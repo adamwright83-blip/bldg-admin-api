@@ -397,6 +397,9 @@ function FollowUpSurface(
   }
 ) {
   const [dueAt, setDueAt] = useState("");
+  const [result, setResult] = useState<"" | "no_contact" | "contacted_no_decision" | "won" | "lost">("");
+  const [resultNotes, setResultNotes] = useState("");
+  const [nextFollowUpAt, setNextFollowUpAt] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mounted = useMountedRef();
@@ -444,21 +447,67 @@ function FollowUpSurface(
           FOLLOW UP
         </a>
       ) : null}
+      <label>
+        WHAT HAPPENED
+        <select
+          value={result}
+          onChange={event =>
+            setResult(
+              event.target.value as typeof result
+            )
+          }
+        >
+          <option value="">Choose real result</option>
+          <option value="no_contact">No contact</option>
+          <option value="contacted_no_decision">Contacted — no decision</option>
+          <option value="won">Won</option>
+          <option value="lost">Lost</option>
+        </select>
+      </label>
+      <label>
+        RESULT NOTES
+        <textarea
+          rows={3}
+          value={resultNotes}
+          onChange={event => setResultNotes(event.target.value)}
+        />
+      </label>
+      {result && result !== "won" && result !== "lost" ? (
+        <label>
+          EXPLICIT NEW FOLLOW-UP · OPTIONAL
+          <input
+            type="datetime-local"
+            value={nextFollowUpAt}
+            onChange={event => setNextFollowUpAt(event.target.value)}
+          />
+        </label>
+      ) : null}
       <button
-        disabled={busy}
+        disabled={
+          busy ||
+          !result ||
+          !resultNotes.trim() ||
+          (!!nextFollowUpAt && new Date(nextFollowUpAt).getTime() <= Date.now())
+        }
         onClick={() =>
           void perform(() =>
             props.services.completeFollowUp({
               followUp: props.action.followUp,
               requestId: props.requestId,
+              outcome: result as "no_contact" | "contacted_no_decision" | "won" | "lost",
+              notes: resultNotes.trim(),
+              nextFollowUpAt:
+                nextFollowUpAt && result !== "won" && result !== "lost"
+                  ? new Date(nextFollowUpAt)
+                  : undefined,
             })
           )
         }
       >
-        RECORD FOLLOW-UP COMPLETE
+        RECORD FOLLOW-UP RESULT
       </button>
       <label>
-        SCHEDULE A REAL NEW TIME
+        MOVE THIS FOLLOW-UP WITHOUT RECORDING AN ATTEMPT
         <input
           type="datetime-local"
           value={dueAt}

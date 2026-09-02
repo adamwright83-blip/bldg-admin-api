@@ -4,6 +4,7 @@ import type { ScoutReport } from "../../../../shared/expansionScout";
 import type { DriverGameWorldNode } from "../../../../shared/driverGameWorld";
 import type { RealActionRequest } from "../encounters/RealActionBridge";
 import type { AuthoritativeFollowUp } from "./actionRegistry";
+import type { CommercialFollowUpOutcome } from "../../../../shared/commercialPipeline";
 
 export type GoldlineVisitContext = {
   mission: { id: number; version: number; status: CommercialMissionStatus };
@@ -76,6 +77,9 @@ export type GoldlineActionServices = {
   completeFollowUp: (input: {
     followUp: AuthoritativeFollowUp;
     requestId: string;
+    outcome: CommercialFollowUpOutcome;
+    notes: string;
+    nextFollowUpAt?: Date;
   }) => Promise<void>;
   rescheduleFollowUp: (input: {
     followUp: AuthoritativeFollowUp;
