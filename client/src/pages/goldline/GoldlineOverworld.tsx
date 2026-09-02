@@ -25,6 +25,16 @@ import { CampaignHudConnected } from "@/components/goldline/CampaignHud";
 import { CampaignOverlandThread } from "@/components/goldline/CampaignWorldLayer";
 import { CampaignChapterHost } from "@/components/goldline/CampaignChapterHost";
 import { DynamicJoystick } from "./DynamicJoystick";
+/*
+  The Overworld's own layout. Vite only emits a stylesheet something imports,
+  so dropping this line does not merely unstyle a detail — it ships the world
+  with no stage box at all: the shell loses its background, the stage loses
+  its `min(100vw, 430px)` cap and its `height: 100dvh`, and the canvas
+  collapses to two pixels tall. The page then renders as an empty cream sheet
+  with the HUD text stacked in the corner, which is exactly what production
+  showed after 929123a removed it.
+*/
+import "./goldline-overworld.css";
 import type { CampaignHostInvocation } from "@shared/goldlineCampaignRuntime";
 
 export { DynamicJoystick };
