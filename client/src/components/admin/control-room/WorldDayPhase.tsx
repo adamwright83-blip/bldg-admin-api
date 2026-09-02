@@ -24,7 +24,10 @@ export function WorldDayPhaseIndicator() {
   }, []);
 
   const phase = atmosphereQuery.data?.dayPhase ?? worldDayPhase(losAngelesHour(now));
-  const label = atmosphereQuery.data?.statusBadge ?? `LA WORLD · ${phase.toUpperCase()}`;
+  // Fallback matches the server badge: LIVE, never DAY/NIGHT. The dark map is
+  // art direction, not a claim about the sun. `phase` still drives the class,
+  // which is atmosphere tinting rather than the ground grade.
+  const label = atmosphereQuery.data?.statusBadge ?? "LA WORLD · LIVE";
 
   return (
     <div

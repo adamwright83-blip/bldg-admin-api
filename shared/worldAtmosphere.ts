@@ -59,7 +59,7 @@ export type LiveAirQualityInput = {
 export type WorldAtmosphereProjection = {
   generatedAt: string;
   dayPhase: "dawn" | "day" | "dusk" | "night";
-  statusBadge: string; // e.g. "LA WORLD · NIGHT · HAZY" or "LA WORLD · CLEAR · 72°F"
+  statusBadge: string; // e.g. "LA WORLD · LIVE · 72°F" or "LA WORLD · LIVE · 68°F · HAZY"
   weather: LiveWeatherInput | null;
   airQuality: LiveAirQualityInput | null;
   /** Bounded CSS variables to apply to the world root */
@@ -211,7 +211,21 @@ export function projectWorldAtmosphere(input: {
     ? airQuality.category.replace(/_/g, " ").toUpperCase()
     : "";
 
-  const badgeTokens = ["LA WORLD", dayPhase.toUpperCase()];
+  /*
+    LIVE, not DAY/NIGHT.
+
+    Lantern City's dark map grade is an art-direction layer that establishes
+    foreground hierarchy — game objects above, real geography beneath. It does
+    not claim Los Angeles is literally dark outside, and the canvas does not
+    brighten at noon.
+
+    So the badge said DAY over a night-treated world, and previously NIGHT over
+    a daylight-graded one; either way it contradicted what the player saw.
+    LIVE is the honest claim: this is the real city, right now. Temperature,
+    weather and air quality stay truthful and unchanged — `dayPhase` itself is
+    still computed and still returned for consumers that legitimately need it.
+  */
+  const badgeTokens = ["LA WORLD", "LIVE"];
   if (tempLabel) badgeTokens.push(tempLabel);
   if (weatherLabel && weatherLabel !== "CLEAR") badgeTokens.push(weatherLabel);
   if (aqLabel) badgeTokens.push(`AQ: ${aqLabel}`);
