@@ -84,8 +84,14 @@ function VisitSurface(
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [outcome, setOutcome] =
-    useState<VisitOutcomeRequest["outcome"]>("follow_up");
+    useState<VisitOutcomeRequest["outcome"]>("no_decision");
   const [followUpAt, setFollowUpAt] = useState("");
+  const [decisionMakerStatus, setDecisionMakerStatus] =
+    useState<VisitOutcomeRequest["decisionMakerStatus"]>("not_recorded");
+  const [collateralDelivered, setCollateralDelivered] = useState(false);
+  const [quoteRequested, setQuoteRequested] = useState(false);
+  const [pilotRequested, setPilotRequested] = useState(false);
+  const [followUpRequested, setFollowUpRequested] = useState(false);
   const mounted = useMountedRef();
 
   async function refresh() {
@@ -266,6 +272,8 @@ function VisitSurface(
                 setOutcome(event.target.value as VisitOutcomeRequest["outcome"])
               }
             >
+              <option value="no_contact">Decision maker unavailable</option>
+              <option value="no_decision">Spoke — no decision</option>
               <option value="follow_up">Follow-up agreed</option>
               <option value="won">Won</option>
               <option value="lost">Lost</option>
@@ -281,6 +289,57 @@ function VisitSurface(
               />
             </label>
           ) : null}
+          <label>
+            DECISION MAKER
+            <select
+              value={outcome === "no_contact" ? "unavailable" : decisionMakerStatus}
+              disabled={outcome === "no_contact"}
+              onChange={event =>
+                setDecisionMakerStatus(
+                  event.target.value as VisitOutcomeRequest["decisionMakerStatus"]
+                )
+              }
+            >
+              <option value="not_recorded">Not recorded</option>
+              <option value="unavailable">Unavailable</option>
+              <option value="met">Met</option>
+            </select>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={collateralDelivered}
+              onChange={event => setCollateralDelivered(event.target.checked)}
+            />
+            Collateral delivered
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={quoteRequested}
+              disabled={outcome === "no_contact"}
+              onChange={event => setQuoteRequested(event.target.checked)}
+            />
+            Pricing / quote requested
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={pilotRequested}
+              disabled={outcome === "no_contact"}
+              onChange={event => setPilotRequested(event.target.checked)}
+            />
+            Pilot requested
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={followUpRequested || outcome === "follow_up"}
+              disabled={outcome === "follow_up"}
+              onChange={event => setFollowUpRequested(event.target.checked)}
+            />
+            Follow-up requested
+          </label>
           <label>
             WHAT HAPPENED
             <textarea
@@ -305,11 +364,17 @@ function VisitSurface(
                       outcome === "follow_up"
                         ? new Date(followUpAt)
                         : undefined,
-                    decisionMakerStatus: "not_recorded",
-                    collateralDelivered: false,
-                    quoteRequested: false,
-                    pilotRequested: false,
-                    followUpRequested: outcome === "follow_up",
+                    decisionMakerStatus:
+                      outcome === "no_contact"
+                        ? "unavailable"
+                        : decisionMakerStatus,
+                    collateralDelivered,
+                    quoteRequested:
+                      outcome === "no_contact" ? false : quoteRequested,
+                    pilotRequested:
+                      outcome === "no_contact" ? false : pilotRequested,
+                    followUpRequested:
+                      outcome === "follow_up" || followUpRequested,
                     reason: outcome === "lost" ? "other" : undefined,
                   }),
                 true
