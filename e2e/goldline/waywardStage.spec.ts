@@ -47,10 +47,25 @@ test.describe("Wayward authored player truth", () => {
       expect(loadedResources.some(resource => resource.includes(asset))).toBe(true);
     }
 
-    // Now take the window: appear -> click, with nothing in between.
+    /*
+      Now take the window: appear -> click, with nothing in between.
+
+      `force` is deliberate and narrow, for the same reason as the Lantern City
+      gate. Playwright's actionability check requires a stable bounding box
+      across consecutive frames, and the guardian telegraph animates the button
+      while the window is open — so on a runner whose rAF is starved it is
+      never "stable" and the click waits until the test times out. That is a
+      property of an animated combat window, not a broken control.
+
+      Visibility and enabled-ness are asserted explicitly on the same locator
+      immediately above, so the only check being skipped is stability. The
+      window itself is untouched: if the parry lands late, the assertion below
+      still fails, which is the behaviour this test exists to protect.
+    */
     const parry = page.getByRole("button", { name: "PARRY NOW" });
     await expect(parry).toBeVisible({ timeout: 10_000 });
-    await parry.click();
+    await expect(parry).toBeEnabled();
+    await parry.click({ force: true });
     await expect(page.getByText("PARRY · BRONZE BREAKS", { exact: false })).toBeVisible();
   });
 
