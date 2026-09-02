@@ -476,3 +476,141 @@
 .overworld-briefing-open{display:inline-flex;min-height:44px;align-items:center;margin-top:8px;padding:0 15px;border:0;border-radius:999px;background:#17385e;color:#fff8dc;font:900 10px Inter,sans-serif;letter-spacing:.14em;text-shadow:none}
 .overworld-briefing-layer{position:fixed;z-index:60;inset:0;overflow-y:auto;background:#17385e26;backdrop-filter:blur(2px)}
 .overworld-briefing-close{position:sticky;z-index:2;top:calc(10px + env(safe-area-inset-top));left:100%;display:inline-flex;min-height:44px;align-items:center;margin:10px 12px 0 0;padding:0 16px;transform:translateX(-100%);border:2px solid #e0bd63;border-radius:999px;background:#fffdf2;color:#17385e;font:900 10px Inter,sans-serif;letter-spacing:.14em}
+
+/* ============================================================
+   THE HUSTLER LEVER
+
+   A doorway in the world rather than an entry in a menu. The lever's
+   purpose is manufacturing a real sales action in the middle of play, and
+   a control you have to go looking for cannot do that.
+
+   It sits opposite FIELD OPS so the two read as the day's two doors:
+   one into operations, one into growth.
+   ============================================================ */
+.overworld-lever-open {
+  position: absolute;
+  z-index: 8;
+  right: 14px;
+  top: calc(14px + env(safe-area-inset-top));
+  min-height: 42px;
+  padding: 0 14px;
+  border: 2px solid #e8c15a;
+  border-radius: 10px;
+  color: #2a1a04;
+  background: linear-gradient(#ffd977, #e9a92d);
+  box-shadow: 0 4px 0 #8f5a08, 0 8px 16px #04101d66;
+  font-weight: 900;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+}
+.overworld-lever-open:active { transform: translateY(2px); box-shadow: 0 2px 0 #8f5a08; }
+
+.overworld-lever-layer {
+  position: absolute;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: #04101dcc;
+  backdrop-filter: blur(3px);
+}
+
+.hustler-lever {
+  width: min(100%, 380px);
+  max-height: 88%;
+  overflow: auto;
+  padding: 16px;
+  border: 2px solid #e8c15a;
+  border-radius: 16px;
+  color: #17385e;
+  background: linear-gradient(160deg, #fffdf0, #f7e6b8);
+  box-shadow: 0 20px 60px #04101d88;
+}
+.hl-head { display: flex; align-items: center; justify-content: space-between; }
+.hl-tier strong { display: block; font-size: 22px; letter-spacing: -0.02em; }
+.hl-tier small { color: #7a5a18; font-size: 10px; text-transform: uppercase; }
+.hl-close { border: 1px solid #b98f2e; border-radius: 6px; padding: 5px 9px; background: #fff8e0; font-size: 9px; }
+
+.hl-meter { margin: 12px 0; }
+/* Vertical, like the carnival machine it is modelled on. */
+.hl-track {
+  position: relative;
+  height: 78px;
+  border: 2px solid #b98f2e;
+  border-radius: 8px;
+  background: linear-gradient(#f3d68a, #e9c26a);
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+}
+.hl-track i {
+  display: block;
+  width: 100%;
+  background: linear-gradient(#ff8a4d, #ffd166);
+  transition: height 0.5s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.hl-because { margin: 7px 0 0; font-size: 11px; font-weight: 700; }
+.hl-hint { margin: 2px 0 0; color: #7a5a18; font-size: 10px; }
+
+.hl-prompt { margin: 0 0 8px; font-size: 12px; font-weight: 800; }
+.hl-pulls { display: grid; gap: 8px; }
+.hl-pull {
+  display: grid;
+  gap: 2px;
+  padding: 11px 13px;
+  border: 2px solid #b98f2e;
+  border-radius: 10px;
+  text-align: left;
+  background: #fff8e0;
+}
+.hl-pull b { font-size: 13px; letter-spacing: 0.04em; }
+.hl-pull small { color: #7a5a18; font-size: 10px; }
+.hl-pull.is-big { border-color: #c2571f; background: #ffeede; }
+.hl-pull:disabled { opacity: 0.55; }
+.hl-empty { margin: 8px 0 0; color: #7a5a18; font-size: 11px; }
+
+.hl-mission { display: grid; gap: 9px; }
+.hl-customer strong { display: block; font-size: 18px; }
+.hl-customer small { color: #7a5a18; font-size: 11px; }
+.hl-humanize span { display: block; font-size: 11px; font-weight: 900; letter-spacing: 0.08em; }
+.hl-humanize small { display: block; margin-bottom: 5px; color: #7a5a18; font-size: 10px; }
+.hl-humanize textarea {
+  width: 100%;
+  padding: 9px;
+  border: 1px solid #b98f2e;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+}
+.hl-mission button, .hl-permission button {
+  min-height: 42px;
+  border: 2px solid #17385e;
+  border-radius: 9px;
+  color: #fff;
+  background: #17385e;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.hl-mission button:disabled { opacity: 0.5; }
+.hl-send { background: #1f7a45 !important; border-color: #1f7a45 !important; }
+.hl-permission { display: grid; gap: 6px; padding: 10px; border: 1px dashed #b98f2e; border-radius: 9px; }
+.hl-permission p { margin: 0; font-size: 11px; }
+.hl-permission input { padding: 8px; border: 1px solid #b98f2e; border-radius: 7px; font-size: 12px; }
+/* Deliberately not a victory line. Sending is an action, not an outcome. */
+.hl-sent { margin: 0; padding: 9px; border-radius: 8px; background: #eaf6ee; font-size: 11px; font-weight: 700; }
+.hl-error { margin: 9px 0 0; color: #9b2226; font-size: 11px; font-weight: 700; }
+
+/* The machine reacting to a real send. */
+.hustler-lever.is-celebrating { animation: hl-jump 0.9s cubic-bezier(0.2, 0.8, 0.3, 1); }
+@keyframes hl-jump {
+  0% { transform: scale(1); }
+  18% { transform: scale(1.035); box-shadow: 0 0 40px #ffd166; }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hustler-lever.is-celebrating { animation: none; }
+  .hl-track i { transition: none; }
+}

@@ -25,6 +25,7 @@ import { CampaignHudConnected } from "@/components/goldline/CampaignHud";
 import { CampaignOverlandThread } from "@/components/goldline/CampaignWorldLayer";
 import { CampaignChapterHost } from "@/components/goldline/CampaignChapterHost";
 import { DynamicJoystick } from "./DynamicJoystick";
+import { HustlerLever } from "@/components/driver/HustlerLever";
 /*
   The Overworld's own layout. Vite only emits a stylesheet something imports,
   so dropping this line does not merely unstyle a detail — it ships the world
@@ -94,6 +95,7 @@ export default function GoldlineOverworld({
   const runtimeRef = useRef<GoldlineOverworldRuntime | null>(null);
   const [ordersOpen, setOrdersOpen] = useState(false);
   const [guardianPlaying, setGuardianPlaying] = useState(false);
+  const [leverOpen, setLeverOpen] = useState(false);
   const [driving, setDriving] = useState(false);
   const [runtimeReady, setRuntimeReady] = useState(false);
   const [proximity, setProximity] = useState<OverworldProximity>(null);
@@ -317,6 +319,28 @@ export default function GoldlineOverworld({
           >
             FIELD OPS
           </button>
+        ) : null}
+
+        {/*
+          The lever lives in the world, not behind the briefing. Its whole
+          purpose is manufacturing a real sales action mid-play, which a doorway
+          you have to go looking for cannot do. Hidden while driving for the
+          same reason every other attention-demanding control is.
+        */}
+        {!driving ? (
+          <button
+            className="overworld-lever-open"
+            type="button"
+            onClick={() => setLeverOpen(true)}
+            aria-label="Open the Hustler lever"
+          >
+            HUSTLE
+          </button>
+        ) : null}
+        {leverOpen ? (
+          <div className="overworld-lever-layer" role="dialog" aria-modal="true">
+            <HustlerLever onClose={() => setLeverOpen(false)} />
+          </div>
         ) : null}
 
         <DriverTerritorySky driving={driving} onEncounterChange={setGuardianPlaying} />

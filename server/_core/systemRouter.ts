@@ -8,6 +8,7 @@ import { territoryRouter } from "../territory/territoryRouter";
 import { publicTerritoryRouter } from "../territory/publicPreviewRouter";
 import { commercialProposalRouter } from "../commercialProposals/commercialProposalRouter";
 import { churnRadarRouter } from "../churnRadar/churnRadarRouter";
+import { hustlerLeverRouter } from "../churnRadar/hustlerLeverRouter";
 import { commercialPipelineRouter } from "../commercialPipeline/commercialPipelineRouter";
 import { saasRouter } from "../saas/saasRouter";
 import { dayforgeDemoRouter } from "../dayforgeDemo/demoTenantRouter";
@@ -43,6 +44,7 @@ export const systemRouter = router({
   adaptiveSalesMeter: adaptiveSalesMeterRouter,
   commercialProposal: commercialProposalRouter,
   churnRadar: churnRadarRouter,
+  hustlerLever: hustlerLeverRouter,
   commercialPipeline: commercialPipelineRouter,
   territory: territoryRouter,
   publicTerritory: publicTerritoryRouter,
