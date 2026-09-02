@@ -3768,8 +3768,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                         props.onOpenTodayRoute?.();
                       }}
                     >
-                      <b>TODAY\u2019S ROUTE</b>
-                      <small>Pickups \u00b7 Drop-offs \u00b7 Sales stops</small>
+                      <b>TODAY’S ROUTE</b>
+                      <small>Pickups · Drop-offs · Sales stops</small>
                     </button>
                   ) : null}
 

@@ -4214,3 +4214,31 @@
 .driving-safety-shield b { font-size: 15px; letter-spacing: .14em; }
 .driving-safety-shield span { font-size: 11px; color: rgba(223,254,255,.78); }
 .expedition-hud__driving { position: absolute; left: 50%; bottom: 22%; transform: translateX(-50%); width: min(82%, 320px); text-align: center; font-size: 12px; letter-spacing: .09em; }
+
+
+/* Today's Route is the primary Field Console exit back to the workday. */
+.field-console-today-route {
+  display: flex;
+  width: 100%;
+  min-height: 58px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border: 2px solid #e0bd63;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #f4d87a, #d9ad3f);
+  color: #07151b;
+  text-align: left;
+}
+.field-console-today-route b {
+  font: 900 13px Inter, sans-serif;
+  letter-spacing: .08em;
+}
+.field-console-today-route small {
+  font: 700 10px Inter, sans-serif;
+  letter-spacing: .03em;
+  color: #314047;
+}
