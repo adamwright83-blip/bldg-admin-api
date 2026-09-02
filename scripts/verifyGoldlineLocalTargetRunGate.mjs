@@ -30,6 +30,7 @@
  */
 import { chromium } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 const baseUrl = process.env.GOLDLINE_VERIFY_URL ?? "http://127.0.0.1:5186";
@@ -37,6 +38,36 @@ const outputDir =
   process.env.GOLDLINE_VERIFY_OUTPUT ?? "tmp/goldline-target-run-frames";
 
 const VIEWPORT = { width: 393, height: 852 };
+
+/**
+ * The doorstep coordinate, read from the fixture that defines it.
+ *
+ * This used to be hardcoded here as well, and the two copies silently drifted:
+ * the fixture put A-1 Dry Cleaners at 34.05/-118.25 while this gate stood at
+ * 34.0522/-118.2437 and waited to arrive. That is 630 metres apart, against a
+ * conservative 55m enter radius, so the dwell could never establish arrival and
+ * the gate could never pass. The arrival rule was right; the test was standing
+ * in the wrong place.
+ *
+ * Deriving it from the single source of truth means a future fixture move
+ * cannot reintroduce that drift — and if the fixture shape changes, this fails
+ * loudly here rather than as a mystery timeout 200 lines later.
+ */
+function readFixtureTarget(name) {
+  const source = readFileSync(
+    new URL("../client/src/game/testSupport/GoldlineFictionHarness.tsx", import.meta.url),
+    "utf8"
+  );
+  const at = source.indexOf(`name: "${name}"`);
+  if (at === -1) throw new Error(`fixture target ${name} not found`);
+  const block = source.slice(at, at + 400);
+  const lat = block.match(/\blat:\s*(-?\d+(?:\.\d+)?)/);
+  const lng = block.match(/\blng:\s*(-?\d+(?:\.\d+)?)/);
+  if (!lat || !lng) throw new Error(`fixture target ${name} has no lat/lng`);
+  return { latitude: Number(lat[1]), longitude: Number(lng[1]) };
+}
+
+const FIRST_TARGET = readFixtureTarget("A-1 Dry Cleaners");
 
 await mkdir(outputDir, { recursive: true });
 
@@ -254,10 +285,22 @@ async function main() {
   // a real 12-second dwell, so exercise that exact rule instead of treating one
   // coordinate as proof the operator remained there. These are GPS-provider
   // updates; touch remains real CDP input and no business result is synthesized.
+  //
+  // The samples must be AT the target: production requires
+  // distance + accuracy <= 55m to call an arrival, and nothing about that rule
+  // is relaxed here. The tiny offsets are provider jitter, not a wider radius.
   const dwellSamples = [
-    { latitude: 34.0522, longitude: -118.2437, accuracy: 10 },
-    { latitude: 34.052201, longitude: -118.243699, accuracy: 10 },
-    { latitude: 34.052199, longitude: -118.243701, accuracy: 10 },
+    { ...FIRST_TARGET, accuracy: 10 },
+    {
+      latitude: FIRST_TARGET.latitude + 0.000001,
+      longitude: FIRST_TARGET.longitude - 0.000001,
+      accuracy: 10,
+    },
+    {
+      latitude: FIRST_TARGET.latitude - 0.000001,
+      longitude: FIRST_TARGET.longitude + 0.000001,
+      accuracy: 10,
+    },
   ];
   for (const sample of dwellSamples) {
     await context.setGeolocation(sample);
