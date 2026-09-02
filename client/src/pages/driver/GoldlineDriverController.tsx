@@ -186,6 +186,11 @@ function LiveGoldlineDriverController() {
   const [operatorStop, setOperatorStop] = useState<ArrivedOperatorStop | null>(
     null
   );
+  // The game can report a genuine arrival and expose LOG A SIGNAL in the same
+  // paint. Keep that latest stop synchronously available so the click does not
+  // depend on a second React render before choosing structured Field Intel vs
+  // Diane's ordinary raw-first journal.
+  const operatorStopRef = useRef<ArrivedOperatorStop | null>(null);
   const [journalOpen, setJournalOpen] = useState(false);
   const [activeAdventureObjectiveId, setActiveAdventureObjectiveId] = useState<string | null>(null);
   const [requestedGameplayHost, setRequestedGameplayHost] =
@@ -1158,10 +1163,20 @@ function LiveGoldlineDriverController() {
       // Ordinary field capture is Diane's durable raw-first journal. A sourced
       // target run is the one exception: once real arrival has been confirmed,
       // its operator-approved structured signal is the canonical visit writer.
-      if (operatorStop?.localTargetRunContext) setLogSignalOpen(true);
-      else setJournalOpen(true);
+      // Read the synchronous arrival ref so a same-frame doorstep tap cannot
+      // race the parent state render and accidentally open the general journal.
+      const stop = operatorStopRef.current;
+      if (stop?.localTargetRunContext) {
+        setOperatorStop(stop);
+        setLogSignalOpen(true);
+      } else {
+        setJournalOpen(true);
+      }
     },
-    onOperatorStopChange: setOperatorStop,
+    onOperatorStopChange: (stop: ArrivedOperatorStop | null) => {
+      operatorStopRef.current = stop;
+      setOperatorStop(stop);
+    },
     onOpenJournal: () => setJournalOpen(true),
     onResolveDay: handleResolveDay,
     onOpenDispatch: activeDispatch ? handleOpenDispatch : undefined,
