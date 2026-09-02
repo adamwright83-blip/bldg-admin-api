@@ -65,7 +65,26 @@ test.describe("Wayward authored player truth", () => {
     const parry = page.getByRole("button", { name: "PARRY NOW" });
     await expect(parry).toBeVisible({ timeout: 10_000 });
     await expect(parry).toBeEnabled();
-    await parry.click({ force: true });
+    /*
+      dispatchEvent, not click. The parry window is real gameplay time — a
+      720-900ms telegraph plus the slam frame, about a second in total — and
+      that duration is the mechanic, so it is not something to widen for a
+      slow runner.
+
+      `click()` waits for a stable bounding box on a button the telegraph is
+      animating, and `click({force})` still hit-tests and may scroll, each
+      costing CDP round-trips. On a loaded runner those round-trips outlast the
+      window and the parry genuinely lands late — which is why the previous
+      attempt stopped timing out and started failing on the parry never
+      registering. The test was losing the race for reasons that have nothing
+      to do with the product.
+
+      dispatchEvent is a single round-trip with no actionability phase, so the
+      click arrives inside the window. Visibility and enabled-ness are still
+      asserted above, and the assertion below still fails if the parry lands
+      late — so the window is proven exactly as strictly as before.
+    */
+    await parry.dispatchEvent("click");
     await expect(page.getByText("PARRY · BRONZE BREAKS", { exact: false })).toBeVisible();
   });
 
