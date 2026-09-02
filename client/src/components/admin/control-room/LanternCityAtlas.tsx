@@ -514,7 +514,8 @@ export default function LanternCityAtlas({
                 className={worldMarkerClass(
                   `lc-pursued-building${worldEntity?.canonicalAsset?.assetUrl ? " has-published-art" : ""}`,
                   worldEntity,
-                  revealing && worldEntity?.id === requestedEntityId
+                  revealing && worldEntity?.id === requestedEntityId,
+                  selectedPursuit?.pipelineId === item.pipelineId
                 )}
                 data-world-entity-id={worldEntity?.id}
                 style={{

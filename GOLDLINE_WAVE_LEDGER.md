@@ -46,7 +46,29 @@ production authorization was bypassed or modified.
 
 ---
 
-## SLICE 0b — MOUNT REGRESSION — **IMPLEMENTED**
+## SLICE 0c — BROWSER MOUNT GATE — **IMPLEMENTED**
+
+`e2e/goldline/lanternCityMount.spec.ts`. Boots the real server against the
+deterministic world, authenticates via the legitimate admin login, and asserts
+the city ROOT mounted, the world surface exists, at least one real lantern and
+one real tower are present, the body is not blank, and no uncaught page error
+occurred.
+
+**Falsified both ways.** Reintroducing the 612af8c export breakage: both specs
+FAIL (`expect(locator).toBeVisible() failed`) while `vite build` still
+succeeds — exactly the state that shipped. Restoring: both pass in 10.5s.
+
+Findings recorded while building it:
+- `.lc-pursued-building` (z-index 7) overlaps the lantern beneath it (z-index
+  5) at the same coordinate and intercepts its pointer events. Real occlusion.
+  Addressed by giving the pursued marker the selection grammar so the topmost
+  object responds; the underlying lantern remains unreachable by mouse at that
+  coordinate. Deferred as a layout question for Slice 7/25.
+- Playwright actionability requires a stable bounding box; Lantern City
+  animates continuously, so markers are never "stable". The spec asserts
+  visible + enabled and then clicks with `force`, skipping only stability.
+
+## SLICE 0b — EXPORT REGRESSION — **IMPLEMENTED**
 
 **Why.** Commit `612af8c` spliced a helper between `export default` and
 `function LanternCityAtlas(`, making `lanternPhaseSeconds` the default export.
@@ -70,7 +92,7 @@ have shipped the blank page again.
 
 | Slice | Status | Note |
 |---|---|---|
-| 1 world interaction language | IN PROGRESS | hover/focus partly done for lanterns + towers |
+| 1 world interaction language | IN PROGRESS | lanterns, towers, pursued-buildings share IDLE/HOVER/SELECTED. Territory + Guardian still on their own active/noticed/encounter vocabulary — reconcile before Phase A closes. |
 | 2 one excellent tower loop | NOT STARTED | OPUS LA locked, do not re-audit |
 | 3 Tower Wars game feel | NOT STARTED | swing/recoil/projectile already exist |
 | 4 Guardians as characters | NOT STARTED | engine + dialogue exist; manifestation is the work |

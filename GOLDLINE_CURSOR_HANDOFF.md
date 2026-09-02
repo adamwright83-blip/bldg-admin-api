@@ -12,8 +12,10 @@ Practical resume file. No chat history required.
 See `git log -1 --format=%H` on the branch. Last known: `119f85d` + this commit.
 
 ## 4. CURRENT PHASE + SLICE
-Slice 0 (auth + reproducible local world) COMPLETE.
-Next: PHASE A, Slice 1 (world interaction language).
+Slice 0 (auth + reproducible world + mount gates) COMPLETE.
+PHASE A Slice 1 IN PROGRESS — lanterns/towers/pursued-buildings done;
+territory + Guardian must join the grammar before Phase A closes.
+Next: Slice 2 (OPUS LA tower loop — locked, do not re-audit).
 
 ## 5. WHAT WAS JUST COMPLETED
 - Ownership trace for `bldg_users` / `service_requests` (see §9).
@@ -113,7 +115,10 @@ pnpm vitest run client/src/components/admin
 pnpm vitest run client/src/components/admin/control-room/facadeRegeneration.test.ts
 pnpm vitest run client/src/components/admin/control-room/lanternCityAtlasMount.test.ts
 pnpm exec playwright test --config playwright.goldline.config.ts
+pnpm exec playwright test --config playwright.goldline.config.ts e2e/goldline/lanternCityMount.spec.ts
 ```
+The last one is the ROUTE-MOUNT GATE. It fails if Lantern City renders blank.
+Falsified against the 612af8c export breakage: fails there, passes when fixed.
 
 ## 13. KNOWN BLOCKERS
 None blocking. Admin auth is solved (§11).
