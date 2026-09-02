@@ -780,3 +780,104 @@
   }
   .pwc-page .pwc-world { height: auto; min-height: 430px; }
 }
+
+/* ============================================================
+   THE CITY IS ALIVE BEFORE YOU TOUCH IT
+
+   Lanterns only ever animated on a TRANSITION — lc-gutter when one went
+   out, lc-reignite when one came back. Between events every lantern was a
+   static dot, so a city of real customers sat perfectly still and read as
+   a map with markers rather than somewhere inhabited.
+
+   Each cadence state now has its own resting behaviour, and the behaviour
+   is the information:
+
+     active    a slow steady breath          the relationship is healthy
+     dimming   an irregular falter           the light is going out
+     dark      almost nothing, a rare glint  the room is empty, not gone
+
+   That is not decoration. A faltering lantern says "this is slipping"
+   before the operator reads a single number, which is the whole point of
+   a city instead of a table.
+
+   Drawn on a ::after halo rather than on .lc-lantern-body itself, because
+   the body already owns the gutter/reignite animation slot and an idle
+   loop there would fight the very transitions that make an event legible.
+
+   Every lantern breathes on its own phase (--lc-phase, hashed from the
+   cluster key). Synchronised flicker reads as a screensaver.
+   ============================================================ */
+.lc-lantern-body::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: 10px;
+  pointer-events: none;
+  animation-delay: var(--lc-phase, 0s);
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+.lc-lantern.state-active .lc-lantern-body::after {
+  box-shadow: 0 0 14px 3px #ffc32455;
+  animation-name: lc-breathe;
+  animation-duration: 7s;
+}
+.lc-lantern.state-dimming .lc-lantern-body::after {
+  box-shadow: 0 0 9px 2px #d9dde233;
+  animation-name: lc-falter;
+  /* Deliberately not a round number: a failing light should not look timed. */
+  animation-duration: 4.3s;
+}
+.lc-lantern.state-dark .lc-lantern-body::after {
+  box-shadow: 0 0 6px 1px #0b0d1200;
+  animation-name: lc-embers;
+  animation-duration: 11s;
+}
+
+@keyframes lc-breathe {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.06); }
+}
+/*
+  Irregular on purpose — two dips of different depth, an almost-recovery,
+  then a long hold. A steady sine wave reads as "pulsing", which is a
+  healthy signal. This has to read as struggling.
+*/
+@keyframes lc-falter {
+  0%   { opacity: 0.8; }
+  9%   { opacity: 0.25; }
+  14%  { opacity: 0.7; }
+  21%  { opacity: 0.15; }
+  27%  { opacity: 0.62; }
+  34%  { opacity: 0.4; }
+  55%  { opacity: 0.72; }
+  100% { opacity: 0.8; }
+}
+/* Nearly always nothing. A dormant customer is not gone — just not lit. */
+@keyframes lc-embers {
+  0%, 88%, 100% { opacity: 0; }
+  93%           { opacity: 0.5; }
+}
+
+/*
+  WHAT CAN I TOUCH, AND WHY
+
+  A lantern was interactive but never said so until the cursor was already
+  on it. It now lifts and warms on approach, and keyboard focus gets the
+  same treatment rather than a bare outline, so reaching a lantern by tab
+  looks like reaching it by mouse.
+*/
+.lc-lantern:hover .lc-lantern-body::after,
+.lc-lantern:focus-visible .lc-lantern-body::after {
+  animation-play-state: paused;
+  opacity: 1;
+  box-shadow: 0 0 20px 6px #ffd76688;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Rest state only. The information survives; the motion does not. */
+  .lc-lantern-body::after { animation: none !important; }
+  .lc-lantern.state-active .lc-lantern-body::after { opacity: 0.85; }
+  .lc-lantern.state-dimming .lc-lantern-body::after { opacity: 0.4; }
+  .lc-lantern.state-dark .lc-lantern-body::after { opacity: 0; }
+}
