@@ -47,6 +47,10 @@
  * it means the most recent, most legible scars are the last to fade, so the
  * building never looks healed while a fresh wound is still open.
  */
+import {
+  isCollectedTruth,
+  type CollectedEvidenceOrder,
+} from "@/game/expedition/strongholdRestoration";
 import type { SettledStratum } from "./facadeScars";
 
 /**
@@ -55,15 +59,35 @@ import type { SettledStratum } from "./facadeScars";
  * Deliberately the narrowest shape that can express "real work landed here".
  * Every field traces to order truth; there is no gameplay channel.
  */
+/**
+ * An authoritative order, plus WHEN its collection actually happened.
+ *
+ * `strongholdRestoration.ts` defines what counts as collected truth and this
+ * module reuses that definition rather than restating it — but that projection
+ * deliberately has no temporal dimension: it counts distinct collected orders
+ * over all history, because a Stronghold either has been restored or has not.
+ *
+ * A facade cannot borrow that. Scars are dated, so healing has to be dated
+ * too. Without a boundary an order collected in March would retroactively
+ * close a wound inflicted in August — the building would appear repaired by
+ * work that happened before the damage existed.
+ */
+export type DatedCollectedOrder = CollectedEvidenceOrder & {
+  /**
+   * ISO date the collection occurred, compared against a stratum's
+   * `businessDate`. Authoritative order truth, never a render timestamp.
+   */
+  readonly collectedOn: string;
+};
+
 export type RegenerationInput = {
   /**
-   * Orders that reached `collected` for this building since the damage was
-   * settled. The canonical restoration fact — see `strongholdRestoration.ts`,
-   * which treats the collected order as primary and audit events as merely
-   * supporting, because the order is the truth.
+   * Authoritative orders for this building. Only those that both pass
+   * `isCollectedTruth` and were collected strictly AFTER a given stratum's
+   * business date may heal that stratum.
    */
-  collectedOrderCount: number;
-  /** Settled history, oldest first. Never mutated here. */
+  orders: readonly DatedCollectedOrder[];
+  /** Settled history. Never mutated here. */
   strata: readonly SettledStratum[];
 };
 
@@ -109,18 +133,41 @@ export const ORDERS_TO_CLOSE_ONE_STRATUM = 3;
 export function projectRegeneration(
   input: RegenerationInput
 ): RegenerationProjection {
-  const collected = Math.max(0, Math.floor(input.collectedOrderCount));
-  const byStratum: StratumRegeneration[] = [];
+  // Distinct genuinely-collected orders, oldest collection first. Deduped by
+  // id because one order is one piece of evidence however many rows mention it.
+  const seen = new Set<number>();
+  const eligible: DatedCollectedOrder[] = [];
+  for (const order of input.orders) {
+    if (!isCollectedTruth(order) || seen.has(order.id)) continue;
+    seen.add(order.id);
+    eligible.push(order);
+  }
+  eligible.sort((a, b) =>
+    a.collectedOn < b.collectedOn ? -1 : a.collectedOn > b.collectedOn ? 1 : a.id - b.id
+  );
 
-  // Oldest first, so the long-settled damage is repaired before the newest.
+  const byStratum: StratumRegeneration[] = [];
+  // Oldest wound first, so long-settled damage is repaired before the newest.
   const ordered = [...input.strata].sort((a, b) =>
     a.businessDate < b.businessDate ? -1 : a.businessDate > b.businessDate ? 1 : 0
   );
 
-  let budget = collected;
+  // An order is spent once. Healing the whole facade with a single delivery
+  // would make recovery cheaper than the work it is supposed to represent.
+  const spentOrderIds = new Set<number>();
+  let usedAny = false;
   for (const stratum of ordered) {
-    const spent = Math.min(budget, ORDERS_TO_CLOSE_ONE_STRATUM);
-    budget -= spent;
+    let spent = 0;
+    for (const order of eligible) {
+      if (spent >= ORDERS_TO_CLOSE_ONE_STRATUM) break;
+      if (spentOrderIds.has(order.id)) continue;
+      // THE BOUNDARY. Work delivered before the damage was settled cannot
+      // have repaired it, so only strictly-later collections are eligible.
+      if (order.collectedOn <= stratum.businessDate) continue;
+      spentOrderIds.add(order.id);
+      spent += 1;
+      usedAny = true;
+    }
     byStratum.push({
       businessDate: stratum.businessDate,
       closure: spent / ORDERS_TO_CLOSE_ONE_STRATUM,
@@ -137,7 +184,7 @@ export function projectRegeneration(
     overall,
     // Evidence, not appearance: a facade with nothing settled and nothing
     // collected has not "fully recovered", it simply has no history.
-    hasAuthoritativeRestoration: collected > 0,
+    hasAuthoritativeRestoration: usedAny,
   };
 }
 
