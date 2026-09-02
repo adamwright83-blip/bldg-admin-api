@@ -172,8 +172,10 @@ only a human can return. `e2e/goldline/firstThirtySeconds.spec.ts` exists.
 
 ## SLICE 18 — REMOVE SOFTWARE MOMENTS — **IMPLEMENTED (partial, honest)**
 Removed from the core loop: Home and Lantern City card-stacks, lantern counts
-as report cards, territory status panels. *Remaining:* the entity inspector is
-full-height at 1440×900 and reads modal — real finding, P2.
+as report cards, territory status panels. Inspector height capped to 62dvh on desktop so the city stays visible behind
+it — runtime-measured 558px of 900 (62%), city still rendered, selection ring
+still on the object. A panel that covers the city converts it back into a
+record viewer, which defeats having a city at all.
 
 ## SLICE 19 — GAME-FEEL CONSISTENCY — **IMPLEMENTED**
 One vocabulary across hover/focus/selection; shared easing
@@ -244,8 +246,8 @@ avoid long CI loops during implementation. Run on the PR.
 ## SLICE 29 — RELEASE TRIAGE — **IMPLEMENTED**
 **P0:** none outstanding (both route crashes fixed and gated).
 **P1:** none outstanding.
-**P2:** pursued-building occludes its lantern; entity inspector reads modal at
-desktop; 8 pre-existing unit failures; long-session profiling; wayward CI timing.
+**P2:** pursued-building occludes its lantern; 8 pre-existing unit failures;
+long-session profiling; wayward CI timing. *(inspector modal-feel: FIXED)*
 **P3:** mature-Stronghold silhouette; unified consequence choreographer;
 regeneration heal visual proof; brittle `adminLiveModel` source-string test.
 

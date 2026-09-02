@@ -1122,3 +1122,27 @@
     animation: none !important;
   }
 }
+
+/* ============================================================
+   SLICE 18 — THE INSPECTOR STOPS EATING THE CITY
+
+   `.owi` is capped at calc(100dvh - 94px), so on a desktop the entity
+   inspector runs floor to ceiling and the world disappears behind it. The
+   content is genuinely good — provenance, residents, the honest "proposal
+   sent does not imply a won account" boundary — but at full height it reads
+   as a modal you have entered rather than a panel about something you are
+   still looking at.
+
+   That matters beyond taste: the whole argument for a city instead of a
+   table is that you keep spatial context while you inspect. A panel that
+   covers the city converts it back into a record viewer.
+
+   Capped on wider viewports only. It still scrolls, so nothing is lost —
+   and the object you selected, now ringed, stays visible beside it.
+   Phones keep the taller sheet, where there is no context to preserve.
+   ============================================================ */
+@media (min-width: 900px) {
+  .owi {
+    max-height: min(62dvh, 620px);
+  }
+}
