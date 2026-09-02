@@ -17,6 +17,7 @@ import {
   type PatinaZone,
   type SettledStratum,
 } from "./facadeScars";
+import { scarOpacityFor, type RegenerationProjection } from "./facadeRegeneration";
 
 /**
  * Intrinsic size of both tower PNGs. The layer must letterbox and bottom-anchor
@@ -37,10 +38,12 @@ function scarOpacity(recency: number): number {
   return 0.55 + recency * 0.35;
 }
 
-function ScarMark({ scar }: { scar: FacadeScar }) {
+function ScarMark({ scar, closure = 0 }: { scar: FacadeScar; closure?: number }) {
   const common = {
     transform: `rotate(${scar.rotation})`,
-    opacity: scarOpacity(scar.recency),
+    // A repaired day fades toward patina but never disappears — the building
+    // still shows it was hurt and rebuilt. See facadeRegeneration.ts.
+    opacity: scarOpacity(scar.recency) * scarOpacityFor(closure),
   };
   switch (scar.kind) {
     case "graft":
@@ -111,15 +114,32 @@ export function FacadeScarLayer({
   strata,
   buildingId,
   buildingName,
+  regeneration,
 }: {
   strata: readonly SettledStratum[];
   buildingId: string;
   buildingName: string;
+  /**
+   * How far each settled day has been repaired by authoritative collected
+   * orders. Omitted means "no restoration evidence", which renders exactly as
+   * it always did — scars at full weight.
+   */
+  regeneration?: RegenerationProjection;
 }) {
   const { scars, patina, compressed } = useMemo(
     () => projectFacade(strata, boundsForBuilding(buildingId)),
     [strata, buildingId]
   );
+  // Pair each scar with its own day's closure. A facade heals per settled day,
+  // not as one uniform wash, so an old repaired wound can sit beside a recent
+  // raw one on the same building.
+  const closureByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of regeneration?.byStratum ?? []) {
+      map.set(item.businessDate, item.closure);
+    }
+    return map;
+  }, [regeneration]);
 
   if (!scars.length && !patina.length) return null;
 
@@ -159,7 +179,7 @@ export function FacadeScarLayer({
             (scar.yPercent / 100) * ART_HEIGHT
           }) scale(${MARK_SCALE})`}
         >
-          <ScarMark scar={scar} />
+          <ScarMark scar={scar} closure={closureByDate.get(scar.businessDate) ?? 0} />
         </g>
       ))}
     </svg>

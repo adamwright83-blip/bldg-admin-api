@@ -14,6 +14,7 @@ import { FacadeScarLayer } from "./FacadeScarLayer";
 import { FreshDamageLayer } from "./FreshDamageLayer";
 import { ART_SPACE, BUILDING_ART, type CanonicalBuildingId } from "./buildingArt";
 import type { SettledStratum } from "./facadeScars";
+import type { RegenerationProjection } from "./facadeRegeneration";
 
 export function CanonicalBuildingArt({
   buildingId,
@@ -23,6 +24,7 @@ export function CanonicalBuildingArt({
   strikesRevealed,
   showWeapon = true,
   charge = 0,
+  regeneration,
   children,
 }: {
   buildingId: CanonicalBuildingId;
@@ -40,6 +42,11 @@ export function CanonicalBuildingArt({
    * line of text, so an order that charges without firing still visibly resolves.
    */
   charge?: number;
+  /**
+   * Authoritative repair, from collected orders that postdate each settled
+   * day (see facadeRegeneration.ts). Omitted renders exactly as before.
+   */
+  regeneration?: RegenerationProjection;
   /** Arena-only chrome (projectile, vfx) that must share the same transform. */
   children?: React.ReactNode;
 }) {
@@ -57,6 +64,7 @@ export function CanonicalBuildingArt({
         strata={strata}
         buildingId={buildingId}
         buildingName={art.displayName}
+        regeneration={regeneration}
       />
       <FreshDamageLayer
         buildingId={buildingId}

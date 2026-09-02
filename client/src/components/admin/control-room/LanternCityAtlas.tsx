@@ -61,11 +61,22 @@ function WorldMarkerAtmosphere({ entity }: { entity: CityWorldEntity | null }) {
 function worldMarkerClass(
   base: string,
   entity: CityWorldEntity | null,
-  revealing = false
+  revealing = false,
+  selected = false
 ) {
+  /*
+    Selection is a property of the OBJECT, not only of the panel that opened.
+    Before this, clicking a lantern changed a side panel while the thing you
+    clicked looked identical to its neighbours — so the world could not answer
+    "which one am I looking at?" once your eye left the panel.
+
+    Applied outside the presentation check on purpose: an entity with no world
+    presentation can still be selected, and must still show it.
+  */
+  const selectedClass = selected ? " is-selected" : "";
   const presentation = entity?.presentation;
-  if (!presentation) return base;
-  return `${base} has-world veil-${presentation.veil} attention-${presentation.prominenceTier}${revealing ? " is-revealing" : ""}`;
+  if (!presentation) return `${base}${selectedClass}`;
+  return `${base} has-world veil-${presentation.veil} attention-${presentation.prominenceTier}${revealing ? " is-revealing" : ""}${selectedClass}`;
 }
 
 function markerLabel(base: string, entity: CityWorldEntity | null) {
@@ -120,6 +131,23 @@ function ArcadeBodyLayer({
       </span>
     </span>
   );
+}
+
+/**
+ * A stable per-lantern animation offset, in seconds.
+ *
+ * Deterministic from the cluster key so the same location always breathes on
+ * the same beat — a reload must not reshuffle the city's rhythm, and two
+ * lanterns must not drift into lockstep. Presentation only; nothing here
+ * touches customer state.
+ */
+function lanternPhaseSeconds(key: string): number {
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) {
+    hash = (hash * 31 + key.charCodeAt(i)) % 100000;
+  }
+  // Spread across the breathing cycle rather than a fixed set of buckets.
+  return (hash % 700) / 100;
 }
 
 export default function LanternCityAtlas({
@@ -220,6 +248,29 @@ export default function LanternCityAtlas({
 
   const requestedEntityId = new URLSearchParams(window.location.search).get("entity");
   const requestedEntity = cityWorld.data?.find(entity => entity.id === requestedEntityId) ?? null;
+  /*
+    ONE PHYSICAL PLACE, ONE PRIMARY WORLD OBJECT.
+
+    A pursued building and a customer lantern can describe the SAME canonical
+    place, and both were drawn at the same coordinate as competing clickable
+    markers — the building sitting on the lantern and swallowing its clicks.
+    Raising one above the other only picks a winner; it leaves two primary
+    objects claiming one place, which contradicts the one-world architecture
+    the inspector states out loud.
+
+    The building wins, because a building is what is actually there. The
+    lantern's cadence is not lost: it is layered onto the building below as
+    state, so the place still reads as active/dimming/dormant.
+  */
+  function pursuitCoversCluster(cluster: CustomerLocationCluster): boolean {
+    return visiblePursuits.some(
+      pursuit =>
+        pursuit.location != null &&
+        Math.abs(pursuit.location.x - cluster.x) < 1.2 &&
+        Math.abs(pursuit.location.y - cluster.y) < 1.2
+    );
+  }
+
   const selectedEntity = selectedPursuit ? entityForPursuit(selectedPursuit.accountId) : selectedCluster ? entityForCluster(selectedCluster) : requestedEntity;
   const selectedFocusPoint = selectedPursuit?.location
     ? { x: selectedPursuit.location.x, y: selectedPursuit.location.y }
@@ -398,7 +449,7 @@ export default function LanternCityAtlas({
             record already carries the latitude/longitude the atlas projection
             was derived from, so nothing is estimated to do this.
           */}
-          {!googleVisible && fanOutAtlasCollisions(customerClusters.filter(cluster => !cluster.outsideAtlas)).map(({ cluster, fanSlot }) => (
+          {!googleVisible && fanOutAtlasCollisions(customerClusters.filter(cluster => !cluster.outsideAtlas && !pursuitCoversCluster(cluster))).map(({ cluster, fanSlot }) => (
             <Fragment key={cluster.key}>
               {fanSlot > 0 ? (
                 <>
@@ -412,11 +463,18 @@ export default function LanternCityAtlas({
                 className={worldMarkerClass(
                   `lc-lantern state-${cluster.dark === cluster.total ? "dark" : cluster.dimming > 0 || cluster.dark > 0 ? "dimming" : "active"}${fanSlot > 0 ? ` fan-${fanSlot}` : ""}`,
                   entityForCluster(cluster),
-                  revealing && entityForCluster(cluster)?.id === requestedEntityId
+                  revealing && entityForCluster(cluster)?.id === requestedEntityId,
+                  selectedCluster?.key === cluster.key
                 )}
                 style={{
                   left: `${cluster.x}%`,
                   top: `${cluster.y}%`,
+                  // Every lantern breathes on its own phase. Synchronised
+                  // flicker reads as a screensaver; staggered, it reads as a
+                  // city where separate lives are running. Hashed from the
+                  // cluster key so a lantern keeps its rhythm across reloads
+                  // rather than reshuffling on every render.
+                  ["--lc-phase" as string]: `${-lanternPhaseSeconds(cluster.key)}s`,
                 }}
                 onClick={() => {
                   setSelectedPursuit(null);
@@ -477,9 +535,30 @@ export default function LanternCityAtlas({
               key={item.pipelineId}
               ref={worldEntity?.id === requestedEntityId ? revealRef : undefined}
                 className={worldMarkerClass(
-                  `lc-pursued-building${worldEntity?.canonicalAsset?.assetUrl ? " has-published-art" : ""}`,
+                  `lc-pursued-building${worldEntity?.canonicalAsset?.assetUrl ? " has-published-art" : ""}${
+                    /*
+                      The suppressed lantern's cadence, carried onto the
+                      building that replaced it, so the place still reads as
+                      active / dimming / dormant.
+                    */
+                    (() => {
+                      const covered = customerClusters.find(
+                        c =>
+                          item.location != null &&
+                          Math.abs(item.location.x - c.x) < 1.2 &&
+                          Math.abs(item.location.y - c.y) < 1.2
+                      );
+                      if (!covered) return "";
+                      return covered.dark === covered.total
+                        ? " cadence-dark"
+                        : covered.dimming > 0 || covered.dark > 0
+                          ? " cadence-dimming"
+                          : " cadence-active";
+                    })()
+                  }`,
                   worldEntity,
-                  revealing && worldEntity?.id === requestedEntityId
+                  revealing && worldEntity?.id === requestedEntityId,
+                  selectedPursuit?.pipelineId === item.pipelineId
                 )}
                 data-world-entity-id={worldEntity?.id}
                 style={{

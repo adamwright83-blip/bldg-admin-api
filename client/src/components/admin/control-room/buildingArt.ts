@@ -24,6 +24,11 @@
  * All layers share the 800x1200 art space and are positioned `center bottom / contain`,
  * so they stay locked together at any scale. Geometry below is in that art space.
  */
+import {
+  OPUS_BALL_CENTRE,
+  OPUS_DRIVER_HINGE,
+  OPUS_STRIKE_DIRECTION,
+} from "./opusWeaponGeometry";
 
 export const ART_SPACE = { width: 800, height: 1200 } as const;
 

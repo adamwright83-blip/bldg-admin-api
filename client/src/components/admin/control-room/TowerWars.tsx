@@ -12,6 +12,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../../../../server/routers";
 import { trpc } from "@/lib/trpc";
 import { TOWER_WARS_ATTACK_THRESHOLD_CENTS } from "@shared/goldlineGameConfig";
+import { BUILDINGS } from "@shared/buildings";
 import {
   applyTowerWarsEvent,
   compileTowerWarsState,
@@ -23,6 +24,11 @@ import {
 } from "@shared/towerWars";
 import { towerComparisonState } from "./towerWarsGeometry";
 import { CanonicalBuildingArt } from "./CanonicalBuildingArt";
+import {
+  datedCollectedOrders,
+  projectRegeneration,
+  type RegenerationProjection,
+} from "./facadeRegeneration";
 import { useWorldTransition } from "./WorldTransitionProvider";
 import { entityFromSearch } from "./worldTransition";
 import {
@@ -78,6 +84,7 @@ function BuildingArt({
   incomingToday,
   strikesRevealed,
   charge,
+  regeneration,
 }: {
   buildingId: TowerWarsBuildingId;
   strata: readonly SettledStratum[];
@@ -85,6 +92,7 @@ function BuildingArt({
   incomingToday: number;
   strikesRevealed?: number;
   charge: number;
+  regeneration?: RegenerationProjection;
 }) {
   // One composition, shared with Home and Lantern City, so the building cannot
   // change identity or weapon between screens.
@@ -96,6 +104,7 @@ function BuildingArt({
       incomingToday={incomingToday}
       strikesRevealed={strikesRevealed}
       charge={charge}
+      regeneration={regeneration}
     />
   );
 }
@@ -169,6 +178,11 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
   }, [isEstablishing]);
   const pieceRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+  // Dated pickup evidence per building. Paired with the settlement's strata to
+  // decide how far each facade has been repaired — see facadeRegeneration.ts.
+  const buildingWorld = trpc.system.canonicalBuilding.world.useQuery(undefined, {
+    staleTime: 60_000,
+  });
   const settlementQuery = trpc.system.towerWars.settlement.useQuery(
     undefined,
     { staleTime: 60_000 }
@@ -287,6 +301,44 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
     return () => window.clearTimeout(timer);
   }, [activeSpectacle, data, today.isError]);
   const replay = useReplay(data);
+  /*
+    MUST stay above the early returns below. This was originally placed after
+    them, which made it a conditional hook: on a loading render React saw
+    fewer hooks than on a loaded one and threw error #310, so Tower Wars
+    crashed to the error boundary instead of rendering the arena.
+  */
+  /**
+   * How far this building's settled scars have been repaired.
+   *
+   * Pairs the settlement's dated strata with dated pickup evidence for the same
+   * building. Both halves are authoritative and both are dated, which is what
+   * lets a collection be placed before or after a given day's damage. A
+   * building with no evidence yields undefined and renders exactly as it always
+   * has — full-weight scars.
+   */
+  const regenerationFor = useMemo(() => {
+    const evidence = buildingWorld.data?.restorationEvidence ?? {};
+    const settlement = settlementQuery.data?.settlement;
+    return (buildingId: TowerWarsBuildingId): RegenerationProjection | undefined => {
+      const strata = settlement?.buildings[buildingId]?.strata ?? [];
+      if (!strata.length) return undefined;
+      const slug = BUILDINGS.find(b => b.id === buildingId)?.slug;
+      const rows = slug ? (evidence[slug] ?? []) : [];
+      if (!rows.length) return undefined;
+      return projectRegeneration({
+        orders: datedCollectedOrders(
+          rows.map(row => ({ id: row.orderId, status: row.orderStatus })),
+          rows.map(row => ({
+            orderId: row.orderId,
+            sourceEventType: "pickup_completed",
+            actualEventTimestamp: row.actualEventTimestamp,
+          }))
+        ),
+        strata,
+      });
+    };
+  }, [buildingWorld.data, settlementQuery.data]);
+
   if (today.isLoading && !data)
     return (
       <main className="tw-page">
@@ -337,6 +389,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
     century.revenueCents
   );
   const hasLoser = comparison.kind === "lead";
+
   const youId: TowerWarsBuildingId = hasLoser
     ? comparison.leaderIndex === 0
       ? "century_park_east"
@@ -376,7 +429,9 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
       {today.isError ? <div className="tw-confidence" role="status">Live feed interrupted · holding the last trusted world · new claims and mutating actions are suppressed</div> : null}
       {comebackBuilding ? <SiegeComeback buildingId={comebackBuilding} onClose={() => setComebackBuilding(null)} onContinue={pipelineId => onNavigate(`/commercial-pipeline?pipeline=${pipelineId}`)} /> : null}
       <section
-        className={`tw-arena ${isArriving || isEstablishing ? "tw-arriving" : ""}`}
+        className={`tw-arena ${isArriving || isEstablishing ? "tw-arriving" : ""} ${
+          activeSpectacle?.phase === "discharge" ? "is-impact" : ""
+        }`}
         data-unseen-events={unseenEvents.length + (activeSpectacle ? 1 : 0)}
         aria-labelledby="tower-wars-title"
       >
@@ -442,6 +497,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
                   settlementQuery.data?.settlement.buildings[buildingId]
                     .strata ?? []
                 }
+                regeneration={regenerationFor(buildingId)}
                 /* The replay reducer already yields the prefix count, so damage at
                    event N equals business state after event N for free. */
                 incomingToday={building.incomingAttackCount}

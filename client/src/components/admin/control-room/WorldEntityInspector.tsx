@@ -275,7 +275,8 @@ export function WorldEntityInspector({
       </button>
 
       <header>
-        <p className="owi-kicker">One physical place · one save file</p>
+        {/* "Save file" is our internal architecture word, not the player's. */}
+        <p className="owi-kicker">One physical place</p>
         <h2>{title}</h2>
         <p>{address ?? "Geographic identity awaiting evidence"}</p>
         {projection ? (

@@ -141,6 +141,32 @@ function TerritoryOnAtlas({
   if (!geometry) return null;
   const ghost = item.state.cleared;
 
+  /*
+    SLICE 7 — territory pressure, read spatially.
+
+    The territory already knew everything strategic about itself: how many
+    members remain, whether the Guardian can be confronted, whether it is
+    cleared. None of it reached the map, so a player could see WHERE a
+    territory was but not whether it mattered right now — and "which area
+    should I care about" is the whole question a strategy map answers.
+
+    Derived, never stored: this is a read over `item.state`, which is
+    itself derived from authoritative evidence.
+
+      cleared        settled — nothing owed here
+      ready          the Guardian can be confronted NOW
+      contested      real progress exists, work remains
+      dormant        untouched
+  */
+  const remaining = item.state.remainingMemberIds.length;
+  const pressure = ghost
+    ? "cleared"
+    : item.state.confrontationReady
+      ? "ready"
+      : item.state.completedMemberIds.length > 0
+        ? "contested"
+        : "dormant";
+
   return (
     <>
       <TerritoryVeilLayer
@@ -148,6 +174,27 @@ function TerritoryOnAtlas({
         state={item.state}
         entities={entities}
         reducedMotion={reducedMotion}
+      />
+      {/*
+        A single mark at the territory's centre carrying its strategic state.
+        Deliberately not a panel: the answer belongs on the ground it
+        describes. aria-label carries the same reading for a screen reader.
+      */}
+      <span
+        className={`gl-territory-pressure is-${pressure}`}
+        data-testid="territory-pressure"
+        data-territory-id={item.definition.id}
+        data-pressure={pressure}
+        style={{ left: `${geometry.centroid.x}%`, top: `${geometry.centroid.y}%` }}
+        aria-label={`${item.definition.fantasyTitle}: ${
+          pressure === "cleared"
+            ? "settled"
+            : pressure === "ready"
+              ? "guardian can be confronted"
+              : pressure === "contested"
+                ? `contested, ${remaining} remaining`
+                : "dormant"
+        }`}
       />
       {ghost && !active ? (
         <div
@@ -175,7 +222,7 @@ function TerritoryOnAtlas({
         />
       ) : (
         <div
-          className="gl-guardian-anchor"
+          className={`gl-guardian-anchor${noticed ? " is-selected" : ""}`}
           style={{ left: `${geometry.centroid.x}%`, top: `${Math.max(10, geometry.centroid.y - 8)}%` }}
         >
           <GuardianActor

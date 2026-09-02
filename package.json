@@ -39,7 +39,8 @@
     "test:goldline:campaign:smoke": "playwright test --config playwright.goldline-smoke.config.ts e2e/goldline-smoke/campaignSmoke.spec.ts e2e/goldline-smoke/campaignMutation.spec.ts",
     "test:goldline:campaign:mutation": "playwright test --config playwright.goldline-smoke.config.ts e2e/goldline-smoke/campaignMutation.spec.ts",
     "goldline:territories:capture": "node scripts/capture-goldline-territories.mjs",
-    "goldline:campaign:capture": "node scripts/capture-goldline-campaign.mjs"
+    "goldline:campaign:capture": "node scripts/capture-goldline-campaign.mjs",
+    "goldline:admin:dev-setup": "tsx scripts/goldline-admin-dev-setup.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

@@ -1,0 +1,203 @@
+import { expect, test } from "@playwright/test";
+import { resetGoldlineProofWorld } from "./proofWorld";
+
+const ADMIN_PASSWORD =
+  process.env.ADMIN_PASSWORD ?? "goldline-proof-admin-pass";
+
+/**
+ * THE ROUTE-MOUNT GATE.
+ *
+ * 612af8c spliced a helper between `export default` and `function
+ * LanternCityAtlas(`, so the module default-exported `lanternPhaseSeconds` and
+ * the component was never exported. Lantern City rendered nothing.
+ *
+ * Everything we ran passed anyway: it is valid TypeScript so tsc was clean, the
+ * bundle built, and the ambient suite passed because it asserts SOURCE TEXT.
+ * The blank page shipped and was only found by opening the browser.
+ *
+ * `lanternCityAtlasMount.test.ts` now catches that exact export corruption in
+ * milliseconds, but it is a module-identity guard — it cannot see a route that
+ * mounts and then renders nothing, throws mid-render, or loses its world.
+ *
+ * This spec is the durable gate for that whole class: it boots the real server
+ * against the deterministic local world, authenticates through the legitimate
+ * admin path, and asserts the city actually arrived with real objects in it.
+ *
+ * It is deliberately written so a blank page CANNOT pass.
+ */
+/*
+  LIVES IN THE SMOKE SUITE BECAUSE IT NEEDS A POPULATED WORLD.
+
+  This first lived in e2e/goldline (the mobile regression). That workflow never
+  seeds a world — it has no seed step at all — so the city mounted correctly
+  and legitimately contained zero inhabitants, and the gate failed on an empty
+  tenant rather than on a defect. The fast-smoke suite seeds the deterministic
+  proof world, which is the only place these assertions mean anything.
+
+  Admin is also a desktop product, so it runs at desktop size rather than the
+  Driver phone viewport.
+*/
+test.use({ viewport: { width: 1440, height: 900 }, isMobile: false, hasTouch: false });
+
+test.describe.configure({ mode: "serial" });
+
+test.describe("Lantern City mounts with a populated world", () => {
+  test.setTimeout(120_000);
+
+  test.beforeAll(async ({ request }) => {
+    await resetGoldlineProofWorld(request);
+  });
+
+  test("the city route renders real world DOM for an authenticated admin", async ({
+    page,
+  }) => {
+    // Any uncaught render exception fails the test rather than silently
+    // producing an empty page — the failure mode this gate exists for.
+    const pageErrors: string[] = [];
+    page.on("pageerror", error => pageErrors.push(String(error)));
+
+    await page.goto("/home");
+
+    // Legitimate configured dev login. Not a production authorization bypass:
+    // this is the same POST /api/auth/login the app itself uses.
+    const login = await page.request.post("/api/auth/login", {
+      data: { password: ADMIN_PASSWORD, role: "admin" },
+    });
+    expect(login.status(), "admin login must succeed").toBe(200);
+
+    await page.goto("/growth/lantern-city");
+
+    // 1. The route's own root actually mounted.
+    const cityRoot = page.locator(".lc-page");
+    await expect(cityRoot).toBeVisible({ timeout: 30_000 });
+
+    // 2. The world surface exists inside it, not just a shell.
+    await expect(page.locator(".lc-map")).toBeVisible();
+
+    // 3. Real populated world DOM. A mounted-but-empty city is still a
+    //    failure: the bug we are guarding produced a page with chrome and no
+    //    world, so "something rendered" is not the assertion.
+    /*
+      A PRIMARY world object, not specifically a lantern.
+
+      One physical place renders as ONE object: where a pursued building
+      stands, the customer lantern is suppressed and its cadence is worn by
+      the building instead. So a legitimately-seeded world can contain zero
+      standalone lanterns, and asserting on `.lc-lantern` specifically would
+      fail for a world that is behaving correctly — as it did on the mobile
+      gate the moment that suppression landed.
+
+      What this gate actually exists to prove is that the city mounted with
+      real inhabitants in it rather than as empty chrome.
+    */
+    await expect
+      .poll(
+        async () =>
+          page.locator(".lc-lantern, .lc-pursued-building").count(),
+        {
+          timeout: 30_000,
+          message:
+            "expected at least one real world object (lantern or pursued building) from the seeded world",
+        }
+      )
+      .toBeGreaterThan(0);
+
+    await expect
+      .poll(async () => page.locator(".pwc-building").count(), {
+        message: "expected at least one canonical tower on the map",
+      })
+      .toBeGreaterThan(0);
+
+    // 4. The body is not blank. Guards the exact symptom that shipped.
+    const bodyText = (await page.locator("body").innerText()).trim();
+    expect(bodyText.length, "page body must not be empty").toBeGreaterThan(80);
+
+    // 5. Nothing threw while getting here.
+    expect(pageErrors, "no uncaught render errors").toEqual([]);
+  });
+
+  test("a selected lantern is visibly held by the player", async ({ page }) => {
+    await page.goto("/home");
+    await page.request.post("/api/auth/login", {
+      data: { password: ADMIN_PASSWORD, role: "admin" },
+    });
+    await page.goto("/growth/lantern-city");
+    await expect(page.locator(".lc-page")).toBeVisible({ timeout: 30_000 });
+
+    const worldObjects = page.locator(".lc-pursued-building, .lc-lantern");
+    await expect.poll(async () => worldObjects.count(), { timeout: 30_000 })
+      .toBeGreaterThan(0);
+
+    const held = page.locator(
+      ".lc-lantern.is-selected, .lc-pursued-building.is-selected"
+    );
+    await expect(held).toHaveCount(0);
+
+    /*
+      Click the topmost world object at a place rather than a specific class.
+      A pursued building sits above the lanterns at the same coordinate
+      (z-index 7 vs 5), so it is genuinely what the cursor meets there — the
+      grammar has to hold for whichever object the player actually reaches.
+    */
+    const target = worldObjects.first();
+
+    /*
+      `force` is deliberate and narrow. Playwright's actionability check
+      requires a stable bounding box across frames, and Lantern City animates
+      continuously — the world surface settles under its markers and attention
+      tiers run an infinite filter animation, so a marker is never "stable" by
+      that definition and the click waits forever.
+      That is a property of a living city, not a broken control: the same click
+      works in a real browser session. Visibility and enabled-ness are asserted
+      above on the same locator, so the only check being skipped is stability.
+    */
+    await expect(target).toBeVisible();
+    await expect(target).toBeEnabled();
+    await target.click({ force: true });
+
+    // Exactly one object is held. Two rings would make selection meaningless.
+    await expect(held).toHaveCount(1);
+  });
+
+  test("selecting OPUS carries the player into the Tower Wars arena", async ({
+    page,
+  }) => {
+    /*
+      The Slice 2 chain, guarded end to end: city -> tower selectable -> select
+      -> transition -> arena with real pieces.
+
+      This exists because c7d8060 added a useMemo AFTER TowerWars' early
+      returns, making it a conditional hook. React threw #310 and the arena
+      crashed to the error boundary. tsc was clean and the bundle built, so
+      only opening the page found it — the same lesson as 612af8c, one route
+      over.
+    */
+    const pageErrors: string[] = [];
+    page.on("pageerror", error => pageErrors.push(String(error)));
+
+    await page.goto("/home");
+    await page.request.post("/api/auth/login", {
+      data: { password: ADMIN_PASSWORD, role: "admin" },
+    });
+    await page.goto("/growth/lantern-city");
+    await expect(page.locator(".lc-page")).toBeVisible({ timeout: 30_000 });
+
+    const opus = page.locator(".pwc-building.opus").first();
+    await expect(opus).toBeVisible();
+    await opus.click({ force: true });
+
+    await expect(page).toHaveURL(/tower-wars\?building=opus_la/);
+
+    // The arena actually arrived, with both towers standing in it.
+    await expect(page.locator(".tw-arena")).toBeVisible({ timeout: 30_000 });
+    await expect
+      .poll(async () => page.locator(".tw-piece").count(), { timeout: 30_000 })
+      .toBeGreaterThan(1);
+
+    // A crashed render would leave the boundary text instead of the world.
+    await expect(page.locator("body")).not.toContainText(
+      "An unexpected error occurred"
+    );
+    expect(pageErrors, "no uncaught render errors entering the arena").toEqual([]);
+  });
+});
