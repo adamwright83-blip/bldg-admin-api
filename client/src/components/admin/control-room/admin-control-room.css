@@ -1031,3 +1031,94 @@
 @media (prefers-reduced-motion: reduce) {
   .lc-pursued-building.is-selected::after { animation: none; }
 }
+
+/* ============================================================
+   SLICE 3 — TOWER WARS GAME FEEL
+
+   The mechanics were already there: tw-driver-swing, tw-launcher-recoil,
+   tw-golfball-flight, a charge meter, and a revenue -> discharge -> settle
+   phase machine. What was missing is everything AROUND the swing. A strike
+   began instantly at full speed, the target did not react, the camera did
+   not care, and control returned with no punctuation — so a giant golf
+   driver hitting a skyscraper read as an animation playing, not a hit
+   landing.
+
+   Added, in the order a hit is actually read:
+
+     ANTICIPATION  the tower loads before it swings. Without a wind-up the
+                   eye cannot predict the strike, and an unpredictable hit
+                   feels arbitrary rather than earned.
+     IMPACT        the struck tower recoils and flashes at the moment of
+                   contact, not on a timer of its own.
+     HIT-STOP      a very short hold at contact. This is the single cheapest
+                   trick in action games: freezing for ~70ms makes a hit feel
+                   like it had mass.
+     CAMERA        the arena itself kicks. A world that does not move when a
+                   skyscraper is struck reads as a diorama.
+     RECOVERY      the weapon settles back rather than snapping, so control
+                   returns visibly rather than just ending.
+
+   OPUS and CPE stay mechanically distinct: OPUS loads a backswing and
+   settles like a club; CPE braces and shoves like a cannon.
+
+   All game-only presentation. Nothing here can alter business truth.
+   ============================================================ */
+
+/* ANTICIPATION — the wind-up that makes the strike readable. */
+.tw-piece.is-firing .cb-weapon.is-opus_la:before {
+  animation: tw-opus-load 0.86s cubic-bezier(0.34, 0, 0.2, 1);
+}
+@keyframes tw-opus-load {
+  0%   { transform: rotate(0deg); }
+  26%  { transform: rotate(-31deg); }   /* load the backswing */
+  30%  { transform: rotate(-33deg); }   /* hang at the top */
+  46%  { transform: rotate(19deg); }    /* through the ball */
+  58%  { transform: rotate(9deg); }
+  74%  { transform: rotate(13deg); }    /* follow-through settles */
+  100% { transform: rotate(0deg); }
+}
+.tw-piece.is-firing .cb-weapon.is-century_park_east:before {
+  animation: tw-cpe-brace 0.72s cubic-bezier(0.3, 0, 0.2, 1);
+}
+@keyframes tw-cpe-brace {
+  0%   { transform: translateX(0) rotate(0deg); }
+  30%  { transform: translateX(6px) rotate(-3deg); }  /* brace back */
+  42%  { transform: translateX(-11px) rotate(5deg); } /* shove */
+  70%  { transform: translateX(3px) rotate(-1deg); }
+  100% { transform: translateX(0) rotate(0deg); }
+}
+
+/* IMPACT — the struck piece answers. Driven by the same is-firing state so
+   the reaction cannot drift out of sync with the swing. */
+.tw-arena.is-impact .tw-piece:not(.is-firing) .cb-plate {
+  animation: tw-struck 0.42s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+@keyframes tw-struck {
+  0%   { transform: translateX(0); filter: brightness(1); }
+  12%  { transform: translateX(7px); filter: brightness(1.5) saturate(0.7); }
+  30%  { transform: translateX(-4px); filter: brightness(1.12); }
+  55%  { transform: translateX(2px); }
+  100% { transform: translateX(0); filter: brightness(1); }
+}
+
+/* HIT-STOP + CAMERA — the arena holds, then kicks. */
+.tw-arena.is-impact {
+  animation: tw-arena-kick 0.46s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+@keyframes tw-arena-kick {
+  0%   { transform: translate(0, 0) scale(1); }
+  8%   { transform: translate(0, 0) scale(1); }      /* the hold — mass */
+  16%  { transform: translate(-5px, 3px) scale(1.006); }
+  34%  { transform: translate(3px, -2px) scale(1.002); }
+  60%  { transform: translate(-1px, 1px) scale(1); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tw-piece.is-firing .cb-weapon.is-opus_la:before,
+  .tw-piece.is-firing .cb-weapon.is-century_park_east:before,
+  .tw-arena.is-impact,
+  .tw-arena.is-impact .tw-piece:not(.is-firing) .cb-plate {
+    animation: none !important;
+  }
+}

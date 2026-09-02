@@ -175,7 +175,7 @@ function TerritoryOnAtlas({
         />
       ) : (
         <div
-          className="gl-guardian-anchor"
+          className={`gl-guardian-anchor${noticed ? " is-selected" : ""}`}
           style={{ left: `${geometry.centroid.x}%`, top: `${Math.max(10, geometry.centroid.y - 8)}%` }}
         >
           <GuardianActor

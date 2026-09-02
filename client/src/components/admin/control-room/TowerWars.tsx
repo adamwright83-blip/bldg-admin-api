@@ -429,7 +429,9 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
       {today.isError ? <div className="tw-confidence" role="status">Live feed interrupted · holding the last trusted world · new claims and mutating actions are suppressed</div> : null}
       {comebackBuilding ? <SiegeComeback buildingId={comebackBuilding} onClose={() => setComebackBuilding(null)} onContinue={pipelineId => onNavigate(`/commercial-pipeline?pipeline=${pipelineId}`)} /> : null}
       <section
-        className={`tw-arena ${isArriving || isEstablishing ? "tw-arriving" : ""}`}
+        className={`tw-arena ${isArriving || isEstablishing ? "tw-arriving" : ""} ${
+          activeSpectacle?.phase === "discharge" ? "is-impact" : ""
+        }`}
         data-unseen-events={unseenEvents.length + (activeSpectacle ? 1 : 0)}
         aria-labelledby="tower-wars-title"
       >

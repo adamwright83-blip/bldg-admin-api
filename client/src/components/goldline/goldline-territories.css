@@ -86,3 +86,93 @@ button.gl-guardian{pointer-events:auto}
   .gl-guardian-encounter{width:92vw;height:70vh}
   .gl-guardian-dialogue{max-width:88vw}
 }
+
+/* ============================================================
+   SLICE 1 (completion) — GUARDIANS AND TERRITORIES JOIN THE GRAMMAR
+
+   Lanterns, towers and pursued buildings share IDLE -> HOVER/FOCUS ->
+   SELECTED. Guardians and territories did not: a Guardian was reachable
+   only through an invisible 48px hit circle with no hover state and no
+   keyboard affordance at all, so the most dangerous object in the city was
+   the least discoverable one.
+
+   These do NOT get the lantern's gold rectangle. A Guardian is not a marker
+   and a rectangle around a boss reads as a UI selection box, which is
+   exactly the software feel this wave is removing. The requirement is one
+   understandable grammar, not identical CSS on wildly different objects:
+
+     lantern / tower / building   ring   — "this is the object you hold"
+     Guardian                     rouse  — it notices you and leans in
+     territory                    wash   — its ground brightens
+
+   Same three states, same meanings, expressed the way each object would
+   plausibly express them.
+   ============================================================ */
+
+/* The hit target itself stays invisible, but must ANNOUNCE itself on
+   approach — including to a keyboard, which previously got nothing. */
+.gl-guardian-hit {
+  border-radius: 50%;
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+.gl-guardian-hit:hover,
+.gl-guardian-hit:focus-visible {
+  outline: none;
+  transform: translate(-50%, -50%) scale(1.08);
+  box-shadow:
+    0 0 0 2px #ffd76699,
+    0 0 22px 6px #ff9d4d55;
+}
+
+/* The Guardian itself rouses when approached — the object reacts, not just
+   the cursor. Scoped to the anchor so the actor art leans without the hit
+   circle dragging it around. */
+.gl-guardian-anchor:hover .gl-guardian,
+.gl-guardian-anchor:focus-within .gl-guardian {
+  filter: drop-shadow(0 10px 22px #ff9d4d88) brightness(1.06);
+  transform: scale(1.03);
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+
+/* SELECTED / ENTERED — the Guardian is the thing the player is now in with.
+   A held Guardian glows from beneath rather than being boxed. */
+.gl-guardian-anchor.is-selected .gl-guardian {
+  filter: drop-shadow(0 12px 30px #ffb545cc) brightness(1.1);
+}
+.gl-guardian-anchor.is-selected::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6%;
+  width: 74%;
+  height: 16%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 50%, #ffb54577 0%, transparent 70%);
+  animation: gl-guardian-hold 2.6s ease-in-out infinite;
+}
+@keyframes gl-guardian-hold {
+  0%, 100% { opacity: 0.55; transform: translateX(-50%) scale(1); }
+  50%      { opacity: 0.95; transform: translateX(-50%) scale(1.08); }
+}
+
+/* Territory ground responds to the same three states. A territory is an
+   AREA, so it brightens rather than gaining an edge. */
+.gl-territory-shape {
+  transition: opacity 0.2s ease, filter 0.2s ease;
+}
+.gl-territory-shape:hover,
+.gl-territory-shape:focus-visible {
+  filter: brightness(1.14);
+}
+.gl-territory-shape.is-selected {
+  filter: brightness(1.22) drop-shadow(0 0 14px #ffd76666);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gl-guardian-anchor.is-selected::after { animation: none; opacity: 0.8; }
+  .gl-guardian-hit,
+  .gl-guardian-anchor:hover .gl-guardian,
+  .gl-territory-shape { transition: none; }
+}
