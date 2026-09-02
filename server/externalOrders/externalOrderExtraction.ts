@@ -180,14 +180,15 @@ export async function extractExternalDayFromScreenshots(input: {
       try {
         return await extractOneImage(image, input.tenantId);
       } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
         console.error(
-          `[external-orders] CleanCloud screenshot extraction failed for image ${index + 1}`,
+          `[external-orders] CleanCloud screenshot extraction failed for image ${index + 1}/${input.images.length}; tenant=${input.tenantId ?? "default"}; payloadChars=${image.length}; ${detail}`,
           error
         );
-        // A provider/config/parser failure is not evidence that the screenshot
-        // was empty or unreadable. Fail the import explicitly so the operator
-        // can retry without being told a false story about the source image.
-        throw new Error("CleanCloud screenshot extraction failed before review");
+        // Preserve the sanitized provider/config/parser reason through tRPC.
+        // The authenticated operator needs this exact reason to distinguish a
+        // bad image from a bad deployment without opening infrastructure logs.
+        throw new Error(`CleanCloud extraction: ${detail}`);
       }
     })
   );

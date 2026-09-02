@@ -103,10 +103,9 @@ export function AddExternalWorkSheet(props: AddExternalWorkSheetProps) {
           "No jobs could be read from those screenshots. Add one by hand instead."
         );
       }
-    } catch {
-      setError(
-        "Screenshot import failed before review. Try again — Goldline did not classify the screenshot as empty."
-      );
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      setError(`Screenshot import failed: ${detail}`);
     } finally {
       setBusy(false);
     }
