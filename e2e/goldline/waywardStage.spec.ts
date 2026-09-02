@@ -19,8 +19,21 @@ test.describe("Wayward authored player truth", () => {
       timeout: 30_000,
     });
     await expect(page.getByText("PARRY · BRONZE BREAKS", { exact: false })).toHaveCount(0);
-    const parry = page.getByRole("button", { name: "PARRY NOW" });
-    await expect(parry).toBeVisible({ timeout: 5_000 });
+
+    /*
+      Asset assertions run BEFORE the parry window opens, deliberately.
+
+      They used to sit between "PARRY NOW appeared" and `parry.click()` — a
+      page.evaluate plus five loop assertions performed inside a time-limited
+      combat window. On a loaded CI runner that unrelated work outlasted the
+      window, the button stopped being actionable, and the click waited until
+      the test timed out. The gameplay was correct; the test was spending the
+      player's parry window on bookkeeping.
+
+      Nothing about the window is widened and no product timing is touched.
+      These checks never depended on the guardian's state — they only read
+      resources the stage already loaded — so they belong outside it.
+    */
     const loadedResources = await page.evaluate(() =>
       performance.getEntriesByType("resource").map(entry => entry.name)
     );
@@ -33,6 +46,10 @@ test.describe("Wayward authored player truth", () => {
     ]) {
       expect(loadedResources.some(resource => resource.includes(asset))).toBe(true);
     }
+
+    // Now take the window: appear -> click, with nothing in between.
+    const parry = page.getByRole("button", { name: "PARRY NOW" });
+    await expect(parry).toBeVisible({ timeout: 10_000 });
     await parry.click();
     await expect(page.getByText("PARRY · BRONZE BREAKS", { exact: false })).toBeVisible();
   });
