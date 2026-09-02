@@ -227,8 +227,26 @@ export type PickupCompletedEvidence = {
  * `actualEventTimestamp`, which is the only field that records the real
  * collection instant.
  *
- * UNCERTAINTY GETS NO CREDIT — and this deliberately diverges from
- * `strongholdRestoration.ts`.
+ * TWO SEPARATE QUESTIONS, TWO SEPARATE AUTHORITIES
+ *
+ * The audit event is NOT what proves a collection happened. That authority
+ * stays exactly where `strongholdRestoration.ts` puts it: the order reaching
+ * collected-or-beyond is primary truth, precisely because the audit row can
+ * legitimately be missing — the conditional UPDATE and the event write are not
+ * one transaction.
+ *
+ * Regeneration therefore requires BOTH, for different reasons:
+ *
+ *   collected-or-beyond order state  ->  the pickup OCCURRED   (primary truth)
+ *   completed pickup_completed row   ->  it occurred WHEN      (dated evidence)
+ *
+ * An order with no usable timestamp is still entirely legitimate business
+ * truth and still restores a Stronghold. It simply earns no HEALING, because
+ * healing is a claim about order-of-events and that claim cannot be supported.
+ * Losing regeneration credit is not a statement that the collection is doubted.
+ *
+ * UNCERTAINTY GETS NO CREDIT — and this is where regeneration deliberately
+ * diverges from `strongholdRestoration.ts`.
  *
  * There, a collected order with no audit event still restores the Stronghold,
  * because the order is the truth and a missing audit row is a known gap
@@ -261,7 +279,9 @@ export function datedCollectedOrders(
   for (const order of orders) {
     if (!isCollectedTruth(order)) continue;
     const at = collectedAt.get(order.id);
-    if (!at) continue; // proven collected, but undatable — no credit.
+    // Genuinely collected — that stands as business truth either way — but
+    // undatable, so it cannot be placed relative to a scar. No healing credit.
+    if (!at) continue;
     dated.push({ ...order, collectedOn: at.slice(0, 10) });
   }
   return dated;
