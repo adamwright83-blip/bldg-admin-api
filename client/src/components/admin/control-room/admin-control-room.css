@@ -591,3 +591,88 @@
   .is-firing .lc-projectile{animation:none}
   .lc-arcade,.lc-weapon-golf_driver,.lc-weapon-valet_bazooka{transition:none}
 }
+
+/* ============================================================
+   LANTERN CITY IS THE PRODUCT, NOT A PANEL IN A REPORT
+
+   The Atlas shipped as a ~460px map boxed inside a scrolling page, under a
+   four-card status grid and above a legend row. The city — the actual game —
+   held about a third of the viewport, and you scrolled a document to see it.
+   That reads as a dashboard that happens to contain a map.
+
+   The world now claims the screen on first paint, and the lantern counts ride
+   on top of it as instruments rather than stacking above it as report cards.
+   The counts stay in normal flow and are pulled down over the map's top edge
+   with a negative margin: anchoring them to `.lc-page` instead put them on top
+   of the title, because the page — not the map — is the positioning context.
+
+   Reference material (legend, unmapped, chronicle) stays below the fold. It is
+   still reachable, just no longer competing with the city for first sight.
+
+   Presentation only. No projection, query, or truth changes — the Atlas renders
+   exactly the same authoritative entities it did before.
+   ============================================================ */
+.lc-page { padding-top: 16px; }
+.lc-page .lc-map {
+  height: calc(100dvh - var(--cr-north-h) - 132px);
+  min-height: 460px;
+}
+/*
+  Right-aligned on purpose. The campaign chapter card (THE BROKEN CROWN) is
+  authored into the map's top-left corner, so chips anchored there sat on top
+  of the current chapter — the one thing on screen that says what to do next.
+*/
+.lc-page .lc-status-grid {
+  position: relative;
+  z-index: 12;
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap-reverse;
+  row-gap: 6px;
+  margin: 0 0 -60px;
+  gap: 8px;
+  padding: 0 16px 0 4px;
+  pointer-events: none;
+}
+.lc-page .lc-status-card {
+  min-height: 0;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 13px 7px 9px;
+  border-color: #ffffff2b;
+  border-radius: 999px;
+  background: #0b1c2fc7;
+  backdrop-filter: blur(7px);
+  box-shadow: 0 6px 18px #04101d55;
+}
+.lc-page .lc-status-card .lc-status-icon {
+  width: 16px;
+  height: 23px;
+  margin-left: 0;
+  border-width: 2px;
+}
+.lc-page .lc-status-card > div {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 7px;
+}
+.lc-page .lc-status-card strong { color: #f4f8ff; font-size: 17px; }
+.lc-page .lc-status-card small { color: #a6c8e8; font-size: 8px; }
+/* The cadence caption is a report footnote; the chip itself is the reading. */
+.lc-page .lc-status-card p { display: none; }
+
+@media (max-width: 800px) {
+  /* On a phone the chips would cover the city they annotate. */
+  .lc-page .lc-status-grid {
+    margin: 0 0 12px;
+    flex-wrap: wrap;
+    pointer-events: auto;
+  }
+  .lc-page .lc-map { height: auto; min-height: 520px; }
+  .lc-page .lc-status-card p { display: block; }
+}
+
+/* The world should start as high as the title honestly allows. */
+.lc-page .lc-page-header h1 { font-size: 25px; letter-spacing: -0.04em; }
+.lc-page .lc-page-header p { font-size: 11px; }
