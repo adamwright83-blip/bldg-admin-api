@@ -55,7 +55,7 @@ async function newPage(browser) {
     userAgent:
       "Mozilla/5.0 (Linux; Android 14; Pixel 9 Pro) AppleWebKit/537.36 " +
       "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
-    geolocation: { latitude: 34.0522, longitude: -118.2437 },
+    geolocation: { latitude: 34.0522, longitude: -118.2437, accuracy: 10 },
     permissions: ["geolocation"],
   });
   const page = await context.newPage();
@@ -132,7 +132,8 @@ async function main() {
   if (await explainer.count()) {
     await explainer.getByRole("button", { name: "GOT IT" }).click();
   }
-  const shot = name => page.screenshot({ path: path.join(outputDir, `${name}.png`) });
+  const shot = name =>
+    page.screenshot({ path: path.join(outputDir, `${name}.png`) });
 
   await page.getByTestId("expedition-enter").click();
   await page.getByTestId("expedition-action-pad").waitFor({ timeout: 10_000 });
@@ -184,15 +185,26 @@ async function main() {
 
   // ----------------------------------------------- walk to the first target
   const cdp = await context.newCDPSession(page);
-  const pt = (x, y) => ({ x: Math.round(x), y: Math.round(y), radiusX: 12, radiusY: 12, force: 1 });
-  const touch = (type, points) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: points });
+  const pt = (x, y) => ({
+    x: Math.round(x),
+    y: Math.round(y),
+    radiusX: 12,
+    radiusY: 12,
+    force: 1,
+  });
+  const touch = (type, points) =>
+    cdp.send("Input.dispatchTouchEvent", { type, touchPoints: points });
   const settleFrames = settle(page);
-  const snapshot = () => page.evaluate(() => window.__goldlineGame.getExpeditionSnapshot());
+  const snapshot = () =>
+    page.evaluate(() => window.__goldlineGame.getExpeditionSnapshot());
   const progressNow = () => page.evaluate(() => window.__goldlineGame.progress);
 
   async function walkTo(target, { maxMs = 25_000 } = {}) {
     const stickBox = await boxOf(page, "goldline-joystick");
-    const stick = { x: stickBox.x + stickBox.width / 2, y: stickBox.y + stickBox.height / 2 };
+    const stick = {
+      x: stickBox.x + stickBox.width / 2,
+      y: stickBox.y + stickBox.height / 2,
+    };
     await touch("touchStart", [pt(stick.x, stick.y)]);
     const startedAt = Date.now();
     let last = await progressNow();
@@ -216,20 +228,41 @@ async function main() {
   await walkTo(destination);
   if ((await snapshot()).outcome !== "arrived") {
     await page.evaluate(() => {
-      for (const hostile of window.__goldlineGame.getExpedition().hostiles) hostile.hp = 0;
+      for (const hostile of window.__goldlineGame.getExpedition().hostiles)
+        hostile.hp = 0;
     });
     if ((await snapshot()).outcome === "down") {
       await page.getByTestId("expedition-redeploy").click();
       await settleFrames(20);
       await page.evaluate(() => {
-        for (const hostile of window.__goldlineGame.getExpedition().hostiles) hostile.hp = 0;
+        for (const hostile of window.__goldlineGame.getExpedition().hostiles)
+          hostile.hp = 0;
       });
     }
     await walkTo(destination);
   }
   await page.getByTestId("expedition-arrived").waitFor({ timeout: 15_000 });
-  check("the first target is reached on foot", (await snapshot()).outcome === "arrived");
+  check(
+    "the first target is reached on foot",
+    (await snapshot()).outcome === "arrived"
+  );
   await shot("ltr-02-arrived-at-first-target");
+
+  // CI's fixed BrowserContext geolocation may emit only its initial
+  // watchPosition reading while the device is stationary. Production's truth
+  // gate intentionally requires at least three accurate provider readings over
+  // a real 12-second dwell, so exercise that exact rule instead of treating one
+  // coordinate as proof the operator remained there. These are GPS-provider
+  // updates; touch remains real CDP input and no business result is synthesized.
+  const dwellSamples = [
+    { latitude: 34.0522, longitude: -118.2437, accuracy: 10 },
+    { latitude: 34.052201, longitude: -118.243699, accuracy: 10 },
+    { latitude: 34.052199, longitude: -118.243701, accuracy: 10 },
+  ];
+  for (const sample of dwellSamples) {
+    await context.setGeolocation(sample);
+    await page.waitForTimeout(6_100);
+  }
 
   // ------------------------------------------------- I. FIELD INTEL LINKAGE
   console.log("\nI. ONLY A CONFIRMED FIELD INTEL CAPTURE ADVANCES PROGRESS");
@@ -252,19 +285,32 @@ async function main() {
   );
 
   const doorstep = page.getByTestId("expedition-log-signal");
-  check("Field Intel capture is reachable from the doorstep itself", (await doorstep.count()) === 1);
+  await doorstep.waitFor({ state: "visible", timeout: 8_000 });
+  const doorstepLabel = (await doorstep.textContent())?.trim();
+  check(
+    "Field Intel unlocks only after the conservative physical-arrival dwell",
+    doorstepLabel === "LOG A SIGNAL",
+    doorstepLabel
+  );
   await doorstep.click();
   const sheet = page.getByTestId("log-signal-sheet");
   await sheet.waitFor({ state: "visible", timeout: 8_000 });
-  const whereShown = (await page.getByTestId("log-signal-where").textContent())?.trim();
+  const whereShown = (
+    await page.getByTestId("log-signal-where").textContent()
+  )?.trim();
   check(
     "the sheet attaches the real target the app pinned, not an invented name",
     whereShown === "A-1 Dry Cleaners",
     whereShown
   );
-  await page.getByTestId("log-signal-speech").fill("Dropped off a referral pitch, they'll consider it");
+  await page
+    .getByTestId("log-signal-speech")
+    .fill("Dropped off a referral pitch, they'll consider it");
   await page.getByTestId("log-signal-structure").click();
-  await page.getByTestId("proposed-signal").first().waitFor({ state: "visible", timeout: 8_000 });
+  await page
+    .getByTestId("proposed-signal")
+    .first()
+    .waitFor({ state: "visible", timeout: 8_000 });
   await shot("ltr-03-log-signal-proposed");
   await page.getByTestId("log-signal-save").click();
   await sheet.waitFor({ state: "detached", timeout: 8_000 }).catch(() => {});
@@ -348,7 +394,9 @@ async function main() {
   }
   // The threshold (pre-entry) screen is where provenance is always shown —
   // it must be honest before the operator even commits to the run.
-  await sim.page.getByTestId("expedition-threshold").waitFor({ timeout: 10_000 });
+  await sim.page
+    .getByTestId("expedition-threshold")
+    .waitFor({ timeout: 10_000 });
   const thresholdProvenance = sim.page.getByTestId("expedition-provenance");
   const thresholdProvenanceText = (await thresholdProvenance.count())
     ? (await thresholdProvenance.textContent())?.trim()
@@ -358,12 +406,16 @@ async function main() {
     thresholdProvenanceText === "SIMULATED · PLACES UNAVAILABLE",
     thresholdProvenanceText ?? "no provenance badge rendered"
   );
-  await sim.page.screenshot({ path: path.join(outputDir, "ltr-06-simulated-threshold.png") });
+  await sim.page.screenshot({
+    path: path.join(outputDir, "ltr-06-simulated-threshold.png"),
+  });
 
   await sim.page.getByTestId("expedition-enter").click();
   await sim.page.getByTestId("expedition-action-pad").waitFor({ timeout: 10_000 });
   await sim.page.getByTestId("expedition-objective").click();
-  await sim.page.getByTestId("expedition-mission-sheet").waitFor({ timeout: 5_000 });
+  await sim.page
+    .getByTestId("expedition-mission-sheet")
+    .waitFor({ timeout: 5_000 });
   const sheetProvenance = (
     await sim.page.locator(".expedition-mission-sheet__provenance").textContent()
   )?.trim();
@@ -372,7 +424,9 @@ async function main() {
     sheetProvenance === "SIMULATED · PLACES UNAVAILABLE",
     sheetProvenance ?? "no provenance line in the sheet"
   );
-  await sim.page.screenshot({ path: path.join(outputDir, "ltr-06-simulated-badge.png") });
+  await sim.page.screenshot({
+    path: path.join(outputDir, "ltr-06-simulated-badge.png"),
+  });
   await sim.context.close();
 
   await browser.close();
@@ -382,7 +436,10 @@ async function main() {
   console.log(`${results.length - failed.length}/${results.length} checks passed`);
   if (failed.length > 0) {
     console.error(`LOCAL_TARGET_RUN GATE FAILED (${failed.length} checks)`);
-    for (const failure of failed) console.error(`  ${failure.name}${failure.detail ? `: ${failure.detail}` : ""}`);
+    for (const failure of failed)
+      console.error(
+        `  ${failure.name}${failure.detail ? `: ${failure.detail}` : ""}`
+      );
     process.exit(1);
   }
   console.log(`LOCAL_TARGET_RUN GATE PASSED — frames in ${outputDir}`);
