@@ -23,31 +23,41 @@ jobs:
           from pathlib import Path
           path = Path('client/src/game/GoldlineGameHome.tsx')
           text = path.read_text()
-          old = """            onLogSignal={
-              activeExpedition?.kind === \"local_target_run\" &&
-              !localTargetRealArrivalConfirmed
-                ? props.onOpenJournal
-                : props.onOpenLogSignal
-            }"""
-          new = """            onLogSignal={
-              activeExpedition?.kind === \"local_target_run\" &&
-              !localTargetRealArrivalConfirmed
-                ? props.onOpenJournal
-                : arrivedStop
-                  ? () => {
-                      // Carry the already-confirmed doorstep identity into the
-                      // controller synchronously before opening capture. The
-                      // passive reporting effect below remains useful for the
-                      // general operating bar, but this real-action boundary
-                      // must not depend on a later React effect/render.
-                      props.onOperatorStopChange?.(arrivedStop);
-                      props.onOpenLogSignal?.();
-                    }
-                  : props.onOpenLogSignal
-            }"""
-          if text.count(old) != 1:
-              raise SystemExit(f'expected exactly one onLogSignal block, found {text.count(old)}; refusing broad edit')
-          path.write_text(text.replace(old, new, 1))
+          lines = text.splitlines()
+          matches = []
+          for i in range(len(lines) - 5):
+              if (
+                  lines[i] == '            onLogSignal={'
+                  and lines[i + 1].strip() == 'activeExpedition?.kind === "local_target_run" &&'
+                  and lines[i + 2].strip() == '!localTargetRealArrivalConfirmed'
+                  and lines[i + 3].strip() == '? props.onOpenJournal'
+                  and lines[i + 4].strip() == ': props.onOpenLogSignal'
+                  and lines[i + 5] == '            }'
+              ):
+                  matches.append(i)
+          if len(matches) != 1:
+              raise SystemExit(f'expected exactly one target onLogSignal block, found {len(matches)}; refusing broad edit')
+          i = matches[0]
+          replacement = [
+              '            onLogSignal={',
+              '              activeExpedition?.kind === "local_target_run" &&',
+              '              !localTargetRealArrivalConfirmed',
+              '                ? props.onOpenJournal',
+              '                : arrivedStop',
+              '                  ? () => {',
+              '                      // Carry the already-confirmed doorstep identity into the',
+              '                      // controller synchronously before opening capture. The',
+              '                      // passive reporting effect below remains useful for the',
+              '                      // general operating bar, but this real-action boundary',
+              '                      // must not depend on a later React effect/render.',
+              '                      props.onOperatorStopChange?.(arrivedStop);',
+              '                      props.onOpenLogSignal?.();',
+              '                    }',
+              '                  : props.onOpenLogSignal',
+              '            }',
+          ]
+          lines[i:i + 6] = replacement
+          path.write_text('\n'.join(lines) + '\n')
           PY
           rm .github/workflows/patch-real-workday-capture-race.yml
       - name: Commit exact patch
