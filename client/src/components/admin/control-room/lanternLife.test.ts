@@ -45,7 +45,10 @@ describe("lantern ambient life", () => {
   });
 
   it("still respects reduced motion, keeping the information without the movement", () => {
-    const reduced = css.slice(css.lastIndexOf("prefers-reduced-motion"));
+    // Scoped to the lantern's own reduced-motion block. `lastIndexOf` would
+    // find the tower block, which is appended later in the same stylesheet.
+    const lanternBlock = css.slice(css.indexOf(".lc-lantern-body::after"));
+    const reduced = lanternBlock.slice(lanternBlock.indexOf("prefers-reduced-motion"));
     expect(reduced).toContain(".lc-lantern-body::after { animation: none !important; }");
     expect(reduced).toMatch(/state-active[\s\S]{0,80}opacity: 0\.85/);
     expect(reduced).toMatch(/state-dark[\s\S]{0,80}opacity: 0/);
@@ -60,5 +63,40 @@ describe("lanternPhaseSeconds", () => {
     // the source so the property survives a refactor of the component.
     expect(atlas).toMatch(/hash \* 31 \+ key\.charCodeAt/);
     expect(atlas).toMatch(/hash % 700\) \/ 100/);
+  });
+});
+
+/**
+ * Confirmed against real computed styles in a browser: both towers resolve
+ * lc-tower-presence at 9s infinite, each binding its own identity colour into
+ * the gradient (OPUS purple, CPE amber).
+ */
+describe("tower presence", () => {
+  it("targets the class CityTowerButton actually renders", () => {
+    // `.lc-world-tower` exists in this stylesheet but no component uses it.
+    // Traced through WorldGeographySurface: CityTowerButton is given
+    // `pwc-building opus|cpe`.
+    const surface = readFileSync(
+      new URL("./WorldGeographySurface.tsx", import.meta.url),
+      "utf8"
+    );
+    expect(surface).toMatch(/pwc-building \$\{.*opus.*cpe/s);
+    expect(css).toContain(".pwc-building::before");
+  });
+
+  it("gives each tower its own identity colour rather than one highlight", () => {
+    expect(css).toMatch(/\.pwc-building\.opus \{ --lc-tower-glow/);
+    expect(css).toMatch(/\.pwc-building\.cpe \{ --lc-tower-glow/);
+  });
+
+  it("looms slower than a lantern flickers", () => {
+    // A lantern is one relationship and should flicker; a tower is a landmark
+    // and should loom. Matching rates would read as one class of object.
+    const tower = css.match(/animation: lc-tower-presence (\d+)s/);
+    expect(Number(tower?.[1])).toBeGreaterThan(7);
+  });
+
+  it("respects reduced motion", () => {
+    expect(css).toMatch(/\.pwc-building::before \{ animation: none !important/);
   });
 });

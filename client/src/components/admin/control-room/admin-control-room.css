@@ -881,3 +881,63 @@
   .lc-lantern.state-dimming .lc-lantern-body::after { opacity: 0.4; }
   .lc-lantern.state-dark .lc-lantern-body::after { opacity: 0; }
 }
+
+/* ============================================================
+   THE TOWERS ARE AWAKE TOO
+
+   With lanterns breathing, the towers became the only dead thing on the map
+   — the two objects that actually fight each other in Tower Wars sat inert
+   until the cursor touched them, reading as map pins rather than combatants.
+
+   A tower now holds a slow presence glow and lifts on approach, keyed to the
+   building's own identity colour, so OPUS and Century Park East are
+   distinguishable across the city the way their towers are.
+
+   Deliberately slower and quieter than the lanterns. A lantern is one
+   relationship and should flicker; a tower is a landmark and should loom. At
+   the same rate the eye would read them as the same class of object.
+
+   Targets `.pwc-building`, which is what CityTowerButton actually renders —
+   traced through WorldGeographySurface rather than assumed from a class name
+   in the stylesheet.
+   ============================================================ */
+.pwc-building {
+  transition:
+    transform 0.22s cubic-bezier(0.2, 0.7, 0.3, 1),
+    filter 0.22s ease;
+}
+.pwc-building::before {
+  content: "";
+  position: absolute;
+  inset: -6% -10% 4%;
+  z-index: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at 50% 78%,
+    var(--lc-tower-glow, #ffca4533) 0%,
+    transparent 68%
+  );
+  animation: lc-tower-presence 9s ease-in-out infinite;
+}
+/* Identity, not decoration: each tower glows in its own colour. */
+.pwc-building.opus { --lc-tower-glow: #a45bff45; }
+.pwc-building.cpe { --lc-tower-glow: #ffc16645; }
+
+.pwc-building:hover,
+.pwc-building:focus-visible { filter: drop-shadow(0 0 14px #ffca45); }
+.pwc-building:hover::before,
+.pwc-building:focus-visible::before {
+  animation-play-state: paused;
+  opacity: 1;
+}
+
+@keyframes lc-tower-presence {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50%      { opacity: 0.85; transform: scale(1.05); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pwc-building::before { animation: none !important; opacity: 0.65; }
+  .pwc-building { transition: none; }
+}
