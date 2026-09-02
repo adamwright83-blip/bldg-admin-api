@@ -8,6 +8,13 @@ import App from "./App";
 import { canRedirectToLoginUrl, getLoginUrl } from "./const";
 import { apiBase } from "./lib/apiBase";
 import "./index.css";
+import "./components/boreslay-rally/rally.css";
+import "./components/boreslay-rally/clockheadCuckooVisual";
+import "./components/boreslay-rally/clockheadTargetVisual";
+import "./components/boreslay-rally/rallyStudioPhysics";
+import "./components/boreslay-rally/rallyStudioVisual";
+import "./components/boreslay-rally/rallyStudioPass.css";
+import "./components/boreslay-rally/rallyStudioCopy.css";
 
 const queryClient = new QueryClient();
 
