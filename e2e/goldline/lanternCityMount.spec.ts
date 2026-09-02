@@ -67,11 +67,29 @@ test.describe("Lantern City mounts with a populated world", () => {
     // 3. Real populated world DOM. A mounted-but-empty city is still a
     //    failure: the bug we are guarding produced a page with chrome and no
     //    world, so "something rendered" is not the assertion.
+    /*
+      A PRIMARY world object, not specifically a lantern.
+
+      One physical place renders as ONE object: where a pursued building
+      stands, the customer lantern is suppressed and its cadence is worn by
+      the building instead. So a legitimately-seeded world can contain zero
+      standalone lanterns, and asserting on `.lc-lantern` specifically would
+      fail for a world that is behaving correctly — as it did on the mobile
+      gate the moment that suppression landed.
+
+      What this gate actually exists to prove is that the city mounted with
+      real inhabitants in it rather than as empty chrome.
+    */
     await expect
-      .poll(async () => page.locator(".lc-lantern").count(), {
-        timeout: 30_000,
-        message: "expected at least one real lantern from the seeded world",
-      })
+      .poll(
+        async () =>
+          page.locator(".lc-lantern, .lc-pursued-building").count(),
+        {
+          timeout: 30_000,
+          message:
+            "expected at least one real world object (lantern or pursued building) from the seeded world",
+        }
+      )
       .toBeGreaterThan(0);
 
     await expect
@@ -96,8 +114,8 @@ test.describe("Lantern City mounts with a populated world", () => {
     await page.goto("/growth/lantern-city");
     await expect(page.locator(".lc-page")).toBeVisible({ timeout: 30_000 });
 
-    const lanterns = page.locator(".lc-lantern");
-    await expect.poll(async () => lanterns.count(), { timeout: 30_000 })
+    const worldObjects = page.locator(".lc-pursued-building, .lc-lantern");
+    await expect.poll(async () => worldObjects.count(), { timeout: 30_000 })
       .toBeGreaterThan(0);
 
     const held = page.locator(
@@ -111,9 +129,7 @@ test.describe("Lantern City mounts with a populated world", () => {
       (z-index 7 vs 5), so it is genuinely what the cursor meets there — the
       grammar has to hold for whichever object the player actually reaches.
     */
-    const target = page
-      .locator(".lc-pursued-building, .lc-lantern")
-      .first();
+    const target = worldObjects.first();
 
     /*
       `force` is deliberate and narrow. Playwright's actionability check
