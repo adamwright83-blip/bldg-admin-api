@@ -676,3 +676,107 @@
 /* The world should start as high as the title honestly allows. */
 .lc-page .lc-page-header h1 { font-size: 25px; letter-spacing: -0.04em; }
 .lc-page .lc-page-header p { font-size: 11px; }
+
+/* ============================================================
+   HOME OBEYS THE SAME LAW AS LANTERN CITY
+
+   THE GAME WORLD IS THE PRODUCT. INFORMATION IS INSTRUMENTATION.
+
+   Home shipped as a report: four metric cards, then a 430px world panel
+   sharing its row with an alerts column, then an insights strip. The live
+   city — real Los Angeles with OPUS and Century Park East standing on it —
+   was the third element down and roughly a third of the width.
+
+   The world now takes the row and the viewport. The metrics become a chip
+   rail over it, and the alerts (promise risk, follow-up debt) become a
+   floating column on the right — still first-class, still legible, no
+   longer boxing the city into a corner of a document.
+
+   This is deliberately NOT "make the cards bigger". The cards stop being
+   the page. Every number still shown, same queries, same authoritative
+   truth — read off instruments laid over the world instead of stacked
+   above it.
+   ============================================================ */
+.pwc-page { padding: 16px 18px 0; }
+.pwc-world-layout {
+  position: relative;
+  display: block;
+}
+.pwc-page .pwc-world {
+  min-height: 0;
+  height: calc(100dvh - var(--cr-north-h) - 150px);
+  border-radius: 12px;
+}
+/* Metrics ride over the world's top edge, as in Lantern City. */
+.pwc-page .pwc-metrics {
+  position: relative;
+  z-index: 12;
+  display: flex;
+  justify-content: flex-start;
+  /* Wraps DOWNWARD onto the world. wrap-reverse pushed the overflow row up
+     into the page title, which is the one place it must not go. */
+  flex-wrap: wrap;
+  margin: 0 0 -46px;
+  padding: 0 4px;
+  gap: 8px;
+  row-gap: 6px;
+  pointer-events: none;
+}
+.pwc-page .pwc-metric {
+  min-height: 0;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 13px 7px 9px;
+  border-color: #ffffff2b;
+  border-radius: 999px;
+  background: #0b1c2fc7;
+  backdrop-filter: blur(7px);
+  box-shadow: 0 6px 18px #04101d55;
+}
+.pwc-page .pwc-metric > span { flex-direction: row; align-items: baseline; gap: 7px; }
+.pwc-page .pwc-metric strong { color: #f4f8ff; font-size: 17px; }
+.pwc-page .pwc-metric small { color: #a6c8e8; font-size: 8px; }
+/* The explanatory note is report prose; the chip is the reading. */
+.pwc-page .pwc-metric p,
+.pwc-page .pwc-metric > i { display: none; }
+.pwc-page .pwc-metric-icon { width: 22px; height: 22px; }
+.pwc-page .pwc-metric-icon svg { width: 14px; }
+
+/* Alerts float over the world's right edge rather than squeezing it. */
+.pwc-page .pwc-alerts {
+  position: absolute;
+  z-index: 12;
+  right: 16px;
+  top: 74px;
+  width: min(260px, 28vw);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.pwc-page .pwc-alerts > * {
+  border-color: #ffffff2b;
+  background: #0b1c2fdb;
+  backdrop-filter: blur(7px);
+  color: #e8f2fb;
+}
+.pwc-page .pwc-alerts strong,
+.pwc-page .pwc-alerts h2 { color: #f4f8ff; }
+
+/* Insights are reference; below the fold, not competing with the city. */
+.pwc-page .pwc-insights { margin-top: 14px; }
+
+@media (max-width: 800px) {
+  /* On a phone, instruments would cover the city they annotate. */
+  .pwc-page .pwc-metrics {
+    margin: 0 0 12px;
+    pointer-events: auto;
+  }
+  .pwc-page .pwc-metric p { display: block; }
+  .pwc-page .pwc-alerts {
+    position: static;
+    width: auto;
+    margin-top: 12px;
+  }
+  .pwc-page .pwc-world { height: auto; min-height: 430px; }
+}
