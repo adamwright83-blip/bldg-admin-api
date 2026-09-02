@@ -1146,3 +1146,53 @@
     max-height: min(62dvh, 620px);
   }
 }
+
+/* ============================================================
+   LANTERN CITY LAYOUT IS DESKTOP-ONLY
+
+   The city-first layout above is desktop-motivated work on a desktop
+   product. Applied at phone widths it shifted the map box far enough that
+   Century Park East landed under the centre of the world camera, so the
+   fast-smoke camera test tapped a tower and navigated to Tower Wars
+   instead of panning the world. That was a real regression I introduced,
+   not a flaky test.
+
+   Rather than adjust a permanent gate to accommodate a layout change it
+   never asked for, phones are returned to the stylesheet's original
+   Lantern City geometry. Everything here resets one of my desktop rules
+   back to what it was; nothing new is introduced.
+   ============================================================ */
+@media (max-width: 800px) {
+  .lc-page { padding-top: 0; }
+  .lc-page .lc-map { height: auto; min-height: 520px; }
+  .lc-page .lc-status-grid {
+    position: static;
+    display: grid;
+    margin: 16px 0;
+    padding: 0;
+    gap: 12px;
+    pointer-events: auto;
+  }
+  .lc-page .lc-status-card {
+    min-height: 92px;
+    grid-template-columns: 62px 1fr;
+    padding: 10px 15px;
+    border-color: #dce1e9;
+    border-radius: 10px;
+    background: #fff;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+  .lc-page .lc-status-card .lc-status-icon {
+    width: 34px;
+    height: 49px;
+    margin-left: 8px;
+    border-width: 3px;
+  }
+  .lc-page .lc-status-card > div { flex-direction: column; gap: 0; }
+  .lc-page .lc-status-card strong { color: inherit; font-size: 28px; }
+  .lc-page .lc-status-card small { color: inherit; font-size: 10px; }
+  .lc-page .lc-status-card p { display: block; }
+  .lc-page .lc-page-header h1 { font-size: 26px; }
+  .lc-page .lc-page-header p { font-size: 12px; }
+}
