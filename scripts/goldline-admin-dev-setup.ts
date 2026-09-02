@@ -49,14 +49,23 @@ import { sql } from "drizzle-orm";
 import { getDb } from "../server/db";
 
 const ENABLED = process.env.GOLDLINE_ADMIN_DEV_SETUP === "true";
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
 function assertDisposableDatabase() {
-  const url = process.env.DATABASE_URL ?? "";
-  if (!url) throw new Error("DATABASE_URL is required");
-  if (!/127\.0\.0\.1|localhost/.test(url)) {
+  const raw = process.env.DATABASE_URL ?? "";
+  if (!raw) throw new Error("DATABASE_URL is required");
+
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error("DATABASE_URL must be a valid URL");
+  }
+
+  if (!LOOPBACK_HOSTS.has(parsed.hostname.toLowerCase())) {
     throw new Error(
       `Refusing to touch a non-local database. This is dev/test fixture ` +
-        `infrastructure only. Got: ${url.replace(/:[^:@]*@/, ":***@")}`
+        `infrastructure only. Got host: ${parsed.hostname || "<missing>"}`
     );
   }
 }
