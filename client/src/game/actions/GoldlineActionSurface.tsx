@@ -267,6 +267,7 @@ function VisitSurface(
           <label>
             REAL VISIT RESULT
             <select
+              data-testid="visit-outcome-select"
               value={outcome}
               onChange={event =>
                 setOutcome(event.target.value as VisitOutcomeRequest["outcome"])
@@ -283,6 +284,7 @@ function VisitSurface(
             <label>
               AGREED FOLLOW-UP DATE
               <input
+                data-testid="visit-follow-up-at"
                 type="datetime-local"
                 value={followUpAt}
                 onChange={event => setFollowUpAt(event.target.value)}
@@ -292,6 +294,7 @@ function VisitSurface(
           <label>
             DECISION MAKER
             <select
+              data-testid="visit-decision-maker-select"
               value={outcome === "no_contact" ? "unavailable" : decisionMakerStatus}
               disabled={outcome === "no_contact"}
               onChange={event =>
@@ -450,6 +453,7 @@ function FollowUpSurface(
       <label>
         WHAT HAPPENED
         <select
+          data-testid="followup-result-select"
           value={result}
           onChange={event =>
             setResult(
@@ -467,6 +471,7 @@ function FollowUpSurface(
       <label>
         RESULT NOTES
         <textarea
+          data-testid="followup-result-notes"
           rows={3}
           value={resultNotes}
           onChange={event => setResultNotes(event.target.value)}
@@ -476,6 +481,7 @@ function FollowUpSurface(
         <label>
           EXPLICIT NEW FOLLOW-UP · OPTIONAL
           <input
+            data-testid="followup-next-at"
             type="datetime-local"
             value={nextFollowUpAt}
             onChange={event => setNextFollowUpAt(event.target.value)}
@@ -509,6 +515,7 @@ function FollowUpSurface(
       <label>
         MOVE THIS FOLLOW-UP WITHOUT RECORDING AN ATTEMPT
         <input
+          data-testid="followup-reschedule-at"
           type="datetime-local"
           value={dueAt}
           onChange={event => setDueAt(event.target.value)}
