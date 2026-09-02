@@ -1,0 +1,31 @@
+name: Patch Real Workday truthful outcomes v2
+
+on:
+  push:
+    branches:
+      - cursor/goldline-real-workday-outcomes
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: cursor/goldline-real-workday-outcomes
+          fetch-depth: 1
+      - name: Apply guarded truthful-outcome patch
+        run: node scripts/patchRealWorkdayOutcomes.cjs
+      - name: Commit source patch and remove scaffolding
+        run: |
+          rm .github/workflows/patch-real-workday-outcomes.yml
+          rm .github/workflows/patch-real-workday-outcomes-v2.yml
+          rm scripts/patchRealWorkdayOutcomes.cjs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add drizzle/schema.ts drizzle/0064_real_workday_visit_outcomes.sql server/commercialMissions/commercialMissionFieldService.ts server/commercialMissions/commercialMissionRouter.ts server/commercialMissions/realWorkdayVisitOutcomeTruth.test.ts client/src/game/actions/actionServices.ts client/src/game/actions/GoldlineActionSurface.tsx .github/workflows/patch-real-workday-outcomes.yml .github/workflows/patch-real-workday-outcomes-v2.yml scripts/patchRealWorkdayOutcomes.cjs
+          git commit -m "feat(real-workday): preserve unresolved visit truth"
+          git push origin HEAD:cursor/goldline-real-workday-outcomes
