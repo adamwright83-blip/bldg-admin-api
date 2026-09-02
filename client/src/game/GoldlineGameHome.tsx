@@ -3005,7 +3005,17 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
               activeExpedition?.kind === "local_target_run" &&
               !localTargetRealArrivalConfirmed
                 ? props.onOpenJournal
-                : props.onOpenLogSignal
+                : arrivedStop
+                  ? () => {
+                      // Carry the already-confirmed doorstep identity into the
+                      // controller synchronously before opening capture. The
+                      // passive reporting effect below remains useful for the
+                      // general operating bar, but this real-action boundary
+                      // must not depend on a later React effect/render.
+                      props.onOperatorStopChange?.(arrivedStop);
+                      props.onOpenLogSignal?.();
+                    }
+                  : props.onOpenLogSignal
             }
             logSignalLabel={
               activeExpedition?.kind === "local_target_run" &&
