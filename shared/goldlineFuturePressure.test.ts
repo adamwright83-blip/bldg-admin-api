@@ -29,6 +29,7 @@ const reported = {
   claim: classifyTemporalClaim("Front desk said she should be back Wednesday", TUESDAY)!,
   physicalEntityId: BUILDING,
   sourceEvidenceReference: "driver_sales_journals:journal-1",
+  sourceOccurredAt: `${TUESDAY}T15:14:00.000Z`,
 };
 
 const project = (date: string, obligations = [promise], claims = [reported]) =>
@@ -74,6 +75,14 @@ describe("what the day is allowed to surface", () => {
     const undated = { ...promise, dueDate: null };
     expect(project(TUESDAY, [undated]).items).toHaveLength(1);
     expect(project(SATURDAY, [undated]).items[0]!.weight).toBe("notable");
+  });
+
+  it("carries the source time so the player can ask why it returned", () => {
+    const items = project(WEDNESDAY).items;
+    expect(items.find(item => item.isObligation)?.sourceOccurredAt).toBe(promise.madeAt);
+    expect(items.find(item => !item.isObligation)?.sourceOccurredAt).toBe(
+      `${TUESDAY}T15:14:00.000Z`
+    );
   });
 
   it("carries the evidence reference on every single item", () => {

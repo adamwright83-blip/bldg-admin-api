@@ -28,6 +28,7 @@ export type LiveAdventureObjective = {
   physicalEntityId: string | null;
   explanation: string;
   sourceEvidenceReference: string;
+  sourceOccurredAt: string | null;
 };
 
 /** The parts of a field-today item this projection is allowed to read. */
@@ -41,6 +42,8 @@ type FieldTodaySource = {
   scheduledAt: string | null;
   destination: { address: string; latitude: number | null; longitude: number | null } | null;
   physicalEntityId?: string | null;
+  whySurfaced?: string | null;
+  whySourceOccurredAt?: string | null;
   source: { sourceReference: string };
 };
 
@@ -50,11 +53,15 @@ const LIVE_OBJECTIVE_KINDS = [
   "customer_recovery",
   "contextual_move",
   "commercial_visit",
+  "field_commitment",
+  "reported_opportunity",
 ];
 
 const LIVE_OBJECTIVE_SOURCE_LABELS: Record<string, string> = {
   customer_recovery: "Dormant relationship",
   contextual_move: "Field discovery",
+  field_commitment: "Field promise",
+  reported_opportunity: "Field signal",
 };
 
 /**
@@ -92,8 +99,9 @@ export function liveObjectivesFromFieldToday(
       latitude: item.destination?.latitude ?? null,
       longitude: item.destination?.longitude ?? null,
       physicalEntityId: item.physicalEntityId ?? null,
-      explanation: item.subtitle,
+      explanation: item.whySurfaced ?? item.subtitle,
       sourceEvidenceReference: item.source.sourceReference,
+      sourceOccurredAt: item.whySourceOccurredAt ?? null,
     }));
 }
 
@@ -136,6 +144,10 @@ export type DayPlanStop = {
   navigationUrl: string | null;
   missionTarget: "colosseum" | null;
   completedAt: string | null;
+  /** Human-readable reason/evidence for carried-forward world pressure. */
+  whySurfaced?: string | null;
+  sourceEvidenceReference?: string | null;
+  sourceOccurredAt?: string | null;
 };
 
 export type DayPlanProjection = {
@@ -425,6 +437,9 @@ export function buildDayPlanProjection(input: {
       navigationUrl: navigationUrl(objective.address),
       missionTarget: null,
       completedAt: objective.status === "completed" ? new Date().toISOString() : null,
+      whySurfaced: objective.explanation,
+      sourceEvidenceReference: objective.sourceEvidenceReference,
+      sourceOccurredAt: objective.sourceOccurredAt,
     })),
   ];
   const pickups = baseStops.filter(

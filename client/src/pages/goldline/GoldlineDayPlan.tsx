@@ -79,6 +79,19 @@ function shortTime(value: string | null): string | null {
     : parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+function evidenceTime(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).toUpperCase();
+}
+
 export function isForcedMobileDayPlanViewport(input: {
   layoutWidth: number;
   screenWidth: number;
@@ -134,6 +147,17 @@ function StopCard({
           {stop.fixed && <span>◷ FIXED WINDOW</span>}
         </div>
         <div className="gdp-source">{stop.sourceLabel}</div>
+        {stop.whySurfaced ? (
+          <details className="gdp-why" data-testid={`why-${stop.id}`}>
+            <summary>WHY IS THIS HERE?</summary>
+            <p>{stop.whySurfaced}</p>
+            <small>
+              {evidenceTime(stop.sourceOccurredAt)
+                ? `${evidenceTime(stop.sourceOccurredAt)} · FIELD EVIDENCE`
+                : "FIELD EVIDENCE"}
+            </small>
+          </details>
+        ) : null}
         {stop.status === "completed" && (
           <div className="gdp-complete">
             <Check /> COMPLETED{completedTime ? ` · ${completedTime}` : ""}

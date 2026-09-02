@@ -66,10 +66,12 @@ function newClientRequestId() {
   return globalThis.crypto?.randomUUID?.() ?? `journal-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-export function SalesJournalSheet({ open, onOpenChange, location }: {
+export function SalesJournalSheet({ open, onOpenChange, location, onSaved }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   location?: GoldlineLocationSnapshot;
+  /** Projection refresh only. The journal is already durable before this fires. */
+  onSaved?: () => void | Promise<void>;
 }) {
   const utils = trpc.useUtils();
   const save = trpc.system.commercialMission.saveSalesJournal.useMutation();
@@ -146,6 +148,10 @@ export function SalesJournalSheet({ open, onOpenChange, location }: {
       ]);
       celebrate(result.worldEvent);
       toast.success("Field Journal secured. Processing continues safely in the background.");
+      // Projection refresh is best-effort and may race asynchronous extraction;
+      // it is deliberately incapable of turning a successful durable save into
+      // a UI failure. Normal polling catches anything that finishes later.
+      void Promise.resolve(onSaved?.()).catch(() => undefined);
       // Only clear captured input on a confirmed, authoritative save — a
       // failed save must never discard the recording or typed transcript.
       setTranscript(""); setAudioDataUrl(null); setClientRequestId(newClientRequestId()); onOpenChange(false);

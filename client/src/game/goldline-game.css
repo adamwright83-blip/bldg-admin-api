@@ -4180,3 +4180,37 @@
 .add-external-work__primary:disabled {
   opacity: 0.45;
 }
+
+/*
+ * SURVEY settle ring — the gathering feedback for a thumb resting at the
+ * centre of the movement stick. Deliberately drawn inside the stick rather
+ * than as a third control: SURVEY is a way of holding the stick, and the
+ * feedback should say so.
+ */
+.game-joystick .joystick-settle {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 214, 138, 0.85);
+  box-shadow: 0 0 14px rgba(255, 196, 92, 0.45);
+  pointer-events: none;
+  transition: opacity 60ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-joystick .joystick-settle {
+    transition: none;
+  }
+}
+
+
+/* Real Workday: passive travel shield; no touch target competes with driving. */
+.driving-safety-shield {
+  position: absolute; z-index: 95; inset: 0; display: grid; align-content: end;
+  justify-items: center; gap: 4px; padding: 24px 18px calc(24px + env(safe-area-inset-bottom));
+  text-align: center; pointer-events: auto;
+  background: linear-gradient(180deg, transparent 55%, rgba(3, 12, 17, 0.82));
+}
+.driving-safety-shield b { font-size: 15px; letter-spacing: .14em; }
+.driving-safety-shield span { font-size: 11px; color: rgba(223,254,255,.78); }
+.expedition-hud__driving { position: absolute; left: 50%; bottom: 22%; transform: translateX(-50%); width: min(82%, 320px); text-align: center; font-size: 12px; letter-spacing: .09em; }

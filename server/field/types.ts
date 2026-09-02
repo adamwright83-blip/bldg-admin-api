@@ -33,6 +33,8 @@ export type FieldTodayItem = {
    * can always ask "why is this here?" and get a real answer.
    */
   whySurfaced?: string | null;
+  /** When the evidence that surfaced this item was recorded. */
+  whySourceOccurredAt?: string | null;
   scheduledAt: string | null;
   urgency: "blocked" | "overdue" | "urgent" | "scheduled" | "flexible" | "upcoming";
   title: string;

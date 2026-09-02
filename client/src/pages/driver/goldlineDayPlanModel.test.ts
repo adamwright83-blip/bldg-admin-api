@@ -231,6 +231,8 @@ const fieldItem = (
   scheduledAt: null,
   destination: null,
   physicalEntityId: null,
+  whySurfaced: null,
+  whySourceOccurredAt: null,
   source: { sourceReference: "customer_recovery_interventions:abc" },
   ...overrides,
 });
@@ -292,6 +294,27 @@ describe("the authoritative day becomes playable objectives", () => {
       "blocked",
       "ready",
     ]);
+  });
+
+  it("preserves why/provenance for carried-forward pressure", () => {
+    const objective = liveObjectivesFromFieldToday([
+      fieldItem({
+        id: "pressure:1",
+        kind: "reported_opportunity",
+        subtitle: "Fallback subtitle",
+        whySurfaced: "Front desk said she should be back Wednesday — not an appointment.",
+        whySourceOccurredAt: "2026-09-01T22:14:00.000Z",
+        source: { sourceReference: "driver_sales_journals:journal-9" },
+      }),
+    ])[0]!;
+    expect(objective.explanation).toMatch(/not an appointment/);
+    expect(objective.sourceOccurredAt).toBe("2026-09-01T22:14:00.000Z");
+    const stop = buildDayPlanProjection({
+      businessDate: "2026-09-02",
+      liveObjectives: [objective],
+    }).stops[0]!;
+    expect(stop.whySurfaced).toBe(objective.explanation);
+    expect(stop.sourceEvidenceReference).toBe("driver_sales_journals:journal-9");
   });
 
   it("carries real objectives into the day the driver actually plays", () => {

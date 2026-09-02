@@ -88,6 +88,8 @@ export const DAYFORGE_PRODUCT_EVENT_NAMES = [
   "fiction_mission_resolved",
   "stronghold_object_engaged",
   "long_horizon_resume",
+  "future_pressure_presented",
+  "growth_action_opened",
 ] as const;
 
 export type DayforgeProductEventName =
@@ -330,6 +332,12 @@ export interface DayforgeProductEventPropertyMap {
   };
   stronghold_object_engaged: { sessionId: string; objectKind: string };
   long_horizon_resume: { sessionId: string; prunedCount: number };
+  future_pressure_presented: {
+    sessionId: string;
+    kind: string;
+    hasPhysicalEntity: boolean;
+  };
+  growth_action_opened: { sessionId: string; actionKind: string };
 }
 
 export type DayforgeProductEventProperties<
@@ -427,6 +435,8 @@ export const DAYFORGE_PRODUCT_EVENT_PROPERTY_KEYS = {
   fiction_mission_resolved: ["sessionId", "templateId", "resolutionKind"],
   stronghold_object_engaged: ["sessionId", "objectKind"],
   long_horizon_resume: ["sessionId", "prunedCount"],
+  future_pressure_presented: ["sessionId", "kind", "hasPhysicalEntity"],
+  growth_action_opened: ["sessionId", "actionKind"],
 } as const satisfies {
   [Name in DayforgeProductEventName]: readonly (keyof DayforgeProductEventPropertyMap[Name])[];
 };
@@ -551,6 +561,8 @@ export const GOLDLINE_CLIENT_EVENT_NAMES = [
   "fiction_mission_resolved",
   "stronghold_object_engaged",
   "long_horizon_resume",
+  "future_pressure_presented",
+  "growth_action_opened",
 ] as const satisfies readonly DayforgeProductEventName[];
 
 export type GoldlineClientEventName =

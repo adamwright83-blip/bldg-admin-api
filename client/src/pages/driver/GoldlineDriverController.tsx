@@ -186,6 +186,11 @@ function LiveGoldlineDriverController() {
   const [operatorStop, setOperatorStop] = useState<ArrivedOperatorStop | null>(
     null
   );
+  // The game can report a genuine arrival and expose LOG A SIGNAL in the same
+  // paint. Keep that latest stop synchronously available so the click does not
+  // depend on a second React render before choosing structured Field Intel vs
+  // Diane's ordinary raw-first journal.
+  const operatorStopRef = useRef<ArrivedOperatorStop | null>(null);
   const [journalOpen, setJournalOpen] = useState(false);
   const [activeAdventureObjectiveId, setActiveAdventureObjectiveId] = useState<string | null>(null);
   const [requestedGameplayHost, setRequestedGameplayHost] =
@@ -320,6 +325,10 @@ function LiveGoldlineDriverController() {
   });
   const campaign = trpc.system.goldlineWorld.campaign.useQuery(undefined, {
     staleTime: 15_000,
+    // Field Journal processing is asynchronous. Poll the compiled campaign so
+    // a newly extracted Wednesday/Thursday pressure can reweave the unfinished
+    // future without a reload or manual planner action.
+    refetchInterval: 30_000,
   });
   const upsertFictionAssignment = trpc.system.goldlineWorld.upsertFictionAssignment.useMutation();
   const builtMissions = trpc.system.commercialMission.myBuiltMissions.useQuery(
@@ -1150,8 +1159,24 @@ function LiveGoldlineDriverController() {
     onOpenWalkIn: () => setWalkInOpen(true),
     onOpenNewOrder: () => setNewOrderOpen(true),
     onOpenAddExternalWork: () => setAddExternalWorkOpen(true),
-    onOpenLogSignal: () => setLogSignalOpen(true),
-    onOperatorStopChange: setOperatorStop,
+    onOpenLogSignal: () => {
+      // Ordinary field capture is Diane's durable raw-first journal. A sourced
+      // target run is the one exception: once real arrival has been confirmed,
+      // its operator-approved structured signal is the canonical visit writer.
+      // Read the synchronous arrival ref so a same-frame doorstep tap cannot
+      // race the parent state render and accidentally open the general journal.
+      const stop = operatorStopRef.current;
+      if (stop?.localTargetRunContext) {
+        setOperatorStop(stop);
+        setLogSignalOpen(true);
+      } else {
+        setJournalOpen(true);
+      }
+    },
+    onOperatorStopChange: (stop: ArrivedOperatorStop | null) => {
+      operatorStopRef.current = stop;
+      setOperatorStop(stop);
+    },
     onOpenJournal: () => setJournalOpen(true),
     onResolveDay: handleResolveDay,
     onOpenDispatch: activeDispatch ? handleOpenDispatch : undefined,
@@ -1292,7 +1317,9 @@ function LiveGoldlineDriverController() {
       case "guardian_encounter":
         return;
       case "field_journal":
-        setLogSignalOpen(true);
+        // Campaign-authored Field Journal chapters use the durable audio/raw
+        // transcript seam. Interpretation happens only after that evidence is saved.
+        setJournalOpen(true);
         return;
       case "open_channel":
         setRequestedGameplayHost(hosted.host);
@@ -1546,7 +1573,22 @@ function LiveGoldlineDriverController() {
           toast.success(`Walk-in ${result.missionCode} saved.${calendarText}`);
         }}
       />
-      <SalesJournalSheet open={journalOpen} onOpenChange={setJournalOpen} location={location} />
+      <SalesJournalSheet
+        open={journalOpen}
+        onOpenChange={setJournalOpen}
+        location={location}
+        onSaved={() => {
+          // The save itself is already durable. These invalidations only make
+          // downstream world/campaign projections catch up quickly; background
+          // extraction may still finish on the next normal poll.
+          void Promise.all([
+            fieldToday.refetch(),
+            campaign.refetch(),
+            driverGameWorld.refetch(),
+            utils.system.goldlineWorld.campaign.invalidate(),
+          ]).catch(() => undefined);
+        }}
+      />
     </>
   );
 }
