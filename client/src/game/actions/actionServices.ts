@@ -4,6 +4,7 @@ import type { ScoutReport } from "../../../../shared/expansionScout";
 import type { DriverGameWorldNode } from "../../../../shared/driverGameWorld";
 import type { RealActionRequest } from "../encounters/RealActionBridge";
 import type { AuthoritativeFollowUp } from "./actionRegistry";
+import type { CommercialFollowUpOutcome } from "../../../../shared/commercialPipeline";
 
 export type GoldlineVisitContext = {
   mission: { id: number; version: number; status: CommercialMissionStatus };
@@ -21,7 +22,7 @@ export type GoldlineVisitContext = {
     status: "pending" | "completed" | "skipped";
   }>;
   visitOutcome: {
-    outcome: "follow_up" | "won" | "lost";
+    outcome: "follow_up" | "won" | "lost" | "no_contact" | "no_decision";
     followUpAt: string | null;
   } | null;
   proposal: { id: string; status: string; validThrough: string } | null;
@@ -31,7 +32,7 @@ export type GoldlineVisitContext = {
 export type VisitOutcomeRequest = {
   missionId: number;
   requestId: string;
-  outcome: "follow_up" | "won" | "lost";
+  outcome: "follow_up" | "won" | "lost" | "no_contact" | "no_decision";
   notes: string;
   followUpAt?: Date;
   decisionMakerStatus: "met" | "unavailable" | "not_recorded";
@@ -76,6 +77,9 @@ export type GoldlineActionServices = {
   completeFollowUp: (input: {
     followUp: AuthoritativeFollowUp;
     requestId: string;
+    outcome: CommercialFollowUpOutcome;
+    notes: string;
+    nextFollowUpAt?: Date;
   }) => Promise<void>;
   rescheduleFollowUp: (input: {
     followUp: AuthoritativeFollowUp;

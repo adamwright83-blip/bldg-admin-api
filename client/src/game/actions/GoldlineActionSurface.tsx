@@ -84,8 +84,14 @@ function VisitSurface(
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [outcome, setOutcome] =
-    useState<VisitOutcomeRequest["outcome"]>("follow_up");
+    useState<VisitOutcomeRequest["outcome"]>("no_decision");
   const [followUpAt, setFollowUpAt] = useState("");
+  const [decisionMakerStatus, setDecisionMakerStatus] =
+    useState<VisitOutcomeRequest["decisionMakerStatus"]>("not_recorded");
+  const [collateralDelivered, setCollateralDelivered] = useState(false);
+  const [quoteRequested, setQuoteRequested] = useState(false);
+  const [pilotRequested, setPilotRequested] = useState(false);
+  const [followUpRequested, setFollowUpRequested] = useState(false);
   const mounted = useMountedRef();
 
   async function refresh() {
@@ -261,11 +267,14 @@ function VisitSurface(
           <label>
             REAL VISIT RESULT
             <select
+              data-testid="visit-outcome-select"
               value={outcome}
               onChange={event =>
                 setOutcome(event.target.value as VisitOutcomeRequest["outcome"])
               }
             >
+              <option value="no_contact">Decision maker unavailable</option>
+              <option value="no_decision">Spoke — no decision</option>
               <option value="follow_up">Follow-up agreed</option>
               <option value="won">Won</option>
               <option value="lost">Lost</option>
@@ -275,12 +284,65 @@ function VisitSurface(
             <label>
               AGREED FOLLOW-UP DATE
               <input
+                data-testid="visit-follow-up-at"
                 type="datetime-local"
                 value={followUpAt}
                 onChange={event => setFollowUpAt(event.target.value)}
               />
             </label>
           ) : null}
+          <label>
+            DECISION MAKER
+            <select
+              data-testid="visit-decision-maker-select"
+              value={outcome === "no_contact" ? "unavailable" : decisionMakerStatus}
+              disabled={outcome === "no_contact"}
+              onChange={event =>
+                setDecisionMakerStatus(
+                  event.target.value as VisitOutcomeRequest["decisionMakerStatus"]
+                )
+              }
+            >
+              <option value="not_recorded">Not recorded</option>
+              <option value="unavailable">Unavailable</option>
+              <option value="met">Met</option>
+            </select>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={collateralDelivered}
+              onChange={event => setCollateralDelivered(event.target.checked)}
+            />
+            Collateral delivered
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={quoteRequested}
+              disabled={outcome === "no_contact"}
+              onChange={event => setQuoteRequested(event.target.checked)}
+            />
+            Pricing / quote requested
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={pilotRequested}
+              disabled={outcome === "no_contact"}
+              onChange={event => setPilotRequested(event.target.checked)}
+            />
+            Pilot requested
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={followUpRequested || outcome === "follow_up"}
+              disabled={outcome === "follow_up"}
+              onChange={event => setFollowUpRequested(event.target.checked)}
+            />
+            Follow-up requested
+          </label>
           <label>
             WHAT HAPPENED
             <textarea
@@ -305,11 +367,17 @@ function VisitSurface(
                       outcome === "follow_up"
                         ? new Date(followUpAt)
                         : undefined,
-                    decisionMakerStatus: "not_recorded",
-                    collateralDelivered: false,
-                    quoteRequested: false,
-                    pilotRequested: false,
-                    followUpRequested: outcome === "follow_up",
+                    decisionMakerStatus:
+                      outcome === "no_contact"
+                        ? "unavailable"
+                        : decisionMakerStatus,
+                    collateralDelivered,
+                    quoteRequested:
+                      outcome === "no_contact" ? false : quoteRequested,
+                    pilotRequested:
+                      outcome === "no_contact" ? false : pilotRequested,
+                    followUpRequested:
+                      outcome === "follow_up" || followUpRequested,
                     reason: outcome === "lost" ? "other" : undefined,
                   }),
                 true
@@ -332,6 +400,9 @@ function FollowUpSurface(
   }
 ) {
   const [dueAt, setDueAt] = useState("");
+  const [result, setResult] = useState<"" | "no_contact" | "contacted_no_decision" | "won" | "lost">("");
+  const [resultNotes, setResultNotes] = useState("");
+  const [nextFollowUpAt, setNextFollowUpAt] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mounted = useMountedRef();
@@ -379,22 +450,72 @@ function FollowUpSurface(
           FOLLOW UP
         </a>
       ) : null}
+      <label>
+        WHAT HAPPENED
+        <select
+          data-testid="followup-result-select"
+          value={result}
+          onChange={event =>
+            setResult(
+              event.target.value as typeof result
+            )
+          }
+        >
+          <option value="">Choose real result</option>
+          <option value="no_contact">No contact</option>
+          <option value="contacted_no_decision">Contacted — no decision</option>
+          <option value="won">Won</option>
+          <option value="lost">Lost</option>
+        </select>
+      </label>
+      <label>
+        RESULT NOTES
+        <textarea
+          data-testid="followup-result-notes"
+          rows={3}
+          value={resultNotes}
+          onChange={event => setResultNotes(event.target.value)}
+        />
+      </label>
+      {result && result !== "won" && result !== "lost" ? (
+        <label>
+          EXPLICIT NEW FOLLOW-UP · OPTIONAL
+          <input
+            data-testid="followup-next-at"
+            type="datetime-local"
+            value={nextFollowUpAt}
+            onChange={event => setNextFollowUpAt(event.target.value)}
+          />
+        </label>
+      ) : null}
       <button
-        disabled={busy}
+        disabled={
+          busy ||
+          !result ||
+          !resultNotes.trim() ||
+          (!!nextFollowUpAt && new Date(nextFollowUpAt).getTime() <= Date.now())
+        }
         onClick={() =>
           void perform(() =>
             props.services.completeFollowUp({
               followUp: props.action.followUp,
               requestId: props.requestId,
+              outcome: result as "no_contact" | "contacted_no_decision" | "won" | "lost",
+              notes: resultNotes.trim(),
+              nextFollowUpAt:
+                nextFollowUpAt && result !== "won" && result !== "lost"
+                  ? new Date(nextFollowUpAt)
+                  : undefined,
             })
           )
         }
       >
-        RECORD FOLLOW-UP COMPLETE
+        RECORD FOLLOW-UP RESULT
       </button>
       <label>
-        SCHEDULE A REAL NEW TIME
+        MOVE THIS FOLLOW-UP WITHOUT RECORDING AN ATTEMPT
         <input
+          data-testid="followup-reschedule-at"
           type="datetime-local"
           value={dueAt}
           onChange={event => setDueAt(event.target.value)}

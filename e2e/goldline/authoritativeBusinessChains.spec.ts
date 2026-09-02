@@ -364,7 +364,9 @@ test("VISIT requires preparation, departure, arrival, and an authoritative outco
   ]);
 
   await page.getByRole("button", { name: /ARRIVED/ }).click();
-  await page.locator("select").selectOption("won");
+  // #113 put a DECISION MAKER select beside the result, so a bare
+  // locator("select") is now ambiguous. Name the one under test.
+  await page.getByTestId("visit-outcome-select").selectOption("won");
   await page
     .locator("textarea")
     .fill("Real field visit produced a signed result.");
@@ -392,9 +394,18 @@ test("FOLLOW_UP only resolves after the linked authoritative completion", async 
   await resolveGhostPerfectly(page);
   await openBusinessAction(page);
 
-  await page.locator('input[type="datetime-local"]').fill("2026-08-20T10:30");
+  // #114: an attempt is no longer recordable as a bare "complete". The
+  // player states what actually happened, and "contacted, no decision" is
+  // the truthful result of a reached-but-undecided follow-up — it must NOT
+  // imply recovery or a win.
+  await page
+    .getByTestId("followup-result-select")
+    .selectOption("contacted_no_decision");
+  await page
+    .getByTestId("followup-result-notes")
+    .fill("Reached the contact; no decision yet.");
   expect((await fixtureProof(page)).writes).toEqual([]);
-  await page.getByRole("button", { name: "RECORD FOLLOW-UP COMPLETE" }).click();
+  await page.getByRole("button", { name: "RECORD FOLLOW-UP RESULT" }).click();
 
   await expectControlRestored(page, listenersBefore);
   const proof = await fixtureProof(page);

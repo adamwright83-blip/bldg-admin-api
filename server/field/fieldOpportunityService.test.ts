@@ -4,40 +4,125 @@ import { rankFieldMoves } from "./fieldOpportunityService";
 import type { FieldMoveCandidate } from "./types";
 
 const candidate: FieldMoveCandidate = {
-  id: "mission:1:visit", moveType: "nearby_commercial_visit", title: "Visit Ridge",
-  target: { entityType: "commercial_account", entityId: "1", name: "Ridge" }, expectedDurationMinutes: 35, travelMinutes: 5,
-  expectedValue: deterministicEstimate({ lowCents: 10000, highCents: 50000 }, "fixture", "medium"), confidence: "medium",
-  relevance: "Nearby", evidence: ["5 minutes away"], expiresAt: null, contactAllowed: true, withinServiceRadius: true,
-  missionId: 1, missionVersion: 1, destinationPath: "/driver/sales-mission/1",
+  id: "mission:1:visit",
+  moveType: "nearby_commercial_visit",
+  title: "Visit Ridge",
+  target: {
+    entityType: "commercial_account",
+    entityId: "1",
+    name: "Ridge",
+  },
+  expectedDurationMinutes: 35,
+  travelMinutes: 5,
+  expectedValue: deterministicEstimate(
+    { lowCents: 10000, highCents: 50000 },
+    "fixture",
+    "medium"
+  ),
+  confidence: "medium",
+  relevance: "Nearby",
+  evidence: ["5 minutes away"],
+  expiresAt: null,
+  contactAllowed: true,
+  withinServiceRadius: true,
+  missionId: 1,
+  missionVersion: 1,
+  destinationPath: "/driver/sales-mission/1",
 };
+
+function asMove(
+  id: string,
+  moveType: FieldMoveCandidate["moveType"],
+  highCents: number
+): FieldMoveCandidate {
+  return {
+    ...candidate,
+    id,
+    moveType,
+    title: id,
+    expectedDurationMinutes: 15,
+    travelMinutes: moveType === "nearby_commercial_visit" ? 5 : 0,
+    expectedValue: deterministicEstimate(
+      { lowCents: Math.round(highCents / 2), highCents },
+      `fixture:${id}`,
+      "medium"
+    ),
+  };
+}
 
 describe("contextual FIELD move hard filters", () => {
   it("allows a nearby prospect inside a 45-minute gap", () => {
     const now = new Date("2026-08-08T10:00:00Z");
-    expect(rankFieldMoves({ now, nextCommitmentAt: new Date("2026-08-08T10:45:00Z"), capacityFull: false, currentLocationAvailable: true, candidates: [candidate] }).recommendedMoves).toHaveLength(1);
+    expect(
+      rankFieldMoves({
+        now,
+        nextCommitmentAt: new Date("2026-08-08T10:45:00Z"),
+        capacityFull: false,
+        currentLocationAvailable: true,
+        candidates: [candidate],
+      }).recommendedMoves
+    ).toHaveLength(1);
   });
+
   it("rejects a 40-minute burden inside a 20-minute gap", () => {
     const now = new Date("2026-08-08T10:00:00Z");
-    const result = rankFieldMoves({ now, nextCommitmentAt: new Date("2026-08-08T10:20:00Z"), capacityFull: false, currentLocationAvailable: true, candidates: [candidate] });
+    const result = rankFieldMoves({
+      now,
+      nextCommitmentAt: new Date("2026-08-08T10:20:00Z"),
+      capacityFull: false,
+      currentLocationAvailable: true,
+      candidates: [candidate],
+    });
     expect(result.recommendedMoves).toEqual([]);
     expect(result.reason).toBe("ROUTE_TOO_TIGHT");
   });
+
   it("returns no eligible target instead of forced activity", () => {
-    expect(rankFieldMoves({ now: new Date(), nextCommitmentAt: null, capacityFull: false, currentLocationAvailable: false, candidates: [] }).reason).toBe("NO_ELIGIBLE_TARGET");
+    expect(
+      rankFieldMoves({
+        now: new Date(),
+        nextCommitmentAt: null,
+        capacityFull: false,
+        currentLocationAvailable: false,
+        candidates: [],
+      }).reason
+    ).toBe("NO_ELIGIBLE_TARGET");
   });
+
   it("enforces contact permission", () => {
-    const result = rankFieldMoves({ now: new Date(), nextCommitmentAt: null, capacityFull: false, currentLocationAvailable: true, candidates: [{ ...candidate, contactAllowed: false }] });
+    const result = rankFieldMoves({
+      now: new Date(),
+      nextCommitmentAt: null,
+      capacityFull: false,
+      currentLocationAvailable: true,
+      candidates: [{ ...candidate, contactAllowed: false }],
+    });
     expect(result.recommendedMoves).toEqual([]);
   });
+
   it("suppresses a discretionary visit at full capacity", () => {
-    const result = rankFieldMoves({ now: new Date(), nextCommitmentAt: null, capacityFull: true, currentLocationAvailable: true, candidates: [candidate] });
+    const result = rankFieldMoves({
+      now: new Date(),
+      nextCommitmentAt: null,
+      capacityFull: true,
+      currentLocationAvailable: true,
+      candidates: [candidate],
+    });
     expect(result.reason).toBe("CAPACITY_FULL");
   });
+
   it("does not call a prospect nearby when current geography is unavailable", () => {
-    const result = rankFieldMoves({ now: new Date("2026-08-08T10:00:00Z"), nextCommitmentAt: null, capacityFull: false, currentLocationAvailable: false, candidates: [candidate] });
+    const result = rankFieldMoves({
+      now: new Date("2026-08-08T10:00:00Z"),
+      nextCommitmentAt: null,
+      capacityFull: false,
+      currentLocationAvailable: false,
+      candidates: [candidate],
+    });
     expect(result.recommendedMoves).toEqual([]);
     expect(result.reason).toBe("DATA_INSUFFICIENT");
   });
+
   it("still allows a sourced phone call when geography is unavailable", () => {
     const callCandidate: FieldMoveCandidate = {
       ...candidate,
@@ -48,8 +133,72 @@ describe("contextual FIELD move hard filters", () => {
       travelMinutes: 0,
       relevance: "A sourced business contact is available",
     };
-    const result = rankFieldMoves({ now: new Date("2026-08-08T10:00:00Z"), nextCommitmentAt: null, capacityFull: false, currentLocationAvailable: false, candidates: [candidate, callCandidate] });
-    expect(result.recommendedMoves.map(item => item.id)).toEqual(["mission:1:call"]);
+    const result = rankFieldMoves({
+      now: new Date("2026-08-08T10:00:00Z"),
+      nextCommitmentAt: null,
+      capacityFull: false,
+      currentLocationAvailable: false,
+      candidates: [candidate, callCandidate],
+    });
+    expect(result.recommendedMoves.map(item => item.id)).toEqual([
+      "mission:1:call",
+    ]);
     expect(result.reason).toBe("MOVES_AVAILABLE");
+  });
+});
+
+describe("evidence-first FIELD move priority", () => {
+  it("puts a due follow-up ahead of a much larger speculative prospect", () => {
+    const followUp = asMove("owed-follow-up", "commercial_follow_up", 1_000);
+    const giantProspect = asMove(
+      "giant-prospect",
+      "nearby_commercial_visit",
+      10_000_000
+    );
+    const result = rankFieldMoves({
+      now: new Date("2026-09-01T12:00:00Z"),
+      nextCommitmentAt: null,
+      capacityFull: false,
+      currentLocationAvailable: true,
+      candidates: [giantProspect, followUp],
+    });
+    expect(result.recommendedMoves.map(item => item.id)).toEqual([
+      "owed-follow-up",
+      "giant-prospect",
+    ]);
+  });
+
+  it("puts recovery ahead of discretionary prospecting", () => {
+    const recovery = asMove("recovery", "customer_recovery_call", 500);
+    const visit = asMove("visit", "nearby_commercial_visit", 500_000);
+    const coldCall = asMove("cold-call", "commercial_call", 1_000_000);
+    const result = rankFieldMoves({
+      now: new Date("2026-09-01T12:00:00Z"),
+      nextCommitmentAt: null,
+      capacityFull: false,
+      currentLocationAvailable: true,
+      candidates: [coldCall, visit, recovery],
+    });
+    expect(result.recommendedMoves.map(item => item.id)).toEqual([
+      "recovery",
+      "visit",
+      "cold-call",
+    ]);
+  });
+
+  it("uses estimated upside only as a tie-breaker inside the same pressure class", () => {
+    const smaller = asMove("smaller", "commercial_call", 10_000);
+    const larger = asMove("larger", "commercial_call", 100_000);
+    const result = rankFieldMoves({
+      now: new Date("2026-09-01T12:00:00Z"),
+      nextCommitmentAt: null,
+      capacityFull: false,
+      currentLocationAvailable: true,
+      candidates: [smaller, larger],
+    });
+    expect(result.recommendedMoves.map(item => item.id)).toEqual([
+      "larger",
+      "smaller",
+    ]);
   });
 });

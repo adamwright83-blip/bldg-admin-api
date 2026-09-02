@@ -205,10 +205,12 @@ test.describe("NEUTRALIZE route stops stay in-game", () => {
     await surface
       .getByRole("button", { name: /ARRIVED · RECORD VISIT/ })
       .click();
+    // #113: the agreed-date field appears only when the operator actually
+    // says a follow-up was agreed. The default outcome is "no_decision" —
+    // uncertainty — so the date is deliberately absent until then.
+    await surface.getByTestId("visit-outcome-select").selectOption("follow_up");
     await surface.getByLabel("WHAT HAPPENED").fill("Real visit completed.");
-    await surface.locator("input[type='datetime-local']").fill(
-      "2026-08-20T10:00"
-    );
+    await surface.getByTestId("visit-follow-up-at").fill("2026-08-20T10:00");
     await surface
       .getByRole("button", { name: "RECORD VISIT RESULT" })
       .click();
