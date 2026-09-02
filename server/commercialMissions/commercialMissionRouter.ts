@@ -942,7 +942,7 @@ export const commercialMissionRouter = router({
           expectedMissionVersion: z.number().int().positive(),
           expectedFieldVersion: z.number().int().positive(),
           requestId: z.string().uuid(),
-          outcome: z.enum(["follow_up", "won", "lost"]),
+          outcome: z.enum(["follow_up", "won", "lost", "no_contact", "no_decision"]),
           notes: z.string().trim().min(1).max(20_000),
           followUpAt: z.coerce.date().optional(),
           decisionMakerStatus: z.enum(["met", "unavailable", "not_recorded"]),

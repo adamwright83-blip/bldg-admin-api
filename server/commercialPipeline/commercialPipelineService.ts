@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   commercialAccountContacts,
   commercialAccountLocations,
@@ -19,6 +19,8 @@ import {
 } from "../../drizzle/schema";
 import {
   canAdvanceRelationshipStage,
+  missionStatusForFollowUpOutcome,
+  type CommercialFollowUpOutcome,
   type CommercialPipelineStage,
 } from "@shared/commercialPipeline";
 import { getDb } from "../db";
@@ -27,6 +29,7 @@ import {
   getCommercialMission,
   getCommercialMissionByIdempotencyKey,
   transitionCommercialMission,
+  transitionCommercialMissionWith,
 } from "../commercialMissions/commercialMissionStore";
 import { associateArmoryOutcome } from "../armory/armoryEvidenceService";
 import { writeDayforgeEventWith } from "../dayforgeEvents/dayforgeEventStore";
@@ -719,6 +722,9 @@ export async function completeCommercialFollowUp(input: {
   followUpId: string;
   actorId: string;
   requestId: string;
+  outcome: CommercialFollowUpOutcome;
+  notes: string;
+  nextFollowUpAt?: Date;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -744,6 +750,12 @@ export async function completeCommercialFollowUp(input: {
           );
         return;
       }
+
+      const terminalStatus = missionStatusForFollowUpOutcome(input.outcome);
+      if (terminalStatus && input.nextFollowUpAt) {
+        throw new Error("Terminal follow-up outcomes cannot schedule another follow-up");
+      }
+
       const result = await tx
         .update(commercialFollowUps)
         .set({
@@ -761,6 +773,47 @@ export async function completeCommercialFollowUp(input: {
         );
       if (affectedRows(result) !== 1)
         throw new Error("Open follow-up not found or already completed");
+
+      let nextFollowUpId: string | null = null;
+      if (input.nextFollowUpAt) {
+        nextFollowUpId = randomUUID();
+        await tx.insert(commercialFollowUps).values({
+          id: nextFollowUpId,
+          tenantId: input.tenantId,
+          pipelineId: pipeline.id,
+          missionId: pipeline.missionId,
+          dueAt: input.nextFollowUpAt,
+          note: input.notes,
+          assignedTo: input.actorId,
+          requestId: randomUUID(),
+          createdBy: input.actorId,
+        });
+      }
+
+      const nextOpen = terminalStatus
+        ? []
+        : await tx
+            .select({ dueAt: commercialFollowUps.dueAt })
+            .from(commercialFollowUps)
+            .where(
+              and(
+                eq(commercialFollowUps.tenantId, input.tenantId),
+                eq(commercialFollowUps.pipelineId, input.pipelineId),
+                eq(commercialFollowUps.status, "open")
+              )
+            )
+            .orderBy(asc(commercialFollowUps.dueAt))
+            .limit(1);
+      await tx
+        .update(commercialPipelineRecords)
+        .set({ nextFollowUpAt: terminalStatus ? null : (nextOpen[0]?.dueAt ?? null) })
+        .where(
+          and(
+            eq(commercialPipelineRecords.tenantId, input.tenantId),
+            eq(commercialPipelineRecords.id, pipeline.id)
+          )
+        );
+
       await tx.insert(commercialPipelineEvents).values({
         tenantId: input.tenantId,
         pipelineId: pipeline.id,
@@ -771,8 +824,47 @@ export async function completeCommercialFollowUp(input: {
         actorId: input.actorId,
         idempotencyKey,
         correlationId: input.requestId,
-        metadataJson: { followUpId: input.followUpId },
+        metadataJson: {
+          followUpId: input.followUpId,
+          outcome: input.outcome,
+          notes: input.notes,
+          nextFollowUpAt: input.nextFollowUpAt?.toISOString() ?? null,
+          nextFollowUpId,
+        },
       });
+
+      if (terminalStatus) {
+        const missionRows = await tx
+          .select({ id: commercialMissions.id, version: commercialMissions.version, status: commercialMissions.status })
+          .from(commercialMissions)
+          .where(
+            and(
+              eq(commercialMissions.tenantId, input.tenantId),
+              eq(commercialMissions.id, pipeline.missionId)
+            )
+          )
+          .for("update")
+          .limit(1);
+        const mission = missionRows[0];
+        if (!mission) throw new Error("Commercial mission not found");
+        if (mission.status !== "follow_up" && mission.status !== "visit_completed") {
+          throw new Error(`Follow-up outcome cannot resolve mission from ${mission.status}`);
+        }
+        await transitionCommercialMissionWith(tx, {
+          tenantId: input.tenantId,
+          missionId: mission.id,
+          expectedVersion: mission.version,
+          toStatus: terminalStatus,
+          actor: { type: "driver", id: input.actorId },
+          idempotencyKey: `pipeline-follow-up-outcome:${input.requestId}`,
+          metadata: {
+            source: "follow_up",
+            followUpId: input.followUpId,
+            outcome: input.outcome,
+            notes: input.notes,
+          },
+        });
+      }
     });
   } catch (error) {
     if (!isDuplicateKeyError(error)) throw error;
@@ -789,6 +881,13 @@ export async function completeCommercialFollowUp(input: {
     )
   )
     throw new Error("Commercial follow-up completion was not persisted");
+  if (
+    input.nextFollowUpAt &&
+    !detail.followUps.some(
+      item => item.status === "open" && item.dueAt === input.nextFollowUpAt?.toISOString()
+    )
+  )
+    throw new Error("Next commercial follow-up was not persisted");
   return detail;
 }
 

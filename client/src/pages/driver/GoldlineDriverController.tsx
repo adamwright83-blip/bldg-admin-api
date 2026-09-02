@@ -1018,11 +1018,17 @@ function LiveGoldlineDriverController() {
   async function completeFollowUpAction(input: {
     followUp: AuthoritativeFollowUp;
     requestId: string;
+    outcome: import("../../../../shared/commercialPipeline").CommercialFollowUpOutcome;
+    notes: string;
+    nextFollowUpAt?: Date;
   }) {
     await completeFollowUp.mutateAsync({
       pipelineId: input.followUp.pipelineId,
       followUpId: input.followUp.followUpId,
       requestId: input.requestId,
+      outcome: input.outcome,
+      notes: input.notes,
+      nextFollowUpAt: input.nextFollowUpAt,
     });
   }
 
