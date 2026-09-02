@@ -28,6 +28,7 @@ vi.setConfig({ testTimeout: 30_000 });
 const tenantId = `route-${randomUUID().slice(0, 8)}`;
 const actorId = `field-${randomUUID().slice(0, 8)}`;
 const missionIds: number[] = [];
+const currentLocation = { latitude: 34.05, longitude: -118.25 };
 
 function missionInput(index: number) {
   return {
@@ -37,8 +38,8 @@ function missionInput(index: number) {
       name: `Route Account ${index}`,
       accountType: "hotel",
       address: `${100 + index} Route Street, Los Angeles, CA`,
-      latitude: null,
-      longitude: null,
+      latitude: currentLocation.latitude + index * 0.001,
+      longitude: currentLocation.longitude + index * 0.001,
       locationCount: 1,
       decisionMaker: { name: null, title: null },
     },
@@ -134,12 +135,24 @@ describe.skipIf(!runDatabaseGate)(
         missionIds.push(mission.id);
       }
 
+      // Route selection is explicitly geography-backed. A real prospect may
+      // still exist without a fix, but it must not become a "nearby" visit.
+      await expect(
+        startAuthoritativeVisitRoute({
+          tenantId,
+          actorId,
+          requestId: randomUUID(),
+          missionIds,
+        })
+      ).rejects.toThrow(/current eligible visit recommendation/);
+
       await expect(
         startAuthoritativeVisitRoute({
           tenantId,
           actorId,
           requestId: randomUUID(),
           missionIds: [missionIds[0]!, 999_999_999],
+          currentLocation,
         })
       ).rejects.toThrow(/current eligible visit recommendation/);
 
@@ -158,6 +171,7 @@ describe.skipIf(!runDatabaseGate)(
           actorId,
           requestId: randomUUID(),
           missionIds,
+          currentLocation,
         })
       ).rejects.toThrow(/current eligible visit recommendation/);
       await db
@@ -175,6 +189,7 @@ describe.skipIf(!runDatabaseGate)(
           actorId,
           requestId: randomUUID(),
           missionIds,
+          currentLocation,
         })
       ).rejects.toThrow(/current eligible visit recommendation/);
       await db
@@ -193,6 +208,7 @@ describe.skipIf(!runDatabaseGate)(
         actorId,
         requestId,
         missionIds,
+        currentLocation,
       });
       expect(started).toMatchObject({ totalStops: 3, coveredCount: 0 });
       // Real account address, enriched from the same authoritative
@@ -213,6 +229,7 @@ describe.skipIf(!runDatabaseGate)(
         actorId,
         requestId,
         missionIds,
+        currentLocation,
       });
       expect(replay.occurrenceId).toBe(started.occurrenceId);
 
