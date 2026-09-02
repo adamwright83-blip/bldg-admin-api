@@ -121,7 +121,7 @@ pnpm vitest run client/src/components/admin
 pnpm vitest run client/src/components/admin/control-room/facadeRegeneration.test.ts
 pnpm vitest run client/src/components/admin/control-room/lanternCityAtlasMount.test.ts
 pnpm exec playwright test --config playwright.goldline.config.ts
-pnpm exec playwright test --config playwright.goldline.config.ts e2e/goldline/lanternCityMount.spec.ts
+pnpm exec playwright test --config playwright.goldline-smoke.config.ts e2e/goldline-smoke/lanternCityMount.spec.ts
 ```
 The last one is the ROUTE-MOUNT GATE. It fails if Lantern City renders blank.
 Falsified against the 612af8c export breakage: fails there, passes when fixed.

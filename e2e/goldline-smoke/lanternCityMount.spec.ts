@@ -1,9 +1,8 @@
 import { expect, test } from "@playwright/test";
+import { resetGoldlineProofWorld } from "./proofWorld";
 
 const ADMIN_PASSWORD =
-  process.env.ADMIN_PASSWORD ??
-  process.env.APP_SHARED_API_SECRET ??
-  "goldline-mobile-app-secret-000000000000000000";
+  process.env.ADMIN_PASSWORD ?? "goldline-proof-admin-pass";
 
 /**
  * THE ROUTE-MOUNT GATE.
@@ -27,16 +26,27 @@ const ADMIN_PASSWORD =
  * It is deliberately written so a blank page CANNOT pass.
  */
 /*
-  Admin is a desktop product. This config's default 412x923 is shaped for the
-  Driver phone app, and at that width the `lc-pursued-building` marker overlaps
-  and intercepts pointer events for the lantern beneath it — a real occlusion
-  worth recording, but not the thing this gate is for. Testing the city at the
-  size it is actually used keeps this spec about mount and selection.
+  LIVES IN THE SMOKE SUITE BECAUSE IT NEEDS A POPULATED WORLD.
+
+  This first lived in e2e/goldline (the mobile regression). That workflow never
+  seeds a world — it has no seed step at all — so the city mounted correctly
+  and legitimately contained zero inhabitants, and the gate failed on an empty
+  tenant rather than on a defect. The fast-smoke suite seeds the deterministic
+  proof world, which is the only place these assertions mean anything.
+
+  Admin is also a desktop product, so it runs at desktop size rather than the
+  Driver phone viewport.
 */
 test.use({ viewport: { width: 1440, height: 900 }, isMobile: false, hasTouch: false });
 
+test.describe.configure({ mode: "serial" });
+
 test.describe("Lantern City mounts with a populated world", () => {
   test.setTimeout(120_000);
+
+  test.beforeAll(async ({ request }) => {
+    await resetGoldlineProofWorld(request);
+  });
 
   test("the city route renders real world DOM for an authenticated admin", async ({
     page,
