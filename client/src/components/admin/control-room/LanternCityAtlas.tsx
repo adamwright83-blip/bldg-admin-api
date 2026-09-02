@@ -122,7 +122,7 @@ function ArcadeBodyLayer({
   );
 }
 
-export default /**
+/**
  * A stable per-lantern animation offset, in seconds.
  *
  * Deterministic from the cluster key so the same location always breathes on
@@ -139,7 +139,7 @@ function lanternPhaseSeconds(key: string): number {
   return (hash % 700) / 100;
 }
 
-function LanternCityAtlas({
+export default function LanternCityAtlas({
   onOpenCustomer,
   onNavigate,
 }: {
