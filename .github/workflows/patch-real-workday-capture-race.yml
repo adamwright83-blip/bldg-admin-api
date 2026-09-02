@@ -29,7 +29,7 @@ jobs:
                 ? props.onOpenJournal
                 : props.onOpenLogSignal
             }
-'''
+          '''
           new = '''            onLogSignal={
               activeExpedition?.kind === "local_target_run" &&
               !localTargetRealArrivalConfirmed
@@ -46,7 +46,7 @@ jobs:
                     }
                   : props.onOpenLogSignal
             }
-'''
+          '''
           if old not in text:
               raise SystemExit('expected onLogSignal block not found; refusing broad edit')
           path.write_text(text.replace(old, new, 1))
