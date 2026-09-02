@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   HEALED_SCAR_FLOOR,
   ORDERS_TO_CLOSE_ONE_STRATUM,
+  datedCollectedOrders,
   projectRegeneration,
   scarOpacityFor,
 } from "./facadeRegeneration";
@@ -188,5 +189,123 @@ describe("facade regeneration firewall", () => {
     });
     expect(projection.overall).toBe(0);
     expect(scarOpacityFor(projection.byStratum[0].closure)).toBe(1);
+  });
+});
+
+describe("dating a collection from authoritative pickup evidence", () => {
+  const order = (id: number, status: string) => ({ id, status });
+  const pickup = (orderId: number, at: string | null) => ({
+    orderId,
+    sourceEventType: "pickup_completed",
+    actualEventTimestamp: at,
+  });
+
+  it("dates a collection from the real pickup instant, not the order row", () => {
+    const dated = datedCollectedOrders(
+      [order(1, "delivered")],
+      [pickup(1, "2026-08-30T15:04:00.000Z")]
+    );
+    // `delivered` proves collection happened; the pickup event says WHEN.
+    expect(dated).toEqual([
+      { id: 1, status: "delivered", collectedOn: "2026-08-30" },
+    ]);
+  });
+
+  it("drops an order proven collected but with no trustworthy date", () => {
+    // strongholdRestoration would still count this one. Regeneration cannot:
+    // it has no way to place it before or after a scar.
+    expect(datedCollectedOrders([order(2, "collected")], [])).toEqual([]);
+    expect(
+      datedCollectedOrders([order(2, "collected")], [pickup(2, null)])
+    ).toEqual([]);
+  });
+
+  it("ignores events that are not pickup completions", () => {
+    const dated = datedCollectedOrders(
+      [order(3, "collected")],
+      [{ orderId: 3, sourceEventType: "delivery_completed", actualEventTimestamp: "2026-08-30T10:00:00.000Z" }]
+    );
+    expect(dated).toEqual([]);
+  });
+
+  it("takes the earliest pickup when duplicate rows exist", () => {
+    const dated = datedCollectedOrders(
+      [order(4, "ready")],
+      [pickup(4, "2026-09-02T09:00:00.000Z"), pickup(4, "2026-08-28T09:00:00.000Z")]
+    );
+    expect(dated[0].collectedOn).toBe("2026-08-28");
+  });
+
+  it("still excludes orders whose status never proved collection", () => {
+    expect(
+      datedCollectedOrders([order(5, "scheduled")], [pickup(5, "2026-08-30T10:00:00.000Z")])
+    ).toEqual([]);
+  });
+
+  it("an undatable collection cannot heal a scar", () => {
+    const dated = datedCollectedOrders([order(6, "delivered")], []);
+    const projection = projectRegeneration({
+      orders: dated,
+      strata: [stratum("2026-08-29")],
+    });
+    expect(projection.overall).toBe(0);
+    expect(projection.hasAuthoritativeRestoration).toBe(false);
+  });
+});
+
+describe("scarred before qualifying work, healed after — the end-to-end shape", () => {
+  /** Exactly the row shape `canonicalBuilding.world.restorationEvidence` ships. */
+  type ServerRow = {
+    orderId: number;
+    orderStatus: string;
+    actualEventTimestamp: string;
+  };
+  const fromServer = (rows: ServerRow[]) =>
+    datedCollectedOrders(
+      rows.map(r => ({ id: r.orderId, status: r.orderStatus })),
+      rows.map(r => ({
+        orderId: r.orderId,
+        sourceEventType: "pickup_completed",
+        actualEventTimestamp: r.actualEventTimestamp,
+      }))
+    );
+
+  const damagedOn = [stratum("2026-08-29")];
+
+  it("a damaged building with no qualifying collection stays fully scarred", () => {
+    const before = projectRegeneration({ orders: fromServer([]), strata: damagedOn });
+    expect(before.overall).toBe(0);
+    expect(scarOpacityFor(before.byStratum[0].closure)).toBe(1);
+  });
+
+  it("...stays scarred even when collections exist that PREDATE the damage", () => {
+    const stale = projectRegeneration({
+      orders: fromServer([
+        { orderId: 2, orderStatus: "delivered", actualEventTimestamp: "2026-08-01T10:00:00.000Z" },
+      ]),
+      strata: damagedOn,
+    });
+    expect(stale.overall).toBe(0);
+    expect(scarOpacityFor(stale.byStratum[0].closure)).toBe(1);
+  });
+
+  it("...and visibly heals once real work lands AFTER the damage", () => {
+    const after = projectRegeneration({
+      orders: fromServer([
+        { orderId: 2, orderStatus: "delivered", actualEventTimestamp: "2026-08-01T10:00:00.000Z" },
+        { orderId: 1, orderStatus: "delivered", actualEventTimestamp: "2026-09-01T10:00:00.000Z" },
+        { orderId: 3, orderStatus: "ready", actualEventTimestamp: "2026-09-02T09:00:00.000Z" },
+        { orderId: 4, orderStatus: "processing", actualEventTimestamp: "2026-09-03T09:00:00.000Z" },
+      ]),
+      strata: damagedOn,
+    });
+    // Three qualifying post-damage collections close the day completely; the
+    // pre-damage one contributed nothing.
+    expect(after.byStratum[0].closure).toBe(1);
+    expect(after.hasAuthoritativeRestoration).toBe(true);
+    // Visibly healed, but the building still remembers being hurt.
+    const opacity = scarOpacityFor(after.byStratum[0].closure);
+    expect(opacity).toBeLessThan(1);
+    expect(opacity).toBeGreaterThan(0);
   });
 });

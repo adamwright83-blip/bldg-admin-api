@@ -200,3 +200,69 @@ export function scarOpacityFor(closure: number): number {
   const value = Math.max(0, Math.min(1, closure));
   return 1 - value * (1 - HEALED_SCAR_FLOOR);
 }
+
+/**
+ * A dated pickup-completion, as recorded in `operations_events`.
+ *
+ * `actualEventTimestamp` is the authoritative time the pickup actually
+ * happened — not when the row was written, and not the order's `updatedAt`.
+ */
+export type PickupCompletedEvidence = {
+  readonly orderId: number | null;
+  readonly sourceEventType: string;
+  /** ISO instant of the real pickup. Null when the row never captured one. */
+  readonly actualEventTimestamp: string | null;
+};
+
+/**
+ * Pairs collected orders with WHEN their collection actually happened.
+ *
+ * The order row cannot answer this. `orders` retains no collection timestamp:
+ * `updatedAt` moves on every later write, so for an order now `delivered` it
+ * is delivery time, and for one in `processing` it is processing time. Using
+ * it would place the healing at the wrong moment — usually later than the real
+ * collection, which is exactly the direction that wrongly closes a scar.
+ *
+ * So the date comes from the `pickup_completed` audit event's
+ * `actualEventTimestamp`, which is the only field that records the real
+ * collection instant.
+ *
+ * UNCERTAINTY GETS NO CREDIT — and this deliberately diverges from
+ * `strongholdRestoration.ts`.
+ *
+ * There, a collected order with no audit event still restores the Stronghold,
+ * because the order is the truth and a missing audit row is a known gap
+ * between two non-transactional writes. That is right for a question shaped
+ * "has this ever been restored?".
+ *
+ * Regeneration asks a different question: "was this building repaired AFTER
+ * that specific day's damage?" An order that proves collection happened but
+ * carries no trustworthy date cannot be placed on either side of a scar. It is
+ * dropped rather than assumed recent, because assuming recent grants healing
+ * the evidence does not support.
+ */
+export function datedCollectedOrders(
+  orders: readonly CollectedEvidenceOrder[],
+  pickupEvents: readonly PickupCompletedEvidence[]
+): DatedCollectedOrder[] {
+  const collectedAt = new Map<number, string>();
+  for (const event of pickupEvents) {
+    if (event.sourceEventType !== "pickup_completed") continue;
+    if (event.orderId == null || !event.actualEventTimestamp) continue;
+    // Earliest wins: the first genuine pickup is the collection. A later
+    // duplicate row must not push the healing forward in time.
+    const existing = collectedAt.get(event.orderId);
+    if (!existing || event.actualEventTimestamp < existing) {
+      collectedAt.set(event.orderId, event.actualEventTimestamp);
+    }
+  }
+
+  const dated: DatedCollectedOrder[] = [];
+  for (const order of orders) {
+    if (!isCollectedTruth(order)) continue;
+    const at = collectedAt.get(order.id);
+    if (!at) continue; // proven collected, but undatable — no credit.
+    dated.push({ ...order, collectedOn: at.slice(0, 10) });
+  }
+  return dated;
+}

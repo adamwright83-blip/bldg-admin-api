@@ -32,6 +32,8 @@ import {
   commercialMissions,
   commercialOpportunities,
   commercialPipelineRecords,
+  operationsEvents,
+  orders,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { BUILDINGS } from "@shared/buildings";
@@ -82,6 +84,14 @@ export type CanonicalBuildingWorld = {
    * of buildingSlug derivation and therefore out of penetration counts.
    */
   registryDisagreements: RegistryDisagreement[];
+  /**
+   * Dated, completed pickups keyed by building slug. Paired with `settlement`'s
+   * strata to decide how far a facade has been REPAIRED, which needs the time
+   * the collection actually happened rather than merely that it did.
+   *
+   * Empty for a building means no healing, never "assume recovered".
+   */
+  restorationEvidence: Record<string, DatedPickupRow[]>;
 };
 
 /* ── The pure identity rule ─────────────────────────────────────────────── */
@@ -256,6 +266,65 @@ export function verifiedAnnualValue(input: {
 
 /* ── Loading ────────────────────────────────────────────────────────────── */
 
+/**
+ * Dated restoration evidence per building slug.
+ *
+ * The date MUST be `actualEventTimestamp` — when the pickup actually happened.
+ * The order row cannot supply it: `orders` retains no collection timestamp, and
+ * `updatedAt` moves on every later write, so for an order now `delivered` it is
+ * delivery time. Healing a scar from a delivery timestamp would place the
+ * repair later than the real collection, which is the direction that wrongly
+ * closes a wound.
+ *
+ * Only `eventStatus: "completed"` rows count. A corrected or voided audit row
+ * is a retraction, and a retracted pickup is not evidence a building recovered.
+ *
+ * Orders proven collected but carrying no such event are simply absent here and
+ * therefore earn no healing — see `datedCollectedOrders` for why regeneration
+ * diverges from strongholdRestoration on that point.
+ */
+async function loadDatedPickupEvidence(
+  tenantId: string
+): Promise<Map<string, DatedPickupRow[]>> {
+  const db = await getDb();
+  if (!db) return new Map();
+  try {
+    const rows = await db
+      .select({
+        buildingSlug: operationsEvents.buildingSlug,
+        orderId: operationsEvents.orderId,
+        sourceEventType: operationsEvents.sourceEventType,
+        actualEventTimestamp: operationsEvents.actualEventTimestamp,
+        orderStatus: orders.status,
+      })
+      .from(operationsEvents)
+      .innerJoin(orders, eq(orders.id, operationsEvents.orderId))
+      .where(
+        and(
+          eq(operationsEvents.tenantId, tenantId),
+          eq(operationsEvents.sourceEventType, "pickup_completed"),
+          eq(operationsEvents.eventStatus, "completed")
+        )
+      );
+    const bySlug = new Map<string, DatedPickupRow[]>();
+    for (const row of rows) {
+      if (!row.buildingSlug || row.orderId == null) continue;
+      const list = bySlug.get(row.buildingSlug) ?? [];
+      list.push({
+        orderId: row.orderId,
+        orderStatus: row.orderStatus,
+        actualEventTimestamp: row.actualEventTimestamp.toISOString(),
+      });
+      bySlug.set(row.buildingSlug, list);
+    }
+    return bySlug;
+  } catch {
+    // A missing audit table means no dated evidence, which means no healing.
+    // It must never mean "assume recovered".
+    return new Map();
+  }
+}
+
 async function loadMissionLocationRows(
   tenantId: string
 ): Promise<MissionLocationRow[]> {
@@ -332,15 +401,24 @@ function coordinateFrom(
   return { latitude, longitude, source: "provider_sourced" };
 }
 
+/** One dated, completed pickup joined to its order's current status. */
+export type DatedPickupRow = {
+  orderId: number;
+  orderStatus: string;
+  /** ISO instant of the real pickup. */
+  actualEventTimestamp: string;
+};
+
 export async function getCanonicalBuildingWorld(input: {
   tenantId: string;
   now?: Date;
 }): Promise<CanonicalBuildingWorld> {
-  const [offensive, war, settled, rows] = await Promise.all([
+  const [offensive, war, settled, rows, pickupEvidence] = await Promise.all([
     getLevel4OffensiveState(input.tenantId),
     getTowerWarsToday({ tenantId: input.tenantId, now: input.now }),
     getTowerWarsSettlement({ tenantId: input.tenantId, now: input.now }),
     loadMissionLocationRows(input.tenantId),
+    loadDatedPickupEvidence(input.tenantId),
   ]);
 
   const missions = resolveMissionsToBuildings(bindMissionsToLocations(rows));
@@ -431,5 +509,12 @@ export async function getCanonicalBuildingWorld(input: {
      * for the old monotonic counter.
      */
     settlement: settled.settlement,
+    /**
+     * Dated, completed pickups per building slug. Consumers pair these with
+     * `settlement`'s strata to decide how far a facade has been REPAIRED —
+     * which requires knowing when the collection happened, not merely that it
+     * did. See client `facadeRegeneration.ts`.
+     */
+    restorationEvidence: Object.fromEntries(pickupEvidence),
   };
 }

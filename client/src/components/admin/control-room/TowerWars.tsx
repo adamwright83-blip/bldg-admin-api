@@ -12,6 +12,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../../../../server/routers";
 import { trpc } from "@/lib/trpc";
 import { TOWER_WARS_ATTACK_THRESHOLD_CENTS } from "@shared/goldlineGameConfig";
+import { BUILDINGS } from "@shared/buildings";
 import {
   applyTowerWarsEvent,
   compileTowerWarsState,
@@ -23,6 +24,11 @@ import {
 } from "@shared/towerWars";
 import { towerComparisonState } from "./towerWarsGeometry";
 import { CanonicalBuildingArt } from "./CanonicalBuildingArt";
+import {
+  datedCollectedOrders,
+  projectRegeneration,
+  type RegenerationProjection,
+} from "./facadeRegeneration";
 import { useWorldTransition } from "./WorldTransitionProvider";
 import { entityFromSearch } from "./worldTransition";
 import {
@@ -78,6 +84,7 @@ function BuildingArt({
   incomingToday,
   strikesRevealed,
   charge,
+  regeneration,
 }: {
   buildingId: TowerWarsBuildingId;
   strata: readonly SettledStratum[];
@@ -85,6 +92,7 @@ function BuildingArt({
   incomingToday: number;
   strikesRevealed?: number;
   charge: number;
+  regeneration?: RegenerationProjection;
 }) {
   // One composition, shared with Home and Lantern City, so the building cannot
   // change identity or weapon between screens.
@@ -96,6 +104,7 @@ function BuildingArt({
       incomingToday={incomingToday}
       strikesRevealed={strikesRevealed}
       charge={charge}
+      regeneration={regeneration}
     />
   );
 }
@@ -169,6 +178,11 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
   }, [isEstablishing]);
   const pieceRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+  // Dated pickup evidence per building. Paired with the settlement's strata to
+  // decide how far each facade has been repaired — see facadeRegeneration.ts.
+  const buildingWorld = trpc.system.canonicalBuilding.world.useQuery(undefined, {
+    staleTime: 60_000,
+  });
   const settlementQuery = trpc.system.towerWars.settlement.useQuery(
     undefined,
     { staleTime: 60_000 }
@@ -337,6 +351,38 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
     century.revenueCents
   );
   const hasLoser = comparison.kind === "lead";
+  /**
+   * How far this building's settled scars have been repaired.
+   *
+   * Pairs the settlement's dated strata with dated pickup evidence for the same
+   * building. Both halves are authoritative and both are dated, which is what
+   * lets a collection be placed before or after a given day's damage. A
+   * building with no evidence yields undefined and renders exactly as it always
+   * has — full-weight scars.
+   */
+  const regenerationFor = useMemo(() => {
+    const evidence = buildingWorld.data?.restorationEvidence ?? {};
+    const settlement = settlementQuery.data?.settlement;
+    return (buildingId: TowerWarsBuildingId): RegenerationProjection | undefined => {
+      const strata = settlement?.buildings[buildingId]?.strata ?? [];
+      if (!strata.length) return undefined;
+      const slug = BUILDINGS.find(b => b.id === buildingId)?.slug;
+      const rows = slug ? (evidence[slug] ?? []) : [];
+      if (!rows.length) return undefined;
+      return projectRegeneration({
+        orders: datedCollectedOrders(
+          rows.map(row => ({ id: row.orderId, status: row.orderStatus })),
+          rows.map(row => ({
+            orderId: row.orderId,
+            sourceEventType: "pickup_completed",
+            actualEventTimestamp: row.actualEventTimestamp,
+          }))
+        ),
+        strata,
+      });
+    };
+  }, [buildingWorld.data, settlementQuery.data]);
+
   const youId: TowerWarsBuildingId = hasLoser
     ? comparison.leaderIndex === 0
       ? "century_park_east"
@@ -442,6 +488,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
                   settlementQuery.data?.settlement.buildings[buildingId]
                     .strata ?? []
                 }
+                regeneration={regenerationFor(buildingId)}
                 /* The replay reducer already yields the prefix count, so damage at
                    event N equals business state after event N for free. */
                 incomingToday={building.incomingAttackCount}
