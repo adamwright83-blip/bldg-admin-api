@@ -176,3 +176,70 @@ button.gl-guardian{pointer-events:auto}
   .gl-guardian-anchor:hover .gl-guardian,
   .gl-territory-shape { transition: none; }
 }
+
+/* ============================================================
+   SLICE 7 — TERRITORY PRESSURE ON THE GROUND
+
+   The territory already knew whether it was dormant, contested, ready for
+   confrontation, or settled. None of it reached the map, so the player
+   could see WHERE a territory was but not whether it mattered now — and
+   "which area should I care about" is the question a strategy map exists
+   to answer.
+
+   One mark at the centroid, four readings, each behaving like what it
+   means rather than being colour-coded arbitrarily:
+
+     dormant     faint and still        nothing has happened here
+     contested   slow pulse             work is underway
+     ready       urgent double-beat     the Guardian can be fought NOW
+     cleared     dim settled ring       finished, and remembered
+
+   Only `ready` is allowed to be visually loud. If everything pulses for
+   attention, nothing does.
+   ============================================================ */
+.gl-territory-pressure {
+  position: absolute;
+  z-index: 6;
+  width: 26px;
+  height: 26px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.gl-territory-pressure.is-dormant {
+  border: 1px solid #8fa3b877;
+  background: radial-gradient(circle, #8fa3b822 0%, transparent 70%);
+}
+.gl-territory-pressure.is-contested {
+  border: 2px solid #ffc16688;
+  background: radial-gradient(circle, #ffc16633 0%, transparent 70%);
+  animation: gl-pressure-work 3.4s ease-in-out infinite;
+}
+.gl-territory-pressure.is-ready {
+  border: 2px solid #ff8a4d;
+  background: radial-gradient(circle, #ff8a4d55 0%, transparent 68%);
+  box-shadow: 0 0 16px 4px #ff8a4d66;
+  animation: gl-pressure-ready 1.5s ease-in-out infinite;
+}
+.gl-territory-pressure.is-cleared {
+  border: 1px solid #6fe3a355;
+  background: radial-gradient(circle, #6fe3a31f 0%, transparent 72%);
+}
+
+@keyframes gl-pressure-work {
+  0%, 100% { opacity: 0.5; transform: translate(-50%, -50%) scale(1); }
+  50%      { opacity: 0.85; transform: translate(-50%, -50%) scale(1.1); }
+}
+/* Double-beat: a heartbeat reads as urgency in a way a sine wave does not. */
+@keyframes gl-pressure-ready {
+  0%   { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+  14%  { opacity: 1;   transform: translate(-50%, -50%) scale(1.2); }
+  28%  { opacity: 0.7; transform: translate(-50%, -50%) scale(1.04); }
+  42%  { opacity: 1;   transform: translate(-50%, -50%) scale(1.16); }
+  70%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gl-territory-pressure { animation: none !important; }
+  .gl-territory-pressure.is-ready { opacity: 1; }
+}
