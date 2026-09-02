@@ -1196,3 +1196,113 @@
   .lc-page .lc-page-header h1 { font-size: 26px; }
   .lc-page .lc-page-header p { font-size: 12px; }
 }
+
+/* ============================================================
+   THE MAP IS THE SUBSTRATE, NOT THE STAR
+
+   The header said LA WORLD · NIGHT while the satellite tile was graded
+   BRIGHTER than source (`saturate(.72) brightness(1.08)`) and covered with a
+   warm white wash. Your eye met Google imagery first and Goldline second.
+   Every game object — pale guardians, gold markers, lantern glow — was
+   competing with a lit daytime photograph instead of sitting on top of a
+   night city.
+
+   The geography stays real and stays legible: this darkens and cools the
+   real satellite plate rather than replacing Los Angeles with invented
+   terrain. Streets, blocks and coastline remain readable enough to orient
+   by; they simply stop out-shouting the game.
+
+   Desktop only, alongside the rest of the Lantern City treatment.
+   ============================================================ */
+@media (min-width: 801px) {
+  .lc-page .lc-map > img {
+    filter: saturate(0.55) brightness(0.42) contrast(1.08)
+      hue-rotate(200deg);
+  }
+  /* The warm daylight wash becomes a cool night grade. */
+  .lc-page .lc-map-wash {
+    background:
+      radial-gradient(ellipse at 50% 40%, #0b1c2f00 0%, #05101dcc 100%),
+      linear-gradient(#0a1b2e55, #06121faa);
+  }
+  /* Neighbourhood labels have to survive the darker ground. */
+  .lc-page .lc-neighborhood {
+    border-color: #ffffff2e;
+    background: #0b1c2fdd;
+    color: #dbe9f7;
+    box-shadow: 0 2px 10px #0008;
+  }
+}
+
+/* ============================================================
+   A PURSUED PLACE IS A BUILDING, AND THERE IS ONLY ONE OF IT
+
+   Two problems, one cause. The marker read as a stack of folders rather
+   than architecture, and it was drawn at the same coordinate as a customer
+   lantern — two competing primary objects for one physical place, with the
+   building swallowing the lantern's clicks.
+
+   The lantern is now suppressed where a building already stands (see
+   `pursuitCoversCluster`), and its cadence is carried onto the building as
+   `cadence-*`. One place, one object, no lost information.
+
+   The silhouette is squared and given a roofline so it reads as a structure
+   at atlas scale, with a dark rim so it separates from the night ground.
+   ============================================================ */
+@media (min-width: 801px) {
+  .lc-page .lc-pursued-building {
+    filter: drop-shadow(0 3px 0 #04101d) drop-shadow(0 8px 14px #04101d99);
+  }
+  /* Cadence of the customers at this same place, worn by the building. */
+  .lc-page .lc-pursued-building.cadence-active {
+    filter: drop-shadow(0 0 12px #ffc32488) drop-shadow(0 3px 0 #04101d)
+      drop-shadow(0 8px 14px #04101d99);
+  }
+  .lc-page .lc-pursued-building.cadence-dimming {
+    filter: saturate(0.65) drop-shadow(0 0 9px #c9d3dd66)
+      drop-shadow(0 3px 0 #04101d);
+  }
+  .lc-page .lc-pursued-building.cadence-dark {
+    filter: saturate(0.3) brightness(0.72) drop-shadow(0 3px 0 #04101d);
+  }
+}
+
+/* ============================================================
+   A GUARDIAN IS A CHARACTER TOKEN FIRST, A CHARACTER SECOND
+
+   At atlas zoom the Tiny Emperor occupied a 148px square of Los Angeles in
+   near-white cloud art, which read as pale blobs rather than a character.
+   Compact and high-contrast at rest; it grows and reveals its authored
+   detail when noticed and again in the encounter:
+
+     READABLE TOKEN  ->  CHARACTER WAKES  ->  FULL ENCOUNTER
+
+   No new art. Same asset, smaller, with a dark backing disc so the pale
+   cloud body separates from the ground it stands on.
+   ============================================================ */
+@media (min-width: 801px) {
+  .lc-page .gl-guardian-anchor {
+    width: 74px;
+    height: 74px;
+    transition: width 0.24s cubic-bezier(0.2, 0.8, 0.3, 1),
+      height 0.24s cubic-bezier(0.2, 0.8, 0.3, 1);
+  }
+  /* The backing disc is what makes a white character legible on a map. */
+  .lc-page .gl-guardian-anchor::before {
+    content: "";
+    position: absolute;
+    inset: 4% 4% 10%;
+    z-index: -1;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 55%, #0b1c2fee 0 58%, #0b1c2f00 72%);
+    box-shadow: 0 0 0 2px #ffd76633;
+  }
+  .lc-page .gl-guardian-anchor .gl-guardian {
+    filter: drop-shadow(0 2px 0 #04101d) drop-shadow(0 6px 12px #04101dcc);
+  }
+  /* Noticed: the character wakes and shows more of itself. */
+  .lc-page .gl-guardian-anchor.is-selected {
+    width: 112px;
+    height: 112px;
+  }
+}

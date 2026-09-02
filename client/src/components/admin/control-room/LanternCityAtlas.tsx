@@ -248,6 +248,29 @@ export default function LanternCityAtlas({
 
   const requestedEntityId = new URLSearchParams(window.location.search).get("entity");
   const requestedEntity = cityWorld.data?.find(entity => entity.id === requestedEntityId) ?? null;
+  /*
+    ONE PHYSICAL PLACE, ONE PRIMARY WORLD OBJECT.
+
+    A pursued building and a customer lantern can describe the SAME canonical
+    place, and both were drawn at the same coordinate as competing clickable
+    markers — the building sitting on the lantern and swallowing its clicks.
+    Raising one above the other only picks a winner; it leaves two primary
+    objects claiming one place, which contradicts the one-world architecture
+    the inspector states out loud.
+
+    The building wins, because a building is what is actually there. The
+    lantern's cadence is not lost: it is layered onto the building below as
+    state, so the place still reads as active/dimming/dormant.
+  */
+  function pursuitCoversCluster(cluster: CustomerLocationCluster): boolean {
+    return visiblePursuits.some(
+      pursuit =>
+        pursuit.location != null &&
+        Math.abs(pursuit.location.x - cluster.x) < 1.2 &&
+        Math.abs(pursuit.location.y - cluster.y) < 1.2
+    );
+  }
+
   const selectedEntity = selectedPursuit ? entityForPursuit(selectedPursuit.accountId) : selectedCluster ? entityForCluster(selectedCluster) : requestedEntity;
   const selectedFocusPoint = selectedPursuit?.location
     ? { x: selectedPursuit.location.x, y: selectedPursuit.location.y }
@@ -426,7 +449,7 @@ export default function LanternCityAtlas({
             record already carries the latitude/longitude the atlas projection
             was derived from, so nothing is estimated to do this.
           */}
-          {!googleVisible && fanOutAtlasCollisions(customerClusters.filter(cluster => !cluster.outsideAtlas)).map(({ cluster, fanSlot }) => (
+          {!googleVisible && fanOutAtlasCollisions(customerClusters.filter(cluster => !cluster.outsideAtlas && !pursuitCoversCluster(cluster))).map(({ cluster, fanSlot }) => (
             <Fragment key={cluster.key}>
               {fanSlot > 0 ? (
                 <>
@@ -512,7 +535,27 @@ export default function LanternCityAtlas({
               key={item.pipelineId}
               ref={worldEntity?.id === requestedEntityId ? revealRef : undefined}
                 className={worldMarkerClass(
-                  `lc-pursued-building${worldEntity?.canonicalAsset?.assetUrl ? " has-published-art" : ""}`,
+                  `lc-pursued-building${worldEntity?.canonicalAsset?.assetUrl ? " has-published-art" : ""}${
+                    /*
+                      The suppressed lantern's cadence, carried onto the
+                      building that replaced it, so the place still reads as
+                      active / dimming / dormant.
+                    */
+                    (() => {
+                      const covered = customerClusters.find(
+                        c =>
+                          item.location != null &&
+                          Math.abs(item.location.x - c.x) < 1.2 &&
+                          Math.abs(item.location.y - c.y) < 1.2
+                      );
+                      if (!covered) return "";
+                      return covered.dark === covered.total
+                        ? " cadence-dark"
+                        : covered.dimming > 0 || covered.dark > 0
+                          ? " cadence-dimming"
+                          : " cadence-active";
+                    })()
+                  }`,
                   worldEntity,
                   revealing && worldEntity?.id === requestedEntityId,
                   selectedPursuit?.pipelineId === item.pipelineId
