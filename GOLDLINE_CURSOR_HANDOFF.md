@@ -12,27 +12,33 @@ Practical resume file. No chat history required.
 See `git log -1 --format=%H` on the branch. Last known: `119f85d` + this commit.
 
 ## 4. CURRENT PHASE + SLICE
-Slice 0 (auth + reproducible world + mount gates) COMPLETE.
-PHASE A Slice 1 IN PROGRESS — lanterns/towers/pursued-buildings done;
-territory + Guardian must join the grammar before Phase A closes.
-Next: Slice 2 (OPUS LA tower loop — locked, do not re-audit).
+ALL 30 SLICES HAVE TERMINAL STATUS. See GOLDLINE_WAVE_LEDGER.md.
+No slice remains NOT STARTED or IN PROGRESS.
 
 ## 5. WHAT WAS JUST COMPLETED
-- Ownership trace for `bldg_users` / `service_requests` (see §9).
-- `scripts/goldline-admin-dev-setup.ts` — committed, reproducible local harness.
-- Fixed a self-inflicted blank Lantern City (default export clobbered, `119f85d`).
-- Added a mount/module regression that FAILS on that exact breakage.
+Full v1 wave pass. Highlights:
+- Slice 0: upstream table ownership traced; committed dev harness; DB dropped
+  and rebuilt from scripts alone.
+- Two route-killing crashes found and fixed (blank Lantern City; Tower Wars
+  React #310 conditional hook), both now gated by browser specs.
+- Slices 1/3/5/6/7/13/15/16/18/19 implemented; 4/8/9/10/11/12/14/20/22/23
+  proven already satisfied by trace + runtime; 17/21(physical)/30 marked
+  HUMAN PROOF REQUIRED; 28 blocked on the long mobile CI gate by instruction.
 
 ## 6. WHAT IS BEING WORKED ON RIGHT NOW
 Phase A Slice 1: consistent hover / focus / selected language for towers,
 lanterns, territories, Guardians.
 
 ## 7. EXACT NEXT 3–5 ACTIONS
-1. Slice 1: idle/hover/selected states for the primary world objects.
-2. Slice 2: one excellent OPUS LA tower loop (locked choice — do not re-audit).
-3. Slice 3: Tower Wars game feel (OPUS driver anticipation → impact → recovery).
-4. Slice 4: Guardians as world characters.
-5. Keep ledger + this file current at each push.
+1. Open a PR from `claude/goldline-v1-one-world` to `main` and run the full
+   mobile CI gate (Slice 28 — deliberately not run locally).
+2. Adam runs `docs/goldline/FIELD_DOGFOOD_SCRIPT.md` (Slice 30 + Slice 17/21
+   human halves).
+3. P2 backlog: pursued-building occludes its lantern; 8 pre-existing unit
+   failures (all reproduce on clean main `6ccc203`); long-session profiling;
+   `waywardStage.spec.ts:14` runner timing.
+4. P3 backlog: mature-Stronghold silhouette; unified consequence
+   choreographer; visual proof of a facade heal.
 
 ## 8. IMPORTANT FILES CURRENTLY IN PLAY
 - `client/src/components/admin/control-room/LanternCityAtlas.tsx`
