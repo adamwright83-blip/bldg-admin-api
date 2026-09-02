@@ -941,3 +941,69 @@
   .pwc-building::before { animation: none !important; opacity: 0.65; }
   .pwc-building { transition: none; }
 }
+
+/* ============================================================
+   ONE SELECTION LANGUAGE FOR THE WHOLE WORLD
+
+   Selecting a world object used to change a side panel while the object
+   itself looked exactly like its neighbours. The world could not answer
+   "which one am I looking at?" the moment your eye left the panel, and
+   selection is the single most important state in a strategy game.
+
+   Every selectable object now shares one vocabulary:
+
+     IDLE          resting behaviour (breath / falter / presence glow)
+     HOVER/FOCUS   warms and lifts — "you can touch this"
+     SELECTED      a persistent ring and stilled ambient — "this one"
+
+   The ambient animation PAUSES while selected. A selected object should
+   read as held and attended to, not still drifting; and a stationary ring
+   is far easier to track across a busy map than a pulsing one.
+
+   Keyboard focus gets the same treatment as hover throughout, so an object
+   reached by tab looks like one reached by mouse.
+   ============================================================ */
+.lc-lantern.is-selected,
+.pwc-building.is-selected {
+  z-index: 9;
+}
+.lc-lantern.is-selected .lc-lantern-body::after,
+.pwc-building.is-selected::before {
+  animation-play-state: paused;
+  opacity: 1;
+}
+/*
+  The ring is drawn on the object's own box so it inherits the same transform
+  as the art — a ring positioned independently drifts off the silhouette as
+  soon as the marker scales on hover.
+*/
+.lc-lantern.is-selected::after,
+.pwc-building.is-selected::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  z-index: 2;
+  border: 2px solid #ffd766;
+  border-radius: 12px;
+  pointer-events: none;
+  box-shadow:
+    0 0 0 1px #04101d66,
+    0 0 16px 3px #ffd76655;
+  animation: lc-selection-settle 0.24s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.pwc-building.is-selected::after {
+  inset: -4% -8% 2%;
+  border-radius: 14px;
+}
+
+/* Arrives with a small settle rather than snapping — a selection should feel
+   caught, not teleported onto the object. */
+@keyframes lc-selection-settle {
+  0%   { opacity: 0; transform: scale(1.14); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lc-lantern.is-selected::after,
+  .pwc-building.is-selected::after { animation: none; }
+}

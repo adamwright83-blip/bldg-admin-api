@@ -61,11 +61,22 @@ function WorldMarkerAtmosphere({ entity }: { entity: CityWorldEntity | null }) {
 function worldMarkerClass(
   base: string,
   entity: CityWorldEntity | null,
-  revealing = false
+  revealing = false,
+  selected = false
 ) {
+  /*
+    Selection is a property of the OBJECT, not only of the panel that opened.
+    Before this, clicking a lantern changed a side panel while the thing you
+    clicked looked identical to its neighbours — so the world could not answer
+    "which one am I looking at?" once your eye left the panel.
+
+    Applied outside the presentation check on purpose: an entity with no world
+    presentation can still be selected, and must still show it.
+  */
+  const selectedClass = selected ? " is-selected" : "";
   const presentation = entity?.presentation;
-  if (!presentation) return base;
-  return `${base} has-world veil-${presentation.veil} attention-${presentation.prominenceTier}${revealing ? " is-revealing" : ""}`;
+  if (!presentation) return `${base}${selectedClass}`;
+  return `${base} has-world veil-${presentation.veil} attention-${presentation.prominenceTier}${revealing ? " is-revealing" : ""}${selectedClass}`;
 }
 
 function markerLabel(base: string, entity: CityWorldEntity | null) {
@@ -429,7 +440,8 @@ export default function LanternCityAtlas({
                 className={worldMarkerClass(
                   `lc-lantern state-${cluster.dark === cluster.total ? "dark" : cluster.dimming > 0 || cluster.dark > 0 ? "dimming" : "active"}${fanSlot > 0 ? ` fan-${fanSlot}` : ""}`,
                   entityForCluster(cluster),
-                  revealing && entityForCluster(cluster)?.id === requestedEntityId
+                  revealing && entityForCluster(cluster)?.id === requestedEntityId,
+                  selectedCluster?.key === cluster.key
                 )}
                 style={{
                   left: `${cluster.x}%`,
