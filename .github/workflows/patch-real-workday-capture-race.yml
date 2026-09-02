@@ -23,15 +23,14 @@ jobs:
           from pathlib import Path
           path = Path('client/src/game/GoldlineGameHome.tsx')
           text = path.read_text()
-          old = '''            onLogSignal={
-              activeExpedition?.kind === "local_target_run" &&
+          old = """            onLogSignal={
+              activeExpedition?.kind === \"local_target_run\" &&
               !localTargetRealArrivalConfirmed
                 ? props.onOpenJournal
                 : props.onOpenLogSignal
-            }
-          '''
-          new = '''            onLogSignal={
-              activeExpedition?.kind === "local_target_run" &&
+            }"""
+          new = """            onLogSignal={
+              activeExpedition?.kind === \"local_target_run\" &&
               !localTargetRealArrivalConfirmed
                 ? props.onOpenJournal
                 : arrivedStop
@@ -45,10 +44,9 @@ jobs:
                       props.onOpenLogSignal?.();
                     }
                   : props.onOpenLogSignal
-            }
-          '''
-          if old not in text:
-              raise SystemExit('expected onLogSignal block not found; refusing broad edit')
+            }"""
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one onLogSignal block, found {text.count(old)}; refusing broad edit')
           path.write_text(text.replace(old, new, 1))
           PY
           rm .github/workflows/patch-real-workday-capture-race.yml
