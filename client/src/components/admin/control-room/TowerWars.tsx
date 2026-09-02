@@ -301,6 +301,44 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
     return () => window.clearTimeout(timer);
   }, [activeSpectacle, data, today.isError]);
   const replay = useReplay(data);
+  /*
+    MUST stay above the early returns below. This was originally placed after
+    them, which made it a conditional hook: on a loading render React saw
+    fewer hooks than on a loaded one and threw error #310, so Tower Wars
+    crashed to the error boundary instead of rendering the arena.
+  */
+  /**
+   * How far this building's settled scars have been repaired.
+   *
+   * Pairs the settlement's dated strata with dated pickup evidence for the same
+   * building. Both halves are authoritative and both are dated, which is what
+   * lets a collection be placed before or after a given day's damage. A
+   * building with no evidence yields undefined and renders exactly as it always
+   * has — full-weight scars.
+   */
+  const regenerationFor = useMemo(() => {
+    const evidence = buildingWorld.data?.restorationEvidence ?? {};
+    const settlement = settlementQuery.data?.settlement;
+    return (buildingId: TowerWarsBuildingId): RegenerationProjection | undefined => {
+      const strata = settlement?.buildings[buildingId]?.strata ?? [];
+      if (!strata.length) return undefined;
+      const slug = BUILDINGS.find(b => b.id === buildingId)?.slug;
+      const rows = slug ? (evidence[slug] ?? []) : [];
+      if (!rows.length) return undefined;
+      return projectRegeneration({
+        orders: datedCollectedOrders(
+          rows.map(row => ({ id: row.orderId, status: row.orderStatus })),
+          rows.map(row => ({
+            orderId: row.orderId,
+            sourceEventType: "pickup_completed",
+            actualEventTimestamp: row.actualEventTimestamp,
+          }))
+        ),
+        strata,
+      });
+    };
+  }, [buildingWorld.data, settlementQuery.data]);
+
   if (today.isLoading && !data)
     return (
       <main className="tw-page">
@@ -351,37 +389,6 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
     century.revenueCents
   );
   const hasLoser = comparison.kind === "lead";
-  /**
-   * How far this building's settled scars have been repaired.
-   *
-   * Pairs the settlement's dated strata with dated pickup evidence for the same
-   * building. Both halves are authoritative and both are dated, which is what
-   * lets a collection be placed before or after a given day's damage. A
-   * building with no evidence yields undefined and renders exactly as it always
-   * has — full-weight scars.
-   */
-  const regenerationFor = useMemo(() => {
-    const evidence = buildingWorld.data?.restorationEvidence ?? {};
-    const settlement = settlementQuery.data?.settlement;
-    return (buildingId: TowerWarsBuildingId): RegenerationProjection | undefined => {
-      const strata = settlement?.buildings[buildingId]?.strata ?? [];
-      if (!strata.length) return undefined;
-      const slug = BUILDINGS.find(b => b.id === buildingId)?.slug;
-      const rows = slug ? (evidence[slug] ?? []) : [];
-      if (!rows.length) return undefined;
-      return projectRegeneration({
-        orders: datedCollectedOrders(
-          rows.map(row => ({ id: row.orderId, status: row.orderStatus })),
-          rows.map(row => ({
-            orderId: row.orderId,
-            sourceEventType: "pickup_completed",
-            actualEventTimestamp: row.actualEventTimestamp,
-          }))
-        ),
-        strata,
-      });
-    };
-  }, [buildingWorld.data, settlementQuery.data]);
 
   const youId: TowerWarsBuildingId = hasLoser
     ? comparison.leaderIndex === 0

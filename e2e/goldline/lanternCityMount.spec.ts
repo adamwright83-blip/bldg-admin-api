@@ -132,4 +132,46 @@ test.describe("Lantern City mounts with a populated world", () => {
     // Exactly one object is held. Two rings would make selection meaningless.
     await expect(held).toHaveCount(1);
   });
+
+  test("selecting OPUS carries the player into the Tower Wars arena", async ({
+    page,
+  }) => {
+    /*
+      The Slice 2 chain, guarded end to end: city -> tower selectable -> select
+      -> transition -> arena with real pieces.
+
+      This exists because c7d8060 added a useMemo AFTER TowerWars' early
+      returns, making it a conditional hook. React threw #310 and the arena
+      crashed to the error boundary. tsc was clean and the bundle built, so
+      only opening the page found it — the same lesson as 612af8c, one route
+      over.
+    */
+    const pageErrors: string[] = [];
+    page.on("pageerror", error => pageErrors.push(String(error)));
+
+    await page.goto("/home");
+    await page.request.post("/api/auth/login", {
+      data: { password: ADMIN_PASSWORD, role: "admin" },
+    });
+    await page.goto("/growth/lantern-city");
+    await expect(page.locator(".lc-page")).toBeVisible({ timeout: 30_000 });
+
+    const opus = page.locator(".pwc-building.opus").first();
+    await expect(opus).toBeVisible();
+    await opus.click({ force: true });
+
+    await expect(page).toHaveURL(/tower-wars\?building=opus_la/);
+
+    // The arena actually arrived, with both towers standing in it.
+    await expect(page.locator(".tw-arena")).toBeVisible({ timeout: 30_000 });
+    await expect
+      .poll(async () => page.locator(".tw-piece").count(), { timeout: 30_000 })
+      .toBeGreaterThan(1);
+
+    // A crashed render would leave the boundary text instead of the world.
+    await expect(page.locator("body")).not.toContainText(
+      "An unexpected error occurred"
+    );
+    expect(pageErrors, "no uncaught render errors entering the arena").toEqual([]);
+  });
 });
