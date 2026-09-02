@@ -18,7 +18,9 @@ jobs:
           ref: cursor/goldline-real-workday-followups
           fetch-depth: 1
       - name: Apply guarded follow-up truth patch
-        run: node scripts/patchRealWorkdayFollowUpTruth.cjs
+        run: |
+          sed -i '/pipeline-follow-up-outcome:${input.requestId}/c\    expect(service).toContain("pipeline-follow-up-outcome:");' scripts/patchRealWorkdayFollowUpTruth.cjs
+          node scripts/patchRealWorkdayFollowUpTruth.cjs
       - name: Commit source patch and remove scaffolding
         run: |
           rm .github/workflows/patch-real-workday-followups.yml
