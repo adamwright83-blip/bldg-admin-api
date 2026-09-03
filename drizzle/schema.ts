@@ -566,6 +566,81 @@ export const catalogItems = mysqlTable(
 export type CatalogItem = typeof catalogItems.$inferSelect;
 export type InsertCatalogItem = typeof catalogItems.$inferInsert;
 
+/**
+ * Dry-cleaning partners. COAST 1hr CLEANERS is the base partner: its price list
+ * IS `catalog_items` (usesBaseCatalog = true), so no Coast pricing is ever
+ * duplicated here. Every other cleaner carries explicit rows in
+ * `dry_cleaner_item_prices` and its catalog grows one real transaction at a time.
+ */
+export const dryCleaners = mysqlTable(
+  "dry_cleaners",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+    slug: varchar("slug", { length: 64 }).notNull(),
+    displayName: varchar("displayName", { length: 128 }).notNull(),
+    /** Normal partnership discount off the cleaner's retail. A default only —
+     * every price row and every order line may record a different reality. */
+    defaultPartnerDiscountPct: decimal("defaultPartnerDiscountPct", {
+      precision: 5,
+      scale: 2,
+    })
+      .notNull()
+      .default("0"),
+    usesBaseCatalog: boolean("usesBaseCatalog").notNull().default(false),
+    sortOrder: int("sortOrder").notNull().default(0),
+    isActive: boolean("isActive").notNull().default(true),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    uqTenantSlug: uniqueIndex("uq_dry_cleaners_tenant_slug").on(
+      table.tenantId,
+      table.slug
+    ),
+  })
+);
+
+export type DryCleaner = typeof dryCleaners.$inferSelect;
+export type InsertDryCleaner = typeof dryCleaners.$inferInsert;
+
+/**
+ * One cleaner's price for one garment. A missing row means "pricing not added
+ * for this cleaner" — never $0.
+ */
+export const dryCleanerItemPrices = mysqlTable(
+  "dry_cleaner_item_prices",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+    dryCleanerId: int("dryCleanerId").notNull(),
+    catalogItemId: int("catalogItemId").notNull(),
+    /** What the cleaner charges us before any partnership discount. */
+    cleanerRetailPriceCents: int("cleanerRetailPriceCents").notNull(),
+    /** Discount actually applied for this item. NULL = use the cleaner default. */
+    partnerDiscountPct: decimal("partnerDiscountPct", {
+      precision: 5,
+      scale: 2,
+    }),
+    /** Customer-facing price. Stored explicitly — never a derived markup. */
+    customerPriceCents: int("customerPriceCents").notNull(),
+    isActive: boolean("isActive").notNull().default(true),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    uqCleanerItem: uniqueIndex("uq_dry_cleaner_item_prices_cleaner_item").on(
+      table.tenantId,
+      table.dryCleanerId,
+      table.catalogItemId
+    ),
+  })
+);
+
+export type DryCleanerItemPrice = typeof dryCleanerItemPrices.$inferSelect;
+export type InsertDryCleanerItemPrice =
+  typeof dryCleanerItemPrices.$inferInsert;
+
 export const drycleanReceiptIntakes = mysqlTable("dryclean_receipt_intakes", {
   id: int("id").autoincrement().primaryKey(),
   tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),

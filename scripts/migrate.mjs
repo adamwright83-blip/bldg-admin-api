@@ -26,9 +26,9 @@ const run = async (sql, label) => {
   }
 };
 
-const runRequired = async (sql, label) => {
+const runRequired = async (sql, label, params) => {
   try {
-    await conn.execute(sql);
+    await conn.execute(sql, params ?? []);
     console.log("✓", label);
   } catch (error) {
     console.error("✗ required migration failed:", label, error.message);
@@ -408,13 +408,32 @@ await runRequired(
 );
 
 for (const [sql, label] of [
-  [`ALTER TABLE entity_locations ADD COLUMN canonicalAddress VARCHAR(512) AFTER normalizedSourceAddress`, "entity_locations.canonicalAddress"],
-  [`ALTER TABLE entity_locations ADD COLUMN geocodeProvider VARCHAR(64) AFTER geocodeStatus`, "entity_locations.geocodeProvider"],
-  [`ALTER TABLE entity_locations ADD COLUMN geocodeError VARCHAR(512) AFTER geocodedAt`, "entity_locations.geocodeError"],
-  [`ALTER TABLE entity_locations ADD COLUMN lastAttemptAt TIMESTAMP NULL AFTER geocodeError`, "entity_locations.lastAttemptAt"],
-  [`ALTER TABLE entity_locations ADD COLUMN createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`, "entity_locations.createdAt"],
-  [`ALTER TABLE entity_locations ADD COLUMN updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`, "entity_locations.updatedAt"],
-]) await run(sql, label);
+  [
+    `ALTER TABLE entity_locations ADD COLUMN canonicalAddress VARCHAR(512) AFTER normalizedSourceAddress`,
+    "entity_locations.canonicalAddress",
+  ],
+  [
+    `ALTER TABLE entity_locations ADD COLUMN geocodeProvider VARCHAR(64) AFTER geocodeStatus`,
+    "entity_locations.geocodeProvider",
+  ],
+  [
+    `ALTER TABLE entity_locations ADD COLUMN geocodeError VARCHAR(512) AFTER geocodedAt`,
+    "entity_locations.geocodeError",
+  ],
+  [
+    `ALTER TABLE entity_locations ADD COLUMN lastAttemptAt TIMESTAMP NULL AFTER geocodeError`,
+    "entity_locations.lastAttemptAt",
+  ],
+  [
+    `ALTER TABLE entity_locations ADD COLUMN createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`,
+    "entity_locations.createdAt",
+  ],
+  [
+    `ALTER TABLE entity_locations ADD COLUMN updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`,
+    "entity_locations.updatedAt",
+  ],
+])
+  await run(sql, label);
 
 await runRequired(
   `CREATE TABLE IF NOT EXISTS tower_wars_promises (
@@ -435,6 +454,110 @@ await runRequired(
   )`,
   "CREATE TABLE tower_wars_promises"
 );
+
+/* ===== Dry-cleaning partners (multi-cleaner order lines) =====
+ * COAST 1hr CLEANERS is the base partner: its price list is `catalog_items`
+ * itself, so no existing Coast pricing is copied, moved, or duplicated here.
+ * PARAGON CLEANERS starts with the single garment we actually know a price for. */
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS dry_cleaners (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL DEFAULT 'default',
+    slug VARCHAR(64) NOT NULL,
+    displayName VARCHAR(128) NOT NULL,
+    defaultPartnerDiscountPct DECIMAL(5,2) NOT NULL DEFAULT 0,
+    usesBaseCatalog TINYINT(1) NOT NULL DEFAULT 0,
+    sortOrder INT NOT NULL DEFAULT 0,
+    isActive TINYINT(1) NOT NULL DEFAULT 1,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_dry_cleaners_tenant_slug (tenantId,slug)
+  )`,
+  "CREATE TABLE dry_cleaners"
+);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS dry_cleaner_item_prices (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL DEFAULT 'default',
+    dryCleanerId INT NOT NULL,
+    catalogItemId INT NOT NULL,
+    cleanerRetailPriceCents INT NOT NULL,
+    partnerDiscountPct DECIMAL(5,2) NULL,
+    customerPriceCents INT NOT NULL,
+    isActive TINYINT(1) NOT NULL DEFAULT 1,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_dry_cleaner_item_prices_cleaner_item (tenantId,dryCleanerId,catalogItemId),
+    KEY idx_dry_cleaner_item_prices_cleaner (tenantId,dryCleanerId,isActive)
+  )`,
+  "CREATE TABLE dry_cleaner_item_prices"
+);
+
+/* Seed the two partners for every tenant that already has a dry-clean catalog,
+ * plus the default tenant. Idempotent: the unique key absorbs re-runs. */
+const [dcTenantRows] = await conn.query(
+  `SELECT DISTINCT tenantId FROM catalog_items WHERE serviceType IN ('dry_clean','alteration')`
+);
+const cleanerTenantIds = Array.from(
+  new Set(["default", ...dcTenantRows.map(r => r.tenantId)])
+);
+for (const tenantId of cleanerTenantIds) {
+  await runRequired(
+    `INSERT IGNORE INTO dry_cleaners
+       (tenantId,slug,displayName,defaultPartnerDiscountPct,usesBaseCatalog,sortOrder,isActive)
+     VALUES (?,?,?,?,?,?,1)`,
+    `seed dry_cleaners COAST 1hr CLEANERS (${tenantId})`,
+    [tenantId, "coast_1hr", "COAST 1hr CLEANERS", "40.00", 1, 0]
+  );
+  await runRequired(
+    `INSERT IGNORE INTO dry_cleaners
+       (tenantId,slug,displayName,defaultPartnerDiscountPct,usesBaseCatalog,sortOrder,isActive)
+     VALUES (?,?,?,?,?,?,1)`,
+    `seed dry_cleaners PARAGON CLEANERS (${tenantId})`,
+    [tenantId, "paragon", "PARAGON CLEANERS", "15.00", 0, 1]
+  );
+
+  /* PARAGON's first and only known garment: the Dress cleaned for Carol.
+   * Paragon retail $14.79, discount actually received 0% (full retail),
+   * customer price $19.00. Profit and margin are derived, never stored. */
+  const [dressRows] = await conn.query(
+    `SELECT id FROM catalog_items WHERE tenantId = ? AND slug = 'dress' LIMIT 1`,
+    [tenantId]
+  );
+  const [paragonRows] = await conn.query(
+    `SELECT id FROM dry_cleaners WHERE tenantId = ? AND slug = 'paragon' LIMIT 1`,
+    [tenantId]
+  );
+  if (dressRows.length && paragonRows.length) {
+    await runRequired(
+      `INSERT IGNORE INTO dry_cleaner_item_prices
+         (tenantId,dryCleanerId,catalogItemId,cleanerRetailPriceCents,partnerDiscountPct,customerPriceCents,isActive)
+       VALUES (?,?,?,?,?,?,1)`,
+      `seed PARAGON CLEANERS dress pricing (${tenantId})`,
+      [tenantId, paragonRows[0].id, dressRows[0].id, 1479, "0.00", 1900]
+    );
+  }
+}
+
+await assertRequiredColumns("dry_cleaners", [
+  "tenantId",
+  "slug",
+  "displayName",
+  "defaultPartnerDiscountPct",
+  "usesBaseCatalog",
+  "sortOrder",
+  "isActive",
+]);
+await assertRequiredColumns("dry_cleaner_item_prices", [
+  "tenantId",
+  "dryCleanerId",
+  "catalogItemId",
+  "cleanerRetailPriceCents",
+  "partnerDiscountPct",
+  "customerPriceCents",
+  "isActive",
+]);
 
 await assertRequiredColumns("entity_locations", [
   "tenantId",

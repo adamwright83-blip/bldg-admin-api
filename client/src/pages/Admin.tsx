@@ -54,8 +54,16 @@ import {
 } from "@shared/pricing";
 import {
   resolveDryCleanCatalogRows,
+  resolveCleanerMenus,
+  buildCleanerLineItems,
   type DryCleanCatalogRow,
+  type CleanerMenu,
 } from "@/lib/dryCleanCatalog";
+import {
+  COAST_CLEANER_SLUG,
+  computeDryCleanEconomics,
+  dryCleanLineKey,
+} from "@shared/dryCleaners";
 import type { Order } from "@shared/types";
 import {
   ADMIN_WORKSPACE_TABS as TABS,
@@ -68,42 +76,53 @@ const SUPPORTED_BUILDINGS: { label: string; value: string }[] = [
   { label: "Century Park East", value: "centuryparkeast" },
 ];
 
-/** Build drycleanItemsJson: keys = catalog slug (legacy DC item id). Uses DB catalog prices; falls back to saved JSON for unknown slugs. */
-function buildDrycleanLineItems(
-  catalogRows: Array<{
-    slug: string;
-    name: string;
-    category: string;
-    standardPriceCents: number;
-  }>,
-  dcQtys: Record<string, number>,
-  legacyJson: Record<string, DryCleanEntry> | null | undefined
-): Record<string, DryCleanEntry> {
-  const bySlug = new Map(catalogRows.map(r => [r.slug, r]));
-  const out: Record<string, DryCleanEntry> = {};
-  for (const [slug, qty] of Object.entries(dcQtys)) {
-    if (!qty || qty <= 0) continue;
-    const row = bySlug.get(slug);
-    if (row) {
-      out[slug] = {
-        label: row.name,
-        category: row.category,
-        unit_price_cents: row.standardPriceCents,
-        qty,
-        total_cents: row.standardPriceCents * qty,
-      };
-    } else if (legacyJson && legacyJson[slug]) {
-      const leg = legacyJson[slug];
-      out[slug] = {
-        label: leg.label,
-        category: leg.category,
-        unit_price_cents: leg.unit_price_cents,
-        qty,
-        total_cents: leg.unit_price_cents * qty,
-      };
-    }
-  }
-  return out;
+/**
+ * Per-cleaner dry-cleaning menus for New Order and order editing.
+ *
+ * COAST 1hr CLEANERS keeps the tenant catalog it has always had; other partners
+ * (PARAGON CLEANERS) show only garments explicitly priced with them.
+ */
+function useCleanerMenus(enabled: boolean): {
+  menus: CleanerMenu[];
+  baseCatalogRows: DryCleanCatalogRow[];
+  isLoading: boolean;
+  isFetching: boolean;
+  refetch: () => void;
+} {
+  const catalogQuery = trpc.admin.catalog.list.useQuery(
+    { includeArchived: false },
+    { enabled }
+  );
+  const cleanersQuery = trpc.admin.dryCleaners.list.useQuery(undefined, {
+    enabled,
+  });
+
+  const baseCatalogRows = useMemo(
+    () => resolveDryCleanCatalogRows(catalogQuery.data),
+    [catalogQuery.data]
+  );
+
+  const menus = useMemo(() => {
+    if (!cleanersQuery.data) return [];
+    return resolveCleanerMenus({
+      cleaners: cleanersQuery.data.cleaners,
+      baseCatalogRows,
+      itemPrices: cleanersQuery.data.itemPrices,
+    });
+  }, [cleanersQuery.data, baseCatalogRows]);
+
+  const refetch = useCallback(() => {
+    void catalogQuery.refetch();
+    void cleanersQuery.refetch();
+  }, [catalogQuery, cleanersQuery]);
+
+  return {
+    menus,
+    baseCatalogRows,
+    isLoading: catalogQuery.isLoading || cleanersQuery.isLoading,
+    isFetching: catalogQuery.isFetching || cleanersQuery.isFetching,
+    refetch,
+  };
 }
 
 function connectStatusBadge(vendor: {
@@ -737,10 +756,7 @@ function NewOrderTab({
         debouncedCustomerNameQuery.trim().length >= 2,
     }
   );
-  const catalogQuery = trpc.admin.catalog.list.useQuery(
-    { includeArchived: false },
-    { enabled: form.serviceType === "dry_cleaning" }
-  );
+  const cleanerCatalog = useCleanerMenus(form.serviceType === "dry_cleaning");
   const handleOpenPricing = useCallback(() => {
     setCheckoutResult(null);
     setForm(f => ({ ...f, serviceType: "dry_cleaning" }));
@@ -942,10 +958,6 @@ function NewOrderTab({
     [utils.admin.searchCustomer]
   );
 
-  const catalogRows = useMemo(() => {
-    return resolveDryCleanCatalogRows(catalogQuery.data);
-  }, [catalogQuery.data]);
-
   const currentInputWeight = (() => {
     const n = parseFloat(weightLbs);
     return Number.isFinite(n) && n > 0 ? n : 0;
@@ -961,8 +973,8 @@ function NewOrderTab({
     [flatRateQtys]
   );
   const drycleanItemsJson = useMemo(
-    () => buildDrycleanLineItems(catalogRows, dcQtys, null),
-    [catalogRows, dcQtys]
+    () => buildCleanerLineItems(cleanerCatalog.menus, dcQtys, null),
+    [cleanerCatalog.menus, dcQtys]
   );
   const discount = parseDiscountPercent(discountPercent);
   const totals = useMemo(() => {
@@ -1406,11 +1418,11 @@ function NewOrderTab({
                   flatRateQtys={flatRateQtys}
                   setFlatRateQtys={setFlatRateQtys}
                 />
-              ) : catalogQuery.isLoading ? (
+              ) : cleanerCatalog.isLoading ? (
                 <div className="flex justify-center py-10">
                   <Loader2 className="h-6 w-6 animate-spin text-black/30" />
                 </div>
-              ) : catalogRows.length === 0 ? (
+              ) : cleanerCatalog.menus.length === 0 ? (
                 <div className="border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                   No dry-clean SKUs for this tenant. Add items in Catalog.
                 </div>
@@ -1418,10 +1430,10 @@ function NewOrderTab({
                 <DryCleanIntake
                   dcQtys={dcQtys}
                   setDcQtys={setDcQtys}
-                  catalogRows={catalogRows}
+                  menus={cleanerCatalog.menus}
                   onAddGarment={handleOpenPricing}
-                  onRefreshPricing={() => void catalogQuery.refetch()}
-                  isRefreshing={catalogQuery.isFetching}
+                  onRefreshPricing={cleanerCatalog.refetch}
+                  isRefreshing={cleanerCatalog.isFetching}
                 />
               )}
             </div>
@@ -2509,13 +2521,9 @@ function IntakeDetail({
   const chargeCard = trpc.admin.chargeCard.useMutation();
   const generatePortalToken = trpc.orders.generatePortalToken.useMutation();
 
-  const catalogQuery = trpc.admin.catalog.list.useQuery(
-    { includeArchived: false },
-    { enabled: !!order && order.serviceType === "dry_cleaning" }
+  const cleanerCatalog = useCleanerMenus(
+    !!order && order.serviceType === "dry_cleaning"
   );
-  const catalogRows = useMemo(() => {
-    return resolveDryCleanCatalogRows(catalogQuery.data);
-  }, [catalogQuery.data]);
 
   // Wash & fold state
   const [weightLbs, setWeightLbs] = useState("");
@@ -2575,8 +2583,8 @@ function IntakeDetail({
     const wfTotal = calcWashFoldTotal(w, upcharges, flatRate, disc);
 
     // Calculate DC section (catalog + legacy JSON for unknown slugs)
-    const items = buildDrycleanLineItems(
-      catalogRows,
+    const items = buildCleanerLineItems(
+      cleanerCatalog.menus,
       dcQtys,
       order.drycleanItemsJson as
         | Record<string, DryCleanEntry>
@@ -2603,7 +2611,7 @@ function IntakeDetail({
     flatRateQtys,
     dcQtys,
     discountPercent,
-    catalogRows,
+    cleanerCatalog.menus,
   ]);
 
   const handleCharge = async () => {
@@ -2615,8 +2623,8 @@ function IntakeDetail({
       ...buildSelectedWashFoldFlatRates(flatRateQtys),
     };
 
-    const drycleanItemsJson = buildDrycleanLineItems(
-      catalogRows,
+    const drycleanItemsJson = buildCleanerLineItems(
+      cleanerCatalog.menus,
       dcQtys,
       order.drycleanItemsJson as
         | Record<string, DryCleanEntry>
@@ -2797,11 +2805,11 @@ function IntakeDetail({
             setFlatRateQtys={setFlatRateQtys}
           />
         </>
-      ) : catalogQuery.isLoading ? (
+      ) : cleanerCatalog.isLoading ? (
         <div className="flex justify-center py-10">
           <Loader2 className="h-6 w-6 animate-spin text-black/30" />
         </div>
-      ) : catalogRows.length === 0 ? (
+      ) : cleanerCatalog.menus.length === 0 ? (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           No dry-clean SKUs for this tenant. Run{" "}
           <code className="rounded bg-white/80 px-1">pnpm seed:catalog</code> or
@@ -2815,10 +2823,10 @@ function IntakeDetail({
         <DryCleanIntake
           dcQtys={dcQtys}
           setDcQtys={setDcQtys}
-          catalogRows={catalogRows}
+          menus={cleanerCatalog.menus}
           onAddGarment={openCatalogPricing}
-          onRefreshPricing={() => void catalogQuery.refetch()}
-          isRefreshing={catalogQuery.isFetching}
+          onRefreshPricing={cleanerCatalog.refetch}
+          isRefreshing={cleanerCatalog.isFetching}
         />
       )}
 
@@ -3055,50 +3063,123 @@ function WashFoldIntake({
   );
 }
 
-/* ===== DRY CLEAN INTAKE ===== */
+/* ===== DRY CLEAN INTAKE =====
+ * One tab per dry-cleaning partner. The active tab IS the cleaner assignment:
+ * a garment tapped under PARAGON CLEANERS becomes a Paragon order line, and the
+ * operator never picks a cleaner twice. Tabs share one cart and one total. */
 function DryCleanIntake({
   dcQtys,
   setDcQtys,
-  catalogRows,
+  menus,
   onAddGarment,
   onRefreshPricing,
   isRefreshing = false,
 }: {
   dcQtys: Record<string, number>;
   setDcQtys: (v: Record<string, number>) => void;
-  catalogRows: Array<{
-    slug: string;
-    name: string;
-    category: string;
-    standardPriceCents: number;
-  }>;
+  menus: CleanerMenu[];
   onAddGarment?: () => void;
   onRefreshPricing?: () => void;
   isRefreshing?: boolean;
 }) {
+  const [activeCleanerSlug, setActiveCleanerSlug] = useState(
+    menus[0]?.cleaner.slug ?? COAST_CLEANER_SLUG
+  );
+  const [showAddItem, setShowAddItem] = useState(false);
+
+  useEffect(() => {
+    if (menus.length === 0) return;
+    if (!menus.some(m => m.cleaner.slug === activeCleanerSlug)) {
+      setActiveCleanerSlug(menus[0].cleaner.slug);
+    }
+  }, [menus, activeCleanerSlug]);
+
+  const active =
+    menus.find(m => m.cleaner.slug === activeCleanerSlug) ?? menus[0];
+
+  /* Per-tab item count and subtotal so the operator can see the split at a glance. */
+  const tabTotals = useMemo(() => {
+    const out: Record<string, { count: number; cents: number }> = {};
+    for (const menu of menus) {
+      let count = 0;
+      let cents = 0;
+      for (const row of menu.rows) {
+        const qty = dcQtys[row.lineKey] || 0;
+        if (qty <= 0) continue;
+        count += qty;
+        cents += qty * row.customerPriceCents;
+      }
+      out[menu.cleaner.slug] = { count, cents };
+    }
+    return out;
+  }, [menus, dcQtys]);
+
   const categories = useMemo(() => {
-    const cats: Record<string, typeof catalogRows> = {};
-    catalogRows.forEach(item => {
-      if (!cats[item.category]) cats[item.category] = [];
-      cats[item.category].push(item);
+    const cats: Record<string, CleanerMenu["rows"]> = {};
+    (active?.rows ?? []).forEach(row => {
+      if (!cats[row.category]) cats[row.category] = [];
+      cats[row.category].push(row);
     });
     return cats;
-  }, [catalogRows]);
+  }, [active]);
+
+  if (!active) return null;
+
+  const isBaseCatalog = active.cleaner.usesBaseCatalog;
 
   return (
     <div className="space-y-6">
-      {(onAddGarment || onRefreshPricing) && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border border-black/10 bg-white px-3 py-2">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-black/50">
-              Dry-cleaning price list
-            </p>
-            <p className="mt-0.5 text-xs text-black/45">
-              Add a garment in Catalog, then refresh pricing here.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {onAddGarment ? (
+      {/* Cleaner tabs — the active tab is the cleaner assignment */}
+      <div className="flex flex-wrap gap-2" role="tablist">
+        {menus.map(menu => {
+          const isActive = menu.cleaner.slug === active.cleaner.slug;
+          const totals = tabTotals[menu.cleaner.slug] ?? {
+            count: 0,
+            cents: 0,
+          };
+          return (
+            <button
+              key={menu.cleaner.slug}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              data-testid={`cleaner-tab-${menu.cleaner.slug}`}
+              onClick={() => setActiveCleanerSlug(menu.cleaner.slug)}
+              className={`border px-3 py-2 text-left transition-colors ${
+                isActive
+                  ? "border-black bg-black text-white"
+                  : "border-black/15 bg-white text-black hover:border-black/40"
+              }`}
+            >
+              <span className="block text-xs font-semibold uppercase tracking-[0.12em]">
+                {menu.cleaner.displayName}
+              </span>
+              <span
+                className={`block text-[11px] ${isActive ? "opacity-70" : "text-black/50"}`}
+              >
+                {totals.count > 0
+                  ? `${totals.count} item${totals.count === 1 ? "" : "s"} · $${centsToDollars(totals.cents)}`
+                  : "No items yet"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border border-black/10 bg-white px-3 py-2">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-black/50">
+            {active.cleaner.displayName} price list
+          </p>
+          <p className="mt-0.5 text-xs text-black/45">
+            {isBaseCatalog
+              ? "Add a garment in Catalog, then refresh pricing here."
+              : `Partnership discount defaults to ${active.cleaner.defaultPartnerDiscountPct}% and is editable per item.`}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {isBaseCatalog ? (
+            onAddGarment ? (
               <Button
                 type="button"
                 variant="outline"
@@ -3109,27 +3190,47 @@ function DryCleanIntake({
                 <Plus className="h-3.5 w-3.5" />
                 Add garment
               </Button>
-            ) : null}
-            {onRefreshPricing ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-2 border-black/20 text-black"
-                onClick={onRefreshPricing}
-                disabled={isRefreshing}
-              >
-                {isRefreshing ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Search className="h-3.5 w-3.5" />
-                )}
-                Refresh pricing
-              </Button>
-            ) : null}
-          </div>
+            ) : null
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2 border-black/20 text-black"
+              data-testid={`add-cleaner-item-${active.cleaner.slug}`}
+              onClick={() => setShowAddItem(true)}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add {active.cleaner.displayName} item
+            </Button>
+          )}
+          {onRefreshPricing ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2 border-black/20 text-black"
+              onClick={onRefreshPricing}
+              disabled={isRefreshing}
+            >
+              {isRefreshing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Search className="h-3.5 w-3.5" />
+              )}
+              Refresh pricing
+            </Button>
+          ) : null}
         </div>
-      )}
+      </div>
+
+      {active.rows.length === 0 ? (
+        <div className="border border-black/10 bg-white p-4 text-sm text-black/60">
+          No {active.cleaner.displayName} pricing yet. Add a garment as you
+          learn what they charge — nothing is copied from another cleaner.
+        </div>
+      ) : null}
+
       {Object.entries(categories).map(([cat, items]) => (
         <div key={cat}>
           <h3 className="text-xs font-medium text-black/50 uppercase tracking-wider mb-2">
@@ -3137,15 +3238,19 @@ function DryCleanIntake({
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
             {items.map(item => {
-              const qty = dcQtys[item.slug] || 0;
+              const qty = dcQtys[item.lineKey] || 0;
               return (
                 <button
-                  key={item.slug}
+                  key={item.lineKey}
                   type="button"
-                  onClick={() => setDcQtys({ ...dcQtys, [item.slug]: qty + 1 })}
+                  data-testid={`dc-item-${item.lineKey}`}
+                  onClick={() =>
+                    setDcQtys({ ...dcQtys, [item.lineKey]: qty + 1 })
+                  }
                   onContextMenu={e => {
                     e.preventDefault();
-                    if (qty > 0) setDcQtys({ ...dcQtys, [item.slug]: qty - 1 });
+                    if (qty > 0)
+                      setDcQtys({ ...dcQtys, [item.lineKey]: qty - 1 });
                   }}
                   className={`relative p-2 border text-left text-xs transition-colors ${
                     qty > 0
@@ -3155,7 +3260,7 @@ function DryCleanIntake({
                 >
                   <span className="block">{item.name}</span>
                   <span className="block text-[10px] opacity-60">
-                    ${centsToDollars(item.standardPriceCents)}
+                    ${centsToDollars(item.customerPriceCents)}
                   </span>
                   {qty > 0 && (
                     <span className="absolute top-1 right-1 bg-white text-black text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">
@@ -3169,8 +3274,226 @@ function DryCleanIntake({
         </div>
       ))}
       <p className="text-xs text-black/40">
-        Click to add. Right-click to remove.
+        Click to add. Right-click to remove. Items are assigned to{" "}
+        {active.cleaner.displayName}.
       </p>
+
+      {showAddItem && !isBaseCatalog ? (
+        <AddCleanerItemDialog
+          cleaner={active.cleaner}
+          onClose={() => setShowAddItem(false)}
+          onSaved={lineKey => {
+            setShowAddItem(false);
+            setDcQtys({ ...dcQtys, [lineKey]: (dcQtys[lineKey] || 0) + 1 });
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Learn one cleaner's price for one garment, then put it straight on the order.
+ *
+ * Cost, profit and margin are all derived from what the operator types — no
+ * markup or margin is assumed anywhere. The partnership discount starts at the
+ * cleaner's default and can be set to anything, including 0%.
+ */
+function AddCleanerItemDialog({
+  cleaner,
+  onClose,
+  onSaved,
+}: {
+  cleaner: CleanerMenu["cleaner"];
+  onClose: () => void;
+  onSaved: (lineKey: string) => void;
+}) {
+  const utils = trpc.useUtils();
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState("Dresses");
+  const [retail, setRetail] = useState("");
+  const [discount, setDiscount] = useState(
+    String(cleaner.defaultPartnerDiscountPct)
+  );
+  const [customerPrice, setCustomerPrice] = useState("");
+
+  const savePrice = trpc.admin.dryCleaners.savePrice.useMutation();
+
+  const dollarsToCents = (value: string): number | null => {
+    const n = Number.parseFloat(value);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return Math.round(n * 100);
+  };
+
+  const retailCents = dollarsToCents(retail);
+  const customerCents = dollarsToCents(customerPrice);
+  const discountPct = (() => {
+    const n = Number.parseFloat(discount);
+    return Number.isFinite(n) && n >= 0 && n <= 100 ? n : null;
+  })();
+
+  const economics =
+    retailCents != null && customerCents != null && discountPct != null
+      ? computeDryCleanEconomics({
+          cleanerRetailPriceCents: retailCents,
+          partnerDiscountPct: discountPct,
+          customerPriceCents: customerCents,
+        })
+      : null;
+
+  const canSave =
+    name.trim().length > 0 &&
+    retailCents != null &&
+    customerCents != null &&
+    discountPct != null &&
+    !savePrice.isPending;
+
+  const handleSave = async () => {
+    if (!canSave || retailCents == null || customerCents == null) return;
+    try {
+      const result = await savePrice.mutateAsync({
+        cleanerSlug: cleaner.slug,
+        name: name.trim(),
+        category: category.trim() || "Other",
+        cleanerRetailPriceCents: retailCents,
+        partnerDiscountPct: discountPct,
+        customerPriceCents: customerCents,
+      });
+      await utils.admin.dryCleaners.list.invalidate();
+      await utils.admin.catalog.list.invalidate();
+      toast.success(`${name.trim()} added to ${cleaner.displayName}`);
+      onSaved(dryCleanLineKey(cleaner.slug, result.slug));
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Could not save item");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md border border-black/15 bg-white p-4">
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold uppercase tracking-[0.12em]">
+              Add {cleaner.displayName} item
+            </h3>
+            <p className="mt-0.5 text-xs text-black/50">
+              Saved to this cleaner&apos;s price list for future orders.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-black/40 hover:text-black"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
+              Item / Garment
+            </span>
+            <Input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Cashmere Sweater"
+              className="bg-white border-black/20"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
+              Category
+            </span>
+            <Input
+              value={category}
+              onChange={e => setCategory(e.target.value)}
+              className="bg-white border-black/20"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
+                {cleaner.displayName} retail
+              </span>
+              <Input
+                inputMode="decimal"
+                value={retail}
+                onChange={e => setRetail(e.target.value)}
+                placeholder="14.79"
+                className="bg-white border-black/20"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
+                Partnership discount %
+              </span>
+              <Input
+                inputMode="decimal"
+                value={discount}
+                onChange={e => setDiscount(e.target.value)}
+                className="bg-white border-black/20"
+              />
+            </label>
+          </div>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
+              Customer price
+            </span>
+            <Input
+              inputMode="decimal"
+              value={customerPrice}
+              onChange={e => setCustomerPrice(e.target.value)}
+              placeholder="19.00"
+              className="bg-white border-black/20"
+            />
+          </label>
+
+          <div className="border border-black/10 bg-black/[0.02] p-3 text-xs">
+            <div className="flex justify-between">
+              <span className="text-black/50">Laundry Farm cost</span>
+              <span className="font-mono">
+                {economics
+                  ? `$${centsToDollars(economics.actualCleanerCostCents)}`
+                  : "—"}
+              </span>
+            </div>
+            <div className="mt-1 flex justify-between">
+              <span className="text-black/50">Gross profit</span>
+              <span className="font-mono">
+                {economics
+                  ? `$${centsToDollars(economics.grossProfitCents)}`
+                  : "—"}
+              </span>
+            </div>
+            <div className="mt-1 flex justify-between">
+              <span className="text-black/50">Gross margin</span>
+              <span className="font-mono">
+                {economics && economics.grossMarginPct != null
+                  ? `${economics.grossMarginPct.toFixed(1)}%`
+                  : "—"}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={!canSave}
+              onClick={() => void handleSave()}
+            >
+              {savePrice.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Save &amp; add to order
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -4419,11 +4742,18 @@ function VendorsTab() {
   const [replaceResultMap, setReplaceResultMap] = useState<
     Record<
       number,
-      { oldAccountId: string | null; newAccountId: string; onboardingUrl: string }
+      {
+        oldAccountId: string | null;
+        newAccountId: string;
+        onboardingUrl: string;
+      }
     >
   >({});
   const [coverageDrafts, setCoverageDrafts] = useState<
-    Record<number, { buildingSlug: string; serviceType: "wash_fold" | "dry_cleaning" }>
+    Record<
+      number,
+      { buildingSlug: string; serviceType: "wash_fold" | "dry_cleaning" }
+    >
   >({});
 
   const handleCreateVendor = async () => {
@@ -4482,7 +4812,9 @@ function VendorsTab() {
     try {
       await updateActiveMutation.mutateAsync({ vendorId, isActive });
       await Promise.all([vendorsQuery.refetch(), coverageQuery.refetch()]);
-      toast.success(isActive ? "Vendor activated for payments." : "Vendor deactivated.");
+      toast.success(
+        isActive ? "Vendor activated for payments." : "Vendor deactivated."
+      );
     } catch (error: any) {
       toast.error(error?.message || "Vendor activation failed.");
     }
@@ -4715,7 +5047,9 @@ function VendorsTab() {
               !chargesEnabled ? "Enable charges" : null,
               !payoutsEnabled ? "Enable payouts" : null,
               !detailsSubmitted ? "Complete onboarding" : null,
-              vendorCoverage.length === 0 ? "Assign a building/service route" : null,
+              vendorCoverage.length === 0
+                ? "Assign a building/service route"
+                : null,
             ].filter(Boolean) as string[];
             const coverageDraft = coverageDrafts[vendor.id] ?? {
               buildingSlug: SUPPORTED_BUILDINGS[0].value,
@@ -4814,8 +5148,14 @@ function VendorsTab() {
                 {/* Payment activation and routing */}
                 <div className="mb-3 border border-black/10 p-3 text-xs">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="font-medium text-black/70">Payment activation</p>
-                    <span className={vendor.isActive ? "text-green-700" : "text-amber-700"}>
+                    <p className="font-medium text-black/70">
+                      Payment activation
+                    </p>
+                    <span
+                      className={
+                        vendor.isActive ? "text-green-700" : "text-amber-700"
+                      }
+                    >
                       {vendor.isActive ? "ACTIVE" : "BLOCKED"}
                     </span>
                   </div>
@@ -4831,10 +5171,18 @@ function VendorsTab() {
 
                   <div className="mt-3 space-y-1">
                     {vendorCoverage.map(route => (
-                      <div key={route.id} className="flex items-center justify-between border border-black/10 px-2 py-1.5">
+                      <div
+                        key={route.id}
+                        className="flex items-center justify-between border border-black/10 px-2 py-1.5"
+                      >
                         <span>
-                          {SUPPORTED_BUILDINGS.find(b => b.value === route.buildingSlug)?.label ?? route.buildingSlug}
-                          {" · "}{route.serviceType === "wash_fold" ? "Wash & Fold" : "Dry Cleaning"}
+                          {SUPPORTED_BUILDINGS.find(
+                            b => b.value === route.buildingSlug
+                          )?.label ?? route.buildingSlug}
+                          {" · "}
+                          {route.serviceType === "wash_fold"
+                            ? "Wash & Fold"
+                            : "Dry Cleaning"}
                         </span>
                         <button
                           type="button"
@@ -4851,22 +5199,36 @@ function VendorsTab() {
                   <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
                     <select
                       value={coverageDraft.buildingSlug}
-                      onChange={e => setCoverageDrafts(prev => ({
-                        ...prev,
-                        [vendor.id]: { ...coverageDraft, buildingSlug: e.target.value },
-                      }))}
+                      onChange={e =>
+                        setCoverageDrafts(prev => ({
+                          ...prev,
+                          [vendor.id]: {
+                            ...coverageDraft,
+                            buildingSlug: e.target.value,
+                          },
+                        }))
+                      }
                       className="border border-black/20 bg-white px-2 py-1.5"
                     >
                       {SUPPORTED_BUILDINGS.map(building => (
-                        <option key={building.value} value={building.value}>{building.label}</option>
+                        <option key={building.value} value={building.value}>
+                          {building.label}
+                        </option>
                       ))}
                     </select>
                     <select
                       value={coverageDraft.serviceType}
-                      onChange={e => setCoverageDrafts(prev => ({
-                        ...prev,
-                        [vendor.id]: { ...coverageDraft, serviceType: e.target.value as "wash_fold" | "dry_cleaning" },
-                      }))}
+                      onChange={e =>
+                        setCoverageDrafts(prev => ({
+                          ...prev,
+                          [vendor.id]: {
+                            ...coverageDraft,
+                            serviceType: e.target.value as
+                              | "wash_fold"
+                              | "dry_cleaning",
+                          },
+                        }))
+                      }
                       className="border border-black/20 bg-white px-2 py-1.5"
                     >
                       <option value="wash_fold">Wash & Fold</option>
@@ -4882,7 +5244,8 @@ function VendorsTab() {
                     </Button>
                   </div>
                   <p className="mt-2 text-[11px] text-black/40">
-                    Activation re-checks Stripe live and is refused until at least one route exists.
+                    Activation re-checks Stripe live and is refused until at
+                    least one route exists.
                   </p>
                 </div>
 
@@ -5144,10 +5507,13 @@ function VendorsTab() {
                 {replaceResultMap[vendor.id] && (
                   <div className="mb-3 p-3 bg-blue-50 border border-blue-200 text-xs space-y-1">
                     <p className="font-medium text-blue-900">
-                      New Connect account created: {replaceResultMap[vendor.id].newAccountId}
+                      New Connect account created:{" "}
+                      {replaceResultMap[vendor.id].newAccountId}
                     </p>
                     <p className="text-blue-800">
-                      Old account ({replaceResultMap[vendor.id].oldAccountId ?? "none"}) was left untouched.
+                      Old account (
+                      {replaceResultMap[vendor.id].oldAccountId ?? "none"}) was
+                      left untouched.
                     </p>
                     <Button
                       size="sm"
@@ -5265,7 +5631,8 @@ function VendorsTab() {
                 </div>
                 {vendor.stripeConnectAccountId && (
                   <p className="mt-1 text-[11px] text-black/40">
-                    Use this only when a vendor is linked to the wrong Stripe account.
+                    Use this only when a vendor is linked to the wrong Stripe
+                    account.
                   </p>
                 )}
               </div>

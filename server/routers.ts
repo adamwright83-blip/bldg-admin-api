@@ -123,6 +123,11 @@ import {
   sendSMS,
 } from "./_core/sms";
 import { centsToDollars, dryCleanCostCentsFromRetail } from "@shared/pricing";
+import {
+  listDryCleanersForTenant,
+  listDryCleanerItemPricesForTenant,
+  saveDryCleanerItemPrice,
+} from "./dryCleaners";
 import { z } from "zod";
 import Stripe from "stripe";
 import * as jose from "jose";
@@ -4291,6 +4296,49 @@ export const appRouter = router({
       .query(async ({ input }) => {
         return listVendorCoverage(input.vendorId);
       }),
+
+    /* ===== DRY-CLEANING PARTNERS (COAST 1hr CLEANERS / PARAGON CLEANERS) =====
+     * The cleaner is an order-LINE property. This router exposes each partner's
+     * own menu; a garment absent from a partner's menu is not offered by that
+     * partner, which is different from costing $0. */
+    dryCleaners: router({
+      list: adminOrDriverProcedure.query(async ({ ctx }) => {
+        const [cleaners, itemPrices] = await Promise.all([
+          listDryCleanersForTenant(ctx.tenantId),
+          listDryCleanerItemPricesForTenant(ctx.tenantId),
+        ]);
+        return { cleaners, itemPrices };
+      }),
+
+      savePrice: adminProcedure
+        .input(
+          z
+            .object({
+              cleanerSlug: z.string().min(1).max(64),
+              catalogItemId: z.number().int().positive().optional(),
+              name: z.string().min(1).max(255).optional(),
+              category: z.string().min(1).max(100).optional(),
+              cleanerRetailPriceCents: z.number().int().min(0),
+              /** Null inherits the cleaner's default partnership discount. */
+              partnerDiscountPct: z.number().min(0).max(100).nullable(),
+              customerPriceCents: z.number().int().min(0),
+            })
+            .refine(i => i.catalogItemId != null || (i.name ?? "").trim(), {
+              message: "Pick an existing garment or give a new garment a name",
+            })
+        )
+        .mutation(async ({ ctx, input }) => {
+          try {
+            return await saveDryCleanerItemPrice({
+              tenantId: ctx.tenantId,
+              ...input,
+            });
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            throw new TRPCError({ code: "BAD_REQUEST", message: msg });
+          }
+        }),
+    }),
 
     /* ===== CATALOG (Revenue Control Surface) — platform admin, tenant-scoped by Host ===== */
     catalog: router({

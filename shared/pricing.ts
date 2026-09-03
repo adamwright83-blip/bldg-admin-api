@@ -152,9 +152,26 @@ export type UpchargeEntry = {
 export type DryCleanEntry = {
   label: string;
   category: string;
+  /** Customer-facing unit price. */
   unit_price_cents: number;
   qty: number;
   total_cents: number;
+
+  /* ===== Cleaner snapshot (immutable historical truth) =====
+   * Absent on every order written before multi-cleaner support; such lines are
+   * COAST 1hr CLEANERS by definition (see shared/dryCleaners.ts). Once written
+   * these values are never recomputed from the live catalog, so editing a
+   * cleaner's price later cannot rewrite a past transaction. */
+  cleaner_slug?: string;
+  cleaner_name?: string;
+  cleaner_id?: number;
+  /** Cleaner's own retail price at the time of sale. */
+  cleaner_retail_price_cents?: number;
+  /** Partnership discount ACTUALLY received on this transaction (may differ
+   * from the cleaner default, including 0). */
+  partner_discount_pct?: number;
+  /** Laundry Farm's actual per-unit cost after that discount. */
+  cleaner_cost_cents?: number;
 };
 
 /**

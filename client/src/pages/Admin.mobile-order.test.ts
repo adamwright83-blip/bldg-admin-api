@@ -44,7 +44,20 @@ describe("New Order mobile checkout flow", () => {
 
     expect(dryCleanSource).not.toMatch(/ShirtIcon|Package|img|svg/);
     expect(dryCleanSource).toContain("item.name");
-    expect(dryCleanSource).toContain("item.standardPriceCents");
+    expect(dryCleanSource).toContain("item.customerPriceCents");
+  });
+
+  it("assigns each garment to the cleaner whose tab is open", () => {
+    const dryCleanSource = source.slice(
+      source.indexOf("function DryCleanIntake("),
+      source.indexOf("/* ===== PROCESSING TAB =====")
+    );
+
+    /* The tab is the assignment: tapping a garment writes its cleaner-scoped
+     * line key, so the operator never picks a cleaner a second time. */
+    expect(dryCleanSource).toContain("setActiveCleanerSlug");
+    expect(dryCleanSource).toContain("[item.lineKey]: qty + 1");
+    expect(dryCleanSource).toContain("menu.cleaner.displayName");
   });
 
   it("returns to customer selection when an order is reset", () => {
