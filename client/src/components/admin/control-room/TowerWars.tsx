@@ -41,6 +41,7 @@ import {
 } from "./spectacle";
 import type { SettledStratum } from "./facadeScars";
 import { SiegeComeback } from "./SiegeComeback";
+import { impactForAttack, type TowerImpact } from "@shared/towerWarsImpacts";
 
 export { damageStateForIncomingAttacks } from "@shared/towerWars";
 export type TowerWarsData =
@@ -85,6 +86,7 @@ function BuildingArt({
   strikesRevealed,
   charge,
   regeneration,
+  impacts,
 }: {
   buildingId: TowerWarsBuildingId;
   strata: readonly SettledStratum[];
@@ -93,6 +95,7 @@ function BuildingArt({
   strikesRevealed?: number;
   charge: number;
   regeneration?: RegenerationProjection;
+  impacts?: readonly TowerImpact[];
 }) {
   // One composition, shared with Home and Lantern City, so the building cannot
   // change identity or weapon between screens.
@@ -105,6 +108,7 @@ function BuildingArt({
       strikesRevealed={strikesRevealed}
       charge={charge}
       regeneration={regeneration}
+      impacts={impacts}
     />
   );
 }
@@ -197,7 +201,7 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
   });
   const settlementQuery = trpc.system.towerWars.settlement.useQuery(
     undefined,
-    { staleTime: 60_000 }
+    { staleTime: 30_000, refetchInterval: 30_000 }
   );
   // Tower Wars was the only admin surface that never polled, so a new order never
   // reached an open tab. Siblings poll at 2.5s-60s.
@@ -504,9 +508,13 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
               </span>
               <BuildingArt
                 buildingId={buildingId}
+                impacts={(businessDate || replay.mode !== "live"
+                  ? state.attacks.map(attack => impactForAttack(attack))
+                  : settlementQuery.data?.impacts ?? state.attacks.map(attack => impactForAttack(attack)))
+                  .filter(impact => impact.defenderBuildingId === buildingId)}
                 businessDate={data.businessDate}
                 strata={
-                  !businessDate ? settlementQuery.data?.settlement.buildings[buildingId]
+                  !businessDate && !settlementQuery.data?.impacts.length ? settlementQuery.data?.settlement.buildings[buildingId]
                     .strata ?? [] : []
                 }
                 regeneration={businessDate ? undefined : regenerationFor(buildingId)}
@@ -745,8 +753,7 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
         </div>
         <button
           type="button"
-          disabled={!hasLoser}
-          disabled={Boolean(businessDate)}
+          disabled={!hasLoser || Boolean(businessDate)}
           onClick={() => setComebackBuilding(youId)}
         >
           {hasLoser ? "Engineer the comeback" : "No comeback assigned on a tie"} <ArrowRight />

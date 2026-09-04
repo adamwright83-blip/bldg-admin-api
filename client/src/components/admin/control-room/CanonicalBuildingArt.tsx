@@ -15,6 +15,8 @@ import { FreshDamageLayer } from "./FreshDamageLayer";
 import { ART_SPACE, BUILDING_ART, type CanonicalBuildingId } from "./buildingArt";
 import type { SettledStratum } from "./facadeScars";
 import type { RegenerationProjection } from "./facadeRegeneration";
+import type { TowerImpact } from "@shared/towerWarsImpacts";
+import { LocatedImpactLayer } from "./LocatedImpactLayer";
 
 export function CanonicalBuildingArt({
   buildingId,
@@ -26,6 +28,7 @@ export function CanonicalBuildingArt({
   charge = 0,
   regeneration,
   children,
+  impacts,
 }: {
   buildingId: CanonicalBuildingId;
   /** Seeds today's wound placement. Unused while `incomingToday` is 0. */
@@ -49,6 +52,7 @@ export function CanonicalBuildingArt({
   regeneration?: RegenerationProjection;
   /** Arena-only chrome (projectile, vfx) that must share the same transform. */
   children?: React.ReactNode;
+  impacts?: readonly TowerImpact[];
 }) {
   const art = BUILDING_ART[buildingId];
   return (
@@ -66,13 +70,13 @@ export function CanonicalBuildingArt({
         buildingName={art.displayName}
         regeneration={regeneration}
       />
-      <FreshDamageLayer
+      {impacts ? <LocatedImpactLayer impacts={impacts} /> : <FreshDamageLayer
         buildingId={buildingId}
         buildingName={art.displayName}
         businessDate={businessDate}
         incomingToday={incomingToday}
         strikesRevealed={strikesRevealed}
-      />
+      />}
       {showWeapon ? (
         <span
           className={`cb-weapon is-${buildingId}`}

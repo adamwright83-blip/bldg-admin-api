@@ -28,7 +28,16 @@
 - Tests: 18 focused importer/validation/combat tests passed; 3 replacement-projection tests passed. Disposable local MySQL proof passed repeated/concurrent imports, publication-before-ack retry, correction/reversion, forced mid-transaction rollback (including outbox count), tenant/actor/store isolation, and one real-source-compiled fixture bazooka attack. Disposable proof database removed by test cleanup; production untouched.
 - Global TypeScript check failed on existing unrelated areas (including duplicate JSX attribute in TowerWars, geography typings and commercial outcome types). Focused changed-file diagnostic check running; no full typecheck success claimed.
 - Live September 3 $134.10 data not inspected yet. Fixture proof is NOT live verification.
-- Commit pending; pushed no; deployed no; next dependency located impacts and weekly projection.
+- Commits `96069ea`, `8a83d32`; pushed yes. GitHub commit statuses report Vercel and Railway success for `8a83d32`; not production browser-verified. Narrowed-row compiler errors corrected in follow-up.
+
+## Slice 2 — located persistent impacts (implemented; final visual gates pending)
+
+- Shared deterministic attack-addressed geometry uses existing measured facade bounds, four wound identities, explicit game_projection provenance, permanent records and per-impact dated repair projection. Existing aggregate scars/patina remain available for legacy callers. Live canonical settlement persists; historical replay derives without writing.
+- Tests: 48 impact/scar/regeneration tests passed. Local browser mounted actual Tower Wars API: 15 wounds; local DB 15 rows; reload exact ID/position equality true; browser errors empty. Screenshot `/tmp/goldline-wave-impacts.png`.
+- Remaining checks: repaired-vs-fresh mounted proof; responsive layout; complete historical projection and weekly integration. Current screenshot also exposes pre-existing scoreboard crowding, to address in weekly side/layout integration.
+- Fixed discovered ISO date-only parser default (`00` vs `0`) while seeding local evidence; no production fixture writes.
+- Isolated browser environment: `goldline_recomposition_20260904` on local MySQL; script `scripts/goldline-wave-local.ts`; port 4188. Source `goldline_daylight` schema read only; no source rows copied or changed.
+- Commit pending; pushed no; deployed no. All descendants held until visual gates complete. Next: Slice 3 weekly rivalry.
 
 ---
 

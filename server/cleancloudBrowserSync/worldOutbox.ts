@@ -25,11 +25,12 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
  * is excluded from the economic key: Sales and Revenue describe one order. */
 export function economicSnapshot(row: InsertCleancloudPaidOrder) {
   const tenantId = row.tenantId ?? "default";
+  const paymentDate = row.paymentDateUtc ?? row.paidDateUtc;
   return {
     economicKey: hash(JSON.stringify([tenantId, "cleancloud", row.cleancloudOrderId])),
     paid: Boolean(row.paid),
     amountCents: row.totalCents,
-    paymentAt: (row.paymentDateUtc ?? row.paidDateUtc)?.toISOString() ?? null,
+    paymentAt: paymentDate && Number.isFinite(paymentDate.getTime()) ? paymentDate.toISOString() : null,
     buildingSlug: row.buildingResolutionStatus === "resolved" ? row.buildingSlug ?? null : null,
     customerIdentityHash: customerIdentityHash(tenantId, {
       phone: row.customerPhone, email: row.customerEmail,

@@ -29,6 +29,8 @@ import {
 } from "../../shared/towerWars";
 import { TOWER_WARS_ATTACK_THRESHOLD_CENTS } from "../../shared/goldlineGameConfig";
 import { settleTowerWars } from "../../shared/towerWarsSettlement";
+import { impactForAttack } from "../../shared/towerWarsImpacts";
+import { persistCanonicalImpacts } from "./impactStore";
 
 export type TowerWarsCandidate = {
   sourceKey: string;
@@ -465,6 +467,7 @@ export async function getTowerWarsSettlement(input: {
       businessDate: bounds.businessDate,
       timeZone,
       historyDays,
+      impacts: [],
     };
   }
 
@@ -495,8 +498,14 @@ export async function getTowerWarsSettlement(input: {
     );
   }
 
+  const attacks = Array.from(byBusinessDate.keys()).flatMap(date =>
+    compileTowerWarsState(events.filter(event => event.businessDate === date)).attacks);
+  const impacts = input.now ? attacks.map(attack => impactForAttack(attack))
+    : await persistCanonicalImpacts(input.tenantId, attacks);
+
   return {
     evidenceSufficient: true,
+    impacts,
     settlement: settleTowerWars({
       events,
       todayBusinessDate: bounds.businessDate,

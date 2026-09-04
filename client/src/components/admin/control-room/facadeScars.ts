@@ -36,6 +36,7 @@
  * comes from the data and the loop cannot run longer than it.
  */
 import type { TowerDamageState } from "@shared/towerWars";
+import { TOWER_FACADE_BOUNDS } from "@shared/towerWarsImpacts";
 
 export type ScarKind = "patch" | "seam" | "panel" | "graft";
 
@@ -64,10 +65,7 @@ export type FacadeBounds = {
  * keeps clear of the golf driver that fills its upper right; CPE spans wider
  * and starts higher.
  */
-export const FACADE_BOUNDS: Record<string, FacadeBounds> = {
-  opus_la: { minX: 13, maxX: 45, minY: 23, maxY: 75 },
-  century_park_east: { minX: 20, maxX: 58, minY: 22, maxY: 78 },
-};
+export const FACADE_BOUNDS: Record<string, FacadeBounds> = TOWER_FACADE_BOUNDS;
 
 export const DEFAULT_FACADE_BOUNDS: FacadeBounds = {
   minX: 20,

@@ -170,7 +170,7 @@ export function parseCleanCloudPacificDate(value: unknown): Date | null {
     /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/
   );
   if (isoDate) {
-    const [, year, month, day, hour = "0", minute = "0", second = "0"] =
+    const [, year, month, day, hour = "00", minute = "00", second = "00"] =
       isoDate;
     return fromZonedTime(
       `${year}-${month}-${day}T${hour}:${minute}:${second}`,

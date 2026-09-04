@@ -711,5 +711,8 @@ for (const statement of gumballSql.replace(/^\s*--.*$/gm, "").split(";").map(val
 await assertRequiredColumns("cleancloud_browser_sync_bindings", ["tenantId", "id", "storeId", "storeLabel", "createdBy", "lastSuccessAt"]);
 await assertRequiredColumns("cleancloud_browser_sync_receipts", ["id", "tenantId", "requestId", "digest", "storeId", "importBatchId", "receiptJson", "createdAt"]);
 
+const impactSql = await readFile(new URL("../server/towerWars/impactSchema.sql", import.meta.url), "utf8");
+await runRequired(impactSql, "Tower Wars located impacts");
+await assertRequiredColumns("goldline_tower_impacts", ["id", "tenantId", "payload"]);
 await conn.end();
 console.log("\nMigration complete.");
