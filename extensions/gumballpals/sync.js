@@ -43,7 +43,11 @@ const save = async (phase, extra = {}) => {
   await chrome.storage.local.set({ run: { ...run, ...extra, phase } });
 };
 const request = (operation, input) =>
-  runInTab(goldlineTab, goldlineRequest, [operation, input]);
+  runInTab(
+    goldlineTab,
+    goldlineRequest,
+    input === undefined ? [operation] : [operation, input]
+  );
 const uuid = () => crypto.randomUUID();
 
 if (!globalThis.chrome?.runtime?.id) {
