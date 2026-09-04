@@ -614,3 +614,5 @@
   .hustler-lever.is-celebrating { animation: none; }
   .hl-track i { transition: none; }
 }
+/* Traversal punctuation stays attached to the game viewport, never business HUD. */
+.goldline-overworld-runtime[data-linehook-phase]::after { content: "LINEHOOK · " attr(data-linehook-phase); position:absolute;top:42%;left:50%;transform:translateX(-50%);z-index:30;padding:8px 16px;border:1px solid #edca70;border-radius:20px;background:#102c43ed;color:#fff2b4;font:700 12px/1.2 system-ui;white-space:nowrap;pointer-events:none; }

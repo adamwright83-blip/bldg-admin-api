@@ -9,6 +9,7 @@ import {
   moveWithCollision,
 } from "./navigation";
 import type { OverworldPoint } from "./types";
+import { linehookFrame } from "./linehookTraversal";
 
 describe("overworld full-route movement audit", () => {
   it("moves the real collider through every free-roam destination", () => {
@@ -45,6 +46,13 @@ describe("overworld full-route movement audit", () => {
         `blocked at ${position.x.toFixed(1)},${position.y.toFixed(1)} before ${target.x},${target.y}`
       ).toBeLessThanOrEqual(7);
       expect(isWalkable(map, position, 11)).toBe(true);
+      if (target.traversalId) {
+        const traversal = map.traversals.find(node => node.id === target.traversalId)!;
+        expect(distance(position, traversal.entry)).toBeLessThan(traversal.entryRadius);
+        position = linehookFrame(2150, position, traversal.path.at(-1)!).position;
+        velocity = { x: 0, y: 0 };
+        expect(isWalkable(map, position, 11)).toBe(true);
+      }
     }
   });
 });

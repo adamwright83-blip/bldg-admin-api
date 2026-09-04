@@ -84,6 +84,14 @@
 - React/trpc remain truth owners. Explicit admin comparison reads persisted CPE -> OPUS impact, otherwise refuses to fabricate one. Default DOM remains deliberate. Pixi uses canonical plates/car, windup/recoil, accelerating arc/trails, 80ms punctuation, falling fragments, persistent registered wound and existing AudioManager cues/mute.
 - Inspected actual art: car and bazooka face RIGHT despite stale geometry comment. Corrected side mirroring in DOM and Pixi. Two geometry/timeline tests pass. Browser mounted, replayed and persisted wound; screenshot `/tmp/goldline-wave-pixi-facing.png`. Discovered query-only routing did not rerender promptly; added reactive useSearch before final repeated mount gate.
 - No production fixture writes or renderer-default migration. Subjective art/feel review remains for Adam. Local only.
+- Commit: `f2a0f52`.
+
+## Slice 9 — reusable overworld Linehook
+
+- Versioned authored collision blocks both broken spans. Four data-defined outbound/return traversals share aim/fire/flight/catch/travel/land/release timing, rope graphics, existing audio cues, reduced motion, landing validation and collision-safe checkpoint recovery. Explicit LINEHOOK CTA; no evidence publisher.
+- Eleven phase/collision/navigation/full-route tests pass. Existing route audit migrated to explicit hook steps rather than asserting that sky is walkable.
+- Mounted local browser: Colosseum landing (325,950), greystar-apron, walkable true. Second gap at mobile 390×844 landed (210,505), treehollow, walkable true using the same runtime. No browser errors reported. Fixture teleports only positioned test at each entry; traversal was activated through actual UI and real runtime.
+- Local only. Screenshot `/tmp/goldline-wave-linehook.png`; labels/HUD overlap still needs integration polish.
 
 ---
 

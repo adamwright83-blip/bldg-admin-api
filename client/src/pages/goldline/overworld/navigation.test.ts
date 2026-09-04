@@ -10,7 +10,7 @@ import {
 } from "./navigation";
 
 describe("overworld navigation contract", () => {
-  it("connects Noticeboard to Greystar without crossing sky", () => {
+  it("connects Noticeboard to destinations through ground and explicit hook edges", () => {
     const step = 8;
     const start = map.spawns.noticeboard!;
     const finish = map.spawns.greystarEntrance!;
@@ -21,6 +21,12 @@ describe("overworld navigation contract", () => {
     let reached = false;
     for (let cursor = 0; cursor < queue.length; cursor += 1) {
       const [x, y] = queue[cursor]!;
+      for (const traversal of map.traversals.filter(node => node.kind === "linehook")) {
+        if (Math.hypot(x - traversal.entry.x, y - traversal.entry.y) > traversal.entryRadius) continue;
+        const landing = traversal.path.at(-1)!;
+        const next: [number, number] = [Math.round(landing.x / step) * step, Math.round(landing.y / step) * step];
+        if (!visited.has(next.join(",")) && isWalkable(map, { x: next[0], y: next[1] }, 11)) { visited.add(next.join(",")); queue.push(next); }
+      }
       if (Math.hypot(x - finish.x, y - finish.y) < 18) reached = true;
       for (const [dx, dy] of [
         [step, 0],

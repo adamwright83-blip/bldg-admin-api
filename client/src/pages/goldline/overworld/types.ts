@@ -28,6 +28,9 @@ export type OverworldDestination = {
 };
 
 export type TraversalNode = {
+  kind?: "linehook";
+  anchor?: OverworldPoint;
+  landingRadius?: number;
   id: string;
   label: string;
   entry: OverworldPoint;
@@ -53,6 +56,8 @@ export type OverworldMapDefinition = {
   occluders: OcclusionRegion[];
   destinations: OverworldDestination[];
   traversals: TraversalNode[];
+  /** Explicit unsupported geometry overrides otherwise broad walkable surfaces. */
+  blockedRegions?: Array<{ id: string; polygon: OverworldPoint[] }>;
 };
 
 export type DestinationAvailability = "active" | "locked" | "completed";

@@ -8,6 +8,8 @@ import {
   Texture,
 } from "pixi.js";
 import { GOLDLINE_OVERWORLD_MAP } from "./mapDefinition";
+import { linehookFrame } from "./linehookTraversal";
+import { getAudioManager } from "@/game/audio/AudioManager";
 import {
   applyCorridorAssist,
   distance,
@@ -95,8 +97,9 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   private lastFrameAt = performance.now();
   private destinationStates: DestinationStateMap = {};
   private proximity: OverworldProximity = null;
-  private activeTraversal: { node: TraversalNode; segment: number } | null =
+  private activeTraversal: { node: TraversalNode; segment: number; elapsed: number; from: OverworldPoint } | null =
     null;
+  private hookGraphic = new Graphics();
   private audioContext: AudioContext | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private resizeFrame = 0;
@@ -585,6 +588,33 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
 
   private stepTraversal(deltaSeconds: number) {
     const traversal = this.activeTraversal!;
+    if (traversal.node.kind === "linehook") {
+      traversal.elapsed += deltaSeconds * 1000;
+      const landing = traversal.node.path[traversal.node.path.length - 1]!;
+      const frame = linehookFrame(traversal.elapsed, traversal.from, landing, this.reducedMotion);
+      const previousPhase = this.host.dataset.linehookPhase;
+      this.host.dataset.linehookPhase = frame.phase;
+      if (previousPhase !== frame.phase) {
+        if (frame.phase === "FIRE") getAudioManager().play("vault");
+        if (frame.phase === "CATCH") getAudioManager().play("signal_lock");
+        if (frame.phase === "LAND") getAudioManager().play("land");
+      }
+      this.velocity = { x: (frame.position.x - this.position.x) / deltaSeconds, y: (frame.position.y - this.position.y) / deltaSeconds };
+      this.position = frame.position;
+      this.facing = facingForVelocity(this.velocity, this.facing);
+      this.moving = frame.phase === "PLAYER TRAVEL";
+      const anchor = traversal.node.anchor ?? landing;
+      const tip = { x: traversal.from.x + (anchor.x - traversal.from.x) * frame.hookProgress, y: traversal.from.y + (anchor.y - traversal.from.y) * frame.hookProgress };
+      if (!this.hookGraphic.parent) { this.hookGraphic.zIndex = 9999; this.world.addChild(this.hookGraphic); }
+      this.hookGraphic.clear();
+      this.hookGraphic.circle(anchor.x, anchor.y, 10).stroke({ width: 3, color: 0xffdc77 });
+      if (frame.hookProgress > 0 && frame.phase !== "RELEASE") this.hookGraphic.moveTo(this.position.x, this.position.y - 18).lineTo(tip.x, tip.y).stroke({ width: 3, color: 0x73ddff }).circle(tip.x, tip.y, 5).fill(0xffd65a);
+      if (frame.done) {
+        this.position = { ...landing }; this.activeTraversal = null; this.velocity = { x: 0, y: 0 }; this.hookGraphic.clear();
+        delete this.host.dataset.linehookPhase; this.saveNow(); this.callbacks.onTraversalComplete?.(traversal.node.id);
+      }
+      return;
+    }
     const nextPoint = traversal.node.path[traversal.segment + 1];
     if (!nextPoint) {
       this.activeTraversal = null;
@@ -837,6 +867,7 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   }
 
   performContextAction(): "entered" | "inspected" | "locked" | "traversal" | "none" {
+    if (this.activeTraversal || this.paused) return "none";
     if (!this.proximity?.canAct) return "none";
     if (this.proximity.availability !== "active") return "locked";
     if (this.proximity.destination.action === "enter") {
@@ -848,7 +879,9 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
       item => item.id === this.proximity?.destination.traversalId
     );
     if (traversal) {
-      this.activeTraversal = { node: traversal, segment: 0 };
+      const landing = traversal.path[traversal.path.length - 1];
+      if (!landing || distance(this.position, traversal.entry) > traversal.entryRadius || !isWalkable(this.map, landing, traversal.landingRadius ?? PLAYER_RADIUS)) return "locked";
+      this.activeTraversal = { node: traversal, segment: 0, elapsed: 0, from: { ...this.position } };
       this.input = { x: 0, y: 0 };
       return "traversal";
     }

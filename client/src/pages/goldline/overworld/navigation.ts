@@ -68,6 +68,7 @@ export function surfaceAtPoint(
   map: OverworldMapDefinition,
   point: OverworldPoint
 ): string | null {
+  if (map.blockedRegions?.some(region => pointInPolygon(point, region.polygon))) return null;
   const surface = map.surfaces.find(item =>
     pointInPolygon(point, item.polygon)
   );

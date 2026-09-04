@@ -15,6 +15,7 @@ import {
   saveOverworldCheckpoint,
 } from "./overworld/checkpoint";
 import { GoldlineOverworldRuntime } from "./overworld/OverworldRuntime";
+import { GOLDLINE_OVERWORLD_MAP } from "./overworld/mapDefinition";
 import type { LiveAdventureObjective } from "../driver/goldlineDayPlanModel";
 import type {
   DestinationStateMap,
@@ -106,6 +107,9 @@ export default function GoldlineOverworld({
   const orderCount = pickups.length + deliveries.length;
   const destinationStates = useMemo<DestinationStateMap>(
     () => ({
+      ...Object.fromEntries(GOLDLINE_OVERWORLD_MAP.destinations.filter(destination =>
+        GOLDLINE_OVERWORLD_MAP.traversals.some(node => node.id === destination.traversalId && node.kind === "linehook")
+      ).map(destination => [destination.id, "active" as const])),
       "greystar-6": greystarCompleted
         ? "completed"
         : greystarActive
@@ -412,7 +416,7 @@ export default function GoldlineOverworld({
                     ? "ENTER GREYSTAR 6"
                     : proximity.destination.id === "wayward-approach"
                       ? "CROSS THE TETHER"
-                      : "CONTINUE"
+                      : GOLDLINE_OVERWORLD_MAP.traversals.find(node => node.id === proximity.destination.traversalId)?.label ?? "CONTINUE"
                   : proximity.availability === "completed"
                     ? "CONQUERED"
                     : "INSPECT"}

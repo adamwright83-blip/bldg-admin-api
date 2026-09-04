@@ -31,7 +31,7 @@ function ellipse(
  */
 export const GOLDLINE_OVERWORLD_MAP: OverworldMapDefinition = {
   id: "goldline-global-overworld",
-  version: 4,
+  version: 5,
   width: 848,
   height: 1854,
   defaultSpawnId: "noticeboard",
@@ -272,6 +272,10 @@ export const GOLDLINE_OVERWORLD_MAP: OverworldMapDefinition = {
     },
   ],
   destinations: [
+    { id: "colosseum-linehook", name: "COLOSSEUM LINEHOOK", subtitle: "Target the far anchor — the broken span is not walkable", point: { x: 230, y: 950 }, approachRadius: 70, entranceRadius: 30, action: "traverse", traversalId: "colosseum-linehook" },
+    { id: "colosseum-linehook-return", name: "RETURN LINEHOOK", subtitle: "Return across the broken span", point: { x: 325, y: 950 }, approachRadius: 42, entranceRadius: 26, action: "traverse", traversalId: "colosseum-linehook-return" },
+    { id: "treehollow-linehook", name: "TREEHOLLOW LINEHOOK", subtitle: "Catch the woodland anchor", point: { x: 330, y: 600 }, approachRadius: 50, entranceRadius: 28, action: "traverse", traversalId: "treehollow-linehook" },
+    { id: "treehollow-linehook-return", name: "RETURN LINEHOOK", subtitle: "Return to the Heavenstalk bank", point: { x: 210, y: 505 }, approachRadius: 45, entranceRadius: 25, action: "traverse", traversalId: "treehollow-linehook-return" },
     {
       id: "greystar-6",
       name: "GREYSTAR 6",
@@ -348,6 +352,10 @@ export const GOLDLINE_OVERWORLD_MAP: OverworldMapDefinition = {
     },
   ],
   traversals: [
+    { id: "colosseum-linehook", label: "LINEHOOK", kind: "linehook", entry: { x: 230, y: 950 }, entryRadius: 30, anchor: { x: 325, y: 920 }, landingRadius: 11, path: [{ x: 230, y: 950 }, { x: 325, y: 950 }], exitSurfaceId: "greystar-apron" },
+    { id: "colosseum-linehook-return", label: "LINEHOOK", kind: "linehook", entry: { x: 325, y: 950 }, entryRadius: 26, anchor: { x: 230, y: 920 }, landingRadius: 11, path: [{ x: 325, y: 950 }, { x: 230, y: 950 }], exitSurfaceId: "dry-cleaner-settlement" },
+    { id: "treehollow-linehook", label: "LINEHOOK", kind: "linehook", entry: { x: 330, y: 600 }, entryRadius: 28, anchor: { x: 210, y: 475 }, landingRadius: 11, path: [{ x: 330, y: 600 }, { x: 210, y: 505 }], exitSurfaceId: "treehollow" },
+    { id: "treehollow-linehook-return", label: "LINEHOOK", kind: "linehook", entry: { x: 210, y: 505 }, entryRadius: 25, anchor: { x: 330, y: 570 }, landingRadius: 11, path: [{ x: 210, y: 505 }, { x: 330, y: 600 }], exitSurfaceId: "heavenstalk-base" },
     {
       id: "heavenstalk-climb",
       label: "CLIMB",
@@ -386,6 +394,10 @@ export const GOLDLINE_OVERWORLD_MAP: OverworldMapDefinition = {
       ],
       exitSurfaceId: "horizon-sail",
     },
+  ],
+  blockedRegions: [
+    { id: "colosseum-broken-span", polygon: [{ x: 262, y: 925 }, { x: 287, y: 925 }, { x: 287, y: 983 }, { x: 262, y: 983 }] },
+    { id: "treehollow-broken-span", polygon: [{ x: 252, y: 535 }, { x: 283, y: 535 }, { x: 283, y: 582 }, { x: 252, y: 582 }] },
   ],
   occluders: [
     {
