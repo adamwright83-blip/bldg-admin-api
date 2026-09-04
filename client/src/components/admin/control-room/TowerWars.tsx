@@ -1,5 +1,6 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { useSearch } from "wouter";
 import {
   ArrowRight,
   LockKeyhole,
@@ -44,6 +45,7 @@ import { SiegeComeback } from "./SiegeComeback";
 import { impactForAttack, type TowerImpact } from "@shared/towerWarsImpacts";
 
 export { damageStateForIncomingAttacks } from "@shared/towerWars";
+const PixiTowerProof = lazy(() => import("./PixiTowerProof"));
 export type TowerWarsData =
   inferRouterOutputs<AppRouter>["system"]["towerWars"]["today"];
 type TowerWarsProps = { onNavigate: (path: string) => void; compact?: boolean };
@@ -173,6 +175,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
 }
 
 function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsProps & { businessDate: string }) {
+  const search = useSearch();
   const [printPromiseId, setPrintPromiseId] = useState<string | null>(null);
   const [comebackBuilding, setComebackBuilding] = useState<TowerWarsBuildingId | null>(null);
   // The building the camera was moving toward, carried from the city.
@@ -430,12 +433,21 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
     },
   ] as const;
   const currentContributors = data.contributors[youId] as Contributor[];
+  const pixiComparison = new URLSearchParams(search).get("renderer") === "pixi";
+  const comparisonImpact = settlementQuery.data?.impacts.find(impact => impact.attackerBuildingId === "century_park_east" && impact.defenderBuildingId === "opus_la") ?? null;
 
   return (
     <main className={`tw-page ${compact ? "is-compact" : ""}`}>
+      <details className="tw-renderer-comparison" open={pixiComparison || undefined}><summary>Admin renderer comparison</summary>
+        <button onClick={() => onNavigate("/growth/tower-wars?renderer=dom")}>Current DOM renderer</button>
+        <button onClick={() => onNavigate("/growth/tower-wars?renderer=pixi")}>Bounded Pixi proof</button>
+        <p>Read-only replay of existing canonical attacks. Normal production renderer remains DOM.</p>
+      </details>
+      {pixiComparison ? <Suspense fallback={<p>Loading Pixi comparison…</p>}><PixiTowerProof impact={comparisonImpact} attackerOnLeft={youId === "century_park_east"} /></Suspense> : null}
       {today.isError ? <div className="tw-confidence" role="status">Live feed interrupted · holding the last trusted world · new claims and mutating actions are suppressed</div> : null}
       {comebackBuilding ? <SiegeComeback buildingId={comebackBuilding} onClose={() => setComebackBuilding(null)} onContinue={pipelineId => onNavigate(`/commercial-pipeline?pipeline=${pipelineId}`)} /> : null}
       <section
+        hidden={pixiComparison}
         className={`tw-arena ${isArriving || isEstablishing ? "tw-arriving" : ""} ${
           activeSpectacle?.phase === "discharge" ? "is-impact" : ""
         }`}

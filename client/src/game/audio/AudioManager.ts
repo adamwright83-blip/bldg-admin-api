@@ -23,6 +23,7 @@ export type AudioCategory =
   | "failure";
 
 export type AudioCueId =
+  | "tower_charge" | "tower_launch" | "tower_impact" | "tower_debris"
   | "ui_tap"
   | "jump"
   | "land"
@@ -61,6 +62,10 @@ const CUE_DEFINITIONS: Record<
   AudioCueId,
   { category: AudioCategory; steps: ToneStep[] }
 > = {
+  tower_charge: { category: "encounter", steps: [{ freq: 90, durationMs: 180, type: "triangle" }, { freq: 150, durationMs: 200, type: "triangle" }, { freq: 220, durationMs: 180, type: "triangle" }] },
+  tower_launch: { category: "encounter", steps: [{ freq: 80, durationMs: 100, type: "sawtooth" }, { freq: 45, durationMs: 160, type: "triangle" }] },
+  tower_impact: { category: "encounter", steps: [{ freq: 60, durationMs: 100, type: "square" }, { freq: 35, durationMs: 220, type: "triangle" }] },
+  tower_debris: { category: "encounter", steps: [{ freq: 170, durationMs: 35, type: "triangle" }, { freq: 95, durationMs: 55, type: "triangle" }, { freq: 50, durationMs: 70, type: "triangle" }] },
   ui_tap: {
     category: "ui",
     steps: [{ freq: 720, durationMs: 40, type: "sine" }],

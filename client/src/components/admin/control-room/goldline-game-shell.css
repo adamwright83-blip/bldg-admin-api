@@ -28,3 +28,8 @@
   .gl-world-utility-menu > button { top: 16px; right: 12px; padding: 8px 10px; font-size: 12px; }
 }
 @media(prefers-reduced-motion:reduce) { .gl-world-portal { transition: none; } }
+.tw-renderer-comparison,.tw-pixi-proof > p { padding: 12px 20px; }
+.tw-renderer-comparison button,.tw-pixi-proof > button { margin: 8px 12px 12px 0; padding: 10px 16px; border: 1px solid #ddbd6a; border-radius: 18px; color: #fff2c0; background: #16354c; }
+.tw-pixi-proof > button:first-of-type { margin-left: 20px; }
+.tw-pixi-proof > button:disabled { opacity: .45; }
+.tw-arena[hidden] { display: none; }

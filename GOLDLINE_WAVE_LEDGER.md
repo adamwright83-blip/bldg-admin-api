@@ -77,6 +77,13 @@
 - Actual owner AdminHostApp now presents Lantern City for home and atlas routes. World remains mounted behind operational routes; three direct portals, small utilities affordance, explicit return link. Existing auth, forms, lists, URL routing and tenant behavior remain owned by existing components. Public localhost root remains resident marketing, correctly distinct from admin host root.
 - Browser: New Order reached full unchanged form in one click; Customers -> /customers; Active Orders -> /operations; return path works; no browser errors. Desktop screenshot reviewed, campaign/title collision fixed, waterways narrowed after visual inspection. Mobile and retained camera verification pending final integration.
 - New TSX files show no diagnostics in TypeScript run (global pre-existing errors remain). Local only.
+- Commit: `da13156`.
+
+## Slice 8 — bounded Pixi comparison
+
+- React/trpc remain truth owners. Explicit admin comparison reads persisted CPE -> OPUS impact, otherwise refuses to fabricate one. Default DOM remains deliberate. Pixi uses canonical plates/car, windup/recoil, accelerating arc/trails, 80ms punctuation, falling fragments, persistent registered wound and existing AudioManager cues/mute.
+- Inspected actual art: car and bazooka face RIGHT despite stale geometry comment. Corrected side mirroring in DOM and Pixi. Two geometry/timeline tests pass. Browser mounted, replayed and persisted wound; screenshot `/tmp/goldline-wave-pixi-facing.png`. Discovered query-only routing did not rerender promptly; added reactive useSearch before final repeated mount gate.
+- No production fixture writes or renderer-default migration. Subjective art/feel review remains for Adam. Local only.
 
 ---
 
