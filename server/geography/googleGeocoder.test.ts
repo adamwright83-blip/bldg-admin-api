@@ -58,6 +58,7 @@ describe("Places text search fallback", () => {
     places: [{
       id: "place-1",
       formattedAddress: "Santa Monica, CA, USA",
+      types: ["locality", "political"],
       location: { latitude: 34.0118, longitude: -118.4915 },
       viewport: {
         low: { latitude: 33.9668, longitude: -118.5631 },
@@ -106,5 +107,29 @@ describe("Places text search fallback", () => {
     const seen: { url: string; init?: RequestInit }[] = [];
     const result = await new GoogleGeocoder("", placesFetcher(seen), "places-key").geocode("Santa Monica, CA");
     if (result.status === "success") expect(result.provider).not.toBe("google_geocoding");
+  });
+});
+
+describe("Places fallback resolves areas, not businesses inside them", () => {
+  const respond = (places: unknown[]) =>
+    (async () => new Response(JSON.stringify({ places }), { status: 200 })) as unknown as typeof fetch;
+
+  it("rejects an establishment match rather than anchoring the world to a storefront", async () => {
+    // The live failure: a service-area sentence matched a bowling alley, which
+    // collapsed the compiled world to one tiny territory around that address.
+    const result = await new GoogleGeocoder("", respond([{
+      id: "p", formattedAddress: "12125 Venice Blvd., Los Angeles, CA 90066, USA",
+      types: ["bowling_alley", "restaurant", "point_of_interest", "establishment"],
+      location: { latitude: 34.0, longitude: -118.4 },
+    }]), "places-key").geocode("the west side of LA, mostly Santa Monica and Mar Vista");
+    expect(result).toEqual({ status: "ambiguous", error: "Matched a business rather than a service area" });
+  });
+
+  it("picks the area result even when a business ranks first", async () => {
+    const result = await new GoogleGeocoder("", respond([
+      { id: "b", formattedAddress: "Some Bar", types: ["bar", "establishment"], location: { latitude: 1, longitude: 2 } },
+      { id: "a", formattedAddress: "Culver City, CA, USA", types: ["locality", "political"], location: { latitude: 34.02, longitude: -118.39 } },
+    ]), "places-key").geocode("Culver City");
+    expect(result).toMatchObject({ status: "success", canonicalAddress: "Culver City, CA, USA", googlePlaceId: "a" });
   });
 });

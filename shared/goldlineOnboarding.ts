@@ -11,6 +11,8 @@ export const ONBOARDING_QUESTIONS = [
 const statement = z.string().trim().min(1).max(2000);
 export const businessProfileSchema = z.object({
   whatTheyDo: statement, servicePattern: statement, localServiceAreaDescription: statement,
+  /** A single concise place name that can be resolved to one canonical location. */
+  geocodableServiceArea: statement,
   customerSourceDescription: statement, avoidancePattern: statement, objective90Day: statement,
   routeBased: z.boolean(), transportsCustomerProperty: z.boolean(), vehicleCountReported: z.number().int().min(0).nullable(),
   inferredBusinessType: statement, campaignIntent: statement,

@@ -119,6 +119,18 @@ export class GoogleGeocoder {
     return { status: "transient_failure", error: lastError };
   }
 
+  /**
+   * Area types Places uses for geographic regions. A service area must resolve
+   * to one of these: an establishment that merely sits inside the area is a
+   * wrong answer, not anear approximation, and it collapses the compiled world to
+   * a single tiny territory around a storefront.
+   */
+  private static readonly AREA_TYPES = new Set([
+    "locality", "sublocality", "neighborhood", "postal_code", "postal_town",
+    "administrative_area_level_1", "administrative_area_level_2",
+    "administrative_area_level_3", "political", "country",
+  ]);
+
   /** Canonical Google place data via Places Text Search. */
   private async geocodeViaPlaces(address: string): Promise<GeocodeResult> {
     if (!this.placesApiKey.trim()) return { status: "unconfigured" };
@@ -133,9 +145,9 @@ export class GoogleGeocoder {
               "Content-Type": "application/json",
               "X-Goog-Api-Key": this.placesApiKey,
               "X-Goog-FieldMask":
-                "places.id,places.formattedAddress,places.location,places.viewport",
+                "places.id,places.formattedAddress,places.location,places.viewport,places.types",
             },
-            body: JSON.stringify({ textQuery: address, maxResultCount: 1 }),
+            body: JSON.stringify({ textQuery: address, maxResultCount: 5 }),
             signal: AbortSignal.timeout(10_000),
           }
         );
@@ -148,6 +160,7 @@ export class GoogleGeocoder {
           places?: Array<{
             id?: string;
             formattedAddress?: string;
+            types?: string[];
             location?: { latitude?: number; longitude?: number };
             viewport?: {
               low: { latitude: number; longitude: number };
@@ -155,10 +168,17 @@ export class GoogleGeocoder {
             };
           }>;
         };
-        const place = body.places?.[0];
+        const place = body.places?.find(candidate =>
+          candidate.types?.some(type => GoogleGeocoder.AREA_TYPES.has(type))
+        );
         const location = place?.location;
         if (!place?.formattedAddress || location?.latitude == null || location.longitude == null)
-          return { status: "ambiguous", error: "No Places result" };
+          return {
+            status: "ambiguous",
+            error: body.places?.length
+              ? "Matched a business rather than a service area"
+              : "No Places result",
+          };
         return {
           status: "success",
           canonicalAddress: place.formattedAddress,

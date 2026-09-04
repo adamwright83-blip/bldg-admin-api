@@ -15,7 +15,11 @@ export function buildFirstMission(session:GoldlineOnboardingSession,checkpoint:W
 export async function importedCustomers(tenantId:string){const db=await onboardingDb();return db.select().from(dayforgeSaasExternalCustomers).where(and(eq(dayforgeSaasExternalCustomers.tenantId,tenantId),eq(dayforgeSaasExternalCustomers.providerKey,"goldline_customer_csv")));}
 export async function revealWorld(tenantId:string){
  const session=await readSession(tenantId);if(!session?.interpretation)throw new Error("Interpret your five answers first.");if(session.status==="COMPLETE")return session;
- const geo=await new GoogleGeocoder().geocode(session.interpretation.profile.localServiceAreaDescription);
+ // The concise geocodable name resolves to one area; the fuller description is
+ // prose and resolves to whatever business happens to sit inside it. Sessions
+ // interpreted before this field existed fall back to the description.
+ const profile=session.interpretation.profile as typeof session.interpretation.profile & {geocodableServiceArea?:string};
+ const geo=await new GoogleGeocoder().geocode(profile.geocodableServiceArea?.trim()||profile.localServiceAreaDescription);
  if(geo.status!=="success")throw new Error("Your service area could not be resolved confidently. Your answers are saved; retry when geocoding is available or clarify your service area.");
  const area:WorldAnchor={id:`area-${session.id}`,label:geo.canonicalAddress,latitude:geo.latitude,longitude:geo.longitude,provenance:"geocoded_declaration",evidenceId:null};
  const anchors:WorldAnchor[]=[area];

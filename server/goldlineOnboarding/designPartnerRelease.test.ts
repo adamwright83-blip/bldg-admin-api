@@ -14,6 +14,7 @@ const profile = (over: Partial<GoldlineBusinessProfile>): GoldlineBusinessProfil
   whatTheyDo: "Pick up, clean and return laundry on a fixed weekday route.",
   servicePattern: "Route-based residential pickup and delivery.",
   localServiceAreaDescription: "Los Angeles, CA",
+  geocodableServiceArea: "Los Angeles, CA",
   customerSourceDescription: "Referrals from existing building residents.",
   avoidancePattern: "Walking into unfamiliar leasing and property offices.",
   objective90Day: "Win two more luxury multifamily buildings.",
@@ -97,6 +98,7 @@ describe("Persona B — Phoenix operator with no customer upload", () => {
   const p = profile({
     whatTheyDo: "Drive to homes across the valley to repair and service plumbing.",
     localServiceAreaDescription: "Phoenix, AZ",
+    geocodableServiceArea: "Phoenix, AZ",
     avoidancePattern: "Prospecting neighborhoods I have never worked before.",
     objective90Day: "Get steady work in two new suburbs.",
     transportsCustomerProperty: false, vehicleCountReported: 1,
