@@ -1,33 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { prepareSource } from "./browser.js";
-import { runInNewContext } from "node:vm";
+import { execFileSync } from "node:child_process";
 
-test("confirmation compares dates, tolerating display padding and separator typography", () => {
-  const source = prepareSource.toString();
-  const start = source.indexOf("function displayedRangeMatches");
-  const end = source.indexOf("\n    // Display text", start);
-  const matches = runInNewContext(`${source.slice(start, end)}; displayedRangeMatches`);
-  const range = { from: "2026-08-06", to: "2026-09-04" };
-  for (const value of ["Aug 6, 2026 - Sep 4, 2026", "Aug 06, 2026 – Sep 04, 2026", "August 6, 2026 — September 4, 2026"])
-    assert.equal(matches(value, range), true);
-  for (const value of ["Sep 4, 2026 - Sep 4, 2026", "Aug 6, 2026 - Sep 3, 2026", "", "unknown"])
-    assert.equal(matches(value, range), false);
-});
-
-test("calendar lookup uses open controls rather than unstable generated IDs", () => {
-  const source = prepareSource.toString();
-  const start = source.indexOf("const calendars =");
-  const end = source.indexOf("\n    });", start);
-  const lookup = source.slice(start, end);
-  const calendar = { querySelector: () => ({}) };
-  const find = nodes => runInNewContext(`(() => { ${lookup} })()`, {
-    visible: () => true,
-    document: { querySelectorAll(selector) { assert.equal(selector, ".datetimepicker.visible"); return nodes; } },
-  });
-  assert.equal(find([calendar]), calendar);
-  assert.equal(find([]), null);
-  assert.equal(find([calendar, calendar]), null);
+test("preserves user-confirmed date selection; no display confirmation wait", () => {
+  const baseline = execFileSync("git", ["show", "e3bf592:extensions/gumballpals/browser.js"], { encoding: "utf8" });
+  const selection = source => source.slice(source.indexOf("const dateInput ="), source.indexOf("await pickDate(range.to);") + "await pickDate(range.to);".length).replaceAll("0.1.6", "0.1.2");
+  const current = prepareSource.toString();
+  assert.ok(selection(current).length > 1000);
+  assert.equal(selection(current), selection(baseline));
+  const after = current.slice(current.indexOf("await pickDate(range.to);") + "await pickDate(range.to);".length);
+  assert.equal(after.includes("await wait"), false);
+  assert.match(after, /ok: true/);
 });
 
 test("report navigation can replace the metrics root before controls load", async () => {

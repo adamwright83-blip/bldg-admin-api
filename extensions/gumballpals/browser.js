@@ -124,13 +124,13 @@ export async function prepareSource(range) {
     if (!dateInput) throw new Error("Date picker changed.");
     dateInput.focus();
     dateInput.click();
-    stage = "locating the open date calendar (build 0.1.5)";
-    // Generated IDs are not a stable relationship between input and popup.
-    // Require one open calendar with both navigation controls, never guess
-    // between multiple calendars or accidentally select a hidden instance.
+    stage = "locating the open date calendar (build 0.1.6)";
+    // The picker can be portalled outside the report container. Match its
+    // input-derived calendar ID, and require exactly one visible instance.
+    const calendarId = dateInput.id.replace(/-input$/, "") + "-picker-container-DatePicker";
     const picker = await wait(() => {
-      const calendars = [...document.querySelectorAll(".datetimepicker.visible")].filter(e =>
-        visible(e) && e.querySelector(".datepicker-prev") && e.querySelector(".datepicker-next")
+      const calendars = [...document.querySelectorAll(".datetimepicker")].filter(e =>
+        visible(e) && [...e.querySelectorAll("[id]")].some(node => node.id === calendarId)
       );
       return calendars.length === 1 ? calendars[0] : null;
     });
@@ -149,7 +149,7 @@ export async function prepareSource(range) {
       "December",
     ];
     async function pickDate(iso) {
-      stage = `selecting ${iso} (build 0.1.5)`;
+      stage = `selecting ${iso} (build 0.1.6)`;
       const [year, month, day] = iso.split("-").map(Number);
       for (let i = 0; i < 25; i++) {
         const labels = await wait(() => {
@@ -190,25 +190,13 @@ export async function prepareSource(range) {
     }
     await pickDate(range.from);
     await pickDate(range.to);
-    stage = `confirming ${range.from} through ${range.to} (build 0.1.5)`;
-    function displayedRangeMatches(value, range) {
-      const match = String(value).trim().match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})\s*[-–—]\s*([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
-      if (!match) return false;
-      const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-      const iso = (month, day, year) => `${year}-${String(months.indexOf(month.slice(0, 3).toLowerCase()) + 1).padStart(2, "0")}-${day.padStart(2, "0")}`;
-      return iso(match[1], match[2], match[3]) === range.from && iso(match[4], match[5], match[6]) === range.to;
-    }
-    // Display text is advisory: the actual captured export URL is validated
-    // against both requested dates before its CSV can be retrieved/imported.
-    // Do not stall a completed calendar selection on presentation formatting.
-    const actual = reportRoot()?.querySelector("#undefined-input")?.value ?? "";
-    const displayedRangeVerified = displayedRangeMatches(actual, range);
-    const currentExportButton = reportRoot()?.querySelector("#submit_export_button");
-    if (!currentExportButton || currentExportButton.disabled)
+    stage = "checking export availability (build 0.1.6)";
+    // The captured export URL is checked against both requested dates before import.
+    if (exportButton.disabled)
       throw new Error("Report export is not available.");
     return {
       ok: true,
-      value: { storeLabel, range, reportType: "orders_sales", displayedRangeVerified },
+      value: { storeLabel, range, reportType: "orders_sales" },
     };
   } catch (error) {
     return { ok: false, error: error.message };
