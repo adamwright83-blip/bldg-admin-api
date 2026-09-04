@@ -93,21 +93,44 @@ async function ensureDemoTenant() {
   return db;
 }
 
-/** Clear ONLY the fixture tenant's onboarding progress so the demo can replay. */
+/**
+ * Clear ONLY the fixture tenant's onboarding progress so the demo can replay.
+ *
+ * The session table is REQUIRED: without clearing it the demo cannot return to
+ * question one, so a failure there is a real failure. The remaining tables are
+ * cleared independently and their failures are reported rather than thrown, so
+ * one table whose shape differs in a given environment cannot leave the demo
+ * permanently stuck — and the caller still learns exactly what did not clear
+ * instead of being told everything was fine.
+ */
 export async function resetDemoOnboarding() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+
+  await db.execute(
+    sql`DELETE FROM goldline_onboarding_sessions WHERE tenantId=${DEMO_TENANT_ID}`
+  );
+
+  const notCleared: { table: string; reason: string }[] = [];
   for (const table of [
-    "goldline_onboarding_sessions",
     "goldline_vehicle_custody",
     "goldline_world_events",
-  ])
-    await db.execute(
-      sql`DELETE FROM ${sql.raw(table)} WHERE tenantId=${DEMO_TENANT_ID}`
-    );
-  await db.execute(
-    sql`DELETE FROM dayforge_saas_external_customers WHERE tenantId=${DEMO_TENANT_ID}`
-  );
+    "dayforge_saas_external_customers",
+  ]) {
+    try {
+      await db.execute(
+        sql`DELETE FROM ${sql.raw(table)} WHERE tenantId=${DEMO_TENANT_ID}`
+      );
+    } catch (error) {
+      const reason =
+        error instanceof Error
+          ? ((error as { cause?: { message?: string } }).cause?.message ?? error.message)
+          : String(error);
+      console.warn(`[GoldlineDemo] could not clear ${table}: ${reason}`);
+      notCleared.push({ table, reason });
+    }
+  }
+  return { notCleared };
 }
 
 export function registerGoldlineDemoRoutes(app: express.Express) {
@@ -150,8 +173,8 @@ export function registerGoldlineDemoRoutes(app: express.Express) {
   app.post("/api/goldline/demo/reset", guard, async (_req, res) => {
     try {
       await ensureDemoTenant();
-      await resetDemoOnboarding();
-      res.json({ ok: true, tenantId: DEMO_TENANT_ID });
+      const { notCleared } = await resetDemoOnboarding();
+      res.json({ ok: true, tenantId: DEMO_TENANT_ID, notCleared });
     } catch (error) {
       console.error("[GoldlineDemo] reset failed:", error);
       res.status(500).json({ error: "Demo reset failed" });
