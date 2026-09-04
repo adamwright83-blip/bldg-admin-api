@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Loader2 } from "lucide-react";
+import { Loader2, ClipboardPlus, Users, Package } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
 import { CustomerProfileDrawer } from "@/components/CustomerProfileDrawer";
@@ -35,6 +35,7 @@ import LanternCityAtlas from "@/components/admin/control-room/LanternCityAtlas";
 import DriverIntelligenceOverview from "@/components/admin/control-room/DriverIntelligenceOverview";
 import { TowerWars } from "@/components/admin/control-room/TowerWars";
 import "@/components/admin/control-room/admin-control-room.css";
+import "@/components/admin/control-room/goldline-game-shell.css";
 import { WorldTransitionProvider } from "@/components/admin/control-room/WorldTransitionProvider";
 import { WorldDayPhaseIndicator } from "@/components/admin/control-room/WorldDayPhase";
 
@@ -145,6 +146,7 @@ export default function AdminHostApp() {
   );
   const [customerSearchQuery, setCustomerSearchQuery] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [worldIntelOpen, setWorldIntelOpen] = useState(false);
   const debouncedCustomerQuery = useDebounce(customerSearchQuery, 300);
   const searchOrders = trpc.admin.searchOrdersForReceipt.useQuery(
     { q: debouncedCustomerQuery },
@@ -176,6 +178,8 @@ export default function AdminHostApp() {
   const isOperatorReflection = path === "/operator-reflection";
   const isGrowth = path === "/growth";
   const isLanternCity = path === "/growth/lantern-city";
+  const isWorldHome = isHome || isLanternCity;
+  const worldHomePath = ["localhost", "127.0.0.1"].includes(window.location.hostname) ? "/home" : "/";
   const isTowerWars = path === "/growth/tower-wars";
   const isSandbox = path === "/growth/sandbox";
   const isDriverIntelligence = path.startsWith("/growth/driver-intelligence");
@@ -314,11 +318,15 @@ export default function AdminHostApp() {
 
   return (
     <WorldTransitionProvider>
-    <div className="cr-shell">
+    <div className={`cr-shell gl-game-shell${isWorldHome ? " is-world-home" : " is-utility"}${worldIntelOpen ? " is-world-intel" : ""}`}>
       {isCounter && activeWorkspace !== "held_corporate" ? (
         <ResidentFollowupAlert />
       ) : null}
 
+      {!isWorldHome ? <Link href={worldHomePath} className="gl-return-world">← Return to Lantern City</Link> : null}
+      <div className={isWorldHome ? "gl-world-utility-menu" : ""}>
+      {isWorldHome ? <button type="button" onClick={() => setMobileNavOpen(open => !open)} aria-expanded={mobileNavOpen}>Utilities ⚙</button> : null}
+      <div hidden={isWorldHome && !mobileNavOpen}>
       <ControlRoomNav
         path={path}
         mobileOpen={mobileNavOpen}
@@ -329,9 +337,22 @@ export default function AdminHostApp() {
         sandboxEnabled={sandboxCapability.data?.enabled === true}
         onOpenMobileNav={() => setMobileNavOpen(true)}
       />
+      </div>
+      </div>
 
       <div className="cr-main-column">
-        {isControlRoomSection || isHome ? <WorldDayPhaseIndicator /> : null}
+        {!isWorldHome && isControlRoomSection ? <WorldDayPhaseIndicator /> : null}
+        <section className="gl-persistent-world" hidden={!isWorldHome} aria-label="Lantern City world home">
+          <LanternCityAtlas onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />
+          <div className="gl-world-title"><span>GOLDLINE</span><strong>Lantern City</strong>
+            <button type="button" onClick={() => setWorldIntelOpen(open => !open)} aria-expanded={worldIntelOpen}>{worldIntelOpen ? "Close intelligence" : "City intelligence"}</button>
+          </div>
+          <nav className="gl-world-portals" aria-label="Business utility portals">
+            <Link href="/new-order" className="gl-world-portal is-order"><ClipboardPlus aria-hidden /><span>NEW<br />ORDER</span></Link>
+            <Link href="/customers" className="gl-world-portal is-customers"><Users aria-hidden /><span>CUSTOMERS</span></Link>
+            <Link href="/operations" className="gl-world-portal is-active"><Package aria-hidden /><span>ACTIVE<br />ORDERS</span></Link>
+          </nav>
+        </section>
         {!isHome &&
         !isOperatorDemo &&
         !isLive &&
@@ -351,7 +372,7 @@ export default function AdminHostApp() {
           />
         ) : null}
 
-        {isHome || isOperatorDemo ? (
+        {isWorldHome ? null : isOperatorDemo ? (
           <AdminHome
             experienceMode={isOperatorDemo ? "operator-demo" : "kingdom"}
             operatorName={user?.name || "Admin"}
@@ -365,8 +386,6 @@ export default function AdminHostApp() {
             onNavigate={path => navigate(path)}
             onOpenCustomer={phone => setProfilePhone(phone)}
           />
-        ) : isLanternCity ? (
-          <LanternCityAtlas onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />
         ) : isTowerWars ? (
           <TowerWars onNavigate={nextPath => navigate(nextPath)} />
         ) : isSandbox ? (

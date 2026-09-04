@@ -1,0 +1,30 @@
+.gl-game-shell.is-world-home .cr-main-column { margin: 0; padding: 0; }
+.gl-persistent-world[hidden] { display: none; }
+.is-world-home .lc-page { padding: 0; }
+.is-world-home:not(.is-world-intel) .lc-page > :not(.lc-map) { display: none; }
+.is-world-home .lc-map { height: 100dvh; min-height: 640px; margin: 0; border: 0; border-radius: 0; }
+.is-world-home .cr-world-geography-surface { height: 100%; min-height: 100%; border-radius: 0; }
+.gl-world-title { position: fixed; z-index: 30; top: 24px; left: 30px; display: grid; color: #fff3bc; text-shadow: 0 2px 7px #1f2334; pointer-events: none; }
+.gl-world-title > span { font: 700 12px/1.6 Georgia,serif; letter-spacing: .4em; }
+.gl-world-title > strong { font: 700 clamp(24px,3vw,42px)/1.2 Georgia,serif; }
+.gl-world-title button { pointer-events: auto; color: #fff4d0; background: #122b3ddb; border: 1px solid #d6ba72; border-radius: 20px; margin-top: 8px; padding: 7px 12px; font-size: 11px; }
+.is-world-home .gl-campaign-hud { top: 145px; left: 18px; max-width: 220px; }
+.gl-world-portals { position: fixed; z-index: 35; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: clamp(12px,3vw,46px); }
+.gl-world-portal { --portal: #008c4c; display: flex; flex-direction: column; align-items: center; justify-content: center; width: clamp(108px,13vw,180px); aspect-ratio: 1; border-radius: 50%; border: 7px double #f2cc6f; background: radial-gradient(circle at 38% 28%,#ffffff45,transparent 42%),radial-gradient(circle,var(--portal),#071b30 78%); color: #fff7c7; box-shadow: 0 0 0 3px #8b571d, inset 0 0 18px var(--portal),0 5px 18px #08182a99; font: 700 clamp(13px,1.4vw,21px)/1.15 Georgia,serif; text-align: center; text-decoration: none; transition: transform .15s; }
+.gl-world-portal svg { width: 32%; height: 32%; margin-bottom: 7px; }
+.gl-world-portal.is-customers { --portal: #078ee7; }
+.gl-world-portal.is-active { --portal: #cf7900; }
+.gl-world-portal:hover,.gl-world-portal:focus-visible { transform: translateY(-5px); outline: 3px solid #fff8da; outline-offset: 5px; }
+.gl-world-utility-menu > button { position: fixed; z-index: 80; right: 20px; top: 20px; padding: 10px 16px; border: 1px solid #d3b162; border-radius: 24px; background: #10273ded; color: #fff0bc; }
+.gl-return-world { position: fixed; z-index: 90; bottom: 12px; left: 12px; padding: 10px 16px; border-radius: 24px; background: #10273d; color: #fff0bc; border: 1px solid #d3b162; }
+.is-world-intel .gl-world-title { display: none; }
+.is-world-intel .lc-page { padding: 20px 20px 220px; }
+.is-world-intel .lc-map { height: 75dvh; }
+@media(max-width:600px) {
+  .gl-world-title { left: 14px; top: 16px; }
+  .gl-world-title > strong { font-size: 24px; }
+  .gl-world-portals { bottom: 16px; gap: 13px; }
+  .gl-world-portal { width: 100px; border-width: 5px; font-size: 12px; }
+  .gl-world-utility-menu > button { top: 16px; right: 12px; padding: 8px 10px; font-size: 12px; }
+}
+@media(prefers-reduced-motion:reduce) { .gl-world-portal { transition: none; } }

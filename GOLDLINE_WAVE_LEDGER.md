@@ -70,6 +70,13 @@
 - Added explicit renewed pressure from verified non-fiction dormancy outcomes after historical defeat. Prior victory/rewards remain; recovery does not auto-win. Server derives rematch readiness and uses recurrence-addressed idempotency.
 - Twenty territory/engine tests pass, including recurrence, immutable history, recovery and subsequent gameplay clearance. Mounted browser gate shows Linehook disabled on incomplete territory and visible Return to city. Full skilled-win browser proof remains pending; no production game/business fixture writes.
 - Local only; final visual release gate pending.
+- Commit: `990713d`.
+
+## Slice 7 — world-first shell
+
+- Actual owner AdminHostApp now presents Lantern City for home and atlas routes. World remains mounted behind operational routes; three direct portals, small utilities affordance, explicit return link. Existing auth, forms, lists, URL routing and tenant behavior remain owned by existing components. Public localhost root remains resident marketing, correctly distinct from admin host root.
+- Browser: New Order reached full unchanged form in one click; Customers -> /customers; Active Orders -> /operations; return path works; no browser errors. Desktop screenshot reviewed, campaign/title collision fixed, waterways narrowed after visual inspection. Mobile and retained camera verification pending final integration.
+- New TSX files show no diagnostics in TypeScript run (global pre-existing errors remain). Local only.
 
 ---
 

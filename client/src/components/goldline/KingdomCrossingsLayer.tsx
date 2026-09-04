@@ -28,9 +28,9 @@ export function KingdomCrossingsLayer({ territories, entities }: { territories: 
     <svg className="gl-kingdom-waterways" viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Fictional kingdom waterways and strategic crossings">
       <defs><linearGradient id="kingdom-water" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#084c94"/><stop offset=".5" stopColor="#077eae"/><stop offset="1" stopColor="#163e80"/></linearGradient></defs>
       {crossings.map(c => <g key={c.id}>
-        <path d={`M${c.riverStart.x} ${c.riverStart.y} Q${c.x - 2} ${c.y + 2} ${c.riverEnd.x} ${c.riverEnd.y}`} fill="none" stroke="#f0ddac" strokeWidth="3" strokeLinejoin="round" />
-        <path d={`M${c.riverStart.x} ${c.riverStart.y} Q${c.x - 2} ${c.y + 2} ${c.riverEnd.x} ${c.riverEnd.y}`} fill="none" stroke="url(#kingdom-water)" strokeWidth="2.3" />
-        <path d={`M${c.riverStart.x} ${c.riverStart.y} Q${c.x - 2} ${c.y + 2} ${c.riverEnd.x} ${c.riverEnd.y}`} fill="none" stroke="#80dcf1" strokeWidth=".25" />
+        <path d={`M${c.riverStart.x} ${c.riverStart.y} Q${c.x - 2} ${c.y + 2} ${c.riverEnd.x} ${c.riverEnd.y}`} fill="none" stroke="#f0ddac" strokeWidth="1.2" strokeLinejoin="round" />
+        <path d={`M${c.riverStart.x} ${c.riverStart.y} Q${c.x - 2} ${c.y + 2} ${c.riverEnd.x} ${c.riverEnd.y}`} fill="none" stroke="url(#kingdom-water)" strokeWidth=".85" />
+        <path d={`M${c.riverStart.x} ${c.riverStart.y} Q${c.x - 2} ${c.y + 2} ${c.riverEnd.x} ${c.riverEnd.y}`} fill="none" stroke="#80dcf1" strokeWidth=".08" />
       </g>)}
     </svg>
     {crossings.map(c => <button type="button" key={c.id} className={`gl-kingdom-crossing is-${c.state.toLowerCase()}`} style={{ left: `${c.x}%`, top: `${c.y}%` }}
