@@ -705,7 +705,7 @@ await assertRequiredColumns("goldline_campaign_instances", [
 // Required, additive Gumballpals schema. Fail startup rather than accept imports
 // against a partially provisioned database.
 const gumballSql = await readFile(new URL("../server/cleancloudBrowserSync/schema.sql", import.meta.url), "utf8");
-for (const statement of gumballSql.split(";").map(value => value.trim()).filter(Boolean)) {
+for (const statement of gumballSql.replace(/^\s*--.*$/gm, "").split(";").map(value => value.trim()).filter(Boolean)) {
   await runRequired(statement, "Gumballpals schema");
 }
 await assertRequiredColumns("cleancloud_browser_sync_bindings", ["tenantId", "id", "storeId", "storeLabel", "createdBy", "lastSuccessAt"]);
