@@ -20,3 +20,4 @@
 @keyframes gl-island-arrive {from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:600px){.gl-onboarding header{font-size:9px;padding-top:22px}.gl-interview-scene{margin-top:24vh}.gl-answer-footer{align-items:flex-start}.gl-answer-footer span{max-width:150px}.gl-onboarding-preview img{width:52%}.gl-onboarding textarea{font-size:16px}.gl-onboarding h1{font-size:36px}.gl-entry{margin:14vh auto}}
 @media(prefers-reduced-motion:reduce){.gl-onboarding *{animation:none!important}}
+.gl-customer-import {font:15px/1.5 system-ui}.gl-customer-import h2{font:28px Georgia}.gl-customer-import input{display:block;margin:16px 0;max-width:100%}.gl-import-preview{max-height:180px;overflow:auto;background:#021c2d99;padding:16px}.gl-import-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px}.gl-local-world{width:100%;max-height:62vh;display:block;filter:drop-shadow(0 18px 25px #002333)}

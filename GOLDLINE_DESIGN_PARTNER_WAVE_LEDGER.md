@@ -36,3 +36,6 @@ World-first full-bleed interview, one required answer at a time, answer-specific
 
 ## Slice 3 — topology / Water-Land
 Renderer-independent deterministic local graph and separate WATER_LAND registry/compositor. Anchor provenance and evidence-derived known state. Same compositor tested for LA/Phoenix/Atlanta/Dallas. 1/4/9-island socket transforms and both-endpoint alignment tested (8 tests pass). Canonical upright bridge artwork reused; no per-city layout offsets. Measured deck/shoreline sockets are code-owned calibration distinct from kit's approximate anchors. SVG labels dynamic. Visual browser audit pending.
+
+## Slice 4 — customer import
+CSV preview reuses existing parser and normalized tenant import spine. Stable identity hashes deduplicate repeated data through existing unique keys; no second customer database. Tolerant headers, quoted fields, incomplete rows retained for review; no map placement without geocoding. Explicit preview/import/skip UI. Three focused tests pass. Screenshot import is not reused because no equally safe general customer adapter was identified. End-to-end persistence/geocoding proof pending.
