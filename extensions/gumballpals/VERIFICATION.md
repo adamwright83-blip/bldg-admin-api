@@ -6,14 +6,14 @@
 - Six backend validation tests: real cents/payment date and canonical building projection, unknown addresses, unpaid orders, invalid evidence, retry digest, invalid calendar/DST values.
 - Local **real MySQL** proof (disposable database, synthetic orders): atomic import, forced mid-transaction rollback, same-request retry, repeated and concurrent report reconciliation without duplicate revenue, changed-payload retry rejection, actor/tenant/store rejection, cross-tenant receipt isolation, invalid-batch no writes, server cancellation tombstone blocking a late request, recovery of an already committed receipt.
 - That database proof reads its persisted order through the existing authoritative-event compiler and Tower Wars reducer: $51 at Century Park East yields one `century_valet_bazooka` attack. This is compiler/data-path evidence, **not live animation evidence**.
-- A pre-existing real historical CleanCloud Orders (Sales) CSV validated successfully (five rows). No source customer data was committed to this repository and no production import was performed. Unrecognized addresses stayed unresolved.
+- A pre-existing real historical gumball Orders (Sales) CSV validated successfully (five rows). No source customer data was committed to this repository and no production import was performed. Unrecognized addresses stayed unresolved.
 - Backend router bundles successfully with esbuild.
 - Desktop and exact 390×844 browser **preview** renders in daylight, no warning/error console entries in the inspected preview; mobile has no horizontal overflow. Buttons deliberately disabled outside an installed extension. This is layout evidence only.
 
 ## Not yet verified / release blockers
 
 1. Extension installed in actual Chrome and granted site/download permissions.
-2. Actual normal CleanCloud report download captured by the extension, followed by authenticated CSV retrieval. Observed normal browser export encountered `ERR_BLOCKED_BY_CLIENT`; user reported their manual export works. Neither fact proves extension capture.
+2. Actual normal gumball report download captured by the extension, followed by authenticated CSV retrieval. Observed normal browser export encountered `ERR_BLOCKED_BY_CLIENT`; user reported their manual export works. Neither fact proves extension capture.
 3. Backend route registration and migration by shared-file owner; this branch deliberately does not edit shared registration/migration files or deploy.
 4. Complete installed-extension → authenticated backend → real current customer data → live Tower Wars / Lantern City journey.
 5. Full incremental coverage of older orders paid/refunded after their creation-report window. Current adapter reconciles changed rows only within the selected Orders (Sales) window.

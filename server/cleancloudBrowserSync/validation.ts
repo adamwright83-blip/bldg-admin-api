@@ -8,7 +8,7 @@ import {
   parseCsv,
   validateExportUrl,
   validateRange,
-} from "../../extensions/cleancloud-sync/core.js";
+} from "../../extensions/gumballpals/core.js";
 import { normalizePropertyTower } from "../../shared/propertyTowers";
 import { fromZonedTime, formatInTimeZone } from "date-fns-tz";
 

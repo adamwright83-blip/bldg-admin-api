@@ -25,7 +25,7 @@ export async function openSite(url) {
   throw new Error("Page did not finish loading. Sign in and retry.");
 }
 
-// All actions and selectors below were grounded in the visible CleanCloud export
+// All actions and selectors below were grounded in the visible gumball export
 // UI. No application internals, cookies, localStorage or private API are read.
 export async function prepareSource(range) {
   try {
@@ -33,7 +33,7 @@ export async function prepareSource(range) {
       location.origin !== "https://cleancloudapp.com" ||
       location.pathname !== "/store"
     )
-      throw new Error("Open the signed-in CleanCloud store.");
+      throw new Error("Open the signed-in gumball store.");
     const pause = () => new Promise(r => setTimeout(r, 100));
     const visible = e =>
       e &&
@@ -46,7 +46,7 @@ export async function prepareSource(range) {
         await pause();
       }
       throw new Error(
-        "CleanCloud layout changed or the reporting permission is unavailable."
+        "gumball layout changed or the reporting permission is unavailable."
       );
     };
     const exact = (root, selector, text) =>
@@ -62,7 +62,7 @@ export async function prepareSource(range) {
       .replace(/\s*\|\s*CleanCloud\s*$/, "")
       .trim();
     if (!storeLabel || !document.title.endsWith("CleanCloud"))
-      throw new Error("Sign into CleanCloud first.");
+      throw new Error("Sign into gumball first.");
     if (!visible(document.querySelector("#metricsContainer"))) {
       (await wait(() => document.querySelector("#accountShow"))).click();
       (
@@ -185,7 +185,7 @@ export function clickExport(expectedStoreLabel) {
       document.title.replace(/\s*\|\s*CleanCloud\s*$/, "").trim() !==
         expectedStoreLabel
     )
-      throw new Error("CleanCloud account changed.");
+      throw new Error("gumball account changed.");
     const button = document.querySelector(
       "#metricsContainer #submit_export_button"
     );
@@ -211,7 +211,7 @@ export async function fetchReport(url, expectedStoreLabel, maxBytes) {
       document.title.replace(/\s*\|\s*CleanCloud\s*$/, "").trim() !==
       expectedStoreLabel
     )
-      throw new Error("CleanCloud account changed.");
+      throw new Error("gumball account changed.");
     const response = await fetch(target.href, {
       credentials: "same-origin",
       cache: "no-store",

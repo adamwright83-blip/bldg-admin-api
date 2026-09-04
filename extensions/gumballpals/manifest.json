@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Goldline · CleanCloud Sync",
+  "name": "Gumballpals",
   "version": "0.1.0",
-  "description": "Bring your authorized CleanCloud order exports into Goldline using your signed-in browser.",
+  "description": "Bring your authorized gumball order exports into Goldline using your signed-in browser.",
   "minimum_chrome_version": "116",
   "permissions": ["storage", "scripting", "downloads"],
   "optional_host_permissions": [
@@ -10,7 +10,7 @@
     "https://admin.bldg.chat/*"
   ],
   "background": { "service_worker": "worker.js", "type": "module" },
-  "action": { "default_title": "Open Goldline Sync" },
+  "action": { "default_title": "Open Gumballpals" },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'"
   }

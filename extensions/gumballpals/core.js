@@ -75,7 +75,7 @@ export function validateExportUrl(raw, range) {
     !Number.isSafeInteger(stores[0]) ||
     stores[0] <= 0
   )
-    throw new Error("Select exactly one CleanCloud store.");
+    throw new Error("Select exactly one gumball store.");
   const date = i =>
     `${u.searchParams.get(`y${i}`)}-${u.searchParams.get(`m${i}`).padStart(2, "0")}-${u.searchParams.get(`d${i}`).padStart(2, "0")}`;
   if (date(1) !== range.from || date(2) !== range.to)
@@ -91,7 +91,7 @@ export function parseCsv(text) {
     throw new Error("Report exceeds the 4 MB limit. Use a shorter period.");
   if (/^\s*</.test(text))
     throw new Error(
-      "CleanCloud returned a page instead of CSV. Check your login."
+      "gumball returned a page instead of CSV. Check your login."
     );
   const rows = [];
   let row = [],

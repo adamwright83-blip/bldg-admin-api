@@ -140,13 +140,13 @@ if (!globalThis.chrome?.runtime?.id) {
           actorId: context.actorId,
           range,
         });
-        status("Opening CleanCloud reporting and setting the exact dates…");
+        status("Opening gumball reporting and setting the exact dates…");
         sourceTab = await openSite(`${CLEANCLOUD}/store`);
         const source = await runInTab(sourceTab, prepareSource, [range]);
         checkCancelled();
         if (context.binding && context.binding.storeLabel !== source.storeLabel)
           throw new Error(
-            "CleanCloud store differs from the paired store. Nothing imported."
+            "gumball store differs from the paired store. Nothing imported."
           );
         await chrome.storage.session.set({
           pendingExport: {
@@ -157,7 +157,7 @@ if (!globalThis.chrome?.runtime?.id) {
           },
         });
         await save("downloading");
-        status("Retrieving the normal CleanCloud report…");
+        status("Retrieving the normal gumball report…");
         // A download may interrupt the response channel; don't click again. The
         // independently registered worker observes the actual download instead.
         await runInTab(sourceTab, clickExport, [source.storeLabel]).catch(
@@ -177,11 +177,11 @@ if (!globalThis.chrome?.runtime?.id) {
         await chrome.storage.session.remove("pendingExport");
         if (!captured)
           throw new Error(
-            "Chrome did not provide the expected report download. Check the CleanCloud tab; no import was submitted."
+            "Chrome did not provide the expected report download. Check the gumball tab; no import was submitted."
           );
         const capture = validateExportUrl(captured.url, range);
         if (context.binding && context.binding.storeId !== capture.storeId)
-          throw new Error("Export belongs to a different CleanCloud store.");
+          throw new Error("Export belongs to a different gumball store.");
         // Fetch the same normal export in a fresh signed-in source tab. Chrome's
         // downloads API does not expose bytes and no filesystem permission is used.
         const readTab = await openSite(`${CLEANCLOUD}/store`);

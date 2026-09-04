@@ -25,8 +25,8 @@ Receipt: source store, actor, bounds, digest, requestId, batchId, inserted/updat
 
 ## Must review before production
 
-- Existing paid data provenance: the first binding is a user-confirmed claim, not a cryptographic attestation from CleanCloud. Validate the store against existing imported data before enabling additional tenants.
-- Existing `normalizeCleanCloudPaidOrderRow` is reused; browser import writes the same table atomically instead of calling the legacy partial-write importer. No UI, geography resolver, combat, or churn service was modified.
+- Existing paid data provenance: the first binding is a user-confirmed claim, not a cryptographic attestation from gumball. Validate the store against existing imported data before enabling additional tenants.
+- The existing paid-order normalizer is reused; browser import writes the same table atomically instead of calling the legacy partial-write importer. No UI, geography resolver, combat, or churn service was modified.
 - Browser sync does not populate `normalizedOrders` / `normalizedCustomers` through `runTenantImport`. Confirm which Lantern City/customer read model should consume these paid rows. Do not claim it does until verified.
 - Validate concurrent legacy import behavior; browser locking cannot serialize a legacy writer that ignores that lock.
 - Complete live import and duplicate tests against an isolated database before merge.
