@@ -1,5 +1,5 @@
 /**
- * Provision the LAUNDRY FARM design-partner TEST tenant.
+ * Provision the WRIGHT CONTRACTORS design-partner TEST tenant.
  *
  * Usage:
  *   GOLDLINE_DESIGN_PARTNER_TENANT=true \
@@ -14,11 +14,12 @@
  * revenue sheet sync. Reusing that id to demo onboarding would drop a test
  * onboarding session on top of a real operating business.
  *
- * So the DISPLAY NAME is "LAUNDRY FARM" as requested, while the tenant id is
- * `goldline-dp-laundry-farm` — a distinct tenant whose rows are invisible to
- * every real tenant through the same tenantId scoping the product already
- * enforces. This is the "safe test tenant mechanism": additive, isolated, and
- * incapable of touching an existing world.
+ * The fixture is therefore named WRIGHT CONTRACTORS under the tenant id
+ * `goldline-dp-wright-contractors` — a name that collides with no real business
+ * unit in this system, and a tenant whose rows are invisible to every real
+ * tenant through the same tenantId scoping the product already enforces. This
+ * is the "safe test tenant mechanism": additive, isolated, and incapable of
+ * touching an existing world.
  *
  * SAFETY
  *
@@ -35,8 +36,8 @@ import "dotenv/config";
 import { sql } from "drizzle-orm";
 import { getDb } from "../server/db";
 
-const TENANT_ID = "goldline-dp-laundry-farm";
-const BUSINESS_NAME = "LAUNDRY FARM";
+const TENANT_ID = "goldline-dp-wright-contractors";
+const BUSINESS_NAME = "WRIGHT CONTRACTORS";
 // Every id this script must never write to, whatever the environment says.
 const PROTECTED_TENANT_IDS = new Set([
   "default",

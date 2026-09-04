@@ -36,7 +36,13 @@ describe("admin operations to live sync", () => {
     expect(source).toContain(
       "await Promise.all([refetchDeliveries(), invalidateLiveStatuses()])"
     );
-    expect(driverSource).toContain("return <GoldlineDriverController />");
+    expect(driverSource).toMatch(
+      // The law is that Driver's default render IS the Goldline controller, with
+      // no admin ProductShell redirect. The literal spelling was incidental: it
+      // broke when Vehicle Cargo began riding alongside the controller, which is
+      // a source-formatting signal rather than a truth signal.
+      /return <>?<GoldlineDriverController \/>/
+    );
     expect(driverSource).not.toContain("ProductShell");
     expect(controllerSource).toContain("updateStatus.useMutation");
     expect(controllerSource).toContain("await invalidateDriverTruth()");

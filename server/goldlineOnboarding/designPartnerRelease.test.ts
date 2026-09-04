@@ -45,10 +45,10 @@ describe("Persona A — laundry route operator with imported customers", () => {
     anchor("customer-1", "Wilshire Tower", 34.0611, -118.3, "external-customer:1"),
     anchor("customer-2", "Playa Vista Lofts", 33.9755, -118.42, "external-customer:2"),
   ];
-  const topology = compileLocalWorld({ tenantId: "laundry-farm", label: "Los Angeles, CA, USA", anchors, extentKm: 34 });
+  const topology = compileLocalWorld({ tenantId: "persona-a-la-route", label: "Los Angeles, CA, USA", anchors, extentKm: 34 });
 
   it("compiles a deterministic local world whose known state comes only from evidence", () => {
-    expect(compileLocalWorld({ tenantId: "laundry-farm", label: "Los Angeles, CA, USA", anchors, extentKm: 34 })).toEqual(topology);
+    expect(compileLocalWorld({ tenantId: "persona-a-la-route", label: "Los Angeles, CA, USA", anchors, extentKm: 34 })).toEqual(topology);
     expect(topology.classification).toBe("game_projection");
     const known = knownTerritoryIds(topology);
     // Two imported customers light their territories; the declared area does not.
@@ -59,7 +59,7 @@ describe("Persona A — laundry route operator with imported customers", () => {
 
   it("generates one playable Territory Scout carrying the operator's own specificity", () => {
     const territoryId = topology.territories.find(t => t.anchorIds.includes("area"))!.id;
-    const mission = buildFirstMission(sessionFor("laundry-farm", p), anchors[0], territoryId);
+    const mission = buildFirstMission(sessionFor("persona-a-la-route", p), anchors[0], territoryId);
     expect(mission.archetype).toBe("TERRITORY_SCOUT");
     expect(mission.status).toBe("active");
     expect(mission.objective).toContain("Win two more luxury multifamily buildings.");
@@ -107,7 +107,7 @@ describe("Persona B — Phoenix operator with no customer upload", () => {
   const phoenix = compileLocalWorld({ tenantId: "phoenix-plumb", label: "Phoenix, AZ, USA", anchors, extentKm: 34 });
 
   it("uses the same compositor and skin with no Los Angeles anywhere in it", () => {
-    const la = compileLocalWorld({ tenantId: "laundry-farm", label: "Los Angeles, CA, USA", anchors: [anchor("area", "Los Angeles, CA, USA", 34.0522, -118.2437, null)], extentKm: 34 });
+    const la = compileLocalWorld({ tenantId: "persona-a-la-route", label: "Los Angeles, CA, USA", anchors: [anchor("area", "Los Angeles, CA, USA", 34.0522, -118.2437, null)], extentKm: 34 });
     expect(phoenix.id).not.toBe(la.id);
     expect(phoenix.territories[0].label).toContain("Phoenix");
     // Same skin, same socket geometry, no per-city offsets.
@@ -284,14 +284,17 @@ describe("architecture reserves future modes without building them", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The LAUNDRY FARM design-partner test tenant
+// The WRIGHT CONTRACTORS design-partner test tenant
 // ---------------------------------------------------------------------------
-describe("LAUNDRY FARM test tenant is a fixture, never the real business", () => {
+describe("WRIGHT CONTRACTORS test tenant is a fixture, never a real business", () => {
   const script = repo("scripts", "goldline-design-partner-tenant.ts");
 
   it("uses a distinct tenant id and refuses the real laundry_farm tenant", () => {
-    expect(script).toContain('const TENANT_ID = "goldline-dp-laundry-farm"');
-    expect(script).toContain('const BUSINESS_NAME = "LAUNDRY FARM"');
+    expect(script).toContain('const TENANT_ID = "goldline-dp-wright-contractors"');
+    expect(script).toContain('const BUSINESS_NAME = "WRIGHT CONTRACTORS"');
+    // laundry_farm may appear ONLY as an id the script protects, never as the
+    // fixture's own identity.
+    expect(script).not.toMatch(/TENANT_ID = .*laundry|BUSINESS_NAME = .*LAUNDRY/);
     // laundry_farm is a real legacy tenant id; the fixture must never claim it.
     expect(script).toContain("PROTECTED_TENANT_IDS");
     expect(script).toContain("Refusing to write to protected tenant");
