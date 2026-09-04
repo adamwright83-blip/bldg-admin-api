@@ -1594,3 +1594,6 @@ body .tw-scoreboard .tw-score-you, body .tw-scoreboard .tw-score-rival { display
 body .tw-scoreboard .tw-score-you strong, body .tw-scoreboard .tw-score-rival strong { font-size:24px; }
 body .tw-truth-hud:not([open]) { width:auto; padding:10px 14px; }
 body .tw-truth-hud summary { cursor:pointer; font-size:11px; color:#fff; }
+.cr-world-geography-surface.view-atlas .cr-atmo-lighting-layer { opacity: 0; }
+.cr-world-geography-surface.view-atlas .cr-world-skin-shade { background: linear-gradient(180deg,#fff3c515,transparent 70%); }
+.cr-world-tower-anchor .cr-reality-trigger-btn { position:relative; z-index:20; margin-top:34px; min-height:36px; padding:7px 12px; font-size:10px; }

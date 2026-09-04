@@ -46,6 +46,14 @@
 - Date input moved under History / Replay. Current-season side determines slot and weapon mirroring; building plates stay unmirrored so signage stays legible. Corrected existing scoreboard transform and cramped centre; evidence HUD now collapsible.
 - Mounted browser: CPE left/challenger, OPUS right/champion, week 2026-08-31, $750 fixture / 15 wounds, no browser errors. Screenshot `/tmp/goldline-wave-weekly-fixed.png`; mobile screenshot captured, review pending.
 - Remaining final checks: all-game integration, repaired-state browser fixture, revision audit UI, production-safe readback. No visual push yet.
+- Slice 3 commit: `5510cdf`, local only.
+
+## Slice 4 — one Lantern City
+
+- Removed primary atlas/Google fork, including implicit mode change on tower entry. Existing daylight fantasy atlas reused; geographic projection unchanged. Real 3D renderer retained in an explicit Spyglass tab inside RealityWindow. Attribution remains inside that actual Google surface.
+- Corrected fictional-art fallback wording; no authored art called real evidence. Daylight presentation retained independently of actual weather context.
+- Browser discovered Spyglass hitbox was covered by tower subtitle; fixed stacking and target size. Actual click now opens OPUS window while atlas, Guardian and entities remain mounted. Screenshot `/tmp/goldline-wave-spyglass-verified.png`. Nine geographic projection tests passed. No browser errors observed. Google imagery itself cannot render locally without provider key; honest unavailable state present.
+- Commit pending; pushed/deployed no (held ancestry). Next: rivers/territory crossings.
 
 ---
 

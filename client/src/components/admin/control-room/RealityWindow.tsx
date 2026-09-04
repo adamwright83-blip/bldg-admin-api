@@ -4,6 +4,8 @@ import { trpc } from "@/lib/trpc";
 import { CanonicalBuildingArt } from "./CanonicalBuildingArt";
 import type { CanonicalBuildingId } from "./buildingArt";
 import { GoogleAttributionSafeZone } from "./GoogleAttributionSafeZone";
+import { GoogleMapsRealityLayer } from "./GoogleMapsRealityLayer";
+import { canonicalGeographyFor } from "@shared/canonicalGeography";
 
 export function RealityWindow({
   buildingId,
@@ -12,7 +14,9 @@ export function RealityWindow({
   buildingId: CanonicalBuildingId;
   onClose: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<"facade" | "aerial" | "place">("facade");
+  const [activeTab, setActiveTab] = useState<"facade" | "aerial" | "place" | "3d">("facade");
+  const runtime = trpc.system.google.runtimeConfig.useQuery(undefined, { staleTime: Infinity });
+  const geography = canonicalGeographyFor(buildingId);
   const query = trpc.system.google.buildingReality.useQuery(
     { buildingId },
     { staleTime: 60_000 }
@@ -51,6 +55,7 @@ export function RealityWindow({
 
       {/* Tabs */}
       <nav className="cr-reality-tabs">
+        <button type="button" className={activeTab === "3d" ? "is-active" : ""} onClick={() => setActiveTab("3d")}>3D Spyglass</button>
         <button
           type="button"
           className={activeTab === "facade" ? "is-active" : ""}
@@ -75,6 +80,10 @@ export function RealityWindow({
       </nav>
 
       <div className="cr-reality-viewport">
+        {activeTab === "3d" ? runtime.data?.mapsJavascriptApiKey && geography ?
+          <GoogleMapsRealityLayer apiKey={runtime.data.mapsJavascriptApiKey} mode="maps_js_3d"
+            target={{ latitude: geography.latitude, longitude: geography.longitude, heading: geography.facadeHeading, zoom: 16, tilt: 55 }} />
+          : <p>Real 3D imagery is unavailable in this environment. The fantasy atlas does not establish real-place evidence.</p> : null}
         {activeTab === "facade" ? (
           <div className="cr-reality-facade">
             {streetView?.hasCoverage && streetView.imageUrl ? (
@@ -92,7 +101,7 @@ export function RealityWindow({
                   <CanonicalBuildingArt buildingId={buildingId} />
                 </div>
                 <p>Street View facade recovering or unavailable for this location.</p>
-                <small>Authored architecture remains authoritative.</small>
+                <small>Authored architecture is game fiction, not real-place imagery.</small>
               </div>
             )}
           </div>
@@ -123,7 +132,7 @@ export function RealityWindow({
                   <CanonicalBuildingArt buildingId={buildingId} />
                 </div>
                 <p>Aerial video orbit currently unavailable for this building coordinate.</p>
-                <small>Maps 3D view and authored architecture remain active.</small>
+                <small>Try the 3D Spyglass or inspect the recorded place identity.</small>
               </div>
             )}
           </div>
