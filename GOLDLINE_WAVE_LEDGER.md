@@ -1,4 +1,30 @@
-# GOLDLINE V1 ONE-WORLD WAVE — LEDGER
+# GOLDLINE FANTASY RECOMPOSITION — 2026-09-04
+
+## Slice 0 — archaeology in progress
+
+- START_SHA: `8ccc38e9a275e8df8c62839a959951bd90df0724`
+- START_TAG: `goldline-wave-start-20260904-032537-8ccc38e9` (pushed).
+- Main worktree: `/Users/adamwrightpfi/Desktop/goldline-v1`; clean at start, fast-forwarded from d581a3b. Original working directory is a different branch and is untouched.
+- Assignment: attached full recomposition brief, explicitly authorized by user. Direct main; per-slice commits; visual browser gate before publishing any visual commit or descendant.
+- Existing ledger below describes an older wave, not proof of this assignment.
+- Import owner: `server/cleancloudBrowserSync/router.ts`, atomic binding/order/batch/receipt transaction; legacy CSV importer `server/cleancloudPaidOrders.ts` writes separately. No world outbox in either inspected owner.
+- World contract/store/receipts: `shared/goldlineWorld.ts`, `server/goldlineWorld/worldEventStore.ts`. order_paid is outcome; store acquires its own DB connection.
+- Combat: `shared/towerWars.ts`, `server/towerWars/towerWarsService.ts`, `shared/towerWarsSettlement.ts` (still explicit daily contract).
+- Facade: `client/src/components/admin/control-room/FacadeScarLayer.tsx`, `facadeRegeneration.ts`, `towerWarsGeometry.ts`, `TowerWars.tsx`.
+- World: `LanternCityAtlas.tsx`, `WorldGeographySurface.tsx`, `RealityWindow.tsx`; geographic truth in `server/geography/geographicTruthService.ts` and `shared/canonicalGeography.ts`.
+- Territories: `shared/goldlineTerritories.ts`, `goldlineTerritoryGeometry.ts`, `goldlineTerritoryCompiler.ts`, `server/goldlineWorld/territoryService.ts`; mounted veil/world layers in `client/src/components/goldline`.
+- Guardians: `shared/goldlineGuardians.ts`, `goldlineGuardianEngine.ts`; `GuardianActor.tsx`, `GuardianEncounter.tsx`, `useGuardianEncounter.ts`.
+- Shell: `client/src/pages/AdminHostApp.tsx`, `Admin.tsx`, `AdminHome.tsx` (route ownership to trace before changes).
+- Driver: `client/src/pages/goldline/GoldlineOverworld.tsx`, `overworld/OverworldRuntime.ts`, `movement.ts`, `mapDefinition.ts`; existing separate expedition Linehook in `client/src/game/expedition/linehook.ts`.
+- Clockhead: existing `shared/clockheadReadability.ts` and boreslay-rally presentation; inspect encounter runtime before changing.
+- Audio: `client/src/game/audio/AudioManager.ts`.
+- Assets: current main already includes valet Rolls-Royce projectile. Supplied ZIP has three supplemental effect/hook images, not separate wound variants; supplied sheet is reference art.
+- Execution order: outbox/corrections; located impacts; weekly seasons; unified atlas; rivers/crossings; Guardian recurrence; shell; bounded Pixi; Linehook; Clockhead; integration/release proof.
+- Product changes/tests/commits: none yet. Deployment/live verification: not yet attempted.
+
+---
+
+# GOLDLINE V1 ONE-WORLD WAVE — LEDGER (prior wave)
 
 | | |
 |---|---|
