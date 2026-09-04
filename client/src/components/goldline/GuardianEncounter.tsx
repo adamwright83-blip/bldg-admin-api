@@ -40,7 +40,7 @@ export function GuardianEncounter({
   const { world, dispatch } = useGuardianEncounter({
     guardianId: guardian.id,
     confrontationReady: state.confrontationReady,
-    enabled: true,
+    enabled: state.confrontationReady,
     reducedMotion,
   });
   const [line, setLine] = useState("");
@@ -80,6 +80,7 @@ export function GuardianEncounter({
         onClose();
         return;
       }
+      if (!state.confrontationReady) return;
       const map: Record<string, { x: number; y: number }> = {
         ArrowLeft: { x: -1, y: 0 },
         ArrowRight: { x: 1, y: 0 },
@@ -112,7 +113,7 @@ export function GuardianEncounter({
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onUp);
     };
-  }, [dispatch, onClose]);
+  }, [dispatch, onClose, state.confrontationReady]);
 
   const look = useMemo(() => {
     return {
@@ -136,7 +137,7 @@ export function GuardianEncounter({
       }}
       onPointerDown={event => {
         event.stopPropagation();
-        dispatch({ type: "poke" });
+        if (state.confrontationReady) dispatch({ type: "poke" });
       }}
       role="application"
       aria-label={guardianAriaLabel(guardian, world.phase)}
@@ -148,10 +149,11 @@ export function GuardianEncounter({
         lookY={look.y}
         reducedMotion={reducedMotion}
         defeated={world.defeated}
-        scale={state.cleared ? 0.45 : 1}
+        scale={state.cleared && !state.pressureReturned ? 0.45 : 1}
       />
       <div className="gl-guardian-dialogue" aria-live="polite">
         <strong>{guardian.name}</strong>
+        {state.pressureReturned ? <p>GUARDIAN RETURNED · Prior victory remains in the Chronicle.</p> : null}
         <p>{line || world.lastTell}</p>
       </div>
       <div className="gl-guardian-arena" aria-hidden>
@@ -181,7 +183,7 @@ export function GuardianEncounter({
             Guardian {world.health}/{world.maxHealth} · You {world.playerHealth}/{world.playerMaxHealth}
           </p>
         ) : (
-          <p>Playing. The street is not ready to be cleared.</p>
+          <p>The lair is sealed. Complete the territory’s real evidence prerequisites to enter.</p>
         )}
         {controlsHint ? <p className="gl-guardian-keys">WASD move · Space / click counter · Shift dodge</p> : null}
         {world.retryAvailable ? (
@@ -191,9 +193,11 @@ export function GuardianEncounter({
         ) : null}
       </div>
       <div className="gl-guardian-touch">
-        <DynamicJoystick disabled={false} onInput={(x, y) => dispatch({ type: "move", x, y })} />
+        <button type="button" onClick={onClose}>Return to city</button>
+        <DynamicJoystick disabled={!state.confrontationReady} onInput={(x, y) => dispatch({ type: "move", x, y })} />
         <button
           type="button"
+          disabled={!state.confrontationReady}
           className="gl-guardian-counter"
           data-testid="goldline-guardian-linehook"
           onPointerDown={event => {

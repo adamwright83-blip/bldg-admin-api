@@ -141,7 +141,7 @@ function TerritoryOnAtlas({
   }, [active, geometry, onNotice]);
 
   if (!geometry) return null;
-  const ghost = item.state.cleared;
+  const ghost = item.state.cleared && !item.state.pressureReturned;
 
   /*
     SLICE 7 — territory pressure, read spatially.
@@ -222,7 +222,7 @@ function TerritoryOnAtlas({
           onDefeat={onDefeat}
           onClose={onClose}
         />
-      ) : (
+      ) : !ghost ? (
         <div
           className={`gl-guardian-anchor${noticed ? " is-selected" : ""}`}
           style={{ left: `${geometry.centroid.x}%`, top: `${Math.max(10, geometry.centroid.y - 8)}%` }}
@@ -239,7 +239,7 @@ function TerritoryOnAtlas({
             aria-label={`${guardian.name} over ${item.definition.fantasyTitle}`}
           />
         </div>
-      )}
+      ) : null}
     </>
   );
 }

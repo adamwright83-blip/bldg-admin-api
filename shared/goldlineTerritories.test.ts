@@ -54,6 +54,33 @@ const event = (
 });
 
 describe("territory progress is derived from chronicle, not a stored counter", () => {
+  it("preserves victory history through dormancy and recovery until a gameplay rematch", () => {
+    const visits = ["b1", "b2", "b3"].map(id => event({ id: `visit-${id}`, eventType: "visited", physicalEntityId: id }));
+    const victory = event({ id: "win", eventType: "territory_cleared", physicalEntityId: null,
+      classification: "game_projection", provenanceClass: "generated_game_fiction",
+      occurredAt: "2026-09-02T12:00:00.000Z", metadata: { territoryId: definition.id } });
+    const dormant = event({ id: "dormant", eventType: "customer_became_dormant", physicalEntityId: "b1",
+      classification: "outcome", occurredAt: "2026-09-03T12:00:00.000Z" });
+    const events = [...visits, victory, dormant];
+    const returned = deriveTerritoryState({ definition, events });
+    expect(returned).toMatchObject({ cleared: true, clearedEventId: "win", pressureReturned: true,
+      confrontationReady: true, recurrenceKey: "dormant" });
+    const recovered = event({ id: "recovered", eventType: "order_paid", physicalEntityId: "b1",
+      classification: "outcome", occurredAt: "2026-09-04T12:00:00.000Z" });
+    expect(deriveTerritoryState({ definition, events: [...events, recovered] }).pressureReturned).toBe(true);
+    expect(deriveTerritoryState({ definition, events: [...events, recovered,
+      { ...victory, id: "rematch", occurredAt: "2026-09-05T12:00:00.000Z" }] })).toMatchObject({
+        cleared: true, clearedEventId: "rematch", pressureReturned: false, confrontationReady: false });
+    expect(events).toContain(victory);
+  });
+
+  it("does not derive renewed pressure from fictional dormancy", () => {
+    const victory = event({ id: "win", eventType: "territory_cleared", physicalEntityId: null,
+      classification: "game_projection", metadata: { territoryId: definition.id } });
+    const fiction = event({ id: "fake-dormancy", eventType: "customer_became_dormant", physicalEntityId: "b1",
+      classification: "outcome", provenanceClass: "generated_game_fiction", occurredAt: "2026-09-04T12:00:00.000Z" });
+    expect(deriveTerritoryState({ definition, events: [victory, fiction] }).pressureReturned).toBe(false);
+  });
   it("does not advance when the player only looks", () => {
     const state = deriveTerritoryState({ definition, events: [] });
     expect(state.readiness).toBe("veiled");

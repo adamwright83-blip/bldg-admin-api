@@ -62,6 +62,14 @@
 - Bridge states derive separately from legitimate territory evidence and persisted Guardian game clearance; unknown remains visibly UNBUILT. Inspection is local UI state only, with no business mutation.
 - Six crossing/territory geometry tests passed; crossing tests rerun after border refinement. Browser mounted world with crossing controls and visible blue borders; initial screenshot reviewed and floating segment geometry refined into connected borders.
 - Commit pending; visual ancestry remains held; final pan/zoom and responsive checks pending in integration.
+- Slice 5 commit: `57556ac` (local).
+
+## Slice 6 — territory Guardian recurrence
+
+- Evidence gates simulation and combat input, not merely the final write. Closed inaccessible encounter is still inspectable, with mobile Return to city action. Preserved approved roster/engine and enlarged world-space character. Removed duplicate idle actor behind cleared ghost.
+- Added explicit renewed pressure from verified non-fiction dormancy outcomes after historical defeat. Prior victory/rewards remain; recovery does not auto-win. Server derives rematch readiness and uses recurrence-addressed idempotency.
+- Twenty territory/engine tests pass, including recurrence, immutable history, recovery and subsequent gameplay clearance. Mounted browser gate shows Linehook disabled on incomplete territory and visible Return to city. Full skilled-win browser proof remains pending; no production game/business fixture writes.
+- Local only; final visual release gate pending.
 
 ---
 

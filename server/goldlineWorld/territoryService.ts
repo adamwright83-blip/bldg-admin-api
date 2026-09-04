@@ -272,10 +272,11 @@ export async function recordGuardianDefeated(input: {
   }
   const events = await listTerritoryChronicle({ tenantId: input.tenantId, definition });
   const state = deriveTerritoryState({ definition, events });
-  if (!state.confrontationReady && !state.cleared) {
+  if (state.cleared && !state.pressureReturned) return { recorded: true, reason: "Already cleared." };
+  if (!state.confrontationReady) {
     return { recorded: false, reason: "Derived readiness is not confrontation-ready." };
   }
-  if (state.cleared) return { recorded: true, reason: "Already cleared." };
+  const encounterKey = state.recurrenceKey ?? String(definition.version);
 
   const payload = {
     classification: "game_projection" as const,
@@ -304,6 +305,7 @@ export async function recordGuardianDefeated(input: {
     metadata: {
       territoryId: definition.id,
       guardianId: input.guardianId,
+      recurrenceOf: state.recurrenceKey ?? null,
       memberPhysicalEntityIds: definition.members.map(member => member.physicalEntityId),
       progressSnapshot: {
         completedMemberIds: state.completedMemberIds,
@@ -317,13 +319,13 @@ export async function recordGuardianDefeated(input: {
     ...shared,
     eventType: "guardian_defeated",
     classification: "game_projection",
-    idempotencyKey: `guardian-defeated:${input.tenantId}:${definition.id}:${definition.version}`,
+    idempotencyKey: `guardian-defeated:${input.tenantId}:${definition.id}:${encounterKey}`,
   });
   await appendGoldlineWorldEvent({
     ...shared,
     eventType: "territory_cleared",
     classification: "game_projection",
-    idempotencyKey: `territory-cleared:${input.tenantId}:${definition.id}:${definition.version}`,
+    idempotencyKey: `territory-cleared:${input.tenantId}:${definition.id}:${encounterKey}`,
   });
   return { recorded: true, reason: "Guardian defeated recorded as game projection only." };
 }

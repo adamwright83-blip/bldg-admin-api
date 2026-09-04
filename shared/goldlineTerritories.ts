@@ -108,6 +108,9 @@ export type TerritoryDerivedState = {
    * challenge may recede — unless a cleared game-history event already exists.
    */
   evidenceRevisedAfterClear: boolean;
+  /** Historical victory is immutable; renewed occupation is a separate projection. */
+  pressureReturned?: boolean;
+  recurrenceKey?: string | null;
 };
 
 export type TerritorySourceOpportunity = {
@@ -283,10 +286,20 @@ export function deriveTerritoryState(input: {
 
   const challengeComplete = remainingMemberIds.length === 0 && members.length > 0;
   const cleared = clearedEvent !== null;
-  const confrontationReady = challengeComplete && !cleared;
+  const memberIds = new Set(members.map(member => member.physicalEntityId));
+  const resurgence = clearedEvent ? input.events
+    .filter(event => event.eventType === "customer_became_dormant"
+      && event.classification === "outcome"
+      && event.provenanceClass !== "generated_game_fiction"
+      && event.verificationClass === "VERIFIED"
+      && event.physicalEntityId !== null && memberIds.has(event.physicalEntityId)
+      && event.occurredAt > clearedEvent.occurredAt)
+    .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt) || b.id.localeCompare(a.id))[0] : undefined;
+  const pressureReturned = Boolean(resurgence);
+  const confrontationReady = challengeComplete && (!cleared || pressureReturned);
 
   let readiness: TerritoryReadiness = "veiled";
-  if (cleared) readiness = "cleared";
+  if (cleared && !pressureReturned) readiness = "cleared";
   else if (confrontationReady) readiness = "confrontation_ready";
   else if (completedMemberIds.length > 0) readiness = "in_progress";
 
@@ -307,6 +320,8 @@ export function deriveTerritoryState(input: {
     clearedEventId: clearedEvent?.id ?? null,
     guardianId: input.definition.guardianId,
     evidenceRevisedAfterClear,
+    pressureReturned,
+    recurrenceKey: resurgence?.id ?? null,
   };
 }
 
