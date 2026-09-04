@@ -1518,12 +1518,20 @@
 .tw-projectile[data-weapon="car"] {
   top: 14%;
   right: 53%;
-  width: clamp(60px, 6vw, 110px);
+  width: clamp(100px, 10vw, 190px);
   height: auto;
-  aspect-ratio: 160 / 70;
+  aspect-ratio: 16 / 9;
   border-radius: 0;
-  background: url("/assets/admin/control-room/tower-wars/valet-car.svg") center / contain no-repeat;
+  background: none;
   filter: drop-shadow(0 4px 3px #152d4770);
+}
+.tw-projectile[data-weapon="car"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("/assets/admin/control-room/tower-wars/rolls-royce-projectile-v1.png") center / contain no-repeat;
+  /* Mirror only the artwork; the parent retains its leftward flight animation. */
+  transform: scaleX(-1);
 }
 .tw-fracture path {
   fill: none;
