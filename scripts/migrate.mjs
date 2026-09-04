@@ -518,9 +518,15 @@ for (const tenantId of cleanerTenantIds) {
     [tenantId, "paragon", "PARAGON CLEANERS", "15.00", 0, 1]
   );
 
-  /* PARAGON's first and only known garment: the Dress cleaned for Carol.
-   * Paragon retail $14.79, discount actually received 0% (full retail),
-   * customer price $19.00. Profit and margin are derived, never stored. */
+  /* PARAGON's first and only known garment: the canonical `dress` — the same
+   * garment Coast cleans, distinguished purely by this pricing relationship,
+   * never by a duplicate Paragon-specific item.
+   * Paragon retail $14.79, explicit 0% discount override (they charged full
+   * retail rather than our normal 15%), customer price $19.00. Profit and
+   * margin are derived from these, never stored.
+   * Catalog pricing only: no order or customer row is seeded here. A real
+   * order acquires its own immutable snapshot when the garment is added
+   * through New Order. */
   const [dressRows] = await conn.query(
     `SELECT id FROM catalog_items WHERE tenantId = ? AND slug = 'dress' LIMIT 1`,
     [tenantId]
