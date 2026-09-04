@@ -5,6 +5,7 @@ on:
     paths:
       - "client/src/game/**"
       - "client/src/pages/driver/GoldlineDriverController.tsx"
+      - "client/src/pages/Driver.tsx"
       # The Goldline page surfaces are part of the playable path, not
       # adjacent to it. OpenChannel.tsx owns the empty-day ignition and the
       # resume banner that realDayIgnition/emptyDayTruth/firstThirtySeconds
@@ -19,6 +20,7 @@ on:
       # could merge without this gate running — the same gap that let the
       # front door break, one directory over.
       - "client/src/components/driver/**"
+      - "client/src/components/admin/control-room/**"
       - "server/commercialMissions/driverSalesMotivationService.ts"
       - "server/commercialMissions/driverSalesJournalResilience.test.ts"
       - "server/driverGameWorld/**"
@@ -28,6 +30,7 @@ on:
       - "server/armory/armoryEvolution.integration.test.ts"
       - "server/salesIntel/driverSafeSalesIntel*"
       - "server/field/**"
+      - "server/goldlineWorld/**"
       - "server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts"
       # LOCAL_TARGET_RUN (§PR77 Part 8-20): recognition, real sourcing (with
       # the labeled-simulation fallback), and the Field Intel linkage that
@@ -41,12 +44,20 @@ on:
       - "shared/impactSignal.test.ts"
       - "shared/goldlineProgression.ts"
       - "shared/goldlineProgression.test.ts"
+      - "shared/goldlineArcade*"
+      - "shared/goldlineCamera*"
+      - "shared/goldlineCustomerWindows*"
+      - "shared/goldlineFuturePressure*"
+      - "shared/goldlineObligations*"
+      - "shared/goldlineTemporal*"
       - "shared/driverSafeSalesIntel.ts"
       - "client/public/goldline.webmanifest"
       - "client/public/goldline-sw.js"
       - "client/public/assets/goldline/**"
       - "e2e/goldline/**"
+      - "e2e/goldline-smoke/**"
       - "playwright.goldline.config.ts"
+      - "playwright.goldline-smoke.config.ts"
       - "scripts/checkGoldlineBundleBudget.mjs"
       - "scripts/verifyPlayableGoldline.mjs"
       - "scripts/verifyGoldlineFirstPlayGate.mjs"
@@ -56,7 +67,11 @@ on:
       - "scripts/verifyGoldlineOpenChannelExpedition.mjs"
       - "scripts/verifyGoldlineFieldIntel.mjs"
       - "scripts/verifyGoldlineExternalOrder.mjs"
+      - "scripts/capture-goldline-closure.mjs"
+      - "scripts/measure-goldline-performance.mjs"
+      - "scripts/goldlineLocalProofTarget.mjs"
       - ".github/workflows/goldline-mobile-regression.yml"
+      - ".github/workflows/goldline-fast-smoke.yml"
   workflow_dispatch:
 
 permissions:
@@ -137,13 +152,17 @@ jobs:
           server/commercialMissions/driverSalesJournalResilience.test.ts
           client/src/components/driver/SalesMomentum.test.ts
 
-      - name: Prove server-rebuilt progression and doctrine gates
-        run: >-
-          pnpm vitest run --config vitest.integration.config.ts
-          server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts
-          server/armory/armoryEvolution.integration.test.ts
-          server/salesIntel/driverSafeSalesIntel.integration.test.ts
-          server/field/authoritativeVisitRoute.integration.test.ts
+      - name: Prove DayForge release journey
+        run: pnpm vitest run --config vitest.integration.config.ts server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts
+
+      - name: Prove Armory evolution
+        run: pnpm vitest run --config vitest.integration.config.ts server/armory/armoryEvolution.integration.test.ts
+
+      - name: Prove driver-safe sales intelligence
+        run: pnpm vitest run --config vitest.integration.config.ts server/salesIntel/driverSafeSalesIntel.integration.test.ts
+
+      - name: Prove authoritative visit route
+        run: pnpm vitest run --config vitest.integration.config.ts server/field/authoritativeVisitRoute.integration.test.ts
 
       - name: Build production application
         run: VITE_GOLDLINE_TEST_HARNESS=1 pnpm build

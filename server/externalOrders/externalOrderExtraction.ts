@@ -144,10 +144,10 @@ async function extractOneImage(
   try {
     parsed = JSON.parse(text) as ExtractionPayload;
   } catch {
-    return { readable: false, jobs: [] };
+    throw new Error("CleanCloud extraction returned invalid structured output");
   }
   if (!parsed || !Array.isArray(parsed.jobs)) {
-    return { readable: false, jobs: [] };
+    throw new Error("CleanCloud extraction returned an invalid jobs payload");
   }
   return { readable: Boolean(parsed.readable), jobs: parsed.jobs };
 }
@@ -176,14 +176,19 @@ export async function extractExternalDayFromScreenshots(input: {
   tenantId?: string;
 }): Promise<ExternalImportProposal> {
   const readings = await Promise.all(
-    input.images.map(async image => {
+    input.images.map(async (image, index) => {
       try {
         return await extractOneImage(image, input.tenantId);
       } catch (error) {
-        // Keep multi-image import resilient, but log the provider failure so a
-        // real model/configuration error is not silently misdiagnosed as bad OCR.
-        console.error("[external-orders] CleanCloud screenshot extraction failed", error);
-        return { readable: false, jobs: [] } satisfies ExtractionPayload;
+        const detail = error instanceof Error ? error.message : String(error);
+        console.error(
+          `[external-orders] CleanCloud screenshot extraction failed for image ${index + 1}/${input.images.length}; tenant=${input.tenantId ?? "default"}; payloadChars=${image.length}; ${detail}`,
+          error
+        );
+        // Preserve the sanitized provider/config/parser reason through tRPC.
+        // The authenticated operator needs this exact reason to distinguish a
+        // bad image from a bad deployment without opening infrastructure logs.
+        throw new Error(`CleanCloud extraction: ${detail}`);
       }
     })
   );

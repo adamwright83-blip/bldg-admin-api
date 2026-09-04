@@ -4,9 +4,9 @@ import {
   useMemo,
   useRef,
   useState,
-  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { Check, ChevronRight, Loader2, LockKeyhole, X } from "lucide-react";
+import { Link } from "wouter";
 import type { Order } from "@shared/types";
 import type { GoldlineEventEmitter } from "../../game/analytics/emitGoldlineEvent";
 import cleanOverworldUrl from "@/assets/goldline/generated/goldline-overworld-clean.png";
@@ -15,11 +15,30 @@ import {
   saveOverworldCheckpoint,
 } from "./overworld/checkpoint";
 import { GoldlineOverworldRuntime } from "./overworld/OverworldRuntime";
+import type { LiveAdventureObjective } from "../driver/goldlineDayPlanModel";
 import type {
   DestinationStateMap,
   OverworldProximity,
 } from "./overworld/types";
+import { DriverTerritorySky } from "@/components/goldline/DriverTerritorySky";
+import { CampaignHudConnected } from "@/components/goldline/CampaignHud";
+import { CampaignOverlandThread } from "@/components/goldline/CampaignWorldLayer";
+import { CampaignChapterHost } from "@/components/goldline/CampaignChapterHost";
+import { DynamicJoystick } from "./DynamicJoystick";
+import { HustlerLever } from "@/components/driver/HustlerLever";
+/*
+  The Overworld's own layout. Vite only emits a stylesheet something imports,
+  so dropping this line does not merely unstyle a detail — it ships the world
+  with no stage box at all: the shell loses its background, the stage loses
+  its `min(100vw, 430px)` cap and its `height: 100dvh`, and the canvas
+  collapses to two pixels tall. The page then renders as an empty cream sheet
+  with the HUD text stacked in the corner, which is exactly what production
+  showed after 929123a removed it.
+*/
 import "./goldline-overworld.css";
+import type { CampaignHostInvocation } from "@shared/goldlineCampaignRuntime";
+
+export { DynamicJoystick };
 
 function orderName(order: Order) {
   return (
@@ -29,85 +48,13 @@ function orderName(order: Order) {
   );
 }
 
-export function DynamicJoystick({
-  disabled,
-  onInput,
-}: {
-  disabled: boolean;
-  onInput: (x: number, y: number) => void;
-}) {
-  const pointerRef = useRef<number | null>(null);
-  const originRef = useRef({ x: 0, y: 0 });
-  const [visible, setVisible] = useState(false);
-  const [origin, setOrigin] = useState({ x: 0, y: 0 });
-  const [knob, setKnob] = useState({ x: 0, y: 0 });
-  const radius = 48;
-
-  function move(event: ReactPointerEvent<HTMLDivElement>) {
-    const dx = event.clientX - originRef.current.x;
-    const dy = event.clientY - originRef.current.y;
-    const magnitude = Math.hypot(dx, dy);
-    const scale = magnitude > radius ? radius / magnitude : 1;
-    setKnob({ x: dx * scale, y: dy * scale });
-    onInput((dx * scale) / radius, (dy * scale) / radius);
-  }
-
-  function release(event?: ReactPointerEvent<HTMLDivElement>) {
-    if (event?.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    pointerRef.current = null;
-    setVisible(false);
-    setKnob({ x: 0, y: 0 });
-    onInput(0, 0);
-  }
-
-  useEffect(() => {
-    if (!disabled) return;
-    pointerRef.current = null;
-    setVisible(false);
-    setKnob({ x: 0, y: 0 });
-    onInput(0, 0);
-  }, [disabled, onInput]);
-
-  return (
-    <div
-      className="overworld-joystick-zone"
-      aria-label="Touch and drag to move Trailblazer"
-      onPointerDown={event => {
-        if (disabled || pointerRef.current !== null) return;
-        pointerRef.current = event.pointerId;
-        event.currentTarget.setPointerCapture(event.pointerId);
-        originRef.current = { x: event.clientX, y: event.clientY };
-        setOrigin(originRef.current);
-        setVisible(true);
-        move(event);
-      }}
-      onPointerMove={event => {
-        if (pointerRef.current === event.pointerId) move(event);
-      }}
-      onPointerUp={release}
-      onPointerCancel={release}
-    >
-      {visible ? (
-        <div
-          className="overworld-joystick"
-          style={{ left: origin.x, top: origin.y }}
-          aria-hidden="true"
-        >
-          <i style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }} />
-        </div>
-      ) : (
-        <span className="overworld-move-hint">TOUCH + DRAG TO MOVE</span>
-      )}
-    </div>
-  );
-}
-
 export default function GoldlineOverworld({
   pickups = [],
   deliveries = [],
   isLoading = false,
+  activeObjective = null,
+  onOpenDayBriefing,
+  dayObjectiveCount = 0,
   greystarActive,
   greystarCompleted = false,
   waywardUnlocked = false,
@@ -115,13 +62,19 @@ export default function GoldlineOverworld({
   isResolvingOrder = false,
   onEmitEvent,
   onEnterOperations,
+  onEnterCampaignHost,
   onEnterGreystar,
   onEnterWayward,
   onResolveOrder,
+  suppressCampaignChrome = false,
 }: {
   pickups?: Order[];
   deliveries?: Order[];
   isLoading?: boolean;
+  activeObjective?: LiveAdventureObjective | null;
+  /** Opens today's briefing over the world, without leaving it. */
+  onOpenDayBriefing?: () => void;
+  dayObjectiveCount?: number;
   greystarActive: boolean;
   greystarCompleted?: boolean;
   waywardUnlocked?: boolean;
@@ -129,16 +82,21 @@ export default function GoldlineOverworld({
   isResolvingOrder?: boolean;
   onEmitEvent?: GoldlineEventEmitter;
   onEnterOperations?: () => void;
+  onEnterCampaignHost?: (hosted: CampaignHostInvocation) => void;
   onEnterGreystar: () => void;
   onEnterWayward?: () => void;
   onResolveOrder: (
     orderId: number,
     status: "collected" | "delivered"
   ) => Promise<boolean>;
+  suppressCampaignChrome?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<GoldlineOverworldRuntime | null>(null);
   const [ordersOpen, setOrdersOpen] = useState(false);
+  const [guardianPlaying, setGuardianPlaying] = useState(false);
+  const [leverOpen, setLeverOpen] = useState(false);
+  const [driving, setDriving] = useState(false);
   const [runtimeReady, setRuntimeReady] = useState(false);
   const [proximity, setProximity] = useState<OverworldProximity>(null);
   const [lockedMessage, setLockedMessage] = useState<string | null>(null);
@@ -290,6 +248,7 @@ export default function GoldlineOverworld({
 
   const setRuntimeInput = useCallback((x: number, y: number) => {
     runtimeRef.current?.setInput(x, y);
+    setDriving(Math.hypot(x, y) > 0.12);
   }, []);
 
   function performContextAction() {
@@ -362,10 +321,85 @@ export default function GoldlineOverworld({
           </button>
         ) : null}
 
+        {/*
+          The lever lives in the world, not behind the briefing. Its whole
+          purpose is manufacturing a real sales action mid-play, which a doorway
+          you have to go looking for cannot do. Hidden while driving for the
+          same reason every other attention-demanding control is.
+        */}
+        {!driving ? (
+          <button
+            className="overworld-lever-open"
+            type="button"
+            onClick={() => setLeverOpen(true)}
+            aria-label="Open the Hustler lever"
+          >
+            HUSTLE
+          </button>
+        ) : null}
+        {leverOpen ? (
+          <div className="overworld-lever-layer" role="dialog" aria-modal="true">
+            <HustlerLever onClose={() => setLeverOpen(false)} />
+          </div>
+        ) : null}
+
+        <DriverTerritorySky driving={driving} onEncounterChange={setGuardianPlaying} />
+        <CampaignOverlandThread />
+        {suppressCampaignChrome ? null : (
+          <>
+            <CampaignHudConnected compact />
+            <CampaignChapterHost
+              driving={driving}
+              atDestination={Boolean(proximity?.canAct)}
+              onHostCurrentChapter={onEnterCampaignHost}
+            />
+          </>
+        )}
+
         <DynamicJoystick
-          disabled={ordersOpen || !runtimeReady}
+          disabled={ordersOpen || !runtimeReady || guardianPlaying}
           onInput={setRuntimeInput}
         />
+
+        {/*
+          Today's real work, already visible in the world. Tapping it opens the
+          fuller briefing over Overland rather than navigating away, so the day
+          never reads as a task list bolted onto the side of the game.
+        */}
+        {activeObjective || dayObjectiveCount > 0 ? (
+          <div className="overworld-objective" aria-live="polite">
+            {activeObjective ? (
+              <>
+                <small>{activeObjective.sourceLabel}</small>
+                <b>{activeObjective.title}</b>
+                {activeObjective.address ? <span>{activeObjective.address}</span> : null}
+                {activeObjective.physicalEntityId ? (
+                  <Link
+                    className="overworld-objective-reveal"
+                    href={`/growth/lantern-city?entity=${activeObjective.physicalEntityId}`}
+                  >
+                    REVEAL THIS PLACE IN THE CITY
+                  </Link>
+                ) : null}
+                <i>{activeObjective.sourceEvidenceReference}</i>
+              </>
+            ) : (
+              <>
+                <small>Today</small>
+                <b>{dayObjectiveCount} objective{dayObjectiveCount === 1 ? "" : "s"} standing</b>
+              </>
+            )}
+            {onOpenDayBriefing ? (
+              <button
+                type="button"
+                className="overworld-briefing-open"
+                onClick={onOpenDayBriefing}
+              >
+                READ TODAY&apos;S BRIEFING
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         {proximity ? (
           <div className={`overworld-context is-${proximity.availability}`}>

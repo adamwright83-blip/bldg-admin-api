@@ -33,7 +33,14 @@
     "dayforge:migrations:verify": "tsx scripts/dayforge-migrations-verify.ts",
     "goldline:bundle:budget": "node scripts/checkGoldlineBundleBudget.mjs",
     "goldline:geocode:backfill": "tsx scripts/goldline-geocode-backfill.ts",
-    "dayforge:demo": "tsx scripts/dayforge-demo.ts"
+    "dayforge:demo": "tsx scripts/dayforge-demo.ts",
+    "test:goldline:smoke": "playwright test --config playwright.goldline-smoke.config.ts",
+    "test:goldline:territories:smoke": "playwright test --config playwright.goldline-smoke.config.ts e2e/goldline-smoke/territoriesSmoke.spec.ts",
+    "test:goldline:campaign:smoke": "playwright test --config playwright.goldline-smoke.config.ts e2e/goldline-smoke/campaignSmoke.spec.ts e2e/goldline-smoke/campaignMutation.spec.ts",
+    "test:goldline:campaign:mutation": "playwright test --config playwright.goldline-smoke.config.ts e2e/goldline-smoke/campaignMutation.spec.ts",
+    "goldline:territories:capture": "node scripts/capture-goldline-territories.mjs",
+    "goldline:campaign:capture": "node scripts/capture-goldline-campaign.mjs",
+    "goldline:admin:dev-setup": "tsx scripts/goldline-admin-dev-setup.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

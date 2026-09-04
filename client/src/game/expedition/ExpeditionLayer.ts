@@ -56,6 +56,7 @@ const GUARDIAN_HEIGHT: Record<string, number> = {
 };
 import { ExpeditionClock, AIM_TIME_SCALE } from "./expeditionClock";
 import { LineCandidateRegistry } from "./lineCandidateRegistry";
+import type { SurveyCandidate } from "./surveyPulse";
 import {
   AIM_CONE_TOTAL_RADIANS,
   AIM_MAX_RADIUS_CSS_PX,
@@ -799,6 +800,45 @@ export class ExpeditionLayer {
       progress: h.x,
       telegraphing: h.isTelegraphing(),
     }));
+  }
+
+  /**
+   * The corridor's answer to a SURVEY pulse: everything in live play a
+   * scan could legitimately surface, in corridor space.
+   *
+   * Only fictional features are offered. Hostiles that are already
+   * telegraphing are marked `alreadyVisible`, because a wind-up is exactly
+   * the thing the player can see unaided — surfacing it again would make
+   * the best use of SURVEY be spamming it at what is already on screen.
+   *
+   * Dead hostiles are omitted entirely rather than marked visible: a
+   * corpse is not information.
+   */
+  getSurveyCandidates(): SurveyCandidate[] {
+    const candidates: SurveyCandidate[] = [];
+    for (const hostile of this.hostiles) {
+      if (!hostile.alive) continue;
+      candidates.push({
+        id: hostile.id,
+        kind: "hostile",
+        x: hostile.x,
+        y: hostile.y,
+        alreadyVisible: hostile.isTelegraphing(),
+      });
+    }
+    // Environment nodes are the corridor's own furniture: architecture is
+    // latchable, hazards sweep. An unarmed hazard is inert scenery and is
+    // not worth a reveal slot that an armed one could use.
+    for (const node of this.env) {
+      if (node.kind === "hazard" && !node.armed) continue;
+      candidates.push({
+        id: node.id,
+        kind: node.kind === "hazard" ? "hazard" : "anchor",
+        x: node.progress,
+        y: node.lateral,
+      });
+    }
+    return candidates;
   }
 
   /**

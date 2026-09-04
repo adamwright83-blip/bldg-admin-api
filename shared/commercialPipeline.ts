@@ -65,6 +65,26 @@ export const COMMERCIAL_PIPELINE_STAGES = [
 export type CommercialPipelineStage =
   (typeof COMMERCIAL_PIPELINE_STAGES)[number];
 
+/**
+ * A completed follow-up is an attempt with an observed result. Contact alone
+ * is not recovery and never implies a win. Only an explicit business outcome
+ * may advance terminal mission truth.
+ */
+export const COMMERCIAL_FOLLOW_UP_OUTCOMES = [
+  "no_contact",
+  "contacted_no_decision",
+  "won",
+  "lost",
+] as const;
+export type CommercialFollowUpOutcome =
+  (typeof COMMERCIAL_FOLLOW_UP_OUTCOMES)[number];
+
+export function missionStatusForFollowUpOutcome(
+  outcome: CommercialFollowUpOutcome
+): "won" | "lost" | null {
+  return outcome === "won" || outcome === "lost" ? outcome : null;
+}
+
 export const COMMERCIAL_PIPELINE_STAGE_LABELS: Record<
   CommercialPipelineStage,
   string

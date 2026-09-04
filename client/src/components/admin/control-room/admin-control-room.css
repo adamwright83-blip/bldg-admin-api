@@ -274,6 +274,13 @@
 .lc-lantern,.lc-lantern-body,.lc-lantern-handle,.lc-lantern-base{transition:background .7s ease,border-color .7s ease,box-shadow .7s ease,filter .7s ease,transform .16s ease}.lc-lantern.state-dimming .lc-lantern-body{animation:lc-gutter 1.2s ease-out both}.lc-lantern.state-active .lc-lantern-body{animation:lc-reignite .8s ease-out both}@keyframes lc-gutter{45%{filter:brightness(.75)}100%{filter:none}}@keyframes lc-reignite{0%{filter:brightness(.6);box-shadow:0 0 3px #ffc324}55%{filter:brightness(1.35);box-shadow:0 0 24px 8px #ffc324}100%{filter:none}}
 @media (prefers-reduced-motion:reduce){.pwc-building.is-pressure .pwc-building-canon,.pwc-building.is-revenue-cue .pwc-building-canon,.lc-lantern .lc-lantern-body{animation:none!important}.lc-lantern,.lc-lantern-body,.lc-lantern-handle,.lc-lantern-base{transition:none!important}}
 
+/* One World closure: the physical place itself is the marker. */
+.lc-pursued-building{position:absolute;z-index:7;width:64px;min-height:76px;transform:translate(-50%,-74%);border:0;background:transparent;color:#17385e;filter:drop-shadow(0 7px 5px #20406040);cursor:pointer}.lc-pursued-building>span{display:grid;width:48px;height:55px;margin:auto;grid-template-columns:repeat(3,1fr);align-items:end;gap:3px;padding:14px 6px 6px;border:3px solid #265d77;border-radius:8px 8px 3px 3px;background:linear-gradient(#fff9d8,#e6a735)}.lc-pursued-building>span:before{content:"";position:absolute;left:22px;top:2px;width:21px;height:15px;transform:skew(-24deg);border:3px solid #265d77;border-bottom:0;background:#ffe589}.lc-pursued-building>span i{height:9px;border-radius:2px;background:#fffbd0;box-shadow:0 0 7px #ffd65a}.lc-pursued-building>b{display:block;overflow:hidden;margin-top:3px;padding:2px 4px;border-radius:4px;background:#fff9e8e8;font-size:7px;white-space:nowrap;text-overflow:ellipsis}.lc-pursued-building.has-published-art{width:92px}.lc-pursued-building.has-published-art img{display:block;width:76px;height:86px;margin:auto;object-fit:contain}.lc-pursued-building.needs-attention{animation:owi-attention 1.8s ease-in-out infinite}.lc-pursued-building:focus-visible{outline:3px solid #ef9f18;outline-offset:5px}
+@keyframes owi-attention{50%{filter:drop-shadow(0 0 16px #f6bb34) brightness(1.08)}}
+.owi{position:fixed;z-index:90;right:18px;bottom:18px;width:min(460px,calc(100% - 36px));max-height:calc(100dvh - 94px);overflow:auto;padding:24px;border:2px solid #e8b64b;border-radius:26px;background:linear-gradient(155deg,#fffdf0,#f9e6ad);color:#17385e;box-shadow:0 24px 80px #31516e55}.owi:before{content:"";position:sticky;display:block;top:-24px;height:8px;margin:-24px -24px 15px;background:linear-gradient(90deg,#62bde8,#f4c84c,#72b866)}.owi.is-conflicting{border-style:dashed}.owi.is-conflicting:before{background:repeating-linear-gradient(90deg,#f0a32f 0 12px,#fff2b6 12px 22px)}.owi.is-inferred{box-shadow:0 24px 80px #31516e55,inset 0 0 0 5px #62bde833}.owi.is-forecast_pressure:before{background:linear-gradient(90deg,#7898bb,#e1a84a)}.owi-close{position:absolute;z-index:2;right:13px;top:13px;display:grid;width:44px;height:44px;border:1px solid #17385e55;border-radius:50%;background:#fff9df;place-items:center}.owi header{padding-right:40px}.owi h2{margin:2px 0;font-size:32px;line-height:1}.owi h3{margin:4px 0 7px;font-size:18px}.owi p{margin:4px 0 10px;line-height:1.45}.owi section{margin-top:16px;padding-top:15px;border-top:1px solid #8b6a2c33}.owi-kicker{margin:0!important;color:#9b6410;font-size:10px!important;font-weight:900;text-transform:uppercase;letter-spacing:.18em}.owi-state{display:flex;gap:7px;margin-top:12px}.owi-state>*{padding:6px 10px;border-radius:999px;background:#fff9df;font-size:10px;text-transform:uppercase}.owi-attention>div,.owi-evidence>div{display:grid;gap:2px;margin-top:8px;padding:10px;border-radius:12px;background:#fff9df}.owi small{display:block;overflow-wrap:anywhere;color:#49657b;font-size:10px;line-height:1.35}.owi-residents{display:grid;gap:7px;margin-top:8px}.owi-residents button{display:flex;min-height:52px;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border:1px solid #cd9d3d66;border-radius:13px;background:#fff9df;color:inherit;text-align:left}.owi-residents button.is-active{border-color:#287f9e;background:#e4f6f6}.owi-residents span{font-size:10px}.owi-recovery-card{margin:9px 0;padding:12px;border-radius:13px;background:#fff9df}.owi-recovery>button,.owi-resident>button{width:100%;min-height:48px;margin-top:8px;border:0;border-radius:13px;background:#edaa26;color:#17385e;font-weight:900}.owi-signal,.owi-relit{margin-top:9px;padding:12px;border-radius:12px;font-size:11px;font-weight:900}.owi-signal{background:#d9edf5}.owi-relit{background:#d8f2bd;box-shadow:0 0 20px #8ed34188}.owi-tower{display:block;width:100%;max-height:260px;object-fit:contain}.owi-chronicle{display:grid;gap:9px;padding:0;list-style:none}.owi-chronicle li{display:grid;grid-template-columns:22px 1fr;gap:10px}.owi-chronicle i{width:18px;height:18px;border:3px solid #bf8120;border-radius:50%;background:#fff5c7}.owi-chronicle i[data-mark="won"],.owi-chronicle i[data-mark="recovery"]{background:#8dcc51;box-shadow:0 0 11px #7dc53c}.owi-chronicle i[data-mark="lost"]{border-style:dashed;background:#c88b75}.owi-empty{color:#61748a;font-size:11px}
+@media (max-width:800px){.owi{right:8px;bottom:8px;width:calc(100% - 16px);max-height:calc(100dvh - 70px);padding:20px}.owi:before{top:-20px;margin:-20px -20px 15px}.owi h2{font-size:26px}.lc-pursued-building{width:58px}.owi-residents button{min-height:56px}}
+@media (prefers-reduced-motion:reduce){.lc-pursued-building.needs-attention{animation:none;outline:3px solid #ef9f18}}
+
 /* ── Living Los Angeles / Google Activation Surface ───────────────────────── */
 
 .cr-world-geography-surface{position:relative;width:100%;min-height:430px;height:100%;overflow:hidden;border-radius:12px;background:#0d1c2d}
@@ -387,3 +394,915 @@
 .lc-stem.fan-2{width:56px;transform:rotate(-145.2deg)}
 .lc-stem.fan-3{width:56px;transform:rotate(34.8deg)}
 .lc-stem.fan-4{width:56px;transform:rotate(145.2deg)}
+.owi-evidence-link{display:inline-flex;min-height:44px;align-items:center;margin-top:6px;padding:0 15px;border-radius:12px;background:#fff9df;color:#17385e;font-size:11px;font-weight:900;text-decoration:none;box-shadow:inset 0 0 0 1px #cd9d3d66}
+
+/* ── World atmosphere: knowledge and history worn by the building ─────────── */
+/* A veil describes what Goldline knows, so it never moves or hides the place. */
+.lc-veil{position:absolute;z-index:2;inset:-10% -12%;border-radius:12px;pointer-events:none}
+.lc-veil.veil-haze{background:radial-gradient(ellipse at 50% 55%,#fffdf2d9,#fff6d68c 52%,transparent 78%);mix-blend-mode:screen}
+.lc-veil.veil-fracture{background:repeating-linear-gradient(58deg,#fff3c400 0 7px,#f5a52b4d 7px 9px);animation:lc-fracture 2.6s steps(3) infinite}
+.lc-veil.veil-tracing{border:1px dashed #4f9ec27a;background:linear-gradient(#c9e9f52e,#ffffff00)}
+.lc-veil.veil-pressure{background:linear-gradient(#8aa6c400,#7d9bbd52 62%,#5f7fa33d);animation:lc-pressure 5.5s ease-in-out infinite}
+@keyframes lc-fracture{50%{opacity:.45}}
+@keyframes lc-pressure{50%{transform:translateY(-4%) scaleY(1.06)}}
+
+/* Marks are a building's permanent, explainable memory of real events. */
+.lc-marks{position:absolute;z-index:6;bottom:-9px;left:50%;display:flex;transform:translateX(-50%);gap:2px;pointer-events:none}
+.lc-marks i{display:grid;width:11px;height:11px;place-items:center;border:2px solid #a8761c;border-radius:50%;background:#fff4c9;color:#5d3d07;font-size:6px;font-style:normal;font-weight:900}
+.lc-marks i[data-mark="won"],.lc-marks i[data-mark="recovery"]{border-color:#4f8d1f;background:#a4e061;box-shadow:0 0 7px #86d13f}
+.lc-marks i[data-mark="lost"]{border-style:dashed;border-color:#a2503a;background:#e3ad99}
+.lc-marks i[data-mark="proposal_sent"]{border-color:#2d6f92;background:#a8dcf0}
+.lc-marks i[data-mark="visited"]{border-color:#7a5ba8;background:#d8c6f2}
+.lc-marks i[data-mark="customer_activity"]{border-color:#c2911d;background:#ffe9a3}
+
+/* Prominence only ever emphasises. It changes no fact about the place. */
+.has-world.attention-noticed{filter:drop-shadow(0 0 9px #f3c75a)}
+.has-world.attention-urgent{filter:drop-shadow(0 0 16px #f0a52a);animation:owi-attention 1.8s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.lc-veil.veil-fracture,.lc-veil.veil-pressure,.has-world.attention-urgent{animation:none}.has-world.attention-urgent{outline:3px solid #ef9f18;outline-offset:4px}}
+
+/* The city revealing a place that was physically there the whole time. */
+.has-world.is-revealing{animation:lc-reveal 2.2s ease-out}
+.has-world.is-revealing .lc-veil{animation:lc-veil-lift 2.2s ease-out forwards}
+@keyframes lc-reveal{0%{filter:brightness(1.9) drop-shadow(0 0 30px #fff3c0)}45%{filter:brightness(1.25) drop-shadow(0 0 20px #f6c95c)}100%{filter:none}}
+@keyframes lc-veil-lift{0%{opacity:1;transform:scale(1.25)}70%{opacity:.25}100%{opacity:1;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.has-world.is-revealing,.has-world.is-revealing .lc-veil{animation:none}.has-world.is-revealing{outline:4px solid #f0a52a;outline-offset:6px}}
+
+/* Attention pulls the city toward a place without editing anything about it. */
+.lc-attention-row{margin-top:14px;padding:16px 18px;border:2px solid #e0bd63;border-radius:18px;background:linear-gradient(150deg,#fffdf2,#f9e6ad)}
+.lc-attention-row h2{margin:0;color:#17385e;font-size:15px}
+.lc-attention-note{margin:4px 0 12px;color:#4a6a86;font-size:11px;line-height:1.45}
+.lc-attention-row>div{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+.lc-attention-card{display:grid;min-height:74px;gap:3px;padding:11px 13px;border:1px solid #cd9d3d66;border-radius:13px;background:#fff9df;color:#17385e;text-align:left}
+.lc-attention-card strong{font-size:13px}
+.lc-attention-card span{color:#3a5f7e;font-size:11px;line-height:1.35}
+.lc-attention-card small{overflow:hidden;color:#7b8fa3;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.lc-attention-card.attention-urgent{border-color:#e08c1c;box-shadow:0 0 0 2px #f0a52a4d}
+.lc-attention-card:focus-visible{outline:3px solid #ef9f18;outline-offset:3px}
+
+/* The legend embodies the building rather than substituting a glyph for it. */
+.lc-mini-building{position:relative;display:inline-grid;width:15px;height:17px;grid-template-columns:repeat(3,1fr);align-items:end;gap:1px;padding:5px 2px 2px;border:2px solid #265d77;border-radius:3px 3px 1px 1px;background:linear-gradient(#fff9d8,#e6a735)}
+.lc-mini-building:before,.lc-mini-building:after{content:"";height:3px;border-radius:1px;background:#fffbd0}
+.lc-mini-building:after{box-shadow:4px 0 0 #fffbd0}
+
+/* ── Lantern City: daylight adventure, not a white-card dashboard ─────────── */
+/*
+  Los Angeles sun over warm stone. The page reads as a place you are standing
+  in rather than a console you are operating, which is the whole point of the
+  city being the primary surface for these flows.
+*/
+.lc-page{background:linear-gradient(#8fd0f2,#cdeaf8 30%,#fdf6de 72%,#f8ecc6)}
+.lc-page-header h1{color:#17385e;text-shadow:0 1px 0 #fff8}
+.lc-page-header p{color:#3a5f7e}
+.lc-spark{color:#e8a71b;text-shadow:0 0 14px #ffd66a}
+.lc-search{border:2px solid #d8b25c;background:#fffdf2}
+.lc-search input{color:#17385e;background:transparent}
+.lc-status-card{border:2px solid #dcbc6b;background:#fffdf2;color:#17385e;box-shadow:0 2px 0 #e4cf9a}
+.lc-status-card small{color:#9b6410}
+.lc-status-card p{color:#4a6a86}
+.lc-status-card.state-pursued .lc-status-icon{font-size:0}
+.lc-status-card.state-pursued .lc-mini-building{width:34px;height:38px;padding:11px 5px 4px;border-width:3px;border-radius:6px 6px 2px 2px}
+.lc-status-card.state-pursued .lc-mini-building:before,.lc-status-card.state-pursued .lc-mini-building:after{height:7px}
+.lc-status-card.state-pursued .lc-mini-building:after{box-shadow:9px 0 0 #fffbd0}
+.lc-map{position:relative;border:2px solid #d8b25c;background:#dff0f7}
+.lc-map-empty{border:2px solid #d8b25c;background:#fffdf2;color:#17385e}
+.lc-map-empty span{color:#4a6a86}
+.lc-legend,.lc-unmapped{border:2px solid #dcbc6b;background:#fffdf2;color:#17385e}
+.lc-legend h2,.lc-unmapped h2{color:#17385e}
+.lc-unmapped p{color:#4a6a86}
+.lc-unmapped small{color:#7b8fa3}
+.lc-unmapped button{border:2px solid #cfa94d;background:#fff6d2;color:#17385e;font-weight:800}
+/* The world canvas keeps sky behind the illustration instead of night navy. */
+.cr-world-geography-surface{background:#cfe8f4}
+.owi-blocked{margin-top:9px;padding:12px;border:1px dashed #cd9d3d;border-radius:12px;background:#fff4d6;font-size:11px;line-height:1.5}
+
+/*
+  Narrow Lantern City. The shell's existing 800px rules already stack this
+  header; what is left is that `.lc-page-header>div` styles BOTH the title
+  block and the controls row, so the title's two-column grid was also being
+  applied to the search row and collapsing it.
+*/
+@media (max-width:800px){
+  .lc-page-header>div:first-child{grid-template-columns:34px 1fr}
+  .lc-page-header h1{line-height:1.15}
+  .lc-spark{align-self:start;font-size:22px}
+  /* One column, so the search owns the full width of the stacked header. */
+  .lc-header-controls{align-self:stretch;width:100%;grid-template-columns:1fr;gap:10px}
+  .lc-header-controls .lc-search{width:100%}
+  /*
+    The Control Room shell already renders this identical day-phase chip above
+    the page, and the in-page copy is positioned out of flow, so it lands on
+    top of the search field here.
+  */
+  .lc-page .lc-header-controls .cr-day-phase{display:none}
+}
+
+/* ── The city camera ──────────────────────────────────────────────────────
+   One transformed world container; fixed controls live outside it so a pan
+   never drags the interface and an arcade explosion never shakes the HUD.
+   `touch-action: none` gives the world ownership of a deliberate gesture so
+   the page does not scroll while the player is dragging Los Angeles. */
+.cr-world-camera{position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:grab}
+.cr-world-camera.is-dragging{cursor:grabbing}
+.cr-world-camera.is-inspecting{pointer-events:none}
+.cr-world-space{position:absolute;inset:0;transform-origin:50% 50%;will-change:transform}
+.cr-world-camera-controls{position:absolute;z-index:30;right:12px;bottom:12px;display:flex;gap:6px}
+.cr-world-camera-controls button{display:grid;min-width:44px;min-height:44px;place-items:center;padding:0 12px;border:2px solid #d8b25c;border-radius:12px;background:#fffdf2;color:#17385e;font:900 12px Inter,sans-serif;cursor:pointer}
+.cr-world-camera-controls button:focus-visible{outline:3px solid #ef9f18;outline-offset:3px}
+@media (prefers-reduced-motion:reduce){.cr-world-space{transition:none}}
+.lc-customer-windows{position:absolute;inset:4px;display:grid;gap:2px;padding:2px;border-radius:3px;background:#17385e55;overflow:hidden}.lc-customer-windows.is-individual{grid-template-columns:repeat(3,1fr)}.lc-customer-windows i{display:block;min-height:3px;border-radius:1px;background:#536374;box-shadow:inset 0 0 0 1px #18304655}.lc-customer-windows i.is-warm{background:#fff2a8;box-shadow:0 0 5px #ffbd2e}.lc-customer-windows.is-aggregate{grid-template-columns:1fr}.lc-customer-windows.is-aggregate i{min-height:2px}.lc-lantern.state-dark .lc-customer-windows i{background:#343b45;box-shadow:none}
+
+/* ── Gold Line tether + seal: the one grammar for an unfinished promise ────
+   Attached to the building, inside the camera transform, so it travels with
+   the place it belongs to. Never colour alone — it always carries a label. */
+.lc-tether{position:absolute;z-index:9;left:50%;bottom:100%;width:2px;height:34px;transform:translateX(-50%);pointer-events:none}
+.lc-tether-line{position:absolute;inset:0;border-radius:2px;background:linear-gradient(#f4c84c00,#f0a52a 35%,#e8901c);box-shadow:0 0 7px #f0a52a99}
+.lc-tether-seal{position:absolute;left:50%;top:-9px;display:grid;width:17px;height:17px;transform:translateX(-50%);place-items:center;border:2px solid #a8641c;border-radius:50%;background:radial-gradient(circle at 40% 35%,#ffe9a8,#e8901c);color:#5d3d07;font:900 8px Inter,sans-serif;box-shadow:0 0 9px #f0a52aaa}
+.lc-tether.tension-taut .lc-tether-line{animation:lc-tether-pull 1.6s ease-in-out infinite}
+.lc-tether.tension-overdue .lc-tether-line{background:linear-gradient(#f4c84c00,#e0761a 30%,#c2503a);box-shadow:0 0 11px #d2691e}
+.lc-tether.tension-overdue .lc-tether-seal{border-color:#a53a26;background:radial-gradient(circle at 40% 35%,#ffd0a8,#c2503a)}
+@keyframes lc-tether-pull{50%{height:30px;filter:brightness(1.2)}}
+
+/* ── Arcade bodies: transient fiction layered over the real building ───────
+   Every one of these is presentation. The published tower art is never
+   modified; it is wrapped, tilted and overlaid, then restored. */
+.lc-arcade{position:absolute;inset:0;transform-origin:50% 100%;transition:transform .12s linear;pointer-events:none}
+.lc-arcade-damage{position:absolute;inset:0;border-radius:8px;opacity:0;background:
+  radial-gradient(circle at 30% 40%,#3a2a1acc 0 6%,transparent 7%),
+  radial-gradient(circle at 62% 28%,#3a2a1acc 0 5%,transparent 6%),
+  radial-gradient(circle at 45% 62%,#3a2a1abb 0 7%,transparent 8%);
+  mix-blend-mode:multiply}
+.lc-arcade-scorch{position:absolute;inset:0;border-radius:8px;opacity:0;background:radial-gradient(circle at 50% 45%,#2b1c0f88,transparent 62%)}
+.lc-arcade-debris{position:absolute;left:50%;bottom:8%;width:0;height:0}
+.lc-arcade-debris i{position:absolute;width:5px;height:5px;border-radius:1px;background:#c9a35c;opacity:0}
+.lc-arcade.is-impact .lc-arcade-debris i{animation:lc-debris .9s ease-out forwards}
+.lc-arcade.is-impact{animation:lc-hit .42s ease-out}
+/* The rebuild is visible: debris returns, scorch fades, the tower straightens. */
+.lc-arcade.is-recovering{transition:transform 1.1s cubic-bezier(.22,1,.36,1)}
+.lc-arcade.is-recovering .lc-arcade-damage,.lc-arcade.is-recovering .lc-arcade-scorch{transition:opacity 1.4s ease-out}
+.lc-arcade.is-recovering .lc-arcade-debris i{animation:lc-debris-return .9s ease-in forwards}
+@keyframes lc-hit{0%{transform:translate(0,0)}18%{transform:translate(-4px,2px)}42%{transform:translate(3px,-1px)}70%{transform:translate(-2px,1px)}100%{transform:translate(0,0)}}
+@keyframes lc-debris{0%{opacity:1;transform:translate(0,0) rotate(0)}100%{opacity:0;transform:translate(var(--dx,18px),var(--dy,-26px)) rotate(220deg)}}
+@keyframes lc-debris-return{0%{opacity:.9;transform:translate(var(--dx,18px),var(--dy,-26px)) rotate(220deg)}100%{opacity:0;transform:translate(0,0) rotate(0)}}
+
+/* ── OPUS: a driver bolted to the roofline, swinging about its attachment ──
+   The club pivots at the point where it meets the tower. It is never a
+   detached sprite flying around the scene. */
+.lc-weapon-golf_driver{position:absolute;z-index:8;left:62%;bottom:74%;width:6px;height:52px;transform-origin:50% 100%;transform:rotate(14deg);border-radius:3px;background:linear-gradient(#e9edf2,#9aa6b4);pointer-events:none}
+.lc-weapon-golf_driver:after{content:"";position:absolute;left:-7px;top:-9px;width:20px;height:13px;border-radius:4px 8px 4px 3px;background:linear-gradient(#f4f7fa,#8b97a6)}
+.is-charging .lc-weapon-golf_driver{transition:transform .78s cubic-bezier(.3,.05,.6,1);transform:rotate(-104deg)}
+.is-firing .lc-weapon-golf_driver{transition:transform .2s cubic-bezier(.2,.9,.3,1.4);transform:rotate(78deg)}
+.is-impact .lc-weapon-golf_driver,.is-recovering .lc-weapon-golf_driver{transition:transform .9s cubic-bezier(.34,1.3,.64,1);transform:rotate(14deg)}
+
+/* ── Century Park East: a valet cannon with an entirely different rhythm ───
+   It tracks, compresses, then launches a car on an arc. Slower tell than the
+   driver, harder recoil, and the projectile travels rather than swings. */
+.lc-weapon-valet_bazooka{position:absolute;z-index:8;left:58%;bottom:56%;width:34px;height:11px;transform-origin:12% 50%;transform:rotate(-8deg);border-radius:4px;background:linear-gradient(#5a6472,#2f3742);pointer-events:none}
+.lc-weapon-valet_bazooka:before{content:"";position:absolute;left:-6px;top:-3px;width:13px;height:17px;border-radius:3px;background:#f0a52a}
+.is-charging .lc-weapon-valet_bazooka{transition:transform .62s ease-in-out;transform:rotate(-26deg) scaleX(.86)}
+.is-firing .lc-weapon-valet_bazooka{transition:transform .12s ease-out;transform:rotate(-14deg) scaleX(1.06) translateX(-5px)}
+.is-impact .lc-weapon-valet_bazooka,.is-recovering .lc-weapon-valet_bazooka{transition:transform .8s cubic-bezier(.34,1.2,.64,1);transform:rotate(-8deg)}
+.lc-projectile{position:absolute;z-index:9;left:66%;bottom:58%;width:14px;height:8px;border-radius:2px;background:#d92821;opacity:0;pointer-events:none}
+.is-firing .lc-projectile{animation:lc-launch .5s cubic-bezier(.3,.1,.7,.9) forwards}
+@keyframes lc-launch{0%{opacity:1;transform:translate(0,0) rotate(0)}100%{opacity:0;transform:translate(120px,-46px) rotate(180deg)}}
+
+/* The terrace engine and Gold Line fallback read differently again. */
+.lc-weapon-terrace_engine{position:absolute;z-index:8;left:50%;bottom:82%;width:22px;height:22px;transform:translateX(-50%);border:3px solid #2b8ca8;border-radius:50%;border-top-color:transparent;pointer-events:none}
+.is-charging .lc-weapon-terrace_engine{animation:lc-spin .54s linear infinite}
+.lc-weapon-gold_line_pulse{position:absolute;z-index:8;left:50%;bottom:70%;width:12px;height:12px;transform:translateX(-50%);border-radius:50%;background:#f4c84c;opacity:.75;pointer-events:none}
+.is-charging .lc-weapon-gold_line_pulse{animation:lc-pulse .46s ease-in-out infinite}
+@keyframes lc-spin{100%{transform:translateX(-50%) rotate(360deg)}}
+@keyframes lc-pulse{50%{transform:translateX(-50%) scale(1.9);opacity:1}}
+
+/* Idle life: small, bounded, and never more than a couple at once. */
+.lc-idle-flourish{animation:lc-idle-flourish 1.5s ease-in-out}
+.lc-idle-practice{animation:lc-idle-practice 1.5s ease-in-out}
+.lc-idle-machinery{animation:lc-idle-machinery 1.5s linear}
+@keyframes lc-idle-flourish{50%{filter:brightness(1.18) drop-shadow(0 0 12px #f6cf6e)}}
+@keyframes lc-idle-practice{35%{transform:rotate(-3deg)}65%{transform:rotate(2deg)}}
+@keyframes lc-idle-machinery{50%{transform:translateY(-3px)}}
+
+@media (prefers-reduced-motion:reduce){
+  .lc-tether.tension-taut .lc-tether-line,
+  .lc-arcade.is-impact,
+  .lc-arcade.is-impact .lc-arcade-debris i,
+  .lc-idle-flourish,.lc-idle-practice,.lc-idle-machinery,
+  .is-charging .lc-weapon-terrace_engine,
+  .is-charging .lc-weapon-gold_line_pulse,
+  .is-firing .lc-projectile{animation:none}
+  .lc-arcade,.lc-weapon-golf_driver,.lc-weapon-valet_bazooka{transition:none}
+}
+
+/* ============================================================
+   LANTERN CITY IS THE PRODUCT, NOT A PANEL IN A REPORT
+
+   The Atlas shipped as a ~460px map boxed inside a scrolling page, under a
+   four-card status grid and above a legend row. The city — the actual game —
+   held about a third of the viewport, and you scrolled a document to see it.
+   That reads as a dashboard that happens to contain a map.
+
+   The world now claims the screen on first paint, and the lantern counts ride
+   on top of it as instruments rather than stacking above it as report cards.
+   The counts stay in normal flow and are pulled down over the map's top edge
+   with a negative margin: anchoring them to `.lc-page` instead put them on top
+   of the title, because the page — not the map — is the positioning context.
+
+   Reference material (legend, unmapped, chronicle) stays below the fold. It is
+   still reachable, just no longer competing with the city for first sight.
+
+   Presentation only. No projection, query, or truth changes — the Atlas renders
+   exactly the same authoritative entities it did before.
+   ============================================================ */
+.lc-page { padding-top: 16px; }
+.lc-page .lc-map {
+  height: calc(100dvh - var(--cr-north-h) - 132px);
+  min-height: 460px;
+}
+/*
+  Right-aligned on purpose. The campaign chapter card (THE BROKEN CROWN) is
+  authored into the map's top-left corner, so chips anchored there sat on top
+  of the current chapter — the one thing on screen that says what to do next.
+*/
+.lc-page .lc-status-grid {
+  position: relative;
+  z-index: 12;
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap-reverse;
+  row-gap: 6px;
+  margin: 0 0 -60px;
+  gap: 8px;
+  padding: 0 16px 0 4px;
+  pointer-events: none;
+}
+.lc-page .lc-status-card {
+  min-height: 0;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 13px 7px 9px;
+  border-color: #ffffff2b;
+  border-radius: 999px;
+  background: #0b1c2fc7;
+  backdrop-filter: blur(7px);
+  box-shadow: 0 6px 18px #04101d55;
+}
+.lc-page .lc-status-card .lc-status-icon {
+  width: 16px;
+  height: 23px;
+  margin-left: 0;
+  border-width: 2px;
+}
+.lc-page .lc-status-card > div {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 7px;
+}
+.lc-page .lc-status-card strong { color: #f4f8ff; font-size: 17px; }
+.lc-page .lc-status-card small { color: #a6c8e8; font-size: 8px; }
+/* The cadence caption is a report footnote; the chip itself is the reading. */
+.lc-page .lc-status-card p { display: none; }
+
+@media (max-width: 800px) {
+  /* On a phone the chips would cover the city they annotate. */
+  .lc-page .lc-status-grid {
+    margin: 0 0 12px;
+    flex-wrap: wrap;
+    pointer-events: auto;
+  }
+  .lc-page .lc-map { height: auto; min-height: 520px; }
+  .lc-page .lc-status-card p { display: block; }
+}
+
+/* The world should start as high as the title honestly allows. */
+.lc-page .lc-page-header h1 { font-size: 25px; letter-spacing: -0.04em; }
+.lc-page .lc-page-header p { font-size: 11px; }
+
+/* ============================================================
+   HOME OBEYS THE SAME LAW AS LANTERN CITY
+
+   THE GAME WORLD IS THE PRODUCT. INFORMATION IS INSTRUMENTATION.
+
+   Home shipped as a report: four metric cards, then a 430px world panel
+   sharing its row with an alerts column, then an insights strip. The live
+   city — real Los Angeles with OPUS and Century Park East standing on it —
+   was the third element down and roughly a third of the width.
+
+   The world now takes the row and the viewport. The metrics become a chip
+   rail over it, and the alerts (promise risk, follow-up debt) become a
+   floating column on the right — still first-class, still legible, no
+   longer boxing the city into a corner of a document.
+
+   This is deliberately NOT "make the cards bigger". The cards stop being
+   the page. Every number still shown, same queries, same authoritative
+   truth — read off instruments laid over the world instead of stacked
+   above it.
+   ============================================================ */
+.pwc-page { padding: 16px 18px 0; }
+.pwc-world-layout {
+  position: relative;
+  display: block;
+}
+.pwc-page .pwc-world {
+  min-height: 0;
+  height: calc(100dvh - var(--cr-north-h) - 150px);
+  border-radius: 12px;
+}
+/* Metrics ride over the world's top edge, as in Lantern City. */
+.pwc-page .pwc-metrics {
+  position: relative;
+  z-index: 12;
+  display: flex;
+  justify-content: flex-start;
+  /* Wraps DOWNWARD onto the world. wrap-reverse pushed the overflow row up
+     into the page title, which is the one place it must not go. */
+  flex-wrap: wrap;
+  margin: 0 0 -46px;
+  padding: 0 4px;
+  gap: 8px;
+  row-gap: 6px;
+  pointer-events: none;
+}
+.pwc-page .pwc-metric {
+  min-height: 0;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 13px 7px 9px;
+  border-color: #ffffff2b;
+  border-radius: 999px;
+  background: #0b1c2fc7;
+  backdrop-filter: blur(7px);
+  box-shadow: 0 6px 18px #04101d55;
+}
+.pwc-page .pwc-metric > span { flex-direction: row; align-items: baseline; gap: 7px; }
+.pwc-page .pwc-metric strong { color: #f4f8ff; font-size: 17px; }
+.pwc-page .pwc-metric small { color: #a6c8e8; font-size: 8px; }
+/* The explanatory note is report prose; the chip is the reading. */
+.pwc-page .pwc-metric p,
+.pwc-page .pwc-metric > i { display: none; }
+.pwc-page .pwc-metric-icon { width: 22px; height: 22px; }
+.pwc-page .pwc-metric-icon svg { width: 14px; }
+
+/* Alerts float over the world's right edge rather than squeezing it. */
+.pwc-page .pwc-alerts {
+  position: absolute;
+  z-index: 12;
+  right: 16px;
+  top: 74px;
+  width: min(260px, 28vw);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.pwc-page .pwc-alerts > * {
+  border-color: #ffffff2b;
+  background: #0b1c2fdb;
+  backdrop-filter: blur(7px);
+  color: #e8f2fb;
+}
+.pwc-page .pwc-alerts strong,
+.pwc-page .pwc-alerts h2 { color: #f4f8ff; }
+
+/* Insights are reference; below the fold, not competing with the city. */
+.pwc-page .pwc-insights { margin-top: 14px; }
+
+@media (max-width: 800px) {
+  /* On a phone, instruments would cover the city they annotate. */
+  .pwc-page .pwc-metrics {
+    margin: 0 0 12px;
+    pointer-events: auto;
+  }
+  .pwc-page .pwc-metric p { display: block; }
+  .pwc-page .pwc-alerts {
+    position: static;
+    width: auto;
+    margin-top: 12px;
+  }
+  .pwc-page .pwc-world { height: auto; min-height: 430px; }
+}
+
+/* ============================================================
+   THE CITY IS ALIVE BEFORE YOU TOUCH IT
+
+   Lanterns only ever animated on a TRANSITION — lc-gutter when one went
+   out, lc-reignite when one came back. Between events every lantern was a
+   static dot, so a city of real customers sat perfectly still and read as
+   a map with markers rather than somewhere inhabited.
+
+   Each cadence state now has its own resting behaviour, and the behaviour
+   is the information:
+
+     active    a slow steady breath          the relationship is healthy
+     dimming   an irregular falter           the light is going out
+     dark      almost nothing, a rare glint  the room is empty, not gone
+
+   That is not decoration. A faltering lantern says "this is slipping"
+   before the operator reads a single number, which is the whole point of
+   a city instead of a table.
+
+   Drawn on a ::after halo rather than on .lc-lantern-body itself, because
+   the body already owns the gutter/reignite animation slot and an idle
+   loop there would fight the very transitions that make an event legible.
+
+   Every lantern breathes on its own phase (--lc-phase, hashed from the
+   cluster key). Synchronised flicker reads as a screensaver.
+   ============================================================ */
+.lc-lantern-body::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: 10px;
+  pointer-events: none;
+  animation-delay: var(--lc-phase, 0s);
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+.lc-lantern.state-active .lc-lantern-body::after {
+  box-shadow: 0 0 14px 3px #ffc32455;
+  animation-name: lc-breathe;
+  animation-duration: 7s;
+}
+.lc-lantern.state-dimming .lc-lantern-body::after {
+  box-shadow: 0 0 9px 2px #d9dde233;
+  animation-name: lc-falter;
+  /* Deliberately not a round number: a failing light should not look timed. */
+  animation-duration: 4.3s;
+}
+.lc-lantern.state-dark .lc-lantern-body::after {
+  box-shadow: 0 0 6px 1px #0b0d1200;
+  animation-name: lc-embers;
+  animation-duration: 11s;
+}
+
+@keyframes lc-breathe {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.06); }
+}
+/*
+  Irregular on purpose — two dips of different depth, an almost-recovery,
+  then a long hold. A steady sine wave reads as "pulsing", which is a
+  healthy signal. This has to read as struggling.
+*/
+@keyframes lc-falter {
+  0%   { opacity: 0.8; }
+  9%   { opacity: 0.25; }
+  14%  { opacity: 0.7; }
+  21%  { opacity: 0.15; }
+  27%  { opacity: 0.62; }
+  34%  { opacity: 0.4; }
+  55%  { opacity: 0.72; }
+  100% { opacity: 0.8; }
+}
+/* Nearly always nothing. A dormant customer is not gone — just not lit. */
+@keyframes lc-embers {
+  0%, 88%, 100% { opacity: 0; }
+  93%           { opacity: 0.5; }
+}
+
+/*
+  WHAT CAN I TOUCH, AND WHY
+
+  A lantern was interactive but never said so until the cursor was already
+  on it. It now lifts and warms on approach, and keyboard focus gets the
+  same treatment rather than a bare outline, so reaching a lantern by tab
+  looks like reaching it by mouse.
+*/
+.lc-lantern:hover .lc-lantern-body::after,
+.lc-lantern:focus-visible .lc-lantern-body::after {
+  animation-play-state: paused;
+  opacity: 1;
+  box-shadow: 0 0 20px 6px #ffd76688;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Rest state only. The information survives; the motion does not. */
+  .lc-lantern-body::after { animation: none !important; }
+  .lc-lantern.state-active .lc-lantern-body::after { opacity: 0.85; }
+  .lc-lantern.state-dimming .lc-lantern-body::after { opacity: 0.4; }
+  .lc-lantern.state-dark .lc-lantern-body::after { opacity: 0; }
+}
+
+/* ============================================================
+   THE TOWERS ARE AWAKE TOO
+
+   With lanterns breathing, the towers became the only dead thing on the map
+   — the two objects that actually fight each other in Tower Wars sat inert
+   until the cursor touched them, reading as map pins rather than combatants.
+
+   A tower now holds a slow presence glow and lifts on approach, keyed to the
+   building's own identity colour, so OPUS and Century Park East are
+   distinguishable across the city the way their towers are.
+
+   Deliberately slower and quieter than the lanterns. A lantern is one
+   relationship and should flicker; a tower is a landmark and should loom. At
+   the same rate the eye would read them as the same class of object.
+
+   Targets `.pwc-building`, which is what CityTowerButton actually renders —
+   traced through WorldGeographySurface rather than assumed from a class name
+   in the stylesheet.
+   ============================================================ */
+.pwc-building {
+  transition:
+    transform 0.22s cubic-bezier(0.2, 0.7, 0.3, 1),
+    filter 0.22s ease;
+}
+.pwc-building::before {
+  content: "";
+  position: absolute;
+  inset: -6% -10% 4%;
+  z-index: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at 50% 78%,
+    var(--lc-tower-glow, #ffca4533) 0%,
+    transparent 68%
+  );
+  animation: lc-tower-presence 9s ease-in-out infinite;
+}
+/* Identity, not decoration: each tower glows in its own colour. */
+.pwc-building.opus { --lc-tower-glow: #a45bff45; }
+.pwc-building.cpe { --lc-tower-glow: #ffc16645; }
+
+.pwc-building:hover,
+.pwc-building:focus-visible { filter: drop-shadow(0 0 14px #ffca45); }
+.pwc-building:hover::before,
+.pwc-building:focus-visible::before {
+  animation-play-state: paused;
+  opacity: 1;
+}
+
+@keyframes lc-tower-presence {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50%      { opacity: 0.85; transform: scale(1.05); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pwc-building::before { animation: none !important; opacity: 0.65; }
+  .pwc-building { transition: none; }
+}
+
+/* ============================================================
+   ONE SELECTION LANGUAGE FOR THE WHOLE WORLD
+
+   Selecting a world object used to change a side panel while the object
+   itself looked exactly like its neighbours. The world could not answer
+   "which one am I looking at?" the moment your eye left the panel, and
+   selection is the single most important state in a strategy game.
+
+   Every selectable object now shares one vocabulary:
+
+     IDLE          resting behaviour (breath / falter / presence glow)
+     HOVER/FOCUS   warms and lifts — "you can touch this"
+     SELECTED      a persistent ring and stilled ambient — "this one"
+
+   The ambient animation PAUSES while selected. A selected object should
+   read as held and attended to, not still drifting; and a stationary ring
+   is far easier to track across a busy map than a pulsing one.
+
+   Keyboard focus gets the same treatment as hover throughout, so an object
+   reached by tab looks like one reached by mouse.
+   ============================================================ */
+.lc-lantern.is-selected,
+.pwc-building.is-selected {
+  z-index: 9;
+}
+.lc-lantern.is-selected .lc-lantern-body::after,
+.pwc-building.is-selected::before {
+  animation-play-state: paused;
+  opacity: 1;
+}
+/*
+  The ring is drawn on the object's own box so it inherits the same transform
+  as the art — a ring positioned independently drifts off the silhouette as
+  soon as the marker scales on hover.
+*/
+.lc-lantern.is-selected::after,
+.pwc-building.is-selected::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  z-index: 2;
+  border: 2px solid #ffd766;
+  border-radius: 12px;
+  pointer-events: none;
+  box-shadow:
+    0 0 0 1px #04101d66,
+    0 0 16px 3px #ffd76655;
+  animation: lc-selection-settle 0.24s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.pwc-building.is-selected::after {
+  inset: -4% -8% 2%;
+  border-radius: 14px;
+}
+
+/* Arrives with a small settle rather than snapping — a selection should feel
+   caught, not teleported onto the object. */
+@keyframes lc-selection-settle {
+  0%   { opacity: 0; transform: scale(1.14); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lc-lantern.is-selected::after,
+  .pwc-building.is-selected::after { animation: none; }
+}
+
+/*
+  The pursued-building marker is the topmost object at a place that also has
+  customer lanterns (z-index 7 over the lantern's 5, 58px wide, same
+  coordinate), so it is what the player's cursor actually meets there. It
+  therefore has to speak the same selection language as everything else —
+  otherwise clicking the most prominent object in the city is the one
+  interaction that gives no feedback on the object itself.
+*/
+.lc-pursued-building.is-selected { z-index: 9; }
+.lc-pursued-building.is-selected::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  z-index: 2;
+  border: 2px solid #ffd766;
+  border-radius: 12px;
+  pointer-events: none;
+  box-shadow: 0 0 0 1px #04101d66, 0 0 16px 3px #ffd76655;
+  animation: lc-selection-settle 0.24s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-pursued-building.is-selected::after { animation: none; }
+}
+
+/* ============================================================
+   SLICE 3 — TOWER WARS GAME FEEL
+
+   The mechanics were already there: tw-driver-swing, tw-launcher-recoil,
+   tw-golfball-flight, a charge meter, and a revenue -> discharge -> settle
+   phase machine. What was missing is everything AROUND the swing. A strike
+   began instantly at full speed, the target did not react, the camera did
+   not care, and control returned with no punctuation — so a giant golf
+   driver hitting a skyscraper read as an animation playing, not a hit
+   landing.
+
+   Added, in the order a hit is actually read:
+
+     ANTICIPATION  the tower loads before it swings. Without a wind-up the
+                   eye cannot predict the strike, and an unpredictable hit
+                   feels arbitrary rather than earned.
+     IMPACT        the struck tower recoils and flashes at the moment of
+                   contact, not on a timer of its own.
+     HIT-STOP      a very short hold at contact. This is the single cheapest
+                   trick in action games: freezing for ~70ms makes a hit feel
+                   like it had mass.
+     CAMERA        the arena itself kicks. A world that does not move when a
+                   skyscraper is struck reads as a diorama.
+     RECOVERY      the weapon settles back rather than snapping, so control
+                   returns visibly rather than just ending.
+
+   OPUS and CPE stay mechanically distinct: OPUS loads a backswing and
+   settles like a club; CPE braces and shoves like a cannon.
+
+   All game-only presentation. Nothing here can alter business truth.
+   ============================================================ */
+
+/* ANTICIPATION — the wind-up that makes the strike readable. */
+.tw-piece.is-firing .cb-weapon.is-opus_la:before {
+  animation: tw-opus-load 0.86s cubic-bezier(0.34, 0, 0.2, 1);
+}
+@keyframes tw-opus-load {
+  0%   { transform: rotate(0deg); }
+  26%  { transform: rotate(-31deg); }   /* load the backswing */
+  30%  { transform: rotate(-33deg); }   /* hang at the top */
+  46%  { transform: rotate(19deg); }    /* through the ball */
+  58%  { transform: rotate(9deg); }
+  74%  { transform: rotate(13deg); }    /* follow-through settles */
+  100% { transform: rotate(0deg); }
+}
+.tw-piece.is-firing .cb-weapon.is-century_park_east:before {
+  animation: tw-cpe-brace 0.72s cubic-bezier(0.3, 0, 0.2, 1);
+}
+@keyframes tw-cpe-brace {
+  0%   { transform: translateX(0) rotate(0deg); }
+  30%  { transform: translateX(6px) rotate(-3deg); }  /* brace back */
+  42%  { transform: translateX(-11px) rotate(5deg); } /* shove */
+  70%  { transform: translateX(3px) rotate(-1deg); }
+  100% { transform: translateX(0) rotate(0deg); }
+}
+
+/* IMPACT — the struck piece answers. Driven by the same is-firing state so
+   the reaction cannot drift out of sync with the swing. */
+.tw-arena.is-impact .tw-piece:not(.is-firing) .cb-plate {
+  animation: tw-struck 0.42s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+@keyframes tw-struck {
+  0%   { transform: translateX(0); filter: brightness(1); }
+  12%  { transform: translateX(7px); filter: brightness(1.5) saturate(0.7); }
+  30%  { transform: translateX(-4px); filter: brightness(1.12); }
+  55%  { transform: translateX(2px); }
+  100% { transform: translateX(0); filter: brightness(1); }
+}
+
+/* HIT-STOP + CAMERA — the arena holds, then kicks. */
+.tw-arena.is-impact {
+  animation: tw-arena-kick 0.46s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+@keyframes tw-arena-kick {
+  0%   { transform: translate(0, 0) scale(1); }
+  8%   { transform: translate(0, 0) scale(1); }      /* the hold — mass */
+  16%  { transform: translate(-5px, 3px) scale(1.006); }
+  34%  { transform: translate(3px, -2px) scale(1.002); }
+  60%  { transform: translate(-1px, 1px) scale(1); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tw-piece.is-firing .cb-weapon.is-opus_la:before,
+  .tw-piece.is-firing .cb-weapon.is-century_park_east:before,
+  .tw-arena.is-impact,
+  .tw-arena.is-impact .tw-piece:not(.is-firing) .cb-plate {
+    animation: none !important;
+  }
+}
+
+/* ============================================================
+   SLICE 18 — THE INSPECTOR STOPS EATING THE CITY
+
+   `.owi` is capped at calc(100dvh - 94px), so on a desktop the entity
+   inspector runs floor to ceiling and the world disappears behind it. The
+   content is genuinely good — provenance, residents, the honest "proposal
+   sent does not imply a won account" boundary — but at full height it reads
+   as a modal you have entered rather than a panel about something you are
+   still looking at.
+
+   That matters beyond taste: the whole argument for a city instead of a
+   table is that you keep spatial context while you inspect. A panel that
+   covers the city converts it back into a record viewer.
+
+   Capped on wider viewports only. It still scrolls, so nothing is lost —
+   and the object you selected, now ringed, stays visible beside it.
+   Phones keep the taller sheet, where there is no context to preserve.
+   ============================================================ */
+@media (min-width: 900px) {
+  .owi {
+    max-height: min(62dvh, 620px);
+  }
+}
+
+/* ============================================================
+   LANTERN CITY LAYOUT IS DESKTOP-ONLY
+
+   The city-first layout above is desktop-motivated work on a desktop
+   product. Applied at phone widths it shifted the map box far enough that
+   Century Park East landed under the centre of the world camera, so the
+   fast-smoke camera test tapped a tower and navigated to Tower Wars
+   instead of panning the world. That was a real regression I introduced,
+   not a flaky test.
+
+   Rather than adjust a permanent gate to accommodate a layout change it
+   never asked for, phones are returned to the stylesheet's original
+   Lantern City geometry. Everything here resets one of my desktop rules
+   back to what it was; nothing new is introduced.
+   ============================================================ */
+@media (max-width: 800px) {
+  .lc-page { padding-top: 0; }
+  .lc-page .lc-map { height: auto; min-height: 520px; }
+  .lc-page .lc-status-grid {
+    position: static;
+    display: grid;
+    margin: 16px 0;
+    padding: 0;
+    gap: 12px;
+    pointer-events: auto;
+  }
+  .lc-page .lc-status-card {
+    min-height: 92px;
+    grid-template-columns: 62px 1fr;
+    padding: 10px 15px;
+    border-color: #dce1e9;
+    border-radius: 10px;
+    background: #fff;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+  .lc-page .lc-status-card .lc-status-icon {
+    width: 34px;
+    height: 49px;
+    margin-left: 8px;
+    border-width: 3px;
+  }
+  .lc-page .lc-status-card > div { flex-direction: column; gap: 0; }
+  .lc-page .lc-status-card strong { color: inherit; font-size: 28px; }
+  .lc-page .lc-status-card small { color: inherit; font-size: 10px; }
+  .lc-page .lc-status-card p { display: block; }
+  .lc-page .lc-page-header h1 { font-size: 26px; }
+  .lc-page .lc-page-header p { font-size: 12px; }
+}
+
+/* ============================================================
+   THE MAP IS THE SUBSTRATE, NOT THE STAR
+
+   The header said LA WORLD · NIGHT while the satellite tile was graded
+   BRIGHTER than source (`saturate(.72) brightness(1.08)`) and covered with a
+   warm white wash. Your eye met Google imagery first and Goldline second.
+   Every game object — pale guardians, gold markers, lantern glow — was
+   competing with a lit daytime photograph instead of sitting on top of a
+   night city.
+
+   The geography stays real and stays legible: this darkens and cools the
+   real satellite plate rather than replacing Los Angeles with invented
+   terrain. Streets, blocks and coastline remain readable enough to orient
+   by; they simply stop out-shouting the game.
+
+   Desktop only, alongside the rest of the Lantern City treatment.
+   ============================================================ */
+@media (min-width: 801px) {
+  .lc-page .lc-map > img {
+    filter: saturate(0.55) brightness(0.42) contrast(1.08)
+      hue-rotate(200deg);
+  }
+  /* The warm daylight wash becomes a cool night grade. */
+  .lc-page .lc-map-wash {
+    background:
+      radial-gradient(ellipse at 50% 40%, #0b1c2f00 0%, #05101dcc 100%),
+      linear-gradient(#0a1b2e55, #06121faa);
+  }
+  /* Neighbourhood labels have to survive the darker ground. */
+  .lc-page .lc-neighborhood {
+    border-color: #ffffff2e;
+    background: #0b1c2fdd;
+    color: #dbe9f7;
+    box-shadow: 0 2px 10px #0008;
+  }
+}
+
+/* ============================================================
+   A PURSUED PLACE IS A BUILDING, AND THERE IS ONLY ONE OF IT
+
+   Two problems, one cause. The marker read as a stack of folders rather
+   than architecture, and it was drawn at the same coordinate as a customer
+   lantern — two competing primary objects for one physical place, with the
+   building swallowing the lantern's clicks.
+
+   The lantern is now suppressed where a building already stands (see
+   `pursuitCoversCluster`), and its cadence is carried onto the building as
+   `cadence-*`. One place, one object, no lost information.
+
+   The silhouette is squared and given a roofline so it reads as a structure
+   at atlas scale, with a dark rim so it separates from the night ground.
+   ============================================================ */
+@media (min-width: 801px) {
+  .lc-page .lc-pursued-building {
+    filter: drop-shadow(0 3px 0 #04101d) drop-shadow(0 8px 14px #04101d99);
+  }
+  /* Cadence of the customers at this same place, worn by the building. */
+  .lc-page .lc-pursued-building.cadence-active {
+    filter: drop-shadow(0 0 12px #ffc32488) drop-shadow(0 3px 0 #04101d)
+      drop-shadow(0 8px 14px #04101d99);
+  }
+  .lc-page .lc-pursued-building.cadence-dimming {
+    filter: saturate(0.65) drop-shadow(0 0 9px #c9d3dd66)
+      drop-shadow(0 3px 0 #04101d);
+  }
+  .lc-page .lc-pursued-building.cadence-dark {
+    filter: saturate(0.3) brightness(0.72) drop-shadow(0 3px 0 #04101d);
+  }
+}
+
+/* ============================================================
+   A GUARDIAN IS A CHARACTER TOKEN FIRST, A CHARACTER SECOND
+
+   At atlas zoom the Tiny Emperor occupied a 148px square of Los Angeles in
+   near-white cloud art, which read as pale blobs rather than a character.
+   Compact and high-contrast at rest; it grows and reveals its authored
+   detail when noticed and again in the encounter:
+
+     READABLE TOKEN  ->  CHARACTER WAKES  ->  FULL ENCOUNTER
+
+   No new art. Same asset, smaller, with a dark backing disc so the pale
+   cloud body separates from the ground it stands on.
+   ============================================================ */
+@media (min-width: 801px) {
+  .lc-page .gl-guardian-anchor {
+    width: 74px;
+    height: 74px;
+    transition: width 0.24s cubic-bezier(0.2, 0.8, 0.3, 1),
+      height 0.24s cubic-bezier(0.2, 0.8, 0.3, 1);
+  }
+  /* The backing disc is what makes a white character legible on a map. */
+  .lc-page .gl-guardian-anchor::before {
+    content: "";
+    position: absolute;
+    inset: 4% 4% 10%;
+    z-index: -1;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 55%, #0b1c2fee 0 58%, #0b1c2f00 72%);
+    box-shadow: 0 0 0 2px #ffd76633;
+  }
+  .lc-page .gl-guardian-anchor .gl-guardian {
+    filter: drop-shadow(0 2px 0 #04101d) drop-shadow(0 6px 12px #04101dcc);
+  }
+  /* Noticed: the character wakes and shows more of itself. */
+  .lc-page .gl-guardian-anchor.is-selected {
+    width: 112px;
+    height: 112px;
+  }
+}

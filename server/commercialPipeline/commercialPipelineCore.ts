@@ -138,6 +138,7 @@ export async function createCommercialPipelineForMissionWith(
     estimatedContractValueCents: number | null;
     actor: PipelineActor;
     correlationId: string;
+    initialStage?: "discovered" | "mission_created";
   }
 ): Promise<number> {
   const existing = await tx
@@ -157,15 +158,13 @@ export async function createCommercialPipelineForMissionWith(
     accountId: input.accountId,
     opportunityId: input.opportunityId,
     missionId: input.missionId,
-    stage: "mission_created",
+    stage: input.initialStage ?? "mission_created",
     estimatedContractValueCents: input.estimatedContractValueCents,
   });
   const pipelineId = Number(inserted[0].insertId);
-  const stages: CommercialPipelineStage[] = [
-    "discovered",
-    "qualified",
-    "mission_created",
-  ];
+  const stages: CommercialPipelineStage[] = input.initialStage === "discovered"
+    ? ["discovered"]
+    : ["discovered", "qualified", "mission_created"];
   let fromStage: CommercialPipelineStage | null = null;
   for (const stage of stages) {
     await tx.insert(commercialPipelineEvents).values({

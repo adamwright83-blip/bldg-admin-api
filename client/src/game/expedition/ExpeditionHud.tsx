@@ -45,6 +45,8 @@ export type ExpeditionHudProps = {
   runtime: ExpeditionHudRuntime | null;
   /** True once the player has explicitly entered the Line. */
   active: boolean;
+  /** Attention-demanding input is unavailable while vehicle travel is likely. */
+  interactionDisabled?: boolean;
   onEnter: () => void;
   /** Compact real objective identity — the only business text on screen. */
   objectiveLabel: string;
@@ -128,6 +130,10 @@ export type ExpeditionHudProps = {
    * be able to block recording that the real work happened.
    */
   onLogSignal?: () => void;
+  /** Button copy can distinguish a real visit writer from a journal-only fallback. */
+  logSignalLabel?: string;
+  /** Honest status while a sourced target is waiting for physical confirmation. */
+  awaitingSignalLabel?: string;
   /**
    * §PR77 Part 4 contextual teaching — the single next mechanic the player
    * has not yet performed, or null once every mechanic is learned (or none
@@ -145,6 +151,7 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
   const {
     runtime,
     active,
+    interactionDisabled = false,
     onEnter,
     objectiveLabel,
     objectiveDetail = null,
@@ -172,6 +179,8 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
     onReconcile,
     reconcileActionLabel = "I UPDATED IT",
     onLogSignal,
+    logSignalLabel = "LOG A SIGNAL",
+    awaitingSignalLabel = "LOG A SIGNAL TO RECORD THIS VISIT AND ADVANCE",
     teachingHint = null,
   } = props;
 
@@ -386,6 +395,7 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
           className="expedition-threshold__enter"
           data-testid="expedition-enter"
           onClick={onEnter}
+          disabled={interactionDisabled}
         >
           ENTER THE LINE
         </button>
@@ -519,7 +529,10 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
         in a terminal state rather than disabled, so a downed or arrived
         player cannot keep poking a control that no longer means anything.
       */}
-      {terminalState === "running" ? (
+      {terminalState === "running" && interactionDisabled ? (
+        <p className="expedition-hud__driving" data-testid="expedition-driving-locked">TRAVEL IN PROGRESS · PLAY RESUMES WHEN PARKED</p>
+      ) : null}
+      {terminalState === "running" && !interactionDisabled ? (
         <div
           ref={padRef}
           className={`expedition-pad${aiming ? " is-aiming" : ""}${
@@ -695,7 +708,7 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
               className="expedition-terminal__verifying"
               data-testid="target-run-awaiting-signal"
             >
-              LOG A SIGNAL TO RECORD THIS VISIT AND ADVANCE
+              {awaitingSignalLabel}
             </p>
           )}
 
@@ -718,7 +731,7 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
               data-testid="expedition-log-signal"
               onClick={onLogSignal}
             >
-              LOG A SIGNAL
+              {logSignalLabel}
             </button>
           ) : null}
         </div>

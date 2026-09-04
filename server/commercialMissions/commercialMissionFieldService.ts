@@ -588,7 +588,7 @@ export async function recordCommercialMissionVisitOutcome(input: {
   expectedMissionVersion: number;
   expectedFieldVersion: number;
   requestId: string;
-  outcome: "follow_up" | "won" | "lost";
+  outcome: "follow_up" | "won" | "lost" | "no_contact" | "no_decision";
   notes: string;
   followUpAt?: Date;
   decisionMakerStatus: "met" | "unavailable" | "not_recorded";
@@ -665,26 +665,32 @@ export async function recordCommercialMissionVisitOutcome(input: {
           collateralDelivered: input.collateralDelivered,
         },
       });
-      await transitionCommercialMissionWith(tx, {
-        tenantId: input.tenantId,
-        missionId: input.missionId,
-        expectedVersion: mission.version,
-        toStatus: input.outcome,
-        actor: { type: "driver", id: input.actorId },
-        idempotencyKey: `field-outcome:${input.requestId}`,
-        metadata: {
-          visitOutcome: input.outcome,
-          reason: input.reason ?? null,
-          decisionMakerStatus: input.decisionMakerStatus,
-          collateralDelivered: input.collateralDelivered,
-          quoteRequested: input.quoteRequested,
-          pilotRequested: input.pilotRequested,
-          followUpRequested: input.followUpRequested,
-          followUpAt: input.followUpAt?.toISOString() ?? null,
-          notes: input.notes,
-          requestId: input.requestId,
-        },
-      });
+      if (
+        input.outcome === "follow_up" ||
+        input.outcome === "won" ||
+        input.outcome === "lost"
+      ) {
+        await transitionCommercialMissionWith(tx, {
+          tenantId: input.tenantId,
+          missionId: input.missionId,
+          expectedVersion: mission.version,
+          toStatus: input.outcome,
+          actor: { type: "driver", id: input.actorId },
+          idempotencyKey: `field-outcome:${input.requestId}`,
+          metadata: {
+            visitOutcome: input.outcome,
+            reason: input.reason ?? null,
+            decisionMakerStatus: input.decisionMakerStatus,
+            collateralDelivered: input.collateralDelivered,
+            quoteRequested: input.quoteRequested,
+            pilotRequested: input.pilotRequested,
+            followUpRequested: input.followUpRequested,
+            followUpAt: input.followUpAt?.toISOString() ?? null,
+            notes: input.notes,
+            requestId: input.requestId,
+          },
+        });
+      }
     });
   } catch (error) {
     if (!isDuplicateKeyError(error)) throw error;

@@ -595,5 +595,111 @@ await assertRequiredColumns("tower_wars_promises", [
   "fulfilledAt",
 ]);
 
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_territory_definitions (
+    id VARCHAR(36) PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    stableKey VARCHAR(191) NOT NULL,
+    version INT NOT NULL DEFAULT 1,
+    fantasyTitle VARCHAR(128) NOT NULL,
+    realGeographyLabel VARCHAR(191) NULL,
+    grammar ENUM('visit_hunt','break_the_silence','send_the_standard') NOT NULL,
+    guardianId VARCHAR(64) NOT NULL,
+    geometryMode ENUM('corridor','cluster','authoritative_polygon') NOT NULL,
+    membersJson JSON NOT NULL,
+    createdFrom VARCHAR(64) NOT NULL,
+    classification VARCHAR(32) NOT NULL DEFAULT 'game_projection',
+    publishedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_goldline_territory_stable (tenantId,stableKey,version),
+    KEY idx_goldline_territory_tenant (tenantId,publishedAt)
+  )`,
+  "CREATE TABLE goldline_territory_definitions"
+);
+
+await assertRequiredColumns("goldline_territory_definitions", [
+  "tenantId",
+  "stableKey",
+  "version",
+  "fantasyTitle",
+  "grammar",
+  "guardianId",
+  "geometryMode",
+  "membersJson",
+  "classification",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_campaign_instances (
+    id VARCHAR(36) PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorId VARCHAR(128) NOT NULL,
+    businessDate VARCHAR(10) NOT NULL,
+    rulesVersion INT NOT NULL DEFAULT 1,
+    stableKey VARCHAR(191) NOT NULL,
+    campaignArchetypeId VARCHAR(32) NOT NULL,
+    title VARCHAR(128) NOT NULL,
+    premise VARCHAR(512) NOT NULL,
+    inputFingerprint VARCHAR(80) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    currentChapterId VARCHAR(191) NULL,
+    completedChapterIdsJson JSON NOT NULL,
+    chaptersJson JSON NOT NULL,
+    revision INT NOT NULL DEFAULT 1,
+    endingTreatment VARCHAR(512) NULL,
+    classification VARCHAR(32) NOT NULL DEFAULT 'game_projection',
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    startedAt TIMESTAMP NULL,
+    completedAt TIMESTAMP NULL,
+    UNIQUE KEY uq_goldline_campaign_day (tenantId,businessDate,rulesVersion),
+    UNIQUE KEY uq_goldline_campaign_stable (tenantId,stableKey),
+    KEY idx_goldline_campaign_operator (tenantId,operatorId,businessDate)
+  )`,
+  "CREATE TABLE goldline_campaign_instances"
+);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_campaign_revisions (
+    id VARCHAR(36) PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    campaignId VARCHAR(36) NOT NULL,
+    revision INT NOT NULL,
+    inputFingerprint VARCHAR(80) NOT NULL,
+    reasonCodesJson JSON NOT NULL,
+    addedFutureChapterIdsJson JSON NOT NULL,
+    removedFutureChapterIdsJson JSON NOT NULL,
+    reorderedFutureChapterIdsJson JSON NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_goldline_campaign_revision (campaignId,revision)
+  )`,
+  "CREATE TABLE goldline_campaign_revisions"
+);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_fiction_assignments (
+    id VARCHAR(36) PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorId VARCHAR(128) NOT NULL,
+    stableMissionKey VARCHAR(191) NOT NULL,
+    templateId VARCHAR(64) NOT NULL,
+    rulesVersion INT NOT NULL DEFAULT 1,
+    instantiatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_goldline_fiction_mission (tenantId,operatorId,stableMissionKey)
+  )`,
+  "CREATE TABLE goldline_fiction_assignments"
+);
+
+await assertRequiredColumns("goldline_campaign_instances", [
+  "tenantId",
+  "operatorId",
+  "businessDate",
+  "rulesVersion",
+  "stableKey",
+  "campaignArchetypeId",
+  "inputFingerprint",
+  "chaptersJson",
+  "classification",
+]);
+
 await conn.end();
 console.log("\nMigration complete.");

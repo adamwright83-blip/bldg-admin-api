@@ -42,6 +42,15 @@ const CAMERA_ZOOM = 1.45;
 const CAMERA_EASE_PER_SECOND = 1000 / 180;
 const LOOKAHEAD_SECONDS = 0.12;
 const CHECKPOINT_INTERVAL_MS = 1000;
+
+/** Largest single simulation step. Keeps fast motion from tunnelling. */
+const MAX_SUBSTEP_SECONDS = 0.04;
+/**
+ * Ceiling on catch-up work in one frame. At 0.04s each this absorbs a drop to
+ * ~5fps without slow motion, and caps the cost of a long stall.
+ */
+const MAX_SUBSTEPS_PER_FRAME = 5;
+
 const PLAYER_FRAME_SECONDS = 0.095;
 const DIRECTIONAL_BASE = "/assets/goldline/characters/trailblazer/directional";
 
@@ -480,24 +489,59 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
 
   private tick = () => {
     const now = performance.now();
-    const deltaSeconds = Math.min(
-      0.04,
-      Math.max(0, (now - this.lastFrameAt) / 1000)
-    );
+    const elapsedSeconds = Math.max(0, (now - this.lastFrameAt) / 1000);
     this.lastFrameAt = now;
     if (this.paused || this.destroyed) return;
 
-    if (this.activeTraversal) this.stepTraversal(deltaSeconds);
-    else this.stepPlayer(deltaSeconds);
-    this.updateAnimation(deltaSeconds);
+    /*
+      Simulation time must track WALL-CLOCK time, not frame count.
+
+      This used to be a bare `Math.min(MAX_SUBSTEP_SECONDS, elapsed)` with no
+      accumulator, which silently made the whole game run in slow motion
+      whenever the device could not hold 25fps: at 8fps a frame covers 0.125s
+      of real time but advanced the fiction by 0.04s, so everything — the
+      player, traversals, the guardian's wind-up — moved at roughly a third of
+      the intended speed. It is not a cosmetic issue. Every timing the player
+      reads (a parry window, a traversal length) stretches with it, and on a
+      loaded CI runner a Linehook traversal that takes 7s locally took 17-23s.
+
+      Stepping in bounded substeps keeps both properties: no individual step
+      is ever larger than MAX_SUBSTEP_SECONDS, so fast movement still cannot
+      tunnel through a collision or overshoot a path node; and up to
+      MAX_SUBSTEPS_PER_FRAME of them run per frame, so real elapsed time is
+      actually consumed instead of discarded.
+
+      The substep ceiling is what stops a spiral of death. After a genuinely
+      long stall — a backgrounded tab, a devtools pause — the leftover time is
+      dropped rather than simulated, because catching up on thirty seconds of
+      fiction the player never saw is worse than losing it.
+    */
+    let remaining = Math.min(
+      elapsedSeconds,
+      MAX_SUBSTEP_SECONDS * MAX_SUBSTEPS_PER_FRAME
+    );
+    let consumed = 0;
+    while (remaining > 0) {
+      const step = Math.min(MAX_SUBSTEP_SECONDS, remaining);
+      remaining -= step;
+      consumed += step;
+      if (this.activeTraversal) this.stepTraversal(step);
+      else this.stepPlayer(step);
+      this.updateAnimation(step);
+      this.updateCamera(step);
+    }
+
+    // Presentation and observers run once per rendered frame, not once per
+    // substep — they describe the frame the player is about to see, and
+    // firing onFrame several times for one paint would double-count any
+    // caller integrating against it (the Wayward guardian does exactly that).
     this.updatePlayerPresentation();
-    this.updateCamera(deltaSeconds);
     this.updateProximity();
     this.updateMarkers(now);
     this.updateScenePresentation(now);
-    this.callbacks.onFrame?.(deltaSeconds, { ...this.position });
+    this.callbacks.onFrame?.(consumed, { ...this.position });
 
-    this.checkpointClock += deltaSeconds * 1000;
+    this.checkpointClock += consumed * 1000;
     if (this.checkpointClock >= CHECKPOINT_INTERVAL_MS) {
       this.checkpointClock = 0;
       this.saveNow();

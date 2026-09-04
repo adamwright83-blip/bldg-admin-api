@@ -19,7 +19,9 @@ import type { OpenChannelMission } from "../../../../server/openChannel/openChan
 import {
   buildDayPlanProjection,
   type DayPlanStop,
+  type LiveAdventureObjective,
 } from "../driver/goldlineDayPlanModel";
+import type { TerritoryBundleHint } from "@shared/goldlineAdventure";
 import world from "@/assets/goldline/generated/goldline-world-empty.png";
 import operator from "@/assets/goldline/generated/trailblazer-operator.png";
 import "./goldline-day-plan.css";
@@ -31,6 +33,10 @@ export type GoldlineDayPlanProps = {
   externalOrders?: ExternalOperationalOrder[];
   openChannelMission?: OpenChannelMission | null;
   salesMissions?: CommercialMission[];
+  liveObjectives?: LiveAdventureObjective[];
+  territoryBundles?: TerritoryBundleHint[];
+  campaignTitle?: string | null;
+  campaignChapters?: Array<{ objectiveIds: readonly string[] }>;
   nextCommitmentAt?: string | null;
   isLoading?: boolean;
   onOpenImport: () => void;
@@ -71,6 +77,19 @@ function shortTime(value: string | null): string | null {
   return Number.isNaN(parsed.getTime())
     ? null
     : parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function evidenceTime(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).toUpperCase();
 }
 
 export function isForcedMobileDayPlanViewport(input: {
@@ -128,6 +147,17 @@ function StopCard({
           {stop.fixed && <span>◷ FIXED WINDOW</span>}
         </div>
         <div className="gdp-source">{stop.sourceLabel}</div>
+        {stop.whySurfaced ? (
+          <details className="gdp-why" data-testid={`why-${stop.id}`}>
+            <summary>WHY IS THIS HERE?</summary>
+            <p>{stop.whySurfaced}</p>
+            <small>
+              {evidenceTime(stop.sourceOccurredAt)
+                ? `${evidenceTime(stop.sourceOccurredAt)} · FIELD EVIDENCE`
+                : "FIELD EVIDENCE"}
+            </small>
+          </details>
+        ) : null}
         {stop.status === "completed" && (
           <div className="gdp-complete">
             <Check /> COMPLETED{completedTime ? ` · ${completedTime}` : ""}
@@ -159,6 +189,11 @@ function StopCard({
             <button type="button" onClick={() => onEnterWorld(stop.id)}>
               <Navigation /> GO THERE IN WORLD
             </button>
+          </div>
+        )}
+        {stop.status === "ready" && stop.source === "living_world" && (
+          <div className="gdp-mission-actions">
+            <button type="button" onClick={() => onEnterWorld(stop.id)}><Navigation /> ENTER THIS OBJECTIVE IN WORLD</button>
           </div>
         )}
         {stop.status !== "ready" &&
@@ -223,6 +258,9 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         externalOrders: props.externalOrders,
         openChannelMission: props.openChannelMission,
         salesMissions: props.salesMissions,
+        liveObjectives: props.liveObjectives,
+        territoryBundles: props.territoryBundles,
+        campaignChapters: props.campaignChapters,
         nextCommitmentAt: props.nextCommitmentAt,
         processingLocation: props.processingLocation,
         commitments: props.commitments,
@@ -235,6 +273,9 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       props.externalOrders,
       props.openChannelMission,
       props.salesMissions,
+      props.liveObjectives,
+      props.territoryBundles,
+      props.campaignChapters,
       props.nextCommitmentAt,
       props.processingLocation,
       props.commitments,
@@ -252,7 +293,10 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       style={{ "--gdp-world": `url(${world})` } as React.CSSProperties}
     >
       <header className="gdp-header">
-        <p>TODAY · {dateHeading(props.businessDate)}</p>
+        <p>
+          {props.campaignTitle ? `${props.campaignTitle} · ` : "TODAY · "}
+          {dateHeading(props.businessDate)}
+        </p>
         <button
           className="gdp-menu-button"
           type="button"

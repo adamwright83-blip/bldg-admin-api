@@ -446,6 +446,7 @@ export async function createCommercialMission(input: {
   steps: CommercialMissionStep[];
   actor: Actor;
   idempotencyKey: string;
+  initialPipelineStage?: "discovered" | "mission_created";
 }): Promise<CommercialMission> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -578,6 +579,7 @@ export async function createCommercialMission(input: {
         estimatedContractValueCents: input.opportunity.estimatedAnnualValueCents,
         actor: input.actor,
         correlationId: input.idempotencyKey,
+        initialStage: input.initialPipelineStage,
       });
 
       if (input.steps.length > 0) {

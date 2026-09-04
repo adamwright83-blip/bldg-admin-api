@@ -1,0 +1,41 @@
+{
+  "before": {
+    "domNodes": 330,
+    "debrisNodes": 0,
+    "activeFrames": 0,
+    "activeTimers": 19,
+    "activeListeners": 244,
+    "duplicateListenerAttempts": 0,
+    "heap": 11900000
+  },
+  "settled": {
+    "domNodes": 331,
+    "debrisNodes": 0,
+    "activeFrames": 0,
+    "activeTimers": 11,
+    "activeListeners": 262,
+    "duplicateListenerAttempts": 0,
+    "heap": 11900000
+  },
+  "remounted": {
+    "domNodes": 331,
+    "debrisNodes": 0,
+    "activeFrames": 0,
+    "activeTimers": 16,
+    "activeListeners": 246,
+    "duplicateListenerAttempts": 0,
+    "heap": 11900000
+  },
+  "reducedMotion": {
+    "domNodes": 331,
+    "debrisNodes": 0,
+    "activeFrames": 0,
+    "activeTimers": 16,
+    "activeListeners": 247,
+    "duplicateListenerAttempts": 0,
+    "heap": 11900000
+  },
+  "focusBackCycles": 22,
+  "fireRequests": 12,
+  "panZoomCycles": 30
+}

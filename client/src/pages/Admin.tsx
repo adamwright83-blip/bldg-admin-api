@@ -1179,8 +1179,7 @@ function NewOrderTab({
         <div>
           <h2 className="text-xl font-semibold tracking-tight">New Order</h2>
           <p className="mt-1 text-sm text-black/50">
-            At-counter POS for customer lookup, garment pricing, discount, and
-            payment.
+            At-counter POS for customer lookup, garment pricing, discount, and payment.
           </p>
         </div>
         <div className="grid grid-cols-3 border border-black/10 bg-white text-center text-xs">

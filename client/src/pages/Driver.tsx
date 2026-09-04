@@ -4,6 +4,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
 import GoldlineDriverController from "./driver/GoldlineDriverController";
 import GoldlineOverworld from "./goldline/GoldlineOverworld";
+import { SalesJournalSheet } from "@/components/driver/SalesMomentum";
 import type { Order } from "@shared/types";
 import "./goldline/goldline-legibility.css";
 import "./goldline/goldline-live-fix.css";
@@ -94,6 +95,20 @@ function AuthenticatedDriver() {
   if (!isAuthenticated) {
     return (
       <LoginForm role="driver" onSuccess={() => window.location.reload()} />
+    );
+  }
+
+  if (
+    import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1" &&
+    new URLSearchParams(window.location.search).get("fieldJournal") === "1"
+  ) {
+    return (
+      <main className="min-h-screen bg-[#f7d982] p-4">
+        <GoldlineDriverController />
+        <div className="fixed inset-0 z-[200] grid place-items-end bg-[#17385e55] p-3 sm:place-items-center">
+          <SalesJournalSheet open onOpenChange={() => {}} />
+        </div>
+      </main>
     );
   }
 

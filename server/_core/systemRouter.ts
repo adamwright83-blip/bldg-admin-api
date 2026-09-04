@@ -8,6 +8,7 @@ import { territoryRouter } from "../territory/territoryRouter";
 import { publicTerritoryRouter } from "../territory/publicPreviewRouter";
 import { commercialProposalRouter } from "../commercialProposals/commercialProposalRouter";
 import { churnRadarRouter } from "../churnRadar/churnRadarRouter";
+import { hustlerLeverRouter } from "../churnRadar/hustlerLeverRouter";
 import { commercialPipelineRouter } from "../commercialPipeline/commercialPipelineRouter";
 import { saasRouter } from "../saas/saasRouter";
 import { dayforgeDemoRouter } from "../dayforgeDemo/demoTenantRouter";
@@ -35,6 +36,7 @@ import { towerWarsRouter } from "../towerWars/towerWarsRouter";
 import { geographicTruthRouter } from "../geography/geographicTruthRouter";
 import { canonicalBuildingRouter } from "../canonicalBuilding/canonicalBuildingRouter";
 import { googleRouter } from "../google/googleRouter";
+import { goldlineWorldRouter } from "../goldlineWorld/goldlineWorldRouter";
 
 export const systemRouter = router({
   commercialMission: commercialMissionRouter,
@@ -42,6 +44,7 @@ export const systemRouter = router({
   adaptiveSalesMeter: adaptiveSalesMeterRouter,
   commercialProposal: commercialProposalRouter,
   churnRadar: churnRadarRouter,
+  hustlerLever: hustlerLeverRouter,
   commercialPipeline: commercialPipelineRouter,
   territory: territoryRouter,
   publicTerritory: publicTerritoryRouter,
@@ -71,6 +74,7 @@ export const systemRouter = router({
   geographicTruth: geographicTruthRouter,
   canonicalBuilding: canonicalBuildingRouter,
   google: googleRouter,
+  goldlineWorld: goldlineWorldRouter,
   health: publicProcedure
     .input(
       z.object({

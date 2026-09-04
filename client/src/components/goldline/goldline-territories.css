@@ -1,0 +1,245 @@
+/* Goldline territories & guardians — world-space presentation.
+   HUD pieces that must not pan with the city live outside .cr-world-space. */
+
+.gl-territory-veil{position:absolute;inset:0;z-index:6;pointer-events:none}
+.gl-territory-veil-svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.gl-territory-crust{filter:url(#none);mix-blend-mode:multiply}
+.gl-territory-veil.is-cleared .gl-territory-crust{opacity:0;transition:opacity .9s ease}
+.gl-territory-crack{filter:drop-shadow(0 0 0.6px #ffe38a)}
+@media (prefers-reduced-motion:reduce){
+  .gl-territory-veil.is-cleared .gl-territory-crust{transition:none}
+}
+
+.gl-guardian{position:absolute;left:50%;top:8%;width:min(42vw,220px);height:min(42vw,220px);transform:translate(-50%,0) scale(var(--guardian-scale,1));transform-origin:50% 80%;pointer-events:none;z-index:7;filter:drop-shadow(0 10px 18px #c9a24a55)}
+.gl-guardian-anchor{position:absolute;z-index:7;width:min(28vw,148px);height:min(28vw,148px);transform:translate(-50%,-72%);pointer-events:none}
+.gl-guardian-anchor .gl-guardian{position:relative;left:auto;top:auto;width:100%;height:100%;transform:none;pointer-events:none}
+.gl-guardian-hit{position:absolute;left:50%;top:22%;width:48px;height:48px;transform:translate(-50%,-50%);border:0;border-radius:50%;background:transparent;cursor:pointer;pointer-events:auto;z-index:8}
+.gl-driver-sky{left:72%;top:12%;width:min(26vw,120px);height:min(26vw,120px);transform:none;z-index:8}
+.gl-guardian-svg{width:100%;height:100%;overflow:visible;pointer-events:none}
+.gl-guardian .cloud-body,.gl-guardian .cloud-puff,.gl-guardian .cloud-fist{fill:#f7fbff;stroke:#d7c9a4;stroke-width:1.2}
+.gl-guardian .gold-prop{fill:#e8c15a;stroke:#a67c2a;stroke-width:1}
+.gl-guardian .eye-white{fill:#fffdf6}
+.gl-guardian .eye-pupil{fill:#2a1d12;transform:translate(var(--look-x,0), var(--look-y,0))}
+.gl-guardian .mouth{fill:none;stroke:#2a1d12;stroke-width:2;stroke-linecap:round}
+.gl-guardian-wisps{position:absolute;inset:-8% -6% auto;height:30%;pointer-events:none;background:radial-gradient(circle at 20% 70%,#fff8 0 18%,transparent 19%),radial-gradient(circle at 80% 40%,#ffe9a866 0 14%,transparent 15%);animation:gl-wisp 3.6s ease-in-out infinite}
+.gl-guardian.is-reduced .gl-guardian-wisps,.gl-guardian.is-ghost .gl-guardian-wisps{animation:none}
+.gl-guardian.is-thunder_king .cloud-fist{fill:#efe7ff}
+.gl-guardian.is-thunder_king .brow{fill:none;stroke:#e8c15a;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.gl-guardian.is-cloud_duchess .dress{fill:#fff4fb}
+.gl-guardian.is-sleepy_one_eye .colossus{fill:#eef4ff}
+.gl-guardian.is-sleepy_one_eye .lid{fill:#c9b48a}
+.gl-guardian.is-tiny_emperor .command-throne{fill:#f4f0ff}
+.gl-guardian.is-gust_jester .cap{fill:#6b4aa8;stroke:#e8c15a}
+.gl-guardian.is-drizzle_detective .coat{fill:#e8eef6}
+.gl-guardian.is-drizzle_detective .gold-prop.glass{fill:none}
+.gl-guardian .bird{fill:#7ec8ff}
+.gl-guardian .bird.two{fill:#f0a52a}
+.gl-guardian .bird.three{fill:#c23a3a}
+.gl-guardian .drop{fill:#5aa0d6}
+.gl-guardian.is-notice{animation:gl-notice .9s ease}
+.gl-guardian.is-taunt{animation:gl-taunt .5s ease infinite alternate}
+.gl-guardian.is-telegraph{filter:drop-shadow(0 0 12px #e8c15a)}
+.gl-guardian.is-hurt{animation:gl-hurt .18s linear 3}
+.gl-guardian.is-defeated{animation:gl-defeat 1.1s ease forwards}
+.gl-guardian.is-ghost{opacity:.45;width:92px;height:92px;top:auto;bottom:12%}
+@keyframes gl-wisp{50%{transform:translateY(-6px) scale(1.04)}}
+@keyframes gl-notice{from{transform:translate(-50%,8px) scale(.92)}to{transform:translate(-50%,0) scale(var(--guardian-scale,1))}}
+@keyframes gl-taunt{from{transform:translate(-50%,0) rotate(-2deg)}to{transform:translate(-50%,-4px) rotate(3deg)}}
+@keyframes gl-hurt{50%{transform:translate(-46%,0)}}
+@keyframes gl-defeat{to{opacity:0;transform:translate(-50%,18px) scale(.4) rotate(12deg);filter:blur(2px)}}
+@media (prefers-reduced-motion:reduce){
+  .gl-guardian,.gl-guardian-wisps{animation:none}
+}
+
+.gl-guardian-encounter{position:absolute;z-index:12;width:min(72vw,420px);height:min(64vh,520px);transform:translate(-50%,-58%);pointer-events:auto;touch-action:none}
+.gl-guardian-encounter .gl-guardian{pointer-events:auto;position:relative;left:auto;top:0;transform:none;width:min(56vw,240px);height:min(56vw,240px);margin:0 auto}
+button.gl-guardian{pointer-events:auto}
+.gl-guardian-dialogue{position:absolute;left:50%;top:-8%;transform:translate(-50%,-100%);min-width:180px;max-width:260px;padding:10px 12px 12px;border:2px solid #e8c15a;border-radius:18px 18px 18px 6px;background:#fffdf6;color:#2a1d12;box-shadow:0 8px 20px #c9a24a33}
+.gl-guardian-dialogue strong{display:block;font:800 11px/1 Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#a67c2a}
+.gl-guardian-dialogue p{margin:.35rem 0 0;font:600 14px/1.25 "Iowan Old Style",Georgia,serif}
+.gl-guardian-arena{position:absolute;inset:38% 4% 18%;pointer-events:none}
+.gl-guardian-player{position:absolute;width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 40% 30%,#fff,#e8c15a 58%,#a67c2a);box-shadow:0 0 10px #e8c15a;transform:translate(-50%,-50%)}
+.gl-guardian-shot{position:absolute;width:18px;height:18px;transform:translate(-50%,-50%);border-radius:50%}
+.gl-guardian-shot.is-bomb_arc{background:radial-gradient(circle at 40% 40%,#ffb347,#5b4a9a 62%,#1b1233);box-shadow:0 0 10px #ff7a18}
+.gl-guardian-shot.is-gust_shockwave{width:42px;height:18px;border-radius:40px;background:conic-gradient(from .2turn,#fff0,#e8c15a88,#6b4aa888,#fff0);box-shadow:0 0 12px #fff}
+.gl-guardian-shot.is-hand_slam{width:26px;height:26px;background:radial-gradient(circle,#e8c15a,#fff0 70%);border:2px dashed #e8c15a}
+.gl-guardian-shot.is-huge{width:34px;height:34px}
+.gl-guardian-shot.is-fizzle{opacity:.35;filter:grayscale(.6)}
+.gl-guardian-hud{position:absolute;left:0;right:0;bottom:0;padding:8px 10px;border-top:1px solid #e8c15a66;background:#fffdf6ee;color:#2a1d12;font:600 12px/1.35 Inter,sans-serif;pointer-events:auto}
+.gl-guardian-keys{opacity:.7}
+.gl-guardian-touch{position:absolute;left:0;right:0;bottom:54px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 8px;pointer-events:auto}
+.gl-guardian-counter{min-width:72px;min-height:72px;border:2px solid #e8c15a;border-radius:50%;background:#fff6d8;color:#6a4a12;font:800 11px Inter,sans-serif}
+.gl-guardian-encounter .overworld-joystick-zone{position:relative;width:120px;height:120px}
+
+.gl-territory-chrome{position:absolute;z-index:28;left:12px;bottom:12px;max-width:min(320px,calc(100vw - 96px));padding:10px 12px;border:2px solid #e8c15a;border-radius:14px;background:#fffdf6f2;color:#2a1d12;pointer-events:none}
+.gl-territory-chrome strong{display:block;font:800 12px/1.2 Inter,sans-serif}
+.gl-territory-chrome p{margin:.3rem 0 0;font:600 12px/1.35 Inter,sans-serif}
+
+.gl-guardian-roster{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:16px}
+.gl-guardian-roster article{position:relative;min-height:210px;overflow:hidden;border:2px solid #e8c15a;border-radius:18px;background:linear-gradient(#9ec7ff,#fff6d8 55%,#f7e7b8);color:#2a1d12}
+.gl-guardian-roster .gl-guardian{position:relative;left:auto;top:8px;transform:none;margin:0 auto}
+.gl-guardian-roster h3{margin:8px 12px 0;font:800 14px Inter,sans-serif}
+.gl-guardian-roster p{margin:4px 12px 12px;font:600 12px/1.35 Inter,sans-serif}
+
+@media (max-width:430px){
+  .gl-guardian-roster{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .gl-guardian-encounter{width:92vw;height:70vh}
+  .gl-guardian-dialogue{max-width:88vw}
+}
+
+/* ============================================================
+   SLICE 1 (completion) — GUARDIANS AND TERRITORIES JOIN THE GRAMMAR
+
+   Lanterns, towers and pursued buildings share IDLE -> HOVER/FOCUS ->
+   SELECTED. Guardians and territories did not: a Guardian was reachable
+   only through an invisible 48px hit circle with no hover state and no
+   keyboard affordance at all, so the most dangerous object in the city was
+   the least discoverable one.
+
+   These do NOT get the lantern's gold rectangle. A Guardian is not a marker
+   and a rectangle around a boss reads as a UI selection box, which is
+   exactly the software feel this wave is removing. The requirement is one
+   understandable grammar, not identical CSS on wildly different objects:
+
+     lantern / tower / building   ring   — "this is the object you hold"
+     Guardian                     rouse  — it notices you and leans in
+     territory                    wash   — its ground brightens
+
+   Same three states, same meanings, expressed the way each object would
+   plausibly express them.
+   ============================================================ */
+
+/* The hit target itself stays invisible, but must ANNOUNCE itself on
+   approach — including to a keyboard, which previously got nothing. */
+.gl-guardian-hit {
+  border-radius: 50%;
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+.gl-guardian-hit:hover,
+.gl-guardian-hit:focus-visible {
+  outline: none;
+  transform: translate(-50%, -50%) scale(1.08);
+  box-shadow:
+    0 0 0 2px #ffd76699,
+    0 0 22px 6px #ff9d4d55;
+}
+
+/* The Guardian itself rouses when approached — the object reacts, not just
+   the cursor. Scoped to the anchor so the actor art leans without the hit
+   circle dragging it around. */
+.gl-guardian-anchor:hover .gl-guardian,
+.gl-guardian-anchor:focus-within .gl-guardian {
+  filter: drop-shadow(0 10px 22px #ff9d4d88) brightness(1.06);
+  transform: scale(1.03);
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+
+/* SELECTED / ENTERED — the Guardian is the thing the player is now in with.
+   A held Guardian glows from beneath rather than being boxed. */
+.gl-guardian-anchor.is-selected .gl-guardian {
+  filter: drop-shadow(0 12px 30px #ffb545cc) brightness(1.1);
+}
+.gl-guardian-anchor.is-selected::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6%;
+  width: 74%;
+  height: 16%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 50%, #ffb54577 0%, transparent 70%);
+  animation: gl-guardian-hold 2.6s ease-in-out infinite;
+}
+@keyframes gl-guardian-hold {
+  0%, 100% { opacity: 0.55; transform: translateX(-50%) scale(1); }
+  50%      { opacity: 0.95; transform: translateX(-50%) scale(1.08); }
+}
+
+/* Territory ground responds to the same three states. A territory is an
+   AREA, so it brightens rather than gaining an edge. */
+.gl-territory-shape {
+  transition: opacity 0.2s ease, filter 0.2s ease;
+}
+.gl-territory-shape:hover,
+.gl-territory-shape:focus-visible {
+  filter: brightness(1.14);
+}
+.gl-territory-shape.is-selected {
+  filter: brightness(1.22) drop-shadow(0 0 14px #ffd76666);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gl-guardian-anchor.is-selected::after { animation: none; opacity: 0.8; }
+  .gl-guardian-hit,
+  .gl-guardian-anchor:hover .gl-guardian,
+  .gl-territory-shape { transition: none; }
+}
+
+/* ============================================================
+   SLICE 7 — TERRITORY PRESSURE ON THE GROUND
+
+   The territory already knew whether it was dormant, contested, ready for
+   confrontation, or settled. None of it reached the map, so the player
+   could see WHERE a territory was but not whether it mattered now — and
+   "which area should I care about" is the question a strategy map exists
+   to answer.
+
+   One mark at the centroid, four readings, each behaving like what it
+   means rather than being colour-coded arbitrarily:
+
+     dormant     faint and still        nothing has happened here
+     contested   slow pulse             work is underway
+     ready       urgent double-beat     the Guardian can be fought NOW
+     cleared     dim settled ring       finished, and remembered
+
+   Only `ready` is allowed to be visually loud. If everything pulses for
+   attention, nothing does.
+   ============================================================ */
+.gl-territory-pressure {
+  position: absolute;
+  z-index: 6;
+  width: 26px;
+  height: 26px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.gl-territory-pressure.is-dormant {
+  border: 1px solid #8fa3b877;
+  background: radial-gradient(circle, #8fa3b822 0%, transparent 70%);
+}
+.gl-territory-pressure.is-contested {
+  border: 2px solid #ffc16688;
+  background: radial-gradient(circle, #ffc16633 0%, transparent 70%);
+  animation: gl-pressure-work 3.4s ease-in-out infinite;
+}
+.gl-territory-pressure.is-ready {
+  border: 2px solid #ff8a4d;
+  background: radial-gradient(circle, #ff8a4d55 0%, transparent 68%);
+  box-shadow: 0 0 16px 4px #ff8a4d66;
+  animation: gl-pressure-ready 1.5s ease-in-out infinite;
+}
+.gl-territory-pressure.is-cleared {
+  border: 1px solid #6fe3a355;
+  background: radial-gradient(circle, #6fe3a31f 0%, transparent 72%);
+}
+
+@keyframes gl-pressure-work {
+  0%, 100% { opacity: 0.5; transform: translate(-50%, -50%) scale(1); }
+  50%      { opacity: 0.85; transform: translate(-50%, -50%) scale(1.1); }
+}
+/* Double-beat: a heartbeat reads as urgency in a way a sine wave does not. */
+@keyframes gl-pressure-ready {
+  0%   { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+  14%  { opacity: 1;   transform: translate(-50%, -50%) scale(1.2); }
+  28%  { opacity: 0.7; transform: translate(-50%, -50%) scale(1.04); }
+  42%  { opacity: 1;   transform: translate(-50%, -50%) scale(1.16); }
+  70%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gl-territory-pressure { animation: none !important; }
+  .gl-territory-pressure.is-ready { opacity: 1; }
+}

@@ -9,6 +9,10 @@ export type FieldTodayItemKind =
   | "commercial_call"
   | "mission_dispatch"
   | "customer_recovery"
+  /** A promise the operator made in the field, now due. */
+  | "field_commitment"
+  /** A place worth returning to because of what someone reported. */
+  | "reported_opportunity"
   | "payment_blocker"
   | "route_exception"
   | "contextual_move";
@@ -17,6 +21,20 @@ export type FieldTodayItem = {
   id: string;
   kind: FieldTodayItemKind;
   source: { entityType: string; entityId: string; sourceReference: string };
+  /**
+   * The building this piece of the day belongs to, when one is already known.
+   * Null means Goldline has not resolved a physical entity for it — never that
+   * the work is placeless, and never a building picked to fill the gap.
+   */
+  physicalEntityId?: string | null;
+  /**
+   * Why this is on today's board, in the words of the evidence it came from.
+   * Present on anything Goldline surfaced on its own initiative, so the player
+   * can always ask "why is this here?" and get a real answer.
+   */
+  whySurfaced?: string | null;
+  /** When the evidence that surfaced this item was recorded. */
+  whySourceOccurredAt?: string | null;
   scheduledAt: string | null;
   urgency: "blocked" | "overdue" | "urgent" | "scheduled" | "flexible" | "upcoming";
   title: string;
@@ -34,6 +52,12 @@ export type FieldTodayProjection = {
   businessDate: string;
   currentUserId: string;
   timeline: FieldTodayItem[];
+  /**
+   * Objective IDs whose authoritative source record proves the real action is
+   * complete even when the live Today timeline intentionally stops showing the
+   * terminal row. This is evidence for campaign history, not a second task store.
+   */
+  authoritativeCompletedObjectiveIds: string[];
   nextFixedCommitment: FieldTodayItem | null;
   blockers: FieldTodayItem[];
   dataQuality: DataQuality;
