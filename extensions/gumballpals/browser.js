@@ -124,13 +124,13 @@ export async function prepareSource(range) {
     if (!dateInput) throw new Error("Date picker changed.");
     dateInput.focus();
     dateInput.click();
-    stage = "locating the open date calendar (build 0.1.2)";
-    // The picker can be portalled outside the report container. Match its
-    // input-derived calendar ID, and require exactly one visible instance.
-    const calendarId = dateInput.id.replace(/-input$/, "") + "-picker-container-DatePicker";
+    stage = "locating the open date calendar (build 0.1.5)";
+    // Generated IDs are not a stable relationship between input and popup.
+    // Require one open calendar with both navigation controls, never guess
+    // between multiple calendars or accidentally select a hidden instance.
     const picker = await wait(() => {
-      const calendars = [...document.querySelectorAll(".datetimepicker")].filter(e =>
-        visible(e) && [...e.querySelectorAll("[id]")].some(node => node.id === calendarId)
+      const calendars = [...document.querySelectorAll(".datetimepicker.visible")].filter(e =>
+        visible(e) && e.querySelector(".datepicker-prev") && e.querySelector(".datepicker-next")
       );
       return calendars.length === 1 ? calendars[0] : null;
     });
@@ -149,7 +149,7 @@ export async function prepareSource(range) {
       "December",
     ];
     async function pickDate(iso) {
-      stage = `selecting ${iso} (build 0.1.2)`;
+      stage = `selecting ${iso} (build 0.1.5)`;
       const [year, month, day] = iso.split("-").map(Number);
       for (let i = 0; i < 25; i++) {
         const labels = await wait(() => {
@@ -190,7 +190,7 @@ export async function prepareSource(range) {
     }
     await pickDate(range.from);
     await pickDate(range.to);
-    stage = `confirming ${range.from} through ${range.to} (build 0.1.2)`;
+    stage = `confirming ${range.from} through ${range.to} (build 0.1.5)`;
     function displayedRangeMatches(value, range) {
       const match = String(value).trim().match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})\s*[-–—]\s*([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
       if (!match) return false;

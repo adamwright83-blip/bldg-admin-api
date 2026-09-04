@@ -15,10 +15,19 @@ test("confirmation compares dates, tolerating display padding and separator typo
     assert.equal(matches(value, range), false);
 });
 
-test("actual calendar ID derivation matches the observed date picker", () => {
-  const declaration = prepareSource.toString().match(/const calendarId = [^;]+;/)?.[0];
-  assert.ok(declaration);
-  assert.equal(runInNewContext(`${declaration} calendarId`, { dateInput: { id: "undefined-input" } }), "undefined-picker-container-DatePicker");
+test("calendar lookup uses open controls rather than unstable generated IDs", () => {
+  const source = prepareSource.toString();
+  const start = source.indexOf("const calendars =");
+  const end = source.indexOf("\n    });", start);
+  const lookup = source.slice(start, end);
+  const calendar = { querySelector: () => ({}) };
+  const find = nodes => runInNewContext(`(() => { ${lookup} })()`, {
+    visible: () => true,
+    document: { querySelectorAll(selector) { assert.equal(selector, ".datetimepicker.visible"); return nodes; } },
+  });
+  assert.equal(find([calendar]), calendar);
+  assert.equal(find([]), null);
+  assert.equal(find([calendar, calendar]), null);
 });
 
 test("report navigation can replace the metrics root before controls load", async () => {
