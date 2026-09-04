@@ -28,6 +28,7 @@ export async function openSite(url) {
 // All actions and selectors below were grounded in the visible gumball export
 // UI. No application internals, cookies, localStorage or private API are read.
 export async function prepareSource(range) {
+  let stage = "opening reporting";
   try {
     if (
       location.origin !== "https://cleancloudapp.com" ||
@@ -46,7 +47,7 @@ export async function prepareSource(range) {
         await pause();
       }
       throw new Error(
-        "gumball layout changed or the reporting permission is unavailable."
+        `gumball preparation stopped while ${stage}. The expected control did not become available.`
       );
     };
     const exact = (root, selector, text) =>
@@ -79,13 +80,18 @@ export async function prepareSource(range) {
         document.querySelector("#metricsContainer")
     );
     clickOne(exact(metrics, "a", "Data Export"));
+    // Report navigation can replace the metrics subtree. Never keep querying
+    // the pre-navigation element after the asynchronous report loads.
+    const reportRoot = () => document.querySelector("#metricsContainer");
+    stage = "loading the export form";
     const exportButton = await wait(() =>
-      metrics.querySelector("#submit_export_button")
+      reportRoot()?.querySelector("#submit_export_button")
     );
     const input = await wait(() =>
-      metrics.querySelector('input[placeholder="Export Type"]')
+      reportRoot()?.querySelector('input[placeholder="Export Type"]')
     );
     const reportSelect = input.closest(".multiselect");
+    stage = "selecting Orders (Sales)";
     reportSelect.querySelector(".multiselect__select").click();
     clickOne(
       await wait(() => {
@@ -97,8 +103,9 @@ export async function prepareSource(range) {
         return es.length ? es : null;
       })
     );
+    stage = "checking the selected store";
     const storesInput = await wait(() =>
-      metrics.querySelector('input[placeholder="Pick Stores"]')
+      reportRoot()?.querySelector('input[placeholder="Pick Stores"]')
     );
     const storeSelect = storesInput.closest(".multiselect");
     const selected = [
@@ -108,13 +115,14 @@ export async function prepareSource(range) {
       throw new Error(
         "Select exactly the currently signed-in store. Group exports are not supported."
       );
-    const dateInput = metrics.querySelector("#undefined-input");
+    stage = "setting the requested dates";
+    const dateInput = reportRoot().querySelector("#undefined-input");
     if (!dateInput) throw new Error("Date picker changed.");
     dateInput.click();
     const picker = await wait(
       () =>
-        visible(metrics.querySelector(".datetimepicker")) &&
-        metrics.querySelector(".datetimepicker")
+        visible(reportRoot().querySelector(".datetimepicker")) &&
+        reportRoot().querySelector(".datetimepicker")
     );
     const monthNames = [
       "January",
