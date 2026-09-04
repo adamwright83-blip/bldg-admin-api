@@ -9,6 +9,8 @@ import {
 } from "../drizzle/schema";
 import { getDb } from "./db";
 import { parseCsv, type CsvRecord } from "./externalSystems/csvIngestion";
+import { enqueueEconomicSnapshot } from "./cleancloudBrowserSync/worldOutbox";
+import { findPhysicalEntityIdByAddress } from "./goldlineWorld/entityLookup";
 
 const PACIFIC_TIME_ZONE = "America/Los_Angeles";
 
@@ -393,7 +395,13 @@ export async function importCleanCloudPaidOrders(input: {
     )
       unresolvedBuildingCount += 1;
 
-    const existing = await db
+    const values = normalized.normalized;
+    const physicalEntityId = values.buildingResolutionStatus === "resolved"
+      ? await findPhysicalEntityIdByAddress({ tenantId: input.tenantId ?? "default", address: values.address }) : null;
+    await db.transaction(async tx => {
+    // Serialize economic identity before the report-specific persistence write.
+    await enqueueEconomicSnapshot(tx, values, physicalEntityId);
+    const existing = await tx
       .select({ id: cleancloudPaidOrders.id })
       .from(cleancloudPaidOrders)
       .where(
@@ -412,15 +420,16 @@ export async function importCleanCloudPaidOrders(input: {
       .limit(1);
 
     if (existing[0]) {
-      await db
+      await tx
         .update(cleancloudPaidOrders)
         .set({ ...normalized.normalized, updatedAt: new Date() })
         .where(eq(cleancloudPaidOrders.id, existing[0].id));
       updatedRowCount += 1;
     } else {
-      await db.insert(cleancloudPaidOrders).values(normalized.normalized);
+      await tx.insert(cleancloudPaidOrders).values(values);
       importedRowCount += 1;
     }
+    });
   }
 
   const importStatus = errors.length ? "completed_with_errors" : "completed";

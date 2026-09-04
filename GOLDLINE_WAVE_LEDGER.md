@@ -20,7 +20,15 @@
 - Audio: `client/src/game/audio/AudioManager.ts`.
 - Assets: current main already includes valet Rolls-Royce projectile. Supplied ZIP has three supplemental effect/hook images, not separate wound variants; supplied sheet is reference art.
 - Execution order: outbox/corrections; located impacts; weekly seasons; unified atlas; rivers/crossings; Guardian recurrence; shell; bounded Pixi; Linehook; Clockhead; integration/release proof.
-- Product changes/tests/commits: none yet. Deployment/live verification: not yet attempted.
+- Slice 0 commit: `fc7b08a`; pushed no; deployed no; browser verified no (documentation only).
+
+## Slice 1 — transactional economic publication
+
+- Implemented durable economic heads and revisioned outbox, atomic enqueue in browser and legacy CSV importers, retry-safe publisher and production background drain. Source order identity is tenant-scoped and report-independent. Corrections are replacement outcomes, not another order_paid grant. Physical identity is lookup-only and unresolved remains null.
+- Tests: 18 focused importer/validation/combat tests passed; 3 replacement-projection tests passed. Disposable local MySQL proof passed repeated/concurrent imports, publication-before-ack retry, correction/reversion, forced mid-transaction rollback (including outbox count), tenant/actor/store isolation, and one real-source-compiled fixture bazooka attack. Disposable proof database removed by test cleanup; production untouched.
+- Global TypeScript check failed on existing unrelated areas (including duplicate JSX attribute in TowerWars, geography typings and commercial outcome types). Focused changed-file diagnostic check running; no full typecheck success claimed.
+- Live September 3 $134.10 data not inspected yet. Fixture proof is NOT live verification.
+- Commit pending; pushed no; deployed no; next dependency located impacts and weekly projection.
 
 ---
 

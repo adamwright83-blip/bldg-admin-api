@@ -14,6 +14,8 @@ import {
 } from "../../drizzle/schema";
 import { browserSyncBindings, browserSyncReceipts } from "./schema";
 import { validatePayload, summarizeOrders } from "./validation";
+import { enqueueEconomicSnapshot } from "./worldOutbox";
+import { findPhysicalEntityIdByAddress } from "../goldlineWorld/entityLookup";
 
 const store = z.object({
   storeId: z.string().regex(/^[1-9]\d{0,15}$/),
@@ -191,6 +193,11 @@ export const cleancloudBrowserSyncRouter = router({
       // imports; this transport deliberately requires an atomic, auditable result.
       const { normalized, digest } = validatePayload(input, ctx.tenantId);
       const db = await requireDb();
+      const physicalIds = new Map<string, string | null>();
+      for (const row of normalized) {
+        physicalIds.set(row.cleancloudOrderId, row.buildingResolutionStatus === "resolved"
+          ? await findPhysicalEntityIdByAddress({ tenantId: ctx.tenantId, address: row.address }) : null);
+      }
       return db.transaction(async tx => {
         const [binding] = await tx
           .select()
@@ -238,6 +245,8 @@ export const cleancloudBrowserSyncRouter = router({
           updated = 0,
           unchanged = 0;
         for (const row of normalized) {
+          const values = { ...row, importBatchId: batch.id, sourceFileName };
+          await enqueueEconomicSnapshot(tx, values, physicalIds.get(row.cleancloudOrderId) ?? null);
           const [existing] = await tx
             .select()
             .from(cleancloudPaidOrders)
@@ -256,7 +265,6 @@ export const cleancloudBrowserSyncRouter = router({
             unchanged++;
             continue;
           }
-          const values = { ...row, importBatchId: batch.id, sourceFileName };
           if (existing) {
             await tx
               .update(cleancloudPaidOrders)

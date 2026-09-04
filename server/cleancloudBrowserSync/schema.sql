@@ -1,4 +1,15 @@
--- Apply explicitly after review; not auto-registered in the shared migration runner.
+-- Additive schema registered in scripts/migrate.mjs.
+CREATE TABLE IF NOT EXISTS goldline_cleancloud_economic_heads (
+  economicKey VARCHAR(64) PRIMARY KEY,
+  revision INT NOT NULL,
+  fingerprint VARCHAR(64) NOT NULL
+);
+CREATE TABLE IF NOT EXISTS goldline_cleancloud_outbox (
+  id VARCHAR(80) PRIMARY KEY,
+  payload JSON NOT NULL,
+  publishedAt TIMESTAMP NULL,
+  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE IF NOT EXISTS cleancloud_browser_sync_bindings (
   tenantId VARCHAR(64) PRIMARY KEY,
   id VARCHAR(36) NOT NULL,

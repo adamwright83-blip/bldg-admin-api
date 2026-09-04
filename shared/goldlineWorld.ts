@@ -113,6 +113,7 @@ const OUTCOME_EVENT_TYPES = new Set([
   "customer_recovered",
   "customer_became_dormant",
   "order_paid",
+  "order_payment_corrected",
 ]);
 
 /** Rejects semantic inflation at the contract boundary. */

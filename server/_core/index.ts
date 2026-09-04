@@ -53,6 +53,7 @@ import {
 } from "../dayforgeSecurity/dayforgeSecurity";
 import { registerDayforgeRetentionRoute } from "../dayforgeRetention/retentionRoute";
 import { startAutomaticGeographicReconciliation } from "../geography/geographicReconciliationScheduler";
+import { startEconomicOutboxDrainer } from "../cleancloudBrowserSync/worldOutbox";
 
 const warnedUnknownTenantHosts = new Set<string>();
 const vendorOnboardingRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -781,6 +782,8 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/`);
     if (process.env.NODE_ENV === "production") {
       startAutomaticGeographicReconciliation();
+      const stopOutbox = startEconomicOutboxDrainer();
+      server.once("close", stopOutbox);
     }
   });
 }

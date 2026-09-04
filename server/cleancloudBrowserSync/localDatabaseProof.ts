@@ -32,6 +32,9 @@ async function main() {
       "cleancloud_paid_orders",
       "cleancloud_import_batches",
       "dayforge_saas_memberships",
+      "physical_entities",
+      "physical_entity_aliases",
+      "goldline_world_events",
     ]) {
       await connection.query(
         `CREATE TABLE \`${table}\` LIKE goldline_daylight.\`${table}\``
@@ -87,6 +90,21 @@ async function main() {
     );
     assert.equal(counts[0].n, 1);
     assert.equal(Number(counts[0].cents), 5100);
+    const { drainEconomicOutbox } = await import("./worldOutbox");
+    assert.equal(await drainEconomicOutbox(), 1);
+    // Simulate publish success followed by a crash before acknowledgement.
+    await connection.query("UPDATE goldline_cleancloud_outbox SET publishedAt=NULL");
+    assert.equal(await drainEconomicOutbox(), 1);
+    const [worldCounts]: any = await connection.query("SELECT COUNT(*) n FROM goldline_world_events WHERE eventType='order_paid'");
+    assert.equal(worldCounts[0].n, 1);
+    await caller.import({ ...input, requestId: randomUUID(), csv: input.csv.replace("51.00", "61.00") });
+    await drainEconomicOutbox();
+    const [corrections]: any = await connection.query("SELECT eventType,metadataJson FROM goldline_world_events ORDER BY createdAt,id");
+    assert.equal(corrections.filter((row: any) => row.eventType === "order_paid").length, 1);
+    assert.equal(corrections.filter((row: any) => row.eventType === "order_payment_corrected").length, 1);
+    // Restore canonical source value through a second explicit correction.
+    await caller.import({ ...input, requestId: randomUUID() });
+    await drainEconomicOutbox();
     await assert.rejects(() =>
       caller.import({ ...input, csv: input.csv.replace("51.00", "52.00") })
     );
@@ -149,6 +167,8 @@ async function main() {
       "SELECT totalCents FROM cleancloud_paid_orders"
     );
     assert.equal(rolledBack[0].totalCents, 5100);
+    const [outboxAfterRollback]: any = await connection.query("SELECT COUNT(*) n FROM goldline_cleancloud_outbox");
+    assert.equal(outboxAfterRollback[0].n, 3, "rollback must remove both new and corrected publication intents");
     await connection.query("DROP TRIGGER fail_test_order");
     const concurrent: any[] = await Promise.all([
       caller.import({ ...input, requestId: randomUUID() }),
