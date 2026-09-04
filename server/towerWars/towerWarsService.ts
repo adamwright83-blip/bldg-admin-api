@@ -30,7 +30,9 @@ import {
 import { TOWER_WARS_ATTACK_THRESHOLD_CENTS } from "../../shared/goldlineGameConfig";
 import { settleTowerWars } from "../../shared/towerWarsSettlement";
 import { impactForAttack } from "../../shared/towerWarsImpacts";
-import { persistCanonicalImpacts } from "./impactStore";
+import { persistCanonicalImpacts, persistSeasonRevisions } from "./impactStore";
+import { rivalryHistory, rivalrySeasonWindow } from "../../shared/towerWarsSeasons";
+import { addDays, format, parseISO } from "date-fns";
 
 export type TowerWarsCandidate = {
   sourceKey: string;
@@ -381,15 +383,18 @@ export async function getTowerWarsToday(input: {
   now?: Date;
 }) {
   const bounds = getBusinessDayWindow(input.now);
-  const compiled = compileAuthoritativeEvents({
-    tenantId: input.tenantId,
-    businessDate: bounds.businessDate,
-    candidates: await loadCandidates(
+  const season = rivalrySeasonWindow(bounds.businessDate);
+  const candidates = await loadCandidates(
       input.tenantId,
-      bounds.startUtc,
+      season.startUtc,
       bounds.endExclusiveUtc
-    ),
-  });
+    );
+  const compiled: ReturnType<typeof compileAuthoritativeEvents> = { events: [], exclusions: [] };
+  for (const date of Array.from(new Set(candidates.map(c => zonedYmd(c.occurredAt, bounds.timeZone)))).sort()) {
+    const day = compileAuthoritativeEvents({ tenantId: input.tenantId, businessDate: date,
+      candidates: candidates.filter(c => zonedYmd(c.occurredAt, bounds.timeZone) === date) });
+    compiled.events.push(...day.events); compiled.exclusions.push(...day.exclusions);
+  }
   const state = compileTowerWarsState(compiled.events);
   const [promises, db] = await Promise.all([
     listTowerWarsPromises(input.tenantId),
@@ -404,9 +409,10 @@ export async function getTowerWarsToday(input: {
   return {
     tenantId: input.tenantId,
     businessDate: bounds.businessDate,
+    seasonId: season.seasonId,
     timeZone: bounds.timeZone,
     window: {
-      startUtc: bounds.startUtc.toISOString(),
+      startUtc: season.startUtc.toISOString(),
       endExclusiveUtc: bounds.endExclusiveUtc.toISOString(),
     },
     thresholdCents: TOWER_WARS_ATTACK_THRESHOLD_CENTS,
@@ -451,10 +457,7 @@ export async function getTowerWarsSettlement(input: {
     1,
     input.historyDays ?? TOWER_WARS_SETTLEMENT_HISTORY_DAYS
   );
-  const startUtc = new Date(
-    zonedDayStartUtc(bounds.businessDate, timeZone).getTime() -
-      historyDays * 86_400_000
-  );
+  const startUtc = rivalrySeasonWindow(format(addDays(parseISO(bounds.businessDate), -historyDays), "yyyy-MM-dd")).startUtc;
 
   const db = await getDb();
   if (!db) {
@@ -498,8 +501,9 @@ export async function getTowerWarsSettlement(input: {
     );
   }
 
-  const attacks = Array.from(byBusinessDate.keys()).flatMap(date =>
-    compileTowerWarsState(events.filter(event => event.businessDate === date)).attacks);
+  const seasons = rivalryHistory(events, bounds.businessDate);
+  if (!input.now) await persistSeasonRevisions(input.tenantId, seasons);
+  const attacks = seasons.flatMap(season => season.state.attacks);
   const impacts = input.now ? attacks.map(attack => impactForAttack(attack))
     : await persistCanonicalImpacts(input.tenantId, attacks);
 

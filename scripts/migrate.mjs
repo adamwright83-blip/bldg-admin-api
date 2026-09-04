@@ -712,7 +712,8 @@ await assertRequiredColumns("cleancloud_browser_sync_bindings", ["tenantId", "id
 await assertRequiredColumns("cleancloud_browser_sync_receipts", ["id", "tenantId", "requestId", "digest", "storeId", "importBatchId", "receiptJson", "createdAt"]);
 
 const impactSql = await readFile(new URL("../server/towerWars/impactSchema.sql", import.meta.url), "utf8");
-await runRequired(impactSql, "Tower Wars located impacts");
+for (const statement of impactSql.split(";").map(value => value.trim()).filter(Boolean))
+  await runRequired(statement, "Tower Wars located impacts and seasons");
 await assertRequiredColumns("goldline_tower_impacts", ["id", "tenantId", "payload"]);
 await conn.end();
 console.log("\nMigration complete.");

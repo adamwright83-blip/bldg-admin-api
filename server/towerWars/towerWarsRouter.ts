@@ -12,10 +12,13 @@ import { sandboxFixture, SANDBOX_SCENARIOS } from "@shared/sandboxScenarios";
 import { settleTowerWars } from "@shared/towerWarsSettlement";
 import { isCompletedReplayDate, requireSandboxEnabled, sandboxEnabled } from "./sandboxGate";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../dashboardZoned";
+import { listSeasonRevisions } from "./impactStore";
 
 const buildingId = z.enum(["opus_la", "century_park_east"]);
 
 export const towerWarsRouter = router({
+  seasonRevisions: adminProcedure.input(z.object({ seasonId: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
+    .query(({ ctx, input }) => listSeasonRevisions(ctx.tenantId, input.seasonId)),
   sandboxCapability: adminProcedure.query(() => ({ enabled: sandboxEnabled() })),
   sandbox: adminProcedure.query(() => {
     requireSandboxEnabled();
@@ -59,13 +62,14 @@ export const towerWarsRouter = router({
   settlement: adminProcedure
     .input(
       z
-        .object({ historyDays: z.number().int().min(1).max(3650).optional() })
+        .object({ historyDays: z.number().int().min(1).max(3650).optional(), businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() })
         .optional()
     )
     .query(({ ctx, input }) =>
       getTowerWarsSettlement({
         tenantId: ctx.tenantId,
         historyDays: input?.historyDays,
+        now: input?.businessDate ? zonedDayStartUtc(input.businessDate, getDashboardTimeZone()) : undefined,
       })
     ),
   recordPromise: adminProcedure

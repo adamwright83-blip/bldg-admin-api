@@ -37,7 +37,15 @@
 - Remaining checks: repaired-vs-fresh mounted proof; responsive layout; complete historical projection and weekly integration. Current screenshot also exposes pre-existing scoreboard crowding, to address in weekly side/layout integration.
 - Fixed discovered ISO date-only parser default (`00` vs `0`) while seeding local evidence; no production fixture writes.
 - Isolated browser environment: `goldline_recomposition_20260904` on local MySQL; script `scripts/goldline-wave-local.ts`; port 4188. Source `goldline_daylight` schema read only; no source rows copied or changed.
-- Commit pending; pushed no; deployed no. All descendants held until visual gates complete. Next: Slice 3 weekly rivalry.
+- Commit `2e61ee8`; pushed no; deployed no. All descendants held until visual gates complete.
+
+## Slice 3 — weekly rivalry (implementation and verification in progress)
+
+- Replaced DAILY COMBAT CONTRACT with weekly rivalry; migrated 15 existing settlement tests rather than deleting them. Added four season tests covering Mon/Tue charge, Monday reset, champion stability/draw carry, historical correction and 167/169-hour DST weeks. All 21 season/settlement/impact tests passed.
+- Live service loads Monday-to-current-date authoritative candidates and preserves per-day source deduplication. History compilation produces season-isolated attacks, season IDs on impacts, deterministic prior-champion sides, content-addressed stored season revisions, and read-only revision inspection API. History replay does not invoke persistence.
+- Date input moved under History / Replay. Current-season side determines slot and weapon mirroring; building plates stay unmirrored so signage stays legible. Corrected existing scoreboard transform and cramped centre; evidence HUD now collapsible.
+- Mounted browser: CPE left/challenger, OPUS right/champion, week 2026-08-31, $750 fixture / 15 wounds, no browser errors. Screenshot `/tmp/goldline-wave-weekly-fixed.png`; mobile screenshot captured, review pending.
+- Remaining final checks: all-game integration, repaired-state browser fixture, revision audit UI, production-safe readback. No visual push yet.
 
 ---
 

@@ -1,4 +1,5 @@
 import type { TowerWarsAttackEvent, TowerWarsBuildingId } from "./towerWars";
+import { formatInTimeZone } from "date-fns-tz";
 
 /** Calibrated facade rectangles in percent of the canonical 800x1200 art.
  * Geometry is fictional; these are not coordinates of real building damage. */
@@ -58,7 +59,8 @@ export function repairImpacts(impacts: readonly TowerImpact[], evidence: readonl
   for (const item of [...evidence].sort((a, b) => a.collectedAt.localeCompare(b.collectedAt) || a.orderId.localeCompare(b.orderId))) {
     if (!item.valid || seen.has(item.orderId) || !Number.isFinite(Date.parse(item.collectedAt))) continue;
     seen.add(item.orderId);
-    const impact = result.find(i => i.defenderBuildingId === item.buildingId && i.repairState === "fresh" && Date.parse(i.occurredAt) < Date.parse(item.collectedAt));
+    const impact = result.find(i => i.defenderBuildingId === item.buildingId && i.repairState === "fresh" &&
+      formatInTimeZone(i.occurredAt, "America/Los_Angeles", "yyyy-MM-dd") < formatInTimeZone(item.collectedAt, "America/Los_Angeles", "yyyy-MM-dd"));
     if (impact) { impact.repairState = "repaired"; impact.repairedAt = item.collectedAt; }
   }
   return result;

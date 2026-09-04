@@ -1,54 +1,24 @@
 /**
- * TOWER WARS SETTLEMENT — a legible match today, permanent history underneath.
+ * WEEKLY RIVALRY CONTRACT
  *
- * Tower Wars had no second act. `damageStateForIncomingAttacks` reads a
- * monotonic `incomingAttackCount`, nothing anywhere decays or repairs it, and
- * four attacks reach `critical` permanently. Given real order volume both
- * buildings converge on maximum damage and the visual language stops carrying
- * information.
- *
- * THE DAILY COMBAT CONTRACT
- *
- * Tower Wars is a battle for TODAY. That is a locked rule, and this module
- * implements it exactly:
- *
- *   - today's scoreboard begins at zero;
- *   - each building's attack accumulator begins at zero;
- *   - today's real orders add today's real order value;
- *   - every TOWER_WARS_ATTACK_THRESHOLD_CENTS crossed emits today's attack;
- *   - the remainder exists only inside that business day's match;
- *   - at the next business-day boundary the match and the accumulator reset;
- *   - the completed day's attacks settle into permanent strata;
- *   - the underlying real revenue is never discarded.
- *
- * So each business date is folded INDEPENDENTLY, from a fresh
- * `initialTowerWarsState()`. Yesterday's unspent charge cannot fire today's
- * shot:
- *
- *   Day 1 — $40 of real OPUS revenue. 4000/5000 toward a strike. No attack.
- *   Day 2 — $10 of real OPUS revenue. 1000/5000 toward a strike. No attack,
- *           even though 4000 + 1000 reaches the threshold, because day 2's
- *           accumulator started at zero.
- *
- * Resetting theatrical ammunition does not destroy revenue. The $40 remains
- * authoritative business history and is reported in `lifetime` below — it
- * simply never becomes a projectile in a later day's match. Anything else
- * would make today's spectacle partly caused by yesterday's business and
- * destroy the legibility of TODAY.
- *
- * The invariant that guarantees it: replaying one business date in isolation
- * reproduces exactly that date's attacks and final TODAY damage, regardless of
- * any preceding day's remainder.
+ * Charge carries across civil days within Monday–Sunday Los Angeles seasons,
+ * and resets only at the next Monday boundary. Mon $40 + Tue $10 fires once.
+ * Located impacts preserve each strike, removing the old aggregate saturation
+ * reason for daily resets. Revenue remains authoritative business history.
+ * Closed seasons are revisable projections: late/corrected evidence may change
+ * their winners, never the actual payment timestamps. One season replayed in
+ * isolation yields identical charge, attacks and impact identities. The legacy
+ * `today` field now means current season through the requested business date.
  */
 import {
-  compileTowerWarsState,
   damageStateForIncomingAttacks,
   type TowerDamageState,
   type TowerWarsBuildingId,
   type TowerWarsBusinessEvent,
 } from "./towerWars";
+import { compileRivalrySeason, rivalryHistory, rivalrySeasonId, rivalrySides } from "./towerWarsSeasons";
 
-/** One settled day of history on one building. Never rewritten, never decays. */
+/** Legacy shape retained for history renderers; new strata represent seasons. */
 export type ScarStratum = {
   businessDate: string;
   /** Attacks this building absorbed on that day, in that day's own match. */
@@ -61,11 +31,11 @@ export type TodayMatch = {
   businessDate: string;
   incomingAttacks: number;
   outgoingAttacks: number;
-  /** Reflects TODAY only — this is what makes the live match legible. */
+  /** Derived accessibility summary for the current season. */
   damage: TowerDamageState;
-  /** Charge toward the next strike. Expires at the day boundary by design. */
+  /** Charge toward the next strike. Resets at Monday's season boundary. */
   unspentValueCents: number;
-  /** Real order value booked today. */
+  /** Real order value booked in the season through the requested date. */
   revenueCents: number;
   orderCount: number;
 };
@@ -83,17 +53,20 @@ export type LifetimeRevenue = {
 export type BuildingSettlement = {
   buildingId: TowerWarsBuildingId;
   today: TodayMatch;
-  /** Prior days, oldest first. The building's permanent architectural record. */
+  /** Prior seasons, oldest first. Legacy aggregate history representation. */
   strata: ScarStratum[];
-  /** Total attacks absorbed across all settled days. Only ever grows. */
+  /** Settled attacks; authoritative corrections can revise this projection. */
   settledScars: number;
-  /** Business truth, unaffected by the daily combat reset. */
+  /** Business truth, unaffected by the weekly combat reset. */
   lifetime: LifetimeRevenue;
 };
 
 export type TowerWarsSettlement = {
   businessDate: string;
   buildings: Record<TowerWarsBuildingId, BuildingSettlement>;
+  seasonId: string;
+  sides: [TowerWarsBuildingId, TowerWarsBuildingId];
+  seasons: ReturnType<typeof rivalryHistory>;
 };
 
 const BUILDING_IDS: TowerWarsBuildingId[] = ["opus_la", "century_park_east"];
@@ -111,20 +84,14 @@ function emptyToday(businessDate: string): TodayMatch {
 }
 
 /**
- * Compile ONE business day's match in isolation, from a zero accumulator.
- *
- * This is the unit the whole contract rests on: it takes only that day's
- * events, so there is no parameter through which a previous day's remainder
- * could reach it.
+ * Compatibility export: a historical day is a view into its rivalry season.
+ * The accumulator starts at that season's Monday, not at the selected day.
  */
 export function compileDailyMatch(input: {
   businessDate: string;
   events: readonly TowerWarsBusinessEvent[];
 }): Record<TowerWarsBuildingId, TodayMatch> {
-  const sameDay = input.events.filter(
-    event => event.businessDate === input.businessDate
-  );
-  const state = compileTowerWarsState(sameDay);
+  const state = compileRivalrySeason(input.events, input.businessDate).state;
   const result = {} as Record<TowerWarsBuildingId, TodayMatch>;
   for (const buildingId of BUILDING_IDS) {
     const building = state.buildings[buildingId];
@@ -164,26 +131,27 @@ export function settleTowerWars(input: {
 
   const byDate = new Map<string, TowerWarsBusinessEvent[]>();
   for (const event of inRange) {
-    const bucket = byDate.get(event.businessDate);
+    const seasonId = rivalrySeasonId(event.businessDate);
+    const bucket = byDate.get(seasonId);
     if (bucket) bucket.push(event);
-    else byDate.set(event.businessDate, [event]);
+    else byDate.set(seasonId, [event]);
   }
 
   const settledDates = Array.from(byDate.keys())
-    .filter(date => date < input.todayBusinessDate)
+    .filter(date => date < rivalrySeasonId(input.todayBusinessDate))
     .sort();
 
-  // Each day compiled independently, from a zero accumulator.
+  // Each season compiled independently, from a zero accumulator.
   const matchesByDate = new Map<string, Record<TowerWarsBuildingId, TodayMatch>>();
   for (const [businessDate, events] of Array.from(byDate.entries())) {
     matchesByDate.set(
       businessDate,
-      compileDailyMatch({ businessDate, events })
+      compileDailyMatch({ businessDate: events.reduce((date, event) => event.businessDate > date ? event.businessDate : date, businessDate), events })
     );
   }
 
   const todayMatches =
-    matchesByDate.get(input.todayBusinessDate) ??
+    matchesByDate.get(rivalrySeasonId(input.todayBusinessDate)) ??
     ({
       opus_la: emptyToday(input.todayBusinessDate),
       century_park_east: emptyToday(input.todayBusinessDate),
@@ -223,7 +191,10 @@ export function settleTowerWars(input: {
     };
   }
 
-  return { businessDate: input.todayBusinessDate, buildings };
+  return { businessDate: input.todayBusinessDate, buildings,
+    seasonId: rivalrySeasonId(input.todayBusinessDate),
+    sides: rivalrySides(inRange, input.todayBusinessDate),
+    seasons: rivalryHistory(inRange, input.todayBusinessDate) };
 }
 
 /**

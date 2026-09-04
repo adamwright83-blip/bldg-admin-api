@@ -1566,3 +1566,31 @@
   font-style: italic;
   font-weight: 650;
 }
+body .tw-arena:not(.tw-arriving) .tw-scoreboard { transform: translateX(-50%); }
+.tw-arena .tw-piece[data-side="left"] { left: 3%; right: auto; width: 44%; height: 72%; }
+.tw-arena .tw-piece[data-side="right"] { right: 3%; left: auto; width: 44%; height: 72%; }
+.tw-piece.is-century[data-side="left"] .cb-weapon,
+.tw-piece.is-opus[data-side="right"] .cb-weapon { transform: scaleX(-1); }
+.tw-piece[data-side="left"] { --tw-flight-x: 40vw; }
+.tw-piece[data-side="right"] { --tw-flight-x: -40vw; }
+.tw-piece.is-firing[data-side] .tw-projectile[data-weapon="car"] { animation-name: tw-side-flight; }
+.tw-piece.is-century[data-side="left"] .tw-projectile::before { transform: scaleX(-1); }
+@keyframes tw-side-flight {
+  0% { opacity: 1; transform: translate(0,0) rotate(0deg); }
+  85% { opacity: 1; transform: translate(var(--tw-flight-x),8vh) rotate(8deg); }
+  100% { opacity: 0; transform: translate(var(--tw-flight-x),8vh) scale(1.25); }
+}
+@media(max-width:800px) {
+  .tw-arena .tw-piece[data-side="left"] { left: -3%; width: 53%; height: 62%; }
+  .tw-arena .tw-piece[data-side="right"] { right: -3%; width: 53%; height: 62%; }
+}
+@media(prefers-reduced-motion:reduce) { .tw-piece.is-firing[data-side] .tw-projectile[data-weapon="car"] { animation: none; } }
+body .tw-scoreboard { width: min(760px,94%); grid-template-columns: minmax(0,1fr) minmax(120px,.7fr) minmax(0,1fr); }
+body .tw-scoreboard .tw-versus { clip-path: none; padding: 10px 4px; }
+body .tw-scoreboard .tw-versus b { font-size: 17px; line-height: 1.2; }
+body .tw-scoreboard .tw-versus em { font-size: 10px; line-height: 1.4; white-space: normal; }
+body .tw-scoreboard .tw-versus span { font-size: 10px; }
+body .tw-scoreboard .tw-score-you, body .tw-scoreboard .tw-score-rival { display:flex; flex-direction:column; gap:4px; align-items:stretch; padding:12px; }
+body .tw-scoreboard .tw-score-you strong, body .tw-scoreboard .tw-score-rival strong { font-size:24px; }
+body .tw-truth-hud:not([open]) { width:auto; padding:10px 14px; }
+body .tw-truth-hud summary { cursor:pointer; font-size:11px; color:#fff; }

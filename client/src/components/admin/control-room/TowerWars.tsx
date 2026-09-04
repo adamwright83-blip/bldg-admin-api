@@ -56,14 +56,8 @@ type Contributor = {
   events: Array<{ occurredAt: string }>;
 };
 
-/**
- * Fixed battlefield order. OPUS always holds the left slot and Century Park East the
- * right, because their weapons face each other: OPUS strikes left-to-right, CPE
- * right-to-left. Roles (YOU / RIVAL / leader) are badges and colour only — if role
- * drove the slot, a lead change would make a building physically swap sides and
- * change height, which it previously did.
- */
-const ARENA_ORDER: TowerWarsBuildingId[] = ["opus_la", "century_park_east"];
+/** Initial rivalry canon: CPE challenges OPUS. Prior closed seasons override. */
+const INITIAL_SIDES: [TowerWarsBuildingId, TowerWarsBuildingId] = ["century_park_east", "opus_la"];
 
 const NAMES: Record<TowerWarsBuildingId, string> = {
   opus_la: "OPUS LA",
@@ -167,11 +161,13 @@ function useReplay(data: TowerWarsData | undefined) {
 export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
   const [businessDate, setBusinessDate] = useState("");
   return <>
-    <section aria-label="Battle date" style={{ background: "#fff9e9", color: "#173d47", padding: "64px 20px 20px", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+    <details style={{ background: "#fff9e9", color: "#173d47", padding: "18px 20px" }}><summary>History / Replay</summary>
+    <section aria-label="Battle date" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
       <label style={{ display: "grid", gap: 8, fontWeight: 700 }}>View sales by payment day <input style={{ background: "#fff", color: "#173d47", colorScheme: "light", border: "2px solid #987321", borderRadius: 8, padding: 10, minHeight: 44, fontSize: 16 }} aria-label="Battle payment date" type="date" value={businessDate} onChange={event => setBusinessDate(event.target.value)} /></label>
       <button style={{ background: "#f7cf68", color: "#173d47", borderRadius: 8, padding: "12px 20px", minHeight: 44, fontWeight: 700 }} type="button" onClick={() => setBusinessDate("")}>Today</button>
-      <span>{businessDate ? "Historical battle · real sales, not new revenue. Press Replay selected day to watch." : "Today's totals exclude earlier payments. Select their payment date to see imported sales and residents."}</span>
+      <span>{businessDate ? "Historical season through selected day · replay creates no revenue." : "Live weekly rivalry · charge carries through Sunday. No date selection needed."}</span>
     </section>
+    </details>
     <TowerWarsDay key={businessDate || "today"} onNavigate={onNavigate} compact={compact} businessDate={businessDate} />
   </>;
 }
@@ -200,7 +196,7 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
     staleTime: 60_000,
   });
   const settlementQuery = trpc.system.towerWars.settlement.useQuery(
-    undefined,
+    businessDate ? { businessDate } : undefined,
     { staleTime: 30_000, refetchInterval: 30_000 }
   );
   // Tower Wars was the only admin surface that never polled, so a new order never
@@ -406,13 +402,8 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
   );
   const hasLoser = comparison.kind === "lead";
 
-  const youId: TowerWarsBuildingId = hasLoser
-    ? comparison.leaderIndex === 0
-      ? "century_park_east"
-      : "opus_la"
-    : "opus_la";
-  const rivalId: TowerWarsBuildingId =
-    youId === "opus_la" ? "century_park_east" : "opus_la";
+  const arenaOrder = settlementQuery.data?.settlement.sides ?? INITIAL_SIDES;
+  const [youId, rivalId] = arenaOrder;
   const you = state.buildings[youId];
   const rival = state.buildings[rivalId];
   const openPromises = businessDate ? [] : data.promises.filter(promise => !promise.fulfilledAt);
@@ -462,33 +453,33 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
           <div className="tw-score-you">
             <span>{NAMES[youId]}</span>
             <small>
-              {hasLoser ? "You · comeback building" : "Tie · no loser assigned"}
+              Challenger · comeback side
             </small>
             <strong>{money(you.revenueCents)}</strong>
           </div>
           <div className="tw-versus">
-            <b>{businessDate ? "HISTORY" : "TODAY"}</b>
+            <b>{businessDate ? "HISTORY" : "THIS WEEK"}</b>
             <span>
               {comparison.kind === "lead"
-                ? `Trailing by ${money(comparison.delta)}`
+                ? `${you.revenueCents > rival.revenueCents ? "Leading" : "Trailing"} by ${money(comparison.delta)}`
                 : comparison.kind === "even"
                   ? "Even"
                   : "Awaiting first order"}
             </span>
             <em>
-              {data.businessDate} · {data.timeZone}
+              Week of {data.seasonId} · Los Angeles
             </em>
           </div>
           <div className="tw-score-rival">
             <span>{NAMES[rivalId]}</span>
-            <small>{hasLoser ? "Current rival" : "Comparison building"}</small>
+            <small>Defending champion</small>
             <strong>{money(rival.revenueCents)}</strong>
           </div>
         </header>
         <h1 id="tower-wars-title" className="sr-only">
-          Tower Wars Today
+          Tower Wars Weekly Rivalry
         </h1>
-        {ARENA_ORDER.map(buildingId => {
+        {arenaOrder.map((buildingId, side) => {
           const building = state.buildings[buildingId];
           return (
             <div
@@ -500,11 +491,12 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
                 isArriving && buildingId === enteredFor ? "is-inbound" : ""
               } ${buildingId === youId ? "tw-piece-you" : "tw-piece-rival"} ${buildingId === "opus_la" ? "is-opus" : "is-century"} ${replay.activeAttack === buildingId || (activeSpectacle?.phase === "discharge" && liveSpectacleEvent?.buildingId === buildingId) ? "is-firing" : ""} ${activeSpectacle?.phase === "revenue" && liveSpectacleEvent?.buildingId === buildingId ? "is-revenue-arriving" : ""}`}
               data-damage={building.damage}
+              data-side={side === 0 ? "left" : "right"}
             >
               <span
                 className={`tw-possession ${buildingId === youId ? "" : "is-rival"}`}
               >
-                {hasLoser ? (buildingId === youId ? "You" : "Rival") : "Tie"}
+                {side === 0 ? "Challenger" : "Champion"}
               </span>
               <BuildingArt
                 buildingId={buildingId}
@@ -562,7 +554,8 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
             </div>
           );
         })}
-        <aside className="tw-truth-hud">
+        <details className="tw-truth-hud">
+          <summary>Battle evidence / replay</summary>
           <span>
             <i />{" "}
             {replay.mode === "live"
@@ -576,7 +569,7 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
           </p>
           <div className="tw-source-breakdown">
             <span>
-              <small>{businessDate ? "Orders this day" : "Orders today"}</small>
+              <small>Orders this season</small>
               <strong>{you.orderCount}</strong>
             </span>
             <span>
@@ -607,7 +600,7 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
           </div>
           <div className="tw-replay-controls">
             <button type="button" onClick={replay.restart}>
-              <RotateCcw /> {businessDate ? "Replay selected day" : "Replay Today"}
+              <RotateCcw /> {businessDate ? "Replay season through selected day" : "Replay this season"}
             </button>
             {replay.mode !== "live" ? (
               <button type="button" onClick={replay.toggle}>
@@ -616,7 +609,7 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
               </button>
             ) : null}
           </div>
-        </aside>
+        </details>
       </section>
       <section className="tw-actions" aria-label="Comeback actions">
         {actionDefinitions.map(action => {
@@ -680,7 +673,7 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
       <section className="tw-contributors">
         <header>
           <div>
-            <span>Who built this tower today?</span>
+            <span>Who powered this season?</span>
             <h2>{NAMES[youId]} contributors</h2>
           </div>
           <button type="button" onClick={() => onNavigate("/customers")}>
@@ -736,8 +729,8 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
           <span>Current possession</span>
           <strong>
             {hasLoser
-              ? `${NAMES[youId]} is YOU because it is losing today.`
-              : "Today is tied. No building is assigned YOU."}
+              ? `${NAMES[youId]} challenges the prior season's champion. Current revenue does not change sides.`
+              : "Tied revenue; champion and challenger retain their season sides."}
           </strong>
         </div>
         <div>
@@ -749,7 +742,7 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
         </div>
         <div>
           <span>Combat input</span>
-          <strong>{money(you.revenueCents)} real order value today</strong>
+          <strong>{money(you.revenueCents)} real order value this season</strong>
         </div>
         <button
           type="button"
