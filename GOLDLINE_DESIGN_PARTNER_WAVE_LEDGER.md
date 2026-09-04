@@ -39,3 +39,6 @@ Renderer-independent deterministic local graph and separate WATER_LAND registry/
 
 ## Slice 4 — customer import
 CSV preview reuses existing parser and normalized tenant import spine. Stable identity hashes deduplicate repeated data through existing unique keys; no second customer database. Tolerant headers, quoted fields, incomplete rows retained for review; no map placement without geocoding. Explicit preview/import/skip UI. Three focused tests pass. Screenshot import is not reused because no equally safe general customer adapter was identified. End-to-end persistence/geocoding proof pending.
+
+## Slice 5 — first mission
+Durable primary Territory Scout compiled from interpreted objective/avoidance and canonical local geocode, with existing Guardian roster. Uses real GoldlineOverworld traversal callback and GuardianEncounter runtime. Atomic tenant-locked evidence write + session update; gameplay traversal does not create evidence, report requires explicit presence attestation, GPS remains context, Guardian defeat remains game_projection and requires saved report. Completion persists across day boundaries. No synthetic customer/contact/order. Full loop browser/DB proof pending; deployment not yet claimed.

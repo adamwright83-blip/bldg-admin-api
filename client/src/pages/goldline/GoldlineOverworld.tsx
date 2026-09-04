@@ -68,6 +68,8 @@ export default function GoldlineOverworld({
   onEnterWayward,
   onResolveOrder,
   suppressCampaignChrome = false,
+  onFirstMissionTraversal,
+  briefingLabel,
 }: {
   pickups?: Order[];
   deliveries?: Order[];
@@ -91,6 +93,8 @@ export default function GoldlineOverworld({
     status: "collected" | "delivered"
   ) => Promise<boolean>;
   suppressCampaignChrome?: boolean;
+  onFirstMissionTraversal?: (traversalId: string) => void;
+  briefingLabel?: string;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<GoldlineOverworldRuntime | null>(null);
@@ -155,12 +159,14 @@ export default function GoldlineOverworld({
             sessionId,
             properties: { sessionId, corridorId: "overworld-first-movement" },
           }),
-        onTraversalComplete: traversalId =>
+        onTraversalComplete: traversalId => {
+          onFirstMissionTraversal?.(traversalId);
           onEmitEvent?.({
             eventName: "corridor_transition_completed",
             sessionId,
             properties: { sessionId, corridorId: traversalId },
-          }),
+          });
+        },
       },
     })
       .then(created => {
@@ -399,7 +405,7 @@ export default function GoldlineOverworld({
                 className="overworld-briefing-open"
                 onClick={onOpenDayBriefing}
               >
-                READ TODAY&apos;S BRIEFING
+                {briefingLabel ?? "READ TODAY’S BRIEFING"}
               </button>
             ) : null}
           </div>

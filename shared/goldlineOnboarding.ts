@@ -19,7 +19,7 @@ export const businessProfileSchema = z.object({
 export type GoldlineBusinessProfile = z.infer<typeof businessProfileSchema>;
 export type WorldAnchor = { id: string; label: string; latitude: number; longitude: number; provenance: "geocoded_declaration" | "imported_evidence" | "operator_reported"; evidenceId: string | null };
 export type LocalTopology = { id: string; revision: number; mode: "LOCAL_PHYSICAL"; label: string; classification: "game_projection"; territories: { id: string; label: string; anchorIds: string[] }[]; adjacency: [string, string][]; anchors: WorldAnchor[] };
-export type FirstMission = { id: string; archetype: "TERRITORY_SCOUT"; title: string; objective: string; avoidance: string; guardianId: string; territoryId: string; checkpoint: WorldAnchor; status: "active" | "completed"; outcome: { text: string; reportedAt: string; actorId: string; provenance: "operator_reported"; gps: { latitude: number; longitude: number; accuracy: number } | null } | null; gameplayCompletedAt: string | null };
+export type FirstMission = { id: string; archetype: "TERRITORY_SCOUT"; title: string; objective: string; avoidance: string; guardianId: string; territoryId: string; checkpoint: WorldAnchor; status: "active" | "completed"; outcome: { text: string; reportedAt: string; actorId: string; provenance: "operator_reported"; gps: { latitude: number; longitude: number; accuracy: number } | null } | null; traversalCompletedAt: string | null; gameplayCompletedAt: string | null };
 export type GoldlineOnboardingSession = {
   id: string; tenantId: string; status: "INTERVIEW" | "READY" | "COMPLETE";
   currentQuestion: number; answers: string[]; interpretation: { provenance: "ai_interpretation"; model: string; profile: GoldlineBusinessProfile } | null;

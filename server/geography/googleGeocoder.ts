@@ -8,6 +8,7 @@ export type GeocodeResult =
       longitude: number;
       googlePlaceId: string | null;
       provider: "google_geocoding";
+      extentKm?: number;
     }
   | { status: "unconfigured" }
   | { status: "ambiguous"; error: string }
@@ -21,7 +22,7 @@ type GoogleBody = {
     formatted_address?: string;
     place_id?: string;
     partial_match?: boolean;
-    geometry?: { location?: { lat?: number; lng?: number } };
+    geometry?: { location?: { lat?: number; lng?: number }; viewport?: { northeast: {lat:number;lng:number}; southwest:{lat:number;lng:number} } };
   }>;
 };
 
@@ -93,6 +94,7 @@ export class GoogleGeocoder {
           longitude: location.lng,
           googlePlaceId: result.place_id ?? null,
           provider: "google_geocoding",
+          ...(result.geometry?.viewport ? { extentKm: Math.hypot((result.geometry.viewport.northeast.lat-result.geometry.viewport.southwest.lat)*111,(result.geometry.viewport.northeast.lng-result.geometry.viewport.southwest.lng)*111*Math.cos(location.lat*Math.PI/180)) } : {}),
         };
       } catch (error) {
         lastError = safeError(error);

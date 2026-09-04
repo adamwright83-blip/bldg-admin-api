@@ -1,3 +1,5 @@
+import { trpc } from "@/lib/trpc";
+import { FirstMissionDriver } from "@/components/goldline/onboarding/FirstMissionDriver";
 import { Loader2 } from "lucide-react";
 import { lazy, Suspense } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -89,6 +91,7 @@ export default function Driver() {
 
 function AuthenticatedDriver() {
   const { loading: authLoading, isAuthenticated } = useAuth();
+  const firstWorld=trpc.system.goldlineOnboarding.state.useQuery(undefined,{enabled:isAuthenticated,retry:false});
   if (authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
@@ -117,5 +120,6 @@ function AuthenticatedDriver() {
     );
   }
 
+  if (firstWorld.data?.session?.mission && firstWorld.data.session.status === "COMPLETE") return <FirstMissionDriver session={firstWorld.data.session} />;
   return <GoldlineDriverController />;
 }
