@@ -124,12 +124,13 @@ export async function prepareSource(range) {
     if (!dateInput) throw new Error("Date picker changed.");
     dateInput.focus();
     dateInput.click();
-    stage = "locating the open date calendar (build 0.1.1)";
+    stage = "locating the open date calendar (build 0.1.2)";
     // The picker can be portalled outside the report container. Match its
     // input-derived calendar ID, and require exactly one visible instance.
+    const calendarId = dateInput.id.replace(/-input$/, "") + "-picker-container-DatePicker";
     const picker = await wait(() => {
       const calendars = [...document.querySelectorAll(".datetimepicker")].filter(e =>
-        visible(e) && e.querySelector(`[id="${dateInput.id}-picker-container-DatePicker"]`)
+        visible(e) && [...e.querySelectorAll("[id]")].some(node => node.id === calendarId)
       );
       return calendars.length === 1 ? calendars[0] : null;
     });
@@ -148,7 +149,7 @@ export async function prepareSource(range) {
       "December",
     ];
     async function pickDate(iso) {
-      stage = `selecting ${iso} (build 0.1.1)`;
+      stage = `selecting ${iso} (build 0.1.2)`;
       const [year, month, day] = iso.split("-").map(Number);
       for (let i = 0; i < 25; i++) {
         const labels = await wait(() => {
@@ -189,7 +190,7 @@ export async function prepareSource(range) {
     }
     await pickDate(range.from);
     await pickDate(range.to);
-    stage = `confirming ${range.from} through ${range.to} (build 0.1.1)`;
+    stage = `confirming ${range.from} through ${range.to} (build 0.1.2)`;
     const expected = iso => {
       const [y, m, d] = iso.split("-").map(Number);
       return `${monthNames[m - 1].slice(0, 3)} ${d}, ${y}`;

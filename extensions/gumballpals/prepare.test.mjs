@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { prepareSource } from "./browser.js";
+import { runInNewContext } from "node:vm";
+
+test("actual calendar ID derivation matches the observed date picker", () => {
+  const declaration = prepareSource.toString().match(/const calendarId = [^;]+;/)?.[0];
+  assert.ok(declaration);
+  assert.equal(runInNewContext(`${declaration} calendarId`, { dateInput: { id: "undefined-input" } }), "undefined-picker-container-DatePicker");
+});
 
 test("report navigation can replace the metrics root before controls load", async () => {
   const keys = ["location", "document", "getComputedStyle", "MouseEvent"];
