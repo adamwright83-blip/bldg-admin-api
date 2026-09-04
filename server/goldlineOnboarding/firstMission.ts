@@ -10,7 +10,7 @@ import { onboardingDb, readSession, resultRows, saveSession } from "./store";
 
 export function buildFirstMission(session:GoldlineOnboardingSession,checkpoint:WorldAnchor,territoryId:string):FirstMission {
  const profile=session.interpretation!.profile;
- return {id:`first-${session.id}`,archetype:"TERRITORY_SCOUT",title:`Scout ${checkpoint.label}`,objective:`Visit a publicly accessible spot near ${checkpoint.label}. Look for one concrete next step toward: ${profile.objective90Day}. Record what you actually observed, including if nothing useful happened.`,avoidance:profile.avoidancePattern,guardianId:GUARDIAN_ROSTER_IDS[stableHash(profile.avoidancePattern)%GUARDIAN_ROSTER_IDS.length],territoryId,checkpoint,status:"active",outcome:null,traversalCompletedAt:null,gameplayCompletedAt:null};
+ return {id:`first-${session.id}`,archetype:"TERRITORY_SCOUT",title:`Scout ${checkpoint.label}`,objective:`Visit a publicly accessible spot near ${checkpoint.label}. Look for one concrete next step toward: ${profile.objective90Day.replace(/\s*[.!?]+\s*$/,"")}. Record what you actually observed, including if nothing useful happened.`,avoidance:profile.avoidancePattern,guardianId:GUARDIAN_ROSTER_IDS[stableHash(profile.avoidancePattern)%GUARDIAN_ROSTER_IDS.length],territoryId,checkpoint,status:"active",outcome:null,traversalCompletedAt:null,gameplayCompletedAt:null};
 }
 export async function importedCustomers(tenantId:string){const db=await onboardingDb();return db.select().from(dayforgeSaasExternalCustomers).where(and(eq(dayforgeSaasExternalCustomers.tenantId,tenantId),eq(dayforgeSaasExternalCustomers.providerKey,"goldline_customer_csv")));}
 export async function revealWorld(tenantId:string){

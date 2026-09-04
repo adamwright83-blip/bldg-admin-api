@@ -63,7 +63,10 @@ describe("Persona A — laundry route operator with imported customers", () => {
     const mission = buildFirstMission(sessionFor("persona-a-la-route", p), anchors[0], territoryId);
     expect(mission.archetype).toBe("TERRITORY_SCOUT");
     expect(mission.status).toBe("active");
-    expect(mission.objective).toContain("Win two more luxury multifamily buildings.");
+    // The objective is spliced into a sentence, so its own trailing stop is
+    // dropped rather than rendering "…buildings.. Record what you observed".
+    expect(mission.objective).toContain("toward: Win two more luxury multifamily buildings. Record");
+    expect(mission.objective).not.toContain("..");
     expect(mission.avoidance).toBe("Walking into unfamiliar leasing and property offices.");
     expect(mission.guardianId).toBeTruthy();
     // A freshly generated mission is unresolved but present — never "no active mission".
@@ -135,7 +138,7 @@ describe("Persona B — Phoenix operator with no customer upload", () => {
 
   it("still generates a playable scout mission from the declared area alone", () => {
     const mission = buildFirstMission(sessionFor("phoenix-plumb", p), anchors[0], phoenix.territories[0].id);
-    expect(mission.objective).toContain("Get steady work in two new suburbs.");
+    expect(mission.objective).toContain("toward: Get steady work in two new suburbs. Record");
     expect(mission.checkpoint.label).toBe("Phoenix, AZ, USA");
   });
 });
