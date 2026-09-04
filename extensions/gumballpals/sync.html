@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Gumballpals</title>
+    <link rel="stylesheet" href="sync.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">GOLDLINE · BROWSER CONNECTION</p>
+        <h1>Your real work.<br />Your living city.</h1>
+        <p>
+          Bring Laundry Farm orders into Goldline. Your gumball login stays
+          in Chrome.
+        </p>
+      </header>
+      <section aria-labelledby="connection-title">
+        <h2 id="connection-title">Sync gumball</h2>
+        <p id="connection">
+          Connect to your signed-in gumball and Goldline accounts.
+        </p>
+        <div class="dates">
+          <label>From <input id="from" type="date" required /></label
+          ><label>Through <input id="to" type="date" required /></label>
+        </div>
+        <p class="hint">
+          Dates use Los Angeles time. Up to 32 days per run. Re-running a period
+          updates matching orders—it does not add duplicate revenue.
+        </p>
+        <button id="start">Connect and prepare sync</button
+        ><button id="cancel" class="secondary" hidden>
+          Cancel before import
+        </button>
+        <div id="approval" hidden>
+          <h3>Confirm the connection</h3>
+          <p id="pair-details"></p>
+          <p>
+            This imports order/customer/payment records into the account shown
+            above. It does not charge customers, edit gumball orders, or send
+            messages.
+          </p>
+          <button id="confirm">Confirm connection and import</button>
+        </div>
+        <p id="status" role="status" aria-live="polite">Ready when you are.</p>
+        <button id="check" class="secondary" hidden>
+          Check interrupted import
+        </button>
+      </section>
+      <section id="receipt" hidden aria-labelledby="receipt-title">
+        <h2 id="receipt-title">Sync receipt</h2>
+        <p id="receipt-summary"></p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Building</th>
+                <th>Payment date</th>
+                <th>Paid orders</th>
+                <th>Amount</th>
+              </tr>
+            </thead>
+            <tbody id="totals"></tbody>
+          </table>
+        </div>
+        <p id="receipt-scope" class="hint"></p>
+        <p id="receipt-time"></p>
+        <a
+          href="https://admin.bldg.chat/growth/tower-wars"
+          target="_blank"
+          rel="noopener"
+          >Open Tower Wars</a
+        >
+        ·
+        <a
+          href="https://admin.bldg.chat/growth/lantern-city"
+          target="_blank"
+          rel="noopener"
+          >Open Lantern City</a
+        >
+      </section>
+      <footer>
+        Keep this tab open while syncing. A normal gumball report download
+        may remain in Chrome; you never need to upload or manage it. No
+        background sync. No paid gumball API.
+        <button id="disconnect" class="secondary">
+          Disconnect this browser
+        </button>
+      </footer>
+    </main>
+    <script type="module" src="sync.js"></script>
+  </body>
+</html>
