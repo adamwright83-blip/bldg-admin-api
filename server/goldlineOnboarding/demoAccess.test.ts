@@ -140,3 +140,20 @@ describe("production migration creates what the first mission writes to", () => 
       expect(statement).toContain("CREATE TABLE IF NOT EXISTS");
   });
 });
+
+describe("the geocodable anchor covers the whole service area", () => {
+  const interpreter = repo("server", "goldlineOnboarding", "interpreter.ts");
+  const mission = repo("server", "goldlineOnboarding", "firstMission.ts");
+
+  it("asks for one resolvable place that contains every area described", () => {
+    expect(interpreter).toContain("geocodableServiceArea must be ONE concise place name");
+    expect(interpreter).toContain("never a sentence, never a list of places, never a street address or business name");
+    expect(interpreter).toContain("SMALLEST single place that CONTAINS all of them");
+    // The operator's own fuller wording is preserved separately.
+    expect(interpreter).toContain("localServiceAreaDescription stays the operator's own fuller description");
+  });
+
+  it("geocodes the resolvable name, not the prose, and tolerates older sessions", () => {
+    expect(mission).toContain("profile.geocodableServiceArea?.trim()||profile.localServiceAreaDescription");
+  });
+});
