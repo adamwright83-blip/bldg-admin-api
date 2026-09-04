@@ -8,6 +8,18 @@ import type { GoldlineWorldEvent } from "../../shared/goldlineWorld";
 import { classificationIsTruthful } from "../../shared/goldlineWorld";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
+import { latestEconomicSnapshots } from "../../shared/goldlineEconomicProjection";
+
+/** Include unresolved bindings: a paid order is real without a guessed place. */
+export async function listCurrentEconomicReceipts(tenantId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(goldlineWorldEvents).where(and(
+    eq(goldlineWorldEvents.tenantId, tenantId), eq(goldlineWorldEvents.sourceType, "gumball")
+  ));
+  return latestEconomicSnapshots(rows.map(toEvent)).sort((a, b) =>
+    (b.observedAt ?? b.occurredAt).localeCompare(a.observedAt ?? a.occurredAt) || b.id.localeCompare(a.id)).slice(0, 20);
+}
 
 export type AppendGoldlineWorldEvent = Omit<GoldlineWorldEvent, "id"> & {
   id?: string;

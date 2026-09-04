@@ -242,7 +242,7 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     const testWindow = window as typeof window & {
       __goldlineOverworldTest?: {
         getState: () => unknown;
-        runRoute: (points: OverworldPoint[]) => unknown;
+        runRoute: (points: (OverworldPoint & { traversalId?: string })[]) => unknown;
         teleport: (point: OverworldPoint) => unknown;
       };
     };
@@ -286,6 +286,15 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
             break;
           }
           reached.push(target);
+          if (target.traversalId) {
+            const node = this.map.traversals.find(item => item.id === target.traversalId);
+            const landing = node?.path.at(-1);
+            if (!node || !landing || distance(this.position, node.entry) > node.entryRadius || !isWalkable(this.map, landing, node.landingRadius ?? PLAYER_RADIUS)) {
+              failures.push({ target, position: { ...this.position } }); break;
+            }
+            this.activeTraversal = { node, segment: 0, elapsed: 0, from: { ...this.position } };
+            for (let frame = 0; this.activeTraversal && frame < 1200; frame++) this.stepTraversal(1 / 60);
+          }
         }
         this.input = { x: 0, y: 0 };
         this.velocity = { x: 0, y: 0 };
@@ -831,7 +840,7 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
               ? 0.55
               : 0.2;
       const label = marker.getChildByLabel("destination-label");
-      if (label) label.visible = near || availability === "active";
+      if (label) label.visible = this.map.traversals.find(item => item.id === destination.traversalId)?.kind === "linehook" ? near : near || availability === "active";
     }
   }
 
@@ -1030,6 +1039,7 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
   }
 
   saveNow = () => {
+    if (this.activeTraversal) return; // Never persist an unsupported mid-air checkpoint.
     const surfaceId = surfaceAtPoint(this.map, this.position);
     if (!surfaceId) return;
     this.callbacks.onCheckpoint({

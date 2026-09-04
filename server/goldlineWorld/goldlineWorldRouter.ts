@@ -8,6 +8,7 @@ import {
 } from "../_core/trpc";
 import {
   listEntityChronicle,
+  listCurrentEconomicReceipts,
   listUnpresentedCelebrationEvents,
   recordGoldlineEventReceipt,
 } from "./worldEventStore";
@@ -27,6 +28,7 @@ import {
 import { resetProofWorldFromApi } from "./goldlineProofWorld";
 
 export const goldlineWorldRouter = router({
+  economicReceipts: dayforgeTenantOperatorProcedure.query(({ ctx }) => listCurrentEconomicReceipts(ctx.tenantId)),
   cityEntities: dayforgeTenantOperatorProcedure.query(({ ctx }) => listCityWorldEntities({ tenantId: ctx.tenantId })),
   unpresentedCelebrations: dayforgeMissionFieldProcedure
     .input(z.object({ limit: z.number().int().min(1).max(50).default(20) }).optional())

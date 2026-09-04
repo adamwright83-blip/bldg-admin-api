@@ -13,7 +13,8 @@
  * back-filled from a neighbour.
  */
 
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { latestEconomicSnapshots } from "../../shared/goldlineEconomicProjection";
 import {
   goldlineWorldEvents,
   physicalEntities,
@@ -137,7 +138,7 @@ export async function listCityWorldEntities(input: {
         .where(
           and(
             eq(goldlineWorldEvents.tenantId, input.tenantId),
-            inArray(goldlineWorldEvents.physicalEntityId, ids)
+            or(inArray(goldlineWorldEvents.physicalEntityId, ids), eq(goldlineWorldEvents.sourceType, "gumball"))
           )
         )
         .orderBy(asc(goldlineWorldEvents.occurredAt)),
@@ -194,13 +195,17 @@ export async function listCityWorldEntities(input: {
     geography.pursued.map(item => [String(item.accountId), item])
   );
 
+  // Resolve revisions tenant-wide BEFORE binding to buildings. A corrected
+  // building (including unresolved/null) must revoke the former projection.
+  const chronicle = eventRows.map(eventFromRow);
+  const latestEconomic = latestEconomicSnapshots(chronicle);
+  const projectedEvents = [...chronicle.filter(event => !["order_paid", "order_payment_corrected"].includes(event.eventType) || typeof event.metadata.economicKey !== "string"), ...latestEconomic]
+    .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
   return entities.map(entity => {
     const entityBindings = bindings.filter(
       binding => binding.physicalEntityId === entity.id
     );
-    const events = eventRows
-      .filter(event => event.physicalEntityId === entity.id)
-      .map(eventFromRow);
+    const events = projectedEvents.filter(event => event.physicalEntityId === entity.id);
     const entityEvidence = evidence.filter(
       item => item.physicalEntityId === entity.id
     );

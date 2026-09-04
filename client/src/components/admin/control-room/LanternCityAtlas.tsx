@@ -1,4 +1,5 @@
 import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { EconomicWorldReaction } from "@/components/goldline/EconomicWorldReaction";
 import { MapPinOff, RefreshCw, Search, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { WorldGeographySurface } from "./WorldGeographySurface";
@@ -164,9 +165,9 @@ export default function LanternCityAtlas({
   >(null);
 
   const atlas = trpc.system.geographicTruth.atlas.useQuery(undefined, {
-    staleTime: 30_000,
+    staleTime: 30_000, refetchInterval: 15_000,
   });
-  const cityWorld = trpc.system.goldlineWorld.cityEntities.useQuery(undefined, { staleTime: 15_000 });
+  const cityWorld = trpc.system.goldlineWorld.cityEntities.useQuery(undefined, { staleTime: 5_000, refetchInterval: 5_000 });
   const geocode = trpc.system.geographicTruth.geocodePending.useMutation({
     onSuccess: () => atlas.refetch(),
   });
@@ -628,6 +629,7 @@ export default function LanternCityAtlas({
               </span>
             </div>
           ) : null}
+          <EconomicWorldReaction entities={cityWorld.data ?? []} />
           <TerritoryWorldLayer
             entities={cityWorld.data ?? []}
             googleVisible={googleVisible}

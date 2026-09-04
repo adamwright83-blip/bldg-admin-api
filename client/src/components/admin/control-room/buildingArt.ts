@@ -39,7 +39,7 @@ export type WeaponGeometry = {
   pivot: { x: number; y: number };
   /** Where the projectile rests / launches from. */
   muzzle: { x: number; y: number };
-  /** Which way the projectile travels. OPUS strikes right, CPE strikes left. */
+  /** Native artwork direction; the arena mirrors weapons on the right side. */
   strikeDirection: "left_to_right" | "right_to_left";
 };
 
@@ -81,11 +81,10 @@ export const BUILDING_ART: Record<CanonicalBuildingId, BuildingArt> = {
     // by the arena rather than as a separate plate.
     projectile: null,
     weaponGeometry: {
-      // Turret base on the rooftop pavilion. The muzzle points LEFT, which is
-      // correct: CPE sits right of OPUS and must fire right to left.
+      // Inspected native plate: the rooftop muzzle points RIGHT.
       pivot: { x: 350, y: 196 },
-      muzzle: { x: 208, y: 96 },
-      strikeDirection: "right_to_left",
+      muzzle: { x: 690, y: 60 },
+      strikeDirection: "left_to_right",
     },
   },
 };

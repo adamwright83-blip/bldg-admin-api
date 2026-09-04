@@ -21,9 +21,9 @@ const stripComments = (s: string) =>
   s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
 describe("identity owns geometry; roles do not", () => {
-  it("renders the arena in a fixed identity order", () => {
+  it("renders stable season sides, never live revenue ranks", () => {
     expect(tower).toContain(
-      'const ARENA_ORDER: TowerWarsBuildingId[] = ["opus_la", "century_park_east"]'
+      'settlementQuery.data?.settlement.sides ?? INITIAL_SIDES'
     );
     // The old code mapped [youId, rivalId], so the left slot was whichever
     // building was LOSING.
@@ -61,12 +61,12 @@ describe("identity owns geometry; roles do not", () => {
     expect(css).not.toContain(".tw-piece-rival.is-firing .tw-projectile");
   });
 
-  it("keeps the two weapons pointed at each other", () => {
+  it("records native right-facing artwork; current arena side owns mirroring", () => {
     expect(BUILDING_ART.opus_la.weaponGeometry.strikeDirection).toBe(
       "left_to_right"
     );
     expect(BUILDING_ART.century_park_east.weaponGeometry.strikeDirection).toBe(
-      "right_to_left"
+      "left_to_right"
     );
   });
 });

@@ -782,6 +782,8 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/`);
     if (process.env.NODE_ENV === "production") {
       startAutomaticGeographicReconciliation();
+    }
+    if (process.env.NODE_ENV === "production" || process.env.GOLDLINE_PROOF_MODE === "1") {
       const stopOutbox = startEconomicOutboxDrainer();
       server.once("close", stopOutbox);
     }

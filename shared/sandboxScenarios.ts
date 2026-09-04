@@ -94,7 +94,7 @@ function priorDays(
   const out: TowerWarsBusinessEvent[] = [];
   let n = startN;
   for (let d = count; d >= 1; d -= 1) {
-    const date = new Date(Date.parse(`${TODAY}T00:00:00Z`) - d * 86_400_000)
+    const date = new Date(Date.parse(`${TODAY}T00:00:00Z`) - d * 7 * 86_400_000)
       .toISOString()
       .slice(0, 10);
     for (const spec of perDay(d)) {

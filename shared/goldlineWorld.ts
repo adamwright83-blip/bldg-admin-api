@@ -122,6 +122,7 @@ export function eventClassificationForType(
 ): GoldlineEventClassification | null {
   if (ACTION_EVENT_TYPES.has(eventType)) return "action";
   if (OUTCOME_EVENT_TYPES.has(eventType)) return "outcome";
+  if (["guardian_defeated", "territory_cleared", "territory_pressure_returned"].includes(eventType)) return "game_projection";
   return null;
 }
 

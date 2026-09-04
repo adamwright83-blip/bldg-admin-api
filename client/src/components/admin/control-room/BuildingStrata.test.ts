@@ -51,8 +51,8 @@ describe("stratum dates", () => {
 describe("the facade consumes real settled history", () => {
   const settlement = settleTowerWars({
     events: [
-      event("2026-08-25", "opus_la", TOWER_WARS_ATTACK_THRESHOLD_CENTS),
-      event("2026-08-27", "opus_la", TOWER_WARS_ATTACK_THRESHOLD_CENTS * 3),
+      event("2026-08-10", "opus_la", TOWER_WARS_ATTACK_THRESHOLD_CENTS),
+      event("2026-08-17", "opus_la", TOWER_WARS_ATTACK_THRESHOLD_CENTS * 3),
       event("2026-08-29", "opus_la", TOWER_WARS_ATTACK_THRESHOLD_CENTS),
     ],
     todayBusinessDate: "2026-08-29",
@@ -61,13 +61,13 @@ describe("the facade consumes real settled history", () => {
 
   it("has strata oldest-first from the settlement, which the view reverses", () => {
     expect(cpe.strata.map(s => s.businessDate)).toEqual([
-      "2026-08-25",
-      "2026-08-27",
+      "2026-08-10",
+      "2026-08-17",
     ]);
     // The component renders [...strata].reverse() so the oldest sits lowest.
     const rendered = [...cpe.strata].reverse();
-    expect(rendered[0]!.businessDate).toBe("2026-08-27");
-    expect(rendered.at(-1)!.businessDate).toBe("2026-08-25");
+    expect(rendered[0]!.businessDate).toBe("2026-08-17");
+    expect(rendered.at(-1)!.businessDate).toBe("2026-08-10");
   });
 
   it("gives each settled day a band the view can render", () => {

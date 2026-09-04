@@ -51,6 +51,7 @@ export type WorldInteractionMode = (typeof WORLD_INTERACTION_MODES)[number];
 
 /** Game-projection event types this module is allowed to recognise. */
 export const TERRITORY_GAME_EVENT_TYPES = [
+  "territory_pressure_returned",
   "territory_published",
   "territory_cleared",
   "guardian_defeated",
@@ -280,9 +281,10 @@ export function deriveTerritoryState(input: {
     .filter(member => !member.completed)
     .map(member => member.physicalEntityId);
 
-  const clearedEvent =
-    gameHistoryEvent(input.events, input.definition.id, "territory_cleared") ??
-    gameHistoryEvent(input.events, input.definition.id, "guardian_defeated");
+  const clearedEvent = [gameHistoryEvent(input.events, input.definition.id, "territory_cleared"),
+    gameHistoryEvent(input.events, input.definition.id, "guardian_defeated")]
+    .filter((event): event is GoldlineWorldEvent => event !== null)
+    .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))[0] ?? null;
 
   const challengeComplete = remainingMemberIds.length === 0 && members.length > 0;
   const cleared = clearedEvent !== null;
@@ -295,7 +297,9 @@ export function deriveTerritoryState(input: {
       && event.physicalEntityId !== null && memberIds.has(event.physicalEntityId)
       && event.occurredAt > clearedEvent.occurredAt)
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt) || b.id.localeCompare(a.id))[0] : undefined;
-  const pressureReturned = Boolean(resurgence);
+  const projectedReturn = gameHistoryEvent(input.events, input.definition.id, "territory_pressure_returned");
+  const recurrence = resurgence ?? (clearedEvent && projectedReturn && projectedReturn.occurredAt > clearedEvent.occurredAt ? projectedReturn : null);
+  const pressureReturned = Boolean(recurrence);
   const confrontationReady = challengeComplete && (!cleared || pressureReturned);
 
   let readiness: TerritoryReadiness = "veiled";
@@ -321,7 +325,7 @@ export function deriveTerritoryState(input: {
     guardianId: input.definition.guardianId,
     evidenceRevisedAfterClear,
     pressureReturned,
-    recurrenceKey: resurgence?.id ?? null,
+    recurrenceKey: recurrence?.id ?? null,
   };
 }
 

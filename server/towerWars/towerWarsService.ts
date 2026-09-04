@@ -457,7 +457,9 @@ export async function getTowerWarsSettlement(input: {
     1,
     input.historyDays ?? TOWER_WARS_SETTLEMENT_HISTORY_DAYS
   );
-  const startUtc = rivalrySeasonWindow(format(addDays(parseISO(bounds.businessDate), -historyDays), "yyyy-MM-dd")).startUtc;
+  // Permanent facade memory cannot expire at a rolling query cutoff. Load all
+  // canonical evidence through this replay boundary; corrections rebuild it.
+  const startUtc = new Date(0);
 
   const db = await getDb();
   if (!db) {
@@ -504,8 +506,9 @@ export async function getTowerWarsSettlement(input: {
   const seasons = rivalryHistory(events, bounds.businessDate);
   if (!input.now) await persistSeasonRevisions(input.tenantId, seasons);
   const attacks = seasons.flatMap(season => season.state.attacks);
-  const impacts = input.now ? attacks.map(attack => impactForAttack(attack))
-    : await persistCanonicalImpacts(input.tenantId, attacks);
+  const impacts = await persistCanonicalImpacts(input.tenantId, attacks, {
+    persist: !input.now, before: bounds.endExclusiveUtc,
+  });
 
   return {
     evidenceSufficient: true,

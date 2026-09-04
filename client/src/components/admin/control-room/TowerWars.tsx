@@ -43,6 +43,38 @@ import {
 import type { SettledStratum } from "./facadeScars";
 import { SiegeComeback } from "./SiegeComeback";
 import { impactForAttack, type TowerImpact } from "@shared/towerWarsImpacts";
+import { BUILDING_ART } from "./buildingArt";
+
+/** Register the projectile against the same contained 800×1200 art as its wound. */
+function RegisteredProjectile({ impact, pieceRefs }: { impact: TowerImpact; pieceRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>> }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const projectile = ref.current;
+    const source = pieceRefs.current[impact.attackerBuildingId];
+    const target = pieceRefs.current[impact.defenderBuildingId];
+    if (!projectile || !source || !target) return;
+    const position = () => {
+      const sourceRect = source.getBoundingClientRect();
+      const point = (piece: HTMLDivElement, x: number, y: number) => {
+        const rect = piece.querySelector(".cb-art")!.getBoundingClientRect();
+        const scale = Math.min(rect.width / 800, rect.height / 1200);
+        return { x: rect.left + (rect.width - 800 * scale) / 2 + x * scale, y: rect.bottom - (1200 - y) * scale };
+      };
+      const muzzle = BUILDING_ART[impact.attackerBuildingId].weaponGeometry.muzzle;
+      const start = point(source, source.dataset.side === "right" ? 800 - muzzle.x : muzzle.x, muzzle.y);
+      const end = point(target, impact.impactX * 8, impact.impactY * 12);
+      projectile.style.left = `${start.x - sourceRect.left - projectile.offsetWidth / 2}px`;
+      projectile.style.top = `${start.y - sourceRect.top - projectile.offsetHeight / 2}px`;
+      projectile.style.right = "auto";
+      projectile.style.setProperty("--tw-flight-x", `${end.x - start.x}px`);
+      projectile.style.setProperty("--tw-flight-y", `${end.y - start.y}px`);
+    };
+    position();
+    const observer = new ResizeObserver(position); observer.observe(source); observer.observe(target);
+    return () => observer.disconnect();
+  }, [impact.attackId, pieceRefs]);
+  return <span ref={ref} className="tw-projectile is-registered" data-impact-target={impact.attackId} data-weapon={impact.attackerBuildingId === "opus_la" ? "golf-ball" : "car"} aria-hidden />;
+}
 
 export { damageStateForIncomingAttacks } from "@shared/towerWars";
 const PixiTowerProof = lazy(() => import("./PixiTowerProof"));
@@ -172,6 +204,14 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
     </details>
     <TowerWarsDay key={businessDate || "today"} onNavigate={onNavigate} compact={compact} businessDate={businessDate} />
   </>;
+}
+
+function SeasonRevisionAudit({ seasonId }: { seasonId: string }) {
+  const revisions = trpc.system.towerWars.seasonRevisions.useQuery({ seasonId });
+  return <details className="tw-season-revisions"><summary>Season {seasonId} · immutable projection revisions ({revisions.data?.length ?? 0})</summary>
+    <p>Corrections preserve prior computed results. These records are game projections, not new sales.</p>
+    {revisions.error ? <p>Revision history is unavailable.</p> : revisions.data?.map(row => <details key={row.id}><summary>Revision {row.id.slice(0, 12)}</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(row.payload, null, 2)}</pre></details>)}
+  </details>;
 }
 
 function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsProps & { businessDate: string }) {
@@ -406,6 +446,12 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
   const hasLoser = comparison.kind === "lead";
 
   const arenaOrder = settlementQuery.data?.settlement.sides ?? INITIAL_SIDES;
+  const currentSeasonId = settlementQuery.data?.settlement.seasonId ?? null;
+  const currentAttackIds = new Set(state.attacks.map(attack => attack.attackId));
+  const allImpacts = new Map((settlementQuery.data?.impacts ?? []).map(impact => [impact.attackId, impact]));
+  for (const attack of state.attacks) if (!allImpacts.has(attack.attackId)) allImpacts.set(attack.attackId, impactForAttack(attack, currentSeasonId));
+  const presentedImpacts = Array.from(allImpacts.values()).filter(impact =>
+    (replay.mode === "live" && !spectacleProjection) || impact.seasonId !== currentSeasonId || currentAttackIds.has(impact.attackId));
   const [youId, rivalId] = arenaOrder;
   const you = state.buildings[youId];
   const rival = state.buildings[rivalId];
@@ -512,10 +558,7 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
               </span>
               <BuildingArt
                 buildingId={buildingId}
-                impacts={(businessDate || replay.mode !== "live"
-                  ? state.attacks.map(attack => impactForAttack(attack))
-                  : settlementQuery.data?.impacts ?? state.attacks.map(attack => impactForAttack(attack)))
-                  .filter(impact => impact.defenderBuildingId === buildingId)}
+                impacts={presentedImpacts.filter(impact => impact.defenderBuildingId === buildingId)}
                 businessDate={data.businessDate}
                 strata={
                   !businessDate && !settlementQuery.data?.impacts.length ? settlementQuery.data?.settlement.buildings[buildingId]
@@ -532,11 +575,7 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
                   TOWER_WARS_ATTACK_THRESHOLD_CENTS
                 )}
               />
-              <span
-                className="tw-projectile"
-                data-weapon={buildingId === "opus_la" ? "golf-ball" : "car"}
-                aria-hidden
-              />
+              {(() => { const attack = [...state.attacks].reverse().find(item => item.attackerBuildingId === buildingId); return attack ? <RegisteredProjectile key={attack.attackId} impact={impactForAttack(attack)} pieceRefs={pieceRefs} /> : null; })()}
               {activeSpectacle?.phase === "revenue" && liveSpectacleEvent?.buildingId === buildingId ? <span className="tw-live-revenue" role="status">+{money(liveSpectacleEvent.realOrderValueCents)} real order</span> : null}
               <span className="tw-piece-label">
                 <strong>{NAMES[buildingId]}</strong>
@@ -551,13 +590,13 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
                           .settledScars;
                       return settled > 0 ? (
                         <em className="tw-piece-history">
-                          {settled} repaired across{" "}
+                          {settled} historical strikes across{" "}
                           {
                             settlementQuery.data.settlement.buildings[
                               buildingId
                             ].strata.length
                           }{" "}
-                          settled days
+                          seasons
                         </em>
                       ) : null;
                     })()
@@ -568,6 +607,7 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
         })}
         <details className="tw-truth-hud">
           <summary>Battle evidence / replay</summary>
+          {settlementQuery.data ? <SeasonRevisionAudit seasonId={settlementQuery.data.settlement.seasonId} /> : null}
           <span>
             <i />{" "}
             {replay.mode === "live"

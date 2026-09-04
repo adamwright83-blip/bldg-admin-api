@@ -44,7 +44,7 @@ export async function listSeasonRevisions(tenantId: string, seasonId: string) {
 
 /** Only canonical server compilation calls this, never a replay reducer.
  * Upsert preserves a single record per attack; geometry derives from identity. */
-export async function persistCanonicalImpacts(tenantId: string, attacks: readonly TowerWarsAttackEvent[]) {
+export async function persistCanonicalImpacts(tenantId: string, attacks: readonly TowerWarsAttackEvent[], options: { persist?: boolean; before?: Date } = {}) {
   const db = await getDb();
   if (!db) return [];
   const evidence = await db.select({ orderId: orders.id, status: orders.status,
@@ -52,12 +52,14 @@ export async function persistCanonicalImpacts(tenantId: string, attacks: readonl
     .from(operationsEvents).innerJoin(orders, and(eq(orders.id, operationsEvents.orderId), eq(orders.tenantId, tenantId)))
     .where(and(eq(operationsEvents.tenantId, tenantId), eq(operationsEvents.sourceEventType, "pickup_completed"), eq(operationsEvents.eventStatus, "completed")));
   const repairs = evidence.flatMap(row => {
-    const buildingId: TowerWarsBuildingId | null = row.buildingSlug === "opusla" ? "opus_la" : row.buildingSlug === "centuryparkeast" ? "century_park_east" : null;
+    if (options.before && row.occurredAt >= options.before) return [];
+    const slug = row.buildingSlug?.replace(/[-_]/g, "");
+    const buildingId: TowerWarsBuildingId | null = slug === "opusla" ? "opus_la" : slug === "centuryparkeast" ? "century_park_east" : null;
     return buildingId ? [{ orderId: String(row.orderId), buildingId, collectedAt: row.occurredAt.toISOString(), valid: ["collected", "processing", "ready", "delivered"].includes(row.status) }] : [];
   });
   const impacts = repairImpacts(attacks.map(a => impactForAttack(a,
     rivalrySeasonId(formatInTimeZone(a.occurredAt, "America/Los_Angeles", "yyyy-MM-dd")))), repairs);
-  for (const payload of impacts) {
+  for (const payload of options.persist === false ? [] : impacts) {
     const id = createHash("sha256").update(JSON.stringify([tenantId, payload.attackId])).digest("hex");
     await db.insert(towerImpacts).values({ id, tenantId, payload }).onDuplicateKeyUpdate({ set: { payload } });
   }

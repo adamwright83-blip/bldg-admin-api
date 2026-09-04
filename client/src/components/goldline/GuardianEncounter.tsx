@@ -18,6 +18,8 @@ import type { TerritoryDefinition, TerritoryDerivedState } from "@shared/goldlin
 import { GuardianActor, guardianAriaLabel } from "./GuardianActor";
 import { useGuardianEncounter } from "./useGuardianEncounter";
 import { DynamicJoystick } from "../../pages/goldline/DynamicJoystick";
+import { getAudioManager } from "@/game/audio/AudioManager";
+import { combatHurtFeedback, combatRevealFeedback } from "@/game/audio/haptics";
 
 export function GuardianEncounter({
   definition,
@@ -47,6 +49,17 @@ export function GuardianEncounter({
   const [controlsHint] = useState(() => !window.matchMedia("(pointer: coarse)").matches);
   const pointer = useRef({ x: 0, y: 0 });
   const defeatedSent = useRef(false);
+  const previousPhase = useRef(world.phase);
+
+  useEffect(() => {
+    if (previousPhase.current === world.phase) return;
+    previousPhase.current = world.phase;
+    const audio = getAudioManager();
+    if (world.phase === "player_hit") { audio.play("player_hurt"); combatHurtFeedback(); }
+    else if (world.phase === "hurt" || world.phase === "enraged") { audio.play("strike_hit"); combatRevealFeedback(); }
+    else if (world.phase === "defeated") audio.play("hostile_down");
+    else if (world.phase === "telegraph") audio.play("target_reveal");
+  }, [world.phase]);
 
   useEffect(() => {
     dispatch({ type: "notice" });
@@ -76,6 +89,7 @@ export function GuardianEncounter({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if ((event.key === " " || event.key === "Enter") && event.target instanceof HTMLElement && event.target.closest("button,input,textarea,select")) return;
       if (event.key === "Escape") {
         onClose();
         return;
@@ -125,7 +139,7 @@ export function GuardianEncounter({
   return (
     <div
       className={`gl-guardian-encounter readiness-${state.readiness}${reducedMotion ? " is-reduced" : ""}`}
-      style={{ left: `${centroid.x}%`, top: `${centroid.y}%` }}
+      style={{ left: `clamp(min(46vw, 210px), ${centroid.x}%, calc(100% - min(46vw, 210px)))`, top: `${centroid.y}%` }}
       data-testid="goldline-guardian-encounter"
       data-interaction-mode="guardian_encounter"
       onPointerMove={event => {
@@ -183,7 +197,7 @@ export function GuardianEncounter({
             Guardian {world.health}/{world.maxHealth} · You {world.playerHealth}/{world.playerMaxHealth}
           </p>
         ) : (
-          <p>The lair is sealed. Complete the territory’s real evidence prerequisites to enter.</p>
+          <p>{state.cleared && !state.pressureReturned ? "Territory cleared. Your victory remains in the Chronicle." : "The lair is sealed. Complete the territory’s real evidence prerequisites to enter."}</p>
         )}
         {controlsHint ? <p className="gl-guardian-keys">WASD move · Space / click counter · Shift dodge</p> : null}
         {world.retryAvailable ? (
@@ -192,15 +206,15 @@ export function GuardianEncounter({
           </button>
         ) : null}
       </div>
+      <button className="gl-guardian-close" type="button" onClick={onClose}>Return to city</button>
       <div className="gl-guardian-touch">
-        <button type="button" onClick={onClose}>Return to city</button>
         <DynamicJoystick disabled={!state.confrontationReady} onInput={(x, y) => dispatch({ type: "move", x, y })} />
         <button
           type="button"
           disabled={!state.confrontationReady}
           className="gl-guardian-counter"
           data-testid="goldline-guardian-linehook"
-          onPointerDown={event => {
+          onClick={event => {
             event.stopPropagation();
             dispatch({ type: "counter" });
           }}

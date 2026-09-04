@@ -36,6 +36,7 @@ export default function ClockheadDuel({ onDefeated }: { onDefeated: () => void }
     const keys = new Set<string>();
     const move = () => { input.current.x = Number(keys.has("d") || keys.has("ArrowRight")) - Number(keys.has("a") || keys.has("ArrowLeft")); input.current.y = Number(keys.has("s") || keys.has("ArrowDown")) - Number(keys.has("w") || keys.has("ArrowUp")); };
     const down = (event: KeyboardEvent) => {
+      if (event.key === " " && event.target instanceof HTMLElement && event.target.closest("button,input,textarea,select")) return;
       if (!["w","a","s","d","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," ","Shift"].includes(event.key)) return;
       event.preventDefault(); keys.add(event.key); move();
       if (!event.repeat && event.key === " ") input.current.strike = true;
@@ -66,6 +67,6 @@ export default function ClockheadDuel({ onDefeated }: { onDefeated: () => void }
         {world.stage === "won" ? <button onClick={() => { if (!completed.current) { completed.current = true; onDefeated(); } }}>Take the Wayward route</button> : <button onClick={() => { const fresh = createClockDuel(); ref.current = fresh; setWorld(fresh); }}>Retry Clockhead</button>}
       </div> : null}
     </div>
-    <footer><DynamicJoystick disabled={!started || finished} onInput={(x, y) => { input.current.x = x; input.current.y = y; }} /><div><button disabled={!started || finished || world.dodgeCooldown > 0} onPointerDown={() => { input.current.dodge = true; }}>DODGE</button><button disabled={!started || finished} onPointerDown={() => { input.current.strike = true; }}>STRIKE</button><button onClick={() => { getAudioManager().setMuted(!muted); setMuted(!muted); }}>{muted ? "Unmute" : "Mute"}</button><small>WASD / arrows · Shift dodge · Space strike</small></div></footer>
+    <footer><DynamicJoystick disabled={!started || finished} onInput={(x, y) => { input.current.x = x; input.current.y = y; }} /><div><button disabled={!started || finished || world.dodgeCooldown > 0} onClick={() => { input.current.dodge = true; }}>DODGE</button><button disabled={!started || finished} onClick={() => { input.current.strike = true; }}>STRIKE</button><button onClick={() => { getAudioManager().setMuted(!muted); setMuted(!muted); }}>{muted ? "Unmute" : "Mute"}</button><small>WASD / arrows · Shift dodge · Space strike</small></div></footer>
   </main>;
 }

@@ -169,7 +169,7 @@ describe("truth-bound visual rules", () => {
     expect(damageStateForIncomingAttacks(0)).toBe("pristine");
     expect(damageStateForIncomingAttacks(2)).toBe("cracked");
     expect(damageStateForIncomingAttacks(4)).toBe("critical");
-    expect(towerSource).toContain("Replay Today");
+    expect(towerSource).toContain("Replay this season");
     expect(towerSource).toContain("TOWER_WARS_ATTACK_THRESHOLD_CENTS");
     expect(towerSource).toContain("promise.id === printPromiseId");
     expect(towerSource).toContain("flushSync");
@@ -196,7 +196,7 @@ describe("truth-bound visual rules", () => {
     }
     expect(towerSource).not.toContain('className="tw-opus-art"');
     expect(towerSource).not.toContain("tw-opus-ball");
-    expect(towerSource).toContain("ARENA_ORDER");
+    expect(towerSource).toContain("settlement.sides");
   });
 
   it("shows Clockhead and Collector only under authoritative conditions", () => {

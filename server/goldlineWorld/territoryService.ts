@@ -243,12 +243,31 @@ export async function listPresentedTerritories(input: {
   tenantId: string;
 }): Promise<PresentedTerritory[]> {
   const definitions = await compileAndPublishTerritories(input);
+  const city = await listCityWorldEntities(input);
   const presented: PresentedTerritory[] = [];
   for (const definition of definitions) {
     const events = await listTerritoryChronicle({ tenantId: input.tenantId, definition });
+    let state = deriveTerritoryState({ definition, events });
+    const priorClear = events.find(event => event.id === state.clearedEventId);
+    const priorActive = new Set(Array.isArray(priorClear?.metadata.activeResidentKeys) ? priorClear.metadata.activeResidentKeys as string[] : []);
+    const members = new Set(definition.members.map(member => member.physicalEntityId));
+    const returnedDormancy = city.filter(entity => members.has(entity.id)).flatMap(entity => entity.residents)
+      .filter(resident => resident.cadence.state === "dark" && priorActive.has(resident.identityKey));
+    if (state.cleared && !state.pressureReturned && returnedDormancy.length) {
+      // Current authoritative cadence changed since the gameplay victory.
+      // Publish only renewed fictional occupation, never a fabricated outcome.
+      await appendGoldlineWorldEvent({ tenantId: input.tenantId, physicalEntityId: null,
+        eventType: "territory_pressure_returned", classification: "game_projection", actorType: "system", actorId: null,
+        occurredAt: new Date().toISOString(), observedAt: null, sourceType: "goldline_territory", sourceId: definition.id,
+        sourceEvidenceReference: `cadence-projection:${definition.id}:${state.clearedEventId}`,
+        provenanceClass: "generated_game_fiction", verificationClass: "CLAIMED", confidence: "unknown",
+        correlationId: definition.id, idempotencyKey: `guardian-return:${input.tenantId}:${state.clearedEventId}`,
+        metadata: { territoryId: definition.id, priorDefeatId: state.clearedEventId, reason: "previously_active_residents_now_dormant", classification: "game_projection" } });
+      state = deriveTerritoryState({ definition, events: await listTerritoryChronicle({ tenantId: input.tenantId, definition }) });
+    }
     presented.push({
       definition,
-      state: deriveTerritoryState({ definition, events }),
+      state,
     });
   }
   return presented;
@@ -288,6 +307,10 @@ export async function recordGuardianDefeated(input: {
   }
 
   const occurredAt = new Date().toISOString();
+  const city = await listCityWorldEntities({ tenantId: input.tenantId });
+  const memberIds = new Set(definition.members.map(member => member.physicalEntityId));
+  const activeResidentKeys = city.filter(entity => memberIds.has(entity.id)).flatMap(entity => entity.residents)
+    .filter(resident => resident.cadence.state === "active").map(resident => resident.identityKey).sort();
   const shared = {
     tenantId: input.tenantId,
     physicalEntityId: null,
@@ -306,6 +329,7 @@ export async function recordGuardianDefeated(input: {
       territoryId: definition.id,
       guardianId: input.guardianId,
       recurrenceOf: state.recurrenceKey ?? null,
+      activeResidentKeys,
       memberPhysicalEntityIds: definition.members.map(member => member.physicalEntityId),
       progressSnapshot: {
         completedMemberIds: state.completedMemberIds,

@@ -1567,6 +1567,7 @@
   font-weight: 650;
 }
 body .tw-arena:not(.tw-arriving) .tw-scoreboard { transform: translateX(-50%); }
+body .tw-arena .tw-piece-label { transform: translateX(-50%) !important; }
 .tw-arena .tw-piece[data-side="left"] { left: 3%; right: auto; width: 44%; height: 72%; }
 .tw-arena .tw-piece[data-side="right"] { right: 3%; left: auto; width: 44%; height: 72%; }
 .tw-piece.is-century[data-side="right"] .cb-weapon,
@@ -1577,14 +1578,23 @@ body .tw-arena:not(.tw-arriving) .tw-scoreboard { transform: translateX(-50%); }
 .tw-piece.is-century[data-side="right"] .tw-projectile::before { transform: scaleX(-1); }
 @keyframes tw-side-flight {
   0% { opacity: 1; transform: translate(0,0) rotate(0deg); }
-  85% { opacity: 1; transform: translate(var(--tw-flight-x),8vh) rotate(8deg); }
-  100% { opacity: 0; transform: translate(var(--tw-flight-x),8vh) scale(1.25); }
+  85% { opacity: 1; transform: translate(var(--tw-flight-x),var(--tw-flight-y,0px)) rotate(8deg); }
+  100% { opacity: 0; transform: translate(var(--tw-flight-x),var(--tw-flight-y,0px)) scale(1.25); }
 }
+.tw-piece.is-firing[data-side] .tw-projectile.is-registered { animation: tw-side-flight .65s ease-in forwards; }
+body .tw-piece .tw-projectile.is-registered { opacity:0; }
+.tw-piece .tw-projectile.is-registered[data-weapon="golf-ball"] { inset:auto;width:18px;height:18px;border-radius:50%;background:radial-gradient(circle at 30% 25%,#fff,#e9eef3 55%,#8799aa);box-shadow:0 2px 4px #172d4580;transform:none; }
+.tw-piece .tw-projectile.is-registered[data-weapon="golf-ball"]::before { display:none; }
+.tw-piece[data-side="left"] .tw-projectile[data-weapon="car"]::before { transform: none; }
 @media(max-width:800px) {
   .tw-arena .tw-piece[data-side="left"] { left: -3%; width: 53%; height: 62%; }
   .tw-arena .tw-piece[data-side="right"] { right: -3%; width: 53%; height: 62%; }
+  body .tw-arena .tw-truth-hud { top:160px; }
+  body .tw-arena .tw-versus b { font-size:14px; }
+  body .tw-arena .tw-versus span { position:static; font-size:9px; padding:4px; }
+  body .tw-arena .tw-piece-label { min-width:0;width:150px; }
 }
-@media(prefers-reduced-motion:reduce) { .tw-piece.is-firing[data-side] .tw-projectile[data-weapon="car"] { animation: none; } }
+@media(prefers-reduced-motion:reduce) { .tw-piece.is-firing[data-side] .tw-projectile.is-registered { animation: none; } }
 body .tw-scoreboard { width: min(760px,94%); grid-template-columns: minmax(0,1fr) minmax(120px,.7fr) minmax(0,1fr); }
 body .tw-scoreboard .tw-versus { clip-path: none; padding: 10px 4px; }
 body .tw-scoreboard .tw-versus b { font-size: 17px; line-height: 1.2; }

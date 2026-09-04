@@ -54,6 +54,17 @@ const event = (
 });
 
 describe("territory progress is derived from chronicle, not a stored counter", () => {
+  it("retains independently audited cadence pressure without granting business evidence", () => {
+    const victory = event({ id: "win", eventType: "territory_cleared", physicalEntityId: null,
+      classification: "game_projection", provenanceClass: "generated_game_fiction",
+      occurredAt: "2026-09-02T12:00:00.000Z", metadata: { territoryId: definition.id } });
+    const pressure = event({ id: "pressure", eventType: "territory_pressure_returned", physicalEntityId: null,
+      classification: "game_projection", provenanceClass: "generated_game_fiction",
+      occurredAt: "2026-09-03T12:00:00.000Z", metadata: { territoryId: definition.id } });
+    expect(deriveTerritoryState({ definition, events: [victory, pressure] })).toMatchObject({
+      cleared: true, pressureReturned: true, completedMemberIds: [], confrontationReady: false,
+    });
+  });
   it("preserves victory history through dormancy and recovery until a gameplay rematch", () => {
     const visits = ["b1", "b2", "b3"].map(id => event({ id: `visit-${id}`, eventType: "visited", physicalEntityId: id }));
     const victory = event({ id: "win", eventType: "territory_cleared", physicalEntityId: null,

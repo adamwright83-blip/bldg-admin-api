@@ -10,6 +10,8 @@
 .gl-world-title button { pointer-events: auto; color: #fff4d0; background: #122b3ddb; border: 1px solid #d6ba72; border-radius: 20px; margin-top: 8px; padding: 7px 12px; font-size: 11px; }
 .is-world-home .gl-campaign-hud { top: 145px; left: 18px; max-width: 220px; }
 .gl-world-portals { position: fixed; z-index: 35; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: clamp(12px,3vw,46px); }
+.is-world-home .cr-world-camera-controls { bottom: 145px; }
+.is-world-home .gl-territory-chrome { bottom: 200px; max-height: 100px; overflow: hidden; }
 .gl-world-portal { --portal: #008c4c; display: flex; flex-direction: column; align-items: center; justify-content: center; width: clamp(108px,13vw,180px); aspect-ratio: 1; border-radius: 50%; border: 7px double #f2cc6f; background: radial-gradient(circle at 38% 28%,#ffffff45,transparent 42%),radial-gradient(circle,var(--portal),#071b30 78%); color: #fff7c7; box-shadow: 0 0 0 3px #8b571d, inset 0 0 18px var(--portal),0 5px 18px #08182a99; font: 700 clamp(13px,1.4vw,21px)/1.15 Georgia,serif; text-align: center; text-decoration: none; transition: transform .15s; }
 .gl-world-portal svg { width: 32%; height: 32%; margin-bottom: 7px; }
 .gl-world-portal.is-customers { --portal: #078ee7; }

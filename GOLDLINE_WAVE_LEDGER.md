@@ -103,6 +103,27 @@
 
 ---
 
+## Slice 11 — integration / release proof in progress
+
+- Slice 10 commit: `60d3e44` (local only). Visual ancestry remains unpushed while finishing gates.
+- Added tenant-scoped current economic revision receipts with automatic 5-second refresh, visible unresolved-place wording, and current-revision replacement revenue in city projections. Enabled background outbox drain in explicitly isolated proof mode. Local newly imported source orders appeared in open city without replay/date/navigation.
+- Full suite: 484 files, 480 passed / 4 failed; 4,558 tests passed, 5 failed, 6 skipped. The five failures were reproduced identically in untouched start-SHA worktree (`/tmp/goldline-recomposition-baseline`), in operationsEvents, operationsEventsDashboard, residentIntake, and marketplacePaymentDryRunRoute. Prior daily/fixed-side contracts migrated to weekly semantics. Full build succeeded. Global TypeScript remains baseline-red; no changed-owner diagnostics in latest run.
+- Local mounted repair proof: 15 impacts, 1 repaired + 14 fresh after dated collection; persists reload. Added prior-season and new-current-season $100 local fixtures, now 19 total impacts and same one repair. Source orders are local only. Corrections stay single economic identities.
+- Normal DOM projectiles now register launch and target in the canonical contained 800×1200 plate, not viewport-distance guesses; measured CSS target delta populated. Native CPE art direction corrected from stale registry comment. Wound types now have four distinct geometries and repair seams vary.
+- Guardian keyboard telegraph/counter proof won with 3 counters; saved clearance appeared in city. Current cadence recurrence projection snapshots active residents at defeat and publishes only game pressure, not fabricated business outcomes. Local recurrence/mobile rematch proof running. Existing audio/haptics integrated; keyboard button activation retained.
+- Pixi/DOM switch browser proof: canvas count 1 -> 0, no default migration. Camera retained exact `scale(1.35) translate(0%, 0%)` and same DOM world node through Customers/return.
+- Mobile world portal hitbox covered camera reset; corrected vertical separation and verified actual reset/bridge click without route change. Unbuilt bridge inspector says no evidence is created; horizontal overflow false. Mobile Tower Wars label transforms corrected after screenshot inspection.
+- Full mounted Driver route: 73 waypoints, no failures, walkable final training-grounds landing; traversal-aware runtime audit now shares actual Linehook phases. Midair checkpoints withheld. Clockhead prior proof won all three phases with no engine state injection.
+- Main worktree now has its own frozen-lockfile dependencies. Original checkout's node_modules untouched; prior symlink retained at `/tmp/goldline-recomposition-shared-node-modules-link`.
+- Existing Railway deployment `cac67d43-6415-4353-a6c3-0b1208e1c391` SUCCESS at pushed `8a83d32`. No visual deployment claimed. Production fixture writes: none.
+- Additional completed gates: fresh browser session reports zero page errors; mobile recurrence rematch won through 3 timed counters, preserving prior victory. Historical reads (Aug 26, Sep 1, Sep 4) returned 2/17/19 impacts and 0/0/1 repairs; before/after counts of orders, source orders, world events, impacts and revisions were identical. Mounted DOM discharge samples showed registered moving projectile, not just static CSS declarations.
+- Production-safe read at admin.bldg.chat confirmed the specified CPE $134.10: $51.00 + $83.10, both retaining LA payment date 2026-09-03. A separate legitimate Stripe $19 makes that day's current total $153.10. No data changed. api.bldg.chat currently serves the separate resident app; admin.bldg.chat correctly rewrites API calls to the admin Railway service. Do not change that unrelated domain routing.
+- Latest targeted integration run: 59/59 tests; Clockhead/Guardian/shell focused run: 28/28. Release build succeeds. The old WorldGeographySurface district callback diagnostic is also present at start SHA, not introduced by this wave.
+- Visual gate satisfied locally: desktop/mobile world, portals, bridge inspection, Spyglass fallback, Guardian gate/win/recurrence, weekly tower impacts/repair/replay, opt-in Pixi, both Driver gaps, full route and three-phase Clockhead. Fresh-session page errors empty. Final DOM replay observation captured BOTH car and golf-ball in motion with registered positive/negative target deltas; fixed legacy golf-ball CSS that otherwise suppressed its parent flight.
+- Local visual ancestry may now be published under the assignment's gate. Production interactive verification follows deployment; do not equate local fixtures with live evidence. Subjective renderer choice, art direction and game feel remain Adam's review, not deployment blockers.
+
+---
+
 # GOLDLINE V1 ONE-WORLD WAVE — LEDGER (prior wave)
 
 | | |
