@@ -6,7 +6,7 @@ import { runInNewContext } from "node:vm";
 test("confirmation compares dates, tolerating display padding and separator typography", () => {
   const source = prepareSource.toString();
   const start = source.indexOf("function displayedRangeMatches");
-  const end = source.indexOf("\n    await wait", start);
+  const end = source.indexOf("\n    // Display text", start);
   const matches = runInNewContext(`${source.slice(start, end)}; displayedRangeMatches`);
   const range = { from: "2026-08-06", to: "2026-09-04" };
   for (const value of ["Aug 6, 2026 - Sep 4, 2026", "Aug 06, 2026 – Sep 04, 2026", "August 6, 2026 — September 4, 2026"])

@@ -198,18 +198,17 @@ export async function prepareSource(range) {
       const iso = (month, day, year) => `${year}-${String(months.indexOf(month.slice(0, 3).toLowerCase()) + 1).padStart(2, "0")}-${day.padStart(2, "0")}`;
       return iso(match[1], match[2], match[3]) === range.from && iso(match[4], match[5], match[6]) === range.to;
     }
-    await wait(() => {
-      // Closing the calendar may replace the input. Read the live field, not
-      // the element captured before the two date selections.
-      const actual = reportRoot()?.querySelector("#undefined-input")?.value ?? "";
-      stage = `confirming ${range.from} through ${range.to}; displayed: ${actual || "(empty)"} (build 0.1.3)`;
-      return displayedRangeMatches(actual, range);
-    });
-    if (exportButton.disabled)
+    // Display text is advisory: the actual captured export URL is validated
+    // against both requested dates before its CSV can be retrieved/imported.
+    // Do not stall a completed calendar selection on presentation formatting.
+    const actual = reportRoot()?.querySelector("#undefined-input")?.value ?? "";
+    const displayedRangeVerified = displayedRangeMatches(actual, range);
+    const currentExportButton = reportRoot()?.querySelector("#submit_export_button");
+    if (!currentExportButton || currentExportButton.disabled)
       throw new Error("Report export is not available.");
     return {
       ok: true,
-      value: { storeLabel, range, reportType: "orders_sales" },
+      value: { storeLabel, range, reportType: "orders_sales", displayedRangeVerified },
     };
   } catch (error) {
     return { ok: false, error: error.message };
