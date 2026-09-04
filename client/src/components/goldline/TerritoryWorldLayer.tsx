@@ -8,6 +8,7 @@ import type { CityWorldEntity } from "../../../../server/goldlineWorld/cityWorld
 import { TerritoryVeilLayer } from "./TerritoryVeilLayer";
 import { GuardianActor } from "./GuardianActor";
 import { GuardianEncounter } from "./GuardianEncounter";
+import { KingdomCrossingsLayer } from "./KingdomCrossingsLayer";
 import "./goldline-territories.css";
 
 export function TerritoryWorldLayer({
@@ -39,6 +40,7 @@ export function TerritoryWorldLayer({
 
   return (
     <>
+      <KingdomCrossingsLayer territories={presented} entities={entities} />
       {presented.map(item => (
         <TerritoryOnAtlas
           key={item.definition.id}

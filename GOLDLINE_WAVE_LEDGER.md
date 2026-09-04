@@ -54,6 +54,14 @@
 - Corrected fictional-art fallback wording; no authored art called real evidence. Daylight presentation retained independently of actual weather context.
 - Browser discovered Spyglass hitbox was covered by tower subtitle; fixed stacking and target size. Actual click now opens OPUS window while atlas, Guardian and entities remain mounted. Screenshot `/tmp/goldline-wave-spyglass-verified.png`. Nine geographic projection tests passed. No browser errors observed. Google imagery itself cannot render locally without provider key; honest unavailable state present.
 - Commit pending; pushed/deployed no (held ancestry). Next: rivers/territory crossings.
+- Slice 4 commit: `8379cf3` (local).
+
+## Slice 5 — rivers and crossings
+
+- Added deterministic Voronoi strategic partition using existing real LA landmark anchors; clipped shared borders yield adjacency and connected blue waterways. This is explicitly fictional geography, not municipal boundary or hydrology data. Existing real entity positions unchanged.
+- Bridge states derive separately from legitimate territory evidence and persisted Guardian game clearance; unknown remains visibly UNBUILT. Inspection is local UI state only, with no business mutation.
+- Six crossing/territory geometry tests passed; crossing tests rerun after border refinement. Browser mounted world with crossing controls and visible blue borders; initial screenshot reviewed and floating segment geometry refined into connected borders.
+- Commit pending; visual ancestry remains held; final pan/zoom and responsive checks pending in integration.
 
 ---
 
