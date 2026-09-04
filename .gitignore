@@ -111,6 +111,7 @@ temp/
 *.sqlite3
 
 # Webdev artifacts (checkpoint zips, migrations, etc.)
+/client/public/gumballpals.zip
 .webdev/
 .vercel
 test-results

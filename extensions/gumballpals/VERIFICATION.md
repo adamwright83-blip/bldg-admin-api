@@ -20,3 +20,11 @@
 6. Read-model propagation to Lantern City/tenant-normalized customers. Existing paid-order storage is reused but no downstream world integration was changed here.
 
 Do not describe this branch as production-ready or the user program as complete. It is an isolated implementation candidate with database/security evidence and an explicit integration handoff.
+# Daily scheduling and hosted entry follow-up
+
+- Production build passes, including an allowlisted eight-file extension ZIP.
+- Eleven extension/schedule tests and six backend validation tests pass. Schedule tests cover summer/winter offsets, both DST transitions and missed-run detection.
+- Local database proof re-run passes: atomic rollback, retries, duplicate protection, tenant/account/store isolation, cancellation barrier and imported-row Tower Wars compilation.
+- Hosted route renders in a real Chrome tab at localhost; with frontend-only development hosting the API is unavailable and the page shows a connection error, not fake success.
+- Full repository TypeScript check still fails in other existing areas; it is not a clean release gate.
+- NOT proven: actual installed extension execution, real current export capture/import, alarm-driven import, full historical payment coverage, production deployment or Lantern City consumption. These remain release work.

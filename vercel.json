@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/gumballpals", "destination": "/index.html" },
     { "source": "/resident-api/:path*", "destination": "https://api.bldg.chat/api/:path*" },
     { "source": "/api/:path*", "destination": "https://bldg-admin-api-production.up.railway.app/api/:path*" },
     { "source": "/receipt/:path*", "destination": "/index.html" },

@@ -2,11 +2,11 @@
 
 ## Status
 
-This is an isolated extension + backend implementation, **not a deployed or live-verified integration**. Main checkout and shared route/migration files are deliberately untouched. See `BACKEND-HANDOFF.md` before installation. No paid gumball API is used.
+The hosted entry route, backend registration, required migration and daily scheduler are implemented in this branch, **not yet deployed or live-verified**. See `BACKEND-HANDOFF.md` before release. No paid gumball API is used.
 
 ## Install locally
 
-1. Have the backend owner integrate the handoff, apply the isolated SQL migration in a test environment, and verify it before production deployment.
+1. Deploy the reviewed frontend/backend and required migration with owner approval. The build generates `/gumballpals.zip`; `/gumballpals` provides installation and last-success status.
 2. In Chrome Extensions, enable Developer mode and choose **Load unpacked**, selecting this directory. This is a development install; inspect/approve the permissions yourself. Do not paste tokens into the extension.
 3. Sign into gumball and `https://admin.bldg.chat` normally. Pin **Gumballpals**, then click it.
 4. Choose an explicit period ending today or earlier in Los Angeles. Click **Connect and prepare sync** and grant access to the two named sites.
@@ -19,6 +19,7 @@ No copying files or cookies. The normal report download may remain in Chrome; th
 - `scripting`: only fixed functions in signed-in gumball/Goldline tabs.
 - `storage`: local progress and receipts; transient download metadata in session storage. Raw CSV stays in memory, not extension storage.
 - `downloads`: a passive `onCreated` listener for the active report; no history search, file access, deletion, or arbitrary download actions.
+- `alarms`: the daily 6:00 PM America/Los_Angeles target, adjusted for DST. Missed runs catch up on browser startup. This cannot wake a closed browser or sleeping computer.
 - Optional hosts: exactly `https://cleancloudapp.com/*` and `https://admin.bldg.chat/*`.
 - No cookies, debugger, all-sites, browsing history, native messaging, remote executable code, or model API. Source page contents cannot issue extension commands.
 
@@ -35,7 +36,7 @@ The dropdown, calendar selectors and one-store label are grounded in observed DO
 - One gumball store per Goldline tenant. Store reassignment requires an administrator migration because existing paid-order keys do not include a store ID.
 - Only **Orders (Sales)**, up to 32 calendar days / 4 MB / 15,000 rows. No invented Revenue endpoint mapping.
 - Re-running the same period performs changed-row reconciliation. This is **not complete incremental coverage of older orders**: a payment/refund/correction on an order created outside the selected period is not captured. Revenue-report support and coverage tracking remain required before claiming full automatic reconciliation.
-- User-triggered only; Chrome/computer and the sync tab must remain open. Service-worker download observation survives popup closure, but the sync page is intentionally not a popup.
+- Manual sync plus opt-in daily sync after a successful manual import verifies the pairing. Automatic runs require the saved actor, tenant and store to match, and never prompt for new permissions or pair an unknown account. Chrome/computer and the sync tab must remain open. Failed automatic runs expose their status and wait for attention rather than silently retrying uncertain imports.
 - The Cancel button is available before import only. An interrupted import is marked outcome unknown. **Check interrupted import** waits on the server's transaction lock and either returns the committed receipt or installs a cancellation tombstone, preventing a late original request from executing. Only then is a fresh run allowed.
 - Pairing uses the existing authenticated Goldline session and tenant-aware tRPC middleware. No session credentials leave their source sites. Fixed same-origin content-script requests retain existing CSRF protections.
 - Imported rows enter `cleancloud_paid_orders`, which Tower Wars reads. This does **not** fix its initial-event animation suppression, daily battle scope, or prove Lantern City's customer association is wired.

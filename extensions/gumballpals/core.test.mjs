@@ -82,7 +82,7 @@ test("permissions are scoped; no cookie, debugger, remote script or broad host a
   const manifest = JSON.parse(
     await readFile(new URL("./manifest.json", import.meta.url), "utf8")
   );
-  assert.deepEqual(manifest.permissions, ["storage", "scripting", "downloads"]);
+  assert.deepEqual(manifest.permissions, ["storage", "scripting", "downloads", "alarms"]);
   assert.deepEqual(manifest.optional_host_permissions, [
     "https://cleancloudapp.com/*",
     "https://admin.bldg.chat/*",
