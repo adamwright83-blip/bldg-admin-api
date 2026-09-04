@@ -323,7 +323,6 @@ export default function AdminHostApp() {
         <ResidentFollowupAlert />
       ) : null}
 
-      {!isWorldHome ? <Link href={worldHomePath} className="gl-return-world">← Return to Lantern City</Link> : null}
       <div className={isWorldHome ? "gl-world-utility-menu" : ""}>
       {isWorldHome ? <button type="button" onClick={() => setMobileNavOpen(open => !open)} aria-expanded={mobileNavOpen}>Utilities ⚙</button> : null}
       <div hidden={isWorldHome && !mobileNavOpen}>
@@ -341,6 +340,7 @@ export default function AdminHostApp() {
       </div>
 
       <div className="cr-main-column">
+        {!isWorldHome ? <Link href={worldHomePath} className="gl-return-world">← Return to Lantern City</Link> : null}
         {!isWorldHome && isControlRoomSection ? <WorldDayPhaseIndicator /> : null}
         <section className="gl-persistent-world" hidden={!isWorldHome} aria-label="Lantern City world home">
           <LanternCityAtlas onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />

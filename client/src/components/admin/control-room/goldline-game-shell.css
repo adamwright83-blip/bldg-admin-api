@@ -12,13 +12,14 @@
 .gl-world-portals { position: fixed; z-index: 35; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: clamp(12px,3vw,46px); }
 .is-world-home .cr-world-camera-controls { bottom: 145px; }
 .is-world-home .gl-territory-chrome { bottom: 200px; max-height: 100px; overflow: hidden; }
+.is-world-home:has(.cr-reality-window) .gl-world-portals { display:none; }
 .gl-world-portal { --portal: #008c4c; display: flex; flex-direction: column; align-items: center; justify-content: center; width: clamp(108px,13vw,180px); aspect-ratio: 1; border-radius: 50%; border: 7px double #f2cc6f; background: radial-gradient(circle at 38% 28%,#ffffff45,transparent 42%),radial-gradient(circle,var(--portal),#071b30 78%); color: #fff7c7; box-shadow: 0 0 0 3px #8b571d, inset 0 0 18px var(--portal),0 5px 18px #08182a99; font: 700 clamp(13px,1.4vw,21px)/1.15 Georgia,serif; text-align: center; text-decoration: none; transition: transform .15s; }
 .gl-world-portal svg { width: 32%; height: 32%; margin-bottom: 7px; }
 .gl-world-portal.is-customers { --portal: #078ee7; }
 .gl-world-portal.is-active { --portal: #cf7900; }
 .gl-world-portal:hover,.gl-world-portal:focus-visible { transform: translateY(-5px); outline: 3px solid #fff8da; outline-offset: 5px; }
 .gl-world-utility-menu > button { position: fixed; z-index: 80; right: 20px; top: 20px; padding: 10px 16px; border: 1px solid #d3b162; border-radius: 24px; background: #10273ded; color: #fff0bc; }
-.gl-return-world { position: fixed; z-index: 90; bottom: 12px; left: 12px; padding: 10px 16px; border-radius: 24px; background: #10273d; color: #fff0bc; border: 1px solid #d3b162; }
+.gl-return-world { position:relative; display:inline-flex; align-self:flex-start; margin:8px 12px; padding:10px 16px; border-radius:24px; background:#10273d; color:#fff0bc; border:1px solid #d3b162; }
 .is-world-intel .gl-world-title { display: none; }
 .is-world-intel .lc-page { padding: 20px 20px 220px; }
 .is-world-intel .lc-map { height: 75dvh; }

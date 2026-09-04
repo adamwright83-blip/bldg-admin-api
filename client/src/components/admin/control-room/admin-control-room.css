@@ -325,15 +325,15 @@
 .cr-reality-header h2{margin:3px 0 2px;font-size:20px;letter-spacing:-0.02em}
 .cr-reality-header p{margin:0;color:var(--cr-muted);font-size:11px}
 .cr-reality-header button{border:0;background:transparent;padding:4px;cursor:pointer;color:var(--cr-muted)}
-.cr-reality-tabs{display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid #eef2f7;padding-bottom:8px}
+.cr-reality-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;border-bottom:1px solid #eef2f7;padding-bottom:8px}
 .cr-reality-tabs button{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border:1px solid #dce2ed;border-radius:7px;background:#f7f9fc;color:var(--cr-ink);font-size:11px;font-weight:750;cursor:pointer}
 .cr-reality-tabs button.is-active{border-color:#753de0;background:#6f36db;color:#fff}
-.cr-reality-viewport{min-height:220px}
+.cr-reality-viewport{position:relative;min-height:220px}
 .cr-reality-image-frame,.cr-reality-video-frame{position:relative;width:100%;height:220px;border-radius:9px;overflow:hidden;background:#06101c}
 .cr-reality-photo,.cr-reality-video{width:100%;height:100%;object-fit:cover}
 .cr-reality-badge{position:absolute;left:10px;bottom:10px;padding:3px 8px;border-radius:4px;background:rgba(6,18,34,0.85);color:#fff;font-size:9px;font-weight:800;text-transform:uppercase}
 .cr-reality-fallback{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px;padding:16px;border:1px dashed #d5dde8;border-radius:9px;text-align:center;background:#f9fafc}
-.cr-reality-art-preview{width:100px;height:120px;margin-bottom:8px}
+.cr-reality-art-preview{position:relative;overflow:hidden;pointer-events:none;width:100px;height:120px;margin-bottom:8px}
 .cr-reality-seam-grid{display:grid;grid-template-columns:100px 1fr;gap:14px;align-items:center}
 .cr-reality-details dl{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0}
 .cr-reality-details dt{font-size:8px;color:var(--cr-muted);text-transform:uppercase}
@@ -1606,4 +1606,4 @@ body .tw-truth-hud:not([open]) { width:auto; padding:10px 14px; }
 body .tw-truth-hud summary { cursor:pointer; font-size:11px; color:#fff; }
 .cr-world-geography-surface.view-atlas .cr-atmo-lighting-layer { opacity: 0; }
 .cr-world-geography-surface.view-atlas .cr-world-skin-shade { background: linear-gradient(180deg,#fff3c515,transparent 70%); }
-.cr-world-tower-anchor .cr-reality-trigger-btn { position:relative; z-index:20; margin-top:34px; min-height:36px; padding:7px 12px; font-size:10px; }
+.cr-world-tower-anchor .cr-reality-trigger-btn { position:relative; pointer-events:auto; z-index:20; margin-top:34px; min-height:36px; padding:7px 12px; font-size:10px; }

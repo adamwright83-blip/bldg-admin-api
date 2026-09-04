@@ -28,15 +28,16 @@ export function RealityWindow({
   const aerial = data?.aerial;
 
   const attributions: Array<{ text: string; uri?: string }> = [];
-  if (streetView?.attributionText) {
+  if (activeTab === "facade" && streetView?.hasCoverage && streetView.attributionText) {
     attributions.push({ text: streetView.attributionText });
   }
-  if (place?.primaryPhotoAttribution) {
+  if (activeTab === "facade" && streetView?.hasCoverage && place?.primaryPhotoAttribution) {
     attributions.push({
       text: place.primaryPhotoAttribution.displayName,
       uri: place.primaryPhotoAttribution.uri,
     });
   }
+  if (activeTab === "aerial" && aerial?.status === "active") attributions.push({ text: "Google Aerial View" });
 
   return (
     <aside className="cr-reality-window" aria-label="Grounded Real Place Window" aria-live="polite">
@@ -185,7 +186,7 @@ export function RealityWindow({
       </div>
 
       <GoogleAttributionSafeZone
-        visible={true}
+        visible={attributions.length > 0}
         providerAttributions={attributions}
         className="cr-reality-attribution"
       />
