@@ -3,6 +3,18 @@ import assert from "node:assert/strict";
 import { prepareSource } from "./browser.js";
 import { runInNewContext } from "node:vm";
 
+test("confirmation compares dates, tolerating display padding and separator typography", () => {
+  const source = prepareSource.toString();
+  const start = source.indexOf("function displayedRangeMatches");
+  const end = source.indexOf("\n    await wait", start);
+  const matches = runInNewContext(`${source.slice(start, end)}; displayedRangeMatches`);
+  const range = { from: "2026-08-06", to: "2026-09-04" };
+  for (const value of ["Aug 6, 2026 - Sep 4, 2026", "Aug 06, 2026 – Sep 04, 2026", "August 6, 2026 — September 4, 2026"])
+    assert.equal(matches(value, range), true);
+  for (const value of ["Sep 4, 2026 - Sep 4, 2026", "Aug 6, 2026 - Sep 3, 2026", "", "unknown"])
+    assert.equal(matches(value, range), false);
+});
+
 test("actual calendar ID derivation matches the observed date picker", () => {
   const declaration = prepareSource.toString().match(/const calendarId = [^;]+;/)?.[0];
   assert.ok(declaration);

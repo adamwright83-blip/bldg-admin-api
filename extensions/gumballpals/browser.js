@@ -191,14 +191,20 @@ export async function prepareSource(range) {
     await pickDate(range.from);
     await pickDate(range.to);
     stage = `confirming ${range.from} through ${range.to} (build 0.1.2)`;
-    const expected = iso => {
-      const [y, m, d] = iso.split("-").map(Number);
-      return `${monthNames[m - 1].slice(0, 3)} ${d}, ${y}`;
-    };
-    await wait(
-      () =>
-        dateInput.value === `${expected(range.from)} - ${expected(range.to)}`
-    );
+    function displayedRangeMatches(value, range) {
+      const match = String(value).trim().match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})\s*[-–—]\s*([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
+      if (!match) return false;
+      const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+      const iso = (month, day, year) => `${year}-${String(months.indexOf(month.slice(0, 3).toLowerCase()) + 1).padStart(2, "0")}-${day.padStart(2, "0")}`;
+      return iso(match[1], match[2], match[3]) === range.from && iso(match[4], match[5], match[6]) === range.to;
+    }
+    await wait(() => {
+      // Closing the calendar may replace the input. Read the live field, not
+      // the element captured before the two date selections.
+      const actual = reportRoot()?.querySelector("#undefined-input")?.value ?? "";
+      stage = `confirming ${range.from} through ${range.to}; displayed: ${actual || "(empty)"} (build 0.1.3)`;
+      return displayedRangeMatches(actual, range);
+    });
     if (exportButton.disabled)
       throw new Error("Report export is not available.");
     return {
