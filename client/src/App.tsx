@@ -1,3 +1,4 @@
+import GoldlineOnboarding from "./components/goldline/onboarding/GoldlineOnboarding";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
@@ -235,6 +236,7 @@ const LOCAL_ADMIN_PATHS = new Set([
 function AdminHostRouter() {
   return (
     <Switch>
+      <Route path="/goldline/start" component={GoldlineOnboarding} />
       <Route path="/gumballpals" component={Gumballpals} />
       <Route path="/product/:rest*">
         <Suspense fallback={<PublicLandingFallback />}>
@@ -421,6 +423,7 @@ function Router() {
 
   return (
     <Switch>
+      <Route path="/goldline/start" component={GoldlineOnboarding} />
       <Route path="/product/:rest*">
         <Suspense fallback={<PublicLandingFallback />}>
           <ProductShell />

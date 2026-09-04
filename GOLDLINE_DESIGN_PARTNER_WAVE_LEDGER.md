@@ -30,3 +30,6 @@ Production has not been modified beyond pushing the rollback tag.
 
 ## Slice 1 — tenant domain / interpreter
 Added durable tenant-keyed JSON session with optimistic version checks, five sequential answers, separate strict AI interpretation via existing configured invokeLLM abstraction, and canonical-world bypass. Additive required startup migration. Raw answers cannot write customer/order/world evidence. Four domain tests pass. Broad typecheck started; results tracked below. No production data touched.
+
+## Slice 2 — five-question scene
+World-first full-bleed interview, one required answer at a time, answer-specific echo, durable resume, optional browser mic reused from existing browserSpeechRecognition utility. Typing always works. New worlds enter from Admin world home; existing worlds bypass. Initial scene projection never writes business facts. Browser proof deferred until compositor/reveal fixture is connected. Not yet claimed release-complete.

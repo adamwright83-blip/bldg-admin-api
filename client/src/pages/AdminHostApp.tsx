@@ -1,3 +1,4 @@
+import GoldlineOnboarding from "@/components/goldline/onboarding/GoldlineOnboarding";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Loader2, ClipboardPlus, Users, Package } from "lucide-react";
@@ -140,6 +141,7 @@ export default function AdminHostApp() {
   const [loc, navigate] = useLocation();
   const path = normalizePath(loc);
   const { user, loading: authLoading, isAuthenticated } = useAuth();
+  const goldlineEntry = trpc.system.goldlineOnboarding.state.useQuery(undefined, { enabled: isAuthenticated, retry: false });
   const [profilePhone, setProfilePhone] = useState<string | null>(null);
   const [newOrderPhoneSeed, setNewOrderPhoneSeed] = useState<string | null>(
     null
@@ -272,6 +274,8 @@ export default function AdminHostApp() {
       <LoginForm role="admin" onSuccess={() => window.location.reload()} />
     );
   }
+
+  if (isWorldHome && goldlineEntry.data?.compatibility === "NEW_WORLD" && goldlineEntry.data.session?.status !== "COMPLETE") return <GoldlineOnboarding />;
 
   if (isLevel4) {
     return (
