@@ -92,7 +92,11 @@ export async function prepareSource(range) {
     );
     const reportSelect = input.closest(".multiselect");
     stage = "selecting Orders (Sales)";
-    reportSelect.querySelector(".multiselect__select").click();
+    // Vue Multiselect opens on mousedown, not click. HTMLElement.click()
+    // skips that event and leaves all options hidden.
+    reportSelect.querySelector(".multiselect__select").dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 })
+    );
     clickOne(
       await wait(() => {
         const es = exact(
