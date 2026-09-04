@@ -7,7 +7,7 @@ export type GeocodeResult =
       latitude: number;
       longitude: number;
       googlePlaceId: string | null;
-      provider: "google_geocoding";
+      provider: "google_geocoding" | "google_places_text_search";
       extentKm?: number;
     }
   | { status: "unconfigured" }
@@ -35,11 +35,21 @@ function safeError(value: unknown): string {
 export class GoogleGeocoder {
   constructor(
     private readonly apiKey = ENV.googleGeocodingApiKey,
-    private readonly fetcher: typeof fetch = fetch
+    private readonly fetcher: typeof fetch = fetch,
+    private readonly placesApiKey = ENV.googlePlacesApiKey
   ) {}
 
+  /**
+   * Resolve an address to canonical Google coordinates.
+   *
+   * The Geocoding API is preferred. When its key is absent, or the key exists
+   * but is restricted to other APIs, Places Text Search is used instead: it is
+   * the same canonical Google place data, and deployments here commonly hold a
+   * Places key whose Geocoding API was never enabled. The provider is reported
+   * honestly either way so downstream provenance is never overstated.
+   */
   async geocode(address: string): Promise<GeocodeResult> {
-    if (!this.apiKey.trim()) return { status: "unconfigured" };
+    if (!this.apiKey.trim()) return this.geocodeViaPlaces(address);
     let lastError = "Google geocoding request failed";
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -54,7 +64,9 @@ export class GoogleGeocoder {
         if (!response.ok) {
           lastError = `Google geocoding HTTP ${response.status}`;
           if (response.status === 429 || response.status >= 500) continue;
-          return { status: "provider_failure", error: lastError };
+          return this.placesApiKey.trim()
+            ? this.geocodeViaPlaces(address)
+            : { status: "provider_failure", error: lastError };
         }
         const body = (await response.json()) as GoogleBody;
         if (body.status === "ZERO_RESULTS")
@@ -68,6 +80,10 @@ export class GoogleGeocoder {
         }
         const result = body.results?.[0];
         const location = result?.geometry?.location;
+        // A key restricted to other Google APIs is a configuration fact, not a
+        // dead end: fall back rather than failing the caller.
+        if (body.status === "REQUEST_DENIED" && this.placesApiKey.trim())
+          return this.geocodeViaPlaces(address);
         if (
           body.status !== "OK" ||
           !result?.formatted_address ||
@@ -95,6 +111,71 @@ export class GoogleGeocoder {
           googlePlaceId: result.place_id ?? null,
           provider: "google_geocoding",
           ...(result.geometry?.viewport ? { extentKm: Math.hypot((result.geometry.viewport.northeast.lat-result.geometry.viewport.southwest.lat)*111,(result.geometry.viewport.northeast.lng-result.geometry.viewport.southwest.lng)*111*Math.cos(location.lat*Math.PI/180)) } : {}),
+        };
+      } catch (error) {
+        lastError = safeError(error);
+      }
+    }
+    return { status: "transient_failure", error: lastError };
+  }
+
+  /** Canonical Google place data via Places Text Search. */
+  private async geocodeViaPlaces(address: string): Promise<GeocodeResult> {
+    if (!this.placesApiKey.trim()) return { status: "unconfigured" };
+    let lastError = "Google Places text search failed";
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const response = await this.fetcher(
+          "https://places.googleapis.com/v1/places:searchText",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Goog-Api-Key": this.placesApiKey,
+              "X-Goog-FieldMask":
+                "places.id,places.formattedAddress,places.location,places.viewport",
+            },
+            body: JSON.stringify({ textQuery: address, maxResultCount: 1 }),
+            signal: AbortSignal.timeout(10_000),
+          }
+        );
+        if (!response.ok) {
+          lastError = `Google Places HTTP ${response.status}`;
+          if (response.status === 429 || response.status >= 500) continue;
+          return { status: "provider_failure", error: lastError };
+        }
+        const body = (await response.json()) as {
+          places?: Array<{
+            id?: string;
+            formattedAddress?: string;
+            location?: { latitude?: number; longitude?: number };
+            viewport?: {
+              low: { latitude: number; longitude: number };
+              high: { latitude: number; longitude: number };
+            };
+          }>;
+        };
+        const place = body.places?.[0];
+        const location = place?.location;
+        if (!place?.formattedAddress || location?.latitude == null || location.longitude == null)
+          return { status: "ambiguous", error: "No Places result" };
+        return {
+          status: "success",
+          canonicalAddress: place.formattedAddress,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          googlePlaceId: place.id ?? null,
+          provider: "google_places_text_search",
+          ...(place.viewport
+            ? {
+                extentKm: Math.hypot(
+                  (place.viewport.high.latitude - place.viewport.low.latitude) * 111,
+                  (place.viewport.high.longitude - place.viewport.low.longitude) *
+                    111 *
+                    Math.cos(location.latitude * (Math.PI / 180))
+                ),
+              }
+            : {}),
         };
       } catch (error) {
         lastError = safeError(error);
