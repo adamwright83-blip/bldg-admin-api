@@ -16,32 +16,21 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import {
+  DAYLIGHT_LUMINANCE_FLOOR,
+  DESIGNATED_DAYLIGHT_SURFACES,
+  luminance,
+} from "@shared/goldlineVisualCanon";
 
 const CSS = readFileSync(join(__dirname, "admin-control-room.css"), "utf8");
 
 /**
- * The surfaces the operator reads the city against. Not every element — the
- * grounds and panels that fill the screen and decide whether it reads as day.
+ * The designated surfaces and the floor both come from the canon
+ * (`shared/goldlineVisualCanon.ts`) so there is exactly one definition of "is
+ * this daylight". Two copies would drift, and the copy that drifted would be the
+ * one nobody was running.
  */
-const DESIGNATED_SURFACES = [
-  ".pwc-world",
-  ".cr-world-geography-surface",
-  ".cr-day-phase",
-  ".pwc-page .pwc-metric",
-];
-
-/** Relative luminance, 0 (black) to 1 (white). */
-function luminance(hex: string): number {
-  const value = hex.replace("#", "");
-  const full =
-    value.length === 3
-      ? value.split("").map(c => c + c).join("")
-      : value.slice(0, 6);
-  const r = parseInt(full.slice(0, 2), 16) / 255;
-  const g = parseInt(full.slice(2, 4), 16) / 255;
-  const b = parseInt(full.slice(4, 6), 16) / 255;
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
+const DESIGNATED_SURFACES = [...DESIGNATED_DAYLIGHT_SURFACES];
 
 /**
  * The last background declared for a selector — the one that actually paints.
@@ -85,12 +74,8 @@ function hexesIn(declaration: string): string[] {
   return resolved.match(/#[0-9a-fA-F]{3,8}/g) ?? [];
 }
 
-/**
- * Below this a surface reads as dark rather than as a shade of daylight. 0.45
- * sits comfortably under cream (~0.95) and well above the slate this replaced
- * (~0.02), so it fails a genuine regression without policing exact tones.
- */
-const DAYLIGHT_FLOOR = 0.45;
+/** The one definition of the floor, imported rather than restated. */
+const DAYLIGHT_FLOOR = DAYLIGHT_LUMINANCE_FLOOR;
 
 describe("the city stays daylight", () => {
   it.each(DESIGNATED_SURFACES)("%s paints a light background", selector => {

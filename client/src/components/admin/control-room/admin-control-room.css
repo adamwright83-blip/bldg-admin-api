@@ -1444,17 +1444,27 @@
   50%      { opacity: 0.6;  transform: translateX(6%); }
 }
 
-.pwc-world-unplaced {
+.pwc-world-notes {
   position: absolute;
   z-index: 6;
-  right: 12px;
-  bottom: 10px;
+  left: 12px;
+  /* Clears the map's zoom row, which sits 13px off the bottom and 44px tall. */
+  bottom: 66px;
+  display: flex;
+  max-width: min(62%, 320px);
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-start;
+  pointer-events: none;
+}
+
+.pwc-world-unplaced {
   margin: 0;
   padding: 5px 9px;
-  border: 1px solid var(--lc-day-edge);
+  border: 1px solid var(--lc-day-edge, #d8c9a8);
   border-radius: 7px;
-  color: var(--lc-day-ink-muted);
-  background: var(--lc-panel);
+  color: var(--lc-day-ink-muted, #5d6b80);
+  background: var(--lc-panel, #fffdf6);
   font-size: 10px;
   font-weight: 700;
 }
@@ -1532,4 +1542,19 @@
 .tw-wound .tw-wound-core { fill: #101e2a; }
 @media (prefers-reduced-motion: reduce) {
   .tw-piece.is-firing .tw-projectile { animation: none; }
+}
+
+/* The city's own sentence about the morning. Sits on the world, in the world's
+   voice — set apart from the instrumentation around it. */
+.pwc-world-voice {
+  margin: 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--lc-ribbon-gold, #ffb01f);
+  border-radius: 3px;
+  color: #43331a;
+  background: var(--lc-panel, #fffdf6);
+  box-shadow: 0 3px 10px #6b5a3026;
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 650;
 }

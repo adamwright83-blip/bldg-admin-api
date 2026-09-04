@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { classifyLanternCustomer } from "@/components/admin/control-room/LanternCityAtlas";
 import { CityTowerButton } from "@/components/admin/control-room/CityTowerButton";
 import { useLanternVitality } from "@/components/admin/control-room/useLanternVitality";
+import { speak } from "@shared/goldlineVoice";
 import { WorldGeographySurface } from "@/components/admin/control-room/WorldGeographySurface";
 import { WorldDayPhaseIndicator } from "@/components/admin/control-room/WorldDayPhase";
 import { clusterGeographicCustomers, clustersAsGoogleEntities, fanOutAtlasCollisions } from "@/components/admin/control-room/customerGeography";
@@ -83,6 +84,24 @@ export default function AdminHome({ operatorName = "Admin", path = "/", onNaviga
     return () => window.clearTimeout(timer);
   }, [towerToday.data]);
   const { byBuilding: buildingVitality, unresolvedLabel } = useLanternVitality(cityVitality.data);
+
+  /*
+    The city says one true sentence about the morning, built from the same counts
+    the windows are lit from. Salted with the scan id rather than the render, so
+    the line is stable while you look at it and changes when the world does —
+    a sentence that reshuffled on every re-render would read as noise.
+  */
+  const morningLine = useMemo(() => {
+    const buildings = Array.from(buildingVitality.values());
+    const quiet = buildings.reduce((sum, b) => sum + b.quietCount, 0);
+    const known = buildings.reduce((sum, b) => sum + b.warmCount + b.quietCount, 0);
+    if (known === 0) return null;
+    return speak({
+      moment: "morning_report",
+      slots: { count: quiet, total: known },
+      salt: cityVitality.data?.scanId ?? "",
+    });
+  }, [buildingVitality, cityVitality.data?.scanId]);
   const firstName = operatorName.split(/\s+/)[0] || "Admin";
   const viewName = path.startsWith("/home/") ? path.split("/").pop() : "overview";
   const sourceGap = dashboard.isError || customers.isError || todayQueue.isError || towerToday.isError;
@@ -132,8 +151,21 @@ export default function AdminHome({ operatorName = "Admin", path = "/", onNaviga
             is a quieter untruth than a wrong placement but an untruth all the
             same.
           */}
-          {unresolvedLabel ? (
-            <p className="pwc-world-unplaced" data-testid="city-unplaced">{unresolvedLabel}</p>
+          {/*
+            Stacked in one column rather than pinned to opposite corners. Pinned
+            separately they overlapped each other AND the map's zoom controls at
+            phone width — the unplaced label was already doing so before the
+            voice line joined it.
+          */}
+          {unresolvedLabel || morningLine ? (
+            <div className="pwc-world-notes">
+              {morningLine ? (
+                <p className="pwc-world-voice" data-testid="city-voice">{morningLine.text}</p>
+              ) : null}
+              {unresolvedLabel ? (
+                <p className="pwc-world-unplaced" data-testid="city-unplaced">{unresolvedLabel}</p>
+              ) : null}
+            </div>
           ) : null}
           {fanOutAtlasCollisions(customerClusters.filter(cluster => !cluster.outsideAtlas)).map(({ cluster, fanSlot }) => (
             <Fragment key={cluster.key}>
