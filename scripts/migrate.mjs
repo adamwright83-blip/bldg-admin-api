@@ -715,5 +715,8 @@ const impactSql = await readFile(new URL("../server/towerWars/impactSchema.sql",
 for (const statement of impactSql.split(";").map(value => value.trim()).filter(Boolean))
   await runRequired(statement, "Tower Wars located impacts and seasons");
 await assertRequiredColumns("goldline_tower_impacts", ["id", "tenantId", "payload"]);
+const onboardingSql = await readFile(new URL("../server/goldlineOnboarding/schema.sql", import.meta.url), "utf8");
+for (const statement of onboardingSql.split(";").map(value => value.trim()).filter(Boolean))
+  await runRequired(statement, "Goldline onboarding");
 await conn.end();
 console.log("\nMigration complete.");

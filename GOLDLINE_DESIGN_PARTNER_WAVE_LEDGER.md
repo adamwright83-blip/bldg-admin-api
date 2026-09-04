@@ -27,3 +27,6 @@ Four bridges are TWO canonical geometries plus exact 180° rotations (pixel-diff
 Slice 0: complete; kit audit installed. Commit tracked in git history.
 Slices 1–9: pending.
 Production has not been modified beyond pushing the rollback tag.
+
+## Slice 1 — tenant domain / interpreter
+Added durable tenant-keyed JSON session with optimistic version checks, five sequential answers, separate strict AI interpretation via existing configured invokeLLM abstraction, and canonical-world bypass. Additive required startup migration. Raw answers cannot write customer/order/world evidence. Four domain tests pass. Broad typecheck started; results tracked below. No production data touched.

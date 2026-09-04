@@ -1,3 +1,4 @@
+import { goldlineOnboardingRouter } from "../goldlineOnboarding/router";
 import { z } from "zod";
 import { notifyOwner } from "./notification";
 import { adminProcedure, publicProcedure, router } from "./trpc";
@@ -40,6 +41,7 @@ import { goldlineWorldRouter } from "../goldlineWorld/goldlineWorldRouter";
 import { cleancloudBrowserSyncRouter } from "../cleancloudBrowserSync/router";
 
 export const systemRouter = router({
+  goldlineOnboarding: goldlineOnboardingRouter,
   gumball: cleancloudBrowserSyncRouter,
   commercialMission: commercialMissionRouter,
   voiceWalkIn: voiceWalkInRouter,
