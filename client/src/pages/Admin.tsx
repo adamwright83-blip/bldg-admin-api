@@ -3150,7 +3150,9 @@ function DryCleanIntake({
                   : "border-black/15 bg-white text-black hover:border-black/40"
               }`}
             >
-              <span className="block text-xs font-semibold uppercase tracking-[0.12em]">
+              {/* No `uppercase` here: the partner's name is rendered exactly as
+                  the business writes it ("COAST 1hr CLEANERS", not "1HR"). */}
+              <span className="block text-xs font-semibold tracking-[0.12em]">
                 {menu.cleaner.displayName}
               </span>
               <span
@@ -3168,7 +3170,8 @@ function DryCleanIntake({
       <div className="flex flex-wrap items-center justify-between gap-2 border border-black/10 bg-white px-3 py-2">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-black/50">
-            {active.cleaner.displayName} price list
+            <span className="normal-case">{active.cleaner.displayName}</span>{" "}
+            price list
           </p>
           <p className="mt-0.5 text-xs text-black/45">
             {isBaseCatalog
@@ -3373,7 +3376,8 @@ function AddCleanerItemDialog({
         <div className="mb-3 flex items-start justify-between gap-2">
           <div>
             <h3 className="text-sm font-semibold uppercase tracking-[0.12em]">
-              Add {cleaner.displayName} item
+              Add <span className="normal-case">{cleaner.displayName}</span>{" "}
+              item
             </h3>
             <p className="mt-0.5 text-xs text-black/50">
               Saved to this cleaner&apos;s price list for future orders.
@@ -3414,7 +3418,8 @@ function AddCleanerItemDialog({
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-black/50">
-                {cleaner.displayName} retail
+                <span className="normal-case">{cleaner.displayName}</span>{" "}
+                retail
               </span>
               <Input
                 inputMode="decimal"

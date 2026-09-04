@@ -47,6 +47,30 @@ describe("New Order mobile checkout flow", () => {
     expect(dryCleanSource).toContain("item.customerPriceCents");
   });
 
+  it("prints each cleaner's name exactly as the business writes it", () => {
+    const dryCleanSource = source.slice(
+      source.indexOf("function DryCleanIntake("),
+      source.indexOf("/* ===== PROCESSING TAB =====")
+    );
+
+    /* `uppercase` would render "COAST 1hr CLEANERS" as "COAST 1HR CLEANERS".
+     * Wherever a partner's name is shown, it must not be CSS-transformed. */
+    const nameRenders = [
+      ...dryCleanSource.matchAll(/[^\n]*cleaner\.displayName[^\n]*/g),
+    ].map(m => m[0]);
+    expect(nameRenders.length).toBeGreaterThan(0);
+    for (const line of nameRenders) {
+      if (/uppercase/.test(line)) {
+        expect(line).toMatch(/normal-case/);
+      }
+    }
+
+    /* The enclosing element must not uppercase the name either. */
+    expect(dryCleanSource).not.toMatch(
+      /uppercase[^\n]*\n\s*\{(?:menu|active|cleaner)[^\n]*\.displayName\}/
+    );
+  });
+
   it("assigns each garment to the cleaner whose tab is open", () => {
     const dryCleanSource = source.slice(
       source.indexOf("function DryCleanIntake("),
