@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
+import Gumballpals from "@/pages/Gumballpals";
 import { Suspense, lazy, type ReactNode } from "react";
 import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -153,6 +154,7 @@ function AdminAuthGate({ children }: { children: ReactNode }) {
 }
 
 const LOCAL_ADMIN_PATHS = new Set([
+  "/gumballpals",
   "/admin",
   "/home",
   "/demo",
@@ -233,6 +235,7 @@ const LOCAL_ADMIN_PATHS = new Set([
 function AdminHostRouter() {
   return (
     <Switch>
+      <Route path="/gumballpals" component={Gumballpals} />
       <Route path="/product/:rest*">
         <Suspense fallback={<PublicLandingFallback />}>
           <ProductShell />

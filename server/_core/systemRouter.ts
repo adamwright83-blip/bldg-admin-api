@@ -37,8 +37,10 @@ import { geographicTruthRouter } from "../geography/geographicTruthRouter";
 import { canonicalBuildingRouter } from "../canonicalBuilding/canonicalBuildingRouter";
 import { googleRouter } from "../google/googleRouter";
 import { goldlineWorldRouter } from "../goldlineWorld/goldlineWorldRouter";
+import { cleancloudBrowserSyncRouter } from "../cleancloudBrowserSync/router";
 
 export const systemRouter = router({
+  gumball: cleancloudBrowserSyncRouter,
   commercialMission: commercialMissionRouter,
   voiceWalkIn: voiceWalkInRouter,
   adaptiveSalesMeter: adaptiveSalesMeterRouter,

@@ -270,7 +270,7 @@ export async function goldlineRequest(operation, input) {
     if (!Object.hasOwn(methods, operation))
       throw new Error("Unknown operation.");
     const method = methods[operation];
-    const path = `/api/trpc/system.cleancloudBrowserSync.${operation}`;
+    const path = `/api/trpc/system.gumball.${operation}`;
     const response = await fetch(
       path +
         (method === "GET" && input

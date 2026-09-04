@@ -19,6 +19,8 @@ import {
   fetchReport,
   goldlineRequest,
 } from "./browser.js";
+import { nextDailyRun } from "./schedule.js";
+let scheduled = false;
 const $ = id => document.getElementById(id);
 let cancelled = false,
   staged = null,
@@ -104,10 +106,15 @@ if (!globalThis.chrome?.runtime?.id) {
     $("disconnect").disabled = value;
   }
 
-  $("start").addEventListener("click", async () => {
+  async function startSync() {
     // Permission request stays directly in the user's gesture.
-    if (!(await chrome.permissions.request({ origins: HOSTS }))) {
+    if (
+      !(await (scheduled
+        ? chrome.permissions.contains({ origins: HOSTS })
+        : chrome.permissions.request({ origins: HOSTS })))
+    ) {
       status("Site access was not granted. Nothing imported.", true);
+      if (scheduled) await scheduleStatus("blocked: site permission missing");
       return;
     }
     busy(true);
@@ -126,6 +133,17 @@ if (!globalThis.chrome?.runtime?.id) {
         status("Checking your signed-in Goldline account…");
         goldlineTab = await openSite(GOLDLINE);
         const context = await request("context");
+        if (scheduled) {
+          const { schedule } = await chrome.storage.local.get("schedule");
+          if (!schedule?.enabled || !context.binding)
+            throw new Error("Daily sync is paused or account is unpaired.");
+          assertPairing(schedule.pairing, {
+            tenantId: context.tenantId,
+            actorId: context.actorId,
+            storeId: context.binding.storeId,
+            storeLabel: context.binding.storeLabel,
+          });
+        }
         if (
           context.protocolVersion !== 1 ||
           !context.tenantId ||
@@ -215,6 +233,7 @@ if (!globalThis.chrome?.runtime?.id) {
       });
     } catch (error) {
       status(error.message, true);
+      if (scheduled) await scheduleStatus(`blocked: ${error.message}`);
       const { run } = await chrome.storage.local.get("run");
       if (!["importing", "outcome_unknown"].includes(run?.phase))
         await save("failed");
@@ -226,9 +245,14 @@ if (!globalThis.chrome?.runtime?.id) {
       $("cancel").hidden = true;
       await chrome.storage.session.remove("pendingExport");
     }
+    if (scheduled && staged) await confirmSync();
+  }
+  $("start").addEventListener("click", () => {
+    scheduled = false;
+    void startSync();
   });
 
-  $("confirm").addEventListener("click", async () => {
+  async function confirmSync() {
     if (!staged) return;
     busy(true);
     $("confirm").disabled = true;
@@ -243,6 +267,12 @@ if (!globalThis.chrome?.runtime?.id) {
             "This preview was superseded by another sync. Prepare it again."
           );
         const context = await request("context");
+        if (scheduled) {
+          const { schedule } = await chrome.storage.local.get("schedule");
+          if (!schedule?.enabled)
+            throw new Error("Daily sync was paused. Nothing imported.");
+          assertPairing(schedule.pairing, staged);
+        }
         assertPairing(
           { ...staged },
           {
@@ -273,13 +303,23 @@ if (!globalThis.chrome?.runtime?.id) {
           ...staged,
           bindingId: binding.id,
         });
+        await chrome.storage.local.set({
+          verifiedPairing: {
+            tenantId: staged.tenantId,
+            actorId: staged.actorId,
+            storeId: staged.storeId,
+            storeLabel: staged.storeLabel,
+          },
+        });
         staged = null;
         await save("completed", { receipt });
         showReceipt(receipt);
         $("approval").hidden = true;
         status("Import confirmed. Your source records are saved in Goldline.");
+        if (scheduled) await scheduleStatus("completed");
       });
     } catch (error) {
+      if (scheduled) await scheduleStatus(`needs attention: ${error.message}`);
       const { run } = await chrome.storage.local.get("run");
       if (run?.phase === "importing") {
         await save("outcome_unknown");
@@ -293,6 +333,45 @@ if (!globalThis.chrome?.runtime?.id) {
       busy(false);
       $("confirm").disabled = false;
     }
+  }
+  $("confirm").addEventListener("click", () => void confirmSync());
+  async function scheduleStatus(message) {
+    const { schedule } = await chrome.storage.local.get("schedule");
+    if (schedule)
+      await chrome.storage.local.set({
+        schedule: { ...schedule, status: message },
+      });
+    await renderSchedule();
+  }
+  async function renderSchedule() {
+    const { schedule } = await chrome.storage.local.get("schedule");
+    $("schedule-status").textContent = schedule?.enabled
+      ? `Daily at 6:00 PM Pacific. Next: ${new Date(schedule.nextRunAt).toLocaleString("en-US", { timeZone: "America/Los_Angeles" })} Pacific. ${schedule.status || "Ready"}`
+      : "Daily sync is off.";
+  }
+  $("enable-schedule").addEventListener("click", async () => {
+    const { verifiedPairing } =
+      await chrome.storage.local.get("verifiedPairing");
+    if (!verifiedPairing) {
+      status("Complete one confirmed manual import first.", true);
+      return;
+    }
+    await chrome.storage.local.set({
+      schedule: {
+        enabled: true,
+        pairing: verifiedPairing,
+        nextRunAt: nextDailyRun(),
+        status: "Ready",
+      },
+    });
+    await renderSchedule();
+  });
+  $("disable-schedule").addEventListener("click", async () => {
+    const { schedule } = await chrome.storage.local.get("schedule");
+    await chrome.storage.local.set({
+      schedule: { ...schedule, enabled: false },
+    });
+    await renderSchedule();
   });
   $("cancel").addEventListener("click", () => {
     cancelled = true;
@@ -348,5 +427,18 @@ if (!globalThis.chrome?.runtime?.id) {
     if (recovered.receipt) showReceipt(recovered.receipt);
     if (recovered.message) status(recovered.message, true);
     $("check").hidden = recovered.phase !== "outcome_unknown";
+  }
+  await renderSchedule();
+  const launchToken = new URLSearchParams(location.search).get("scheduled");
+  const { scheduledLaunch } =
+    await chrome.storage.session.get("scheduledLaunch");
+  if (
+    launchToken &&
+    scheduledLaunch?.token === launchToken &&
+    scheduledLaunch.expiresAt > Date.now()
+  ) {
+    await chrome.storage.session.remove("scheduledLaunch");
+    scheduled = true;
+    await startSync();
   }
 }

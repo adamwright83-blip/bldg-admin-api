@@ -80,10 +80,17 @@
           >Open Lantern City</a
         >
       </section>
+      <section aria-labelledby="schedule-title">
+        <h2 id="schedule-title">A daily pulse</h2>
+        <p>Automatically sync at 6:00 PM Los Angeles time. Chrome must be running and both accounts signed in. Missed runs catch up when Chrome reopens. First complete a manual import to verify your account and store.</p>
+        <button id="enable-schedule">Enable daily sync for this paired account</button>
+        <button id="disable-schedule" class="secondary">Pause daily sync</button>
+        <p id="schedule-status" role="status">Daily sync is off.</p>
+      </section>
       <footer>
         Keep this tab open while syncing. A normal gumball report download
         may remain in Chrome; you never need to upload or manage it. No
-        background sync. No paid gumball API.
+        paid gumball API. Scheduled runs open a sync tab automatically.
         <button id="disconnect" class="secondary">
           Disconnect this browser
         </button>

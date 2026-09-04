@@ -1,4 +1,5 @@
 import mysql from "mysql2/promise";
+import { readFile } from "node:fs/promises";
 
 const DB_URL = process.env.DATABASE_URL;
 if (!DB_URL) {
@@ -700,6 +701,15 @@ await assertRequiredColumns("goldline_campaign_instances", [
   "chaptersJson",
   "classification",
 ]);
+
+// Required, additive Gumballpals schema. Fail startup rather than accept imports
+// against a partially provisioned database.
+const gumballSql = await readFile(new URL("../server/cleancloudBrowserSync/schema.sql", import.meta.url), "utf8");
+for (const statement of gumballSql.split(";").map(value => value.trim()).filter(Boolean)) {
+  await runRequired(statement, "Gumballpals schema");
+}
+await assertRequiredColumns("cleancloud_browser_sync_bindings", ["tenantId", "id", "storeId", "storeLabel", "createdBy", "lastSuccessAt"]);
+await assertRequiredColumns("cleancloud_browser_sync_receipts", ["id", "tenantId", "requestId", "digest", "storeId", "importBatchId", "receiptJson", "createdAt"]);
 
 await conn.end();
 console.log("\nMigration complete.");

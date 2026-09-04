@@ -1,12 +1,12 @@
 # Shared-file handoff to the admin-repo owner
 
-Owner of this branch: Codex. Shared files intentionally not edited. No merge/deploy authorized.
+Owner of this branch: Codex. Shared integration is now implemented; deployment still requires explicit approval.
 
-## Integration edits for Claude
+## Implemented integration and remaining release checks
 
-1. Import `cleancloudBrowserSyncRouter` from `../cleancloudBrowserSync/router` into `server/_core/systemRouter.ts`.
-2. Register `cleancloudBrowserSync: cleancloudBrowserSyncRouter` inside `systemRouter`. Do not register at the app-router root: extension uses `/api/trpc/system.cleancloudBrowserSync.{context,pair,import,receipt}`.
-3. Integrate `server/cleancloudBrowserSync/schema.sql` in the migration runner, with required-table checks. Do not apply it to production without review/approval.
+1. The existing browser-sync router is imported in the system router.
+2. It is registered as `gumball`; the extension uses `/api/trpc/system.gumball.{context,pair,import,receipt,resolve}`.
+3. The additive schema is integrated into `scripts/migrate.mjs` with required-column checks. Do not apply it to production without review/approval.
 4. Verify session-derived tenant ownership and existing mutation-origin guard remain active. No extension-origin CORS exception is needed: requests run from the signed-in Goldline tab.
 
 ## Contract
