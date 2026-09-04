@@ -409,11 +409,11 @@ export async function importCleanCloudPaidOrders(input: {
           eq(cleancloudPaidOrders.tenantId, input.tenantId ?? "default"),
           eq(
             cleancloudPaidOrders.cleancloudOrderId,
-            normalized.normalized.cleancloudOrderId
+            values.cleancloudOrderId
           ),
           eq(
             cleancloudPaidOrders.sourceReportType,
-            normalized.normalized.sourceReportType
+            values.sourceReportType
           )
         )
       )
@@ -422,7 +422,7 @@ export async function importCleanCloudPaidOrders(input: {
     if (existing[0]) {
       await tx
         .update(cleancloudPaidOrders)
-        .set({ ...normalized.normalized, updatedAt: new Date() })
+        .set({ ...values, updatedAt: new Date() })
         .where(eq(cleancloudPaidOrders.id, existing[0].id));
       updatedRowCount += 1;
     } else {
