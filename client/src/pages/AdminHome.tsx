@@ -4,6 +4,7 @@ import type { Order } from "@shared/types";
 import { trpc } from "@/lib/trpc";
 import { classifyLanternCustomer } from "@/components/admin/control-room/LanternCityAtlas";
 import { CityTowerButton } from "@/components/admin/control-room/CityTowerButton";
+import { useLanternVitality } from "@/components/admin/control-room/useLanternVitality";
 import { WorldGeographySurface } from "@/components/admin/control-room/WorldGeographySurface";
 import { WorldDayPhaseIndicator } from "@/components/admin/control-room/WorldDayPhase";
 import { clusterGeographicCustomers, clustersAsGoogleEntities, fanOutAtlasCollisions } from "@/components/admin/control-room/customerGeography";
@@ -41,6 +42,13 @@ export default function AdminHome({ operatorName = "Admin", path = "/", onNaviga
   const options = { refetchInterval: 30_000, refetchOnWindowFocus: true } as const;
   const dashboard = trpc.admin.dashboardSummary.useQuery(undefined, options);
   const customers = trpc.admin.listCustomers.useQuery({ sortBy: "lastOrder", includeLegacyCleanCloud: true }, { staleTime: 60_000 });
+  /*
+    Which customers sit in which tower, and how they are doing. Separate from
+    `customers` above because this one is bound to buildings through the order
+    each customer was last served on — the only building evidence a churn
+    snapshot carries.
+  */
+  const cityVitality = trpc.system.churnRadar.cityVitality.useQuery(undefined, { staleTime: 60_000 });
   const received = trpc.admin.listByStatus.useQuery({ status: "new" }, options);
   const collected = trpc.admin.listByStatus.useQuery({ status: "collected" }, options);
   const processing = trpc.admin.listByStatus.useQuery({ status: "processing" }, options);
@@ -74,6 +82,7 @@ export default function AdminHome({ operatorName = "Admin", path = "/", onNaviga
     const timer = window.setTimeout(() => setRevenueCue(null), 1400);
     return () => window.clearTimeout(timer);
   }, [towerToday.data]);
+  const { byBuilding: buildingVitality, unresolvedLabel } = useLanternVitality(cityVitality.data);
   const firstName = operatorName.split(/\s+/)[0] || "Admin";
   const viewName = path.startsWith("/home/") ? path.split("/").pop() : "overview";
   const sourceGap = dashboard.isError || customers.isError || todayQueue.isError || towerToday.isError;
@@ -109,6 +118,7 @@ export default function AdminHome({ operatorName = "Admin", path = "/", onNaviga
           showOpportunityLayer={true}
           geographicEntities={geographicEntities}
           battleState={{ pressureBuilding, revenueCue, revenues: { opus_la: opusRevenue, century_park_east: cpeRevenue } }}
+          buildingVitality={buildingVitality}
         >
           <header className="pwc-world-header">
             <strong>Live world overview — Los Angeles</strong>
@@ -116,6 +126,15 @@ export default function AdminHome({ operatorName = "Admin", path = "/", onNaviga
               <i /> {sourceGap ? "Source gap" : "Living LA Live"}
             </span>
           </header>
+          {/*
+            Customers we could not place in any tower. Shown rather than dropped:
+            a city that silently omits them reads as "there are no others", which
+            is a quieter untruth than a wrong placement but an untruth all the
+            same.
+          */}
+          {unresolvedLabel ? (
+            <p className="pwc-world-unplaced" data-testid="city-unplaced">{unresolvedLabel}</p>
+          ) : null}
           {fanOutAtlasCollisions(customerClusters.filter(cluster => !cluster.outsideAtlas)).map(({ cluster, fanSlot }) => (
             <Fragment key={cluster.key}>
               {fanSlot > 0 ? (

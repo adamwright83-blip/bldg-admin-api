@@ -8,6 +8,7 @@ import {
 } from "@shared/canonicalGeography";
 import type { CanonicalBuildingId } from "./buildingArt";
 import { CityTowerButton } from "./CityTowerButton";
+import type { BuildingVitality } from "./lanternVitality";
 import { WorldAtmosphereOverlay } from "./WorldAtmosphereOverlay";
 import { GoogleMapsRealityLayer, type GeographicCameraTarget, type GeographicEntity, type RealityRendererType } from "./GoogleMapsRealityLayer";
 import { RealityWindow } from "./RealityWindow";
@@ -27,6 +28,14 @@ export type WorldGeographySurfaceProps = {
   children?: React.ReactNode;
   className?: string;
   battleState?: { pressureBuilding: CanonicalBuildingId | null; revenueCue: CanonicalBuildingId | null; revenues: Record<CanonicalBuildingId, number | null> };
+  /**
+   * How each building's customers are doing, keyed by canonical building id.
+   *
+   * Optional, and absent means "not known" rather than "nothing happening":
+   * callers without customer data render the towers exactly as before instead
+   * of showing every window as quiet.
+   */
+  buildingVitality?: Map<string, BuildingVitality>;
   /**
    * Entities the caller wants placed by real coordinate while Google is
    * drawing. They are handed to the renderer, never positioned with atlas
@@ -78,6 +87,7 @@ export function WorldGeographySurface({
   children,
   className = "",
   battleState,
+  buildingVitality,
   geographicEntities,
   onGoogleVisibilityChange,
   focusPoint,
@@ -308,6 +318,7 @@ export function WorldGeographySurface({
                   onNavigate?.(path);
                 }}
                 subtitle={`${tower.neighborhood} · TODAY ${battleState?.revenues[tower.id] == null ? "—" : `$${(battleState.revenues[tower.id]! / 100).toFixed(0)}`} · battle truth`}
+                vitality={buildingVitality?.get(tower.id)}
               />
               <button
                 type="button"

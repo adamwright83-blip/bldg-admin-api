@@ -15,6 +15,7 @@ import {
   saveCustomerRecoveryProfile,
   setCustomerRecoveryPermission,
 } from "./customerChurnService";
+import { getLanternCityVitality } from "./lanternCityService";
 
 const uuid = z.string().uuid();
 
@@ -24,6 +25,17 @@ function required<T>(value: T | null, message: string): T {
 }
 
 export const churnRadarRouter = router({
+  /**
+   * Every scored customer, bound to the building their last order was served at.
+   *
+   * Returns evidence, not appearance — counts and timestamps that the client
+   * projects into window states. The outreach ribbon expires on a wall clock, so
+   * a page left open must be able to dim itself without asking the server again.
+   */
+  cityVitality: dayforgeChurnProcedure.query(({ ctx }) =>
+    getLanternCityVitality(ctx.tenantId)
+  ),
+
   profile: dayforgeChurnProcedure.query(({ ctx }) =>
     getCustomerRecoveryProfile(ctx.tenantId)
   ),

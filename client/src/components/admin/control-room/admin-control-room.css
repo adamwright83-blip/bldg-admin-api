@@ -1306,3 +1306,200 @@
     height: 112px;
   }
 }
+
+/* ============================================================
+   DAYLIGHT LANTERN CITY
+
+   The city is worked in an LA van in the sun, and a dark screen
+   loses the operator before the data ever gets a chance. So the
+   whole surface is daylight: cream grounds, sunlit facades, ink
+   text. Dark TEXT and dark SHADOWS stay — they are what makes a
+   bright surface readable outdoors.
+
+   Written additively rather than by editing the minified rules
+   above, because a scripted edit to this file has silently blanked
+   Lantern City before and the diff was invisible to tsc.
+
+   DORMANCY IS QUIET, NOT DARK
+
+   A dormant building is never unlit. It stays sunlit and cream;
+   what it loses is the golden shimmer in its windows and its gentle
+   motion. Darkening it would say "abandoned"; going quiet says
+   "nobody has ordered from here lately", which is the true and far
+   more actionable statement.
+   ============================================================ */
+.pwc-world {
+  /* City-scoped tokens. The next repaint edits these, not literals. */
+  --lc-day-sky: #dfeefb;
+  --lc-day-ground: #f6efe0;
+  --lc-day-ink: #24354d;
+  --lc-day-ink-muted: #5d6b80;
+  --lc-day-label: #fffdf2f2;
+  --lc-day-edge: #d8c9a8;
+  --lc-window-gold: #ffc94d;
+  --lc-ribbon-gold: #ffb01f;
+  --lc-panel: #fffdf6;
+  /* Nothing known yet. Not zero — an unknown building must not read as a
+     failing one, so it renders flat rather than quiet. */
+  --lc-lit: 0;
+  background: linear-gradient(180deg, var(--lc-day-sky), var(--lc-day-ground)) !important;
+}
+
+/* The old shade was a deep-navy vignette. Daylight wants the opposite:
+   a warm haze that lifts the horizon rather than sinking it. */
+.pwc-world .pwc-world-shade {
+  background: linear-gradient(180deg, #fff6df55, transparent 34%, #e8d9b933) !important;
+}
+
+.pwc-world > header {
+  color: var(--lc-day-ink) !important;
+  background: linear-gradient(180deg, #fffaeccc, transparent) !important;
+}
+.pwc-world > header span {
+  color: #17492f !important;
+  background: #dbf3e2 !important;
+}
+.pwc-world > header span.has-gap {
+  color: #7c2414 !important;
+  background: #ffe0d6 !important;
+}
+
+/* Building labels were dark plates. In daylight they read as paper. */
+.pwc-building { color: var(--lc-day-ink) !important; }
+.pwc-building strong,
+.pwc-building small {
+  color: var(--lc-day-ink) !important;
+  background: var(--lc-day-label) !important;
+  border-radius: 3px;
+}
+.pwc-building small { color: var(--lc-day-ink-muted) !important; }
+
+/* The plain-language status. Always present when vitality is known, so the
+   state never depends on seeing a colour or a motion. */
+.pwc-building-status {
+  margin-top: 2px;
+  border: 1px solid var(--lc-day-edge);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+/* ---- window shimmer -------------------------------------------------
+   The facade itself is untouched: it stays whatever sunlit cream the art
+   gives it. Only this overlay varies, and its opacity IS the share of
+   customers who are active — so a half-active tower is visibly half as
+   golden, and a fully quiet one simply has no gold left.
+   -------------------------------------------------------------------- */
+.pwc-building-canon { position: relative; }
+.pwc-building-canon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 4px;
+  background: linear-gradient(
+    118deg,
+    transparent 18%,
+    var(--lc-window-gold) 44%,
+    #fff3c9 52%,
+    var(--lc-window-gold) 60%,
+    transparent 84%
+  );
+  mix-blend-mode: screen;
+  opacity: calc(var(--lc-lit, 0) * 0.72);
+  transition: opacity 620ms ease;
+}
+
+/* Gentle activity, and only where there is activity to show. A building with
+   no active customers holds still — the stillness is the signal. */
+.pwc-building[data-vitality="known"] .pwc-building-canon::after {
+  animation: lc-shimmer 5.5s ease-in-out infinite;
+}
+@keyframes lc-shimmer {
+  0%, 100% { opacity: calc(var(--lc-lit, 0) * 0.58); }
+  50%      { opacity: calc(var(--lc-lit, 0) * 0.86); }
+}
+
+/* Unknown: no evidence either way. Flat, no shimmer, no quiet — it must not
+   be mistaken for a building that is doing badly. */
+.pwc-building[data-vitality="unknown"] .pwc-building-canon::after { opacity: 0; }
+
+/* ---- the outreach ribbon --------------------------------------------
+   A brief gold sweep meaning "somebody reached out", sitting ON a still-quiet
+   building. It deliberately does not raise --lc-lit: outreach is an action,
+   and only a real order may light a window. Its lifetime comes from the
+   outreach event itself, so it cannot be restarted by reopening the page.
+   -------------------------------------------------------------------- */
+.pwc-building[data-ribbon="true"] .pwc-building-canon::before {
+  content: "";
+  position: absolute;
+  inset: -4px -8px;
+  pointer-events: none;
+  border-radius: 6px;
+  background: linear-gradient(100deg, transparent 30%, var(--lc-ribbon-gold) 50%, transparent 70%);
+  opacity: 0.5;
+  animation: lc-ribbon 2.6s ease-in-out infinite;
+}
+@keyframes lc-ribbon {
+  0%, 100% { opacity: 0.22; transform: translateX(-6%); }
+  50%      { opacity: 0.6;  transform: translateX(6%); }
+}
+
+.pwc-world-unplaced {
+  position: absolute;
+  z-index: 6;
+  right: 12px;
+  bottom: 10px;
+  margin: 0;
+  padding: 5px 9px;
+  border: 1px solid var(--lc-day-edge);
+  border-radius: 7px;
+  color: var(--lc-day-ink-muted);
+  background: var(--lc-panel);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.pwc-character {
+  color: #8a5200 !important;
+  background: var(--lc-panel) !important;
+  box-shadow: 0 3px 10px #a2884d33 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The ribbon becomes a static tint that still expires on schedule — the
+     timer is unrelated to the animation, so nothing about its truthfulness
+     depends on motion being available. */
+  .pwc-building-canon::after,
+  .pwc-building[data-ribbon="true"] .pwc-building-canon::before {
+    animation: none !important;
+  }
+  .pwc-building-canon::after { transition: none; }
+}
+
+/* ---- daylight chrome ------------------------------------------------
+   The chips, alerts and surface behind them were dark glass, built to sit
+   legibly over a night satellite photo. In daylight they invert: pale glass
+   with ink text, the same shape and blur, so nothing about the layout moves.
+
+   Scoped to the city surfaces only. Tower Wars (.tw-*) is deliberately a dark
+   arena and is a separate decision, not an oversight.
+   -------------------------------------------------------------------- */
+.pwc-page .pwc-metric,
+.pwc-page .pwc-alerts > * {
+  border-color: #c9b98e !important;
+  color: var(--lc-day-ink, #24354d) !important;
+  background: #fffdf4e8 !important;
+  box-shadow: 0 6px 18px #6b5a3033 !important;
+}
+.pwc-page .pwc-metric strong { color: #1d2c40 !important; }
+.pwc-page .pwc-metric small { color: #6b5f45 !important; }
+
+/* The world surface behind the map. Visible wherever imagery has not loaded,
+   so a dark value here shows as a dark flash on every open. */
+.cr-world-geography-surface { background: #e8f0f7 !important; }
+
+.cr-day-phase {
+  border-color: #c9b98e !important;
+  color: #43331a !important;
+  background: #fffdf4e8 !important;
+}
