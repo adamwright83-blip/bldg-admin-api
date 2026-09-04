@@ -1,0 +1,81 @@
+{
+  "projection": "2:1 dimetric / isometric-style strategic map",
+  "canonicalTileCanvas": {
+    "width": 1024,
+    "height": 768
+  },
+  "islandEdgeAnchorsNormalized": {
+    "north": [
+      0.5,
+      0.08
+    ],
+    "east": [
+      0.91,
+      0.5
+    ],
+    "south": [
+      0.5,
+      0.92
+    ],
+    "west": [
+      0.09,
+      0.5
+    ]
+  },
+  "bridgeAxes": {
+    "03-bridge-ne-sw.png": {
+      "from": "NE",
+      "to": "SW",
+      "start": [
+        0.9,
+        0.28
+      ],
+      "end": [
+        0.1,
+        0.72
+      ]
+    },
+    "04-bridge-sw-ne.png": {
+      "from": "SW",
+      "to": "NE",
+      "start": [
+        0.1,
+        0.72
+      ],
+      "end": [
+        0.9,
+        0.28
+      ]
+    },
+    "05-bridge-nw-se.png": {
+      "from": "NW",
+      "to": "SE",
+      "start": [
+        0.1,
+        0.28
+      ],
+      "end": [
+        0.9,
+        0.72
+      ]
+    },
+    "06-bridge-se-nw.png": {
+      "from": "SE",
+      "to": "NW",
+      "start": [
+        0.9,
+        0.72
+      ],
+      "end": [
+        0.1,
+        0.28
+      ]
+    }
+  },
+  "notes": [
+    "The four placement bridge assets use two canonical artworks plus exact 180-degree rotations.",
+    "All geometry is game projection; real customer/building coordinates remain separate business/geographic truth.",
+    "The generic island intentionally contains no labels.",
+    "The island PNG has exterior water removed. Use coastline/water overlays beneath it in code."
+  ]
+}

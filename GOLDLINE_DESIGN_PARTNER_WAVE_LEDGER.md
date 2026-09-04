@@ -1,0 +1,29 @@
+# Goldline design-partner wave ledger
+
+START_SHA: 522de90fa0e57d208c05a01fbd5edd15b00b813f
+START_TAG: goldline-design-partner-start-20260904-104128-522de90f (pushed)
+Working directory: /Users/adamwrightpfi/Desktop/goldline-v1 (existing main worktree; original checkout on geography branch left intact).
+
+## Slice 0 — archaeology / assets
+- Auth/tenant: server/_core/trpc.ts tenant procedures; server/saas/tenantAccess.ts. Existing-world compatibility must query canonical entities/territories, never reset them.
+- Lantern City: components/admin/control-room/LanternCityAtlas.tsx, server/goldlineWorld/cityWorldService.ts.
+- Territories/veil/Guardians: shared/goldlineTerritoryCompiler.ts, shared/goldlineTerritories.ts, server/goldlineWorld/territoryService.ts; TerritoryWorldLayer/TerritoryVeilLayer.
+- Chronicle/evidence: server/goldlineWorld/worldEventStore.ts; identityResolver.ts; fieldJournalProcessingService.ts.
+- Campaign: goldlineWorld/campaignService.ts, campaignTravelAdapter.ts; shared/goldlineCampaignRuntime.ts.
+- Driver runtime: pages/driver/GoldlineDriverController.tsx; game/expedition; pages/goldline/Day1FieldMission.tsx; Today’s Line/openChannel.
+- Geography: server/geography/geographicTruthService.ts and GoogleGeocoder. Real-place infrastructure: server/territory and commercialPipeline.
+- Import: server/saas/tenantImportService.ts, tenantImportProviders.ts, saasStore.ts; existing normalized external customers, no second database.
+- Voice: existing journal capture/transcription infrastructure; onboarding typing must remain unconditional.
+- Cargo: authoritativeCargo.test.ts tests expedition pickup evidence. No physical Vehicle Cargo UI found. Orders have new/collected/processing/ready/delivered statuses; ready alone does not establish in-vehicle custody. Explicit transfer evidence required.
+- Admin: App.tsx, AdminHostApp.tsx, admin/adminPaths.ts; /new-order /customers /operations portals.
+- Tower Wars: shared/towerWars.ts and server/towerWars; existing hardcoded comparable building rules need careful bypass preservation.
+- Existing onboarding: SaaS setup in DayforgeOnboardingPage, not five-question world onboarding.
+
+### Asset audit
+Found supplied archive on Desktop. Installed at client/public/assets/goldline/procedural-world-v1. All 11 PNGs decoded with Pillow; exact dimensions, nonzero-alpha bounds, transparent/partial counts in audit.json. Production pack is 2:1 dimetric-style strategic art; supplied projection.json has proposed normalized pivots/sockets. Contact sheet visually inspected. Scale is reusable presentation, never literal geographic scale.
+Four bridges are TWO canonical geometries plus exact 180° rotations (pixel-difference verified). Rotated derivatives invert upright architecture: use upright 03 and 05. Generic island contains illustrated buildings: these are explicitly fantasy scenery, never customer holdings. No dynamic labels are baked in. Single lush city artwork is not climate-specific. Background itself has alpha: composite over opaque water. Vehicle-shell art absent from this pack; final cargo art requires review.
+
+## Execution status
+Slice 0: complete; kit audit installed. Commit tracked in git history.
+Slices 1–9: pending.
+Production has not been modified beyond pushing the rollback tag.

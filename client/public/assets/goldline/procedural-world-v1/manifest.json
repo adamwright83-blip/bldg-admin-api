@@ -1,0 +1,125 @@
+{
+  "pack": "goldline-procedural-world-kit-v1",
+  "assets": [
+    {
+      "file": "01-background-water-sky.png",
+      "width": 1920,
+      "height": 1080,
+      "mode": "RGBA",
+      "hasTransparency": true,
+      "transparentCorners": false,
+      "alphaRange": [
+        0,
+        255
+      ]
+    },
+    {
+      "file": "02-territory-island-generic.png",
+      "width": 1024,
+      "height": 768,
+      "mode": "RGBA",
+      "hasTransparency": true,
+      "transparentCorners": true,
+      "alphaRange": [
+        0,
+        255
+      ]
+    },
+    {
+      "file": "03-bridge-ne-sw.png",
+      "width": 768,
+      "height": 512,
+      "mode": "RGBA",
+      "hasTransparency": true,
+      "transparentCorners": true,
+      "alphaRange": [
+        0,
+        253
+      ]
+    },
+    {
+      "file": "04-bridge-sw-ne.png",
+      "width": 768,
+      "height": 512,
+      "mode": "RGBA",
+      "hasTransparency": true,
+      "transparentCorners": true,
+      "alphaRange": [
+        0,
+        253
+      ]
+    },
+    {
+      "file": "05-bridge-nw-se.png",
+      "width": 768,
+      "height": 512,
+      "mode": "RGBA",
+      "hasTransparency": true,
+      "transparentCorners": true,
+      "alphaRange": [
+        0,
+        253
+      ]
+    },
+    {
+      "file": "06-bridge-se-nw.png",
+      "width": 768,
+      "height": 512,
+      "mode": "RGBA",
+      "hasTransparency": true,
+      "transparentCorners": true,
+      "alphaRange": [
+        0,
+        253
+      ]
+    },
+    {
+      "file": "07-coastline-glow-overlay.png",
+      "width": 1024,
+      "height": 768,
+      "mode": "RGBA",
+      "hasTransparency": true,
+      "transparentCorners": true,
+      "alphaRange": [
+        0,
+        255
+      ]
+    },
+    {
+      "file": "08-cloud-fog-overlay.png",
+      "width": 1024,
+      "height": 512,
+      "mode": "RGBA",
+      "hasTransparency": true,
+      "transparentCorners": true,
+      "alphaRange": [
+        0,
+        253
+      ]
+    },
+    {
+      "file": "09-water-reflection-overlay.png",
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "hasTransparency": true,
+      "transparentCorners": true,
+      "alphaRange": [
+        0,
+        252
+      ]
+    },
+    {
+      "file": "10-sun-glow-overlay.png",
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA",
+      "hasTransparency": true,
+      "transparentCorners": true,
+      "alphaRange": [
+        0,
+        252
+      ]
+    }
+  ]
+}

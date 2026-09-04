@@ -1,0 +1,189 @@
+[
+  {
+    "file": "01-background-water-sky.png",
+    "width": 1920,
+    "height": 1080,
+    "alphaBounds": [
+      0,
+      0,
+      1920,
+      1080
+    ],
+    "alphaRange": [
+      0,
+      255
+    ],
+    "transparentPixels": 189777,
+    "partialAlphaPixels": 1883200
+  },
+  {
+    "file": "02-territory-island-generic.png",
+    "width": 1024,
+    "height": 768,
+    "alphaBounds": [
+      61,
+      71,
+      962,
+      689
+    ],
+    "alphaRange": [
+      0,
+      255
+    ],
+    "transparentPixels": 517360,
+    "partialAlphaPixels": 267332
+  },
+  {
+    "file": "03-bridge-ne-sw.png",
+    "width": 768,
+    "height": 512,
+    "alphaBounds": [
+      72,
+      82,
+      650,
+      449
+    ],
+    "alphaRange": [
+      0,
+      253
+    ],
+    "transparentPixels": 303493,
+    "partialAlphaPixels": 89723
+  },
+  {
+    "file": "04-bridge-sw-ne.png",
+    "width": 768,
+    "height": 512,
+    "alphaBounds": [
+      118,
+      63,
+      696,
+      430
+    ],
+    "alphaRange": [
+      0,
+      253
+    ],
+    "transparentPixels": 303493,
+    "partialAlphaPixels": 89723
+  },
+  {
+    "file": "05-bridge-nw-se.png",
+    "width": 768,
+    "height": 512,
+    "alphaBounds": [
+      46,
+      47,
+      698,
+      465
+    ],
+    "alphaRange": [
+      0,
+      253
+    ],
+    "transparentPixels": 290961,
+    "partialAlphaPixels": 102255
+  },
+  {
+    "file": "06-bridge-se-nw.png",
+    "width": 768,
+    "height": 512,
+    "alphaBounds": [
+      70,
+      47,
+      722,
+      465
+    ],
+    "alphaRange": [
+      0,
+      253
+    ],
+    "transparentPixels": 290961,
+    "partialAlphaPixels": 102255
+  },
+  {
+    "file": "07-coastline-glow-overlay.png",
+    "width": 1024,
+    "height": 768,
+    "alphaBounds": [
+      61,
+      150,
+      962,
+      624
+    ],
+    "alphaRange": [
+      0,
+      255
+    ],
+    "transparentPixels": 686372,
+    "partialAlphaPixels": 93033
+  },
+  {
+    "file": "08-cloud-fog-overlay.png",
+    "width": 1024,
+    "height": 512,
+    "alphaBounds": [
+      41,
+      49,
+      983,
+      463
+    ],
+    "alphaRange": [
+      0,
+      253
+    ],
+    "transparentPixels": 140274,
+    "partialAlphaPixels": 384014
+  },
+  {
+    "file": "09-water-reflection-overlay.png",
+    "width": 512,
+    "height": 512,
+    "alphaBounds": [
+      26,
+      128,
+      486,
+      384
+    ],
+    "alphaRange": [
+      0,
+      252
+    ],
+    "transparentPixels": 147181,
+    "partialAlphaPixels": 114963
+  },
+  {
+    "file": "10-sun-glow-overlay.png",
+    "width": 512,
+    "height": 512,
+    "alphaBounds": [
+      26,
+      85,
+      486,
+      427
+    ],
+    "alphaRange": [
+      0,
+      252
+    ],
+    "transparentPixels": 120078,
+    "partialAlphaPixels": 142066
+  },
+  {
+    "file": "preview-contact-sheet.png",
+    "width": 1000,
+    "height": 1400,
+    "alphaBounds": [
+      0,
+      0,
+      1000,
+      1400
+    ],
+    "alphaRange": [
+      255,
+      255
+    ],
+    "transparentPixels": 0,
+    "partialAlphaPixels": 0
+  }
+]
