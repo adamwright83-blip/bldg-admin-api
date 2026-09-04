@@ -161,6 +161,18 @@ function useReplay(data: TowerWarsData | undefined) {
 }
 
 export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
+  const [businessDate, setBusinessDate] = useState("");
+  return <>
+    <section aria-label="Battle date" style={{ background: "#fff9e9", color: "#173d47", padding: 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+      <label>View imported sales by payment day <input aria-label="Battle payment date" type="date" value={businessDate} onChange={event => setBusinessDate(event.target.value)} /></label>
+      <button type="button" onClick={() => setBusinessDate("")}>Today</button>
+      <span>{businessDate ? "Historical battle · real sales, not new revenue. Press Replay selected day to watch." : "Today's totals exclude earlier payments. Select their payment date to see imported sales and residents."}</span>
+    </section>
+    <TowerWarsDay key={businessDate || "today"} onNavigate={onNavigate} compact={compact} businessDate={businessDate} />
+  </>;
+}
+
+function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsProps & { businessDate: string }) {
   const [printPromiseId, setPrintPromiseId] = useState<string | null>(null);
   const [comebackBuilding, setComebackBuilding] = useState<TowerWarsBuildingId | null>(null);
   // The building the camera was moving toward, carried from the city.
@@ -189,7 +201,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
   );
   // Tower Wars was the only admin surface that never polled, so a new order never
   // reached an open tab. Siblings poll at 2.5s-60s.
-  const today = trpc.system.towerWars.today.useQuery(undefined, {
+  const today = trpc.system.towerWars.today.useQuery(businessDate ? { businessDate } : undefined, {
     staleTime: 30_000,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
@@ -218,6 +230,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
   useEffect(() => {
     if (!today.data) return;
     const ids = ledgerKey ? ledgerKey.split("|") : [];
+    if (businessDate) return;
     const cursor = readSeenCursor();
     // Every mount adopts its initial authoritative ledger silently. A remount or
     // afternoon direct load is not a new economic event.
@@ -358,8 +371,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
         <div>
           <strong>Tower Wars is waiting for revenue truth</strong>
           <p>
-            The arena remains inactive because the tenant-scoped ledger could
-            not be compiled.
+            {today.error?.message || "The arena remains inactive because the tenant-scoped ledger could not be compiled."}
           </p>
         </div>
       </div>
@@ -399,7 +411,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
     youId === "opus_la" ? "century_park_east" : "opus_la";
   const you = state.buildings[youId];
   const rival = state.buildings[rivalId];
-  const openPromises = data.promises.filter(promise => !promise.fulfilledAt);
+  const openPromises = businessDate ? [] : data.promises.filter(promise => !promise.fulfilledAt);
   const actionDefinitions = [
     {
       title: "Fulfill promise",
@@ -451,7 +463,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
             <strong>{money(you.revenueCents)}</strong>
           </div>
           <div className="tw-versus">
-            <b>TODAY</b>
+            <b>{businessDate ? "HISTORY" : "TODAY"}</b>
             <span>
               {comparison.kind === "lead"
                 ? `Trailing by ${money(comparison.delta)}`
@@ -494,10 +506,10 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
                 buildingId={buildingId}
                 businessDate={data.businessDate}
                 strata={
-                  settlementQuery.data?.settlement.buildings[buildingId]
-                    .strata ?? []
+                  !businessDate ? settlementQuery.data?.settlement.buildings[buildingId]
+                    .strata ?? [] : []
                 }
-                regeneration={regenerationFor(buildingId)}
+                regeneration={businessDate ? undefined : regenerationFor(buildingId)}
                 /* The replay reducer already yields the prefix count, so damage at
                    event N equals business state after event N for free. */
                 incomingToday={building.incomingAttackCount}
@@ -521,7 +533,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
                   {building.incomingAttackCount} incoming strikes ·{" "}
                   {building.damage.replace("-", " ")}
                 </small>
-                {settlementQuery.data
+                {!businessDate && settlementQuery.data
                   ? (() => {
                       const settled =
                         settlementQuery.data.settlement.buildings[buildingId]
@@ -547,7 +559,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
           <span>
             <i />{" "}
             {replay.mode === "live"
-              ? "Live compilation"
+              ? businessDate ? "Historical compilation" : "Live compilation"
               : `Replay event ${replay.index} / ${data.ledger.length}`}
           </span>
           <strong>Real orders create attacks</strong>
@@ -557,7 +569,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
           </p>
           <div className="tw-source-breakdown">
             <span>
-              <small>Orders today</small>
+              <small>{businessDate ? "Orders this day" : "Orders today"}</small>
               <strong>{you.orderCount}</strong>
             </span>
             <span>
@@ -588,7 +600,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
           </div>
           <div className="tw-replay-controls">
             <button type="button" onClick={replay.restart}>
-              <RotateCcw /> Replay Today
+              <RotateCcw /> {businessDate ? "Replay selected day" : "Replay Today"}
             </button>
             {replay.mode !== "live" ? (
               <button type="button" onClick={replay.toggle}>
@@ -735,6 +747,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
         <button
           type="button"
           disabled={!hasLoser}
+          disabled={Boolean(businessDate)}
           onClick={() => setComebackBuilding(youId)}
         >
           {hasLoser ? "Engineer the comeback" : "No comeback assigned on a tie"} <ArrowRight />

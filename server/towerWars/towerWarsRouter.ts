@@ -11,7 +11,7 @@ import { dayDirectorActorId } from "../dayDirector/dayDirectorActor";
 import { sandboxFixture, SANDBOX_SCENARIOS } from "@shared/sandboxScenarios";
 import { settleTowerWars } from "@shared/towerWarsSettlement";
 import { isCompletedReplayDate, requireSandboxEnabled, sandboxEnabled } from "./sandboxGate";
-import { getDashboardTimeZone } from "../dashboardZoned";
+import { getDashboardTimeZone, zonedDayStartUtc } from "../dashboardZoned";
 
 const buildingId = z.enum(["opus_la", "century_park_east"]);
 
@@ -43,9 +43,18 @@ export const towerWarsRouter = router({
       const replay = await getTowerWarsSettlement({ tenantId: ctx.tenantId, now: new Date(`${input.businessDate}T19:00:00.000Z`) });
       return { ...replay, readOnly: true as const, cursorScope: `sandbox:replay:${input.businessDate}` };
     }),
-  today: adminProcedure.query(({ ctx }) =>
-    getTowerWarsToday({ tenantId: ctx.tenantId })
-  ),
+  today: adminProcedure
+    .input(z.object({ businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const date = input?.businessDate;
+      if (date && !isCompletedReplayDate(date, new Date(), getDashboardTimeZone()))
+        throw new Error("Choose a completed past business date, or return to Today.");
+      const result = await getTowerWarsToday({
+        tenantId: ctx.tenantId,
+        now: date ? zonedDayStartUtc(date, getDashboardTimeZone()) : undefined,
+      });
+      return date ? { ...result, promises: [] } : result;
+    }),
   /** Today's legible match plus the permanent strata beneath it. */
   settlement: adminProcedure
     .input(
