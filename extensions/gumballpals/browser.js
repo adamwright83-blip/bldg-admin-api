@@ -122,6 +122,7 @@ export async function prepareSource(range) {
     stage = "setting the requested dates";
     const dateInput = reportRoot().querySelector("#undefined-input");
     if (!dateInput) throw new Error("Date picker changed.");
+    dateInput.focus();
     dateInput.click();
     const picker = await wait(
       () =>
@@ -145,18 +146,26 @@ export async function prepareSource(range) {
     async function pickDate(iso) {
       const [year, month, day] = iso.split("-").map(Number);
       for (let i = 0; i < 25; i++) {
-        const labels = [
+        const labels = await wait(() => {
+          const values = [
           ...picker.querySelectorAll(
             ".datepicker-container-label .custom-button-content"
           ),
-        ].map(e => e.textContent.trim());
+          ].filter(visible).map(e => e.textContent.trim());
+          const animating = picker.matches('[class*="-enter-active"], [class*="-leave-active"]') ||
+            picker.querySelector('[class*="-enter-active"], [class*="-leave-active"]');
+          return !animating && values.length === 2 ? values : null;
+        });
         const currentMonth = monthNames.indexOf(labels[0]) + 1,
           currentYear = Number(labels[1]);
         if (!currentMonth || !currentYear)
           throw new Error("Unrecognized calendar.");
         const delta = (year - currentYear) * 12 + month - currentMonth;
         if (!delta) {
-          clickOne(exact(picker, "button.datepicker-day.enable", String(day)));
+          clickOne(await wait(() => {
+            const days = exact(picker, "button.datepicker-day.enable", String(day));
+            return days.length === 1 ? days : null;
+          }));
           await pause();
           return;
         }
@@ -165,7 +174,11 @@ export async function prepareSource(range) {
         );
         if (!arrow || arrow.disabled) throw new Error("Date is unavailable.");
         arrow.click();
-        await pause();
+        await wait(() => {
+          const values = [...picker.querySelectorAll(".datepicker-container-label .custom-button-content")]
+            .filter(visible).map(e => e.textContent.trim());
+          return values.length === 2 && values.join("|") !== labels.join("|");
+        });
       }
       throw new Error("Date range is too far from the current calendar.");
     }
