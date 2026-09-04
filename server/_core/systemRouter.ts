@@ -1,3 +1,4 @@
+import { goldlineCargoRouter } from "../goldlineCargo/cargoRouter";
 import { goldlineOnboardingRouter } from "../goldlineOnboarding/router";
 import { z } from "zod";
 import { notifyOwner } from "./notification";
@@ -41,6 +42,7 @@ import { goldlineWorldRouter } from "../goldlineWorld/goldlineWorldRouter";
 import { cleancloudBrowserSyncRouter } from "../cleancloudBrowserSync/router";
 
 export const systemRouter = router({
+  goldlineCargo: goldlineCargoRouter,
   goldlineOnboarding: goldlineOnboardingRouter,
   gumball: cleancloudBrowserSyncRouter,
   commercialMission: commercialMissionRouter,

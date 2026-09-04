@@ -1,0 +1,2 @@
+import {describe,it,expect} from "vitest";import {cargoAppearance} from "./cargoService";
+describe("Vehicle Cargo projection",()=>{it("draws unprocessed and processed custody differently",()=>{expect(cargoAppearance("IN_VEHICLE_UNPROCESSED")).toEqual({kind:"paper_bag",condition:"scrunched garments",next:"Processor handoff"});expect(cargoAppearance("IN_VEHICLE_PROCESSED").kind).toBe("garment_bag")});});

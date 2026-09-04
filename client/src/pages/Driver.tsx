@@ -1,3 +1,4 @@
+import { VehicleCargo } from "@/components/goldline/VehicleCargo";
 import { trpc } from "@/lib/trpc";
 import { FirstMissionDriver } from "@/components/goldline/onboarding/FirstMissionDriver";
 import { Loader2 } from "lucide-react";
@@ -120,6 +121,6 @@ function AuthenticatedDriver() {
     );
   }
 
-  if (firstWorld.data?.session?.mission && firstWorld.data.session.status === "COMPLETE") return <FirstMissionDriver session={firstWorld.data.session} />;
-  return <GoldlineDriverController />;
+  if (firstWorld.data?.session?.mission && firstWorld.data.session.status === "COMPLETE") return <><FirstMissionDriver session={firstWorld.data.session} /><VehicleCargo /></>;
+  return <><GoldlineDriverController /><VehicleCargo /></>;
 }
