@@ -1,3 +1,4 @@
+import { DesignPartnerWorld } from "@/components/goldline/onboarding/DesignPartnerWorld";
 import GoldlineOnboarding from "@/components/goldline/onboarding/GoldlineOnboarding";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
@@ -274,6 +275,18 @@ export default function AdminHostApp() {
       <LoginForm role="admin" onSuccess={() => window.location.reload()} />
     );
   }
+
+  // Day two: a completed design-partner session never returns to the interview.
+  // The reveal surface IS the persistent world home for these tenants, and the
+  // same session drives the generalized solo Tower Wars arena.
+  const designPartnerWorld =
+    goldlineEntry.data?.session?.status === "COMPLETE" &&
+    goldlineEntry.data.session.world &&
+    goldlineEntry.data.session.mission
+      ? goldlineEntry.data.session
+      : null;
+  if (isTowerWars && designPartnerWorld) return <DesignPartnerWorld session={designPartnerWorld} view="tower-wars" />;
+  if (isWorldHome && designPartnerWorld) return <DesignPartnerWorld session={designPartnerWorld} />;
 
   if (isWorldHome && goldlineEntry.data?.compatibility === "NEW_WORLD" && goldlineEntry.data.session?.status !== "COMPLETE") return <GoldlineOnboarding />;
 

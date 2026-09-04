@@ -121,6 +121,11 @@ function AuthenticatedDriver() {
     );
   }
 
-  if (firstWorld.data?.session?.mission && firstWorld.data.session.status === "COMPLETE") return <><FirstMissionDriver session={firstWorld.data.session} /><VehicleCargo /></>;
+  // Day two: the first mission owns Driver only until it is fully resolved. Once
+  // the operator has recorded real field evidence AND closed the fictional
+  // encounter, Driver hands back to the real controller so Today's Line reweaves
+  // from ongoing truth instead of replaying a finished first chapter forever.
+  const firstMission = firstWorld.data?.session?.status === "COMPLETE" ? firstWorld.data.session.mission : null;
+  if (firstMission && !firstMission.gameplayCompletedAt) return <><FirstMissionDriver session={firstWorld.data!.session!} /><VehicleCargo /></>;
   return <><GoldlineDriverController /><VehicleCargo /></>;
 }

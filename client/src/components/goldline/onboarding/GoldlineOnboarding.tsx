@@ -1,3 +1,5 @@
+import { CustomerImport } from "./CustomerImport";
+import { DesignPartnerWorld } from "./DesignPartnerWorld";
 import { startBrowserSpeechTranscript, type BrowserSpeechSession } from "@/lib/browserSpeechRecognition";
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -41,11 +43,13 @@ export default function GoldlineOnboarding() {
  const utils = trpc.useUtils();
  const start = trpc.system.goldlineOnboarding.start.useMutation({onSuccess:()=>utils.system.goldlineOnboarding.state.invalidate()});
  const save = trpc.system.goldlineOnboarding.answer.useMutation({onSuccess:()=>utils.system.goldlineOnboarding.state.invalidate()});
+ const reveal = trpc.system.goldlineOnboarding.reveal.useMutation({onSuccess:()=>utils.system.goldlineOnboarding.state.invalidate()});
  const interpret = trpc.system.goldlineOnboarding.interpret.useMutation({onSuccess:()=>utils.system.goldlineOnboarding.state.invalidate()});
  const session = state.data?.session;
  if (state.isLoading) return <main className="gl-onboarding"><p className="gl-entry">Opening your world…</p></main>;
  if (state.error) return <main className="gl-onboarding"><div className="gl-entry"><p role="alert">{state.error.message}</p><a href="/">Return to sign in</a></div></main>;
  if (state.data?.compatibility === "LEGACY_EXISTING_WORLD") return <main className="gl-onboarding"><div className="gl-entry"><h1>Your world is waiting.</h1><a href="/growth/lantern-city">RETURN TO LANTERN CITY</a></div></main>;
  if (!session) return <main className="gl-onboarding"><div className="gl-onboarding-sky"/><div className="gl-entry"><p>GOLDLINE</p><h1>Your work.<br/>An extraordinary world.</h1><p>Five questions. One useful mission. Your first chapter starts here.</p><button disabled={start.isPending} onClick={()=>start.mutate()}>BEGIN YOUR STORY</button>{start.error && <p role="alert">{start.error.message}</p>}</div></main>;
- return <OnboardingInterview session={session} busy={save.isPending || interpret.isPending} error={save.error?.message || interpret.error?.message} onAnswer={answer=>save.mutateAsync({question:session.currentQuestion,answer,version:session.version})} onInterpret={()=>interpret.mutateAsync()}><p>Your story is saved. Preparing your local world…</p></OnboardingInterview>;
+ if(session.status === "COMPLETE" && session.world && session.mission) return <DesignPartnerWorld session={session}/>;
+ return <OnboardingInterview session={session} busy={save.isPending || interpret.isPending} error={save.error?.message || interpret.error?.message} onAnswer={answer=>save.mutateAsync({question:session.currentQuestion,answer,version:session.version})} onInterpret={()=>interpret.mutateAsync()}><CustomerImport busy={reveal.isPending} onContinue={()=>reveal.mutate()} />{reveal.error&&<p role="alert">{reveal.error.message}</p>}</OnboardingInterview>;
 }
