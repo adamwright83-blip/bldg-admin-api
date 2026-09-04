@@ -33,3 +33,6 @@ Added durable tenant-keyed JSON session with optimistic version checks, five seq
 
 ## Slice 2 — five-question scene
 World-first full-bleed interview, one required answer at a time, answer-specific echo, durable resume, optional browser mic reused from existing browserSpeechRecognition utility. Typing always works. New worlds enter from Admin world home; existing worlds bypass. Initial scene projection never writes business facts. Browser proof deferred until compositor/reveal fixture is connected. Not yet claimed release-complete.
+
+## Slice 3 — topology / Water-Land
+Renderer-independent deterministic local graph and separate WATER_LAND registry/compositor. Anchor provenance and evidence-derived known state. Same compositor tested for LA/Phoenix/Atlanta/Dallas. 1/4/9-island socket transforms and both-endpoint alignment tested (8 tests pass). Canonical upright bridge artwork reused; no per-city layout offsets. Measured deck/shoreline sockets are code-owned calibration distinct from kit's approximate anchors. SVG labels dynamic. Visual browser audit pending.

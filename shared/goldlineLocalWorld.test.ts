@@ -1,0 +1,7 @@
+import {describe,it,expect} from "vitest";
+import {compileLocalWorld,composeWaterLand,knownTerritoryIds,BRIDGE_GEOMETRIES,snapBridge} from "./goldlineLocalWorld";
+describe("local topology and socket composition",()=>{
+ for(const [label,latitude,longitude] of [["Los Angeles",34.05,-118.24],["Phoenix",33.45,-112.07],["Atlanta",33.75,-84.39],["Dallas",32.78,-96.8]] as const){it(`renders ${label} with the same skin and truthful darkness`,()=>{const input={tenantId:label,label,anchors:[{id:label,label,latitude,longitude,provenance:"geocoded_declaration" as const,evidenceId:null}],extentKm:30};const t=compileLocalWorld(input);expect(compileLocalWorld(input)).toEqual(t);expect(knownTerritoryIds(t)).toEqual([]);expect(composeWaterLand(t).islands).toHaveLength(4);expect(t.anchors[0].latitude).toBe(latitude);});}
+ for(const count of [1,4,9])it(`aligns ${count} islands without city offsets`,()=>{const t=compileLocalWorld({tenantId:"t",label:"Area",anchors:[],extentKm:count*8});const c=composeWaterLand(t);expect(c.islands).toHaveLength(count);for(const b of c.bridges){const g=Object.values(BRIDGE_GEOMETRIES).find(g=>g.file===b.file)!;const p={x:b.transform.a*g.start.x+b.transform.c*g.start.y+b.transform.e,y:b.transform.b*g.start.x+b.transform.d*g.start.y+b.transform.f};expect(Math.min(Math.hypot(p.x-b.from.x,p.y-b.from.y),Math.hypot(p.x-b.to.x,p.y-b.to.y))).toBeLessThan(.0001);}});
+ it("maps both sockets",()=>{const t=snapBridge({x:1,y:2},{x:7,y:4},{x:9,y:8},{x:19,y:20});expect(t.a*7+t.c*4+t.e).toBeCloseTo(19);expect(t.b*7+t.d*4+t.f).toBeCloseTo(20);});
+});
