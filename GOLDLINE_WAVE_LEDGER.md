@@ -124,6 +124,35 @@
 - Slice 11 commit `8fa623e` pushed. Railway deployment `a5739c2f-7ea4-44df-88a7-dc87dc128ac0` SUCCESS and Vercel SUCCESS. Live Admin world-first and Driver overworld mounted; both page-error lists empty. Local conventional New Order created a priced $45 order saved unpaid (no saved card, no external charge); mobile Continue reached item intake after scrolling into view.
 - Live Spyglass uncovered inherited `pointer-events:none` on its world layer; explicit button pointer events fixed. Its fallback canonical-art child also escaped its preview container and covered tabs; contained it and the 3D viewport, verified actual mobile 3D tab click and close. Provider attribution now follows the displayed source, with native Maps attribution owned by the 3D renderer. Moved utility Return link into layout so it cannot cover form controls. Follow-up publishing after local browser gate/build; final live readback remains to do.
 
+## Final terminal audit — all slices attempted and implemented
+
+This audit supersedes the earlier in-progress/push-hold notes above.
+
+- Final application commit: `76c1cc4ba379dbdd85109810a98e26d56770ee77`; pushed main. Railway `e2ee6ca6-64d9-40c4-b8d3-a7d5f5846e51` SUCCESS; Vercel SUCCESS. This ledger closeout is documentation-only.
+- Live Admin root opens Lantern City with three utility portals. Live Tower Wars: 86 impacts / 26 repaired; exact ID, transform and repair-state array survived reload. Live Pixi used canonical `cleancloud:302:attack:1`, settled at 34.66%, 32.52%, and reported repaired state. Switching to DOM left zero canvases.
+- Live Spyglass opened OPUS place identity and real Google 3D imagery with visible Google Maps attribution. Live Driver root mounted the overworld at mobile size. Page-error lists empty on Admin and Driver. No production business fixture, payment, contact, or invented outcome was written.
+- Four controlled browser action chains passed: CALL, VISIT, FOLLOW_UP, RECOVER. These are the existing deterministic business-loop harness, not live customer interactions. Local Guardian victories/recurrence and local economic outbox/repair tests used the isolated MySQL database. Production-locked Guardian/Clockhead fights were NOT bypassed for live verification.
+- Full suite: 4,558 passed / 5 baseline failures / 6 skipped. Final focused checks: 59 tests, then 28, 29 and 16 passed in their respective runs. Final build passed. Global TypeScript remains baseline-red; new changed-owner diagnostics were corrected. Baseline failures: operationsEvents, operationsEventsDashboard (2), residentIntake, marketplacePaymentDryRunRoute.
+- No new points/XP/coins system. Occurrences of `points` in route data are geometric coordinates.
+- Supplied asset ZIP/sheets inspected as references; existing canonical car/weapon art and authored SVG wounds reused. No image generation or external voice generation claimed.
+
+| Slice | Terminal status | Primary commit | Published/deployed | Proof boundary |
+| --- | --- | --- | --- | --- |
+| 0 Archaeology | IMPLEMENTED | fc7b08a | Yes | Start tag/owner trace |
+| 1 Outbox | IMPLEMENTED | 96069ea, 8a83d32 | Yes | Controlled transactional chain; live September 3 $134.10 preserved |
+| 2 Located impacts | IMPLEMENTED | 2e61ee8 | Yes | Local repair/reload; live 86 impacts and 26 repairs |
+| 3 Weekly rivalry | IMPLEMENTED | 5510cdf | Yes | DST/correction tests; live weekly state and replay |
+| 4 Unified city | IMPLEMENTED | 8379cf3 | Yes | Live atlas and real 3D Spyglass |
+| 5 Rivers/crossings | IMPLEMENTED | 57556ac | Yes | Live unbuilt crossings; controlled gate tests |
+| 6 Guardian | IMPLEMENTED | 990713d | Yes | Local evidence gate, real-input win, recurrence/rematch; no forced live fight |
+| 7 Shell | IMPLEMENTED | da13156 | Yes | Live portals/utilities; local unpaid creation and retained camera |
+| 8 Pixi proof | IMPLEMENTED | f2a0f52 | Yes | Live canonical replay and canvas teardown; DOM remains default |
+| 9 Linehook | IMPLEMENTED | c354098 | Yes | Local two-gap mobile traversal and 73-waypoint route; live overworld mount |
+| 10 Clockhead | IMPLEMENTED | 60d3e44 | Yes | Local stationary loss and 3-phase skilled win; no forced live fight |
+| 11 Release | IMPLEMENTED | 8fa623e, 76c1cc4 | Yes | Integrated local and safe production readback above |
+
+Remaining subjective review only: DOM versus Pixi, combat feel/timing, visual art direction and supplied-sheet versus current canonical art treatment. Baseline unrelated test/type errors remain explicitly outside this wave. Local proof database/server and screenshot evidence under `/tmp/goldline-wave-*` are retained for inspection; original checkout changes and source fixture database were preserved.
+
 ---
 
 # GOLDLINE V1 ONE-WORLD WAVE — LEDGER (prior wave)
