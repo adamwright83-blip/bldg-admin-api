@@ -48,3 +48,32 @@ Built real Driver affordance and full vehicle view. Additive explicit custody le
 
 ## Slice 7 — solo Tower Wars
 Added general arena projector with explicit zero, founding, ghost and holding rivalry modes. Tests prove zero creates no tower; founding enemy is labelled fictional entropy; ghost requires and displays actual prior cents; rivalry uses two supplied legitimate holdings. Generalized new-tenant presentation component added without changing Adam's two-building legacy arena. Wiring new-tenant Tower Wars route to evidence query remains pending before release claim.
+
+## Slice 8 — reveal / day two
+Commit bb97d4e. The reveal renders counts it actually computed (deterministic territory count, evidence-derived known/unmapped), one primary mission CTA and the New Order / Customers / Active Orders portals. Two real day-two defects fixed: a completed session routed to the persistent world rather than the interview, and Driver no longer pins itself to the first mission forever — it hands back to the real controller once field evidence is recorded AND the fictional encounter is closed. The reveal is never mounted without the world and mission it dereferences.
+
+## Slice 9 — design-partner release proof
+Commits fcd4229, 8ea5d30. Three personas exercise the real compilers: LA laundry route (evidence-lit territories, playable scout, two-holding rivalry), Phoenix (same compositor/skin, different city, no hardcoded geography, Founding Siege), Atlanta (CSV duplicates collapse, unresolved rows stay unresolved, no filler holdings). Truth-falsification suite pins the firewall at its breakable points.
+
+Regressions found and fixed: three suites (driverMobileActions, adminDriverLiveSync, commercialMissionBuilderContract) pinned the literal text of Driver's default return, which Slice 6 changed by rendering Vehicle Cargo alongside the controller. Each now asserts the law, not the spelling.
+
+Baseline comparison at START_SHA 522de90: 5 failures reproduce (operations-event ×3, resident-intake, marketplace dry-run) and 42 TypeScript errors. Final state: same 5 failures, same 42 errors, 4630 tests passing, build clean.
+
+## Routing + WRIGHT CONTRACTORS demo wave
+Commits 57cfe31, e388de9, 441816f, 326d587, fdd5c18, c931b87, f1db49a, 15fc48c, d82fd88.
+
+Routing: bldg.chat → www.bldg.chat public landing (unchanged). admin.bldg.chat/onboarding is first-run onboarding; admin.bldg.chat is the returning-customer world. driver.bldg.chat untouched. Vercel rewrite added for /onboarding.
+
+Demo access: dark unless GOLDLINE_DEMO_BYPASS=true (routes 404, client renders nothing). One compile-time fixture tenant goldline-dp-wright-contractors that no request can steer; server refuses to boot if that id ever collides with a real tenant; reset scoped to that tenant alone. laundry_farm was deliberately NOT reused — it is a real legacy tenant id and live business unit.
+
+Production defects found only by live verification, all fixed:
+- goldline_world_events did not exist in production. migrate.mjs never runs drizzle/*.sql, so the first mission's evidence write would have failed at RECORD FIELD OUTCOME. Now created by the bootstrap.
+- physical_entities and goldline_territory_definitions likewise missing, which made the onboarding state query return 500 for every tenant. Now created, and hasExistingWorld can no longer be taken down by one missing table.
+- GOOGLE_GEOCODING_API_KEY is the literal placeholder "your_generated_key" and every real Google key on the deployment is restricted to its own API, so geocoding answered REQUEST_DENIED. Added a Places Text Search fallback reporting provider google_places_text_search, never overstating provenance.
+- Places answered a prose service-area description with a bowling alley. Added geocodableServiceArea (one resolvable place name covering all described areas) and an area-type filter that returns ambiguous rather than anchoring a world to a storefront.
+- ANTHROPIC_API_KEY was unset; the existing ANTHROPIC_API_KEY_GoldlineAdminProduction is now referenced.
+- The demo reset became unreachable after completion, so the demo could run once. /onboarding now shows a handoff with the reset control when demo access is on.
+
+LIVE VERIFIED on admin.bldg.chat: /onboarding entry → BYPASS LOGIN → five scenes → interpret (claude-sonnet-4-6, provenance ai_interpretation) → skip CSV → reveal → redirect to admin root; reload keeps the world and never returns to the interview; /growth/tower-wars shows the truthful ZERO_HOLDING state with no fabricated tower; revisiting /onboarding leaves session id, topology id and completedAt unchanged; RESET returns to question one.
+
+USER REVIEW: West Los Angeles resolves to a viewport yielding 1 territory. That count is deterministic from real extent and inflating it would break the truth firewall, so the divisor in compileLocalWorld is a deliberate tuning question, not a defect.
