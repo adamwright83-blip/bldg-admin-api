@@ -1,0 +1,27 @@
+.clock-duel { min-height:100dvh;background:#142b3e;color:#fff1c5;display:flex;flex-direction:column;font-family:Georgia,serif; }
+.clock-duel header { padding:14px 18px;text-align:center;background:#0a1c2ded;min-height:155px; }
+.clock-duel h1 { font-size:28px;letter-spacing:.15em;margin:2px; }
+.clock-duel header small { font:10px/1.5 system-ui;letter-spacing:.14em; }
+.clock-duel header p { margin:5px;font-size:13px; }
+.clock-duel-arena { position:relative;height:calc(100dvh - 295px);min-height:360px;max-width:800px;width:100%;margin:auto;background:linear-gradient(#10283c22,#10283c66),url('/assets/goldline/colosseum/arena-background.jpg') center/cover;overflow:hidden; }
+.clock-duel-boss { position:absolute;left:50%;top:0;width:29%;height:39%;object-fit:contain;transform:translateX(-50%);filter:drop-shadow(0 4px 10px #1d142f); }
+.clock-duel.is-exposed .clock-duel-boss { filter:drop-shadow(0 0 12px #8beaff);transform:translateX(-50%) rotate(-5deg); }
+.clock-duel-player { position:absolute;width:13%;height:21%;object-fit:contain;transform:translate(-50%,-75%);pointer-events:none; }
+.clock-duel-player.is-dodging { filter:drop-shadow(0 0 12px #7ff8ff);opacity:.6; }
+.clock-duel-effects { position:absolute;inset:0;width:100%;height:100%;pointer-events:none; }
+.clock-tell { position:absolute;top:35%;left:5%;width:90%;text-align:center;padding:8px;background:#10213be8;border:1px solid #e2c179;font:700 12px/1.3 system-ui; }
+.clock-duel footer { display:flex;align-items:center;justify-content:space-around;min-height:140px;padding:12px 12px max(12px,env(safe-area-inset-bottom));gap:20px; }
+.clock-duel footer > div:last-child { max-width:250px;display:flex;flex-wrap:wrap;gap:8px; }
+.clock-duel footer small { display:block;font:10px system-ui; }
+.clock-duel footer .overworld-joystick-zone { position:relative;inset:auto;width:110px;height:110px;min-width:110px;z-index:auto;flex-shrink:0;border:1px solid #dec47e66;border-radius:50%;background:#b5e8ff14;touch-action:none; }
+.clock-duel footer .overworld-move-hint { position:absolute;inset:40% 8px auto;white-space:normal;text-align:center;font:9px/1.4 system-ui; }
+.clock-duel footer { gap:10px; }.clock-duel footer > div:last-child { max-width:220px; }
+.clock-duel footer button { padding:10px 12px;font-size:12px; }
+.clock-duel button { padding:12px 16px;border:2px solid #e7c776;border-radius:18px;background:#24445c;color:#fff5bf;font-weight:700;min-height:44px; }
+.clock-duel button:disabled { opacity:.4; }
+.clock-duel-start,.clock-duel-result { position:absolute;top:45%;left:10%;width:80%;text-align:center; }
+.clock-duel-result { background:#0b203bf2;padding:20px;border:2px solid #dfb969;border-radius:20px; }
+.clock-duel-result h2 { font-size:22px; }.clock-duel-result p { font-size:13px; }
+.clock-duel.is-hurt .clock-duel-arena { box-shadow:inset 0 0 55px #ff5c39; }
+@media(min-width:900px) { .clock-duel { max-width:1000px;margin:auto; } }
+@media(prefers-reduced-motion:reduce) { .clock-duel.is-exposed .clock-duel-boss { transform:translateX(-50%); } }

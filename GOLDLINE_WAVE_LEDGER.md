@@ -92,6 +92,14 @@
 - Eleven phase/collision/navigation/full-route tests pass. Existing route audit migrated to explicit hook steps rather than asserting that sky is walkable.
 - Mounted local browser: Colosseum landing (325,950), greystar-apron, walkable true. Second gap at mobile 390×844 landed (210,505), treehollow, walkable true using the same runtime. No browser errors reported. Fixture teleports only positioned test at each entry; traversal was activated through actual UI and real runtime.
 - Local only. Screenshot `/tmp/goldline-wave-linehook.png`; labels/HUD overlap still needs integration polish.
+- Commit: `c354098`.
+
+## Slice 10 — authored Clockhead duel
+
+- Replaced hold-to-advance finale with three health-gated combat phases: aimed pressure; fan/sweep; delayed deadline zone plus sweep/fan. Existing art, projectile geometry, AudioManager and haptics reused. Tell -> danger -> winding vulnerability; one close-range strike per opening, dodge cooldown, finite guard, loss/retry. Existing game-only Wayward unlock callback runs only after victory.
+- Removed old finale’s real-target identity binding entirely. New duel accepts only a game completion callback, no customer/prospect/person record or outcome writer. Verified field-trace prerequisite remains the parent gate.
+- Nine engine/projectile tests pass. Mobile browser discovered inherited joystick hitbox covered Start/Dodge; scoped joystick layout fixed. Browser stationary loss observed; DOM-observed keyboard bot then won all three phases, nine strikes, guard 3/3, no state injection. `/tmp/goldline-wave-clockhead-won.png`. Existing audio cue log captured; no generated voice claimed.
+- Local only. Subjective game-feel review remains.
 
 ---
 

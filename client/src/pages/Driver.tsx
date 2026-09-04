@@ -13,12 +13,17 @@ import "./goldline/goldline-import-overlay.css";
 const WaywardTetheredDeck = lazy(
   () => import("./goldline/stages/WaywardTetheredDeck")
 );
+const ClockheadDuelFixture = import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"
+  ? lazy(() => import("./goldline/ClockheadDuel")) : null;
 const GoldlineDayPlanFixture =
   import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"
     ? lazy(() => import("./goldline/GoldlineDayPlanFixture"))
     : null;
 
 export default function Driver() {
+  if (ClockheadDuelFixture && new URLSearchParams(window.location.search).get("goldlineStageFixture") === "clockhead") {
+    return <Suspense fallback={null}><ClockheadDuelFixture onDefeated={() => { window.location.href = "/driver?goldlineOverworldFixture=1"; }} /></Suspense>;
+  }
   const overworldFixture =
     import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1" &&
     new URLSearchParams(window.location.search).has("goldlineOverworldFixture");

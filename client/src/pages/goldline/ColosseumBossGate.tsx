@@ -10,10 +10,8 @@ import {
 import Day1FieldMission, {
   type Day1TenDoorsMissionView,
 } from "./Day1FieldMission";
-import {
-  COLOSSEUM_VILLAIN_TARGET_ID,
-  projectColosseumMission,
-} from "./colosseumCampaign";
+import { projectColosseumMission } from "./colosseumCampaign";
+import ClockheadDuel from "./ClockheadDuel";
 import {
   CLOCKHEAD_PROJECTILE_ORIGIN,
   movementFacing,
@@ -130,18 +128,8 @@ export default function ColosseumBossGate({
 }: Props) {
   const campaign = useMemo(() => projectColosseumMission(mission), [mission]);
   const [fieldMode, setFieldMode] = useState(false);
-  const captureMode =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("capture") === "1";
-
   if (campaign.isComplete) {
-    return (
-      <ColosseumFinale
-        mission={campaign}
-        captureMode={captureMode}
-        onBossDefeated={onBossDefeated}
-      />
-    );
+    return <ClockheadDuel onDefeated={onBossDefeated} />;
   }
 
   if (fieldMode) {
@@ -752,178 +740,6 @@ function ColosseumSearchArena({
           BEGIN REAL-WORLD HUNT
         </button>
       </div>
-    </main>
-  );
-}
-
-function ColosseumFinale({
-  mission,
-  captureMode,
-  onBossDefeated,
-}: {
-  mission: Day1TenDoorsMissionView;
-  captureMode: boolean;
-  onBossDefeated: () => void;
-}) {
-  const villainTarget =
-    mission.targets.find(target => target.id === COLOSSEUM_VILLAIN_TARGET_ID) ??
-    mission.targets[mission.targets.length - 1];
-  const [phase, setPhase] = useState<"armed" | "blast" | "revealed">("armed");
-  const [shieldTaken, setShieldTaken] = useState(false);
-  const [advance, setAdvance] = useState(0);
-  const [victory, setVictory] = useState(false);
-  const advanceTimer = useRef<number | null>(null);
-
-  useEffect(() => {
-    getAudioManager().primeOnGesture(window);
-    const blast = window.setTimeout(() => {
-      setPhase("blast");
-      getAudioManager().play("target_reveal");
-      combatRevealFeedback();
-    }, 430);
-    const reveal = window.setTimeout(() => setPhase("revealed"), 1460);
-    return () => {
-      window.clearTimeout(blast);
-      window.clearTimeout(reveal);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (advance >= 100 && !victory) {
-      setVictory(true);
-      getAudioManager().play("hostile_down");
-      arcadeFeedback();
-    }
-  }, [advance, victory]);
-
-  useEffect(() => {
-    if (!victory) return;
-    const openWorld = window.setTimeout(onBossDefeated, 1450);
-    return () => window.clearTimeout(openWorld);
-  }, [onBossDefeated, victory]);
-
-  useEffect(
-    () => () => {
-      if (advanceTimer.current != null) window.clearInterval(advanceTimer.current);
-    },
-    []
-  );
-
-  function stopAdvance() {
-    if (advanceTimer.current != null) {
-      window.clearInterval(advanceTimer.current);
-      advanceTimer.current = null;
-    }
-  }
-
-  function startAdvance() {
-    if (!shieldTaken || victory || advanceTimer.current != null) return;
-    advanceTimer.current = window.setInterval(() => {
-      setAdvance(value => Math.min(100, value + 2.6));
-    }, 38);
-  }
-
-  const playerBottom = 11 + advance * 0.43;
-  const revealName = captureMode
-    ? "VERIFIED REAL-WORLD TARGET"
-    : villainTarget?.name ?? "TARGET";
-
-  return (
-    <main
-      className={`colosseum-shell colosseum-finale colosseum-shell--approved-art is-${phase}`}
-      style={{ "--player-bottom": `${playerBottom}%` } as CSSProperties}
-      data-testid="colosseum-finale"
-    >
-      <div className="colosseum-scene colosseum-scene--search" aria-hidden="true">
-        <img className="colosseum-approved-background" src={ARENA_BACKGROUND_SRC} alt="" />
-        <img className="colosseum-approved-facade" src={SIX_DOOR_FACADE_SRC} alt="" />
-      </div>
-
-      <div className="colosseum-scene colosseum-scene--revealed" aria-hidden="true">
-        <img className="colosseum-approved-background" src={ARENA_BACKGROUND_SRC} alt="" />
-        <img
-          className="colosseum-approved-facade colosseum-approved-facade--reveal"
-          src={VILLAIN_REVEAL_SRC}
-          alt=""
-        />
-      </div>
-
-      {phase !== "revealed" && (
-        <>
-          <div className={`colosseum-goldline-rip ${phase === "blast" ? "is-live" : ""}`} />
-          <div className={`colosseum-explosion ${phase === "blast" ? "is-live" : ""}`}>
-            {Array.from({ length: 12 }, (_, index) => <i key={index} />)}
-          </div>
-        </>
-      )}
-
-      {phase === "revealed" && !victory && (
-        <>
-          <header className="colosseum-reveal-copy">
-            <span>
-              TRACE COMPLETE · {mission.totalCount} / {mission.totalCount}
-            </span>
-            <strong>TARGET LOCATED</strong>
-            <small>{revealName}</small>
-          </header>
-
-          <div
-            className={`colosseum-final-player ${shieldTaken ? "has-shield" : ""}`}
-            style={{ bottom: `${playerBottom}%` }}
-          >
-            {shieldTaken && <span className="carried-shield">◈</span>}
-            <img
-              src={`${TRAILBLAZER_BASE}/${advance > 2 ? "walk-back-03" : "idle-back"}.webp`}
-              alt="Trailblazer"
-            />
-          </div>
-
-          {!shieldTaken ? (
-            <button
-              type="button"
-              className="colosseum-grab-shield"
-              onClick={() => {
-                setShieldTaken(true);
-                getAudioManager().play("shield_clang");
-                arcadeFeedback();
-              }}
-              data-testid="colosseum-grab-shield"
-            >
-              <span>◈</span>
-              <b>TAKE SHIELD</b>
-            </button>
-          ) : (
-            <>
-              <div className="colosseum-final-projectiles" aria-hidden="true">
-                <i /><i /><i />
-              </div>
-              <div className="colosseum-final-block-sparks" aria-hidden="true">
-                <i /><i /><i /><i />
-              </div>
-              <button
-                type="button"
-                className="colosseum-advance-pad"
-                onPointerDown={startAdvance}
-                onPointerUp={stopAdvance}
-                onPointerCancel={stopAdvance}
-                onPointerLeave={stopAdvance}
-                data-testid="colosseum-advance"
-              >
-                <strong>HOLD THE LINE</strong>
-                <span>{Math.round(advance)}%</span>
-              </button>
-            </>
-          )}
-        </>
-      )}
-
-      {victory && (
-        <div className="colosseum-victory" role="status">
-          <span>TARGET BREACHED</span>
-          <strong>THE BOSS IS DOWN</strong>
-          <small>GOLDLINE IS OPEN.</small>
-        </div>
-      )}
     </main>
   );
 }
