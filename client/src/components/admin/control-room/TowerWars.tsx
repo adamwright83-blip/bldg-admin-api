@@ -163,9 +163,9 @@ function useReplay(data: TowerWarsData | undefined) {
 export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
   const [businessDate, setBusinessDate] = useState("");
   return <>
-    <section aria-label="Battle date" style={{ background: "#fff9e9", color: "#173d47", padding: 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-      <label>View imported sales by payment day <input aria-label="Battle payment date" type="date" value={businessDate} onChange={event => setBusinessDate(event.target.value)} /></label>
-      <button type="button" onClick={() => setBusinessDate("")}>Today</button>
+    <section aria-label="Battle date" style={{ background: "#fff9e9", color: "#173d47", padding: "64px 20px 20px", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+      <label style={{ display: "grid", gap: 8, fontWeight: 700 }}>View sales by payment day <input style={{ background: "#fff", color: "#173d47", colorScheme: "light", border: "2px solid #987321", borderRadius: 8, padding: 10, minHeight: 44, fontSize: 16 }} aria-label="Battle payment date" type="date" value={businessDate} onChange={event => setBusinessDate(event.target.value)} /></label>
+      <button style={{ background: "#f7cf68", color: "#173d47", borderRadius: 8, padding: "12px 20px", minHeight: 44, fontWeight: 700 }} type="button" onClick={() => setBusinessDate("")}>Today</button>
       <span>{businessDate ? "Historical battle · real sales, not new revenue. Press Replay selected day to watch." : "Today's totals exclude earlier payments. Select their payment date to see imported sales and residents."}</span>
     </section>
     <TowerWarsDay key={businessDate || "today"} onNavigate={onNavigate} compact={compact} businessDate={businessDate} />
