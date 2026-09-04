@@ -3,8 +3,15 @@ import {
   Check,
   ChevronRight,
   CloudUpload,
+  Compass,
+  Crown,
   Menu,
   Navigation,
+  Route,
+  ScrollText,
+  Shield,
+  Swords,
+  UserRound,
   X,
 } from "lucide-react";
 import type { Order } from "@shared/types";
@@ -24,6 +31,7 @@ import {
 import type { TerritoryBundleHint } from "@shared/goldlineAdventure";
 import world from "@/assets/goldline/generated/goldline-world-empty.png";
 import operator from "@/assets/goldline/generated/trailblazer-operator.png";
+import { VehicleCargo, type VehicleCargoItem } from "@/components/goldline/VehicleCargo";
 import "./goldline-day-plan.css";
 
 export type GoldlineDayPlanProps = {
@@ -51,6 +59,7 @@ export type GoldlineDayPlanProps = {
   onAcceptProposal?: (proposal: DayDirectorProposal) => Promise<void>;
   onDismissProposal?: (promptKey: string) => Promise<void>;
   onCompleteCommitment?: (commitmentId: string) => Promise<void>;
+  cargoFixture?: VehicleCargoItem[];
 };
 
 const KIND_LABEL = {
@@ -286,6 +295,12 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
     stop => stop.status === "completed"
   ).length;
   const progress = plan.stops.length ? completedCount / plan.stops.length : 0;
+  const nextStop = plan.stops.find(stop => stop.status !== "completed" && stop.status !== "cancelled") ?? null;
+  const startNext = () => {
+    if (!nextStop) return props.onEnterWorld();
+    if (nextStop.missionTarget === "colosseum") return props.onEnterColosseum();
+    props.onEnterWorld(nextStop.id);
+  };
 
   return (
     <main
@@ -293,6 +308,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       style={{ "--gdp-world": `url(${world})` } as React.CSSProperties}
     >
       <header className="gdp-header">
+        <div className="gdp-brand"><Crown /><strong>GOLDLINE DRIVER</strong><small>YOUR DAY. YOUR QUEST.</small></div>
         <p>
           {props.campaignTitle ? `${props.campaignTitle} · ` : "TODAY · "}
           {dateHeading(props.businessDate)}
@@ -358,6 +374,12 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           </span>
         </button>
       </header>
+
+      <aside className="gdp-player-rail" aria-label="Driver status">
+        <div className="gdp-player-card"><img src={operator} alt="Trailblazer" /><span><strong>TRAILBLAZER</strong><small>ON TODAY'S LINE</small></span></div>
+        <div className="gdp-status-card"><Shield /><span><strong>LINE STATUS</strong><small>{completedCount} OF {plan.stops.length} STOPS COMPLETE</small></span><i><b style={{ width: `${Math.round(progress * 100)}%` }} /></i></div>
+      </aside>
+      <VehicleCargo mode="hero" fixtureCargo={props.cargoFixture} />
 
       <section className="gdp-route" aria-label="Today's Gold Line">
         <svg
@@ -547,6 +569,20 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           </div>
         )}
       </section>
+
+      <section className="gdp-next-up" data-testid="day-plan-next-up">
+        <div><small>NEXT UP</small><strong>{nextStop?.title ?? "THE LINE IS OPEN"}</strong><span>{nextStop ? `${KIND_LABEL[nextStop.kind]} · ${nextStop.timeLabel}` : "NO SCHEDULED STOP"}</span></div>
+        <button type="button" onClick={startNext} disabled={!nextStop}>START EXPEDITION <ChevronRight /></button>
+      </section>
+
+      <nav className="gdp-game-nav" aria-label="Goldline navigation">
+        <button className="is-active" type="button"><ScrollText /><span>QUESTS</span></button>
+        <button type="button" onClick={() => props.onEnterWorld()}><Compass /><span>MAP</span></button>
+        <button type="button" onClick={startNext}><Swords /><span>EXPEDITION</span></button>
+        <button type="button" onClick={() => props.onEnterWorld()}><Route /><span>GOLD LINE</span></button>
+        <button type="button" onClick={props.onEnterOperations}><Shield /><span>RELICS</span></button>
+        <button type="button" onClick={() => setMenuOpen(value => !value)}><UserRound /><span>PROFILE</span></button>
+      </nav>
 
       <footer className="gdp-world-entry">
         <button type="button" onClick={() => props.onEnterWorld()}>

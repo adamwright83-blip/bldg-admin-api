@@ -4,6 +4,7 @@ import type { ExternalOperationalOrder } from "@shared/externalOperationalOrder"
 import GoldlineDayPlan from "./GoldlineDayPlan";
 import { useState } from "react";
 import type { DayDirectorCommitment } from "@shared/dayDirector";
+import type { VehicleCargoItem } from "@/components/goldline/VehicleCargo";
 
 export default function GoldlineDayPlanFixture({ state }: { state: string }) {
   const storagePrefix = `day-director-${state}`;
@@ -65,9 +66,17 @@ export default function GoldlineDayPlanFixture({ state }: { state: string }) {
     expiresAt: null,
     completedAt: null,
   } as CommercialMission;
+  const cargo: VehicleCargoItem[] = state === "morning" ? [] : [
+    { id: 101, firstName: "Avery", lastName: "Stone", state: "IN_VEHICLE_UNPROCESSED", appearance: { kind: "paper_bag", condition: "scrunched garments", next: "Processor handoff" } },
+    { id: 102, firstName: "Morgan", lastName: "Lane", state: "IN_VEHICLE_PROCESSED", appearance: { kind: "garment_bag", condition: "covered garments", next: "Customer return" } },
+    { id: 103, firstName: "Jordan", lastName: "Pike", state: "IN_VEHICLE_UNPROCESSED", appearance: { kind: "paper_bag", condition: "scrunched garments", next: "Processor handoff" } },
+    { id: 104, firstName: "Riley", lastName: "Vale", state: "IN_VEHICLE_PROCESSED", appearance: { kind: "garment_bag", condition: "covered garments", next: "Customer return" } },
+    { id: 105, firstName: "Casey", lastName: "North", state: "IN_VEHICLE_UNPROCESSED", appearance: { kind: "paper_bag", condition: "scrunched garments", next: "Processor handoff" } },
+  ];
   return (
     <GoldlineDayPlan
       businessDate="2026-08-25"
+      cargoFixture={cargo}
       pickups={[
         order(
           1,

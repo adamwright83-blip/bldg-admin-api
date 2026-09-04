@@ -127,5 +127,5 @@ function AuthenticatedDriver() {
   // from ongoing truth instead of replaying a finished first chapter forever.
   const firstMission = firstWorld.data?.session?.status === "COMPLETE" ? firstWorld.data.session.mission : null;
   if (firstMission && !firstMission.gameplayCompletedAt) return <><FirstMissionDriver session={firstWorld.data!.session!} /><VehicleCargo /></>;
-  return <><GoldlineDriverController /><VehicleCargo /></>;
+  return <GoldlineDriverController />;
 }

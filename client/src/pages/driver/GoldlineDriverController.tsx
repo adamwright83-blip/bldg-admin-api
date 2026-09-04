@@ -175,7 +175,7 @@ function LiveGoldlineDriverController() {
   const [stageReturnScene, setStageReturnScene] =
     useState<"overworld">("overworld");
   /** The day briefing, opened over Overland without leaving it. */
-  const [dayBriefingOpen, setDayBriefingOpen] = useState(false);
+  const [dayBriefingOpen, setDayBriefingOpen] = useState(true);
   const [waywardProgress, setWaywardProgress] = useState<WaywardProgress>(() =>
     loadWaywardProgress(null)
   );

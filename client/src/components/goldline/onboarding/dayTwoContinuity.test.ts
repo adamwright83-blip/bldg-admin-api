@@ -8,6 +8,7 @@ const read = (...parts: string[]) =>
   fs.readFileSync(path.resolve(import.meta.dirname, ...parts), "utf8");
 const reveal = read("DesignPartnerWorld.tsx");
 const driver = read("..", "..", "..", "pages", "Driver.tsx");
+const dayPlan = read("..", "..", "..", "pages", "goldline", "GoldlineDayPlan.tsx");
 const host = read("..", "..", "..", "pages", "AdminHostApp.tsx");
 
 const anchor = (id: string, latitude: number, longitude: number, evidenceId: string | null): WorldAnchor => ({
@@ -94,8 +95,10 @@ describe("day two returns to the world, never to the interview", () => {
   it("hands Driver back to the real controller once the first mission is resolved", () => {
     expect(driver).toContain("!firstMission.gameplayCompletedAt");
     expect(driver).toContain("<GoldlineDriverController />");
-    // Vehicle Cargo persists on both driver surfaces.
-    expect(driver.match(/<VehicleCargo \/>/g)?.length).toBeGreaterThanOrEqual(2);
+    // First mission retains its cargo control; the real Daily Line mounts the
+    // hero cargo composition inside GoldlineDayPlan itself.
+    expect(driver).toContain("<VehicleCargo />");
+    expect(dayPlan).toContain('mode="hero"');
   });
 
   it("keeps an unfinished mission visible on return", () => {
