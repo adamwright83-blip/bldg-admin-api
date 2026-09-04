@@ -1,0 +1,13 @@
+{
+  "name": "laundry-butler",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
+  "terminals": [
+    {
+      "name": "dev-server",
+      "command": "set -a; . ./.env; set +a; pnpm dev",
+      "description": "Express + tRPC API and Vite/React dev server on http://localhost:3000 (env sourced from ./.env)."
+    }
+  ]
+}
