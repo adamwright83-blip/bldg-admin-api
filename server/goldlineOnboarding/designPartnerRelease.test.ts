@@ -244,8 +244,9 @@ describe("truth firewall falsification", () => {
   it("preserves the existing world of a tenant that already has one", () => {
     const store = repo("server", "goldlineOnboarding", "store.ts");
     expect(store).toContain("Existing Goldline world is preserved.");
-    expect(store).toContain("FROM physical_entities WHERE tenantId=");
-    expect(store).toContain("FROM goldline_territory_definitions WHERE tenantId=");
+    // Both canonical-world signals are consulted, each scoped to the tenant.
+    expect(store).toContain('for (const table of ["physical_entities", "goldline_territory_definitions"])');
+    expect(store).toContain("FROM ${sql.raw(table)} WHERE tenantId=${tenantId}");
     expect(router).toContain('"LEGACY_EXISTING_WORLD"');
     // The onboarding tables are additive; nothing in the wave drops or resets.
     expect(repo("server", "goldlineOnboarding", "schema.sql")).toContain("CREATE TABLE IF NOT EXISTS");

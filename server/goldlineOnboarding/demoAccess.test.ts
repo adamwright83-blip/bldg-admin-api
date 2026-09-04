@@ -117,9 +117,26 @@ describe("production migration creates what the first mission writes to", () => 
     expect(worldSchema).toContain("uq_goldline_world_event_idempotency");
   });
 
+  it("also bootstraps the tables existing-world detection reads", () => {
+    for (const table of ["goldline_territory_definitions", "physical_entities"]) {
+      expect(worldSchema).toContain(`CREATE TABLE IF NOT EXISTS \`${table}\``);
+      expect(migrate).toContain(`assertRequiredColumns("${table}"`);
+    }
+  });
+
+  it("never lets one missing table 500 the whole onboarding state query", () => {
+    const store = repo("server", "goldlineOnboarding", "store.ts");
+    expect(store).toContain("existing-world signal");
+    // Both signals are attempted independently.
+    expect(store).toContain('for (const table of ["physical_entities", "goldline_territory_definitions"])');
+    // An unavailable signal is never mistaken for a world that exists.
+    expect(store).toContain("return false;");
+  });
+
   it("splits cleanly into statements the migrator can run", () => {
     const statements = worldSchema.split(";").map(s => s.trim()).filter(Boolean);
-    expect(statements).toHaveLength(1);
-    expect(statements[0]).toContain("CREATE TABLE IF NOT EXISTS");
+    expect(statements).toHaveLength(3);
+    for (const statement of statements)
+      expect(statement).toContain("CREATE TABLE IF NOT EXISTS");
   });
 });

@@ -40,3 +40,44 @@ CREATE TABLE IF NOT EXISTS `goldline_world_events` (
   KEY `idx_goldline_world_event_class` (`tenantId`,`classification`,`occurredAt`),
   KEY `idx_goldline_world_event_source` (`tenantId`,`sourceType`,`sourceId`)
 )
+
+;
+
+-- Existing-world detection reads these two tables to decide whether a tenant
+-- already owns a canonical Goldline world and must bypass onboarding. Both come
+-- from the same never-applied drizzle migrations, so without them that check
+-- threw and the onboarding state query returned 500 for every tenant.
+CREATE TABLE IF NOT EXISTS `goldline_territory_definitions` (
+  `id` varchar(36) NOT NULL,
+  `tenantId` varchar(64) NOT NULL,
+  `stableKey` varchar(191) NOT NULL,
+  `version` int NOT NULL DEFAULT 1,
+  `fantasyTitle` varchar(128) NOT NULL,
+  `realGeographyLabel` varchar(191) NULL,
+  `grammar` enum('visit_hunt','break_the_silence','send_the_standard') NOT NULL,
+  `guardianId` varchar(64) NOT NULL,
+  `geometryMode` enum('corridor','cluster','authoritative_polygon') NOT NULL,
+  `membersJson` json NOT NULL,
+  `createdFrom` varchar(64) NOT NULL,
+  `classification` varchar(32) NOT NULL DEFAULT 'game_projection',
+  `publishedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_goldline_territory_stable` (`tenantId`,`stableKey`,`version`),
+  KEY `idx_goldline_territory_tenant` (`tenantId`,`publishedAt`)
+)
+;
+
+CREATE TABLE IF NOT EXISTS `physical_entities` (
+  `id` varchar(36) NOT NULL,
+  `tenantId` varchar(64) NOT NULL,
+  `kind` enum('building','property','other_place') NOT NULL DEFAULT 'building',
+  `displayName` varchar(255) NOT NULL,
+  `identityStatus` enum('confirmed','provisional','needs_review','merged') NOT NULL DEFAULT 'provisional',
+  `canonicalEntityId` varchar(36) NULL,
+  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_physical_entities_tenant_status` (`tenantId`,`identityStatus`,`updatedAt`),
+  KEY `idx_physical_entities_canonical` (`tenantId`,`canonicalEntityId`)
+)

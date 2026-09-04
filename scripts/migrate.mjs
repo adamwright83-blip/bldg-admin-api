@@ -722,6 +722,8 @@ const worldEventsSql = await readFile(new URL("../server/goldlineWorld/schema.sq
 for (const statement of worldEventsSql.split(";").map(value => value.trim()).filter(Boolean))
   await runRequired(statement, "Goldline world events");
 await assertRequiredColumns("goldline_world_events", ["id", "tenantId", "classification", "idempotencyKey"]);
+await assertRequiredColumns("goldline_territory_definitions", ["id", "tenantId"]);
+await assertRequiredColumns("physical_entities", ["id", "tenantId"]);
 const onboardingSql = await readFile(new URL("../server/goldlineOnboarding/schema.sql", import.meta.url), "utf8");
 for (const statement of onboardingSql.split(";").map(value => value.trim()).filter(Boolean))
   await runRequired(statement, "Goldline onboarding");
