@@ -1,70 +1,272 @@
 {
   "rewrites": [
-    { "source": "/gumballpals", "destination": "/index.html" },
-    { "source": "/resident-api/:path*", "destination": "https://api.bldg.chat/api/:path*" },
-    { "source": "/api/:path*", "destination": "https://bldg-admin-api-production.up.railway.app/api/:path*" },
-    { "source": "/receipt/:path*", "destination": "/index.html" },
-    { "source": "/welcome", "destination": "/index.html" },
-    { "source": "/account", "destination": "/index.html" },
-    { "source": "/admin", "destination": "/index.html" },
-    { "source": "/home", "destination": "/index.html" },
-    { "source": "/demo", "destination": "/index.html" },
-    { "source": "/live", "destination": "/index.html" },
-    { "source": "/level4", "destination": "/index.html" },
-    { "source": "/new-order", "destination": "/index.html" },
-    { "source": "/customers", "destination": "/index.html" },
-    { "source": "/growth", "destination": "/index.html" },
-    { "source": "/growth/:path*", "destination": "/index.html" },
-    { "source": "/operations", "destination": "/index.html" },
-    { "source": "/operations/:path*", "destination": "/index.html" },
-    { "source": "/money", "destination": "/index.html" },
-    { "source": "/money/:path*", "destination": "/index.html" },
-    { "source": "/settings", "destination": "/index.html" },
-    { "source": "/settings/:path*", "destination": "/index.html" },
-    { "source": "/pnl", "destination": "/index.html" },
-    { "source": "/operations-events", "destination": "/index.html" },
-    { "source": "/payment-reconciliation", "destination": "/index.html" },
-    { "source": "/intake", "destination": "/index.html" },
-    { "source": "/processing", "destination": "/index.html" },
-    { "source": "/ready", "destination": "/index.html" },
-    { "source": "/pickups", "destination": "/index.html" },
-    { "source": "/requests", "destination": "/index.html" },
-    { "source": "/job-cards", "destination": "/index.html" },
-    { "source": "/proposal-review", "destination": "/index.html" },
-    { "source": "/proposal-bootstrap", "destination": "/index.html" },
-    { "source": "/casting-sprint", "destination": "/index.html" },
-    { "source": "/mission-control", "destination": "/index.html" },
-    { "source": "/post-consent-plans", "destination": "/index.html" },
-    { "source": "/leads", "destination": "/index.html" },
-    { "source": "/vendors", "destination": "/index.html" },
-    { "source": "/sales-intel", "destination": "/index.html" },
-    { "source": "/goldline-effectiveness", "destination": "/index.html" },
-    { "source": "/operator-reflection", "destination": "/index.html" },
-    { "source": "/catalog", "destination": "/index.html" },
-    { "source": "/catalog/:path*", "destination": "/index.html" },
-    { "source": "/driver", "destination": "/index.html" },
-    { "source": "/driver/sales-mission/:path*", "destination": "/index.html" },
-    { "source": "/boreslay", "destination": "/index.html" },
-    { "source": "/boreslay-rally", "destination": "/index.html" },
-    { "source": "/dayforge", "destination": "/index.html" },
-    { "source": "/landingfinal", "destination": "/index.html" },
-    { "source": "/territory-preview", "destination": "/index.html" },
-    { "source": "/commercial-missions", "destination": "/index.html" },
-    { "source": "/commercial-proposal/:path*", "destination": "/index.html" },
-    { "source": "/commercial-proposal-settings", "destination": "/index.html" },
-    { "source": "/commercial-pipeline", "destination": "/index.html" },
-    { "source": "/churn-radar", "destination": "/index.html" },
-    { "source": "/dayforge-onboarding", "destination": "/index.html" },
-    { "source": "/dayforge-login", "destination": "/index.html" },
-    { "source": "/dayforge-settings", "destination": "/index.html" },
-    { "source": "/dayforge-invite", "destination": "/index.html" },
-    { "source": "/dayforge-today", "destination": "/index.html" },
-    { "source": "/dayforge-proof", "destination": "/index.html" },
-    { "source": "/billing", "destination": "/index.html" },
-    { "source": "/julydemo", "destination": "/index.html" },
-    { "source": "/dayforge-demo", "destination": "/index.html" },
-    { "source": "/dayforgenew", "destination": "/codexlfinal.html" },
-    { "source": "/dayforgeflagship", "destination": "/dayforgeflagship.html" },
-    { "source": "/404", "destination": "/index.html" }
+    {
+      "source": "/gumballpals",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/resident-api/:path*",
+      "destination": "https://api.bldg.chat/api/:path*"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://bldg-admin-api-production.up.railway.app/api/:path*"
+    },
+    {
+      "source": "/receipt/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/welcome",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/account",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/onboarding",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/home",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/demo",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/live",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/level4",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/new-order",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/customers",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/growth",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/growth/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/operations",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/operations/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/money",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/money/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/settings",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/settings/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/pnl",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/operations-events",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/payment-reconciliation",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/intake",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/processing",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/ready",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/pickups",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/requests",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/job-cards",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/proposal-review",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/proposal-bootstrap",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/casting-sprint",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/mission-control",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/post-consent-plans",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/leads",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/vendors",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/sales-intel",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/goldline-effectiveness",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/operator-reflection",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/catalog",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/catalog/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/driver",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/driver/sales-mission/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/boreslay",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/boreslay-rally",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/dayforge",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/landingfinal",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/territory-preview",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/commercial-missions",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/commercial-proposal/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/commercial-proposal-settings",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/commercial-pipeline",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/churn-radar",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/dayforge-onboarding",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/dayforge-login",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/dayforge-settings",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/dayforge-invite",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/dayforge-today",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/dayforge-proof",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/billing",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/julydemo",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/dayforge-demo",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/dayforgenew",
+      "destination": "/codexlfinal.html"
+    },
+    {
+      "source": "/dayforgeflagship",
+      "destination": "/dayforgeflagship.html"
+    },
+    {
+      "source": "/404",
+      "destination": "/index.html"
+    }
   ]
 }

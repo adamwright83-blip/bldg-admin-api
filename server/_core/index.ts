@@ -37,6 +37,7 @@ import { registerDayforgeBillingWebhookRoute } from "../saas/saasBillingWebhookR
 import { registerDayforgeSaasAuthRoute } from "../saas/saasAuthRoute";
 import { registerMarketplacePaymentDryRunRoutes } from "../marketplacePayments/marketplacePaymentDryRunRoute";
 import { registerLaundryFarmSheetSyncRoutes } from "../laundryFarmSheetSyncRoute";
+import { registerGoldlineDemoRoutes } from "../goldlineOnboarding/demoAccess";
 import { registerResidentProposalReadRoutes, registerResidentProposalConsentRoute } from "../procurement/residentProposalReadApi";
 import { registerAgentMailVendorReplyWebhookRoutes } from "../procurement/agentMailVendorReplyWebhookRoute";
 import { buildAdminCorsOptions, isPublicFormOrigin } from "./corsConfig";
@@ -303,6 +304,7 @@ async function startServer() {
   registerMarketplacePaymentDryRunRoutes(app);
   registerAgentMailVendorReplyWebhookRoutes(app);
   registerLaundryFarmSheetSyncRoutes(app);
+  registerGoldlineDemoRoutes(app);
   registerResidentProposalReadRoutes(app);
   registerResidentProposalConsentRoute(app);
 

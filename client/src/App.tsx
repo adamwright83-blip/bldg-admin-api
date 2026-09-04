@@ -236,7 +236,14 @@ const LOCAL_ADMIN_PATHS = new Set([
 function AdminHostRouter() {
   return (
     <Switch>
-      <Route path="/goldline/start" component={GoldlineOnboarding} />
+      {/* admin.bldg.chat/onboarding is the first-run Goldline onboarding.
+          admin.bldg.chat itself stays the returning-customer experience. */}
+      <Route path="/onboarding">
+        <GoldlineOnboarding entry="onboarding" />
+      </Route>
+      <Route path="/goldline/start">
+        <GoldlineOnboarding />
+      </Route>
       <Route path="/gumballpals" component={Gumballpals} />
       <Route path="/product/:rest*">
         <Suspense fallback={<PublicLandingFallback />}>
@@ -423,7 +430,12 @@ function Router() {
 
   return (
     <Switch>
-      <Route path="/goldline/start" component={GoldlineOnboarding} />
+      <Route path="/onboarding">
+        <GoldlineOnboarding entry="onboarding" />
+      </Route>
+      <Route path="/goldline/start">
+        <GoldlineOnboarding />
+      </Route>
       <Route path="/product/:rest*">
         <Suspense fallback={<PublicLandingFallback />}>
           <ProductShell />

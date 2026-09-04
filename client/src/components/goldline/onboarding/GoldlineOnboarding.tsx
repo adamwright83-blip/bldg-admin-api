@@ -1,4 +1,5 @@
 import { CustomerImport } from "./CustomerImport";
+import { DemoAccess } from "./DemoAccess";
 import { DesignPartnerWorld } from "./DesignPartnerWorld";
 import { startBrowserSpeechTranscript, type BrowserSpeechSession } from "@/lib/browserSpeechRecognition";
 import { useEffect, useRef, useState } from "react";
@@ -38,8 +39,9 @@ export function OnboardingInterview({ session, busy, error, onAnswer, onInterpre
   <footer>Fantasy scenery · Your real customers and outcomes only appear from evidence.</footer>
  </main>;
 }
-export default function GoldlineOnboarding() {
+export default function GoldlineOnboarding({ entry = "world" }: { entry?: "world" | "onboarding" } = {}) {
  const state = trpc.system.goldlineOnboarding.state.useQuery();
+ const reload = () => window.location.reload();
  const utils = trpc.useUtils();
  const start = trpc.system.goldlineOnboarding.start.useMutation({onSuccess:()=>utils.system.goldlineOnboarding.state.invalidate()});
  const save = trpc.system.goldlineOnboarding.answer.useMutation({onSuccess:()=>utils.system.goldlineOnboarding.state.invalidate()});
@@ -47,9 +49,21 @@ export default function GoldlineOnboarding() {
  const interpret = trpc.system.goldlineOnboarding.interpret.useMutation({onSuccess:()=>utils.system.goldlineOnboarding.state.invalidate()});
  const session = state.data?.session;
  if (state.isLoading) return <main className="gl-onboarding"><p className="gl-entry">Opening your world…</p></main>;
- if (state.error) return <main className="gl-onboarding"><div className="gl-entry"><p role="alert">{state.error.message}</p><a href="/">Return to sign in</a></div></main>;
+ // An unauthenticated visitor lands here. The demo bypass must be reachable from
+ // this state — entering with one click and no real login is its whole purpose.
+ if (state.error) return <main className="gl-onboarding"><div className="gl-onboarding-sky"/><div className="gl-entry"><p role="alert">{state.error.message}</p><a href="/">Return to sign in</a><DemoAccess onEntered={reload}/></div></main>;
+ // A tenant that already owns a world never sees the interview, and /onboarding
+ // is not a way to build a second one.
  if (state.data?.compatibility === "LEGACY_EXISTING_WORLD") return <main className="gl-onboarding"><div className="gl-entry"><h1>Your world is waiting.</h1><a href="/growth/lantern-city">RETURN TO LANTERN CITY</a></div></main>;
- if (!session) return <main className="gl-onboarding"><div className="gl-onboarding-sky"/><div className="gl-entry"><p>GOLDLINE</p><h1>Your work.<br/>An extraordinary world.</h1><p>Five questions. One useful mission. Your first chapter starts here.</p><button disabled={start.isPending} onClick={()=>start.mutate()}>BEGIN YOUR STORY</button>{start.error && <p role="alert">{start.error.message}</p>}</div></main>;
- if(session.status === "COMPLETE" && session.world && session.mission) return <DesignPartnerWorld session={session}/>;
+ if (!session) return <main className="gl-onboarding"><div className="gl-onboarding-sky"/><div className="gl-entry"><p>GOLDLINE</p><h1>Your work.<br/>An extraordinary world.</h1><p>Five questions. One useful mission. Your first chapter starts here.</p><button disabled={start.isPending} onClick={()=>start.mutate()}>BEGIN YOUR STORY</button>{start.error && <p role="alert">{start.error.message}</p>}<DemoAccess onEntered={reload}/></div></main>;
+ // Onboarding is finished exactly once. On the dedicated /onboarding entry the
+ // completed session hands off to the normal returning-customer experience at
+ // the admin root rather than rendering a second reveal, so revisiting the URL
+ // can never start or duplicate a world. Everywhere else the reveal IS the
+ // world home.
+ if(session.status === "COMPLETE" && session.world && session.mission){
+  if(entry==="onboarding"){window.location.replace("/");return <main className="gl-onboarding"><p className="gl-entry">Your world is ready. Opening Lantern City…</p></main>;}
+  return <DesignPartnerWorld session={session}/>;
+ }
  return <OnboardingInterview session={session} busy={save.isPending || interpret.isPending} error={save.error?.message || interpret.error?.message} onAnswer={answer=>save.mutateAsync({question:session.currentQuestion,answer,version:session.version})} onInterpret={()=>interpret.mutateAsync()}><CustomerImport busy={reveal.isPending} onContinue={()=>reveal.mutate()} />{reveal.error&&<p role="alert">{reveal.error.message}</p>}</OnboardingInterview>;
 }
