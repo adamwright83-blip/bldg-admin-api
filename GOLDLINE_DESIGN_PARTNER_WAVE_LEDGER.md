@@ -45,3 +45,6 @@ Durable primary Territory Scout compiled from interpreted objective/avoidance an
 
 ## Slice 6 — Vehicle Cargo
 Built real Driver affordance and full vehicle view. Additive explicit custody ledger separates unassigned real pickups, in-vehicle unprocessed, at processor, and in-vehicle processed; delivered/cancelled orders disappear. Physical transfers require user confirmation; GPS cannot mutate custody. Per-driver vehicle id and tenant joins prevent cross-tenant cargo. Existing order status supplies authoritative pickup/ready/delivered constraints, while the custody ledger supplies physical holder. View uses an honest CSS/SVG-like x-ray schematic because no production vehicle shell asset exists. Visual art is a user review item. Persistence DB proof and processor-location prompt browser proof pending.
+
+## Slice 7 — solo Tower Wars
+Added general arena projector with explicit zero, founding, ghost and holding rivalry modes. Tests prove zero creates no tower; founding enemy is labelled fictional entropy; ghost requires and displays actual prior cents; rivalry uses two supplied legitimate holdings. Generalized new-tenant presentation component added without changing Adam's two-building legacy arena. Wiring new-tenant Tower Wars route to evidence query remains pending before release claim.
