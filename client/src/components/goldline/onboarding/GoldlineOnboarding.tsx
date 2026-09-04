@@ -1,5 +1,5 @@
 import { CustomerImport } from "./CustomerImport";
-import { DemoAccess } from "./DemoAccess";
+import { DemoAccess, useDemoCapability } from "./DemoAccess";
 import { DesignPartnerWorld } from "./DesignPartnerWorld";
 import { startBrowserSpeechTranscript, type BrowserSpeechSession } from "@/lib/browserSpeechRecognition";
 import { useEffect, useRef, useState } from "react";
@@ -42,6 +42,7 @@ export function OnboardingInterview({ session, busy, error, onAnswer, onInterpre
 export default function GoldlineOnboarding({ entry = "world" }: { entry?: "world" | "onboarding" } = {}) {
  const state = trpc.system.goldlineOnboarding.state.useQuery();
  const reload = () => window.location.reload();
+ const demo = useDemoCapability();
  const utils = trpc.useUtils();
  const start = trpc.system.goldlineOnboarding.start.useMutation({onSuccess:()=>utils.system.goldlineOnboarding.state.invalidate()});
  const save = trpc.system.goldlineOnboarding.answer.useMutation({onSuccess:()=>utils.system.goldlineOnboarding.state.invalidate()});
@@ -62,7 +63,14 @@ export default function GoldlineOnboarding({ entry = "world" }: { entry?: "world
  // can never start or duplicate a world. Everywhere else the reveal IS the
  // world home.
  if(session.status === "COMPLETE" && session.world && session.mission){
-  if(entry==="onboarding"){window.location.replace("/");return <main className="gl-onboarding"><p className="gl-entry">Your world is ready. Opening Lantern City…</p></main>;}
+  if(entry==="onboarding"){
+   // Wait for the capability answer before deciding: redirecting first would
+   // make the demo reset control unreachable, since /onboarding is the only
+   // place it lives and a completed session is exactly when you want to replay.
+   if(demo===null)return <main className="gl-onboarding"><div className="gl-onboarding-sky"/><p className="gl-entry">Opening your world…</p></main>;
+   if(!demo.enabled){window.location.replace("/");return <main className="gl-onboarding"><p className="gl-entry">Your world is ready. Opening Lantern City…</p></main>;}
+   return <main className="gl-onboarding"><div className="gl-onboarding-sky"/><div className="gl-entry"><p>GOLDLINE</p><h1>Your world is ready.</h1><p>Onboarding is complete for {demo.businessName}. It will not run again, and this page cannot build a second world.</p><a href="/">ENTER LANTERN CITY</a><DemoAccess onEntered={reload} showLogin={false}/></div></main>;
+  }
   return <DesignPartnerWorld session={session}/>;
  }
  return <OnboardingInterview session={session} busy={save.isPending || interpret.isPending} error={save.error?.message || interpret.error?.message} onAnswer={answer=>save.mutateAsync({question:session.currentQuestion,answer,version:session.version})} onInterpret={()=>interpret.mutateAsync()}><CustomerImport busy={reveal.isPending} onContinue={()=>reveal.mutate()} />{reveal.error&&<p role="alert">{reveal.error.message}</p>}</OnboardingInterview>;

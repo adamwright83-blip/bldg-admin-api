@@ -1,6 +1,20 @@
 import { useEffect, useState } from "react";
 
-type Capability = { enabled: boolean; tenantId: string | null; businessName: string | null };
+export type Capability = { enabled: boolean; tenantId: string | null; businessName: string | null };
+
+/** null while still asking the server. */
+export function useDemoCapability() {
+  const [capability, setCapability] = useState<Capability | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/goldline/demo/capability", { credentials: "include" })
+      .then(response => (response.ok ? response.json() : { enabled: false }))
+      .then(data => { if (!cancelled) setCapability(data); })
+      .catch(() => { if (!cancelled) setCapability({ enabled: false, tenantId: null, businessName: null }); });
+    return () => { cancelled = true; };
+  }, []);
+  return capability;
+}
 
 /**
  * Development/demo access controls for the WRIGHT CONTRACTORS fixture tenant.
@@ -10,19 +24,10 @@ type Capability = { enabled: boolean; tenantId: string | null; businessName: str
  * disabled, this component renders nothing, and the underlying routes 404 — so
  * a normal deploy shows no trace of it and normal auth is untouched.
  */
-export function DemoAccess({ onEntered }: { onEntered: () => void }) {
-  const [capability, setCapability] = useState<Capability | null>(null);
+export function DemoAccess({ onEntered, showLogin = true }: { onEntered: () => void; showLogin?: boolean }) {
+  const capability = useDemoCapability();
   const [busy, setBusy] = useState<"login" | "reset" | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/goldline/demo/capability", { credentials: "include" })
-      .then(response => (response.ok ? response.json() : { enabled: false }))
-      .then(data => { if (!cancelled) setCapability(data); })
-      .catch(() => { if (!cancelled) setCapability({ enabled: false, tenantId: null, businessName: null }); });
-    return () => { cancelled = true; };
-  }, []);
 
   if (!capability?.enabled) return null;
 
@@ -44,14 +49,14 @@ export function DemoAccess({ onEntered }: { onEntered: () => void }) {
     <section className="gl-demo-access" data-testid="goldline-demo-access">
       <p>DEVELOPMENT / DEMO ACCESS · {capability.businessName}</p>
       <div>
-        <button
+        {showLogin ? <button
           type="button"
           data-testid="goldline-demo-bypass-login"
           disabled={busy !== null}
           onClick={() => call("/api/goldline/demo/bypass-login", "login")}
         >
           {busy === "login" ? "ENTERING…" : "BYPASS LOGIN"}
-        </button>
+        </button> : null}
         <button
           type="button"
           data-testid="goldline-demo-reset"

@@ -74,7 +74,7 @@ describe("host routing", () => {
   });
 
   it("redirects a completed session away from /onboarding instead of building a second world", () => {
-    expect(onboarding).toContain('if(entry==="onboarding"){window.location.replace("/")');
+    expect(onboarding).toContain('if(!demo.enabled){window.location.replace("/")');
     // The reveal still owns the world home for every other entry point.
     expect(onboarding).toContain("return <DesignPartnerWorld session={session}/>;");
     // A tenant that already has a canonical world never enters the interview.
@@ -84,6 +84,18 @@ describe("host routing", () => {
   it("offers the bypass to an unauthenticated visitor, which is its purpose", () => {
     const errorBranch = onboarding.split("\n").find(l => l.includes("state.error"))!;
     expect(errorBranch).toContain("<DemoAccess onEntered={reload}/>");
+  });
+
+  it("keeps the reset control reachable after completion so the demo can replay", () => {
+    // /onboarding is the only home of the reset control, and a completed
+    // session is exactly when you want to replay — so the redirect waits for
+    // the capability answer instead of firing first.
+    expect(onboarding).toContain("if(demo===null)return");
+    expect(onboarding).toContain("<DemoAccess onEntered={reload} showLogin={false}/>");
+    expect(onboarding).toContain("this page cannot build a second world");
+    // Bypass login is not offered there: the visitor is already signed in.
+    expect(client).toContain("showLogin = true");
+    expect(client).toContain("{showLogin ? <button");
   });
 
   it("leaves driver.bldg.chat alone", () => {
