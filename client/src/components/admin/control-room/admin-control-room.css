@@ -1503,3 +1503,33 @@
   color: #43331a !important;
   background: #fffdf4e8 !important;
 }
+
+/* Arena ammunition is a vehicle, not a generic combat particle. */
+.tw-projectile[data-weapon="car"] {
+  top: 14%;
+  right: 53%;
+  width: clamp(60px, 6vw, 110px);
+  height: auto;
+  aspect-ratio: 160 / 70;
+  border-radius: 0;
+  background: url("/assets/admin/control-room/tower-wars/valet-car.svg") center / contain no-repeat;
+  filter: drop-shadow(0 4px 3px #152d4770);
+}
+.tw-fracture path {
+  fill: none;
+  stroke: #d4efff;
+  stroke-width: .22;
+  stroke-linejoin: miter;
+  filter: drop-shadow(1px 1px 0 #102435);
+}
+.tw-fracture .tw-fracture-glint {
+  fill: #bfe7f4;
+  fill-opacity: .8;
+  stroke: #fff8e8;
+  stroke-width: .12;
+}
+.tw-wound path { fill: #263542; stroke: #8ba5b1; }
+.tw-wound .tw-wound-core { fill: #101e2a; }
+@media (prefers-reduced-motion: reduce) {
+  .tw-piece.is-firing .tw-projectile { animation: none; }
+}

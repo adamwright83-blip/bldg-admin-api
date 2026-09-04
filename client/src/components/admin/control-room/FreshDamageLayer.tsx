@@ -114,6 +114,10 @@ export function FreshDamageLayer({
           }) scale(${MARK_SCALE})`}
         >
           <WoundMark wound={wound} />
+          <g className="tw-fracture" transform={`rotate(${wound.rotation})`}>
+            <path d="M0 0 -3 -2 -6 -6 -9 -7 M-6 -6 -5 -9 M0 0 4 -3 7 -3 10 -6 M4 -3 3 -7 M0 0 3 4 7 6 8 9 M3 4 1 8 M0 0 -4 3 -8 4 -10 7 M-4 3 -5 7" />
+            <path className="tw-fracture-glint" d="m-5 -3 -2 -2 1 3Zm8 5 3 1-1-3ZM2-5 4-7 5-4Z" />
+          </g>
         </g>
       ))}
     </svg>

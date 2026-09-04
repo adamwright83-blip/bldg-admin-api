@@ -525,7 +525,6 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
                 data-weapon={buildingId === "opus_la" ? "golf-ball" : "car"}
                 aria-hidden
               />
-              <span className="tw-damage-vfx" aria-hidden />
               {activeSpectacle?.phase === "revenue" && liveSpectacleEvent?.buildingId === buildingId ? <span className="tw-live-revenue" role="status">+{money(liveSpectacleEvent.realOrderValueCents)} real order</span> : null}
               <span className="tw-piece-label">
                 <strong>{NAMES[buildingId]}</strong>
