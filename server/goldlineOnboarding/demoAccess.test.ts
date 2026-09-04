@@ -91,3 +91,35 @@ describe("host routing", () => {
     expect(app).toContain('if (isDriverHost && window.location.pathname !== "/")');
   });
 });
+
+describe("production migration creates what the first mission writes to", () => {
+  const migrate = repo("scripts", "migrate.mjs");
+  const worldSchema = repo("server", "goldlineWorld", "schema.sql");
+  const firstMission = repo("server", "goldlineOnboarding", "firstMission.ts");
+
+  it("bootstraps goldline_world_events, which the field outcome inserts into", () => {
+    // The first mission's evidence write targets this table.
+    expect(firstMission).toContain("tx.insert(goldlineWorldEvents)");
+    // migrate.mjs is the production bootstrap and never runs drizzle/*.sql, so
+    // the table must be applied from a hand-written schema file.
+    expect(migrate).toContain("../server/goldlineWorld/schema.sql");
+    expect(migrate).toContain('"Goldline world events"');
+    expect(migrate).toContain('assertRequiredColumns("goldline_world_events"');
+    expect(worldSchema).toContain("CREATE TABLE IF NOT EXISTS `goldline_world_events`");
+    // Every column the insert supplies must exist in the applied definition.
+    for (const column of [
+      "classification", "actorType", "actorId", "occurredAt", "observedAt",
+      "sourceType", "sourceId", "sourceEvidenceReference", "provenanceClass",
+      "verificationClass", "confidence", "idempotencyKey", "correlationId", "metadataJson",
+    ])
+      expect(worldSchema).toContain(`\`${column}\``);
+    // Idempotency is what stops a replayed mission multiplying evidence.
+    expect(worldSchema).toContain("uq_goldline_world_event_idempotency");
+  });
+
+  it("splits cleanly into statements the migrator can run", () => {
+    const statements = worldSchema.split(";").map(s => s.trim()).filter(Boolean);
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toContain("CREATE TABLE IF NOT EXISTS");
+  });
+});

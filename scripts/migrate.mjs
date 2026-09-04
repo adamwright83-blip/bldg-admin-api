@@ -718,6 +718,10 @@ await assertRequiredColumns("goldline_tower_impacts", ["id", "tenantId", "payloa
 const cargoSql = await readFile(new URL("../server/goldlineCargo/schema.sql", import.meta.url), "utf8");
 for (const statement of cargoSql.split(";").map(value => value.trim()).filter(Boolean))
   await runRequired(statement, "Goldline vehicle cargo");
+const worldEventsSql = await readFile(new URL("../server/goldlineWorld/schema.sql", import.meta.url), "utf8");
+for (const statement of worldEventsSql.split(";").map(value => value.trim()).filter(Boolean))
+  await runRequired(statement, "Goldline world events");
+await assertRequiredColumns("goldline_world_events", ["id", "tenantId", "classification", "idempotencyKey"]);
 const onboardingSql = await readFile(new URL("../server/goldlineOnboarding/schema.sql", import.meta.url), "utf8");
 for (const statement of onboardingSql.split(";").map(value => value.trim()).filter(Boolean))
   await runRequired(statement, "Goldline onboarding");
