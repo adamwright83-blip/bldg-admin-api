@@ -272,7 +272,12 @@ class SDKServer {
   async authenticateRequest(req: Request): Promise<User> {
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);
-    const session = await this.verifySession(sessionCookie);
+    return this.authenticateSessionToken(sessionCookie);
+  }
+
+  /** Authenticate an explicitly supplied session without consulting the normal cookie. */
+  async authenticateSessionToken(sessionToken: string | undefined | null): Promise<User> {
+    const session = await this.verifySession(sessionToken);
 
     if (!session) {
       throw ForbiddenError("Invalid session cookie");

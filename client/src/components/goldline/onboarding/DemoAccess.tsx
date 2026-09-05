@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
 
-export type Capability = { enabled: boolean; tenantId: string | null; businessName: string | null };
+export type Capability = { enabled: boolean; active: boolean; tenantId: string | null; businessName: string | null };
 
 /** null while still asking the server. */
 export function useDemoCapability() {
   const [capability, setCapability] = useState<Capability | null>(null);
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/goldline/demo/capability", { credentials: "include" })
+    const active = window.sessionStorage.getItem("goldline:demo-context") === "wright-contractors";
+    fetch("/api/goldline/demo/capability", {
+      credentials: "include",
+      headers: active ? { "x-goldline-demo-context": "wright-contractors" } : {},
+    })
       .then(response => (response.ok ? response.json() : { enabled: false }))
       .then(data => { if (!cancelled) setCapability(data); })
-      .catch(() => { if (!cancelled) setCapability({ enabled: false, tenantId: null, businessName: null }); });
+      .catch(() => { if (!cancelled) setCapability({ enabled: false, active: false, tenantId: null, businessName: null }); });
     return () => { cancelled = true; };
   }, []);
   return capability;
@@ -37,6 +41,7 @@ export function DemoAccess({ onEntered, showLogin = true }: { onEntered: () => v
     try {
       const response = await fetch(path, { method: "POST", credentials: "include" });
       if (!response.ok) throw new Error(`Demo request failed (${response.status})`);
+      if (kind === "login") window.sessionStorage.setItem("goldline:demo-context", "wright-contractors");
       onEntered();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Demo request failed");
@@ -73,4 +78,20 @@ export function DemoAccess({ onEntered, showLogin = true }: { onEntered: () => v
       </small>
     </section>
   );
+}
+
+export function DemoExit() {
+  const [busy, setBusy] = useState(false);
+  const exit = async () => {
+    setBusy(true);
+    try {
+      await fetch("/api/goldline/demo/exit", { method: "POST", credentials: "include" });
+    } finally {
+      window.sessionStorage.removeItem("goldline:demo-context");
+      window.location.replace("/");
+    }
+  };
+  return <button type="button" className="gl-demo-exit" data-testid="goldline-demo-exit" disabled={busy} onClick={exit}>
+    {busy ? "RETURNING…" : "EXIT DEMO / RETURN TO MY GOLDLINE"}
+  </button>;
 }

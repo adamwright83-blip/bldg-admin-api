@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { DEMO_BUSINESS_NAME, DEMO_TENANT_ID, demoBypassEnabled, protectedTenantIds } from "./demoAccess";
+import { DEMO_BUSINESS_NAME, DEMO_TENANT_ID, demoBypassEnabled, demoSessionTokenFromRequest, protectedTenantIds } from "./demoAccess";
 
 const repo = (...p: string[]) => fs.readFileSync(path.resolve(import.meta.dirname, "..", "..", ...p), "utf8");
 const server = repo("server", "goldlineOnboarding", "demoAccess.ts");
@@ -29,7 +29,7 @@ describe("demo bypass is dark by default", () => {
 
   it("404s every mutating route while disabled, so a normal deploy shows no door", () => {
     expect(server).toContain('res.status(404).json({ error: "Not found" })');
-    for (const route of ["/api/goldline/demo/bypass-login", "/api/goldline/demo/reset"])
+    for (const route of ["/api/goldline/demo/bypass-login", "/api/goldline/demo/reset", "/api/goldline/demo/exit"])
       expect(server).toMatch(new RegExp(`app\\.post\\("${route.replace(/\//g, "\\/")}", guard`));
     // The client renders nothing at all unless the server says enabled.
     expect(client).toContain("if (!capability?.enabled) return null;");
@@ -51,11 +51,42 @@ describe("demo bypass cannot reach a real tenant", () => {
     expect(server).toContain("Refusing to start.");
   });
 
-  it("mints a session only for the single fixture user", () => {
+  it("mints a separate short-lived session only for the fixture user", () => {
     expect(server).toContain('const DEMO_OPEN_ID = "goldline-demo:wright-contractors"');
     expect(server).toContain("sdk.createSessionToken(DEMO_OPEN_ID");
+    expect(server).toContain('DEMO_COOKIE_NAME = "goldline_demo_session"');
+    expect(server).not.toContain("res.cookie(COOKIE_NAME");
+    expect(server).not.toContain("ONE_YEAR_MS");
     // No other openId can be requested.
     expect(server).not.toMatch(/createSessionToken\((?!DEMO_OPEN_ID)/);
+  });
+
+  it("requires an explicit fixed demo context and cannot be steered by request tenant data", () => {
+    expect(server).toContain('DEMO_CONTEXT_HEADER = "x-goldline-demo-context"');
+    expect(server).toContain('DEMO_CONTEXT_VALUE = "wright-contractors"');
+    expect(server).toContain("req.headers[DEMO_CONTEXT_HEADER] !== DEMO_CONTEXT_VALUE");
+    expect(server).not.toMatch(/req\.(body|query|params)[^\n]*[Tt]enant/);
+  });
+
+  it("ignores the demo cookie without the exact context header", () => {
+    const original = process.env.GOLDLINE_DEMO_BYPASS;
+    process.env.GOLDLINE_DEMO_BYPASS = "true";
+    try {
+      expect(demoSessionTokenFromRequest({ headers: { cookie: "goldline_demo_session=demo-token" } } as any)).toBeNull();
+      expect(demoSessionTokenFromRequest({ headers: { cookie: "goldline_demo_session=demo-token", "x-goldline-demo-context": "another-tenant" } } as any)).toBeNull();
+      expect(demoSessionTokenFromRequest({ headers: { cookie: "goldline_demo_session=demo-token", "x-goldline-demo-context": "wright-contractors" } } as any)).toBe("demo-token");
+    } finally {
+      if (original === undefined) delete process.env.GOLDLINE_DEMO_BYPASS;
+      else process.env.GOLDLINE_DEMO_BYPASS = original;
+    }
+  });
+
+  it("exit clears only demo context while leaving production auth intact", () => {
+    expect(server).toContain('app.post("/api/goldline/demo/exit"');
+    expect(server).toContain("res.clearCookie(DEMO_COOKIE_NAME");
+    expect(server).not.toMatch(/clearCookie\(COOKIE_NAME/);
+    expect(client).toContain("EXIT DEMO / RETURN TO MY GOLDLINE");
+    expect(client).toContain('sessionStorage.removeItem("goldline:demo-context")');
   });
 
   it("scopes every reset delete to the fixture tenant", () => {
@@ -92,10 +123,21 @@ describe("host routing", () => {
     // the capability answer instead of firing first.
     expect(onboarding).toContain("if(demo===null)return");
     expect(onboarding).toContain("<DemoAccess onEntered={reload} showLogin={false}/>");
-    expect(onboarding).toContain("this page cannot build a second world");
+    expect(onboarding).toContain("if(demo.active)return");
+    expect(onboarding).toContain("<DemoExit/>");
+    expect(onboarding).toContain("This page cannot build a second world");
     // Bypass login is not offered there: the visitor is already signed in.
     expect(client).toContain("showLogin = true");
     expect(client).toContain("{showLogin ? <button");
+  });
+
+  it("keeps normal admin root on production auth even after demo completion", () => {
+    const main = repo("client", "src", "main.tsx");
+    const context = repo("server", "_core", "context.ts");
+    expect(main).toContain('window.location.pathname === "/onboarding"');
+    expect(context).toContain("authenticateGoldlineDemoRequest(opts.req)");
+    expect(context).toContain("sdk.authenticateRequest(opts.req)");
+    expect(onboarding).toContain('<a href="/">RETURN TO MY GOLDLINE</a>');
   });
 
   it("leaves driver.bldg.chat alone", () => {

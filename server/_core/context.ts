@@ -4,6 +4,7 @@ import type { VendorSession } from "./vendorAuth";
 import { resolveTenantIdFromHeaders } from "@shared/tenantConfig";
 import { sdk } from "./sdk";
 import { parseVendorCookie, verifyVendorSession } from "./vendorAuth";
+import { authenticateGoldlineDemoRequest } from "../goldlineOnboarding/demoAccess";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -22,7 +23,9 @@ export async function createContext(
   let vendorSession: VendorSession | null = null;
 
   try {
-    user = await sdk.authenticateRequest(opts.req);
+    user =
+      (await authenticateGoldlineDemoRequest(opts.req)) ??
+      (await sdk.authenticateRequest(opts.req));
   } catch {
     user = null;
   }

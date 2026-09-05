@@ -62,6 +62,13 @@ const trpcClient = trpc.createClient({
     httpBatchLink({
       url: TRPC_BASE_URL,
       transformer: superjson,
+      headers() {
+        if (
+          window.location.pathname === "/onboarding" &&
+          window.sessionStorage.getItem("goldline:demo-context") === "wright-contractors"
+        ) return { "x-goldline-demo-context": "wright-contractors" };
+        return {};
+      },
       fetch(input, init) {
         return globalThis.fetch(input, {
           ...(init ?? {}),

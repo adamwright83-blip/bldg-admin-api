@@ -29,13 +29,17 @@
  */
 import type express from "express";
 import { sql } from "drizzle-orm";
-import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { parse } from "cookie";
 import { getSessionCookieOptions } from "../_core/cookies";
 import { sdk } from "../_core/sdk";
 import { getDb, upsertUser } from "../db";
 
 export const DEMO_TENANT_ID = "goldline-dp-wright-contractors";
 export const DEMO_BUSINESS_NAME = "WRIGHT CONTRACTORS";
+export const DEMO_COOKIE_NAME = "goldline_demo_session";
+export const DEMO_CONTEXT_HEADER = "x-goldline-demo-context";
+export const DEMO_CONTEXT_VALUE = "wright-contractors";
+const DEMO_SESSION_MS = 1000 * 60 * 60 * 8;
 const DEMO_OPEN_ID = "goldline-demo:wright-contractors";
 
 /** Tenant ids this module must never be able to address, whatever it is edited to. */
@@ -55,6 +59,20 @@ if (protectedTenantIds().has(DEMO_TENANT_ID))
 
 export function demoBypassEnabled(): boolean {
   return process.env.GOLDLINE_DEMO_BYPASS === "true";
+}
+
+export function demoSessionTokenFromRequest(req: Pick<express.Request, "headers">) {
+  if (!demoBypassEnabled()) return null;
+  if (req.headers[DEMO_CONTEXT_HEADER] !== DEMO_CONTEXT_VALUE) return null;
+  return parse(req.headers.cookie ?? "")[DEMO_COOKIE_NAME] ?? null;
+}
+
+export async function authenticateGoldlineDemoRequest(req: express.Request) {
+  const token = demoSessionTokenFromRequest(req);
+  if (!token) return null;
+  const user = await sdk.authenticateSessionToken(token).catch(() => null);
+  if (user?.openId !== DEMO_OPEN_ID || user.tenantId !== DEMO_TENANT_ID) return null;
+  return user;
 }
 
 /** Idempotently provision the fixture tenant, owner and entitlements. */
@@ -136,9 +154,11 @@ export async function resetDemoOnboarding() {
 export function registerGoldlineDemoRoutes(app: express.Express) {
   // The capability endpoint is always mounted so the client can ask; it simply
   // reports disabled when the flag is off, and the buttons never render.
-  app.get("/api/goldline/demo/capability", (_req, res) => {
+  app.get("/api/goldline/demo/capability", async (req, res) => {
+    const active = Boolean(await authenticateGoldlineDemoRequest(req));
     res.json({
       enabled: demoBypassEnabled(),
+      active,
       tenantId: demoBypassEnabled() ? DEMO_TENANT_ID : null,
       businessName: demoBypassEnabled() ? DEMO_BUSINESS_NAME : null,
     });
@@ -157,17 +177,22 @@ export function registerGoldlineDemoRoutes(app: express.Express) {
       const sessionToken = await sdk.createSessionToken(DEMO_OPEN_ID, {
         name: DEMO_BUSINESS_NAME,
         role: "admin",
-        expiresInMs: ONE_YEAR_MS,
+        expiresInMs: DEMO_SESSION_MS,
       });
-      res.cookie(COOKIE_NAME, sessionToken, {
+      res.cookie(DEMO_COOKIE_NAME, sessionToken, {
         ...getSessionCookieOptions(req),
-        maxAge: ONE_YEAR_MS,
+        maxAge: DEMO_SESSION_MS,
       });
       res.json({ ok: true, tenantId: DEMO_TENANT_ID, businessName: DEMO_BUSINESS_NAME });
     } catch (error) {
       console.error("[GoldlineDemo] bypass login failed:", error);
       res.status(500).json({ error: "Demo bypass login failed" });
     }
+  });
+
+  app.post("/api/goldline/demo/exit", guard, (req, res) => {
+    res.clearCookie(DEMO_COOKIE_NAME, getSessionCookieOptions(req));
+    res.json({ ok: true });
   });
 
   app.post("/api/goldline/demo/reset", guard, async (_req, res) => {

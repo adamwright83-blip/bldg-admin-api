@@ -1,5 +1,5 @@
 import { CustomerImport } from "./CustomerImport";
-import { DemoAccess, useDemoCapability } from "./DemoAccess";
+import { DemoAccess, DemoExit, useDemoCapability } from "./DemoAccess";
 import { DesignPartnerWorld } from "./DesignPartnerWorld";
 import { startBrowserSpeechTranscript, type BrowserSpeechSession } from "@/lib/browserSpeechRecognition";
 import { useEffect, useRef, useState } from "react";
@@ -8,9 +8,9 @@ import { ONBOARDING_QUESTIONS, type GoldlineOnboardingSession } from "@shared/go
 import "./onboarding.css";
 const art = "/assets/goldline/procedural-world-v1/";
 
-export function OnboardingInterview({ session, busy, error, onAnswer, onInterpret, children }: {
+export function OnboardingInterview({ session, busy, error, onAnswer, onInterpret, children, demoActive = false }: {
  session: GoldlineOnboardingSession; busy: boolean; error?: string;
- onAnswer: (answer: string) => Promise<unknown>; onInterpret: () => Promise<unknown>; children?: React.ReactNode;
+ onAnswer: (answer: string) => Promise<unknown>; onInterpret: () => Promise<unknown>; children?: React.ReactNode; demoActive?: boolean;
 }) {
  const [answer, setAnswer] = useState("");
  const question = session.currentQuestion;
@@ -20,7 +20,8 @@ export function OnboardingInterview({ session, busy, error, onAnswer, onInterpre
  useEffect(()=>()=>speech.current?.abort(),[]);
  const stopSpeech=()=>{speech.current?.abort();speech.current=null;setListening(false);};
  return <main className="gl-onboarding" data-presentation="game_projection">
-  <div className="gl-onboarding-sky" aria-hidden="true" />
+ <div className="gl-onboarding-sky" aria-hidden="true" />
+  {demoActive&&<DemoExit/>}
   <div className="gl-onboarding-preview" aria-hidden="true">
    {Array.from({length: Math.max(1, Math.min(5, question + 1))}, (_,i) => <img key={i} src={art+"02-territory-island-generic.png"} alt="" style={{left:`${12+(i%3)*29}%`,top:`${5+Math.floor(i/3)*26}%`, animationDelay:`${i*100}ms`}} />)}
   </div>
@@ -56,7 +57,7 @@ export default function GoldlineOnboarding({ entry = "world" }: { entry?: "world
  // A tenant that already owns a world never sees the interview, and /onboarding
  // is not a way to build a second one.
  if (state.data?.compatibility === "LEGACY_EXISTING_WORLD") return <main className="gl-onboarding"><div className="gl-entry"><h1>Your world is waiting.</h1><a href="/growth/lantern-city">RETURN TO LANTERN CITY</a></div></main>;
- if (!session) return <main className="gl-onboarding"><div className="gl-onboarding-sky"/><div className="gl-entry"><p>GOLDLINE</p><h1>Your work.<br/>An extraordinary world.</h1><p>Five questions. One useful mission. Your first chapter starts here.</p><button disabled={start.isPending} onClick={()=>start.mutate()}>BEGIN YOUR STORY</button>{start.error && <p role="alert">{start.error.message}</p>}<DemoAccess onEntered={reload}/></div></main>;
+ if (!session) return <main className="gl-onboarding"><div className="gl-onboarding-sky"/>{demo?.active&&<DemoExit/>}<div className="gl-entry"><p>GOLDLINE</p><h1>Your work.<br/>An extraordinary world.</h1><p>Five questions. One useful mission. Your first chapter starts here.</p><button disabled={start.isPending} onClick={()=>start.mutate()}>BEGIN YOUR STORY</button>{start.error && <p role="alert">{start.error.message}</p>}<DemoAccess onEntered={reload}/></div></main>;
  // Onboarding is finished exactly once. On the dedicated /onboarding entry the
  // completed session hands off to the normal returning-customer experience at
  // the admin root rather than rendering a second reveal, so revisiting the URL
@@ -69,9 +70,10 @@ export default function GoldlineOnboarding({ entry = "world" }: { entry?: "world
    // place it lives and a completed session is exactly when you want to replay.
    if(demo===null)return <main className="gl-onboarding"><div className="gl-onboarding-sky"/><p className="gl-entry">Opening your world…</p></main>;
    if(!demo.enabled){window.location.replace("/");return <main className="gl-onboarding"><p className="gl-entry">Your world is ready. Opening Lantern City…</p></main>;}
-   return <main className="gl-onboarding"><div className="gl-onboarding-sky"/><div className="gl-entry"><p>GOLDLINE</p><h1>Your world is ready.</h1><p>Onboarding is complete for {demo.businessName}. It will not run again, and this page cannot build a second world.</p><a href="/">ENTER LANTERN CITY</a><DemoAccess onEntered={reload} showLogin={false}/></div></main>;
+   if(demo.active)return <main className="gl-onboarding"><DemoExit/><DesignPartnerWorld session={session}/><DemoAccess onEntered={reload} showLogin={false}/></main>;
+   return <main className="gl-onboarding"><div className="gl-onboarding-sky"/><div className="gl-entry"><p>GOLDLINE</p><h1>Your world is ready.</h1><p>Onboarding is complete. This page cannot build a second world.</p><a href="/">RETURN TO MY GOLDLINE</a></div></main>;
   }
   return <DesignPartnerWorld session={session}/>;
  }
- return <OnboardingInterview session={session} busy={save.isPending || interpret.isPending} error={save.error?.message || interpret.error?.message} onAnswer={answer=>save.mutateAsync({question:session.currentQuestion,answer,version:session.version})} onInterpret={()=>interpret.mutateAsync()}><CustomerImport busy={reveal.isPending} onContinue={()=>reveal.mutate()} />{reveal.error&&<p role="alert">{reveal.error.message}</p>}</OnboardingInterview>;
+ return <OnboardingInterview session={session} demoActive={Boolean(demo?.active)} busy={save.isPending || interpret.isPending} error={save.error?.message || interpret.error?.message} onAnswer={answer=>save.mutateAsync({question:session.currentQuestion,answer,version:session.version})} onInterpret={()=>interpret.mutateAsync()}><CustomerImport busy={reveal.isPending} onContinue={()=>reveal.mutate()} />{reveal.error&&<p role="alert">{reveal.error.message}</p>}</OnboardingInterview>;
 }
