@@ -53,11 +53,20 @@
 .gdp-shell--forced-mobile .gdp-stop,
 .gdp-shell--forced-mobile .gdp-stop--processing,
 .gdp-shell--forced-mobile .gdp-stop--growth {
-  height: 78px !important;
-  min-height: 78px !important;
+  width: 72% !important;
+  height: 82px !important;
+  min-height: 82px !important;
   padding-top: 8px !important;
   padding-bottom: 8px !important;
   overflow: visible !important;
+}
+.gdp-shell .gdp-stop--left {
+  left: 2% !important;
+}
+.gdp-shell .gdp-stop--right,
+.gdp-shell--forced-mobile .gdp-stop--right {
+  right: 2% !important;
+  left: auto !important;
 }
 .gdp-shell .gdp-card-kicker,
 .gdp-shell--forced-mobile .gdp-card-kicker,
