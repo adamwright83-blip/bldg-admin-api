@@ -2,6 +2,7 @@ import { useState } from "react";
 import { PackageOpen, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import "./vehicle-cargo.css";
+import "./daily-line-readable.css";
 
 export type VehicleCargoItem = { id: number; firstName?: string | null; lastName?: string | null; address?: string | null; state: "IN_VEHICLE_UNPROCESSED" | "IN_VEHICLE_PROCESSED"; appearance: { kind: "paper_bag" | "garment_bag"; condition: string; next: string } };
 const ASSET = "/assets/goldline/vehicle-cargo/v1";
