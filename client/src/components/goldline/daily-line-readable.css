@@ -1,0 +1,225 @@
+/*
+ * Goldline Driver readability lock.
+ * The field UI must read at the same practical phone size as a native route app.
+ * We make the primary text 18px, then REMOVE secondary copy instead of shrinking it.
+ */
+.gdp-shell {
+  --gdp-readable-text: 18px;
+}
+
+/* Header: keep only the useful identity/date. Do not solve density with tiny type. */
+.gdp-shell .gdp-brand strong,
+.gdp-shell--forced-mobile .gdp-brand strong,
+.gdp-shell .gdp-header > p,
+.gdp-shell--forced-mobile .gdp-header > p {
+  font-size: var(--gdp-readable-text) !important;
+  line-height: 1.08 !important;
+}
+.gdp-shell .gdp-brand small,
+.gdp-shell .gdp-counts,
+.gdp-shell .gdp-summary,
+.gdp-shell .gdp-import {
+  display: none !important;
+}
+.gdp-shell .gdp-menu button {
+  font-size: var(--gdp-readable-text) !important;
+  line-height: 1.15 !important;
+}
+
+/* Left rail: one readable label per panel. Secondary micro-copy is removed. */
+.gdp-shell .gdp-player-card strong,
+.gdp-shell .gdp-status-card strong,
+.gdp-shell .gl-cargo-cta--hero > span strong,
+.gdp-shell .gl-cargo-cta--hero > span small {
+  font-size: var(--gdp-readable-text) !important;
+  line-height: 1.05 !important;
+  letter-spacing: 0 !important;
+}
+.gdp-shell .gdp-player-card small,
+.gdp-shell .gdp-status-card small {
+  display: none !important;
+}
+.gdp-shell .gdp-player-card,
+.gdp-shell .gdp-status-card {
+  min-height: 56px !important;
+}
+.gdp-shell .gl-cargo-cta--hero > span {
+  min-height: 64px !important;
+  padding: 7px 4px !important;
+}
+
+/* Route cards: three readable lines maximum: TYPE, destination/task, time. */
+.gdp-shell .gdp-stop,
+.gdp-shell--forced-mobile .gdp-stop,
+.gdp-shell--forced-mobile .gdp-stop--processing,
+.gdp-shell--forced-mobile .gdp-stop--growth {
+  height: 78px !important;
+  min-height: 78px !important;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+  overflow: visible !important;
+}
+.gdp-shell .gdp-card-kicker,
+.gdp-shell--forced-mobile .gdp-card-kicker,
+.gdp-shell .gdp-card-copy h2,
+.gdp-shell--forced-mobile .gdp-card-copy h2,
+.gdp-shell .gdp-card-meta,
+.gdp-shell--forced-mobile .gdp-card-meta,
+.gdp-shell .gdp-node,
+.gdp-shell--forced-mobile .gdp-node {
+  font-size: var(--gdp-readable-text) !important;
+  line-height: 1.08 !important;
+  letter-spacing: 0 !important;
+}
+.gdp-shell .gdp-card-kicker {
+  display: block !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gdp-shell .gdp-card-kicker strong {
+  display: none !important;
+}
+.gdp-shell .gdp-card-copy h2,
+.gdp-shell--forced-mobile .gdp-card-copy h2 {
+  display: block !important;
+  margin: 3px 0 !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+  -webkit-line-clamp: unset !important;
+}
+.gdp-shell .gdp-card-meta {
+  display: block !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The timeLabel already carries the useful timing. Remove redundant FIXED WINDOW words. */
+.gdp-shell .gdp-card-meta > span:not(:first-child),
+.gdp-shell .gdp-source,
+.gdp-shell .gdp-why,
+.gdp-shell .gdp-complete,
+.gdp-shell .gdp-map-link,
+.gdp-shell .gdp-mission-actions {
+  display: none !important;
+}
+.gdp-shell .gdp-node,
+.gdp-shell--forced-mobile .gdp-node {
+  width: 46px !important;
+  height: 46px !important;
+}
+
+/* Trailblazer/current-position label. */
+.gdp-shell .gdp-trailblazer span {
+  font-size: var(--gdp-readable-text) !important;
+  line-height: 1 !important;
+  padding: 4px 8px !important;
+}
+
+/* Day Director is optional, but when opened it must be readable too. */
+.gdp-shell .gdp-director-toggle,
+.gdp-shell .gdp-director strong,
+.gdp-shell .gdp-director p,
+.gdp-shell .gdp-director small,
+.gdp-shell .gdp-director textarea,
+.gdp-shell .gdp-director button,
+.gdp-shell .gdp-empty,
+.gdp-shell .gdp-empty strong,
+.gdp-shell .gdp-empty span {
+  font-size: var(--gdp-readable-text) !important;
+  line-height: 1.2 !important;
+}
+
+/* NEXT UP: readable title + one action. Remove duplicate type/time line. */
+.gdp-shell .gdp-next-up small,
+.gdp-shell .gdp-next-up strong,
+.gdp-shell .gdp-next-up button {
+  font-size: var(--gdp-readable-text) !important;
+  line-height: 1.08 !important;
+}
+.gdp-shell .gdp-next-up span {
+  display: none !important;
+}
+.gdp-shell .gdp-next-up strong {
+  display: block !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+/* "START EXPEDITION" is too long at the correct size; the action is simply GO. */
+.gdp-shell .gdp-next-up button {
+  font-size: 0 !important;
+}
+.gdp-shell .gdp-next-up button::before {
+  content: "GO";
+  font-size: var(--gdp-readable-text);
+  line-height: 1;
+}
+
+/* Bottom HUD: short labels at the same readable size instead of six microscopic words. */
+.gdp-shell .gdp-game-nav button {
+  font-size: 0 !important;
+}
+.gdp-shell .gdp-game-nav button::after {
+  font-family: Inter, system-ui, sans-serif;
+  font-size: var(--gdp-readable-text);
+  font-weight: 700;
+  line-height: 1;
+}
+.gdp-shell .gdp-game-nav button:nth-child(1)::after { content: "QUEST"; }
+.gdp-shell .gdp-game-nav button:nth-child(2)::after { content: "MAP"; }
+.gdp-shell .gdp-game-nav button:nth-child(3)::after { content: "GO"; }
+.gdp-shell .gdp-game-nav button:nth-child(4)::after { content: "LINE"; }
+.gdp-shell .gdp-game-nav button:nth-child(5)::after { content: "RELIC"; }
+.gdp-shell .gdp-game-nav button:nth-child(6)::after { content: "ME"; }
+.gdp-shell .gdp-game-nav button > span {
+  display: none !important;
+}
+
+/* Keep the larger words from colliding with the artwork on narrow phones. */
+@media (max-width: 699px), (max-device-width: 699px) {
+  .gdp-shell .gdp-header {
+    padding-top: 10px !important;
+  }
+  .gdp-shell .gdp-header > p {
+    margin-top: 4px !important;
+  }
+  .gdp-shell .gdp-player-card img {
+    width: 42px !important;
+    height: 42px !important;
+    flex: 0 0 42px;
+  }
+  .gdp-shell .gdp-player-card span,
+  .gdp-shell .gdp-status-card span {
+    min-width: 0;
+    overflow: hidden;
+  }
+  .gdp-shell .gdp-player-card strong,
+  .gdp-shell .gdp-status-card strong {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .gdp-shell .gdp-stop {
+    border-radius: 9px !important;
+  }
+  .gdp-shell .gdp-game-nav {
+    height: 88px !important;
+  }
+  .gdp-shell .gdp-game-nav button {
+    gap: 4px !important;
+  }
+  .gdp-shell .gdp-game-nav svg {
+    width: 24px !important;
+    height: 24px !important;
+  }
+  .gdp-shell .gdp-next-up {
+    bottom: 88px !important;
+    height: 92px !important;
+    min-height: 92px !important;
+  }
+  .gdp-shell .gdp-route {
+    bottom: 180px !important;
+  }
+}
