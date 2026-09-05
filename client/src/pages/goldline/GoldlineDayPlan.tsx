@@ -4,7 +4,6 @@ import {
   ChevronRight,
   CloudUpload,
   Compass,
-  Crown,
   Menu,
   Navigation,
   Route,
@@ -31,7 +30,8 @@ import {
 import type { TerritoryBundleHint } from "@shared/goldlineAdventure";
 import world from "@/assets/goldline/generated/goldline-world-empty.png";
 import operator from "@/assets/goldline/generated/trailblazer-operator.png";
-import { VehicleCargo, type VehicleCargoItem } from "@/components/goldline/VehicleCargo";
+import type { VehicleCargoItem } from "@/components/goldline/VehicleCargo";
+import { DriverVehicleDrawer } from "@/components/goldline/DriverVehicleDrawer";
 import "./goldline-day-plan.css";
 
 export type GoldlineDayPlanProps = {
@@ -92,13 +92,15 @@ function evidenceTime(value: string | null | undefined): string | null {
   if (!value) return null;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toLocaleString([], {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).toUpperCase();
+  return parsed
+    .toLocaleString([], {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    })
+    .toUpperCase();
 }
 
 export function isForcedMobileDayPlanViewport(input: {
@@ -137,17 +139,11 @@ function StopCard({
       data-testid={`day-plan-stop-${stop.id}`}
     >
       <div className="gdp-node" aria-hidden="true">
-        {stop.status === "completed" ? (
-          <Check />
-        ) : (
-          KIND_LABEL[stop.kind].slice(0, 1)
-        )}
+        {stop.status === "completed" ? <Check /> : index + 1}
       </div>
       <div className="gdp-card-copy">
         <div className="gdp-card-kicker">
-          <span>
-            {index + 1} · {KIND_LABEL[stop.kind]}
-          </span>
+          <span>{KIND_LABEL[stop.kind]}</span>
           {stop.status === "ready" && <strong>READY</strong>}
         </div>
         <h2>{stop.title}</h2>
@@ -202,7 +198,9 @@ function StopCard({
         )}
         {stop.status === "ready" && stop.source === "living_world" && (
           <div className="gdp-mission-actions">
-            <button type="button" onClick={() => onEnterWorld(stop.id)}><Navigation /> ENTER THIS OBJECTIVE IN WORLD</button>
+            <button type="button" onClick={() => onEnterWorld(stop.id)}>
+              <Navigation /> ENTER THIS OBJECTIVE IN WORLD
+            </button>
           </div>
         )}
         {stop.status !== "ready" &&
@@ -224,7 +222,6 @@ function StopCard({
 
 export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [directorOpen, setDirectorOpen] = useState(false);
   const [truthText, setTruthText] = useState("");
   const [proposal, setProposal] = useState<DayDirectorProposal | null>(null);
   const [directorBusy, setDirectorBusy] = useState(false);
@@ -296,8 +293,10 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
     stop => stop.status === "completed"
   ).length;
   const progress = plan.stops.length ? completedCount / plan.stops.length : 0;
-  const routeStopCount = Math.max(plan.stops.length, 1);
-  const nextStop = plan.stops.find(stop => stop.status !== "completed" && stop.status !== "cancelled") ?? null;
+  const nextStop =
+    plan.stops.find(
+      stop => stop.status !== "completed" && stop.status !== "cancelled"
+    ) ?? null;
   const startNext = () => {
     if (!nextStop) return props.onEnterWorld();
     if (nextStop.missionTarget === "colosseum") return props.onEnterColosseum();
@@ -310,7 +309,11 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       style={{ "--gdp-world": `url(${world})` } as React.CSSProperties}
     >
       <header className="gdp-header">
-        <div className="gdp-brand"><Crown /><strong>GOLDLINE DRIVER</strong><small>YOUR DAY. YOUR QUEST.</small></div>
+        <div className="gdp-brand">
+          <Compass />
+          <strong>GOLDLINE DRIVER</strong>
+          <small>YOUR DAY. YOUR QUEST.</small>
+        </div>
         <p>
           {props.campaignTitle ? `${props.campaignTitle} · ` : "TODAY · "}
           {dateHeading(props.businessDate)}
@@ -320,11 +323,15 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           type="button"
           onClick={() => setMenuOpen(value => !value)}
           aria-label="Open menu"
+          aria-expanded={menuOpen}
         >
           {menuOpen ? <X /> : <Menu />}
         </button>
         {menuOpen && (
           <div className="gdp-menu">
+            <button type="button" onClick={props.onOpenImport}>
+              IMPORT ROUTE
+            </button>
             <button type="button" onClick={props.onEnterOperations}>
               FIELD OPERATIONS
             </button>
@@ -377,11 +384,17 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         </button>
       </header>
 
-      <aside className="gdp-player-rail" aria-label="Driver status">
-        <div className="gdp-player-card"><img src={operator} alt="Trailblazer" /><span><strong>TRAILBLAZER</strong><small>ON TODAY'S LINE</small></span></div>
-        <div className="gdp-status-card"><Shield /><span><strong>LINE STATUS</strong><small>{completedCount} OF {plan.stops.length} STOPS COMPLETE</small></span><i><b style={{ width: `${Math.round(progress * 100)}%` }} /></i></div>
-      </aside>
-      <VehicleCargo mode="hero" fixtureCargo={props.cargoFixture} />
+      <DriverVehicleDrawer
+        completed={completedCount}
+        total={plan.stops.length}
+        cargo={props.cargoFixture}
+      />
+      <div className="gdp-trail-heading">
+        <span>DAILY LINE</span>
+        <span>
+          {completedCount} / {plan.stops.length} COMPLETE
+        </span>
+      </div>
 
       <section className="gdp-route" aria-label="Today's Gold Line">
         <svg
@@ -390,50 +403,25 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           preserveAspectRatio="none"
           aria-hidden="true"
         >
-          <path d="M18 0 C8 82 84 88 76 190 S12 270 20 370 S91 448 78 560 S8 650 23 760 S89 844 52 1000" />
+          <path d="M50 0 C18 90 82 145 45 225 S75 365 48 455 S25 610 57 690 S80 825 48 1000" />
           <path
             className="gdp-line-complete"
             pathLength="1"
             strokeDasharray={`${progress} 1`}
-            d="M18 0 C8 82 84 88 76 190 S12 270 20 370 S91 448 78 560 S8 650 23 760 S89 844 52 1000"
+            d="M50 0 C18 90 82 145 45 225 S75 365 48 455 S25 610 57 690 S80 825 48 1000"
           />
-          {[190, 370, 560, 760, 915].map((y, index) => (
-            <rect
-              key={y}
-              className="gdp-checkpoint"
-              x={index % 2 ? 72 : 15}
-              y={y}
-              width="5"
-              height="5"
-              rx="1"
-              transform={`rotate(45 ${index % 2 ? 74.5 : 17.5} ${y + 2.5})`}
-            />
-          ))}
         </svg>
-        <div className="gdp-trailblazer" aria-label="Trailblazer at the current point in the day">
-          <img src={operator} alt="" />
-          <span>NOW</span>
-        </div>
-        {plan.growthCoverage !== "covered" &&
-          !props.dismissedPromptKeys?.includes("growth-intake") && (
-            <button
-              className="gdp-director-toggle"
-              type="button"
-              aria-expanded={directorOpen || Boolean(proposal)}
-              onClick={() => setDirectorOpen(value => !value)}
-            >
-              <Compass /> DAY DIRECTOR
-            </button>
-          )}
         {props.isLoading && (
           <div className="gdp-empty">Charting today’s Gold Line…</div>
         )}
         {!props.isLoading &&
           plan.growthCoverage !== "covered" &&
           !proposal &&
-          directorOpen &&
           !props.dismissedPromptKeys?.includes("growth-intake") && (
-            <aside className="gdp-director" data-testid="day-director-intake">
+            <details className="gdp-director" data-testid="day-director-intake">
+              <summary>
+                ADD A COMMITMENT <ChevronRight size={16} />
+              </summary>
               <strong>DAY DIRECTOR</strong>
               <p>What has to move forward today?</p>
               {!props.intelligenceAvailable && (
@@ -470,13 +458,12 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
                   onClick={async () => {
                     await props.onDismissProposal?.("growth-intake");
                     setProposal(null);
-                    setDirectorOpen(false);
                   }}
                 >
                   NOT NOW
                 </button>
               </div>
-            </aside>
+            </details>
           )}
         {proposal &&
           !props.dismissedPromptKeys?.includes(proposal.promptKey) && (
@@ -503,7 +490,6 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
                       await props.onAcceptProposal?.(proposal);
                       setProposal(null);
                       setTruthText("");
-                      setDirectorOpen(false);
                     } catch {
                       setDirectorError(
                         "Could not add this to Today. Please try again."
@@ -524,7 +510,6 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
                       setDirectorError(null);
                       await props.onDismissProposal?.(proposal.promptKey);
                       setProposal(null);
-                      setDirectorOpen(false);
                     } catch {
                       setDirectorError(
                         "Could not dismiss this prompt. Please try again."
@@ -546,18 +531,25 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           </div>
         )}
         {plan.stops.map((stop, index) => (
-          <div
-            className="gdp-route-step"
-            key={stop.id}
-            style={{
-              "--gdp-stop-index": index,
-              "--gdp-stop-position": `${
-                routeStopCount === 1
-                  ? 28
-                  : 12 + (index * 74) / Math.max(routeStopCount - 1, 1)
-              }%`,
-            } as React.CSSProperties}
-          >
+          <div className="gdp-route-step" key={stop.id}>
+            {index === completedCount && (
+              <div className="gdp-now">
+                <div>
+                  <strong>NOW</strong>
+                  <span>
+                    {now.toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                  <small>Day-progress position</small>
+                </div>
+                <img
+                  src={operator}
+                  alt="Trailblazer at the current point in the day"
+                />
+              </div>
+            )}
             <StopCard
               stop={stop}
               index={index}
@@ -576,20 +568,71 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
             />
           </div>
         ))}
+        {completedCount === plan.stops.length && (
+          <div className="gdp-now">
+            <div>
+              <strong>NOW</strong>
+              <span>
+                {now.toLocaleTimeString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </span>
+              <small>Day-progress position</small>
+            </div>
+            <img
+              src={operator}
+              alt="Trailblazer at the current point in the day"
+            />
+          </div>
+        )}
       </section>
 
       <section className="gdp-next-up" data-testid="day-plan-next-up">
-        <div><small>NEXT UP</small><strong>{nextStop?.title ?? "THE LINE IS OPEN"}</strong><span>{nextStop ? `${KIND_LABEL[nextStop.kind]} · ${nextStop.timeLabel}` : "NO SCHEDULED STOP"}</span></div>
-        <button type="button" onClick={startNext} disabled={!nextStop}>START EXPEDITION <ChevronRight /></button>
+        <div>
+          <small>NEXT UP</small>
+          <strong>{nextStop?.title ?? "THE LINE IS OPEN"}</strong>
+          <span>
+            {nextStop
+              ? `${KIND_LABEL[nextStop.kind]} · ${nextStop.timeLabel}`
+              : "NO SCHEDULED STOP"}
+          </span>
+        </div>
+        <button type="button" onClick={startNext} disabled={!nextStop}>
+          START EXPEDITION <ChevronRight />
+        </button>
       </section>
 
       <nav className="gdp-game-nav" aria-label="Goldline navigation">
-        <button className="is-active" type="button"><ScrollText /><span>QUESTS</span></button>
-        <button type="button" onClick={() => props.onEnterWorld()}><Compass /><span>MAP</span></button>
-        <button type="button" onClick={startNext}><Swords /><span>EXPEDITION</span></button>
-        <button type="button" onClick={() => props.onEnterWorld()}><Route /><span>GOLD LINE</span></button>
-        <button type="button" onClick={props.onEnterOperations}><Shield /><span>RELICS</span></button>
-        <button type="button" onClick={() => setMenuOpen(value => !value)}><UserRound /><span>PROFILE</span></button>
+        <button
+          className="is-active"
+          type="button"
+          aria-current="page"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        >
+          <ScrollText />
+          <span>QUESTS</span>
+        </button>
+        <button type="button" onClick={() => props.onEnterWorld()}>
+          <Compass />
+          <span>MAP</span>
+        </button>
+        <button type="button" onClick={startNext}>
+          <Swords />
+          <span>EXPEDITION</span>
+        </button>
+        <button type="button" onClick={() => props.onEnterWorld()}>
+          <Route />
+          <span>GOLD LINE</span>
+        </button>
+        <button type="button" onClick={props.onEnterOperations}>
+          <Shield />
+          <span>RELICS</span>
+        </button>
+        <button type="button" onClick={() => setMenuOpen(value => !value)}>
+          <UserRound />
+          <span>PROFILE</span>
+        </button>
       </nav>
 
       <footer className="gdp-world-entry">
