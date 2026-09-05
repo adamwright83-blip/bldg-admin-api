@@ -477,6 +477,28 @@
 .overworld-briefing-layer{position:fixed;z-index:60;inset:0;overflow-y:auto;background:#17385e26;backdrop-filter:blur(2px)}
 .overworld-briefing-close{position:sticky;z-index:2;top:calc(10px + env(safe-area-inset-top));left:100%;display:inline-flex;min-height:44px;align-items:center;margin:10px 12px 0 0;padding:0 16px;transform:translateX(-100%);border:2px solid #e0bd63;border-radius:999px;background:#fffdf2;color:#17385e;font:900 10px Inter,sans-serif;letter-spacing:.14em}
 
+/* The Daily Line owns the mobile viewport; the parent layer must not create
+   decorative gutters or place a second page behind it. */
+.overworld-briefing-layer {
+  overflow: hidden;
+  background: #061315;
+  backdrop-filter: none;
+}
+.overworld-briefing-close {
+  position: fixed;
+  z-index: 190;
+  top: max(.7dvh, env(safe-area-inset-top));
+  right: 11cqw;
+  left: auto;
+  min-height: 3dvh;
+  margin: 0;
+  padding: .35dvh 1.5cqw;
+  transform: none;
+  border-width: 1px;
+  background: rgba(255, 250, 224, .92);
+  font-size: clamp(4px, 1.2cqw, 7px);
+}
+
 /* ============================================================
    THE HUSTLER LEVER
 

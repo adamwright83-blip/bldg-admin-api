@@ -7,6 +7,7 @@ import type { DayDirectorCommitment } from "@shared/dayDirector";
 import type { VehicleCargoItem } from "@/components/goldline/VehicleCargo";
 
 export default function GoldlineDayPlanFixture({ state }: { state: string }) {
+  const sparse = state === "sparse";
   const storagePrefix = `day-director-${state}`;
   const [commitments, setCommitments] = useState<DayDirectorCommitment[]>(() =>
     JSON.parse(sessionStorage.getItem(`${storagePrefix}-commitments`) ?? "[]")
@@ -33,7 +34,7 @@ export default function GoldlineDayPlanFixture({ state }: { state: string }) {
       updatedAt: new Date("2026-08-25T17:14:00.000Z"),
     }) as Order;
   const imported: ExternalOperationalOrder[] =
-    state === "morning"
+    state === "morning" || sparse
       ? []
       : [
           {
@@ -66,7 +67,7 @@ export default function GoldlineDayPlanFixture({ state }: { state: string }) {
     expiresAt: null,
     completedAt: null,
   } as CommercialMission;
-  const cargo: VehicleCargoItem[] = state === "morning" ? [] : [
+  const cargo: VehicleCargoItem[] = state === "morning" || sparse ? [] : [
     { id: 101, firstName: "Avery", lastName: "Stone", state: "IN_VEHICLE_UNPROCESSED", appearance: { kind: "paper_bag", condition: "scrunched garments", next: "Processor handoff" } },
     { id: 102, firstName: "Morgan", lastName: "Lane", state: "IN_VEHICLE_PROCESSED", appearance: { kind: "garment_bag", condition: "covered garments", next: "Customer return" } },
     { id: 103, firstName: "Jordan", lastName: "Pike", state: "IN_VEHICLE_UNPROCESSED", appearance: { kind: "paper_bag", condition: "scrunched garments", next: "Processor handoff" } },
@@ -77,7 +78,7 @@ export default function GoldlineDayPlanFixture({ state }: { state: string }) {
     <GoldlineDayPlan
       businessDate="2026-08-25"
       cargoFixture={cargo}
-      pickups={[
+      pickups={sparse ? [] : [
         order(
           1,
           "pickup",
@@ -87,10 +88,10 @@ export default function GoldlineDayPlanFixture({ state }: { state: string }) {
         ),
         order(5, "pickup", "Sunset Towers", "1:30–2:30"),
       ]}
-      deliveries={[order(6, "dropoff", "Park Meridian", "3:00–4:00", "ready")]}
+      deliveries={sparse ? [] : [order(6, "dropoff", "Park Meridian", "3:00–4:00", "ready")]}
       externalOrders={imported}
-      salesMissions={state.startsWith("director") ? [] : [mission]}
-      processingLocation={{
+      salesMissions={state.startsWith("director") || sparse ? [] : [mission]}
+      processingLocation={sparse ? null : {
         name: "Lugo's Lavanderia",
         locality: "Huntington Park",
         address: null,
@@ -166,7 +167,19 @@ export default function GoldlineDayPlanFixture({ state }: { state: string }) {
         availableMinutes: 180,
         approvedAt: "2026-08-25T15:00:00.000Z",
         completedAt: null,
-        tasks: [
+        tasks: sparse ? [
+          {
+            id: "briefing",
+            position: 0,
+            title: "Confirm today's preparation",
+            detail: "",
+            estimatedMinutes: 10,
+            category: "operations",
+            navigationQuery: null,
+            status: "pending",
+            completedAt: null,
+          },
+        ] : [
           {
             id: "print",
             position: 0,

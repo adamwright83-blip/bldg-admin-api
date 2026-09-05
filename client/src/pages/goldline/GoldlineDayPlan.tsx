@@ -224,6 +224,7 @@ function StopCard({
 
 export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [directorOpen, setDirectorOpen] = useState(false);
   const [truthText, setTruthText] = useState("");
   const [proposal, setProposal] = useState<DayDirectorProposal | null>(null);
   const [directorBusy, setDirectorBusy] = useState(false);
@@ -295,6 +296,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
     stop => stop.status === "completed"
   ).length;
   const progress = plan.stops.length ? completedCount / plan.stops.length : 0;
+  const routeStopCount = Math.max(plan.stops.length, 1);
   const nextStop = plan.stops.find(stop => stop.status !== "completed" && stop.status !== "cancelled") ?? null;
   const startNext = () => {
     if (!nextStop) return props.onEnterWorld();
@@ -388,20 +390,48 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           preserveAspectRatio="none"
           aria-hidden="true"
         >
-          <path d="M50 0 C18 90 82 145 45 225 S75 365 48 455 S25 610 57 690 S80 825 48 1000" />
+          <path d="M18 0 C8 82 84 88 76 190 S12 270 20 370 S91 448 78 560 S8 650 23 760 S89 844 52 1000" />
           <path
             className="gdp-line-complete"
             pathLength="1"
             strokeDasharray={`${progress} 1`}
-            d="M50 0 C18 90 82 145 45 225 S75 365 48 455 S25 610 57 690 S80 825 48 1000"
+            d="M18 0 C8 82 84 88 76 190 S12 270 20 370 S91 448 78 560 S8 650 23 760 S89 844 52 1000"
           />
+          {[190, 370, 560, 760, 915].map((y, index) => (
+            <rect
+              key={y}
+              className="gdp-checkpoint"
+              x={index % 2 ? 72 : 15}
+              y={y}
+              width="5"
+              height="5"
+              rx="1"
+              transform={`rotate(45 ${index % 2 ? 74.5 : 17.5} ${y + 2.5})`}
+            />
+          ))}
         </svg>
+        <div className="gdp-trailblazer" aria-label="Trailblazer at the current point in the day">
+          <img src={operator} alt="" />
+          <span>NOW</span>
+        </div>
+        {plan.growthCoverage !== "covered" &&
+          !props.dismissedPromptKeys?.includes("growth-intake") && (
+            <button
+              className="gdp-director-toggle"
+              type="button"
+              aria-expanded={directorOpen || Boolean(proposal)}
+              onClick={() => setDirectorOpen(value => !value)}
+            >
+              <Compass /> DAY DIRECTOR
+            </button>
+          )}
         {props.isLoading && (
           <div className="gdp-empty">Charting today’s Gold Line…</div>
         )}
         {!props.isLoading &&
           plan.growthCoverage !== "covered" &&
           !proposal &&
+          directorOpen &&
           !props.dismissedPromptKeys?.includes("growth-intake") && (
             <aside className="gdp-director" data-testid="day-director-intake">
               <strong>DAY DIRECTOR</strong>
@@ -440,6 +470,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
                   onClick={async () => {
                     await props.onDismissProposal?.("growth-intake");
                     setProposal(null);
+                    setDirectorOpen(false);
                   }}
                 >
                   NOT NOW
@@ -472,6 +503,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
                       await props.onAcceptProposal?.(proposal);
                       setProposal(null);
                       setTruthText("");
+                      setDirectorOpen(false);
                     } catch {
                       setDirectorError(
                         "Could not add this to Today. Please try again."
@@ -492,6 +524,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
                       setDirectorError(null);
                       await props.onDismissProposal?.(proposal.promptKey);
                       setProposal(null);
+                      setDirectorOpen(false);
                     } catch {
                       setDirectorError(
                         "Could not dismiss this prompt. Please try again."
@@ -513,25 +546,18 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           </div>
         )}
         {plan.stops.map((stop, index) => (
-          <div className="gdp-route-step" key={stop.id}>
-            {index === completedCount && (
-              <div className="gdp-now">
-                <div>
-                  <strong>NOW</strong>
-                  <span>
-                    {now.toLocaleTimeString([], {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                  <small>Day-progress position</small>
-                </div>
-                <img
-                  src={operator}
-                  alt="Trailblazer at the current point in the day"
-                />
-              </div>
-            )}
+          <div
+            className="gdp-route-step"
+            key={stop.id}
+            style={{
+              "--gdp-stop-index": index,
+              "--gdp-stop-position": `${
+                routeStopCount === 1
+                  ? 28
+                  : 12 + (index * 74) / Math.max(routeStopCount - 1, 1)
+              }%`,
+            } as React.CSSProperties}
+          >
             <StopCard
               stop={stop}
               index={index}
@@ -550,24 +576,6 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
             />
           </div>
         ))}
-        {completedCount === plan.stops.length && (
-          <div className="gdp-now">
-            <div>
-              <strong>NOW</strong>
-              <span>
-                {now.toLocaleTimeString([], {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-              </span>
-              <small>Day-progress position</small>
-            </div>
-            <img
-              src={operator}
-              alt="Trailblazer at the current point in the day"
-            />
-          </div>
-        )}
       </section>
 
       <section className="gdp-next-up" data-testid="day-plan-next-up">
