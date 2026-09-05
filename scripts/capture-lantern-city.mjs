@@ -85,6 +85,75 @@ const TOWER_WARS = {
   empty: null,
 };
 
+
+/*
+  Territory board fixtures.
+
+  Six territories anchored on REAL Los Angeles coordinates, one per readiness
+  state plus repeats, so the board can be judged on the four states it actually
+  renders. Shapes match `TerritoryDefinition` / `TerritoryDerivedState` exactly;
+  nothing here is a convenience object the real server could not produce.
+*/
+const TERRITORY_SEED = [
+  ["Silver Vault", "Beverly Hills", "cleared", "thunder_king", 34.0736, -118.4004],
+  ["The Quiet Mile", "West Hollywood", "confrontation_ready", "cloud_duchess", 34.09, -118.3617],
+  ["Lantern Reach", "Hollywood", "in_progress", "sleepy_one_eye", 34.0928, -118.3287],
+  ["Hollow Ward", "Echo Park", "veiled", "tiny_emperor", 34.0782, -118.2606],
+  ["The Long Wire", "Downtown", "in_progress", "gust_jester", 34.0505, -118.2479],
+  ["Still Harbour", "Silver Lake", "cleared", "drizzle_detective", 34.0869, -118.2702],
+];
+
+const boardEntities = TERRITORY_SEED.map(([title, , , , latitude, longitude], index) => ({
+  id: `entity-${index}`,
+  displayName: `${title} anchor`,
+  identityStatus: "confirmed",
+  aliases: [], bindings: [], events: [], evidence: [],
+  canonicalAsset: null,
+  location: { latitude, longitude, ...project(latitude, longitude) },
+  residents: [],
+  pursuit: null,
+  projection: { attentionReasons: [] },
+  presentation: { veil: "none", marks: [], prominenceTier: "ambient", attentionSummary: null },
+  obligations: null,
+}));
+
+const territories = TERRITORY_SEED.map(([fantasyTitle, realGeographyLabel, readiness, guardianId], index) => {
+  const memberId = `entity-${index}`;
+  const cleared = readiness === "cleared";
+  return {
+    definition: {
+      id: `00000000-0000-4000-8000-00000000000${index}`,
+      tenantId: "fixture",
+      stableKey: `territory-key-${index}`,
+      version: 1,
+      fantasyTitle,
+      realGeographyLabel,
+      grammar: "visit_hunt",
+      guardianId,
+      members: [{ physicalEntityId: memberId, requiredAction: "visit", order: 0, sourceReason: "fixture" }],
+      geometryMode: "cluster",
+      createdFrom: "fixture",
+      publishedAt: new Date().toISOString(),
+      classification: "game_projection",
+    },
+    state: {
+      territoryId: `00000000-0000-4000-8000-00000000000${index}`,
+      stableKey: `territory-key-${index}`,
+      version: 1,
+      readiness,
+      completedMemberIds: readiness === "veiled" ? [] : [memberId],
+      remainingMemberIds: readiness === "veiled" ? [memberId] : [],
+      members: [{ physicalEntityId: memberId, requiredAction: "visit", completed: readiness !== "veiled", evidenceEventId: null, evidenceOccurredAt: null }],
+      confrontationReady: readiness === "confrontation_ready",
+      cleared,
+      clearedAt: cleared ? new Date().toISOString() : null,
+      clearedEventId: null,
+      guardianId,
+      evidenceRevisedAfterClear: false,
+    },
+  };
+});
+
 function towerWarsToday() {
   const spec = TOWER_WARS[scenario];
   const building = (buildingId, s) => ({
@@ -122,7 +191,9 @@ function fixtureFor(procedure) {
         }],
       };
     case "system.towerWars.today": return towerWarsToday();
-    case "system.goldlineWorld.cityEntities": return [];
+    case "system.goldlineWorld.cityEntities": return boardEntities;
+    case "system.goldlineWorld.territories": return territories;
+    case "system.goldlineWorld.campaign": return null;
     case "system.google.atmosphere": return null;
     case "system.google.opportunityPressure": return null;
     case "system.towerWars.sandboxCapability": return { enabled: false };
@@ -172,6 +243,9 @@ for (const viewport of VIEWPORTS) {
     hud: await page.locator(".lc-rivalry-hud").count(),
     dock: await page.locator(".gl-command-dock .gl-command").count(),
     projectiles: await page.locator(".pwc-combat-round").count(),
+    islands: await page.locator(".gl-board-island").count(),
+    bridges: await page.locator(".gl-board-bridge").count(),
+    islandVariants: await page.locator(".gl-board-island").evaluateAll(els => [...new Set(els.map(e => e.dataset.variant))].sort()),
     damagedPlates: await page.locator("[data-damaged='true']").count(),
     legacyPortals: await page.locator(".gl-world-portal:visible").count(),
     consoleErrors: [...consoleErrors],

@@ -9,6 +9,8 @@ import { TerritoryVeilLayer } from "./TerritoryVeilLayer";
 import { GuardianActor } from "./GuardianActor";
 import { GuardianEncounter } from "./GuardianEncounter";
 import { KingdomCrossingsLayer } from "./KingdomCrossingsLayer";
+import { TerritoryBoardLayer } from "./board/TerritoryBoardLayer";
+import "./board/territory-board.css";
 import "./goldline-territories.css";
 
 export function TerritoryWorldLayer({
@@ -40,6 +42,24 @@ export function TerritoryWorldLayer({
 
   return (
     <>
+      {/*
+        The board comes first: islands and bridges are the physical pieces the
+        rest of the territory chrome sits on. The veil polygons and guardian
+        encounters that follow are unchanged — they now have terrain to land on
+        instead of floating over an aerial photograph.
+      */}
+      <TerritoryBoardLayer
+        territories={presented}
+        entities={entities}
+        selectedKey={
+          presented.find(item => item.definition.id === activeId)?.definition
+            .stableKey ?? null
+        }
+        onSelect={territory => {
+          setActiveId(territory.definition.id);
+          onInteractionLock(true);
+        }}
+      />
       <KingdomCrossingsLayer territories={presented} entities={entities} />
       {presented.map(item => (
         <TerritoryOnAtlas

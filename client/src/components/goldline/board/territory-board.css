@@ -1,0 +1,157 @@
+/* ============================================================================
+   THE WAR TABLE
+
+   Territories as discrete board pieces over real Los Angeles. Everything here
+   is presentation over positions that were already decided by real coordinates
+   — see TerritoryBoardLayer for why not one value below is a placement.
+   ========================================================================= */
+
+.gl-board { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+
+/* --- bridges ------------------------------------------------------------ */
+.gl-board-bridges { position: absolute; inset: 0; }
+.gl-board-bridge {
+  position: absolute;
+  height: auto;
+  transform: translate(-50%, -50%);
+  opacity: 0.9;
+  filter: drop-shadow(0 6px 10px #0d1c2a4d);
+  pointer-events: none;
+}
+
+/* --- the piece ---------------------------------------------------------- */
+.gl-board-island {
+  position: absolute;
+  display: block;
+  /*
+    Sized so a territory reads as a board piece the strongholds STAND AMONG,
+    not as scenery that swallows them. At the previous width the islands
+    overlapped each other and buried Century Park East and OPUS, which inverts
+    the hierarchy: the two combatants are the most important objects here and a
+    supporting territory must never out-mass them.
+  */
+  width: clamp(112px, 11.5vw, 190px);
+  padding: 0;
+  border: 0;
+  background: none;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  cursor: pointer;
+  /* transform/opacity only, so hovering a piece never triggers layout. */
+  transition: transform 0.2s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.gl-board-island:hover,
+.gl-board-island:focus-visible { transform: translate(-50%, -54%); outline: none; }
+
+.gl-board-piece { position: relative; display: block; transform-origin: 50% 50%; }
+.gl-board-tile,
+.gl-board-coast,
+.gl-board-fog {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+/*
+  Overlays cover the whole piece rather than sitting at its top-left. The fog
+  asset is 1024x512 against a 1024x768 tile, so `width:100%` alone pinned a
+  half-height band across the top of the island and read as a charcoal smear
+  rather than as weather.
+*/
+.gl-board-coast,
+.gl-board-fog { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.gl-board-coast { opacity: 0.75; mix-blend-mode: screen; }
+/*
+  Screened, so fog can only LIGHTEN the piece. An unknown territory should read
+  as washed out and unreadable — you cannot see it — not as burnt and ruined,
+  which is what a darkening blend said instead.
+*/
+.gl-board-fog { opacity: 0.85; mix-blend-mode: screen; }
+
+/*
+  Tint is dressing on top of an authored silhouette. Screened, so it can only
+  colour a sunlit piece and never darken it into a different picture.
+*/
+.gl-board-tint {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 55%, var(--gl-board-tint) 0%, transparent 70%);
+}
+
+/* --- readiness, from real evidence -------------------------------------- */
+/* Cleared: yours, permanently. Warm and settled. */
+.gl-board-island.tone-held { --gl-board-tint: #ffcb5e63; --gl-board-trim: #f2cd72; }
+/* A guardian is standing here. This is where the pressure is. */
+.gl-board-island.tone-contested { --gl-board-tint: #ff5a3a5c; --gl-board-trim: #ff8a5c; }
+/* Evidence accumulating. Neutral stone, lit, unremarkable on purpose. */
+.gl-board-island.tone-active { --gl-board-tint: #9fd4ff42; --gl-board-trim: #a8c8e8; }
+/* Nothing known. Must read as unreadable, not as empty. */
+.gl-board-island.tone-veiled { --gl-board-tint: #38506644; --gl-board-trim: #6d8399; }
+/*
+  Unknown is drained of colour and detail, not plunged into darkness: the city
+  is in daylight and a veiled district is one you cannot READ, not one that has
+  been destroyed. Brightness stays near 1 and the fog above does the obscuring.
+*/
+.gl-board-island.tone-veiled .gl-board-tile { filter: saturate(0.12) brightness(1.04) contrast(0.82); }
+
+.gl-board-island.is-selected { z-index: 3; }
+.gl-board-island.is-selected .gl-board-piece {
+  filter: drop-shadow(0 0 16px var(--gl-board-trim));
+}
+
+/*
+  A scaffolded silhouette is marked in development so a placeholder is never
+  mistaken for finished art. Invisible in production builds.
+*/
+.gl-board-island[data-art="scaffold"] .gl-board-tile { outline: 1px dashed #ffffff2e; }
+
+/* --- the name plate ----------------------------------------------------- */
+.gl-board-plate {
+  position: relative;
+  z-index: 2;
+  display: block;
+  /* Tucked against the base of its own piece. A larger negative margin let a
+     plate float onto whichever island happened to be behind it. */
+  margin: -8% auto 0;
+  width: max-content;
+  max-width: 100%;
+  padding: 5px 14px 4px;
+  border: 1px solid var(--gl-board-trim);
+  background: linear-gradient(180deg, #14202fee, #060d16f2);
+  box-shadow: 0 4px 14px #04101c66, inset 0 1px 0 var(--gl-board-trim);
+  clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 8px 100%, 0 50%);
+  text-align: center;
+}
+.gl-board-plate strong {
+  display: block;
+  color: #fff8e2;
+  font: 900 clamp(10px, 0.9vw, 13px) / 1.2 Georgia, "Times New Roman", serif;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.gl-board-plate small {
+  display: block;
+  color: var(--gl-board-trim);
+  font: 800 8px/1.4 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.gl-board-plate em {
+  display: block;
+  color: #8ea3b8;
+  font: 700 7px/1.4 ui-sans-serif, system-ui, sans-serif;
+  font-style: normal;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gl-board-island { transition: none; }
+  .gl-board-island:hover,
+  .gl-board-island:focus-visible { transform: translate(-50%, -50%); }
+}
