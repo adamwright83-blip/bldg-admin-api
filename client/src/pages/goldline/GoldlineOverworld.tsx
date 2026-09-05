@@ -283,6 +283,9 @@ export default function GoldlineOverworld({
           : `${proximity?.destination.name ?? "THIS DESTINATION"} IS NOT YET REACHABLE`
       );
       window.setTimeout(() => setLockedMessage(null), 2200);
+    } else if (result === "inspected") {
+      if (onEnterOperations) onEnterOperations();
+      else onOpenDayBriefing?.();
     }
   }
 

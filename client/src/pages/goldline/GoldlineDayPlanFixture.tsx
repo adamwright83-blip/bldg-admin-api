@@ -7,6 +7,7 @@ import type { DayDirectorCommitment } from "@shared/dayDirector";
 import type { VehicleCargoItem } from "@/components/goldline/VehicleCargo";
 
 export default function GoldlineDayPlanFixture({ state }: { state: string }) {
+  const [completed, setCompleted] = useState<number[]>([]);
   const storagePrefix = `day-director-${state}`;
   const [commitments, setCommitments] = useState<DayDirectorCommitment[]>(() =>
     JSON.parse(sessionStorage.getItem(`${storagePrefix}-commitments`) ?? "[]")
@@ -28,7 +29,11 @@ export default function GoldlineDayPlanFixture({ state }: { state: string }) {
       address: `${id} Goldline Way`,
       pickupTimeWindow: kind === "pickup" ? window : "",
       deliveryTimeWindow: kind === "dropoff" ? window : null,
-      status,
+      status: completed.includes(id)
+        ? kind === "pickup"
+          ? "collected"
+          : "delivered"
+        : status,
       paid: true,
       updatedAt: new Date("2026-08-25T17:14:00.000Z"),
     }) as Order;
@@ -65,16 +70,80 @@ export default function GoldlineDayPlanFixture({ state }: { state: string }) {
     steps: [],
     expiresAt: null,
     completedAt: null,
-  } as CommercialMission;
-  const cargo: VehicleCargoItem[] = state === "morning" ? [] : [
-    { id: 101, firstName: "Avery", lastName: "Stone", state: "IN_VEHICLE_UNPROCESSED", appearance: { kind: "paper_bag", condition: "scrunched garments", next: "Processor handoff" } },
-    { id: 102, firstName: "Morgan", lastName: "Lane", state: "IN_VEHICLE_PROCESSED", appearance: { kind: "garment_bag", condition: "covered garments", next: "Customer return" } },
-    { id: 103, firstName: "Jordan", lastName: "Pike", state: "IN_VEHICLE_UNPROCESSED", appearance: { kind: "paper_bag", condition: "scrunched garments", next: "Processor handoff" } },
-    { id: 104, firstName: "Riley", lastName: "Vale", state: "IN_VEHICLE_PROCESSED", appearance: { kind: "garment_bag", condition: "covered garments", next: "Customer return" } },
-    { id: 105, firstName: "Casey", lastName: "North", state: "IN_VEHICLE_UNPROCESSED", appearance: { kind: "paper_bag", condition: "scrunched garments", next: "Processor handoff" } },
-  ];
+  } as unknown as CommercialMission;
+  const cargo: VehicleCargoItem[] =
+    state === "morning"
+      ? []
+      : [
+          {
+            id: 101,
+            firstName: "Avery",
+            lastName: "Stone",
+            state: "IN_VEHICLE_UNPROCESSED",
+            appearance: {
+              kind: "paper_bag",
+              condition: "scrunched garments",
+              next: "Processor handoff",
+            },
+          },
+          {
+            id: 102,
+            firstName: "Morgan",
+            lastName: "Lane",
+            state: "IN_VEHICLE_PROCESSED",
+            appearance: {
+              kind: "garment_bag",
+              condition: "covered garments",
+              next: "Customer return",
+            },
+          },
+          {
+            id: 103,
+            firstName: "Jordan",
+            lastName: "Pike",
+            state: "IN_VEHICLE_UNPROCESSED",
+            appearance: {
+              kind: "paper_bag",
+              condition: "scrunched garments",
+              next: "Processor handoff",
+            },
+          },
+          {
+            id: 104,
+            firstName: "Riley",
+            lastName: "Vale",
+            state: "IN_VEHICLE_PROCESSED",
+            appearance: {
+              kind: "garment_bag",
+              condition: "covered garments",
+              next: "Customer return",
+            },
+          },
+          {
+            id: 105,
+            firstName: "Casey",
+            lastName: "North",
+            state: "IN_VEHICLE_UNPROCESSED",
+            appearance: {
+              kind: "paper_bag",
+              condition: "scrunched garments",
+              next: "Processor handoff",
+            },
+          },
+        ];
   return (
     <GoldlineDayPlan
+      onResolveStop={async stop => {
+        const action = stop.action;
+        if (action?.type === "order") {
+          setCompleted(current => [...current, action.orderId]);
+          return true;
+        }
+        return false;
+      }}
+      onOpenJournal={() => {
+        document.body.dataset.journalOpened = "true";
+      }}
       businessDate="2026-08-25"
       cargoFixture={cargo}
       pickups={[
@@ -118,7 +187,9 @@ export default function GoldlineDayPlanFixture({ state }: { state: string }) {
       })}
       onAcceptProposal={async proposal =>
         setCommitments(current => {
-          const next = current.some(item => item.id === proposal.promptKey)
+          const next: DayDirectorCommitment[] = current.some(
+            item => item.id === proposal.promptKey
+          )
             ? current
             : [
                 ...current,
@@ -141,7 +212,7 @@ export default function GoldlineDayPlanFixture({ state }: { state: string }) {
         })
       }
       onDismissProposal={async promptKey => {
-        const next = [...new Set([...dismissed, promptKey])];
+        const next = Array.from(new Set([...dismissed, promptKey]));
         setDismissed(next);
         sessionStorage.setItem(
           `${storagePrefix}-dismissed`,

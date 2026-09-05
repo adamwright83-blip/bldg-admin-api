@@ -96,6 +96,11 @@ describe("authoritative Goldline Day Plan projection", () => {
       expect.arrayContaining(["laundry_butler", "cleancloud", "open_channel"])
     );
     expect(plan.cleanCloudCount).toBe(1);
+    expect(plan.stops.map(stop => stop.action)).toEqual(expect.arrayContaining([
+      { type: "order", orderId: 1, status: "collected", eligible: true },
+      { type: "external", id: "clean-confirmed" },
+      { type: "task", missionId: "briefing-1", taskId: "prep-1" },
+    ]));
   });
 
   it("maps factual completion without converting provenance", () => {

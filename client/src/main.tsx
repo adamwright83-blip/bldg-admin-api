@@ -8,7 +8,6 @@ import App from "./App";
 import { canRedirectToLoginUrl, getLoginUrl } from "./const";
 import { apiBase } from "./lib/apiBase";
 import "./index.css";
-import "./components/goldline/daily-line-readable.css";
 
 const queryClient = new QueryClient();
 

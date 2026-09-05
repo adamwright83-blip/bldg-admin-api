@@ -5,13 +5,10 @@ import {
   CloudUpload,
   Compass,
   Menu,
-  Navigation,
-  Route,
   ScrollText,
-  Shield,
-  Swords,
-  UserRound,
   X,
+  Flame,
+  Building2,
 } from "lucide-react";
 import type { Order } from "@shared/types";
 import type { CommercialMission } from "@shared/commercialMission";
@@ -32,6 +29,8 @@ import world from "@/assets/goldline/generated/goldline-world-empty.png";
 import operator from "@/assets/goldline/generated/trailblazer-operator.png";
 import type { VehicleCargoItem } from "@/components/goldline/VehicleCargo";
 import { DriverVehicleDrawer } from "@/components/goldline/DriverVehicleDrawer";
+import { DriverStopChapter } from "@/components/goldline/DriverStopChapter";
+import { LanternRun } from "@/components/goldline/LanternRun";
 import "./goldline-day-plan.css";
 
 export type GoldlineDayPlanProps = {
@@ -47,6 +46,11 @@ export type GoldlineDayPlanProps = {
   campaignChapters?: Array<{ objectiveIds: readonly string[] }>;
   nextCommitmentAt?: string | null;
   isLoading?: boolean;
+  loadError?: string | null;
+  onRetry?: () => void;
+  onResolveStop?: (stop: DayPlanStop) => Promise<boolean>;
+  onOpenJournal?: () => void;
+  onOpenFirstMission?: () => void;
   onOpenImport: () => void;
   onEnterOperations: () => void;
   onEnterWorld: (trackedStopId?: string) => void;
@@ -120,19 +124,12 @@ export function isForcedMobileDayPlanViewport(input: {
 function StopCard({
   stop,
   index,
-  onEnterColosseum,
-  onEnterWorld,
-  onCompleteCommitment,
-  completingCommitmentId,
+  onOpen,
 }: {
   stop: DayPlanStop;
   index: number;
-  onEnterColosseum: () => void;
-  onEnterWorld: (trackedStopId?: string) => void;
-  onCompleteCommitment?: (commitmentId: string) => Promise<void>;
-  completingCommitmentId: string | null;
+  onOpen: () => void;
 }) {
-  const completedTime = shortTime(stop.completedAt);
   return (
     <article
       className={`gdp-stop gdp-stop--${stop.kind} gdp-stop--${stop.status} gdp-stop--${index % 2 ? "right" : "left"}`}
@@ -144,91 +141,49 @@ function StopCard({
       <div className="gdp-card-copy">
         <div className="gdp-card-kicker">
           <span>{KIND_LABEL[stop.kind]}</span>
-          {stop.status === "ready" && <strong>READY</strong>}
+          <strong>
+            {stop.status === "completed"
+              ? "SEALED"
+              : stop.status === "blocked"
+                ? "BLOCKED"
+                : "OPEN"}
+          </strong>
         </div>
-        <h2>{stop.title}</h2>
+        <h2>
+          <button
+            type="button"
+            className="gdp-stop-open"
+            onClick={onOpen}
+            aria-label={`Open ${stop.title}`}
+          >
+            {stop.title}
+            <ChevronRight size={17} />
+          </button>
+        </h2>
         <div className="gdp-card-meta">
           <span>{stop.timeLabel}</span>
-          {stop.fixed && <span>◷ FIXED WINDOW</span>}
         </div>
         <div className="gdp-source">{stop.sourceLabel}</div>
-        {stop.whySurfaced ? (
-          <details className="gdp-why" data-testid={`why-${stop.id}`}>
-            <summary>WHY IS THIS HERE?</summary>
-            <p>{stop.whySurfaced}</p>
-            <small>
-              {evidenceTime(stop.sourceOccurredAt)
-                ? `${evidenceTime(stop.sourceOccurredAt)} · FIELD EVIDENCE`
-                : "FIELD EVIDENCE"}
-            </small>
-          </details>
-        ) : null}
         {stop.status === "completed" && (
           <div className="gdp-complete">
-            <Check /> COMPLETED{completedTime ? ` · ${completedTime}` : ""}
+            <Check /> COMPLETED
+            {shortTime(stop.completedAt)
+              ? ` · ${shortTime(stop.completedAt)}`
+              : ""}
           </div>
         )}
-        {onCompleteCommitment &&
-          stop.source === "user_commitment" &&
-          stop.status !== "completed" && (
-            <div className="gdp-mission-actions">
-              <button
-                type="button"
-                disabled={completingCommitmentId === stop.id}
-                onClick={() =>
-                  onCompleteCommitment?.(stop.id.replace(/^commitment-/, ""))
-                }
-              >
-                <Check />
-                {completingCommitmentId === stop.id
-                  ? "COMPLETING…"
-                  : "MARK COMPLETE"}
-              </button>
-            </div>
-          )}
-        {stop.status === "ready" && stop.missionTarget === "colosseum" && (
-          <div className="gdp-mission-actions">
-            <button type="button" onClick={onEnterColosseum}>
-              ENTER MISSION <ChevronRight />
-            </button>
-            <button type="button" onClick={() => onEnterWorld(stop.id)}>
-              <Navigation /> GO THERE IN WORLD
-            </button>
-          </div>
-        )}
-        {stop.status === "ready" && stop.source === "living_world" && (
-          <div className="gdp-mission-actions">
-            <button type="button" onClick={() => onEnterWorld(stop.id)}>
-              <Navigation /> ENTER THIS OBJECTIVE IN WORLD
-            </button>
-          </div>
-        )}
-        {stop.status !== "ready" &&
-          stop.status !== "completed" &&
-          stop.navigationUrl && (
-            <a
-              className="gdp-map-link"
-              href={stop.navigationUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <Navigation /> DIRECTIONS
-            </a>
-          )}
       </div>
     </article>
   );
 }
-
 export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
+  const [activeStop, setActiveStop] = useState<DayPlanStop | null>(null);
+  const [playing, setPlaying] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [truthText, setTruthText] = useState("");
   const [proposal, setProposal] = useState<DayDirectorProposal | null>(null);
   const [directorBusy, setDirectorBusy] = useState(false);
   const [directorError, setDirectorError] = useState<string | null>(null);
-  const [completingCommitmentId, setCompletingCommitmentId] = useState<
-    string | null
-  >(null);
   const [now, setNow] = useState(() => new Date());
   const [forcedMobileViewport, setForcedMobileViewport] = useState(false);
   useEffect(() => {
@@ -295,12 +250,14 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
   const progress = plan.stops.length ? completedCount / plan.stops.length : 0;
   const nextStop =
     plan.stops.find(
-      stop => stop.status !== "completed" && stop.status !== "cancelled"
+      stop =>
+        stop.status !== "completed" &&
+        stop.status !== "cancelled" &&
+        stop.status !== "blocked"
     ) ?? null;
   const startNext = () => {
-    if (!nextStop) return props.onEnterWorld();
-    if (nextStop.missionTarget === "colosseum") return props.onEnterColosseum();
-    props.onEnterWorld(nextStop.id);
+    if (!nextStop) return props.onOpenImport();
+    setActiveStop(nextStop);
   };
 
   return (
@@ -312,7 +269,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         <div className="gdp-brand">
           <Compass />
           <strong>GOLDLINE DRIVER</strong>
-          <small>YOUR DAY. YOUR QUEST.</small>
+          <small>SMALL ACTIONS. A WORLD CHANGED.</small>
         </div>
         <p>
           {props.campaignTitle ? `${props.campaignTitle} · ` : "TODAY · "}
@@ -329,15 +286,38 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         </button>
         {menuOpen && (
           <div className="gdp-menu">
-            <button type="button" onClick={props.onOpenImport}>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                props.onOpenImport();
+              }}
+            >
               IMPORT ROUTE
             </button>
-            <button type="button" onClick={props.onEnterOperations}>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                props.onEnterOperations();
+              }}
+            >
               FIELD OPERATIONS
             </button>
-            <button type="button" onClick={() => props.onEnterWorld()}>
-              ENTER OVERWORLD
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                props.onEnterWorld();
+              }}
+            >
+              EXPLORE OVERLAND
             </button>
+            {props.onOpenFirstMission && (
+              <button type="button" onClick={props.onOpenFirstMission}>
+                SIDE QUEST · THE FIRST SPARK
+              </button>
+            )}
           </div>
         )}
         <div className="gdp-counts">
@@ -389,6 +369,23 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         total={plan.stops.length}
         cargo={props.cargoFixture}
       />
+      <div className="gdp-chapter-invite">
+        <span>
+          <Flame />
+          <strong>THE LANTERN RUN</strong>
+          <small>Three lanterns. Find your rhythm.</small>
+        </span>
+        <button type="button" onClick={() => setPlaying(true)}>
+          PLAY <ChevronRight size={15} />
+        </button>
+      </div>
+      {props.loadError && (
+        <div className="gdp-load-error" role="alert">
+          <strong>Your route needs a connection.</strong>
+          <p>{props.loadError}</p>
+          <button onClick={props.onRetry}>RETRY ROUTE</button>
+        </div>
+      )}
       <div className="gdp-trail-heading">
         <span>DAILY LINE</span>
         <span>
@@ -413,6 +410,11 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         </svg>
         {props.isLoading && (
           <div className="gdp-empty">Charting today’s Gold Line…</div>
+        )}
+        {directorError && !proposal && (
+          <div className="gdp-director-error" role="alert">
+            {directorError}
+          </div>
         )}
         {!props.isLoading &&
           plan.growthCoverage !== "covered" &&
@@ -444,7 +446,12 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
                     if (!props.onProposeCommitment) return;
                     setDirectorBusy(true);
                     try {
+                      setDirectorError(null);
                       setProposal(await props.onProposeCommitment(truthText));
+                    } catch {
+                      setDirectorError(
+                        "Could not prepare this commitment. Your text is kept; please try again."
+                      );
                     } finally {
                       setDirectorBusy(false);
                     }
@@ -456,8 +463,14 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
                   type="button"
                   disabled={directorBusy}
                   onClick={async () => {
-                    await props.onDismissProposal?.("growth-intake");
-                    setProposal(null);
+                    try {
+                      await props.onDismissProposal?.("growth-intake");
+                      setProposal(null);
+                    } catch {
+                      setDirectorError(
+                        "Could not dismiss this prompt. Please try again."
+                      );
+                    }
                   }}
                 >
                   NOT NOW
@@ -524,10 +537,22 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
               </div>
             </aside>
           )}
-        {!props.isLoading && plan.stops.length === 0 && (
+        {!props.isLoading && !props.loadError && plan.stops.length === 0 && (
           <div className="gdp-empty">
-            <strong>Your route is open.</strong>
-            <span>No pickups or dropoffs are scheduled yet.</span>
+            <strong>A blank page. Your next chapter.</strong>
+            <span>
+              No stops are scheduled yet. Bring in your route, capture a field
+              opportunity, or warm up with a Lantern Run.
+            </span>
+            <button type="button" onClick={props.onOpenImport}>
+              IMPORT OR ADD STOPS <ChevronRight size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={props.onOpenJournal ?? props.onEnterOperations}
+            >
+              OPEN FIELD JOURNAL
+            </button>
           </div>
         )}
         {plan.stops.map((stop, index) => (
@@ -553,18 +578,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
             <StopCard
               stop={stop}
               index={index}
-              onEnterColosseum={props.onEnterColosseum}
-              onEnterWorld={props.onEnterWorld}
-              completingCommitmentId={completingCommitmentId}
-              onCompleteCommitment={async commitmentId => {
-                const stopId = `commitment-${commitmentId}`;
-                setCompletingCommitmentId(stopId);
-                try {
-                  await props.onCompleteCommitment?.(commitmentId);
-                } finally {
-                  setCompletingCommitmentId(null);
-                }
-              }}
+              onOpen={() => setActiveStop(stop)}
             />
           </div>
         ))}
@@ -598,8 +612,8 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
               : "NO SCHEDULED STOP"}
           </span>
         </div>
-        <button type="button" onClick={startNext} disabled={!nextStop}>
-          START EXPEDITION <ChevronRight />
+        <button type="button" onClick={startNext} disabled={props.isLoading}>
+          {nextStop ? "OPEN CHAPTER" : "ADD STOPS"} <ChevronRight />
         </button>
       </section>
 
@@ -611,29 +625,48 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
         >
           <ScrollText />
-          <span>QUESTS</span>
+          <span>YOUR DAY</span>
         </button>
-        <button type="button" onClick={() => props.onEnterWorld()}>
-          <Compass />
-          <span>MAP</span>
+        <button type="button" onClick={() => setPlaying(true)}>
+          <Flame />
+          <span>PLAY</span>
         </button>
-        <button type="button" onClick={startNext}>
-          <Swords />
-          <span>EXPEDITION</span>
+        <button
+          type="button"
+          onClick={props.onOpenJournal ?? props.onEnterOperations}
+        >
+          <ScrollText />
+          <span>JOURNAL</span>
         </button>
-        <button type="button" onClick={() => props.onEnterWorld()}>
-          <Route />
-          <span>GOLD LINE</span>
-        </button>
-        <button type="button" onClick={props.onEnterOperations}>
-          <Shield />
-          <span>RELICS</span>
-        </button>
-        <button type="button" onClick={() => setMenuOpen(value => !value)}>
-          <UserRound />
-          <span>PROFILE</span>
-        </button>
+        <a
+          href="https://admin.bldg.chat/growth/lantern-city"
+          target="_blank"
+          rel="noreferrer"
+        >
+          <Building2 />
+          <span>CITY</span>
+        </a>
       </nav>
+      {activeStop && (
+        <DriverStopChapter
+          stop={activeStop}
+          onClose={() => setActiveStop(null)}
+          onResolve={props.onResolveStop}
+          onEnter={() => {
+            props.onEnterWorld(activeStop.id);
+            setActiveStop(null);
+          }}
+          onJournal={() => {
+            setActiveStop(null);
+            (props.onOpenJournal ?? props.onEnterOperations)();
+          }}
+          onPlay={() => {
+            setActiveStop(null);
+            setPlaying(true);
+          }}
+        />
+      )}
+      {playing && <LanternRun onClose={() => setPlaying(false)} />}
 
       <footer className="gdp-world-entry">
         <button type="button" onClick={() => props.onEnterWorld()}>

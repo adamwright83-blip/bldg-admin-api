@@ -3,7 +3,6 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { PackageOpen, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import "./vehicle-cargo.css";
-import "./daily-line-readable.css";
 
 export type VehicleCargoItem = {
   id: number;

@@ -77,7 +77,7 @@ try {
     );
     await page.getByRole("button", { name: "Open menu" }).click();
     await page
-      .getByRole("button", { name: /START EXPEDITION/ })
+      .getByRole("button", { name: "EXPLORE OVERLAND", exact: true })
       .click();
     assert.equal(
       await page.evaluate(() => document.body.dataset.worldEntered),
@@ -140,7 +140,7 @@ try {
   await page.getByRole("button", { name: "ADD MANUALLY" }).click();
   await page.getByRole("button", { name: "ADD TO PLAN" }).click();
   await page
-    .getByRole("heading", { name: "Visit a customer", exact: true })
+    .getByRole("button", { name: "Open Visit a customer", exact: true })
     .waitFor();
   console.log("PASS collapsed commitment intake and add-to-plan flow");
 } finally {

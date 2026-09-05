@@ -1,8 +1,7 @@
-import { VehicleCargo } from "@/components/goldline/VehicleCargo";
 import { trpc } from "@/lib/trpc";
 import { FirstMissionDriver } from "@/components/goldline/onboarding/FirstMissionDriver";
 import { Loader2 } from "lucide-react";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
 import GoldlineDriverController from "./driver/GoldlineDriverController";
@@ -91,6 +90,7 @@ export default function Driver() {
 }
 
 function AuthenticatedDriver() {
+  const [sideQuestOpen, setSideQuestOpen] = useState(false);
   const { loading: authLoading, isAuthenticated } = useAuth();
   const firstWorld=trpc.system.goldlineOnboarding.state.useQuery(undefined,{enabled:isAuthenticated,retry:false});
   if (authLoading) {
@@ -121,11 +121,12 @@ function AuthenticatedDriver() {
     );
   }
 
-  // Day two: the first mission owns Driver only until it is fully resolved. Once
-  // the operator has recorded real field evidence AND closed the fictional
-  // encounter, Driver hands back to the real controller so Today's Line reweaves
-  // from ongoing truth instead of replaying a finished first chapter forever.
   const firstMission = firstWorld.data?.session?.status === "COMPLETE" ? firstWorld.data.session.mission : null;
-  if (firstMission && !firstMission.gameplayCompletedAt) return <><FirstMissionDriver session={firstWorld.data!.session!} /><VehicleCargo /></>;
-  return <GoldlineDriverController />;
+  // Onboarding never owns the driver's route. The first chapter is optional,
+  // and opening it always leaves an explicit way back to today's work.
+  if (sideQuestOpen && firstMission) return <>
+    <button className="driver-return-home" onClick={() => setSideQuestOpen(false)}>← YOUR DAY</button>
+    <FirstMissionDriver session={firstWorld.data!.session!} />
+  </>;
+  return <GoldlineDriverController onOpenFirstMission={firstMission && !firstMission.gameplayCompletedAt ? () => setSideQuestOpen(true) : undefined} />;
 }

@@ -40,7 +40,8 @@ export async function mutateFirstMission(tenantId:string,actorId:string,missionI
   const now=new Date().toISOString();
   if(action.kind==="traversal")mission.traversalCompletedAt??=now;
   else if(action.kind==="outcome"){
-   if(!mission.traversalCompletedAt)throw new Error("Cross the first game passage before recording this mission's field outcome.");
+   // Real observations can be recorded immediately. Fictional traversal never
+   // gates the operator's ability to preserve field evidence.
    if(!mission.outcome){
     mission.outcome={text:action.text,reportedAt:now,actorId,provenance:"operator_reported",gps:action.gps};
     mission.status="completed";

@@ -222,7 +222,7 @@ describe("truth firewall falsification", () => {
 
   it("evidence unlocks and gameplay defeats, never the reverse", () => {
     expect(mission).toContain("Legitimate field evidence must unlock the Guardian first.");
-    expect(mission).toContain("Cross the first game passage before recording this mission's field outcome.");
+    expect(mission).not.toContain("Cross the first game passage before recording this mission's field outcome.");
     // A Guardian victory is fiction and writes no business outcome.
     expect(mission).toContain('classification:"game_projection"');
     expect(mission).toContain('provenanceClass:"generated_game_fiction"');

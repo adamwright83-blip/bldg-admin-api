@@ -200,6 +200,7 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
     backgroundSprite.height = this.map.height;
     backgroundSprite.zIndex = 0;
     this.world.addChild(backgroundSprite);
+    if (this.map.id === GOLDLINE_OVERWORLD_MAP.id) this.buildWalkableGround();
     if (this.debugNavigation) this.buildNavigationDebug();
 
     this.shadow.ellipse(0, 0, 21, 7).fill({ color: 0x020507, alpha: 0.42 });
@@ -212,7 +213,7 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
 
     this.footfall.zIndex = 1980;
     this.world.addChild(this.footfall);
-    if (this.presentation.backgroundOccluders !== false)
+    if (this.presentation.backgroundOccluders !== false && this.map.id !== GOLDLINE_OVERWORLD_MAP.id)
       this.buildOccluders(background);
     this.buildScenePresentation();
     this.buildDestinationMarkers();
@@ -432,6 +433,35 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
         .circle(0, -18, 28).stroke({ color: 0xffb53e, alpha: 0.32, width: 3 });
     }
     return graphic;
+  }
+
+  /** The visible causeways use the same geometry as collision. Background art
+   * supplies the distant scenery; these authored surfaces are the actual level. */
+  private buildWalkableGround() {
+    const ground = new Graphics();
+    ground.label = "walkable-ground";
+    ground.zIndex = 1100;
+    for (const surface of this.map.surfaces) {
+      ground.poly(surface.polygon.flatMap(point => [point.x, point.y]))
+        .fill({ color: 0x163933, alpha: 0.12 })
+        .stroke({ color: 0xb4a66b, alpha: 0.25, width: 2 });
+    }
+    for (const corridor of this.map.corridors) {
+      const trace = () => {
+        ground.moveTo(corridor.points[0]!.x, corridor.points[0]!.y);
+        for (const point of corridor.points.slice(1)) ground.lineTo(point.x, point.y);
+      };
+      trace(); ground.stroke({ color: 0xc4a660, width: corridor.halfWidth * 2, alpha: .12 });
+      trace(); ground.stroke({ color: corridor.material === "wood" ? 0x4e4631 : 0x24483e, width: Math.max(2, corridor.halfWidth * 2 - 5), alpha: .22 });
+      trace(); ground.stroke({ color: 0xffcf69, width: 9, alpha: .2 });
+      trace(); ground.stroke({ color: 0xffeab0, width: 2, alpha: .8 });
+    }
+    for (const blocked of this.map.blockedRegions ?? []) {
+      ground.poly(blocked.polygon.flatMap(point => [point.x, point.y]))
+        .fill({ color: 0x071821, alpha: .98 })
+        .stroke({ color: 0x947648, width: 2 });
+    }
+    this.world.addChild(ground);
   }
 
   private buildNavigationDebug() {

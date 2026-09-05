@@ -122,6 +122,14 @@ export type DayPlanSource =
   | "living_world";
 
 export type DayPlanStop = {
+  /** Exact source identifiers for the existing write services. Never infer a
+   * mutation from a title or from completion of a fictional encounter. */
+  action?:
+    | { type: "order"; orderId: number; status: "collected" | "delivered"; eligible: boolean }
+    | { type: "external"; id: string }
+    | { type: "task"; missionId: string; taskId: string }
+    | { type: "commitment"; id: string }
+    | { type: "commercial"; missionId: number };
   id: string;
   kind: DayPlanStopKind;
   title: string;
@@ -200,6 +208,7 @@ function nativeStop(order: Order, kind: "pickup" | "dropoff"): DayPlanStop {
       : order.status === "delivered";
   return {
     id: `native-${kind}-${order.id}`,
+    action: { type: "order", orderId: order.id, status: kind === "pickup" ? "collected" : "delivered", eligible: kind === "pickup" || Boolean(order.paid) },
     kind,
     title: nameForOrder(order),
     source: "laundry_butler",
@@ -222,6 +231,7 @@ function externalStop(order: ExternalOperationalOrder): DayPlanStop | null {
     formatExternalWindow(order.windowStart, order.windowEnd) ?? "Time TBD";
   return {
     id: `external-${order.id}`,
+    action: { type: "external", id: order.id },
     kind: order.jobKind,
     title: order.customerName,
     source: "cleancloud",
@@ -251,6 +261,7 @@ function openChannelStop(
   const kind: DayPlanStopKind = task.category === "sales" ? "sales" : "prep";
   return {
     id: `open-channel-${mission.id}-${task.id}`,
+    action: { type: "task", missionId: mission.id, taskId: task.id },
     kind,
     title: task.title,
     source: "open_channel",
@@ -283,6 +294,7 @@ function commercialStop(
   const deadline = step?.deadlineAt ?? mission.expiresAt;
   return {
     id: `commercial-${mission.id}`,
+    action: { type: "commercial", missionId: mission.id },
     kind: "sales",
     title: mission.account.name,
     source: "commercial_mission",
@@ -399,6 +411,7 @@ export function buildDayPlanProjection(input: {
     ...(input.commitments ?? []).map(
       (commitment, index): DayPlanStop => ({
         id: `commitment-${commitment.id}`,
+        action: { type: "commitment", id: commitment.id },
         kind: commitment.kind === "growth" ? "growth" : "prep",
         title: commitment.title,
         source: "user_commitment",

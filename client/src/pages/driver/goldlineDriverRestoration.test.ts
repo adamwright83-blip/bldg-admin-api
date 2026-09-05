@@ -43,7 +43,7 @@ const mission = readFileSync(
 );
 
 describe("Goldline canonical driver restoration", () => {
-  it("starts every fresh driver session on Overland and enters Clockhead only by scene choice", () => {
+  it("opens the real day before traversal and enters Clockhead only by scene choice", () => {
     expect(controller).toContain(
       'const INITIAL_DRIVER_SCENE: DriverScene = "overworld"'
     );
@@ -65,31 +65,25 @@ describe("Goldline canonical driver restoration", () => {
     expect(controller).not.toContain("shouldAutoEnterWayward");
   });
 
-  it("keeps the real day reachable inside Overland instead of in front of it", () => {
-    /*
-      The Day Plan is an in-world briefing that belongs to Overland, not a
-      productivity home the player passes through on the way to the game. It
-      must therefore be openable from the world and must not be a scene of its
-      own, or real work starts reading as a break from Goldline.
-    */
+  it("keeps one authoritative day home reachable from Overland", () => {
+    // The world and its return action reuse the authoritative day projection.
     expect(controller).not.toContain('"day-plan"');
     expect(controller).toContain("dayBriefingOpen");
     expect(controller).toContain("onOpenDayBriefing={() => setDayBriefingOpen(true)}");
-    expect(controller).toContain("{dayBriefingOpen ? dayBriefing : null}");
+    expect(controller).toContain("if (dayBriefingOpen) return dayBriefing;");
     // Reuses the same day projection and component, not a second planner.
     expect(controller).toContain("<GoldlineDayPlan");
     expect(controller).toContain("liveObjectives={liveAdventureObjectives}");
   });
 
-  it("opens the briefing over the world without tearing the world down", () => {
-    // The briefing is rendered as a sibling layer while GoldlineOverworld stays
-    // mounted, so closing it returns to the same runtime, camera and checkpoint.
+  it("does not mount the world while the day is open", () => {
     const overworldBranch = controller.slice(
       controller.indexOf('if (driverScene === "overworld")')
     );
     expect(overworldBranch).toContain("<GoldlineOverworld");
-    expect(overworldBranch).toContain("{dayBriefingOpen ? dayBriefing : null}");
+    expect(overworldBranch).toContain("{returnToDay}");
     expect(controller).toContain("setDayBriefingOpen(false)");
+    expect(controller.indexOf("if (dayBriefingOpen) return dayBriefing;")).toBeLessThan(controller.indexOf('if (driverScene === "overworld")'));
   });
 
   it("shows the authoritative active objective in the world itself", () => {
