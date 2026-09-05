@@ -15,6 +15,22 @@
 .gl-guardian-anchor .gl-guardian{position:relative;left:auto;top:auto;width:100%;height:100%;transform:none;pointer-events:none}
 .gl-guardian-hit{position:absolute;left:50%;top:22%;width:72px;height:72px;transform:translate(-50%,-50%);border:0;border-radius:50%;background:transparent;cursor:pointer;pointer-events:auto;z-index:8}
 .gl-driver-sky{left:72%;top:12%;width:min(26vw,120px);height:min(26vw,120px);transform:none;z-index:8}
+/*
+  The guardian portrait. Fills its anchor and keeps its own proportions, and
+  drifts very slightly with the look vector so a static image still tracks the
+  operator the way the old SVG eyes did. Transform only, so the drift never
+  triggers layout.
+*/
+.gl-guardian-art{
+  width:100%;height:100%;object-fit:contain;object-position:center bottom;
+  pointer-events:none;user-select:none;-webkit-user-drag:none;
+  transform:translate(calc(var(--look-x,0px) * .55), calc(var(--look-y,0px) * .55));
+  transition:transform .28s ease-out;
+  filter:drop-shadow(0 10px 16px #1b2a3a4d);
+}
+.gl-guardian.is-ghost .gl-guardian-art{opacity:.4;filter:grayscale(.55) drop-shadow(0 6px 12px #1b2a3a33)}
+.gl-guardian.is-defeated .gl-guardian-art{opacity:.32;filter:saturate(.35) brightness(1.12)}
+@media (prefers-reduced-motion:reduce){.gl-guardian-art{transition:none;transform:none}}
 .gl-guardian-svg{width:100%;height:100%;overflow:visible;pointer-events:none}
 .gl-guardian .cloud-body,.gl-guardian .cloud-puff,.gl-guardian .cloud-fist{fill:#f7fbff;stroke:#d7c9a4;stroke-width:1.2}
 .gl-guardian .gold-prop{fill:#e8c15a;stroke:#a67c2a;stroke-width:1}

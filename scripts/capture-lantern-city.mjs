@@ -244,6 +244,8 @@ for (const viewport of VIEWPORTS) {
     dock: await page.locator(".gl-command-dock .gl-command").count(),
     projectiles: await page.locator(".pwc-combat-round").count(),
     islands: await page.locator(".gl-board-island").count(),
+    guardianArt: await page.locator(".gl-guardian-art").count(),
+    legacyGuardianSvg: await page.locator(".gl-guardian-svg").count(),
     bridges: await page.locator(".gl-board-bridge").count(),
     islandVariants: await page.locator(".gl-board-island").evaluateAll(els => [...new Set(els.map(e => e.dataset.variant))].sort()),
     damagedPlates: await page.locator("[data-damaged='true']").count(),
