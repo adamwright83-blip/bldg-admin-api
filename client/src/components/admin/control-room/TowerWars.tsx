@@ -33,6 +33,8 @@ import {
 } from "./facadeRegeneration";
 import { useWorldTransition } from "./WorldTransitionProvider";
 import { entityFromSearch } from "./worldTransition";
+import type { CanonicalBuildingId } from "./buildingArt";
+import { playableSiegeLevel } from "./siegeStageGeometry";
 import {
   chargeFraction,
   markSeen,
@@ -193,17 +195,22 @@ function useReplay(data: TowerWarsData | undefined) {
   };
 }
 
+/**
+ * THE ARRIVAL VIEW FOR A TOWER.
+ *
+ * Clicking a building in Lantern City always lands here — Tower Wars, the
+ * automatic sales-driven spectacle for that tower. Siege is not a peer mode
+ * sitting behind a tab; it is a game the player deliberately enters from a quiet
+ * Tower Wars and returns to. So this component owns which of the two is on
+ * screen, and leaving Siege restores the same building's Tower Wars rather than
+ * dropping the player back out to the city.
+ */
 export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
   const [businessDate, setBusinessDate] = useState("");
-  const [mode, setMode] = useState<"siege" | "rivalry">(() => {
-    if (typeof window === "undefined") return "siege";
-    return entityFromSearch(window.location.search) === "opus_la" || new URLSearchParams(window.location.search).has("renderer") ? "rivalry" : "siege";
-  });
+  const [siegeBuilding, setSiegeBuilding] = useState<CanonicalBuildingId | null>(null);
+  if (siegeBuilding)
+    return <TowerSiege buildingId={siegeBuilding} onExit={() => setSiegeBuilding(null)} />;
   return <>
-    <nav aria-label="Tower Wars mode" style={{ display: "flex", gap: 8, padding: "12px 20px", background: "#f7f6e9", color: "#193e3d" }}>
-      {(["siege", "rivalry"] as const).map(value => <button key={value} aria-pressed={mode === value} onClick={() => setMode(value)} style={{ minHeight: 44, padding: "10px 20px", borderRadius: 24, background: mode === value ? "#193e3d" : "#e7e9d8", color: mode === value ? "#fff5cd" : "#193e3d", fontWeight: 700 }}>{value === "siege" ? "Siege · Century Park East" : "Rivalry · Sales"}</button>)}
-    </nav>
-    {mode === "siege" ? <TowerSiege onNavigate={onNavigate} /> : <>
     <details style={{ background: "#fff9e9", color: "#173d47", padding: "18px 20px" }}><summary>History / Replay</summary>
     <section aria-label="Battle date" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
       <label style={{ display: "grid", gap: 8, fontWeight: 700 }}>View sales by payment day <input style={{ background: "#fff", color: "#173d47", colorScheme: "light", border: "2px solid #987321", borderRadius: 8, padding: 10, minHeight: 44, fontSize: 16 }} aria-label="Battle payment date" type="date" value={businessDate} onChange={event => setBusinessDate(event.target.value)} /></label>
@@ -211,8 +218,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
       <span>{businessDate ? "Historical season through selected day · replay creates no revenue." : "Live weekly rivalry · charge carries through Sunday. No date selection needed."}</span>
     </section>
     </details>
-    <TowerWarsDay key={businessDate || "today"} onNavigate={onNavigate} compact={compact} businessDate={businessDate} />
-    </>}
+    <TowerWarsDay key={businessDate || "today"} onNavigate={onNavigate} compact={compact} businessDate={businessDate} onPlaySiege={setSiegeBuilding} />
   </>;
 }
 
@@ -224,7 +230,7 @@ function SeasonRevisionAudit({ seasonId }: { seasonId: string }) {
   </details>;
 }
 
-function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsProps & { businessDate: string }) {
+function TowerWarsDay({ onNavigate, compact = false, businessDate, onPlaySiege }: TowerWarsProps & { businessDate: string; onPlaySiege: (buildingId: CanonicalBuildingId) => void }) {
   const search = useSearch();
   const [printPromiseId, setPrintPromiseId] = useState<string | null>(null);
   const [comebackBuilding, setComebackBuilding] = useState<TowerWarsBuildingId | null>(null);
@@ -490,6 +496,9 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
   ] as const;
   const currentContributors = data.contributors[youId] as Contributor[];
   const pixiComparison = new URLSearchParams(search).get("renderer") === "pixi";
+  // Which Stronghold this tower can actually open. Null would mean no authored
+  // battlefield at all; we never dress one building's courtyard as another's.
+  const siegeLevel = playableSiegeLevel(enteredFor ?? youId);
   const comparisonImpact = settlementQuery.data?.impacts.find(impact => impact.attackerBuildingId === "century_park_east" && impact.defenderBuildingId === "opus_la") ?? null;
 
   return (
@@ -672,6 +681,45 @@ function TowerWarsDay({ onNavigate, compact = false, businessDate }: TowerWarsPr
             ) : null}
           </div>
         </details>
+        {/*
+          THE REAL WAR IS QUIET — YOU CAN STILL DEFEND THE TOWER.
+
+          Siege is offered only once the sales-driven spectacle has settled: a
+          playable game must never compete for attention with the authoritative
+          event it exists to fill the gaps between. It is a game action inside
+          the world, not an admin tab, and pressing it enters Siege directly —
+          no second mode picker, no trip back through the city.
+        */}
+        {siegeLevel && !activeSpectacle && unseenEvents.length === 0 && replay.mode === "live" && !businessDate ? (
+          <button
+            type="button"
+            className="tw-play-siege"
+            data-testid="play-siege"
+            onClick={() => {
+              // Camera pushes from the tower down to the battlefield at its base.
+              // returnPath is passed through unchanged so the city anchor survives.
+              begin({
+                entityId: siegeLevel.buildingId,
+                from: "building",
+                to: "interior",
+                sourceEl: pieceRefs.current[siegeLevel.buildingId],
+                returnPath,
+                kind: "traversal",
+              });
+              onPlaySiege(siegeLevel.buildingId);
+            }}
+          >
+            <ShieldCheck aria-hidden />
+            <span>
+              <strong>Play Siege</strong>
+              <small>
+                {siegeLevel.buildingId === enteredFor || !enteredFor
+                  ? "Defend the courtyard · five waves"
+                  : `${siegeLevel.displayName} Stronghold · the battlefield built so far`}
+              </small>
+            </span>
+          </button>
+        ) : null}
       </section>
       <section className="tw-actions" aria-label="Comeback actions">
         {actionDefinitions.map(action => {

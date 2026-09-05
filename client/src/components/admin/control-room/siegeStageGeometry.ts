@@ -48,3 +48,38 @@ export function screenPoint(
     y: point.y * camera.scale + camera.y,
   };
 }
+
+/**
+ * WHICH TOWERS HAVE A SIEGE BATTLEFIELD.
+ *
+ * Siege is entered from a specific tower, so the shell is parameterised by the
+ * canonical building. The *level* is not: `courtyard.png` is a painted Century
+ * Park East courtyard, and the pad and route coordinates above are registered
+ * against that painting.
+ *
+ * Rather than show a CPE courtyard while claiming the player is defending OPUS,
+ * a building with no battlefield of its own has no entry here. Tower Wars reads
+ * this registry to say truthfully which Stronghold the CTA opens. Adding OPUS
+ * means adding OPUS artwork with its own registered geometry — never rebadging
+ * this one.
+ */
+export type SiegeLevel = {
+  buildingId: "century_park_east";
+  displayName: string;
+  courtyard: string;
+};
+export const SIEGE_LEVELS: Record<string, SiegeLevel> = {
+  century_park_east: {
+    buildingId: "century_park_east",
+    displayName: "Century Park East",
+    courtyard: `${SIEGE_ART}/courtyard.png`,
+  },
+};
+/** The battlefield for this tower, or null when none has been authored yet. */
+export function siegeLevelFor(buildingId: string | null | undefined): SiegeLevel | null {
+  return (buildingId && SIEGE_LEVELS[buildingId]) || null;
+}
+/** The Stronghold a player entering from `buildingId` can actually defend. */
+export function playableSiegeLevel(buildingId: string | null | undefined): SiegeLevel | null {
+  return siegeLevelFor(buildingId) ?? SIEGE_LEVELS.century_park_east ?? null;
+}

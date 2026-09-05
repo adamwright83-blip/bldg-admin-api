@@ -1607,3 +1607,19 @@ body .tw-truth-hud summary { cursor:pointer; font-size:11px; color:#fff; }
 .cr-world-geography-surface.view-atlas .cr-atmo-lighting-layer { opacity: 0; }
 .cr-world-geography-surface.view-atlas .cr-world-skin-shade { background: linear-gradient(180deg,#fff3c515,transparent 70%); }
 .cr-world-tower-anchor .cr-reality-trigger-btn { position:relative; pointer-events:auto; z-index:20; margin-top:34px; min-height:36px; padding:7px 12px; font-size:10px; }
+
+/*
+  PLAY SIEGE — a game action standing in the world, not an admin control.
+  It sits low and centre in the arena, at the base of the towers, which is
+  where the battlefield it opens actually is. It is only rendered when Tower
+  Wars is quiet, so it never competes with a live sales spectacle.
+*/
+.tw-play-siege{position:absolute;z-index:16;left:50%;bottom:22px;display:flex;transform:translateX(-50%);align-items:center;gap:11px;padding:13px 24px;border:1px solid #ffe08a;border-radius:44px;color:#241300;background:linear-gradient(180deg,#ffd977,#f0ad25);box-shadow:0 10px 26px #02101eaa,0 0 22px #ffc75655;cursor:pointer}
+.tw-play-siege svg{width:22px}
+.tw-play-siege span{display:flex;flex-direction:column;text-align:left}
+.tw-play-siege strong{font-size:15px;font-weight:900;letter-spacing:.06em;text-transform:uppercase}
+.tw-play-siege small{color:#4a3208;font-size:9px;text-transform:uppercase}
+.tw-play-siege:hover{background:linear-gradient(180deg,#ffe698,#f7bb3b)}
+.tw-arriving .tw-play-siege{opacity:0;pointer-events:none}
+@media (max-width:800px){.tw-play-siege{width:calc(100% - 28px);justify-content:center;bottom:14px;padding:12px 16px}}
+@media (prefers-reduced-motion:reduce){.tw-play-siege{transition:none}}

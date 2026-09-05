@@ -25,11 +25,18 @@ import {
   restoreSiege,
   siegePressure,
   siegeReducer,
+  siegeStorageKey,
   type Defense,
   type SiegeAction,
   type SiegeState,
 } from "@shared/towerSiege";
-import { SIEGE_ART, STAGE_PADS, stagePoint } from "./siegeStageGeometry";
+import {
+  STAGE_PADS,
+  playableSiegeLevel,
+  stagePoint,
+  type SiegeLevel,
+} from "./siegeStageGeometry";
+import type { CanonicalBuildingId } from "./buildingArt";
 import { useWorldTransition } from "./WorldTransitionProvider";
 import "./towerSiege.css";
 
@@ -37,15 +44,33 @@ const icons = { launch: Car, surge: Droplets, beacon: Radio };
 const pathPoint = stagePoint;
 const pads = STAGE_PADS;
 
-/** Read-only adapter: combat never writes a payment, promise, or property observation. */
+/**
+ * GOLDLINE: SIEGE — the manually playable tower defense.
+ *
+ * Siege is subordinate to Tower Wars, not a peer of it. Tower Wars is the
+ * automatic, real-sales-driven spectacle; Siege is what the player can do with
+ * their own hands when the real war is quiet. It is entered deliberately from a
+ * tower's Tower Wars view and it returns there — never straight out to the city.
+ *
+ * Read-only adapter: combat never writes a payment, promise, order, Tower Wars
+ * attack, or property observation. It reads the weekly ledger for difficulty
+ * only, and it never marks a Tower Wars event seen.
+ */
 export function TowerSiege({
-  onNavigate,
+  buildingId,
+  onExit,
 }: {
-  onNavigate: (path: string) => void;
+  /** The tower the player entered from. Identity survives the transition. */
+  buildingId: CanonicalBuildingId;
+  /** Back to this building's Tower Wars view. */
+  onExit: () => void;
 }) {
   const [skipFeed, setSkipFeed] = useState(false);
+  // The battlefield actually authored for this tower. Only CPE has one today,
+  // so entering from OPUS truthfully opens the CPE Stronghold rather than
+  // relabelling its courtyard as somewhere it is not.
+  const level = playableSiegeLevel(buildingId)!;
   const { user, loading } = useAuth();
-  const { returnPath } = useWorldTransition();
   const live = trpc.system.towerWars.today.useQuery(undefined, {
     staleTime: 60_000,
     retry: false,
@@ -53,17 +78,20 @@ export function TowerSiege({
   });
   const data = live.data;
   const orders = data?.evidenceSufficient
-    ? data.ledger.filter(e => e.buildingId === "century_park_east").length
+    ? data.ledger.filter(e => e.buildingId === level.buildingId).length
     : undefined;
   const reflection =
     orders === undefined
       ? "Business feed unavailable. Playing at standard difficulty."
-      : `${orders} recorded paid order${orders === 1 ? "" : "s"} at Century Park East in the current weekly feed.`;
-  // An unavailable tenant context still permits play, but does not share a save across tenants.
-  const storageKey =
-    user && data?.tenantId
-      ? `goldline:siege:v1:${data.tenantId}:${user.openId}:century_park_east`
-      : undefined;
+      : `${orders} recorded paid order${orders === 1 ? "" : "s"} at ${level.displayName} in the current weekly feed.`;
+  // An unavailable tenant context still permits play, but does not share a save
+  // across tenants — and the key names the Stronghold, so two towers defended by
+  // the same operator can never overwrite one another's battle.
+  const storageKey = siegeStorageKey({
+    tenantId: data?.tenantId,
+    openId: user?.openId,
+    buildingId: level.buildingId,
+  });
   const context = useRef<{
     storageKey?: string;
     pressure: number;
@@ -90,7 +118,8 @@ export function TowerSiege({
       storageKey={context.current.storageKey}
       pressure={context.current.pressure}
       reflection={context.current.reflection}
-      onBack={() => onNavigate(returnPath ?? "/growth/lantern-city")}
+      level={level}
+      onBack={onExit}
     />
   );
 }
@@ -99,11 +128,13 @@ export function SiegeGame({
   storageKey,
   pressure = 0.45,
   reflection,
+  level = playableSiegeLevel("century_park_east")!,
   onBack,
 }: {
   storageKey?: string;
   pressure?: number;
   reflection?: string;
+  level?: SiegeLevel;
   onBack?: () => void;
 }) {
   const [chronicle, setChronicle] = useState(() => {
@@ -129,8 +160,8 @@ export function SiegeGame({
   const tower = useRef<SVGImageElement | null>(null);
   const { arrive } = useWorldTransition();
   useLayoutEffect(() => {
-    arrive("century_park_east", tower.current);
-  }, [arrive]);
+    arrive(level.buildingId, tower.current);
+  }, [arrive, level.buildingId]);
   const [selected, setSelected] = useState(0);
   const [sound, setSound] = useState(false);
   const [saveError, setSaveError] = useState(false);
@@ -279,18 +310,18 @@ export function SiegeGame({
   );
 
   return (
-    <section className="sg" aria-label="Century Park East Siege">
+    <section className="sg" aria-label={`${level.displayName} Siege`}>
       <header className="sg-header">
         <div>
-          <span className="sg-eyebrow">TOWER WARS / SIEGE</span>
+          <span className="sg-eyebrow">GOLDLINE: SIEGE</span>
           <h1>Hold the light.</h1>
           <p>
-            Century Park East <span>·</span> Five waves. Your command.
+            {level.displayName} <span>·</span> Five waves. Your command.
           </p>
         </div>
         <div className="sg-header-actions">
           {onBack && (
-            <button aria-label="Return to city" onClick={onBack}>
+            <button aria-label="Return to Tower Wars" onClick={onBack}>
               <ArrowLeft size={18} />
             </button>
           )}
@@ -331,7 +362,7 @@ export function SiegeGame({
             <svg viewBox="0 0 1536 1024" className="sg-map" aria-hidden="true">
               <image
                 ref={tower}
-                href={`${SIEGE_ART}/courtyard.png`}
+                href={level.courtyard}
                 width="1536"
                 height="1024"
               />
@@ -507,7 +538,7 @@ export function SiegeGame({
             {finished && (
               <div className="sg-overlay">
                 <Shield size={32} />
-                <span className="sg-eyebrow">CENTURY PARK EAST</span>
+                <span className="sg-eyebrow">{level.displayName.toUpperCase()}</span>
                 <h2>
                   {state.phase === "held"
                     ? "The light holds."
@@ -598,13 +629,18 @@ export function SiegeGame({
               </small>
             </span>
           </button>
-          {state.phase === "planning" && (
+          {/*
+            Wave 1 has no "Begin Siege" gate: deploying the first defense IS the
+            opening move and starts combat (see siegeReducer). Later waves keep
+            the deliberate planning beat, so the button only appears once there
+            is a board worth adjusting.
+          */}
+          {state.phase === "planning" && state.wave > 1 && (
             <button
               className="sg-primary"
               onClick={() => dispatch({ type: "start" })}
             >
-              <Play size={18} />{" "}
-              {state.wave === 1 ? "Begin Siege" : `Send wave ${state.wave}`}
+              <Play size={18} /> Send wave {state.wave}
             </button>
           )}
           <div className="sg-notice" role="status">

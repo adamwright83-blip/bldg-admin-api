@@ -166,6 +166,16 @@ export function siegeReducer(
     s.slots[action.slot] = { kind: action.kind, cooldown: 0 };
     s.lumen -= DEFENSES[action.kind].cost;
     s.notice = `${DEFENSES[action.kind].name} deployed at pad ${action.slot + 1}.`;
+    /*
+      Entering Siege must not cost the player two clicks before anything happens.
+      The first defense IS the opening move of wave 1, so committing it starts
+      combat. Later waves keep their deliberate planning beat: the player has a
+      board to adjust and asks for the next wave when ready.
+    */
+    if (s.phase === "planning" && s.wave === 1) {
+      s.phase = "active";
+      s.notice = `${DEFENSES[action.kind].name} deployed. Wave 1: defend the Approach Route.`;
+    }
     return s;
   }
   if (action.type === "sell") {
@@ -299,7 +309,7 @@ export function siegeReducer(
   ) {
     if (s.wave === 5) {
       s.phase = "held";
-      s.notice = "Century Park East held. The Ruinbound recede.";
+      s.notice = "The Stronghold held. The Ruinbound recede.";
     } else {
       s.phase = "planning";
       s.wave++;
@@ -358,4 +368,23 @@ export function returningSiegePressure(
   return last && now - last.endedAt >= 7 * 86400000
     ? Math.min(pressure, 0.55)
     : pressure;
+}
+
+/**
+ * Where one Stronghold's local save lives.
+ *
+ * Siege is entered from a specific tower, so the key must name that tower.
+ * Without the building segment two Strongholds defended by the same operator in
+ * the same tenant would share — and silently overwrite — one save.
+ *
+ * Returns undefined when tenant or operator context is missing: play stays
+ * available for the session rather than inventing a tenant to save under.
+ */
+export function siegeStorageKey(input: {
+  tenantId?: string | null;
+  openId?: string | null;
+  buildingId: string;
+}): string | undefined {
+  if (!input.tenantId || !input.openId || !input.buildingId) return undefined;
+  return `goldline:siege:v1:${input.tenantId}:${input.openId}:${input.buildingId}`;
 }

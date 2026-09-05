@@ -7,6 +7,7 @@ import {
   restoreSiege,
   siegePressure,
   siegeReducer,
+  siegeStorageKey,
   type SiegeState,
 } from "./towerSiege";
 const tick = (s: SiegeState, count: number) => {
@@ -157,5 +158,89 @@ describe("always-playable Siege", () => {
     }).toMatchObject({ phase: "held", wave: 5 });
     expect(seconds).toBeGreaterThanOrEqual(300);
     expect(seconds).toBeLessThanOrEqual(480);
+  });
+
+  it("starts wave 1 from the first deployment rather than a separate Begin click", () => {
+    // PLAY SIEGE -> choose pad -> deploy -> wave 1. No redundant gate between.
+    const opening = siegeReducer(newSiege(), {
+      type: "deploy",
+      slot: 0,
+      kind: "launch",
+    });
+    expect(opening.phase).toBe("active");
+    expect(opening.wave).toBe(1);
+    // Combat is genuinely running, not merely labelled active.
+    expect(tick(opening, 10).time).toBeCloseTo(1);
+  });
+
+  it("keeps the deliberate planning beat for later waves", () => {
+    const planning: SiegeState = { ...newSiege(), wave: 3, lumen: 120 };
+    const deployed = siegeReducer(planning, {
+      type: "deploy",
+      slot: 1,
+      kind: "surge",
+    });
+    expect(deployed.phase).toBe("planning");
+    expect(siegeReducer(deployed, { type: "start" }).phase).toBe("active");
+  });
+
+  it("scopes a save to one Stronghold so towers cannot overwrite each other", () => {
+    const cpe = siegeStorageKey({
+      tenantId: "t1",
+      openId: "u1",
+      buildingId: "century_park_east",
+    });
+    const opus = siegeStorageKey({
+      tenantId: "t1",
+      openId: "u1",
+      buildingId: "opus_la",
+    });
+    expect(cpe).toBe("goldline:siege:v1:t1:u1:century_park_east");
+    expect(cpe).not.toBe(opus);
+    // No tenant or operator context invents no tenant: session play, no save.
+    expect(
+      siegeStorageKey({ tenantId: null, openId: "u1", buildingId: "opus_la" })
+    ).toBeUndefined();
+    expect(
+      siegeStorageKey({ tenantId: "t1", openId: null, buildingId: "opus_la" })
+    ).toBeUndefined();
+  });
+
+  it("never writes business truth from any action", () => {
+    const actions = [
+      { type: "deploy", slot: 0, kind: "launch" },
+      { type: "start" },
+      { type: "tick" },
+      { type: "pulse" },
+      { type: "focus", id: 100 },
+      { type: "sell", slot: 0 },
+      { type: "pause" },
+    ] as const;
+    let s = newSiege();
+    for (const action of actions) s = siegeReducer(s, action);
+    // The reducer's whole output surface is game state. There is no order,
+    // payment, promise, attack, or property field it could ever produce.
+    expect(Object.keys(s).sort()).toEqual(
+      [
+        "effects",
+        "enemies",
+        "focus",
+        "integrity",
+        "kills",
+        "lanterns",
+        "lumen",
+        "notice",
+        "phase",
+        "pressure",
+        "pulseCooldown",
+        "reflection",
+        "sessionId",
+        "slots",
+        "spawned",
+        "time",
+        "version",
+        "wave",
+      ].sort()
+    );
   });
 });
