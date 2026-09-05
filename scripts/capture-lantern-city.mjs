@@ -34,7 +34,51 @@ const VIEWPORTS = [
   { name: "1920x1080", width: 1920, height: 1080 },
 ];
 
-/** Real LA addresses with real coordinates. Nothing here is a made-up place. */
+const WEST = -118.445, EAST = -118.225, SOUTH = 34.02, NORTH = 34.135;
+const mercY = lat => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+function project(latitude, longitude) {
+  const x = ((longitude - WEST) / (EAST - WEST)) * 100;
+  const y = ((mercY(NORTH) - mercY(latitude)) / (mercY(NORTH) - mercY(SOUTH))) * 100;
+  return { x, y, outOfBounds: x < 0 || x > 100 || y < 0 || y > 100 };
+}
+
+/*
+  Real Laundry Farm customers, when a local export is present.
+
+  `LANTERN_FIXTURE` points at a JSON file produced from the CleanCloud export
+  with every address resolved through Google Address Validation — the same
+  provider the production geographic-truth pipeline reaches for first. It is
+  read from disk and never committed: those rows are real names, emails, phones
+  and home addresses, and this repository is not where that belongs.
+
+  Without it the script falls back to the small synthetic seed below, so the
+  harness still runs for anyone who does not have the export.
+*/
+const fixturePath = process.env.LANTERN_FIXTURE;
+let realCustomers = null;
+if (fixturePath) {
+  const raw = JSON.parse(await fs.readFile(fixturePath, "utf8"));
+  realCustomers = raw.map((row, index) => ({
+    identityKey: `lf-${row.customerId ?? index}`,
+    phone: row.phone ?? null,
+    displayName: row.name,
+    address: row.address,
+    unit: null,
+    cadence: { state: row.state, daysSinceLastOrder: row.daysSince ?? 999 },
+    totalOrders: row.totalOrders ?? 0,
+    lastOrderAt: null,
+    location: {
+      latitude: row.latitude,
+      longitude: row.longitude,
+      canonicalAddress: row.formatted ?? row.address,
+      ...project(row.latitude, row.longitude),
+    },
+    geocodeStatus: "success",
+  }));
+  console.error(`[fixture] ${realCustomers.length} real customers loaded`);
+}
+
+/** Fallback seed. Real LA coordinates, but invented people. */
 const CUSTOMER_SEED = [
   ["Beverly Hills resident", 34.0736, -118.4004, "active"],
   ["Century City resident", 34.0554, -118.4162, "active"],
@@ -50,15 +94,8 @@ const CUSTOMER_SEED = [
   ["Fairfax resident", 34.0762, -118.3614, "active"],
 ];
 
-const WEST = -118.445, EAST = -118.225, SOUTH = 34.02, NORTH = 34.135;
-const mercY = lat => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
-function project(latitude, longitude) {
-  const x = ((longitude - WEST) / (EAST - WEST)) * 100;
-  const y = ((mercY(NORTH) - mercY(latitude)) / (mercY(NORTH) - mercY(SOUTH))) * 100;
-  return { x, y, outOfBounds: x < 0 || x > 100 || y < 0 || y > 100 };
-}
 
-const customers = CUSTOMER_SEED.map(([displayName, latitude, longitude, state], index) => ({
+const syntheticCustomers = CUSTOMER_SEED.map(([displayName, latitude, longitude, state], index) => ({
   identityKey: `fixture-${index}`,
   phone: `555010${String(index).padStart(4, "0")}`,
   displayName,
@@ -70,6 +107,7 @@ const customers = CUSTOMER_SEED.map(([displayName, latitude, longitude, state], 
   location: { latitude, longitude, canonicalAddress: `${displayName} canonical`, ...project(latitude, longitude) },
   geocodeStatus: "success",
 }));
+const customers = realCustomers ?? syntheticCustomers;
 
 /*
   Internally consistent: one side's attacks are the other side's incoming, and
@@ -240,6 +278,8 @@ for (const viewport of VIEWPORTS) {
     viewport: viewport.name, file, scenario,
     towers: await page.locator("[data-combat='true']").count(),
     lanterns: await page.locator(".lc-lantern").count(),
+    veil: await page.locator(".gl-world-veil").count(),
+    veilHoles: await page.locator(".gl-world-veil circle").count(),
     hud: await page.locator(".lc-rivalry-hud").count(),
     dock: await page.locator(".gl-command-dock .gl-command").count(),
     projectiles: await page.locator(".pwc-combat-round").count(),

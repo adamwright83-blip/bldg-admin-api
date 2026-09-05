@@ -16,6 +16,7 @@ import { projectCustomerWindows } from "@shared/goldlineCustomerWindows";
 import { TerritoryChrome, TerritoryWorldLayer, useReducedMotionFlag } from "@/components/goldline/TerritoryWorldLayer";
 import { CampaignChrome, CampaignChronicleList, CampaignWorldLayer } from "@/components/goldline/CampaignWorldLayer";
 import { CRITICAL_COMBAT_ASSETS } from "./lanternCityCombat";
+import { WorldVeilLayer } from "@/components/goldline/board/WorldVeilLayer";
 
 export {
   inferCustomerCadence,
@@ -688,6 +689,15 @@ export default function LanternCityAtlas({
               </span>
             </div>
           ) : null}
+          {/*
+            The unknown, drawn as weather. Mounted before the reacting world so
+            it sits under every piece that stands on the ground — see
+            WorldVeilLayer for why a hole is always a real fact.
+          */}
+          <WorldVeilLayer
+            clusters={customerClusters}
+            entities={cityWorld.data ?? []}
+          />
           <EconomicWorldReaction entities={cityWorld.data ?? []} />
           <TerritoryWorldLayer
             entities={cityWorld.data ?? []}

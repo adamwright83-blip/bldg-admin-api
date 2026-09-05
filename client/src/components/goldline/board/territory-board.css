@@ -155,3 +155,19 @@
   .gl-board-island:hover,
   .gl-board-island:focus-visible { transform: translate(-50%, -50%); }
 }
+
+/* ----------------------------------------------------------------------------
+   THE WORLD VEIL
+
+   Sits above the map and below the pieces that stand on it. A customer's
+   lantern and a stronghold are always inside a hole in the cloud, so nothing
+   real is ever hidden by the weather that describes what is not known yet.
+   -------------------------------------------------------------------------- */
+.gl-world-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
