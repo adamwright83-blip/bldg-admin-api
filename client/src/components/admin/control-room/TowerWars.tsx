@@ -1,3 +1,4 @@
+import { TowerSiege } from "./TowerSiege";
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useSearch } from "wouter";
@@ -194,7 +195,15 @@ function useReplay(data: TowerWarsData | undefined) {
 
 export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
   const [businessDate, setBusinessDate] = useState("");
+  const [mode, setMode] = useState<"siege" | "rivalry">(() => {
+    if (typeof window === "undefined") return "siege";
+    return entityFromSearch(window.location.search) === "opus_la" || new URLSearchParams(window.location.search).has("renderer") ? "rivalry" : "siege";
+  });
   return <>
+    <nav aria-label="Tower Wars mode" style={{ display: "flex", gap: 8, padding: "12px 20px", background: "#f7f6e9", color: "#193e3d" }}>
+      {(["siege", "rivalry"] as const).map(value => <button key={value} aria-pressed={mode === value} onClick={() => setMode(value)} style={{ minHeight: 44, padding: "10px 20px", borderRadius: 24, background: mode === value ? "#193e3d" : "#e7e9d8", color: mode === value ? "#fff5cd" : "#193e3d", fontWeight: 700 }}>{value === "siege" ? "Siege · Century Park East" : "Rivalry · Sales"}</button>)}
+    </nav>
+    {mode === "siege" ? <TowerSiege onNavigate={onNavigate} /> : <>
     <details style={{ background: "#fff9e9", color: "#173d47", padding: "18px 20px" }}><summary>History / Replay</summary>
     <section aria-label="Battle date" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
       <label style={{ display: "grid", gap: 8, fontWeight: 700 }}>View sales by payment day <input style={{ background: "#fff", color: "#173d47", colorScheme: "light", border: "2px solid #987321", borderRadius: 8, padding: 10, minHeight: 44, fontSize: 16 }} aria-label="Battle payment date" type="date" value={businessDate} onChange={event => setBusinessDate(event.target.value)} /></label>
@@ -203,6 +212,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
     </section>
     </details>
     <TowerWarsDay key={businessDate || "today"} onNavigate={onNavigate} compact={compact} businessDate={businessDate} />
+    </>}
   </>;
 }
 

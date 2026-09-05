@@ -14,6 +14,7 @@ export default defineConfig({
       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
     },
   },
+  publicDir: path.resolve(import.meta.dirname, "client", "public"),
   envDir: path.resolve(import.meta.dirname),
   root: path.resolve(import.meta.dirname, "preview"),
   server: {
