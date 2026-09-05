@@ -459,7 +459,11 @@ export async function geocodePendingLocations(input: {
   await syncGeographicEntities(input.tenantId);
   const batchSize = Math.max(1, Math.min(50, input.batchSize ?? 20));
   const now = input.now ?? new Date();
-  const providerConfigured = Boolean(ENV.googleGeocodingApiKey);
+  const providerConfigured = Boolean(
+    ENV.googleAddressValidationApiKey ||
+    ENV.googleGeocodingApiKey ||
+    ENV.googlePlacesApiKey
+  );
   const pending = eligibleGeocodeQueue(
     await db
       .select()
@@ -724,10 +728,14 @@ export async function getGeographicTruth(input: {
     businessDate: today,
     timeZone,
     provider: {
-      status: ENV.googleGeocodingApiKey
+      status: (
+        ENV.googleAddressValidationApiKey ||
+        ENV.googleGeocodingApiKey ||
+        ENV.googlePlacesApiKey
+      )
         ? ("configured" as const)
         : ("unconfigured" as const),
-      variable: "GOOGLE_GEOCODING_API_KEY" as const,
+      variable: "GOOGLE_ADDRESS_VALIDATION_API_KEY" as const,
     },
     statusCounts,
     lastRunAt: lastRunAt ? new Date(lastRunAt).toISOString() : null,

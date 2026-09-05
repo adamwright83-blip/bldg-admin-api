@@ -2162,3 +2162,108 @@ body .tw-truth-hud summary { cursor:pointer; font-size:11px; color:#fff; }
   filter: drop-shadow(0 3px 6px #12100844)
     drop-shadow(0 0 14px var(--lc-faction-pool));
 }
+/* Cloud Guardian briefing: a focused chapter laid over the world, not a
+   dashboard drawer. The city remains visible so the territory still feels
+   like a place the player approached. */
+.lc-frontier-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: clamp(20px, 4vw, 64px);
+  background: radial-gradient(circle at 50% 42%, #18385844, #06101ad9 72%);
+  backdrop-filter: blur(3px) saturate(.75);
+}
+.lc-frontier-briefing {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(210px, .8fr) minmax(360px, 1.35fr);
+  width: min(920px, 92vw);
+  max-height: min(720px, 88vh);
+  overflow: auto;
+  border: 2px solid #e9bc58;
+  background: linear-gradient(135deg, #10283af5, #07121df8 58%, #161021f5);
+  color: #f7f2df;
+  box-shadow: 0 28px 80px #000b, inset 0 0 50px #85c9ff16, 0 0 0 6px #07111cbb;
+  clip-path: polygon(22px 0, calc(100% - 22px) 0, 100% 22px, 100% calc(100% - 22px), calc(100% - 22px) 100%, 22px 100%, 0 calc(100% - 22px), 0 22px);
+}
+.lc-frontier-guardian {
+  position: relative;
+  min-height: 480px;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 42%, #c9e7ff55, transparent 46%), linear-gradient(180deg, #2e5b7a55, #0b182755);
+}
+.lc-frontier-guardian .gl-guardian {
+  left: 50%;
+  top: 50%;
+  width: min(34vw, 360px);
+  height: min(34vw, 360px);
+  transform: translate(-50%, -50%);
+}
+.lc-frontier-copy { padding: clamp(32px, 4vw, 56px); }
+.lc-frontier-kicker {
+  margin: 0 0 8px;
+  color: #efc867;
+  font: 800 11px/1.3 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+}
+.lc-frontier-copy h2 {
+  margin: 0;
+  color: #fff8e6;
+  font: 900 clamp(26px, 3.1vw, 44px)/.98 Georgia, serif;
+  text-transform: uppercase;
+  text-shadow: 0 3px 0 #0008;
+}
+.lc-frontier-sage { margin: 18px 0 22px; color: #d8e8f2; font: 600 16px/1.45 Georgia, serif; }
+.lc-frontier-objectives { display: grid; gap: 8px; }
+.lc-frontier-objectives article {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 13px;
+  border: 1px solid #8cb8d344;
+  background: linear-gradient(90deg, #17344cbb, #0a1825aa);
+}
+.lc-frontier-objectives article > b { color: #efc867; font: 900 18px Georgia, serif; }
+.lc-frontier-objectives span, .lc-frontier-objectives strong, .lc-frontier-objectives small { display: block; }
+.lc-frontier-objectives strong { color: #fff7df; font: 800 12px/1.25 ui-sans-serif, system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+.lc-frontier-objectives small { margin-top: 3px; color: #abc1d0; font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif; }
+.lc-frontier-targets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 12px;
+  max-height: 154px;
+  margin: 0;
+  padding: 8px 10px 8px 30px;
+  overflow: auto;
+  border: 1px solid #8cb8d322;
+  background: #050e17aa;
+  color: #efc867;
+  font: 700 10px/1.25 ui-sans-serif, system-ui, sans-serif;
+}
+.lc-frontier-targets a, .lc-frontier-targets strong { color: #f8ead0; }
+.lc-frontier-targets span { display: block; margin-top: 2px; color: #8fa9b9; font-weight: 500; }
+.lc-frontier-targets.is-streets { grid-template-columns: 1fr; }
+.lc-frontier-intel { color: #8299a9; font: 600 10px/1.4 ui-sans-serif, system-ui, sans-serif; }
+.lc-frontier-return, .lc-frontier-close {
+  border: 1px solid #e9bc58;
+  background: linear-gradient(#f8cf6b, #b57817);
+  color: #101621;
+  font: 900 11px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.lc-frontier-return { min-height: 42px; padding: 0 18px; }
+.lc-frontier-close { position: absolute; z-index: 3; top: 14px; right: 14px; display: grid; place-items: center; width: 40px; height: 40px; }
+.lc-frontier-close svg { width: 18px; }
+@media (max-width: 720px) {
+  .lc-frontier-scrim { padding: 10px; }
+  .lc-frontier-briefing { grid-template-columns: 1fr; max-height: 90vh; }
+  .lc-frontier-guardian { min-height: 190px; }
+  .lc-frontier-guardian .gl-guardian { width: 220px; height: 220px; }
+  .lc-frontier-copy { padding: 24px; }
+}

@@ -17,6 +17,9 @@ import { TerritoryChrome, TerritoryWorldLayer, useReducedMotionFlag } from "@/co
 import { CampaignChrome, CampaignChronicleList, CampaignWorldLayer } from "@/components/goldline/CampaignWorldLayer";
 import { CRITICAL_COMBAT_ASSETS } from "./lanternCityCombat";
 import { WorldVeilLayer } from "@/components/goldline/board/WorldVeilLayer";
+import { GuardianActor } from "@/components/goldline/GuardianActor";
+import { guardianById } from "@shared/goldlineGuardians";
+import type { NeighbourhoodVeil } from "@shared/neighbourhoodVeil";
 
 export {
   inferCustomerCadence,
@@ -153,6 +156,72 @@ function lanternPhaseSeconds(key: string): number {
   return (hash % 700) / 100;
 }
 
+function FrontierBriefing({
+  neighbourhood,
+  onClose,
+}: {
+  neighbourhood: NeighbourhoodVeil;
+  onClose: () => void;
+}) {
+  const guardian = guardianById(neighbourhood.guardianId!);
+  const intelligence = trpc.system.goldlineWorld.frontierIntelligence.useQuery({
+    neighbourhood: neighbourhood.name,
+    latitude: neighbourhood.latitude,
+    longitude: neighbourhood.longitude,
+  }, { staleTime: 60 * 60 * 1000, retry: false });
+  const salons = intelligence.data?.salons ?? [];
+  const streets = intelligence.data?.streets ?? [];
+  return (
+    <div className="lc-frontier-scrim" role="presentation" onMouseDown={event => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
+      <section
+        className="lc-frontier-briefing"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="lc-frontier-title"
+      >
+        <button className="lc-frontier-close" type="button" onClick={onClose} aria-label="Return to Lantern City">
+          <X aria-hidden />
+        </button>
+        <div className="lc-frontier-guardian" aria-hidden>
+          <GuardianActor guardianId={guardian.id} phase="notice" />
+        </div>
+        <div className="lc-frontier-copy">
+          <p className="lc-frontier-kicker">Territory counsel · unconquered</p>
+          <h2 id="lc-frontier-title">{neighbourhood.name} is under guard</h2>
+          <p className="lc-frontier-sage">
+            “To defeat {guardian.name}, hit them where it hurts: put Goldline in
+            front of the people most likely to place the first order here.”
+          </p>
+          <div className="lc-frontier-objectives" aria-label="Conquest plan">
+            <article><b>01</b><span><strong>Win the trade</strong><small>Deliver salon-specific flyers to {salons.length || 10} high-fit salons.</small></span></article>
+            {salons.length ? <ol className="lc-frontier-targets">
+              {salons.map(salon => <li key={salon.placeId}>
+                <a href={salon.sourceUrl} target="_blank" rel="noreferrer">{salon.businessName}</a>
+                <span>{salon.address}{salon.rating ? ` · ${salon.rating}★` : ""}</span>
+              </li>)}
+            </ol> : null}
+            <article><b>02</b><span><strong>Take the blocks</strong><small>Hang 100 door cards on high-potential residential streets.</small></span></article>
+            {streets.length ? <ol className="lc-frontier-targets is-streets">
+              {streets.map(street => <li key={street.name}><strong>{street.name}</strong><span>{street.rationale}</span></li>)}
+            </ol> : null}
+            <article><b>03</b><span><strong>Light the first lantern</strong><small>Convert one verified resident order in {neighbourhood.name}.</small></span></article>
+          </div>
+          <p className="lc-frontier-intel">
+            {intelligence.isLoading
+              ? "Sage is ranking live Google Places and residential candidates…"
+              : intelligence.error
+                ? "Territory intelligence is temporarily unavailable. Try this guardian again."
+                : intelligence.data?.note}
+          </p>
+          <button type="button" className="lc-frontier-return" onClick={onClose}>Return to the city</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function LanternCityAtlas({
   onOpenCustomer,
   onNavigate,
@@ -262,6 +331,7 @@ export default function LanternCityAtlas({
 
   const [googleVisible, setGoogleVisible] = useState(false);
   const [guardianLocked, setGuardianLocked] = useState(false);
+  const [frontierBriefing, setFrontierBriefing] = useState<NeighbourhoodVeil | null>(null);
   const reducedMotion = useReducedMotionFlag();
   /*
     One scheduler drives every playable building. Only the places actually
@@ -696,7 +766,14 @@ export default function LanternCityAtlas({
           */}
           <WorldVeilLayer
             clusters={customerClusters}
-            entities={cityWorld.data ?? []}
+            totalCustomers={customers.length}
+            atlasReady={!atlas.isLoading && !atlas.isError}
+            onConfront={neighbourhood => {
+              setSelectedCluster(null);
+              setSelectedPursuit(null);
+              setFrontierBriefing(neighbourhood);
+              setGuardianLocked(true);
+            }}
           />
           <EconomicWorldReaction entities={cityWorld.data ?? []} />
           <TerritoryWorldLayer
@@ -711,6 +788,15 @@ export default function LanternCityAtlas({
             googleVisible={googleVisible}
           />
         </WorldGeographySurface>
+        {frontierBriefing ? (
+          <FrontierBriefing
+            neighbourhood={frontierBriefing}
+            onClose={() => {
+              setFrontierBriefing(null);
+              setGuardianLocked(false);
+            }}
+          />
+        ) : null}
         <TerritoryChrome />
         {selectedCluster || selectedPursuit || requestedEntity ? null : <CampaignChrome />}
       </section>

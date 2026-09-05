@@ -1,52 +1,35 @@
 /**
- * THE UNKNOWN, DRAWN AS WEATHER.
+ * THE UNCONQUERED CITY, DRAWN AS WEATHER — AND THE GUARDIANS STANDING ON IT.
  *
- * Lantern City opens under cloud. The city shows through only where there is
- * genuine real-world presence, and everywhere else is weather you have not
- * cleared yet. That is the single visual that makes the world read as a place
- * you are progressively taking rather than a map you are looking at.
+ * A neighbourhood where you have customers is clear. A neighbourhood where you
+ * have none is under cloud, with a guardian on top of it. That is the whole
+ * rule, and it comes straight from real geocoded customers — see
+ * `shared/neighbourhoodVeil.ts` for why reveal is per NEIGHBOURHOOD rather than
+ * per customer, and for the case where the cloud must not be drawn at all.
  *
- * WHAT OPENS A HOLE IS ALWAYS A REAL FACT
+ * WHY THE CLOUD IS PAINTED PER NEIGHBOURHOOD, NOT MASKED GLOBALLY
  *
- * Three things, and nothing else:
- *
- *   a mapped customer      someone real orders here, at a real geocoded
- *                          address, so their own light clears the air around
- *                          them. A denser cluster clears more.
- *   a cleared territory     you beat its guardian; the ground stays open
- *                          permanently, because the kingdom remembers.
- *   a canonical stronghold  Century Park East and OPUS LA are real buildings
- *                          at real coordinates and are never hidden.
- *
- * There is no "explored" flag, no reveal percentage and no stored fog state.
- * The veil is recomputed from evidence every render, which means it cannot
- * drift from the truth and cannot be cheated: the only way to clear the sky
- * over a neighbourhood is to actually have customers there or to actually
- * clear its territory.
- *
- * WHY THE HOLES ARE SOFT
- *
- * A hard edge would draw a border, and a border around a customer is a claim
- * about catchment or coverage that nothing supports. A soft falloff says
- * "it is clearer here", which is exactly as much as the evidence supports.
- *
- * Rendered entirely inside one SVG — pattern, mask and fill — rather than as a
- * CSS-masked element, because SVG masks applied to HTML boxes are not reliable
- * across browsers while a mask inside SVG is.
+ * The previous version clouded the whole map and cut holes out of it. Against
+ * real data that inverted: with customers spread over nine districts the map
+ * was mostly holes, the surviving cloud was a lattice of gaps between them, and
+ * a neighbourhood the operator genuinely owns still had weather sitting on it.
+ * Painting only the clouded neighbourhoods means a district you work is clear
+ * to its edges, and the sky is only ever drawn where the claim is true.
  */
 import { useMemo } from "react";
-import { trpc } from "@/lib/trpc";
-import { buildVeilGeometry } from "@shared/goldlineTerritoryGeometry";
-import { projectLatLngToLanternAtlas } from "@shared/lanternCity";
-import { CANONICAL_BUILDING_GEOGRAPHY } from "@shared/canonicalGeography";
+import { GuardianActor } from "../GuardianActor";
 import { BOARD_OVERLAYS } from "@shared/goldlineBoardKit";
-import type { CityWorldEntity } from "../../../../../server/goldlineWorld/cityWorldService";
+import {
+  deriveNeighbourhoodVeil,
+  selectActiveCloudGuardians,
+  type NeighbourhoodVeil,
+} from "@shared/neighbourhoodVeil";
 
 /**
  * The overlapping cloud fields.
  *
- * Tile sizes are deliberately coprime so their seams never coincide; the
- * combined pattern does not visibly repeat inside any supported viewport.
+ * Tile sizes are coprime so their seams never coincide; one tiled pattern read
+ * as exactly what it was, a grid of rectangles marching across the sky.
  */
 const CLOUD_LAYERS = [
   { id: "gl-veil-clouds-a", width: 37, height: 21, dx: 0, dy: 0, opacity: 0.95, flip: false },
@@ -54,176 +37,137 @@ const CLOUD_LAYERS = [
   { id: "gl-veil-clouds-c", width: 71, height: 43, dx: 23, dy: 17, opacity: 0.5, flip: false },
 ] as const;
 
-/** A place the sky is clear, in atlas percentage space. */
-export type VeilOpening = { x: number; y: number; radius: number };
-
-/** How far one mapped customer location clears the air, in atlas percent. */
-const CUSTOMER_CLEAR_RADIUS = 7;
-/** Extra reach per additional real customer at the same physical place. */
-const CUSTOMER_CLEAR_PER_EXTRA = 1.6;
-/** A stronghold is a landmark; it clears more than a single household. */
-const STRONGHOLD_CLEAR_RADIUS = 15;
-/** A territory you have cleared stays open. */
-const CLEARED_TERRITORY_RADIUS = 16;
-
-export function buildVeilOpenings(input: {
-  clusters: readonly { x: number; y: number; total: number; outsideAtlas: boolean }[];
-  territories: readonly {
-    definition: { geometryMode: string; members: { physicalEntityId: string }[] };
-    state: { cleared: boolean };
-  }[];
-  entities: readonly CityWorldEntity[];
-}): VeilOpening[] {
-  const openings: VeilOpening[] = [];
-
-  // 1. Real customers. Their own light is what clears the sky.
-  for (const cluster of input.clusters) {
-    if (cluster.outsideAtlas) continue;
-    openings.push({
-      x: cluster.x,
-      y: cluster.y,
-      radius:
-        CUSTOMER_CLEAR_RADIUS +
-        Math.max(0, cluster.total - 1) * CUSTOMER_CLEAR_PER_EXTRA,
-    });
-  }
-
-  // 2. Territories whose guardian has actually been beaten.
-  for (const territory of input.territories) {
-    if (!territory.state.cleared) continue;
-    const members = territory.definition.members.flatMap(member => {
-      const entity = input.entities.find(row => row.id === member.physicalEntityId);
-      const latitude = entity?.location?.latitude;
-      const longitude = entity?.location?.longitude;
-      if (typeof latitude !== "number" || typeof longitude !== "number") return [];
-      const atlas = projectLatLngToLanternAtlas({ latitude, longitude });
-      if (atlas.outOfBounds) return [];
-      return [{ physicalEntityId: member.physicalEntityId, atlas: { x: atlas.x, y: atlas.y } }];
-    });
-    if (!members.length) continue;
-    const geometry = buildVeilGeometry({
-      mode: territory.definition.geometryMode as never,
-      members,
-    });
-    openings.push({
-      x: geometry.centroid.x,
-      y: geometry.centroid.y,
-      radius: CLEARED_TERRITORY_RADIUS,
-    });
-  }
-
-  // 3. The two canonical strongholds. Real buildings, never hidden.
-  for (const geography of Object.values(CANONICAL_BUILDING_GEOGRAPHY)) {
-    const atlas = projectLatLngToLanternAtlas(geography);
-    if (atlas.outOfBounds) continue;
-    openings.push({ x: atlas.x, y: atlas.y, radius: STRONGHOLD_CLEAR_RADIUS });
-  }
-
-  return openings;
-}
-
 export function WorldVeilLayer({
   clusters,
-  entities,
+  totalCustomers,
+  atlasReady,
+  onConfront,
 }: {
-  clusters: readonly { x: number; y: number; total: number; outsideAtlas: boolean }[];
-  entities: readonly CityWorldEntity[];
+  /** Mapped customer clusters, already projected into atlas space. */
+  clusters: readonly { x: number; y: number; outsideAtlas: boolean }[];
+  /** Everything the atlas knows about, mapped or not. */
+  totalCustomers: number;
+  atlasReady: boolean;
+  onConfront?: (neighbourhood: NeighbourhoodVeil) => void;
 }) {
-  const territories = trpc.system.goldlineWorld.territories.useQuery(undefined, {
-    staleTime: 10_000,
-  });
-
-  const openings = useMemo(
+  const derivation = useMemo(
     () =>
-      buildVeilOpenings({
-        clusters,
-        territories: territories.data ?? [],
-        entities,
+      deriveNeighbourhoodVeil({
+        mappedCustomers: clusters.filter(cluster => !cluster.outsideAtlas),
+        totalCustomers,
+        atlasReady,
       }),
-    [clusters, territories.data, entities]
+    [clusters, totalCustomers, atlasReady]
   );
 
-  return (
-    <svg
-      className="gl-world-veil"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      aria-hidden
-      focusable="false"
-    >
-      <defs>
-        {/*
-          THE CLOUD FIELD, AND WHY IT IS THREE LAYERS.
+  // Nothing is drawn when the absence of lanterns is a pipeline gap rather
+  // than an unconquered city. An incomplete screen beats a confident lie.
+  if (derivation.suppressed) return null;
 
-          One tiled pattern reads as exactly what it is: a grid of repeated
-          rectangles marching across the sky. Three layers at coprime tile sizes
-          and different offsets have a combined repeat period far larger than
-          the viewport, so no seam ever lines up with another and the eye finds
-          no grid to lock onto.
-        */}
-        {CLOUD_LAYERS.map(layer => (
-          <pattern
-            key={layer.id}
-            id={layer.id}
-            width={layer.width}
-            height={layer.height}
-            patternUnits="userSpaceOnUse"
-            patternTransform={`translate(${layer.dx} ${layer.dy})`}
-          >
-            <image
-              href={BOARD_OVERLAYS.fog}
+  const mappedCustomers = clusters.filter(cluster => !cluster.outsideAtlas);
+  const clouded = selectActiveCloudGuardians(
+    derivation.neighbourhoods,
+    mappedCustomers
+  );
+  if (!clouded.length) return null;
+
+  return (
+    <>
+      <svg
+        className="gl-world-veil"
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        aria-hidden
+        focusable="false"
+      >
+        <defs>
+          {CLOUD_LAYERS.map(layer => (
+            <pattern
+              key={layer.id}
+              id={layer.id}
               width={layer.width}
               height={layer.height}
-              preserveAspectRatio="none"
-              opacity={layer.opacity}
-              transform={layer.flip ? `scale(-1,1) translate(${-layer.width} 0)` : undefined}
-            />
-          </pattern>
-        ))}
+              patternUnits="userSpaceOnUse"
+              patternTransform={`translate(${layer.dx} ${layer.dy})`}
+            >
+              <image
+                href={BOARD_OVERLAYS.fog}
+                width={layer.width}
+                height={layer.height}
+                preserveAspectRatio="none"
+                opacity={layer.opacity}
+                transform={
+                  layer.flip ? `scale(-1,1) translate(${-layer.width} 0)` : undefined
+                }
+              />
+            </pattern>
+          ))}
 
-        {/* Soft-edged hole. Black hides the cloud, white keeps it. */}
-        <radialGradient id="gl-veil-hole">
-          <stop offset="0%" stopColor="#000000" />
-          <stop offset="48%" stopColor="#000000" />
-          <stop offset="100%" stopColor="#ffffff" />
-        </radialGradient>
+          {/* Solid at the centre, gone at the rim, so adjacent clouded
+              neighbourhoods merge into overcast instead of reading as discs. */}
+          <radialGradient id="gl-veil-falloff">
+            <stop offset="0%" stopColor="#ffffff" />
+            <stop offset="55%" stopColor="#ffffff" />
+            <stop offset="100%" stopColor="#000000" />
+          </radialGradient>
 
-        <mask id="gl-veil-mask" maskUnits="userSpaceOnUse">
-          {/* Cloud everywhere by default. The world starts unknown. */}
-          <rect x="0" y="0" width="100" height="100" fill="#ffffff" />
-          {openings.map((opening, index) => (
-            <circle
-              key={index}
-              cx={opening.x}
-              cy={opening.y}
-              r={opening.radius}
-              fill="url(#gl-veil-hole)"
+          <mask id="gl-veil-mask" maskUnits="userSpaceOnUse">
+            {/* Black hides. Only the clouded neighbourhoods are painted. */}
+            <rect x="0" y="0" width="100" height="100" fill="#000000" />
+            {clouded.map(neighbourhood => (
+              <circle
+                key={neighbourhood.name}
+                cx={neighbourhood.x}
+                cy={neighbourhood.y}
+                r={neighbourhood.cloudRadius}
+                fill="url(#gl-veil-falloff)"
+              />
+            ))}
+          </mask>
+        </defs>
+
+        <g mask="url(#gl-veil-mask)">
+          {/* Warm daylight body first, or the tiled fog reads as grey smoke. */}
+          <rect x="0" y="0" width="100" height="100" fill="#fdfaf2" opacity="0.92" />
+          {CLOUD_LAYERS.map(layer => (
+            <rect
+              key={layer.id}
+              x="0"
+              y="0"
+              width="100"
+              height="100"
+              fill={`url(#${layer.id})`}
             />
           ))}
-        </mask>
-      </defs>
+          <rect x="0" y="0" width="100" height="100" fill="#ffe9bd" opacity="0.16" />
+        </g>
+      </svg>
 
-      <g mask="url(#gl-veil-mask)">
-        {/*
-          A warm daylight body under the cloud art. Without it the tiled fog
-          reads as grey smoke over a sunlit city; with it the veil looks like
-          bright weather you have not flown through yet, which is the tone the
-          whole world is held to.
-        */}
-        <rect x="0" y="0" width="100" height="100" fill="#fdfaf2" opacity="0.9" />
-        {CLOUD_LAYERS.map(layer => (
-          <rect
-            key={layer.id}
-            x="0"
-            y="0"
-            width="100"
-            height="100"
-            fill={`url(#${layer.id})`}
+      {/*
+        A guardian stands on every clouded neighbourhood. This is the threat
+        layer: the operator can see, without reading anything, exactly which
+        districts are still holding out and who is holding them.
+      */}
+      {clouded.map(neighbourhood => (
+        <div
+          key={neighbourhood.name}
+          className="gl-veil-guardian"
+          data-neighbourhood={neighbourhood.name}
+          style={{ left: `${neighbourhood.x}%`, top: `${neighbourhood.y}%` }}
+        >
+          <GuardianActor guardianId={neighbourhood.guardianId!} phase="notice" />
+          <button
+            type="button"
+            className="gl-veil-guardian-hit"
+            onClick={() => onConfront?.(neighbourhood)}
+            aria-label={`${neighbourhood.name} is under cloud. No customers here yet.`}
           />
-        ))}
-        {/* A faint warm cast so the veil belongs to the same sun as the city. */}
-        <rect x="0" y="0" width="100" height="100" fill="#ffe9bd" opacity="0.16" />
-      </g>
-    </svg>
+          <span className="gl-veil-plate" aria-hidden>
+            <strong>{neighbourhood.name}</strong>
+            <small>Unclaimed</small>
+          </span>
+        </div>
+      ))}
+    </>
   );
 }

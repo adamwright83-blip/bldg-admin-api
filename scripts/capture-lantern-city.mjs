@@ -18,6 +18,7 @@
  *   node scripts/capture-lantern-city.mjs
  *   TOWER_WARS_STATE=empty node scripts/capture-lantern-city.mjs   # no truth yet
  *   TOWER_WARS_STATE=heavy node scripts/capture-lantern-city.mjs   # damaged plates
+ *   LANTERN_CUSTOMER_STATE=frontier node scripts/capture-lantern-city.mjs # five active guardians
  */
 import { chromium } from "@playwright/test";
 import fs from "node:fs/promises";
@@ -26,6 +27,8 @@ import path from "node:path";
 const origin = process.env.LANTERN_CAPTURE_ORIGIN || "http://127.0.0.1:5173";
 const outputDir = path.resolve(process.cwd(), "screenshots", "lantern-city-v2");
 const scenario = process.env.TOWER_WARS_STATE || "live";
+const customerScenario = process.env.LANTERN_CUSTOMER_STATE || "full";
+const territoryScenario = process.env.LANTERN_TERRITORY_STATE || "fixture";
 
 const VIEWPORTS = [
   { name: "1440x900", width: 1440, height: 900 },
@@ -107,7 +110,12 @@ const syntheticCustomers = CUSTOMER_SEED.map(([displayName, latitude, longitude,
   location: { latitude, longitude, canonicalAddress: `${displayName} canonical`, ...project(latitude, longitude) },
   geocodeStatus: "success",
 }));
-const customers = realCustomers ?? syntheticCustomers;
+const allCustomers = realCustomers ?? syntheticCustomers;
+const customers = customerScenario === "frontier"
+  ? allCustomers.filter(customer =>
+      /Beverly Hills|Koreatown|Silver Lake/i.test(customer.displayName)
+    )
+  : allCustomers;
 
 /*
   Internally consistent: one side's attacks are the other side's incoming, and
@@ -230,7 +238,7 @@ function fixtureFor(procedure) {
       };
     case "system.towerWars.today": return towerWarsToday();
     case "system.goldlineWorld.cityEntities": return boardEntities;
-    case "system.goldlineWorld.territories": return territories;
+    case "system.goldlineWorld.territories": return territoryScenario === "empty" ? [] : territories;
     case "system.goldlineWorld.campaign": return null;
     case "system.google.atmosphere": return null;
     case "system.google.opportunityPressure": return null;
@@ -272,10 +280,22 @@ for (const viewport of VIEWPORTS) {
     script regenerates on demand. Quality 82 keeps every detail this pass is
     judged on and costs ~400KB a frame.
   */
-  const file = `lantern-city-${scenario}-${viewport.name}.jpg`;
+  const file = `lantern-city-${scenario}-${customerScenario}-${viewport.name}.jpg`;
   await page.screenshot({ path: path.join(outputDir, file), type: "jpeg", quality: 82 });
+  let briefing = 0;
+  if (customerScenario === "frontier" && viewport === VIEWPORTS[0]) {
+    await page.locator(".gl-veil-guardian-hit").first().click();
+    briefing = await page.locator(".lc-frontier-briefing").count();
+    await page.locator(".lc-frontier-briefing .gl-guardian-art").waitFor({ state: "visible" });
+    await page.waitForTimeout(250);
+    await page.screenshot({
+      path: path.join(outputDir, "lantern-city-frontier-briefing.jpg"),
+      type: "jpeg",
+      quality: 82,
+    });
+  }
   report.push({
-    viewport: viewport.name, file, scenario,
+    viewport: viewport.name, file, scenario, customerScenario, briefing,
     towers: await page.locator("[data-combat='true']").count(),
     lanterns: await page.locator(".lc-lantern").count(),
     veil: await page.locator(".gl-world-veil").count(),
@@ -285,6 +305,7 @@ for (const viewport of VIEWPORTS) {
     projectiles: await page.locator(".pwc-combat-round").count(),
     islands: await page.locator(".gl-board-island").count(),
     guardianArt: await page.locator(".gl-guardian-art").count(),
+    veilGuardianIds: await page.locator(".gl-veil-guardian .gl-guardian").evaluateAll(els => els.map(el => el.getAttribute("data-testid"))),
     legacyGuardianSvg: await page.locator(".gl-guardian-svg").count(),
     bridges: await page.locator(".gl-board-bridge").count(),
     islandVariants: await page.locator(".gl-board-island").evaluateAll(els => [...new Set(els.map(e => e.dataset.variant))].sort()),

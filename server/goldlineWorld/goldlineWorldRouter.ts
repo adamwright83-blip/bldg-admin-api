@@ -26,8 +26,16 @@ import {
   upsertFictionAssignmentIfAbsent,
 } from "./campaignService";
 import { resetProofWorldFromApi } from "./goldlineProofWorld";
+import { buildFrontierIntelligence } from "./frontierIntelligenceService";
 
 export const goldlineWorldRouter = router({
+  frontierIntelligence: dayforgeTenantMemberProcedure
+    .input(z.object({
+      neighbourhood: z.string().trim().min(2).max(80),
+      latitude: z.number().min(-90).max(90),
+      longitude: z.number().min(-180).max(180),
+    }))
+    .query(({ ctx, input }) => buildFrontierIntelligence({ tenantId: ctx.tenantId, ...input })),
   economicReceipts: dayforgeTenantOperatorProcedure.query(({ ctx }) => listCurrentEconomicReceipts(ctx.tenantId)),
   cityEntities: dayforgeTenantOperatorProcedure.query(({ ctx }) => listCityWorldEntities({ tenantId: ctx.tenantId })),
   unpresentedCelebrations: dayforgeMissionFieldProcedure
