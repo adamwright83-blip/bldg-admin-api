@@ -15,6 +15,7 @@ import type { CityWorldEntity } from "../../../../../server/goldlineWorld/cityWo
 import { projectCustomerWindows } from "@shared/goldlineCustomerWindows";
 import { TerritoryChrome, TerritoryWorldLayer, useReducedMotionFlag } from "@/components/goldline/TerritoryWorldLayer";
 import { CampaignChrome, CampaignChronicleList, CampaignWorldLayer } from "@/components/goldline/CampaignWorldLayer";
+import { CRITICAL_COMBAT_ASSETS } from "./lanternCityCombat";
 
 export {
   inferCustomerCadence,
@@ -168,6 +169,46 @@ export default function LanternCityAtlas({
     staleTime: 30_000, refetchInterval: 15_000,
   });
   const cityWorld = trpc.system.goldlineWorld.cityEntities.useQuery(undefined, { staleTime: 5_000, refetchInterval: 5_000 });
+  /*
+    THE ONLY DAMAGE SOURCE THE CITY IS ALLOWED.
+
+    `towerWars.today` compiles the battle from collected orders on the server.
+    Lantern City reads it and hands the result down to the towers; it never
+    derives, caches or adjusts a damage value of its own, so a building cannot
+    look wrecked here and intact one click later inside Tower Wars.
+
+    `evidenceSufficient` gates the whole thing: when the server could not reach
+    the evidence, every building's damage stays UNDEFINED (unknown), which the
+    art layer renders as the clean plate labelled "damage unknown" rather than
+    as pristine.
+  */
+  const towerWarsToday = trpc.system.towerWars.today.useQuery(undefined, {
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    retry: false,
+  });
+  const buildingDamage = useMemo(() => {
+    const data = towerWarsToday.data;
+    if (!data || data.evidenceSufficient !== true) return undefined;
+    return {
+      century_park_east: data.state.buildings.century_park_east.damage,
+      opus_la: data.state.buildings.opus_la.damage,
+    };
+  }, [towerWarsToday.data]);
+  /*
+    Attacks each tower actually launched today, gated by the same
+    `evidenceSufficient` check. This is the sole permission slip for drawing a
+    valet car or a golf ball in the city.
+  */
+  const buildingAttacks = useMemo(() => {
+    const data = towerWarsToday.data;
+    if (!data || data.evidenceSufficient !== true) return undefined;
+    return {
+      century_park_east: data.state.buildings.century_park_east.attackCount,
+      opus_la: data.state.buildings.opus_la.attackCount,
+    };
+  }, [towerWarsToday.data]);
   const geocode = trpc.system.geographicTruth.geocodePending.useMutation({
     onSuccess: () => atlas.refetch(),
   });
@@ -202,6 +243,21 @@ export default function LanternCityAtlas({
       ),
     [pursued, normalized]
   );
+
+  /*
+    The two combat plates are the composition. Warm them in the browser cache
+    before the map has finished settling so the combatants are standing there
+    on first paint rather than arriving late over a finished city.
+  */
+  useEffect(() => {
+    for (const href of CRITICAL_COMBAT_ASSETS) {
+      const link = document.createElement("link");
+      link.rel = "preload";
+      link.as = "image";
+      link.href = href;
+      document.head.appendChild(link);
+    }
+  }, []);
 
   const [googleVisible, setGoogleVisible] = useState(false);
   const [guardianLocked, setGuardianLocked] = useState(false);
@@ -440,6 +496,9 @@ export default function LanternCityAtlas({
           geographicEntities={googleEntities}
           focusPoint={selectedFocusPoint}
           gesturesDisabled={guardianLocked}
+          combatPresentation
+          buildingDamage={buildingDamage}
+          buildingAttacks={buildingAttacks}
         >
           {/*
             Lanterns and pursuit flames are positioned with the atlas x/y

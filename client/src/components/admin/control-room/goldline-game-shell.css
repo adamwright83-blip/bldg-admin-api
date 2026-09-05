@@ -36,3 +36,395 @@
 .tw-pixi-proof > button:first-of-type { margin-left: 20px; }
 .tw-pixi-proof > button:disabled { opacity: .45; }
 .tw-arena[hidden] { display: none; }
+
+/* ============================================================================
+   LANTERN CITY V2 — WORLD SHELL CHROME
+   ============================================================================
+
+   The title, the 1v1 band, the command console and the utility control.
+
+   These live HERE rather than in admin-control-room.css for one concrete
+   reason: this stylesheet is imported second (see AdminHostApp.tsx), so it is
+   the one that wins on equal specificity. The world title in particular already
+   had a rule in this file, and the combat version sitting in the other sheet
+   lost silently — the title rendered at the old 42px and overflowed straight
+   into the 1v1 band. Chrome that this file already owns is edited in this file.
+   ========================================================================= */
+/* ----------------------------------------------------------------------------
+   5. THE 1V1 HUD
+
+   Gold framing on the left, violet on the right, the versus mark between them.
+   Fixed to the top of the world and out of the map's transform, so panning the
+   city never drags the match with it.
+
+   Every number inside is read from towerWars.today. When there is no
+   authoritative answer the HUD renders words instead of figures — see
+   RivalryHud.tsx. Nothing here has a placeholder value.
+   -------------------------------------------------------------------------- */
+.lc-rivalry-hud {
+  position: fixed;
+  z-index: 40;
+  top: 14px;
+  left: 50%;
+  display: flex;
+  transform: translateX(-50%);
+  align-items: stretch;
+  gap: 10px;
+  pointer-events: none;
+  /* Reserves the title's corner on the left and the utility control's on the
+     right, so the band is centred in the space that is actually free. */
+  width: min(780px, calc(100vw - 760px));
+}
+.lc-hud-side {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border: 1px solid var(--lc-hud-trim);
+  background: linear-gradient(180deg, #101c2af2, #06101bf7);
+  box-shadow: 0 6px 22px #04101c66, inset 0 1px 0 var(--lc-hud-trim);
+  color: #fff5dd;
+}
+.lc-hud-side.faction-gold {
+  --lc-hud-trim: #f2c96b;
+  --lc-hud-fill: linear-gradient(90deg, #ffd977, #f1a81f);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 16px) 100%, 0 100%);
+}
+.lc-hud-side.faction-violet {
+  --lc-hud-trim: #c58bff;
+  --lc-hud-fill: linear-gradient(90deg, #a24dff, #d9a6ff);
+  clip-path: polygon(16px 0, 100% 0, 100% 100%, 0 100%);
+  flex-direction: row-reverse;
+  text-align: right;
+}
+.lc-hud-crest {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border: 1px solid var(--lc-hud-trim);
+  background: var(--lc-hud-fill);
+  clip-path: polygon(50% 0, 100% 27%, 100% 73%, 50% 100%, 0 73%, 0 27%);
+}
+.lc-hud-side-body { min-width: 0; flex: 1; }
+.lc-hud-side strong {
+  display: block;
+  font: 900 clamp(11px, 1vw, 15px) / 1.15 Georgia, "Times New Roman", serif;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lc-hud-side small {
+  display: block;
+  color: var(--lc-hud-trim);
+  font: 800 8px/1.4 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.lc-hud-bar {
+  height: 7px;
+  margin: 5px 0 4px;
+  border: 1px solid #ffffff1f;
+  background: #00060cc4;
+}
+.lc-hud-bar > i {
+  display: block;
+  height: 100%;
+  /* No width means no share to state. An empty track is the correct rendering
+     of "no revenue on either side"; a half-full one would claim a dead heat. */
+  width: 0;
+  background: var(--lc-hud-fill);
+  transition: width 0.5s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.faction-violet .lc-hud-bar > i { margin-left: auto; }
+.lc-hud-readout {
+  font: 800 11px/1.3 ui-sans-serif, system-ui, sans-serif;
+  color: #ffeec2;
+}
+.lc-hud-readout em { color: #b9c7d6; font-style: normal; font-weight: 700; }
+.lc-hud-readout .is-unknown {
+  color: #8fa2b5;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.lc-hud-pips { display: flex; align-items: center; gap: 3px; margin-top: 4px; }
+.faction-violet .lc-hud-pips { justify-content: flex-end; }
+.lc-hud-pips > i {
+  width: 12px;
+  height: 5px;
+  background: #ffffff1c;
+  clip-path: polygon(3px 0, 100% 0, calc(100% - 3px) 100%, 0 100%);
+}
+.lc-hud-pips > i[data-struck] { background: #ff7a45; }
+.lc-hud-pips > b {
+  color: #93a4b6;
+  font: 800 8px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.1em;
+}
+.lc-hud-versus {
+  display: flex;
+  width: 112px;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 4px;
+  border: 1px solid #e2c583;
+  background: linear-gradient(180deg, #16233296, #060d16d6);
+  clip-path: polygon(50% 0, 100% 22%, 100% 78%, 50% 100%, 0 78%, 0 22%);
+}
+.lc-hud-versus-mark {
+  color: #ffe9a6;
+  font: 900 clamp(16px, 1.6vw, 24px) / 1 Georgia, "Times New Roman", serif;
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 12px #ffc85a80;
+}
+.lc-hud-versus small {
+  margin-top: 3px;
+  color: #c9d6e3;
+  font: 700 7px/1.3 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.12em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+/* ----------------------------------------------------------------------------
+   6. THE WORLD TITLE
+
+   The title of a game world, not a page heading: display serif, gold
+   architectural rule, sitting on the sky rather than inside a card.
+   -------------------------------------------------------------------------- */
+.gl-world-title {
+  top: 16px;
+  left: 24px;
+  gap: 0;
+  /* Sized by its own text. Capping the box only hid an overflow that still
+     painted into the 1v1 band beside it. */
+  width: max-content;
+  max-width: 42vw;
+}
+.gl-world-title > span {
+  color: #2c1d02;
+  font: 900 11px/1.5 Georgia, "Times New Roman", serif;
+  letter-spacing: 0.46em;
+  /*
+    Dark ink with a light halo, not light ink with a dark one.
+
+    This corner of the frame is open sky — the brightest thing on the screen —
+    and pale gold set on it disappeared entirely at every viewport. The word
+    below it can afford light type because it is huge; an 11px eyebrow cannot.
+  */
+  text-shadow: 0 1px 0 #fff3cfcc, 0 0 10px #fff8e0;
+}
+.gl-world-title > strong {
+  font: 900 clamp(26px, 2.6vw, 42px) / 0.98 Georgia, "Times New Roman", serif;
+  letter-spacing: 0.012em;
+  color: #fff8dd;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-shadow: 0 2px 0 #7c5409, 0 3px 14px #0b1522cc, 0 0 30px #0b1522a6;
+}
+.gl-world-title > small {
+  margin-top: 5px;
+  padding-top: 5px;
+  max-width: 250px;
+  border-top: 2px solid #e2bc63;
+  color: #fff4d2;
+  font: 800 9px/1.5 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 #4a3204, 0 2px 9px #0d1826d9;
+}
+.gl-world-title button {
+  justify-self: start;
+  margin-top: 10px;
+  border-radius: 2px;
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  font: 800 9px/1.4 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* ----------------------------------------------------------------------------
+   7. THE COMMAND CONSOLE
+
+   ONE ornamental frame holding three angular commands, replacing the three
+   free-floating circular buttons.
+
+   The labels are unchanged and literally true. They are NOT renamed to
+   ATTACK / DEFEND / UPGRADE, because Lantern City has no manual attack: Tower
+   Wars is driven by real sales, and a button that manufactured an attack would
+   be a button that manufactured revenue. What is upgraded here is the
+   craftsmanship, not the semantics.
+   -------------------------------------------------------------------------- */
+.gl-command-dock {
+  position: fixed;
+  z-index: 35;
+  bottom: 18px;
+  left: 50%;
+  display: flex;
+  transform: translateX(-50%);
+  align-items: stretch;
+  gap: 0;
+  padding: 7px;
+  border: 1px solid #d9b96a;
+  background: linear-gradient(180deg, #16232fee, #060e17f5);
+  box-shadow: 0 12px 34px #04101c7a, inset 0 1px 0 #f0d492aa,
+    inset 0 0 0 1px #00000055;
+  clip-path: polygon(
+    22px 0, calc(100% - 22px) 0, 100% 50%, calc(100% - 22px) 100%,
+    22px 100%, 0 50%
+  );
+}
+/* The ornamental ends of the frame, so the dock reads as one built object
+   rather than as three buttons that happen to be adjacent. */
+.gl-dock-wing {
+  width: 26px;
+  flex: none;
+  align-self: center;
+  height: 58%;
+  background: linear-gradient(180deg, transparent, #e5c47a5e, transparent);
+}
+.gl-command {
+  display: flex;
+  width: clamp(132px, 14vw, 196px);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 12px 14px 11px;
+  border: 1px solid var(--gl-cmd-trim);
+  color: #fff6dc;
+  background: linear-gradient(180deg, var(--gl-cmd-top), var(--gl-cmd-bottom));
+  box-shadow: inset 0 1px 0 #ffffff2e, inset 0 -14px 20px -14px #000000aa;
+  clip-path: polygon(
+    11px 0, calc(100% - 11px) 0, 100% 11px, 100% calc(100% - 11px),
+    calc(100% - 11px) 100%, 11px 100%, 0 calc(100% - 11px), 0 11px
+  );
+  text-align: center;
+  text-decoration: none;
+  transition: transform 0.16s ease, filter 0.16s ease;
+}
+.gl-command + .gl-command { margin-left: 7px; }
+.gl-command svg { width: 21px; height: 21px; }
+.gl-command strong {
+  font: 900 clamp(11px, 1.05vw, 15px) / 1.15 Georgia, "Times New Roman", serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.gl-command small {
+  color: #ffffffa8;
+  font: 700 8px/1.3 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.gl-command.is-order {
+  --gl-cmd-trim: #7ce0a6;
+  --gl-cmd-top: #10794b;
+  --gl-cmd-bottom: #063a27;
+}
+.gl-command.is-customers {
+  --gl-cmd-trim: #8cc9ff;
+  --gl-cmd-top: #135d99;
+  --gl-cmd-bottom: #06283f;
+}
+.gl-command.is-active {
+  --gl-cmd-trim: #ffc178;
+  --gl-cmd-top: #a45a08;
+  --gl-cmd-bottom: #402103;
+}
+.gl-command:hover,
+.gl-command:focus-visible {
+  transform: translateY(-3px);
+  filter: brightness(1.16);
+  outline: 2px solid #fff3cd;
+  outline-offset: 2px;
+}
+/* The three circular portals this dock replaces. Neutralised rather than left
+   lying around, so a stale reference cannot resurrect them. */
+.gl-world-portals, .gl-world-portal { display: none !important; }
+
+/* ----------------------------------------------------------------------------
+   8. THE UTILITY RAIL
+
+   Admin navigation stays reachable and stops dominating the world: an angular
+   world-appropriate control in the corner, opening the existing rail. The rail
+   itself is untouched — this only changes the thing that summons it.
+   -------------------------------------------------------------------------- */
+.gl-world-utility-menu > button {
+  border-radius: 2px;
+  border-color: #d9b96a;
+  background: linear-gradient(180deg, #16232fee, #060e17f5);
+  box-shadow: 0 6px 20px #04101c66, inset 0 1px 0 #f0d49299;
+  clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+  font: 800 10px/1.4 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+
+/* ----------------------------------------------------------------------------
+   9. DESKTOP COMPOSITION AND SMALL SCREENS
+
+   This pass is desktop-first and deliberately so: the reference is a desktop
+   battlefield and squeezing a 1v1 HUD plus a command console into a phone would
+   cost the desktop composition without buying a usable phone one. On narrow
+   screens the battlefield chrome stands down to the simple stacked treatment
+   the mobile admin already had, and the utilities keep working exactly as they
+   did.
+   -------------------------------------------------------------------------- */
+@media (max-width: 1280px) {
+  /* Below the desktop battlefield the band cannot hold both sides legibly
+     beside the title, so it steps aside rather than shrinking into mush. */
+  .lc-rivalry-hud { display: none; }
+}
+@media (max-width: 860px) {
+  .gl-command-dock {
+    width: calc(100vw - 20px);
+    padding: 6px;
+    clip-path: none;
+  }
+  .gl-dock-wing { display: none; }
+  .gl-command {
+    width: auto;
+    flex: 1;
+    padding: 9px 6px;
+    gap: 2px;
+  }
+  .gl-command small { display: none; }
+  .gl-command strong { font-size: 10px; letter-spacing: 0.05em; }
+  .gl-command svg { width: 17px; height: 17px; }
+  .gl-world-title > strong { font-size: 26px; }
+  .gl-world-title > small { display: none; }
+  .pwc-building[data-combat] .pwc-building-canon { height: 132px; }
+  .pwc-building[data-combat] > strong { font-size: 9px; padding: 4px 12px 3px; }
+  .lc-battlefield-glow { opacity: 0.6; }
+}
+
+
+/*
+  Parity with the chrome this pass replaced, kept in one place so a future
+  reader does not have to rediscover it:
+
+    - the Reality Window (Google's real-place evidence) takes the screen, so
+      the command console stands down while it is open, exactly as the three
+      portals did;
+    - City Intelligence turns Lantern City into a reading surface rather than a
+      battlefield, so the 1v1 band steps aside with the title.
+*/
+.is-world-home:has(.cr-reality-window) .gl-command-dock { display: none; }
+.is-world-intel .lc-rivalry-hud { display: none; }
+
+/*
+  The daylight repaint turns every `.pwc-building` label into dark ink on paper
+  with `!important`, which is right for the small overview marker and wrong for
+  a combat nameplate cut into a metal plinth. Re-stated here, in the sheet that
+  loads last, and scoped to [data-combat] so the overview keeps its paper.
+*/
+.pwc-building[data-combat] > strong { color: #fff8e2 !important; background: linear-gradient(180deg, #14202fee, #060d16f2) !important; border-radius: 0 !important; }
+.pwc-building[data-combat] > small { color: #2a2313 !important; background: none !important; border-radius: 0 !important; }

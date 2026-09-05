@@ -254,10 +254,27 @@ button.gl-guardian{pointer-events:auto}
   .gl-territory-pressure { animation: none !important; }
   .gl-territory-pressure.is-ready { opacity: 1; }
 }
-.gl-kingdom-waterways { position:absolute; inset:0; width:100%; height:100%; z-index:2; pointer-events:none; opacity:.88; }
-.gl-kingdom-crossing { position:absolute; z-index:9; transform:translate(-50%,-50%); width:38px; height:34px; border:2px solid #f7d78a; border-radius:5px; background:#e7d5aa; color:#71512b; box-shadow:0 3px 8px #173d5577; cursor:pointer; font-size:25px; line-height:1; }
-.gl-kingdom-crossing.is-unbuilt { border-style:dashed; background:#dfddce; opacity:.8; }
-.gl-kingdom-crossing.is-open { background:#f9e2a3; box-shadow:0 0 15px #ffe391; }
+/*
+  Crossings, drawn as GAME LINKS rather than as invented geography.
+
+  The waterway rendering that used to live here is gone for good — see
+  KingdomCrossingsLayer.tsx. What remains is deliberately quiet: a hairline
+  dashed thread between two real neighbourhood anchors, and a small angular gate
+  at the midpoint. Both sit well below the towers and the lanterns in visual
+  weight, because a crossing is a supporting mechanic and the combatants are the
+  hero of the screen.
+*/
+.gl-kingdom-links { position:absolute; inset:0; width:100%; height:100%; z-index:2; pointer-events:none; }
+.gl-kingdom-links line { stroke:#fff0c2; stroke-width:1px; stroke-dasharray:3 7; opacity:.3; }
+.gl-kingdom-links line.is-open { stroke:#ffd977; opacity:.5; stroke-dasharray:none; stroke-width:1.25px; }
+.gl-kingdom-links line.is-unbuilt { opacity:.16; }
+.gl-kingdom-crossing { position:absolute; z-index:9; transform:translate(-50%,-50%) rotate(45deg); display:grid; place-items:center; width:13px; height:13px; padding:0; border:1px solid #e9cf95; border-radius:0; background:#12202ecc; color:#ffe9ab; box-shadow:0 2px 5px #0a18264d; cursor:pointer; font-size:0; line-height:1; opacity:.62; transition:opacity .15s ease, transform .15s ease; }
+.gl-kingdom-crossing > i { display:block; width:4px; height:4px; background:currentColor; }
+.gl-kingdom-crossing:hover { opacity:1; transform:translate(-50%,-50%) rotate(45deg) scale(1.25); }
+.gl-kingdom-crossing.is-unbuilt { border-style:dashed; opacity:.34; }
+.gl-kingdom-crossing.is-unbuilt > i { background:none; box-shadow:inset 0 0 0 1px currentColor; }
+.gl-kingdom-crossing.is-open { border-color:#ffd977; box-shadow:0 0 9px #ffd97788; opacity:.9; }
+@media (prefers-reduced-motion:reduce){ .gl-kingdom-crossing { transition:none; } }
 .gl-kingdom-crossing:focus-visible { outline:3px solid #fff; outline-offset:3px; }
 .gl-crossing-inspector { position:absolute; z-index:35; left:15%; bottom:8%; width:min(360px,70%); padding:18px; border:2px solid #c49c44; border-radius:10px; background:#fff8df; color:#173d47; box-shadow:0 12px 35px #16303d55; }
 .gl-crossing-inspector strong { display:block; }

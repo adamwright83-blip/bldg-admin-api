@@ -1623,3 +1623,542 @@ body .tw-truth-hud summary { cursor:pointer; font-size:11px; color:#fff; }
 .tw-arriving .tw-play-siege{opacity:0;pointer-events:none}
 @media (max-width:800px){.tw-play-siege{width:calc(100% - 28px);justify-content:center;bottom:14px;padding:12px 16px}}
 @media (prefers-reduced-motion:reduce){.tw-play-siege{transition:none}}
+
+/* ============================================================================
+   LANTERN CITY V2 — THE 1V1 COMBAT OVERWORLD
+   ============================================================================
+
+   Everything below is PRESENTATION over a world whose positions are already
+   decided elsewhere. Not one rule here moves a building, a customer, a
+   neighbourhood or a road: the towers sit where their real latitude and
+   longitude put them, the lanterns sit where the customer's geocode put them,
+   and this stylesheet only decides what those things LOOK like once they are
+   there. Where the concept art and Los Angeles disagree about a position, Los
+   Angeles has already won before any of this runs.
+
+   The target is one sentence: bright, luxurious Los Angeles daylight with a
+   serious 1v1 war happening inside it. Which means the two rules this file
+   keeps breaking its own drama against are:
+
+     THE CITY STAYS BRIGHT.   No dark mode, no neon cyberpunk, no half-map
+                              flooded purple. Faction light is light ADDED to
+                              a sunlit city, never a filter laid over it.
+
+     THE WORLD STAYS THE HERO. Chrome is dark, angular and metallic so it reads
+                              as a game HUD, but it clings to the edges. The
+                              middle of the screen belongs to the city.
+   ========================================================================= */
+
+/* ----------------------------------------------------------------------------
+   1. THE BASE CITY
+
+   A daylight grade over the authored atlas. It is a colour pass and nothing
+   else — no geometry is drawn, moved or hidden, because the map underneath is
+   the geographic layer and this file has no business editing it.
+
+   Why grade at all: the atlas art carries hard cyan waterways that read as
+   developer polylines against everything else in the frame, and they were
+   pulling the eye straight off the combatants. Warming the whole image settles
+   them into the city instead of erasing them, which keeps the map honest.
+   -------------------------------------------------------------------------- */
+.cr-world-geography-surface.view-atlas .cr-world-skin-img {
+  filter: sepia(0.07) saturate(1.05) brightness(1.04) contrast(1.06);
+}
+.cr-world-geography-surface.view-atlas .cr-world-skin-shade {
+  background:
+    radial-gradient(ellipse at 50% 42%, #fff6d21f 0%, transparent 62%),
+    linear-gradient(180deg, #fff2c528 0%, transparent 34%, #2a1c0a24 100%);
+}
+
+/* ----------------------------------------------------------------------------
+   2. THE BATTLEFIELD LIGHTING PASS
+
+   Gold light standing on Century Park East, violet light standing on OPUS LA.
+
+   Shaped as ILLUMINATION, deliberately: a soft radial falloff with no edge and
+   no enclosed area. A region with a border reads as territory, and Goldline has
+   no authoritative claim that either building controls any part of the city, so
+   the light is not allowed to draw one. It says "something powerful stands
+   here" — which is true — and stops.
+
+   Kept translucent enough that streets, blocks and neighbourhood labels stay
+   readable straight through it. If the city cannot be read, the pass is too
+   strong and it is wrong.
+   -------------------------------------------------------------------------- */
+.lc-battlefield {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+.lc-battlefield-glow {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  /* Screen keeps the pass ADDITIVE: it can only make the sunlit city brighter
+     and more coloured, never darker. That is the whole no-dark-mode guarantee
+     expressed as a blend mode rather than as a promise. */
+  mix-blend-mode: screen;
+  opacity: 0.72;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  will-change: opacity;
+}
+.lc-battlefield-glow.faction-gold {
+  background: radial-gradient(
+    circle,
+    #ffd45ea8 0%,
+    #ffa8226b 24%,
+    #ff86002e 46%,
+    transparent 72%
+  );
+}
+.lc-battlefield-glow.faction-violet {
+  background: radial-gradient(
+    circle,
+    #c07bff7a 0%,
+    #9b4dff47 26%,
+    #7a2ee81f 48%,
+    transparent 72%
+  );
+}
+/* Attention intensifies a tower's own light. Scaled and brightened rather than
+   recoloured, so the faction reads the same whether or not it is hovered. */
+.lc-battlefield-glow.is-emphasised {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.08);
+}
+
+/* The sightline between the two combatants. One straight line between two real
+   coordinates — not a route, not a road, not a waterway. */
+.lc-battlefield-conflict {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /*
+    Painted normally, NOT screened. The glows are screened because they are
+    light added to a sunlit city; a screened line over a near-white map is
+    invisible, which is exactly how this one shipped the first time.
+  */
+  opacity: 0.8;
+}
+/*
+  A STATIC dash, not a travelling one.
+
+  The first version animated `stroke-dashoffset`, which the visual canon guard
+  correctly rejected: dashoffset is not a compositor property, so every frame
+  repaints a line spanning most of the viewport, forever, over a large bitmap
+  map. The travel bought nothing the dash pattern does not already say, so it
+  simply went away rather than being granted an exception.
+*/
+.lc-battlefield-conflict line {
+  stroke-dasharray: 5 9;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-battlefield-glow { transition: none; }
+}
+
+/* ----------------------------------------------------------------------------
+   3. THE COMBATANTS
+
+   THE TOWER IS THE BUTTON.
+
+   There is no circular CTA marker over either building and there must never be
+   one again: a pin over a tower says "click the pin", which makes the building
+   scenery. The building is the control, so the whole silhouette — bazooka and
+   all — is the hit area, and hover lifts the ACTUAL ARTWORK.
+
+   Scoped to [data-combat] so the small Home overview frame, where a tower is a
+   locator in a 430px box, keeps the layered canonical composition it has always
+   used. A 900px hero plate in a 128px box is not a smaller hero, it is mush.
+   -------------------------------------------------------------------------- */
+.cr-world-tower-anchor[data-faction] {
+  /* The plinth of the plate lands on the building's real coordinate. */
+  transform: translate(-50%, -88%);
+  z-index: 7;
+}
+.pwc-building[data-combat] {
+  position: relative;
+  display: flex;
+  width: auto;
+  height: auto;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  /* transform/opacity only — the lift must never trigger layout. */
+  transition: transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1), filter 0.24s ease;
+}
+.pwc-building[data-combat] .pwc-building-canon {
+  position: relative;
+  z-index: 1;
+  left: auto;
+  bottom: auto;
+  width: auto;
+  height: clamp(200px, 30vh, 380px);
+  transform: none;
+}
+.pwc-combat-plate {
+  display: block;
+  width: auto;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+  /* Grounds the tower on the map instead of letting it float as a sticker. */
+  filter: drop-shadow(0 14px 18px #1b1a0f5c);
+  -webkit-user-drag: none;
+  user-select: none;
+}
+/* The pool of faction light the building itself is standing in, drawn on the
+   button so it tracks the artwork through the hover lift. */
+.pwc-building[data-combat]::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: auto;
+  left: 50%;
+  bottom: 34px;
+  width: 190%;
+  aspect-ratio: 2.6 / 1;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at 50% 50%,
+    var(--lc-faction-pool) 0%,
+    transparent 68%
+  );
+  mix-blend-mode: screen;
+  animation: lc-tower-presence 9s ease-in-out infinite;
+}
+.pwc-building[data-faction="gold"] { --lc-faction-pool: #ffc65e9c; }
+.pwc-building[data-faction="violet"] { --lc-faction-pool: #b061ff9c; }
+
+/* Hover / focus: the building lifts and its faction burns harder. This is the
+   whole affordance — no cursor pin, no outline box, no separate hotspot. */
+.pwc-building[data-combat]:hover,
+.pwc-building[data-combat]:focus-visible {
+  transform: translateY(-8px) scale(1.035);
+  filter: drop-shadow(0 0 22px var(--lc-faction-pool));
+  outline: none;
+}
+.pwc-building[data-combat]:hover::before,
+.pwc-building[data-combat]:focus-visible::before {
+  animation-play-state: paused;
+  opacity: 1;
+  width: 220%;
+}
+/* Keyboard reach must be at least as obvious as a mouse hover, never less. */
+.pwc-building[data-combat]:focus-visible .pwc-combat-plate {
+  filter: drop-shadow(0 14px 18px #1b1a0f5c) drop-shadow(0 0 3px #fffbe8);
+}
+
+/* The faction nameplate. Angular and metallic, cut into the plinth rather than
+   floating as a rounded card above it. */
+.pwc-building[data-combat] > strong,
+.pwc-building[data-combat] > small {
+  position: relative;
+  z-index: 3;
+  display: block;
+  align-self: center;
+  padding: 0;
+  background: none;
+  text-align: center;
+}
+.pwc-building[data-combat] > strong {
+  margin-top: -8px;
+  padding: 6px 18px 5px;
+  border: 1px solid var(--lc-faction-trim);
+  border-radius: 2px;
+  color: #fff8e2;
+  background: linear-gradient(180deg, #14202fee, #060d16f2);
+  box-shadow: 0 0 0 1px #00000055, 0 4px 14px #04101c66,
+    inset 0 1px 0 var(--lc-faction-trim);
+  clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 9px 100%, 0 50%);
+  font:
+    900 clamp(10px, 0.85vw, 13px) / 1.2 Georgia, "Times New Roman", serif;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.pwc-building[data-combat] > small {
+  margin-top: 3px;
+  color: #2a2313;
+  font: 800 9px/1.3 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 #fff8dfcc, 0 0 6px #fff8dfcc;
+}
+.pwc-building[data-faction="gold"] { --lc-faction-trim: #f5cd72; }
+.pwc-building[data-faction="violet"] { --lc-faction-trim: #c58bff; }
+/* Damage is stated in words as well as in art, so a wrecked tower is never a
+   colour-only fact. Rendered only when the damaged plate is genuinely shown. */
+.pwc-building[data-damaged="true"] > strong::after {
+  content: " ⚠";
+  color: #ff9c6b;
+}
+
+/* The Spyglass is a real feature (it opens Google's evidence for a real place),
+   so it stays — but as an angular chip clipped into the plinth, not as a second
+   round marker competing with the building for the click. */
+.cr-world-tower-anchor[data-faction] .cr-reality-trigger-btn {
+  margin-top: 6px;
+  padding: 4px 12px;
+  border: 1px solid #d8c08b99;
+  border-radius: 2px;
+  color: #fff3cf;
+  background: #0b1522d9;
+  box-shadow: none;
+  clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+  font: 800 8px/1.4 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.72;
+  min-height: 0;
+}
+.cr-world-tower-anchor[data-faction]:hover .cr-reality-trigger-btn,
+.cr-world-tower-anchor[data-faction] .cr-reality-trigger-btn:focus-visible {
+  opacity: 1;
+  transform: none;
+  background: #142236f2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pwc-building[data-combat] { transition: none; }
+  .pwc-building[data-combat]::before { animation: none !important; opacity: 0.8; }
+  .pwc-building[data-combat]:hover,
+  .pwc-building[data-combat]:focus-visible { transform: none; }
+}
+
+/* ----------------------------------------------------------------------------
+   4. LANTERNS AS PHYSICAL OBJECTS
+
+   The supplied lantern artwork replaces the CSS-drawn box, so a customer's
+   place in the city is a real brass object sitting in it rather than a marker
+   pin. The three states map one-to-one onto the three cadence states the
+   customer's own order history already produces — lit / dim / off. There is no
+   fourth image because there is no fourth state to justify one.
+
+   The existing elements are kept and painted rather than replaced: the
+   window grid inside `.lc-lantern-body` still reports individual customers, and
+   the `::after` halo still carries the ambient life and the reduced-motion
+   behaviour that `lanternLife.test.ts` pins. Only the box-drawing is retired.
+   -------------------------------------------------------------------------- */
+.lc-lantern {
+  width: 30px;
+  height: 46px;
+  background-image: var(--lc-lantern-art);
+  background-repeat: no-repeat;
+  background-position: center bottom;
+  background-size: contain;
+  filter: drop-shadow(0 3px 4px #2c180066);
+}
+.lc-lantern.state-active { --lc-lantern-art: url("/assets/goldline/lantern-city/v2/lantern-gold-lit.png"); }
+.lc-lantern.state-dimming { --lc-lantern-art: url("/assets/goldline/lantern-city/v2/lantern-gold-dim.png"); }
+.lc-lantern.state-dark { --lc-lantern-art: url("/assets/goldline/lantern-city/v2/lantern-gold-off.png"); }
+
+/* The drawn brass is now in the image, so the borders that used to draw it are
+   removed. The elements themselves stay: the body still hosts the per-customer
+   window grid and the ambient halo. */
+.lc-lantern .lc-lantern-handle,
+.lc-lantern .lc-lantern-base {
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.lc-lantern .lc-lantern-body {
+  inset: 26% 26% 24%;
+  border: 0;
+  border-radius: 2px;
+  background: none;
+  box-shadow: none;
+}
+/* The lit interior belongs to the artwork; the window grid rides inside the
+   glass as a faint scatter so a multi-customer building still reads as several
+   separate lives without covering the brass. */
+.lc-lantern .lc-customer-windows {
+  inset: 0;
+  padding: 0;
+  background: none;
+  opacity: 0.55;
+  mix-blend-mode: screen;
+}
+.lc-lantern.state-dark .lc-customer-windows { opacity: 0.3; }
+/* The cluster count sits on the lantern's base as a struck brass plate. */
+.lc-lantern > b {
+  position: absolute;
+  right: -6px;
+  bottom: -2px;
+  z-index: 4;
+  min-width: 15px;
+  padding: 1px 3px;
+  border: 1px solid #8d6416;
+  border-radius: 2px;
+  color: #2b1c00;
+  background: linear-gradient(180deg, #ffe9a8, #e5b249);
+  font: 900 9px/1.2 ui-sans-serif, system-ui, sans-serif;
+  text-align: center;
+}
+
+/* ----------------------------------------------------------------------------
+   10. WORLD-INTEGRATED CHROME
+
+   The last SaaS-looking objects standing on the battlefield: white rounded
+   place chips and white rounded map buttons. They are the same information,
+   re-cut so they belong to a game world rather than to a mapping widget.
+
+   Scoped to the Lantern City surface, so the small Home overview frame — where
+   these read fine and where nobody is looking for a battlefield — is untouched.
+   -------------------------------------------------------------------------- */
+.cr-world-geography-surface.mode-lantern_atlas .cr-world-neighborhood-label {
+  /*
+    NO CARD. The place name is painted onto the city, not printed on a chip
+    floating above it.
+
+    Two things were wrong with the chip. It was the last generic map-pin object
+    on a screen that had otherwise stopped looking like a mapping widget. And
+    because towers and lanterns correctly draw in FRONT of it, a rectangular
+    plate got sliced clean through — "BEVERLY HILLS" arrived as "ERLY HILLS"
+    behind a chopped-off box, which reads as a rendering bug rather than as
+    depth. Type with a halo and no box occludes gracefully: a building standing
+    in front of a painted place name looks exactly like a building standing in
+    front of a painted place name.
+  */
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: #241a06;
+  background: none;
+  box-shadow: none;
+  font: 900 9px/1.4 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.22em;
+  text-shadow: 0 1px 0 #fff6dae0, 0 0 4px #fff8e2, 0 0 11px #fff8e2cc;
+  /* Places name the ground; they must never compete with a combatant or a
+     lantern for the eye, so they sit under both in weight and in stacking. */
+  opacity: 0.88;
+}
+.cr-world-geography-surface.mode-lantern_atlas .cr-world-neighborhoods { z-index: 3; }
+
+.cr-world-geography-surface.mode-lantern_atlas .cr-world-camera-controls button {
+  border: 1px solid #d9b96a;
+  border-radius: 2px;
+  color: #fff3cf;
+  background: linear-gradient(180deg, #16232fee, #060e17f5);
+  box-shadow: 0 5px 16px #04101c66, inset 0 1px 0 #f0d49299;
+  clip-path: polygon(7px 0, 100% 0, calc(100% - 7px) 100%, 0 100%);
+  font: 800 11px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* ----------------------------------------------------------------------------
+   11. PLACE LABELS DO NOT FIGHT WORLD OBJECTS
+
+   Neighbourhood labels are drawn at their real landmark coordinates, and real
+   customers live in those same neighbourhoods — so a label and a lantern land
+   on the same spot constantly, and the lantern (higher in the stack) was
+   punching a hole through the middle of the word.
+
+   The label is lifted clear of the marker rather than either one being moved:
+   the coordinate is untouched, the type just sits above the object standing on
+   it. A place name is ground truth about the city and belongs slightly behind
+   the pieces playing on it.
+   -------------------------------------------------------------------------- */
+.cr-world-geography-surface.mode-lantern_atlas .cr-world-neighborhood-label {
+  transform: translate(-50%, calc(-50% - 30px));
+}
+
+/* ----------------------------------------------------------------------------
+   12. PURSUED BUILDINGS IN THE COMBAT WORLD
+
+   A pursued opportunity is a real persisted record and keeps every bit of its
+   behaviour. It stops looking like a map pin with a caption card: an angular
+   gold-trimmed plinth, sized well below the two combatants so it can never be
+   mistaken for one. Only the two canonical towers are fighters.
+   -------------------------------------------------------------------------- */
+.cr-world-geography-surface.mode-lantern_atlas .lc-pursued-building > span {
+  border: 1px solid #d9b96a;
+  border-radius: 0;
+  background: linear-gradient(180deg, #fff3cc, #d9a441);
+  clip-path: polygon(0 12%, 22px 0, calc(100% - 6px) 0, 100% 12%, 100% 100%, 0 100%);
+}
+.cr-world-geography-surface.mode-lantern_atlas .lc-pursued-building > b {
+  border-radius: 0;
+  border: 1px solid #ffffff26;
+  color: #fff4d8;
+  background: linear-gradient(180deg, #101c2ae8, #05101af0);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ----------------------------------------------------------------------------
+   13. THE SPYGLASS SITS UNDER ITS OWN TOWER
+
+   It opens Google's real-place evidence for the building above it, so it stays.
+   It is pushed clear of the nameplate and the place labels that share the same
+   patch of map, and it stays quiet until the tower it belongs to is hovered.
+   -------------------------------------------------------------------------- */
+.cr-world-tower-anchor[data-faction] .cr-reality-trigger-btn {
+  margin-top: 8px;
+  opacity: 0;
+  pointer-events: none;
+}
+.cr-world-tower-anchor[data-faction]:hover .cr-reality-trigger-btn,
+.cr-world-tower-anchor[data-faction]:focus-within .cr-reality-trigger-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* Never hide it from keyboard users, who have no hover to reveal it with. */
+.cr-world-tower-anchor[data-faction] .cr-reality-trigger-btn:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ----------------------------------------------------------------------------
+   14. THE ROUND A TOWER ACTUALLY THREW
+
+   The valet car and the golf ball, resting at the weapon that launched them.
+   Drawn only when `towerWars.today` says the building genuinely attacked today
+   — see CityTowerButton — and drawn STILL. Nothing loops. A projectile in
+   permanent flight would be atmosphere impersonating an event, and the animated
+   exchange belongs to Tower Wars, one click away.
+   -------------------------------------------------------------------------- */
+.pwc-combat-round {
+  position: absolute;
+  z-index: 2;
+  width: 46%;
+  height: auto;
+  pointer-events: none;
+  filter: drop-shadow(0 3px 6px #12100844);
+}
+.pwc-building[data-faction="gold"] .pwc-combat-round {
+  /* Beside the rooftop muzzle, on the side the bazooka is pointing. */
+  right: -26%;
+  top: 2%;
+  width: 62%;
+}
+.pwc-building[data-faction="violet"] .pwc-combat-round {
+  /* Just off the driver's face, on the line toward the other tower. Close
+     enough to the club to read as struck rather than as clip art parked in
+     the sky, which is how it read at arm's length. */
+  left: -2%;
+  top: 1%;
+  width: 21%;
+}
+/*
+  A short muzzle/impact bloom behind the round, so a still image still reads as
+  a shot that happened. It is a glow, not a motion trail: nothing here animates,
+  because a looping trail would imply a shot happening right now.
+*/
+.pwc-building[data-combat] .pwc-building-canon::after {
+  content: none;
+}
+.pwc-building[data-faction="gold"]:has(.pwc-combat-round) .pwc-combat-round,
+.pwc-building[data-faction="violet"]:has(.pwc-combat-round) .pwc-combat-round {
+  filter: drop-shadow(0 3px 6px #12100844)
+    drop-shadow(0 0 14px var(--lc-faction-pool));
+}

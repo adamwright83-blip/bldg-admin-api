@@ -87,6 +87,26 @@ describe("Admin six-domain shell", () => {
     expect(source).toContain('goldlineEntry.data.session?.status !== "COMPLETE"');
   });
 
+  it("keeps Lantern City the canonical returning-user home after the combat pass", () => {
+    // The visual pass rebuilt the world chrome around the atlas. It must not
+    // have moved the world: Home and /growth/lantern-city are still the same
+    // surface, and it is still the one an authenticated returning user lands on.
+    expect(source).toContain('const isLanternCity = path === "/growth/lantern-city"');
+    expect(source).toContain("const isWorldHome = isHome || isLanternCity");
+    expect(source).toContain("hidden={!isWorldHome}");
+  });
+
+  it("dresses the world as a 1v1 without giving it a manual attack", () => {
+    // The rivalry band is presentation over towerWars.today; the console below
+    // it is the same three admin utilities on the same three paths. Neither may
+    // become a control that starts a fight.
+    expect(source).toContain("<RivalryHud />");
+    expect(source).toContain('className="gl-command-dock"');
+    expect(source).not.toContain("gl-world-portal");
+    for (const href of ["/new-order", "/customers", "/operations"])
+      expect(source).toContain(`href="${href}"`);
+  });
+
   it("shows the sandbox route only from the server-authoritative capability", () => {
     expect(source).toContain("towerWars.sandboxCapability.useQuery");
     expect(source).toContain("sandboxEnabled={sandboxCapability.data?.enabled === true}");

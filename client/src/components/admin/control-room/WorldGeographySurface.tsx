@@ -11,6 +11,8 @@ import { WorldAtmosphereOverlay } from "./WorldAtmosphereOverlay";
 import type { GeographicEntity } from "./GoogleMapsRealityLayer";
 import { RealityWindow } from "./RealityWindow";
 import { useWorldCamera } from "./useWorldCamera";
+import { FactionBattlefieldLayer } from "./FactionBattlefieldLayer";
+import type { TowerDamageState } from "@shared/towerWars";
 
 const ATLAS_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas.jpg";
 
@@ -48,6 +50,28 @@ export type WorldGeographySurfaceProps = {
   focusPoint?: { x: number; y: number } | null;
   /** Guardian encounter owns gestures so a boss tap cannot drag the city. */
   gesturesDisabled?: boolean;
+  /**
+   * Draw the world as the 1v1 COMBAT OVERWORLD: combat tower plates and the
+   * faction lighting pass. Lantern City turns this on; the small Home overview
+   * frame does not, because a hero plate and a 26%-wide light pool are illegible
+   * in a 430px box.
+   *
+   * Purely a presentation switch. It changes no coordinate, no projection and no
+   * navigation — the same towers stand in the same real places either way.
+   */
+  combatPresentation?: boolean;
+  /**
+   * Authoritative Tower Wars damage per building, from `towerWars.today`.
+   *
+   * Absent, or absent for one building, means UNKNOWN — the tower keeps its
+   * clean plate and says the damage is unknown, rather than claiming pristine.
+   */
+  buildingDamage?: Partial<Record<CanonicalBuildingId, TowerDamageState>>;
+  /**
+   * Attacks each building genuinely launched today, from `towerWars.today`.
+   * Absent means unknown, and unknown draws no projectile at all.
+   */
+  buildingAttacks?: Partial<Record<CanonicalBuildingId, number>>;
 };
 
 const CANONICAL_TOWERS: Array<{
@@ -89,8 +113,18 @@ export function WorldGeographySurface({
   onGoogleVisibilityChange,
   focusPoint,
   gesturesDisabled = false,
+  combatPresentation = false,
+  buildingDamage,
+  buildingAttacks,
 }: WorldGeographySurfaceProps) {
   const [realityBuildingId, setRealityBuildingId] = useState<CanonicalBuildingId | null>(null);
+  /*
+    Which tower the operator's attention is on, so its faction light can
+    intensify with the hover. Local presentation state only — it never leaves
+    this component and never reaches a query.
+  */
+  const [emphasisedBuildingId, setEmphasisedBuildingId] =
+    useState<CanonicalBuildingId | null>(null);
 
   // Query live atmosphere & runtime config from backend
   const atmosphereQuery = trpc.system.google.atmosphere.useQuery(undefined, {
@@ -191,6 +225,18 @@ export function WorldGeographySurface({
       {/* 2. Living Atmosphere Overlay: real clouds, AQI haze, rain */}
       <WorldAtmosphereOverlay atmosphere={atmosphere} />
 
+      {/*
+        2b. The battlefield lighting pass.
+
+        Sits above the atlas skin and BELOW every marker, so gold and violet
+        light the city that real lanterns and real towers then stand in. It is
+        anchored entirely on the canonical buildings' own coordinates — see
+        FactionBattlefieldLayer.
+      */}
+      {combatPresentation && !googleVisible ? (
+        <FactionBattlefieldLayer emphasised={emphasisedBuildingId} />
+      ) : null}
+
       {/* 3. Places Aggregate Opportunity Density / Territory Glow */}
       {showOpportunityLayer && opportunity && !googleVisible ? (
         <div className="cr-opportunity-layer" aria-hidden="true">
@@ -214,6 +260,31 @@ export function WorldGeographySurface({
         <div className="cr-world-neighborhoods" aria-hidden="true">
           {GOLDLINE_LA_LANDMARKS.map(district => {
             const point = projectLatLngToLanternAtlas(district);
+            /*
+              ONE PLACE, ONE NAME.
+
+              Century Park East really is in Century City and OPUS LA really is
+              in Koreatown, so the neighbourhood label and the tower's own
+              nameplate land on the same patch of map and were printed on top of
+              each other. Both are true; the tower's name is the more specific
+              of the two, so it is the one that survives.
+
+              Suppressed only in the combat presentation, and only for a label
+              that is genuinely sitting on a rendered tower — the label is not
+              moved, and it returns the moment the tower is not there.
+            */
+            if (
+              combatPresentation &&
+              CANONICAL_TOWERS.some(tower => {
+                const towerPoint = projectLatLngToLanternAtlas(tower);
+                return (
+                  !towerPoint.outOfBounds &&
+                  Math.abs(towerPoint.x - point.x) < 3 &&
+                  Math.abs(towerPoint.y - point.y) < 5
+                );
+              })
+            )
+              return null;
             return (
             <span
               key={district.name}
@@ -250,7 +321,16 @@ export function WorldGeographySurface({
             <div
               key={tower.id}
                 className={`cr-world-tower-anchor ${selectedBuildingId === tower.id ? "is-selected" : ""} ${battleState?.pressureBuilding === tower.id ? "is-pressure" : ""} ${battleState?.revenueCue === tower.id ? "is-revenue-cue" : ""}`}
+              data-faction={combatPresentation ? (tower.id === "opus_la" ? "violet" : "gold") : undefined}
               style={{ left: `${pt.x}%`, top: `${pt.y}%` }}
+              onPointerEnter={() => setEmphasisedBuildingId(tower.id)}
+              onPointerLeave={() =>
+                setEmphasisedBuildingId(current => (current === tower.id ? null : current))
+              }
+              onFocus={() => setEmphasisedBuildingId(tower.id)}
+              onBlur={() =>
+                setEmphasisedBuildingId(current => (current === tower.id ? null : current))
+              }
             >
               <CityTowerButton
                 buildingId={tower.id}
@@ -259,8 +339,22 @@ export function WorldGeographySurface({
                   onSelectBuilding?.(tower.id);
                   onNavigate?.(path);
                 }}
-                subtitle={`${tower.neighborhood} · THIS WEEK ${battleState?.revenues[tower.id] == null ? "—" : `$${(battleState.revenues[tower.id]! / 100).toFixed(0)}`} · battle truth`}
+                subtitle={
+                  /*
+                    In the combat world the neighbourhood is already written on
+                    the map two centimetres away, so repeating it under the
+                    nameplate says nothing. The line becomes the affordance
+                    instead — it states exactly what clicking the building does,
+                    which is the one thing the composition cannot show.
+                  */
+                  combatPresentation
+                    ? "Enter Tower Wars"
+                    : `${tower.neighborhood} · THIS WEEK ${battleState?.revenues[tower.id] == null ? "—" : `$${(battleState.revenues[tower.id]! / 100).toFixed(0)}`} · battle truth`
+                }
                 vitality={buildingVitality?.get(tower.id)}
+                combat={combatPresentation}
+                damage={buildingDamage?.[tower.id] ?? null}
+                attacksToday={buildingAttacks?.[tower.id] ?? null}
               />
               <button
                 type="button"

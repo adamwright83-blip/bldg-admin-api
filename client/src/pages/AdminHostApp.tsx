@@ -33,6 +33,7 @@ import {
   SettingsControlRoom,
 } from "@/components/admin/control-room/ControlRoomSections";
 import LanternCityAtlas from "@/components/admin/control-room/LanternCityAtlas";
+import { RivalryHud } from "@/components/admin/control-room/RivalryHud";
 import DriverIntelligenceOverview from "@/components/admin/control-room/DriverIntelligenceOverview";
 import { TowerWars } from "@/components/admin/control-room/TowerWars";
 import "@/components/admin/control-room/admin-control-room.css";
@@ -351,13 +352,50 @@ export default function AdminHostApp() {
         {!isWorldHome && isControlRoomSection ? <WorldDayPhaseIndicator /> : null}
         <section className="gl-persistent-world" hidden={!isWorldHome} aria-label="Lantern City world home">
           <LanternCityAtlas onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />
-          <div className="gl-world-title"><span>GOLDLINE</span><strong>Lantern City</strong>
+          {/*
+            The world title, as the title of a game world rather than a page
+            heading. Kept out of the map's transform so panning never drags it.
+          */}
+          <div className="gl-world-title">
+            <span>GOLDLINE</span>
+            <strong>Lantern City</strong>
+            <small>Luxury towers. Real power.</small>
             <button type="button" onClick={() => setWorldIntelOpen(open => !open)} aria-expanded={worldIntelOpen}>{worldIntelOpen ? "Close intelligence" : "City intelligence"}</button>
           </div>
-          <nav className="gl-world-portals" aria-label="Business utility portals">
-            <Link href="/new-order" className="gl-world-portal is-order"><ClipboardPlus aria-hidden /><span>NEW<br />ORDER</span></Link>
-            <Link href="/customers" className="gl-world-portal is-customers"><Users aria-hidden /><span>CUSTOMERS</span></Link>
-            <Link href="/operations" className="gl-world-portal is-active"><Package aria-hidden /><span>ACTIVE<br />ORDERS</span></Link>
+          {/*
+            The 1v1 band. Every figure inside it is read from towerWars.today;
+            see RivalryHud for why it renders empty rather than plausible.
+          */}
+          <RivalryHud />
+          {/*
+            ONE COMMAND CONSOLE, NOT THREE FLOATING BUTTONS.
+
+            These are real admin utilities and their labels stay literally true
+            — they are not renamed ATTACK / DEFEND / UPGRADE, because Lantern
+            City has no manual attack and inventing one would let a button
+            manufacture a Tower Wars event. What changed is only the craft: one
+            ornamental frame holding three angular commands, so business utility
+            arrives with game-HUD build quality instead of as three SaaS circles
+            parked on a battlefield.
+          */}
+          <nav className="gl-command-dock" aria-label="Business utility commands">
+            <span className="gl-dock-wing" aria-hidden />
+            <Link href="/new-order" className="gl-command is-order">
+              <ClipboardPlus aria-hidden />
+              <strong>NEW ORDER</strong>
+              <small>Open intake</small>
+            </Link>
+            <Link href="/customers" className="gl-command is-customers">
+              <Users aria-hidden />
+              <strong>CUSTOMERS</strong>
+              <small>The people behind the lanterns</small>
+            </Link>
+            <Link href="/operations" className="gl-command is-active">
+              <Package aria-hidden />
+              <strong>ACTIVE ORDERS</strong>
+              <small>Work in flight</small>
+            </Link>
+            <span className="gl-dock-wing" aria-hidden />
           </nav>
         </section>
         {!isHome &&

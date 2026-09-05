@@ -25,16 +25,31 @@ export function KingdomCrossingsLayer({ territories, entities }: { territories: 
   }, [territories, entities]);
   const current = crossings.find(c => c.id === selected);
   return <>
-    <svg className="gl-kingdom-waterways" viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Fictional kingdom waterways and strategic crossings">
-      <defs><linearGradient id="kingdom-water" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#084c94"/><stop offset=".5" stopColor="#077eae"/><stop offset="1" stopColor="#163e80"/></linearGradient></defs>
-      {crossings.map(c => <g key={c.id}>
-        <path d={`M${c.riverStart.x} ${c.riverStart.y} Q${c.x - 2} ${c.y + 2} ${c.riverEnd.x} ${c.riverEnd.y}`} fill="none" stroke="#f0ddac" strokeWidth="1.2" strokeLinejoin="round" />
-        <path d={`M${c.riverStart.x} ${c.riverStart.y} Q${c.x - 2} ${c.y + 2} ${c.riverEnd.x} ${c.riverEnd.y}`} fill="none" stroke="url(#kingdom-water)" strokeWidth=".85" />
-        <path d={`M${c.riverStart.x} ${c.riverStart.y} Q${c.x - 2} ${c.y + 2} ${c.riverEnd.x} ${c.riverEnd.y}`} fill="none" stroke="#80dcf1" strokeWidth=".08" />
-      </g>)}
+    {/*
+      THE INVENTED WATERWAYS ARE GONE, AND MUST NOT COME BACK.
+
+      This layer used to draw a three-stroke blue river with a bridge glyph for
+      every crossing, over a map of real Los Angeles. Two things were wrong with
+      it. It invented geography — canals and bridges that do not exist, laid
+      across streets that do — and the actual geographic layer is authoritative,
+      so nothing here is allowed to add a waterway to it. And visually it was
+      the loudest thing on the screen: thick straight strokes with a repeating
+      node stamped along them, which is what a debug polyline looks like.
+
+      The crossing itself is a real game object with real state and is kept in
+      full: same anchors, same territory-derived state, same inspector. Only its
+      PRESENTATION changed. It is now a thin dashed thread between two real
+      neighbourhood anchors plus a small angular gate — legible as a link
+      between two places, which is what it is, and impossible to mistake for a
+      river, a road or a bridge, which is what it is not.
+    */}
+    <svg className="gl-kingdom-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden focusable="false">
+      {crossings.map(c => <line key={c.id} className={`is-${c.state.toLowerCase()}`}
+        x1={c.riverStart.x} y1={c.riverStart.y} x2={c.riverEnd.x} y2={c.riverEnd.y}
+        vectorEffect="non-scaling-stroke" />)}
     </svg>
     {crossings.map(c => <button type="button" key={c.id} className={`gl-kingdom-crossing is-${c.state.toLowerCase()}`} style={{ left: `${c.x}%`, top: `${c.y}%` }}
-      aria-label={`${c.from} to ${c.to}: ${c.state.toLowerCase()} fictional crossing`} onClick={() => setSelected(c.id)} data-crossing-id={c.id} data-crossing-state={c.state}>╫</button>)}
+      aria-label={`${c.from} to ${c.to}: ${c.state.toLowerCase()} fictional crossing`} onClick={() => setSelected(c.id)} data-crossing-id={c.id} data-crossing-state={c.state}><i aria-hidden /></button>)}
     {current ? <aside className="gl-crossing-inspector" role="status"><button type="button" onClick={() => setSelected(null)} aria-label="Close crossing">×</button><strong>{current.from} ↔ {current.to}</strong><p>{current.state === "OPEN" ? "Crossing open — territory game clearance is recorded." : current.state === "AVAILABLE" ? "Known territory. Guardian gameplay clearance is still required." : "Unbuilt crossing. Legitimate territory evidence must establish access first."}</p><small>Fantasy geography. Inspecting this bridge records no visit or business evidence.</small></aside> : null}
   </>;
 }
