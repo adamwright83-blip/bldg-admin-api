@@ -78,6 +78,15 @@ describe("Admin six-domain shell", () => {
     expect(navSource).toContain('label: "Overlook — Scout"');
   });
 
+  it("keeps completed design-partner sessions from replacing the canonical world", () => {
+    expect(source).not.toContain("DesignPartnerWorld");
+    expect(source).toContain('aria-label="Lantern City world home"');
+    expect(source).toContain("<LanternCityAtlas");
+    expect(source).toContain("isTowerWars ? (");
+    expect(source).toContain("<TowerWars onNavigate=");
+    expect(source).toContain('goldlineEntry.data.session?.status !== "COMPLETE"');
+  });
+
   it("shows the sandbox route only from the server-authoritative capability", () => {
     expect(source).toContain("towerWars.sandboxCapability.useQuery");
     expect(source).toContain("sandboxEnabled={sandboxCapability.data?.enabled === true}");
