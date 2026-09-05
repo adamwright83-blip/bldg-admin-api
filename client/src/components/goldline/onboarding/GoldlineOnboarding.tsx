@@ -56,7 +56,7 @@ export default function GoldlineOnboarding({ entry = "world" }: { entry?: "world
  if (state.error) return <main className="gl-onboarding"><div className="gl-onboarding-sky"/><div className="gl-entry"><p role="alert">{state.error.message}</p><a href="/">Return to sign in</a><DemoAccess onEntered={reload}/></div></main>;
  // A tenant that already owns a world never sees the interview, and /onboarding
  // is not a way to build a second one.
- if (state.data?.compatibility === "LEGACY_EXISTING_WORLD") return <main className="gl-onboarding"><div className="gl-entry"><h1>Your world is waiting.</h1><a href="/growth/lantern-city">RETURN TO LANTERN CITY</a></div></main>;
+ if (state.data?.compatibility === "LEGACY_EXISTING_WORLD") return <main className="gl-onboarding"><div className="gl-entry"><h1>Your world is waiting.</h1><a href="/growth/lantern-city">RETURN TO LANTERN CITY</a><DemoAccess onEntered={reload}/></div></main>;
  if (!session) return <main className="gl-onboarding"><div className="gl-onboarding-sky"/>{demo?.active&&<DemoExit/>}<div className="gl-entry"><p>GOLDLINE</p><h1>Your work.<br/>An extraordinary world.</h1><p>Five questions. One useful mission. Your first chapter starts here.</p><button disabled={start.isPending} onClick={()=>start.mutate()}>BEGIN YOUR STORY</button>{start.error && <p role="alert">{start.error.message}</p>}<DemoAccess onEntered={reload}/></div></main>;
  // Onboarding is finished exactly once. On the dedicated /onboarding entry the
  // completed session hands off to the normal returning-customer experience at
@@ -71,7 +71,7 @@ export default function GoldlineOnboarding({ entry = "world" }: { entry?: "world
    if(demo===null)return <main className="gl-onboarding"><div className="gl-onboarding-sky"/><p className="gl-entry">Opening your world…</p></main>;
    if(!demo.enabled){window.location.replace("/");return <main className="gl-onboarding"><p className="gl-entry">Your world is ready. Opening Lantern City…</p></main>;}
    if(demo.active)return <main className="gl-onboarding"><DemoExit/><DesignPartnerWorld session={session}/><DemoAccess onEntered={reload} showLogin={false}/></main>;
-   return <main className="gl-onboarding"><div className="gl-onboarding-sky"/><div className="gl-entry"><p>GOLDLINE</p><h1>Your world is ready.</h1><p>Onboarding is complete. This page cannot build a second world.</p><a href="/">RETURN TO MY GOLDLINE</a></div></main>;
+   return <main className="gl-onboarding"><div className="gl-onboarding-sky"/><div className="gl-entry"><p>GOLDLINE</p><h1>Your world is ready.</h1><p>Onboarding is complete. This page cannot build a second world.</p><a href="/">RETURN TO MY GOLDLINE</a><DemoAccess onEntered={reload}/></div></main>;
   }
   return <DesignPartnerWorld session={session}/>;
  }

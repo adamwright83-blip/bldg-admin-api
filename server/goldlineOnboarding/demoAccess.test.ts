@@ -117,6 +117,14 @@ describe("host routing", () => {
     expect(errorBranch).toContain("<DemoAccess onEntered={reload}/>");
   });
 
+  it("offers demo entry without changing a completed real tenant", () => {
+    const completedBranches = onboarding.split("\n").filter(line =>
+      line.includes("LEGACY_EXISTING_WORLD") || line.includes("Onboarding is complete.")
+    );
+    expect(completedBranches).toHaveLength(2);
+    for (const branch of completedBranches) expect(branch).toContain("<DemoAccess onEntered={reload}/>");
+  });
+
   it("keeps the reset control reachable after completion so the demo can replay", () => {
     // /onboarding is the only home of the reset control, and a completed
     // session is exactly when you want to replay — so the redirect waits for
