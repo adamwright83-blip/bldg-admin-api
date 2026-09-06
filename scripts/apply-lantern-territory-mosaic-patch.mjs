@@ -93,6 +93,13 @@ source = source.replace(
   "opportunity.districts.map((district: any) => ("
 );
 
+// Idempotent marker normalization. Previous workflow passes could append the
+// same QA attribute again because generated integration is committed to main.
+// Remove every existing copy, then install exactly one beside data-day-phase.
+source = source.replace(
+  /\n\s*data-world-truth=\{worldTruth \? "1" : "0"\}/g,
+  ""
+);
 source = source.replace(
   '      data-day-phase="day"',
   '      data-day-phase="day"\n      data-world-truth={worldTruth ? "1" : "0"}'
