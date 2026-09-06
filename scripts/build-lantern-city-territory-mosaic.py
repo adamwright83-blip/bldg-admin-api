@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-"""Build one continuous geography-registered HD Lantern City surface, then cut it into territory assets."""
+"""Cut the continuous vector-fantasy Lantern City master into exact territory plates.
+
+The geographic surface is rendered upstream by MapLibre from real vector data.
+This script never invents geography: it validates the art-direction gate, crops
+one continuous master, and applies the already-exported authoritative masks.
+"""
 from __future__ import annotations
 
 import json
-import math
 import os
 import pathlib
 import shutil
-import time
-import urllib.parse
-import urllib.request
 from datetime import datetime, timezone
 
 import numpy as np
-from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+from PIL import Image, ImageEnhance, ImageFilter
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 INPUTS = ROOT / "artifacts" / "lantern-city-territory-art-inputs"
@@ -21,15 +22,13 @@ TERRITORY_INDEX = INPUTS / "_qa" / "territory-index.json"
 OUT = ROOT / "client" / "public" / "assets" / "admin" / "control-room" / "world" / "territories-v2"
 QA = ROOT / "screenshots" / "lantern-city-v2"
 MASTER_DIR = ROOT / "artifacts" / "lantern-city-territory-mosaic"
-MASTER_PATH = MASTER_DIR / "lantern-city-hd-master.png"
-
+DEFAULT_MASTER_PATH = MASTER_DIR / "lantern-city-hd-master.png"
+MASTER_PATH = pathlib.Path(os.environ.get("LANTERN_MASTER_INPUT", str(DEFAULT_MASTER_PATH)))
 MASTER_W = int(os.environ.get("LANTERN_MASTER_WIDTH", "7680"))
 MASTER_H = int(os.environ.get("LANTERN_MASTER_HEIGHT", "4320"))
-GRID_X = int(os.environ.get("LANTERN_MASTER_GRID_X", "4"))
-GRID_Y = int(os.environ.get("LANTERN_MASTER_GRID_Y", "4"))
-ARCGIS_SERVICE = os.environ.get(
-    "LANTERN_MASTER_SERVICE",
-    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer",
+ATTRIBUTION = os.environ.get(
+    "LANTERN_MASTER_ATTRIBUTION",
+    "OpenMapTiles Data from OpenStreetMap · rendered with OpenFreeMap vector tiles",
 )
 
 FIRST_GATE = {
@@ -46,104 +45,6 @@ FIRST_GATE = {
 }
 
 
-def merc_x(lon: float) -> float:
-    return 6378137.0 * math.radians(lon)
-
-
-def merc_y(lat: float) -> float:
-    lat = max(min(lat, 85.05112878), -85.05112878)
-    return 6378137.0 * math.log(math.tan(math.pi / 4 + math.radians(lat) / 2))
-
-
-def request_bytes(url: str, attempts: int = 4) -> bytes:
-    last: Exception | None = None
-    for attempt in range(attempts):
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Goldline-LanternCity-Renderer/1.0"})
-            with urllib.request.urlopen(req, timeout=120) as response:
-                return response.read()
-        except Exception as exc:
-            last = exc
-            if attempt + 1 < attempts:
-                time.sleep(2 ** attempt)
-    raise RuntimeError(f"Failed to fetch {url}: {last}")
-
-
-def service_attribution() -> str:
-    try:
-        payload = json.loads(request_bytes(f"{ARCGIS_SERVICE}?f=pjson").decode("utf-8"))
-        return str(payload.get("copyrightText") or "Basemap imagery © Esri")
-    except Exception:
-        return "Basemap imagery © Esri"
-
-
-def fetch_master(projection: dict) -> Image.Image:
-    west = merc_x(float(projection["west"]))
-    east = merc_x(float(projection["east"]))
-    south = merc_y(float(projection["south"]))
-    north = merc_y(float(projection["north"]))
-    master = Image.new("RGB", (MASTER_W, MASTER_H))
-
-    for row in range(GRID_Y):
-        y_top = north - (north - south) * row / GRID_Y
-        y_bottom = north - (north - south) * (row + 1) / GRID_Y
-        py0 = round(MASTER_H * row / GRID_Y)
-        py1 = round(MASTER_H * (row + 1) / GRID_Y)
-        tile_h = py1 - py0
-        for col in range(GRID_X):
-            x_left = west + (east - west) * col / GRID_X
-            x_right = west + (east - west) * (col + 1) / GRID_X
-            px0 = round(MASTER_W * col / GRID_X)
-            px1 = round(MASTER_W * (col + 1) / GRID_X)
-            tile_w = px1 - px0
-            params = urllib.parse.urlencode(
-                {
-                    "bbox": f"{x_left},{y_bottom},{x_right},{y_top}",
-                    "bboxSR": "3857",
-                    "imageSR": "3857",
-                    "size": f"{tile_w},{tile_h}",
-                    "format": "png32",
-                    "transparent": "false",
-                    "f": "image",
-                }
-            )
-            data = request_bytes(f"{ARCGIS_SERVICE}/export?{params}")
-            import io
-            tile = Image.open(io.BytesIO(data)).convert("RGB")
-            if tile.size != (tile_w, tile_h):
-                tile = tile.resize((tile_w, tile_h), Image.Resampling.LANCZOS)
-            master.paste(tile, (px0, py0))
-            print(f"master tile {row * GRID_X + col + 1}/{GRID_X * GRID_Y}")
-    return master
-
-
-def stylize(master: Image.Image) -> Image.Image:
-    """Deterministic art direction only. Never resamples or synthesizes geography."""
-    base = ImageOps.autocontrast(master, cutoff=(0.2, 0.2))
-    base = ImageEnhance.Color(base).enhance(1.32)
-    base = ImageEnhance.Contrast(base).enhance(1.10)
-    base = ImageEnhance.Brightness(base).enhance(1.04)
-
-    arr = np.asarray(base).astype(np.float32) / 255.0
-    r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
-    water = (b > r * 1.10) & (b > g * 1.02) & ((b - r) > 0.045)
-    foliage = (g > r * 1.06) & (g > b * 0.92) & ((g - r) > 0.025)
-    neutral = (np.abs(r - g) < 0.07) & (np.abs(g - b) < 0.08) & (((r + g + b) / 3) > 0.35)
-
-    water_target = np.array([0.035, 0.58, 0.88], dtype=np.float32)
-    green_target = np.array([0.20, 0.52, 0.20], dtype=np.float32)
-    warm_target = np.array([0.78, 0.70, 0.56], dtype=np.float32)
-    arr[water] = arr[water] * 0.48 + water_target * 0.52
-    arr[foliage] = arr[foliage] * 0.74 + green_target * 0.26
-    arr[neutral] = arr[neutral] * 0.90 + warm_target * 0.10
-    arr = np.clip(arr, 0, 1) ** 0.94
-
-    styled = Image.fromarray(np.uint8(arr * 255), "RGB")
-    poster = ImageOps.posterize(styled, 6)
-    styled = Image.blend(styled, poster, 0.10)
-    return styled.filter(ImageFilter.UnsharpMask(radius=1.2, percent=115, threshold=3))
-
-
 def pct_crop(bbox: dict) -> tuple[int, int, int, int]:
     left = round(float(bbox["left"]) / 100 * MASTER_W)
     top = round(float(bbox["top"]) / 100 * MASTER_H)
@@ -155,18 +56,70 @@ def pct_crop(bbox: dict) -> tuple[int, int, int, int]:
 def save_preview(image: Image.Image, path: pathlib.Path) -> None:
     preview = image.copy()
     preview.thumbnail((1920, 1080), Image.Resampling.LANCZOS)
-    canvas = Image.new("RGB", (1920, 1080), (245, 243, 235))
+    canvas = Image.new("RGB", (1920, 1080), (236, 220, 178))
     canvas.paste(preview, ((1920 - preview.width) // 2, (1080 - preview.height) // 2))
     path.parent.mkdir(parents=True, exist_ok=True)
-    canvas.save(path, "JPEG", quality=90, optimize=True)
+    canvas.save(path, "JPEG", quality=92, optimize=True)
 
 
-def assemble_preview(entries: list[dict]) -> Image.Image:
-    fallback_path = ROOT / "client" / "public" / "assets" / "admin" / "control-room" / "world" / "lantern-city-atlas-v4.png"
-    if fallback_path.exists():
-        result = Image.open(fallback_path).convert("RGBA").resize((1920, 1080), Image.Resampling.LANCZOS)
-    else:
-        result = Image.new("RGBA", (1920, 1080), (245, 243, 235, 255))
+def save_zoom_previews(master: Image.Image) -> None:
+    # Static art-direction crops. Runtime/browser zoom is verified separately.
+    for label, factor in (("200", 2.0), ("300", 3.0)):
+        crop_w = round(master.width / factor)
+        crop_h = round(master.height / factor)
+        # Centre the crop slightly east of centre so Koreatown/Silver Lake and
+        # the densest canal crossings are represented together.
+        cx = round(master.width * 0.57)
+        cy = round(master.height * 0.52)
+        left = max(0, min(master.width - crop_w, cx - crop_w // 2))
+        top = max(0, min(master.height - crop_h, cy - crop_h // 2))
+        crop = master.crop((left, top, left + crop_w, top + crop_h))
+        crop = crop.resize((1920, 1080), Image.Resampling.LANCZOS)
+        crop.save(QA / f"territory-mosaic-zoom-{label}.jpg", "JPEG", quality=93, optimize=True)
+
+
+def art_direction_metrics(master: Image.Image) -> dict:
+    """Cheap deterministic guard against shipping another green/satellite-looking world."""
+    sample = master.resize((960, 540), Image.Resampling.BILINEAR).convert("RGB")
+    arr = np.asarray(sample).astype(np.float32) / 255.0
+    r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
+
+    cyan = (b > 0.52) & (g > 0.43) & (r < 0.45) & ((b - r) > 0.18)
+    green = (g > 0.34) & (g > r * 1.10) & (g > b * 0.92) & ((g - r) > 0.045)
+    warm = (r > 0.52) & (g > 0.42) & (r > b * 1.06) & (g > b * 1.02)
+    purple = (b > 0.38) & (r > 0.31) & (b > g * 1.13) & (r > g * 1.10)
+    near_black = ((r + g + b) / 3.0) < 0.12
+
+    metrics = {
+        "cyanPct": round(float(cyan.mean() * 100), 2),
+        "greenPct": round(float(green.mean() * 100), 2),
+        "warmPct": round(float(warm.mean() * 100), 2),
+        "purplePct": round(float(purple.mean() * 100), 2),
+        "nearBlackPct": round(float(near_black.mean() * 100), 2),
+    }
+
+    failures: list[str] = []
+    if metrics["cyanPct"] < 1.8:
+        failures.append(f"turquoise waterways are not visually prominent enough ({metrics['cyanPct']}%)")
+    if metrics["greenPct"] > 28.0:
+        failures.append(f"green dominates the city again ({metrics['greenPct']}%)")
+    if metrics["warmPct"] < 15.0:
+        failures.append(f"warm ivory/cream/terracotta city mass is too weak ({metrics['warmPct']}%)")
+    if metrics["purplePct"] > 2.0:
+        failures.append(f"broad purple contamination returned ({metrics['purplePct']}%)")
+    if metrics["nearBlackPct"] > 7.0:
+        failures.append(f"the light-mode city contains too much near-black surface ({metrics['nearBlackPct']}%)")
+
+    metrics["passed"] = not failures
+    metrics["failures"] = failures
+    return metrics
+
+
+def assemble_preview(entries: list[dict], master: Image.Image) -> Image.Image:
+    # Use the new fantasy master itself as the safety plate; this makes the QA
+    # image equivalent to production's intended underlay rather than quietly
+    # reintroducing the old v4 painting at polygon antialiasing edges.
+    result = master.resize((1920, 1080), Image.Resampling.LANCZOS).convert("RGBA")
     for entry in entries:
         src = ROOT / "client" / "public" / entry["src"].lstrip("/")
         if not src.exists():
@@ -203,12 +156,14 @@ def load_exported_territories() -> tuple[list[dict], dict]:
             raise SystemExit(f"Missing exported geometry package for {territory_id}")
         meta = json.loads(meta_path.read_text())
         projection = projection or meta.get("projection")
-        territories.append({
-            "territoryId": territory_id,
-            "name": meta.get("name") or entry.get("name") or territory_id,
-            "meta": meta,
-            "maskPath": mask_path,
-        })
+        territories.append(
+            {
+                "territoryId": territory_id,
+                "name": meta.get("name") or entry.get("name") or territory_id,
+                "meta": meta,
+                "maskPath": mask_path,
+            }
+        )
     if not projection:
         raise SystemExit("No projection found in exported territory metadata")
     return territories, projection
@@ -216,17 +171,36 @@ def load_exported_territories() -> tuple[list[dict], dict]:
 
 def main() -> None:
     territories, projection = load_exported_territories()
-
     MASTER_DIR.mkdir(parents=True, exist_ok=True)
     QA.mkdir(parents=True, exist_ok=True)
+
+    if not MASTER_PATH.exists():
+        raise SystemExit(
+            f"Missing vector-fantasy master at {MASTER_PATH}. "
+            "Run scripts/render-lantern-city-vector-master.mjs first. Satellite fallback is intentionally forbidden."
+        )
+
+    master = Image.open(MASTER_PATH).convert("RGB")
+    if master.size != (MASTER_W, MASTER_H):
+        raise SystemExit(f"Expected master {MASTER_W}x{MASTER_H}, got {master.size[0]}x{master.size[1]}")
+
+    # Tiny finishing pass only; all geographic content already exists as vector
+    # geometry. This is equivalent to final-game color grading, not repainting.
+    master = ImageEnhance.Color(master).enhance(1.04)
+    master = ImageEnhance.Contrast(master).enhance(1.025)
+    master = master.filter(ImageFilter.UnsharpMask(radius=0.7, percent=70, threshold=2))
+    master.save(DEFAULT_MASTER_PATH, "PNG", optimize=True)
+
+    art_metrics = art_direction_metrics(master)
+    if not art_metrics["passed"]:
+        raise SystemExit("Art-direction gate failed: " + "; ".join(art_metrics["failures"]))
+
     if OUT.exists():
         shutil.rmtree(OUT)
     OUT.mkdir(parents=True, exist_ok=True)
 
-    raw = fetch_master(projection)
-    master = stylize(raw)
-    master.save(MASTER_PATH, "PNG", optimize=True)
     save_preview(master, QA / "territory-mosaic-master-preview.jpg")
+    save_zoom_previews(master)
 
     entries: list[dict] = []
     gate_seen: set[str] = set()
@@ -238,42 +212,55 @@ def main() -> None:
         mask = Image.open(territory["maskPath"]).convert("L").resize(crop.size, Image.Resampling.LANCZOS)
         crop.putalpha(mask)
         filename = f"{territory_id}.webp"
-        crop.save(OUT / filename, "WEBP", quality=92, method=6, exact=True)
-        entries.append({
-            "territoryId": territory_id,
-            "name": territory["name"],
-            "src": f"/assets/admin/control-room/world/territories-v2/{filename}",
-            "atlasBBoxPct": bbox,
-            "naturalWidth": crop.width,
-            "naturalHeight": crop.height,
-        })
+        crop.save(OUT / filename, "WEBP", quality=94, method=6, exact=True)
+        entries.append(
+            {
+                "territoryId": territory_id,
+                "name": territory["name"],
+                "src": f"/assets/admin/control-room/world/territories-v2/{filename}",
+                "atlasBBoxPct": bbox,
+                "naturalWidth": crop.width,
+                "naturalHeight": crop.height,
+            }
+        )
         if territory_id in FIRST_GATE:
             gate_seen.add(territory_id)
 
     missing_gate = sorted(FIRST_GATE - gate_seen)
     if missing_gate:
-        raise SystemExit(f"Ten-territory gate missing: {', '.join(missing_gate)}")
+        raise SystemExit(f"Ten-territory geography gate missing: {', '.join(missing_gate)}")
 
     out_manifest = {
-        "version": 2,
+        "version": 3,
         "generatedAt": datetime.now(timezone.utc).isoformat(),
-        "source": "single continuous geography-registered master; territory alpha from authoritative Goldline masks",
-        "attribution": service_attribution(),
+        "source": "one continuous OpenStreetMap/OpenMapTiles vector master with deterministic Lantern City styling; no satellite imagery; no generative geography",
+        "attribution": ATTRIBUTION,
         "projection": projection,
         "master": {"width": MASTER_W, "height": MASTER_H},
+        "fantasyPresentation": {
+            "waterways": "/assets/admin/control-room/world/fantasy-waterways-v1.geojson",
+            "businessTruthRole": "none",
+            "protectedGeography": "real roads and buildings render above fantasy waterways; crossings preserve the real road alignment as bridges",
+        },
         "territories": entries,
     }
     (OUT / "manifest.json").write_text(json.dumps(out_manifest, indent=2) + "\n")
 
-    assembled = assemble_preview(entries)
-    assembled.convert("RGB").save(QA / "territory-mosaic-assembled-preview.jpg", "JPEG", quality=91, optimize=True)
+    assembled = assemble_preview(entries, master)
+    assembled.convert("RGB").save(
+        QA / "territory-mosaic-assembled-preview.jpg", "JPEG", quality=93, optimize=True
+    )
+
     qa = {
         "territoryCount": len(entries),
         "gateCount": len(gate_seen),
         "missingGate": missing_gate,
         "master": [MASTER_W, MASTER_H],
-        "method": "one continuous master then authoritative polygon cuts",
-        "geographyDriftRisk": "none from image generation; no generative geography step exists",
+        "method": "real vector geography -> one continuous Lantern City fantasy master -> authoritative polygon cuts",
+        "satelliteImagery": False,
+        "generativeGeography": False,
+        "geographyDriftRisk": "structurally excluded: vector features and Goldline projection are never repainted",
+        "artDirection": art_metrics,
     }
     (MASTER_DIR / "qa.json").write_text(json.dumps(qa, indent=2) + "\n")
     print(json.dumps(qa, indent=2))
