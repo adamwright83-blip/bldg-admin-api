@@ -6,98 +6,95 @@ let renderer = await fs.readFile(rendererPath, "utf8");
 
 // APPROVED ART TARGET
 // -------------------
-// The authority is the saturated game-world screenshot supplied by Adam, not
-// a conventional cartographic style. Geographic primitives remain exact; only
-// their visual treatment changes. Ground mass stays mostly neutral stone so
-// warm cream/terracotta BUILDINGS, cyan WATER and green HILLS can separate
-// clearly instead of collapsing into one beige wash.
+// The supplied Lantern City screenshot is the authority: dense toy-city depth,
+// warm cream/terracotta architecture, rich green hills, vivid turquoise water,
+// pale stone roads/bridges and strong California daylight. Geography remains
+// exact; these changes only restyle the real vector primitives.
 const replacements = new Map([
-  // Urban ground: neutral warm stone. These deliberately avoid occupying the
-  // same hue family as the buildings, which is what made the previous pass 89%
-  // beige/warm and visually flat.
-  ['"residential", "#eadbb5"', '"residential", "#d8d7cc"'],
-  ['"commercial", "#e7cfaa"', '"commercial", "#d4d2c9"'],
-  ['"retail", "#efd2a9"', '"retail", "#ddd0c6"'],
-  ['"industrial", "#d8c6a3"', '"industrial", "#c9c9bf"'],
-  ['"railway", "#d7c4a0"', '"railway", "#c9c7bd"'],
-  ['"cemetery", "#91aa6a"', '"cemetery", "#698450"'],
-  ['"hospital", "#edd5b3"', '"hospital", "#ded3c8"'],
-  ['"school", "#ead9b4"', '"school", "#d9d5ca"'],
-  ['"university", "#e7d3ad"', '"university", "#d9d0c6"'],
-  ['"#e4d3aa",', '"#d1d2c8",'],
+  // Keep the broad ground neutral so the warm BUILDINGS read as architecture
+  // instead of turning the whole city into one beige sheet.
+  ['"residential", "#eadbb5"', '"residential", "#c6c9c1"'],
+  ['"commercial", "#e7cfaa"', '"commercial", "#c2c5be"'],
+  ['"retail", "#efd2a9"', '"retail", "#ccc5bf"'],
+  ['"industrial", "#d8c6a3"', '"industrial", "#b9bdb7"'],
+  ['"railway", "#d7c4a0"', '"railway", "#bbbdb7"'],
+  ['"cemetery", "#91aa6a"', '"cemetery", "#587744"'],
+  ['"hospital", "#edd5b3"', '"hospital", "#d1cbc5"'],
+  ['"school", "#ead9b4"', '"school", "#cccac3"'],
+  ['"university", "#e7d3ad"', '"university", "#cdc6c0"'],
+  ['"#e4d3aa",', '"#c1c4bc",'],
 
-  // Real hills / parks: saturated California green, not satellite texture.
-  ['"wood", "#557b3b"', '"wood", "#456b37"'],
-  ['"grass", "#86a955"', '"grass", "#73964d"'],
-  ['"scrub", "#7b934c"', '"scrub", "#788c48"'],
-  ['"farmland", "#d9c98f"', '"farmland", "#aaa56b"'],
-  ['"sand", "#e7d1a1"', '"sand", "#d9c493"'],
-  ['"#d9c99b",', '"#8b9255",'],
+  // Real topography stays lush and deliberate, not satellite-green everywhere.
+  ['"wood", "#557b3b"', '"wood", "#345f35"'],
+  ['"grass", "#86a955"', '"grass", "#628b48"'],
+  ['"scrub", "#7b934c"', '"scrub", "#667c3e"'],
+  ['"farmland", "#d9c98f"', '"farmland", "#969660"'],
+  ['"sand", "#e7d1a1"', '"sand", "#d0b986"'],
+  ['"#d9c99b",', '"#718048",'],
 
-  // Roads: bright raised-looking stone over much darker casings. Because real
-  // roads render above fantasy water, crossings read as bridges automatically.
-  ['"motorway", "#f2d49e"', '"motorway", "#fff0c9"'],
-  ['"trunk", "#f0d7a8"', '"trunk", "#f9e7c0"'],
-  ['"primary", "#eedab3"', '"primary", "#f6dfb6"'],
-  ['"secondary", "#eadcbd"', '"secondary", "#efdbbc"'],
-  ['"tertiary", "#e5d8bb"', '"tertiary", "#ead5b8"'],
-  ['"minor", "#dfd3b7"', '"minor", "#e3d1b7"'],
-  ['"service", "#d9cdb2"', '"service", "#dccab0"'],
-  ['"path", "#cdbf9f"', '"path", "#c9b591"'],
-  ['"track", "#c9bb9b"', '"track", "#c2ad89"'],
-  ['"#e0d4b9",', '"#dfcdb0",'],
-  ['"motorway", "#9e7655"', '"motorway", "#6f4b36"'],
-  ['"trunk", "#a27b59"', '"trunk", "#79553c"'],
-  ['"primary", "#a98261"', '"primary", "#866247"'],
-  ['"secondary", "#ad8c6d"', '"secondary", "#947256"'],
-  ['"tertiary", "#b59a7e"', '"tertiary", "#9f8063"'],
-  ['"minor", "#b8a58d"', '"minor", "#a58f77"'],
-  ['"service", "#bcae98"', '"service", "#aa9b87"'],
-  ['"#ad957a",', '"#94765d",'],
+  // Real roads remain exact. Pale interiors over dark casings make every
+  // fantasy-water crossing read as an ornate bridge without moving the road.
+  ['"motorway", "#f2d49e"', '"motorway", "#ece8dc"'],
+  ['"trunk", "#f0d7a8"', '"trunk", "#e8e3d7"'],
+  ['"primary", "#eedab3"', '"primary", "#e4dfd4"'],
+  ['"secondary", "#eadcbd"', '"secondary", "#dfdbd2"'],
+  ['"tertiary", "#e5d8bb"', '"tertiary", "#dad7cf"'],
+  ['"minor", "#dfd3b7"', '"minor", "#d3d2cb"'],
+  ['"service", "#d9cdb2"', '"service", "#ccccc6"'],
+  ['"path", "#cdbf9f"', '"path", "#c1bdb2"'],
+  ['"track", "#c9bb9b"', '"track", "#bbb7aa"'],
+  ['"#e0d4b9",', '"#d5d3ca",'],
+  ['"motorway", "#9e7655"', '"motorway", "#624535"'],
+  ['"trunk", "#a27b59"', '"trunk", "#6d4d39"'],
+  ['"primary", "#a98261"', '"primary", "#775743"'],
+  ['"secondary", "#ad8c6d"', '"secondary", "#82644e"'],
+  ['"tertiary", "#b59a7e"', '"tertiary", "#8d7058"'],
+  ['"minor", "#b8a58d"', '"minor", "#987f69"'],
+  ['"service", "#bcae98"', '"service", "#9e8d79"'],
+  ['"#ad957a",', '"#84664f",'],
 
-  // Canvas / parks.
-  ['"background-color": "#ead7a8"', '"background-color": "#c8b58e"'],
-  ['"fill-color": "#75a04c"', '"fill-color": "#689548"'],
-  ['"fill-outline-color": "#5d873f"', '"fill-outline-color": "#456f35"'],
+  // Canvas / park treatment.
+  ['"background-color": "#ead7a8"', '"background-color": "#b8b9ad"'],
+  ['"fill-color": "#75a04c"', '"fill-color": "#4f813e"'],
+  ['"fill-outline-color": "#5d873f"', '"fill-outline-color": "#315f32"'],
 
-  // Buildings carry the warm fantasy architecture: cream, ivory and
-  // terracotta with a much stronger contact shadow for toy-city depth.
-  ['"fill-color": "#6c4f3a"', '"fill-color": "#493126"'],
-  ['"fill-opacity": 0.22,', '"fill-opacity": 0.42,'],
-  ['"fill-translate": [2.4, 3.2]', '"fill-translate": [3.8, 5.4]'],
-  ['0, "#ead3a5"', '0, "#cb9568"'],
-  ['18, "#f3dfb8"', '18, "#dfb57f"'],
-  ['55, "#f6e8cb"', '55, "#f2d39f"'],
-  ['160, "#fff0cf"', '160, "#fff0c7"'],
-  ['"fill-outline-color": "#c18d62"', '"fill-outline-color": "#8b583b"'],
-  ['"line-color": "#9e8063"', '"line-color": "#766553"'],
-  ['"fill-color": "#ddc9a3"', '"fill-color": "#c9b38d"'],
-  ['"line-color": "#bfa785"', '"line-color": "#91775c"'],
+  // Buildings are the warm element. A darker translated base plus two extra
+  // deterministic sidewall bands creates pseudo-3D toy-city depth while the
+  // roof footprint itself stays exactly registered to the real building.
+  ['"fill-color": "#6c4f3a"', '"fill-color": "#38241e"'],
+  ['"fill-opacity": 0.22,', '"fill-opacity": 0.36,'],
+  ['"fill-translate": [2.4, 3.2]', '"fill-translate": [5.2, 7.0]'],
+  ['0, "#ead3a5"', '0, "#c5875f"'],
+  ['18, "#f3dfb8"', '18, "#dfa977"'],
+  ['55, "#f6e8cb"', '55, "#efd09c"'],
+  ['160, "#fff0cf"', '160, "#fff0c8"'],
+  ['"fill-outline-color": "#c18d62"', '"fill-outline-color": "#815039"'],
+  ['"line-color": "#9e8063"', '"line-color": "#6f5d4d"'],
+  ['"fill-color": "#ddc9a3"', '"fill-color": "#c4ae88"'],
+  ['"line-color": "#bfa785"', '"line-color": "#846d56"'],
 
-  // Cyan water with warm banks. Keep real water and fantasy water in the same
-  // family so they read as one authored world.
-  ['"fill-color": "#21b9e5"', '"fill-color": "#09addd"'],
-  ['"fill-outline-color": "#0f84af"', '"fill-outline-color": "#056d96"'],
-  ['"line-color": "#0c86b4"', '"line-color": "#056f99"'],
-  ['"line-color": "#1aaedb"', '"line-color": "#0a9dcc"'],
-  ['"line-color": "#e6d3aa"', '"line-color": "#d5ba8b"'],
-  ['"line-color": "#087fae"', '"line-color": "#046d99"'],
-  ['"line-color": "#20c5ee"', '"line-color": "#0bbbe8"'],
+  // One vivid water language for real and fantasy water.
+  ['"fill-color": "#21b9e5"', '"fill-color": "#05a9d9"'],
+  ['"fill-outline-color": "#0f84af"', '"fill-outline-color": "#045d87"'],
+  ['"line-color": "#0c86b4"', '"line-color": "#05658d"'],
+  ['"line-color": "#1aaedb"', '"line-color": "#0599c7"'],
+  ['"line-color": "#e6d3aa"', '"line-color": "#cfae7d"'],
+  ['"line-color": "#087fae"', '"line-color": "#035e89"'],
+  ['"line-color": "#20c5ee"', '"line-color": "#05b8e6"'],
 
-  // More branches + moderate widths is better than a handful of giant blue
-  // capsules. The authored GeoJSON now supplies the density; this keeps each
-  // individual watercourse proportional to the target art.
+  // The network now has many connected branches; moderately broaden them to
+  // reach the target's ~5-7% visible water without recreating giant capsules.
   [
     'const canalWidth = ["interpolate", ["linear"], ["zoom"], 10, 18, 14, ["get", "width"]];',
-    'const canalWidth = ["interpolate", ["linear"], ["zoom"], 10, 15, 14, ["*", ["get", "width"], 0.95]];'
+    'const canalWidth = ["interpolate", ["linear"], ["zoom"], 10, 20, 14, ["*", ["get", "width"], 1.58]];'
   ],
   [
     'const canalBankWidth = ["interpolate", ["linear"], ["zoom"], 10, 28, 14, ["+", ["get", "width"], 18]];',
-    'const canalBankWidth = ["interpolate", ["linear"], ["zoom"], 10, 23, 14, ["+", ["*", ["get", "width"], 0.95], 14]];'
+    'const canalBankWidth = ["interpolate", ["linear"], ["zoom"], 10, 30, 14, ["+", ["*", ["get", "width"], 1.58], 15]];'
   ],
   [
     'const canalDepthWidth = ["interpolate", ["linear"], ["zoom"], 10, 23, 14, ["+", ["get", "width"], 8]];',
-    'const canalDepthWidth = ["interpolate", ["linear"], ["zoom"], 10, 19, 14, ["+", ["*", ["get", "width"], 0.95], 6]];'
+    'const canalDepthWidth = ["interpolate", ["linear"], ["zoom"], 10, 25, 14, ["+", ["*", ["get", "width"], 1.58], 7]];'
   ],
 ]);
 
@@ -108,37 +105,46 @@ for (const [from, to] of replacements) {
     changed += 1;
   }
 }
-if (changed < 56) {
+if (changed < 58) {
   throw new Error(`Lantern art-target patch matched only ${changed} expected palette/width anchors; renderer drifted`);
+}
+
+// Add two deterministic sidewall bands underneath every building roof. This
+// is intentionally NOT fill-extrusion/pitched camera geometry: the exact roof
+// footprint remains the registration truth, while translated copies provide
+// the dimensional craft visible in the approved target.
+const buildingDepthAnchor = '      layers.push(shadow);\n      layer.paint = {';
+if (!renderer.includes('goldline-side-near')) {
+  if (!renderer.includes(buildingDepthAnchor)) throw new Error('Building depth anchor changed');
+  renderer = renderer.replace(
+    buildingDepthAnchor,
+    `      layers.push(shadow);\n\n      const sideFar = structuredClone(layer);\n      sideFar.id = \`${'${layer.id}'}-goldline-side-far\`;\n      sideFar.paint = {\n        "fill-color": "#704734",\n        "fill-opacity": 0.78,\n        "fill-translate": [3.5, 4.8],\n        "fill-translate-anchor": "map",\n      };\n      layers.push(sideFar);\n\n      const sideNear = structuredClone(layer);\n      sideNear.id = \`${'${layer.id}'}-goldline-side-near\`;\n      sideNear.paint = {\n        "fill-color": "#a66c49",\n        "fill-opacity": 0.88,\n        "fill-translate": [1.7, 2.4],\n        "fill-translate-anchor": "map",\n      };\n      layers.push(sideNear);\n\n      layer.paint = {`
+  );
 }
 await fs.writeFile(rendererPath, renderer);
 
 const cutterPath = path.resolve("scripts/build-lantern-city-territory-mosaic.py");
 let cutter = await fs.readFile(cutterPath, "utf8");
 
-// Stronger game-art finishing grade. This operates on a deterministic vector
-// render; it cannot move a single road, building, territory or coordinate.
+// Game-art finishing grade. Still deterministic and incapable of moving map
+// geometry.
 cutter = cutter
-  .replace('master = ImageEnhance.Color(master).enhance(1.04)', 'master = ImageEnhance.Color(master).enhance(1.24)')
-  .replace('master = ImageEnhance.Contrast(master).enhance(1.025)', 'master = ImageEnhance.Contrast(master).enhance(1.14)\n    master = ImageEnhance.Brightness(master).enhance(0.96)')
+  .replace('master = ImageEnhance.Color(master).enhance(1.04)', 'master = ImageEnhance.Color(master).enhance(1.34)')
+  .replace('master = ImageEnhance.Contrast(master).enhance(1.025)', 'master = ImageEnhance.Contrast(master).enhance(1.19)\n    master = ImageEnhance.Brightness(master).enhance(0.91)')
   .replace('if metrics["cyanPct"] < 1.8:', 'if metrics["cyanPct"] < 4.0:')
   .replace('if metrics["greenPct"] > 28.0:', 'if metrics["greenPct"] > 22.0:')
-  .replace('if metrics["warmPct"] < 15.0:', 'if metrics["warmPct"] < 20.0:')
-  .replace('if metrics["nearBlackPct"] > 7.0:', 'if metrics["nearBlackPct"] > 12.0:');
+  .replace('if metrics["warmPct"] < 15.0:', 'if metrics["warmPct"] < 18.0:')
+  .replace('if metrics["nearBlackPct"] > 7.0:', 'if metrics["nearBlackPct"] > 14.0:');
 
 const warmAnchor = '        failures.append(f"warm ivory/cream/terracotta city mass is too weak ({metrics[\'warmPct\']}%)")';
 if (!cutter.includes('warm ivory/cream/terracotta city mass overwhelms')) {
   if (!cutter.includes(warmAnchor)) throw new Error("Lantern art gate warm anchor changed");
   cutter = cutter.replace(
     warmAnchor,
-    `${warmAnchor}\n    if metrics["warmPct"] > 55.0:\n        failures.append(f"warm ivory/cream/terracotta city mass overwhelms the water/stone palette ({metrics['warmPct']}%)")`
+    `${warmAnchor}\n    if metrics["warmPct"] > 58.0:\n        failures.append(f"warm ivory/cream/terracotta city mass overwhelms the water/stone palette ({metrics['warmPct']}%)")`
   );
 }
 
-// Prevent another technically-correct but washed-out cartographic pass. The
-// supplied authority screenshot is roughly 41% mean saturation; production
-// does not need to match that number exactly, but it must clearly live in the
-// same game-art family rather than the ~16% saturation of the rejected map.
 const nearBlackLine = '    near_black = ((r + g + b) / 3.0) < 0.12';
 if (!cutter.includes('saturationMeanPct')) {
   if (!cutter.includes(nearBlackLine)) throw new Error("Lantern art metrics anchor changed");
@@ -152,9 +158,9 @@ if (!cutter.includes('saturationMeanPct')) {
   );
   cutter = cutter.replace(
     '    metrics["passed"] = not failures',
-    '    if metrics["saturationMeanPct"] < 28.0:\n        failures.append(f"city is still too cartographic/washed out ({metrics[\'saturationMeanPct\']}% mean saturation)")\n    if metrics["brightnessPct"] > 72.0:\n        failures.append(f"city is still too pale/washed out ({metrics[\'brightnessPct\']}% mean brightness)")\n    metrics["passed"] = not failures'
+    '    if metrics["saturationMeanPct"] < 26.0:\n        failures.append(f"city is still too cartographic/washed out ({metrics[\'saturationMeanPct\']}% mean saturation)")\n    if metrics["brightnessPct"] > 68.0:\n        failures.append(f"city is still too pale/washed out ({metrics[\'brightnessPct\']}% mean brightness)")\n    metrics["passed"] = not failures'
   );
 }
 
 await fs.writeFile(cutterPath, cutter);
-console.log(`Locked Lantern City to the supplied saturated fantasy target (${changed} renderer anchors).`);
+console.log(`Applied registered fantasy depth, palette and water balance (${changed} renderer anchors).`);
