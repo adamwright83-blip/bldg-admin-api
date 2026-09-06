@@ -5,7 +5,7 @@
   "features": [
     {
       "type": "Feature",
-      "properties": { "id": "western-canal", "name": "Western Canal", "width": 44 },
+      "properties": { "id": "western-canal", "name": "Western Canal", "width": 92 },
       "geometry": {
         "type": "LineString",
         "coordinates": [
@@ -21,7 +21,7 @@
     },
     {
       "type": "Feature",
-      "properties": { "id": "hollywood-river", "name": "Hollywood River", "width": 40 },
+      "properties": { "id": "hollywood-river", "name": "Hollywood River", "width": 84 },
       "geometry": {
         "type": "LineString",
         "coordinates": [
@@ -38,7 +38,7 @@
     },
     {
       "type": "Feature",
-      "properties": { "id": "silver-channel", "name": "Silver Channel", "width": 46 },
+      "properties": { "id": "silver-channel", "name": "Silver Channel", "width": 96 },
       "geometry": {
         "type": "LineString",
         "coordinates": [
@@ -57,7 +57,7 @@
     },
     {
       "type": "Feature",
-      "properties": { "id": "southern-aqueduct", "name": "Southern Aqueduct", "width": 38 },
+      "properties": { "id": "southern-aqueduct", "name": "Southern Aqueduct", "width": 80 },
       "geometry": {
         "type": "LineString",
         "coordinates": [
@@ -79,7 +79,7 @@
     },
     {
       "type": "Feature",
-      "properties": { "id": "central-ring-north", "name": "Central Ring North", "width": 30 },
+      "properties": { "id": "central-ring-north", "name": "Central Ring North", "width": 63 },
       "geometry": {
         "type": "LineString",
         "coordinates": [
@@ -96,7 +96,7 @@
     },
     {
       "type": "Feature",
-      "properties": { "id": "central-ring-south", "name": "Central Ring South", "width": 30 },
+      "properties": { "id": "central-ring-south", "name": "Central Ring South", "width": 63 },
       "geometry": {
         "type": "LineString",
         "coordinates": [
@@ -113,7 +113,7 @@
     },
     {
       "type": "Feature",
-      "properties": { "id": "beverly-lagoon-spur", "name": "Beverly Lagoon Spur", "width": 26 },
+      "properties": { "id": "beverly-lagoon-spur", "name": "Beverly Lagoon Spur", "width": 55 },
       "geometry": {
         "type": "LineString",
         "coordinates": [
@@ -127,7 +127,7 @@
     },
     {
       "type": "Feature",
-      "properties": { "id": "koreatown-crossing", "name": "Koreatown Crossing", "width": 25 },
+      "properties": { "id": "koreatown-crossing", "name": "Koreatown Crossing", "width": 53 },
       "geometry": {
         "type": "LineString",
         "coordinates": [
@@ -140,7 +140,7 @@
     },
     {
       "type": "Feature",
-      "properties": { "id": "silver-crossing", "name": "Silver Crossing", "width": 26 },
+      "properties": { "id": "silver-crossing", "name": "Silver Crossing", "width": 55 },
       "geometry": {
         "type": "LineString",
         "coordinates": [
@@ -155,7 +155,7 @@
     },
     {
       "type": "Feature",
-      "properties": { "id": "downtown-harbor-spur", "name": "Downtown Harbor Spur", "width": 32 },
+      "properties": { "id": "downtown-harbor-spur", "name": "Downtown Harbor Spur", "width": 67 },
       "geometry": {
         "type": "LineString",
         "coordinates": [
@@ -170,7 +170,7 @@
     },
     {
       "type": "Feature",
-      "properties": { "id": "echo-park-link", "name": "Echo Park Link", "width": 24 },
+      "properties": { "id": "echo-park-link", "name": "Echo Park Link", "width": 51 },
       "geometry": {
         "type": "LineString",
         "coordinates": [
