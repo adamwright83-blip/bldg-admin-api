@@ -34,6 +34,7 @@
     "goldline:bundle:budget": "node scripts/checkGoldlineBundleBudget.mjs",
     "goldline:geocode:backfill": "tsx scripts/goldline-geocode-backfill.ts",
     "goldline:territory:audit": "tsx scripts/goldline-territory-audit.ts",
+    "goldline:territory-art:export": "tsx scripts/export-lantern-city-territory-art-inputs.ts",
     "dayforge:demo": "tsx scripts/dayforge-demo.ts",
     "test:goldline:smoke": "playwright test --config playwright.goldline-smoke.config.ts",
     "test:goldline:territories:smoke": "playwright test --config playwright.goldline-smoke.config.ts e2e/goldline-smoke/territoriesSmoke.spec.ts",
