@@ -7,7 +7,6 @@ import math
 import os
 import pathlib
 import shutil
-import sys
 import time
 import urllib.parse
 import urllib.request
@@ -18,7 +17,7 @@ from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 INPUTS = ROOT / "artifacts" / "lantern-city-territory-art-inputs"
-AUTHORITATIVE = INPUTS / "_authoritative-manifest.json"
+TERRITORY_INDEX = INPUTS / "_qa" / "territory-index.json"
 OUT = ROOT / "client" / "public" / "assets" / "admin" / "control-room" / "world" / "territories-v2"
 QA = ROOT / "screenshots" / "lantern-city-v2"
 MASTER_DIR = ROOT / "artifacts" / "lantern-city-territory-mosaic"
@@ -63,7 +62,7 @@ def request_bytes(url: str, attempts: int = 4) -> bytes:
             req = urllib.request.Request(url, headers={"User-Agent": "Goldline-LanternCity-Renderer/1.0"})
             with urllib.request.urlopen(req, timeout=120) as response:
                 return response.read()
-        except Exception as exc:  # pragma: no cover - network retry path
+        except Exception as exc:
             last = exc
             if attempt + 1 < attempts:
                 time.sleep(2 ** attempt)
@@ -108,8 +107,7 @@ def fetch_master(projection: dict) -> Image.Image:
                     "f": "image",
                 }
             )
-            url = f"{ARCGIS_SERVICE}/export?{params}"
-            data = request_bytes(url)
+            data = request_bytes(f"{ARCGIS_SERVICE}/export?{params}")
             import io
             tile = Image.open(io.BytesIO(data)).convert("RGB")
             if tile.size != (tile_w, tile_h):
@@ -143,8 +141,7 @@ def stylize(master: Image.Image) -> Image.Image:
     styled = Image.fromarray(np.uint8(arr * 255), "RGB")
     poster = ImageOps.posterize(styled, 6)
     styled = Image.blend(styled, poster, 0.10)
-    styled = styled.filter(ImageFilter.UnsharpMask(radius=1.2, percent=115, threshold=3))
-    return styled
+    return styled.filter(ImageFilter.UnsharpMask(radius=1.2, percent=115, threshold=3))
 
 
 def pct_crop(bbox: dict) -> tuple[int, int, int, int]:
@@ -185,16 +182,40 @@ def assemble_preview(entries: list[dict]) -> Image.Image:
     return result
 
 
-def main() -> None:
-    if not AUTHORITATIVE.exists():
+def load_exported_territories() -> tuple[list[dict], dict]:
+    if not TERRITORY_INDEX.exists():
         raise SystemExit(
-            "Missing artifacts/lantern-city-territory-art-inputs/_authoritative-manifest.json. "
+            "Missing artifacts/lantern-city-territory-art-inputs/_qa/territory-index.json. "
             "Run `pnpm goldline:territory-art:export` first."
         )
-    manifest = json.loads(AUTHORITATIVE.read_text())
-    territories = manifest.get("territories") or []
-    if len(territories) != 61:
-        raise SystemExit(f"Expected 61 territories, got {len(territories)}")
+    index_doc = json.loads(TERRITORY_INDEX.read_text())
+    index_entries = index_doc.get("territories") or []
+    if len(index_entries) != 61:
+        raise SystemExit(f"Expected 61 exported territories, got {len(index_entries)}")
+
+    territories: list[dict] = []
+    projection = None
+    for entry in index_entries:
+        territory_id = entry["territoryId"]
+        meta_path = INPUTS / territory_id / "metadata.json"
+        mask_path = INPUTS / territory_id / "mask.png"
+        if not meta_path.exists() or not mask_path.exists():
+            raise SystemExit(f"Missing exported geometry package for {territory_id}")
+        meta = json.loads(meta_path.read_text())
+        projection = projection or meta.get("projection")
+        territories.append({
+            "territoryId": territory_id,
+            "name": meta.get("name") or entry.get("name") or territory_id,
+            "meta": meta,
+            "maskPath": mask_path,
+        })
+    if not projection:
+        raise SystemExit("No projection found in exported territory metadata")
+    return territories, projection
+
+
+def main() -> None:
+    territories, projection = load_exported_territories()
 
     MASTER_DIR.mkdir(parents=True, exist_ok=True)
     QA.mkdir(parents=True, exist_ok=True)
@@ -202,7 +223,7 @@ def main() -> None:
         shutil.rmtree(OUT)
     OUT.mkdir(parents=True, exist_ok=True)
 
-    raw = fetch_master(manifest["projection"])
+    raw = fetch_master(projection)
     master = stylize(raw)
     master.save(MASTER_PATH, "PNG", optimize=True)
     save_preview(master, QA / "territory-mosaic-master-preview.jpg")
@@ -211,28 +232,21 @@ def main() -> None:
     gate_seen: set[str] = set()
     for territory in territories:
         territory_id = territory["territoryId"]
-        meta_path = INPUTS / territory_id / "metadata.json"
-        mask_path = INPUTS / territory_id / "mask.png"
-        if not meta_path.exists() or not mask_path.exists():
-            raise SystemExit(f"Missing exported geometry package for {territory_id}")
-        meta = json.loads(meta_path.read_text())
+        meta = territory["meta"]
         bbox = meta["atlasBBoxPct"]
-        crop_box = pct_crop(bbox)
-        crop = master.crop(crop_box).convert("RGBA")
-        mask = Image.open(mask_path).convert("L").resize(crop.size, Image.Resampling.LANCZOS)
+        crop = master.crop(pct_crop(bbox)).convert("RGBA")
+        mask = Image.open(territory["maskPath"]).convert("L").resize(crop.size, Image.Resampling.LANCZOS)
         crop.putalpha(mask)
         filename = f"{territory_id}.webp"
-        dest = OUT / filename
-        crop.save(dest, "WEBP", quality=92, method=6, exact=True)
-        entry = {
+        crop.save(OUT / filename, "WEBP", quality=92, method=6, exact=True)
+        entries.append({
             "territoryId": territory_id,
             "name": territory["name"],
             "src": f"/assets/admin/control-room/world/territories-v2/{filename}",
             "atlasBBoxPct": bbox,
             "naturalWidth": crop.width,
             "naturalHeight": crop.height,
-        }
-        entries.append(entry)
+        })
         if territory_id in FIRST_GATE:
             gate_seen.add(territory_id)
 
@@ -245,7 +259,7 @@ def main() -> None:
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "source": "single continuous geography-registered master; territory alpha from authoritative Goldline masks",
         "attribution": service_attribution(),
-        "projection": manifest["projection"],
+        "projection": projection,
         "master": {"width": MASTER_W, "height": MASTER_H},
         "territories": entries,
     }
