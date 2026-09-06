@@ -37,5 +37,13 @@ source = source.replace(
   '{showOpportunityLayer && opportunity && !googleVisible && mode !== "lantern_atlas" ? ('
 );
 
+// The opportunity projection currently arrives through a loosely typed tRPC
+// surface in this legacy component. Keep the integration patch from adding a
+// new noImplicitAny failure while the repo-wide historical type debt remains.
+source = source.replace(
+  "opportunity.districts.map(district => (",
+  "opportunity.districts.map((district: any) => ("
+);
+
 await fs.writeFile(file, source);
 console.log("WorldGeographySurface patched for HD territory mosaic and clean Lantern City lighting.");
