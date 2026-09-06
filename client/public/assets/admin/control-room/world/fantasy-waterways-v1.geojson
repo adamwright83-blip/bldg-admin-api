@@ -1,0 +1,105 @@
+{
+  "type": "FeatureCollection",
+  "name": "goldline-fantasy-waterways-v1",
+  "description": "Presentation-only Lantern City waterways. They never participate in routing, territory classification, customer geography, or business truth. Real roads/buildings always render above them; where they cross, the real road remains authoritative and reads visually as a bridge.",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "id": "western-canal", "name": "Western Canal", "width": 54 },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-118.441, 34.047],
+          [-118.425, 34.052],
+          [-118.411, 34.060],
+          [-118.398, 34.069],
+          [-118.384, 34.078],
+          [-118.369, 34.083],
+          [-118.353, 34.080],
+          [-118.339, 34.071]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "hollywood-river", "name": "Hollywood River", "width": 48 },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-118.385, 34.118],
+          [-118.369, 34.109],
+          [-118.352, 34.101],
+          [-118.337, 34.093],
+          [-118.323, 34.084],
+          [-118.310, 34.074],
+          [-118.299, 34.063],
+          [-118.291, 34.052]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "silver-channel", "name": "Silver Channel", "width": 50 },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-118.312, 34.130],
+          [-118.300, 34.119],
+          [-118.289, 34.109],
+          [-118.279, 34.099],
+          [-118.271, 34.090],
+          [-118.263, 34.081],
+          [-118.252, 34.071],
+          [-118.239, 34.061]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "southern-aqueduct", "name": "Southern Aqueduct", "width": 44 },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-118.438, 34.036],
+          [-118.417, 34.042],
+          [-118.395, 34.047],
+          [-118.373, 34.051],
+          [-118.350, 34.053],
+          [-118.327, 34.051],
+          [-118.305, 34.046],
+          [-118.282, 34.041],
+          [-118.258, 34.038],
+          [-118.232, 34.041]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "central-ring-north", "name": "Central Ring North", "width": 34 },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-118.368, 34.071],
+          [-118.355, 34.067],
+          [-118.341, 34.066],
+          [-118.328, 34.068],
+          [-118.316, 34.073]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "central-ring-south", "name": "Central Ring South", "width": 34 },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-118.367, 34.059],
+          [-118.352, 34.056],
+          [-118.337, 34.057],
+          [-118.322, 34.061],
+          [-118.308, 34.068]
+        ]
+      }
+    }
+  ]
+}
