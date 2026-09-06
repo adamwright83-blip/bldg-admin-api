@@ -1,13 +1,15 @@
+import "./lantern-city-production-safety.css";
+
 /**
- * Emergency safety gate for Lantern City's generated territory mosaic.
+ * Production safety gate for Lantern City's territory mosaic.
  *
- * The latest generated 61-piece vector mosaic is geographically registered but
+ * The generated 61-piece vector mosaic is geographically registered but
  * visually unacceptable: it reads as a posterized street map rather than the
- * approved authored fantasy city. Keep the component mounted in
- * WorldGeographySurface so the architecture can be restored later, but render
- * nothing until a genuinely art-directed replacement is approved.
+ * approved authored fantasy city. Keep this component mounted so its scoped
+ * production-art safety rules load, but render no generated map art until an
+ * authored, reviewed territory set is explicitly approved.
  *
- * The existing authored atlas underneath remains the production surface.
+ * The authored atlas underneath remains the production surface.
  */
 export function LanternTerritoryMosaic() {
   return null;
