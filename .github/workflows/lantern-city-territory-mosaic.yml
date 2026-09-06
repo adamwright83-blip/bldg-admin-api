@@ -1,0 +1,84 @@
+name: Build Lantern City HD Territory Mosaic
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/render-lantern-city-vector-master.mjs"
+      - "scripts/build-lantern-city-territory-mosaic.py"
+      - "scripts/apply-lantern-territory-mosaic-patch.mjs"
+      - "scripts/export-lantern-city-territory-art-inputs.ts"
+      - "scripts/render-lantern-city-territory-art-inputs.py"
+      - "shared/lanternTerritories.ts"
+      - "shared/lanternCity.ts"
+      - "client/src/components/admin/control-room/LanternTerritoryMosaic.tsx"
+      - "client/src/components/admin/control-room/lantern-territory-mosaic.css"
+      - ".github/workflows/lantern-city-territory-mosaic.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lantern-city-territory-mosaic
+  cancel-in-progress: false
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install image pipeline dependencies
+        run: python -m pip install --disable-pip-version-check pillow numpy
+
+      - name: Apply renderer integration
+        run: node scripts/apply-lantern-territory-mosaic-patch.mjs
+
+      - name: Export authoritative territory geometry
+        run: pnpm goldline:territory-art:export
+
+      - name: Build one continuous HD world and cut all 61 territories
+        run: node scripts/render-lantern-city-vector-master.mjs
+
+      - name: Typecheck
+        run: pnpm check
+
+      - name: Production build
+        run: pnpm build
+
+      - name: Commit verified mosaic and integration to main
+        shell: bash
+        run: |
+          git config user.name "goldline-world-builder"
+          git config user.email "actions@users.noreply.github.com"
+          git add \
+            client/src/components/admin/control-room/WorldGeographySurface.tsx \
+            client/public/assets/admin/control-room/world/territories-v2 \
+            screenshots/lantern-city-v2/territory-mosaic-master-preview.jpg \
+            screenshots/lantern-city-v2/territory-mosaic-assembled-preview.jpg
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit."
+            exit 0
+          fi
+          git commit -m "Generate geography-locked HD Lantern City mosaic"
+          git pull --rebase origin main
+          git push origin HEAD:main
