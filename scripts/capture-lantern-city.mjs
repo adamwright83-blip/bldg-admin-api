@@ -30,6 +30,7 @@ const scenario = process.env.TOWER_WARS_STATE || "live";
 const customerScenario = process.env.LANTERN_CUSTOMER_STATE || "full";
 const territoryScenario = process.env.LANTERN_TERRITORY_STATE || "fixture";
 const territoryDebug = process.env.LANTERN_TERRITORY_DEBUG === "1";
+const worldTruth = process.env.LANTERN_WORLD_TRUTH === "1";
 
 const VIEWPORTS = [
   { name: "1440x900", width: 1440, height: 900 },
@@ -274,7 +275,11 @@ const report = [];
 for (const viewport of VIEWPORTS) {
   consoleErrors.length = 0;
   await page.setViewportSize({ width: viewport.width, height: viewport.height });
-  await page.goto(`${origin}/growth/lantern-city${territoryDebug ? "?territoryDebug=1" : ""}`, { waitUntil: "networkidle" });
+  const query = new URLSearchParams();
+  if (territoryDebug) query.set("territoryDebug", "1");
+  if (worldTruth) query.set("worldTruth", "1");
+  const queryString = query.toString();
+  await page.goto(`${origin}/growth/lantern-city${queryString ? `?${queryString}` : ""}`, { waitUntil: "networkidle" });
   await page.waitForTimeout(900);
   /*
     JPEG, not PNG. These are visual QA artifacts of a photographic map: the
@@ -282,8 +287,34 @@ for (const viewport of VIEWPORTS) {
     script regenerates on demand. Quality 82 keeps every detail this pass is
     judged on and costs ~400KB a frame.
   */
-  const file = `lantern-city-${scenario}-${customerScenario}${territoryDebug ? "-territory-debug" : ""}-${viewport.name}.jpg`;
+  const file = `lantern-city-${scenario}-${customerScenario}${territoryDebug ? "-territory-debug" : ""}${worldTruth ? "-world-truth" : ""}-${viewport.name}.jpg`;
   await page.screenshot({ path: path.join(outputDir, file), type: "jpeg", quality: 82 });
+
+  // Browser-level zoom QA for the real Admin composition. The camera uses
+  // factor = exp(-deltaY * .0016), so these wheel deltas are approximately
+  // 2x and then 3x relative to the default pose. This exercises the actual
+  // Goldline camera instead of merely cropping the generated master.
+  if (viewport.name === "1920x1080" && !worldTruth && !territoryDebug) {
+    const host = page.locator(".cr-world-camera");
+    const box = await host.boundingBox();
+    if (box) {
+      await page.mouse.move(box.x + box.width * 0.56, box.y + box.height * 0.52);
+      await page.mouse.wheel(0, -433);
+      await page.waitForTimeout(350);
+      await page.screenshot({
+        path: path.join(outputDir, "lantern-city-vector-fantasy-zoom-200.jpg"),
+        type: "jpeg",
+        quality: 88,
+      });
+      await page.mouse.wheel(0, -253);
+      await page.waitForTimeout(350);
+      await page.screenshot({
+        path: path.join(outputDir, "lantern-city-vector-fantasy-zoom-300.jpg"),
+        type: "jpeg",
+        quality: 88,
+      });
+    }
+  }
   let briefing = 0;
   if (customerScenario === "frontier" && viewport === VIEWPORTS[0]) {
     await page.locator(".gl-freedom-object-hit").first().click();
@@ -297,7 +328,7 @@ for (const viewport of VIEWPORTS) {
     });
   }
   report.push({
-    viewport: viewport.name, file, scenario, customerScenario, briefing,
+    viewport: viewport.name, file, scenario, customerScenario, worldTruth, briefing,
     towers: await page.locator("[data-combat='true']").count(),
     lanterns: await page.locator(".lc-lantern").count(),
     veil: await page.locator(".gl-world-veil").count(),

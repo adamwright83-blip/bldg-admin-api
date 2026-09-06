@@ -16,6 +16,7 @@ import { LanternTerritoryMosaic } from "./LanternTerritoryMosaic";
 import type { TowerDamageState } from "@shared/towerWars";
 
 const ATLAS_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas-v4.png";
+const TRUTH_IMAGE = "/assets/admin/control-room/world/lantern-city-truth-reference.jpg";
 
 export type WorldGeographySurfaceProps = {
   mode?: "overview" | "lantern_atlas" | "reality_approach";
@@ -145,6 +146,12 @@ export function WorldGeographySurface({
   const territoryDebug =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("territoryDebug") === "1";
+  // Permanent QA switch: the real vector map and the fantasy surface occupy
+  // the exact same Mercator canvas. Towers/lanterns stay put while only the
+  // presentation skin changes, so registration drift becomes visually obvious.
+  const worldTruth =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("worldTruth") === "1";
   useEffect(() => {
     onGoogleVisibilityChange?.(googleVisible);
   }, [googleVisible, onGoogleVisibilityChange]);
@@ -202,6 +209,7 @@ export function WorldGeographySurface({
     <div
       className={`cr-world-geography-surface mode-${mode} view-atlas ${className}`}
       data-day-phase="day"
+      data-world-truth={worldTruth ? "1" : "0"}
     >
       {/*
         The world container. Everything spatial lives inside it, so the camera
@@ -219,18 +227,18 @@ export function WorldGeographySurface({
       {/* 1. Base Layer: Authored Atlas Skin vs Google Reality 3D Layer */}
         <div className="cr-world-skin-container">
           <img
-            src={ATLAS_IMAGE}
-            alt="Fictional daylight Los Angeles kingdom atlas; real entities are positioned from geographic evidence"
+            src={worldTruth ? TRUTH_IMAGE : ATLAS_IMAGE}
+            alt={worldTruth ? "Neutral real-vector Los Angeles registration reference" : "Fictional daylight Los Angeles kingdom atlas; real entities are positioned from geographic evidence"}
             className="cr-world-skin-img"
           />
-          <div className="cr-world-skin-shade" />
+          {!worldTruth ? <div className="cr-world-skin-shade" /> : null}
         </div>
 
       {/* 1b. HD geography-locked territory mosaic. The v4 atlas remains the safety underlay. */}
-      {!googleVisible ? <LanternTerritoryMosaic /> : null}
+      {!googleVisible && !worldTruth ? <LanternTerritoryMosaic /> : null}
 
       {/* 2. Living Atmosphere Overlay: real clouds, AQI haze, rain */}
-      <WorldAtmosphereOverlay atmosphere={mode === "lantern_atlas" ? null : atmosphere} />
+      <WorldAtmosphereOverlay atmosphere={mode === "lantern_atlas" || worldTruth ? null : atmosphere} />
 
       {/*
         2b. The battlefield lighting pass.
@@ -240,12 +248,12 @@ export function WorldGeographySurface({
         anchored entirely on the canonical buildings' own coordinates — see
         FactionBattlefieldLayer.
       */}
-      {combatPresentation && !googleVisible && mode !== "lantern_atlas" ? (
+      {combatPresentation && !googleVisible && mode !== "lantern_atlas" && !worldTruth ? (
         <FactionBattlefieldLayer emphasised={emphasisedBuildingId} />
       ) : null}
 
       {/* 3. Places Aggregate Opportunity Density / Territory Glow */}
-      {showOpportunityLayer && opportunity && !googleVisible && mode !== "lantern_atlas" ? (
+      {showOpportunityLayer && opportunity && !googleVisible && mode !== "lantern_atlas" && !worldTruth ? (
         <div className="cr-opportunity-layer" aria-hidden="true">
           {opportunity.districts.map((district: any) => (
             <div

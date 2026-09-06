@@ -1,8 +1,8 @@
 {
-  "version": 2,
-  "generatedAt": "2026-09-06T12:54:32.286089+00:00",
-  "source": "single continuous geography-registered master; territory alpha from authoritative Goldline masks",
-  "attribution": "Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community",
+  "version": 3,
+  "generatedAt": "2026-09-06T21:45:02.303853+00:00",
+  "source": "one continuous OpenStreetMap/OpenMapTiles vector master with deterministic Lantern City styling; no satellite imagery; no generative geography",
+  "attribution": "OpenMapTiles Data from OpenStreetMap \u00b7 rendered with OpenFreeMap vector tiles",
   "projection": {
     "west": -118.445,
     "east": -118.225,
@@ -13,6 +13,11 @@
   "master": {
     "width": 7680,
     "height": 4320
+  },
+  "fantasyPresentation": {
+    "waterways": "/assets/admin/control-room/world/fantasy-waterways-v1.geojson",
+    "businessTruthRole": "none",
+    "protectedGeography": "real roads and buildings render above fantasy waterways; crossings preserve the real road alignment as bridges"
   },
   "territories": [
     {
