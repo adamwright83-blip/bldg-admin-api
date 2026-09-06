@@ -5,21 +5,36 @@ import { trpc } from "@/lib/trpc";
 import { WorldGeographySurface } from "./WorldGeographySurface";
 import type { GeographicEntity } from "./GoogleMapsRealityLayer";
 import { WorldDayPhaseIndicator } from "./WorldDayPhase";
-import { clusterGeographicCustomers, clustersAsGoogleEntities, fanOutAtlasCollisions } from "./customerGeography";
+import {
+  clusterGeographicCustomers,
+  clustersAsGoogleEntities,
+  fanOutAtlasCollisions,
+} from "./customerGeography";
 import type { CustomerLocationCluster } from "./customerGeography";
 import { WorldEntityInspector } from "./WorldEntityInspector";
 import { WorldObligationTether } from "./WorldObligationTether";
 import { useArcadeWorld } from "./useArcadeWorld";
-import { describeWorldPresentation, orderByProminence } from "@shared/goldlineWorldPresentation";
+import {
+  describeWorldPresentation,
+  orderByProminence,
+} from "@shared/goldlineWorldPresentation";
 import type { CityWorldEntity } from "../../../../../server/goldlineWorld/cityWorldService";
 import { projectCustomerWindows } from "@shared/goldlineCustomerWindows";
-import { TerritoryChrome, TerritoryWorldLayer, useReducedMotionFlag } from "@/components/goldline/TerritoryWorldLayer";
-import { CampaignChrome, CampaignChronicleList, CampaignWorldLayer } from "@/components/goldline/CampaignWorldLayer";
+import { TerritoryChrome } from "@/components/goldline/TerritoryWorldLayer";
+import {
+  CampaignChrome,
+  CampaignChronicleList,
+  CampaignWorldLayer,
+} from "@/components/goldline/CampaignWorldLayer";
 import { CRITICAL_COMBAT_ASSETS } from "./lanternCityCombat";
 import { WorldVeilLayer } from "@/components/goldline/board/WorldVeilLayer";
 import { GuardianActor } from "@/components/goldline/GuardianActor";
 import { guardianById } from "@shared/goldlineGuardians";
-import type { NeighbourhoodVeil } from "@shared/neighbourhoodVeil";
+import {
+  territoryByName,
+  territoryCenter,
+  type TerritoryOccupancy,
+} from "@shared/lanternTerritories";
 
 export {
   inferCustomerCadence,
@@ -120,20 +135,28 @@ function ArcadeBodyLayer({
     >
       <span className={`lc-weapon-${weapon}`} />
       {weapon === "valet_bazooka" ? <span className="lc-projectile" /> : null}
-      <span className="lc-arcade-damage" style={{ opacity: Math.min(0.85, damage) }} />
-      <span className="lc-arcade-scorch" style={{ opacity: Math.min(0.7, damage * 0.8) }} />
+      <span
+        className="lc-arcade-damage"
+        style={{ opacity: Math.min(0.85, damage) }}
+      />
+      <span
+        className="lc-arcade-scorch"
+        style={{ opacity: Math.min(0.7, damage * 0.8) }}
+      />
       <span className="lc-arcade-debris">
-        {Array.from({ length: Math.min(8, body?.debris ?? 0) }).map((_, index) => (
-          <i
-            key={index}
-            style={
-              {
-                "--dx": `${(index % 4) * 12 - 18}px`,
-                "--dy": `${-14 - index * 4}px`,
-              } as React.CSSProperties
-            }
-          />
-        ))}
+        {Array.from({ length: Math.min(8, body?.debris ?? 0) }).map(
+          (_, index) => (
+            <i
+              key={index}
+              style={
+                {
+                  "--dx": `${(index % 4) * 12 - 18}px`,
+                  "--dy": `${-14 - index * 4}px`,
+                } as React.CSSProperties
+              }
+            />
+          )
+        )}
       </span>
     </span>
   );
@@ -160,28 +183,43 @@ function FrontierBriefing({
   neighbourhood,
   onClose,
 }: {
-  neighbourhood: NeighbourhoodVeil;
+  neighbourhood: TerritoryOccupancy;
   onClose: () => void;
 }) {
-  const guardian = guardianById(neighbourhood.guardianId!);
-  const intelligence = trpc.system.goldlineWorld.frontierIntelligence.useQuery({
-    neighbourhood: neighbourhood.name,
-    latitude: neighbourhood.latitude,
-    longitude: neighbourhood.longitude,
-  }, { staleTime: 60 * 60 * 1000, retry: false });
+  const territory = neighbourhood.territory;
+  const guardian = guardianById(territory.initialGuardianId!);
+  const center = territoryCenter(territory);
+  const intelligence = trpc.system.goldlineWorld.frontierIntelligence.useQuery(
+    {
+      territoryId: territory.id,
+      neighbourhood: territory.name,
+      latitude: center.latitude,
+      longitude: center.longitude,
+    },
+    { staleTime: 60 * 60 * 1000, retry: false }
+  );
   const salons = intelligence.data?.salons ?? [];
   const streets = intelligence.data?.streets ?? [];
   return (
-    <div className="lc-frontier-scrim" role="presentation" onMouseDown={event => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
+    <div
+      className="lc-frontier-scrim"
+      role="presentation"
+      onMouseDown={event => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <section
         className="lc-frontier-briefing"
         role="dialog"
         aria-modal="true"
         aria-labelledby="lc-frontier-title"
       >
-        <button className="lc-frontier-close" type="button" onClick={onClose} aria-label="Return to Lantern City">
+        <button
+          className="lc-frontier-close"
+          type="button"
+          onClick={onClose}
+          aria-label="Return to Lantern City"
+        >
           <X aria-hidden />
         </button>
         <div className="lc-frontier-guardian" aria-hidden>
@@ -189,24 +227,65 @@ function FrontierBriefing({
         </div>
         <div className="lc-frontier-copy">
           <p className="lc-frontier-kicker">Territory counsel · unconquered</p>
-          <h2 id="lc-frontier-title">{neighbourhood.name} is under guard</h2>
+          <h2 id="lc-frontier-title">{territory.name} is under guard</h2>
           <p className="lc-frontier-sage">
             “To defeat {guardian.name}, hit them where it hurts: put Goldline in
             front of the people most likely to place the first order here.”
           </p>
           <div className="lc-frontier-objectives" aria-label="Conquest plan">
-            <article><b>01</b><span><strong>Win the trade</strong><small>Deliver salon-specific flyers to {salons.length || 10} high-fit salons.</small></span></article>
-            {salons.length ? <ol className="lc-frontier-targets">
-              {salons.map(salon => <li key={salon.placeId}>
-                <a href={salon.sourceUrl} target="_blank" rel="noreferrer">{salon.businessName}</a>
-                <span>{salon.address}{salon.rating ? ` · ${salon.rating}★` : ""}</span>
-              </li>)}
-            </ol> : null}
-            <article><b>02</b><span><strong>Take the blocks</strong><small>Hang 100 door cards on high-potential residential streets.</small></span></article>
-            {streets.length ? <ol className="lc-frontier-targets is-streets">
-              {streets.map(street => <li key={street.name}><strong>{street.name}</strong><span>{street.rationale}</span></li>)}
-            </ol> : null}
-            <article><b>03</b><span><strong>Light the first lantern</strong><small>Convert one verified resident order in {neighbourhood.name}.</small></span></article>
+            <article>
+              <b>01</b>
+              <span>
+                <strong>Win the trade</strong>
+                <small>
+                  Deliver salon-specific flyers to {salons.length || 10}{" "}
+                  high-fit salons.
+                </small>
+              </span>
+            </article>
+            {salons.length ? (
+              <ol className="lc-frontier-targets">
+                {salons.map(salon => (
+                  <li key={salon.placeId}>
+                    <a href={salon.sourceUrl} target="_blank" rel="noreferrer">
+                      {salon.businessName}
+                    </a>
+                    <span>
+                      {salon.address}
+                      {salon.rating ? ` · ${salon.rating}★` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+            <article>
+              <b>02</b>
+              <span>
+                <strong>Take the blocks</strong>
+                <small>
+                  Hang 100 door cards on high-potential residential streets.
+                </small>
+              </span>
+            </article>
+            {streets.length ? (
+              <ol className="lc-frontier-targets is-streets">
+                {streets.map(street => (
+                  <li key={street.name}>
+                    <strong>{street.name}</strong>
+                    <span>{street.rationale}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+            <article>
+              <b>03</b>
+              <span>
+                <strong>Light the first lantern</strong>
+                <small>
+                  Convert one verified resident order in {territory.name}.
+                </small>
+              </span>
+            </article>
           </div>
           <p className="lc-frontier-intel">
             {intelligence.isLoading
@@ -215,7 +294,13 @@ function FrontierBriefing({
                 ? "Territory intelligence is temporarily unavailable. Try this guardian again."
                 : intelligence.data?.note}
           </p>
-          <button type="button" className="lc-frontier-return" onClick={onClose}>Return to the city</button>
+          <button
+            type="button"
+            className="lc-frontier-return"
+            onClick={onClose}
+          >
+            Return to the city
+          </button>
         </div>
       </section>
     </div>
@@ -230,15 +315,37 @@ export default function LanternCityAtlas({
   onNavigate: (path: string) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [selectedCluster, setSelectedCluster] = useState<CustomerLocationCluster | null>(null);
+  const [selectedCluster, setSelectedCluster] =
+    useState<CustomerLocationCluster | null>(null);
   const [selectedPursuit, setSelectedPursuit] = useState<
     NonNullable<ReturnType<typeof useAtlasData>>["pursued"][number] | null
   >(null);
 
   const atlas = trpc.system.geographicTruth.atlas.useQuery(undefined, {
-    staleTime: 30_000, refetchInterval: 15_000,
+    staleTime: 30_000,
+    refetchInterval: 15_000,
   });
-  const cityWorld = trpc.system.goldlineWorld.cityEntities.useQuery(undefined, { staleTime: 5_000, refetchInterval: 5_000 });
+  const cityWorld = trpc.system.goldlineWorld.cityEntities.useQuery(undefined, {
+    staleTime: 5_000,
+    refetchInterval: 5_000,
+  });
+  const territoryWorld = trpc.system.goldlineWorld.territories.useQuery(
+    undefined,
+    { staleTime: 30_000 }
+  );
+  const conqueredTerritoryIds = useMemo(
+    () =>
+      new Set(
+        (territoryWorld.data ?? []).flatMap(item => {
+          if (!item.state.cleared || item.state.pressureReturned) return [];
+          const territory = territoryByName(
+            item.definition.realGeographyLabel ?? ""
+          );
+          return territory ? [territory.id] : [];
+        })
+      ),
+    [territoryWorld.data]
+  );
   /*
     THE ONLY DAMAGE SOURCE THE CITY IS ALLOWED.
 
@@ -331,8 +438,8 @@ export default function LanternCityAtlas({
 
   const [googleVisible, setGoogleVisible] = useState(false);
   const [guardianLocked, setGuardianLocked] = useState(false);
-  const [frontierBriefing, setFrontierBriefing] = useState<NeighbourhoodVeil | null>(null);
-  const reducedMotion = useReducedMotionFlag();
+  const [frontierBriefing, setFrontierBriefing] =
+    useState<TerritoryOccupancy | null>(null);
   /*
     One scheduler drives every playable building. Only the places actually
     drawn are handed to it, so offscreen towers cost nothing.
@@ -342,7 +449,10 @@ export default function LanternCityAtlas({
     [cityWorld.data]
   );
   const arcade = useArcadeWorld({ visibleIds: visibleEntityIds });
-  const customerClusters = useMemo(() => clusterGeographicCustomers(visibleCustomers as any), [visibleCustomers]);
+  const customerClusters = useMemo(
+    () => clusterGeographicCustomers(visibleCustomers as any),
+    [visibleCustomers]
+  );
 
   /*
     Buildings are matched on the server, against the same normaliser the
@@ -360,12 +470,14 @@ export default function LanternCityAtlas({
   const entityByResident = useMemo(() => {
     const map = new Map<string, CityWorldEntity>();
     for (const entity of cityWorld.data ?? []) {
-      for (const resident of entity.residents) map.set(resident.identityKey, entity);
+      for (const resident of entity.residents)
+        map.set(resident.identityKey, entity);
     }
     return map;
   }, [cityWorld.data]);
 
-  const entityForPursuit = (accountId: number) => entityByAccountId.get(accountId) ?? null;
+  const entityForPursuit = (accountId: number) =>
+    entityByAccountId.get(accountId) ?? null;
   const entityForCluster = (cluster: CustomerLocationCluster) => {
     for (const customer of cluster.customers) {
       const entity = entityByResident.get(customer.identityKey);
@@ -374,8 +486,11 @@ export default function LanternCityAtlas({
     return null;
   };
 
-  const requestedEntityId = new URLSearchParams(window.location.search).get("entity");
-  const requestedEntity = cityWorld.data?.find(entity => entity.id === requestedEntityId) ?? null;
+  const requestedEntityId = new URLSearchParams(window.location.search).get(
+    "entity"
+  );
+  const requestedEntity =
+    cityWorld.data?.find(entity => entity.id === requestedEntityId) ?? null;
   /*
     ONE PHYSICAL PLACE, ONE PRIMARY WORLD OBJECT.
 
@@ -399,7 +514,11 @@ export default function LanternCityAtlas({
     );
   }
 
-  const selectedEntity = selectedPursuit ? entityForPursuit(selectedPursuit.accountId) : selectedCluster ? entityForCluster(selectedCluster) : requestedEntity;
+  const selectedEntity = selectedPursuit
+    ? entityForPursuit(selectedPursuit.accountId)
+    : selectedCluster
+      ? entityForCluster(selectedCluster)
+      : requestedEntity;
   const selectedFocusPoint = selectedPursuit?.location
     ? { x: selectedPursuit.location.x, y: selectedPursuit.location.y }
     : selectedCluster
@@ -453,7 +572,9 @@ export default function LanternCityAtlas({
       return;
     }
     const cluster = customerClusters.find(item =>
-      item.customers.some(customer => entityByResident.get(customer.identityKey)?.id === entity.id)
+      item.customers.some(
+        customer => entityByResident.get(customer.identityKey)?.id === entity.id
+      )
     );
     if (cluster) {
       setSelectedPursuit(null);
@@ -495,7 +616,9 @@ export default function LanternCityAtlas({
     { active: 0, dimming: 0, dark: 0 }
   );
 
-  const unmappedCustomers = customers.filter(customer => !customer.location).length;
+  const unmappedCustomers = customers.filter(
+    customer => !customer.location
+  ).length;
   const unmappedPursuits = pursued.filter(item => !item.location).length;
 
   return (
@@ -546,7 +669,9 @@ export default function LanternCityAtlas({
           </article>
         ))}
         <article className="lc-status-card state-pursued">
-          <span className="lc-status-icon"><i className="lc-mini-building" aria-hidden /></span>
+          <span className="lc-status-icon">
+            <i className="lc-mini-building" aria-hidden />
+          </span>
           <div>
             <small>Pursued</small>
             <strong>
@@ -580,170 +705,227 @@ export default function LanternCityAtlas({
             record already carries the latitude/longitude the atlas projection
             was derived from, so nothing is estimated to do this.
           */}
-          {!googleVisible && fanOutAtlasCollisions(customerClusters.filter(cluster => !cluster.outsideAtlas && !pursuitCoversCluster(cluster))).map(({ cluster, fanSlot }) => (
-            <Fragment key={cluster.key}>
-              {fanSlot > 0 ? (
-                <>
-                  <span className="lc-anchor" style={{ left: `${cluster.x}%`, top: `${cluster.y}%` }} aria-hidden />
-                  <span className={`lc-stem fan-${fanSlot}`} style={{ left: `${cluster.x}%`, top: `${cluster.y}%` }} aria-hidden />
-                </>
-              ) : null}
-              <button
-                type="button"
-                ref={entityForCluster(cluster)?.id === requestedEntityId ? revealRef : undefined}
-                className={worldMarkerClass(
-                  `lc-lantern state-${cluster.dark === cluster.total ? "dark" : cluster.dimming > 0 || cluster.dark > 0 ? "dimming" : "active"}${fanSlot > 0 ? ` fan-${fanSlot}` : ""}`,
-                  entityForCluster(cluster),
-                  revealing && entityForCluster(cluster)?.id === requestedEntityId,
-                  selectedCluster?.key === cluster.key
-                )}
-                style={{
-                  left: `${cluster.x}%`,
-                  top: `${cluster.y}%`,
-                  // Every lantern breathes on its own phase. Synchronised
-                  // flicker reads as a screensaver; staggered, it reads as a
-                  // city where separate lives are running. Hashed from the
-                  // cluster key so a lantern keeps its rhythm across reloads
-                  // rather than reshuffling on every render.
-                  ["--lc-phase" as string]: `${-lanternPhaseSeconds(cluster.key)}s`,
-                }}
-                onClick={() => {
-                  setSelectedPursuit(null);
-                  setSelectedCluster(cluster);
-                }}
-                aria-label={markerLabel(
-                  `${cluster.total} customer${cluster.total === 1 ? "" : "s"} at this location`,
-                  entityForCluster(cluster)
-                )}
-              >
-                <span className="lc-lantern-handle" />
-                <span className="lc-lantern-body">
-                  {(() => {
-                    const windows = projectCustomerWindows(cluster.customers);
-                    return windows.mode === "individual" ? (
-                      <span className="lc-customer-windows is-individual" data-active={windows.active} data-dormant={windows.dormant}>
-                        {windows.windows.map(window => <i key={window.identityKey} className={`is-${window.state}`} />)}
-                      </span>
-                    ) : (
-                      <span className="lc-customer-windows is-aggregate" data-total={windows.total} data-active={windows.active} data-dormant={windows.dormant}>
-                        {windows.bands.map((state, index) => <i key={index} className={`is-${state}`} />)}
-                      </span>
-                    );
-                  })()}
-                </span>
-                <span className="lc-lantern-base" />
-                {cluster.total > 1 ? <b>{cluster.total}</b> : null}
-                <WorldMarkerAtmosphere entity={entityForCluster(cluster)} />
-                <WorldObligationTether
-                  obligations={entityForCluster(cluster)?.obligations}
-                  buildingName={`${cluster.total} customer${cluster.total === 1 ? "" : "s"} here`}
-                />
-                {/* Every real building is a playable body, not just pursued ones. */}
-                {entityForCluster(cluster) ? (
-                  <ArcadeBodyLayer
-                    body={arcade.world.bodies[entityForCluster(cluster)!.id]}
-                    weapon={
-                      arcade.weaponFor({
-                        displayName: entityForCluster(cluster)!.displayName,
-                      }).archetype
-                    }
-                    idle={
-                      arcade.idle.find(
-                        i => i.physicalEntityId === entityForCluster(cluster)!.id
-                      )?.kind ?? null
-                    }
-                  />
+          {!googleVisible &&
+            fanOutAtlasCollisions(
+              customerClusters.filter(
+                cluster =>
+                  !cluster.outsideAtlas && !pursuitCoversCluster(cluster)
+              )
+            ).map(({ cluster, fanSlot }) => (
+              <Fragment key={cluster.key}>
+                {fanSlot > 0 ? (
+                  <>
+                    <span
+                      className="lc-anchor"
+                      style={{ left: `${cluster.x}%`, top: `${cluster.y}%` }}
+                      aria-hidden
+                    />
+                    <span
+                      className={`lc-stem fan-${fanSlot}`}
+                      style={{ left: `${cluster.x}%`, top: `${cluster.y}%` }}
+                      aria-hidden
+                    />
+                  </>
                 ) : null}
-              </button>
-            </Fragment>
-          ))}
+                <button
+                  type="button"
+                  ref={
+                    entityForCluster(cluster)?.id === requestedEntityId
+                      ? revealRef
+                      : undefined
+                  }
+                  className={worldMarkerClass(
+                    `lc-lantern state-${cluster.dark === cluster.total ? "dark" : cluster.dimming > 0 || cluster.dark > 0 ? "dimming" : "active"}${fanSlot > 0 ? ` fan-${fanSlot}` : ""}`,
+                    entityForCluster(cluster),
+                    revealing &&
+                      entityForCluster(cluster)?.id === requestedEntityId,
+                    selectedCluster?.key === cluster.key
+                  )}
+                  style={{
+                    left: `${cluster.x}%`,
+                    top: `${cluster.y}%`,
+                    // Every lantern breathes on its own phase. Synchronised
+                    // flicker reads as a screensaver; staggered, it reads as a
+                    // city where separate lives are running. Hashed from the
+                    // cluster key so a lantern keeps its rhythm across reloads
+                    // rather than reshuffling on every render.
+                    ["--lc-phase" as string]: `${-lanternPhaseSeconds(cluster.key)}s`,
+                  }}
+                  onClick={() => {
+                    setSelectedPursuit(null);
+                    setSelectedCluster(cluster);
+                  }}
+                  aria-label={markerLabel(
+                    `${cluster.total} customer${cluster.total === 1 ? "" : "s"} at this location`,
+                    entityForCluster(cluster)
+                  )}
+                >
+                  <span className="lc-lantern-handle" />
+                  <span className="lc-lantern-body">
+                    {(() => {
+                      const windows = projectCustomerWindows(cluster.customers);
+                      return windows.mode === "individual" ? (
+                        <span
+                          className="lc-customer-windows is-individual"
+                          data-active={windows.active}
+                          data-dormant={windows.dormant}
+                        >
+                          {windows.windows.map(window => (
+                            <i
+                              key={window.identityKey}
+                              className={`is-${window.state}`}
+                            />
+                          ))}
+                        </span>
+                      ) : (
+                        <span
+                          className="lc-customer-windows is-aggregate"
+                          data-total={windows.total}
+                          data-active={windows.active}
+                          data-dormant={windows.dormant}
+                        >
+                          {windows.bands.map((state, index) => (
+                            <i key={index} className={`is-${state}`} />
+                          ))}
+                        </span>
+                      );
+                    })()}
+                  </span>
+                  <span className="lc-lantern-base" />
+                  {cluster.total > 1 ? <b>{cluster.total}</b> : null}
+                  <WorldMarkerAtmosphere entity={entityForCluster(cluster)} />
+                  <WorldObligationTether
+                    obligations={entityForCluster(cluster)?.obligations}
+                    buildingName={`${cluster.total} customer${cluster.total === 1 ? "" : "s"} here`}
+                  />
+                  {/* Every real building is a playable body, not just pursued ones. */}
+                  {entityForCluster(cluster) ? (
+                    <ArcadeBodyLayer
+                      body={arcade.world.bodies[entityForCluster(cluster)!.id]}
+                      weapon={
+                        arcade.weaponFor({
+                          displayName: entityForCluster(cluster)!.displayName,
+                        }).archetype
+                      }
+                      idle={
+                        arcade.idle.find(
+                          i =>
+                            i.physicalEntityId === entityForCluster(cluster)!.id
+                        )?.kind ?? null
+                      }
+                    />
+                  ) : null}
+                </button>
+              </Fragment>
+            ))}
 
-          {!googleVisible && visiblePursuits.map(item => {
-            const worldEntity = entityForPursuit(item.accountId);
-            return (
-            <button
-              type="button"
-              key={item.pipelineId}
-              ref={worldEntity?.id === requestedEntityId ? revealRef : undefined}
-                className={worldMarkerClass(
-                  `lc-pursued-building${worldEntity?.canonicalAsset?.assetUrl ? " has-published-art" : ""}${
-                    /*
+          {!googleVisible &&
+            visiblePursuits.map(item => {
+              const worldEntity = entityForPursuit(item.accountId);
+              return (
+                <button
+                  type="button"
+                  key={item.pipelineId}
+                  ref={
+                    worldEntity?.id === requestedEntityId
+                      ? revealRef
+                      : undefined
+                  }
+                  className={worldMarkerClass(
+                    `lc-pursued-building${worldEntity?.canonicalAsset?.assetUrl ? " has-published-art" : ""}${
+                      /*
                       The suppressed lantern's cadence, carried onto the
                       building that replaced it, so the place still reads as
                       active / dimming / dormant.
                     */
-                    (() => {
-                      const covered = customerClusters.find(
-                        c =>
-                          item.location != null &&
-                          Math.abs(item.location.x - c.x) < 1.2 &&
-                          Math.abs(item.location.y - c.y) < 1.2
-                      );
-                      if (!covered) return "";
-                      return covered.dark === covered.total
-                        ? " cadence-dark"
-                        : covered.dimming > 0 || covered.dark > 0
-                          ? " cadence-dimming"
-                          : " cadence-active";
-                    })()
-                  }`,
-                  worldEntity,
-                  revealing && worldEntity?.id === requestedEntityId,
-                  selectedPursuit?.pipelineId === item.pipelineId
-                )}
-                data-world-entity-id={worldEntity?.id}
-                style={{
-                  left: `${item.location!.x}%`,
-                  top: `${item.location!.y}%`,
-                }}
-              onClick={() => {
-                setSelectedCluster(null);
-                setSelectedPursuit(item);
-              }}
-              /*
+                      (() => {
+                        const covered = customerClusters.find(
+                          c =>
+                            item.location != null &&
+                            Math.abs(item.location.x - c.x) < 1.2 &&
+                            Math.abs(item.location.y - c.y) < 1.2
+                        );
+                        if (!covered) return "";
+                        return covered.dark === covered.total
+                          ? " cadence-dark"
+                          : covered.dimming > 0 || covered.dark > 0
+                            ? " cadence-dimming"
+                            : " cadence-active";
+                      })()
+                    }`,
+                    worldEntity,
+                    revealing && worldEntity?.id === requestedEntityId,
+                    selectedPursuit?.pipelineId === item.pipelineId
+                  )}
+                  data-world-entity-id={worldEntity?.id}
+                  style={{
+                    left: `${item.location!.x}%`,
+                    top: `${item.location!.y}%`,
+                  }}
+                  onClick={() => {
+                    setSelectedCluster(null);
+                    setSelectedPursuit(item);
+                  }}
+                  /*
                 The building is the control. A plain click inspects it; holding
                 Alt fires its own weapon at another tower, which is play and
                 touches nothing real.
               */
-              onPointerDown={event => {
-                if (guardianLocked) return;
-                if (!event.altKey || !worldEntity) return;
-                event.preventDefault();
-                event.stopPropagation();
-                /*
+                  onPointerDown={event => {
+                    if (guardianLocked) return;
+                    if (!event.altKey || !worldEntity) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    /*
                   Fire at another building that is actually drawn, so the
                   damage lands somewhere the player can see. With nothing else
                   on screen the tower takes its own shot, which is funnier and
                   still visible.
                 */
-                const target =
-                  (cityWorld.data ?? []).find(
-                    e => e.id !== worldEntity.id && e.location
-                  ) ?? worldEntity;
-                arcade.fireAt({
-                  shooterId: worldEntity.id,
-                  targetId: target.id,
-                  weapon: arcade.weaponFor({ displayName: item.name }).archetype,
-                });
-              }}
-              aria-label={markerLabel(`Pursued: ${item.name}`, worldEntity)}
-            >
-              {worldEntity?.canonicalAsset?.assetUrl ? <img src={worldEntity.canonicalAsset.assetUrl} alt="" /> : <span aria-hidden><i/><i/><i/></span>}
-              <b>{item.name}</b>
-              <WorldMarkerAtmosphere entity={worldEntity} />
-              <WorldObligationTether
-                obligations={worldEntity?.obligations}
-                buildingName={item.name}
-              />
-              {worldEntity ? (
-                <ArcadeBodyLayer
-                  body={arcade.world.bodies[worldEntity.id]}
-                  weapon={arcade.weaponFor({ displayName: item.name }).archetype}
-                  idle={arcade.idle.find(i => i.physicalEntityId === worldEntity.id)?.kind ?? null}
-                />
-              ) : null}
-            </button>
-          )})}
+                    const target =
+                      (cityWorld.data ?? []).find(
+                        e => e.id !== worldEntity.id && e.location
+                      ) ?? worldEntity;
+                    arcade.fireAt({
+                      shooterId: worldEntity.id,
+                      targetId: target.id,
+                      weapon: arcade.weaponFor({ displayName: item.name })
+                        .archetype,
+                    });
+                  }}
+                  aria-label={markerLabel(`Pursued: ${item.name}`, worldEntity)}
+                >
+                  {worldEntity?.canonicalAsset?.assetUrl ? (
+                    <img src={worldEntity.canonicalAsset.assetUrl} alt="" />
+                  ) : (
+                    <span aria-hidden>
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                  )}
+                  <b>{item.name}</b>
+                  <WorldMarkerAtmosphere entity={worldEntity} />
+                  <WorldObligationTether
+                    obligations={worldEntity?.obligations}
+                    buildingName={item.name}
+                  />
+                  {worldEntity ? (
+                    <ArcadeBodyLayer
+                      body={arcade.world.bodies[worldEntity.id]}
+                      weapon={
+                        arcade.weaponFor({ displayName: item.name }).archetype
+                      }
+                      idle={
+                        arcade.idle.find(
+                          i => i.physicalEntityId === worldEntity.id
+                        )?.kind ?? null
+                      }
+                    />
+                  ) : null}
+                </button>
+              );
+            })}
 
           {!atlas.isLoading &&
           visibleCustomers.length + visiblePursuits.length === 0 ? (
@@ -754,8 +936,8 @@ export default function LanternCityAtlas({
                   : "No geocoded records match this view"}
               </strong>
               <span>
-                Records without successful provider coordinates remain outside the
-                illustrated map.
+                Records without successful provider coordinates remain outside
+                the illustrated map.
               </span>
             </div>
           ) : null}
@@ -765,9 +947,19 @@ export default function LanternCityAtlas({
             WorldVeilLayer for why a hole is always a real fact.
           */}
           <WorldVeilLayer
-            clusters={customerClusters}
+            customerLocations={customers.flatMap(customer =>
+              customer.location
+                ? [
+                    {
+                      latitude: customer.location.latitude,
+                      longitude: customer.location.longitude,
+                    },
+                  ]
+                : []
+            )}
             totalCustomers={customers.length}
             atlasReady={!atlas.isLoading && !atlas.isError}
+            conqueredTerritoryIds={conqueredTerritoryIds}
             onConfront={neighbourhood => {
               setSelectedCluster(null);
               setSelectedPursuit(null);
@@ -776,13 +968,6 @@ export default function LanternCityAtlas({
             }}
           />
           <EconomicWorldReaction entities={cityWorld.data ?? []} />
-          <TerritoryWorldLayer
-            entities={cityWorld.data ?? []}
-            googleVisible={googleVisible}
-            interactionLocked={guardianLocked}
-            onInteractionLock={setGuardianLocked}
-            reducedMotion={reducedMotion}
-          />
           <CampaignWorldLayer
             entities={cityWorld.data ?? []}
             googleVisible={googleVisible}
@@ -798,11 +983,16 @@ export default function LanternCityAtlas({
           />
         ) : null}
         <TerritoryChrome />
-        {selectedCluster || selectedPursuit || requestedEntity ? null : <CampaignChrome />}
+        {selectedCluster || selectedPursuit || requestedEntity ? null : (
+          <CampaignChrome />
+        )}
       </section>
 
       {attentionRecommendations.length ? (
-        <section className="lc-attention-row" aria-label="Where Goldline suggests looking">
+        <section
+          className="lc-attention-row"
+          aria-label="Where Goldline suggests looking"
+        >
           <h2>Where Goldline suggests looking</h2>
           <p className="lc-attention-note">
             Ranked by real derived signals. Nothing here changes a stage, a
@@ -818,7 +1008,12 @@ export default function LanternCityAtlas({
               >
                 <strong>{entity.displayName}</strong>
                 <span>{entity.presentation.attentionSummary}</span>
-                <small>{entity.projection.attentionReasons[0]?.sourceEvidenceReference}</small>
+                <small>
+                  {
+                    entity.projection.attentionReasons[0]
+                      ?.sourceEvidenceReference
+                  }
+                </small>
               </button>
             ))}
           </div>
@@ -871,7 +1066,20 @@ export default function LanternCityAtlas({
 
       <CampaignChronicleList />
 
-      {selectedCluster || selectedPursuit || requestedEntity ? <WorldEntityInspector entity={selectedEntity} cluster={selectedCluster} pursuit={selectedPursuit} onClose={() => { setSelectedCluster(null); setSelectedPursuit(null); if (requestedEntityId) window.history.replaceState({}, "", "/growth/lantern-city"); }} onOpenCustomer={onOpenCustomer} /> : null}
+      {selectedCluster || selectedPursuit || requestedEntity ? (
+        <WorldEntityInspector
+          entity={selectedEntity}
+          cluster={selectedCluster}
+          pursuit={selectedPursuit}
+          onClose={() => {
+            setSelectedCluster(null);
+            setSelectedPursuit(null);
+            if (requestedEntityId)
+              window.history.replaceState({}, "", "/growth/lantern-city");
+          }}
+          onOpenCustomer={onOpenCustomer}
+        />
+      ) : null}
     </main>
   );
 }

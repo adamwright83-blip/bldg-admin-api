@@ -6,10 +6,18 @@
    — see TerritoryBoardLayer for why not one value below is a placement.
    ========================================================================= */
 
-.gl-board { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+.gl-board {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
 
 /* --- bridges ------------------------------------------------------------ */
-.gl-board-bridges { position: absolute; inset: 0; }
+.gl-board-bridges {
+  position: absolute;
+  inset: 0;
+}
 .gl-board-bridge {
   position: absolute;
   height: auto;
@@ -41,9 +49,16 @@
   transition: transform 0.2s cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 .gl-board-island:hover,
-.gl-board-island:focus-visible { transform: translate(-50%, -54%); outline: none; }
+.gl-board-island:focus-visible {
+  transform: translate(-50%, -54%);
+  outline: none;
+}
 
-.gl-board-piece { position: relative; display: block; transform-origin: 50% 50%; }
+.gl-board-piece {
+  position: relative;
+  display: block;
+  transform-origin: 50% 50%;
+}
 .gl-board-tile,
 .gl-board-coast,
 .gl-board-fog {
@@ -60,14 +75,26 @@
   rather than as weather.
 */
 .gl-board-coast,
-.gl-board-fog { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.gl-board-coast { opacity: 0.75; mix-blend-mode: screen; }
+.gl-board-fog {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.gl-board-coast {
+  opacity: 0.75;
+  mix-blend-mode: screen;
+}
 /*
   Screened, so fog can only LIGHTEN the piece. An unknown territory should read
   as washed out and unreadable — you cannot see it — not as burnt and ruined,
   which is what a darkening blend said instead.
 */
-.gl-board-fog { opacity: 0.85; mix-blend-mode: screen; }
+.gl-board-fog {
+  opacity: 0.85;
+  mix-blend-mode: screen;
+}
 
 /*
   Tint is dressing on top of an authored silhouette. Screened, so it can only
@@ -79,26 +106,46 @@
   border-radius: 50%;
   mix-blend-mode: screen;
   pointer-events: none;
-  background: radial-gradient(ellipse at 50% 55%, var(--gl-board-tint) 0%, transparent 70%);
+  background: radial-gradient(
+    ellipse at 50% 55%,
+    var(--gl-board-tint) 0%,
+    transparent 70%
+  );
 }
 
 /* --- readiness, from real evidence -------------------------------------- */
 /* Cleared: yours, permanently. Warm and settled. */
-.gl-board-island.tone-held { --gl-board-tint: #ffcb5e63; --gl-board-trim: #f2cd72; }
+.gl-board-island.tone-held {
+  --gl-board-tint: #ffcb5e63;
+  --gl-board-trim: #f2cd72;
+}
 /* A guardian is standing here. This is where the pressure is. */
-.gl-board-island.tone-contested { --gl-board-tint: #ff5a3a5c; --gl-board-trim: #ff8a5c; }
+.gl-board-island.tone-contested {
+  --gl-board-tint: #ff5a3a5c;
+  --gl-board-trim: #ff8a5c;
+}
 /* Evidence accumulating. Neutral stone, lit, unremarkable on purpose. */
-.gl-board-island.tone-active { --gl-board-tint: #9fd4ff42; --gl-board-trim: #a8c8e8; }
+.gl-board-island.tone-active {
+  --gl-board-tint: #9fd4ff42;
+  --gl-board-trim: #a8c8e8;
+}
 /* Nothing known. Must read as unreadable, not as empty. */
-.gl-board-island.tone-veiled { --gl-board-tint: #38506644; --gl-board-trim: #6d8399; }
+.gl-board-island.tone-veiled {
+  --gl-board-tint: #38506644;
+  --gl-board-trim: #6d8399;
+}
 /*
   Unknown is drained of colour and detail, not plunged into darkness: the city
   is in daylight and a veiled district is one you cannot READ, not one that has
   been destroyed. Brightness stays near 1 and the fog above does the obscuring.
 */
-.gl-board-island.tone-veiled .gl-board-tile { filter: saturate(0.12) brightness(1.04) contrast(0.82); }
+.gl-board-island.tone-veiled .gl-board-tile {
+  filter: saturate(0.12) brightness(1.04) contrast(0.82);
+}
 
-.gl-board-island.is-selected { z-index: 3; }
+.gl-board-island.is-selected {
+  z-index: 3;
+}
 .gl-board-island.is-selected .gl-board-piece {
   filter: drop-shadow(0 0 16px var(--gl-board-trim));
 }
@@ -107,7 +154,9 @@
   A scaffolded silhouette is marked in development so a placeholder is never
   mistaken for finished art. Invisible in production builds.
 */
-.gl-board-island[data-art="scaffold"] .gl-board-tile { outline: 1px dashed #ffffff2e; }
+.gl-board-island[data-art="scaffold"] .gl-board-tile {
+  outline: 1px dashed #ffffff2e;
+}
 
 /* --- the name plate ----------------------------------------------------- */
 .gl-board-plate {
@@ -122,14 +171,26 @@
   padding: 5px 14px 4px;
   border: 1px solid var(--gl-board-trim);
   background: linear-gradient(180deg, #14202fee, #060d16f2);
-  box-shadow: 0 4px 14px #04101c66, inset 0 1px 0 var(--gl-board-trim);
-  clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 8px 100%, 0 50%);
+  box-shadow:
+    0 4px 14px #04101c66,
+    inset 0 1px 0 var(--gl-board-trim);
+  clip-path: polygon(
+    8px 0,
+    calc(100% - 8px) 0,
+    100% 50%,
+    calc(100% - 8px) 100%,
+    8px 100%,
+    0 50%
+  );
   text-align: center;
 }
 .gl-board-plate strong {
   display: block;
   color: #fff8e2;
-  font: 900 clamp(10px, 0.9vw, 13px) / 1.2 Georgia, "Times New Roman", serif;
+  font:
+    900 clamp(10px, 0.9vw, 13px) / 1.2 Georgia,
+    "Times New Roman",
+    serif;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -137,23 +198,33 @@
 .gl-board-plate small {
   display: block;
   color: var(--gl-board-trim);
-  font: 800 8px/1.4 ui-sans-serif, system-ui, sans-serif;
+  font:
+    800 8px/1.4 ui-sans-serif,
+    system-ui,
+    sans-serif;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 .gl-board-plate em {
   display: block;
   color: #8ea3b8;
-  font: 700 7px/1.4 ui-sans-serif, system-ui, sans-serif;
+  font:
+    700 7px/1.4 ui-sans-serif,
+    system-ui,
+    sans-serif;
   font-style: normal;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .gl-board-island { transition: none; }
+  .gl-board-island {
+    transition: none;
+  }
   .gl-board-island:hover,
-  .gl-board-island:focus-visible { transform: translate(-50%, -50%); }
+  .gl-board-island:focus-visible {
+    transform: translate(-50%, -50%);
+  }
 }
 
 /* ----------------------------------------------------------------------------
@@ -171,6 +242,87 @@
   height: 100%;
   pointer-events: none;
 }
+.gl-territory-cloud {
+  opacity: 0.9;
+}
+.gl-territory-lock {
+  position: absolute;
+  z-index: 12;
+  width: 34%;
+  height: 34%;
+  object-fit: contain;
+  transform: translate(-50%, -50%) scale(var(--territory-lock-scale, 1));
+  pointer-events: none;
+  filter: drop-shadow(0 5px 9px #0009) drop-shadow(0 0 8px #ffc94d88);
+}
+.gl-territory-debug {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.gl-territory-debug polygon {
+  fill: #00e5ff18;
+  stroke: #00e5ff;
+  stroke-width: 0.18;
+  vector-effect: non-scaling-stroke;
+}
+.gl-territory-debug polygon.is-guarded {
+  fill: #ff385522;
+  stroke: #ff3855;
+}
+.gl-territory-debug polygon.has-customers {
+  fill: #4cff8122;
+  stroke: #4cff81;
+}
+.gl-territory-debug polygon.is-clear {
+  fill: #88a4b40d;
+  stroke: #88a4b488;
+}
+.gl-territory-debug circle {
+  fill: #ffe071;
+  stroke: #3b2500;
+  stroke-width: 0.16;
+  vector-effect: non-scaling-stroke;
+}
+.gl-territory-debug-ledger {
+  position: absolute;
+  left: 14px;
+  top: 148px;
+  z-index: 51;
+  display: grid;
+  gap: 3px;
+  max-height: calc(100% - 250px);
+  overflow: auto;
+  padding: 10px 12px;
+  color: #eefaff;
+  background: #07131eea;
+  border: 1px solid #5bd7f2;
+  font:
+    10px/1.25 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  pointer-events: auto;
+}
+.gl-territory-debug-ledger strong {
+  color: #5bd7f2;
+  letter-spacing: 0.12em;
+}
+.gl-territory-debug-ledger span {
+  display: block;
+  white-space: nowrap;
+}
+.gl-territory-debug-ledger span b {
+  display: inline-block;
+  min-width: 132px;
+  color: #fff;
+}
+.gl-territory-debug-ledger em {
+  color: #ffcf62;
+}
 
 /* ----------------------------------------------------------------------------
    THE GUARDIAN STANDING ON AN UNCLAIMED NEIGHBOURHOOD
@@ -182,9 +334,9 @@
 .gl-veil-guardian {
   position: absolute;
   z-index: 9;
-  width: clamp(112px, 11.5vw, 190px);
-  height: clamp(112px, 11.5vw, 190px);
-  transform: translate(-50%, -62%);
+  width: clamp(150px, 14vw, 235px);
+  height: clamp(150px, 14vw, 235px);
+  transform: translate(-50%, -62%) scale(var(--territory-guardian-scale, 1));
   pointer-events: none;
 }
 .gl-veil-guardian::before {
@@ -192,7 +344,12 @@
   position: absolute;
   inset: 26% 12% 7%;
   border-radius: 50%;
-  background: radial-gradient(ellipse, #fff8d766 0%, #9bcfff33 36%, transparent 72%);
+  background: radial-gradient(
+    ellipse,
+    #fff8d766 0%,
+    #9bcfff33 36%,
+    transparent 72%
+  );
   filter: blur(8px);
   pointer-events: none;
 }
@@ -222,39 +379,64 @@
   pointer-events: auto;
   cursor: pointer;
 }
-.gl-veil-guardian-hit:focus-visible { outline: 3px solid #fff3cd; outline-offset: 4px; }
+.gl-veil-guardian-hit:focus-visible {
+  outline: 3px solid #fff3cd;
+  outline-offset: 4px;
+}
 
 .gl-veil-plate {
+  display: none;
   position: absolute;
   left: 50%;
   bottom: -8%;
-  display: block;
   transform: translateX(-50%);
   padding: 5px 15px 4px;
   border: 1px solid #cbd8e6;
   background: linear-gradient(180deg, #16232fee, #060d16f2);
-  box-shadow: 0 4px 14px #04101c55, inset 0 1px 0 #cbd8e6;
-  clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 8px 100%, 0 50%);
+  box-shadow:
+    0 4px 14px #04101c55,
+    inset 0 1px 0 #cbd8e6;
+  clip-path: polygon(
+    8px 0,
+    calc(100% - 8px) 0,
+    100% 50%,
+    calc(100% - 8px) 100%,
+    8px 100%,
+    0 50%
+  );
   text-align: center;
   white-space: nowrap;
 }
 .gl-veil-plate strong {
   display: block;
   color: #f2f7ff;
-  font: 900 clamp(10px, 0.9vw, 13px) / 1.2 Georgia, "Times New Roman", serif;
+  font:
+    900 clamp(10px, 0.9vw, 13px) / 1.2 Georgia,
+    "Times New Roman",
+    serif;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 .gl-veil-plate small {
   display: block;
   color: #9db2c6;
-  font: 800 8px/1.4 ui-sans-serif, system-ui, sans-serif;
+  font:
+    800 8px/1.4 ui-sans-serif,
+    system-ui,
+    sans-serif;
   letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 
 @media (max-width: 900px) {
-  .gl-veil-guardian { width: 130px; height: 130px; }
-  .gl-veil-plate { padding-inline: 10px; }
-  .gl-veil-plate small { display: none; }
+  .gl-veil-guardian {
+    width: 130px;
+    height: 130px;
+  }
+  .gl-veil-plate {
+    padding-inline: 10px;
+  }
+  .gl-veil-plate small {
+    display: none;
+  }
 }
