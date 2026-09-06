@@ -1,0 +1,812 @@
+{
+  "version": 2,
+  "generatedAt": "2026-09-06T12:54:32.286089+00:00",
+  "source": "single continuous geography-registered master; territory alpha from authoritative Goldline masks",
+  "attribution": "Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community",
+  "projection": {
+    "west": -118.445,
+    "east": -118.225,
+    "south": 34.02,
+    "north": 34.135,
+    "type": "existing Goldline Mercator atlas projection"
+  },
+  "master": {
+    "width": 7680,
+    "height": 4320
+  },
+  "territories": [
+    {
+      "territoryId": "adams-normandie",
+      "name": "Adams-Normandie",
+      "src": "/assets/admin/control-room/world/territories-v2/adams-normandie.webp",
+      "atlasBBoxPct": {
+        "left": 61.01454545449477,
+        "top": 83.83458371009462,
+        "width": 9.60000000000094,
+        "height": 12.409602443406044
+      },
+      "naturalWidth": 737,
+      "naturalHeight": 536
+    },
+    {
+      "territoryId": "arlington-heights",
+      "name": "Arlington Heights",
+      "src": "/assets/admin/control-room/world/territories-v2/arlington-heights.webp",
+      "atlasBBoxPct": {
+        "left": 49.59586363635951,
+        "top": 68.02376986553092,
+        "width": 11.346000000003244,
+        "height": 20.651876617932388
+      },
+      "naturalWidth": 871,
+      "naturalHeight": 892
+    },
+    {
+      "territoryId": "arts-district",
+      "name": "Arts District",
+      "src": "/assets/admin/control-room/world/territories-v2/arts-district.webp",
+      "atlasBBoxPct": {
+        "left": 92.99999999999496,
+        "top": 70.70987409642015,
+        "width": 7.000000000005045,
+        "height": 17.732009812296738
+      },
+      "naturalWidth": 538,
+      "naturalHeight": 766
+    },
+    {
+      "territoryId": "atwater-village",
+      "name": "Atwater Village",
+      "src": "/assets/admin/control-room/world/territories-v2/atwater-village.webp",
+      "atlasBBoxPct": {
+        "left": 74.0848839740061,
+        "top": 0,
+        "width": 17.8543414498388,
+        "height": 26.973197320665044
+      },
+      "naturalWidth": 1371,
+      "naturalHeight": 1165
+    },
+    {
+      "territoryId": "baldwin-hillscrenshaw",
+      "name": "Baldwin Hills/Crenshaw",
+      "src": "/assets/admin/control-room/world/territories-v2/baldwin-hillscrenshaw.webp",
+      "atlasBBoxPct": {
+        "left": 27.258909090912212,
+        "top": 91.51829156230909,
+        "width": 24.803999999937396,
+        "height": 8.481708437690912
+      },
+      "naturalWidth": 1905,
+      "naturalHeight": 366
+    },
+    {
+      "territoryId": "bel-air",
+      "name": "Bel-Air",
+      "src": "/assets/admin/control-room/world/territories-v2/bel-air.webp",
+      "atlasBBoxPct": {
+        "left": 0,
+        "top": 0,
+        "width": 6.776136363559363,
+        "height": 58.7677229161829
+      },
+      "naturalWidth": 520,
+      "naturalHeight": 2539
+    },
+    {
+      "territoryId": "beverly-crest",
+      "name": "Beverly Crest",
+      "src": "/assets/admin/control-room/world/territories-v2/beverly-crest.webp",
+      "atlasBBoxPct": {
+        "left": 0,
+        "top": 0,
+        "width": 29.708272727272238,
+        "height": 53.29836073382236
+      },
+      "naturalWidth": 2282,
+      "naturalHeight": 2302
+    },
+    {
+      "territoryId": "beverly-grove",
+      "name": "Beverly Grove",
+      "src": "/assets/admin/control-room/world/territories-v2/beverly-grove.webp",
+      "atlasBBoxPct": {
+        "left": 23.34490909090269,
+        "top": 36.55477478260743,
+        "width": 15.944727272731434,
+        "height": 28.430309045092876
+      },
+      "naturalWidth": 1224,
+      "naturalHeight": 1228
+    },
+    {
+      "territoryId": "beverly-hills",
+      "name": "Beverly Hills",
+      "src": "/assets/admin/control-room/world/territories-v2/beverly-hills.webp",
+      "atlasBBoxPct": {
+        "left": 5.662545454484976,
+        "top": 14.446323155067322,
+        "width": 30.00763636361321,
+        "height": 62.35883008911222
+      },
+      "naturalWidth": 2304,
+      "naturalHeight": 2694
+    },
+    {
+      "territoryId": "beverlywood",
+      "name": "Beverlywood",
+      "src": "/assets/admin/control-room/world/territories-v2/beverlywood.webp",
+      "atlasBBoxPct": {
+        "left": 18.514909090907558,
+        "top": 70.38823719098062,
+        "width": 9.350181818177862,
+        "height": 18.357847626263336
+      },
+      "naturalWidth": 718,
+      "naturalHeight": 793
+    },
+    {
+      "territoryId": "boyle-heights",
+      "name": "Boyle Heights",
+      "src": "/assets/admin/control-room/world/territories-v2/boyle-heights.webp",
+      "atlasBBoxPct": {
+        "left": 95.81377272727615,
+        "top": 55.653562099404354,
+        "width": 4.186227272723855,
+        "height": 44.346437900595646
+      },
+      "naturalWidth": 322,
+      "naturalHeight": 1916
+    },
+    {
+      "territoryId": "carthay",
+      "name": "Carthay",
+      "src": "/assets/admin/control-room/world/territories-v2/carthay.webp",
+      "atlasBBoxPct": {
+        "left": 30.54999999999501,
+        "top": 60.47685969733734,
+        "width": 8.072727272731754,
+        "height": 13.239970943163435
+      },
+      "naturalWidth": 620,
+      "naturalHeight": 572
+    },
+    {
+      "territoryId": "central-alameda",
+      "name": "Central-Alameda",
+      "src": "/assets/admin/control-room/world/territories-v2/central-alameda.webp",
+      "atlasBBoxPct": {
+        "left": 84.83368181812824,
+        "top": 93.01138087110397,
+        "width": 10.13945454544998,
+        "height": 6.988619128896033
+      },
+      "naturalWidth": 779,
+      "naturalHeight": 302
+    },
+    {
+      "territoryId": "century-city",
+      "name": "Century City",
+      "src": "/assets/admin/control-room/world/territories-v2/century-city.webp",
+      "atlasBBoxPct": {
+        "left": 8.61918181818509,
+        "top": 59.786851424080815,
+        "width": 9.958909090848763,
+        "height": 19.018674729592128
+      },
+      "naturalWidth": 765,
+      "naturalHeight": 821
+    },
+    {
+      "territoryId": "cheviot-hills",
+      "name": "Cheviot Hills",
+      "src": "/assets/admin/control-room/world/territories-v2/cheviot-hills.webp",
+      "atlasBBoxPct": {
+        "left": 7.962681818127599,
+        "top": 69.94004583436927,
+        "width": 14.564181818237653,
+        "height": 23.871755706763494
+      },
+      "naturalWidth": 1118,
+      "naturalHeight": 1032
+    },
+    {
+      "territoryId": "chinatown",
+      "name": "Chinatown",
+      "src": "/assets/admin/control-room/world/territories-v2/chinatown.webp",
+      "atlasBBoxPct": {
+        "left": 87.83313636368507,
+        "top": 53.41713966093933,
+        "width": 12.166863636314929,
+        "height": 17.52649144533372
+      },
+      "naturalWidth": 934,
+      "naturalHeight": 757
+    },
+    {
+      "territoryId": "culver-city",
+      "name": "Culver City",
+      "src": "/assets/admin/control-room/world/territories-v2/culver-city.webp",
+      "atlasBBoxPct": {
+        "left": 0,
+        "top": 81.82410104084099,
+        "width": 37.86931818175552,
+        "height": 18.175898959159014
+      },
+      "naturalWidth": 2908,
+      "naturalHeight": 785
+    },
+    {
+      "territoryId": "cypress-park",
+      "name": "Cypress Park",
+      "src": "/assets/admin/control-room/world/territories-v2/cypress-park.webp",
+      "atlasBBoxPct": {
+        "left": 93.264954545453,
+        "top": 24.626066731764443,
+        "width": 6.735045454547006,
+        "height": 25.31810829599225
+      },
+      "naturalWidth": 517,
+      "naturalHeight": 1094
+    },
+    {
+      "territoryId": "downtown",
+      "name": "Downtown",
+      "src": "/assets/admin/control-room/world/territories-v2/downtown.webp",
+      "atlasBBoxPct": {
+        "left": 75.3516276731087,
+        "top": 56.21686981584007,
+        "width": 24.648372326891305,
+        "height": 43.78313018415993
+      },
+      "naturalWidth": 1893,
+      "naturalHeight": 1891
+    },
+    {
+      "territoryId": "eagle-rock",
+      "name": "Eagle Rock",
+      "src": "/assets/admin/control-room/world/territories-v2/eagle-rock.webp",
+      "atlasBBoxPct": {
+        "left": 95.65477272726933,
+        "top": 0,
+        "width": 4.345227272730668,
+        "height": 19.43203663123222
+      },
+      "naturalWidth": 334,
+      "naturalHeight": 839
+    },
+    {
+      "territoryId": "east-hollywood",
+      "name": "East Hollywood",
+      "src": "/assets/admin/control-room/world/territories-v2/east-hollywood.webp",
+      "atlasBBoxPct": {
+        "left": 60.486772727269106,
+        "top": 26.666773420401316,
+        "width": 13.745999999997686,
+        "height": 26.50693011135046
+      },
+      "naturalWidth": 1056,
+      "naturalHeight": 1145
+    },
+    {
+      "territoryId": "echo-park",
+      "name": "Echo Park",
+      "src": "/assets/admin/control-room/world/territories-v2/echo-park.webp",
+      "atlasBBoxPct": {
+        "left": 76.1417727272729,
+        "top": 25.83666143288929,
+        "width": 16.800545454543766,
+        "height": 44.818455247566845
+      },
+      "naturalWidth": 1290,
+      "naturalHeight": 1936
+    },
+    {
+      "territoryId": "elysian-park",
+      "name": "Elysian Park",
+      "src": "/assets/admin/control-room/world/territories-v2/elysian-park.webp",
+      "atlasBBoxPct": {
+        "left": 87.60131818181333,
+        "top": 31.772749323957594,
+        "width": 12.398681818186674,
+        "height": 29.947059620596352
+      },
+      "naturalWidth": 952,
+      "naturalHeight": 1293
+    },
+    {
+      "territoryId": "elysian-valley",
+      "name": "Elysian Valley",
+      "src": "/assets/admin/control-room/world/territories-v2/elysian-valley.webp",
+      "atlasBBoxPct": {
+        "left": 84.35586363631174,
+        "top": 20.725529924090853,
+        "width": 15.644136363688261,
+        "height": 26.822123465956548
+      },
+      "naturalWidth": 1201,
+      "naturalHeight": 1159
+    },
+    {
+      "territoryId": "exposition-park",
+      "name": "Exposition Park",
+      "src": "/assets/admin/control-room/world/territories-v2/exposition-park.webp",
+      "atlasBBoxPct": {
+        "left": 55.98431818175533,
+        "top": 93.74158602696161,
+        "width": 20.87181818188563,
+        "height": 6.258413973038387
+      },
+      "naturalWidth": 1603,
+      "naturalHeight": 270
+    },
+    {
+      "territoryId": "fairfax",
+      "name": "Fairfax",
+      "src": "/assets/admin/control-room/world/territories-v2/fairfax.webp",
+      "atlasBBoxPct": {
+        "left": 37.05654545454855,
+        "top": 38.30566395679173,
+        "width": 9.65236363630212,
+        "height": 20.924174330352116
+      },
+      "naturalWidth": 741,
+      "naturalHeight": 904
+    },
+    {
+      "territoryId": "glassell-park",
+      "name": "Glassell Park",
+      "src": "/assets/admin/control-room/world/territories-v2/glassell-park.webp",
+      "atlasBBoxPct": {
+        "left": 85.13961019703792,
+        "top": 0,
+        "width": 14.860389802962075,
+        "height": 40.042621114640504
+      },
+      "naturalWidth": 1141,
+      "naturalHeight": 1730
+    },
+    {
+      "territoryId": "glendale",
+      "name": "Glendale",
+      "src": "/assets/admin/control-room/world/territories-v2/glendale.webp",
+      "atlasBBoxPct": {
+        "left": 56.62118181808651,
+        "top": 0,
+        "width": 43.37881818191349,
+        "height": 27.05362853653109
+      },
+      "naturalWidth": 3331,
+      "naturalHeight": 1169
+    },
+    {
+      "territoryId": "griffith-park",
+      "name": "Griffith Park",
+      "src": "/assets/admin/control-room/world/territories-v2/griffith-park.webp",
+      "atlasBBoxPct": {
+        "left": 49.88437794498515,
+        "top": 0,
+        "width": 34.63456290299163,
+        "height": 24.01723562218864
+      },
+      "naturalWidth": 2660,
+      "naturalHeight": 1038
+    },
+    {
+      "territoryId": "hancock-park",
+      "name": "Hancock Park",
+      "src": "/assets/admin/control-room/world/territories-v2/hancock-park.webp",
+      "atlasBBoxPct": {
+        "left": 45.03177272726938,
+        "top": 42.92219886128356,
+        "width": 9.927818181820854,
+        "height": 22.432476700592957
+      },
+      "naturalWidth": 763,
+      "naturalHeight": 969
+    },
+    {
+      "territoryId": "harvard-heights",
+      "name": "Harvard Heights",
+      "src": "/assets/admin/control-room/world/territories-v2/harvard-heights.webp",
+      "atlasBBoxPct": {
+        "left": 58.255454545451144,
+        "top": 70.03090827930204,
+        "width": 8.345454545452583,
+        "height": 16.376334016259037
+      },
+      "naturalWidth": 641,
+      "naturalHeight": 708
+    },
+    {
+      "territoryId": "historic-south-central",
+      "name": "Historic South-Central",
+      "src": "/assets/admin/control-room/world/territories-v2/historic-south-central.webp",
+      "atlasBBoxPct": {
+        "left": 73.05590909085011,
+        "top": 83.8515840362878,
+        "width": 16.745454545460163,
+        "height": 16.148415963712196
+      },
+      "naturalWidth": 1286,
+      "naturalHeight": 698
+    },
+    {
+      "territoryId": "hollywood",
+      "name": "Hollywood",
+      "src": "/assets/admin/control-room/world/territories-v2/hollywood.webp",
+      "atlasBBoxPct": {
+        "left": 35.43512750200653,
+        "top": 23.72743598376023,
+        "width": 28.628290658965575,
+        "height": 23.168793050880126
+      },
+      "naturalWidth": 2199,
+      "naturalHeight": 1001
+    },
+    {
+      "territoryId": "hollywood-hills",
+      "name": "Hollywood Hills",
+      "src": "/assets/admin/control-room/world/territories-v2/hollywood-hills.webp",
+      "atlasBBoxPct": {
+        "left": 34.594909090915124,
+        "top": 0,
+        "width": 30.43745454536939,
+        "height": 31.46659627290184
+      },
+      "naturalWidth": 2337,
+      "naturalHeight": 1359
+    },
+    {
+      "territoryId": "hollywood-hills-west",
+      "name": "Hollywood Hills West",
+      "src": "/assets/admin/control-room/world/territories-v2/hollywood-hills-west.webp",
+      "atlasBBoxPct": {
+        "left": 19.656545454546375,
+        "top": 0,
+        "width": 28.63418181812267,
+        "height": 41.73141731687473
+      },
+      "naturalWidth": 2199,
+      "naturalHeight": 1803
+    },
+    {
+      "territoryId": "jefferson-park",
+      "name": "Jefferson Park",
+      "src": "/assets/admin/control-room/world/territories-v2/jefferson-park.webp",
+      "atlasBBoxPct": {
+        "left": 48.76404545454601,
+        "top": 83.2697346221155,
+        "width": 14.236909090853281,
+        "height": 16.730265377884507
+      },
+      "naturalWidth": 1093,
+      "naturalHeight": 723
+    },
+    {
+      "territoryId": "koreatown",
+      "name": "Koreatown",
+      "src": "/assets/admin/control-room/world/territories-v2/koreatown.webp",
+      "atlasBBoxPct": {
+        "left": 53.809499999997534,
+        "top": 48.791288287623665,
+        "width": 19.691454545455834,
+        "height": 25.03858770493934
+      },
+      "naturalWidth": 1512,
+      "naturalHeight": 1081
+    },
+    {
+      "territoryId": "larchmont",
+      "name": "Larchmont",
+      "src": "/assets/admin/control-room/world/territories-v2/larchmont.webp",
+      "atlasBBoxPct": {
+        "left": 53.177727272726976,
+        "top": 44.069895323384976,
+        "width": 9.272727272725085,
+        "height": 7.616566570050786
+      },
+      "naturalWidth": 712,
+      "naturalHeight": 329
+    },
+    {
+      "territoryId": "leimert-park",
+      "name": "Leimert Park",
+      "src": "/assets/admin/control-room/world/territories-v2/leimert-park.webp",
+      "atlasBBoxPct": {
+        "left": 48.84647366365054,
+        "top": 95.9643209589344,
+        "width": 10.180045259421554,
+        "height": 4.035679041065606
+      },
+      "naturalWidth": 782,
+      "naturalHeight": 174
+    },
+    {
+      "territoryId": "lincoln-heights",
+      "name": "Lincoln Heights",
+      "src": "/assets/admin/control-room/world/territories-v2/lincoln-heights.webp",
+      "atlasBBoxPct": {
+        "left": 97.40631818181603,
+        "top": 39.486453774778234,
+        "width": 2.593681818183967,
+        "height": 33.38745655278779
+      },
+      "naturalWidth": 199,
+      "naturalHeight": 1442
+    },
+    {
+      "territoryId": "los-feliz",
+      "name": "Los Feliz",
+      "src": "/assets/admin/control-room/world/territories-v2/los-feliz.webp",
+      "atlasBBoxPct": {
+        "left": 59.723136363632584,
+        "top": 11.139305907887854,
+        "width": 22.909636363635975,
+        "height": 24.947024697583593
+      },
+      "naturalWidth": 1759,
+      "naturalHeight": 1078
+    },
+    {
+      "territoryId": "mar-vista",
+      "name": "Mar Vista",
+      "src": "/assets/admin/control-room/world/territories-v2/mar-vista.webp",
+      "atlasBBoxPct": {
+        "left": 0,
+        "top": 91.1925364950646,
+        "width": 14.328902288922256,
+        "height": 8.807463504935399
+      },
+      "naturalWidth": 1100,
+      "naturalHeight": 380
+    },
+    {
+      "territoryId": "mid-city",
+      "name": "Mid-City",
+      "src": "/assets/admin/control-room/world/territories-v2/mid-city.webp",
+      "atlasBBoxPct": {
+        "left": 21.668136363636314,
+        "top": 68.92748399072912,
+        "width": 35.01872727266384,
+        "height": 25.455146755235575
+      },
+      "naturalWidth": 2690,
+      "naturalHeight": 1099
+    },
+    {
+      "territoryId": "mid-wilshire",
+      "name": "Mid-Wilshire",
+      "src": "/assets/admin/control-room/world/territories-v2/mid-wilshire.webp",
+      "atlasBBoxPct": {
+        "left": 33.33177272726783,
+        "top": 53.1573116356623,
+        "width": 25.964181818182084,
+        "height": 24.828488199079224
+      },
+      "naturalWidth": 1994,
+      "naturalHeight": 1073
+    },
+    {
+      "territoryId": "mount-washington",
+      "name": "Mount Washington",
+      "src": "/assets/admin/control-room/world/territories-v2/mount-washington.webp",
+      "atlasBBoxPct": {
+        "left": 94.43313636363484,
+        "top": 12.409779864713016,
+        "width": 5.566863636365156,
+        "height": 30.581084502702275
+      },
+      "naturalWidth": 428,
+      "naturalHeight": 1321
+    },
+    {
+      "territoryId": "palms",
+      "name": "Palms",
+      "src": "/assets/admin/control-room/world/territories-v2/palms.webp",
+      "atlasBBoxPct": {
+        "left": 4.749268615002764,
+        "top": 82.85131242716683,
+        "width": 23.201503891918136,
+        "height": 17.14868757283317
+      },
+      "naturalWidth": 1782,
+      "naturalHeight": 741
+    },
+    {
+      "territoryId": "pico-robertson",
+      "name": "Pico-Robertson",
+      "src": "/assets/admin/control-room/world/territories-v2/pico-robertson.webp",
+      "atlasBBoxPct": {
+        "left": 16.09813636363625,
+        "top": 61.06120292205569,
+        "width": 16.598727272669272,
+        "height": 19.240509333014806
+      },
+      "naturalWidth": 1275,
+      "naturalHeight": 831
+    },
+    {
+      "territoryId": "pico-union",
+      "name": "Pico-Union",
+      "src": "/assets/admin/control-room/world/territories-v2/pico-union.webp",
+      "atlasBBoxPct": {
+        "left": 64.02359090903497,
+        "top": 69.87454954426757,
+        "width": 17.673272727331025,
+        "height": 18.2526388361227
+      },
+      "naturalWidth": 1357,
+      "naturalHeight": 788
+    },
+    {
+      "territoryId": "rancho-park",
+      "name": "Rancho Park",
+      "src": "/assets/admin/control-room/world/territories-v2/rancho-park.webp",
+      "atlasBBoxPct": {
+        "left": 3.4446363636365533,
+        "top": 79.74239675791378,
+        "width": 12.997090909033792,
+        "height": 15.633767352446853
+      },
+      "naturalWidth": 998,
+      "naturalHeight": 675
+    },
+    {
+      "territoryId": "sawtelle",
+      "name": "Sawtelle",
+      "src": "/assets/admin/control-room/world/territories-v2/sawtelle.webp",
+      "atlasBBoxPct": {
+        "left": 0,
+        "top": 68.82173400297972,
+        "width": 8.527554326167106,
+        "height": 31.178265997020276
+      },
+      "naturalWidth": 655,
+      "naturalHeight": 1347
+    },
+    {
+      "territoryId": "sherman-oaks",
+      "name": "Sherman Oaks",
+      "src": "/assets/admin/control-room/world/territories-v2/sherman-oaks.webp",
+      "atlasBBoxPct": {
+        "left": 0,
+        "top": 0,
+        "width": 20.457818181813384,
+        "height": 11.829063358660362
+      },
+      "naturalWidth": 1571,
+      "naturalHeight": 511
+    },
+    {
+      "territoryId": "silver-lake",
+      "name": "Silver Lake",
+      "src": "/assets/admin/control-room/world/territories-v2/silver-lake.webp",
+      "atlasBBoxPct": {
+        "left": 71.25995454545281,
+        "top": 15.280141464899934,
+        "width": 18.6550909090888,
+        "height": 39.9721681477102
+      },
+      "naturalWidth": 1432,
+      "naturalHeight": 1727
+    },
+    {
+      "territoryId": "studio-city",
+      "name": "Studio City",
+      "src": "/assets/admin/control-room/world/territories-v2/studio-city.webp",
+      "atlasBBoxPct": {
+        "left": 6.981381787688534,
+        "top": 0,
+        "width": 38.328873092403185,
+        "height": 17.09738045097352
+      },
+      "naturalWidth": 2944,
+      "naturalHeight": 739
+    },
+    {
+      "territoryId": "universal-city",
+      "name": "Universal City",
+      "src": "/assets/admin/control-room/world/territories-v2/universal-city.webp",
+      "atlasBBoxPct": {
+        "left": 36.70309090898904,
+        "top": 0,
+        "width": 10.424727272684592,
+        "height": 4.184630368601744
+      },
+      "naturalWidth": 800,
+      "naturalHeight": 181
+    },
+    {
+      "territoryId": "university-park",
+      "name": "University Park",
+      "src": "/assets/admin/control-room/world/territories-v2/university-park.webp",
+      "atlasBBoxPct": {
+        "left": 68.97813636364221,
+        "top": 82.83455984036328,
+        "width": 9.491454545388478,
+        "height": 17.165440159636717
+      },
+      "naturalWidth": 728,
+      "naturalHeight": 742
+    },
+    {
+      "territoryId": "west-adams",
+      "name": "West Adams",
+      "src": "/assets/admin/control-room/world/territories-v2/west-adams.webp",
+      "atlasBBoxPct": {
+        "left": 29.17178317652661,
+        "top": 85.88579226932261,
+        "width": 23.312269592545277,
+        "height": 12.826373951756011
+      },
+      "naturalWidth": 1791,
+      "naturalHeight": 554
+    },
+    {
+      "territoryId": "west-hollywood",
+      "name": "West Hollywood",
+      "src": "/assets/admin/control-room/world/territories-v2/west-hollywood.webp",
+      "atlasBBoxPct": {
+        "left": 19.958999999914898,
+        "top": 30.275533972633045,
+        "width": 28.615636363631797,
+        "height": 22.588123893631693
+      },
+      "naturalWidth": 2198,
+      "naturalHeight": 976
+    },
+    {
+      "territoryId": "west-los-angeles",
+      "name": "West Los Angeles",
+      "src": "/assets/admin/control-room/world/territories-v2/west-los-angeles.webp",
+      "atlasBBoxPct": {
+        "left": 0,
+        "top": 65.60973026194148,
+        "width": 13.916227272721482,
+        "height": 21.46397504865206
+      },
+      "naturalWidth": 1069,
+      "naturalHeight": 928
+    },
+    {
+      "territoryId": "westlake",
+      "name": "Westlake",
+      "src": "/assets/admin/control-room/world/territories-v2/westlake.webp",
+      "atlasBBoxPct": {
+        "left": 69.27027272727416,
+        "top": 46.95676058185957,
+        "width": 18.531272727211146,
+        "height": 32.44427923860974
+      },
+      "naturalWidth": 1423,
+      "naturalHeight": 1401
+    },
+    {
+      "territoryId": "westwood",
+      "name": "Westwood",
+      "src": "/assets/admin/control-room/world/territories-v2/westwood.webp",
+      "atlasBBoxPct": {
+        "left": 0,
+        "top": 42.44979775466019,
+        "width": 16.264780500261775,
+        "height": 36.460101707433246
+      },
+      "naturalWidth": 1249,
+      "naturalHeight": 1575
+    },
+    {
+      "territoryId": "windsor-square",
+      "name": "Windsor Square",
+      "src": "/assets/admin/control-room/world/territories-v2/windsor-square.webp",
+      "atlasBBoxPct": {
+        "left": 53.423181818126366,
+        "top": 49.79943768743018,
+        "width": 6.872727272784928,
+        "height": 15.027723901246482
+      },
+      "naturalWidth": 528,
+      "naturalHeight": 650
+    }
+  ]
+}

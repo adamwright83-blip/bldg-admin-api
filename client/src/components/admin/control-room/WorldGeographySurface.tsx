@@ -12,6 +12,7 @@ import type { GeographicEntity } from "./GoogleMapsRealityLayer";
 import { RealityWindow } from "./RealityWindow";
 import { useWorldCamera } from "./useWorldCamera";
 import { FactionBattlefieldLayer } from "./FactionBattlefieldLayer";
+import { LanternTerritoryMosaic } from "./LanternTerritoryMosaic";
 import type { TowerDamageState } from "@shared/towerWars";
 
 const ATLAS_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas-v4.png";
@@ -225,8 +226,11 @@ export function WorldGeographySurface({
           <div className="cr-world-skin-shade" />
         </div>
 
+      {/* 1b. HD geography-locked territory mosaic. The v4 atlas remains the safety underlay. */}
+      {!googleVisible ? <LanternTerritoryMosaic /> : null}
+
       {/* 2. Living Atmosphere Overlay: real clouds, AQI haze, rain */}
-      <WorldAtmosphereOverlay atmosphere={atmosphere} />
+      <WorldAtmosphereOverlay atmosphere={mode === "lantern_atlas" ? null : atmosphere} />
 
       {/*
         2b. The battlefield lighting pass.
@@ -236,14 +240,14 @@ export function WorldGeographySurface({
         anchored entirely on the canonical buildings' own coordinates — see
         FactionBattlefieldLayer.
       */}
-      {combatPresentation && !googleVisible ? (
+      {combatPresentation && !googleVisible && mode !== "lantern_atlas" ? (
         <FactionBattlefieldLayer emphasised={emphasisedBuildingId} />
       ) : null}
 
       {/* 3. Places Aggregate Opportunity Density / Territory Glow */}
-      {showOpportunityLayer && opportunity && !googleVisible ? (
+      {showOpportunityLayer && opportunity && !googleVisible && mode !== "lantern_atlas" ? (
         <div className="cr-opportunity-layer" aria-hidden="true">
-          {opportunity.districts.map(district => (
+          {opportunity.districts.map((district: any) => (
             <div
               key={district.districtId}
               className={`cr-district-glow pressure-${district.opportunityPressure}`}
