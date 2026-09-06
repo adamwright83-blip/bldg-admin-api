@@ -4,16 +4,19 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    # Only source inputs trigger generation. Generated WorldGeographySurface,
+    # screenshots, truth reference, manifest, and 61 plates are intentionally
+    # excluded so the bot's own verified output commit cannot recurse forever.
     paths:
       - "scripts/render-lantern-city-vector-master.mjs"
       - "scripts/build-lantern-city-territory-mosaic.py"
       - "scripts/apply-lantern-territory-mosaic-patch.mjs"
+      - "scripts/apply-lantern-capture-qa-patch.mjs"
       - "scripts/export-lantern-city-territory-art-inputs.ts"
       - "scripts/render-lantern-city-territory-art-inputs.py"
+      - "client/public/assets/admin/control-room/world/fantasy-waterways-v1.geojson"
       - "shared/lanternTerritories.ts"
       - "shared/lanternCity.ts"
-      - "client/src/components/admin/control-room/LanternTerritoryMosaic.tsx"
-      - "client/src/components/admin/control-room/lantern-territory-mosaic.css"
       - ".github/workflows/lantern-city-territory-mosaic.yml"
 
 permissions:
@@ -26,7 +29,7 @@ concurrency:
 jobs:
   build-and-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -49,19 +52,24 @@ jobs:
       - name: Install image pipeline dependencies
         run: python -m pip install --disable-pip-version-check pillow numpy
 
-      - name: Apply renderer integration
-        run: node scripts/apply-lantern-territory-mosaic-patch.mjs
+      - name: Install Chromium for vector rendering and browser QA
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Apply production and browser-QA integration patches
+        run: |
+          node scripts/apply-lantern-territory-mosaic-patch.mjs
+          node scripts/apply-lantern-capture-qa-patch.mjs
 
       - name: Export authoritative territory geometry
         run: pnpm goldline:territory-art:export
 
-      - name: Build one continuous HD world and cut all 61 territories
+      - name: Build one continuous vector-fantasy world and cut all 61 territories
         run: node scripts/render-lantern-city-vector-master.mjs
 
       # The repository currently has unrelated pre-existing TypeScript debt in
       # Dayforge, procurement, vendor onboarding, and other modules. Preserve
-      # visibility into that debt without letting it block this isolated visual
-      # build after the mosaic itself has passed its deterministic QA gate.
+      # visibility into that debt without allowing unrelated historical errors
+      # to replace the two hard Lantern City gates below.
       - name: Baseline repo typecheck (non-blocking known debt)
         continue-on-error: true
         run: pnpm check
@@ -69,20 +77,60 @@ jobs:
       - name: Production build
         run: pnpm build
 
-      - name: Commit verified mosaic and integration to main
+      - name: Browser verify Admin at 100/200/300% and truth-vs-fantasy
         shell: bash
         run: |
+          set -euo pipefail
+          pnpm exec vite --host 127.0.0.1 > /tmp/lantern-vite.log 2>&1 &
+          VITE_PID=$!
+          cleanup() { kill "$VITE_PID" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+
+          READY=0
+          for i in $(seq 1 60); do
+            if curl --silent --fail http://127.0.0.1:5173/growth/lantern-city >/dev/null; then
+              READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$READY" -ne 1 ]; then
+            cat /tmp/lantern-vite.log
+            exit 1
+          fi
+
+          node scripts/capture-lantern-city.mjs
+          LANTERN_WORLD_TRUTH=1 node scripts/capture-lantern-city.mjs
+
+      - name: Assert browser QA artifacts exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s screenshots/lantern-city-v2/lantern-city-live-full-1920x1080.jpg
+          test -s screenshots/lantern-city-v2/lantern-city-vector-fantasy-zoom-200.jpg
+          test -s screenshots/lantern-city-v2/lantern-city-vector-fantasy-zoom-300.jpg
+          test -s screenshots/lantern-city-v2/lantern-city-live-full-world-truth-1920x1080.jpg
+          test -s screenshots/lantern-city-v2/territory-mosaic-master-preview.jpg
+          test -s screenshots/lantern-city-v2/territory-mosaic-assembled-preview.jpg
+          test -s client/public/assets/admin/control-room/world/lantern-city-truth-reference.jpg
+          test "$(find client/public/assets/admin/control-room/world/territories-v2 -maxdepth 1 -name '*.webp' | wc -l | tr -d ' ')" = "61"
+
+      - name: Commit verified fantasy mosaic and integration to main
+        shell: bash
+        run: |
+          set -euo pipefail
           git config user.name "goldline-world-builder"
           git config user.email "actions@users.noreply.github.com"
           git add \
             client/src/components/admin/control-room/WorldGeographySurface.tsx \
+            scripts/capture-lantern-city.mjs \
+            client/public/assets/admin/control-room/world/lantern-city-truth-reference.jpg \
             client/public/assets/admin/control-room/world/territories-v2 \
-            screenshots/lantern-city-v2/territory-mosaic-master-preview.jpg \
-            screenshots/lantern-city-v2/territory-mosaic-assembled-preview.jpg
+            screenshots/lantern-city-v2
           if git diff --cached --quiet; then
             echo "No generated changes to commit."
             exit 0
           fi
-          git commit -m "Generate geography-locked HD Lantern City mosaic"
+          git commit -m "Ship geography-locked fantasy Lantern City"
           git pull --rebase origin main
           git push origin HEAD:main
