@@ -10,6 +10,7 @@ on:
     paths:
       - "scripts/render-lantern-city-vector-master.mjs"
       - "scripts/build-lantern-city-territory-mosaic.py"
+      - "scripts/apply-lantern-art-target-patch.mjs"
       - "scripts/apply-lantern-territory-mosaic-patch.mjs"
       - "scripts/apply-lantern-capture-qa-patch.mjs"
       - "scripts/export-lantern-city-territory-art-inputs.ts"
@@ -55,8 +56,9 @@ jobs:
       - name: Install Chromium for vector rendering and browser QA
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Apply production and browser-QA integration patches
+      - name: Apply approved art target, production integration, and browser-QA patches
         run: |
+          node scripts/apply-lantern-art-target-patch.mjs
           node scripts/apply-lantern-territory-mosaic-patch.mjs
           node scripts/apply-lantern-capture-qa-patch.mjs
 
