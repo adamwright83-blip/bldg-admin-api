@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "generatedAt": "2026-09-06T21:45:02.303853+00:00",
+  "generatedAt": "2026-09-06T21:56:23.237849+00:00",
   "source": "one continuous OpenStreetMap/OpenMapTiles vector master with deterministic Lantern City styling; no satellite imagery; no generative geography",
   "attribution": "OpenMapTiles Data from OpenStreetMap \u00b7 rendered with OpenFreeMap vector tiles",
   "projection": {

@@ -210,6 +210,7 @@ export function WorldGeographySurface({
       className={`cr-world-geography-surface mode-${mode} view-atlas ${className}`}
       data-day-phase="day"
       data-world-truth={worldTruth ? "1" : "0"}
+      data-world-truth={worldTruth ? "1" : "0"}
     >
       {/*
         The world container. Everything spatial lives inside it, so the camera
