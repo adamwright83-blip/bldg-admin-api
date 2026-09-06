@@ -5,7 +5,7 @@
   "features": [
     {
       "type": "Feature",
-      "properties": { "id": "western-canal", "name": "Western Canal", "width": 54 },
+      "properties": { "id": "western-canal", "name": "Western Canal", "width": 78 },
       "geometry": {
         "type": "LineString",
         "coordinates": [
@@ -22,7 +22,7 @@
     },
     {
       "type": "Feature",
-      "properties": { "id": "hollywood-river", "name": "Hollywood River", "width": 48 },
+      "properties": { "id": "hollywood-river", "name": "Hollywood River", "width": 72 },
       "geometry": {
         "type": "LineString",
         "coordinates": [
@@ -39,7 +39,7 @@
     },
     {
       "type": "Feature",
-      "properties": { "id": "silver-channel", "name": "Silver Channel", "width": 50 },
+      "properties": { "id": "silver-channel", "name": "Silver Channel", "width": 74 },
       "geometry": {
         "type": "LineString",
         "coordinates": [
@@ -56,7 +56,7 @@
     },
     {
       "type": "Feature",
-      "properties": { "id": "southern-aqueduct", "name": "Southern Aqueduct", "width": 44 },
+      "properties": { "id": "southern-aqueduct", "name": "Southern Aqueduct", "width": 64 },
       "geometry": {
         "type": "LineString",
         "coordinates": [
@@ -75,7 +75,7 @@
     },
     {
       "type": "Feature",
-      "properties": { "id": "central-ring-north", "name": "Central Ring North", "width": 34 },
+      "properties": { "id": "central-ring-north", "name": "Central Ring North", "width": 52 },
       "geometry": {
         "type": "LineString",
         "coordinates": [
@@ -89,7 +89,7 @@
     },
     {
       "type": "Feature",
-      "properties": { "id": "central-ring-south", "name": "Central Ring South", "width": 34 },
+      "properties": { "id": "central-ring-south", "name": "Central Ring South", "width": 52 },
       "geometry": {
         "type": "LineString",
         "coordinates": [
@@ -98,6 +98,34 @@
           [-118.337, 34.057],
           [-118.322, 34.061],
           [-118.308, 34.068]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "beverly-lagoon-spur", "name": "Beverly Lagoon Spur", "width": 48 },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-118.409, 34.092],
+          [-118.397, 34.087],
+          [-118.386, 34.081],
+          [-118.377, 34.073],
+          [-118.368, 34.064]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "downtown-harbor-spur", "name": "Downtown Harbor Spur", "width": 50 },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-118.286, 34.064],
+          [-118.273, 34.058],
+          [-118.260, 34.054],
+          [-118.247, 34.052],
+          [-118.234, 34.055]
         ]
       }
     }
