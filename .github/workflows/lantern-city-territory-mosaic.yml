@@ -25,7 +25,7 @@ permissions:
 
 concurrency:
   group: lantern-city-territory-mosaic
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-and-verify:
@@ -134,5 +134,11 @@ jobs:
             exit 0
           fi
           git commit -m "Ship geography-locked fantasy Lantern City"
+          # The art-target patch deliberately mutates these generation sources
+          # only inside CI. Restore those transient edits before rebasing so the
+          # verified output commit can always advance main with a clean tree.
+          git restore --worktree -- \
+            scripts/render-lantern-city-vector-master.mjs \
+            scripts/build-lantern-city-territory-mosaic.py
           git pull --rebase origin main
           git push origin HEAD:main
