@@ -10,20 +10,20 @@ let renderer = await fs.readFile(rendererPath, "utf8");
 // colors and fantasy-waterway stroke widths change here.
 const replacements = new Map([
   ['"residential", "#eadbb5"', '"residential", "#dce1de"'],
-  ['"commercial", "#e7cfaa"', '"commercial", "#e4e1dc"'],
-  ['"retail", "#efd2a9"', '"retail", "#ead9d4"'],
+  ['"commercial", "#e7cfaa"', '"commercial", "#e3e2de"'],
+  ['"retail", "#efd2a9"', '"retail", "#e5ddda"'],
   ['"industrial", "#d8c6a3"', '"industrial", "#d7dcda"'],
   ['"railway", "#d7c4a0"', '"railway", "#d6d8d4"'],
   ['"cemetery", "#91aa6a"', '"cemetery", "#a4aa91"'],
-  ['"hospital", "#edd5b3"', '"hospital", "#eadedb"'],
+  ['"hospital", "#edd5b3"', '"hospital", "#e7e2df"'],
   ['"school", "#ead9b4"', '"school", "#e3e2dc"'],
   ['"university", "#e7d3ad"', '"university", "#e4e0da"'],
   ['"#e4d3aa",', '"#dedfda",'],
   ['"wood", "#557b3b"', '"wood", "#929a7e"'],
   ['"grass", "#86a955"', '"grass", "#a3aa8e"'],
   ['"scrub", "#7b934c"', '"scrub", "#b8b49d"'],
-  ['"farmland", "#d9c98f"', '"farmland", "#d7d0b4"'],
-  ['"sand", "#e7d1a1"', '"sand", "#ded7c5"'],
+  ['"farmland", "#d9c98f"', '"farmland", "#d2d3c7"'],
+  ['"sand", "#e7d1a1"', '"sand", "#dddcd5"'],
   ['"#d9c99b",', '"#cbcbbd",'],
   ['"motorway", "#f2d49e"', '"motorway", "#f3f1eb"'],
   ['"trunk", "#f0d7a8"', '"trunk", "#f0eee8"'],
@@ -46,11 +46,17 @@ const replacements = new Map([
   ['"background-color": "#ead7a8"', '"background-color": "#dfe3df"'],
   ['"fill-color": "#75a04c"', '"fill-color": "#9aa481"'],
   ['"fill-outline-color": "#5d873f"', '"fill-outline-color": "#8f9979"'],
-  ['0, "#ead3a5"', '0, "#e4d8cf"'],
-  ['18, "#f3dfb8"', '18, "#ede6df"'],
-  ['55, "#f6e8cb"', '55, "#f4ebe3"'],
-  ['160, "#fff0cf"', '160, "#fff1e2"'],
+  ['"fill-color": "#6c4f3a"', '"fill-color": "#77736f"'],
+  ['"fill-opacity": 0.22,', '"fill-opacity": 0.14,'],
+  ['0, "#ead3a5"', '0, "#e1deda"'],
+  ['18, "#f3dfb8"', '18, "#ebe9e5"'],
+  ['55, "#f6e8cb"', '55, "#f3efea"'],
+  ['160, "#fff0cf"', '160, "#fff8f4"'],
   ['"fill-outline-color": "#c18d62"', '"fill-outline-color": "#bd9478"'],
+  ['"line-color": "#9e8063"', '"line-color": "#a5a39c"'],
+  ['"fill-color": "#ddc9a3"', '"fill-color": "#d9ddd9"'],
+  ['"line-color": "#bfa785"', '"line-color": "#b7bbb8"'],
+  ['"line-color": "#e6d3aa"', '"line-color": "#d9dedb"'],
   [
     'const canalWidth = ["interpolate", ["linear"], ["zoom"], 10, 18, 14, ["get", "width"]];',
     'const canalWidth = ["interpolate", ["linear"], ["zoom"], 10, 24, 14, ["*", ["get", "width"], 1.4]];'
@@ -72,7 +78,7 @@ for (const [from, to] of replacements) {
     changed += 1;
   }
 }
-if (changed < 33) {
+if (changed < 38) {
   throw new Error(`Lantern art-target patch matched only ${changed} expected palette/width anchors; renderer drifted`);
 }
 await fs.writeFile(rendererPath, renderer);
