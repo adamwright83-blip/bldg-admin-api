@@ -1,0 +1,88 @@
+/*
+ * LANTERN CITY PRODUCTION ART SAFETY
+ *
+ * Geography-correct generated vector tiles are tracing / registration tools,
+ * not production Lantern City art. Production must show the authored fantasy
+ * atlas, with real geography underneath positioning entities.
+ */
+
+.cr-world-geography-surface.mode-lantern_atlas.view-atlas {
+  background: #dfead6 !important;
+}
+
+.cr-world-geography-surface.mode-lantern_atlas.view-atlas .cr-world-skin-container {
+  opacity: 1 !important;
+  mix-blend-mode: normal !important;
+}
+
+.cr-world-geography-surface.mode-lantern_atlas.view-atlas .cr-world-skin-img {
+  opacity: 1 !important;
+  filter: saturate(1.18) contrast(1.08) brightness(1.035) !important;
+  mix-blend-mode: normal !important;
+  image-rendering: auto;
+}
+
+.cr-world-geography-surface.mode-lantern_atlas.view-atlas .cr-world-skin-shade {
+  display: none !important;
+  background: none !important;
+}
+
+/* Second safety lock: Lantern City never receives a whole-map atmosphere,
+ * opportunity-density tint, or faction wash. */
+.cr-world-geography-surface.mode-lantern_atlas .cr-world-atmosphere-root,
+.cr-world-geography-surface.mode-lantern_atlas .cr-opportunity-layer,
+.cr-world-geography-surface.mode-lantern_atlas .cr-faction-battlefield-layer {
+  display: none !important;
+}
+
+/* The family/future objective outranks any individual tower. */
+.cr-world-geography-surface.mode-lantern_atlas .gl-future-objective {
+  left: 50% !important;
+  top: 8% !important;
+  width: clamp(124px, 11vw, 184px) !important;
+  z-index: 18 !important;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 10px 10px rgba(75, 45, 12, .28)) !important;
+}
+
+.cr-world-geography-surface.mode-lantern_atlas .gl-future-objective img {
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+/* Locked freedom rewards are localized props, not oversized map-covering art. */
+.cr-world-geography-surface.mode-lantern_atlas .gl-freedom-object {
+  width: clamp(92px, 9.5vw, 154px) !important;
+  z-index: 14 !important;
+  filter: none !important;
+}
+
+.cr-world-geography-surface.mode-lantern_atlas .gl-freedom-object-art {
+  opacity: 1 !important;
+  filter:
+    drop-shadow(0 9px 7px rgba(29, 24, 47, .34))
+    drop-shadow(0 0 8px rgba(255, 213, 104, .24)) !important;
+}
+
+/* Strongholds stay dominant without painting a translucent faction stain over
+ * the city. Contact shadow only. */
+.cr-world-geography-surface.mode-lantern_atlas .cr-world-tower-anchor {
+  z-index: 16 !important;
+  filter: none !important;
+}
+
+.cr-world-geography-surface.mode-lantern_atlas .cr-world-tower-anchor img {
+  filter: drop-shadow(0 12px 8px rgba(26, 22, 38, .34)) !important;
+}
+
+@media (max-width: 800px) {
+  .cr-world-geography-surface.mode-lantern_atlas .gl-future-objective {
+    left: 50% !important;
+    top: 7% !important;
+    width: 86px !important;
+  }
+
+  .cr-world-geography-surface.mode-lantern_atlas .gl-freedom-object {
+    width: 88px !important;
+  }
+}
