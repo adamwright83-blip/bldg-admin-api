@@ -1,6 +1,6 @@
 import { useMemo, type CSSProperties } from "react";
 import { GuardianActor } from "../GuardianActor";
-import { BOARD_OVERLAYS } from "@shared/goldlineBoardKit";
+import { TerritoryShroud } from "./TerritoryShroud";
 import { projectLatLngToLanternAtlas } from "@shared/lanternCity";
 import {
   atlasPolygon,
@@ -38,59 +38,20 @@ export function WorldVeilLayer({
     new URLSearchParams(location.search).get("territoryDebug") === "1";
   return (
     <>
+      {/*
+        THE OCCUPATION LAYER. One localized shroud per guarded territory, each
+        clipped to its own polygon — never a single weather front spanning the
+        city. See TerritoryShroud for why this is drawn rather than textured.
+      */}
       <svg
         className="gl-world-veil"
         viewBox="0 0 100 100"
         preserveAspectRatio="none"
         aria-hidden
       >
-        <defs>
-          {guarded.map(({ territory }) => (
-            <mask
-              id={`territory-${territory.id}`}
-              maskUnits="userSpaceOnUse"
-              x="0"
-              y="0"
-              width="100"
-              height="100"
-              key={territory.id}
-            >
-              <filter
-                id={`territory-feather-${territory.id}`}
-                x="-20%"
-                y="-20%"
-                width="140%"
-                height="140%"
-              >
-                <feGaussianBlur stdDeviation="1.1" />
-              </filter>
-              {atlasPolygon(territory).map((ring, i) => (
-                <polygon
-                  key={i}
-                  fill="white"
-                  filter={`url(#territory-feather-${territory.id})`}
-                  points={ring.map(p => `${p.x},${p.y}`).join(" ")}
-                />
-              ))}
-            </mask>
-          ))}
-        </defs>
-        {guarded.map(({ territory }) => {
-          const b = territory.presentation.cloudBounds;
-          return (
-            <image
-              key={territory.id}
-              className="gl-territory-cloud"
-              href={BOARD_OVERLAYS.fog}
-              x={b.xPct - b.widthPct * 0.65}
-              y={b.yPct - b.heightPct * 0.7}
-              width={Math.max(8, b.widthPct * 1.3)}
-              height={Math.max(8, b.heightPct * 1.4)}
-              preserveAspectRatio="xMidYMid slice"
-              mask={`url(#territory-${territory.id})`}
-            />
-          );
-        })}
+        {guarded.map(({ territory }) => (
+          <TerritoryShroud key={territory.id} territory={territory} />
+        ))}
       </svg>
       {guarded.map(occupation => {
         const { territory } = occupation,

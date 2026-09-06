@@ -242,18 +242,49 @@
   height: 100%;
   pointer-events: none;
 }
-.gl-territory-cloud {
-  opacity: 0.9;
+/* --- the occupation layer ------------------------------------------------
+   A guarded territory is SEALED, not fogged. The base mass is opaque so the
+   streets and buildings underneath genuinely disappear; everything else here
+   only gives that mass form. If any value below drops enough to let the city
+   read through, this stops saying "blocked" and goes back to saying "weather".
+   ---------------------------------------------------------------------- */
+.gl-shroud-base {
+  fill: #f8f4ea;
 }
+.gl-shroud-lump {
+  /* Full opacity: the lumps ARE the surface, not a wash over it. */
+  opacity: 1;
+}
+/* Widths are set per territory in atlas units, so a seam stays a seam whether
+   the territory is a few blocks or a whole basin. */
+.gl-shroud-cracks {
+  fill: none;
+  stroke-linecap: round;
+}
+.gl-shroud-crack-glow {
+  stroke: #ffbf4a;
+  opacity: 0.62;
+}
+.gl-shroud-crack {
+  stroke: #fff4d2;
+  opacity: 0.95;
+}
+/*
+  The seal, read against a PALE cover. The old shadow stack was tuned for a
+  dark, hazy background; over an ivory shroud a soft glow is invisible, so the
+  contrast now comes from a tight dark contact shadow instead. Larger, too — a
+  lock the operator has to hunt for does not communicate "sealed".
+*/
 .gl-territory-lock {
   position: absolute;
   z-index: 12;
-  width: 34%;
-  height: 34%;
+  width: 42%;
+  height: 42%;
   object-fit: contain;
   transform: translate(-50%, -50%) scale(var(--territory-lock-scale, 1));
   pointer-events: none;
-  filter: drop-shadow(0 5px 9px #0009) drop-shadow(0 0 8px #ffc94d88);
+  filter: drop-shadow(0 2px 3px #2b2033cc) drop-shadow(0 8px 14px #3a2c4a80)
+    drop-shadow(0 0 10px #ff9d2e66) saturate(1.12) contrast(1.06);
 }
 .gl-territory-debug {
   position: absolute;
@@ -344,10 +375,11 @@
   position: absolute;
   inset: 26% 12% 7%;
   border-radius: 50%;
+  /* Warmed and dimmed: over a pale cover the old cool halo read as more haze. */
   background: radial-gradient(
     ellipse,
-    #fff8d766 0%,
-    #9bcfff33 36%,
+    #ffe9a852 0%,
+    #ffc97a2e 38%,
     transparent 72%
   );
   filter: blur(8px);
@@ -358,6 +390,12 @@
   transform: translateY(-4px) scale(1.045);
   filter: drop-shadow(0 14px 24px #ffc75f99) brightness(1.07);
 }
+/*
+  The Guardian INHABITS the sealed territory rather than hovering over it: its
+  lower body fades into the cover, and a puff of that same cover is drawn in
+  front of its feet, so the two objects share one surface. Scale is untouched —
+  bosses stay large.
+*/
 .gl-veil-guardian .gl-guardian {
   position: relative;
   left: auto;
@@ -365,6 +403,36 @@
   width: 100%;
   height: 100%;
   transform: none;
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    #000 0%,
+    #000 74%,
+    #000000b3 85%,
+    transparent 97%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    #000 0%,
+    #000 74%,
+    #000000b3 85%,
+    transparent 97%
+  );
+}
+.gl-veil-guardian::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 4%;
+  z-index: 2;
+  width: 82%;
+  height: 26%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse at 46% 34%, #fffdf7 0%, #f4efe2 46%, #f4efe200 74%),
+    radial-gradient(ellipse at 62% 62%, #c9cee4b3 0%, transparent 66%);
+  filter: blur(2px);
+  pointer-events: none;
 }
 .gl-veil-guardian-hit {
   position: absolute;
