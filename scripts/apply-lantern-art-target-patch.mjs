@@ -4,49 +4,65 @@ import path from "node:path";
 const rendererPath = path.resolve("scripts/render-lantern-city-vector-master.mjs");
 let renderer = await fs.readFile(rendererPath, "utf8");
 
+// The approved target is a bright California fantasy atlas: cool pearl/ivory
+// city mass, deliberate turquoise waterways, restrained green accents, and no
+// broad purple haze. Real vector geography stays untouched; only presentation
+// colors and fantasy-waterway stroke widths change here.
 const replacements = new Map([
-  ['"residential", "#eadbb5"', '"residential", "#deddd4"'],
-  ['"commercial", "#e7cfaa"', '"commercial", "#e7ded1"'],
-  ['"retail", "#efd2a9"', '"retail", "#ead7ca"'],
-  ['"industrial", "#d8c6a3"', '"industrial", "#d3d0c7"'],
-  ['"railway", "#d7c4a0"', '"railway", "#d0ccc1"'],
-  ['"cemetery", "#91aa6a"', '"cemetery", "#82a05f"'],
-  ['"hospital", "#edd5b3"', '"hospital", "#ead8d1"'],
-  ['"school", "#ead9b4"', '"school", "#e3ded2"'],
-  ['"university", "#e7d3ad"', '"university", "#e5ddd0"'],
-  ['"#e4d3aa",', '"#ddd9cd",'],
-  ['"wood", "#557b3b"', '"wood", "#69864b"'],
-  ['"grass", "#86a955"', '"grass", "#82a25a"'],
-  ['"scrub", "#7b934c"', '"scrub", "#aaa071"'],
-  ['"farmland", "#d9c98f"', '"farmland", "#d3c794"'],
-  ['"sand", "#e7d1a1"', '"sand", "#e4d4aa"'],
-  ['"#d9c99b",', '"#cfc9ae",'],
-  ['"motorway", "#f2d49e"', '"motorway", "#f3eee3"'],
-  ['"trunk", "#f0d7a8"', '"trunk", "#f1eadf"'],
-  ['"primary", "#eedab3"', '"primary", "#eee7dc"'],
-  ['"secondary", "#eadcbd"', '"secondary", "#e9e3da"'],
-  ['"tertiary", "#e5d8bb"', '"tertiary", "#e4ded5"'],
-  ['"minor", "#dfd3b7"', '"minor", "#ded8cf"'],
-  ['"service", "#d9cdb2"', '"service", "#d9d4ca"'],
-  ['"path", "#cdbf9f"', '"path", "#cec8bc"'],
-  ['"track", "#c9bb9b"', '"track", "#c9c3b6"'],
-  ['"#e0d4b9",', '"#ddd8ce",'],
-  ['"motorway", "#9e7655"', '"motorway", "#a98d73"'],
-  ['"trunk", "#a27b59"', '"trunk", "#ac9278"'],
-  ['"primary", "#a98261"', '"primary", "#b19980"'],
-  ['"secondary", "#ad8c6d"', '"secondary", "#b6a088"'],
-  ['"tertiary", "#b59a7e"', '"tertiary", "#bbaa94"'],
-  ['"minor", "#b8a58d"', '"minor", "#bdb09e"'],
-  ['"service", "#bcae98"', '"service", "#c1b7a7"'],
-  ['"#ad957a",', '"#b5a18c",'],
-  ['"background-color": "#ead7a8"', '"background-color": "#ddd9cd"'],
-  ['"fill-color": "#75a04c"', '"fill-color": "#76a052"'],
-  ['"fill-outline-color": "#5d873f"', '"fill-outline-color": "#668b47"'],
-  ['0, "#ead3a5"', '0, "#e5d3c3"'],
-  ['18, "#f3dfb8"', '18, "#eee4d8"'],
-  ['55, "#f6e8cb"', '55, "#f4eadf"'],
-  ['160, "#fff0cf"', '160, "#fff1dc"'],
-  ['"fill-outline-color": "#c18d62"', '"fill-outline-color": "#bd8b6b"'],
+  ['"residential", "#eadbb5"', '"residential", "#dce1de"'],
+  ['"commercial", "#e7cfaa"', '"commercial", "#e4e1dc"'],
+  ['"retail", "#efd2a9"', '"retail", "#ead9d4"'],
+  ['"industrial", "#d8c6a3"', '"industrial", "#d7dcda"'],
+  ['"railway", "#d7c4a0"', '"railway", "#d6d8d4"'],
+  ['"cemetery", "#91aa6a"', '"cemetery", "#a4aa91"'],
+  ['"hospital", "#edd5b3"', '"hospital", "#eadedb"'],
+  ['"school", "#ead9b4"', '"school", "#e3e2dc"'],
+  ['"university", "#e7d3ad"', '"university", "#e4e0da"'],
+  ['"#e4d3aa",', '"#dedfda",'],
+  ['"wood", "#557b3b"', '"wood", "#929a7e"'],
+  ['"grass", "#86a955"', '"grass", "#a3aa8e"'],
+  ['"scrub", "#7b934c"', '"scrub", "#b8b49d"'],
+  ['"farmland", "#d9c98f"', '"farmland", "#d7d0b4"'],
+  ['"sand", "#e7d1a1"', '"sand", "#ded7c5"'],
+  ['"#d9c99b",', '"#cbcbbd",'],
+  ['"motorway", "#f2d49e"', '"motorway", "#f3f1eb"'],
+  ['"trunk", "#f0d7a8"', '"trunk", "#f0eee8"'],
+  ['"primary", "#eedab3"', '"primary", "#eceae5"'],
+  ['"secondary", "#eadcbd"', '"secondary", "#e8e7e2"'],
+  ['"tertiary", "#e5d8bb"', '"tertiary", "#e3e2dd"'],
+  ['"minor", "#dfd3b7"', '"minor", "#ddddd8"'],
+  ['"service", "#d9cdb2"', '"service", "#d8d9d4"'],
+  ['"path", "#cdbf9f"', '"path", "#cfd0ca"'],
+  ['"track", "#c9bb9b"', '"track", "#c9cbc5"'],
+  ['"#e0d4b9",', '"#dcddd8",'],
+  ['"motorway", "#9e7655"', '"motorway", "#a99b8e"'],
+  ['"trunk", "#a27b59"', '"trunk", "#aca093"'],
+  ['"primary", "#a98261"', '"primary", "#b1a69a"'],
+  ['"secondary", "#ad8c6d"', '"secondary", "#b6ada2"'],
+  ['"tertiary", "#b59a7e"', '"tertiary", "#bbb4aa"'],
+  ['"minor", "#b8a58d"', '"minor", "#bdb8b0"'],
+  ['"service", "#bcae98"', '"service", "#c1bdb5"'],
+  ['"#ad957a",', '"#b5aca2",'],
+  ['"background-color": "#ead7a8"', '"background-color": "#dfe3df"'],
+  ['"fill-color": "#75a04c"', '"fill-color": "#9aa481"'],
+  ['"fill-outline-color": "#5d873f"', '"fill-outline-color": "#8f9979"'],
+  ['0, "#ead3a5"', '0, "#e4d8cf"'],
+  ['18, "#f3dfb8"', '18, "#ede6df"'],
+  ['55, "#f6e8cb"', '55, "#f4ebe3"'],
+  ['160, "#fff0cf"', '160, "#fff1e2"'],
+  ['"fill-outline-color": "#c18d62"', '"fill-outline-color": "#bd9478"'],
+  [
+    'const canalWidth = ["interpolate", ["linear"], ["zoom"], 10, 18, 14, ["get", "width"]];',
+    'const canalWidth = ["interpolate", ["linear"], ["zoom"], 10, 24, 14, ["*", ["get", "width"], 1.4]];'
+  ],
+  [
+    'const canalBankWidth = ["interpolate", ["linear"], ["zoom"], 10, 28, 14, ["+", ["get", "width"], 18]];',
+    'const canalBankWidth = ["interpolate", ["linear"], ["zoom"], 10, 36, 14, ["+", ["*", ["get", "width"], 1.4], 22]];'
+  ],
+  [
+    'const canalDepthWidth = ["interpolate", ["linear"], ["zoom"], 10, 23, 14, ["+", ["get", "width"], 8]];',
+    'const canalDepthWidth = ["interpolate", ["linear"], ["zoom"], 10, 30, 14, ["+", ["*", ["get", "width"], 1.4], 10]];'
+  ],
 ]);
 
 let changed = 0;
@@ -56,8 +72,8 @@ for (const [from, to] of replacements) {
     changed += 1;
   }
 }
-if (changed < 30) {
-  throw new Error(`Lantern art-target patch matched only ${changed} expected palette anchors; renderer drifted`);
+if (changed < 33) {
+  throw new Error(`Lantern art-target patch matched only ${changed} expected palette/width anchors; renderer drifted`);
 }
 await fs.writeFile(rendererPath, renderer);
 
@@ -78,4 +94,4 @@ if (!cutter.includes('warm ivory/cream/terracotta city mass overwhelms')) {
 }
 await fs.writeFile(cutterPath, cutter);
 
-console.log(`Locked Lantern City palette toward the approved concept target (${changed} renderer palette anchors).`);
+console.log(`Locked Lantern City palette and water mass toward the approved concept target (${changed} renderer anchors).`);
