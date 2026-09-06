@@ -1,7 +1,9 @@
 import { useMemo, type CSSProperties } from "react";
-import { GuardianActor } from "../GuardianActor";
-import { TerritoryShroud } from "./TerritoryShroud";
 import { projectLatLngToLanternAtlas } from "@shared/lanternCity";
+import {
+  frontierAssetForTerritory,
+  LANTERN_CITY_ASSETS,
+} from "../lanternCityAssets";
 import {
   atlasPolygon,
   classifyTerritory,
@@ -33,64 +35,45 @@ export function WorldVeilLayer({
     [customerLocations, totalCustomers, atlasReady, conqueredTerritoryIds]
   );
   if (occupancy.suppressed) return null;
-  const guarded = occupancy.territories.filter(row => row.guarded);
+  const guarded = occupancy.territories.filter(row => row.guarded).slice(0, 5);
   const debug =
     new URLSearchParams(location.search).get("territoryDebug") === "1";
   return (
     <>
-      {/*
-        THE OCCUPATION LAYER. One localized shroud per guarded territory, each
-        clipped to its own polygon — never a single weather front spanning the
-        city. See TerritoryShroud for why this is drawn rather than textured.
-      */}
-      <svg
-        className="gl-world-veil"
-        viewBox="0 0 100 100"
-        preserveAspectRatio="none"
-        aria-hidden
-      >
-        {guarded.map(({ territory }) => (
-          <TerritoryShroud key={territory.id} territory={territory} />
-        ))}
-      </svg>
+      <div className="gl-future-objective" aria-hidden="true">
+        <img src={LANTERN_CITY_ASSETS.futureCage.src} alt="" />
+        <span>A brighter tomorrow awaits</span>
+      </div>
       {guarded.map(occupation => {
         const { territory } = occupation,
           a = territory.presentation.guardianAnchor,
-          l = territory.presentation.lockAnchor;
+          asset = frontierAssetForTerritory(territory.id);
+        if (!asset) return null;
         return (
           <div
-            className="gl-veil-guardian"
+            className="gl-freedom-object"
             data-territory-id={territory.id}
+            data-asset-id={asset.id}
+            data-state={asset.state}
             key={territory.id}
             style={
               {
                 left: `${a.xPct}%`,
                 top: `${a.yPct}%`,
-                "--territory-guardian-scale": a.scale,
+                "--freedom-object-scale": asset.recommendedScale,
               } as CSSProperties
             }
           >
-            <GuardianActor
-              guardianId={territory.initialGuardianId!}
-              phase="notice"
-            />
             <img
-              className="gl-territory-lock"
-              src="/assets/goldline/guardians/v1/lock-seal.png"
+              className="gl-freedom-object-art"
+              src={asset.src}
               alt=""
-              style={
-                {
-                  left: `${50 + (l.xPct - a.xPct) * 5}%`,
-                  top: `${50 + (l.yPct - a.yPct) * 5}%`,
-                  "--territory-lock-scale": l.scale,
-                } as CSSProperties
-              }
             />
             <button
-              className="gl-veil-guardian-hit"
+              className="gl-freedom-object-hit"
               type="button"
               onClick={() => onConfront?.(occupation)}
-              aria-label={`${territory.name} is locked by its Cloud Guardian`}
+              aria-label={`${territory.name}: locked freedom objective`}
             />
           </div>
         );

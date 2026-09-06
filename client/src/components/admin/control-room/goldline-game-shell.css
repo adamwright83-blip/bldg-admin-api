@@ -31,6 +31,7 @@
   .gl-world-utility-menu > button { top: 16px; right: 12px; padding: 8px 10px; font-size: 12px; }
 }
 @media(prefers-reduced-motion:reduce) { .gl-world-portal { transition: none; } }
+
 .tw-renderer-comparison,.tw-pixi-proof > p { padding: 12px 20px; }
 .tw-renderer-comparison button,.tw-pixi-proof > button { margin: 8px 12px 12px 0; padding: 10px 16px; border: 1px solid #ddbd6a; border-radius: 18px; color: #fff2c0; background: #16354c; }
 .tw-pixi-proof > button:first-of-type { margin-left: 20px; }
@@ -428,3 +429,44 @@
 */
 .pwc-building[data-combat] > strong { color: #fff8e2 !important; background: linear-gradient(180deg, #14202fee, #060d16f2) !important; border-radius: 0 !important; }
 .pwc-building[data-combat] > small { color: #2a2313 !important; background: none !important; border-radius: 0 !important; }
+
+/* The approved image skins own the final cascade for the world-home dock. */
+body .gl-command-dock {
+  width: min(900px, calc(100vw - 300px)); min-width: 610px;
+  padding: 10px 24px; border: 0; box-shadow: none; clip-path: none;
+  background: url("/assets/goldline/lantern-city/v3/cta-backing-plate.png") center / 100% 100% no-repeat;
+}
+body .gl-command-dock .gl-dock-wing { display:none; }
+body .gl-command-dock .gl-command {
+  width: 33.333%; min-width:0; aspect-ratio:3/1; padding:0; border:0;
+  background:none; box-shadow:none; clip-path:none;
+}
+body .gl-command-dock .gl-command + .gl-command { margin-left:4px; }
+body .gl-command-dock .gl-command img { display:block; width:100%; height:100%; object-fit:contain; }
+@media(max-width:800px) {
+  body .gl-command-dock { width:calc(100vw - 16px); min-width:0; padding:6px 8px; }
+}
+
+/* Final supplied presentation plates. Interactive elements remain real buttons
+   and links; the images only supply their approved visual skin. */
+.gl-world-title {
+  width: min(570px, 38vw);
+  max-width: none;
+}
+.gl-world-title-art { display:block; width:100%; height:auto; }
+.gl-world-title button {
+  width: 52%; margin: -2px 0 0 2%; padding:0; border:0; background:none;
+  box-shadow:none; clip-path:none;
+}
+.gl-world-title button img { display:block; width:100%; height:auto; }
+.gl-world-utility-menu > button {
+  width: min(270px, 18vw); padding:0; border:0; background:none;
+  box-shadow:none; clip-path:none;
+}
+.gl-world-utility-menu > button img { display:block; width:100%; height:auto; }
+
+@media(max-width:800px) {
+  .gl-world-title { left:8px; top:8px; width:min(255px, 64vw); }
+  .gl-world-utility-menu > button { right:6px; top:8px; width:118px; }
+  .gl-world-title button { width:58%; }
+}

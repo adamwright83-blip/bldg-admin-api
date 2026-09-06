@@ -1662,12 +1662,81 @@ body .tw-truth-hud summary { cursor:pointer; font-size:11px; color:#fff; }
    them into the city instead of erasing them, which keeps the map honest.
    -------------------------------------------------------------------------- */
 .cr-world-geography-surface.view-atlas .cr-world-skin-img {
-  filter: sepia(0.07) saturate(1.05) brightness(1.04) contrast(1.06);
+  filter: saturate(1.05) brightness(1.01) contrast(1.04);
 }
 .cr-world-geography-surface.view-atlas .cr-world-skin-shade {
-  background:
-    radial-gradient(ellipse at 50% 42%, #fff6d21f 0%, transparent 62%),
-    linear-gradient(180deg, #fff2c528 0%, transparent 34%, #2a1c0a24 100%);
+  background: linear-gradient(180deg, #ffe39b08 0%, transparent 32%);
+}
+
+/* V3 freedom layer: localized approved objects, never a city-wide wash. */
+.gl-freedom-object {
+  position: absolute;
+  z-index: 9;
+  width: clamp(118px, 14vw, 220px);
+  aspect-ratio: 4 / 3;
+  transform: translate(-50%, -72%) scale(var(--freedom-object-scale, 1));
+  transform-origin: 50% 86%;
+  pointer-events: none;
+  filter: drop-shadow(0 9px 6px #1e153c73) drop-shadow(0 18px 22px #2b144e45);
+  transition: transform .18s ease, filter .18s ease;
+}
+.gl-freedom-object::after {
+  content: "";
+  position: absolute;
+  left: 20%; right: 20%; bottom: 5%; height: 10%;
+  border-radius: 50%;
+  background: #1d183e80;
+  filter: blur(8px);
+  z-index: -1;
+}
+.gl-freedom-object-art { width: 100%; height: 100%; object-fit: contain; }
+.gl-freedom-object-hit {
+  position: absolute;
+  inset: 7% 7% 5%;
+  border: 0;
+  background: transparent;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.gl-freedom-object:hover,
+.gl-freedom-object:focus-within {
+  transform: translate(-50%, -75%) scale(calc(var(--freedom-object-scale, 1) * 1.05));
+  filter: drop-shadow(0 12px 8px #1e153c82) drop-shadow(0 0 16px #ffd66e66);
+}
+.gl-freedom-object-hit:focus-visible { outline: 3px solid #fff4c8; outline-offset: 2px; border-radius: 18px; }
+
+.gl-future-objective {
+  position: absolute;
+  z-index: 8;
+  left: 61%;
+  top: 10%;
+  width: clamp(88px, 9vw, 150px);
+  pointer-events: none;
+  text-align: center;
+  filter: drop-shadow(0 10px 12px #7c4a1355);
+}
+.gl-future-objective img { display: block; width: 100%; max-height: 20vh; object-fit: contain; }
+.gl-future-objective span {
+  display: block;
+  margin-top: -8px;
+  color: #382408;
+  font: 800 8px/1.25 Georgia, serif;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  text-shadow: 0 1px #fff8dc;
+}
+.lc-frontier-guardian img { width: min(100%, 310px); height: 100%; object-fit: contain; }
+.cr-geography-debug-towers { position:absolute; inset:0; z-index:52; pointer-events:none; }
+.cr-geography-debug-towers > span { position:absolute; transform:translate(-50%,-50%); display:grid; justify-items:center; }
+.cr-geography-debug-towers i { width:18px; height:18px; border:3px solid #fff; border-radius:50%; background:#ff2bd6; box-shadow:0 0 0 3px #151028,0 0 14px #ff2bd6; }
+.cr-geography-debug-towers b,
+.cr-geography-debug-towers small { padding:2px 5px; color:#fff; background:#151028e8; font:800 9px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:nowrap; }
+.cr-geography-debug-towers b { margin-top:3px; color:#ff8bea; }
+
+@media (max-width: 800px) {
+  .gl-freedom-object { width: 112px; }
+  .gl-future-objective { left: 57%; top: 8%; width: 78px; }
+  .gl-future-objective span { display: none; }
 }
 
 /* ----------------------------------------------------------------------------
@@ -1956,9 +2025,9 @@ body .tw-truth-hud summary { cursor:pointer; font-size:11px; color:#fff; }
   background-size: contain;
   filter: drop-shadow(0 3px 4px #2c180066);
 }
-.lc-lantern.state-active { --lc-lantern-art: url("/assets/goldline/lantern-city/v2/lantern-gold-lit.png"); }
-.lc-lantern.state-dimming { --lc-lantern-art: url("/assets/goldline/lantern-city/v2/lantern-gold-dim.png"); }
-.lc-lantern.state-dark { --lc-lantern-art: url("/assets/goldline/lantern-city/v2/lantern-gold-off.png"); }
+.lc-lantern.state-active { --lc-lantern-art: url("/assets/goldline/lantern-city/v4/lantern-bright.png"); }
+.lc-lantern.state-dimming { --lc-lantern-art: url("/assets/goldline/lantern-city/v4/lantern-dim.png"); }
+.lc-lantern.state-dark { --lc-lantern-art: url("/assets/goldline/lantern-city/v4/lantern-off.png"); }
 
 /* The drawn brass is now in the image, so the borders that used to draw it are
    removed. The elements themselves stay: the body still hosts the per-customer

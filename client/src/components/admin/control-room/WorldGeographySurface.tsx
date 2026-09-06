@@ -14,7 +14,7 @@ import { useWorldCamera } from "./useWorldCamera";
 import { FactionBattlefieldLayer } from "./FactionBattlefieldLayer";
 import type { TowerDamageState } from "@shared/towerWars";
 
-const ATLAS_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas.jpg";
+const ATLAS_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas-v4.png";
 
 export type WorldGeographySurfaceProps = {
   mode?: "overview" | "lantern_atlas" | "reality_approach";
@@ -141,6 +141,9 @@ export function WorldGeographySurface({
 
   // One strategic world. Google is only mounted inside deliberate RealityWindow.
   const googleVisible = false;
+  const territoryDebug =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("territoryDebug") === "1";
   useEffect(() => {
     onGoogleVisibilityChange?.(googleVisible);
   }, [googleVisible, onGoogleVisibilityChange]);
@@ -369,6 +372,25 @@ export function WorldGeographySurface({
           );
         })}
       </div>
+      ) : null}
+      {territoryDebug && !googleVisible ? (
+        <div className="cr-geography-debug-towers" aria-hidden="true">
+          {CANONICAL_TOWERS.map(tower => {
+            const point = projectLatLngToLanternAtlas(tower);
+            if (point.outOfBounds) return null;
+            return (
+              <span
+                key={tower.id}
+                data-tower-id={tower.id}
+                style={{ left: `${point.x}%`, top: `${point.y}%` }}
+              >
+                <i />
+                <b>{tower.id}</b>
+                <small>{tower.latitude.toFixed(4)}, {tower.longitude.toFixed(4)}</small>
+              </span>
+            );
+          })}
+        </div>
       ) : null}
 
       {/* Additional UI elements (lanterns, search, controls passed as children) */}

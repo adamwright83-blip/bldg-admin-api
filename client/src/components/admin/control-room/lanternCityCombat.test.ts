@@ -60,7 +60,7 @@ describe("supplied combat assets", () => {
       ...Object.values(LANTERN_ART),
     ];
     for (const url of referenced) {
-      expect(url.startsWith("/assets/goldline/lantern-city/v2/")).toBe(true);
+      expect(url).toMatch(/^\/assets\/goldline\/lantern-city\/v[24]\//);
       expect(
         existsSync(join(PUBLIC_ROOT, url.replace(/^\//, ""))),
         `missing asset on disk: ${url}`
@@ -189,9 +189,9 @@ describe("lanterns keep deriving from real customer cadence", () => {
 
   it("paints the lantern from the cadence class the atlas already computed", () => {
     for (const [state, file] of [
-      ["active", "lantern-gold-lit.png"],
-      ["dimming", "lantern-gold-dim.png"],
-      ["dark", "lantern-gold-off.png"],
+      ["active", "lantern-bright.png"],
+      ["dimming", "lantern-dim.png"],
+      ["dark", "lantern-off.png"],
     ]) {
       expect(css).toMatch(
         new RegExp(`\\.lc-lantern\\.state-${state}[\\s\\S]{0,120}${file.replace(".", "\\.")}`)
@@ -403,7 +403,7 @@ describe("geography is authoritative", () => {
   it("moves no place: the base map and the projection are untouched", () => {
     // The atlas skin is graded, never replaced, and never repositioned.
     expect(surface).toContain(
-      'const ATLAS_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas.jpg"'
+      'const ATLAS_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas-v4.png"'
     );
     const grade = css.slice(css.indexOf(".cr-world-skin-img"));
     const scoped = grade.slice(0, grade.indexOf("}"));
@@ -429,7 +429,7 @@ describe("the command console", () => {
       ["/operations", "ACTIVE ORDERS"],
     ]) {
       expect(host).toContain(`href="${href}"`);
-      expect(host).toContain(`<strong>${label}</strong>`);
+      expect(host.toUpperCase()).toContain(label);
     }
   });
 

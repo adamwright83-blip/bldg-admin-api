@@ -61,14 +61,14 @@ export type CombatTowerArt = {
 export const COMBAT_TOWER_ART: Record<CanonicalBuildingId, CombatTowerArt> = {
   century_park_east: {
     faction: "gold",
-    clean: `${LANTERN_CITY_V2_ASSETS}/tower-cpe-combat-clean.png`,
+    clean: "/assets/goldline/lantern-city/v4/tower-century-park-east.png",
     damaged: null,
     weaponDescription: "rooftop valet bazooka",
     projectile: `${LANTERN_CITY_V2_ASSETS}/projectile-valet-car.png`,
   },
   opus_la: {
     faction: "violet",
-    clean: `${LANTERN_CITY_V2_ASSETS}/tower-opus-combat-clean.png`,
+    clean: "/assets/goldline/lantern-city/v4/tower-opus-la.png",
     damaged: null,
     weaponDescription: "giant architectural golf driver",
     projectile: `${LANTERN_CITY_V2_ASSETS}/projectile-opus-golf-ball.png`,

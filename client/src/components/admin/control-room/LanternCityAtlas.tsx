@@ -28,8 +28,7 @@ import {
 } from "@/components/goldline/CampaignWorldLayer";
 import { CRITICAL_COMBAT_ASSETS } from "./lanternCityCombat";
 import { WorldVeilLayer } from "@/components/goldline/board/WorldVeilLayer";
-import { GuardianActor } from "@/components/goldline/GuardianActor";
-import { guardianById } from "@shared/goldlineGuardians";
+import { frontierAssetForTerritory } from "@/components/goldline/lanternCityAssets";
 import {
   territoryByName,
   territoryCenter,
@@ -187,7 +186,7 @@ function FrontierBriefing({
   onClose: () => void;
 }) {
   const territory = neighbourhood.territory;
-  const guardian = guardianById(territory.initialGuardianId!);
+  const freedomAsset = frontierAssetForTerritory(territory.id);
   const center = territoryCenter(territory);
   const intelligence = trpc.system.goldlineWorld.frontierIntelligence.useQuery(
     {
@@ -223,16 +222,16 @@ function FrontierBriefing({
           <X aria-hidden />
         </button>
         <div className="lc-frontier-guardian" aria-hidden>
-          <GuardianActor guardianId={guardian.id} phase="notice" />
+          {freedomAsset ? <img src={freedomAsset.src} alt="" /> : null}
         </div>
         <div className="lc-frontier-copy">
-          <p className="lc-frontier-kicker">Territory counsel · unconquered</p>
-          <h2 id="lc-frontier-title">{territory.name} is under guard</h2>
+          <p className="lc-frontier-kicker">Freedom frontier · dormant</p>
+          <h2 id="lc-frontier-title">Awaken {territory.name}</h2>
           <p className="lc-frontier-sage">
-            “To defeat {guardian.name}, hit them where it hurts: put Goldline in
-            front of the people most likely to place the first order here.”
+            “This adventure starts with one real customer. Put Goldline in front
+            of the people most likely to place the first order here.”
           </p>
-          <div className="lc-frontier-objectives" aria-label="Conquest plan">
+          <div className="lc-frontier-objectives" aria-label="Freedom plan">
             <article>
               <b>01</b>
               <span>

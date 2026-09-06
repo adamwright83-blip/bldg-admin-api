@@ -29,12 +29,14 @@ const outputDir = path.resolve(process.cwd(), "screenshots", "lantern-city-v2");
 const scenario = process.env.TOWER_WARS_STATE || "live";
 const customerScenario = process.env.LANTERN_CUSTOMER_STATE || "full";
 const territoryScenario = process.env.LANTERN_TERRITORY_STATE || "fixture";
+const territoryDebug = process.env.LANTERN_TERRITORY_DEBUG === "1";
 
 const VIEWPORTS = [
   { name: "1440x900", width: 1440, height: 900 },
   { name: "1440x1000", width: 1440, height: 1000 },
   { name: "1536x1024", width: 1536, height: 1024 },
   { name: "1920x1080", width: 1920, height: 1080 },
+  { name: "390x844", width: 390, height: 844 },
 ];
 
 const WEST = -118.445, EAST = -118.225, SOUTH = 34.02, NORTH = 34.135;
@@ -272,7 +274,7 @@ const report = [];
 for (const viewport of VIEWPORTS) {
   consoleErrors.length = 0;
   await page.setViewportSize({ width: viewport.width, height: viewport.height });
-  await page.goto(`${origin}/growth/lantern-city`, { waitUntil: "networkidle" });
+  await page.goto(`${origin}/growth/lantern-city${territoryDebug ? "?territoryDebug=1" : ""}`, { waitUntil: "networkidle" });
   await page.waitForTimeout(900);
   /*
     JPEG, not PNG. These are visual QA artifacts of a photographic map: the
@@ -280,13 +282,13 @@ for (const viewport of VIEWPORTS) {
     script regenerates on demand. Quality 82 keeps every detail this pass is
     judged on and costs ~400KB a frame.
   */
-  const file = `lantern-city-${scenario}-${customerScenario}-${viewport.name}.jpg`;
+  const file = `lantern-city-${scenario}-${customerScenario}${territoryDebug ? "-territory-debug" : ""}-${viewport.name}.jpg`;
   await page.screenshot({ path: path.join(outputDir, file), type: "jpeg", quality: 82 });
   let briefing = 0;
   if (customerScenario === "frontier" && viewport === VIEWPORTS[0]) {
-    await page.locator(".gl-veil-guardian-hit").first().click();
+    await page.locator(".gl-freedom-object-hit").first().click();
     briefing = await page.locator(".lc-frontier-briefing").count();
-    await page.locator(".lc-frontier-briefing .gl-guardian-art").waitFor({ state: "visible" });
+    await page.locator(".lc-frontier-briefing img").waitFor({ state: "visible" });
     await page.waitForTimeout(250);
     await page.screenshot({
       path: path.join(outputDir, "lantern-city-frontier-briefing.jpg"),
@@ -302,6 +304,8 @@ for (const viewport of VIEWPORTS) {
     veilHoles: await page.locator(".gl-world-veil circle").count(),
     hud: await page.locator(".lc-rivalry-hud").count(),
     dock: await page.locator(".gl-command-dock .gl-command").count(),
+    freedomObjects: await page.locator(".gl-freedom-object").count(),
+    futureObjectives: await page.locator(".gl-future-objective").count(),
     projectiles: await page.locator(".pwc-combat-round").count(),
     islands: await page.locator(".gl-board-island").count(),
     guardianArt: await page.locator(".gl-guardian-art").count(),

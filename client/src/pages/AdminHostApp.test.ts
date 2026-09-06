@@ -100,7 +100,7 @@ describe("Admin six-domain shell", () => {
     // The rivalry band is presentation over towerWars.today; the console below
     // it is the same three admin utilities on the same three paths. Neither may
     // become a control that starts a fight.
-    expect(source).toContain("<RivalryHud />");
+    expect(source).not.toContain("<RivalryHud />");
     expect(source).toContain('className="gl-command-dock"');
     expect(source).not.toContain("gl-world-portal");
     for (const href of ["/new-order", "/customers", "/operations"])

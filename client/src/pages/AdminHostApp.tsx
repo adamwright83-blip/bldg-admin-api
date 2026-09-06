@@ -1,7 +1,7 @@
 import GoldlineOnboarding from "@/components/goldline/onboarding/GoldlineOnboarding";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Loader2, ClipboardPlus, Users, Package } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
 import { CustomerProfileDrawer } from "@/components/CustomerProfileDrawer";
@@ -33,7 +33,6 @@ import {
   SettingsControlRoom,
 } from "@/components/admin/control-room/ControlRoomSections";
 import LanternCityAtlas from "@/components/admin/control-room/LanternCityAtlas";
-import { RivalryHud } from "@/components/admin/control-room/RivalryHud";
 import DriverIntelligenceOverview from "@/components/admin/control-room/DriverIntelligenceOverview";
 import { TowerWars } from "@/components/admin/control-room/TowerWars";
 import "@/components/admin/control-room/admin-control-room.css";
@@ -332,7 +331,7 @@ export default function AdminHostApp() {
       ) : null}
 
       <div className={isWorldHome ? "gl-world-utility-menu" : ""}>
-      {isWorldHome ? <button type="button" onClick={() => setMobileNavOpen(open => !open)} aria-expanded={mobileNavOpen}>Utilities ⚙</button> : null}
+      {isWorldHome ? <button type="button" onClick={() => setMobileNavOpen(open => !open)} aria-expanded={mobileNavOpen} aria-label="Utilities"><img src="/assets/goldline/lantern-city/v4/utilities.png" alt="" /></button> : null}
       <div hidden={isWorldHome && !mobileNavOpen}>
       <ControlRoomNav
         path={path}
@@ -357,16 +356,11 @@ export default function AdminHostApp() {
             heading. Kept out of the map's transform so panning never drags it.
           */}
           <div className="gl-world-title">
-            <span>GOLDLINE</span>
-            <strong>Lantern City</strong>
-            <small>Luxury towers. Real power.</small>
-            <button type="button" onClick={() => setWorldIntelOpen(open => !open)} aria-expanded={worldIntelOpen}>{worldIntelOpen ? "Close intelligence" : "City intelligence"}</button>
+            <img className="gl-world-title-art" src="/assets/goldline/lantern-city/v4/world-title.png" alt="Goldline Lantern City — Luxury towers. Real power." />
+            <button type="button" onClick={() => setWorldIntelOpen(open => !open)} aria-expanded={worldIntelOpen} aria-label={worldIntelOpen ? "Close intelligence" : "City intelligence"}>
+              <img src="/assets/goldline/lantern-city/v4/city-intelligence.png" alt="" />
+            </button>
           </div>
-          {/*
-            The 1v1 band. Every figure inside it is read from towerWars.today;
-            see RivalryHud for why it renders empty rather than plausible.
-          */}
-          <RivalryHud />
           {/*
             ONE COMMAND CONSOLE, NOT THREE FLOATING BUTTONS.
 
@@ -381,19 +375,16 @@ export default function AdminHostApp() {
           <nav className="gl-command-dock" aria-label="Business utility commands">
             <span className="gl-dock-wing" aria-hidden />
             <Link href="/new-order" className="gl-command is-order">
-              <ClipboardPlus aria-hidden />
-              <strong>NEW ORDER</strong>
-              <small>Open intake</small>
+              <img src="/assets/goldline/lantern-city/v3/cta-new-order.png" alt="" />
+              <span className="sr-only">New Order — Open intake</span>
             </Link>
             <Link href="/customers" className="gl-command is-customers">
-              <Users aria-hidden />
-              <strong>CUSTOMERS</strong>
-              <small>The people behind the lanterns</small>
+              <img src="/assets/goldline/lantern-city/v3/cta-customers.png" alt="" />
+              <span className="sr-only">Customers — The people behind the lanterns</span>
             </Link>
             <Link href="/operations" className="gl-command is-active">
-              <Package aria-hidden />
-              <strong>ACTIVE ORDERS</strong>
-              <small>Work in flight</small>
+              <img src="/assets/goldline/lantern-city/v3/cta-active-orders.png" alt="" />
+              <span className="sr-only">Active Orders — Work in flight</span>
             </Link>
             <span className="gl-dock-wing" aria-hidden />
           </nav>

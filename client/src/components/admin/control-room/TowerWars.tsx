@@ -47,6 +47,7 @@ import type { SettledStratum } from "./facadeScars";
 import { SiegeComeback } from "./SiegeComeback";
 import { impactForAttack, type TowerImpact } from "@shared/towerWarsImpacts";
 import { BUILDING_ART } from "./buildingArt";
+import { RivalryHud } from "./RivalryHud";
 
 /** Register the projectile against the same contained 800×1200 art as its wound. */
 function RegisteredProjectile({ impact, pieceRefs }: { impact: TowerImpact; pieceRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>> }) {
@@ -211,6 +212,7 @@ export function TowerWars({ onNavigate, compact = false }: TowerWarsProps) {
   if (siegeBuilding)
     return <TowerSiege buildingId={siegeBuilding} onExit={() => setSiegeBuilding(null)} />;
   return <>
+    <RivalryHud />
     <details style={{ background: "#fff9e9", color: "#173d47", padding: "18px 20px" }}><summary>History / Replay</summary>
     <section aria-label="Battle date" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
       <label style={{ display: "grid", gap: 8, fontWeight: 700 }}>View sales by payment day <input style={{ background: "#fff", color: "#173d47", colorScheme: "light", border: "2px solid #987321", borderRadius: 8, padding: 10, minHeight: 44, fontSize: 16 }} aria-label="Battle payment date" type="date" value={businessDate} onChange={event => setBusinessDate(event.target.value)} /></label>
