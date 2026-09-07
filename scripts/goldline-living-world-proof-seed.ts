@@ -97,6 +97,28 @@ async function wipeProofTenant(db: NonNullable<Awaited<ReturnType<typeof getDb>>
  */
 export async function resetGoldlineProofWorld() {
   await seed();
+
+  const importPath = process.env.GOLDLINE_CUSTOMER_ORDER_IMPORT;
+  if (importPath) {
+    const { readFileSync } = await import("node:fs");
+    const {
+      importCustomerOrderHistory,
+      parseCustomerOrderWorkbookBuffer,
+    } = await import("../server/goldline/customerOrderHistoryImport");
+    const rows = parseCustomerOrderWorkbookBuffer(readFileSync(importPath));
+    const result = await importCustomerOrderHistory({
+      tenantId: TENANT,
+      rows,
+    });
+    console.log(
+      "Imported workbook into proof tenant:",
+      JSON.stringify({
+        customersProcessed: result.customersProcessed,
+        ordersInserted: result.ordersInserted,
+        ordersSkippedExisting: result.ordersSkippedExisting,
+      })
+    );
+  }
 }
 
 async function seed() {

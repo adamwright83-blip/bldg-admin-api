@@ -79,6 +79,45 @@ export const ATLAS_FAN_SLOTS = 5;
 const COLLISION_X = 2;
 const COLLISION_Y = 4;
 
+/** Shared threshold for a primary world object covering a customer cluster. */
+export const ATLAS_PRIMARY_COVER_X = 1.2;
+export const ATLAS_PRIMARY_COVER_Y = 1.2;
+
+export function atlasPointsOverlap(
+  left: { x: number; y: number },
+  right: { x: number; y: number },
+  thresholdX = ATLAS_PRIMARY_COVER_X,
+  thresholdY = ATLAS_PRIMARY_COVER_Y
+): boolean {
+  return (
+    Math.abs(left.x - right.x) < thresholdX &&
+    Math.abs(left.y - right.y) < thresholdY
+  );
+}
+
+export function findClusterAtAtlasPoint(
+  point: { x: number; y: number },
+  clusters: CustomerLocationCluster[]
+): CustomerLocationCluster | null {
+  return (
+    clusters.find(cluster => atlasPointsOverlap(point, cluster, COLLISION_X, COLLISION_Y)) ??
+    null
+  );
+}
+
+export function clusterCoveredByAtlasPoint(
+  cluster: CustomerLocationCluster,
+  point: { x: number; y: number }
+): boolean {
+  return atlasPointsOverlap(cluster, point);
+}
+
+export function lanternDensityClass(total: number): string {
+  if (total >= 4) return "density-major";
+  if (total >= 2) return "density-medium";
+  return "density-single";
+}
+
 export type FannedCluster = {
   cluster: CustomerLocationCluster;
   /** 0 = drawn on its true anchor; >0 = drawn on an offset slot with a stem. */

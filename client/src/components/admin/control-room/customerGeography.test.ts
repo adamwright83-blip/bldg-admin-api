@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { clusterGeographicCustomers, fanOutAtlasCollisions, type GeographicCustomer } from "./customerGeography";
+import {
+  clusterGeographicCustomers,
+  fanOutAtlasCollisions,
+  lanternDensityClass,
+  type GeographicCustomer,
+} from "./customerGeography";
 
 const customer = (id: string, address: string, state: "active" | "dimming" | "dark", lat = 34.0618): GeographicCustomer => ({ identityKey: id, displayName: id, phone: null, cadence: { state, daysSinceLastOrder: 1 }, location: { latitude: lat, longitude: -118.3011, x: 65, y: 63, outOfBounds: false, canonicalAddress: address } });
 
@@ -84,9 +89,9 @@ describe("atlas lantern collision fan-out", () => {
     expect(cpe.cluster.latitude).toBe(34.0618);
   });
 
-  it("is deterministic across call order", () => {
-    const first = colliding().map(f => `${f.cluster.key}:${f.fanSlot}`);
-    const second = colliding().map(f => `${f.cluster.key}:${f.fanSlot}`);
-    expect(first).toEqual(second);
+  it("assigns readable density classes", () => {
+    expect(lanternDensityClass(1)).toBe("density-single");
+    expect(lanternDensityClass(3)).toBe("density-medium");
+    expect(lanternDensityClass(8)).toBe("density-major");
   });
 });

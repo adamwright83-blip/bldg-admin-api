@@ -8,6 +8,8 @@ import {
   clusterGeographicCustomers,
   clustersAsGoogleEntities,
   fanOutAtlasCollisions,
+  clusterCoveredByAtlasPoint,
+  lanternDensityClass,
 } from "./customerGeography";
 import type { CustomerLocationCluster } from "./customerGeography";
 import { WorldEntityInspector } from "./WorldEntityInspector";
@@ -56,6 +58,9 @@ import {
   territoryCenter,
   type TerritoryOccupancy,
 } from "@shared/lanternTerritories";
+import { CANONICAL_BUILDING_GEOGRAPHY } from "@shared/canonicalGeography";
+import { projectLatLngToLanternAtlas } from "@shared/lanternCity";
+import { TowerAttachedCustomerLantern } from "./TowerAttachedCustomerLantern";
 
 export {
   inferCustomerCadence,
@@ -581,12 +586,50 @@ export default function LanternCityAtlas({
     lantern's cadence is not lost: it is layered onto the building below as
     state, so the place still reads as active/dimming/dormant.
   */
-  function pursuitCoversCluster(cluster: CustomerLocationCluster): boolean {
-    return visiblePursuits.some(
-      pursuit =>
-        pursuit.location != null &&
-        Math.abs(pursuit.location.x - cluster.x) < 1.2 &&
-        Math.abs(pursuit.location.y - cluster.y) < 1.2
+  function clusterAtPoint(point: { x: number; y: number }) {
+    return (
+      customerClusters.find(cluster =>
+        clusterCoveredByAtlasPoint(cluster, point)
+      ) ?? null
+    );
+  }
+
+  const canonicalTowerPoints = useMemo(
+    () =>
+      (["opus_la", "century_park_east"] as const).map(id => ({
+        id,
+        ...projectLatLngToLanternAtlas(CANONICAL_BUILDING_GEOGRAPHY[id]),
+      })),
+    []
+  );
+
+  const towerAttachedClusters = useMemo(() => {
+    const map = new Map<
+      (typeof canonicalTowerPoints)[number]["id"],
+      CustomerLocationCluster
+    >();
+    for (const tower of canonicalTowerPoints) {
+      const cluster = customerClusters.find(
+        cluster =>
+          !cluster.outsideAtlas && clusterCoveredByAtlasPoint(cluster, tower)
+      );
+      if (cluster) map.set(tower.id, cluster);
+    }
+    return map;
+  }, [canonicalTowerPoints, customerClusters]);
+
+  function primaryObjectCoversCluster(cluster: CustomerLocationCluster): boolean {
+    if (
+      visiblePursuits.some(
+        pursuit =>
+          pursuit.location != null &&
+          clusterCoveredByAtlasPoint(cluster, pursuit.location)
+      )
+    ) {
+      return true;
+    }
+    return canonicalTowerPoints.some(tower =>
+      clusterCoveredByAtlasPoint(cluster, tower)
     );
   }
 
@@ -684,6 +727,10 @@ export default function LanternCityAtlas({
     [customerClusters, visiblePursuits]
   );
 
+  const worldTruthMode =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("worldTruth") === "1";
+
   const unmappedCustomers = customers.filter(
     customer => !customer.location
   ).length;
@@ -710,7 +757,7 @@ export default function LanternCityAtlas({
         searchOpen={searchOpen}
         onToggleSearch={() => setSearchOpen(current => !current)}
       />
-      <LanternMapLegend />
+      <LanternMapLegend collapsedDefault />
 
       <section className="lc-map" aria-label="Lantern City world">
         <WorldGeographySurface
@@ -729,6 +776,8 @@ export default function LanternCityAtlas({
           businessDate={data?.businessDate ?? ""}
           conqueredTerritoryIds={conqueredTerritoryIds}
           lostGroundTerritoryIds={lostGroundTerritoryIds}
+          towerAttachedClusters={towerAttachedClusters}
+          worldTruthMode={worldTruthMode}
           atlasReady={!atlas.isLoading && !atlas.isError}
         >
           {/*
@@ -744,7 +793,7 @@ export default function LanternCityAtlas({
             fanOutAtlasCollisions(
               customerClusters.filter(
                 cluster =>
-                  !cluster.outsideAtlas && !pursuitCoversCluster(cluster)
+                  !cluster.outsideAtlas && !primaryObjectCoversCluster(cluster)
               )
             ).map(({ cluster, fanSlot }) => {
               const lanternState = clusterLanternState(cluster);
@@ -777,7 +826,7 @@ export default function LanternCityAtlas({
                       : undefined
                   }
                   className={worldMarkerClass(
-                    `lc-v5-lantern lc-lantern state-${lanternState}${fanSlot > 0 ? ` fan-${fanSlot}` : ""}`,
+                    `lc-v5-lantern lc-lantern ${lanternDensityClass(cluster.total)} state-${lanternState}${fanSlot > 0 ? ` fan-${fanSlot}` : ""}`,
                     entityForCluster(cluster),
                     revealing &&
                       entityForCluster(cluster)?.id === requestedEntityId,
@@ -850,6 +899,8 @@ export default function LanternCityAtlas({
           {!googleVisible &&
             visiblePursuits.map(item => {
               const worldEntity = entityForPursuit(item.accountId);
+              const attachedCluster =
+                item.location != null ? clusterAtPoint(item.location) : null;
               return (
                 <button
                   type="button"
@@ -867,12 +918,7 @@ export default function LanternCityAtlas({
                       active / dimming / dormant.
                     */
                       (() => {
-                        const covered = customerClusters.find(
-                          c =>
-                            item.location != null &&
-                            Math.abs(item.location.x - c.x) < 1.2 &&
-                            Math.abs(item.location.y - c.y) < 1.2
-                        );
+                        const covered = attachedCluster;
                         if (!covered) return "";
                         return covered.dark === covered.total
                           ? " cadence-dark"
@@ -880,7 +926,7 @@ export default function LanternCityAtlas({
                             ? " cadence-dimming"
                             : " cadence-active";
                       })()
-                    }`,
+                    }${attachedCluster ? " has-attached-customers" : ""}`,
                     worldEntity,
                     revealing && worldEntity?.id === requestedEntityId,
                     selectedPursuit?.pipelineId === item.pipelineId
@@ -894,22 +940,11 @@ export default function LanternCityAtlas({
                     setSelectedCluster(null);
                     setSelectedPursuit(item);
                   }}
-                  /*
-                The building is the control. A plain click inspects it; holding
-                Alt fires its own weapon at another tower, which is play and
-                touches nothing real.
-              */
                   onPointerDown={event => {
                     if (guardianLocked) return;
                     if (!event.altKey || !worldEntity) return;
                     event.preventDefault();
                     event.stopPropagation();
-                    /*
-                  Fire at another building that is actually drawn, so the
-                  damage lands somewhere the player can see. With nothing else
-                  on screen the tower takes its own shot, which is funnier and
-                  still visible.
-                */
                     const target =
                       (cityWorld.data ?? []).find(
                         e => e.id !== worldEntity.id && e.location
@@ -923,6 +958,9 @@ export default function LanternCityAtlas({
                   }}
                   aria-label={markerLabel(`Pursued: ${item.name}`, worldEntity)}
                 >
+                  {attachedCluster ? (
+                    <TowerAttachedCustomerLantern cluster={attachedCluster} />
+                  ) : null}
                   {worldEntity?.canonicalAsset?.assetUrl ? (
                     <img src={worldEntity.canonicalAsset.assetUrl} alt="" />
                   ) : (
@@ -1069,6 +1107,7 @@ export default function LanternCityAtlas({
         ) : null}
       </LanternGameRoom>
 
+      {worldTruthMode ? (
       <details className="lc-v5-drawer">
         <summary>Map tools & geographic truth</summary>
         <p>
@@ -1086,6 +1125,7 @@ export default function LanternCityAtlas({
           {geocode.isPending ? "Geocoding…" : "Geocode pending locations"}
         </button>
       </details>
+      ) : null}
 
       <LanternCommandDeck
         active={activeCommand}
@@ -1107,7 +1147,12 @@ export default function LanternCityAtlas({
       (selectedCluster || selectedPursuit || requestedEntity) ? (
         <WorldEntityInspector
           entity={selectedEntity}
-          cluster={selectedCluster}
+          cluster={
+            selectedCluster ??
+            (selectedPursuit?.location
+              ? clusterAtPoint(selectedPursuit.location)
+              : null)
+          }
           pursuit={selectedPursuit}
           onClose={() => {
             setSelectedCluster(null);

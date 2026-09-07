@@ -7,8 +7,9 @@ dist/
 build/
 *.dist
 
-# Environment variables
-.env
+# Local Goldline customer import QA artifacts (contains PII)
+goldline-customer-order-ledger.local.json
+**/goldline-customer-order-ledger.local.json
 .env.local
 .env.development.local
 .env.test.local

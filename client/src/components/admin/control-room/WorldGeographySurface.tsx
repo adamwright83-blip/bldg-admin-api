@@ -18,8 +18,9 @@ import {
   LANTERN_CITY_V5_ASSETS,
   LANTERN_CITY_V5_PRELOAD,
 } from "@/components/goldline/lanternCityV5Assets";
-import type { GeographicCustomer } from "./customerGeography";
+import type { GeographicCustomer, CustomerLocationCluster } from "./customerGeography";
 import { classifyTerritory } from "@shared/lanternTerritories";
+import { TowerAttachedCustomerLantern } from "./TowerAttachedCustomerLantern";
 import "./lantern-city-v5.css";
 
 const ATLAS_IMAGE = LANTERN_CITY_V5_ASSETS.world.master;
@@ -87,6 +88,10 @@ export type WorldGeographySurfaceProps = {
   lostGroundTerritoryIds?: ReadonlySet<string>;
   worldTruthMode?: boolean;
   atlasReady?: boolean;
+  towerAttachedClusters?: ReadonlyMap<
+    CanonicalBuildingId,
+    CustomerLocationCluster
+  >;
 };
 
 const CANONICAL_TOWERS: Array<{
@@ -137,6 +142,7 @@ export function WorldGeographySurface({
   lostGroundTerritoryIds,
   worldTruthMode = false,
   atlasReady = true,
+  towerAttachedClusters,
 }: WorldGeographySurfaceProps) {
   const [realityBuildingId, setRealityBuildingId] = useState<CanonicalBuildingId | null>(null);
   /*
@@ -376,7 +382,7 @@ export function WorldGeographySurface({
           return (
             <div
               key={tower.id}
-                className={`cr-world-tower-anchor ${selectedBuildingId === tower.id ? "is-selected" : ""} ${battleState?.pressureBuilding === tower.id ? "is-pressure" : ""} ${battleState?.revenueCue === tower.id ? "is-revenue-cue" : ""}`}
+                className={`cr-world-tower-anchor ${selectedBuildingId === tower.id ? "is-selected" : ""} ${battleState?.pressureBuilding === tower.id ? "is-pressure" : ""} ${battleState?.revenueCue === tower.id ? "is-revenue-cue" : ""}${towerAttachedClusters?.get(tower.id) ? " has-attached-customers" : ""}`}
               data-faction={combatPresentation ? (tower.id === "opus_la" ? "violet" : "gold") : undefined}
               style={{ left: `${pt.x}%`, top: `${pt.y}%` }}
               onPointerEnter={() => setEmphasisedBuildingId(tower.id)}
@@ -390,21 +396,16 @@ export function WorldGeographySurface({
             >
               <CityTowerButton
                 buildingId={tower.id}
-                className={`pwc-building ${tower.id === "opus_la" ? "opus" : "cpe"}`}
+                className={`pwc-building ${tower.id === "opus_la" ? "opus" : "cpe"}${towerAttachedClusters?.get(tower.id) ? " has-attached-customers" : ""}`}
                 onNavigate={path => {
                   onSelectBuilding?.(tower.id);
                   onNavigate?.(path);
                 }}
                 subtitle={
-                  /*
-                    In the combat world the neighbourhood is already written on
-                    the map two centimetres away, so repeating it under the
-                    nameplate says nothing. The line becomes the affordance
-                    instead — it states exactly what clicking the building does,
-                    which is the one thing the composition cannot show.
-                  */
                   combatPresentation
-                    ? "Enter Tower Wars"
+                    ? towerAttachedClusters?.get(tower.id)
+                      ? `${towerAttachedClusters.get(tower.id)!.total} customers live here · Enter Tower Wars`
+                      : "Enter Tower Wars"
                     : `${tower.neighborhood} · THIS WEEK ${battleState?.revenues[tower.id] == null ? "—" : `$${(battleState.revenues[tower.id]! / 100).toFixed(0)}`} · battle truth`
                 }
                 vitality={buildingVitality?.get(tower.id)}
@@ -412,6 +413,11 @@ export function WorldGeographySurface({
                 damage={buildingDamage?.[tower.id] ?? null}
                 attacksToday={buildingAttacks?.[tower.id] ?? null}
               />
+              {towerAttachedClusters?.get(tower.id) ? (
+                <TowerAttachedCustomerLantern
+                  cluster={towerAttachedClusters.get(tower.id)!}
+                />
+              ) : null}
               <button
                 type="button"
                 className="cr-reality-trigger-btn"

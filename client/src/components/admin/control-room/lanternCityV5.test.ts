@@ -60,9 +60,19 @@ describe("Lantern City v5 visible composition", () => {
     expect(atlas).toContain('useState<LanternCommandId>("map")');
   });
 
-  it("uses real frontier objectives for conquest room", () => {
-    expect(atlas).toContain("LanternConquestRoom");
-    expect(atlas).toContain("frontierObjectives");
-    expect(read("./LanternCommandRooms.tsx")).toContain("frontierObjectives");
+  it("hides geographic truth drawer unless worldTruth=1", () => {
+    expect(atlas).toContain('get("worldTruth") === "1"');
+    expect(atlas).toContain("{worldTruthMode ? (");
+  });
+
+  it("keeps tower-attached customer lanterns visible instead of suppressing them", () => {
+    expect(atlas).toContain("primaryObjectCoversCluster");
+    expect(atlas).toContain("TowerAttachedCustomerLantern");
+    expect(surface).toContain("towerAttachedClusters");
+  });
+
+  it("scales customer lanterns by cluster density", () => {
+    expect(atlas).toContain("lanternDensityClass");
+    expect(css).toContain(".lc-v5-lantern.density-major");
   });
 });

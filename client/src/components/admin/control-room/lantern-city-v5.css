@@ -52,25 +52,38 @@
 
 .lc-v5-identity {
   display: grid;
-  gap: 2px;
-  padding: 10px 14px;
-  background: rgb(255 255 255 / 82%);
-  border: 1px solid rgb(152 115 33 / 35%);
-  border-radius: 12px;
+  gap: 4px;
+  padding: 14px 18px;
+  background: rgb(255 255 255 / 88%);
+  border: 1px solid rgb(152 115 33 / 40%);
+  border-radius: 14px;
   backdrop-filter: blur(8px);
+  min-width: 168px;
 }
 
 .lc-v5-brand {
-  font-size: 11px;
-  letter-spacing: 0.12em;
+  font-size: 13px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #987321;
+  font-weight: 700;
+}
+
+.lc-v5-identity strong {
+  font-size: 22px;
+  line-height: 1.05;
+  letter-spacing: 0.02em;
+}
+
+.lc-v5-identity small {
+  font-size: 12px;
+  color: #5d6b80;
 }
 
 .lc-v5-today-quest {
   position: relative;
-  min-height: 88px;
-  max-width: 420px;
+  min-height: 120px;
+  max-width: 520px;
   justify-self: center;
 }
 
@@ -85,13 +98,13 @@
 
 .lc-v5-today-quest > div {
   position: relative;
-  padding: 16px 22px 14px 28px;
+  padding: 22px 28px 18px 34px;
 }
 
 .lc-v5-today-quest h2 {
-  margin: 0 0 4px;
-  font-size: 12px;
-  letter-spacing: 0.08em;
+  margin: 0 0 6px;
+  font-size: 15px;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #6b4d1a;
 }
@@ -100,8 +113,14 @@
 .lc-v5-today-quest p,
 .lc-v5-quest-empty {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.35;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.lc-v5-today-quest strong {
+  display: block;
+  font-size: 18px;
+  margin-bottom: 4px;
 }
 
 .lc-v5-search-toggle,
@@ -132,7 +151,7 @@
   right: 12px;
   top: 120px;
   z-index: 35;
-  width: 180px;
+  width: 240px;
 }
 
 .lc-v5-legend > img {
@@ -142,11 +161,11 @@
 
 .lc-v5-legend-body {
   position: absolute;
-  inset: 18% 12% 16%;
+  inset: 16% 10% 14%;
   display: grid;
-  gap: 2px;
-  font-size: 10px;
-  line-height: 1.2;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.25;
 }
 
 .lc-v5-legend.is-collapsed .lc-v5-legend-body {
@@ -155,14 +174,15 @@
 
 .lc-v5-legend-toggle {
   position: absolute;
-  top: 6px;
-  left: 8px;
+  top: 8px;
+  left: 10px;
   z-index: 1;
   border: none;
   background: transparent;
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  font-weight: 700;
 }
 
 .lc-v5-command-deck {
@@ -171,8 +191,8 @@
   bottom: 8px;
   transform: translateX(-50%);
   z-index: 120;
-  width: min(920px, calc(100vw - 24px));
-  height: 108px;
+  width: min(1040px, calc(100vw - 24px));
+  height: 148px;
   pointer-events: none;
 }
 
@@ -201,9 +221,9 @@
   color: #173d47;
   display: grid;
   place-items: center;
-  gap: 2px;
+  gap: 4px;
   cursor: pointer;
-  min-height: 44px;
+  min-height: 64px;
 }
 
 .lc-v5-command-btn > img:first-child {
@@ -217,16 +237,17 @@
 
 .lc-v5-command-icon {
   position: relative;
-  width: 28px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
   object-fit: contain;
 }
 
 .lc-v5-command-btn span {
   position: relative;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  font-weight: 700;
 }
 
 .lc-territory-state-layer,
@@ -258,10 +279,10 @@
 
 .lc-environmental-props img {
   position: absolute;
-  width: 8%;
-  transform: translate(-50%, -50%) scale(var(--lc-prop-scale, 0.6));
+  width: 12%;
+  transform: translate(-50%, -50%) scale(var(--lc-prop-scale, 0.85));
   pointer-events: none;
-  opacity: 0.88;
+  opacity: 0.92;
 }
 
 .lc-v5-foreground-depth {
@@ -284,8 +305,24 @@
   z-index: 8;
 }
 
+.lc-v5-lantern.density-single .lc-v5-lantern-art {
+  width: clamp(48px, 4.2vw, 56px);
+}
+
+.lc-v5-lantern.density-medium .lc-v5-lantern-art {
+  width: clamp(64px, 5.4vw, 76px);
+  filter: drop-shadow(0 0 14px rgb(255 193 36 / 45%))
+    drop-shadow(0 6px 10px rgb(0 0 0 / 18%));
+}
+
+.lc-v5-lantern.density-major .lc-v5-lantern-art {
+  width: clamp(84px, 7vw, 110px);
+  filter: drop-shadow(0 0 22px rgb(255 193 36 / 55%))
+    drop-shadow(0 8px 14px rgb(0 0 0 / 22%));
+}
+
 .lc-v5-lantern-art {
-  width: clamp(28px, 2.4vw, 44px);
+  width: clamp(48px, 4.2vw, 56px);
   height: auto;
   display: block;
   filter: drop-shadow(0 4px 8px rgb(0 0 0 / 18%));
@@ -293,16 +330,18 @@
 
 .lc-v5-lantern-count {
   position: absolute;
-  right: -6px;
-  top: -4px;
-  min-width: 18px;
-  height: 18px;
+  right: -2px;
+  top: -2px;
+  min-width: 24px;
+  height: 24px;
   border-radius: 999px;
   background: #173d47;
   color: #fff;
-  font-size: 10px;
+  font-size: 13px;
+  font-weight: 700;
   display: grid;
   place-items: center;
+  border: 2px solid #f0c14d;
 }
 
 .lc-v5-lantern-effect {
@@ -320,13 +359,13 @@
 
 .lc-frontier-object {
   position: absolute;
-  transform: translate(-50%, -100%) scale(var(--lc-frontier-scale, 1));
+  transform: translate(-50%, -100%) scale(var(--lc-frontier-scale, 1.85));
   pointer-events: none;
   z-index: 7;
 }
 
 .lc-frontier-freedom-art {
-  width: clamp(56px, 5vw, 92px);
+  width: clamp(96px, 8vw, 148px);
   height: auto;
   display: block;
 }
@@ -335,8 +374,61 @@
   position: absolute;
   left: 50%;
   top: 58%;
-  width: 28%;
+  width: 34%;
   transform: translate(-50%, -50%);
+}
+
+.lc-tower-attached-lantern {
+  position: absolute;
+  left: 50%;
+  top: -8%;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.lc-tower-attached-lantern.density-single .lc-tower-attached-lantern-art {
+  width: clamp(48px, 4vw, 56px);
+}
+
+.lc-tower-attached-lantern.density-medium .lc-tower-attached-lantern-art {
+  width: clamp(64px, 5.2vw, 76px);
+  filter: drop-shadow(0 0 16px rgb(255 193 36 / 50%));
+}
+
+.lc-tower-attached-lantern.density-major .lc-tower-attached-lantern-art {
+  width: clamp(84px, 6.8vw, 104px);
+  filter: drop-shadow(0 0 24px rgb(255 193 36 / 62%));
+}
+
+.lc-tower-attached-lantern-art {
+  display: block;
+  height: auto;
+}
+
+.lc-tower-attached-lantern-count {
+  position: absolute;
+  right: -4px;
+  top: -4px;
+  min-width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #173d47;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  border: 2px solid #f0c14d;
+}
+
+.cr-world-tower-anchor.has-attached-customers,
+.lc-pursued-building.has-attached-customers {
+  filter: drop-shadow(0 0 18px rgb(255 193 36 / 35%));
+}
+
+.lc-page.lc-v5-game .lc-map {
+  min-height: calc(100vh - 156px);
 }
 
 .lc-frontier-hit {
@@ -349,16 +441,17 @@
 }
 
 .lc-lost-ground-object img {
-  width: clamp(48px, 4vw, 76px);
+  width: clamp(72px, 6vw, 112px);
 }
 
 .lc-lost-ground-label {
   display: block;
   text-align: center;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #5a6670;
+  font-weight: 700;
 }
 
 .lc-v5-rekindling-scrim,
