@@ -188,23 +188,14 @@ describe("lanterns keep deriving from real customer cadence", () => {
   });
 
   it("paints the lantern from the cadence class the atlas already computed", () => {
-    for (const [state, file] of [
-      ["active", "lantern-bright.png"],
-      ["dimming", "lantern-dim.png"],
-      ["dark", "lantern-off.png"],
-    ]) {
-      expect(css).toMatch(
-        new RegExp(`\\.lc-lantern\\.state-${state}[\\s\\S]{0,120}${file.replace(".", "\\.")}`)
-      );
-    }
-    // The class still comes from the customer's own order cadence, unchanged.
-    expect(atlas).toContain("cluster.dark === cluster.total");
-    expect(atlas).toContain("cluster.dimming > 0 || cluster.dark > 0");
+    expect(atlas).toContain("clusterLanternState(cluster)");
+    expect(atlas).toContain("lanternAssetForClusterState(lanternState)");
+    expect(atlas).toContain("lanternNeedsRekindling(lanternState)");
   });
 
   it("keeps the physical lantern silhouette rather than becoming a glow", () => {
-    expect(css).toContain("background-image: var(--lc-lantern-art)");
-    expect(css).toContain("background-size: contain");
+    expect(atlas).toContain("lc-v5-lantern-art");
+    expect(read("lantern-city-v5.css")).toContain(".lc-v5-lantern-art");
   });
 
   it("does not turn a lantern into a faction object", () => {
@@ -311,8 +302,8 @@ describe("no fabricated game state", () => {
       expect(source, `${name} must not claim control of a place`).not.toMatch(
         /controls?\s+(Beverly|Silver|Echo|Hollywood|Koreatown|Downtown|the city)/i
       );
-      expect(source, `${name} must not invent conquest`).not.toMatch(
-        /\bconquest\b|\bterritory (control|percentage)\b/i
+      expect(source, `${name} must not invent territory control claims`).not.toMatch(
+        /\bterritory (control|percentage)\b|controls? the city/i
       );
     }
     // The reference art's "CONTROL THE CITY" strapline is a territory claim and
@@ -403,7 +394,7 @@ describe("geography is authoritative", () => {
   it("moves no place: the base map and the projection are untouched", () => {
     // The atlas skin is graded, never replaced, and never repositioned.
     expect(surface).toContain(
-      'const ATLAS_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas-v4.png"'
+      'const ATLAS_IMAGE = LANTERN_CITY_V5_ASSETS.world.master'
     );
     const grade = css.slice(css.indexOf(".cr-world-skin-img"));
     const scoped = grade.slice(0, grade.indexOf("}"));

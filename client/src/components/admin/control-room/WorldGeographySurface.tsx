@@ -12,11 +12,17 @@ import type { GeographicEntity } from "./GoogleMapsRealityLayer";
 import { RealityWindow } from "./RealityWindow";
 import { useWorldCamera } from "./useWorldCamera";
 import { FactionBattlefieldLayer } from "./FactionBattlefieldLayer";
-import { LanternTerritoryMosaic } from "./LanternTerritoryMosaic";
 import type { TowerDamageState } from "@shared/towerWars";
+import { LanternTerritoryStateLayer } from "./LanternTerritoryStateLayer";
+import {
+  LANTERN_CITY_V5_ASSETS,
+  LANTERN_CITY_V5_PRELOAD,
+} from "@/components/goldline/lanternCityV5Assets";
+import type { GeographicCustomer } from "./customerGeography";
+import { classifyTerritory } from "@shared/lanternTerritories";
+import "./lantern-city-v5.css";
 
-const ATLAS_IMAGE = "/assets/admin/control-room/world/lantern-city-atlas-v4.png";
-const TRUTH_IMAGE = "/assets/admin/control-room/world/lantern-city-truth-reference.jpg";
+const ATLAS_IMAGE = LANTERN_CITY_V5_ASSETS.world.master;
 
 export type WorldGeographySurfaceProps = {
   mode?: "overview" | "lantern_atlas" | "reality_approach";
@@ -74,6 +80,13 @@ export type WorldGeographySurfaceProps = {
    * Absent means unknown, and unknown draws no projectile at all.
    */
   buildingAttacks?: Partial<Record<CanonicalBuildingId, number>>;
+  /** Customers for territory-state gels (Lantern City v5). */
+  territoryCustomers?: readonly GeographicCustomer[];
+  businessDate?: string;
+  conqueredTerritoryIds?: ReadonlySet<string>;
+  lostGroundTerritoryIds?: ReadonlySet<string>;
+  worldTruthMode?: boolean;
+  atlasReady?: boolean;
 };
 
 const CANONICAL_TOWERS: Array<{
@@ -118,6 +131,12 @@ export function WorldGeographySurface({
   combatPresentation = false,
   buildingDamage,
   buildingAttacks,
+  territoryCustomers,
+  businessDate = "",
+  conqueredTerritoryIds,
+  lostGroundTerritoryIds,
+  worldTruthMode = false,
+  atlasReady = true,
 }: WorldGeographySurfaceProps) {
   const [realityBuildingId, setRealityBuildingId] = useState<CanonicalBuildingId | null>(null);
   /*
@@ -146,12 +165,25 @@ export function WorldGeographySurface({
   const territoryDebug =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("territoryDebug") === "1";
-  // Permanent QA switch: the real vector map and the fantasy surface occupy
-  // the exact same Mercator canvas. Towers/lanterns stay put while only the
-  // presentation skin changes, so registration drift becomes visually obvious.
   const worldTruth =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("worldTruth") === "1";
+    worldTruthMode ||
+    (typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("worldTruth") === "1");
+
+  useEffect(() => {
+    const links: HTMLLinkElement[] = [];
+    for (const href of LANTERN_CITY_V5_PRELOAD) {
+      const link = document.createElement("link");
+      link.rel = "preload";
+      link.as = "image";
+      link.href = href;
+      document.head.appendChild(link);
+      links.push(link);
+    }
+    return () => {
+      for (const link of links) document.head.removeChild(link);
+    };
+  }, []);
   useEffect(() => {
     onGoogleVisibilityChange?.(googleVisible);
   }, [googleVisible, onGoogleVisibilityChange]);
@@ -209,7 +241,6 @@ export function WorldGeographySurface({
     <div
       className={`cr-world-geography-surface mode-${mode} view-atlas ${className}`}
       data-day-phase="day"
-      data-world-truth={worldTruth ? "1" : "0"}
     >
       {/*
         The world container. Everything spatial lives inside it, so the camera
@@ -224,21 +255,31 @@ export function WorldGeographySurface({
         ref={camera.bind.ref}
       >
       <div className="cr-world-space" style={{ transform: cameraIsLive ? camera.transform : undefined }}>
-      {/* 1. Base Layer: Authored Atlas Skin vs Google Reality 3D Layer */}
-        <div className="cr-world-skin-container">
-          <img
-            src={worldTruth ? TRUTH_IMAGE : ATLAS_IMAGE}
-            alt={worldTruth ? "Neutral real-vector Los Angeles registration reference" : "Fictional daylight Los Angeles kingdom atlas; real entities are positioned from geographic evidence"}
-            className="cr-world-skin-img"
-          />
-          {!worldTruth ? <div className="cr-world-skin-shade" /> : null}
+      {/* 1. Base Layer: Authored v5 Lantern City master (neutral world art) */}
+        <div className={`cr-world-skin-container${worldTruth ? " is-world-truth" : ""}`}>
+          {!worldTruth ? (
+            <img
+              src={ATLAS_IMAGE}
+              alt="Fictional daylight Los Angeles kingdom atlas; real entities are positioned from geographic evidence"
+              className="cr-world-skin-img"
+            />
+          ) : null}
+          <div className="cr-world-skin-shade" />
         </div>
 
-      {/* 1b. HD geography-locked territory mosaic. The v4 atlas remains the safety underlay. */}
-      {!googleVisible && !worldTruth ? <LanternTerritoryMosaic /> : null}
+      {/* Real-territory-clipped visual state gels + environmental props */}
+      {!googleVisible && !worldTruth && territoryCustomers ? (
+        <LanternTerritoryStateLayer
+          customers={territoryCustomers}
+          atlasReady={atlasReady}
+          businessDate={businessDate}
+          conqueredTerritoryIds={conqueredTerritoryIds}
+          lostGroundTerritoryIds={lostGroundTerritoryIds}
+        />
+      ) : null}
 
       {/* 2. Living Atmosphere Overlay: real clouds, AQI haze, rain */}
-      <WorldAtmosphereOverlay atmosphere={mode === "lantern_atlas" || worldTruth ? null : atmosphere} />
+      <WorldAtmosphereOverlay atmosphere={atmosphere} />
 
       {/*
         2b. The battlefield lighting pass.
@@ -248,14 +289,14 @@ export function WorldGeographySurface({
         anchored entirely on the canonical buildings' own coordinates — see
         FactionBattlefieldLayer.
       */}
-      {combatPresentation && !googleVisible && mode !== "lantern_atlas" && !worldTruth ? (
+      {combatPresentation && !googleVisible ? (
         <FactionBattlefieldLayer emphasised={emphasisedBuildingId} />
       ) : null}
 
       {/* 3. Places Aggregate Opportunity Density / Territory Glow */}
-      {showOpportunityLayer && opportunity && !googleVisible && mode !== "lantern_atlas" && !worldTruth ? (
+      {showOpportunityLayer && opportunity && !googleVisible ? (
         <div className="cr-opportunity-layer" aria-hidden="true">
-          {opportunity.districts.map((district: any) => (
+          {opportunity.districts.map(district => (
             <div
               key={district.districtId}
               className={`cr-district-glow pressure-${district.opportunityPressure}`}
@@ -405,8 +446,54 @@ export function WorldGeographySurface({
         </div>
       ) : null}
 
-      {/* Additional UI elements (lanterns, search, controls passed as children) */}
+      {/* Additional UI elements (lanterns, frontier, campaigns passed as children) */}
       {children}
+
+      {/* Decorative foreground depth — pointer-events none, scales with atlas */}
+      {!googleVisible && !worldTruth ? (
+        <img
+          className="lc-v5-foreground-depth"
+          src={LANTERN_CITY_V5_ASSETS.world.foregroundDepth}
+          alt=""
+          aria-hidden
+          draggable={false}
+        />
+      ) : null}
+
+      {worldTruth && !googleVisible ? (
+        <svg className="lc-world-truth-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Geographic truth overlay">
+          {territoryCustomers?.flatMap((customer, index) => {
+            if (!customer.location) return [];
+            const point = projectLatLngToLanternAtlas(customer.location);
+            const territory = classifyTerritory(
+              customer.location.latitude,
+              customer.location.longitude
+            );
+            return [
+              <circle
+                key={`cust-${index}`}
+                cx={point.x}
+                cy={point.y}
+                r="0.45"
+                className="lc-world-truth-customer"
+                data-territory-id={territory?.id ?? "unclassified"}
+              />,
+            ];
+          })}
+          {CANONICAL_TOWERS.map(tower => {
+            const point = projectLatLngToLanternAtlas(tower);
+            if (point.outOfBounds) return null;
+            return (
+              <g key={tower.id} className="lc-world-truth-tower">
+                <rect x={point.x - 0.8} y={point.y - 0.8} width="1.6" height="1.6" />
+                <text x={point.x} y={point.y - 1.2} fontSize="1.2">
+                  {tower.id}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      ) : null}
       </div>
 
       {/*

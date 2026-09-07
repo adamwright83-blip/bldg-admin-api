@@ -1,0 +1,539 @@
+/* Lantern City v5 — game-native desktop presentation */
+
+.lc-page.lc-v5-game {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  background: linear-gradient(180deg, #e8f4fb 0%, #f7f2e8 48%, #eef6ff 100%);
+  color: #1f3a44;
+  overflow: visible;
+}
+
+.lc-page.lc-v5-game .lc-page-header,
+.lc-page.lc-v5-game .lc-status-grid,
+.lc-page.lc-v5-game .lc-attention-row,
+.lc-page.lc-v5-game .lc-utility-row,
+.lc-page.lc-v5-game .gl-campaign-history {
+  display: none;
+}
+
+/* AdminHostApp v4 title + business dock retire when v5 game shell owns the route. */
+.gl-persistent-world:has(.lc-v5-game) > .gl-world-title,
+.gl-persistent-world:has(.lc-v5-game) > .gl-command-dock,
+.gl-game-shell.is-lantern-city-v5 .gl-world-utility-menu {
+  display: none !important;
+}
+
+.lc-page.lc-v5-game .lc-map {
+  position: relative;
+  min-height: calc(100vh - 120px);
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.lc-v5-hud-top {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.lc-v5-hud-top > * {
+  pointer-events: auto;
+}
+
+.lc-v5-identity {
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
+  background: rgb(255 255 255 / 82%);
+  border: 1px solid rgb(152 115 33 / 35%);
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+}
+
+.lc-v5-brand {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #987321;
+}
+
+.lc-v5-today-quest {
+  position: relative;
+  min-height: 88px;
+  max-width: 420px;
+  justify-self: center;
+}
+
+.lc-v5-today-quest > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+.lc-v5-today-quest > div {
+  position: relative;
+  padding: 16px 22px 14px 28px;
+}
+
+.lc-v5-today-quest h2 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b4d1a;
+}
+
+.lc-v5-today-quest strong,
+.lc-v5-today-quest p,
+.lc-v5-quest-empty {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.lc-v5-search-toggle,
+.lc-v5-search {
+  align-self: start;
+  justify-self: end;
+}
+
+.lc-v5-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgb(255 255 255 / 90%);
+  border-radius: 999px;
+  border: 1px solid rgb(152 115 33 / 35%);
+}
+
+.lc-v5-search input {
+  border: none;
+  background: transparent;
+  min-width: 220px;
+  outline: none;
+}
+
+.lc-v5-legend {
+  position: fixed;
+  right: 12px;
+  top: 120px;
+  z-index: 35;
+  width: 180px;
+}
+
+.lc-v5-legend > img {
+  width: 100%;
+  pointer-events: none;
+}
+
+.lc-v5-legend-body {
+  position: absolute;
+  inset: 18% 12% 16%;
+  display: grid;
+  gap: 2px;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.lc-v5-legend.is-collapsed .lc-v5-legend-body {
+  display: none;
+}
+
+.lc-v5-legend-toggle {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  z-index: 1;
+  border: none;
+  background: transparent;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.lc-v5-command-deck {
+  position: fixed;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  z-index: 120;
+  width: min(920px, calc(100vw - 24px));
+  height: 108px;
+  pointer-events: none;
+}
+
+.lc-v5-command-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+.lc-v5-command-buttons {
+  position: absolute;
+  inset: 18% 6% 10%;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  pointer-events: auto;
+}
+
+.lc-v5-command-btn {
+  position: relative;
+  border: none;
+  background: transparent;
+  color: #173d47;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.lc-v5-command-btn > img:first-child {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+.lc-v5-command-icon {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.lc-v5-command-btn span {
+  position: relative;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lc-territory-state-layer,
+.lc-environmental-props {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.lc-territory-gel {
+  position: absolute;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+.lc-territory-gel img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: var(--lc-gel-opacity, 0.15);
+  mix-blend-mode: multiply;
+}
+
+.lc-environmental-props img {
+  position: absolute;
+  width: 8%;
+  transform: translate(-50%, -50%) scale(var(--lc-prop-scale, 0.6));
+  pointer-events: none;
+  opacity: 0.88;
+}
+
+.lc-v5-foreground-depth {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  z-index: 12;
+}
+
+.lc-v5-lantern {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  z-index: 8;
+}
+
+.lc-v5-lantern-art {
+  width: clamp(28px, 2.4vw, 44px);
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 4px 8px rgb(0 0 0 / 18%));
+}
+
+.lc-v5-lantern-count {
+  position: absolute;
+  right: -6px;
+  top: -4px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #173d47;
+  color: #fff;
+  font-size: 10px;
+  display: grid;
+  place-items: center;
+}
+
+.lc-v5-lantern-effect {
+  position: absolute;
+  inset: -20%;
+  width: 140%;
+  pointer-events: none;
+}
+
+.lc-v5-lantern.is-selected .lc-v5-lantern-art {
+  outline: 2px solid #f0c14d;
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+.lc-frontier-object {
+  position: absolute;
+  transform: translate(-50%, -100%) scale(var(--lc-frontier-scale, 1));
+  pointer-events: none;
+  z-index: 7;
+}
+
+.lc-frontier-freedom-art {
+  width: clamp(56px, 5vw, 92px);
+  height: auto;
+  display: block;
+}
+
+.lc-frontier-lock-art {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  width: 28%;
+  transform: translate(-50%, -50%);
+}
+
+.lc-frontier-hit {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.lc-lost-ground-object img {
+  width: clamp(48px, 4vw, 76px);
+}
+
+.lc-lost-ground-label {
+  display: block;
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5a6670;
+}
+
+.lc-v5-rekindling-scrim,
+.lc-v5-game-room-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgb(232 244 251 / 55%);
+  backdrop-filter: blur(3px);
+  display: grid;
+  place-items: center;
+}
+
+.lc-v5-rekindling {
+  position: relative;
+  width: min(520px, 92vw);
+  min-height: 420px;
+  padding: 24px;
+}
+
+.lc-v5-rekindling-wheel {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  pointer-events: none;
+}
+
+.lc-v5-rekindling-tools {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 180px;
+}
+
+.lc-v5-rekindling-tool {
+  border: none;
+  background: rgb(255 255 255 / 72%);
+  border-radius: 12px;
+  padding: 8px;
+  cursor: pointer;
+}
+
+.lc-v5-rekindling-tool img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+
+.lc-v5-game-room {
+  width: min(720px, 94vw);
+  max-height: 80vh;
+  overflow: auto;
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid rgb(152 115 33 / 35%);
+}
+
+.lc-v5-drawer {
+  position: fixed;
+  right: 12px;
+  bottom: 120px;
+  z-index: 38;
+  width: min(320px, 90vw);
+  background: rgb(255 255 255 / 92%);
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid rgb(152 115 33 / 30%);
+}
+
+.lc-world-truth-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.lc-world-truth-customer {
+  fill: #00a878;
+  stroke: #004d40;
+  stroke-width: 0.08;
+}
+
+.lc-world-truth-tower rect {
+  fill: none;
+  stroke: #7b1fa2;
+  stroke-width: 0.15;
+}
+
+.lc-world-truth-tower text {
+  fill: #7b1fa2;
+}
+
+.cr-world-skin-container.is-world-truth {
+  background:
+    linear-gradient(0deg, rgb(255 255 255 / 88%), rgb(255 255 255 / 88%)),
+    repeating-linear-gradient(0deg, #d9e8ef 0 1px, transparent 1px 12px),
+    repeating-linear-gradient(90deg, #d9e8ef 0 1px, transparent 1px 12px);
+}
+
+@media (max-width: 1180px) {
+  .lc-v5-hud-top {
+    grid-template-columns: 1fr;
+  }
+
+  .lc-v5-today-quest {
+    justify-self: stretch;
+    max-width: none;
+  }
+}
+
+.lc-v5-lantern-transient {
+  position: absolute;
+  inset: -18% -18%;
+  width: 136%;
+  height: 136%;
+  pointer-events: none;
+  object-fit: contain;
+}
+
+.lc-v5-building-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.lc-v5-building-card {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 12px;
+  background: rgb(8 18 28 / 72%);
+  color: inherit;
+  text-align: left;
+}
+
+.lc-v5-building-card img {
+  width: 96px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.lc-v5-building-card strong {
+  display: block;
+}
+
+.lc-v5-frontier-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: grid;
+  gap: 10px;
+}
+
+.lc-v5-frontier-list button {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgb(255 255 255 / 16%);
+  background: rgb(8 18 28 / 72%);
+  color: inherit;
+  text-align: left;
+}
+
+.lc-v5-frontier-list img {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+}

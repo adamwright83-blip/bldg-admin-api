@@ -19,6 +19,7 @@ import {
   commercialPipelineRecords,
   entityLocations,
   goldlineEventReceipts,
+  goldlineTerritoryDefinitions,
   goldlineWorldEvents,
   orders,
   physicalEntities,
@@ -34,6 +35,7 @@ import {
   getGeographicTruth,
   normalizeSourceAddress,
 } from "../server/geography/geographicTruthService";
+import { stableTerritoryKey } from "../shared/goldlineTerritories";
 
 const TENANT = "default";
 
@@ -289,6 +291,34 @@ async function seed() {
   );
 
   /**
+   * Standalone cooling lantern for Rekindling proof — Los Feliz, not covered by
+   * a pursued building marker. Weekly cadence with the last order ~14 days ago
+   * resolves to dimming, not dark.
+   */
+  const coolingAddress = "1850 N Vermont Ave, Los Angeles, CA 90027";
+  const coolingPhone = "3105550177";
+  await db.insert(orders).values(
+    [42, 35, 28, 14].map((days, index) => ({
+      tenantId: TENANT,
+      firstName: "Nina",
+      lastName: "Reyes",
+      phone: coolingPhone,
+      address: coolingAddress,
+      status: "delivered" as const,
+      paid: true,
+      total: "6800",
+      serviceType: "wash_fold" as const,
+      createdAt: daysAgo(days),
+      updatedAt: daysAgo(days),
+      paidAt: daysAgo(days),
+      pickupDate: daysAgo(days).toISOString().slice(0, 10),
+      pickupTimeWindow: "9:00-11:00",
+      deliveryDate: daysAgo(days - 1).toISOString().slice(0, 10),
+      specialInstructions: `proof-fixture-cooling-${index}`,
+    })) as never
+  );
+
+  /**
    * The customer's geographic row is created by the app's own identity sync
    * rather than by guessing its key here, then given fixture coordinates. That
    * way this fixture cannot drift from how real customers are identified.
@@ -331,6 +361,26 @@ async function seed() {
         eq(
           entityLocations.normalizedSourceAddress,
           normalizeSourceAddress(meridianAddress)
+        )
+      )
+    );
+  await db
+    .update(entityLocations)
+    .set({
+      canonicalAddress: coolingAddress,
+      latitude: "34.1055000",
+      longitude: "-118.2915000",
+      geocodeStatus: "success",
+      geocodeProvider: "proof_fixture",
+      geocodedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(entityLocations.tenantId, TENANT),
+        eq(entityLocations.entityType, "customer"),
+        eq(
+          entityLocations.normalizedSourceAddress,
+          normalizeSourceAddress(coolingAddress)
         )
       )
     );
@@ -575,6 +625,85 @@ async function seed() {
       dueDate: new Date().toISOString().slice(0, 10),
     },
   } as never);
+
+  /**
+   * Lost-ground proof: Silver Lake was cleared, pressure returned, and has no
+   * current customer presence. Proof database only — never production truth.
+   */
+  if (process.env.GOLDLINE_PROOF_MODE !== "1" && process.env.NODE_ENV !== "ci") {
+    throw new Error(
+      "Lost-ground proof fixture requires GOLDLINE_PROOF_MODE=1 or NODE_ENV=ci"
+    );
+  }
+  const lostGroundTerritoryId = "proof-fixture-silver-lake-lost";
+  await db.insert(goldlineTerritoryDefinitions).values({
+    id: lostGroundTerritoryId,
+    tenantId: TENANT,
+    stableKey: stableTerritoryKey({
+      tenantId: TENANT,
+      grammar: "visit_hunt",
+      physicalEntityIds: [hunt[0]!.id],
+    }),
+    version: 1,
+    fantasyTitle: "The Forgotten Shore",
+    realGeographyLabel: "Silver Lake",
+    grammar: "visit_hunt",
+    guardianId: "cloud_duchess",
+    geometryMode: "cluster",
+    membersJson: [
+      {
+        physicalEntityId: hunt[0]!.id,
+        requiredAction: "visited",
+        order: 0,
+        sourceReason: "visit",
+      },
+    ],
+    createdFrom: "proof_fixture_lost_ground",
+    classification: "game_projection",
+    publishedAt: daysAgo(120),
+  } as never);
+  await db.insert(goldlineWorldEvents).values([
+    {
+      id: randomUUID(),
+      tenantId: TENANT,
+      physicalEntityId: null,
+      eventType: "territory_cleared",
+      classification: "game_projection",
+      actorType: "operator",
+      actorId: "proof-seed",
+      occurredAt: daysAgo(45),
+      observedAt: null,
+      sourceType: "proof_fixture",
+      sourceId: lostGroundTerritoryId,
+      sourceEvidenceReference: `proof:lost-ground:${lostGroundTerritoryId}:cleared`,
+      provenanceClass: "generated_game_fiction",
+      verificationClass: "CLAIMED",
+      confidence: "high",
+      idempotencyKey: `proof:lost-ground:${lostGroundTerritoryId}:cleared`,
+      correlationId: lostGroundTerritoryId,
+      metadataJson: { territoryId: lostGroundTerritoryId, fixture: true },
+    },
+    {
+      id: randomUUID(),
+      tenantId: TENANT,
+      physicalEntityId: null,
+      eventType: "territory_pressure_returned",
+      classification: "game_projection",
+      actorType: "system",
+      actorId: null,
+      occurredAt: daysAgo(12),
+      observedAt: null,
+      sourceType: "proof_fixture",
+      sourceId: lostGroundTerritoryId,
+      sourceEvidenceReference: `proof:lost-ground:${lostGroundTerritoryId}:pressure`,
+      provenanceClass: "generated_game_fiction",
+      verificationClass: "CLAIMED",
+      confidence: "high",
+      idempotencyKey: `proof:lost-ground:${lostGroundTerritoryId}:pressure`,
+      correlationId: lostGroundTerritoryId,
+      metadataJson: { territoryId: lostGroundTerritoryId, fixture: true },
+    },
+  ] as never);
 
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Los_Angeles",

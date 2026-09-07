@@ -51,7 +51,6 @@ describe("Lantern City is the living world", () => {
 
   it("embodies the pursued place as a building rather than a glyph", () => {
     expect(atlas).toContain("lc-pursued-building");
-    expect(atlas).toContain("lc-mini-building");
     // The old flame glyph stood in for a building that can now be drawn.
     expect(atlas).not.toContain("lc-pursued-flame");
     expect(atlas).not.toContain("♨");

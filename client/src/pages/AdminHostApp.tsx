@@ -325,14 +325,15 @@ export default function AdminHostApp() {
 
   return (
     <WorldTransitionProvider>
-    <div className={`cr-shell gl-game-shell${isWorldHome ? " is-world-home" : " is-utility"}${worldIntelOpen ? " is-world-intel" : ""}`}>
+    <div className={`cr-shell gl-game-shell${isWorldHome ? " is-world-home" : " is-utility"}${isLanternCity ? " is-lantern-city-v5" : ""}${worldIntelOpen ? " is-world-intel" : ""}`}>
       {isCounter && activeWorkspace !== "held_corporate" ? (
         <ResidentFollowupAlert />
       ) : null}
 
-      <div className={isWorldHome ? "gl-world-utility-menu" : ""}>
-      {isWorldHome ? <button type="button" onClick={() => setMobileNavOpen(open => !open)} aria-expanded={mobileNavOpen} aria-label="Utilities"><img src="/assets/goldline/lantern-city/v4/utilities.png" alt="" /></button> : null}
-      <div hidden={isWorldHome && !mobileNavOpen}>
+      {isWorldHome && !isLanternCity ? (
+      <div className="gl-world-utility-menu">
+      <button type="button" onClick={() => setMobileNavOpen(open => !open)} aria-expanded={mobileNavOpen} aria-label="Utilities"><img src="/assets/goldline/lantern-city/v4/utilities.png" alt="" /></button>
+      <div hidden={!mobileNavOpen}>
       <ControlRoomNav
         path={path}
         mobileOpen={mobileNavOpen}
@@ -345,12 +346,15 @@ export default function AdminHostApp() {
       />
       </div>
       </div>
+      ) : null}
 
       <div className="cr-main-column">
         {!isWorldHome ? <Link href={worldHomePath} className="gl-return-world">← Return to Lantern City</Link> : null}
         {!isWorldHome && isControlRoomSection ? <WorldDayPhaseIndicator /> : null}
         <section className="gl-persistent-world" hidden={!isWorldHome} aria-label="Lantern City world home">
           <LanternCityAtlas onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />
+          {!isLanternCity ? (
+          <>
           {/*
             The world title, as the title of a game world rather than a page
             heading. Kept out of the map's transform so panning never drags it.
@@ -388,6 +392,8 @@ export default function AdminHostApp() {
             </Link>
             <span className="gl-dock-wing" aria-hidden />
           </nav>
+          </>
+          ) : null}
         </section>
         {!isHome &&
         !isOperatorDemo &&

@@ -1,10 +1,9 @@
 import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { EconomicWorldReaction } from "@/components/goldline/EconomicWorldReaction";
-import { MapPinOff, RefreshCw, Search, X } from "lucide-react";
+import { RefreshCw, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { WorldGeographySurface } from "./WorldGeographySurface";
 import type { GeographicEntity } from "./GoogleMapsRealityLayer";
-import { WorldDayPhaseIndicator } from "./WorldDayPhase";
 import {
   clusterGeographicCustomers,
   clustersAsGoogleEntities,
@@ -19,17 +18,40 @@ import {
   orderByProminence,
 } from "@shared/goldlineWorldPresentation";
 import type { CityWorldEntity } from "../../../../../server/goldlineWorld/cityWorldService";
-import { projectCustomerWindows } from "@shared/goldlineCustomerWindows";
 import { TerritoryChrome } from "@/components/goldline/TerritoryWorldLayer";
 import {
-  CampaignChrome,
   CampaignChronicleList,
   CampaignWorldLayer,
 } from "@/components/goldline/CampaignWorldLayer";
 import { CRITICAL_COMBAT_ASSETS } from "./lanternCityCombat";
 import { WorldVeilLayer } from "@/components/goldline/board/WorldVeilLayer";
-import { frontierAssetForTerritory } from "@/components/goldline/lanternCityAssets";
+import { frontierAssetSrc, frontierKindForTerritory } from "@/components/goldline/lanternCityV5Assets";
+import { LanternCityHud } from "./LanternCityHud";
 import {
+  LanternCommandDeck,
+  LanternGameRoom,
+  LanternMapLegend,
+  type LanternCommandId,
+} from "./LanternCommandDeck";
+import {
+  RekindlingArsenal,
+  RekindlingEmptyState,
+  type RekindlingToolId,
+} from "./RekindlingArsenal";
+import {
+  clusterLanternState,
+  deriveTransientLanternEvidence,
+  lanternAssetForClusterState,
+  lanternNeedsRekindling,
+  transientLanternOverlay,
+} from "./lanternCustomerPresentation";
+import {
+  LanternBuildingsRoom,
+  LanternConquestRoom,
+} from "./LanternCommandRooms";
+import { LANTERN_CITY_V5_ASSETS } from "@/components/goldline/lanternCityV5Assets";
+import {
+  deriveTerritoryOccupancy,
   territoryByName,
   territoryCenter,
   type TerritoryOccupancy,
@@ -186,7 +208,8 @@ function FrontierBriefing({
   onClose: () => void;
 }) {
   const territory = neighbourhood.territory;
-  const freedomAsset = frontierAssetForTerritory(territory.id);
+  const freedomAssetKind = frontierKindForTerritory(territory.id);
+  const freedomAssetSrc = frontierAssetSrc(freedomAssetKind);
   const center = territoryCenter(territory);
   const intelligence = trpc.system.goldlineWorld.frontierIntelligence.useQuery(
     {
@@ -222,7 +245,7 @@ function FrontierBriefing({
           <X aria-hidden />
         </button>
         <div className="lc-frontier-guardian" aria-hidden>
-          {freedomAsset ? <img src={freedomAsset.src} alt="" /> : null}
+          {freedomAssetSrc ? <img src={freedomAssetSrc} alt="" /> : null}
         </div>
         <div className="lc-frontier-copy">
           <p className="lc-frontier-kicker">Freedom frontier · dormant</p>
@@ -314,6 +337,11 @@ export default function LanternCityAtlas({
   onNavigate: (path: string) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [activeCommand, setActiveCommand] = useState<LanternCommandId>("map");
+  const [rekindlingCluster, setRekindlingCluster] =
+    useState<CustomerLocationCluster | null>(null);
+  const [showInspector, setShowInspector] = useState(false);
   const [selectedCluster, setSelectedCluster] =
     useState<CustomerLocationCluster | null>(null);
   const [selectedPursuit, setSelectedPursuit] = useState<
@@ -337,6 +365,19 @@ export default function LanternCityAtlas({
       new Set(
         (territoryWorld.data ?? []).flatMap(item => {
           if (!item.state.cleared || item.state.pressureReturned) return [];
+          const territory = territoryByName(
+            item.definition.realGeographyLabel ?? ""
+          );
+          return territory ? [territory.id] : [];
+        })
+      ),
+    [territoryWorld.data]
+  );
+  const lostGroundTerritoryIds = useMemo(
+    () =>
+      new Set(
+        (territoryWorld.data ?? []).flatMap(item => {
+          if (!item.state.cleared || !item.state.pressureReturned) return [];
           const territory = territoryByName(
             item.definition.realGeographyLabel ?? ""
           );
@@ -385,6 +426,12 @@ export default function LanternCityAtlas({
       opus_la: data.state.buildings.opus_la.attackCount,
     };
   }, [towerWarsToday.data]);
+  const campaign = trpc.system.goldlineWorld.campaign.useQuery(undefined, {
+    staleTime: 15_000,
+  });
+  const currentChapter = campaign.data?.campaign.chapters.find(
+    chapter => chapter.stableChapterId === campaign.data?.campaign.currentChapterId
+  );
   const geocode = trpc.system.geographicTruth.geocodePending.useMutation({
     onSuccess: () => atlas.refetch(),
   });
@@ -393,6 +440,36 @@ export default function LanternCityAtlas({
   const normalized = query.trim().toLowerCase();
   const customers = data?.customers ?? [];
   const pursued = data?.pursued ?? [];
+  const customerLocations = useMemo(
+    () =>
+      customers.flatMap(customer =>
+        customer.location
+          ? [
+              {
+                latitude: customer.location.latitude,
+                longitude: customer.location.longitude,
+              },
+            ]
+          : []
+      ),
+    [customers]
+  );
+  const frontierObjectives = useMemo(() => {
+    const occupancy = deriveTerritoryOccupancy({
+      customers: customerLocations,
+      totalCustomers: customers.length,
+      atlasReady: !atlas.isLoading && !atlas.isError,
+      conqueredTerritoryIds,
+    });
+    if (occupancy.suppressed) return [] as TerritoryOccupancy[];
+    return occupancy.territories.filter(row => row.guarded).slice(0, 5);
+  }, [
+    customerLocations,
+    customers.length,
+    atlas.isLoading,
+    atlas.isError,
+    conqueredTerritoryIds,
+  ]);
 
   const visibleCustomers = useMemo(
     () =>
@@ -607,81 +684,35 @@ export default function LanternCityAtlas({
     [customerClusters, visiblePursuits]
   );
 
-  const counts = customers.reduce(
-    (acc, customer) => ({
-      ...acc,
-      [customer.cadence.state]: acc[customer.cadence.state] + 1,
-    }),
-    { active: 0, dimming: 0, dark: 0 }
-  );
-
   const unmappedCustomers = customers.filter(
     customer => !customer.location
   ).length;
   const unmappedPursuits = pursued.filter(item => !item.location).length;
 
   return (
-    <main className="lc-page">
-      <header className="lc-page-header">
-        <div>
-          <span className="lc-spark">✦</span>
-          <h1>Lantern City Atlas — Los Angeles</h1>
-          <p>Real customer geography · {data?.businessDate ?? "Today"}</p>
-        </div>
-        <div className="lc-header-controls">
-          <WorldDayPhaseIndicator />
-          <label className="lc-search">
-            <Search aria-hidden />
-            <input
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              placeholder="Search customers and opportunities…"
-              aria-label="Search Lantern City"
-            />
-            {query ? (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                aria-label="Clear search"
-              >
-                <X />
-              </button>
-            ) : null}
-          </label>
-        </div>
-      </header>
+    <main className="lc-page lc-v5-game">
+      <LanternCityHud
+        businessDate={data?.businessDate ?? "Today"}
+        questTitle={
+          campaign.data?.campaign.title ??
+          currentChapter?.fictionalTreatment ??
+          attentionRecommendations[0]?.displayName ??
+          ""
+        }
+        questBody={
+          currentChapter?.fictionalTreatment ??
+          attentionRecommendations[0]?.presentation.attentionSummary ??
+          ""
+        }
+        questEmpty={!currentChapter && attentionRecommendations.length === 0}
+        query={query}
+        onQueryChange={setQuery}
+        searchOpen={searchOpen}
+        onToggleSearch={() => setSearchOpen(current => !current)}
+      />
+      <LanternMapLegend />
 
-      <section
-        className="lc-status-grid"
-        aria-label="Customer relationship counts"
-      >
-        {(["active", "dimming", "dark"] as const).map(state => (
-          <article key={state} className={`lc-status-card state-${state}`}>
-            <span className="lc-status-icon" />
-            <div>
-              <small>{state === "dark" ? "Dormant" : state}</small>
-              <strong>
-                {atlas.isLoading || atlas.isError ? "—" : counts[state]}
-              </strong>
-              <p>Customer-specific order cadence</p>
-            </div>
-          </article>
-        ))}
-        <article className="lc-status-card state-pursued">
-          <span className="lc-status-icon">
-            <i className="lc-mini-building" aria-hidden />
-          </span>
-          <div>
-            <small>Pursued</small>
-            <strong>
-              {atlas.isLoading || atlas.isError ? "—" : pursued.length}
-            </strong>
-            <p>Active persisted opportunities</p>
-          </div>
-        </article>
-      </section>
-
-      <section className="lc-map" aria-label="Customer relationship atlas">
+      <section className="lc-map" aria-label="Lantern City world">
         <WorldGeographySurface
           mode="lantern_atlas"
           onNavigate={onNavigate}
@@ -694,6 +725,11 @@ export default function LanternCityAtlas({
           combatPresentation
           buildingDamage={buildingDamage}
           buildingAttacks={buildingAttacks}
+          territoryCustomers={visibleCustomers as any}
+          businessDate={data?.businessDate ?? ""}
+          conqueredTerritoryIds={conqueredTerritoryIds}
+          lostGroundTerritoryIds={lostGroundTerritoryIds}
+          atlasReady={!atlas.isLoading && !atlas.isError}
         >
           {/*
             Lanterns and pursuit flames are positioned with the atlas x/y
@@ -710,7 +746,14 @@ export default function LanternCityAtlas({
                 cluster =>
                   !cluster.outsideAtlas && !pursuitCoversCluster(cluster)
               )
-            ).map(({ cluster, fanSlot }) => (
+            ).map(({ cluster, fanSlot }) => {
+              const lanternState = clusterLanternState(cluster);
+              const lanternArt = lanternAssetForClusterState(lanternState);
+              const entity = entityForCluster(cluster);
+              const transientArt = transientLanternOverlay(
+                deriveTransientLanternEvidence(entity?.projection)
+              );
+              return (
               <Fragment key={cluster.key}>
                 {fanSlot > 0 ? (
                   <>
@@ -734,7 +777,7 @@ export default function LanternCityAtlas({
                       : undefined
                   }
                   className={worldMarkerClass(
-                    `lc-lantern state-${cluster.dark === cluster.total ? "dark" : cluster.dimming > 0 || cluster.dark > 0 ? "dimming" : "active"}${fanSlot > 0 ? ` fan-${fanSlot}` : ""}`,
+                    `lc-v5-lantern lc-lantern state-${lanternState}${fanSlot > 0 ? ` fan-${fanSlot}` : ""}`,
                     entityForCluster(cluster),
                     revealing &&
                       entityForCluster(cluster)?.id === requestedEntityId,
@@ -753,45 +796,30 @@ export default function LanternCityAtlas({
                   onClick={() => {
                     setSelectedPursuit(null);
                     setSelectedCluster(cluster);
+                    if (lanternNeedsRekindling(lanternState)) {
+                      setRekindlingCluster(cluster);
+                      setShowInspector(false);
+                    } else {
+                      setRekindlingCluster(null);
+                      setShowInspector(true);
+                    }
                   }}
                   aria-label={markerLabel(
                     `${cluster.total} customer${cluster.total === 1 ? "" : "s"} at this location`,
                     entityForCluster(cluster)
                   )}
                 >
-                  <span className="lc-lantern-handle" />
-                  <span className="lc-lantern-body">
-                    {(() => {
-                      const windows = projectCustomerWindows(cluster.customers);
-                      return windows.mode === "individual" ? (
-                        <span
-                          className="lc-customer-windows is-individual"
-                          data-active={windows.active}
-                          data-dormant={windows.dormant}
-                        >
-                          {windows.windows.map(window => (
-                            <i
-                              key={window.identityKey}
-                              className={`is-${window.state}`}
-                            />
-                          ))}
-                        </span>
-                      ) : (
-                        <span
-                          className="lc-customer-windows is-aggregate"
-                          data-total={windows.total}
-                          data-active={windows.active}
-                          data-dormant={windows.dormant}
-                        >
-                          {windows.bands.map((state, index) => (
-                            <i key={index} className={`is-${state}`} />
-                          ))}
-                        </span>
-                      );
-                    })()}
-                  </span>
-                  <span className="lc-lantern-base" />
-                  {cluster.total > 1 ? <b>{cluster.total}</b> : null}
+                  <img className="lc-v5-lantern-art" src={lanternArt} alt="" />
+                  {transientArt ? (
+                    <img
+                      className="lc-v5-lantern-transient"
+                      src={transientArt}
+                      alt=""
+                    />
+                  ) : null}
+                  {cluster.total > 1 ? (
+                    <b className="lc-v5-lantern-count">{cluster.total}</b>
+                  ) : null}
                   <WorldMarkerAtmosphere entity={entityForCluster(cluster)} />
                   <WorldObligationTether
                     obligations={entityForCluster(cluster)?.obligations}
@@ -816,7 +844,8 @@ export default function LanternCityAtlas({
                   ) : null}
                 </button>
               </Fragment>
-            ))}
+            );
+            })}
 
           {!googleVisible &&
             visiblePursuits.map(item => {
@@ -946,19 +975,11 @@ export default function LanternCityAtlas({
             WorldVeilLayer for why a hole is always a real fact.
           */}
           <WorldVeilLayer
-            customerLocations={customers.flatMap(customer =>
-              customer.location
-                ? [
-                    {
-                      latitude: customer.location.latitude,
-                      longitude: customer.location.longitude,
-                    },
-                  ]
-                : []
-            )}
+            customerLocations={customerLocations}
             totalCustomers={customers.length}
             atlasReady={!atlas.isLoading && !atlas.isError}
             conqueredTerritoryIds={conqueredTerritoryIds}
+            lostGroundTerritoryIds={lostGroundTerritoryIds}
             onConfront={neighbourhood => {
               setSelectedCluster(null);
               setSelectedPursuit(null);
@@ -982,90 +1003,108 @@ export default function LanternCityAtlas({
           />
         ) : null}
         <TerritoryChrome />
-        {selectedCluster || selectedPursuit || requestedEntity ? null : (
-          <CampaignChrome />
-        )}
       </section>
 
-      {attentionRecommendations.length ? (
-        <section
-          className="lc-attention-row"
-          aria-label="Where Goldline suggests looking"
-        >
-          <h2>Where Goldline suggests looking</h2>
-          <p className="lc-attention-note">
-            Ranked by real derived signals. Nothing here changes a stage, a
-            revenue figure or a deadline — it only changes what is easy to find.
-          </p>
-          <div>
-            {attentionRecommendations.map(entity => (
-              <button
-                key={entity.id}
-                type="button"
-                className={`lc-attention-card attention-${entity.presentation.prominenceTier}`}
-                onClick={() => revealEntity(entity)}
-              >
-                <strong>{entity.displayName}</strong>
-                <span>{entity.presentation.attentionSummary}</span>
-                <small>
-                  {
-                    entity.projection.attentionReasons[0]
-                      ?.sourceEvidenceReference
-                  }
-                </small>
-              </button>
-            ))}
-          </div>
-        </section>
+      {rekindlingCluster ? (
+        <RekindlingArsenal
+          customerLabel={`${rekindlingCluster.total} customer${rekindlingCluster.total === 1 ? "" : "s"} here`}
+          onClose={() => setRekindlingCluster(null)}
+          onInspect={() => {
+            setShowInspector(true);
+            setRekindlingCluster(null);
+          }}
+          onSelectTool={(tool: RekindlingToolId) => {
+            setShowInspector(true);
+            setRekindlingCluster(null);
+            if (tool === "signal" || tool === "bell" || tool === "courier" || tool === "seal") {
+              /* real workflows live in WorldEntityInspector RecoveryPath */
+            }
+          }}
+        />
       ) : null}
 
-      <section className="lc-utility-row">
-        <article className="lc-legend">
-          <h2>Lantern legend</h2>
-          {(["active", "dimming", "dark"] as const).map(state => (
-            <span key={state}>
-              <i className={`lc-mini-lantern state-${state}`} />
-              <strong>{state === "dark" ? "Dormant" : state}</strong>
-            </span>
-          ))}
-          <span>
-            <i className="lc-mini-building" aria-hidden />
-            <strong>Pursued building</strong>
-          </span>
-        </article>
-
-        <article className="lc-unmapped">
-          <MapPinOff aria-hidden />
-          <div>
-            <h2>Geographic Truth</h2>
-            <strong>{unmappedCustomers + unmappedPursuits}</strong>
-            <p>
-              {data?.provider.status === "unconfigured"
-                ? "Geographic provider not configured. Credential-independent records and statuses remain operational."
-                : `${unmappedCustomers} customers and ${unmappedPursuits} pursuits need location.`}
-            </p>
-            <small>
-              {Object.entries(data?.statusCounts ?? {})
-                .map(([status, value]) => `${status}: ${value}`)
-                .join(" · ")}
-            </small>
-            <button
-              type="button"
-              disabled={geocode.isPending}
-              onClick={() => geocode.mutate({ batchSize: 20 })}
-            >
-              <RefreshCw className={geocode.isPending ? "animate-spin" : ""} />
-              {geocode.isPending
-                ? "Geocoding bounded batch…"
-                : "Geocode pending locations"}
-            </button>
+      <LanternGameRoom
+        command={activeCommand}
+        onClose={() => setActiveCommand("map")}
+      >
+        {activeCommand === "missions" ? (
+          <div className="lc-v5-game-room-body">
+            <h2>Missions</h2>
+            {currentChapter ? (
+              <>
+                <strong>{campaign.data?.campaign.title ?? "Current chapter"}</strong>
+                <p>{currentChapter.fictionalTreatment}</p>
+              </>
+            ) : (
+              <p>No active campaign chapter right now.</p>
+            )}
+            <CampaignChronicleList />
           </div>
-        </article>
-      </section>
+        ) : null}
+        {activeCommand === "companions" ? (
+          <div className="lc-v5-game-room-body">
+            <h2>Companions</h2>
+            <p>No companion roster is configured yet. The city still runs on real customer evidence.</p>
+          </div>
+        ) : null}
+        {activeCommand === "arsenal" ? (
+          rekindlingCluster || selectedCluster ? (
+            <RekindlingEmptyState onClose={() => setActiveCommand("map")} />
+          ) : (
+            <RekindlingEmptyState onClose={() => setActiveCommand("map")} />
+          )
+        ) : null}
+        {activeCommand === "buildings" ? (
+          <LanternBuildingsRoom onNavigate={onNavigate} />
+        ) : null}
+        {activeCommand === "conquest" ? (
+          <LanternConquestRoom
+            frontierObjectives={frontierObjectives}
+            onSelect={occupation => {
+              setActiveCommand("map");
+              setFrontierBriefing(occupation);
+              setGuardianLocked(true);
+            }}
+          />
+        ) : null}
+      </LanternGameRoom>
 
-      <CampaignChronicleList />
+      <details className="lc-v5-drawer">
+        <summary>Map tools & geographic truth</summary>
+        <p>
+          {unmappedCustomers + unmappedPursuits} records need location ·{" "}
+          {Object.entries(data?.statusCounts ?? {})
+            .map(([status, value]) => `${status}: ${value}`)
+            .join(" · ")}
+        </p>
+        <button
+          type="button"
+          disabled={geocode.isPending}
+          onClick={() => geocode.mutate({ batchSize: 20 })}
+        >
+          <RefreshCw className={geocode.isPending ? "animate-spin" : ""} />
+          {geocode.isPending ? "Geocoding…" : "Geocode pending locations"}
+        </button>
+      </details>
 
-      {selectedCluster || selectedPursuit || requestedEntity ? (
+      <LanternCommandDeck
+        active={activeCommand}
+        onSelect={command => {
+          setActiveCommand(command);
+          if (command === "map") {
+            setSelectedCluster(null);
+            setSelectedPursuit(null);
+            setRekindlingCluster(null);
+          }
+          if (command === "arsenal" && selectedCluster) {
+            const state = clusterLanternState(selectedCluster);
+            if (lanternNeedsRekindling(state)) setRekindlingCluster(selectedCluster);
+          }
+        }}
+      />
+
+      {(showInspector || requestedEntity) &&
+      (selectedCluster || selectedPursuit || requestedEntity) ? (
         <WorldEntityInspector
           entity={selectedEntity}
           cluster={selectedCluster}
@@ -1073,6 +1112,7 @@ export default function LanternCityAtlas({
           onClose={() => {
             setSelectedCluster(null);
             setSelectedPursuit(null);
+            setShowInspector(false);
             if (requestedEntityId)
               window.history.replaceState({}, "", "/growth/lantern-city");
           }}

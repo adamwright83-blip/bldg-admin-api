@@ -287,6 +287,8 @@
 .cr-world-skin-container{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .cr-world-skin-img{width:100%;height:100%;object-fit:cover;filter:saturate(var(--world-ground-saturation, 1.0)) contrast(var(--world-atmosphere-contrast, 1.0))}
 .cr-world-skin-shade{position:absolute;inset:0;background:linear-gradient(180deg,#0a254018 0%,transparent 35%,#04122044 100%)}
+.cr-territory-mosaic{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.cr-territory-mosaic>img{position:absolute;display:block;max-width:none;user-select:none}
 
 /* Atmosphere Overlays */
 .cr-world-atmosphere-root{position:absolute;inset:0;pointer-events:none;z-index:3}

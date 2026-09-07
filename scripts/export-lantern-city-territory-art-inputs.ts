@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile, copyFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import {
@@ -11,9 +11,13 @@ import {
   geometryContainsPoint,
 } from "../shared/lanternTerritories";
 import { CANONICAL_BUILDING_GEOGRAPHY } from "../shared/canonicalGeography";
+import { TERRITORY_MASK_PUBLIC_ROOT } from "../shared/territoryMaskPackage";
 
 type Coordinate = { latitude: number; longitude: number };
 const output = path.resolve("artifacts/lantern-city-territory-art-inputs");
+const maskDeployRoot = path.resolve(
+  "client/public/assets/admin/control-room/world/territories-v2/masks"
+);
 const customerFile = process.env.LANTERN_CUSTOMER_COORDINATES;
 
 function projectedGeometry(geometry: (typeof LANTERN_TERRITORIES)[number]["geometry"]) {
@@ -72,8 +76,15 @@ await writeFile(path.join(output, "_authoritative-manifest.json"), JSON.stringif
 const render = spawnSync("python3", [path.resolve("scripts/render-lantern-city-territory-art-inputs.py"), output], { stdio: "inherit" });
 if (render.status !== 0) process.exit(render.status ?? 1);
 
+await mkdir(maskDeployRoot, { recursive: true });
+for (const territory of LANTERN_TERRITORIES) {
+  const source = path.join(output, territory.id, "mask.png");
+  const target = path.join(maskDeployRoot, `${territory.id}.png`);
+  await copyFile(source, target);
+}
+
 const zipPath = `${output}.zip`;
 await rm(zipPath, { force: true });
 const zip = spawnSync("zip", ["-qr", zipPath, path.basename(output)], { cwd: path.dirname(output), stdio: "inherit" });
 if (zip.status !== 0) process.exit(zip.status ?? 1);
-console.log(JSON.stringify({ territoryPackages: manifest.territories.length, customerDataStatus: manifest.customerDataStatus, zipPath }, null, 2));
+console.log(JSON.stringify({ territoryPackages: manifest.territories.length, customerDataStatus: manifest.customerDataStatus, maskDeployRoot: TERRITORY_MASK_PUBLIC_ROOT, zipPath }, null, 2));
