@@ -10,6 +10,7 @@ import {
 } from "../../shared/goldlineCampaignRuntime";
 import {
   classifyTerritory,
+  deriveTerritoryOccupancy,
   territoryByName,
 } from "../../shared/lanternTerritories";
 import { deriveTerritoryVisualState } from "../../shared/lanternTerritoryVisualState";
@@ -21,6 +22,7 @@ import { getRevenueSummary } from "../analytics/analyticsQueries";
 import { getDb } from "../db";
 import { getGeographicTruth } from "../geography/geographicTruthService";
 import { getOrMaterializeTodayCampaign } from "./campaignService";
+import { listPresentedTerritories } from "./territoryService";
 
 export const AUTHORED_V6_TERRITORY_IDS = [
   "koreatown",
@@ -52,6 +54,17 @@ export type LanternOperationBaseline = {
   baselineCustomerIdentityKeys: string[];
   baselineDormantIdentityKeys: string[];
   anchorCustomerIdentityKey: string | null;
+};
+/** Real territory occupancy, from the same evidence the scene composes with. */
+export type LanternTerritoryOccupancyFlags = {
+  guarded: boolean;
+  conquered: boolean;
+  pressureReturned: boolean;
+};
+/** Presented territory state as `goldlineWorld.territories` returns it. */
+export type LanternPresentedTerritoryState = {
+  definition: { realGeographyLabel: string | null };
+  state: { cleared: boolean; pressureReturned?: boolean };
 };
 export type LanternTerritoryDossier = {
   territoryId: string;
@@ -91,13 +104,50 @@ export function resolveChapterLanternTerritory(
       null,
   };
 }
-function visualEnvironment(d: LanternTerritoryDossier) {
+/**
+ * Mirrors `composeLanternCityScene`: guarded/conquered come from
+ * `deriveTerritoryOccupancy` over located customers plus cleared territory
+ * history; pressure returned comes from cleared territories whose pressure
+ * came back. No flag is assumed.
+ */
+export function deriveDossierOccupancy(input: {
+  atlas: Atlas;
+  territoryStates?: readonly LanternPresentedTerritoryState[];
+}): (territoryId: string) => LanternTerritoryOccupancyFlags {
+  const conquered = new Set<string>();
+  const lost = new Set<string>();
+  for (const item of input.territoryStates ?? []) {
+    const territory = territoryByName(item.definition.realGeographyLabel ?? "");
+    if (territory && item.state.cleared)
+      (item.state.pressureReturned ? lost : conquered).add(territory.id);
+  }
+  const located = input.atlas.customers.filter(c => c.location);
+  const occupancy = deriveTerritoryOccupancy({
+    customers: located.map(c => c.location!),
+    totalCustomers: input.atlas.customers.length,
+    atlasReady: true,
+    conqueredTerritoryIds: conquered,
+  });
+  const rows = new Map(
+    occupancy.territories.map(row => [row.territory.id, row] as const)
+  );
+  return territoryId => {
+    const row = rows.get(territoryId);
+    return {
+      guarded: row?.guarded ?? false,
+      conquered: row?.conquered ?? false,
+      pressureReturned: lost.has(territoryId),
+    };
+  };
+}
+function visualEnvironment(
+  d: LanternTerritoryDossier,
+  occupancy: LanternTerritoryOccupancyFlags
+) {
   const state = deriveTerritoryVisualState({
     ...d.counts,
     territoryId: d.territoryId,
-    guarded: false,
-    conquered: false,
-    pressureReturned: false,
+    ...occupancy,
   });
   return ["infested", "overgrown", "closed_construction"].includes(state)
     ? "infested"
@@ -124,7 +174,9 @@ export function projectLanternCityOverview(input: {
     lanternCityTerritoryId: string | null;
   };
   operation?: LanternOperationBaseline;
+  territoryStates?: readonly LanternPresentedTerritoryState[];
 }) {
+  const occupancyFor = deriveDossierOccupancy(input);
   const grouped = new Map<string, Customer[]>();
   for (const c of input.atlas.customers) {
     if (!c.location) continue;
@@ -173,11 +225,7 @@ export function projectLanternCityOverview(input: {
               identityKey: customer.identityKey,
               cadence: customer.cadence,
             })),
-            occupancy: {
-              guarded: false,
-              conquered: false,
-              pressureReturned: false,
-            },
+            occupancy: occupancyFor(territoryId),
           })
         ),
         knownLight,
@@ -247,7 +295,9 @@ export function projectLanternCityOverview(input: {
           )[0] ?? null)
       : null;
   const binding = chapter?.selectedGameplayBinding ?? "recovery";
-  const environment = dossier ? visualEnvironment(dossier) : null;
+  const environment = dossier
+    ? visualEnvironment(dossier, occupancyFor(dossier.territoryId))
+    : null;
   const title = chapter
     ? binding === "authoritative_visit_route"
       ? "HOLD THE ROUTE"
@@ -487,13 +537,14 @@ export async function getLanternCityOverview(input: {
   operatorId: string;
 }) {
   const atlas = await getGeographicTruth({ tenantId: input.tenantId });
-  const [campaign, revenue] = await Promise.all([
+  const [campaign, revenue, territoryStates] = await Promise.all([
     getOrMaterializeTodayCampaign(input),
     getRevenueSummary(input.tenantId, {
       range: mondayThrough(atlas.businessDate),
       groupBy: "week",
       basis: "paidAt",
     }),
+    listPresentedTerritories({ tenantId: input.tenantId }),
   ]);
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -516,5 +567,6 @@ export async function getLanternCityOverview(input: {
     operation,
     resolvedCampaignTerritory: resolved,
     paidRevenueThisWeek: revenue.totalRevenue,
+    territoryStates,
   });
 }

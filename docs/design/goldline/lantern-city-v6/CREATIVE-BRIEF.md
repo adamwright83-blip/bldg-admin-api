@@ -315,8 +315,8 @@ strongholds. Not soldiers, turrets, ammo, fuel, fictional cash, squads, mutant
 bosses.
 
 Mission titles use strong verbs: PURGE THE RAT NEST, RESTORE THE LIGHT,
-REBUILD THE BIRD, OPEN THE BALLOON, LIGHT THE WESTSIDE, HOLD THE ROUTE, FACE THE
-GUARDIAN. Never "Contact Dormant Customers" or "Follow Up Leads."
+REBUILD THE BIRD, OPEN THE BALLOON, LIGHT THE WESTSIDE, HOLD THE ROUTE. Never
+"Contact Dormant Customers" or "Follow Up Leads."
 
 Frontier districts are wanted, not forbidden. Padlock icons on zero-customer
 territories say "keep out," which is the opposite of the intent. The broken

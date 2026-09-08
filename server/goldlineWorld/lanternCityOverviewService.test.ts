@@ -1,12 +1,23 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   projectLanternCityOverview,
   resolveChapterLanternTerritory,
 } from "./lanternCityOverviewService";
 import {
+  LANTERN_TERRITORIES,
   territoryCenter,
   territoryByName,
 } from "../../shared/lanternTerritories";
+import { forecastTerritoryDecay } from "../../shared/lanternDecayForecast";
+
+vi.mock("../../shared/lanternDecayForecast", async importOriginal => {
+  const actual =
+    await importOriginal<typeof import("../../shared/lanternDecayForecast")>();
+  return {
+    ...actual,
+    forecastTerritoryDecay: vi.fn(actual.forecastTerritoryDecay),
+  };
+});
 
 function customer(
   name: string,
@@ -43,9 +54,13 @@ function customer(
   };
 }
 function fixture(
-  customers = [customer("Rebecca", "dark", 70), customer("Anita", "active", 3)]
+  customers = [customer("Rebecca", "dark", 70), customer("Anita", "active", 3)],
+  territoryStates?: Parameters<
+    typeof projectLanternCityOverview
+  >[0]["territoryStates"]
 ) {
   return projectLanternCityOverview({
+    territoryStates,
     atlas: {
       tenantId: "tenant",
       businessDate: "2026-09-08",
@@ -67,7 +82,63 @@ function fixture(
   });
 }
 
+function forecastOccupancy(territoryId: string) {
+  const call = vi
+    .mocked(forecastTerritoryDecay)
+    .mock.calls.map(([input]) => input)
+    .find(input => input.territoryId === territoryId);
+  expect(call).toBeDefined();
+  return call!.occupancy;
+}
+
 describe("Lantern City truthful overview", () => {
+  beforeEach(() => {
+    vi.mocked(forecastTerritoryDecay).mockClear();
+  });
+
+  it("hands the decay forecast the territory's real occupancy, never assumed flags", () => {
+    const artsDistrict = LANTERN_TERRITORIES.find(t => t.id === "arts-district")!;
+    expect(artsDistrict.initialState).toBe("guarded");
+
+    fixture();
+    // Silver Lake is held ground by its seed state and occupied, so never
+    // guarded; unreached Arts District is guarded by its seed state. Same
+    // derivation the scene uses.
+    expect(forecastOccupancy("silver-lake")).toEqual({
+      guarded: false,
+      conquered: true,
+      pressureReturned: false,
+    });
+    expect(forecastOccupancy("arts-district")).toEqual({
+      guarded: true,
+      conquered: false,
+      pressureReturned: false,
+    });
+
+    vi.mocked(forecastTerritoryDecay).mockClear();
+    fixture(undefined, [
+      {
+        definition: { realGeographyLabel: "Silver Lake" },
+        state: { cleared: true, pressureReturned: true },
+      },
+      {
+        definition: { realGeographyLabel: artsDistrict.name },
+        state: { cleared: true, pressureReturned: false },
+      },
+    ]);
+    // Real cleared history: pressure returned in Silver Lake, Arts District held.
+    expect(forecastOccupancy("silver-lake")).toEqual({
+      guarded: false,
+      conquered: true,
+      pressureReturned: true,
+    });
+    expect(forecastOccupancy("arts-district")).toEqual({
+      guarded: false,
+      conquered: true,
+      pressureReturned: false,
+    });
+  });
+
   it("renders a cadence forecast only when measured cadence supports one", () => {
     const measured = fixture([customer("Anita", "active", 8)]);
     expect(
