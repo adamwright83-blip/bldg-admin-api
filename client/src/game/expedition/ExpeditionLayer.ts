@@ -173,6 +173,21 @@ const PALETTE = {
   shadow: 0x1a140f,
 } as const;
 
+/** Linear RGB interpolation between two 24-bit hex colors, `t` in 0..1. */
+function lerpRgb(from: number, to: number, t: number): number {
+  const clamped = Math.max(0, Math.min(1, t));
+  const fr = (from >> 16) & 0xff;
+  const fg = (from >> 8) & 0xff;
+  const fb = from & 0xff;
+  const tr = (to >> 16) & 0xff;
+  const tg = (to >> 8) & 0xff;
+  const tb = to & 0xff;
+  const r = Math.round(fr + (tr - fr) * clamped);
+  const g = Math.round(fg + (tg - fg) * clamped);
+  const b = Math.round(fb + (tb - fb) * clamped);
+  return (r << 16) | (g << 8) | b;
+}
+
 export type ScreenProjection = (
   progress: number,
   lateral: number
@@ -359,7 +374,26 @@ export class ExpeditionLayer {
   private rawPlan: PickupExpeditionPlan | null = null;
   /** Corridor-space projection of rawPlan. The only plan the runtime reads. */
   private plan: PickupExpeditionPlan | null = null;
-  private hitFlash = new Map<string, number>();
+  /**
+   * `peak` distinguishes a deliberate/earned hit (STRIKE, the Line, a relic
+   * effect — all 1) from the passive ambient lash (0.55, §18's SECONDARY
+   * assist), which used to render pixel-identical to a real STRIKE — same
+   * flash, same near-binary snap on/off. Nothing told the player which of
+   * their own actions actually caused the damage they were seeing. `flash()`
+   * still returns a plain 0..1 number so the one read site doesn't need to
+   * know about the distinction, only render it.
+   */
+  private hitFlash = new Map<string, { remaining: number; duration: number; peak: number }>();
+  private setHitFlash(id: string, duration: number, peak = 1) {
+    this.hitFlash.set(id, { remaining: duration, duration, peak });
+  }
+  /** Eased 0..1 flash intensity — fades out over the window instead of a
+   * binary on/off snap, scaled by how "loud" this particular hit was. */
+  private flashIntensity(id: string): number {
+    const entry = this.hitFlash.get(id);
+    if (!entry) return 0;
+    return Math.max(0, Math.min(1, entry.remaining / entry.duration)) * entry.peak;
+  }
   /** Depth scale at Trailblazer's current position — keeps lineOrigin's
    *  vertical offset consistent across corridor perspective. */
   private bodyScale = 1;
@@ -1323,7 +1357,7 @@ export class ExpeditionLayer {
         { x: primary.x, y: primary.y },
         fromLine
       );
-      this.hitFlash.set(secondary.id, 0.16);
+      this.setHitFlash(secondary.id, 0.16);
       if (result.defeated) {
         this.run.addMomentum(EXPEDITION.momentum.hostileDefeated);
         this.callbacks.onHostileDefeated?.(secondary.kind);
@@ -1357,7 +1391,7 @@ export class ExpeditionLayer {
       { x: this.playerProgress, y: this.playerLateral },
       true
     );
-    this.hitFlash.set(target.id, 0.16);
+    this.setHitFlash(target.id, 0.16);
     if (result.defeated) {
       this.run.addMomentum(EXPEDITION.momentum.hostileDefeated);
       this.callbacks.onHostileDefeated?.(target.kind);
@@ -1458,7 +1492,7 @@ export class ExpeditionLayer {
     if (hostile) {
       hostile.onLinehookLatch({ x: this.playerProgress, y: this.playerLateral });
       const result = hostile.applyHit(1, { x: this.playerProgress, y: this.playerLateral }, true);
-      this.hitFlash.set(hostile.id, 0.18);
+      this.setHitFlash(hostile.id, 0.18);
       this.run.addMomentum(EXPEDITION.momentum.lineLatch);
       this.callbacks.onHitStop?.(55);
       if (result.defeated) {
@@ -1508,15 +1542,19 @@ export class ExpeditionLayer {
   }
 
   /** Applies a melee hit to `target` and reports the momentum/defeat side
-   * effects shared by STRIKE and the ambient lash. */
+   * effects shared by STRIKE and the ambient lash. `flashPeak` is what
+   * actually keeps the ambient lash visually SECONDARY (§18) — before this
+   * it rendered pixel-identical to a real STRIKE, so nothing distinguished
+   * "I hit that" from "the game hit that for me while I stood still". */
   private applyMeleeHit(
     target: Ruinbound,
     playerProgress: number,
     playerLateral: number,
-    hitFlashSeconds: number
+    hitFlashSeconds: number,
+    flashPeak: number
   ) {
     const result = target.applyHit(1, { x: playerProgress, y: playerLateral }, false);
-    this.hitFlash.set(target.id, hitFlashSeconds);
+    this.setHitFlash(target.id, hitFlashSeconds, flashPeak);
     if (result.guarded) {
       this.callbacks.onHitStop?.(40);
       return;
@@ -1542,7 +1580,7 @@ export class ExpeditionLayer {
     this.callbacks.onStrikeAttempt?.();
     const nearest = this.nearestMeleeTarget(playerProgress, playerLateral);
     if (!nearest) return false;
-    this.applyMeleeHit(nearest, playerProgress, playerLateral, 0.18);
+    this.applyMeleeHit(nearest, playerProgress, playerLateral, 0.18, 1);
     this.callbacks.onStrikeLanded?.();
     return true;
   }
@@ -1556,7 +1594,10 @@ export class ExpeditionLayer {
     if (moving) return false;
     const nearest = this.nearestMeleeTarget(playerProgress, playerLateral);
     if (!nearest) return false;
-    this.applyMeleeHit(nearest, playerProgress, playerLateral, 0.14);
+    // Dimmer peak (0.55, not 1) is what actually delivers "SECONDARY assist
+    // only" visually — the comment already promised this, but every hit
+    // flashed identically bright regardless of source.
+    this.applyMeleeHit(nearest, playerProgress, playerLateral, 0.14, 0.55);
     return true;
   }
 
@@ -1609,10 +1650,10 @@ export class ExpeditionLayer {
   // ---------------------------------------------------------------- render
 
   private draw(project: ScreenProjection, viewportWidth: number) {
-    for (const [id, remaining] of Array.from(this.hitFlash.entries())) {
-      const next = remaining - 1 / 60;
+    for (const [id, entry] of Array.from(this.hitFlash.entries())) {
+      const next = entry.remaining - 1 / 60;
       if (next <= 0) this.hitFlash.delete(id);
-      else this.hitFlash.set(id, next);
+      else entry.remaining = next;
     }
 
     this.reapSprites();
@@ -2456,7 +2497,7 @@ export class ExpeditionLayer {
       // Depth: guardians further up the corridor genuinely shrink, so they
       // sit in the painted perspective instead of floating on top of it.
       const s = at.scale * (0.62 + (1 - hostile.x) * 0.5);
-      const flash = this.hitFlash.get(hostile.id) ?? 0;
+      const flash = this.flashIntensity(hostile.id);
       const y = at.y;
 
       const telegraph = hostile.telegraphProgress();
@@ -2586,8 +2627,14 @@ export class ExpeditionLayer {
     body.scale.y = Math.abs(body.scale.y) * (1 + telegraph * 0.06) * (1 + squash * 0.6);
 
     const exposed = hostile instanceof Shieldbearer && hostile.exposed;
-    body.tint = flash > 0 ? 0xffffff : exposed ? 0xffd9a0 : 0xffffff;
-    body.alpha = flash > 0 ? 0.85 : 1;
+    const baseTint = exposed ? 0xffd9a0 : 0xffffff;
+    // Eased toward white rather than a binary snap, and scaled by the
+    // flash's own peak — a real STRIKE (peak 1) still reads as a full white
+    // flash, but the ambient lash (peak 0.55) now visibly reads as quieter,
+    // which is the actual mechanism that makes it feel SECONDARY rather
+    // than identical to the player's own deliberate hit.
+    body.tint = flash > 0 ? lerpRgb(baseTint, 0xffffff, flash) : baseTint;
+    body.alpha = 1 - flash * 0.15;
     if (exposed) body.rotation += Math.sin(t * 12) * 0.05 + 0.12;
   }
 
@@ -2656,8 +2703,12 @@ export class ExpeditionLayer {
     return 0.55 + Math.sin(t * 2.4 + offset) * 0.3;
   }
 
+  /** Eased toward stoneRim rather than a binary snap — see hitFlash's own
+   * comment: a flash that held one flat color for its whole window then
+   * cut instantly back read as a glitch, and gave the ambient lash no way
+   * to look any quieter than a real STRIKE landing. */
   private bodyColor(flash: number): number {
-    return flash > 0 ? PALETTE.stoneRim : PALETTE.stone;
+    return flash > 0 ? lerpRgb(PALETTE.stone, PALETTE.stoneRim, flash) : PALETTE.stone;
   }
 
   /**
