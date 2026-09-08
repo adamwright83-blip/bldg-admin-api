@@ -358,6 +358,7 @@ export default function LanternCityScene({
       <LanternCityHUD
         scene={scene}
         overview={overview.data as Overview | undefined}
+        overviewError={overview.isError}
         dossier={dossier}
         selectedTarget={selectedTarget}
         active={command}

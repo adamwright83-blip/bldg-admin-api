@@ -94,6 +94,7 @@ const stateLabel = {
 export function LanternCityHUD({
   scene,
   overview,
+  overviewError,
   dossier,
   selectedTarget,
   active,
@@ -103,6 +104,7 @@ export function LanternCityHUD({
 }: {
   scene: CityScene;
   overview?: Overview;
+  overviewError?: boolean;
   dossier?: Dossier | null;
   selectedTarget?: "district" | "second_light";
   active: Command;
@@ -130,7 +132,17 @@ export function LanternCityHUD({
         style={rectStyle(scene.hud.topBar)}
         data-hud-zone="topBar"
         aria-label="Real business scoreboard"
+        title={
+          overviewError
+            ? "City data is temporarily unavailable. Numbers may be stale."
+            : undefined
+        }
       >
+        {overviewError ? (
+          <div className={styles.overviewError} role="status">
+            City data unavailable — showing last known numbers
+          </div>
+        ) : null}
         <div>
           <Users aria-hidden />
           <span>
@@ -175,7 +187,9 @@ export function LanternCityHUD({
           <span>
             {overview?.businessDate
               ? date.format(new Date(`${overview.businessDate}T12:00:00Z`))
-              : "Loading…"}
+              : overviewError
+                ? "Unavailable"
+                : "Loading…"}
             <small>LOS ANGELES</small>
           </span>
         </div>
@@ -191,6 +205,9 @@ export function LanternCityHUD({
             <img
               src={`/assets/goldline/lantern-city/v6/territories/${operation.territoryId}/${operation.environment}.png`}
               alt=""
+              onError={event => {
+                event.currentTarget.style.display = "none";
+              }}
             />
           ) : null}
         </div>
