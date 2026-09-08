@@ -38,6 +38,11 @@ export type ShieldbearerPhase =
  */
 export const LATERAL_TO_PROGRESS = 1 / 700;
 
+/** Real seconds a landed hit's recoil lasts — shared with the renderer so
+ * it can ease the offset out over the same window rather than a hardcoded
+ * duplicate of this value. */
+export const RECOIL_DURATION_SECONDS = 0.18;
+
 /**
  * Tuning in CORRIDOR PROGRESS units — not pixels.
  *
@@ -178,7 +183,7 @@ export abstract class Ruinbound {
 
     this.hp = Math.max(0, this.hp - applied);
     if (applied > 0) {
-      this.recoilSeconds = 0.18;
+      this.recoilSeconds = RECOIL_DURATION_SECONDS;
       this.recoilX = Math.sign(this.x - from.x) || 1;
     }
     this.onHit(applied, from, fromLine, guarded);

@@ -90,7 +90,7 @@ import {
   type RelicId,
 } from "./expeditionState";
 import { TRAVERSAL_Z, worldActorZ } from "../world/worldActorDepth";
-import { LATERAL_TO_PROGRESS } from "./ruinbound";
+import { LATERAL_TO_PROGRESS, RECOIL_DURATION_SECONDS } from "./ruinbound";
 import {
   LINE_TARGET_INTENSITY,
   climaxSealAffordanceState,
@@ -2535,15 +2535,30 @@ export class ExpeditionLayer {
     body.scale.x = Math.abs(body.scale.x) * (facingRight ? 1 : -1);
 
     // Recoil is a local body offset, never a world move — moving the root
-    // would make a hit visibly change the actor's depth.
-    body.x = hostile.recoilSeconds > 0 ? hostile.recoilX * 7 * s : 0;
+    // would make a hit visibly change the actor's depth. Eased rather than
+    // a binary on/off: it used to hold the FULL offset for the entire
+    // window then snap back to 0 in one frame, which read as a flicker/
+    // glitch rather than an impact settling out. `recoilProgress` decays
+    // linearly from 1 (the instant of the hit) to 0; squaring it into an
+    // ease-out curve gives a fast kick that settles gently, closer to how a
+    // real impact reads than a linear return.
+    const recoilProgress = Math.max(
+      0,
+      Math.min(1, hostile.recoilSeconds / RECOIL_DURATION_SECONDS)
+    );
+    const recoilEase = recoilProgress * (2 - recoilProgress);
+    body.x = hostile.recoilX * 11 * s * recoilEase;
 
     const lean = telegraph * 0.18 * (facingRight ? 1 : -1);
-    body.rotation =
-      lean + (hostile.recoilSeconds > 0 ? -hostile.recoilX * 0.09 : 0);
-    if (telegraph > 0) {
-      body.scale.y = Math.abs(body.scale.y) * (1 + telegraph * 0.06);
-    }
+    body.rotation = lean - hostile.recoilX * 0.1 * recoilEase;
+    // A brief impact squash — compressed along the hit axis, stretched
+    // vertically — on top of the existing telegraph wind-up scale, not
+    // instead of it (the two are rarely active at once, but multiplying
+    // rather than overwriting means neither silently discards the other on
+    // the rare frame both are).
+    const squash = recoilEase * 0.14;
+    body.scale.x *= 1 - squash;
+    body.scale.y = Math.abs(body.scale.y) * (1 + telegraph * 0.06) * (1 + squash * 0.6);
 
     const exposed = hostile instanceof Shieldbearer && hostile.exposed;
     body.tint = flash > 0 ? 0xffffff : exposed ? 0xffd9a0 : 0xffffff;
