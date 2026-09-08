@@ -1,6 +1,6 @@
 {
   "version": 6,
-  "status": "pilot-registered-art-v2-integrated",
+  "status": "pilot-registered-art-v4-hollywood-integrated",
   "accepted": false,
   "reference": "Screen Shot 2026-09-07 at 22.01.55 PM.png (composition only; never copy counts)",
   "runtimeRegistry": "client/src/components/admin/control-room/LanternCitySceneV6/sceneAssets.ts",
@@ -2884,7 +2884,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-pilot-v2",
+          "status": "supplied-pilot-v4",
           "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
         }
       ]
