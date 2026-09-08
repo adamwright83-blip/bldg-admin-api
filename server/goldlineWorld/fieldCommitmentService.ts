@@ -14,10 +14,11 @@
 
 import { and, eq, inArray } from "drizzle-orm";
 import { goldlineWorldEvents } from "../../drizzle/schema";
-import type { FieldJournalExtraction } from "../../shared/fieldJournal";
+import { journalCanUseVisitContext, requestedJournalFollowUps, type FieldJournalExtraction } from "../../shared/fieldJournal";
 import {
   claimCreatesObligation,
   resolveTranscriptClaims,
+  resolveTemporalReference,
   type ProposedTemporalClaim,
   type ValidatedTemporalClaim,
 } from "../../shared/goldlineTemporal";
@@ -86,6 +87,7 @@ export async function recordFieldCommitments(input: {
   /** The journal's own capture date, in the tenant's timezone. */
   anchorDate: string;
   capturedAt: string;
+  contextPhysicalEntityId?: string | null;
 }): Promise<RecordedCommitment[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -235,7 +237,7 @@ export async function recordFieldCommitments(input: {
     const address = claimAddress;
     const physicalEntityId = address
       ? await findPhysicalEntityIdByAddress({ tenantId: input.tenantId, address })
-      : null;
+      : journalCanUseVisitContext(input.extraction) ? input.contextPhysicalEntityId ?? null : null;
 
     /*
       Keyed by the journal entry and the promise's own words. Two genuinely
@@ -280,6 +282,37 @@ export async function recordFieldCommitments(input: {
       )
       .limit(1);
     if (stored) recorded.push({ eventId: stored.id, physicalEntityId, claim });
+  }
+  // A customer's explicit request is a follow-up obligation, not evidence that
+  // the customer agreed to a meeting or that the operator already fulfilled it.
+  for (const followUp of requestedJournalFollowUps(input.extraction, input.transcript)) {
+    const quote = followUp.requestedAction.transcriptExcerpt!;
+    if (claims.some(claim => claimCreatesObligation(claim) && claim.sourceText === quote)) continue;
+    const address = addressForClaim(input.extraction, followUp);
+    const physicalEntityId = address
+      ? await findPhysicalEntityIdByAddress({ tenantId: input.tenantId, address })
+      : journalCanUseVisitContext(input.extraction) ? input.contextPhysicalEntityId ?? null : null;
+    const when = resolveTemporalReference(quote, input.anchorDate);
+    const { createHash } = await import("node:crypto");
+    const key = createHash("sha256").update(quote).digest("hex").slice(0, 32);
+    await appendGoldlineWorldEvent({
+      tenantId: input.tenantId, physicalEntityId,
+      eventType: COMMITMENT_MADE_EVENT, classification: "evidence",
+      actorType: "operator", actorId: input.actorId,
+      occurredAt: input.capturedAt, observedAt: null,
+      sourceType: "driver_sales_journals", sourceId: input.journalEntryId,
+      sourceEvidenceReference: `driver_sales_journals:${input.journalEntryId}`,
+      provenanceClass: "operator_reported", verificationClass: "ATTESTED", confidence: "high",
+      idempotencyKey: `field-request:${input.journalEntryId}:${key}`,
+      correlationId: `field-journal:${input.journalEntryId}`,
+      metadata: {
+        statement: quote, promisedTo: null, obligationBasis: "explicit_request",
+        dueDate: when && !when.hedged && ["day", "daypart", "time"].includes(when.precision) ? when.startDate : null,
+        duePrecision: when?.precision ?? "none", daypart: when?.daypart ?? null,
+        explanation: `Requested in your field debrief: ${quote}`,
+        impliesAppointment: false, impliesOperatorPromise: false, addressClue: address,
+      },
+    });
   }
   return recorded;
 }

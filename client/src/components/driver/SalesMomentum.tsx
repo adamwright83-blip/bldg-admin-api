@@ -66,7 +66,8 @@ function newClientRequestId() {
   return globalThis.crypto?.randomUUID?.() ?? `journal-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-export function SalesJournalSheet({ open, onOpenChange, location, onSaved }: {
+export function SalesJournalSheet({ open, onOpenChange, location, onSaved, debrief }: {
+  debrief?: { missionId: number; buildingName: string } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   location?: GoldlineLocationSnapshot;
@@ -128,10 +129,11 @@ export function SalesJournalSheet({ open, onOpenChange, location, onSaved }: {
     setSaveError(null);
     try {
       const date = new Date();
-      const journalDate = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+      const journalDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
       const availableLocation = location?.status === "available" ? location : null;
       const result = await save.mutateAsync({
         journalDate,
+        debriefMissionId: debrief?.missionId,
         clientRequestId,
         audioDataUrl: audioDataUrl ?? undefined,
         transcript: transcript.trim() || undefined,
@@ -166,7 +168,7 @@ export function SalesJournalSheet({ open, onOpenChange, location, onSaved }: {
     <motion.div className="fixed inset-0 z-[90] flex items-end justify-center bg-[#17385e6b] p-3 backdrop-blur-sm sm:items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !recording && onOpenChange(false)}>
       <motion.section role="dialog" aria-modal="true" aria-labelledby="sales-journal-title" className="w-full max-w-[760px] overflow-hidden rounded-[26px] border-2 border-[#e0bd63] bg-[linear-gradient(#fffdf2,#f9e6ad)] text-[#17385e] shadow-[0_24px_80px_#31516e55]" initial={{ y: 40 }} animate={{ y: 0 }} exit={{ y: 40 }} onClick={event => event.stopPropagation()}>
         <header className="flex items-start justify-between border-b-2 border-[#e0bd63] p-[clamp(22px,4vw,38px)]">
-          <div><p className="text-sm font-black uppercase tracking-[.2em] text-[#9b6410]">Field Journal · durable evidence</p><h2 id="sales-journal-title" className="mt-2 text-[clamp(30px,4vw,42px)] font-black">Capture what happened</h2><p className="mt-2 max-w-xl text-[clamp(15px,2vw,20px)] text-[#3a5f7e]">Name every property or business you encountered, what was said, what you did, and what needs follow-up. One entry can hold several places.</p></div>
+          <div><p className="text-sm font-black uppercase tracking-[.2em] text-[#9b6410]">{debrief ? "Loot Walk · field debrief" : "Field Journal · durable evidence"}</p><h2 id="sales-journal-title" className="mt-2 text-[clamp(30px,4vw,42px)] font-black">{debrief ? debrief.buildingName : "Capture what happened"}</h2><p className="mt-2 max-w-xl text-[clamp(15px,2vw,20px)] text-[#3a5f7e]">{debrief ? "What happened inside? Say what they asked for and what you promised. The Line remembers." : "Name every property or business you encountered, what was said, what you did, and what needs follow-up. One entry can hold several places."}</p></div>
           <button type="button" aria-label="Close journal" disabled={recording} onClick={() => onOpenChange(false)} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[#17385e33] bg-[#fff9df] disabled:opacity-30"><X /></button>
         </header>
         <div className="grid gap-4 p-[clamp(18px,3.5vw,32px)]">
@@ -185,7 +187,7 @@ export function SalesJournalSheet({ open, onOpenChange, location, onSaved }: {
               {saveError}
             </p>
           ) : null}
-          <button type="button" data-testid="journal-save" onClick={() => void submit()} disabled={recording || save.isPending || (!audioDataUrl && transcript.trim().length < 20)} className="flex min-h-[66px] items-center justify-center gap-3 rounded-[17px] bg-[#17385e] text-lg font-black text-[#fff8dc] disabled:opacity-35">{save.isPending ? <><Loader2 className="animate-spin" /> Securing evidence…</> : saveError ? "Retry same entry" : "Secure Field Journal"}</button>
+          <button type="button" data-testid="journal-save" onClick={() => void submit()} disabled={recording || save.isPending || (!audioDataUrl && transcript.trim().length < 20)} className="flex min-h-[66px] items-center justify-center gap-3 rounded-[17px] bg-[#17385e] text-lg font-black text-[#fff8dc] disabled:opacity-35">{save.isPending ? <><Loader2 className="animate-spin" /> Securing evidence…</> : saveError ? "Retry same entry" : debrief ? "Secure debrief · return to the Line" : "Secure Field Journal"}</button>
         </div>
       </motion.section>
     </motion.div>

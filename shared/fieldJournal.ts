@@ -111,6 +111,11 @@ export const fieldJournalExtractionSchema = z.object({
     requestedAction: evidenceItem,
     explicitDateText: z.string().trim().max(200).nullable(),
   })).max(30),
+  facts: z.array(z.object({
+    kind: z.enum(["unit_count", "preferred_channel"]),
+    entityClientKey: z.string().nullable(),
+    evidence: evidenceItem,
+  })).max(20).optional(),
   coaching: z.object({
     objections: z.array(evidenceItem).max(20),
     worked: z.array(evidenceItem).max(20),
@@ -135,8 +140,55 @@ export const EMPTY_FIELD_JOURNAL_EXTRACTION: FieldJournalExtraction = {
   corrections: [],
 };
 
-export const FIELD_JOURNAL_EXTRACTION_SCHEMA_VERSION = "goldline-field-journal-v2";
+export const FIELD_JOURNAL_EXTRACTION_SCHEMA_VERSION = "goldline-field-journal-v3";
 
 export function parseFieldJournalExtraction(value: unknown): FieldJournalExtraction {
   return fieldJournalExtractionSchema.parse(value);
+}
+
+/** A human mention is not a new contact. Keep it as quoted evidence only.
+ * A named other property must resolve independently, never to the last visit. */
+export function journalCanUseVisitContext(extraction: FieldJournalExtraction): boolean {
+  return extraction.entities.every(entity => entity.kind === "person" &&
+    !entity.addressClue && !entity.propertyName);
+}
+
+/** Only transcript-supported evidence may reach downstream world writers.
+ * The model's paraphrase is not an independent source. Unsupported items are
+ * dropped; the durable original remains available for correction/reprocessing. */
+export function groundFieldJournalExtraction(
+  extraction: FieldJournalExtraction, transcript: string
+): FieldJournalExtraction {
+  const supported = (item: { value: string; transcriptExcerpt: string | null } | null) =>
+    Boolean(item?.transcriptExcerpt && transcript.includes(item.transcriptExcerpt) &&
+      item.transcriptExcerpt.toLowerCase().includes(item.value.toLowerCase()));
+  const grounded = <T extends { value: string; transcriptExcerpt: string | null }>(item: T | null): T | null =>
+    supported(item) ? item : null;
+  return {
+    ...extraction,
+    entities: extraction.entities.map(entity => ({
+      ...entity,
+      propertyName: grounded(entity.propertyName), addressClue: grounded(entity.addressClue),
+      neighborhood: grounded(entity.neighborhood), websiteDomain: grounded(entity.websiteDomain),
+      contactName: grounded(entity.contactName), contactTitle: grounded(entity.contactTitle),
+      email: grounded(entity.email), phone: grounded(entity.phone),
+      amenities: entity.amenities.filter(supported), architecture: entity.architecture.filter(supported),
+    })),
+    actions: extraction.actions.filter(item => supported(item.evidence)),
+    outcomes: extraction.outcomes.filter(item => supported(item.evidence) && item.explicitlyReported),
+    followUps: extraction.followUps.filter(item => supported(item.requestedAction)),
+    temporalClaims: extraction.temporalClaims.filter(item => transcript.includes(item.sourceText)),
+    facts: extraction.facts?.filter(item => supported(item.evidence)),
+  };
+}
+
+/** Explicit requests create work owed, without claiming an accepted appointment
+ * or an operator promise. Vague dates remain null in the existing obligation. */
+export function requestedJournalFollowUps(extraction: FieldJournalExtraction, transcript: string) {
+  return extraction.followUps.filter(item => {
+    const quote = item.requestedAction.transcriptExcerpt;
+    return quote && transcript.includes(quote) &&
+      /\b(asked|requested|wants|please|send|email|call|follow up)\b/i.test(quote) &&
+      !/\b(maybe|might|could|perhaps|didn't|did not|doesn't|does not|don't|do not)\b/i.test(quote);
+  });
 }

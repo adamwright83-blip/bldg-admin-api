@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import {
+  commercialVisitOutcomes,
   driverSalesJournals,
   driverSalesPlaybookSources,
   driverSalesScoreEvents,
@@ -206,6 +207,7 @@ export async function saveDriverSalesJournal(input: {
   driverId: string;
   journalDate: string;
   clientRequestId: string;
+  debriefMissionId?: number;
   audioDataUrl?: string;
   transcript?: string;
   location?: {
@@ -219,6 +221,22 @@ export async function saveDriverSalesJournal(input: {
   await ensureMotivationTables();
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  // Context is verified against the actor's real visit; a client-supplied ID
+  // cannot attach evidence to an unworked account or another operator's visit.
+  let debriefPhysicalEntityId: string | null = null;
+  if (input.debriefMissionId != null) {
+    const [visit] = await db.select({ id: commercialVisitOutcomes.id })
+      .from(commercialVisitOutcomes).where(and(
+        eq(commercialVisitOutcomes.tenantId, input.tenantId),
+        eq(commercialVisitOutcomes.missionId, input.debriefMissionId),
+        eq(commercialVisitOutcomes.recordedBy, input.driverId),
+      )).limit(1);
+    if (!visit) throw new Error("The debrief requires your recorded field visit.");
+    const { getCommercialMission } = await import("./commercialMissionStore");
+    const { findPhysicalEntityIdByAddress } = await import("../goldlineWorld/entityLookup");
+    const mission = await getCommercialMission({ tenantId: input.tenantId, missionId: input.debriefMissionId });
+    debriefPhysicalEntityId = await findPhysicalEntityIdByAddress({ tenantId: input.tenantId, address: mission?.account.address });
+  }
   const rawTranscript = input.transcript?.trim() ?? "";
   let audioStorageKey: string | null = null;
   let audioMimeType: string | null = null;
@@ -266,7 +284,7 @@ export async function saveDriverSalesJournal(input: {
   const { appendGoldlineWorldEvent } = await import("../goldlineWorld/worldEventStore");
   const worldEvent = await appendGoldlineWorldEvent({
     tenantId: input.tenantId,
-    physicalEntityId: null,
+    physicalEntityId: debriefPhysicalEntityId,
     eventType: "field_journal_saved",
     classification: "action",
     actorType: "field",
@@ -281,7 +299,7 @@ export async function saveDriverSalesJournal(input: {
     confidence: "high",
     idempotencyKey: `field-journal-saved:${input.tenantId}:${input.clientRequestId}`,
     correlationId: `field-journal:${journal.id}`,
-    metadata: { journalDate: input.journalDate, hasAudio: Boolean(audioStorageKey), hasDeviceLocation: Boolean(input.location) },
+    metadata: { debriefMissionId: input.debriefMissionId ?? null, journalDate: input.journalDate, hasAudio: Boolean(audioStorageKey), hasDeviceLocation: Boolean(input.location) },
   });
   const { queueFieldJournalProcessing } = await import("../goldlineWorld/fieldJournalProcessingService");
   queueFieldJournalProcessing({ tenantId: input.tenantId, journalEntryId: journal.id });

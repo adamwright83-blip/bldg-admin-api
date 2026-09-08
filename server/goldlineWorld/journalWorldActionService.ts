@@ -6,7 +6,7 @@
  * neighbour, and a new building is not created from a sentence.
  */
 
-import type { FieldJournalExtraction } from "../../shared/fieldJournal";
+import { journalCanUseVisitContext, type FieldJournalExtraction } from "../../shared/fieldJournal";
 import { eventClassificationForType } from "../../shared/goldlineWorld";
 import { findPhysicalEntityIdByAddress } from "./entityLookup";
 import { appendGoldlineWorldEvent } from "./worldEventStore";
@@ -34,6 +34,7 @@ export async function recordJournalActionsOnMatchedEntities(input: {
   journalEntryId: string;
   actorId: string;
   extraction: FieldJournalExtraction;
+  contextPhysicalEntityId?: string | null;
 }): Promise<{ recorded: number; unmatched: number }> {
   let recorded = 0;
   let unmatched = 0;
@@ -49,7 +50,7 @@ export async function recordJournalActionsOnMatchedEntities(input: {
       entity?.addressClue?.value,
       entity?.propertyName?.value,
     ].filter((value): value is string => Boolean(value?.trim()));
-    let physicalEntityId: string | null = null;
+    let physicalEntityId: string | null = journalCanUseVisitContext(input.extraction) ? input.contextPhysicalEntityId ?? null : null;
     for (const clue of clues) {
       physicalEntityId = await findPhysicalEntityIdByAddress({
         tenantId: input.tenantId,

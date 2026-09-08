@@ -226,6 +226,7 @@ function LiveGoldlineDriverController({
   // depend on a second React render before choosing structured Field Intel vs
   // Diane's ordinary raw-first journal.
   const operatorStopRef = useRef<ArrivedOperatorStop | null>(null);
+  const [debrief, setDebrief] = useState<{ missionId: number; buildingName: string } | null>(null);
   const [journalOpen, setJournalOpen] = useState(
     launchSurface === "field_journal"
   );
@@ -1033,6 +1034,10 @@ function LiveGoldlineDriverController({
       expectedFieldVersion: current.field.version,
     });
     if (!next) throw new Error("Visit result was not persisted");
+    // Only the successful real visit mutation opens the debrief. Loading,
+    // polling, arrival and fictional completion never start a microphone.
+    setDebrief({ missionId: input.missionId, buildingName: builtMissions.data?.find(mission => mission.id === input.missionId)?.account.name ?? "Your field visit" });
+    setJournalOpen(true);
     return next;
   }
 
@@ -1391,7 +1396,8 @@ function LiveGoldlineDriverController({
       />
       <SalesJournalSheet
         open={journalOpen}
-        onOpenChange={setJournalOpen}
+        onOpenChange={open => { setJournalOpen(open); if (!open) setDebrief(null); }}
+        debrief={debrief}
         location={location}
         onSaved={() => {
           void Promise.all([
@@ -1709,7 +1715,8 @@ function LiveGoldlineDriverController({
       />
       <SalesJournalSheet
         open={journalOpen}
-        onOpenChange={setJournalOpen}
+        onOpenChange={open => { setJournalOpen(open); if (!open) setDebrief(null); }}
+        debrief={debrief}
         location={location}
         onSaved={() => {
           // The save itself is already durable. These invalidations only make

@@ -205,6 +205,7 @@ export const commercialMissionRouter = router({
     .input(z.object({
       journalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       clientRequestId: z.string().uuid(),
+      debriefMissionId: z.number().int().positive().optional(),
       audioDataUrl: z.string().max(16_500_000).optional(),
       transcript: z.string().trim().max(20_000).optional(),
       location: z.object({
