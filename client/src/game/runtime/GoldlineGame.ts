@@ -470,6 +470,14 @@ export class GoldlineGame {
    * the fiction is contributing to it.
    */
   private expeditionDrivingMovement = false;
+  /**
+   * A landed hostile hit's shove, eased out over a short window rather than
+   * applied as one instant jump — an instant jump reads as a teleport/glitch
+   * at this scale, while decaying it over a few frames reads as a real
+   * "getting shoved back" reaction. Corridor progress/lateral units.
+   */
+  private knockbackRemainingProgress = 0;
+  private knockbackRemainingLateral = 0;
   private dodgeState = createDodgeState();
   /** Lit SURVEY reveals, aged in gameplay time alongside the dodge state. */
   private surveyReveals: SurveyReveal[] = [];
@@ -961,6 +969,8 @@ export class GoldlineGame {
     this.dodgeState = createDodgeState();
     this.lashCooldown = 0;
     this.expeditionDrivingMovement = false;
+    this.knockbackRemainingProgress = 0;
+    this.knockbackRemainingLateral = 0;
     // Neutral base branch while the expedition owns route semantics —
     // ordinary branchForLateralPosition must not run during an expedition
     // (see the locomotion block below), so this is a presentation default,
@@ -1048,6 +1058,8 @@ export class GoldlineGame {
     this.expedition = null;
     this.expeditionCallbacks = {};
     this.expeditionDrivingMovement = false;
+    this.knockbackRemainingProgress = 0;
+    this.knockbackRemainingLateral = 0;
     this.surveyReveals = [];
     this.gSurvey.clear();
     this.populationSystem?.setExpeditionPresentation(false);
@@ -1362,6 +1374,8 @@ export class GoldlineGame {
     this.velocity = 0;
     this.dodgeState = createDodgeState();
     this.expeditionDrivingMovement = false;
+    this.knockbackRemainingProgress = 0;
+    this.knockbackRemainingLateral = 0;
     return true;
   }
 
@@ -1374,6 +1388,8 @@ export class GoldlineGame {
     this.velocity = 0;
     this.dodgeState = createDodgeState();
     this.expeditionDrivingMovement = false;
+    this.knockbackRemainingProgress = 0;
+    this.knockbackRemainingLateral = 0;
     this.branch = "intel";
     this.callbacks.onBranchChange(this.branch);
     if (this.progress !== progressBefore) {
@@ -1758,6 +1774,8 @@ export class GoldlineGame {
       this.velocity = 0;
       this.expeditionDrivingMovement = false;
       this.dodgeState = createDodgeState();
+      this.knockbackRemainingProgress = 0;
+      this.knockbackRemainingLateral = 0;
     }
 
     // Every purely VISUAL movement reaction — facing, locomotion pose,
@@ -1995,6 +2013,65 @@ export class GoldlineGame {
           -0.72,
           Math.min(0.72, this.lateral + deltaLateral)
         );
+      }
+
+      // A landed hostile hit shoves the player back — eased out over a few
+      // frames (accumulate, then bleed off a decaying fraction each frame)
+      // rather than applied as one instant jump, which read as a
+      // teleport/glitch at this scale. Bypasses resolveHostileCollision
+      // deliberately: the shove points AWAY from whichever hostile struck,
+      // so it is never going to walk the player into another one's body.
+      //
+      // Damped below the authored ruinbound.ts knockback magnitude: at full
+      // strength even the hunter's modest 0.03 could push the player back
+      // out past the 0.06 melee range in a single hit, so taking a hit
+      // could silently make the player's OWN immediately-following STRIKE
+      // whiff — a real regression verifyGoldlineTrueTouch.mjs caught before
+      // this reached main. Still a real, visible shove; just not one that
+      // fights the player's own retaliation.
+      const KNOCKBACK_STRENGTH = 0.45;
+      const knockback = this.expedition.consumeKnockback();
+      this.knockbackRemainingProgress += knockback.progress * KNOCKBACK_STRENGTH;
+      this.knockbackRemainingLateral += knockback.lateral * KNOCKBACK_STRENGTH;
+      // Repeated hits landing faster than the previous shove fully decays
+      // (real during sustained multi-hostile combat) must not compound into
+      // an ever-growing displacement — cap the combined remaining magnitude
+      // at roughly one full hit's worth. Without this a long fight could
+      // silently bank up knockback across many small hits and then dump it
+      // as one large, jarring jump several seconds later — exactly the kind
+      // of glitch-reading motion the easing above exists to avoid.
+      const KNOCKBACK_CAP = 0.03;
+      const bankedMagnitude = Math.hypot(
+        this.knockbackRemainingProgress,
+        this.knockbackRemainingLateral
+      );
+      if (bankedMagnitude > KNOCKBACK_CAP) {
+        const scale = KNOCKBACK_CAP / bankedMagnitude;
+        this.knockbackRemainingProgress *= scale;
+        this.knockbackRemainingLateral *= scale;
+      }
+      if (this.knockbackRemainingProgress !== 0 || this.knockbackRemainingLateral !== 0) {
+        // A quick snap (settles in a handful of frames, comparable to the
+        // hostile hit-recoil's own 0.18s), not a lingering drift — a tail
+        // that bled into the next couple of frames was enough to read as
+        // "still moving after releasing the stick" to an unrelated check.
+        const KNOCKBACK_DECAY_PER_SECOND = 45;
+        const eased = 1 - Math.exp(-KNOCKBACK_DECAY_PER_SECOND * gameplayDelta);
+        const stepProgress = this.knockbackRemainingProgress * eased;
+        const stepLateral = this.knockbackRemainingLateral * eased;
+        this.knockbackRemainingProgress -= stepProgress;
+        this.knockbackRemainingLateral -= stepLateral;
+        this.progress = clampCorridorProgress(
+          this.progress + stepProgress,
+          this.forwardCeiling()
+        );
+        this.lateral = Math.max(-0.72, Math.min(0.72, this.lateral + stepLateral));
+        if (Math.abs(this.knockbackRemainingProgress) < 0.0002) {
+          this.knockbackRemainingProgress = 0;
+        }
+        if (Math.abs(this.knockbackRemainingLateral) < 0.0002) {
+          this.knockbackRemainingLateral = 0;
+        }
       }
 
       // Handing control back: seed eased locomotion from the momentum the

@@ -537,6 +537,63 @@ check(
 );
 await shot("touch-05-world-continues");
 
+// Grammar sections test input mechanics in isolation and, per the comment
+// below, no longer depend on hunter_first specifically — but other
+// hostiles spawned further up the corridor (slinger_first, hunter_second)
+// are still alive and can still land real ambient/telegraphed hits while
+// these sections run. A landed hit's real knockback (GoldlineGame.ts) would
+// then read as unexplained drift to a check that expects a specific input
+// to be the ONLY thing moving the player this instant — neutralize what's
+// left so grammar sections test input, not incidental combat.
+await page.evaluate(() => {
+  for (const hostile of window.__goldlineGame.getExpedition().hostiles) {
+    hostile.hp = 0;
+  }
+  // Also clear any knockback still mid-decay from a hit landed just before
+  // this — TypeScript `private` fields are ordinary properties at runtime,
+  // so this is a real, direct way to guarantee zero residual carries into
+  // the grammar sections rather than hoping settle() outlasts the tail.
+  window.__goldlineGame.knockbackRemainingProgress = 0;
+  window.__goldlineGame.knockbackRemainingLateral = 0;
+});
+await settle(10);
+
+// Section 9's aim sweep locks whichever candidate is nearest the player,
+// and exactly where combat with hunter_first left the player (position now
+// legitimately affected by both real collision and real knockback, not
+// just input) shifts which one that is — a real hostile/elite vs. an
+// unrelated hazard prop or traversal anchor that does not fire the same
+// way on release. Walk to a fixed, known position ahead of
+// shieldbearer_climax with real touch (nothing left alive to collide
+// with, so this is a plain, uncontested walk) so sections 7-10 always
+// start from the SAME geometry regardless of how the first fight went.
+const shieldbearerBeforeWalk = (await hostiles()).find(h => h.id === "shieldbearer_climax");
+const walkTarget = (shieldbearerBeforeWalk?.progress ?? 0.63) - 0.06;
+await touchStart(stick.x, stick.y);
+const walkToBossStart = Date.now();
+let lastBossWalkProgress = (await corridor()).progress;
+let stalledBossWalk = 0;
+while (Date.now() - walkToBossStart < 15000) {
+  await touchMove(stick.x, stick.y - radius * 0.9);
+  await settle(4);
+  const now = (await corridor()).progress;
+  if (now >= walkTarget) break;
+  stalledBossWalk = Math.abs(now - lastBossWalkProgress) < 0.0005 ? stalledBossWalk + 1 : 0;
+  if (stalledBossWalk > 20) break;
+  lastBossWalkProgress = now;
+}
+await touchEnd();
+await settle(10);
+// The walk drives progress but leaves whatever lateral offset combat left
+// behind untouched — center it directly rather than fighting it back with
+// more touch input the same way section 5 already accepts a real,
+// non-adversarial state write is fine once combat is over (every hostile
+// above was set to hp = 0 the same way).
+await page.evaluate(() => {
+  window.__goldlineGame.lateral = 0;
+});
+await settle(6);
+
 // ===================================================================
 // Grammar sections (unchanged in substance from before Part 7, just
 // renumbered and moved after combat since they no longer depend on the
@@ -640,6 +697,20 @@ check(
 );
 
 // -------------------------------------------- 11. generic joystick proof
+
+// Section 9's real grapple swing (a genuine, pre-existing mechanic — a
+// fired Line pulls the player toward the target with real momentum, see
+// linehook.ts) can itself carry lateral toward one edge depending on the
+// exact swing arc. Recenter once more so this section — which specifically
+// needs headroom in BOTH directions — starts from a position that can
+// prove "drag right increases lateral" regardless of which way the swing
+// happened to carry.
+await page.evaluate(() => {
+  window.__goldlineGame.lateral = 0;
+  window.__goldlineGame.knockbackRemainingProgress = 0;
+  window.__goldlineGame.knockbackRemainingLateral = 0;
+});
+await settle(6);
 
 console.log("\n11. REAL JOYSTICK DRAG MOVES TRAILBLAZER");
 const before = await corridor();

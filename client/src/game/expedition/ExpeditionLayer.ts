@@ -326,6 +326,14 @@ export class ExpeditionLayer {
    * player keeps the momentum they actually earned from the swing.
    */
   private handoffSpeed = 0;
+  /**
+   * A landed hostile hit's shove, already converted to corridor
+   * progress/lateral units (see consumeKnockback). Accumulates rather than
+   * overwrites so two hits landing the same frame both register instead of
+   * one silently clobbering the other.
+   */
+  private pendingKnockbackProgress = 0;
+  private pendingKnockbackLateral = 0;
   /** True during a dodge's i-frames — a well-timed evade is real mastery. */
   private playerInvulnerable = false;
   /** Authored, expedition-space. Never fed back into load(). */
@@ -755,6 +763,8 @@ export class ExpeditionLayer {
     this.pendingImpulseX = 0;
     this.pendingImpulseY = 0;
     this.handoffSpeed = 0;
+    this.pendingKnockbackProgress = 0;
+    this.pendingKnockbackLateral = 0;
     // Covers the down/arrived terminal settle, pressOn and redeploy (all
     // call this): a discontinuity in the player's position must never be
     // read as a velocity spike on the next update.
@@ -1145,6 +1155,14 @@ export class ExpeditionLayer {
           this.callbacks.onPlayerDamaged?.(taken, this.run.hp);
           this.callbacks.onHitStop?.(90);
           this.callbacks.onCameraShake?.(1, hit.knockbackX, hit.knockbackY);
+          // hit.knockbackX/Y were computed for the camera-shake direction
+          // only — knockbackX is already a raw progress delta, but
+          // knockbackY went through LATERAL_TO_PROGRESS to combine with it
+          // in one Euclidean vector, so it must come back out the same way
+          // (and out of the ×140 expedition-lateral space) before it means
+          // anything as an actual lateral displacement.
+          this.pendingKnockbackProgress += hit.knockbackX;
+          this.pendingKnockbackLateral += hit.knockbackY / LATERAL_TO_PROGRESS / 140;
           if (this.run.outcome === "down") this.callbacks.onDefeated?.();
         }
       }
@@ -1528,6 +1546,20 @@ export class ExpeditionLayer {
     this.pendingImpulseX = 0;
     this.pendingImpulseY = 0;
     return { dx, dy };
+  }
+
+  /**
+   * A landed hit's shove, already in corridor progress/lateral units and
+   * pointed AWAY from whichever hostile struck. GoldlineGame eases this out
+   * over a few frames rather than applying it as one instant jump — see the
+   * call site for why.
+   */
+  consumeKnockback(): { progress: number; lateral: number } {
+    const progress = this.pendingKnockbackProgress;
+    const lateral = this.pendingKnockbackLateral;
+    this.pendingKnockbackProgress = 0;
+    this.pendingKnockbackLateral = 0;
+    return { progress, lateral };
   }
 
   /** True only while a taut tether is actually driving the player. */
