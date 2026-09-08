@@ -8,7 +8,7 @@
 -- them and driver journal capture failed on every submission.
 --
 -- driver_sales_journals below is 0047's shape merged with 0061's additive
--- columns, so a fresh install lands on the final shape in one step; the
+-- columns, so a fresh install lands on the final shape in one step. The
 -- ALTER TABLE further down is a best-effort upgrade for a database that
 -- already has the 0047-only shape.
 CREATE TABLE IF NOT EXISTS `driver_sales_score_events` (
