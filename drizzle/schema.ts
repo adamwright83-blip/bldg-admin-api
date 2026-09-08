@@ -2097,12 +2097,17 @@ export const driverSalesJournals = mysqlTable(
     tenantRequestUnique: uniqueIndex(
       "uq_driver_sales_journal_tenant_request"
     ).on(table.tenantId, table.clientRequestId),
-    tenantDriverDateIdx: index(
-      "idx_driver_sales_journal_driver_date"
-    ).on(table.tenantId, table.driverId, table.journalDate, table.createdAt),
-    tenantProcessingIdx: index(
-      "idx_driver_sales_journal_processing"
-    ).on(table.tenantId, table.processingStatus, table.createdAt),
+    tenantDriverDateIdx: index("idx_driver_sales_journal_driver_date").on(
+      table.tenantId,
+      table.driverId,
+      table.journalDate,
+      table.createdAt
+    ),
+    tenantProcessingIdx: index("idx_driver_sales_journal_processing").on(
+      table.tenantId,
+      table.processingStatus,
+      table.createdAt
+    ),
     tenantCreatedIdx: index("idx_driver_sales_journal_tenant_created").on(
       table.tenantId,
       table.createdAt
@@ -5813,7 +5818,9 @@ export const physicalEntities = mysqlTable(
       "provisional",
       "needs_review",
       "merged",
-    ]).notNull().default("provisional"),
+    ])
+      .notNull()
+      .default("provisional"),
     canonicalEntityId: varchar("canonicalEntityId", { length: 36 }),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
     updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
@@ -5855,7 +5862,9 @@ export const physicalEntityBindings = mysqlTable(
       "accepted",
       "review_required",
       "rejected",
-    ]).notNull().default("accepted"),
+    ])
+      .notNull()
+      .default("accepted"),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
   },
   table => ({
@@ -5885,7 +5894,9 @@ export const physicalEntityAliases = mysqlTable(
       "operator_alias",
     ]).notNull(),
     aliasValue: varchar("aliasValue", { length: 512 }).notNull(),
-    normalizedAliasValue: varchar("normalizedAliasValue", { length: 512 }).notNull(),
+    normalizedAliasValue: varchar("normalizedAliasValue", {
+      length: 512,
+    }).notNull(),
     evidenceReference: varchar("evidenceReference", { length: 512 }).notNull(),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
   },
@@ -5929,7 +5940,9 @@ export const goldlineWorldEvents = mysqlTable(
     observedAt: timestamp("observedAt"),
     sourceType: varchar("sourceType", { length: 64 }).notNull(),
     sourceId: varchar("sourceId", { length: 191 }).notNull(),
-    sourceEvidenceReference: varchar("sourceEvidenceReference", { length: 512 }).notNull(),
+    sourceEvidenceReference: varchar("sourceEvidenceReference", {
+      length: 512,
+    }).notNull(),
     provenanceClass: mysqlEnum("provenanceClass", [
       "operator_observed",
       "operator_reported",
@@ -6018,12 +6031,9 @@ export const fieldJournalExtractions = mysqlTable(
     provider: varchar("provider", { length: 64 }),
     model: varchar("model", { length: 96 }),
     schemaVersion: varchar("schemaVersion", { length: 32 }).notNull(),
-    status: mysqlEnum("status", [
-      "pending",
-      "processed",
-      "fallback",
-      "failed",
-    ]).notNull().default("pending"),
+    status: mysqlEnum("status", ["pending", "processed", "fallback", "failed"])
+      .notNull()
+      .default("pending"),
     itemsJson: json("itemsJson").notNull(),
     error: varchar("error", { length: 512 }),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
@@ -6067,7 +6077,9 @@ export const towerForgeJobs = mysqlTable(
       "approved",
       "rejected",
       "published",
-    ]).notNull().default("captured"),
+    ])
+      .notNull()
+      .default("captured"),
     correlationId: varchar("correlationId", { length: 191 }).notNull(),
     idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
     candidateJson: json("candidateJson").notNull(),
@@ -6151,7 +6163,9 @@ export const towerWeaponConcepts = mysqlTable(
     forgeJobId: varchar("forgeJobId", { length: 36 }).notNull(),
     rank: int("rank").notNull(),
     title: varchar("title", { length: 191 }).notNull(),
-    sourceCharacteristic: varchar("sourceCharacteristic", { length: 512 }).notNull(),
+    sourceCharacteristic: varchar("sourceCharacteristic", {
+      length: 512,
+    }).notNull(),
     sourceEvidenceIdsJson: json("sourceEvidenceIdsJson").notNull(),
     conceptJson: json("conceptJson").notNull(),
     similarityRisk: mysqlEnum("similarityRisk", [
@@ -6160,11 +6174,9 @@ export const towerWeaponConcepts = mysqlTable(
       "high",
     ]).notNull(),
     selected: boolean("selected").notNull().default(false),
-    reviewState: mysqlEnum("reviewState", [
-      "pending",
-      "accepted",
-      "rejected",
-    ]).notNull().default("pending"),
+    reviewState: mysqlEnum("reviewState", ["pending", "accepted", "rejected"])
+      .notNull()
+      .default("pending"),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
     updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
   },
@@ -6205,7 +6217,9 @@ export const towerAssetVersions = mysqlTable(
       "approved",
       "rejected",
       "superseded",
-    ]).notNull().default("draft"),
+    ])
+      .notNull()
+      .default("draft"),
     supersededBy: varchar("supersededBy", { length: 36 }),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
   },
@@ -6303,7 +6317,9 @@ export const goldlineCampaignInstances = mysqlTable(
     businessDate: varchar("businessDate", { length: 10 }).notNull(),
     rulesVersion: int("rulesVersion").notNull().default(1),
     stableKey: varchar("stableKey", { length: 191 }).notNull(),
-    campaignArchetypeId: varchar("campaignArchetypeId", { length: 32 }).notNull(),
+    campaignArchetypeId: varchar("campaignArchetypeId", {
+      length: 32,
+    }).notNull(),
     title: varchar("title", { length: 128 }).notNull(),
     premise: varchar("premise", { length: 512 }).notNull(),
     inputFingerprint: varchar("inputFingerprint", { length: 80 }).notNull(),
@@ -6349,13 +6365,55 @@ export const goldlineCampaignRevisions = mysqlTable(
     reasonCodesJson: json("reasonCodesJson").notNull(),
     addedFutureChapterIdsJson: json("addedFutureChapterIdsJson").notNull(),
     removedFutureChapterIdsJson: json("removedFutureChapterIdsJson").notNull(),
-    reorderedFutureChapterIdsJson: json("reorderedFutureChapterIdsJson").notNull(),
+    reorderedFutureChapterIdsJson: json(
+      "reorderedFutureChapterIdsJson"
+    ).notNull(),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
   },
   table => ({
     revisionUnique: uniqueIndex("uq_goldline_campaign_revision").on(
       table.campaignId,
       table.revision
+    ),
+  })
+);
+
+/** Stable authored baseline for a Lantern City operation. Business progress is derived. */
+export const goldlineLanternOperations = mysqlTable(
+  "goldline_lantern_operations",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorId: varchar("operatorId", { length: 128 }).notNull(),
+    stableKey: varchar("stableKey", { length: 191 }).notNull(),
+    sourceCampaignChapterId: varchar("sourceCampaignChapterId", {
+      length: 191,
+    }),
+    operationType: varchar("operationType", { length: 32 }).notNull(),
+    campaignTerritoryDefinitionId: varchar("campaignTerritoryDefinitionId", {
+      length: 36,
+    }),
+    lanternCityTerritoryId: varchar("lanternCityTerritoryId", { length: 64 }),
+    startedAt: timestamp("startedAt").notNull(),
+    baselineCustomerIdentityKeysJson: json(
+      "baselineCustomerIdentityKeysJson"
+    ).notNull(),
+    baselineDormantIdentityKeysJson: json(
+      "baselineDormantIdentityKeysJson"
+    ).notNull(),
+    anchorCustomerIdentityKey: varchar("anchorCustomerIdentityKey", {
+      length: 191,
+    }),
+    status: varchar("status", { length: 24 }).notNull().default("active"),
+    metadataJson: json("metadataJson").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    stableUnique: uniqueIndex("uq_goldline_lantern_operation_stable").on(
+      table.tenantId,
+      table.operatorId,
+      table.stableKey
     ),
   })
 );

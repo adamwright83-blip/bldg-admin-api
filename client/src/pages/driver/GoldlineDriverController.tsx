@@ -39,7 +39,10 @@ import type {
   GoldlineVisitContext,
 } from "../../game/actions/actionServices";
 import type { AuthoritativeFollowUp } from "../../game/actions/actionRegistry";
-import { liveObjectivesFromFieldToday, type DayPlanStop } from "./goldlineDayPlanModel";
+import {
+  liveObjectivesFromFieldToday,
+  type DayPlanStop,
+} from "./goldlineDayPlanModel";
 import {
   canCompleteDelivery,
   nextCommitmentDate,
@@ -110,6 +113,10 @@ type DriverScene = "game" | "overworld" | "colosseum" | "wayward";
 export const INITIAL_DRIVER_SCENE: DriverScene = "overworld";
 
 function initialDriverScene(): DriverScene {
+  const launchSurface = new URLSearchParams(window.location.search).get(
+    "lanternSurface"
+  );
+  if (launchSurface && launchSurface !== "overland") return "game";
   if (
     import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1" &&
     new URLSearchParams(window.location.search).get("goldlineSceneFixture") ===
@@ -132,7 +139,9 @@ const GoldlineFictionHarness =
     ? lazy(() => import("../../game/testSupport/GoldlineFictionHarness"))
     : null;
 
-export default function GoldlineDriverController({ onOpenFirstMission }: { onOpenFirstMission?: () => void } = {}) {
+export default function GoldlineDriverController({
+  onOpenFirstMission,
+}: { onOpenFirstMission?: () => void } = {}) {
   const search = new URLSearchParams(window.location.search);
   if (GoldlineProgressionHarness && search.has("goldlineProgressionFixture")) {
     return (
@@ -156,10 +165,38 @@ export default function GoldlineDriverController({ onOpenFirstMission }: { onOpe
       </Suspense>
     );
   }
-  return <LiveGoldlineDriverController onOpenFirstMission={onOpenFirstMission} />;
+  return (
+    <LiveGoldlineDriverController onOpenFirstMission={onOpenFirstMission} />
+  );
 }
 
-function LiveGoldlineDriverController({ onOpenFirstMission }: { onOpenFirstMission?: () => void }) {
+function LiveGoldlineDriverController({
+  onOpenFirstMission,
+}: {
+  onOpenFirstMission?: () => void;
+}) {
+  const launchSearch = new URLSearchParams(window.location.search);
+  const launchOperationId = launchSearch.get("lanternOperation");
+  const launchBinding = launchSearch.get("lanternBinding");
+  const launchSurface = launchSearch.get("lanternSurface");
+  const launchHostValue = launchSearch.get("lanternHost");
+  const launchHost = (
+    [
+      "expedition",
+      "authoritative_visit_route",
+      "local_target_run",
+      "action_grammar_fiction",
+      "encounters",
+      "recovery",
+      "territories",
+      "guardian_encounter",
+      "field_voice_journal",
+      "real_action_bridge",
+      "overland",
+    ] as ExistingGameplayHost[]
+  ).includes(launchHostValue as ExistingGameplayHost)
+    ? (launchHostValue as ExistingGameplayHost)
+    : null;
   const utils = trpc.useUtils();
   /**
    * Scopes the local positional checkpoint to the signed-in player, so a
@@ -173,7 +210,7 @@ function LiveGoldlineDriverController({ onOpenFirstMission }: { onOpenFirstMissi
   const [stageReturnScene, setStageReturnScene] =
     useState<"overworld">("overworld");
   /** The day briefing, opened over Overland without leaving it. */
-  const [dayBriefingOpen, setDayBriefingOpen] = useState(true);
+  const [dayBriefingOpen, setDayBriefingOpen] = useState(!launchOperationId);
   const [waywardProgress, setWaywardProgress] = useState<WaywardProgress>(() =>
     loadWaywardProgress(null)
   );
@@ -189,10 +226,14 @@ function LiveGoldlineDriverController({ onOpenFirstMission }: { onOpenFirstMissi
   // depend on a second React render before choosing structured Field Intel vs
   // Diane's ordinary raw-first journal.
   const operatorStopRef = useRef<ArrivedOperatorStop | null>(null);
-  const [journalOpen, setJournalOpen] = useState(false);
-  const [activeAdventureObjectiveId, setActiveAdventureObjectiveId] = useState<string | null>(null);
+  const [journalOpen, setJournalOpen] = useState(
+    launchSurface === "field_journal"
+  );
+  const [activeAdventureObjectiveId, setActiveAdventureObjectiveId] = useState<
+    string | null
+  >(() => launchSearch.get("lanternChapter"));
   const [requestedGameplayHost, setRequestedGameplayHost] =
-    useState<ExistingGameplayHost | null>(null);
+    useState<ExistingGameplayHost | null>(launchHost);
   const [dayResolution, setDayResolution] = useState<DayResolution | null>(
     null
   );
@@ -318,9 +359,12 @@ function LiveGoldlineDriverController({ onOpenFirstMission }: { onOpenFirstMissi
   const fieldToday = trpc.system.field.today.useQuery(undefined, {
     refetchInterval: 30_000,
   });
-  const territories = trpc.system.goldlineWorld.territories.useQuery(undefined, {
-    staleTime: 15_000,
-  });
+  const territories = trpc.system.goldlineWorld.territories.useQuery(
+    undefined,
+    {
+      staleTime: 15_000,
+    }
+  );
   const campaign = trpc.system.goldlineWorld.campaign.useQuery(undefined, {
     staleTime: 15_000,
     // Field Journal processing is asynchronous. Poll the compiled campaign so
@@ -328,7 +372,8 @@ function LiveGoldlineDriverController({ onOpenFirstMission }: { onOpenFirstMissi
     // future without a reload or manual planner action.
     refetchInterval: 30_000,
   });
-  const upsertFictionAssignment = trpc.system.goldlineWorld.upsertFictionAssignment.useMutation();
+  const upsertFictionAssignment =
+    trpc.system.goldlineWorld.upsertFictionAssignment.useMutation();
   const builtMissions = trpc.system.commercialMission.myBuiltMissions.useQuery(
     undefined,
     { refetchInterval: 15_000 }
@@ -1135,8 +1180,12 @@ function LiveGoldlineDriverController({ onOpenFirstMission }: { onOpenFirstMissi
     () => liveObjectivesFromFieldToday(currentDayProjection?.timeline ?? []),
     [currentDayProjection?.timeline]
   );
-  const activeAdventureObjective = liveAdventureObjectives.find(item => item.id === activeAdventureObjectiveId)
-    ?? liveAdventureObjectives.find(item => item.status === "ready") ?? null;
+  const activeAdventureObjective =
+    liveAdventureObjectives.find(
+      item => item.id === activeAdventureObjectiveId
+    ) ??
+    liveAdventureObjectives.find(item => item.status === "ready") ??
+    null;
 
   const gameHomeProps = {
     pickups: pickups.data,
@@ -1214,7 +1263,9 @@ function LiveGoldlineDriverController({ onOpenFirstMission }: { onOpenFirstMissi
       case "order":
         return handleResolveOrder(action.orderId, action.status);
       case "external": {
-        const result = await completeExternalOrder.mutateAsync({ id: action.id });
+        const result = await completeExternalOrder.mutateAsync({
+          id: action.id,
+        });
         await externalOrders.refetch();
         return result?.operationalStatus === "completed";
       }
@@ -1227,116 +1278,149 @@ function LiveGoldlineDriverController({ onOpenFirstMission }: { onOpenFirstMissi
     }
   }
 
-  const returnToDay = <button type="button" className="driver-return-home" onClick={() => { setDayBriefingOpen(true); setDriverScene("overworld"); }}>← YOUR DAY</button>;
+  const returnToDay = (
+    <button
+      type="button"
+      className="driver-return-home"
+      onClick={() => {
+        setDayBriefingOpen(true);
+        setDriverScene("overworld");
+      }}
+    >
+      ← YOUR DAY
+    </button>
+  );
 
   // One authoritative day projection, available before and after exploration.
   const dayBriefing = (
-    <div
-      className="driver-day-home"
-      data-testid="driver-day-home"
-    >
-        <GoldlineDayPlan
-          onOpenFirstMission={onOpenFirstMission}
-          onOpenJournal={() => setJournalOpen(true)}
-          onResolveStop={resolveDayStop}
-          loadError={pickups.isError || deliveries.isError || externalOrders.isError ? "Some stops could not be loaded. Any available work is shown below; reconnect and retry for your complete day." : null}
-          onRetry={() => { void Promise.all([pickups.refetch(), deliveries.refetch(), externalOrders.refetch()]); }}
-          businessDate={selectedDate}
-          pickups={dayPlanPickups}
-          deliveries={dayPlanDeliveries}
-          externalOrders={externalOrders.data ?? []}
-          openChannelMission={openChannel.data}
-          salesMissions={builtMissions.data}
-          liveObjectives={liveAdventureObjectives}
-          territoryBundles={(territories.data ?? [])
-            .filter(item => !item.state.cleared)
-            .map(item => ({
-              territoryId: item.definition.id,
-              memberPhysicalEntityIds: item.definition.members.map(
-                member => member.physicalEntityId
-              ),
-            }))}
-          campaignTitle={campaign.data?.campaign.title ?? null}
-          campaignChapters={campaign.data?.campaign.chapters}
-          processingLocation={dayDirectorState.data?.processingLocation}
-          commitments={dayDirectorState.data?.commitments}
-          intelligenceAvailable={dayDirectorState.data?.intelligenceAvailable}
-          dismissedPromptKeys={dayDirectorState.data?.dismissedPromptKeys}
-          nextCommitmentAt={
-            currentDayProjection?.nextFixedCommitment?.scheduledAt
+    <div className="driver-day-home" data-testid="driver-day-home">
+      <GoldlineDayPlan
+        onOpenFirstMission={onOpenFirstMission}
+        onOpenJournal={() => setJournalOpen(true)}
+        onResolveStop={resolveDayStop}
+        loadError={
+          pickups.isError || deliveries.isError || externalOrders.isError
+            ? "Some stops could not be loaded. Any available work is shown below; reconnect and retry for your complete day."
+            : null
+        }
+        onRetry={() => {
+          void Promise.all([
+            pickups.refetch(),
+            deliveries.refetch(),
+            externalOrders.refetch(),
+          ]);
+        }}
+        businessDate={selectedDate}
+        pickups={dayPlanPickups}
+        deliveries={dayPlanDeliveries}
+        externalOrders={externalOrders.data ?? []}
+        openChannelMission={openChannel.data}
+        salesMissions={builtMissions.data}
+        liveObjectives={liveAdventureObjectives}
+        territoryBundles={(territories.data ?? [])
+          .filter(item => !item.state.cleared)
+          .map(item => ({
+            territoryId: item.definition.id,
+            memberPhysicalEntityIds: item.definition.members.map(
+              member => member.physicalEntityId
+            ),
+          }))}
+        campaignTitle={campaign.data?.campaign.title ?? null}
+        campaignChapters={campaign.data?.campaign.chapters}
+        processingLocation={dayDirectorState.data?.processingLocation}
+        commitments={dayDirectorState.data?.commitments}
+        intelligenceAvailable={dayDirectorState.data?.intelligenceAvailable}
+        dismissedPromptKeys={dayDirectorState.data?.dismissedPromptKeys}
+        nextCommitmentAt={
+          currentDayProjection?.nextFixedCommitment?.scheduledAt
+        }
+        isLoading={
+          pickups.isLoading || deliveries.isLoading || externalOrders.isLoading
+        }
+        onOpenImport={() => setAddExternalWorkOpen(true)}
+        onEnterOperations={() => {
+          setDayBriefingOpen(false);
+          setRequestedGameplayHost(null);
+          setDriverScene("game");
+        }}
+        onEnterWorld={trackedStopId => {
+          const commercialId = trackedStopId?.match(/^commercial-(\d+)/)?.[1];
+          if (commercialId) {
+            window.location.assign(`/driver/sales-mission/${commercialId}`);
+            return;
           }
-          isLoading={
-            pickups.isLoading ||
-            deliveries.isLoading ||
-            externalOrders.isLoading
-          }
-          onOpenImport={() => setAddExternalWorkOpen(true)}
-          onEnterOperations={() => {
-            setDayBriefingOpen(false);
-            setRequestedGameplayHost(null);
-            setDriverScene("game");
-          }}
-          onEnterWorld={trackedStopId => {
-            const commercialId = trackedStopId?.match(/^commercial-(\d+)/)?.[1];
-            if (commercialId) { window.location.assign(`/driver/sales-mission/${commercialId}`); return; }
-            setActiveAdventureObjectiveId(trackedStopId?.replace(/^living-world-/, "") ?? null);
-            setDayBriefingOpen(false);
-            setDriverScene(trackedStopId ? "game" : "overworld");
-          }}
-          onEnterColosseum={() => {
-            setStageReturnScene("overworld");
-            setDayBriefingOpen(false);
-            setDriverScene("colosseum");
-          }}
-          onProposeCommitment={sourceText =>
-            proposeDayCommitment.mutateAsync({ sourceText })
-          }
-          onAcceptProposal={async proposal => {
-            await acceptDayCommitment.mutateAsync({
-              businessDate: selectedDate,
-              proposal,
-            });
-            await dayDirectorState.refetch();
-          }}
-          onDismissProposal={async promptKey => {
-            await dismissDayPrompt.mutateAsync({
-              businessDate: selectedDate,
-              promptKey,
-            });
-            await dayDirectorState.refetch();
-          }}
-          onCompleteCommitment={async commitmentId => {
-            await completeDayCommitment.mutateAsync({ commitmentId });
-            await dayDirectorState.refetch();
-          }}
-        />
-        <SalesJournalSheet open={journalOpen} onOpenChange={setJournalOpen} location={location} onSaved={() => { void Promise.all([fieldToday.refetch(), campaign.refetch(), driverGameWorld.refetch()]); }} />
-        <AddExternalWorkSheet
-          open={addExternalWorkOpen}
-          onClose={() => setAddExternalWorkOpen(false)}
-          onExtract={images => extractExternalDay.mutateAsync({ images })}
-          onConfirmImport={async input => {
-            await confirmExternalImport.mutateAsync({
-              ...input,
-              sourceSystem: "cleancloud",
-            });
-            await externalOrders.refetch();
-          }}
-          onCreateManual={async job => {
-            await createManualExternalOrder.mutateAsync({
-              ...job,
-              sourceSystem: "cleancloud",
-              ingestionMethod: "manual",
-            });
-            await externalOrders.refetch();
-          }}
-        />
+          setActiveAdventureObjectiveId(
+            trackedStopId?.replace(/^living-world-/, "") ?? null
+          );
+          setDayBriefingOpen(false);
+          setDriverScene(trackedStopId ? "game" : "overworld");
+        }}
+        onEnterColosseum={() => {
+          setStageReturnScene("overworld");
+          setDayBriefingOpen(false);
+          setDriverScene("colosseum");
+        }}
+        onProposeCommitment={sourceText =>
+          proposeDayCommitment.mutateAsync({ sourceText })
+        }
+        onAcceptProposal={async proposal => {
+          await acceptDayCommitment.mutateAsync({
+            businessDate: selectedDate,
+            proposal,
+          });
+          await dayDirectorState.refetch();
+        }}
+        onDismissProposal={async promptKey => {
+          await dismissDayPrompt.mutateAsync({
+            businessDate: selectedDate,
+            promptKey,
+          });
+          await dayDirectorState.refetch();
+        }}
+        onCompleteCommitment={async commitmentId => {
+          await completeDayCommitment.mutateAsync({ commitmentId });
+          await dayDirectorState.refetch();
+        }}
+      />
+      <SalesJournalSheet
+        open={journalOpen}
+        onOpenChange={setJournalOpen}
+        location={location}
+        onSaved={() => {
+          void Promise.all([
+            fieldToday.refetch(),
+            campaign.refetch(),
+            driverGameWorld.refetch(),
+          ]);
+        }}
+      />
+      <AddExternalWorkSheet
+        open={addExternalWorkOpen}
+        onClose={() => setAddExternalWorkOpen(false)}
+        onExtract={images => extractExternalDay.mutateAsync({ images })}
+        onConfirmImport={async input => {
+          await confirmExternalImport.mutateAsync({
+            ...input,
+            sourceSystem: "cleancloud",
+          });
+          await externalOrders.refetch();
+        }}
+        onCreateManual={async job => {
+          await createManualExternalOrder.mutateAsync({
+            ...job,
+            sourceSystem: "cleancloud",
+            ingestionMethod: "manual",
+          });
+          await externalOrders.refetch();
+        }}
+      />
     </div>
   );
 
-  const currentCampaignChapter = campaign.data?.campaign.chapters.find(
-    item => item.stableChapterId === campaign.data?.campaign.currentChapterId
-  ) ?? null;
+  const currentCampaignChapter =
+    campaign.data?.campaign.chapters.find(
+      item => item.stableChapterId === campaign.data?.campaign.currentChapterId
+    ) ?? null;
 
   const enterCampaignHost = (hosted: CampaignHostInvocation) => {
     const focus = hosted.objectiveIds[0];
@@ -1367,36 +1451,36 @@ function LiveGoldlineDriverController({ onOpenFirstMission }: { onOpenFirstMissi
   if (driverScene === "overworld") {
     return (
       <>
-      <GoldlineOverworld
-        pickups={pickups.data}
-        deliveries={deliveries.data}
-        activeObjective={activeAdventureObjective}
-        isLoading={pickups.isLoading || deliveries.isLoading}
-        isResolvingOrder={updateStatus.isPending}
-        greystarActive={Boolean(
-          day1TenDoors.data && !day1TenDoors.data.isComplete
-        )}
-        greystarCompleted={Boolean(day1TenDoors.data?.isComplete)}
-        waywardUnlocked={waywardProgress.unlocked}
-        playerIdentity={identity.data?.openId ?? null}
-        onEmitEvent={emitGoldlineEvent}
-        onEnterOperations={() => {
-          setRequestedGameplayHost(null);
-          setDriverScene("game");
-        }}
-        onEnterCampaignHost={enterCampaignHost}
-        onEnterGreystar={() => {
-          setStageReturnScene("overworld");
-          setDriverScene("colosseum");
-        }}
-        onEnterWayward={() => setDriverScene("wayward")}
-        onResolveOrder={handleResolveOrder}
-        onOpenDayBriefing={() => setDayBriefingOpen(true)}
-        suppressCampaignChrome={dayBriefingOpen}
-        dayObjectiveCount={liveAdventureObjectives.length}
-      />
-      {returnToDay}
-    </>
+        <GoldlineOverworld
+          pickups={pickups.data}
+          deliveries={deliveries.data}
+          activeObjective={activeAdventureObjective}
+          isLoading={pickups.isLoading || deliveries.isLoading}
+          isResolvingOrder={updateStatus.isPending}
+          greystarActive={Boolean(
+            day1TenDoors.data && !day1TenDoors.data.isComplete
+          )}
+          greystarCompleted={Boolean(day1TenDoors.data?.isComplete)}
+          waywardUnlocked={waywardProgress.unlocked}
+          playerIdentity={identity.data?.openId ?? null}
+          onEmitEvent={emitGoldlineEvent}
+          onEnterOperations={() => {
+            setRequestedGameplayHost(null);
+            setDriverScene("game");
+          }}
+          onEnterCampaignHost={enterCampaignHost}
+          onEnterGreystar={() => {
+            setStageReturnScene("overworld");
+            setDriverScene("colosseum");
+          }}
+          onEnterWayward={() => setDriverScene("wayward")}
+          onResolveOrder={handleResolveOrder}
+          onOpenDayBriefing={() => setDayBriefingOpen(true)}
+          suppressCampaignChrome={dayBriefingOpen}
+          dayObjectiveCount={liveAdventureObjectives.length}
+        />
+        {returnToDay}
+      </>
     );
   }
 
@@ -1427,40 +1511,48 @@ function LiveGoldlineDriverController({ onOpenFirstMission }: { onOpenFirstMissi
     !hasLegacyDay1Dismissal()
   ) {
     return (
-      <>{returnToDay}<Day1TenDoors
-        mission={day1TenDoors.data}
-        isRecordingOutcome={recordDay1Outcome.isPending}
-        onRecordOutcome={async (targetId, outcome) => {
-          try {
-            const result = await recordDay1Outcome.mutateAsync({
-              missionId: day1TenDoors.data!.missionId,
-              targetId,
-              outcome,
-            });
-            utils.system.day1TenDoors.current.setData(undefined, result);
-          } catch (error) {
-            toast.error(
-              error instanceof Error
-                ? error.message
-                : "Could not record this stop."
-            );
-          }
-        }}
-        onDismiss={() => {
-          markLegacyDay1Dismissal();
-          markColosseumResolved(identity.data?.openId ?? null);
-          setWaywardProgress(unlockWayward(identity.data?.openId ?? null));
-          setDriverScene(stageReturnScene);
-        }}
-      /></>
+      <>
+        {returnToDay}
+        <Day1TenDoors
+          mission={day1TenDoors.data}
+          isRecordingOutcome={recordDay1Outcome.isPending}
+          onRecordOutcome={async (targetId, outcome) => {
+            try {
+              const result = await recordDay1Outcome.mutateAsync({
+                missionId: day1TenDoors.data!.missionId,
+                targetId,
+                outcome,
+              });
+              utils.system.day1TenDoors.current.setData(undefined, result);
+            } catch (error) {
+              toast.error(
+                error instanceof Error
+                  ? error.message
+                  : "Could not record this stop."
+              );
+            }
+          }}
+          onDismiss={() => {
+            markLegacyDay1Dismissal();
+            markColosseumResolved(identity.data?.openId ?? null);
+            setWaywardProgress(unlockWayward(identity.data?.openId ?? null));
+            setDriverScene(stageReturnScene);
+          }}
+        />
+      </>
     );
   }
 
   return (
-    <>
+    <div
+      data-lantern-operation-id={launchOperationId ?? undefined}
+      data-lantern-operation-binding={launchBinding ?? undefined}
+      data-lantern-rendered-surface={launchSurface ?? undefined}
+      data-lantern-rendered-host={requestedGameplayHost ?? undefined}
+    >
       {returnToDay}
       <Suspense fallback={<GoldlineHome {...gameHomeProps} />}>
-          <GoldlineGameHome
+        <GoldlineGameHome
           {...gameHomeProps}
           playerIdentity={identity.data?.openId ?? null}
           preferredFictionTemplateId={
@@ -1624,6 +1716,6 @@ function LiveGoldlineDriverController({ onOpenFirstMission }: { onOpenFirstMissi
           ]).catch(() => undefined);
         }}
       />
-    </>
+    </div>
   );
 }

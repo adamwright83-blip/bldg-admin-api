@@ -677,6 +677,39 @@ await runRequired(
 );
 
 await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_lantern_operations (
+    id VARCHAR(36) PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorId VARCHAR(128) NOT NULL,
+    stableKey VARCHAR(191) NOT NULL,
+    sourceCampaignChapterId VARCHAR(191) NULL,
+    operationType VARCHAR(32) NOT NULL,
+    campaignTerritoryDefinitionId VARCHAR(36) NULL,
+    lanternCityTerritoryId VARCHAR(64) NULL,
+    startedAt TIMESTAMP NOT NULL,
+    baselineCustomerIdentityKeysJson JSON NOT NULL,
+    baselineDormantIdentityKeysJson JSON NOT NULL,
+    anchorCustomerIdentityKey VARCHAR(191) NULL,
+    status VARCHAR(24) NOT NULL DEFAULT 'active',
+    metadataJson JSON NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_goldline_lantern_operation_stable (tenantId,operatorId,stableKey)
+  )`,
+  "CREATE TABLE goldline_lantern_operations"
+);
+
+await assertRequiredColumns("goldline_lantern_operations", [
+  "tenantId",
+  "operatorId",
+  "stableKey",
+  "operationType",
+  "startedAt",
+  "baselineCustomerIdentityKeysJson",
+  "baselineDormantIdentityKeysJson",
+]);
+
+await runRequired(
   `CREATE TABLE IF NOT EXISTS goldline_fiction_assignments (
     id VARCHAR(36) PRIMARY KEY,
     tenantId VARCHAR(64) NOT NULL,

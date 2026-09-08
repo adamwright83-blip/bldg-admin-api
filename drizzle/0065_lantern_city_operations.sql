@@ -1,0 +1,20 @@
+CREATE TABLE `goldline_lantern_operations` (
+  `id` varchar(36) NOT NULL,
+  `tenantId` varchar(64) NOT NULL,
+  `operatorId` varchar(128) NOT NULL,
+  `stableKey` varchar(191) NOT NULL,
+  `sourceCampaignChapterId` varchar(191),
+  `operationType` varchar(32) NOT NULL,
+  `campaignTerritoryDefinitionId` varchar(36),
+  `lanternCityTerritoryId` varchar(64),
+  `startedAt` timestamp NOT NULL,
+  `baselineCustomerIdentityKeysJson` json NOT NULL,
+  `baselineDormantIdentityKeysJson` json NOT NULL,
+  `anchorCustomerIdentityKey` varchar(191),
+  `status` varchar(24) NOT NULL DEFAULT 'active',
+  `metadataJson` json NOT NULL,
+  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT `goldline_lantern_operations_id` PRIMARY KEY (`id`),
+  CONSTRAINT `uq_goldline_lantern_operation_stable` UNIQUE (`tenantId`,`operatorId`,`stableKey`)
+);

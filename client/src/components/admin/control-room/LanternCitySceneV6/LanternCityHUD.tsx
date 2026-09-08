@@ -58,6 +58,10 @@ export type Overview = {
     id: string;
     title: string;
     territoryId: string | null;
+    environment: "healthy" | "cooling" | "infested" | "locked" | null;
+    binding: string;
+    host: string;
+    surface: string;
     territoryName: string;
     briefing: string;
     objectives: Array<{
@@ -183,9 +187,9 @@ export function LanternCityHUD({
       >
         <h2>FEATURED OPERATION</h2>
         <div className={styles.operationHero} aria-hidden>
-          {operation?.territoryId ? (
+          {operation?.territoryId && operation.environment ? (
             <img
-              src={`/assets/goldline/lantern-city/v6/territories/${operation.territoryId}/infested.png`}
+              src={`/assets/goldline/lantern-city/v6/territories/${operation.territoryId}/${operation.environment}.png`}
               alt=""
             />
           ) : null}

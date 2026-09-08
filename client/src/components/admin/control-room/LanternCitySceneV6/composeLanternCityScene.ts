@@ -95,6 +95,7 @@ export type ComposeInput = {
   controls?: SceneControls;
   prospects?: readonly SceneProspect[];
   secondLightTerritoryId?: string | null;
+  featuredOperationTerritoryId?: string | null;
 };
 export function composeLanternCityScene(input: ComposeInput): CityScene {
   const { width, height } = input.viewport;
@@ -345,8 +346,20 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
           bounds: {
             x: plateBounds.x + plateBounds.width * 0.12 + jitterX,
             y: plateBounds.y + plateBounds.height * 0.42 + jitterY,
-            width: Math.max(64, plateBounds.width * 0.22),
-            height: Math.max(64, plateBounds.width * 0.22),
+            width: Math.max(
+              64,
+              plateBounds.width *
+                (input.featuredOperationTerritoryId === territoryId
+                  ? 0.34
+                  : 0.22)
+            ),
+            height: Math.max(
+              64,
+              plateBounds.width *
+                (input.featuredOperationTerritoryId === territoryId
+                  ? 0.34
+                  : 0.22)
+            ),
           },
         });
         scene.props.push({

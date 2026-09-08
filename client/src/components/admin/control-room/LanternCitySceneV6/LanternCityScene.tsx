@@ -221,6 +221,10 @@ export default function LanternCityScene({
           "waiting_for_reality"
             ? overview.data.featuredOperation.secondLight.territoryId
             : null,
+        featuredOperationTerritoryId:
+          overview.data?.featuredOperation.environment === "infested"
+            ? overview.data.featuredOperation.territoryId
+            : null,
         prospects: (atlas.data?.pursued ?? []).flatMap(p =>
           p.location && !p.location.outOfBounds
             ? [
@@ -360,7 +364,7 @@ export default function LanternCityScene({
         onCommand={setCommand}
         onLaunch={() =>
           onNavigate(
-            `/driver?lanternOperation=${encodeURIComponent(overview.data?.featuredOperation.id ?? "")}&host=${overview.data?.featuredOperation.host ?? "overland"}`
+            `/driver?lanternOperation=${encodeURIComponent(overview.data?.featuredOperation.id ?? "")}&lanternChapter=${encodeURIComponent(overview.data?.featuredOperation.id ?? "")}&lanternBinding=${overview.data?.featuredOperation.binding ?? "world_exploration"}&lanternHost=${overview.data?.featuredOperation.host ?? "overland"}&lanternSurface=${overview.data?.featuredOperation.surface ?? "overland"}`
           )
         }
         onKnownLight={identityKey => {
