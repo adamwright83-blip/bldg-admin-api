@@ -94,6 +94,8 @@ import {
   actionReadyFeedback,
   arcadeFeedback,
   authoritativeMutationFeedback,
+  combatGuardFeedback,
+  combatHurtFeedback,
   missionApproachFeedback,
   missFeedback,
 } from "./audio/haptics";
@@ -2170,9 +2172,19 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       {
         onPlayerDamaged: () => {
           getAudioManager().play("player_hurt");
-          missFeedback();
+          // Real damage taken, not a UI whiff — missFeedback's 12ms single
+          // pulse read identically to a failed skill check. A landed
+          // Shieldbearer slam deserves a pattern that says "that hurt".
+          combatHurtFeedback();
         },
-        onGuardAbsorbed: () => getAudioManager().play("vault"),
+        onGuardAbsorbed: () => {
+          // The guard actually blocking a hit is its own event, distinct
+          // from ordinary traversal — "vault" is a footstep/climb sound, not
+          // an impact. shield_clang/combatGuardFeedback were authored for
+          // exactly this and had no call site.
+          getAudioManager().play("shield_clang");
+          combatGuardFeedback();
+        },
         onHostileDefeated: () => {
           getAudioManager().play("hostile_down");
           arcadeFeedback();
