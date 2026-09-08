@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  clusterAtCanonicalAddress,
   clusterGeographicCustomers,
   fanOutAtlasCollisions,
   lanternDensityClass,
+  mergeClusters,
+  streetIdentity,
   type GeographicCustomer,
 } from "./customerGeography";
 
@@ -34,6 +37,34 @@ describe("customer physical geography", () => {
     expect(clusters).toHaveLength(2);
   });
   it("keeps a single customer as a single lantern", () => expect(clusterGeographicCustomers([customer("a", "1 Main St", "active")])[0]?.total).toBe(1));
+});
+
+describe("stronghold address identity", () => {
+  it("matches a cluster to a canonical tower by street number + street, not by coordinate", () => {
+    // Production shape: the same premise arrives as two spellings and the
+    // provider parcel geocode sits ~300m from the canonical tower point.
+    expect(streetIdentity("2170 Century Park E, Los Angeles, CA 90067")).toBe("2170 century");
+    expect(streetIdentity("2170 century park east, century city ca 90067")).toBe("2170 century");
+    expect(streetIdentity("2160 Century Park East, Los Angeles CA 90067")).toBe("2160 century");
+    expect(streetIdentity("Westwood")).toBeNull();
+    const [cluster] = clusterGeographicCustomers([customer("a", "2170 century park east, Century City CA 90067", "active")]);
+    expect(clusterAtCanonicalAddress(cluster!, "2170 Century Park E, Los Angeles, CA 90067")).toBe(true);
+    const [neighbour] = clusterGeographicCustomers([customer("b", "2160 Century Park East, Los Angeles CA 90067", "active")]);
+    expect(clusterAtCanonicalAddress(neighbour!, "2170 Century Park E, Los Angeles, CA 90067")).toBe(false);
+  });
+
+  it("folds address variants of one premise into a single light with one count", () => {
+    const clusters = clusterGeographicCustomers([
+      customer("a", "2170 Century Park E, Los Angeles, CA 90067", "active"),
+      customer("b", "2170 Century Park East, Century City CA 90067", "dark"),
+      customer("c", "2170 Century Park East, Century City CA 90067", "dimming"),
+    ]);
+    expect(clusters).toHaveLength(2);
+    const merged = mergeClusters(clusters);
+    expect(merged).toMatchObject({ total: 3, active: 1, dimming: 1, dark: 1 });
+    expect(merged.customers).toHaveLength(3);
+    expect(mergeClusters([clusters[0]!])).toBe(clusters[0]);
+  });
 });
 
 const at = (id: string, address: string, x: number, y: number): GeographicCustomer => ({

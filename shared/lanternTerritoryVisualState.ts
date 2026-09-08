@@ -60,6 +60,10 @@ export function deriveTerritoryVisualState(
 
   if (mix.guarded && total === 0) return "locked_opportunity";
   if (mix.pressureReturned && total === 0) return "lost_ground";
+  // No located customers and never conquered: Goldline has not established
+  // real business here yet. That is prospective "what could be" territory,
+  // never "healthy" — an empty neighbourhood is not a thriving one.
+  if (total === 0 && !mix.conquered) return "locked_opportunity";
   if (total === 0) return "healthy";
 
   // One dormant customer must not visually destroy a neighborhood.
@@ -123,23 +127,71 @@ export function stableHash(input: string): number {
   return hash;
 }
 
+/**
+ * Whether a territory earns a state gel at all. A conquered territory with no
+ * located customers has no evidence to paint — it stays neutral rather than
+ * pretending to be healthy or lost.
+ */
+export function territoryStateHasEvidence(mix: TerritoryCustomerMix): boolean {
+  const total = mix.active + mix.dimming + mix.dark;
+  if (total > 0) return true;
+  if (mix.guarded || mix.pressureReturned) return true;
+  return !mix.conquered;
+}
+
+/**
+ * Painterly gel texture strength. These are strong enough to read from the
+ * whole-city view; the tint below carries the colour, the texture carries the
+ * "weather" at the territory edges.
+ */
 export function gelOpacityForState(state: TerritoryVisualState): number {
   switch (state) {
     case "healthy":
-      return 0.08;
+      return 0.55;
     case "at_risk":
-      return 0.14;
+      return 0.6;
     case "cooling":
-      return 0.2;
+      return 0.62;
     case "overgrown":
-      return 0.26;
+      return 0.66;
     case "infested":
-      return 0.3;
+      return 0.7;
     case "closed_construction":
-      return 0.32;
+      return 0.66;
     case "lost_ground":
-      return 0.22;
+      return 0.64;
     case "locked_opportunity":
-      return 0.18;
+      return 0.3;
+  }
+}
+
+/**
+ * Flat colour tint clipped inside the territory mask, blended (multiply) so
+ * the architecture underneath stays legible while the neighbourhood clearly
+ * reads green / amber / red / dusk from across the room.
+ */
+export function gelTintForState(state: TerritoryVisualState): {
+  color: string;
+  opacity: number;
+} {
+  switch (state) {
+    case "healthy":
+      return { color: "#3fd06a", opacity: 0.36 };
+    case "at_risk":
+      return { color: "#f7c62a", opacity: 0.42 };
+    case "cooling":
+      return { color: "#e0452a", opacity: 0.44 };
+    case "overgrown":
+      return { color: "#6a9a1c", opacity: 0.48 };
+    case "infested":
+      return { color: "#8f7d33", opacity: 0.48 };
+    case "closed_construction":
+      return { color: "#9a9aa2", opacity: 0.46 };
+    case "lost_ground":
+      return { color: "#5e5868", opacity: 0.5 };
+    // Locked is the quiet background most of the city sits in: a cool dusk
+    // that lets lit neighbourhoods pop, never a purple blanket.
+    case "locked_opportunity":
+      return { color: "#3b4276", opacity: 0.22 };
   }
 }

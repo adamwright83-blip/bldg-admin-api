@@ -9,7 +9,9 @@ import {
   clustersAsGoogleEntities,
   fanOutAtlasCollisions,
   clusterCoveredByAtlasPoint,
+  clusterAtCanonicalAddress,
   lanternDensityClass,
+  mergeClusters,
 } from "./customerGeography";
 import type { CustomerLocationCluster } from "./customerGeography";
 import { WorldEntityInspector } from "./WorldEntityInspector";
@@ -502,6 +504,29 @@ export default function LanternCityAtlas({
     [pursued, normalized]
   );
 
+  /**
+   * Several pipelines can sit on one real address. Presentation-only fan-out
+   * so they read as a row of prospects instead of one block drawn four times;
+   * the recorded location is untouched.
+   */
+  const pursuitFanOffset = useMemo(() => {
+    const groups = new Map<string, number[]>();
+    for (const item of visiblePursuits) {
+      // ~1% of the atlas ≈ one prospect block width at desktop scale.
+      const key = `${Math.round(item.location!.x)}:${Math.round(item.location!.y)}`;
+      const list = groups.get(key) ?? [];
+      list.push(item.pipelineId);
+      groups.set(key, list);
+    }
+    const offsets = new Map<number, number>();
+    groups.forEach(ids => {
+      ids.forEach((id, index) => {
+        offsets.set(id, (index - (ids.length - 1) / 2) * 2.1);
+      });
+    });
+    return offsets;
+  }, [visiblePursuits]);
+
   /*
     The two combat plates are the composition. Warm them in the browser cache
     before the map has finished settling so the combatants are standing there
@@ -598,10 +623,27 @@ export default function LanternCityAtlas({
     () =>
       (["opus_la", "century_park_east"] as const).map(id => ({
         id,
+        address: CANONICAL_BUILDING_GEOGRAPHY[id].address,
         ...projectLatLngToLanternAtlas(CANONICAL_BUILDING_GEOGRAPHY[id]),
       })),
     []
   );
+
+  /*
+    A stronghold carries a cluster's light when the cluster sits on the
+    tower's projected point OR lives at the tower's own street address. The
+    canonical tower coordinate and the provider's parcel geocode for the same
+    address can differ by a few hundred metres; the address is the identity.
+  */
+  function towerCarriesCluster(
+    tower: (typeof canonicalTowerPoints)[number],
+    cluster: CustomerLocationCluster
+  ): boolean {
+    return (
+      clusterCoveredByAtlasPoint(cluster, tower) ||
+      clusterAtCanonicalAddress(cluster, tower.address)
+    );
+  }
 
   const towerAttachedClusters = useMemo(() => {
     const map = new Map<
@@ -609,13 +651,15 @@ export default function LanternCityAtlas({
       CustomerLocationCluster
     >();
     for (const tower of canonicalTowerPoints) {
-      const cluster = customerClusters.find(
-        cluster =>
-          !cluster.outsideAtlas && clusterCoveredByAtlasPoint(cluster, tower)
+      // Every cluster the tower carries is folded into one light with one
+      // count; an address variant must never make a customer vanish.
+      const carried = customerClusters.filter(
+        cluster => !cluster.outsideAtlas && towerCarriesCluster(tower, cluster)
       );
-      if (cluster) map.set(tower.id, cluster);
+      if (carried.length) map.set(tower.id, mergeClusters(carried));
     }
     return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canonicalTowerPoints, customerClusters]);
 
   function primaryObjectCoversCluster(cluster: CustomerLocationCluster): boolean {
@@ -629,7 +673,7 @@ export default function LanternCityAtlas({
       return true;
     }
     return canonicalTowerPoints.some(tower =>
-      clusterCoveredByAtlasPoint(cluster, tower)
+      towerCarriesCluster(tower, cluster)
     );
   }
 
@@ -757,13 +801,15 @@ export default function LanternCityAtlas({
         searchOpen={searchOpen}
         onToggleSearch={() => setSearchOpen(current => !current)}
       />
-      <LanternMapLegend collapsedDefault />
+      <LanternMapLegend />
 
       <section className="lc-map" aria-label="Lantern City world">
         <WorldGeographySurface
           mode="lantern_atlas"
           onNavigate={onNavigate}
-          showNeighborhoods={true}
+          /* Territory nameplates (LanternTerritoryStateLayer) carry name +
+             state at the real centroid; the landmark captions would double up. */
+          showNeighborhoods={false}
           showOpportunityLayer={true}
           onGoogleVisibilityChange={setGoogleVisible}
           geographicEntities={googleEntities}
@@ -933,7 +979,7 @@ export default function LanternCityAtlas({
                   )}
                   data-world-entity-id={worldEntity?.id}
                   style={{
-                    left: `${item.location!.x}%`,
+                    left: `${item.location!.x + (pursuitFanOffset.get(item.pipelineId) ?? 0)}%`,
                     top: `${item.location!.y}%`,
                   }}
                   onClick={() => {

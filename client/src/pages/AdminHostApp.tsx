@@ -181,6 +181,9 @@ export default function AdminHostApp() {
   const isGrowth = path === "/growth";
   const isLanternCity = path === "/growth/lantern-city";
   const isWorldHome = isHome || isLanternCity;
+  const worldDebugChrome =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("worldTruth") === "1";
   const worldHomePath = ["localhost", "127.0.0.1"].includes(window.location.hostname) ? "/home" : "/";
   const isTowerWars = path === "/growth/tower-wars";
   const isSandbox = path === "/growth/sandbox";
@@ -330,7 +333,12 @@ export default function AdminHostApp() {
         <ResidentFollowupAlert />
       ) : null}
 
-      {isWorldHome && !isLanternCity ? (
+      {/*
+        Utilities is admin chrome, not a game object. The default Lantern City
+        player view never shows it; it stays reachable in the QA/debug mode
+        (?worldTruth=1) alongside the geographic-truth tools.
+      */}
+      {isWorldHome && !isLanternCity && worldDebugChrome ? (
       <div className="gl-world-utility-menu">
       <button type="button" onClick={() => setMobileNavOpen(open => !open)} aria-expanded={mobileNavOpen} aria-label="Utilities"><img src="/assets/goldline/lantern-city/v4/utilities.png" alt="" /></button>
       <div hidden={!mobileNavOpen}>

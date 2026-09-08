@@ -112,6 +112,58 @@ export function clusterCoveredByAtlasPoint(
   return atlasPointsOverlap(cluster, point);
 }
 
+/** Fold several clusters of the same premise into one light with one count. */
+export function mergeClusters(
+  clusters: readonly CustomerLocationCluster[]
+): CustomerLocationCluster {
+  if (clusters.length === 1) return clusters[0]!;
+  const [first, ...rest] = clusters as [CustomerLocationCluster, ...CustomerLocationCluster[]];
+  const merged: CustomerLocationCluster = {
+    ...first,
+    key: clusters.map(cluster => cluster.key).join("+"),
+    customers: clusters.flatMap(cluster => cluster.customers),
+    total: 0,
+    active: 0,
+    dimming: 0,
+    dark: 0,
+  };
+  for (const cluster of [first, ...rest]) {
+    merged.total += cluster.total;
+    merged.active += cluster.active;
+    merged.dimming += cluster.dimming;
+    merged.dark += cluster.dark;
+  }
+  return merged;
+}
+
+/**
+ * Street number + first street token of an address: "2170 Century Park E,
+ * Los Angeles" and "2170 Century Park East, Century City" are the same
+ * premise. Unit tokens and city/ZIP never take part.
+ */
+export function streetIdentity(address: string | null | undefined): string | null {
+  const match = (address ?? "")
+    .toLowerCase()
+    .trim()
+    .match(/^(\d+[a-z]?)\s+(?:[nsew]\.?\s+)?([a-z]+)/);
+  return match ? `${match[1]} ${match[2]}` : null;
+}
+
+/**
+ * A customer cluster that lives at a canonical stronghold's own street address
+ * belongs to that building, whichever way the provider geocoded the parcel.
+ * The customers' real coordinates are untouched — this only decides which
+ * world object carries their light.
+ */
+export function clusterAtCanonicalAddress(
+  cluster: CustomerLocationCluster,
+  canonicalAddress: string
+): boolean {
+  const target = streetIdentity(canonicalAddress);
+  if (!target) return false;
+  return streetIdentity(cluster.canonicalAddress) === target;
+}
+
 export function lanternDensityClass(total: number): string {
   if (total >= 4) return "density-major";
   if (total >= 2) return "density-medium";

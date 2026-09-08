@@ -4,7 +4,7 @@
  */
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { chromium } from "playwright";
+import { chromium } from "@playwright/test";
 
 const baseURL = process.env.GOLDLINE_SMOKE_BASE_URL ?? "http://127.0.0.1:4177";
 const adminPassword = process.env.ADMIN_PASSWORD ?? "goldline-proof-admin-pass";
@@ -46,9 +46,11 @@ async function main() {
   await detailPage.waitForTimeout(3000);
 
   const targets = [
-    { name: "04-opus-tower", selector: ".pwc-building.opus" },
-    { name: "05-cpe-tower", selector: ".pwc-building.cpe" },
+    { name: "04-opus-tower", selector: ".cr-world-tower-anchor:has(.pwc-building.opus), .pwc-building.opus" },
+    { name: "05-cpe-tower", selector: ".cr-world-tower-anchor:has(.pwc-building.cpe), .pwc-building.cpe" },
     { name: "06-frontier-object", selector: ".lc-frontier-object" },
+    { name: "09-territory-gel-cooling", selector: ".lc-territory-gel.state-cooling, .lc-territory-gel.state-at_risk" },
+    { name: "10-legend-open", selector: ".lc-v5-legend" },
   ];
   for (const target of targets) {
     const locator = detailPage.locator(target.selector).first();
@@ -76,8 +78,24 @@ async function main() {
   });
   await detailPage.screenshot({
     path: join(outDir, "08-command-deck-bottom.png"),
-    clip: { x: 0, y: 860, width: 1920, height: 220 },
+    clip: { x: 0, y: 820, width: 1920, height: 260 },
   });
+  // Territory-state readability: the state summary the layer computed.
+  const gelSummary = await detailPage.evaluate(() => {
+    const out = {};
+    for (const gel of document.querySelectorAll(".lc-territory-gel")) {
+      const state = gel.getAttribute("data-visual-state");
+      out[state] = (out[state] ?? 0) + 1;
+    }
+    return {
+      gels: out,
+      nameplates: document.querySelectorAll(".lc-territory-nameplate").length,
+      lanterns: document.querySelectorAll(".lc-v5-lantern").length,
+      utilitiesVisible: Boolean(document.querySelector(".gl-world-utility-menu")),
+      truthDrawerVisible: Boolean(document.querySelector(".lc-v5-drawer")),
+    };
+  });
+  console.log(JSON.stringify(gelSummary, null, 2));
 
   await browser.close();
   console.log(`Wrote Lantern City QA screenshots to ${outDir}`);

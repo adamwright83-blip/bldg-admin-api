@@ -52,39 +52,47 @@
 
 .lc-v5-identity {
   display: grid;
-  gap: 4px;
-  padding: 14px 18px;
-  background: rgb(255 255 255 / 88%);
-  border: 1px solid rgb(152 115 33 / 40%);
-  border-radius: 14px;
-  backdrop-filter: blur(8px);
-  min-width: 168px;
+  gap: 2px;
+  padding: 16px 22px 14px;
+  background: linear-gradient(180deg, #1d2a36f0, #0a131cf5);
+  border: 1px solid #d9b96a;
+  border-radius: 6px;
+  box-shadow: 0 10px 28px rgb(4 16 28 / 45%), inset 0 1px 0 rgb(240 212 146 / 60%);
+  min-width: 220px;
+  color: #fff3cf;
 }
 
 .lc-v5-brand {
-  font-size: 13px;
-  letter-spacing: 0.14em;
+  font-size: 15px;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: #987321;
-  font-weight: 700;
+  color: #f0c14d;
+  font-weight: 800;
 }
 
 .lc-v5-identity strong {
-  font-size: 22px;
-  line-height: 1.05;
-  letter-spacing: 0.02em;
+  font-size: 32px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 900;
 }
 
 .lc-v5-identity small {
+  margin-top: 4px;
   font-size: 12px;
-  color: #5d6b80;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #d9c9a5;
 }
 
 .lc-v5-today-quest {
   position: relative;
-  min-height: 120px;
-  max-width: 520px;
+  min-height: 190px;
+  width: min(760px, 44vw);
+  max-width: 760px;
   justify-self: center;
+  filter: drop-shadow(0 12px 22px rgb(20 30 40 / 40%));
 }
 
 .lc-v5-today-quest > img {
@@ -98,29 +106,39 @@
 
 .lc-v5-today-quest > div {
   position: relative;
-  padding: 22px 28px 18px 34px;
+  /* The parchment's corner scrollwork eats the first ~80px on each side. */
+  padding: 40px 84px 30px 88px;
 }
 
 .lc-v5-today-quest h2 {
-  margin: 0 0 6px;
-  font-size: 15px;
-  letter-spacing: 0.1em;
+  margin: 0 0 8px;
+  font-size: 22px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #6b4d1a;
+  font-weight: 900;
 }
 
 .lc-v5-today-quest strong,
 .lc-v5-today-quest p,
 .lc-v5-quest-empty {
   margin: 0;
-  font-size: 16px;
-  line-height: 1.4;
+  font-size: 18px;
+  line-height: 1.35;
+  color: #2b2418;
 }
 
 .lc-v5-today-quest strong {
   display: block;
-  font-size: 18px;
-  margin-bottom: 4px;
+  font-size: 22px;
+  margin-bottom: 6px;
+}
+
+.lc-v5-today-quest p {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .lc-v5-search-toggle,
@@ -146,54 +164,153 @@
   outline: none;
 }
 
+/* ----------------------------------------------------------------------------
+   LEGEND — the map key. Open by default and actually readable: lantern rows
+   inside the authored five-slot frame, neighbourhood swatches in a parchment
+   strip below. Collapses to a single tab.
+   -------------------------------------------------------------------------- */
 .lc-v5-legend {
   position: fixed;
-  right: 12px;
-  top: 120px;
+  right: 16px;
+  top: clamp(150px, 18vh, 200px);
   z-index: 35;
-  width: 240px;
+  width: clamp(250px, 16.5vw, 300px);
+  display: grid;
+  gap: 6px;
+  filter: drop-shadow(0 12px 22px rgb(20 30 40 / 40%));
 }
 
-.lc-v5-legend > img {
+.lc-v5-legend-frame {
+  position: relative;
+}
+
+.lc-v5-legend-frame > img {
+  display: block;
   width: 100%;
   pointer-events: none;
 }
 
 .lc-v5-legend-body {
   position: absolute;
-  inset: 16% 10% 14%;
+  inset: 16% 9% 15% 9%;
   display: grid;
-  gap: 4px;
-  font-size: 13px;
-  line-height: 1.25;
+  grid-template-rows: repeat(5, 1fr);
+  align-items: center;
+  color: #2b2418;
 }
 
-.lc-v5-legend.is-collapsed .lc-v5-legend-body {
-  display: none;
+.lc-v5-legend-heading {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #6b4d1a;
+  font-weight: 900;
+  text-align: center;
+}
+
+.lc-v5-legend-row {
+  display: grid;
+  grid-template-columns: 22% 1fr;
+  align-items: center;
+  gap: 4px;
+  min-height: 0;
+}
+
+.lc-v5-legend-row img {
+  width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  justify-self: center;
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 30%));
+}
+
+.lc-v5-legend-row span {
+  display: grid;
+  line-height: 1.15;
+}
+
+.lc-v5-legend-row b {
+  font-size: clamp(12px, 0.85vw, 15px);
+  font-weight: 800;
+}
+
+.lc-v5-legend-row small {
+  font-size: clamp(10px, 0.65vw, 12px);
+  color: #5b4a2c;
+}
+
+.lc-v5-legend-territories {
+  padding: 10px 14px 12px;
+  border: 2px solid #d9b96a;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, #fbf3dfee, #efdfbdf2);
+  box-shadow: inset 0 0 0 1px #8a6a2a66;
+  color: #2b2418;
+}
+
+.lc-v5-legend-territories .lc-v5-legend-heading {
+  margin-bottom: 8px;
+}
+
+.lc-v5-legend-territories ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px 10px;
+}
+
+.lc-v5-legend-territories li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: clamp(11px, 0.78vw, 13px);
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.lc-v5-legend-territories i {
+  flex: none;
+  width: 26px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid rgb(0 0 0 / 35%);
+  background:
+    radial-gradient(ellipse at 50% 50%, rgb(255 255 255 / 40%), transparent 70%),
+    var(--lc-swatch, #3fbf5a);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 60%) inset;
 }
 
 .lc-v5-legend-toggle {
-  position: absolute;
-  top: 8px;
-  left: 10px;
-  z-index: 1;
-  border: none;
-  background: transparent;
+  justify-self: end;
+  padding: 6px 14px;
+  border: 1px solid #d9b96a;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #1d2a36f0, #0a131cf5);
+  color: #fff3cf;
   font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 700;
+  letter-spacing: 0.12em;
+  font-weight: 800;
+  cursor: pointer;
 }
 
+/* ----------------------------------------------------------------------------
+   COMMAND DECK — six game rooms, readable at 1440 and 1920 without squinting.
+   -------------------------------------------------------------------------- */
 .lc-v5-command-deck {
   position: fixed;
   left: 50%;
-  bottom: 8px;
+  bottom: 6px;
   transform: translateX(-50%);
   z-index: 120;
-  width: min(1040px, calc(100vw - 24px));
-  height: 148px;
+  width: min(1380px, calc(100vw - 32px));
+  height: clamp(170px, 12.5vw, 230px);
   pointer-events: none;
+  filter: drop-shadow(0 -6px 24px rgb(4 16 28 / 40%));
 }
 
 .lc-v5-command-frame {
@@ -207,10 +324,10 @@
 
 .lc-v5-command-buttons {
   position: absolute;
-  inset: 18% 6% 10%;
+  inset: 15% 5.5% 9%;
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 4px;
+  gap: 8px;
   pointer-events: auto;
 }
 
@@ -220,10 +337,20 @@
   background: transparent;
   color: #173d47;
   display: grid;
+  grid-template-rows: 1fr auto;
   place-items: center;
-  gap: 4px;
+  gap: 0;
+  /* Keep icon + label inside the parchment square of the button art
+     (the square spans roughly 26%–72% of the art on each axis). */
+  padding: 27% 22% 29%;
   cursor: pointer;
-  min-height: 64px;
+  min-height: 96px;
+  transition: transform 0.15s ease;
+}
+
+.lc-v5-command-btn:hover,
+.lc-v5-command-btn:focus-visible {
+  transform: translateY(-3px);
 }
 
 .lc-v5-command-btn > img:first-child {
@@ -237,25 +364,63 @@
 
 .lc-v5-command-icon {
   position: relative;
-  width: 40px;
-  height: 40px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: clamp(48px, 5vw, 96px);
   object-fit: contain;
+  filter: drop-shadow(0 3px 4px rgb(0 0 0 / 30%));
 }
 
 .lc-v5-command-btn span {
   position: relative;
-  font-size: 12px;
-  letter-spacing: 0.08em;
+  font-size: clamp(12px, 0.9vw, 17px);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  font-weight: 700;
+  font-weight: 900;
+  color: #173d47;
+  text-shadow: 0 1px 0 rgb(255 255 255 / 70%);
 }
 
+.lc-v5-command-btn.is-active span {
+  color: #7a4a00;
+}
+
+/* ----------------------------------------------------------------------------
+   MICRO-NEIGHBOURHOOD STATE GELS
+
+   Real territory mask = invisible skeleton. Authored atlas = visible world.
+   Generic painterly gel clipped to the real mask = the changing condition.
+
+   Each gel is two layers inside one masked box: a flat colour tint blended
+   with multiply (so streets and towers stay legible while the block reads
+   green / amber / red / dusk from across the room) and the painterly texture
+   on top for edge weather. Masks are feathered at render time; the raw mask
+   falls back to luminance mode so the gel is never a rectangle.
+   -------------------------------------------------------------------------- */
 .lc-territory-state-layer,
-.lc-environmental-props {
+.lc-environmental-props,
+.lc-environmental-props-layer,
+.lc-territory-nameplates {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
+
+/* Camera controls sit on the deck baseline, right of the deck, so they never
+   cover a territory nameplate (Downtown / Arts District live down there). */
+.lc-page.lc-v5-game .cr-world-camera-controls {
+  position: fixed;
+  right: 16px;
+  bottom: 14px;
+  z-index: 121;
+}
+
+/* Layer stack: base map (0) → gels (1) → props (2) → foreground foliage (3)
+   → frontier (7) → lanterns (8) → strongholds (9) → nameplates (10). */
+.lc-territory-state-layer { z-index: 1; }
+.lc-environmental-props-layer { z-index: 2; }
+.lc-page.lc-v5-game .cr-world-towers-layer { z-index: 9; }
 
 .lc-territory-gel {
   position: absolute;
@@ -267,22 +432,118 @@
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
+  -webkit-mask-source-type: luminance;
+  mask-mode: luminance;
+  transition: filter 0.3s ease;
 }
 
-.lc-territory-gel img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: var(--lc-gel-opacity, 0.15);
+.lc-territory-gel.is-feathered {
+  -webkit-mask-source-type: alpha;
+  mask-mode: alpha;
+}
+
+.lc-territory-gel-tint {
+  position: absolute;
+  inset: 0;
+  background: var(--lc-gel-tint, #3fbf5a);
+  opacity: var(--lc-gel-tint-opacity, 0.4);
   mix-blend-mode: multiply;
+}
+
+.lc-territory-gel-texture {
+  position: absolute;
+  inset: -6%;
+  width: 112%;
+  height: 112%;
+  max-width: none;
+  object-fit: cover;
+  opacity: var(--lc-gel-opacity, 0.8);
+}
+
+/* Prosperity glows at the edges; decline settles in. Same texture, different blend. */
+.lc-territory-gel.state-healthy .lc-territory-gel-texture,
+.lc-territory-gel.state-at_risk .lc-territory-gel-texture {
+  mix-blend-mode: screen;
+}
+
+.lc-territory-gel.state-locked_opportunity .lc-territory-gel-texture {
+  mix-blend-mode: soft-light;
+}
+
+.lc-territory-gel.state-cooling .lc-territory-gel-texture,
+.lc-territory-gel.state-overgrown .lc-territory-gel-texture,
+.lc-territory-gel.state-infested .lc-territory-gel-texture,
+.lc-territory-gel.state-closed_construction .lc-territory-gel-texture,
+.lc-territory-gel.state-lost_ground .lc-territory-gel-texture {
+  mix-blend-mode: normal;
+}
+
+.lc-territory-gel.is-emphasized {
+  filter: brightness(1.12) saturate(1.15);
 }
 
 .lc-environmental-props img {
   position: absolute;
-  width: 12%;
+  width: 9%;
+  max-width: none;
   transform: translate(-50%, -50%) scale(var(--lc-prop-scale, 0.85));
   pointer-events: none;
-  opacity: 0.92;
+  opacity: 0.94;
+  filter: drop-shadow(0 6px 8px rgb(0 0 0 / 28%));
+}
+
+/* Territory nameplates: name + status chip at the real centroid. */
+.lc-territory-nameplates {
+  z-index: 10;
+}
+
+.lc-territory-nameplate {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 8px rgb(0 0 0 / 45%));
+}
+
+.lc-territory-nameplate-name {
+  padding: 5px 12px;
+  border: 1px solid #d9b96a;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #1d2a36f2, #0a131cf5);
+  color: #fff3cf;
+  font-size: clamp(12px, 0.85vw, 16px);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.lc-territory-nameplate-status {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 55%);
+  background: var(--lc-status-bg, #2f7d4a);
+  color: #fff;
+  font-size: clamp(11px, 0.72vw, 13px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.lc-territory-nameplate.state-healthy { --lc-status-bg: #1f8a4c; }
+.lc-territory-nameplate.state-at_risk { --lc-status-bg: #c47f0e; }
+.lc-territory-nameplate.state-cooling { --lc-status-bg: #c0432a; }
+.lc-territory-nameplate.state-overgrown { --lc-status-bg: #4f6b1c; }
+.lc-territory-nameplate.state-infested { --lc-status-bg: #6d5a1f; }
+.lc-territory-nameplate.state-closed_construction { --lc-status-bg: #5c5c66; }
+.lc-territory-nameplate.state-lost_ground { --lc-status-bg: #4a4450; }
+.lc-territory-nameplate.state-locked_opportunity { --lc-status-bg: #3c3f8a; }
+
+.lc-territory-nameplate.is-emphasized {
+  transform: translate(-50%, -50%) scale(1.08);
 }
 
 .lc-v5-foreground-depth {
@@ -292,56 +553,105 @@
   height: 100%;
   object-fit: cover;
   pointer-events: none;
-  z-index: 12;
+  /* Decorative depth only: it must never cover a tower label, a customer
+     lantern, or a frontier objective (they sit at 6–9). */
+  z-index: 3;
 }
 
+/* ----------------------------------------------------------------------------
+   CUSTOMER LANTERNS — the lights of the city, one of the first things the
+   eye should land on.
+
+   Root cause of the tiny lanterns in production: the legacy `.lc-lantern`
+   rule fixes the button at 30×46px and the global `img { max-width: 100% }`
+   reset then clamps the v5 art to that 30px box, regardless of the width
+   declared below. The v5 lantern owns its own box now.
+   -------------------------------------------------------------------------- */
+.lc-page.lc-v5-game .lc-v5-lantern.lc-lantern,
 .lc-v5-lantern {
   position: absolute;
+  width: auto;
+  height: auto;
   transform: translate(-50%, -100%);
   border: none;
   background: transparent;
+  background-image: none;
   padding: 0;
   cursor: pointer;
   z-index: 8;
 }
 
-.lc-v5-lantern.density-single .lc-v5-lantern-art {
-  width: clamp(48px, 4.2vw, 56px);
-}
-
-.lc-v5-lantern.density-medium .lc-v5-lantern-art {
-  width: clamp(64px, 5.4vw, 76px);
-  filter: drop-shadow(0 0 14px rgb(255 193 36 / 45%))
-    drop-shadow(0 6px 10px rgb(0 0 0 / 18%));
-}
-
-.lc-v5-lantern.density-major .lc-v5-lantern-art {
-  width: clamp(84px, 7vw, 110px);
-  filter: drop-shadow(0 0 22px rgb(255 193 36 / 55%))
-    drop-shadow(0 8px 14px rgb(0 0 0 / 22%));
+.lc-v5-lantern .lc-lantern-body,
+.lc-v5-lantern .lc-lantern-base,
+.lc-v5-lantern .lc-lantern-handle {
+  display: none;
 }
 
 .lc-v5-lantern-art {
-  width: clamp(48px, 4.2vw, 56px);
+  width: clamp(64px, 5vw, 96px);
+  max-width: none;
   height: auto;
   display: block;
-  filter: drop-shadow(0 4px 8px rgb(0 0 0 / 18%));
+  filter: drop-shadow(0 0 12px rgb(255 193 36 / 35%))
+    drop-shadow(0 6px 10px rgb(0 0 0 / 25%));
+}
+
+.lc-v5-lantern.density-single .lc-v5-lantern-art {
+  width: clamp(64px, 5vw, 96px);
+}
+
+.lc-v5-lantern.density-medium .lc-v5-lantern-art {
+  width: clamp(84px, 6.6vw, 126px);
+  filter: drop-shadow(0 0 18px rgb(255 193 36 / 50%))
+    drop-shadow(0 8px 12px rgb(0 0 0 / 25%));
+}
+
+.lc-v5-lantern.density-major .lc-v5-lantern-art {
+  width: clamp(108px, 8.4vw, 160px);
+  filter: drop-shadow(0 0 28px rgb(255 193 36 / 62%))
+    drop-shadow(0 10px 16px rgb(0 0 0 / 28%));
+}
+
+.lc-v5-lantern.state-dark .lc-v5-lantern-art,
+.lc-v5-lantern.state-quiet .lc-v5-lantern-art {
+  filter: drop-shadow(0 6px 10px rgb(0 0 0 / 35%));
 }
 
 .lc-v5-lantern-count {
   position: absolute;
-  right: -2px;
-  top: -2px;
-  min-width: 24px;
-  height: 24px;
+  right: -4px;
+  top: 4px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
   border-radius: 999px;
-  background: #173d47;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
+  background: linear-gradient(180deg, #1d2a36, #0a131c);
+  color: #ffe08a;
+  font-size: 16px;
+  font-weight: 900;
   display: grid;
   place-items: center;
   border: 2px solid #f0c14d;
+  box-shadow: 0 3px 8px rgb(0 0 0 / 45%);
+}
+
+.lc-v5-lantern.density-major .lc-v5-lantern-count {
+  min-width: 36px;
+  height: 36px;
+  font-size: 19px;
+}
+
+/* Collision fan-out has to clear the larger art. */
+.lc-v5-lantern.fan-1 { --fx: 66px; --fy: -46px; }
+.lc-v5-lantern.fan-2 { --fx: -66px; --fy: -46px; }
+.lc-v5-lantern.fan-3 { --fx: 66px; --fy: 46px; }
+.lc-v5-lantern.fan-4 { --fx: -66px; --fy: 46px; }
+.lc-v5-lantern[class*="fan-"] {
+  transform: translate(calc(-50% + var(--fx, 0px)), calc(-100% + var(--fy, 0px)));
+}
+.lc-v5-lantern[class*="fan-"]:hover,
+.lc-v5-lantern[class*="fan-"]:focus-visible {
+  transform: translate(calc(-50% + var(--fx, 0px)), calc(-100% + var(--fy, 0px))) scale(1.1);
 }
 
 .lc-v5-lantern-effect {
@@ -357,15 +667,24 @@
   border-radius: 8px;
 }
 
+/* ----------------------------------------------------------------------------
+   FRONTIER / "WHAT COULD BE" OBJECTIVES
+
+   The authored anchor scale (~0.86–0.9) used to be the whole transform, so
+   the CSS default never applied and objectives rendered as map debris. The
+   anchor scale is now a relative modifier on a game-object base size.
+   -------------------------------------------------------------------------- */
 .lc-frontier-object {
   position: absolute;
-  transform: translate(-50%, -100%) scale(var(--lc-frontier-scale, 1.85));
+  transform: translate(-50%, -100%) scale(calc(var(--lc-frontier-scale, 1) * 1.15));
   pointer-events: none;
   z-index: 7;
+  filter: drop-shadow(0 14px 18px rgb(0 0 0 / 35%));
 }
 
 .lc-frontier-freedom-art {
-  width: clamp(96px, 8vw, 148px);
+  width: clamp(170px, 13vw, 250px);
+  max-width: none;
   height: auto;
   display: block;
 }
@@ -373,58 +692,100 @@
 .lc-frontier-lock-art {
   position: absolute;
   left: 50%;
-  top: 58%;
-  width: 34%;
+  top: 56%;
+  width: 40%;
+  max-width: none;
   transform: translate(-50%, -50%);
+  filter: drop-shadow(0 0 14px rgb(255 215 120 / 55%))
+    drop-shadow(0 4px 6px rgb(0 0 0 / 45%));
 }
 
 .lc-tower-attached-lantern {
   position: absolute;
-  left: 50%;
-  top: -8%;
-  transform: translate(-50%, -100%);
+  /* Hangs off the tower's lower-right flank so it reads as the customer
+     light *on* the stronghold, not a stray lantern floating over the spire. */
+  left: 80%;
+  top: 60%;
+  transform: translate(-50%, -50%);
   pointer-events: none;
-  z-index: 3;
-}
-
-.lc-tower-attached-lantern.density-single .lc-tower-attached-lantern-art {
-  width: clamp(48px, 4vw, 56px);
-}
-
-.lc-tower-attached-lantern.density-medium .lc-tower-attached-lantern-art {
-  width: clamp(64px, 5.2vw, 76px);
-  filter: drop-shadow(0 0 16px rgb(255 193 36 / 50%));
-}
-
-.lc-tower-attached-lantern.density-major .lc-tower-attached-lantern-art {
-  width: clamp(84px, 6.8vw, 104px);
-  filter: drop-shadow(0 0 24px rgb(255 193 36 / 62%));
+  /* Above the .pwc-building button (z 5) so the tower art never hides it. */
+  z-index: 6;
 }
 
 .lc-tower-attached-lantern-art {
   display: block;
+  max-width: none;
   height: auto;
+  width: clamp(64px, 5vw, 96px);
+  filter: drop-shadow(0 0 14px rgb(255 193 36 / 45%))
+    drop-shadow(0 6px 10px rgb(0 0 0 / 25%));
+}
+
+.lc-tower-attached-lantern.density-single .lc-tower-attached-lantern-art {
+  width: clamp(64px, 5vw, 96px);
+}
+
+.lc-tower-attached-lantern.density-medium .lc-tower-attached-lantern-art {
+  width: clamp(84px, 6.6vw, 126px);
+  filter: drop-shadow(0 0 20px rgb(255 193 36 / 55%))
+    drop-shadow(0 8px 12px rgb(0 0 0 / 25%));
+}
+
+.lc-tower-attached-lantern.density-major .lc-tower-attached-lantern-art {
+  width: clamp(108px, 8.4vw, 160px);
+  filter: drop-shadow(0 0 30px rgb(255 193 36 / 66%))
+    drop-shadow(0 10px 16px rgb(0 0 0 / 28%));
 }
 
 .lc-tower-attached-lantern-count {
   position: absolute;
-  right: -4px;
-  top: -4px;
-  min-width: 26px;
-  height: 26px;
+  /* Tower side of the lantern: stays on the stronghold, clear of the
+     neighbouring territory nameplates to the right. */
+  left: -6px;
+  top: 4px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 6px;
   border-radius: 999px;
-  background: #173d47;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
+  background: linear-gradient(180deg, #1d2a36, #0a131c);
+  color: #ffe08a;
+  font-size: 18px;
+  font-weight: 900;
   display: grid;
   place-items: center;
   border: 2px solid #f0c14d;
+  box-shadow: 0 3px 8px rgb(0 0 0 / 45%);
 }
 
 .cr-world-tower-anchor.has-attached-customers,
 .lc-pursued-building.has-attached-customers {
   filter: drop-shadow(0 0 18px rgb(255 193 36 / 35%));
+}
+
+/* A prospect block is ~64px wide: hang its customer light beside it, at a
+   scale that suits the block, and above neighbouring prospect blocks. */
+.lc-pursued-building.has-attached-customers {
+  z-index: 8;
+}
+
+.lc-pursued-building > span.lc-tower-attached-lantern {
+  /* Reset the legacy `.lc-pursued-building > span` building-glyph styling. */
+  display: block;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  clip-path: none;
+  left: 100%;
+  top: 50%;
+  transform: translate(-40%, -50%) scale(0.7);
+}
+
+.lc-pursued-building > span.lc-tower-attached-lantern::before {
+  content: none;
 }
 
 .lc-page.lc-v5-game .lc-map {
@@ -441,17 +802,24 @@
 }
 
 .lc-lost-ground-object img {
-  width: clamp(72px, 6vw, 112px);
+  width: clamp(130px, 10vw, 190px);
+  max-width: none;
+  filter: grayscale(0.4) drop-shadow(0 10px 14px rgb(0 0 0 / 40%));
 }
 
 .lc-lost-ground-label {
-  display: block;
+  display: inline-block;
+  margin-top: 4px;
+  padding: 4px 10px;
+  border: 1px solid #8d8797;
+  border-radius: 4px;
+  background: #221f27ee;
   text-align: center;
   font-size: 12px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #5a6670;
-  font-weight: 700;
+  color: #d9d3e2;
+  font-weight: 800;
 }
 
 .lc-v5-rekindling-scrim,

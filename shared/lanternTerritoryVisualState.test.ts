@@ -3,8 +3,12 @@ import { CANONICAL_BUILDING_GEOGRAPHY } from "./canonicalGeography";
 import { projectLatLngToLanternAtlas } from "./lanternCity";
 import {
   deriveTerritoryVisualState,
+  gelOpacityForState,
+  gelTintForState,
   stableHash,
+  territoryStateHasEvidence,
   TERRITORY_VISUAL_THRESHOLDS,
+  type TerritoryVisualState,
 } from "./lanternTerritoryVisualState";
 import {
   classifyTerritory,
@@ -115,6 +119,86 @@ describe("lanternTerritoryVisualState", () => {
         pressureReturned: false,
       })
     ).toBe("healthy");
+  });
+
+  it("reads an empty, never-conquered territory as locked opportunity, not healthy", () => {
+    // ~50 of the 61 real territories have no located customers. They are
+    // prospective ground ("what could be"), and must never paint as thriving.
+    expect(
+      deriveTerritoryVisualState({
+        territoryId: "atwater-village",
+        active: 0,
+        dimming: 0,
+        dark: 0,
+        guarded: false,
+        conquered: false,
+        pressureReturned: false,
+      })
+    ).toBe("locked_opportunity");
+  });
+
+  it("paints no gel for a conquered territory with no located customers", () => {
+    expect(
+      territoryStateHasEvidence({
+        territoryId: "hollywood",
+        active: 0,
+        dimming: 0,
+        dark: 0,
+        guarded: false,
+        conquered: true,
+        pressureReturned: false,
+      })
+    ).toBe(false);
+    expect(
+      territoryStateHasEvidence({
+        territoryId: "hollywood",
+        active: 0,
+        dimming: 0,
+        dark: 1,
+        guarded: false,
+        conquered: true,
+        pressureReturned: false,
+      })
+    ).toBe(true);
+    expect(
+      territoryStateHasEvidence({
+        territoryId: "atwater-village",
+        active: 0,
+        dimming: 0,
+        dark: 0,
+        guarded: false,
+        conquered: false,
+        pressureReturned: false,
+      })
+    ).toBe(true);
+  });
+
+  it("gives every visual state a visible gel treatment, with locked as the quiet background", () => {
+    const states: TerritoryVisualState[] = [
+      "healthy",
+      "at_risk",
+      "cooling",
+      "overgrown",
+      "infested",
+      "closed_construction",
+      "lost_ground",
+      "locked_opportunity",
+    ];
+    for (const state of states) {
+      const tint = gelTintForState(state);
+      expect(tint.color).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(tint.opacity).toBeGreaterThan(0.15);
+      expect(tint.opacity).toBeLessThan(0.6);
+      expect(gelOpacityForState(state)).toBeGreaterThanOrEqual(0.3);
+    }
+    // Locked covers most of the city; it must stay lighter than any lit state
+    // so healthy / at-risk / cooling neighbourhoods pop out of it.
+    const locked = gelTintForState("locked_opportunity").opacity;
+    for (const state of states.filter(s => s !== "locked_opportunity")) {
+      expect(gelTintForState(state).opacity).toBeGreaterThan(locked);
+    }
+    // Distinct hues for the three lit business states.
+    expect(new Set([gelTintForState("healthy").color, gelTintForState("at_risk").color, gelTintForState("cooling").color]).size).toBe(3);
   });
 
   it("never locks a territory that has real customer presence", () => {

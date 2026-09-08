@@ -57,35 +57,70 @@ export function LanternCommandDeck({
   );
 }
 
+/**
+ * Legend rows. Lantern rows use the very lantern art the city renders, so the
+ * key can never drift from the map. Neighbourhood rows use the gel tints.
+ */
+const LANTERN_LEGEND = [
+  { id: "active", label: "Active customer", hint: "Ordering on cadence", art: LANTERN_CITY_V5_ASSETS.lanterns.active },
+  { id: "cooling", label: "Cooling / Fading", hint: "Overdue — take action", art: LANTERN_CITY_V5_ASSETS.lanterns.cooling },
+  { id: "quiet", label: "Quiet / Dormant", hint: "Inactive — win back", art: LANTERN_CITY_V5_ASSETS.lanterns.quiet },
+  { id: "hearth", label: "Hearth", hint: "Verified recurring service", art: LANTERN_CITY_V5_ASSETS.lanterns.hearth },
+  { id: "opportunity", label: "Opportunity", hint: "Prospect to pursue", art: LANTERN_CITY_V5_ASSETS.lanterns.opportunity },
+] as const;
+
+const TERRITORY_LEGEND = [
+  { id: "healthy", label: "Healthy", tint: "#3fbf5a" },
+  { id: "at_risk", label: "At Risk", tint: "#f0a921" },
+  { id: "cooling", label: "Cooling", tint: "#e2542a" },
+  { id: "overgrown", label: "Overgrown / Decay", tint: "#557a1a" },
+  { id: "locked_opportunity", label: "Locked opportunity", tint: "#3a3f8f" },
+  { id: "lost_ground", label: "Lost · Re-earn", tint: "#5a5461" },
+] as const;
+
 export function LanternMapLegend({ collapsedDefault = false }: { collapsedDefault?: boolean }) {
   const [collapsed, setCollapsed] = useState(collapsedDefault);
   return (
-    <aside className={`lc-v5-legend${collapsed ? " is-collapsed" : ""}`}>
+    <aside
+      className={`lc-v5-legend${collapsed ? " is-collapsed" : ""}`}
+      aria-label="Lantern City legend"
+    >
       <button
         type="button"
         className="lc-v5-legend-toggle"
         onClick={() => setCollapsed(current => !current)}
         aria-expanded={!collapsed}
       >
-        Legend
+        {collapsed ? "Legend" : "Hide legend"}
       </button>
-      <img src={LANTERN_CITY_V5_ASSETS.hud.mapLegend} alt="" aria-hidden />
       {!collapsed ? (
-        <div className="lc-v5-legend-body">
-          <strong>Lanterns</strong>
-          <span>Active</span>
-          <span>Cooling</span>
-          <span>Quiet</span>
-          <span>Hearth</span>
-          <span>Opportunity</span>
-          <strong>Territories</strong>
-          <span>Healthy</span>
-          <span>At Risk</span>
-          <span>Cooling</span>
-          <span>Overgrown</span>
-          <span>Lost Ground</span>
-          <span>What Could Be</span>
-        </div>
+        <>
+          <div className="lc-v5-legend-frame">
+            <img src={LANTERN_CITY_V5_ASSETS.hud.mapLegend} alt="" aria-hidden />
+            <div className="lc-v5-legend-body" aria-label="Lantern status">
+              {LANTERN_LEGEND.map(row => (
+                <div className="lc-v5-legend-row" key={row.id} data-legend={row.id}>
+                  <img src={row.art} alt="" aria-hidden />
+                  <span>
+                    <b>{row.label}</b>
+                    <small>{row.hint}</small>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="lc-v5-legend-territories">
+            <strong className="lc-v5-legend-heading">Neighborhood state</strong>
+            <ul>
+              {TERRITORY_LEGEND.map(row => (
+                <li key={row.id} data-legend={row.id}>
+                  <i style={{ ["--lc-swatch" as string]: row.tint }} aria-hidden />
+                  <span>{row.label}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </>
       ) : null}
     </aside>
   );
