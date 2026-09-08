@@ -12,30 +12,46 @@ geography, camera, roads and buildings are identical across all four states
 by construction — there is no way for a camera-angle or skyline mismatch to
 occur.
 
+SHAPE: the alpha is not a rounded rectangle. It is built from the real,
+already-registered neighborhood silhouette mask committed at
+client/public/assets/admin/control-room/world/territories-v2/masks/<id>.png
+(a proper anti-aliased coverage mask, not a binary cutout — see
+shared/territoryMaskPackage.ts). The mask is contain-fit (its own aspect
+ratio preserved, never stretched) and centered inside the badge canvas, then
+heavily blurred, so the plate reads as "this real neighborhood went dark"
+rather than "a rectangle got pasted here."
+
 Seam-safety: each state's transformed RGB is blended back toward the
-UNTRANSFORMED base crop as a function of distance from center (full
-transform in the interior, ~0% transform at the perimeter), and only then
-does alpha feather to 0. So at the very edge, both RGB and alpha converge to
-"invisible" — not just alpha alone.
+UNTRANSFORMED base crop using a STEEPER falloff than the alpha channel
+itself (blend = alpha_field ** BLEND_EXPONENT), so the interior fully
+transforms, the RGB visibly relaxes toward the base well before the edge,
+and only then does alpha finish fading to 0. At the very edge, both RGB and
+alpha converge to "invisible" — not just alpha alone.
 
 Usage: python3 scripts/generate-lantern-city-v6-derived-territory-art.py
 """
-import json
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageFilter
 import numpy as np
-import colorsys
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BASE_PATH = REPO_ROOT / "client/public/assets/goldline/lantern-city/v6/world-neutral.png"
 DEST_ROOT = REPO_ROOT / "client/public/assets/goldline/lantern-city/v6/territories"
+MASK_ROOT = REPO_ROOT / "client/public/assets/admin/control-room/world/territories-v2/masks"
 
 WORLD_W, WORLD_H = 3840, 2160
 TARGET_W, TARGET_H = 1536, 994
-FEATHER_MARGIN_FRAC = 0.09
+MASK_BLUR_FRAC = 0.045  # gaussian blur radius as a fraction of canvas width
+BLEND_EXPONENT = 2.6  # blend (RGB relax) shrinks faster than alpha (visibility)
+MASK_INSET_FRAC = 0.08  # shrink the contain-fit mask inward so its own edge
+# never touches the canvas edge — guarantees room for the blur to fully
+# resolve to 0 before the badge's own bounding box, matching the seam-safe
+# lesson from Hollywood Locked V4.
 
 # territory: stateArtBounds (x,y,width,height) percent of world stage —
-# copied verbatim from territoryPresentation.ts's district() calls.
+# copied verbatim from territoryPresentation.ts's district() calls. This is
+# the RENDER position/size (unchanged) — only the alpha SHAPE within it
+# changes, from a rounded rectangle to the real neighborhood silhouette.
 STATE_ART_BOUNDS = {
     "west-hollywood": (23, 24, 20, 23),
     "beverly-hills": (4, 31, 20, 23),
@@ -48,37 +64,58 @@ STATE_ART_BOUNDS = {
     "westlake": (50, 52, 20, 23),
     "arts-district": (75, 67, 20, 23),
     "hollywood-hills-west": (22, 8, 20, 23),
+    # Hollywood was the worst-offending bespoke plate (a standalone painted
+    # ruins scene with almost no feather, reading as a hard dark rectangle
+    # on the board). Converting it to the same derived+masked method as
+    # every other territory makes the whole board consistent.
+    "hollywood": (40, 11, 20, 23),
 }
 STATES = ["healthy", "cooling", "infested", "locked"]
 
 
-def smoothstep_np(edge0, edge1, x):
-    t = np.clip((x - edge0) / (edge1 - edge0), 0.0, 1.0)
-    return t * t * (3 - 2 * t)
+def load_real_mask(territory: str, canvas_w: int, canvas_h: int) -> np.ndarray:
+    """The real, already-registered neighborhood silhouette (grayscale
+    coverage mask, 0=outside .. 255=inside), COVER-fit into the badge
+    canvas (scaled so it fully fills the inset frame, center-cropping
+    whichever axis overflows) and centered, then inset so its own edge
+    never touches the canvas boundary. Real neighborhoods span every
+    aspect ratio from tall (downtown, arts-district) to wide (mid-city);
+    contain-fit would shrink a tall mask to a thin sliver with mostly
+    empty padding on a fixed-aspect badge, reading as "barely there" —
+    cover-fit keeps every territory's badge consistently legible while
+    still following that territory's own real local silhouette in the
+    visible crop, not a rectangle."""
+    mask_path = MASK_ROOT / f"{territory}.png"
+    mask = Image.open(mask_path).convert("L")
+    mw, mh = mask.size
+
+    inset_w = canvas_w * (1 - 2 * MASK_INSET_FRAC)
+    inset_h = canvas_h * (1 - 2 * MASK_INSET_FRAC)
+    scale = max(inset_w / mw, inset_h / mh)
+    fit_w = max(1, round(mw * scale))
+    fit_h = max(1, round(mh * scale))
+    resized = mask.resize((fit_w, fit_h), Image.LANCZOS)
+    # center-crop the resized mask down to the inset frame
+    crop_x = max(0, (fit_w - round(inset_w)) // 2)
+    crop_y = max(0, (fit_h - round(inset_h)) // 2)
+    resized = resized.crop((crop_x, crop_y, crop_x + round(inset_w), crop_y + round(inset_h)))
+
+    canvas = Image.new("L", (canvas_w, canvas_h), 0)
+    ox = (canvas_w - resized.size[0]) // 2
+    oy = (canvas_h - resized.size[1]) // 2
+    canvas.paste(resized, (ox, oy))
+    return np.asarray(canvas, dtype=np.float64) / 255.0
 
 
-def build_feather_and_blend(w, h, margin_frac):
-    """Returns (alpha_mask[h,w] 0..1, blend_mask[h,w] 0..1).
-    alpha_mask: 0 at the outer edge, 1 through most of the interior.
-    blend_mask: how much of the transform to apply — 0 at edge (pure base
-    RGB), 1 in the interior — using a slightly larger margin than alpha so
-    the RGB itself visibly relaxes toward the base before alpha even starts
-    cutting in, exactly per the seam-safe requirement.
-    """
-    margin_x = w * margin_frac
-    margin_y = h * margin_frac
-    xs = np.arange(w, dtype=np.float64)
-    ys = np.arange(h, dtype=np.float64)
-    fx = smoothstep_np(0, margin_x, xs) * smoothstep_np(0, margin_x, (w - 1) - xs)
-    fy = smoothstep_np(0, margin_y, ys) * smoothstep_np(0, margin_y, (h - 1) - ys)
-    alpha_mask = fy[:, None] * fx[None, :]
-
-    blend_margin_x = w * (margin_frac * 1.8)
-    blend_margin_y = h * (margin_frac * 1.8)
-    bx = smoothstep_np(0, blend_margin_x, xs) * smoothstep_np(0, blend_margin_x, (w - 1) - xs)
-    by = smoothstep_np(0, blend_margin_y, ys) * smoothstep_np(0, blend_margin_y, (h - 1) - ys)
-    blend_mask = by[:, None] * bx[None, :]
-    return alpha_mask, blend_mask
+def build_alpha_and_blend(territory: str, w: int, h: int):
+    raw = load_real_mask(territory, w, h)
+    blur_radius = w * MASK_BLUR_FRAC
+    blurred = Image.fromarray((raw * 255).astype(np.uint8), mode="L").filter(
+        ImageFilter.GaussianBlur(radius=blur_radius)
+    )
+    alpha_field = np.asarray(blurred, dtype=np.float64) / 255.0
+    blend_field = alpha_field ** BLEND_EXPONENT
+    return alpha_field, blend_field
 
 
 def rgb_to_hsv_np(rgb):
@@ -126,6 +163,10 @@ def make_grime_texture(w: int, h: int, seed: int, strength: float) -> np.ndarray
 
 
 def apply_state_transform(rgb01: np.ndarray, state: str, seed: int = 0) -> np.ndarray:
+    """Commercially-toned state grading — noticeably distinct from healthy,
+    but roughly half the intensity of an earlier pass that read as a heavy
+    dark field doing all the storytelling on its own. Detail (grime
+    texture, beacons) carries more of the read than raw darkness now."""
     hsv = rgb_to_hsv_np(rgb01)
     h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
     if state == "healthy":
@@ -133,21 +174,21 @@ def apply_state_transform(rgb01: np.ndarray, state: str, seed: int = 0) -> np.nd
         s = np.clip(s * 1.18, 0, 1)
         h = (h + 0.01) % 1.0  # nudge slightly warm
     elif state == "cooling":
-        v = np.clip(v * 0.62, 0, 1)
-        s = np.clip(s * 0.40, 0, 1)
-        h = (h + 0.035) % 1.0  # amber/dusk nudge
+        v = np.clip(v * 0.78, 0, 1)
+        s = np.clip(s * 0.62, 0, 1)
+        h = (h + 0.03) % 1.0  # amber/dusk nudge
     elif state == "infested":
-        v = np.clip(v * 0.40, 0, 1)
-        s = np.clip(s * 0.18, 0, 1)
+        v = np.clip(v * 0.62, 0, 1)
+        s = np.clip(s * 0.42, 0, 1)
         # olive/gray push: pull hue toward ~0.22 (olive).
         target = 0.22
-        h = h + (target - h) * 0.55
+        h = h + (target - h) * 0.32
         h = h % 1.0
     elif state == "locked":
-        v = np.clip(v * 0.28, 0, 1)
-        s = np.clip(s * 0.45, 0, 1)
+        v = np.clip(v * 0.52, 0, 1)
+        s = np.clip(s * 0.55, 0, 1)
         target = 0.62  # cool blue
-        h = h + (target - h) * 0.55
+        h = h + (target - h) * 0.32
         h = h % 1.0
     hsv2 = np.stack([h, s, v], axis=-1)
     out = hsv_to_rgb_np(hsv2)
@@ -189,20 +230,20 @@ def generate_territory(territory: str, bounds: tuple[int, int, int, int], base: 
     crop = crop.resize((TARGET_W, TARGET_H), Image.LANCZOS)
     base_rgb01 = np.asarray(crop, dtype=np.float64) / 255.0
 
-    alpha_mask, blend_mask = build_feather_and_blend(TARGET_W, TARGET_H, FEATHER_MARGIN_FRAC)
+    alpha_field, blend_field = build_alpha_and_blend(territory, TARGET_W, TARGET_H)
 
     dest_dir = DEST_ROOT / territory
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     results = []
-    for i, state in enumerate(STATES):
+    for state in STATES:
         transformed = apply_state_transform(base_rgb01, state, seed=hash((territory, state, "grime")) & 0xFFFFFFFF)
         if state == "locked":
             transformed = add_locked_beacons(transformed, seed=hash((territory, state)) & 0xFFFFFFFF)
-        blend = blend_mask[..., None]
+        blend = blend_field[..., None]
         final_rgb01 = base_rgb01 * (1 - blend) + transformed * blend
         final_rgb = np.clip(final_rgb01 * 255.0, 0, 255).astype(np.uint8)
-        alpha = np.clip(alpha_mask * 255.0, 0, 255).astype(np.uint8)
+        alpha = np.clip(alpha_field * 255.0, 0, 255).astype(np.uint8)
         rgba = np.dstack([final_rgb, alpha])
         img = Image.fromarray(rgba, mode="RGBA")
         dest_path = dest_dir / f"{state}.png"
