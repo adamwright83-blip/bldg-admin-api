@@ -29,6 +29,14 @@ export function frontierKindForTerritory(territoryId: string): FrontierObjectKin
   );
 }
 
+/**
+ * Lost ground never recycles the prize. The balloon already flew; it cannot
+ * narratively land again. A previously held territory shows abandonment —
+ * a different machine than the one that departed — so "what was" reads
+ * differently from "what could be" while sharing the lock grammar.
+ */
 export function lostGroundKindForTerritory(territoryId: string): FrontierObjectKind {
-  return frontierKindForTerritory(territoryId);
+  const original = frontierKindForTerritory(territoryId);
+  const index = FRONTIER_OBJECT_KINDS.indexOf(original);
+  return FRONTIER_OBJECT_KINDS[(index + 1) % FRONTIER_OBJECT_KINDS.length]!;
 }

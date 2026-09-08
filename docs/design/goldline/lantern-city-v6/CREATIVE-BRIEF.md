@@ -124,6 +124,11 @@ Four to five figures, all real, each with a stated provenance. Approved shapes:
   date)
 - Dormant customers (dark cadence over total)
 - Buildings secured (canonical strongholds with real occupancy)
+- Recurring accounts (customers on a standing pickup schedule). This is the
+  Defend metric.
+
+Weekly deltas such as "+127 / wk" appear only with real week-over-week
+provenance. Weather is never in the bar; real weather lives in the sky overlay.
 
 Rejected: any scalar with no denominator or provenance. "IMPACT 8,930" is fake
 XP. "TERRITORY 58%" is allowed only if the denominator is defined. A weather
@@ -136,7 +141,9 @@ equal tasks. Other available operations may be collapsed beneath it.
 
 Contents, in order: a strong-verb title, the territory, a short briefing
 (one to three sentences, sparse, in the house voice), primary objectives with
-real-ratio progress, a Launch Operation control that hands off into gameplay.
+real-ratio progress, a Launch Operation control that hands off into gameplay. On desktop, Launch
+commits the operation and the Driver receives it; the action is done in the
+field, never resolved inside this rail.
 
 Objectives are truth-derived. Each is a ratio of real events:
 - "RELIGHT <real customer name>" 0/1 (dormant customer places an order)
@@ -150,9 +157,15 @@ of real dormant recoveries. A percentage of nothing is banned.
 
 ### Center: the living city
 
-The dominant visual surface. Real geography, painterly, daylight. Territory
+The dominant visual surface. Real geography, painterly, lit by the real Los
+Angeles day phase (`WorldDayPhase`). The September dusk concept is what 7 PM
+looks like; marketing and default screenshots are daylight. Territory
 chips carry a state and an action hint, not a state alone. "SILVER LAKE ·
 INFESTED · 16 at risk" plus the operation verb beats "Infested · 16 customers."
+"At risk" means customers in the dimming cadence state; state the definition
+wherever the count appears. Frontier chips never say GUARDED or LOCKED (the
+first echoes the retired Guardians, the second says keep out); they carry the
+object's verb only: OPEN THE BALLOON, REBUILD THE BIRD.
 
 ### Right panel: Field Intel (the dossier)
 
@@ -329,17 +342,65 @@ dossier on the right. The server derives the operation in
   first order after operation start appears in the territory
 - a scoreboard with provenance strings on every figure
 
+Shared truth modules added 2026-09-08, each with tests, none yet rendered:
+
+- `shared/lanternDecayForecast.ts` — "goes quiet in N days unless one order
+  lands", pure cadence arithmetic run forward through the real visual-state
+  reducer. Sparse cadence never forecasts. Horizon capped at 45 days.
+- `shared/lanternFrontierCap.ts` — at most five visible frontier objects,
+  priority: active campaign, lost ground, authored order. Overflow renders
+  quiet with no object and no lock.
+- `shared/lanternFrontierPresentation.ts` — `lostGroundKindForTerritory` now
+  returns a different machine from the prize that departed. Wired into
+  `composeLanternCityScene`.
+- `shared/rekindlingArsenal.ts` — tool truth classes (system_sent, attested,
+  redeemable), spark/ember/flame from the impact ladder, real cooldowns,
+  Golden Seal cost, and a sent line that makes no promise.
+
 Territory state art is registered to real neighborhood masks (not boxes).
 Building identity is canonical across Home, Lantern City, and Tower Wars via
 `buildingArt.ts`. The layer-toggle panel is gone.
 
-Concept images from September carry placeholder numbers, a weather widget, a
-handler NPC, a fictional prospect, and padlocks. They are mood boards. This
-document is the authority on what survives from them.
+The September concept images are the **layout authority**: five zones, one
+featured operation, the dossier, the dock. This document is the **truth
+authority**. Where they conflict (placeholder numbers, a weather widget, a
+handler NPC, a fictional prospect, padlocks, GUARDED labels, an authored
+district tagline, dusk as the default), this document wins. The Meta "tycoon"
+light-mode concept (cash, reputation, citizens, power, water, materials,
+mission rewards, upgrades, research, time-speed controls) is rejected in full;
+only its daylight palette survives.
 
 ---
 
-## 11. Decision rules when forced to choose
+## 11. Decay, defence, and rescue (rulings added 2026-09-08)
+
+1. **Decay advances only at nightly settlement.** Visual state is derived per
+   business date, the same rule as Tower Wars folding. Nobody watches a rat
+   appear at 3 PM. Improvement (a real order) may show immediately; decline
+   only ever appears overnight, which is what makes the evening replay the
+   moment the city changes.
+2. **Decay is forecast, not just observed.** Field Intel carries one line:
+   "Goes quiet in N days unless one order lands." Cadence arithmetic only;
+   sparse cadence says nothing.
+3. **Frontier cap of five visible objects, including lost ground.** Past the
+   cap a territory is quiet and dark, not blockaded. Lost ground uses a
+   distinct abandonment object, never the prize that already left.
+4. **Rescue has two outs: rekindle or replace.** The building is the durable
+   entity. A new resident in the same building counts as rescue.
+5. **Defend means converting a customer to a standing recurring pickup.** A
+   recurring customer's lantern is a hearth: heavier glass, slower to dim.
+   Outreach to a healthy customer is spam, not defence.
+6. **Arsenal tools carry truth classes and three states.** Sent is a spark,
+   a real reply is an ember, an order is the flame. Cooldowns are real. The
+   Golden Seal shows its cost. Copy never promises the light will answer.
+7. **Infestation and every decay state are operator-private.** No public or
+   consumer surface ever shows decay, lost ground, or a lock on previously
+   held territory. Public surfaces show earned glow only.
+8. **Blame is banned in copy.** Cooling, quiet, gone quiet, overgrown.
+   Never "neglect". The art may keep rats and plywood; the words never say
+   the operator did this.
+
+## 12. Decision rules when forced to choose
 
 - A beautiful dashboard or a legible game: the legible game.
 - A fun fake progression mechanic or a real one: the real one.

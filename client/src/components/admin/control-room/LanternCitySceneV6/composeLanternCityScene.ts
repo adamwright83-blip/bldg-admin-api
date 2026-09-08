@@ -20,7 +20,7 @@ import {
 } from "../customerGeography";
 import type { GeographicCustomer } from "../customerGeography";
 import { LANTERN_CITY_V5_ASSETS as ASSETS } from "@/components/goldline/lanternCityV5Assets";
-import { frontierKindForTerritory } from "@shared/lanternFrontierPresentation";
+import { frontierKindForTerritory, lostGroundKindForTerritory } from "@shared/lanternFrontierPresentation";
 import {
   presentationFor,
   TERRITORY_PRESENTATION,
@@ -261,9 +261,11 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
     // from anything but real occupancy/state truth already computed above.
     const isLostGround = truth.state === "lost_ground";
     const frontierKind =
-      !cluster && (truth.occupancy.guarded || isLostGround)
-        ? frontierKindForTerritory(territory.id)
-        : undefined;
+      !cluster && isLostGround
+        ? lostGroundKindForTerritory(territory.id)
+        : !cluster && truth.occupancy.guarded
+          ? frontierKindForTerritory(territory.id)
+          : undefined;
     candidates.push({
       id: `territory:${territory.id}`,
       territoryId: territory.id,
