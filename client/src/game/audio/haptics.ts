@@ -77,6 +77,19 @@ export function combatRevealFeedback() {
   vibrate([16, 24, 28]);
 }
 
+/**
+ * A single real, server-confirmed task resolving (finishExpeditionAtStronghold) —
+ * a genuine authoritative fact, but a smaller one than businessVictoryFeedback's
+ * reserved "verified capture" tier (a Stronghold win). Deliberately between
+ * arcadeFeedback and businessVictoryFeedback rather than reusing either: the
+ * task completing used to feel identical to landing a single strike, which
+ * undersold it, but promoting it all the way to the victory tier would have
+ * cheapened that tier's exclusivity instead.
+ */
+export function taskCompleteFeedback() {
+  vibrate([20, 25, 35]);
+}
+
 /** Distinct, stronger pattern reserved for an authoritative business win. */
 export function businessVictoryFeedback() {
   vibrate([30, 40, 60]);

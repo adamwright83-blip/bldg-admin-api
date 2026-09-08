@@ -98,6 +98,7 @@ import {
   combatHurtFeedback,
   missionApproachFeedback,
   missFeedback,
+  taskCompleteFeedback,
 } from "./audio/haptics";
 import { planPickupExpedition } from "./expedition/expeditionPlan";
 import {
@@ -2118,9 +2119,24 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
 
     // Server-verified feedback. For Open Channel this means the persisted
     // task is completed; it does NOT imply a customer, revenue, or pickup.
+    //
+    // This used to play identical feedback to landing a single strike or
+    // taking a relic — the exact same arcadeFeedback() pulse regardless of
+    // whether the player had just picked something up or finished the
+    // entire real-world objective they came here for. taskCompleteFeedback
+    // sits deliberately between that light pulse and businessVictoryFeedback
+    // (reserved for a genuinely bigger authoritative win, a Stronghold
+    // capture) rather than reusing either tier — a real completion, but not
+    // the biggest one this game has. The second audio note lands once the
+    // first has actually finished playing rather than overlapping it, for a
+    // two-step "resolved" cadence instead of one flat cue.
     getAudioManager().play("captured_truth");
-    arcadeFeedback();
+    taskCompleteFeedback();
+    const capabilityNoteTimeout = window.setTimeout(() => {
+      getAudioManager().play("capability_available");
+    }, 230);
     runtimeRef.current?.finishExpeditionAtStronghold();
+    return () => window.clearTimeout(capabilityNoteTimeout);
   }, [activeExpedition, objectiveConfirmed]);
 
   useEffect(() => {

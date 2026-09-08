@@ -261,6 +261,18 @@ export class ExpeditionLayer {
    */
   private actorHost: Container | null = null;
   private hostileVisuals = new Map<string, HostileVisual>();
+  /**
+   * A hostile reaching zero HP used to be destroy()'d the same frame — no
+   * death animation, no particle burst, no fade, just gone. The only
+   * feedback was whatever hitFlash was already playing for the killing
+   * blow. This keeps a dying hostile's visual alive for one brief window so
+   * it can pop and shrink away instead of vanishing, keyed separately from
+   * hostileVisuals so the main per-frame hostile loop (which reads directly
+   * from the live, alive hostiles list) never has to know dying visuals
+   * exist.
+   */
+  private dyingHostiles = new Map<string, { root: Container; startedAt: number }>();
+  private static readonly DEATH_ANIMATION_SECONDS = 0.42;
   private propVisuals = new Map<string, HostileVisual>();
   private textures = new Map<string, Texture>();
 
@@ -1604,6 +1616,7 @@ export class ExpeditionLayer {
     }
 
     this.reapSprites();
+    this.updateDyingHostiles();
     // Ground paint first: the road the player is choosing between, and the
     // pool marking where they are going.
     this.drawGroundPaint(project);
@@ -2588,10 +2601,53 @@ export class ExpeditionLayer {
     }
     for (const [id, visual] of Array.from(this.hostileVisuals.entries())) {
       const hostile = this.hostiles.find(h => h.id === id);
-      if (!hostile || !hostile.alive) {
+      if (!hostile) {
+        // Gone from the plan entirely (not a death) — no animation earned.
         visual.root.destroy({ children: true });
         this.hostileVisuals.delete(id);
+      } else if (!hostile.alive) {
+        // A genuine death: hand the visual to the dying-animation step
+        // instead of destroying it immediately.
+        this.hostileVisuals.delete(id);
+        this.dyingHostiles.set(id, {
+          root: visual.root,
+          startedAt: this.clock.fictionalElapsedSeconds(),
+        });
       }
+    }
+    for (const [id, dying] of Array.from(this.dyingHostiles.entries())) {
+      if (
+        this.clock.fictionalElapsedSeconds() - dying.startedAt >=
+        ExpeditionLayer.DEATH_ANIMATION_SECONDS
+      ) {
+        dying.root.destroy({ children: true });
+        this.dyingHostiles.delete(id);
+      }
+    }
+  }
+
+  /**
+   * A quick pop (a brief overshoot, as if the last hit's impact is still
+   * carrying through) followed by an accelerating shrink-and-fade — reads
+   * as a real defeat rather than an object being deleted. Runs on the
+   * root, not the body, since the body drives ordinary hit reactions and a
+   * dying hostile is done reacting to anything else.
+   */
+  private updateDyingHostiles() {
+    if (this.dyingHostiles.size === 0) return;
+    const t = this.clock.fictionalElapsedSeconds();
+    for (const dying of Array.from(this.dyingHostiles.values())) {
+      const progress = Math.min(
+        1,
+        (t - dying.startedAt) / ExpeditionLayer.DEATH_ANIMATION_SECONDS
+      );
+      const popWindow = 0.16;
+      const scale =
+        progress < popWindow
+          ? 1 + (progress / popWindow) * 0.22
+          : 1.22 * Math.pow(1 - (progress - popWindow) / (1 - popWindow), 1.6);
+      dying.root.scale.set(Math.max(0.02, scale));
+      dying.root.alpha = progress < popWindow ? 1 : 1 - (progress - popWindow) / (1 - popWindow);
     }
   }
 
@@ -2917,6 +2973,10 @@ export class ExpeditionLayer {
       v.root.destroy({ children: true });
     }
     this.hostileVisuals.clear();
+    for (const dying of Array.from(this.dyingHostiles.values())) {
+      dying.root.destroy({ children: true });
+    }
+    this.dyingHostiles.clear();
     for (const v of Array.from(this.propVisuals.values())) {
       v.root.destroy({ children: true });
     }
