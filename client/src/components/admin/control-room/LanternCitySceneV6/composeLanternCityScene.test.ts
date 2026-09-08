@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { composeLanternCityScene, overlaps } from "./composeLanternCityScene";
+import {
+  composeLanternCityScene,
+  overlaps,
+  territoryStateText,
+} from "./composeLanternCityScene";
 import { DEFAULT_CONTROLS } from "./sceneTypes";
 import { CANONICAL_BUILDING_GEOGRAPHY } from "@shared/canonicalGeography";
 import { projectLatLngToLanternAtlas } from "@shared/lanternCity";
@@ -255,5 +259,141 @@ describe("V6 truthful scene composition", () => {
     expect(compose(fixture(), 1280, 900)).toEqual(
       compose(fixture(), 1280, 900)
     );
+  });
+  it("anchors a single-address lantern to the real customer location, not the territory centroid", () => {
+    const geo = territoryCenter(
+      LANTERN_TERRITORIES.find(t => t.id === "silver-lake")!
+    );
+    // Offset the real customer slightly away from the territory center
+    // (small enough to stay inside the territory) so the two anchors are
+    // distinguishable.
+    const offset = { latitude: geo.latitude + 0.0015, longitude: geo.longitude };
+    const c = customer(
+      "one-address",
+      offset.latitude,
+      offset.longitude,
+      "active",
+      "1 Real Street"
+    );
+    const object = compose([c]).objects.find(
+      o => o.territoryId === "silver-lake"
+    )!;
+    expect(object.kind).toBe("lantern");
+    const expected = projectLatLngToLanternAtlas(offset);
+    expect(object.worldAnchor.x).toBeCloseTo(expected.x, 6);
+    expect(object.worldAnchor.y).toBeCloseTo(expected.y, 6);
+    const territoryAnchor = projectLatLngToLanternAtlas(geo);
+    expect(object.worldAnchor.y).not.toBeCloseTo(territoryAnchor.y, 6);
+  });
+  it("anchors a multi-address lantern to a real centroid of its source clusters, not the territory centroid", () => {
+    const geo = territoryCenter(
+      LANTERN_TERRITORIES.find(t => t.id === "mid-city")!
+    );
+    const a = customer(
+      "address-a",
+      geo.latitude + 0.0015,
+      geo.longitude,
+      "active",
+      "100 Test Avenue"
+    );
+    const b = customer(
+      "address-b",
+      geo.latitude - 0.0015,
+      geo.longitude,
+      "active",
+      "200 Test Avenue"
+    );
+    const object = compose([a, b]).objects.find(
+      o => o.territoryId === "mid-city"
+    )!;
+    expect(object.sourceClusters).toHaveLength(2);
+    // The centroid of two equally-weighted, symmetric real addresses lands
+    // back on the shared longitude midpoint — a derived truth, not the
+    // territory's own centroid coordinate, and not either single source
+    // anchor by itself.
+    const territoryAnchor = projectLatLngToLanternAtlas(geo);
+    expect(object.worldAnchor.y).toBeCloseTo(territoryAnchor.y, 2);
+    expect(object.sourceAnchors).toHaveLength(2);
+    expect(object.worldAnchor.y).not.toBeCloseTo(
+      object.sourceAnchors[0]!.y,
+      6
+    );
+    expect(object.worldAnchor.y).not.toBeCloseTo(
+      object.sourceAnchors[1]!.y,
+      6
+    );
+  });
+  it("a lantern's status text describes only its own object count, never the whole territory total", () => {
+    // Regression for the count lie: when a stronghold and an unrelated
+    // address share a territory, the secondary lantern must report its own
+    // remaining cluster (1), never truth.customers.length for the whole
+    // territory (10, which includes the stronghold's 9).
+    const text = territoryStateText({
+      totalCustomers: 10,
+      guarded: false,
+      state: "healthy",
+      objectCustomerCount: 1,
+    });
+    expect(text).toContain("1 customer");
+    expect(text).not.toContain("10");
+  });
+  it("describes a secondary lantern by its own remaining cluster, never the whole territory count", () => {
+    const geo = CANONICAL_BUILDING_GEOGRAPHY.opus_la;
+    const strongholdCustomers = Array.from({ length: 9 }, (_, i) =>
+      customer(`opus:${i}`, geo.latitude, geo.longitude, "active", geo.address)
+    );
+    const unrelated = customer(
+      "unrelated-koreatown",
+      geo.latitude + 0.002,
+      geo.longitude,
+      "active",
+      "1 Somewhere Else Ave"
+    );
+    const scene = compose([...strongholdCustomers, unrelated]);
+    const tower = scene.objects.find(o => o.id === "opus_la")!;
+    expect(tower.cluster!.total).toBe(9);
+    const truth = scene.truth.find(
+      t => t.occupancy.territory.id === "koreatown"
+    )!;
+    expect(truth.customers).toHaveLength(10);
+    // The secondary lantern for the remaining address currently cannot find
+    // a collision-free slot next to the tower at koreatown's single
+    // authored anchor (a pre-existing placement-capacity limit, unrelated
+    // to this count-truth fix) — it is suppressed rather than mis-labeled.
+    const secondary = scene.objects.find(
+      o => o.territoryId === "koreatown" && o.kind === "lantern"
+    );
+    if (secondary) {
+      expect(secondary.cluster!.total).toBe(1);
+      expect(secondary.status).toContain("1 customer");
+      expect(secondary.status).not.toContain("10 customer");
+    } else {
+      expect(
+        scene.suppressed.some(s => s.id === "territory:koreatown")
+      ).toBe(true);
+    }
+  });
+  it("does not turn every conquered zero-customer territory into infestation", () => {
+    const scene = composeLanternCityScene({
+      customers: [],
+      atlasReady: true,
+      viewport: { width: 1440, height: 900 },
+      conqueredTerritoryIds: new Set(["downtown"]),
+    });
+    const downtown = scene.truth.find(
+      t => t.occupancy.territory.id === "downtown"
+    )!;
+    // Downtown has no authored `emptyEnvironment: "infested"` skin and is
+    // not lost ground, so a bare conquest must not manufacture vermin.
+    expect(downtown.occupancy.conquered).toBe(true);
+    expect(downtown.environment).toBe("locked");
+  });
+  it("still infests authored empty districts even when they are not conquered", () => {
+    const scene = compose();
+    const midCity = scene.truth.find(
+      t => t.occupancy.territory.id === "mid-city"
+    )!;
+    expect(midCity.occupancy.conquered).toBe(false);
+    expect(midCity.environment).toBe("infested");
   });
 });

@@ -76,6 +76,19 @@ test.describe("Lantern City V6 route and retained workflows", () => {
     }
     expect(errors).toEqual([]);
   });
+  test("the attached stronghold customer light opens the customer inspector instead of Tower Wars", async ({
+    page,
+  }) => {
+    await page.goto("/growth/lantern-city");
+    const light = page
+      .locator('[data-scene-id="opus_la"] [data-scene-target="light"]')
+      .first();
+    await expect(light).toBeVisible();
+    await light.click();
+    await expect(page.locator(".owi")).toBeVisible();
+    await expect(page).toHaveURL(/\/growth\/lantern-city/);
+    await expect(page).not.toHaveURL(/tower-wars/);
+  });
   test("frozen V5 is still available for comparison", async ({ page }) => {
     await page.goto("/growth/lantern-city?scene=v5");
     await expect(page.locator(".lc-page.lc-v5-game")).toBeVisible();

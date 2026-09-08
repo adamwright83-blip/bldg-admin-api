@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, SyntheticEvent } from "react";
 import { LANTERN_CITY_V5_ASSETS as ASSETS } from "@/components/goldline/lanternCityV5Assets";
 import {
   clusterLanternState,
@@ -48,10 +48,12 @@ export function Stronghold({
   object,
   damage,
   showLight,
+  onSelectLight,
 }: {
   object: SceneObject;
   showLight: boolean;
   damage?: TowerDamageState;
+  onSelectLight?: (event: SyntheticEvent<HTMLElement>) => void;
 }) {
   const art = combatTowerArtFor(object.buildingId!, damage ?? null);
   return (
@@ -66,7 +68,23 @@ export function Stronghold({
         draggable={false}
       />
       {showLight && object.cluster && object.cluster.total > 0 ? (
-        <span className={styles.towerLight}>
+        <span
+          className={styles.towerLight}
+          role="button"
+          tabIndex={0}
+          aria-label={`${object.name} customers: ${object.cluster.total}`}
+          data-scene-target="light"
+          onClick={event => {
+            event.stopPropagation();
+            onSelectLight?.(event);
+          }}
+          onKeyDown={event => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            event.stopPropagation();
+            onSelectLight?.(event);
+          }}
+        >
           <CustomerLantern object={object} />
           <b>{object.cluster.total}</b>
         </span>
@@ -82,6 +100,7 @@ export function TerritoryLabel({ object }: { object: SceneObject }) {
     </span>
   );
 }
+export type SceneSelectTarget = "tower" | "light" | "default";
 export function LanternCitySceneRenderer({
   scene,
   selectedId,
@@ -91,7 +110,11 @@ export function LanternCitySceneRenderer({
   scene: CityScene;
   selectedId?: string | null;
   damage?: Partial<Record<CanonicalBuildingId, TowerDamageState>>;
-  onSelect: (object: SceneObject, element: HTMLElement) => void;
+  onSelect: (
+    object: SceneObject,
+    element: HTMLElement,
+    target?: SceneSelectTarget
+  ) => void;
 }) {
   return (
     <div
@@ -130,8 +153,18 @@ export function LanternCitySceneRenderer({
           data-world-anchor={`${object.worldAnchor.x},${object.worldAnchor.y}`}
           data-display-anchor={`${object.displayAnchor.x},${object.displayAnchor.y}`}
           data-selected={selectedId === object.id}
-          aria-label={`${object.name}: ${object.status}`}
-          onClick={event => onSelect(object, event.currentTarget)}
+          aria-label={
+            object.kind === "stronghold"
+              ? `${object.name}: Enter Tower Wars`
+              : `${object.name}: ${object.status}`
+          }
+          onClick={event =>
+            onSelect(
+              object,
+              event.currentTarget,
+              object.kind === "stronghold" ? "tower" : "default"
+            )
+          }
         >
           <span
             className={styles.objectArt}
@@ -145,6 +178,9 @@ export function LanternCitySceneRenderer({
                 object={object}
                 showLight={scene.controls.lanterns}
                 damage={damage?.[object.buildingId!]}
+                onSelectLight={event =>
+                  onSelect(object, event.currentTarget, "light")
+                }
               />
             ) : null}
             {object.kind === "lock" ? (

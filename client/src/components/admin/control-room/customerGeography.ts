@@ -112,6 +112,36 @@ export function clusterCoveredByAtlasPoint(
   return atlasPointsOverlap(cluster, point);
 }
 
+/**
+ * Truthful world position for a lantern that aggregates several physical
+ * addresses: a customer-count-weighted centroid of the real cluster
+ * locations, never a territory centroid. Every real source location stays
+ * available separately via the caller's sourceAnchors/sourceClusters.
+ */
+export function centroidOfClusters(
+  clusters: readonly CustomerLocationCluster[]
+): { x: number; y: number; latitude: number; longitude: number } {
+  const weight = (c: CustomerLocationCluster) => c.total || 1;
+  const totalWeight = clusters.reduce((sum, c) => sum + weight(c), 0);
+  const sum = clusters.reduce(
+    (acc, c) => {
+      const w = weight(c);
+      acc.x += c.x * w;
+      acc.y += c.y * w;
+      acc.latitude += c.latitude * w;
+      acc.longitude += c.longitude * w;
+      return acc;
+    },
+    { x: 0, y: 0, latitude: 0, longitude: 0 }
+  );
+  return {
+    x: sum.x / totalWeight,
+    y: sum.y / totalWeight,
+    latitude: sum.latitude / totalWeight,
+    longitude: sum.longitude / totalWeight,
+  };
+}
+
 /** Fold several clusters of the same premise into one light with one count. */
 export function mergeClusters(
   clusters: readonly CustomerLocationCluster[]

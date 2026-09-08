@@ -8,7 +8,10 @@ import { RekindlingArsenal } from "../RekindlingArsenal";
 import { CampaignChronicleList } from "@/components/goldline/CampaignWorldLayer";
 import { useWorldTransition } from "../WorldTransitionProvider";
 import { composeLanternCityScene } from "./composeLanternCityScene";
-import { LanternCitySceneRenderer } from "./LanternCitySceneRenderer";
+import {
+  LanternCitySceneRenderer,
+  type SceneSelectTarget,
+} from "./LanternCitySceneRenderer";
 import { LanternCityHUD, type Command } from "./LanternCityHUD";
 import {
   DEFAULT_CONTROLS,
@@ -272,10 +275,17 @@ export default function LanternCityScene({
     setCommand("map");
     setControls(DEFAULT_CONTROLS);
   }
-  function select(object: SceneObject, element: HTMLElement) {
+  function select(
+    object: SceneObject,
+    element: HTMLElement,
+    target: SceneSelectTarget = "default"
+  ) {
     setSelectedId(object.id);
     setSelectedClusterKey(null);
-    if (object.buildingId) {
+    // The stronghold tower and its attached live customer light are one
+    // scene object but two interaction targets: the tower body enters
+    // Tower Wars, the attached light opens the customer inspector.
+    if (object.buildingId && target !== "light") {
       transition.begin({
         entityId: object.buildingId,
         from: "city",

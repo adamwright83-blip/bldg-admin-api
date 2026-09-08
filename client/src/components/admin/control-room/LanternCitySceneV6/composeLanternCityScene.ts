@@ -8,11 +8,13 @@ import { projectLatLngToLanternAtlas } from "@shared/lanternCity";
 import {
   deriveTerritoryVisualState,
   territoryVisualStateLabel,
+  type TerritoryVisualState,
 } from "@shared/lanternTerritoryVisualState";
 import {
   clusterGeographicCustomers,
   clusterAtCanonicalAddress,
   clusterCoveredByAtlasPoint,
+  centroidOfClusters,
   mergeClusters,
 } from "../customerGeography";
 import type { GeographicCustomer } from "../customerGeography";
@@ -40,6 +42,23 @@ export function overlaps(a: Rect, b: Rect, gap = 8) {
     a.y < b.y + b.height + gap &&
     a.y + a.height + gap > b.y
   );
+}
+/**
+ * A scene object's status text must describe that object, not the whole
+ * territory. `objectCustomerCount` is the count the object itself carries
+ * (its own cluster total) — never the territory-wide truth.customers.length
+ * when the object is only one of several lanterns sharing a territory.
+ */
+export function territoryStateText(params: {
+  totalCustomers: number;
+  guarded: boolean;
+  state: TerritoryVisualState;
+  objectCustomerCount: number;
+}): string {
+  const { totalCustomers, guarded, state, objectCustomerCount } = params;
+  return !totalCustomers
+    ? `${guarded ? "Guarded · " : ""}0 customers`
+    : `${territoryVisualStateLabel(state)} · ${objectCustomerCount} customer${objectCustomerCount === 1 ? "" : "s"}`;
 }
 export function hudLayout(width: number, height: number) {
   const compact = width < 1400;
@@ -114,7 +133,7 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
     const emptySkin =
       TERRITORY_PRESENTATION[row.territory.id]?.emptyEnvironment;
     const environment: TerritoryTruth["environment"] = !customers.length
-      ? emptySkin === "infested" || state === "lost_ground" || row.conquered
+      ? emptySkin === "infested" || state === "lost_ground"
         ? "infested"
         : "locked"
       : ["infested", "overgrown", "closed_construction"].includes(state)
@@ -129,6 +148,12 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
   const candidates: Array<
     Omit<SceneObject, "displayAnchor" | "bounds" | "artBounds" | "labelBounds">
   > = [];
+  // Placement anchoring stays territory-geography-based even where
+  // worldAnchor (truth) now points at a specific customer address.
+  const territoryPresentationCache = new Map<
+    string,
+    ReturnType<typeof presentationFor>
+  >();
   for (const buildingId of ["opus_la", "century_park_east"] as const) {
     const geo = CANONICAL_BUILDING_GEOGRAPHY[buildingId];
     const worldAnchor = projectLatLngToLanternAtlas(geo);
@@ -171,8 +196,9 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
   for (const truth of scene.truth) {
     const { territory } = truth.occupancy;
     const geo = territoryCenter(territory);
-    const worldAnchor = projectLatLngToLanternAtlas(geo);
-    const presentation = presentationFor(territory.id, worldAnchor);
+    const territoryWorldAnchor = projectLatLngToLanternAtlas(geo);
+    const presentation = presentationFor(territory.id, territoryWorldAnchor);
+    territoryPresentationCache.set(territory.id, presentation);
     const remaining = truth.customers.filter(
       c => !clusters.some(g => assigned.has(g.key) && g.customers.includes(c))
     );
@@ -188,7 +214,10 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
       input.selectedTerritory !== territory.id
     )
       continue;
-    if (worldAnchor.outOfBounds && !TERRITORY_PRESENTATION[territory.id])
+    if (
+      territoryWorldAnchor.outOfBounds &&
+      !TERRITORY_PRESENTATION[territory.id]
+    )
       continue;
     const kind =
       cluster && controls.lanterns
@@ -196,9 +225,23 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
         : truth.environment === "locked"
           ? "lock"
           : "environment";
-    const stateText = !truth.customers.length
-      ? `${truth.occupancy.guarded ? "Guarded · " : ""}0 customers`
-      : `${territoryVisualStateLabel(truth.state)} · ${truth.customers.length} customer${truth.customers.length === 1 ? "" : "s"}`;
+    // worldAnchor is geographic truth: a single real address for one
+    // physical cluster, a weighted centroid of real addresses for an
+    // aggregate, and the territory centroid only for objects that don't
+    // represent any specific customer (locks/environment skins).
+    const worldAnchor =
+      kind === "lantern" && groups.length === 1
+        ? { x: groups[0]!.x, y: groups[0]!.y }
+        : kind === "lantern" && groups.length > 1
+          ? centroidOfClusters(groups)
+          : territoryWorldAnchor;
+    const objectCustomerCount = cluster?.total ?? truth.customers.length;
+    const stateText = territoryStateText({
+      totalCustomers: truth.customers.length,
+      guarded: truth.occupancy.guarded,
+      state: truth.state,
+      objectCustomerCount,
+    });
     candidates.push({
       id: `territory:${territory.id}`,
       territoryId: territory.id,
@@ -260,7 +303,9 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
   const occupied: Rect[] = [...exclusions];
   let heroSlots = 3;
   for (const candidate of candidates) {
-    const p = presentationFor(candidate.territoryId, candidate.worldAnchor);
+    const p =
+      territoryPresentationCache.get(candidate.territoryId) ??
+      presentationFor(candidate.territoryId, candidate.worldAnchor);
     const count = candidate.cluster?.total ?? 0;
     const hero =
       heroSlots > 0 && (candidate.kind === "stronghold" || count >= 6);
