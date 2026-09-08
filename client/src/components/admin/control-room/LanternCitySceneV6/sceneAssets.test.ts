@@ -16,6 +16,9 @@ const CANONICAL_TERRITORIES = [
   "mid-city",
   "echo-park",
   "downtown",
+  "westlake",
+  "arts-district",
+  "hollywood-hills-west",
 ] as const;
 const STATES: EnvironmentState[] = ["healthy", "cooling", "infested", "locked"];
 const PUBLIC_ROOT = join(__dirname, "../../../../../public");
@@ -26,7 +29,7 @@ describe("SCENE_ART registry", () => {
       "/assets/goldline/lantern-city/v6/world-neutral.png"
     );
   });
-  it("resolves all 11 canonical territories x 4 states — 44 mappings", () => {
+  it("resolves all 14 authored territories x 4 states — 56 mappings", () => {
     const seen = new Set<string>();
     let count = 0;
     for (const territoryId of CANONICAL_TERRITORIES) {
@@ -44,10 +47,10 @@ describe("SCENE_ART registry", () => {
         count++;
       }
     }
-    expect(count).toBe(44);
-    expect(seen.size).toBe(44);
+    expect(count).toBe(56);
+    expect(seen.size).toBe(56);
   });
-  it("every one of the 44 production paths resolves to a real committed file", () => {
+  it("every one of the 56 production paths resolves to a real committed file", () => {
     for (const territoryId of CANONICAL_TERRITORIES) {
       for (const state of STATES) {
         const path = statePlateAsset(territoryId, state)!;
@@ -60,10 +63,10 @@ describe("SCENE_ART registry", () => {
   });
   it("leaves every non-canonical territory entirely null, never falling back to another territory's plate", () => {
     for (const territoryId of [
-      "hollywood-hills-west",
-      "arts-district",
-      "westlake",
+      "silver-lake-north",
       "not-a-real-territory",
+      "university-park",
+      "beverly-crest",
     ]) {
       for (const state of STATES) {
         expect(statePlateAsset(territoryId, state)).toBeNull();

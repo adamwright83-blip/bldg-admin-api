@@ -263,6 +263,39 @@ describe("V6 truthful scene composition", () => {
       "200 Test Avenue",
     ]);
   });
+  it.each([
+    [1920, 1080],
+    [1440, 900],
+    [1280, 900],
+  ])(
+    "keeps a territory's environment plate even when its own interactive object is suppressed by collision pressure, at %ix%i",
+    (width, height) => {
+      // A dense customer load right on top of the OPUS stronghold is
+      // exactly the scenario that used to starve the koreatown customer
+      // lantern's placement search — and, before the environment/object
+      // split, silently dropped koreatown's environment plate along with
+      // the suppressed lantern object, even though koreatown itself is far
+      // from any HUD exclusion zone.
+      const opus = CANONICAL_BUILDING_GEOGRAPHY.opus_la;
+      const dense = [
+        ...Array.from({ length: 9 }, (_, i) =>
+          customer(`opus:${i}`, opus.latitude, opus.longitude, "active", opus.address)
+        ),
+        customer(
+          "unrelated-koreatown",
+          opus.latitude + 0.002,
+          opus.longitude,
+          "active",
+          "1 Somewhere Else Ave"
+        ),
+      ];
+      const scene = compose(dense, width, height);
+      const truth = scene.truth.find(t => t.occupancy.territory.id === "koreatown")!;
+      expect(
+        scene.plates.some(p => p.territoryId === "koreatown" && p.state === truth.environment)
+      ).toBe(true);
+    }
+  );
   it("has deterministic layout, including suppression", () => {
     expect(compose(fixture(), 1280, 900)).toEqual(
       compose(fixture(), 1280, 900)

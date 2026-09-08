@@ -265,6 +265,44 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
       status: stateText,
     });
   }
+  // Territory environment art is foundational world art, not an
+  // interactive object — it renders whenever a territory has an authored
+  // position, independent of whether that territory's customer lantern or
+  // stronghold later wins a collision-free slot in the placement pass
+  // below. It always sits at its pure authored stateArtBounds (never
+  // nudged to "follow" a displaced object), which is correct now that
+  // registered art is generated directly from that exact board crop.
+  if (controls.territories)
+    for (const truth of scene.truth) {
+      const territoryId = truth.occupancy.territory.id;
+      const presentation = territoryPresentationCache.get(territoryId);
+      if (!presentation) continue;
+      const plateTopLeft = worldPercentToScreen(
+        { x: presentation.stateArtBounds.x, y: presentation.stateArtBounds.y },
+        input.viewport
+      );
+      const plateSize = worldPercentSizeToScreen(
+        {
+          width: presentation.stateArtBounds.width,
+          height: presentation.stateArtBounds.height,
+        },
+        input.viewport
+      );
+      const plateBounds = {
+        x: plateTopLeft.x,
+        y: plateTopLeft.y,
+        width: plateSize.width,
+        height: plateSize.height,
+      };
+      if (exclusions.some(zone => overlaps(plateBounds, zone, 0))) continue;
+      scene.plates.push({
+        territoryId,
+        state: truth.environment,
+        bounds: plateBounds,
+        src: statePlateAsset(territoryId, truth.environment),
+        registration: "authored-display",
+      });
+    }
   if (controls.opportunities)
     for (const prospect of input.prospects ?? []) {
       const territoryId = classifyTerritory(
@@ -403,36 +441,6 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
       },
     };
     scene.objects.push(object);
-    if (
-      controls.territories &&
-      !scene.plates.some(plate => plate.territoryId === object.territoryId)
-    ) {
-      // Registered art moves with its authored territory group, not an
-      // unrelated centroid, and is converted through the same world-stage
-      // transform as the anchor above so it stays pinned to the atlas.
-      const plateTopLeft = worldPercentToScreen(
-        { x: p.stateArtBounds.x, y: p.stateArtBounds.y },
-        input.viewport
-      );
-      const plateSize = worldPercentSizeToScreen(
-        { width: p.stateArtBounds.width, height: p.stateArtBounds.height },
-        input.viewport
-      );
-      const plateBounds = {
-        x: plateTopLeft.x + found.x - desired.x,
-        y: plateTopLeft.y + found.y - desired.y,
-        width: plateSize.width,
-        height: plateSize.height,
-      };
-      if (!exclusions.some(zone => overlaps(plateBounds, zone, 0)))
-        scene.plates.push({
-          territoryId: object.territoryId,
-          state: object.environment,
-          bounds: plateBounds,
-          src: statePlateAsset(object.territoryId, object.environment),
-          registration: "authored-display",
-        });
-    }
     if (
       candidate.kind === "environment" &&
       candidate.environment === "infested" &&

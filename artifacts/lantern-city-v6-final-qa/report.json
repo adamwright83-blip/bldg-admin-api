@@ -1,0 +1,1145 @@
+[
+  {
+    "width": 1920,
+    "height": 1080,
+    "objects": 14,
+    "hud": 4,
+    "collisions": [],
+    "brokenImages": [],
+    "legacyClasses": 0,
+    "pilotPlatesRendered": [
+      {
+        "territoryId": "beverly-hills",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/beverly-hills/locked.png"
+      },
+      {
+        "territoryId": "century-city",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/century-city/locked.png"
+      },
+      {
+        "territoryId": "downtown",
+        "environment": "healthy",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/downtown/healthy.png"
+      },
+      {
+        "territoryId": "east-hollywood",
+        "environment": "cooling",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/east-hollywood/cooling.png"
+      },
+      {
+        "territoryId": "echo-park",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/echo-park/locked.png"
+      },
+      {
+        "territoryId": "hollywood-hills-west",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/hollywood-hills-west/locked.png"
+      },
+      {
+        "territoryId": "hollywood",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/hollywood/locked.png"
+      },
+      {
+        "territoryId": "koreatown",
+        "environment": "healthy",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/koreatown/healthy.png"
+      },
+      {
+        "territoryId": "los-feliz",
+        "environment": "cooling",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/los-feliz/cooling.png"
+      },
+      {
+        "territoryId": "mid-city",
+        "environment": "infested",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/mid-city/infested.png"
+      },
+      {
+        "territoryId": "silver-lake",
+        "environment": "infested",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/silver-lake/infested.png"
+      },
+      {
+        "territoryId": "west-hollywood",
+        "environment": "infested",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/west-hollywood/infested.png"
+      },
+      {
+        "territoryId": "westlake",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/westlake/locked.png"
+      },
+      {
+        "territoryId": "arts-district",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/arts-district/locked.png"
+      }
+    ],
+    "allPlates": [
+      {
+        "territoryId": "adams-normandie",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "arlington-heights",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "atwater-village",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "baldwin-hillscrenshaw",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "beverly-grove",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "beverly-hills",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/beverly-hills/locked.png"
+      },
+      {
+        "territoryId": "beverlywood",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "boyle-heights",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "carthay",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "central-alameda",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "century-city",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/century-city/locked.png"
+      },
+      {
+        "territoryId": "cheviot-hills",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "chinatown",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "culver-city",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "cypress-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "downtown",
+        "environment": "healthy",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/downtown/healthy.png"
+      },
+      {
+        "territoryId": "eagle-rock",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "east-hollywood",
+        "environment": "cooling",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/east-hollywood/cooling.png"
+      },
+      {
+        "territoryId": "echo-park",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/echo-park/locked.png"
+      },
+      {
+        "territoryId": "elysian-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "elysian-valley",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "exposition-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "fairfax",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "glassell-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "glendale",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "griffith-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "hancock-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "harvard-heights",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "historic-south-central",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "hollywood-hills",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "hollywood-hills-west",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/hollywood-hills-west/locked.png"
+      },
+      {
+        "territoryId": "hollywood",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/hollywood/locked.png"
+      },
+      {
+        "territoryId": "jefferson-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "koreatown",
+        "environment": "healthy",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/koreatown/healthy.png"
+      },
+      {
+        "territoryId": "larchmont",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "leimert-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "lincoln-heights",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "los-feliz",
+        "environment": "cooling",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/los-feliz/cooling.png"
+      },
+      {
+        "territoryId": "mar-vista",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "mid-city",
+        "environment": "infested",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/mid-city/infested.png"
+      },
+      {
+        "territoryId": "mid-wilshire",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "mount-washington",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "palms",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "pico-robertson",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "pico-union",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "rancho-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "sawtelle",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "silver-lake",
+        "environment": "infested",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/silver-lake/infested.png"
+      },
+      {
+        "territoryId": "studio-city",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "universal-city",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "university-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "west-adams",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "west-hollywood",
+        "environment": "infested",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/west-hollywood/infested.png"
+      },
+      {
+        "territoryId": "westlake",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/westlake/locked.png"
+      },
+      {
+        "territoryId": "west-los-angeles",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "westwood",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "windsor-square",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "arts-district",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/arts-district/locked.png"
+      }
+    ],
+    "consoleErrors": [],
+    "interactionQA": {
+      "opusLightOpensInspector": true,
+      "opusTowerOpensTowerWars": true,
+      "cpeLightOpensInspector": null,
+      "cpeTowerOpensTowerWars": true,
+      "v5FallbackWorks": true
+    },
+    "visualAcceptance": "BLOCKED ON ART",
+    "dataSource": "local disposable proof database + QA-only fixture rows exercising the four pilot states; not production counts"
+  },
+  {
+    "width": 1440,
+    "height": 900,
+    "objects": 11,
+    "hud": 4,
+    "collisions": [],
+    "brokenImages": [],
+    "legacyClasses": 0,
+    "pilotPlatesRendered": [
+      {
+        "territoryId": "beverly-hills",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/beverly-hills/locked.png"
+      },
+      {
+        "territoryId": "century-city",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/century-city/locked.png"
+      },
+      {
+        "territoryId": "downtown",
+        "environment": "healthy",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/downtown/healthy.png"
+      },
+      {
+        "territoryId": "east-hollywood",
+        "environment": "cooling",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/east-hollywood/cooling.png"
+      },
+      {
+        "territoryId": "echo-park",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/echo-park/locked.png"
+      },
+      {
+        "territoryId": "hollywood",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/hollywood/locked.png"
+      },
+      {
+        "territoryId": "koreatown",
+        "environment": "healthy",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/koreatown/healthy.png"
+      },
+      {
+        "territoryId": "los-feliz",
+        "environment": "cooling",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/los-feliz/cooling.png"
+      },
+      {
+        "territoryId": "mid-city",
+        "environment": "infested",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/mid-city/infested.png"
+      },
+      {
+        "territoryId": "westlake",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/westlake/locked.png"
+      }
+    ],
+    "allPlates": [
+      {
+        "territoryId": "adams-normandie",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "arlington-heights",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "baldwin-hillscrenshaw",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "beverly-grove",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "beverly-hills",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/beverly-hills/locked.png"
+      },
+      {
+        "territoryId": "beverlywood",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "boyle-heights",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "carthay",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "central-alameda",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "century-city",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/century-city/locked.png"
+      },
+      {
+        "territoryId": "cheviot-hills",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "chinatown",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "culver-city",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "downtown",
+        "environment": "healthy",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/downtown/healthy.png"
+      },
+      {
+        "territoryId": "east-hollywood",
+        "environment": "cooling",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/east-hollywood/cooling.png"
+      },
+      {
+        "territoryId": "echo-park",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/echo-park/locked.png"
+      },
+      {
+        "territoryId": "exposition-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "fairfax",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "griffith-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "hancock-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "harvard-heights",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "historic-south-central",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "hollywood-hills",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "hollywood",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/hollywood/locked.png"
+      },
+      {
+        "territoryId": "jefferson-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "koreatown",
+        "environment": "healthy",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/koreatown/healthy.png"
+      },
+      {
+        "territoryId": "larchmont",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "leimert-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "lincoln-heights",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "los-feliz",
+        "environment": "cooling",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/los-feliz/cooling.png"
+      },
+      {
+        "territoryId": "mar-vista",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "mid-city",
+        "environment": "infested",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/mid-city/infested.png"
+      },
+      {
+        "territoryId": "mid-wilshire",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "palms",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "pico-robertson",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "pico-union",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "rancho-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "sawtelle",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "universal-city",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "university-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "west-adams",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "westlake",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/westlake/locked.png"
+      },
+      {
+        "territoryId": "west-los-angeles",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "westwood",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "windsor-square",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      }
+    ],
+    "consoleErrors": [],
+    "interactionQA": {
+      "opusLightOpensInspector": true,
+      "opusTowerOpensTowerWars": true,
+      "cpeLightOpensInspector": null,
+      "cpeTowerOpensTowerWars": true,
+      "v5FallbackWorks": true
+    },
+    "visualAcceptance": "BLOCKED ON ART",
+    "dataSource": "local disposable proof database + QA-only fixture rows exercising the four pilot states; not production counts"
+  },
+  {
+    "width": 1280,
+    "height": 900,
+    "objects": 11,
+    "hud": 4,
+    "collisions": [],
+    "brokenImages": [],
+    "legacyClasses": 0,
+    "pilotPlatesRendered": [
+      {
+        "territoryId": "beverly-hills",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/beverly-hills/locked.png"
+      },
+      {
+        "territoryId": "century-city",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/century-city/locked.png"
+      },
+      {
+        "territoryId": "downtown",
+        "environment": "healthy",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/downtown/healthy.png"
+      },
+      {
+        "territoryId": "east-hollywood",
+        "environment": "cooling",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/east-hollywood/cooling.png"
+      },
+      {
+        "territoryId": "echo-park",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/echo-park/locked.png"
+      },
+      {
+        "territoryId": "hollywood",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/hollywood/locked.png"
+      },
+      {
+        "territoryId": "koreatown",
+        "environment": "healthy",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/koreatown/healthy.png"
+      },
+      {
+        "territoryId": "mid-city",
+        "environment": "infested",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/mid-city/infested.png"
+      },
+      {
+        "territoryId": "westlake",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/westlake/locked.png"
+      }
+    ],
+    "allPlates": [
+      {
+        "territoryId": "adams-normandie",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "arlington-heights",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "baldwin-hillscrenshaw",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "beverly-grove",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "beverly-hills",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/beverly-hills/locked.png"
+      },
+      {
+        "territoryId": "beverlywood",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "boyle-heights",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "carthay",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "central-alameda",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "century-city",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/century-city/locked.png"
+      },
+      {
+        "territoryId": "cheviot-hills",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "chinatown",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "culver-city",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "downtown",
+        "environment": "healthy",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/downtown/healthy.png"
+      },
+      {
+        "territoryId": "east-hollywood",
+        "environment": "cooling",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/east-hollywood/cooling.png"
+      },
+      {
+        "territoryId": "echo-park",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/echo-park/locked.png"
+      },
+      {
+        "territoryId": "exposition-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "fairfax",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "hancock-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "harvard-heights",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "historic-south-central",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "hollywood-hills",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "hollywood",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/hollywood/locked.png"
+      },
+      {
+        "territoryId": "jefferson-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "koreatown",
+        "environment": "healthy",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/koreatown/healthy.png"
+      },
+      {
+        "territoryId": "larchmont",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "leimert-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "lincoln-heights",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "mar-vista",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "mid-city",
+        "environment": "infested",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/mid-city/infested.png"
+      },
+      {
+        "territoryId": "mid-wilshire",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "palms",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "pico-robertson",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "pico-union",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "rancho-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "sawtelle",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "universal-city",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "university-park",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "west-adams",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "westlake",
+        "environment": "locked",
+        "artStatus": "supplied",
+        "src": "/assets/goldline/lantern-city/v6/territories/westlake/locked.png"
+      },
+      {
+        "territoryId": "west-los-angeles",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "westwood",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      },
+      {
+        "territoryId": "windsor-square",
+        "environment": "locked",
+        "artStatus": "missing",
+        "src": null
+      }
+    ],
+    "consoleErrors": [],
+    "interactionQA": {
+      "opusLightOpensInspector": true,
+      "opusTowerOpensTowerWars": true,
+      "cpeLightOpensInspector": null,
+      "cpeTowerOpensTowerWars": true,
+      "v5FallbackWorks": true
+    },
+    "visualAcceptance": "BLOCKED ON ART",
+    "dataSource": "local disposable proof database + QA-only fixture rows exercising the four pilot states; not production counts"
+  }
+]

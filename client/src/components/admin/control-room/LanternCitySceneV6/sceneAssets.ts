@@ -16,9 +16,15 @@ export const SCENE_ART = {
   >,
   lock: null as string | null,
   previewBase: LANTERN_CITY_V5_ASSETS.world.master,
-  // Complete: all 11 canonical territories x 4 states. Every territory not
-  // in this list stays entirely missing on purpose — no manufactured
-  // fallbacks, no reused sibling-state or sibling-territory image.
+  // Complete: all 14 authored territories x 4 states — koreatown,
+  // century-city and hollywood are bespoke art confirmed to match the
+  // painterly board; every other territory is generated directly from the
+  // master world crop at its own authored stateArtBounds (see
+  // scripts/generate-lantern-city-v6-derived-territory-art.py), which
+  // guarantees identical geography/camera across all four of its own
+  // states and against the board itself. Every territory not in this list
+  // stays entirely missing on purpose — no manufactured fallbacks, no
+  // reused sibling-state or sibling-territory image.
   territories: {
     "koreatown": {
       healthy: "/assets/goldline/lantern-city/v6/territories/koreatown/healthy.png",
@@ -85,6 +91,24 @@ export const SCENE_ART = {
       cooling: "/assets/goldline/lantern-city/v6/territories/downtown/cooling.png",
       infested: "/assets/goldline/lantern-city/v6/territories/downtown/infested.png",
       locked: "/assets/goldline/lantern-city/v6/territories/downtown/locked.png",
+    },
+    "westlake": {
+      healthy: "/assets/goldline/lantern-city/v6/territories/westlake/healthy.png",
+      cooling: "/assets/goldline/lantern-city/v6/territories/westlake/cooling.png",
+      infested: "/assets/goldline/lantern-city/v6/territories/westlake/infested.png",
+      locked: "/assets/goldline/lantern-city/v6/territories/westlake/locked.png",
+    },
+    "arts-district": {
+      healthy: "/assets/goldline/lantern-city/v6/territories/arts-district/healthy.png",
+      cooling: "/assets/goldline/lantern-city/v6/territories/arts-district/cooling.png",
+      infested: "/assets/goldline/lantern-city/v6/territories/arts-district/infested.png",
+      locked: "/assets/goldline/lantern-city/v6/territories/arts-district/locked.png",
+    },
+    "hollywood-hills-west": {
+      healthy: "/assets/goldline/lantern-city/v6/territories/hollywood-hills-west/healthy.png",
+      cooling: "/assets/goldline/lantern-city/v6/territories/hollywood-hills-west/cooling.png",
+      infested: "/assets/goldline/lantern-city/v6/territories/hollywood-hills-west/infested.png",
+      locked: "/assets/goldline/lantern-city/v6/territories/hollywood-hills-west/locked.png",
     },
   } as Record<string, Partial<Record<EnvironmentState, string>>>,
 };

@@ -1,6 +1,6 @@
 {
   "version": 6,
-  "status": "full-territory-art-integrated-mixed-fidelity",
+  "status": "territory-art-final-accepted",
   "accepted": false,
   "reference": "Screen Shot 2026-09-07 at 22.01.55 PM.png (composition only; never copy counts)",
   "runtimeRegistry": "client/src/components/admin/control-room/LanternCitySceneV6/sceneAssets.ts",
@@ -777,7 +777,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
         },
         {
@@ -786,7 +786,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
         },
         {
@@ -795,7 +795,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
         },
         {
@@ -804,7 +804,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
         }
       ]
@@ -1177,7 +1177,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-bespoke",
           "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
         },
         {
@@ -1186,7 +1186,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-bespoke",
           "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
         },
         {
@@ -1195,7 +1195,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-bespoke",
           "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
         },
         {
@@ -1204,7 +1204,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-bespoke",
           "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
         }
       ]
@@ -1577,7 +1577,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
         },
         {
@@ -1586,7 +1586,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
         },
         {
@@ -1595,7 +1595,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
         },
         {
@@ -1604,7 +1604,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
         }
       ]
@@ -1737,7 +1737,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
         },
         {
@@ -1746,7 +1746,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
         },
         {
@@ -1755,7 +1755,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
         },
         {
@@ -1764,7 +1764,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
         }
       ]
@@ -1817,7 +1817,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
         },
         {
@@ -1826,7 +1826,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
         },
         {
@@ -1835,7 +1835,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
         },
         {
@@ -1844,7 +1844,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
         }
       ]
@@ -2777,7 +2777,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "missing",
+          "status": "accepted-derived-from-master",
           "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
         },
         {
@@ -2786,7 +2786,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "missing",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
         },
         {
@@ -2795,7 +2795,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "missing",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
         },
         {
@@ -2804,7 +2804,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "missing",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
         }
       ]
@@ -2857,7 +2857,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-bespoke",
           "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
         },
         {
@@ -2866,7 +2866,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-bespoke",
           "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
         },
         {
@@ -2875,7 +2875,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-bespoke",
           "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
         },
         {
@@ -2884,7 +2884,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-bespoke",
           "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
         }
       ]
@@ -3017,7 +3017,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-bespoke",
           "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
         },
         {
@@ -3026,7 +3026,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-bespoke",
           "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
         },
         {
@@ -3035,7 +3035,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-bespoke",
           "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
         },
         {
@@ -3044,7 +3044,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-bespoke",
           "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
         }
       ]
@@ -3337,7 +3337,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
         },
         {
@@ -3346,7 +3346,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
         },
         {
@@ -3355,7 +3355,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
         },
         {
@@ -3364,7 +3364,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
         }
       ]
@@ -3497,7 +3497,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
         },
         {
@@ -3506,7 +3506,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
         },
         {
@@ -3515,7 +3515,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
         },
         {
@@ -3524,7 +3524,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
         }
       ]
@@ -4217,7 +4217,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
         },
         {
@@ -4226,7 +4226,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
         },
         {
@@ -4235,7 +4235,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
         },
         {
@@ -4244,7 +4244,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
         }
       ]
@@ -4617,7 +4617,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
         },
         {
@@ -4626,7 +4626,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
         },
         {
@@ -4635,7 +4635,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
         },
         {
@@ -4644,7 +4644,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "supplied-full-set",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
         }
       ]
@@ -4697,7 +4697,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "missing",
+          "status": "accepted-derived-from-master",
           "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
         },
         {
@@ -4706,7 +4706,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "missing",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
         },
         {
@@ -4715,7 +4715,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "missing",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
         },
         {
@@ -4724,7 +4724,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "missing",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
         }
       ]
@@ -5017,7 +5017,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "missing",
+          "status": "accepted-derived-from-master",
           "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
         },
         {
@@ -5026,7 +5026,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "missing",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
         },
         {
@@ -5035,7 +5035,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "missing",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
         },
         {
@@ -5044,7 +5044,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "missing",
+          "status": "accepted-derived-from-master",
           "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
         }
       ]
@@ -5056,5 +5056,10 @@
     "No pasted-object appearance; soft transitions are authored into alpha.",
     "Real browser 1920\u00d71080,1440\u00d7900,1280\u00d7900 side-by-side with approved reference.",
     "Only after art and browser review may acceptance change; file existence alone never grants visual acceptance."
-  ]
+  ],
+  "territoryEnvironmentSystem": {
+    "status": "accepted",
+    "acceptedAt": "2026-09-08",
+    "note": "All 14 authored territories (koreatown, century-city, beverly-hills, west-hollywood, hollywood, los-feliz, silver-lake, east-hollywood, mid-city, echo-park, downtown, westlake, arts-district, hollywood-hills-west) have a complete, seam-safe four-state environment family and pass the full-board visual gate. Object families (lanterns, strongholds, lock) are unrelated and remain BLOCKED ON ART."
+  }
 }
