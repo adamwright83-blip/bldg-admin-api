@@ -1,5 +1,24 @@
 import { describe, it, expect } from "vitest";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { SCENE_ART, statePlateAsset } from "./sceneAssets";
+import type { EnvironmentState } from "./sceneTypes";
+
+const CANONICAL_TERRITORIES = [
+  "koreatown",
+  "century-city",
+  "beverly-hills",
+  "west-hollywood",
+  "hollywood",
+  "los-feliz",
+  "silver-lake",
+  "east-hollywood",
+  "mid-city",
+  "echo-park",
+  "downtown",
+] as const;
+const STATES: EnvironmentState[] = ["healthy", "cooling", "infested", "locked"];
+const PUBLIC_ROOT = join(__dirname, "../../../../../public");
 
 describe("SCENE_ART registry", () => {
   it("points the V6 base to the registered pilot base world", () => {
@@ -7,43 +26,46 @@ describe("SCENE_ART registry", () => {
       "/assets/goldline/lantern-city/v6/world-neutral.png"
     );
   });
-  it("resolves the four registered pilot territory/state plates", () => {
-    expect(statePlateAsset("koreatown", "healthy")).toBe(
-      "/assets/goldline/lantern-city/v6/territories/koreatown/healthy.png"
-    );
-    expect(statePlateAsset("east-hollywood", "cooling")).toBe(
-      "/assets/goldline/lantern-city/v6/territories/east-hollywood/cooling.png"
-    );
-    expect(statePlateAsset("mid-city", "infested")).toBe(
-      "/assets/goldline/lantern-city/v6/territories/mid-city/infested.png"
-    );
-    expect(statePlateAsset("hollywood", "locked")).toBe(
-      "/assets/goldline/lantern-city/v6/territories/hollywood/locked.png"
-    );
+  it("resolves all 11 canonical territories x 4 states — 44 mappings", () => {
+    const seen = new Set<string>();
+    let count = 0;
+    for (const territoryId of CANONICAL_TERRITORIES) {
+      for (const state of STATES) {
+        const path = statePlateAsset(territoryId, state);
+        expect(path, `${territoryId}/${state} must not be null`).not.toBeNull();
+        expect(path).toBe(
+          `/assets/goldline/lantern-city/v6/territories/${territoryId}/${state}.png`
+        );
+        // No two territory/state pairs may resolve to the same path — no
+        // state aliasing a sibling state, no territory aliasing another
+        // territory's asset.
+        expect(seen.has(path!), `duplicate path: ${path}`).toBe(false);
+        seen.add(path!);
+        count++;
+      }
+    }
+    expect(count).toBe(44);
+    expect(seen.size).toBe(44);
   });
-  it("leaves an unsupplied state on a registered territory as null, never falling back to a sibling state", () => {
-    expect(statePlateAsset("koreatown", "cooling")).toBeNull();
-    expect(statePlateAsset("koreatown", "infested")).toBeNull();
-    expect(statePlateAsset("koreatown", "locked")).toBeNull();
-    expect(statePlateAsset("east-hollywood", "healthy")).toBeNull();
-    expect(statePlateAsset("mid-city", "healthy")).toBeNull();
-    expect(statePlateAsset("hollywood", "healthy")).toBeNull();
+  it("every one of the 44 production paths resolves to a real committed file", () => {
+    for (const territoryId of CANONICAL_TERRITORIES) {
+      for (const state of STATES) {
+        const path = statePlateAsset(territoryId, state)!;
+        const onDisk = join(PUBLIC_ROOT, path);
+        expect(existsSync(onDisk), `missing file on disk: ${onDisk}`).toBe(
+          true
+        );
+      }
+    }
   });
-  it("leaves every unsupplied territory as null, never falling back to another territory's plate", () => {
+  it("leaves every non-canonical territory entirely null, never falling back to another territory's plate", () => {
     for (const territoryId of [
-      "beverly-hills",
-      "west-hollywood",
       "hollywood-hills-west",
-      "silver-lake",
-      "downtown",
-      "century-city",
+      "arts-district",
+      "westlake",
+      "not-a-real-territory",
     ]) {
-      for (const state of [
-        "healthy",
-        "cooling",
-        "infested",
-        "locked",
-      ] as const) {
+      for (const state of STATES) {
         expect(statePlateAsset(territoryId, state)).toBeNull();
       }
     }

@@ -16,22 +16,75 @@ export const SCENE_ART = {
   >,
   lock: null as string | null,
   previewBase: LANTERN_CITY_V5_ASSETS.world.master,
-  // Pilot-only: four approved territory plates. Every other territory/state
-  // stays missing on purpose — no manufactured fallbacks.
+  // Complete: all 11 canonical territories x 4 states. Every territory not
+  // in this list stays entirely missing on purpose — no manufactured
+  // fallbacks, no reused sibling-state or sibling-territory image.
   territories: {
-    koreatown: {
+    "koreatown": {
       healthy: "/assets/goldline/lantern-city/v6/territories/koreatown/healthy.png",
+      cooling: "/assets/goldline/lantern-city/v6/territories/koreatown/cooling.png",
+      infested: "/assets/goldline/lantern-city/v6/territories/koreatown/infested.png",
+      locked: "/assets/goldline/lantern-city/v6/territories/koreatown/locked.png",
+    },
+    "century-city": {
+      healthy: "/assets/goldline/lantern-city/v6/territories/century-city/healthy.png",
+      cooling: "/assets/goldline/lantern-city/v6/territories/century-city/cooling.png",
+      infested: "/assets/goldline/lantern-city/v6/territories/century-city/infested.png",
+      locked: "/assets/goldline/lantern-city/v6/territories/century-city/locked.png",
+    },
+    "beverly-hills": {
+      healthy: "/assets/goldline/lantern-city/v6/territories/beverly-hills/healthy.png",
+      cooling: "/assets/goldline/lantern-city/v6/territories/beverly-hills/cooling.png",
+      infested: "/assets/goldline/lantern-city/v6/territories/beverly-hills/infested.png",
+      locked: "/assets/goldline/lantern-city/v6/territories/beverly-hills/locked.png",
+    },
+    "west-hollywood": {
+      healthy: "/assets/goldline/lantern-city/v6/territories/west-hollywood/healthy.png",
+      cooling: "/assets/goldline/lantern-city/v6/territories/west-hollywood/cooling.png",
+      infested: "/assets/goldline/lantern-city/v6/territories/west-hollywood/infested.png",
+      locked: "/assets/goldline/lantern-city/v6/territories/west-hollywood/locked.png",
+    },
+    "hollywood": {
+      healthy: "/assets/goldline/lantern-city/v6/territories/hollywood/healthy.png",
+      cooling: "/assets/goldline/lantern-city/v6/territories/hollywood/cooling.png",
+      infested: "/assets/goldline/lantern-city/v6/territories/hollywood/infested.png",
+      locked: "/assets/goldline/lantern-city/v6/territories/hollywood/locked.png",
+    },
+    "los-feliz": {
+      healthy: "/assets/goldline/lantern-city/v6/territories/los-feliz/healthy.png",
+      cooling: "/assets/goldline/lantern-city/v6/territories/los-feliz/cooling.png",
+      infested: "/assets/goldline/lantern-city/v6/territories/los-feliz/infested.png",
+      locked: "/assets/goldline/lantern-city/v6/territories/los-feliz/locked.png",
+    },
+    "silver-lake": {
+      healthy: "/assets/goldline/lantern-city/v6/territories/silver-lake/healthy.png",
+      cooling: "/assets/goldline/lantern-city/v6/territories/silver-lake/cooling.png",
+      infested: "/assets/goldline/lantern-city/v6/territories/silver-lake/infested.png",
+      locked: "/assets/goldline/lantern-city/v6/territories/silver-lake/locked.png",
     },
     "east-hollywood": {
-      cooling:
-        "/assets/goldline/lantern-city/v6/territories/east-hollywood/cooling.png",
+      healthy: "/assets/goldline/lantern-city/v6/territories/east-hollywood/healthy.png",
+      cooling: "/assets/goldline/lantern-city/v6/territories/east-hollywood/cooling.png",
+      infested: "/assets/goldline/lantern-city/v6/territories/east-hollywood/infested.png",
+      locked: "/assets/goldline/lantern-city/v6/territories/east-hollywood/locked.png",
     },
     "mid-city": {
-      infested:
-        "/assets/goldline/lantern-city/v6/territories/mid-city/infested.png",
+      healthy: "/assets/goldline/lantern-city/v6/territories/mid-city/healthy.png",
+      cooling: "/assets/goldline/lantern-city/v6/territories/mid-city/cooling.png",
+      infested: "/assets/goldline/lantern-city/v6/territories/mid-city/infested.png",
+      locked: "/assets/goldline/lantern-city/v6/territories/mid-city/locked.png",
     },
-    hollywood: {
-      locked: "/assets/goldline/lantern-city/v6/territories/hollywood/locked.png",
+    "echo-park": {
+      healthy: "/assets/goldline/lantern-city/v6/territories/echo-park/healthy.png",
+      cooling: "/assets/goldline/lantern-city/v6/territories/echo-park/cooling.png",
+      infested: "/assets/goldline/lantern-city/v6/territories/echo-park/infested.png",
+      locked: "/assets/goldline/lantern-city/v6/territories/echo-park/locked.png",
+    },
+    "downtown": {
+      healthy: "/assets/goldline/lantern-city/v6/territories/downtown/healthy.png",
+      cooling: "/assets/goldline/lantern-city/v6/territories/downtown/cooling.png",
+      infested: "/assets/goldline/lantern-city/v6/territories/downtown/infested.png",
+      locked: "/assets/goldline/lantern-city/v6/territories/downtown/locked.png",
     },
   } as Record<string, Partial<Record<EnvironmentState, string>>>,
 };
