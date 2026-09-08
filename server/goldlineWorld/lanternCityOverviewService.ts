@@ -157,6 +157,53 @@ function visualEnvironment(
         ? "locked"
         : "cooling";
 }
+/**
+ * Replace as rescue (brief §8, building-level). A first order from a new
+ * resident, placed after the operation began, in the building of a baseline
+ * lantern that is still dark restores that building's light. The building is
+ * the geocoded canonical address; a raw address string never matches. Each
+ * dark lantern is rescued at most once and each new resident rescues at most
+ * one lantern, so RESTORE DORMANT LIGHTS can never exceed its baseline.
+ */
+export function deriveReplacementRescues(input: {
+  territoryCustomers: readonly Customer[];
+  baselineCustomers: readonly string[];
+  stillDark: readonly string[];
+  identities: ReadonlyMap<string, Customer>;
+  startedAt: string;
+}): { dormantIdentityKey: string; newResidentIdentityKey: string }[] {
+  const started = new Date(input.startedAt).getTime();
+  const newResidents = input.territoryCustomers
+    .filter(
+      c =>
+        !input.baselineCustomers.includes(c.identityKey) &&
+        new Date(c.firstOrderAt).getTime() > started &&
+        !!c.location?.canonicalAddress
+    )
+    .sort(
+      (a, b) =>
+        new Date(a.firstOrderAt).getTime() -
+          new Date(b.firstOrderAt).getTime() ||
+        a.identityKey.localeCompare(b.identityKey)
+    );
+  const used = new Set<string>();
+  const rescues: { dormantIdentityKey: string; newResidentIdentityKey: string }[] =
+    [];
+  for (const dormantKey of [...input.stillDark].sort()) {
+    const building = input.identities.get(dormantKey)?.location?.canonicalAddress;
+    if (!building) continue;
+    const resident = newResidents.find(
+      c => !used.has(c.identityKey) && c.location?.canonicalAddress === building
+    );
+    if (!resident) continue;
+    used.add(resident.identityKey);
+    rescues.push({
+      dormantIdentityKey: dormantKey,
+      newResidentIdentityKey: resident.identityKey,
+    });
+  }
+  return rescues;
+}
 function returned(customer: Customer | undefined, startedAt: string) {
   return (
     !!customer &&
@@ -277,9 +324,22 @@ export function projectLanternCityOverview(input: {
     input.atlas.customers.map(c => [c.identityKey, c])
   );
   const anchor = anchorKey ? identities.get(anchorKey) : undefined;
-  const recovered = baselineDormant.filter(k =>
+  const returnedDormant = baselineDormant.filter(k =>
     returned(identities.get(k), startedAt)
-  ).length;
+  );
+  const replacementRescues =
+    dossier && isRecovery
+      ? deriveReplacementRescues({
+          territoryCustomers: grouped.get(dossier.territoryId) ?? [],
+          baselineCustomers,
+          stillDark: baselineDormant.filter(
+            k => !returnedDormant.includes(k)
+          ),
+          identities,
+          startedAt,
+        })
+      : [];
+  const recovered = returnedDormant.length + replacementRescues.length;
   const second =
     dossier && isRecovery
       ? ((grouped.get(dossier.territoryId) ?? [])
@@ -399,6 +459,8 @@ export function projectLanternCityOverview(input: {
       environment,
       operationStartedAt: startedAt,
       baselineDormantIdentityKeys: baselineDormant,
+      /** Buildings relit by a new resident's first order while the old lantern stayed dark. */
+      replacementRescues,
       knownLightIdentityKey: anchorKey,
       secondLight:
         isRecovery && dossier

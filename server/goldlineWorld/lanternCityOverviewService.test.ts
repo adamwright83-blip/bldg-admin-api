@@ -23,7 +23,8 @@ function customer(
   name: string,
   state: "active" | "dimming" | "dark",
   days: number,
-  firstOrderAt = "2026-01-01T12:00:00.000Z"
+  firstOrderAt = "2026-01-01T12:00:00.000Z",
+  canonicalAddress = "100 Real St"
 ) {
   const point = territoryCenter(territoryByName("Silver Lake")!);
   return {
@@ -48,7 +49,7 @@ function customer(
       x: 50,
       y: 50,
       outOfBounds: false,
-      canonicalAddress: "100 Real St",
+      canonicalAddress,
     },
     geocodeStatus: "success",
   };
@@ -371,5 +372,114 @@ describe("Lantern City truthful overview", () => {
       target: 2,
     });
     expect(result.featuredOperation.knownLightIdentityKey).toBe("a");
+  });
+
+  describe("replace as rescue", () => {
+    const operation = {
+      id: "op",
+      stableKey: "op",
+      sourceCampaignChapterId: null,
+      operationType: "recovery" as const,
+      campaignTerritoryDefinitionId: null,
+      lanternCityTerritoryId: "silver-lake",
+      startedAt: "2026-09-01T00:00:00.000Z",
+      baselineCustomerIdentityKeys: ["rebecca", "anita"],
+      baselineDormantIdentityKeys: ["rebecca"],
+      anchorCustomerIdentityKey: "rebecca",
+    };
+    function run(customers: ReturnType<typeof customer>[]) {
+      return projectLanternCityOverview({
+        atlas: {
+          tenantId: "tenant",
+          businessDate: "2026-09-08",
+          timeZone: "America/Los_Angeles",
+          customers,
+          pursued: [],
+        } as any,
+        paidRevenueThisWeek: 0,
+        campaign: { campaign: { chapters: [], currentChapterId: null } } as any,
+        operation,
+      });
+    }
+    const restore = (r: ReturnType<typeof run>) =>
+      r.featuredOperation.objectives.find(o => o.id === "restore:silver-lake");
+
+    it("counts a new resident's first order in a dark lantern's building toward RESTORE DORMANT LIGHTS", () => {
+      const result = run([
+        customer("Rebecca", "dark", 70),
+        customer("Anita", "active", 3),
+        customer("Noor", "active", 2, "2026-09-05T12:00:00.000Z"),
+      ]);
+      expect(restore(result)).toMatchObject({ current: 1, target: 1 });
+      expect(result.featuredOperation.replacementRescues).toEqual([
+        { dormantIdentityKey: "rebecca", newResidentIdentityKey: "noor" },
+      ]);
+      // The dark lantern itself has not returned; the rescue is the building's.
+      expect(result.featuredOperation.objectives[0]).toMatchObject({
+        label: "RELIGHT REBECCA",
+        current: 0,
+      });
+    });
+
+    it("ignores new residents in other buildings and orders that predate the operation", () => {
+      const early = customer("Early", "active", 2, "2026-08-20T12:00:00.000Z");
+      const elsewhere = customer(
+        "Elsewhere",
+        "active",
+        2,
+        "2026-09-05T12:00:00.000Z",
+        "200 Other St"
+      );
+      const result = run([
+        customer("Rebecca", "dark", 70),
+        customer("Anita", "active", 3),
+        early,
+        elsewhere,
+      ]);
+      expect(restore(result)).toMatchObject({ current: 0, target: 1 });
+      expect(result.featuredOperation.replacementRescues).toEqual([]);
+    });
+
+    it("never credits one dark lantern twice and never credits one new resident twice", () => {
+      const rebecca = customer("Rebecca", "active", 1) as any;
+      rebecca.lastOrderAt = "2026-09-06T12:00:00.000Z";
+      const returnedAndReplaced = run([
+        rebecca,
+        customer("Anita", "active", 3),
+        customer("Noor", "active", 2, "2026-09-05T12:00:00.000Z"),
+      ]);
+      expect(restore(returnedAndReplaced)).toMatchObject({ current: 1, target: 1 });
+      expect(returnedAndReplaced.featuredOperation.replacementRescues).toEqual([]);
+
+      const twoDarkOneResident = projectLanternCityOverview({
+        atlas: {
+          tenantId: "tenant",
+          businessDate: "2026-09-08",
+          timeZone: "America/Los_Angeles",
+          customers: [
+            customer("Rebecca", "dark", 70),
+            customer("Sam", "dark", 60),
+            customer("Noor", "active", 2, "2026-09-05T12:00:00.000Z"),
+          ],
+          pursued: [],
+        } as any,
+        paidRevenueThisWeek: 0,
+        campaign: { campaign: { chapters: [], currentChapterId: null } } as any,
+        operation: {
+          ...operation,
+          baselineCustomerIdentityKeys: ["rebecca", "sam"],
+          baselineDormantIdentityKeys: ["rebecca", "sam"],
+        },
+      });
+      expect(restore(twoDarkOneResident)).toMatchObject({ current: 1, target: 2 });
+      expect(twoDarkOneResident.featuredOperation.replacementRescues).toHaveLength(1);
+    });
+
+    it("requires a real canonical building match, not a raw address string", () => {
+      const noor = customer("Noor", "active", 2, "2026-09-05T12:00:00.000Z") as any;
+      noor.location.canonicalAddress = null;
+      const result = run([customer("Rebecca", "dark", 70), noor]);
+      expect(restore(result)).toMatchObject({ current: 0, target: 1 });
+    });
   });
 });
