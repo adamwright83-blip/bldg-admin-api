@@ -2206,6 +2206,14 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           arcadeFeedback();
           markTaught("evade");
         },
+        // The reticle used to appear fully-formed and silent the instant a
+        // lock existed — nothing distinguished ACQUIRING a target from
+        // having already held it for seconds. target_reveal was authored
+        // for exactly this kind of moment and had no call site.
+        onLineTargetAcquired: () => {
+          getAudioManager().play("target_reveal");
+          arcadeFeedback();
+        },
         onLineLatched: () => {
           getAudioManager().play("vault");
           arcadeFeedback();

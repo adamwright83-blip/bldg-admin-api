@@ -196,6 +196,9 @@ export type ExpeditionCallbacks = {
   onGuardAbsorbed?: () => void;
   onHostileDefeated?: (kind: string) => void;
   onLineLatched?: (target: LineTarget) => void;
+  /** A NEW Line target entered lock — the reticle just acquired it, distinct
+   * from onLineLatched (which fires only once the cable actually connects). */
+  onLineTargetAcquired?: (targetId: string) => void;
   onHazardTriggered?: () => void;
   onDefeated?: () => void;
   onHitStop?: (ms: number) => void;
@@ -305,6 +308,10 @@ export class ExpeditionLayer {
   private aiming = false;
   private aimRadians = 0;
   private lockedTargetId: string | null = null;
+  /** Fictional-clock timestamp the current lock was acquired — drives the
+   * reticle's acquisition pulse, so a fresh lock reads as "just snapped on"
+   * instead of appearing fully-formed and static. */
+  private lockedSince = 0;
   /** Player body in SCREEN space; the corridor owns progress/lateral. */
   private body: PlayerBody = { x: 0, y: 0, vx: 0, vy: 0 };
   private reducedMotion = false;
@@ -1129,7 +1136,12 @@ export class ExpeditionLayer {
 
     this.syncRegistry(project, viewportWidth);
     if (this.aiming) {
-      this.lockedTargetId = this.currentTarget(project)?.id ?? null;
+      const nextLockedId = this.currentTarget(project)?.id ?? null;
+      if (nextLockedId && nextLockedId !== this.lockedTargetId) {
+        this.lockedSince = this.clock.fictionalElapsedSeconds();
+        this.callbacks.onLineTargetAcquired?.(nextLockedId);
+      }
+      this.lockedTargetId = nextLockedId;
     }
 
     this.draw(project, viewportWidth);
@@ -2868,14 +2880,34 @@ export class ExpeditionLayer {
     // Lock reticle: heavy, high-contrast, unmistakable against the plate,
     // and now at the SAME point the registry selected and fireLine anchors
     // to — the reticle the player sees is the point the Line actually goes.
-    g.circle(at.x, at.y, 30).stroke({
-      width: 4,
+    //
+    // It used to render at a fixed size the instant a lock existed and stay
+    // completely static for as long as it was held — a lock genuinely
+    // acquiring read no differently from a lock that had been sitting there
+    // for seconds. `lockAge` drives a quick snap-in (starts oversized and
+    // fast-eases down to true size) plus a slow, subtle breathing pulse
+    // while held, so acquisition itself has a moment and a live lock still
+    // reads as "on" rather than a static decal.
+    const t = this.clock.fictionalElapsedSeconds();
+    const lockAge = Math.max(0, t - this.lockedSince);
+    const snapProgress = Math.min(1, lockAge / 0.15);
+    const snapEase = 1 - (1 - snapProgress) * (1 - snapProgress);
+    const snapScale = this.reducedMotion ? 1 : 1 + (1 - snapEase) * 0.7;
+    const breathe = this.reducedMotion ? 1 : 1 + Math.sin(t * 6) * 0.035;
+    const scale = snapScale * breathe;
+    const acquireGlow = this.reducedMotion ? 0 : (1 - snapEase) * 0.4;
+
+    g.circle(at.x, at.y, 30 * scale).stroke({
+      // Alpha is already at full opacity, so the acquisition emphasis has
+      // to read through stroke weight instead — a brief thicker ring that
+      // settles back to the standard 4px as the snap eases out.
+      width: 4 + acquireGlow * 3,
       color: PALETTE.lineGold,
     });
-    g.circle(at.x, at.y, 38).stroke({
+    g.circle(at.x, at.y, 38 * scale).stroke({
       width: 1.5,
       color: PALETTE.lineGold,
-      alpha: 0.6,
+      alpha: Math.min(1, 0.6 + acquireGlow),
     });
   }
 
