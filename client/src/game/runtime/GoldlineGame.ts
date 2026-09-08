@@ -1901,9 +1901,22 @@ export class GoldlineGame {
       groundY -
       jumpLift +
       (this.avatarState.state === "run" ? Math.sin(now / 72) * 3 : 0);
-    this.avatar.rotation = effectiveInput.x * 0.035;
+    // A real flick-evade had genuine i-frames and a real screen-space burst
+    // but nothing to SEE — no visual distinguished a dodge from a normal
+    // step, so the mechanic only worked, it never read as working. The
+    // translucency specifically tracks actual invulnerability (i-frames end
+    // slightly before the burst does), not the whole dodge window, so it
+    // stays an honest cue rather than decoration that outlives the frames
+    // it claims to represent.
+    const dodgeInvulnerable = dodgeIsInvulnerable(this.dodgeState);
+    const dodgeLean = this.dodgeState.active ? this.dodgeState.dirX * 0.14 : 0;
+    this.avatar.rotation = effectiveInput.x * 0.035 + dodgeLean;
     this.avatar.alpha =
-      this.avatarState.state === "encounter_locked" ? 0.72 : 1;
+      this.avatarState.state === "encounter_locked"
+        ? 0.72
+        : dodgeInvulnerable
+          ? 0.55
+          : 1;
 
     // Trailblazer sorts by the same rule as every other world actor.
     const actorZ = worldActorZ(groundY, "trailblazer");

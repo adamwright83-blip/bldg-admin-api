@@ -2197,8 +2197,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           getAudioManager().play("strike_hit");
           markTaught("strike");
         },
-        // §PR77 Part 4 "first evade" — a flick that genuinely began.
-        onDodgeBegan: () => markTaught("evade"),
+        // §PR77 Part 4 "first evade" — a flick that genuinely began. Had
+        // real i-frames and a real screen-space burst but no sound, no
+        // haptic, and nothing on the sprite itself — silent and invisible
+        // mechanics that only worked, never felt like they worked.
+        onDodgeBegan: () => {
+          getAudioManager().play("dodge");
+          arcadeFeedback();
+          markTaught("evade");
+        },
         onLineLatched: () => {
           getAudioManager().play("vault");
           arcadeFeedback();

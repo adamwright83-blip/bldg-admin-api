@@ -54,7 +54,8 @@ export type AudioCueId =
   | "clockhead_sweep"
   | "shield_clang"
   | "player_stagger"
-  | "target_reveal";
+  | "target_reveal"
+  | "dodge";
 
 type ToneStep = { freq: number; durationMs: number; type?: OscillatorType };
 
@@ -260,6 +261,14 @@ const CUE_DEFINITIONS: Record<
       { freq: 520, durationMs: 95, type: "triangle" },
       { freq: 780, durationMs: 105, type: "triangle" },
       { freq: 1040, durationMs: 150, type: "sine" },
+    ],
+  },
+  /** A real flick-evade had no sound at all. Fast descending sweep — a whoosh, not an impact. */
+  dodge: {
+    category: "traversal",
+    steps: [
+      { freq: 920, durationMs: 30, type: "sawtooth" },
+      { freq: 340, durationMs: 55, type: "sawtooth" },
     ],
   },
 };
