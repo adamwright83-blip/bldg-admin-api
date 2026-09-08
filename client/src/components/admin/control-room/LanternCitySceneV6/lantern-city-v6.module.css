@@ -99,6 +99,43 @@
 .objectArt .lanternArt {
   filter: drop-shadow(0 3px 5px #271607);
 }
+/* The stronghold's weapon (OPUS's golf driver, CPE's bazooka) is a hero
+   feature authored to extend above the tower's own narrow footprint —
+   never clip it. The Tower Wars click target stays the full button. */
+.objectArtOverflow {
+  overflow: visible;
+}
+.canonicalBuildingHost {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+/* World-storytelling frontier object ("What could be…"): the fantasy
+   object is the star; the lock is a smaller secondary affordance. */
+.frontierArt {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 10px #04101d99);
+}
+/* Higher specificity than the pre-existing `.objectArt > img` rule (which
+   would otherwise win at equal specificity and force this back to 100%),
+   so the lock stays the SECONDARY affordance and the frontier object
+   underneath remains the star. */
+.objectArt > .frontierLockBadge {
+  position: absolute;
+  inset: auto;
+  right: -4px;
+  bottom: -2px;
+  width: 34% !important;
+  height: 34% !important;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px #04101dcc);
+}
 .towerLight {
   position: absolute;
   width: 54px;

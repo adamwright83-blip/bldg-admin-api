@@ -1,6 +1,6 @@
 {
   "version": 6,
-  "status": "territory-art-final-accepted",
+  "status": "territory-art-final-accepted; world-interaction-and-props-restored",
   "accepted": false,
   "reference": "Screen Shot 2026-09-07 at 22.01.55 PM.png (composition only; never copy counts)",
   "runtimeRegistry": "client/src/components/admin/control-room/LanternCitySceneV6/sceneAssets.ts",
@@ -21,7 +21,8 @@
       "alpha": true,
       "registry": "SCENE_ART.lanterns.active",
       "description": "Ground-standing monumental gold customer lantern matching the approved reference, with a grounded architectural foot, correct flame/energy state and transparent perimeter. Same camera, silhouette, and pivot across states. No text, numbers, backing square or baked neighborhood. Bottom-center pivot. Existing V5 hanging lantern remains a preview fallback.",
-      "status": "required-for-reference-art-direction"
+      "status": "required-for-reference-art-direction",
+      "resolvedVia": "Resolved via the existing approved V5 lantern family (lanternAssetForClusterState fallback) \u2014 customer lanterns render and are independently clickable today. The v6-specific destination file listed here was never produced."
     },
     {
       "destination": "/assets/goldline/lantern-city/v6/objects/lantern-dimming.png",
@@ -30,7 +31,8 @@
       "alpha": true,
       "registry": "SCENE_ART.lanterns.dimming",
       "description": "Ground-standing monumental gold customer lantern matching the approved reference, with a grounded architectural foot, correct flame/energy state and transparent perimeter. Same camera, silhouette, and pivot across states. No text, numbers, backing square or baked neighborhood. Bottom-center pivot. Existing V5 hanging lantern remains a preview fallback.",
-      "status": "required-for-reference-art-direction"
+      "status": "required-for-reference-art-direction",
+      "resolvedVia": "Resolved via the existing approved V5 lantern family (lanternAssetForClusterState fallback). The v6-specific destination file listed here was never produced."
     },
     {
       "destination": "/assets/goldline/lantern-city/v6/objects/lantern-dark.png",
@@ -39,7 +41,8 @@
       "alpha": true,
       "registry": "SCENE_ART.lanterns.dark",
       "description": "Ground-standing monumental gold customer lantern matching the approved reference, with a grounded architectural foot, correct flame/energy state and transparent perimeter. Same camera, silhouette, and pivot across states. No text, numbers, backing square or baked neighborhood. Bottom-center pivot. Existing V5 hanging lantern remains a preview fallback.",
-      "status": "required-for-reference-art-direction"
+      "status": "required-for-reference-art-direction",
+      "resolvedVia": "Resolved via the existing approved V5 lantern family (lanternAssetForClusterState fallback). The v6-specific destination file listed here was never produced."
     },
     {
       "destination": "/assets/goldline/lantern-city/v6/objects/opus_la.png",
@@ -48,7 +51,8 @@
       "alpha": true,
       "registry": "SCENE_ART.strongholds.opus_la",
       "description": "Authored stronghold silhouette coordinated with the approved gold lantern world and neutral atlas. Preserve the canonical building identity, reserve lower-right 28% width by 50% height for separate live customer light. No count or flame baked into the tower. Whole-city art only; existing Tower Wars combat assets and damage truth are unchanged.",
-      "status": "required-for-reference-art-direction"
+      "status": "required-for-reference-art-direction",
+      "resolvedVia": "Resolved via an approved existing asset family instead: CanonicalBuildingArt / BUILDING_ART.opus_la (client/src/components/admin/control-room/buildingArt.ts) \u2014 the same tower plate + giant architectural golf-driver weapon overlay Home and Tower Wars already use. The v6-specific destination file listed here was never produced and this status intentionally still reflects that; the building's presentation is not missing, it is served by a different, already-approved registry."
     },
     {
       "destination": "/assets/goldline/lantern-city/v6/objects/century_park_east.png",
@@ -57,7 +61,8 @@
       "alpha": true,
       "registry": "SCENE_ART.strongholds.century_park_east",
       "description": "Authored stronghold silhouette coordinated with the approved gold lantern world and neutral atlas. Preserve the canonical building identity, reserve lower-right 28% width by 50% height for separate live customer light. No count or flame baked into the tower. Whole-city art only; existing Tower Wars combat assets and damage truth are unchanged.",
-      "status": "required-for-reference-art-direction"
+      "status": "required-for-reference-art-direction",
+      "resolvedVia": "Resolved via an approved existing asset family instead: CanonicalBuildingArt / BUILDING_ART.century_park_east \u2014 the tower plate + rooftop valet-bazooka weapon overlay already used on Home and in Tower Wars. The v6-specific destination file listed here was never produced; the building's presentation is not missing, it is served by a different, already-approved registry."
     },
     {
       "destination": "/assets/goldline/lantern-city/v6/objects/frontier-lock.png",
@@ -66,7 +71,8 @@
       "alpha": true,
       "registry": "SCENE_ART.lock",
       "description": "Simple readable gold frontier lock matching approved reference and hostile terrain perspective; no background or text.",
-      "status": "required-for-reference-art-direction"
+      "status": "required-for-reference-art-direction",
+      "resolvedVia": "Resolved via the existing approved V5 asset (LANTERN_CITY_V5_ASSETS.frontier.lock) as a small secondary affordance layered over the restored frontier objects. The v6-specific destination file listed here was never produced."
     }
   ],
   "hudSafeAreas": {
@@ -5061,5 +5067,10 @@
     "status": "accepted",
     "acceptedAt": "2026-09-08",
     "note": "All 14 authored territories (koreatown, century-city, beverly-hills, west-hollywood, hollywood, los-feliz, silver-lake, east-hollywood, mid-city, echo-park, downtown, westlake, arts-district, hollywood-hills-west) have a complete, seam-safe four-state environment family and pass the full-board visual gate. Object families (lanterns, strongholds, lock) are unrelated and remain BLOCKED ON ART."
+  },
+  "worldInteractionSystems": {
+    "status": "restored",
+    "restoredAt": "2026-09-08",
+    "note": "Infestation props (rat + cockroach) are now territory-level truth, independent of customers/lanterns/objects, and no longer gated by viewport width. Strongholds render their real approved weapon art (OPUS giant golf driver, CPE rooftop bazooka) via the existing CanonicalBuildingArt/BUILDING_ART registry shared with Home and Tower Wars. 'What could be...' frontier objects (balloon/helicopter/toyFlight/expedition, plus lost-ground variants) are back on the map using the existing authored shared/lanternFrontierPresentation.ts mapping, clickable into the same TerritoryRoom flow. Customer lantern clicking was verified with real Playwright pointer clicks (not synthetic calls): single-address lanterns open the inspector directly, multi-address aggregates open the address chooser first, and OPUS/CPE tower vs attached-light are separate, independently-verified hit targets. The scene's overall artStatus banner remains BLOCKED ON ART because customer lantern art and stronghold plates are still V5/shared assets rather than v6-specific commissions -- that is a deliberate, honest distinction (see objectAssets[].resolvedVia), not an unresolved defect."
   }
 }

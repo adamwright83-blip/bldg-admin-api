@@ -449,4 +449,130 @@ describe("V6 truthful scene composition", () => {
     expect(midCity.occupancy.conquered).toBe(false);
     expect(midCity.environment).toBe("infested");
   });
+
+  describe("infestation props are territory-level, independent of customers/objects", () => {
+    it("infested + real customers still shows both a rat and a cockroach, alongside the lantern", () => {
+      const geo = territoryCenter(
+        LANTERN_TERRITORIES.find(t => t.id === "mid-city")!
+      );
+      // 5 dark customers pushes mid-city's derived state to
+      // closed_construction -> environment infested, per the existing
+      // "changes state from current records" test above.
+      const dormant = Array.from({ length: 5 }, (_, i) =>
+        customer(`quiet:${i}`, geo.latitude, geo.longitude, "dark")
+      );
+      const scene = compose(dormant);
+      const truth = scene.truth.find(
+        t => t.occupancy.territory.id === "mid-city"
+      )!;
+      expect(truth.environment).toBe("infested");
+      expect(truth.customers.length).toBeGreaterThan(0);
+      // The lantern object still exists — infestation never displaces it.
+      expect(
+        scene.objects.some(o => o.territoryId === "mid-city" && o.cluster)
+      ).toBe(true);
+      const rat = scene.props.find(
+        p => p.territoryId === "mid-city" && p.id.endsWith(":rat")
+      );
+      const roach = scene.props.find(
+        p => p.territoryId === "mid-city" && p.id.endsWith(":roach")
+      );
+      expect(rat, "expected a rat prop despite real customers").toBeDefined();
+      expect(
+        roach,
+        "expected a cockroach prop despite real customers"
+      ).toBeDefined();
+    });
+    it("infested + zero customers still shows both a rat and a cockroach", () => {
+      const scene = compose();
+      const rat = scene.props.find(
+        p => p.territoryId === "mid-city" && p.id.endsWith(":rat")
+      );
+      const roach = scene.props.find(
+        p => p.territoryId === "mid-city" && p.id.endsWith(":roach")
+      );
+      expect(rat).toBeDefined();
+      expect(roach).toBeDefined();
+    });
+    it("healthy/cooling/locked territories show neither pest prop", () => {
+      const scene = compose(fixture());
+      for (const truth of scene.truth) {
+        if (truth.environment === "infested") continue;
+        const id = truth.occupancy.territory.id;
+        expect(
+          scene.props.some(p => p.territoryId === id),
+          `${id} (${truth.environment}) should have no pest props`
+        ).toBe(false);
+      }
+    });
+    it("cockroaches are not gated by viewport width — present at 1280px too", () => {
+      const scene = compose([], 1280, 900);
+      const roach = scene.props.find(
+        p => p.territoryId === "mid-city" && p.id.endsWith(":roach")
+      );
+      expect(roach).toBeDefined();
+    });
+  });
+
+  describe("What could be… frontier objects use the authored mapping", () => {
+    it("west-hollywood (guarded) resolves to balloon", () => {
+      const scene = compose();
+      const object = scene.objects.find(
+        o => o.territoryId === "west-hollywood" && o.frontierKind
+      );
+      expect(object?.frontierKind).toBe("balloon");
+      expect(object?.frontierLostGround).toBe(false);
+    });
+    it("east-hollywood (guarded) resolves to helicopter", () => {
+      const scene = compose();
+      const object = scene.objects.find(
+        o => o.territoryId === "east-hollywood" && o.frontierKind
+      );
+      expect(object?.frontierKind).toBe("helicopter");
+    });
+    it("echo-park (guarded) resolves to toyFlight", () => {
+      const scene = compose();
+      const object = scene.objects.find(
+        o => o.territoryId === "echo-park" && o.frontierKind
+      );
+      expect(object?.frontierKind).toBe("toyFlight");
+    });
+    it("arts-district (guarded) resolves to expedition", () => {
+      const scene = compose();
+      const object = scene.objects.find(
+        o => o.territoryId === "arts-district" && o.frontierKind
+      );
+      expect(object?.frontierKind).toBe("expedition");
+    });
+    it("frontier kind is stable across recompositions — never rerolled", () => {
+      const a = compose().objects.find(o => o.territoryId === "west-hollywood");
+      const b = compose().objects.find(o => o.territoryId === "west-hollywood");
+      expect(a?.frontierKind).toBe(b?.frontierKind);
+    });
+    it("lost-ground territory uses the LOST variant, not the pristine dormant object", () => {
+      const scene = composeLanternCityScene({
+        customers: [],
+        atlasReady: true,
+        viewport: { width: 1920, height: 1080 },
+        lostGroundTerritoryIds: new Set(["silver-lake"]),
+      });
+      const object = scene.objects.find(
+        o => o.territoryId === "silver-lake" && o.frontierKind
+      );
+      expect(object).toBeDefined();
+      expect(object?.frontierLostGround).toBe(true);
+    });
+    it("a territory with real customers never shows a frontier object", () => {
+      // A point verified to classify inside west-hollywood's own polygon —
+      // its plain geometric centroid actually lands in a neighboring
+      // territory, so a real in-bounds point is used instead.
+      const scene = compose([
+        customer("real", 34.0970869991234, -118.36816800000018),
+      ]);
+      const object = scene.objects.find(
+        o => o.territoryId === "west-hollywood"
+      );
+      expect(object?.frontierKind).toBeUndefined();
+    });
+  });
 });

@@ -5,6 +5,7 @@ import type {
 import type { TerritoryOccupancy } from "@shared/lanternTerritories";
 import type { TerritoryVisualState } from "@shared/lanternTerritoryVisualState";
 import type { CanonicalBuildingId } from "../buildingArt";
+import type { FrontierObjectKind } from "@shared/lanternFrontierPresentation";
 export type Point = { x: number; y: number };
 export type Rect = Point & { width: number; height: number };
 export type EnvironmentState = "healthy" | "cooling" | "infested" | "locked";
@@ -56,6 +57,15 @@ export type SceneObject = {
   buildingId?: CanonicalBuildingId;
   prospectId?: number;
   occupancy?: TerritoryOccupancy;
+  /**
+   * Set only for a guarded (unreached) or lost-ground frontier territory —
+   * "What could be…" world storytelling, using the same authored mapping
+   * (shared/lanternFrontierPresentation.ts) V5 used. `frontierLostGround`
+   * distinguishes the pristine dormant object (guarded) from the LOST
+   * variant (pressure returned after a prior clear).
+   */
+  frontierKind?: FrontierObjectKind;
+  frontierLostGround?: boolean;
 };
 export type ScenePlate = {
   territoryId: string;

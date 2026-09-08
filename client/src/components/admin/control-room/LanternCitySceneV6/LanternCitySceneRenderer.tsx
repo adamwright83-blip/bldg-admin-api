@@ -1,10 +1,14 @@
 import type { CSSProperties, SyntheticEvent } from "react";
 import { LANTERN_CITY_V5_ASSETS as ASSETS } from "@/components/goldline/lanternCityV5Assets";
 import {
+  frontierAssetSrc,
+  lostGroundAssetForFrontierKind,
+} from "@/components/goldline/lanternCityV5Assets";
+import {
   clusterLanternState,
   lanternAssetForClusterState,
 } from "../lanternCustomerPresentation";
-import { combatTowerArtFor } from "../lanternCityCombat";
+import { CanonicalBuildingArt } from "../CanonicalBuildingArt";
 import type { TowerDamageState } from "@shared/towerWars";
 import type { CanonicalBuildingId } from "../buildingArt";
 import type { CityScene, Rect, SceneObject, ScenePlate } from "./sceneTypes";
@@ -53,7 +57,6 @@ export function CustomerLantern({ object }: { object: SceneObject }) {
  */
 export function Stronghold({
   object,
-  damage,
   showLight,
   onSelectTower,
   onSelectLight,
@@ -64,26 +67,30 @@ export function Stronghold({
   onSelectTower: (event: SyntheticEvent<HTMLElement>) => void;
   onSelectLight?: (event: SyntheticEvent<HTMLElement>) => void;
 }) {
-  const art = combatTowerArtFor(object.buildingId!, damage ?? null);
   return (
     <>
+      {/*
+       * CanonicalBuildingArt is the SAME component Home and Tower Wars use —
+       * "a building cannot change identity, architecture or weapon merely
+       * because the camera layer changed" (buildingArt.ts). It composes the
+       * pristine plate plus the real approved weapon overlay (OPUS's giant
+       * architectural golf driver, CPE's rooftop valet bazooka), which is
+       * how the weapon reappears on the world map without inventing new
+       * art. The weapon art can extend beyond the tower's own silhouette —
+       * `.objectArtOverflow` deliberately does not clip it — while the
+       * clickable Tower Wars hit area stays the full button underneath.
+       */}
       <button
         type="button"
-        className={styles.objectArt}
+        className={`${styles.objectArt} ${styles.objectArtOverflow}`}
         style={{ height: object.artBounds.height }}
         data-scene-target="tower"
         aria-label={`${object.name}: Enter Tower Wars`}
         onClick={onSelectTower}
       >
-        <img
-          className={styles.towerArt}
-          src={
-            (!art.showingDamage && SCENE_ART.strongholds[object.buildingId!]) ||
-            art.src
-          }
-          alt={art.description}
-          draggable={false}
-        />
+        <div className={styles.canonicalBuildingHost}>
+          <CanonicalBuildingArt buildingId={object.buildingId!} showWeapon />
+        </div>
       </button>
       {showLight && object.cluster && object.cluster.total > 0 ? (
         <button
@@ -190,7 +197,11 @@ export function LanternCitySceneRenderer({
             data-world-anchor={`${object.worldAnchor.x},${object.worldAnchor.y}`}
             data-display-anchor={`${object.displayAnchor.x},${object.displayAnchor.y}`}
             data-selected={selectedId === object.id}
-            aria-label={`${object.name}: ${object.status}`}
+            aria-label={
+              object.frontierKind
+                ? `${object.name}: What could be — ${object.frontierLostGround ? "lost frontier objective" : "locked frontier objective"}`
+                : `${object.name}: ${object.status}`
+            }
             onClick={event => onSelect(object, event.currentTarget, "default")}
           >
             <span
@@ -200,7 +211,28 @@ export function LanternCitySceneRenderer({
               {object.kind === "lantern" ? (
                 <CustomerLantern object={object} />
               ) : null}
-              {object.kind === "lock" ? (
+              {object.frontierKind ? (
+                <>
+                  <img
+                    className={styles.frontierArt}
+                    src={
+                      object.frontierLostGround
+                        ? lostGroundAssetForFrontierKind(object.frontierKind)
+                        : frontierAssetSrc(object.frontierKind)
+                    }
+                    alt=""
+                    draggable={false}
+                  />
+                  {!object.frontierLostGround ? (
+                    <img
+                      className={styles.frontierLockBadge}
+                      src={SCENE_ART.lock ?? ASSETS.frontier.lock}
+                      alt=""
+                      draggable={false}
+                    />
+                  ) : null}
+                </>
+              ) : object.kind === "lock" ? (
                 <img src={SCENE_ART.lock ?? ASSETS.frontier.lock} alt="" />
               ) : null}
               {object.kind === "prospect" ? (

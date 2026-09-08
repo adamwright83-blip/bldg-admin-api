@@ -8,6 +8,7 @@ import { projectLatLngToLanternAtlas } from "@shared/lanternCity";
 import {
   deriveTerritoryVisualState,
   territoryVisualStateLabel,
+  stableHash,
   type TerritoryVisualState,
 } from "@shared/lanternTerritoryVisualState";
 import {
@@ -19,6 +20,7 @@ import {
 } from "../customerGeography";
 import type { GeographicCustomer } from "../customerGeography";
 import { LANTERN_CITY_V5_ASSETS as ASSETS } from "@/components/goldline/lanternCityV5Assets";
+import { frontierKindForTerritory } from "@shared/lanternFrontierPresentation";
 import {
   presentationFor,
   TERRITORY_PRESENTATION,
@@ -243,6 +245,15 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
       state: truth.state,
       objectCustomerCount,
     });
+    // "What could be…" world storytelling: a guarded (unreached) frontier
+    // gets its authored dormant object; a territory whose prior clear lost
+    // pressure gets the LOST variant instead. Never both, never fabricated
+    // from anything but real occupancy/state truth already computed above.
+    const isLostGround = truth.state === "lost_ground";
+    const frontierKind =
+      !cluster && (truth.occupancy.guarded || isLostGround)
+        ? frontierKindForTerritory(territory.id)
+        : undefined;
     candidates.push({
       id: `territory:${territory.id}`,
       territoryId: territory.id,
@@ -263,6 +274,8 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
       priority:
         input.selectedTerritory === territory.id ? 1 : presentation.priority,
       status: stateText,
+      frontierKind,
+      frontierLostGround: isLostGround,
     });
   }
   // Territory environment art is foundational world art, not an
@@ -302,6 +315,40 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
         src: statePlateAsset(territoryId, truth.environment),
         registration: "authored-display",
       });
+      // Infestation is a territory-level environmental truth, independent
+      // of whether that same territory also has real customers, a lantern,
+      // or a stronghold — those are separate layers. A district reading
+      // "infested" always shows both a rat and a cockroach presence, never
+      // suppressed by customer/object placement pressure. Deterministic
+      // per-territory offset (not random) so neighbors don't look cloned,
+      // and both props always render regardless of viewport width.
+      if (truth.environment === "infested") {
+        const seed = stableHash(territoryId);
+        const jitterX = ((seed % 7) - 3) * 4; // -12..12
+        const jitterY = (((seed >> 3) % 5) - 2) * 4; // -8..8
+        scene.props.push({
+          id: `territory:${territoryId}:rat`,
+          territoryId,
+          src: ASSETS.decayProps.ratHero,
+          bounds: {
+            x: plateBounds.x + plateBounds.width * 0.12 + jitterX,
+            y: plateBounds.y + plateBounds.height * 0.42 + jitterY,
+            width: Math.max(64, plateBounds.width * 0.22),
+            height: Math.max(64, plateBounds.width * 0.22),
+          },
+        });
+        scene.props.push({
+          id: `territory:${territoryId}:roach`,
+          territoryId,
+          src: ASSETS.decayProps.cockroachSwarm,
+          bounds: {
+            x: plateBounds.x + plateBounds.width * 0.58 - jitterX,
+            y: plateBounds.y + plateBounds.height * 0.68 - jitterY,
+            width: Math.max(48, plateBounds.width * 0.16),
+            height: Math.max(36, plateBounds.width * 0.12),
+          },
+        });
+      }
     }
   if (controls.opportunities)
     for (const prospect of input.prospects ?? []) {
@@ -350,14 +397,22 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
       heroSlots > 0 && (candidate.kind === "stronghold" || count >= 6);
     const artHeight =
       candidate.kind === "stronghold"
-        ? width >= 1680
-          ? 206
-          : 168
-        : hero
-          ? 154
-          : count >= 2
-            ? 115
-            : 88;
+        ? // Sized so the weapon overlay (the OPUS golf driver, the CPE
+          // bazooka) — composed together with the tower plate in the same
+          // authored 800x1200 art space — reads as a hero feature rather
+          // than a barely-visible detail. CanonicalBuildingArt scales
+          // both plate and weapon as one locked unit, so enlarging this
+          // box enlarges the weapon proportionally with it.
+          width >= 1680
+          ? 280
+          : 230
+        : candidate.frontierKind
+          ? 150
+          : hero
+            ? 154
+            : count >= 2
+              ? 115
+              : 88;
     const boxWidth = candidate.kind === "stronghold" ? 190 : 166;
     const boxHeight = artHeight + 50;
     // Strongholds always use the territory's primary anchor. A customer
@@ -441,35 +496,6 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
       },
     };
     scene.objects.push(object);
-    if (
-      candidate.kind === "environment" &&
-      candidate.environment === "infested" &&
-      !candidate.cluster
-    ) {
-      scene.props.push({
-        id: `${candidate.id}:rat`,
-        territoryId: candidate.territoryId,
-        src: ASSETS.decayProps.ratHero,
-        bounds: {
-          x: found.x + 30,
-          y: found.y,
-          width: 90,
-          height: artHeight - 15,
-        },
-      });
-      if (width >= 1400)
-        scene.props.push({
-          id: `${candidate.id}:roach`,
-          territoryId: candidate.territoryId,
-          src: ASSETS.decayProps.cockroachSwarm,
-          bounds: {
-            x: found.x + 102,
-            y: found.y + artHeight - 38,
-            width: 52,
-            height: 36,
-          },
-        });
-    }
   }
   return scene;
 }
