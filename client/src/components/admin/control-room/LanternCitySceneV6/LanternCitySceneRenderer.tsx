@@ -108,10 +108,19 @@ export function Stronghold({
   );
 }
 export function TerritoryLabel({ object }: { object: SceneObject }) {
+  const frontierVerb = object.frontierKind
+    ? {
+        balloon: "OPEN THE BALLOON",
+        helicopter: "REBUILD THE BIRD",
+        toyFlight: "LIGHT THE WESTSIDE",
+        excursion: "HOLD THE ROUTE",
+        expedition: "RESTORE THE LIGHT",
+      }[object.frontierKind]
+    : null;
   return (
     <span className={styles.label} data-environment={object.environment}>
       <strong>{object.name}</strong>
-      <small>{object.status}</small>
+      <small>{frontierVerb ?? object.status}</small>
     </span>
   );
 }
@@ -199,7 +208,7 @@ export function LanternCitySceneRenderer({
             data-selected={selectedId === object.id}
             aria-label={
               object.frontierKind
-                ? `${object.name}: What could be — ${object.frontierLostGround ? "lost frontier objective" : "locked frontier objective"}`
+                ? `${object.name}: frontier objective`
                 : `${object.name}: ${object.status}`
             }
             onClick={event => onSelect(object, event.currentTarget, "default")}
@@ -223,14 +232,6 @@ export function LanternCitySceneRenderer({
                     alt=""
                     draggable={false}
                   />
-                  {!object.frontierLostGround ? (
-                    <img
-                      className={styles.frontierLockBadge}
-                      src={SCENE_ART.lock ?? ASSETS.frontier.lock}
-                      alt=""
-                      draggable={false}
-                    />
-                  ) : null}
                 </>
               ) : object.kind === "lock" ? (
                 <img src={SCENE_ART.lock ?? ASSETS.frontier.lock} alt="" />

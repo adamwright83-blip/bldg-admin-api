@@ -68,6 +68,22 @@ function fixture(
 }
 
 describe("Lantern City truthful overview", () => {
+  it("renders a cadence forecast only when measured cadence supports one", () => {
+    const measured = fixture([customer("Anita", "active", 8)]);
+    expect(
+      measured.territoryDossiers.find(d => d.territoryId === "silver-lake")
+        ?.decayForecast
+    ).toMatch(/^Goes quiet in \d+ days? unless one order lands\.$/);
+
+    const sparseCustomer = customer("Anita", "active", 8) as any;
+    sparseCustomer.cadence.confidence = "sparse";
+    sparseCustomer.cadence.expectedCadenceDays = null;
+    const sparse = fixture([sparseCustomer]);
+    expect(
+      sparse.territoryDossiers.find(d => d.territoryId === "silver-lake")
+        ?.decayForecast
+    ).toBeNull();
+  });
   it("uses exact real people and never invents a future person", () => {
     const result = fixture();
     expect(result.featuredOperation.knownLightIdentityKey).toBe("rebecca");

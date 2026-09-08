@@ -551,6 +551,29 @@ describe("V6 truthful scene composition", () => {
   });
 
   describe("What could be… frontier objects use the authored mapping", () => {
+    it("caps visible frontier objects at five and leaves overflow quiet", () => {
+      const scene = composeLanternCityScene({
+        customers: [],
+        atlasReady: true,
+        viewport: { width: 1920, height: 1080 },
+        lostGroundTerritoryIds: new Set([
+          "silver-lake",
+          "hollywood",
+          "los-feliz",
+          "beverly-hills",
+          "century-city",
+        ]),
+      });
+      expect(
+        scene.objects.filter(object => object.frontierKind).length
+      ).toBeLessThanOrEqual(5);
+      expect(
+        scene.objects.filter(
+          object =>
+            object.kind === "environment" && object.status === "0 customers"
+        ).length
+      ).toBeGreaterThan(0);
+    });
     it("west-hollywood (guarded) resolves to balloon", () => {
       const scene = compose();
       const object = scene.objects.find(

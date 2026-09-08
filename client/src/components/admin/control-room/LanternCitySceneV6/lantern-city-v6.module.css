@@ -420,6 +420,17 @@
   padding: 7px 9px;
   font-size: 12px;
 }
+.decayForecast {
+  margin: 12px 0 5px;
+  color: #ffe09a;
+  font-weight: 800;
+  line-height: 1.25;
+}
+.atRiskDefinition {
+  display: block;
+  color: #b9c8cb;
+  line-height: 1.3;
+}
 .statusGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;

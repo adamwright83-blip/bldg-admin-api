@@ -33,6 +33,7 @@ export type Dossier = {
   territoryId: string;
   territoryName: string;
   counts: { total: number; active: number; dimming: number; dark: number };
+  decayForecast: string | null;
   knownLight: null | {
     identityKey: string;
     displayName: string;
@@ -288,6 +289,12 @@ export function LanternCityHUD({
               <small>active lights</small>
             </div>
           </div>
+          {dossier?.decayForecast ? (
+            <p className={styles.decayForecast}>{dossier.decayForecast}</p>
+          ) : null}
+          <small className={styles.atRiskDefinition}>
+            At risk = customers currently in dimming cadence.
+          </small>
         </section>
         {dossier?.knownLight ? (
           <section>
