@@ -40,6 +40,7 @@ import {
   stepVelocity,
   targetSpeedForMagnitude,
 } from "./movementFeel";
+import { resolveHostileCollision } from "./hostileCollision";
 import {
   lateralForProgress,
   loadGoldRoute,
@@ -1173,6 +1174,24 @@ export class GoldlineGame {
     });
   }
 
+  /** A living hostile is a physical body, not a decal — thin wrapper over
+   * the pure, unit-tested resolver in hostileCollision.ts. */
+  private resolveHostileCollision(
+    candidateProgress: number,
+    candidateLateral: number
+  ): { progress: number; lateral: number } {
+    if (!this.expedition) {
+      return { progress: candidateProgress, lateral: candidateLateral };
+    }
+    return resolveHostileCollision(
+      candidateProgress,
+      candidateLateral,
+      this.progress,
+      this.lateral,
+      this.expedition.getHostileCollisionPositions()
+    );
+  }
+
   /** Screen projection for one corridor position, mirroring the avatar. */
   private projectCorridor(progress: number, lateral: number, width: number, height: number) {
     return projectCorridorPoint({
@@ -1787,7 +1806,7 @@ export class GoldlineGame {
       // The mode ceiling always applies; a traversal trigger may only make
       // the limit tighter. Previously an unblocked step clamped to the raw
       // 0.82 and walked straight through the expedition ceiling.
-      this.progress = clampCorridorProgress(
+      const candidateProgress = clampCorridorProgress(
         next,
         forwardProgressLimit({
           modeCeiling: this.forwardCeiling(),
@@ -1795,10 +1814,15 @@ export class GoldlineGame {
           blocked,
         })
       );
-      this.lateral = Math.max(
+      const candidateLateral = Math.max(
         -0.72,
         Math.min(0.72, this.lateral + effectiveInput.x * 0.72 * gameplayDelta)
       );
+      // A living hostile is a physical body, not a decal — Trailblazer must
+      // not be able to walk straight through it.
+      const resolved = this.resolveHostileCollision(candidateProgress, candidateLateral);
+      this.progress = resolved.progress;
+      this.lateral = resolved.lateral;
     }
 
     if (this.expedition) {

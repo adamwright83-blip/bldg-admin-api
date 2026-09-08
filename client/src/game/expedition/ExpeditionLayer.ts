@@ -713,6 +713,22 @@ export class ExpeditionLayer {
   }
 
   /**
+   * Living hostiles' true corridor position, for the runtime's own physical
+   * collision resolution (Trailblazer must not be able to walk through a
+   * guardian's body). `y` is in the same ×140 expedition-lateral space
+   * `setPlayerCorridor`/`tryStrike` already use — the runtime converts back
+   * to its own raw lateral before comparing. Separate from
+   * `getHostileSummary()` deliberately: that one is documented read-only
+   * verification and must never be read to affect an outcome, whereas this
+   * one exists specifically to affect movement.
+   */
+  getHostileCollisionPositions(): Array<{ id: string; x: number; y: number }> {
+    return this.hostiles
+      .filter(h => h.alive)
+      .map(h => ({ id: h.id, x: h.x, y: h.y }));
+  }
+
+  /**
    * Reaching the mapped destination settles the expedition into "arrived"
    * only once the climax is genuinely cleared — physically sprinting past
    * an alive Shieldbearer must not count, which mirrors the movement
