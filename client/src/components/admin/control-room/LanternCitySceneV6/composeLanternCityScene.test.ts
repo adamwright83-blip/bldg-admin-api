@@ -5,6 +5,7 @@ import {
   territoryStateText,
 } from "./composeLanternCityScene";
 import { DEFAULT_CONTROLS } from "./sceneTypes";
+import { SCENE_ART } from "./sceneAssets";
 import { CANONICAL_BUILDING_GEOGRAPHY } from "@shared/canonicalGeography";
 import { projectLatLngToLanternAtlas } from "@shared/lanternCity";
 import {
@@ -180,7 +181,14 @@ describe("V6 truthful scene composition", () => {
     expect(scene.truth).toEqual(compose(customers).truth);
     expect(scene.objects.filter(o => o.kind === "lantern")).toEqual([]);
     expect(scene.artStatus).toBe("BLOCKED ON ART");
-    expect(scene.plates.every(p => p.src === null)).toBe(true);
+    // Scene-level acceptance stays BLOCKED regardless of which individual
+    // territory plates happen to have pilot art wired — a plate has a src
+    // only when SCENE_ART actually supplies one for that territory/state.
+    expect(
+      scene.plates.every(
+        p => (p.src === null) === !SCENE_ART.territories[p.territoryId]?.[p.state]
+      )
+    ).toBe(true);
   });
   it("hiding labels preserves the world positions for the art acceptance test", () => {
     const customers = fixture();

@@ -1,6 +1,6 @@
 {
   "version": 6,
-  "status": "BLOCKED ON ART",
+  "status": "pilot-registered-art-integrated",
   "accepted": false,
   "reference": "Screen Shot 2026-09-07 at 22.01.55 PM.png (composition only; never copy counts)",
   "runtimeRegistry": "client/src/components/admin/control-room/LanternCitySceneV6/sceneAssets.ts",
@@ -10,7 +10,7 @@
     "height": 2160,
     "alpha": false,
     "colorSpace": "sRGB",
-    "status": "missing-approved-art",
+    "status": "supplied-pilot",
     "description": "Bright premium painterly Los Angeles, broad readable district masses, connected roads, mountain/skyline backdrop, quieter central object slots. No text, customers, lanterns, locks, destruction or pests baked in. Match approved perspective and light direction. Rejected neutral-atlas-draft.png is not an approved substitute."
   },
   "objectAssets": [
@@ -160,7 +160,7 @@
       "width": 1536,
       "height": 994
     },
-    "plateAlpha": "RGBA PNG with straight alpha. Opaque terrain/building core covers the old landscape; feather the perimeter over 48–96 pixels into genuine transparency. No rectangular matte, drop shadow, baked color wash, or duplicate pests.",
+    "plateAlpha": "RGBA PNG with straight alpha. Opaque terrain/building core covers the old landscape; feather the perimeter over 48\u201396 pixels into genuine transparency. No rectangular matte, drop shadow, baked color wash, or duplicate pests.",
     "pivot": {
       "x": 0.5,
       "y": 0.391304347826087
@@ -1746,7 +1746,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "missing",
+          "status": "supplied-pilot",
           "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
         },
         {
@@ -2884,7 +2884,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "missing",
+          "status": "supplied-pilot",
           "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
         }
       ]
@@ -3017,7 +3017,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "missing",
+          "status": "supplied-pilot",
           "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
         },
         {
@@ -3515,7 +3515,7 @@
           "width": 1536,
           "height": 994,
           "alpha": true,
-          "status": "missing",
+          "status": "supplied-pilot",
           "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
         },
         {
@@ -5054,7 +5054,7 @@
     "Base and all required visible territory states supplied and manually reviewed.",
     "Hide status labels: healthy, cooling, neglected and hostile places remain distinguishable.",
     "No pasted-object appearance; soft transitions are authored into alpha.",
-    "Real browser 1920×1080,1440×900,1280×900 side-by-side with approved reference.",
+    "Real browser 1920\u00d71080,1440\u00d7900,1280\u00d7900 side-by-side with approved reference.",
     "Only after art and browser review may acceptance change; file existence alone never grants visual acceptance."
   ]
 }
