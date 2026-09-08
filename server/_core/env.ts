@@ -57,4 +57,6 @@ export const ENV = {
   dayforgeDemoEnabled: process.env.DAYFORGE_DEMO_ENABLED === "true",
   dayforgeDemoTenantSlug:
     process.env.DAYFORGE_DEMO_TENANT_SLUG?.trim() || "sunset-laundry-demo",
+  /** World capability: Night Shift authors tomorrow's presentation after LA date roll. Off by default. */
+  goldlineNightShiftEnabled: process.env.GOLDLINE_NIGHT_SHIFT === "true",
 };

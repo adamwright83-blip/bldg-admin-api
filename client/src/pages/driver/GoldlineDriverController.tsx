@@ -359,6 +359,10 @@ function LiveGoldlineDriverController({
   const fieldToday = trpc.system.field.today.useQuery(undefined, {
     refetchInterval: 30_000,
   });
+  const authoredDay = trpc.system.nightShift.today.useQuery(undefined, {
+    refetchInterval: 60_000,
+    retry: false,
+  });
   const territories = trpc.system.goldlineWorld.territories.useQuery(
     undefined,
     {
@@ -1327,6 +1331,9 @@ function LiveGoldlineDriverController({
           }))}
         campaignTitle={campaign.data?.campaign.title ?? null}
         campaignChapters={campaign.data?.campaign.chapters}
+        authoredDay={
+          authoredDay.data?.available ? authoredDay.data.authoredDay : null
+        }
         processingLocation={dayDirectorState.data?.processingLocation}
         commitments={dayDirectorState.data?.commitments}
         intelligenceAvailable={dayDirectorState.data?.intelligenceAvailable}

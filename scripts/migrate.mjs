@@ -791,5 +791,38 @@ await run(
 );
 await assertRequiredColumns("driver_sales_journals", ["id", "tenantId", "driverId", "journalDate", "processingStatus"]);
 
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS authored_days (
+    id VARCHAR(36) PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorId VARCHAR(128) NOT NULL,
+    businessDate VARCHAR(10) NOT NULL,
+    stableKey VARCHAR(191) NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'draft',
+    headline VARCHAR(255) NOT NULL,
+    framing VARCHAR(512) NOT NULL,
+    linesJson JSON NOT NULL,
+    inputFingerprint VARCHAR(80) NOT NULL,
+    intelligence VARCHAR(32) NOT NULL,
+    linkedOperationStableKey VARCHAR(191) NULL,
+    committedAt TIMESTAMP NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_authored_day_operator_date (tenantId,operatorId,businessDate),
+    UNIQUE KEY uq_authored_day_stable (tenantId,operatorId,stableKey)
+  )`,
+  "CREATE TABLE authored_days"
+);
+
+await assertRequiredColumns("authored_days", [
+  "tenantId",
+  "operatorId",
+  "businessDate",
+  "stableKey",
+  "linesJson",
+  "inputFingerprint",
+  "intelligence",
+]);
+
 await conn.end();
 console.log("\nMigration complete.");

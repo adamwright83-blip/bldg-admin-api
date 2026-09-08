@@ -6418,6 +6418,42 @@ export const goldlineLanternOperations = mysqlTable(
   })
 );
 
+/** Night Shift presentation layer. One authoritative row per operator per business date. */
+export const authoredDays = mysqlTable(
+  "authored_days",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorId: varchar("operatorId", { length: 128 }).notNull(),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    stableKey: varchar("stableKey", { length: 191 }).notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("draft"),
+    headline: varchar("headline", { length: 255 }).notNull(),
+    framing: varchar("framing", { length: 512 }).notNull(),
+    linesJson: json("linesJson").notNull(),
+    inputFingerprint: varchar("inputFingerprint", { length: 80 }).notNull(),
+    intelligence: varchar("intelligence", { length: 32 }).notNull(),
+    linkedOperationStableKey: varchar("linkedOperationStableKey", {
+      length: 191,
+    }),
+    committedAt: timestamp("committedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    dayUnique: uniqueIndex("uq_authored_day_operator_date").on(
+      table.tenantId,
+      table.operatorId,
+      table.businessDate
+    ),
+    stableUnique: uniqueIndex("uq_authored_day_stable").on(
+      table.tenantId,
+      table.operatorId,
+      table.stableKey
+    ),
+  })
+);
+
 export const goldlineFictionAssignments = mysqlTable(
   "goldline_fiction_assignments",
   {

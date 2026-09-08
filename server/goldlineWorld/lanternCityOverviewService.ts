@@ -22,6 +22,7 @@ import {
 import { getRevenueSummary } from "../analytics/analyticsQueries";
 import { getDb } from "../db";
 import { getGeographicTruth } from "../geography/geographicTruthService";
+import { commitAuthoredDayForOperation } from "../nightShift/authoredDayService";
 import {
   deriveRekindling,
   type RekindlingEvent,
@@ -634,6 +635,12 @@ async function materialize(input: {
     )
     .limit(1);
   if (!row) throw new Error("Lantern operation was not materialized");
+  await commitAuthoredDayForOperation({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    businessDate: input.atlas.businessDate,
+    operationStableKey: stableKey,
+  });
   return {
     id: row.id,
     stableKey: row.stableKey,

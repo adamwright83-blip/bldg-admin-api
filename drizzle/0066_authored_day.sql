@@ -1,0 +1,20 @@
+CREATE TABLE `authored_days` (
+  `id` varchar(36) NOT NULL,
+  `tenantId` varchar(64) NOT NULL,
+  `operatorId` varchar(128) NOT NULL,
+  `businessDate` varchar(10) NOT NULL,
+  `stableKey` varchar(191) NOT NULL,
+  `status` varchar(16) NOT NULL DEFAULT 'draft',
+  `headline` varchar(255) NOT NULL,
+  `framing` varchar(512) NOT NULL,
+  `linesJson` json NOT NULL,
+  `inputFingerprint` varchar(80) NOT NULL,
+  `intelligence` varchar(32) NOT NULL,
+  `linkedOperationStableKey` varchar(191),
+  `committedAt` timestamp NULL,
+  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT `authored_days_id` PRIMARY KEY (`id`),
+  CONSTRAINT `uq_authored_day_operator_date` UNIQUE (`tenantId`,`operatorId`,`businessDate`),
+  CONSTRAINT `uq_authored_day_stable` UNIQUE (`tenantId`,`operatorId`,`stableKey`)
+);

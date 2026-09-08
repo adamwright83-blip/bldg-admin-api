@@ -11,7 +11,9 @@ import type {
   DayDirectorCommitment,
   ProcessingLocation,
 } from "@shared/dayDirector";
+import type { AuthoredDayRecord } from "@shared/authoredDay";
 import { compileGoldlineAdventure, type TerritoryBundleHint } from "@shared/goldlineAdventure";
+import { applyAuthoredDayOrdering } from "@shared/authoredDay";
 import { projectStopsOntoCampaign } from "@shared/goldlineCampaignRuntime";
 
 export type LiveAdventureObjective = {
@@ -165,6 +167,7 @@ export type DayPlanProjection = {
   fixedWindowCount: number;
   cleanCloudCount: number;
   growthCoverage: "covered" | "underfilled" | "blocked" | "unknown";
+  authoredDay?: Pick<AuthoredDayRecord, "headline" | "framing" | "lines" | "status"> | null;
 };
 
 function nameForOrder(order: Order): string {
@@ -330,6 +333,7 @@ export function buildDayPlanProjection(input: {
   liveObjectives?: LiveAdventureObjective[];
   territoryBundles?: TerritoryBundleHint[];
   campaignChapters?: Array<{ objectiveIds: readonly string[] }>;
+  authoredDay?: Pick<AuthoredDayRecord, "headline" | "framing" | "lines" | "status"> | null;
 }): DayPlanProjection {
   const fixedCount = [
     ...(input.pickups ?? []),
@@ -487,13 +491,16 @@ export function buildDayPlanProjection(input: {
     });
   }
   const deduped = baseStops.filter(unique);
+  const orderedBase = input.authoredDay?.lines?.length
+    ? applyAuthoredDayOrdering(deduped, input.authoredDay.lines)
+    : deduped;
   const stops = input.campaignChapters?.length
-    ? projectStopsOntoCampaign(deduped, input.campaignChapters)
+    ? projectStopsOntoCampaign(orderedBase, input.campaignChapters)
     : (() => {
         const compiled = compileGoldlineAdventure({
           date: input.businessDate,
           territoryBundles: input.territoryBundles,
-          objectives: deduped.map(stop => ({
+          objectives: orderedBase.map(stop => ({
             id: stop.id, physicalEntityId: stop.physicalEntityId ?? null,
             kind: stop.kind === "pickup" ? "pickup" : stop.kind === "dropoff" ? "delivery" : stop.source === "living_world" && /recovery/i.test(stop.sourceLabel) ? "recovery" : stop.kind === "sales" ? "commercial_visit" : "field_capture",
             authority: stop.fixed ? "fixed_commitment" : stop.source === "living_world" ? "persisted_task" : "derived_recommendation",
@@ -504,7 +511,7 @@ export function buildDayPlanProjection(input: {
           })),
         });
         const rank = new Map(compiled.ordered.map((objective, index) => [objective.id, index]));
-        return deduped.sort((a, b) => (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER) || a.sortKey.localeCompare(b.sortKey));
+        return orderedBase.sort((a, b) => (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER) || a.sortKey.localeCompare(b.sortKey));
       })();
   const counts: Record<DayPlanStopKind, number> = {
     pickup: 0,
@@ -530,5 +537,6 @@ export function buildDayPlanProjection(input: {
       : stops.some(stop => stop.kind === "sales" && stop.status === "blocked")
         ? "blocked"
         : "underfilled",
+    authoredDay: input.authoredDay ?? null,
   };
 }

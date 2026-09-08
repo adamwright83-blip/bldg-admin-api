@@ -54,6 +54,7 @@ import {
 } from "../dayforgeSecurity/dayforgeSecurity";
 import { registerDayforgeRetentionRoute } from "../dayforgeRetention/retentionRoute";
 import { startAutomaticGeographicReconciliation } from "../geography/geographicReconciliationScheduler";
+import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
 import { startEconomicOutboxDrainer } from "../cleancloudBrowserSync/worldOutbox";
 
 const warnedUnknownTenantHosts = new Set<string>();
@@ -787,6 +788,7 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/`);
     if (process.env.NODE_ENV === "production") {
       startAutomaticGeographicReconciliation();
+      startNightShiftScheduler();
     }
     if (process.env.NODE_ENV === "production" || process.env.GOLDLINE_PROOF_MODE === "1") {
       const stopOutbox = startEconomicOutboxDrainer();

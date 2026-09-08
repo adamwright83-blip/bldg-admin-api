@@ -18,6 +18,7 @@ import type {
   DayDirectorProposal,
   ProcessingLocation,
 } from "@shared/dayDirector";
+import type { AuthoredDayRecord } from "@shared/authoredDay";
 import type { OpenChannelMission } from "../../../../server/openChannel/openChannelTypes";
 import {
   buildDayPlanProjection,
@@ -63,6 +64,7 @@ export type GoldlineDayPlanProps = {
   onAcceptProposal?: (proposal: DayDirectorProposal) => Promise<void>;
   onDismissProposal?: (promptKey: string) => Promise<void>;
   onCompleteCommitment?: (commitmentId: string) => Promise<void>;
+  authoredDay?: Pick<AuthoredDayRecord, "headline" | "framing" | "lines" | "status"> | null;
   cargoFixture?: VehicleCargoItem[];
 };
 
@@ -227,6 +229,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         processingLocation: props.processingLocation,
         commitments: props.commitments,
         now,
+        authoredDay: props.authoredDay,
       }),
     [
       props.businessDate,
@@ -241,6 +244,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       props.nextCommitmentAt,
       props.processingLocation,
       props.commitments,
+      props.authoredDay,
       now,
     ]
   );
@@ -272,9 +276,16 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           <small>SMALL ACTIONS. A WORLD CHANGED.</small>
         </div>
         <p>
-          {props.campaignTitle ? `${props.campaignTitle} · ` : "TODAY · "}
-          {dateHeading(props.businessDate)}
+          {plan.authoredDay?.headline ??
+            (props.campaignTitle ? `${props.campaignTitle} · ` : "TODAY · ")}
+          {!plan.authoredDay?.headline && dateHeading(props.businessDate)}
+          {plan.authoredDay?.headline ? ` · ${dateHeading(props.businessDate)}` : null}
         </p>
+        {plan.authoredDay?.framing ? (
+          <p className="gdp-authored-framing" data-testid="authored-day-framing">
+            {plan.authoredDay.framing}
+          </p>
+        ) : null}
         <button
           className="gdp-menu-button"
           type="button"
