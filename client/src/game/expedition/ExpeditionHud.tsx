@@ -216,6 +216,24 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
     if (terminalState !== "running") setMissionSheetOpen(false);
   }, [terminalState]);
 
+  /**
+   * A real hit landing had no visual weight on the HP bar itself — only the
+   * number changed, on a 140ms linear width transition indistinguishable
+   * from any other value update. A brief flash on the moment HP actually
+   * drops (never on mount, never on healing/redeploy) gives the bar its own
+   * reaction to being hit, separate from the world-level hit-stop/shake.
+   */
+  const previousHpRef = useRef(hp);
+  const [hpFlash, setHpFlash] = useState(false);
+  useEffect(() => {
+    const previous = previousHpRef.current;
+    previousHpRef.current = hp;
+    if (hp >= previous) return;
+    setHpFlash(true);
+    const timeout = setTimeout(() => setHpFlash(false), 220);
+    return () => clearTimeout(timeout);
+  }, [hp]);
+
   const padModel = useRef(
     new ActionPad({
       onEnterAim: () => setAiming(true),
@@ -424,7 +442,11 @@ export function ExpeditionHud(props: ExpeditionHudProps) {
         >
           {objectiveLabel}
         </button>
-        <span className="expedition-hud__bar expedition-hud__bar--hp">
+        <span
+          className={`expedition-hud__bar expedition-hud__bar--hp${
+            hpFlash ? " is-hit" : ""
+          }${hpPct <= 25 ? " is-low" : ""}`}
+        >
           <span style={{ width: `${hpPct}%` }} data-testid="expedition-hp" />
         </span>
         <span className="expedition-hud__bar expedition-hud__bar--momentum">
