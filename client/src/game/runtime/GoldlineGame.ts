@@ -1922,7 +1922,7 @@ export class GoldlineGame {
     }
     this.updateStronghold(width, height);
     this.updatePortals(width, height);
-    this.updateCameraLookahead();
+    this.updateCameraLookahead(effectiveInput.x);
     this.updateParallax();
 
     if (this.expedition) {
@@ -2721,9 +2721,26 @@ export class GoldlineGame {
     }
   }
 
-  private updateCameraLookahead() {
+  /**
+   * `combatLateralInput` is the player's current lateral steering intent
+   * (-1..1, same range/sign as joystick x), used only while an expedition
+   * is active. Outside combat this still biases toward the next authored
+   * anchor exactly as before.
+   */
+  private updateCameraLookahead(combatLateralInput: number) {
     if (this.expedition) {
-      this.camera.clearLookahead();
+      // The camera used to go fully static the instant an expedition
+      // started — the one moment reactivity matters most. Bias toward
+      // whichever way the player is deliberately steering, scaled by how
+      // decisively (deadzone-gated so idle micro-input doesn't flicker it),
+      // easing back to center the instant input stops rather than holding
+      // a stale bias into the next beat of combat.
+      const magnitude = Math.abs(combatLateralInput);
+      if (magnitude < 0.12) {
+        this.camera.clearLookahead();
+        return;
+      }
+      this.camera.setLookahead(combatLateralInput, Math.min(1, magnitude));
       return;
     }
     const upcoming = this.anchors
