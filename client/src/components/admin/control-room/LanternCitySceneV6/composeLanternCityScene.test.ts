@@ -337,7 +337,13 @@ describe("V6 truthful scene composition", () => {
     expect(text).toContain("1 customer");
     expect(text).not.toContain("10");
   });
-  it("describes a secondary lantern by its own remaining cluster, never the whole territory count", () => {
+  it.each([
+    [1920, 1080],
+    [1440, 900],
+    [1280, 900],
+  ])(
+    "describes a secondary lantern by its own remaining cluster, never the whole territory count, at %ix%i",
+    (width, height) => {
     const geo = CANONICAL_BUILDING_GEOGRAPHY.opus_la;
     const strongholdCustomers = Array.from({ length: 9 }, (_, i) =>
       customer(`opus:${i}`, geo.latitude, geo.longitude, "active", geo.address)
@@ -349,30 +355,36 @@ describe("V6 truthful scene composition", () => {
       "active",
       "1 Somewhere Else Ave"
     );
-    const scene = compose([...strongholdCustomers, unrelated]);
+    const scene = compose([...strongholdCustomers, unrelated], width, height);
     const tower = scene.objects.find(o => o.id === "opus_la")!;
     expect(tower.cluster!.total).toBe(9);
     const truth = scene.truth.find(
       t => t.occupancy.territory.id === "koreatown"
     )!;
     expect(truth.customers).toHaveLength(10);
-    // The secondary lantern for the remaining address currently cannot find
-    // a collision-free slot next to the tower at koreatown's single
-    // authored anchor (a pre-existing placement-capacity limit, unrelated
-    // to this count-truth fix) — it is suppressed rather than mis-labeled.
+    // Koreatown's authored lanternSlots give the secondary lantern
+    // somewhere to land instead of being suppressed by the tower sitting
+    // on the shared primary anchor.
     const secondary = scene.objects.find(
       o => o.territoryId === "koreatown" && o.kind === "lantern"
-    );
-    if (secondary) {
-      expect(secondary.cluster!.total).toBe(1);
-      expect(secondary.status).toContain("1 customer");
-      expect(secondary.status).not.toContain("10 customer");
-    } else {
-      expect(
-        scene.suppressed.some(s => s.id === "territory:koreatown")
-      ).toBe(true);
+    )!;
+    expect(secondary).toBeDefined();
+    expect(secondary.cluster!.total).toBe(1);
+    expect(secondary.status).toContain("1 customer");
+    expect(secondary.status).not.toContain("10 customer");
+    expect(
+      scene.objects.some(
+        other => other !== secondary && overlaps(other.bounds, secondary.bounds)
+      )
+    ).toBe(false);
+    expect(
+      scene.exclusions.some(zone => overlaps(zone, secondary.bounds))
+    ).toBe(false);
+    expect(
+      scene.suppressed.some(s => s.id === "territory:koreatown")
+    ).toBe(false);
     }
-  });
+  );
   it("does not turn every conquered zero-customer territory into infestation", () => {
     const scene = composeLanternCityScene({
       customers: [],

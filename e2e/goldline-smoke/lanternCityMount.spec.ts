@@ -76,18 +76,27 @@ test.describe("Lantern City V6 route and retained workflows", () => {
     }
     expect(errors).toEqual([]);
   });
-  test("the attached stronghold customer light opens the customer inspector instead of Tower Wars", async ({
+  test("each stronghold's tower and attached customer light are independent hit targets", async ({
     page,
   }) => {
-    await page.goto("/growth/lantern-city");
-    const light = page
-      .locator('[data-scene-id="opus_la"] [data-scene-target="light"]')
-      .first();
-    await expect(light).toBeVisible();
-    await light.click();
-    await expect(page.locator(".owi")).toBeVisible();
-    await expect(page).toHaveURL(/\/growth\/lantern-city/);
-    await expect(page).not.toHaveURL(/tower-wars/);
+    for (const id of ["opus_la", "century_park_east"]) {
+      await page.goto("/growth/lantern-city");
+      const light = page.locator(
+        `[data-scene-id="${id}"] [data-scene-target="light"]`
+      );
+      await expect(light).toBeVisible();
+      await light.click();
+      await expect(page.locator(".owi")).toBeVisible();
+      await expect(page).toHaveURL(/\/growth\/lantern-city/);
+      await expect(page).not.toHaveURL(/tower-wars/);
+
+      await page.goto("/growth/lantern-city");
+      await page
+        .locator(`[data-scene-id="${id}"] [data-scene-target="tower"]`)
+        .click();
+      await expect(page).toHaveURL(new RegExp(`tower-wars\\?building=${id}`));
+      await expect(page.locator(".tw-arena")).toBeVisible();
+    }
   });
   test("frozen V5 is still available for comparison", async ({ page }) => {
     await page.goto("/growth/lantern-city?scene=v5");

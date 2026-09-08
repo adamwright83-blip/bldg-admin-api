@@ -24,6 +24,7 @@ import {
   TERRITORY_PRESENTATION,
 } from "./territoryPresentation";
 import { statePlateAsset } from "./sceneAssets";
+import { worldPercentToScreen, worldPercentSizeToScreen } from "./worldStage";
 import {
   DEFAULT_CONTROLS,
   type CityScene,
@@ -321,10 +322,18 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
             : 88;
     const boxWidth = candidate.kind === "stronghold" ? 190 : 166;
     const boxHeight = artHeight + 50;
-    const desired = {
-      x: (p.primaryAnchor.x * width) / 100 - boxWidth / 2,
-      y: (p.primaryAnchor.y * height) / 100 - artHeight / 2,
-    };
+    // Strongholds always use the territory's primary anchor. A customer
+    // lantern that cannot fit there (usually because it shares the
+    // territory with a stronghold already occupying that anchor) falls
+    // through to the territory's authored lanternSlots in order, before
+    // being suppressed. Each anchor is a world-stage percent, converted
+    // through the same cover transform the atlas <img> renders with, so
+    // the box lands on the artwork it is meant to sit on instead of
+    // drifting with viewport aspect ratio.
+    const anchorCandidates: Point[] =
+      candidate.kind === "stronghold"
+        ? [p.primaryAnchor]
+        : [p.primaryAnchor, ...(p.lanternSlots ?? [])];
     const offsets = [{ x: 0, y: 0 }];
     for (const radius of [36, 72, 108, 144])
       for (const [dx, dy] of [
@@ -338,23 +347,37 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
         [-1, -1],
       ])
         offsets.push({ x: dx * radius, y: dy * radius });
-    const found = offsets
-      .map(offset => ({
-        x: desired.x + offset.x,
-        y: desired.y + offset.y,
-        width: boxWidth,
-        height: boxHeight,
-      }))
-      .find(
-        rect =>
-          Math.hypot(rect.x - desired.x, rect.y - desired.y) <=
-            p.displacementLimit &&
-          rect.x >= 8 &&
-          rect.y >= 8 &&
-          rect.x + rect.width <= width - 8 &&
-          rect.y + rect.height <= height - 8 &&
-          !occupied.some(other => overlaps(rect, other))
-      );
+    let desired = { x: 0, y: 0 };
+    let found: Rect | undefined;
+    for (const anchor of anchorCandidates) {
+      const anchorScreen = worldPercentToScreen(anchor, input.viewport);
+      const anchorDesired = {
+        x: anchorScreen.x - boxWidth / 2,
+        y: anchorScreen.y - artHeight / 2,
+      };
+      const anchorFound = offsets
+        .map(offset => ({
+          x: anchorDesired.x + offset.x,
+          y: anchorDesired.y + offset.y,
+          width: boxWidth,
+          height: boxHeight,
+        }))
+        .find(
+          rect =>
+            Math.hypot(rect.x - anchorDesired.x, rect.y - anchorDesired.y) <=
+              p.displacementLimit &&
+            rect.x >= 8 &&
+            rect.y >= 8 &&
+            rect.x + rect.width <= width - 8 &&
+            rect.y + rect.height <= height - 8 &&
+            !occupied.some(other => overlaps(rect, other))
+        );
+      if (anchorFound) {
+        found = anchorFound;
+        desired = anchorDesired;
+        break;
+      }
+    }
     if (!found) {
       scene.suppressed.push({
         id: candidate.id,
@@ -384,12 +407,22 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
       controls.territories &&
       !scene.plates.some(plate => plate.territoryId === object.territoryId)
     ) {
-      // Registered art moves with its authored territory group, not an unrelated centroid.
+      // Registered art moves with its authored territory group, not an
+      // unrelated centroid, and is converted through the same world-stage
+      // transform as the anchor above so it stays pinned to the atlas.
+      const plateTopLeft = worldPercentToScreen(
+        { x: p.stateArtBounds.x, y: p.stateArtBounds.y },
+        input.viewport
+      );
+      const plateSize = worldPercentSizeToScreen(
+        { width: p.stateArtBounds.width, height: p.stateArtBounds.height },
+        input.viewport
+      );
       const plateBounds = {
-        x: (p.stateArtBounds.x * width) / 100 + found.x - desired.x,
-        y: (p.stateArtBounds.y * height) / 100 + found.y - desired.y,
-        width: (p.stateArtBounds.width * width) / 100,
-        height: (p.stateArtBounds.height * height) / 100,
+        x: plateTopLeft.x + found.x - desired.x,
+        y: plateTopLeft.y + found.y - desired.y,
+        width: plateSize.width,
+        height: plateSize.height,
       };
       if (!exclusions.some(zone => overlaps(plateBounds, zone, 0)))
         scene.plates.push({

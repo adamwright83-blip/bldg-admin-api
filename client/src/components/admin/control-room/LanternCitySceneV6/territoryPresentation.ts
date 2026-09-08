@@ -6,22 +6,41 @@ export type TerritoryPresentation = {
   priority: number;
   emptyEnvironment: "infested" | "locked";
   displacementLimit: number;
+  /**
+   * Deterministic authored fallback positions (world-stage percent, like
+   * primaryAnchor) for a customer lantern that cannot share the stronghold's
+   * own anchor. Tried in order, after primaryAnchor, before the object is
+   * suppressed. Never used for the stronghold itself — a tower always uses
+   * primaryAnchor. Not runtime physics: fixed, authored slots only.
+   */
+  lanternSlots?: Point[];
 };
 const district = (
   x: number,
   y: number,
   priority = 3,
-  emptyEnvironment: "infested" | "locked" = "locked"
+  emptyEnvironment: "infested" | "locked" = "locked",
+  lanternSlots?: Point[]
 ): TerritoryPresentation => ({
   primaryAnchor: { x, y },
   stateArtBounds: { x: x - 10, y: y - 9, width: 20, height: 23 },
   priority,
   emptyEnvironment,
   displacementLimit: 150,
+  lanternSlots,
 });
 export const TERRITORY_PRESENTATION: Record<string, TerritoryPresentation> = {
-  koreatown: district(47, 49, 1),
-  "century-city": district(20, 65, 1),
+  // Strongholds anchor here too, so an unrelated customer address sharing
+  // the territory needs its own authored slot(s) rather than competing for
+  // the same anchor and being suppressed.
+  koreatown: district(47, 49, 1, "locked", [
+    { x: 55, y: 55 },
+    { x: 40, y: 42 },
+  ]),
+  "century-city": district(20, 65, 1, "locked", [
+    { x: 27, y: 72 },
+    { x: 14, y: 58 },
+  ]),
   "beverly-hills": district(14, 40, 2),
   "west-hollywood": district(33, 33, 2, "infested"),
   hollywood: district(50, 20, 2),

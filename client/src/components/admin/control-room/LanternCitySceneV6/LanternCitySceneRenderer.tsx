@@ -44,50 +44,58 @@ export function CustomerLantern({ object }: { object: SceneObject }) {
     />
   ) : null;
 }
+/**
+ * The stronghold tower and its attached live customer light are two
+ * independent hit targets, not a nested interactive control: the tower
+ * button enters Tower Wars, the light button opens the customer inspector.
+ * They are siblings inside a non-interactive positioning wrapper (see
+ * LanternCitySceneRenderer), never one nested inside the other.
+ */
 export function Stronghold({
   object,
   damage,
   showLight,
+  onSelectTower,
   onSelectLight,
 }: {
   object: SceneObject;
   showLight: boolean;
   damage?: TowerDamageState;
+  onSelectTower: (event: SyntheticEvent<HTMLElement>) => void;
   onSelectLight?: (event: SyntheticEvent<HTMLElement>) => void;
 }) {
   const art = combatTowerArtFor(object.buildingId!, damage ?? null);
   return (
     <>
-      <img
-        className={styles.towerArt}
-        src={
-          (!art.showingDamage && SCENE_ART.strongholds[object.buildingId!]) ||
-          art.src
-        }
-        alt={art.description}
-        draggable={false}
-      />
+      <button
+        type="button"
+        className={styles.objectArt}
+        style={{ height: object.artBounds.height }}
+        data-scene-target="tower"
+        aria-label={`${object.name}: Enter Tower Wars`}
+        onClick={onSelectTower}
+      >
+        <img
+          className={styles.towerArt}
+          src={
+            (!art.showingDamage && SCENE_ART.strongholds[object.buildingId!]) ||
+            art.src
+          }
+          alt={art.description}
+          draggable={false}
+        />
+      </button>
       {showLight && object.cluster && object.cluster.total > 0 ? (
-        <span
+        <button
+          type="button"
           className={styles.towerLight}
-          role="button"
-          tabIndex={0}
           aria-label={`${object.name} customers: ${object.cluster.total}`}
           data-scene-target="light"
-          onClick={event => {
-            event.stopPropagation();
-            onSelectLight?.(event);
-          }}
-          onKeyDown={event => {
-            if (event.key !== "Enter" && event.key !== " ") return;
-            event.preventDefault();
-            event.stopPropagation();
-            onSelectLight?.(event);
-          }}
+          onClick={onSelectLight}
         >
           <CustomerLantern object={object} />
           <b>{object.cluster.total}</b>
-        </span>
+        </button>
       ) : null}
     </>
   );
@@ -141,58 +149,68 @@ export function LanternCitySceneRenderer({
           />
         ))}
       </div>
-      {scene.objects.map(object => (
-        <button
-          key={object.id}
-          type="button"
-          className={styles.object}
-          style={rectStyle(object.bounds)}
-          data-scene-object={object.kind}
-          data-scene-id={object.id}
-          data-territory-id={object.territoryId}
-          data-world-anchor={`${object.worldAnchor.x},${object.worldAnchor.y}`}
-          data-display-anchor={`${object.displayAnchor.x},${object.displayAnchor.y}`}
-          data-selected={selectedId === object.id}
-          aria-label={
-            object.kind === "stronghold"
-              ? `${object.name}: Enter Tower Wars`
-              : `${object.name}: ${object.status}`
-          }
-          onClick={event =>
-            onSelect(
-              object,
-              event.currentTarget,
-              object.kind === "stronghold" ? "tower" : "default"
-            )
-          }
-        >
-          <span
-            className={styles.objectArt}
-            style={{ height: object.artBounds.height }}
+      {scene.objects.map(object =>
+        object.kind === "stronghold" ? (
+          // Non-interactive positioning wrapper: the tower and its
+          // attached customer light are sibling buttons inside it, never
+          // one nested inside the other.
+          <div
+            key={object.id}
+            className={styles.object}
+            style={rectStyle(object.bounds)}
+            data-scene-object={object.kind}
+            data-scene-id={object.id}
+            data-territory-id={object.territoryId}
+            data-world-anchor={`${object.worldAnchor.x},${object.worldAnchor.y}`}
+            data-display-anchor={`${object.displayAnchor.x},${object.displayAnchor.y}`}
+            data-selected={selectedId === object.id}
           >
-            {object.kind === "lantern" ? (
-              <CustomerLantern object={object} />
-            ) : null}
-            {object.kind === "stronghold" ? (
-              <Stronghold
-                object={object}
-                showLight={scene.controls.lanterns}
-                damage={damage?.[object.buildingId!]}
-                onSelectLight={event =>
-                  onSelect(object, event.currentTarget, "light")
-                }
-              />
-            ) : null}
-            {object.kind === "lock" ? (
-              <img src={SCENE_ART.lock ?? ASSETS.frontier.lock} alt="" />
-            ) : null}
-            {object.kind === "prospect" ? (
-              <img src={ASSETS.lanterns.opportunity} alt="" />
-            ) : null}
-          </span>
-          {scene.controls.labels ? <TerritoryLabel object={object} /> : null}
-        </button>
-      ))}
+            <Stronghold
+              object={object}
+              showLight={scene.controls.lanterns}
+              damage={damage?.[object.buildingId!]}
+              onSelectTower={event =>
+                onSelect(object, event.currentTarget, "tower")
+              }
+              onSelectLight={event =>
+                onSelect(object, event.currentTarget, "light")
+              }
+            />
+            {scene.controls.labels ? <TerritoryLabel object={object} /> : null}
+          </div>
+        ) : (
+          <button
+            key={object.id}
+            type="button"
+            className={styles.object}
+            style={rectStyle(object.bounds)}
+            data-scene-object={object.kind}
+            data-scene-id={object.id}
+            data-territory-id={object.territoryId}
+            data-world-anchor={`${object.worldAnchor.x},${object.worldAnchor.y}`}
+            data-display-anchor={`${object.displayAnchor.x},${object.displayAnchor.y}`}
+            data-selected={selectedId === object.id}
+            aria-label={`${object.name}: ${object.status}`}
+            onClick={event => onSelect(object, event.currentTarget, "default")}
+          >
+            <span
+              className={styles.objectArt}
+              style={{ height: object.artBounds.height }}
+            >
+              {object.kind === "lantern" ? (
+                <CustomerLantern object={object} />
+              ) : null}
+              {object.kind === "lock" ? (
+                <img src={SCENE_ART.lock ?? ASSETS.frontier.lock} alt="" />
+              ) : null}
+              {object.kind === "prospect" ? (
+                <img src={ASSETS.lanterns.opportunity} alt="" />
+              ) : null}
+            </span>
+            {scene.controls.labels ? <TerritoryLabel object={object} /> : null}
+          </button>
+        )
+      )}
     </div>
   );
 }

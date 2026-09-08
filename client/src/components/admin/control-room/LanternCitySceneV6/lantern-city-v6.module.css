@@ -80,6 +80,15 @@
   display: block;
   width: 100%;
   flex-shrink: 0;
+  /* Reset applies whether this renders as a <span> (most kinds) or a
+     <button> (the stronghold's own tower hit target — a sibling of its
+     attached customer-light hit target, never nested inside it). */
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 .objectArt > img {
   height: 100%;
@@ -96,6 +105,12 @@
   height: 83px;
   right: 0;
   bottom: 8px;
+  /* Sibling hit target to .objectArt's tower button, not nested in it. */
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  z-index: 4;
 }
 .towerLight img {
   width: 100%;
