@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, notInArray } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, like, notInArray } from "drizzle-orm";
 import {
   goldlineEventReceipts,
   goldlineWorldEvents,
@@ -112,6 +112,22 @@ export async function listEntityChronicle(input: {
     eq(goldlineWorldEvents.tenantId, input.tenantId),
     eq(goldlineWorldEvents.physicalEntityId, input.physicalEntityId)
   )).orderBy(desc(goldlineWorldEvents.occurredAt), desc(goldlineWorldEvents.createdAt)).limit(input.limit ?? 100);
+  return rows.map(toEvent);
+}
+
+/** Every recovery-intervention event at or after `since`, oldest first. */
+export async function listRecoveryChronicleSince(input: {
+  tenantId: string;
+  since: string;
+  limit?: number;
+}): Promise<GoldlineWorldEvent[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db.select().from(goldlineWorldEvents).where(and(
+    eq(goldlineWorldEvents.tenantId, input.tenantId),
+    like(goldlineWorldEvents.correlationId, "recovery-intervention:%"),
+    gte(goldlineWorldEvents.occurredAt, new Date(input.since))
+  )).orderBy(asc(goldlineWorldEvents.occurredAt), asc(goldlineWorldEvents.createdAt)).limit(input.limit ?? 2000);
   return rows.map(toEvent);
 }
 

@@ -261,6 +261,14 @@ export default function LanternCityScene({
     (selected?.sourceClusters?.length === 1
       ? selected.sourceClusters[0]
       : null);
+  const rekindleIdentityKey = physicalCluster
+    ? ([...physicalCluster.customers].sort(
+        (left, right) =>
+          ({ active: 2, dimming: 1, dark: 0 })[left.cadence.state] -
+            { active: 2, dimming: 1, dark: 0 }[right.cadence.state] ||
+          left.identityKey.localeCompare(right.identityKey)
+      )[0]?.identityKey ?? null)
+    : null;
   const needsAddressChoice =
     !!selected?.cluster &&
     (selected.sourceClusters?.length ?? 0) > 1 &&
@@ -529,13 +537,11 @@ export default function LanternCityScene({
               ? physicalCluster.customers[0]!.displayName
               : `${physicalCluster.total} customers`
           }
-          customerIdentityKey={
-            [...physicalCluster.customers].sort(
-              (left, right) =>
-                ({ active: 2, dimming: 1, dark: 0 })[left.cadence.state] -
-                  { active: 2, dimming: 1, dark: 0 }[right.cadence.state] ||
-                left.identityKey.localeCompare(right.identityKey)
-            )[0]?.identityKey ?? null
+          customerIdentityKey={rekindleIdentityKey}
+          rekindling={
+            overview.data?.featuredOperation.rekindling.find(
+              r => r.customerIdentityKey === rekindleIdentityKey
+            ) ?? null
           }
           businessDate={
             overview.data?.businessDate ?? new Date().toISOString().slice(0, 10)

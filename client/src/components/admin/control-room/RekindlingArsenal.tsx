@@ -7,7 +7,16 @@ import {
   rekindlingStateFor,
   sentLine,
   type ArsenalToolId,
+  type RekindlingState,
 } from "@shared/rekindlingArsenal";
+import type { ImpactClass } from "@shared/impactSignal";
+
+/** Server-derived rekindling truth for one lantern since the operation began. */
+export type RekindlingTruth = {
+  state: RekindlingState;
+  reached: ImpactClass | null;
+  lastToolUse: { tool: ArsenalToolId; businessDate: string } | null;
+};
 
 const TOOL_ART: Record<ArsenalToolId, string> = {
   signal_flare: LANTERN_CITY_V5_ASSETS.arsenal.signalFlare,
@@ -30,6 +39,7 @@ export function RekindlingArsenal({
   businessDate = new Date().toISOString().slice(0, 10),
   goldenSealDiscountPercent = null,
   typicalOrderCents = null,
+  rekindling = null,
   onSelectTool,
   onClose,
   onInspect,
@@ -39,6 +49,8 @@ export function RekindlingArsenal({
   businessDate?: string;
   goldenSealDiscountPercent?: number | null;
   typicalOrderCents?: number | null;
+  /** From the overview projection; when present it is the authority for state and cooldown. */
+  rekindling?: RekindlingTruth | null;
   onSelectTool: (tool: ArsenalToolId) => void;
   onClose: () => void;
   onInspect?: () => void;
@@ -53,7 +65,7 @@ export function RekindlingArsenal({
       : intervention?.status === "contacted"
         ? "field_activity"
         : null;
-  const state = rekindlingStateFor(reached);
+  const state = rekindling ? rekindling.state : rekindlingStateFor(reached);
 
   return (
     <div
@@ -96,10 +108,13 @@ export function RekindlingArsenal({
             const tool = ARSENAL_TOOLS[id];
             const connected =
               id === "signal_flare" && customerIdentityKey !== null;
-            const lastUsed =
-              connected &&
-              (intervention?.status === "contacted" ||
-                intervention?.status === "recovered")
+            const lastUsed = rekindling
+              ? rekindling.lastToolUse?.tool === id
+                ? rekindling.lastToolUse.businessDate
+                : null
+              : connected &&
+                  (intervention?.status === "contacted" ||
+                    intervention?.status === "recovered")
                 ? (intervention.contactedAt?.slice(0, 10) ?? null)
                 : null;
             const cooldown = cooldownVerdict({

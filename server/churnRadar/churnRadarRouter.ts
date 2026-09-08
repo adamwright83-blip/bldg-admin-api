@@ -2,6 +2,10 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { dayforgeChurnProcedure, router } from "../_core/trpc";
 import {
+  ARSENAL_TOOLS,
+  type ArsenalToolId,
+} from "../../shared/rekindlingArsenal";
+import {
   approveCustomerRecoveryDraft,
   createCustomerRecoveryIntervention,
   getCustomerRecoveryProfile,
@@ -203,6 +207,9 @@ export const churnRadarRouter = router({
         confirmation: z.literal(
           "I manually sent this exact approved message to this customer"
         ),
+        arsenalTool: z
+          .enum(Object.keys(ARSENAL_TOOLS) as [ArsenalToolId, ...ArsenalToolId[]])
+          .optional(),
       })
     )
     .mutation(({ ctx, input }) =>
@@ -211,6 +218,7 @@ export const churnRadarRouter = router({
         draftId: input.draftId,
         contentHash: input.contentHash,
         requestId: input.requestId,
+        arsenalTool: input.arsenalTool,
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,
       })

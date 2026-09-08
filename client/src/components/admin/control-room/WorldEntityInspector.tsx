@@ -101,6 +101,8 @@ function RecoveryPath({ resident }: { resident: Resident }) {
         requestId: requestId(),
         confirmation:
           "I manually sent this exact approved message to this customer",
+        // The map's Signal Flare: the send is recorded with the tool's truth class.
+        arsenalTool: "signal_flare",
       });
       await Promise.all([
         utils.system.churnRadar.interventions.invalidate(),

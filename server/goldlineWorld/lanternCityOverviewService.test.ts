@@ -482,4 +482,126 @@ describe("Lantern City truthful overview", () => {
       expect(restore(result)).toMatchObject({ current: 0, target: 1 });
     });
   });
+
+  describe("rekindling state from world events", () => {
+    const operation = {
+      id: "op",
+      stableKey: "op",
+      sourceCampaignChapterId: null,
+      operationType: "recovery" as const,
+      campaignTerritoryDefinitionId: null,
+      lanternCityTerritoryId: "silver-lake",
+      startedAt: "2026-09-01T00:00:00.000Z",
+      baselineCustomerIdentityKeys: ["rebecca", "anita"],
+      baselineDormantIdentityKeys: ["rebecca"],
+      anchorCustomerIdentityKey: "rebecca",
+    };
+    const send = (occurredAt: string, correlationId = "recovery-intervention:int-1") => ({
+      eventType: "recovery_outreach_completed",
+      classification: "action",
+      occurredAt,
+      correlationId,
+      metadata: { arsenalTool: "signal_flare", truthClass: "system_sent" },
+    });
+    function run(events: ReturnType<typeof send>[], extra: object[] = []) {
+      return projectLanternCityOverview({
+        atlas: {
+          tenantId: "tenant",
+          businessDate: "2026-09-08",
+          timeZone: "America/Los_Angeles",
+          customers: [customer("Rebecca", "dark", 70), customer("Anita", "active", 3)],
+          pursued: [],
+        } as any,
+        paidRevenueThisWeek: 0,
+        campaign: { campaign: { chapters: [], currentChapterId: null } } as any,
+        operation,
+        rekindling: {
+          interventions: [
+            { id: "int-1", customerKey: "rebecca" },
+            { id: "int-9", customerKey: "someone-else" },
+          ],
+          events: [...events, ...(extra as any[])],
+        },
+      });
+    }
+
+    it("derives spark from a real tool send since the operation began, dated in the business zone", () => {
+      const result = run([send("2026-09-04T03:30:00.000Z")]);
+      expect(result.featuredOperation.rekindling).toEqual([
+        {
+          customerIdentityKey: "rebecca",
+          state: "spark",
+          reached: "field_activity",
+          lastToolUse: { tool: "signal_flare", businessDate: "2026-09-03" },
+        },
+      ]);
+    });
+
+    it("stays dark for sends before the operation or on another customer's intervention", () => {
+      const result = run([
+        send("2026-08-25T18:00:00.000Z"),
+        send("2026-09-04T18:00:00.000Z", "recovery-intervention:int-9"),
+      ]);
+      expect(result.featuredOperation.rekindling).toEqual([
+        { customerIdentityKey: "rebecca", state: "dark", reached: null, lastToolUse: null },
+      ]);
+    });
+
+    it("reaches flame only through a real recovered-order outcome", () => {
+      const result = run(
+        [send("2026-09-02T18:00:00.000Z")],
+        [
+          {
+            eventType: "customer_recovered",
+            classification: "outcome",
+            occurredAt: "2026-09-06T18:00:00.000Z",
+            correlationId: "recovery-intervention:int-1",
+            metadata: {},
+          },
+        ]
+      );
+      expect(result.featuredOperation.rekindling[0]).toMatchObject({
+        state: "flame",
+        reached: "customer_outcome",
+      });
+    });
+
+    it("reads dark with no evidence, and lists nothing outside a recovery operation", () => {
+      expect(fixture().featuredOperation.rekindling).toEqual([
+        { customerIdentityKey: "rebecca", state: "dark", reached: null, lastToolUse: null },
+      ]);
+      const fixed = projectLanternCityOverview({
+        atlas: {
+          tenantId: "tenant",
+          businessDate: "2026-09-08",
+          timeZone: "America/Los_Angeles",
+          customers: [customer("Rebecca", "dark", 70)],
+          pursued: [],
+        } as any,
+        paidRevenueThisWeek: 0,
+        campaign: {
+          campaign: {
+            currentChapterId: "fixed",
+            chapters: [
+              {
+                stableChapterId: "fixed",
+                territoryId: null,
+                physicalAnchors: [],
+                required: true,
+                hardAnchor: true,
+                fictionalTreatment: "MAKE THE PICKUP",
+                selectedGameplayBinding: "authoritative_visit_route",
+              },
+            ],
+          },
+        } as any,
+        resolvedCampaignTerritory: {
+          campaignTerritoryDefinitionId: null,
+          lanternCityTerritoryId: null,
+        },
+        rekindling: { interventions: [{ id: "int-1", customerKey: "rebecca" }], events: [send("2026-09-04T18:00:00.000Z")] },
+      });
+      expect(fixed.featuredOperation.rekindling).toEqual([]);
+    });
+  });
 });

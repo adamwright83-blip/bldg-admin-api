@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import {
+  customerRecoveryInterventions,
   goldlineLanternOperations,
   goldlineTerritoryDefinitions,
 } from "../../drizzle/schema";
@@ -21,8 +22,13 @@ import {
 import { getRevenueSummary } from "../analytics/analyticsQueries";
 import { getDb } from "../db";
 import { getGeographicTruth } from "../geography/geographicTruthService";
+import {
+  deriveRekindling,
+  type RekindlingEvent,
+} from "../../shared/rekindlingEvents";
 import { getOrMaterializeTodayCampaign } from "./campaignService";
 import { listPresentedTerritories } from "./territoryService";
+import { listRecoveryChronicleSince } from "./worldEventStore";
 
 export const AUTHORED_V6_TERRITORY_IDS = [
   "koreatown",
@@ -66,6 +72,19 @@ export type LanternPresentedTerritoryState = {
   definition: { realGeographyLabel: string | null };
   state: { cleared: boolean; pressureReturned?: boolean };
 };
+/** Real outreach evidence the rekindling state is derived from. */
+export type LanternRekindlingInput = {
+  interventions: readonly { id: string; customerKey: string }[];
+  events: readonly (RekindlingEvent & { correlationId: string })[];
+};
+function businessDateIn(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
+}
 export type LanternTerritoryDossier = {
   territoryId: string;
   territoryName: string;
@@ -222,6 +241,7 @@ export function projectLanternCityOverview(input: {
   };
   operation?: LanternOperationBaseline;
   territoryStates?: readonly LanternPresentedTerritoryState[];
+  rekindling?: LanternRekindlingInput;
 }) {
   const occupancyFor = deriveDossierOccupancy(input);
   const grouped = new Map<string, Customer[]>();
@@ -354,6 +374,45 @@ export function projectLanternCityOverview(input: {
               new Date(b.firstOrderAt).getTime()
           )[0] ?? null)
       : null;
+  // Rekindling state: highest impact class reached per lantern since the
+  // operation began, read from world events on that customer's real recovery
+  // interventions. Derived, never stored; a send alone is only a spark.
+  const interventionsByCustomer = new Map<string, string[]>();
+  for (const item of input.rekindling?.interventions ?? [])
+    interventionsByCustomer.set(item.customerKey, [
+      ...(interventionsByCustomer.get(item.customerKey) ?? []),
+      `recovery-intervention:${item.id}`,
+    ]);
+  const rekindling =
+    isRecovery && dossier
+      ? Array.from(
+          new Set([...(anchorKey ? [anchorKey] : []), ...baselineDormant])
+        ).map(customerIdentityKey => {
+          const correlations = new Set(
+            interventionsByCustomer.get(customerIdentityKey) ?? []
+          );
+          const derived = deriveRekindling({
+            since: startedAt,
+            events: (input.rekindling?.events ?? []).filter(e =>
+              correlations.has(e.correlationId)
+            ),
+          });
+          return {
+            customerIdentityKey,
+            state: derived.state,
+            reached: derived.reached,
+            lastToolUse: derived.lastToolUse
+              ? {
+                  tool: derived.lastToolUse.tool,
+                  businessDate: businessDateIn(
+                    derived.lastToolUse.occurredAt,
+                    input.atlas.timeZone
+                  ),
+                }
+              : null,
+          };
+        })
+      : [];
   const binding = chapter?.selectedGameplayBinding ?? "recovery";
   const environment = dossier
     ? visualEnvironment(dossier, occupancyFor(dossier.territoryId))
@@ -461,6 +520,8 @@ export function projectLanternCityOverview(input: {
       baselineDormantIdentityKeys: baselineDormant,
       /** Buildings relit by a new resident's first order while the old lantern stayed dark. */
       replacementRescues,
+      /** Per dormant lantern: spark / ember / flame from real events since the operation began. */
+      rekindling,
       knownLightIdentityKey: anchorKey,
       secondLight:
         isRecovery && dossier
@@ -623,7 +684,21 @@ export async function getLanternCityOverview(input: {
     ) ?? null;
   const resolved = resolveChapterLanternTerritory(chapter, definitions);
   const operation = await materialize({ ...input, atlas, campaign, resolved });
+  const [interventions, events] = await Promise.all([
+    db
+      .select({
+        id: customerRecoveryInterventions.id,
+        customerKey: customerRecoveryInterventions.customerKeyHash,
+      })
+      .from(customerRecoveryInterventions)
+      .where(eq(customerRecoveryInterventions.tenantId, input.tenantId)),
+    listRecoveryChronicleSince({
+      tenantId: input.tenantId,
+      since: operation?.startedAt ?? `${atlas.businessDate}T00:00:00.000Z`,
+    }),
+  ]);
   return projectLanternCityOverview({
+    rekindling: { interventions, events },
     atlas,
     campaign,
     operation,

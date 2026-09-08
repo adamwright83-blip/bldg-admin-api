@@ -31,4 +31,21 @@ describe("Lantern City V6 render integration", () => {
     expect(arsenal).toContain("Action path not yet connected.");
     expect(arsenal).not.toMatch(/useMutation/);
   });
+
+  it("shows server-derived rekindling truth and records the Signal Flare through the existing outreach path", () => {
+    const arsenal = read("../RekindlingArsenal.tsx");
+    expect(arsenal).toContain("rekindling ? rekindling.state : rekindlingStateFor(reached)");
+    expect(arsenal).toContain("rekindling.lastToolUse?.tool === id");
+    expect(arsenal).not.toMatch(/useMutation/);
+
+    const scene = read("./LanternCityScene.tsx");
+    expect(scene).toContain("overview.data?.featuredOperation.rekindling.find(");
+
+    const inspector = read("../WorldEntityInspector.tsx");
+    expect(inspector).toContain('arsenalTool: "signal_flare"');
+    expect(inspector).toContain("trpc.system.churnRadar.markContacted.useMutation()");
+    // No client path fabricates a response or an order.
+    expect(inspector).not.toMatch(/customer_recovered|markRecovered|status: "recovered"/);
+    expect(arsenal).not.toMatch(/customer_recovered|markRecovered/);
+  });
 });

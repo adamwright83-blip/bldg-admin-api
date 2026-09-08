@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
+import type { ArsenalToolId } from "../../shared/rekindlingArsenal";
+import { arsenalOutreachEventFields } from "../../shared/rekindlingEvents";
 import { and, asc, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";
 import {
   customerChurnScans,
@@ -1469,6 +1471,8 @@ export async function markCustomerRecoveryContacted(input: {
   contentHash: string;
   actorId: string;
   requestId: string;
+  /** Rekindling Arsenal tool this send was made with, when made from the map. */
+  arsenalTool?: ArsenalToolId;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -1556,6 +1560,7 @@ export async function markCustomerRecoveryContacted(input: {
         operatorReported: true,
         providerDeliveryVerified: false,
         contactedAt: contactedAt.toISOString(),
+        arsenalTool: input.arsenalTool ?? null,
       },
     });
     await tx.insert(opsTaskEvents).values({
@@ -1568,13 +1573,18 @@ export async function markCustomerRecoveryContacted(input: {
       note: "Operator reported manual outreach; provider delivery is not verified.",
     });
   });
+  // Manual contact is operator-reported, so the arsenal tool's truth class is
+  // capped at ATTESTED here; the tool and class ride along as metadata.
+  const arsenal = input.arsenalTool
+    ? arsenalOutreachEventFields({ tool: input.arsenalTool, providerDeliveryVerified: false })
+    : null;
   await appendGoldlineWorldEvent({
     tenantId: input.tenantId,
     physicalEntityId: await physicalEntityForIntervention({ tenantId: input.tenantId, interventionId: input.interventionId }),
     eventType: "recovery_outreach_completed", classification: "action", actorType: "operator", actorId: input.actorId,
     occurredAt: new Date().toISOString(), observedAt: null, sourceType: "customer_recovery_interventions", sourceId: input.interventionId, sourceEvidenceReference: `customer_recovery_interventions:${input.interventionId}`,
-    provenanceClass: "operator_reported", verificationClass: "ATTESTED", confidence: "high", idempotencyKey: `recovery-outreach:${input.tenantId}:${input.requestId}`, correlationId: `recovery-intervention:${input.interventionId}`,
-    metadata: { draftId: input.draftId, actionOnly: true, doesNotMeanRecovered: true },
+    provenanceClass: "operator_reported", verificationClass: arsenal?.verificationClass ?? "ATTESTED", confidence: "high", idempotencyKey: `recovery-outreach:${input.tenantId}:${input.requestId}`, correlationId: `recovery-intervention:${input.interventionId}`,
+    metadata: { draftId: input.draftId, actionOnly: true, doesNotMeanRecovered: true, ...(arsenal?.metadata ?? {}) },
   });
   return getRecoveryInterventionDetail(input);
 }
