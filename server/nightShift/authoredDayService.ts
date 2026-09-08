@@ -13,8 +13,10 @@ import type {
   AuthoredDayRecord,
 } from "../../shared/authoredDay";
 import {
+  applyAuthoredDayPlan,
   authoredDayStableKey,
-  validateAuthoredDayLines,
+  deterministicNightShiftPlan,
+  type NightShiftSelectionPlan,
 } from "../../shared/authoredDay";
 import { AUTHORED_V6_TERRITORY_IDS } from "../goldlineWorld/lanternCityOverviewService";
 import { forecastTerritoryDecay } from "../../shared/lanternDecayForecast";
@@ -362,70 +364,27 @@ export async function gatherNightShiftInputs(input: {
   };
 }
 
-const authoredDaySchema = {
-  name: "authored_day",
+const nightShiftPlanSchema = {
+  name: "night_shift_plan",
   strict: true,
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["headline", "framing", "lines"],
+    required: ["headline", "framing", "selections"],
     properties: {
       headline: { type: "string" },
       framing: { type: "string" },
-      lines: {
+      selections: {
         type: "array",
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["id", "title", "narrative", "kind", "emphasis", "provenance"],
+          required: ["candidateId", "emphasis"],
           properties: {
-            id: { type: "string" },
-            title: { type: "string" },
-            narrative: { type: "string" },
-            kind: {
-              type: "string",
-              enum: [
-                "pickup",
-                "delivery",
-                "follow_up",
-                "recovery",
-                "commercial",
-                "obligation",
-                "emphasis",
-                "operation",
-              ],
-            },
+            candidateId: { type: "string" },
             emphasis: {
               type: "string",
               enum: ["primary", "secondary", "background"],
-            },
-            provenance: {
-              type: "array",
-              items: {
-                type: "object",
-                additionalProperties: false,
-                required: ["entityType", "entityId", "sourceReference"],
-                properties: {
-                  entityType: {
-                    type: "string",
-                    enum: [
-                      "order",
-                      "external_order",
-                      "commercial_follow_up",
-                      "commercial_mission",
-                      "field_item",
-                      "obligation",
-                      "territory",
-                      "operation",
-                      "campaign_chapter",
-                      "physical_entity",
-                      "customer",
-                    ],
-                  },
-                  entityId: { type: "string" },
-                  sourceReference: { type: "string" },
-                },
-              },
             },
           },
         },
@@ -449,15 +408,72 @@ function deterministicFallback(bundle: NightShiftInputBundle): {
   lines: AuthoredDayLine[];
   intelligence: AuthoredDayRecord["intelligence"];
 } {
-  const lines = [...bundle.candidateLines].sort((a, b) => {
-    const rank = { primary: 0, secondary: 1, background: 2 };
-    return rank[a.emphasis] - rank[b.emphasis] || a.id.localeCompare(b.id);
+  const plan = deterministicNightShiftPlan(bundle.candidateLines);
+  const applied = applyAuthoredDayPlan({
+    candidateLines: bundle.candidateLines,
+    allowlist: bundle.allowlist,
+    headlineSeed: bundle.headlineSeed,
+    framingSeed: bundle.framingSeed,
+    plan: {
+      ...plan,
+      headline: bundle.headlineSeed,
+      framing: bundle.framingSeed,
+    },
   });
+  if (!applied.ok) {
+    const sorted = [...bundle.candidateLines].sort((a, b) => {
+      const rank = { primary: 0, secondary: 1, background: 2 };
+      return rank[a.emphasis] - rank[b.emphasis] || a.id.localeCompare(b.id);
+    });
+    return {
+      headline: bundle.headlineSeed,
+      framing: bundle.framingSeed,
+      lines: sorted,
+      intelligence: "deterministic_fallback",
+    };
+  }
   return {
-    headline: bundle.headlineSeed,
-    framing: bundle.framingSeed,
-    lines,
+    headline: applied.headline,
+    framing: applied.framing,
+    lines: applied.lines,
     intelligence: "deterministic_fallback",
+  };
+}
+
+function parseNightShiftPlan(raw: unknown): NightShiftSelectionPlan | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as Partial<NightShiftSelectionPlan>;
+  if (typeof value.headline !== "string" || typeof value.framing !== "string") {
+    return null;
+  }
+  if (!Array.isArray(value.selections)) return null;
+  const selections = value.selections
+    .map(item => {
+      if (!item || typeof item !== "object") return null;
+      const selection = item as {
+        candidateId?: unknown;
+        emphasis?: unknown;
+      };
+      if (typeof selection.candidateId !== "string") return null;
+      if (
+        selection.emphasis !== "primary" &&
+        selection.emphasis !== "secondary" &&
+        selection.emphasis !== "background"
+      ) {
+        return null;
+      }
+      return {
+        candidateId: selection.candidateId,
+        emphasis: selection.emphasis,
+      };
+    })
+    .filter((item): item is NightShiftSelectionPlan["selections"][number] =>
+      Boolean(item)
+    );
+  return {
+    headline: value.headline,
+    framing: value.framing,
+    selections,
   };
 }
 
@@ -479,57 +495,56 @@ export async function composeAuthoredDayFromBundle(
   }
   if (!ENV.anthropicApiKey?.trim()) {
     const fallback = deterministicFallback(bundle);
-    const validated = validateAuthoredDayLines(fallback.lines, bundle.allowlist);
-    return validated.ok ? { ok: true, ...fallback } : validated;
+    if (!fallback.lines.length) return { ok: false, reason: "no real work to author" };
+    return { ok: true, ...fallback };
   }
   try {
-    const allowedIds = {
-      fieldItems: Array.from(bundle.allowlist.fieldItemIds),
-      orders: Array.from(bundle.allowlist.orderIds),
-      followUps: Array.from(bundle.allowlist.followUpIds),
-      missions: Array.from(bundle.allowlist.missionIds),
-      obligations: Array.from(bundle.allowlist.obligationIds),
-      territories: Array.from(bundle.allowlist.territoryIds),
-      customers: Array.from(bundle.allowlist.customerIds),
-      physicalEntities: Array.from(bundle.allowlist.physicalEntityIds),
-    };
     const result = await invokeLLM({
       tenantId,
       model: ENV.anthropicModel,
       maxTokens: 4000,
       temperature: 0,
-      outputSchema: authoredDaySchema,
+      outputSchema: nightShiftPlanSchema,
       messages: [
         {
           role: "system",
           content:
-            "You are the Goldline Night Shift. Arrange and narratively frame ONLY the supplied real work. You may choose emphasis and ordering. You must NOT invent customers, stops, meetings, outcomes, or geography. Every provenance entityId must come from the supplied allowlist. Never author dashboard busywork.",
+            "You are the Goldline Night Shift. Choose ordering and emphasis among the supplied canonical candidate IDs only. Headline and framing may be atmospheric presentation language only and must not introduce meetings, outcomes, human commitments, revenue, or timing facts.",
         },
         {
           role: "user",
           content: JSON.stringify({
             businessDate: bundle.businessDate,
-            allowedIds,
-            candidates: bundle.candidateLines,
+            candidates: bundle.candidateLines.map(candidate => ({
+              candidateId: candidate.id,
+              title: candidate.title,
+              narrative: candidate.narrative,
+              kind: candidate.kind,
+              emphasis: candidate.emphasis,
+            })),
           }),
         },
       ],
     });
-    const parsed = JSON.parse(contentText(result)) as {
-      headline?: string;
-      framing?: string;
-      lines?: AuthoredDayLine[];
-    };
-    if (!parsed.headline || !parsed.framing || !Array.isArray(parsed.lines)) {
-      return { ok: false, reason: "malformed structured output" };
+    const plan = parseNightShiftPlan(JSON.parse(contentText(result)));
+    if (!plan) return { ok: false, reason: "malformed structured output" };
+    const applied = applyAuthoredDayPlan({
+      candidateLines: bundle.candidateLines,
+      allowlist: bundle.allowlist,
+      headlineSeed: bundle.headlineSeed,
+      framingSeed: bundle.framingSeed,
+      plan,
+    });
+    if (!applied.ok) {
+      const fallback = deterministicFallback(bundle);
+      if (!fallback.lines.length) return applied;
+      return { ok: true, ...fallback, intelligence: "deterministic_fallback" };
     }
-    const validated = validateAuthoredDayLines(parsed.lines, bundle.allowlist);
-    if (!validated.ok) return validated;
     return {
       ok: true,
-      headline: String(parsed.headline).slice(0, 255),
-      framing: String(parsed.framing).slice(0, 512),
-      lines: parsed.lines,
+      headline: applied.headline,
+      framing: applied.framing,
+      lines: applied.lines,
       intelligence: "anthropic",
     };
   } catch (error) {
@@ -538,8 +553,8 @@ export async function composeAuthoredDayFromBundle(
       error instanceof Error ? error.message : error
     );
     const fallback = deterministicFallback(bundle);
-    const validated = validateAuthoredDayLines(fallback.lines, bundle.allowlist);
-    return validated.ok ? { ok: true, ...fallback } : validated;
+    if (!fallback.lines.length) return { ok: false, reason: "no real work to author" };
+    return { ok: true, ...fallback };
   }
 }
 

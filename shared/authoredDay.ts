@@ -74,6 +74,16 @@ export type AuthoredDayAllowlist = {
   missionIds: Set<string>;
 };
 
+/** LLM may only choose among canonical candidates; it cannot rewrite line facts. */
+export type NightShiftSelectionPlan = {
+  headline: string;
+  framing: string;
+  selections: Array<{
+    candidateId: string;
+    emphasis: AuthoredDayLine["emphasis"];
+  }>;
+};
+
 const BUSYWORK_PATTERNS = [
   /\breview\s+dashboard\b/i,
   /\bupdate\s+crm\b/i,
@@ -87,6 +97,125 @@ const BUSYWORK_PATTERNS = [
 
 export function isBusyworkMission(text: string): boolean {
   return BUSYWORK_PATTERNS.some(pattern => pattern.test(text));
+}
+
+const UNSUPPORTED_FACT_PATTERNS = [
+  /\bconfirmed meeting\b/i,
+  /\bconfirmed a meeting\b/i,
+  /\bmeeting with\b/i,
+  /\bmeeting at\b/i,
+  /\bsigned the deal\b/i,
+  /\bclose to signing\b/i,
+  /\bagreed to weekly\b/i,
+  /\bweekly pickup\b/i,
+  /\bweekly service\b/i,
+  /\brevenue booked\b/i,
+  /\bclosed revenue\b/i,
+  /\bdeal happened\b/i,
+  /\bcustomer agreed\b/i,
+  /\bagreed to weekly pickup\b/i,
+  /\bdeal closed\b/i,
+  /\bpromised to call\b/i,
+  /\bmanager promised\b/i,
+  /\bis waiting for pricing\b/i,
+  /\bare ready to return\b/i,
+  /\b\d+\s+customers?\b/i,
+  /\bat \d{1,2}(:\d{2})?\s*(am|pm)\b/i,
+  /\b\d{1,2}\s*pm\b/i,
+  /\b\d{1,2}\s*am\b/i,
+];
+
+/** Presentation copy must not introduce business facts unsupported by evidence. */
+export function introducesUnsupportedFactualClaim(text: string): boolean {
+  return UNSUPPORTED_FACT_PATTERNS.some(pattern => pattern.test(text));
+}
+
+export function validatePresentationCopy(
+  text: string
+): { ok: true } | { ok: false; reason: string } {
+  if (!text?.trim()) return { ok: false, reason: "presentation copy required" };
+  if (introducesUnsupportedFactualClaim(text)) {
+    return { ok: false, reason: "presentation copy introduces unsupported factual claim" };
+  }
+  if (isBusyworkMission(text)) {
+    return { ok: false, reason: "busywork missions are not allowed" };
+  }
+  return { ok: true };
+}
+
+export function reconstructAuthoredLinesFromCandidates(
+  candidates: AuthoredDayLine[],
+  plan: Pick<NightShiftSelectionPlan, "selections">
+): { ok: true; lines: AuthoredDayLine[] } | { ok: false; reason: string } {
+  const byId = new Map(candidates.map(candidate => [candidate.id, candidate]));
+  if (!plan.selections.length) {
+    return { ok: false, reason: "night shift must select at least one candidate" };
+  }
+  const seen = new Set<string>();
+  const lines: AuthoredDayLine[] = [];
+  for (const selection of plan.selections) {
+    if (seen.has(selection.candidateId)) {
+      return { ok: false, reason: "duplicate candidate selection" };
+    }
+    seen.add(selection.candidateId);
+    const candidate = byId.get(selection.candidateId);
+    if (!candidate) {
+      return { ok: false, reason: `unknown candidate id ${selection.candidateId}` };
+    }
+    lines.push({
+      ...candidate,
+      emphasis: selection.emphasis,
+    });
+  }
+  return { ok: true, lines };
+}
+
+export function applyAuthoredDayPlan(input: {
+  candidateLines: AuthoredDayLine[];
+  allowlist: AuthoredDayAllowlist;
+  headlineSeed: string;
+  framingSeed: string;
+  plan: NightShiftSelectionPlan;
+}):
+  | {
+      ok: true;
+      headline: string;
+      framing: string;
+      lines: AuthoredDayLine[];
+    }
+  | { ok: false; reason: string } {
+  const headline = validatePresentationCopy(input.plan.headline).ok
+    ? input.plan.headline.trim().slice(0, 255)
+    : input.headlineSeed;
+  const framing = validatePresentationCopy(input.plan.framing).ok
+    ? input.plan.framing.trim().slice(0, 512)
+    : input.framingSeed;
+  const reconstructed = reconstructAuthoredLinesFromCandidates(
+    input.candidateLines,
+    input.plan
+  );
+  if (!reconstructed.ok) return reconstructed;
+  const validated = validateAuthoredDayLines(reconstructed.lines, input.allowlist);
+  if (!validated.ok) return validated;
+  return { ok: true, headline, framing, lines: reconstructed.lines };
+}
+
+export function deterministicNightShiftPlan(
+  candidateLines: AuthoredDayLine[]
+): NightShiftSelectionPlan {
+  return {
+    headline: "",
+    framing: "",
+    selections: [...candidateLines]
+      .sort((a, b) => {
+        const rank = { primary: 0, secondary: 1, background: 2 };
+        return rank[a.emphasis] - rank[b.emphasis] || a.id.localeCompare(b.id);
+      })
+      .map(candidate => ({
+        candidateId: candidate.id,
+        emphasis: candidate.emphasis,
+      })),
+  };
 }
 
 export function authoredDayStableKey(businessDate: string): string {

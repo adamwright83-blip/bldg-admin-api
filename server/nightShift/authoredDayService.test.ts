@@ -294,29 +294,43 @@ describe("Night Shift service", () => {
             content: JSON.stringify({
               headline: "Tomorrow",
               framing: "Work",
-              lines: [
-                {
-                  id: "bad",
-                  title: "Fake customer",
-                  narrative: "Invented",
-                  kind: "pickup",
-                  emphasis: "primary",
-                  provenance: [
-                    {
-                      entityType: "customer",
-                      entityId: "not-in-allowlist",
-                      sourceReference: "customers:999",
-                    },
-                  ],
-                },
-              ],
+              selections: [{ candidateId: "line:does-not-exist", emphasis: "primary" }],
             }),
           },
         },
       ],
     });
     const result = await composeAuthoredDayFromBundle(bundle, "default");
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.intelligence).toBe("deterministic_fallback");
+      expect(result.lines[0]?.title).toBe("Pick up Ada");
+    }
+  });
+
+  it("reconstructs canonical candidate text instead of accepting fabricated prose", async () => {
+    ENV.anthropicApiKey = "test-key";
+    mocks.invokeLLM.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              headline: "Confirmed meeting with Sarah at 2 PM",
+              framing: "Greystar signed the deal",
+              selections: [{ candidateId: "line:pickup:42", emphasis: "primary" }],
+            }),
+          },
+        },
+      ],
+    });
+    const result = await composeAuthoredDayFromBundle(sampleBundle(), "default");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.lines[0]?.title).toBe("Pick up Ada");
+      expect(result.lines[0]?.narrative).toBe("Scheduled pickup.");
+      expect(result.headline).toBe("Tomorrow on 2026-09-09");
+      expect(result.framing).toBe("1 real stop.");
+    }
   });
 
   it("accepts deterministic fallback from real candidates", async () => {
@@ -364,29 +378,18 @@ describe("Night Shift service", () => {
             content: JSON.stringify({
               headline: "Closed revenue",
               framing: "A deal happened",
-              lines: [
-                {
-                  id: "fake-order",
-                  title: "New order booked",
-                  narrative: "Revenue invented overnight",
-                  kind: "pickup",
-                  emphasis: "primary",
-                  provenance: [
-                    {
-                      entityType: "order",
-                      entityId: "99999",
-                      sourceReference: "orders:99999",
-                    },
-                  ],
-                },
-              ],
+              selections: [{ candidateId: "line:pickup:42", emphasis: "primary" }],
             }),
           },
         },
       ],
     });
     const result = await composeAuthoredDayFromBundle(sampleBundle(), "default");
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.lines[0]?.title).toBe("Pick up Ada");
+      expect(result.headline).toBe("Tomorrow on 2026-09-09");
+    }
   });
 
   it("builds allowlisted inputs from field today only", async () => {

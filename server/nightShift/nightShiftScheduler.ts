@@ -6,9 +6,12 @@ import {
   nightShiftTargetBusinessDate,
   runNightShiftForBusinessDate,
 } from "./authoredDayService";
+import {
+  resolveAutonomousNightShiftScope,
+  type NightShiftAutonomousScope,
+} from "./nightShiftScope";
 
 const DEFAULT_INTERVAL_MS = 60_000;
-const DEFAULT_TENANT = "default";
 
 type ActiveRun = Promise<void> | null;
 const activeRuns = new Map<string, ActiveRun>();
@@ -18,34 +21,32 @@ const activeRuns = new Map<string, ActiveRun>();
  * landed yet; this scheduler leaves that seam open and authors from real
  * obligations/stops only.
  */
-export function triggerNightShiftRun(input: {
-  tenantId?: string;
-  operatorId: string;
-  userId: string;
-  now?: Date;
-}): Promise<void> {
+export async function triggerNightShiftRun(
+  input?: NightShiftAutonomousScope & { now?: Date }
+): Promise<void> {
   if (!isNightShiftEnabled()) return Promise.resolve();
-  const tenantId = input.tenantId ?? DEFAULT_TENANT;
-  const now = input.now ?? new Date();
+  const scope = input ?? (await resolveAutonomousNightShiftScope());
+  if (!scope) return Promise.resolve();
+  const now = input?.now ?? new Date();
   const timeZone = getDashboardTimeZone();
   if (!isAfterLosAngelesBusinessDateRoll(now, timeZone)) {
     return Promise.resolve();
   }
   const businessDate = nightShiftTargetBusinessDate(now, timeZone);
-  const key = `${tenantId}:${input.operatorId}:${businessDate}`;
+  const key = `${scope.tenantId}:${scope.operatorId}:${businessDate}`;
   const existing = activeRuns.get(key);
   if (existing) return existing;
   const run = runNightShiftForBusinessDate({
-    tenantId,
-    operatorId: input.operatorId,
-    userId: input.userId,
+    tenantId: scope.tenantId,
+    operatorId: scope.operatorId,
+    userId: scope.userId,
     businessDate,
     now,
   })
     .then(result => {
       if (result.status === "authored") {
         console.info(
-          `[NightShift] Authored ${result.authoredDay.businessDate} for ${input.operatorId}`
+          `[NightShift] Authored ${result.authoredDay.businessDate} for ${scope.operatorId}`
         );
       }
     })
@@ -64,17 +65,23 @@ export function triggerNightShiftRun(input: {
 
 export function startNightShiftScheduler(input?: {
   intervalMs?: number;
-  tenantId?: string;
-  operatorId?: string;
-  userId?: string;
+  scope?: NightShiftAutonomousScope;
 }) {
   if (!ENV.goldlineNightShiftEnabled) return () => undefined;
-  const run = () =>
-    triggerNightShiftRun({
-      tenantId: input?.tenantId ?? DEFAULT_TENANT,
-      operatorId: input?.operatorId ?? (ENV.ownerOpenId || "owner"),
-      userId: input?.userId ?? "1",
-    });
+  let warnedMissingScope = false;
+  const run = async () => {
+    const scope = input?.scope ?? (await resolveAutonomousNightShiftScope());
+    if (!scope) {
+      if (!warnedMissingScope) {
+        console.warn(
+          "[NightShift] Autonomous authoring disabled until OWNER_OPEN_ID resolves to a real user."
+        );
+        warnedMissingScope = true;
+      }
+      return;
+    }
+    await triggerNightShiftRun(scope);
+  };
   void run();
   const timer = setInterval(run, input?.intervalMs ?? DEFAULT_INTERVAL_MS);
   timer.unref();
