@@ -4,8 +4,22 @@ export type GeographicCustomer = {
   identityKey: string;
   displayName: string;
   phone: string | null;
-  cadence: { state: "active" | "dimming" | "dark"; daysSinceLastOrder: number };
-  location: null | { latitude: number; longitude: number; x: number; y: number; outOfBounds: boolean; canonicalAddress: string | null };
+  totalOrders?: number;
+  firstOrderAt?: string;
+  lastOrderAt?: string;
+  cadence: {
+    state: "active" | "dimming" | "dark";
+    daysSinceLastOrder: number;
+    expectedCadenceDays?: number | null;
+  };
+  location: null | {
+    latitude: number;
+    longitude: number;
+    x: number;
+    y: number;
+    outOfBounds: boolean;
+    canonicalAddress: string | null;
+  };
 };
 
 export type CustomerLocationCluster = {
@@ -34,15 +48,22 @@ function physicalKey(customer: GeographicCustomer): string {
   const location = customer.location!;
   const address = location.canonicalAddress
     ?.toLowerCase()
-    .replace(/(?:\b(?:apartment|apt|unit|suite|ste|floor|fl)\.?\s*|#\s*)[a-z0-9-]+\b/g, "")
+    .replace(
+      /(?:\b(?:apartment|apt|unit|suite|ste|floor|fl)\.?\s*|#\s*)[a-z0-9-]+\b/g,
+      ""
+    )
     .replace(/(\b\d{5})-\d{4}\b/g, "$1")
     .replace(/\s+/g, " ")
     .replace(/\s+,/g, ",")
     .trim();
-  return address ? `address:${address}` : `coord:${location.latitude.toFixed(5)},${location.longitude.toFixed(5)}`;
+  return address
+    ? `address:${address}`
+    : `coord:${location.latitude.toFixed(5)},${location.longitude.toFixed(5)}`;
 }
 
-export function clusterGeographicCustomers(customers: GeographicCustomer[]): CustomerLocationCluster[] {
+export function clusterGeographicCustomers(
+  customers: GeographicCustomer[]
+): CustomerLocationCluster[] {
   const groups = new Map<string, GeographicCustomer[]>();
   for (const customer of customers) {
     if (!customer.location) continue;
@@ -53,12 +74,36 @@ export function clusterGeographicCustomers(customers: GeographicCustomer[]): Cus
     const location = members[0]!.location!;
     const counts = { active: 0, dimming: 0, dark: 0 };
     for (const member of members) counts[member.cadence.state] += 1;
-    return { key, latitude: location.latitude, longitude: location.longitude, x: location.x, y: location.y, outsideAtlas: location.outOfBounds, canonicalAddress: location.canonicalAddress, customers: members, total: members.length, ...counts };
+    return {
+      key,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      x: location.x,
+      y: location.y,
+      outsideAtlas: location.outOfBounds,
+      canonicalAddress: location.canonicalAddress,
+      customers: members,
+      total: members.length,
+      ...counts,
+    };
   });
 }
 
-export function clustersAsGoogleEntities(clusters: CustomerLocationCluster[], onSelect: (cluster: CustomerLocationCluster) => void): GeographicEntity[] {
-  return clusters.map(cluster => ({ id: `customer-cluster:${cluster.key}`, latitude: cluster.latitude, longitude: cluster.longitude, label: cluster.total === 1 ? cluster.customers[0]!.displayName : `${cluster.total} customers`, kind: "customer", onSelect: () => onSelect(cluster) }));
+export function clustersAsGoogleEntities(
+  clusters: CustomerLocationCluster[],
+  onSelect: (cluster: CustomerLocationCluster) => void
+): GeographicEntity[] {
+  return clusters.map(cluster => ({
+    id: `customer-cluster:${cluster.key}`,
+    latitude: cluster.latitude,
+    longitude: cluster.longitude,
+    label:
+      cluster.total === 1
+        ? cluster.customers[0]!.displayName
+        : `${cluster.total} customers`,
+    kind: "customer",
+    onSelect: () => onSelect(cluster),
+  }));
 }
 
 /**
@@ -100,8 +145,9 @@ export function findClusterAtAtlasPoint(
   clusters: CustomerLocationCluster[]
 ): CustomerLocationCluster | null {
   return (
-    clusters.find(cluster => atlasPointsOverlap(point, cluster, COLLISION_X, COLLISION_Y)) ??
-    null
+    clusters.find(cluster =>
+      atlasPointsOverlap(point, cluster, COLLISION_X, COLLISION_Y)
+    ) ?? null
   );
 }
 
@@ -147,7 +193,10 @@ export function mergeClusters(
   clusters: readonly CustomerLocationCluster[]
 ): CustomerLocationCluster {
   if (clusters.length === 1) return clusters[0]!;
-  const [first, ...rest] = clusters as [CustomerLocationCluster, ...CustomerLocationCluster[]];
+  const [first, ...rest] = clusters as [
+    CustomerLocationCluster,
+    ...CustomerLocationCluster[],
+  ];
   const merged: CustomerLocationCluster = {
     ...first,
     key: clusters.map(cluster => cluster.key).join("+"),
@@ -171,7 +220,9 @@ export function mergeClusters(
  * Los Angeles" and "2170 Century Park East, Century City" are the same
  * premise. Unit tokens and city/ZIP never take part.
  */
-export function streetIdentity(address: string | null | undefined): string | null {
+export function streetIdentity(
+  address: string | null | undefined
+): string | null {
   const match = (address ?? "")
     .toLowerCase()
     .trim()
@@ -221,10 +272,7 @@ export function fanOutAtlasCollisions(
         Math.abs(other.x - cluster.x) <= COLLISION_X &&
         Math.abs(other.y - cluster.y) <= COLLISION_Y
     );
-    groupOf.set(
-      cluster.key,
-      near ? groupOf.get(near.key)! : nextGroup++
-    );
+    groupOf.set(cluster.key, near ? groupOf.get(near.key)! : nextGroup++);
   }
   const takenPerGroup = new Map<number, number>();
   return ordered.map(cluster => {

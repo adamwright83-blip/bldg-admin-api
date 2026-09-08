@@ -22,7 +22,10 @@ import {
 import { getDashboardTimeZone, zonedYmd } from "../dashboardZoned";
 import { getDb } from "../db";
 import { GoogleGeocoder } from "./googleGeocoder";
-import { GoogleAddressValidationService, type AddressValidationResult } from "../google/googleAddressValidationService";
+import {
+  GoogleAddressValidationService,
+  type AddressValidationResult,
+} from "../google/googleAddressValidationService";
 import { ENV } from "../_core/env";
 
 export type GeographicEntityType =
@@ -461,8 +464,8 @@ export async function geocodePendingLocations(input: {
   const now = input.now ?? new Date();
   const providerConfigured = Boolean(
     ENV.googleAddressValidationApiKey ||
-    ENV.googleGeocodingApiKey ||
-    ENV.googlePlacesApiKey
+      ENV.googleGeocodingApiKey ||
+      ENV.googlePlacesApiKey
   );
   const pending = eligibleGeocodeQueue(
     await db
@@ -484,7 +487,8 @@ export async function geocodePendingLocations(input: {
     successful.map(row => [row.normalizedSourceAddress, row])
   );
   const geocoder = input.geocoder ?? new GoogleGeocoder();
-  const addressValidator = input.addressValidator ?? new GoogleAddressValidationService();
+  const addressValidator =
+    input.addressValidator ?? new GoogleAddressValidationService();
   const counts = {
     attempted: 0,
     success: 0,
@@ -515,16 +519,19 @@ export async function geocodePendingLocations(input: {
     // Address Validation is the authoritative first pass; only fall back to
     // legacy Geocoding when it cannot establish a usable premise coordinate.
     const validated = await addressValidator.validateAddress(row.sourceAddress);
-    const result = validated.status === "success" && validated.latitude != null && validated.longitude != null
-      ? {
-          status: "success" as const,
-          canonicalAddress: validated.formattedAddress,
-          latitude: validated.latitude,
-          longitude: validated.longitude,
-          googlePlaceId: validated.placeId,
-          provider: "google_address_validation" as const,
-        }
-      : await geocoder.geocode(row.sourceAddress);
+    const result =
+      validated.status === "success" &&
+      validated.latitude != null &&
+      validated.longitude != null
+        ? {
+            status: "success" as const,
+            canonicalAddress: validated.formattedAddress,
+            latitude: validated.latitude,
+            longitude: validated.longitude,
+            googlePlaceId: validated.placeId,
+            provider: "google_address_validation" as const,
+          }
+        : await geocoder.geocode(row.sourceAddress);
     if (result.status === "success") {
       await db
         .update(entityLocations)
@@ -669,6 +676,7 @@ export async function getGeographicTruth(input: {
       unit: latest.unit,
       cadence,
       totalOrders: sorted.length,
+      firstOrderAt: sorted[0]!.createdAt.toISOString(),
       lastOrderAt: latest.createdAt.toISOString(),
       location:
         latitude != null &&
@@ -728,13 +736,12 @@ export async function getGeographicTruth(input: {
     businessDate: today,
     timeZone,
     provider: {
-      status: (
+      status:
         ENV.googleAddressValidationApiKey ||
         ENV.googleGeocodingApiKey ||
         ENV.googlePlacesApiKey
-      )
-        ? ("configured" as const)
-        : ("unconfigured" as const),
+          ? ("configured" as const)
+          : ("unconfigured" as const),
       variable: "GOOGLE_ADDRESS_VALIDATION_API_KEY" as const,
     },
     statusCounts,

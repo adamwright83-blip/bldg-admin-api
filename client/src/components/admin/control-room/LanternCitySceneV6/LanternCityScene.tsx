@@ -12,7 +12,12 @@ import {
   LanternCitySceneRenderer,
   type SceneSelectTarget,
 } from "./LanternCitySceneRenderer";
-import { LanternCityHUD, type Command } from "./LanternCityHUD";
+import {
+  LanternCityHUD,
+  type Command,
+  type Dossier,
+  type Overview,
+} from "./LanternCityHUD";
 import {
   DEFAULT_CONTROLS,
   type SceneObject,
@@ -135,6 +140,9 @@ export default function LanternCityScene({
   const [command, setCommand] = useState<Command>("map");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [territoryId, setTerritoryId] = useState<string | null>(null);
+  const [selectedTarget, setSelectedTarget] = useState<
+    "district" | "second_light"
+  >("district");
   const [inspect, setInspect] = useState(false);
   const [selectedClusterKey, setSelectedClusterKey] = useState<string | null>(
     null
@@ -146,6 +154,13 @@ export default function LanternCityScene({
     staleTime: 30000,
     refetchInterval: 15000,
   });
+  const overview = trpc.system.goldlineWorld.lanternCityOverview.useQuery(
+    undefined,
+    {
+      staleTime: 30000,
+      refetchInterval: 30000,
+    }
+  );
   const world = trpc.system.goldlineWorld.cityEntities.useQuery(undefined, {
     staleTime: 5000,
     refetchInterval: 5000,
@@ -201,6 +216,11 @@ export default function LanternCityScene({
         conqueredTerritoryIds: conquest.conquered,
         lostGroundTerritoryIds: conquest.lost,
         selectedTerritory: territoryId,
+        secondLightTerritoryId:
+          overview.data?.featuredOperation.secondLight?.status ===
+          "waiting_for_reality"
+            ? overview.data.featuredOperation.secondLight.territoryId
+            : null,
         prospects: (atlas.data?.pursued ?? []).flatMap(p =>
           p.location && !p.location.outOfBounds
             ? [
@@ -224,6 +244,7 @@ export default function LanternCityScene({
       controls,
       conquest,
       territoryId,
+      overview.data,
     ]
   );
   const selected = scene.objects.find(object => object.id === selectedId);
@@ -239,6 +260,11 @@ export default function LanternCityScene({
   const selectedTerritory = scene.truth.find(
     t => t.occupancy.territory.id === territoryId
   );
+  const activeTerritoryId =
+    territoryId ?? overview.data?.featuredOperation.territoryId ?? null;
+  const dossier = (overview.data?.territoryDossiers.find(
+    item => item.territoryId === activeTerritoryId
+  ) ?? null) as Dossier | null;
   const pursuit =
     atlas.data?.pursued.find(p => p.pipelineId === selected?.prospectId) ??
     null;
@@ -282,6 +308,10 @@ export default function LanternCityScene({
   ) {
     setSelectedId(object.id);
     setSelectedClusterKey(null);
+    setTerritoryId(object.territoryId);
+    setSelectedTarget(
+      object.kind === "second_light" ? "second_light" : "district"
+    );
     // The stronghold tower and its attached live customer light are one
     // scene object but two interaction targets: the tower body enters
     // Tower Wars, the attached light opens the customer inspector.
@@ -299,8 +329,8 @@ export default function LanternCityScene({
     }
     if (object.cluster || object.prospectId) {
       setInspect(true);
-      setTerritoryId(null);
-    } else setTerritoryId(object.territoryId);
+      setTerritoryId(object.territoryId);
+    }
   }
   const damage = battle.data?.evidenceSufficient
     ? {
@@ -323,23 +353,34 @@ export default function LanternCityScene({
       />
       <LanternCityHUD
         scene={scene}
-        date={atlas.data?.businessDate ?? ""}
-        quest={
-          chapter?.fictionalTreatment ?? campaign.data?.campaign.title ?? ""
-        }
-        counts={counts}
+        overview={overview.data as Overview | undefined}
+        dossier={dossier}
+        selectedTarget={selectedTarget}
         active={command}
         onCommand={setCommand}
-        onControls={setControls}
-        onReset={reset}
+        onLaunch={() =>
+          onNavigate(
+            `/driver?lanternOperation=${encodeURIComponent(overview.data?.featuredOperation.id ?? "")}&host=${overview.data?.featuredOperation.host ?? "overland"}`
+          )
+        }
+        onKnownLight={identityKey => {
+          const object = scene.objects.find(item =>
+            item.cluster?.customers.some(
+              customer => customer.identityKey === identityKey
+            )
+          );
+          if (!object) return;
+          setSelectedId(object.id);
+          setSelectedClusterKey(
+            object.sourceClusters?.find(cluster =>
+              cluster.customers.some(
+                customer => customer.identityKey === identityKey
+              )
+            )?.key ?? null
+          );
+          setInspect(true);
+        }}
       />
-      <div className={styles.notice} role="status">
-        {atlas.isError || territories.isError
-          ? "City evidence unavailable — retry when the connection returns."
-          : atlas.isLoading
-            ? "Loading real customer evidence…"
-            : "V6 composition preview · Visual acceptance BLOCKED ON ART"}
-      </div>
       {command !== "map" ? (
         <Room
           title={command[0].toUpperCase() + command.slice(1)}
@@ -445,16 +486,6 @@ export default function LanternCityScene({
                 ))
             : null}
         </Room>
-      ) : null}
-      {selectedTerritory && command === "map" ? (
-        <TerritoryRoom
-          truth={selectedTerritory}
-          onClose={() => setTerritoryId(null)}
-          onCustomers={() => {
-            setTerritoryId(null);
-            setCommand("customers");
-          }}
-        />
       ) : null}
       {(inspect || rekindle) && needsAddressChoice && selected ? (
         <Room

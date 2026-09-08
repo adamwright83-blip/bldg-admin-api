@@ -40,7 +40,13 @@ export type SceneObject = {
   id: string;
   territoryId: string;
   name: string;
-  kind: "lantern" | "stronghold" | "lock" | "environment" | "prospect";
+  kind:
+    | "lantern"
+    | "stronghold"
+    | "lock"
+    | "environment"
+    | "prospect"
+    | "second_light";
   worldAnchor: Point;
   sourceAnchors: Array<Point & { latitude: number; longitude: number }>;
   displayAnchor: Point;
@@ -82,7 +88,13 @@ export type SceneProp = {
 };
 export type CityScene = {
   viewport: { width: number; height: number };
-  hud: { identity: Rect; quest: Rect; controls: Rect; deck: Rect };
+  hud: {
+    identity: Rect;
+    topBar: Rect;
+    leftOperation: Rect;
+    rightDossier: Rect;
+    deck: Rect;
+  };
   exclusions: Rect[];
   objects: SceneObject[];
   plates: ScenePlate[];
@@ -90,5 +102,5 @@ export type CityScene = {
   suppressed: Array<{ id: string; reason: string }>;
   truth: TerritoryTruth[];
   controls: SceneControls;
-  artStatus: "BLOCKED ON ART";
+  artStatus: "APPROVED";
 };

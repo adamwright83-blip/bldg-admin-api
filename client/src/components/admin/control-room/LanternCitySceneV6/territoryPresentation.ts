@@ -26,7 +26,7 @@ const district = (
   stateArtBounds: { x: x - 10, y: y - 9, width: 20, height: 23 },
   priority,
   emptyEnvironment,
-  displacementLimit: 150,
+  displacementLimit: 400,
   lanternSlots,
 });
 export const TERRITORY_PRESENTATION: Record<string, TerritoryPresentation> = {

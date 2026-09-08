@@ -65,16 +65,24 @@ export function territoryStateText(params: {
 }
 export function hudLayout(width: number, height: number) {
   const compact = width < 1400;
+  const leftWidth = compact ? 258 : width < 1700 ? 286 : 330;
+  const rightWidth = compact ? 264 : width < 1700 ? 292 : 330;
   return {
-    identity: { x: 16, y: 12, width: compact ? 300 : 370, height: 80 },
-    quest: { x: 16, y: 102, width: compact ? 246 : 280, height: 136 },
-    controls: {
-      x: width - (compact ? 204 : 224),
-      y: 16,
-      width: compact ? 188 : 208,
-      height: 340,
+    identity: { x: 16, y: 10, width: compact ? 250 : 330, height: 72 },
+    topBar: {
+      x: compact ? 278 : 360,
+      y: 10,
+      width: width - (compact ? 294 : 376),
+      height: 72,
     },
-    deck: { x: 16, y: height - 104, width: width - 32, height: 88 },
+    leftOperation: { x: 14, y: 92, width: leftWidth, height: height - 198 },
+    rightDossier: {
+      x: width - rightWidth - 14,
+      y: 92,
+      width: rightWidth,
+      height: height - 198,
+    },
+    deck: { x: 14, y: height - 96, width: width - 28, height: 84 },
   };
 }
 export type ComposeInput = {
@@ -86,6 +94,7 @@ export type ComposeInput = {
   selectedTerritory?: string | null;
   controls?: SceneControls;
   prospects?: readonly SceneProspect[];
+  secondLightTerritoryId?: string | null;
 };
 export function composeLanternCityScene(input: ComposeInput): CityScene {
   const { width, height } = input.viewport;
@@ -102,7 +111,7 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
     suppressed: [],
     truth: [],
     controls,
-    artStatus: "BLOCKED ON ART",
+    artStatus: "APPROVED",
   };
   const located = input.customers.filter(c => c.location);
   const occupancy = deriveTerritoryOccupancy({
@@ -271,8 +280,11 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
       environment: truth.environment,
       state: truth.state,
       occupancy: truth.occupancy,
-      priority:
-        input.selectedTerritory === territory.id ? 1 : presentation.priority,
+      priority: frontierKind
+        ? -2
+        : input.selectedTerritory === territory.id
+          ? 1
+          : presentation.priority,
       status: stateText,
       frontierKind,
       frontierLostGround: isLostGround,
@@ -380,6 +392,27 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
         status: "Opportunity",
       });
     }
+  if (input.secondLightTerritoryId) {
+    const territoryId = input.secondLightTerritoryId;
+    const truth = scene.truth.find(
+      row => row.occupancy.territory.id === territoryId
+    );
+    const presentation = territoryPresentationCache.get(territoryId);
+    if (truth && presentation)
+      candidates.push({
+        id: `second-light:${territoryId}`,
+        territoryId,
+        name: "The Second Light",
+        kind: "second_light",
+        worldAnchor:
+          presentation.lanternSlots?.at(-1) ?? presentation.primaryAnchor,
+        sourceAnchors: [],
+        priority: -1,
+        state: truth.state,
+        environment: truth.environment,
+        status: "Waiting for a real new customer",
+      });
+  }
   candidates.sort(
     (a, b) =>
       a.priority - b.priority ||
@@ -406,15 +439,17 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
           width >= 1680
           ? 280
           : 230
-        : candidate.frontierKind
-          ? 150
-          : hero
-            ? 154
-            : count >= 2
-              ? 115
-              : 88;
-    const boxWidth = candidate.kind === "stronghold" ? 190 : 166;
-    const boxHeight = artHeight + 50;
+        : candidate.kind === "second_light"
+          ? 96
+          : candidate.frontierKind
+            ? 108
+            : hero
+              ? 154
+              : count >= 2
+                ? 104
+                : 80;
+    const boxWidth = candidate.kind === "stronghold" ? 176 : 124;
+    const boxHeight = artHeight + 42;
     // Strongholds always use the territory's primary anchor. A customer
     // lantern that cannot fit there (usually because it shares the
     // territory with a stronghold already occupying that anchor) falls
@@ -426,9 +461,11 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
     const anchorCandidates: Point[] =
       candidate.kind === "stronghold"
         ? [p.primaryAnchor]
-        : [p.primaryAnchor, ...(p.lanternSlots ?? [])];
+        : candidate.kind === "second_light"
+          ? [...(p.lanternSlots ?? []), p.primaryAnchor]
+          : [p.primaryAnchor, ...(p.lanternSlots ?? [])];
     const offsets = [{ x: 0, y: 0 }];
-    for (const radius of [36, 72, 108, 144])
+    for (const radius of [36, 72, 108, 144, 180, 216, 252, 288, 324, 360, 396])
       for (const [dx, dy] of [
         [1, 0],
         [-1, 0],
@@ -492,7 +529,7 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
         x: found.x,
         y: found.y + artHeight,
         width: found.width,
-        height: 50,
+        height: 42,
       },
     };
     scene.objects.push(object);

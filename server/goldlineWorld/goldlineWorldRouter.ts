@@ -35,8 +35,15 @@ import {
 } from "./campaignService";
 import { resetProofWorldFromApi } from "./goldlineProofWorld";
 import { buildFrontierIntelligence } from "./frontierIntelligenceService";
+import { getLanternCityOverview } from "./lanternCityOverviewService";
 
 export const goldlineWorldRouter = router({
+  lanternCityOverview: dayforgeTenantOperatorProcedure.query(({ ctx }) =>
+    getLanternCityOverview({
+      tenantId: ctx.tenantId,
+      operatorId: ctx.user.openId,
+    })
+  ),
   frontierIntelligence: dayforgeTenantMemberProcedure
     .input(
       z.object({

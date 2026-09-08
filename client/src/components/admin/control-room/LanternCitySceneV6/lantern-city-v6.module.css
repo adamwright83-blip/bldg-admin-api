@@ -206,11 +206,295 @@
   background: #18374e;
 }
 .identity,
-.quest,
-.controls,
+.scoreboard,
+.operation,
+.dossier,
 .deck {
   z-index: 5;
   box-sizing: border-box;
+}
+.scoreboard {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr) 1.08fr;
+  gap: 7px;
+}
+.scoreboard > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 11px;
+  background: linear-gradient(145deg, #102d42f5, #061722f8);
+  border: 1px solid #e0ac3e;
+  border-radius: 8px;
+  box-shadow:
+    inset 0 0 14px #1e77a833,
+    0 3px 12px #0008;
+}
+.scoreboard svg {
+  width: 26px;
+  color: #ffd84f;
+  flex: 0 0 auto;
+}
+.scoreboard span {
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.1;
+  color: #e8edf0;
+  text-transform: uppercase;
+}
+.scoreboard b {
+  display: block;
+  margin-top: 4px;
+  color: white;
+  font-size: 22px;
+  white-space: nowrap;
+}
+.scoreboard small {
+  display: block;
+  margin-top: 5px;
+  color: #ffd84f;
+  font-size: 9px;
+}
+.operation,
+.dossier {
+  overflow: hidden;
+  background: linear-gradient(160deg, #0b2a3aee, #04141df7);
+  border: 2px solid #d5a22c;
+  border-radius: 10px;
+  box-shadow:
+    inset 0 0 25px #1884b51d,
+    0 6px 20px #0009;
+}
+.operation > h2,
+.dossier h3 {
+  margin: 0;
+  padding: 10px 14px;
+  color: #ffd34e;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid #bd8b27;
+}
+.operationHero {
+  height: 128px;
+  overflow: hidden;
+  border-bottom: 2px solid #c59631;
+  background: #082435;
+}
+.operationHero img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.operationBody {
+  padding: 12px;
+}
+.operationBody h3 {
+  margin: 0;
+  color: #ffe15f;
+  font:
+    700 23px/1 Georgia,
+    serif;
+}
+.operationBody > strong {
+  display: block;
+  margin-top: 5px;
+  color: white;
+  font-size: 18px;
+}
+.operationBody > p {
+  margin: 10px 0 12px;
+  color: #edf1f2;
+  font-size: 14px;
+  line-height: 1.35;
+}
+.objectives {
+  display: grid;
+  gap: 8px;
+}
+.objectives > div {
+  display: grid;
+  grid-template-columns: 25px 1fr auto;
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid #3a6375;
+  border-radius: 7px;
+  background: #092334;
+}
+.objectives svg {
+  width: 22px;
+  color: #ffe05a;
+}
+.objectives span {
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+}
+.objectives i {
+  display: block;
+  height: 6px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #031019;
+}
+.objectives em {
+  display: block;
+  height: 100%;
+  background: #22c7f3;
+}
+.objectives b {
+  color: white;
+}
+.launch {
+  width: 100%;
+  margin-top: 12px;
+  padding: 13px 9px;
+  border: 1px solid #fff0a0;
+  border-radius: 7px;
+  background: linear-gradient(#ffe76b, #e9a91d);
+  color: #191408;
+  font-weight: 900;
+  font-size: 16px;
+  box-shadow: 0 0 16px #ffc72f55;
+}
+.launch span,
+.other span {
+  float: right;
+}
+.other {
+  width: 100%;
+  margin-top: 9px;
+  padding: 10px;
+  text-align: left;
+  border: 1px solid #3d667a;
+  border-radius: 6px;
+  background: #0c2b3d;
+  color: white;
+  font-weight: 700;
+}
+.dossier > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid #d1a032;
+}
+.dossier > header h2 {
+  margin: 0;
+  color: white;
+  font:
+    700 22px/1 Georgia,
+    serif;
+  text-transform: uppercase;
+}
+.dossier > header span {
+  padding: 5px 7px;
+  background: #a92b24;
+  border: 1px solid #ff6358;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 800;
+}
+.dossier section {
+  margin: 8px;
+  border: 1px solid #355e72;
+  border-radius: 7px;
+  overflow: hidden;
+  background: #082333d9;
+}
+.dossier section h3 {
+  padding: 7px 9px;
+  font-size: 12px;
+}
+.statusGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.statusGrid > div {
+  display: grid;
+  grid-template-columns: 25px 1fr;
+  padding: 8px;
+  border: 1px solid #24485a;
+}
+.statusGrid svg {
+  width: 21px;
+  color: #ffdf55;
+  grid-row: 1 / 3;
+}
+.statusGrid b {
+  font-size: 17px;
+  color: white;
+}
+.statusGrid small {
+  font-size: 10px;
+  color: #d5e1e7;
+}
+.knownLight {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: white;
+}
+.knownLight img {
+  width: 62px;
+  height: 86px;
+  object-fit: contain;
+}
+.knownLight span {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+.knownLight b {
+  font:
+    700 17px Georgia,
+    serif;
+  text-transform: uppercase;
+}
+.knownLight mark {
+  align-self: flex-start;
+  padding: 2px 6px;
+  background: #e1b539;
+  color: #151006;
+  font-size: 9px;
+  font-weight: 800;
+}
+.knownLight small {
+  color: #d4e0e5;
+  font-size: 10px;
+}
+.target > div {
+  display: flex;
+  gap: 9px;
+  padding: 8px;
+}
+.target img {
+  width: 64px;
+  height: 88px;
+  object-fit: contain;
+  filter: grayscale(0.8) brightness(0.55) drop-shadow(0 0 8px #e6b72b77);
+}
+.target b {
+  color: white;
+  font-family: Georgia, serif;
+}
+.target p {
+  margin: 6px 0 0;
+  color: #d9e2e6;
+  font-size: 11px;
+  line-height: 1.3;
+}
+.secondLightArt {
+  filter: grayscale(1) brightness(0.45) drop-shadow(0 0 7px #ffd44e);
 }
 .identity {
   display: flex;
@@ -414,6 +698,37 @@
   }
   .identity > svg {
     width: 38px;
+  }
+  .identity small {
+    display: none;
+  }
+  .scoreboard {
+    gap: 4px;
+  }
+  .scoreboard > div {
+    gap: 5px;
+    padding: 7px;
+  }
+  .scoreboard svg {
+    width: 19px;
+  }
+  .scoreboard span {
+    font-size: 9px;
+  }
+  .scoreboard b {
+    font-size: 17px;
+  }
+  .operationHero {
+    height: 105px;
+  }
+  .operationBody h3 {
+    font-size: 19px;
+  }
+  .operationBody > p {
+    font-size: 12px;
+  }
+  .dossier > header h2 {
+    font-size: 17px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

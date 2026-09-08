@@ -238,6 +238,13 @@ export function LanternCitySceneRenderer({
               {object.kind === "prospect" ? (
                 <img src={ASSETS.lanterns.opportunity} alt="" />
               ) : null}
+              {object.kind === "second_light" ? (
+                <img
+                  className={styles.secondLightArt}
+                  src={ASSETS.lanterns.quiet}
+                  alt=""
+                />
+              ) : null}
             </span>
             {scene.controls.labels ? <TerritoryLabel object={object} /> : null}
           </button>

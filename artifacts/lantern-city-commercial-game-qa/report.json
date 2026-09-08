@@ -1,0 +1,31 @@
+{
+  "viewports": ["1920x1080", "1440x900", "1280x900"],
+  "featuredOperationId": "2026-09-08:hard_anchor:afa991de3e2052d3",
+  "featuredTerritoryId": "mid-city",
+  "realCustomerIdentityKey": "396941c6c51eb47c2db1cc61b7f1aaf1cdaf0c7e153285d5c2c315d957c84cc3",
+  "secondLightStatus": "completed_by_real_customer",
+  "scoreboardProvenance": {
+    "customers": "system.geographicTruth.atlas grouped real customers",
+    "districtsLit": "authored V6 territories containing at least one real non-dark customer",
+    "paidRevenueThisWeek": "paid admin-app orders by paidAt, Monday through business date",
+    "dormantCustomers": "dark cadence customers divided by all grouped real customers"
+  },
+  "brokenImages": 0,
+  "consoleErrors": {
+    "lanternCityIntroduced": 0,
+    "proofEnvironmentMissingLegacyTables": true
+  },
+  "hudCollisions": 0,
+  "objectCollisions": 0,
+  "interactionResults": {
+    "secondLight": "target object dossier opened",
+    "knownRealLight": "existing WorldEntityInspector opened",
+    "westHollywoodBalloon": "district dossier selected",
+    "opusTower": "/growth/tower-wars?building=opus_la",
+    "centuryParkEastTower": "/growth/tower-wars?building=century_park_east",
+    "commandDeck": "six semantic controls present",
+    "launchOperation": "/driver?host=real_action_bridge"
+  },
+  "operationHostInvoked": "real_action_bridge",
+  "v5Result": "existing V5 art fallback and asset family preserved"
+}
