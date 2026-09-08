@@ -757,8 +757,39 @@ for (const statement of worldEventsSql.split(";").map(value => value.trim()).fil
 await assertRequiredColumns("goldline_world_events", ["id", "tenantId", "classification", "idempotencyKey"]);
 await assertRequiredColumns("goldline_territory_definitions", ["id", "tenantId"]);
 await assertRequiredColumns("physical_entities", ["id", "tenantId"]);
+await assertRequiredColumns("tower_forge_jobs", ["id", "tenantId", "state", "idempotencyKey"]);
 const onboardingSql = await readFile(new URL("../server/goldlineOnboarding/schema.sql", import.meta.url), "utf8");
 for (const statement of onboardingSql.split(";").map(value => value.trim()).filter(Boolean))
   await runRequired(statement, "Goldline onboarding");
+
+const driverSalesSql = await readFile(new URL("../server/commercialMissions/driverSalesMotivationSchema.sql", import.meta.url), "utf8");
+for (const statement of driverSalesSql.split(";").map(value => value.trim()).filter(Boolean))
+  await runRequired(statement, "Driver sales motivation");
+// Best-effort upgrade for a driver_sales_journals table already at the
+// pre-0061 (0047-only) shape: CREATE TABLE IF NOT EXISTS above is a no-op
+// on an existing table, so the newer columns need adding explicitly.
+await run(
+  `ALTER TABLE driver_sales_journals DROP INDEX uq_driver_sales_journal_tenant_driver_date`,
+  "driver_sales_journals: drop legacy daily-uniqueness index"
+);
+await run(
+  `ALTER TABLE driver_sales_journals
+    ADD COLUMN clientRequestId varchar(36) NULL AFTER journalDate,
+    ADD COLUMN rawTranscript text NULL AFTER audioMimeType,
+    ADD COLUMN captureLatitude decimal(10,7) NULL AFTER journalPoints,
+    ADD COLUMN captureLongitude decimal(10,7) NULL AFTER captureLatitude,
+    ADD COLUMN captureAccuracyMeters decimal(10,2) NULL AFTER captureLongitude,
+    ADD COLUMN locationCapturedAt timestamp NULL AFTER captureAccuracyMeters,
+    ADD COLUMN locationContemporaneous boolean NOT NULL DEFAULT false AFTER locationCapturedAt,
+    ADD COLUMN processingError varchar(512) NULL AFTER locationContemporaneous,
+    ADD COLUMN processingAttempts int NOT NULL DEFAULT 0 AFTER processingError,
+    ADD COLUMN processedAt timestamp NULL AFTER processingAttempts,
+    ADD UNIQUE KEY uq_driver_sales_journal_tenant_request (tenantId,clientRequestId),
+    ADD KEY idx_driver_sales_journal_processing (tenantId,processingStatus,createdAt),
+    ADD KEY idx_driver_sales_journal_driver_date (tenantId,driverId,journalDate,createdAt)`,
+  "driver_sales_journals: 0061 columns"
+);
+await assertRequiredColumns("driver_sales_journals", ["id", "tenantId", "driverId", "journalDate", "processingStatus"]);
+
 await conn.end();
 console.log("\nMigration complete.");
