@@ -1,0 +1,5060 @@
+{
+  "version": 6,
+  "status": "BLOCKED ON ART",
+  "accepted": false,
+  "reference": "Screen Shot 2026-09-07 at 22.01.55 PM.png (composition only; never copy counts)",
+  "runtimeRegistry": "client/src/components/admin/control-room/LanternCitySceneV6/sceneAssets.ts",
+  "base": {
+    "destination": "/assets/goldline/lantern-city/v6/world-neutral.png",
+    "width": 3840,
+    "height": 2160,
+    "alpha": false,
+    "colorSpace": "sRGB",
+    "status": "missing-approved-art",
+    "description": "Bright premium painterly Los Angeles, broad readable district masses, connected roads, mountain/skyline backdrop, quieter central object slots. No text, customers, lanterns, locks, destruction or pests baked in. Match approved perspective and light direction. Rejected neutral-atlas-draft.png is not an approved substitute."
+  },
+  "objectAssets": [
+    {
+      "destination": "/assets/goldline/lantern-city/v6/objects/lantern-active.png",
+      "width": 768,
+      "height": 1024,
+      "alpha": true,
+      "registry": "SCENE_ART.lanterns.active",
+      "description": "Ground-standing monumental gold customer lantern matching the approved reference, with a grounded architectural foot, correct flame/energy state and transparent perimeter. Same camera, silhouette, and pivot across states. No text, numbers, backing square or baked neighborhood. Bottom-center pivot. Existing V5 hanging lantern remains a preview fallback.",
+      "status": "required-for-reference-art-direction"
+    },
+    {
+      "destination": "/assets/goldline/lantern-city/v6/objects/lantern-dimming.png",
+      "width": 768,
+      "height": 1024,
+      "alpha": true,
+      "registry": "SCENE_ART.lanterns.dimming",
+      "description": "Ground-standing monumental gold customer lantern matching the approved reference, with a grounded architectural foot, correct flame/energy state and transparent perimeter. Same camera, silhouette, and pivot across states. No text, numbers, backing square or baked neighborhood. Bottom-center pivot. Existing V5 hanging lantern remains a preview fallback.",
+      "status": "required-for-reference-art-direction"
+    },
+    {
+      "destination": "/assets/goldline/lantern-city/v6/objects/lantern-dark.png",
+      "width": 768,
+      "height": 1024,
+      "alpha": true,
+      "registry": "SCENE_ART.lanterns.dark",
+      "description": "Ground-standing monumental gold customer lantern matching the approved reference, with a grounded architectural foot, correct flame/energy state and transparent perimeter. Same camera, silhouette, and pivot across states. No text, numbers, backing square or baked neighborhood. Bottom-center pivot. Existing V5 hanging lantern remains a preview fallback.",
+      "status": "required-for-reference-art-direction"
+    },
+    {
+      "destination": "/assets/goldline/lantern-city/v6/objects/opus_la.png",
+      "width": 1024,
+      "height": 1024,
+      "alpha": true,
+      "registry": "SCENE_ART.strongholds.opus_la",
+      "description": "Authored stronghold silhouette coordinated with the approved gold lantern world and neutral atlas. Preserve the canonical building identity, reserve lower-right 28% width by 50% height for separate live customer light. No count or flame baked into the tower. Whole-city art only; existing Tower Wars combat assets and damage truth are unchanged.",
+      "status": "required-for-reference-art-direction"
+    },
+    {
+      "destination": "/assets/goldline/lantern-city/v6/objects/century_park_east.png",
+      "width": 1024,
+      "height": 1024,
+      "alpha": true,
+      "registry": "SCENE_ART.strongholds.century_park_east",
+      "description": "Authored stronghold silhouette coordinated with the approved gold lantern world and neutral atlas. Preserve the canonical building identity, reserve lower-right 28% width by 50% height for separate live customer light. No count or flame baked into the tower. Whole-city art only; existing Tower Wars combat assets and damage truth are unchanged.",
+      "status": "required-for-reference-art-direction"
+    },
+    {
+      "destination": "/assets/goldline/lantern-city/v6/objects/frontier-lock.png",
+      "width": 512,
+      "height": 512,
+      "alpha": true,
+      "registry": "SCENE_ART.lock",
+      "description": "Simple readable gold frontier lock matching approved reference and hostile terrain perspective; no background or text.",
+      "status": "required-for-reference-art-direction"
+    }
+  ],
+  "hudSafeAreas": {
+    "1920x1080": {
+      "identity": {
+        "x": 16,
+        "y": 12,
+        "width": 370,
+        "height": 80
+      },
+      "quest": {
+        "x": 16,
+        "y": 102,
+        "width": 280,
+        "height": 136
+      },
+      "controls": {
+        "x": 1696,
+        "y": 16,
+        "width": 208,
+        "height": 340
+      },
+      "deck": {
+        "x": 16,
+        "y": 976,
+        "width": 1888,
+        "height": 88
+      }
+    },
+    "1440x900": {
+      "identity": {
+        "x": 16,
+        "y": 12,
+        "width": 370,
+        "height": 80
+      },
+      "quest": {
+        "x": 16,
+        "y": 102,
+        "width": 280,
+        "height": 136
+      },
+      "controls": {
+        "x": 1216,
+        "y": 16,
+        "width": 208,
+        "height": 340
+      },
+      "deck": {
+        "x": 16,
+        "y": 796,
+        "width": 1408,
+        "height": 88
+      }
+    },
+    "1280x900": {
+      "identity": {
+        "x": 16,
+        "y": 12,
+        "width": 300,
+        "height": 80
+      },
+      "quest": {
+        "x": 16,
+        "y": 102,
+        "width": 246,
+        "height": 136
+      },
+      "controls": {
+        "x": 1076,
+        "y": 16,
+        "width": 188,
+        "height": 340
+      },
+      "deck": {
+        "x": 16,
+        "y": 796,
+        "width": 1248,
+        "height": 88
+      }
+    }
+  },
+  "registration": {
+    "stage": {
+      "width": 3840,
+      "height": 2160
+    },
+    "geography": "worldAnchor remains the existing Mercator projection of canonical WGS84; display percentages are art-directed and must not be used for membership or GPS.",
+    "maskUsage": "Existing canonical masks are provenance/reference only. V6 plates use the authored display footprint, not the unshifted GIS crop.",
+    "platePixelSize": {
+      "width": 1536,
+      "height": 994
+    },
+    "plateAlpha": "RGBA PNG with straight alpha. Opaque terrain/building core covers the old landscape; feather the perimeter over 48–96 pixels into genuine transparency. No rectangular matte, drop shadow, baked color wash, or duplicate pests.",
+    "pivot": {
+      "x": 0.5,
+      "y": 0.391304347826087
+    },
+    "continuity": "All four states for a territory share pixel dimensions, camera, skyline/building registration, road entry/exit positions, horizon, light direction and pivot. Plate translation follows the compositor group. Inspect transitions at 100% and label-hidden state at all target viewports.",
+    "forbidden": "Do not turn a state plate into a large rat/building sticker. Transform the perceived ground and neighborhood. No labels, counts, customer lanterns, major locks, UI or business facts baked into artwork."
+  },
+  "territories": [
+    {
+      "territoryId": "adams-normandie",
+      "name": "Adams-Normandie",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/adams-normandie.png",
+      "worldAnchor": {
+        "x": 64.88597402594142,
+        "y": 89.35031032581266,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 64.88597402594142,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 54.88597402594142,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/adams-normandie/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/adams-normandie/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/adams-normandie/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/adams-normandie/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "arlington-heights",
+      "name": "Arlington Heights",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/arlington-heights.png",
+      "worldAnchor": {
+        "x": 56.79016042779912,
+        "y": 80.39504710431147,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 56.79016042779912,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 46.79016042779912,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/arlington-heights/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/arlington-heights/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/arlington-heights/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/arlington-heights/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "atwater-village",
+      "name": "Atwater Village",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/atwater-village.png",
+      "worldAnchor": {
+        "x": 82.02232112164583,
+        "y": 6.735299335333737,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 78,
+        "y": 20
+      },
+      "displayStateBoundsPct": {
+        "x": 68,
+        "y": 11,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/atwater-village/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/atwater-village/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/atwater-village/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/atwater-village/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "baldwin-hillscrenshaw",
+      "name": "Baldwin Hills/Crenshaw",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/baldwin-hillscrenshaw.png",
+      "worldAnchor": {
+        "x": 38.6384196557416,
+        "y": 106.99579355421398,
+        "outOfBounds": true
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 38.6384196557416,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 28.6384196557416,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/baldwin-hillscrenshaw/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/baldwin-hillscrenshaw/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/baldwin-hillscrenshaw/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/baldwin-hillscrenshaw/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "bel-air",
+      "name": "Bel-Air",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/bel-air.png",
+      "worldAnchor": {
+        "x": -6.000094905125149,
+        "y": 28.903556560550932,
+        "outOfBounds": true
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 18,
+        "y": 28.903556560550932
+      },
+      "displayStateBoundsPct": {
+        "x": 8,
+        "y": 19.903556560550932,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/bel-air/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/bel-air/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/bel-air/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/bel-air/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "beverly-crest",
+      "name": "Beverly Crest",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/beverly-crest.png",
+      "worldAnchor": {
+        "x": 9.957861999761958,
+        "y": 21.28426560294879,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 18,
+        "y": 21.28426560294879
+      },
+      "displayStateBoundsPct": {
+        "x": 8,
+        "y": 12.284265602948789,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/beverly-crest/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/beverly-crest/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/beverly-crest/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/beverly-crest/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "beverly-grove",
+      "name": "Beverly Grove",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/beverly-grove.png",
+      "worldAnchor": {
+        "x": 32.23914244259826,
+        "y": 48.1017641931374,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 32.23914244259826,
+        "y": 48.1017641931374
+      },
+      "displayStateBoundsPct": {
+        "x": 22.239142442598258,
+        "y": 39.1017641931374,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/beverly-grove/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/beverly-grove/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/beverly-grove/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/beverly-grove/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "beverly-hills",
+      "name": "Beverly Hills",
+      "priority": "initial authored neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/beverly-hills.png",
+      "worldAnchor": {
+        "x": 19.552791723123782,
+        "y": 47.860738370828116,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 14,
+        "y": 40
+      },
+      "displayStateBoundsPct": {
+        "x": 4,
+        "y": 31,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/beverly-hills/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/beverly-hills/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/beverly-hills/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/beverly-hills/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "beverlywood",
+      "name": "Beverlywood",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/beverlywood.png",
+      "worldAnchor": {
+        "x": 22.887860962538674,
+        "y": 78.89928092098313,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 22.887860962538674,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 12.887860962538674,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/beverlywood/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/beverlywood/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/beverlywood/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/beverlywood/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "boyle-heights",
+      "name": "Boyle Heights",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/boyle-heights.png",
+      "worldAnchor": {
+        "x": 107.840495125238,
+        "y": 86.96482247759963,
+        "outOfBounds": true
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 78,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 68,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/boyle-heights/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/boyle-heights/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/boyle-heights/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/boyle-heights/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "carthay",
+      "name": "Carthay",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/carthay.png",
+      "worldAnchor": {
+        "x": 33.709118753758666,
+        "y": 65.01856101689422,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 33.709118753758666,
+        "y": 65.01856101689422
+      },
+      "displayStateBoundsPct": {
+        "x": 23.709118753758666,
+        "y": 56.018561016894225,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/carthay/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/carthay/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/carthay/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/carthay/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "central-alameda",
+      "name": "Central-Alameda",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/central-alameda.png",
+      "worldAnchor": {
+        "x": 89.59812197435191,
+        "y": 107.34432762166286,
+        "outOfBounds": true
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 78,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 68,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/central-alameda/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/central-alameda/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/central-alameda/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/central-alameda/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "century-city",
+      "name": "Century City",
+      "priority": "initial authored neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/century-city.png",
+      "worldAnchor": {
+        "x": 12.64520171784776,
+        "y": 67.65435801069864,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 20,
+        "y": 65
+      },
+      "displayStateBoundsPct": {
+        "x": 10,
+        "y": 56,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/century-city/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/century-city/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/century-city/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/century-city/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "cheviot-hills",
+      "name": "Cheviot Hills",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/cheviot-hills.png",
+      "worldAnchor": {
+        "x": 16.755296442674144,
+        "y": 84.15804835953018,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 18,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 8,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/cheviot-hills/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/cheviot-hills/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/cheviot-hills/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/cheviot-hills/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "chinatown",
+      "name": "Chinatown",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/chinatown.png",
+      "worldAnchor": {
+        "x": 95.12485389615142,
+        "y": 61.041982822876705,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 78,
+        "y": 61.041982822876705
+      },
+      "displayStateBoundsPct": {
+        "x": 68,
+        "y": 52.041982822876705,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/chinatown/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/chinatown/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/chinatown/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/chinatown/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "culver-city",
+      "name": "Culver City",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/culver-city.png",
+      "worldAnchor": {
+        "x": 20.74339011768194,
+        "y": 112.79328902461754,
+        "outOfBounds": true
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 20.74339011768194,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 10.74339011768194,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/culver-city/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/culver-city/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/culver-city/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/culver-city/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "cypress-park",
+      "name": "Cypress Park",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/cypress-park.png",
+      "worldAnchor": {
+        "x": 100.55198564592342,
+        "y": 36.73836597378982,
+        "outOfBounds": true
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 78,
+        "y": 36.73836597378982
+      },
+      "displayStateBoundsPct": {
+        "x": 68,
+        "y": 27.73836597378982,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/cypress-park/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/cypress-park/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/cypress-park/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/cypress-park/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "downtown",
+      "name": "Downtown",
+      "priority": "initial authored neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/downtown.png",
+      "worldAnchor": {
+        "x": 91.40007243984739,
+        "y": 83.24769458033626,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 66,
+        "y": 72
+      },
+      "displayStateBoundsPct": {
+        "x": 56,
+        "y": 63,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/downtown/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/downtown/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/downtown/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/downtown/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "eagle-rock",
+      "name": "Eagle Rock",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/eagle-rock.png",
+      "worldAnchor": {
+        "x": 108.91941946461961,
+        "y": -0.983992692528795,
+        "outOfBounds": true
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 78,
+        "y": 20
+      },
+      "displayStateBoundsPct": {
+        "x": 68,
+        "y": 11,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/eagle-rock/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/eagle-rock/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/eagle-rock/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/eagle-rock/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "east-hollywood",
+      "name": "East Hollywood",
+      "priority": "initial authored neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/east-hollywood.png",
+      "worldAnchor": {
+        "x": 69.53026515149836,
+        "y": 39.06594492865017,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 63,
+        "y": 43
+      },
+      "displayStateBoundsPct": {
+        "x": 53,
+        "y": 34,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/east-hollywood/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/east-hollywood/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/east-hollywood/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/east-hollywood/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "echo-park",
+      "name": "Echo Park",
+      "priority": "initial authored neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/echo-park.png",
+      "worldAnchor": {
+        "x": 87.11196363633353,
+        "y": 46.680602855210836,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 80,
+        "y": 61
+      },
+      "displayStateBoundsPct": {
+        "x": 70,
+        "y": 52,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/echo-park/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/echo-park/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/echo-park/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/echo-park/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "elysian-park",
+      "name": "Elysian Park",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/elysian-park.png",
+      "worldAnchor": {
+        "x": 93.80481818179912,
+        "y": 46.65140650510572,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 78,
+        "y": 46.65140650510572
+      },
+      "displayStateBoundsPct": {
+        "x": 68,
+        "y": 37.65140650510572,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/elysian-park/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/elysian-park/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/elysian-park/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/elysian-park/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "elysian-valley",
+      "name": "Elysian Valley",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/elysian-valley.png",
+      "worldAnchor": {
+        "x": 92.82702020200274,
+        "y": 33.17183122573062,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 78,
+        "y": 33.17183122573062
+      },
+      "displayStateBoundsPct": {
+        "x": 68,
+        "y": 24.17183122573062,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/elysian-valley/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/elysian-valley/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/elysian-valley/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/elysian-valley/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "exposition-park",
+      "name": "Exposition Park",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/exposition-park.png",
+      "worldAnchor": {
+        "x": 67.06105113633791,
+        "y": 101.75107410337094,
+        "outOfBounds": true
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 67.06105113633791,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 57.06105113633791,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/exposition-park/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/exposition-park/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/exposition-park/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/exposition-park/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "fairfax",
+      "name": "Fairfax",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/fairfax.png",
+      "worldAnchor": {
+        "x": 42.8264250532999,
+        "y": 47.21925339706584,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 42.8264250532999,
+        "y": 47.21925339706584
+      },
+      "displayStateBoundsPct": {
+        "x": 32.8264250532999,
+        "y": 38.21925339706584,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/fairfax/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/fairfax/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/fairfax/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/fairfax/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "glassell-park",
+      "name": "Glassell Park",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/glassell-park.png",
+      "worldAnchor": {
+        "x": 96.12354547350371,
+        "y": 16.85299828602878,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 78,
+        "y": 20
+      },
+      "displayStateBoundsPct": {
+        "x": 68,
+        "y": 11,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/glassell-park/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/glassell-park/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/glassell-park/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/glassell-park/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "glendale",
+      "name": "Glendale",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/glendale.png",
+      "worldAnchor": {
+        "x": 94.89243453880437,
+        "y": -43.708674723675195,
+        "outOfBounds": true
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 78,
+        "y": 20
+      },
+      "displayStateBoundsPct": {
+        "x": 68,
+        "y": 11,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/glendale/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/glendale/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/glendale/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/glendale/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "griffith-park",
+      "name": "Griffith Park",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/griffith-park.png",
+      "worldAnchor": {
+        "x": 67.8838384530878,
+        "y": -6.959615242486558,
+        "outOfBounds": true
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 67.8838384530878,
+        "y": 20
+      },
+      "displayStateBoundsPct": {
+        "x": 57.883838453087805,
+        "y": 11,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/griffith-park/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/griffith-park/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/griffith-park/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/griffith-park/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "hancock-park",
+      "name": "Hancock Park",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/hancock-park.png",
+      "worldAnchor": {
+        "x": 50.750272727268516,
+        "y": 52.28702424881335,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 50.750272727268516,
+        "y": 52.28702424881335
+      },
+      "displayStateBoundsPct": {
+        "x": 40.750272727268516,
+        "y": 43.28702424881335,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/hancock-park/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/hancock-park/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/hancock-park/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/hancock-park/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "harvard-heights",
+      "name": "Harvard Heights",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/harvard-heights.png",
+      "worldAnchor": {
+        "x": 62.87487373733537,
+        "y": 79.29650676260167,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 62.87487373733537,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 52.87487373733537,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/harvard-heights/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/harvard-heights/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/harvard-heights/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/harvard-heights/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "historic-south-central",
+      "name": "Historic South-Central",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/historic-south-central.png",
+      "worldAnchor": {
+        "x": 81.03943181814905,
+        "y": 105.60951270644733,
+        "outOfBounds": true
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 78,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 68,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/historic-south-central/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/historic-south-central/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/historic-south-central/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/historic-south-central/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "hollywood-hills",
+      "name": "Hollywood Hills",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/hollywood-hills.png",
+      "worldAnchor": {
+        "x": 45.9123374061288,
+        "y": 6.750748330986396,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 45.9123374061288,
+        "y": 20
+      },
+      "displayStateBoundsPct": {
+        "x": 35.9123374061288,
+        "y": 11,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/hollywood-hills/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/hollywood-hills/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/hollywood-hills/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/hollywood-hills/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "hollywood-hills-west",
+      "name": "Hollywood Hills West",
+      "priority": "initial authored neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/hollywood-hills-west.png",
+      "worldAnchor": {
+        "x": 32.83092146122371,
+        "y": 19.941209372077882,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 32,
+        "y": 17
+      },
+      "displayStateBoundsPct": {
+        "x": 22,
+        "y": 8,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/hollywood-hills-west/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/hollywood-hills-west/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/hollywood-hills-west/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/hollywood-hills-west/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "hollywood",
+      "name": "Hollywood",
+      "priority": "initial authored neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/hollywood.png",
+      "worldAnchor": {
+        "x": 48.09600615525342,
+        "y": 31.40219078953073,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 50,
+        "y": 20
+      },
+      "displayStateBoundsPct": {
+        "x": 40,
+        "y": 11,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/hollywood/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/hollywood/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/hollywood/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/hollywood/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "jefferson-park",
+      "name": "Jefferson Park",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/jefferson-park.png",
+      "worldAnchor": {
+        "x": 56.135515151487205,
+        "y": 89.9614926774127,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 56.135515151487205,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 46.135515151487205,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/jefferson-park/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/jefferson-park/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/jefferson-park/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/jefferson-park/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "koreatown",
+      "name": "Koreatown",
+      "priority": "initial authored neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/koreatown.png",
+      "worldAnchor": {
+        "x": 64.85946640313921,
+        "y": 63.0825018380156,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 47,
+        "y": 49
+      },
+      "displayStateBoundsPct": {
+        "x": 37,
+        "y": 40,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/koreatown/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/koreatown/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/koreatown/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/koreatown/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "larchmont",
+      "name": "Larchmont",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/larchmont.png",
+      "worldAnchor": {
+        "x": 58.60954545453817,
+        "y": 46.820382922935615,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 58.60954545453817,
+        "y": 46.820382922935615
+      },
+      "displayStateBoundsPct": {
+        "x": 48.60954545453817,
+        "y": 37.820382922935615,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/larchmont/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/larchmont/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/larchmont/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/larchmont/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "leimert-park",
+      "name": "Leimert Park",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/leimert-park.png",
+      "worldAnchor": {
+        "x": 54.22452802009913,
+        "y": 107.90387841149361,
+        "outOfBounds": true
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 54.22452802009913,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 44.22452802009913,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/leimert-park/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/leimert-park/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/leimert-park/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/leimert-park/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "lincoln-heights",
+      "name": "Lincoln Heights",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/lincoln-heights.png",
+      "worldAnchor": {
+        "x": 107.8903922789535,
+        "y": 50.73160897540131,
+        "outOfBounds": true
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 78,
+        "y": 50.73160897540131
+      },
+      "displayStateBoundsPct": {
+        "x": 68,
+        "y": 41.73160897540131,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/lincoln-heights/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/lincoln-heights/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/lincoln-heights/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/lincoln-heights/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "los-feliz",
+      "name": "Los Feliz",
+      "priority": "initial authored neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/los-feliz.png",
+      "worldAnchor": {
+        "x": 72.93612012984826,
+        "y": 22.61936959537934,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 69,
+        "y": 24
+      },
+      "displayStateBoundsPct": {
+        "x": 59,
+        "y": 15,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/los-feliz/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/los-feliz/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/los-feliz/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/los-feliz/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "mar-vista",
+      "name": "Mar Vista",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/mar-vista.png",
+      "worldAnchor": {
+        "x": 6.1755567857088645,
+        "y": 111.67103909590139,
+        "outOfBounds": true
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 18,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 8,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/mar-vista/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/mar-vista/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/mar-vista/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/mar-vista/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "mid-city",
+      "name": "Mid-City",
+      "priority": "initial authored neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/mid-city.png",
+      "worldAnchor": {
+        "x": 36.98279154629754,
+        "y": 81.70804645712208,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 38,
+        "y": 71
+      },
+      "displayStateBoundsPct": {
+        "x": 28,
+        "y": 62,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/mid-city/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/mid-city/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/mid-city/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/mid-city/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "mid-wilshire",
+      "name": "Mid-Wilshire",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/mid-wilshire.png",
+      "worldAnchor": {
+        "x": 45.26839285714818,
+        "y": 67.96561888473387,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 45.26839285714818,
+        "y": 67.96561888473387
+      },
+      "displayStateBoundsPct": {
+        "x": 35.26839285714818,
+        "y": 58.96561888473387,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/mid-wilshire/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/mid-wilshire/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/mid-wilshire/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/mid-wilshire/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "mount-washington",
+      "name": "Mount Washington",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/mount-washington.png",
+      "worldAnchor": {
+        "x": 102.5069752065964,
+        "y": 27.467282701557714,
+        "outOfBounds": true
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 78,
+        "y": 27.467282701557714
+      },
+      "displayStateBoundsPct": {
+        "x": 68,
+        "y": 18.467282701557714,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/mount-washington/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/mount-washington/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/mount-washington/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/mount-washington/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "palms",
+      "name": "Palms",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/palms.png",
+      "worldAnchor": {
+        "x": 20.222643795064478,
+        "y": 94.0303789566938,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 20.222643795064478,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 10.222643795064478,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/palms/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/palms/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/palms/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/palms/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "pico-robertson",
+      "name": "Pico-Robertson",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/pico-robertson.png",
+      "worldAnchor": {
+        "x": 22.125515151507535,
+        "y": 69.50376709537312,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 22.125515151507535,
+        "y": 69.50376709537312
+      },
+      "displayStateBoundsPct": {
+        "x": 12.125515151507535,
+        "y": 60.50376709537312,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/pico-robertson/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/pico-robertson/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/pico-robertson/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/pico-robertson/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "pico-union",
+      "name": "Pico-Union",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/pico-union.png",
+      "worldAnchor": {
+        "x": 71.38259999995296,
+        "y": 78.00159598037799,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 71.38259999995296,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 61.38259999995296,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/pico-union/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/pico-union/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/pico-union/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/pico-union/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "rancho-park",
+      "name": "Rancho Park",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/rancho-park.png",
+      "worldAnchor": {
+        "x": 9.159940711433846,
+        "y": 88.20252675416232,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 18,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 8,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/rancho-park/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/rancho-park/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/rancho-park/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/rancho-park/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "sawtelle",
+      "name": "Sawtelle",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/sawtelle.png",
+      "worldAnchor": {
+        "x": 0.13645112306645374,
+        "y": 86.72931357171744,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 18,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 8,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/sawtelle/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/sawtelle/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/sawtelle/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/sawtelle/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "sherman-oaks",
+      "name": "Sherman Oaks",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/sherman-oaks.png",
+      "worldAnchor": {
+        "x": 5.2779699911554,
+        "y": -3.43094432175678,
+        "outOfBounds": true
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 18,
+        "y": 20
+      },
+      "displayStateBoundsPct": {
+        "x": 8,
+        "y": 11,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/sherman-oaks/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/sherman-oaks/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/sherman-oaks/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/sherman-oaks/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "silver-lake",
+      "name": "Silver Lake",
+      "priority": "initial authored neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/silver-lake.png",
+      "worldAnchor": {
+        "x": 82.00279904303036,
+        "y": 31.969801771865974,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 78,
+        "y": 42
+      },
+      "displayStateBoundsPct": {
+        "x": 68,
+        "y": 33,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/silver-lake/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/silver-lake/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/silver-lake/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/silver-lake/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "studio-city",
+      "name": "Studio City",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/studio-city.png",
+      "worldAnchor": {
+        "x": 26.215938874032936,
+        "y": 0.9880813743675199,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 26.215938874032936,
+        "y": 20
+      },
+      "displayStateBoundsPct": {
+        "x": 16.215938874032936,
+        "y": 11,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/studio-city/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/studio-city/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/studio-city/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/studio-city/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "universal-city",
+      "name": "Universal City",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/universal-city.png",
+      "worldAnchor": {
+        "x": 43.094284536173724,
+        "y": -2.140348478796604,
+        "outOfBounds": true
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 43.094284536173724,
+        "y": 20
+      },
+      "displayStateBoundsPct": {
+        "x": 33.094284536173724,
+        "y": 11,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/universal-city/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/universal-city/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/universal-city/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/universal-city/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "university-park",
+      "name": "University Park",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/university-park.png",
+      "worldAnchor": {
+        "x": 74.33059090907118,
+        "y": 93.45736830464497,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 74.33059090907118,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 64.33059090907118,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/university-park/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/university-park/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/university-park/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/university-park/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "west-adams",
+      "name": "West Adams",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/west-adams.png",
+      "worldAnchor": {
+        "x": 41.59744543130103,
+        "y": 91.80377743632825,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 41.59744543130103,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 31.597445431301033,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/west-adams/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/west-adams/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/west-adams/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/west-adams/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "west-hollywood",
+      "name": "West Hollywood",
+      "priority": "initial authored neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/west-hollywood.png",
+      "worldAnchor": {
+        "x": 31.90115929029974,
+        "y": 40.356964228492764,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 33,
+        "y": 33
+      },
+      "displayStateBoundsPct": {
+        "x": 23,
+        "y": 24,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/west-hollywood/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/west-hollywood/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/west-hollywood/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/west-hollywood/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "westlake",
+      "name": "Westlake",
+      "priority": "initial authored neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/westlake.png",
+      "worldAnchor": {
+        "x": 77.52511363632188,
+        "y": 63.02318461402997,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 60,
+        "y": 61
+      },
+      "displayStateBoundsPct": {
+        "x": 50,
+        "y": 52,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/westlake/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/westlake/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/westlake/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/westlake/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "west-los-angeles",
+      "name": "West Los Angeles",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/west-los-angeles.png",
+      "worldAnchor": {
+        "x": 7.732824675305147,
+        "y": 76.17436990859252,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 18,
+        "y": 74
+      },
+      "displayStateBoundsPct": {
+        "x": 8,
+        "y": 65,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/west-los-angeles/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/west-los-angeles/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/west-los-angeles/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/west-los-angeles/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "westwood",
+      "name": "Westwood",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/westwood.png",
+      "worldAnchor": {
+        "x": 3.169528094895746,
+        "y": 54.43022930349555,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 18,
+        "y": 54.43022930349555
+      },
+      "displayStateBoundsPct": {
+        "x": 8,
+        "y": 45.43022930349555,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/westwood/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/westwood/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/westwood/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/westwood/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "windsor-square",
+      "name": "Windsor Square",
+      "priority": "expansion / selected neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/windsor-square.png",
+      "worldAnchor": {
+        "x": 58.33878787877303,
+        "y": 56.409060723736104,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 58.33878787877303,
+        "y": 56.409060723736104
+      },
+      "displayStateBoundsPct": {
+        "x": 48.33878787877303,
+        "y": 47.409060723736104,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/windsor-square/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/windsor-square/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/windsor-square/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/windsor-square/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    },
+    {
+      "territoryId": "arts-district",
+      "name": "Arts District",
+      "priority": "initial authored neighborhood",
+      "canonicalMask": "/assets/admin/control-room/world/territories-v2/masks/arts-district.png",
+      "worldAnchor": {
+        "x": 95.90909090909074,
+        "y": 78.09856698159216,
+        "outOfBounds": false
+      },
+      "displayPrimaryAnchorPct": {
+        "x": 85,
+        "y": 76
+      },
+      "displayStateBoundsPct": {
+        "x": 75,
+        "y": 67,
+        "width": 20,
+        "height": 23
+      },
+      "displacementLimitPx": 150,
+      "objectSafeArea": {
+        "x": 0.25,
+        "y": 0,
+        "width": 0.5,
+        "height": 0.7
+      },
+      "propGroundSlots": [
+        {
+          "x": 0.3,
+          "y": 0.7,
+          "width": 0.25,
+          "height": 0.2
+        },
+        {
+          "x": 0.65,
+          "y": 0.8,
+          "width": 0.2,
+          "height": 0.1
+        }
+      ],
+      "assets": [
+        {
+          "state": "healthy",
+          "destination": "/assets/goldline/lantern-city/v6/territories/arts-district/healthy.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "Warm window lighting, maintained low-rise LA buildings, clean paths, healthy planted courtyards. Leave the central game-object silhouette clear; no baked customer lanterns."
+        },
+        {
+          "state": "cooling",
+          "destination": "/assets/goldline/lantern-city/v6/territories/arts-district/cooling.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered architecture and paths with weakened illumination, dry greenery, modest physical deterioration and warm amber/red environmental light. No labels or lanterns."
+        },
+        {
+          "state": "infested",
+          "destination": "/assets/goldline/lantern-city/v6/territories/arts-district/infested.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood footprint transformed into neglected terrain: boarded storefronts, cracked pavement, trash, grime and abandoned yards. Must read as neglect with no rats, roaches, UI or labels. Existing rat and roach assets are supporting runtime props; leave ground slots for them."
+        },
+        {
+          "state": "locked",
+          "destination": "/assets/goldline/lantern-city/v6/territories/arts-district/locked.png",
+          "width": 1536,
+          "height": 994,
+          "alpha": true,
+          "status": "missing",
+          "description": "The SAME registered neighborhood transformed into hostile, unclaimed land: blackened/damaged buildings, broken entrances, thorny ground and darkened paths. Must read physically locked without a lock icon or label. Reserve central slot for the runtime lock."
+        }
+      ]
+    }
+  ],
+  "acceptance": [
+    "Base and all required visible territory states supplied and manually reviewed.",
+    "Hide status labels: healthy, cooling, neglected and hostile places remain distinguishable.",
+    "No pasted-object appearance; soft transitions are authored into alpha.",
+    "Real browser 1920×1080,1440×900,1280×900 side-by-side with approved reference.",
+    "Only after art and browser review may acceptance change; file existence alone never grants visual acceptance."
+  ]
+}

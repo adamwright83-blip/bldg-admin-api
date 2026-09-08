@@ -1,0 +1,363 @@
+.scene {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 100dvh;
+  min-height: 700px;
+  overflow: hidden;
+  background: #0c2434;
+  color: #fff0c4;
+  font-family: Arial, sans-serif;
+}
+.scene button {
+  cursor: pointer;
+  font: inherit;
+}
+.scene button:focus-visible,
+.scene input:focus-visible {
+  outline: 3px solid #fff1a7;
+  outline-offset: 4px;
+}
+.world {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.atlas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  max-width: none;
+}
+.plate {
+  pointer-events: none;
+  z-index: 1;
+}
+.plate img {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+.props {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.props img {
+  object-fit: contain;
+}
+.object {
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff4d2;
+  text-align: center;
+}
+.object[data-selected="true"] {
+  outline: 2px solid #ffe08b;
+  border-radius: 10px;
+}
+.objectArt {
+  position: relative;
+  display: block;
+  width: 100%;
+  flex-shrink: 0;
+}
+.objectArt > img {
+  height: 100%;
+  width: 100%;
+  object-fit: contain;
+  max-width: none;
+}
+.objectArt .lanternArt {
+  filter: drop-shadow(0 3px 5px #271607);
+}
+.towerLight {
+  position: absolute;
+  width: 54px;
+  height: 83px;
+  right: 0;
+  bottom: 8px;
+}
+.towerLight img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.towerLight b {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  background: #132f41;
+  border: 1px solid #ebc36b;
+  padding: 1px 5px;
+  border-radius: 50%;
+}
+.label {
+  height: 50px;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 3px;
+  line-height: 1.15;
+  text-shadow: 0 1px #000;
+}
+.label strong {
+  display: block;
+  max-width: 100%;
+  padding: 5px 9px;
+  background: linear-gradient(#183749, #07151f);
+  border: 1px solid #d8b870;
+  border-radius: 5px;
+  font-size: 13px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.label small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: #244d36;
+  border: 1px solid #bfa75b;
+  white-space: nowrap;
+}
+.label[data-environment="cooling"] small {
+  background: #943c25;
+}
+.label[data-environment="infested"] small {
+  background: #514237;
+}
+.label[data-environment="locked"] small {
+  background: #18374e;
+}
+.identity,
+.quest,
+.controls,
+.deck {
+  z-index: 5;
+  box-sizing: border-box;
+}
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-shadow: 0 2px 3px #07101b;
+}
+.identity > svg {
+  width: 50px;
+  height: 64px;
+  color: #f8be45;
+  flex-shrink: 0;
+}
+.identity span {
+  font-family: Georgia, serif;
+  font-size: 18px;
+  letter-spacing: 0.22em;
+  color: #ffe19a;
+}
+.identity h1 {
+  font-family: Georgia, serif;
+  font-size: 29px;
+  line-height: 1;
+  margin: 3px 0;
+  color: #ffe8a2;
+}
+.identity small {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.quest {
+  padding: 14px 18px;
+  background: #f2dfaf;
+  border: 3px double #a6762c;
+  border-radius: 6px;
+  box-shadow: 0 3px 14px #15202b77;
+  color: #302919;
+}
+.quest > strong {
+  font-size: 14px;
+}
+.quest p {
+  font-size: 13px;
+  margin: 10px 0;
+  height: 32px;
+  overflow: hidden;
+}
+.quest button {
+  border: 1px solid #bb8c3e;
+  border-radius: 4px;
+  background: #15394b;
+  color: #ffedc3;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: bold;
+}
+.controls {
+  padding: 12px 14px;
+  background: linear-gradient(#173040f5, #061723fa);
+  border: 1px solid #bd944e;
+  border-radius: 6px;
+  box-shadow: 0 3px 14px #0b182c77;
+  font-size: 12px;
+}
+.controls time {
+  display: block;
+  padding-bottom: 12px;
+  color: #d4dfe5;
+}
+.controls h2 {
+  font-size: 13px;
+  letter-spacing: 0.07em;
+  margin: 4px 0 12px;
+}
+.count {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  color: #d4dfe5;
+}
+.controls hr {
+  border: 0;
+  border-top: 1px solid #c6a15355;
+  margin: 12px 0;
+}
+.controls label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  margin: 11px 0;
+}
+.controls input {
+  accent-color: #27c4ff;
+  width: 20px;
+  height: 14px;
+}
+.deck {
+  display: flex;
+  gap: 7px;
+  padding: 5px;
+  background: #0b1825e8;
+  border: 2px solid #a67c35;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px #0009;
+}
+.deck button {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: linear-gradient(#163247, #071421);
+  color: #ede5ce;
+  border: 1px solid #9e783c;
+  border-radius: 8px;
+}
+.deck button[aria-current] {
+  border-color: #ffe5a5;
+  box-shadow:
+    0 0 12px #ffd061,
+    inset 0 0 20px #ab711655;
+}
+.deck svg {
+  width: 24px;
+  height: 24px;
+  color: #eccb78;
+}
+.deck strong {
+  font-size: 12px;
+  text-transform: uppercase;
+}
+.deck small {
+  font-size: 10px;
+  color: #b8c7d0;
+}
+.notice {
+  position: absolute;
+  z-index: 6;
+  bottom: 0;
+  width: 100%;
+  height: 15px;
+  text-align: center;
+  font:
+    10px/15px Arial,
+    sans-serif;
+  color: #ffe9b9;
+  background: #172632;
+}
+.dialog {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  width: min(650px, 90vw);
+  max-height: 75vh;
+  margin: auto;
+  overflow: auto;
+  padding: 28px;
+  border: 2px solid #c8a354;
+  border-radius: 10px;
+  background: #102738;
+  color: #fff0ce;
+  box-shadow: 0 0 0 100vmax #03111abb;
+}
+.dialog h2 {
+  font-family: Georgia, serif;
+  font-size: 25px;
+  margin: 0 0 16px;
+}
+.dialog button,
+.dialog a {
+  display: block;
+  padding: 10px;
+  margin: 6px 0;
+  background: #1c3e50;
+  border: 1px solid #b29558;
+  border-radius: 4px;
+  color: #fff0ce;
+}
+.dialog .close {
+  float: right;
+  margin-top: -12px;
+}
+.dialog p {
+  margin: 12px 0;
+}
+.dialog ul {
+  list-style: none;
+  padding: 0;
+}
+.dialog small {
+  display: block;
+  color: #b9cad4;
+}
+@media (max-width: 1399px) {
+  .identity h1 {
+    font-size: 24px;
+  }
+  .identity > svg {
+    width: 38px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scene *,
+  .scene *::before,
+  .scene *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

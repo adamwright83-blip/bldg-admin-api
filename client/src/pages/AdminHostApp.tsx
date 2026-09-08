@@ -33,6 +33,7 @@ import {
   SettingsControlRoom,
 } from "@/components/admin/control-room/ControlRoomSections";
 import LanternCityAtlas from "@/components/admin/control-room/LanternCityAtlas";
+import LanternCityScene from "@/components/admin/control-room/LanternCitySceneV6/LanternCityScene";
 import DriverIntelligenceOverview from "@/components/admin/control-room/DriverIntelligenceOverview";
 import { TowerWars } from "@/components/admin/control-room/TowerWars";
 import "@/components/admin/control-room/admin-control-room.css";
@@ -360,7 +361,11 @@ export default function AdminHostApp() {
         {!isWorldHome ? <Link href={worldHomePath} className="gl-return-world">← Return to Lantern City</Link> : null}
         {!isWorldHome && isControlRoomSection ? <WorldDayPhaseIndicator /> : null}
         <section className="gl-persistent-world" hidden={!isWorldHome} aria-label="Lantern City world home">
-          <LanternCityAtlas onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />
+          {isLanternCity && new URLSearchParams(window.location.search).get("scene") !== "v5" ? (
+            <LanternCityScene onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />
+          ) : (
+            <LanternCityAtlas onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />
+          )}
           {!isLanternCity ? (
           <>
           {/*
