@@ -225,6 +225,10 @@ export default function LanternCityScene({
           overview.data?.featuredOperation.environment === "infested"
             ? overview.data.featuredOperation.territoryId
             : null,
+        activeCampaignTerritoryId:
+          overview.data?.featuredOperation.binding !== "recovery"
+            ? overview.data?.featuredOperation.territoryId
+            : null,
         prospects: (atlas.data?.pursued ?? []).flatMap(p =>
           p.location && !p.location.outOfBounds
             ? [
@@ -520,7 +524,22 @@ export default function LanternCityScene({
       ) : null}
       {rekindle && physicalCluster ? (
         <RekindlingArsenal
-          customerLabel={`${physicalCluster.total} customers`}
+          customerLabel={
+            physicalCluster.total === 1
+              ? physicalCluster.customers[0]!.displayName
+              : `${physicalCluster.total} customers`
+          }
+          customerIdentityKey={
+            [...physicalCluster.customers].sort(
+              (left, right) =>
+                ({ active: 2, dimming: 1, dark: 0 })[left.cadence.state] -
+                  { active: 2, dimming: 1, dark: 0 }[right.cadence.state] ||
+                left.identityKey.localeCompare(right.identityKey)
+            )[0]?.identityKey ?? null
+          }
+          businessDate={
+            overview.data?.businessDate ?? new Date().toISOString().slice(0, 10)
+          }
           onClose={() => setRekindle(false)}
           onInspect={() => {
             setRekindle(false);

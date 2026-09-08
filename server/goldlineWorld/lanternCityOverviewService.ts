@@ -13,6 +13,10 @@ import {
   territoryByName,
 } from "../../shared/lanternTerritories";
 import { deriveTerritoryVisualState } from "../../shared/lanternTerritoryVisualState";
+import {
+  decayForecastLine,
+  forecastTerritoryDecay,
+} from "../../shared/lanternDecayForecast";
 import { getRevenueSummary } from "../analytics/analyticsQueries";
 import { getDb } from "../db";
 import { getGeographicTruth } from "../geography/geographicTruthService";
@@ -53,6 +57,7 @@ export type LanternTerritoryDossier = {
   territoryId: string;
   territoryName: string;
   counts: { total: number; active: number; dimming: number; dark: number };
+  decayForecast: string | null;
   knownLight: null | Pick<
     Customer,
     | "identityKey"
@@ -161,6 +166,20 @@ export function projectLanternCityOverview(input: {
             .map(w => w[0]!.toUpperCase() + w.slice(1))
             .join(" "),
         counts,
+        decayForecast: decayForecastLine(
+          forecastTerritoryDecay({
+            territoryId,
+            customers: customers.map(customer => ({
+              identityKey: customer.identityKey,
+              cadence: customer.cadence,
+            })),
+            occupancy: {
+              guarded: false,
+              conquered: false,
+              pressureReturned: false,
+            },
+          })
+        ),
         knownLight,
       };
     }

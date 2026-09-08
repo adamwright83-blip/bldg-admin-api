@@ -20,7 +20,11 @@ import {
 } from "../customerGeography";
 import type { GeographicCustomer } from "../customerGeography";
 import { LANTERN_CITY_V5_ASSETS as ASSETS } from "@/components/goldline/lanternCityV5Assets";
-import { frontierKindForTerritory } from "@shared/lanternFrontierPresentation";
+import {
+  frontierKindForTerritory,
+  lostGroundKindForTerritory,
+} from "@shared/lanternFrontierPresentation";
+import { applyFrontierCap } from "@shared/lanternFrontierCap";
 import {
   presentationFor,
   TERRITORY_PRESENTATION,
@@ -60,7 +64,7 @@ export function territoryStateText(params: {
 }): string {
   const { totalCustomers, guarded, state, objectCustomerCount } = params;
   return !totalCustomers
-    ? `${guarded ? "Guarded · " : ""}0 customers`
+    ? "0 customers"
     : `${territoryVisualStateLabel(state)} · ${objectCustomerCount} customer${objectCustomerCount === 1 ? "" : "s"}`;
 }
 export function hudLayout(width: number, height: number) {
@@ -96,6 +100,7 @@ export type ComposeInput = {
   prospects?: readonly SceneProspect[];
   secondLightTerritoryId?: string | null;
   featuredOperationTerritoryId?: string | null;
+  activeCampaignTerritoryId?: string | null;
 };
 export function composeLanternCityScene(input: ComposeInput): CityScene {
   const { width, height } = input.viewport;
@@ -261,9 +266,11 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
     // from anything but real occupancy/state truth already computed above.
     const isLostGround = truth.state === "lost_ground";
     const frontierKind =
-      !cluster && (truth.occupancy.guarded || isLostGround)
-        ? frontierKindForTerritory(territory.id)
-        : undefined;
+      !cluster && isLostGround
+        ? lostGroundKindForTerritory(territory.id)
+        : !cluster && truth.occupancy.guarded
+          ? frontierKindForTerritory(territory.id)
+          : undefined;
     candidates.push({
       id: `territory:${territory.id}`,
       territoryId: territory.id,
@@ -425,6 +432,32 @@ export function composeLanternCityScene(input: ComposeInput): CityScene {
         environment: truth.environment,
         status: "Waiting for a real new customer",
       });
+  }
+  const frontierCandidates = candidates.filter(
+    candidate => candidate.frontierKind
+  );
+  const frontierPresentation = new Map(
+    applyFrontierCap(
+      frontierCandidates.map(candidate => ({
+        territoryId: candidate.territoryId,
+        kind: candidate.frontierLostGround ? "lost_ground" : "opportunity",
+        activeCampaign:
+          input.activeCampaignTerritoryId === candidate.territoryId,
+        authoredRank: scene.truth.findIndex(
+          row => row.occupancy.territory.id === candidate.territoryId
+        ),
+      }))
+    ).map(item => [item.territoryId, item])
+  );
+  for (const candidate of frontierCandidates) {
+    if (frontierPresentation.get(candidate.territoryId)?.visibility !== "quiet")
+      continue;
+    candidate.frontierKind = undefined;
+    candidate.frontierLostGround = false;
+    candidate.kind = "environment";
+    candidate.status = "0 customers";
+    candidate.priority =
+      territoryPresentationCache.get(candidate.territoryId)?.priority ?? 5;
   }
   candidates.sort(
     (a, b) =>
