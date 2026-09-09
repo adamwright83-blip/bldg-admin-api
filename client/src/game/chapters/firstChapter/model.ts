@@ -18,6 +18,8 @@ export const WALLS: Record<Room, Array<{x:number;y:number;w:number;h:number}>> =
 };
 /** A crate blocks the direct garden shortcut until the latch heading is thrown once. */
 export const SHORTCUT_CRATE = {x:560,y:440,w:70,h:40};
+/** Perrin's manual latch handle: an always-available alternative to Inez's redirect route. */
+export const MANUAL_LATCH = {x:660,y:460};
 
 export type Heading = 'bridge'|'latch'|'confrontation';
 /** Launch/redirect machinery: one shared mechanism family reused for traversal, puzzle and combat. */
@@ -35,6 +37,7 @@ export const saveSchema = z.object({
   gardenOpen: z.boolean(), completed: z.boolean(),
   heading: z.enum(['bridge','latch','confrontation']).nullable(),
   latchOpen: z.boolean(),
+  choice: z.enum(['preserve','break']).nullable(),
 });
 export type ChapterSave = z.infer<typeof saveSchema>;
 export type Enemy = Point & { hp:number; stage:'tell'|'charge'|'recover'|'down'; clock:number; target:Point };
@@ -43,20 +46,22 @@ export type ChapterState = {
   save:ChapterSave; player:Point; velocity:Point; facing:Point; hp:number;
   dodge:number; dodgeCooldown:number; attack:number; attackCooldown:number;
   hurt:number; freeze:number; enemy:Enemy|null; weight:Weight|null; paused:boolean; lost:boolean;
-  cue:number; effect:'none'|'hit'|'hurt'|'guard'|'dodge'|'open'|'win'|'launch'|'redirect'|'stagger';
+  /** Perrin's remembered assistance: cancels one otherwise-fatal hit, once per run, only when `choice==='preserve'`. */
+  grace:boolean;
+  cue:number; effect:'none'|'hit'|'hurt'|'guard'|'dodge'|'open'|'win'|'launch'|'redirect'|'stagger'|'saved';
 };
 export function createChapter(save?: ChapterSave):ChapterState {
   const parsed = save ? saveSchema.safeParse(save) : null;
   const clean:ChapterSave = parsed?.success ? parsed.data : {
     chapterId:CHAPTER_ID,version:1,room:'arrival',cleared:[],gardenOpen:false,completed:false,
-    heading:null,latchOpen:false,
+    heading:null,latchOpen:false,choice:null,
   };
   const enemy = clean.room === 'garden' || clean.cleared.includes(clean.room) ? null : {
     x:700,y:245,hp:clean.room==='gallery'?5:2,stage:'tell' as const,clock:0,target:{...START},
   };
   return {save:{...clean,cleared:[...clean.cleared]},player:{...START},velocity:{x:0,y:0},
     facing:{x:1,y:0},hp:3,dodge:0,dodgeCooldown:0,attack:0,attackCooldown:0,
-    hurt:0,freeze:0,enemy,weight:null,paused:false,lost:false,cue:0,effect:'none'};
+    hurt:0,freeze:0,enemy,weight:null,paused:false,lost:false,grace:clean.choice==='preserve',cue:0,effect:'none'};
 }
 export function restoreChapter(raw:string|null):ChapterState {
   try { return createChapter(saveSchema.parse(JSON.parse(raw??'null'))); } catch { return createChapter(); }
@@ -93,8 +98,15 @@ function stepWeight(s:ChapterState,ms:number,cue:(effect:ChapterState['effect'])
     s.weight=null;return;
   }
   if(w.heading==='bridge') s.save.gardenOpen=true;
-  else if(w.heading==='latch') s.save.latchOpen=true;
-  else if(w.heading==='confrontation'&&s.enemy&&s.enemy.stage!=='down') {s.enemy.stage='recover';s.enemy.clock=0;}
+  else if(w.heading==='latch') {
+    if(!s.save.latchOpen&&!s.save.choice) s.save.choice='break';
+    s.save.latchOpen=true;
+  }
+  else if(w.heading==='confrontation'&&s.enemy&&s.enemy.stage!=='down') {
+    // Inez's redirect buys a longer opening when her riskier route was chosen.
+    s.enemy.stage='recover';
+    s.enemy.clock=s.save.choice==='break'?-500:0;
+  }
   cue(w.heading==='confrontation'?'stagger':'open');
   s.weight=null;
 }
@@ -136,7 +148,9 @@ export function stepChapter(previous:ChapterState,deltaMs:number,input:Input):Ch
       const d=distance(e,e.target);
       if(d>5){const speed=Math.min(d,340*ms/1000);e.x+=(e.target.x-e.x)/d*speed;e.y+=(e.target.y-e.y)/d*speed;}
       if(distance(e,s.player)<43&&s.dodge===0&&s.hurt===0) {
-        s.hp--;s.hurt=1000;s.freeze=90;cue('hurt');if(s.hp<=0)s.lost=true;
+        s.hp--;s.hurt=1000;s.freeze=90;
+        if(s.hp<=0&&s.grace) {s.hp=1;s.grace=false;cue('saved');}
+        else {cue('hurt');if(s.hp<=0)s.lost=true;}
       }
       if(e.clock>=700||d<6){e.stage='recover';e.clock=0;}
     } else if(e.clock>=1400){e.stage='tell';e.clock=0;}
@@ -154,6 +168,10 @@ export function stepChapter(previous:ChapterState,deltaMs:number,input:Input):Ch
     } else if(launcher&&distance(s.player,launcher)<70&&!s.weight) {
       s.weight={x:launcher.x,y:launcher.y,target:REDIRECTOR[room]!,heading:null,phase:'toRedirector'};
       cue('launch');
+    } else if(s.save.room==='garden'&&!s.save.latchOpen&&distance(s.player,MANUAL_LATCH)<70) {
+      s.save.latchOpen=true;
+      if(!s.save.choice) s.save.choice='preserve';
+      cue('open');
     } else if(s.save.room==='garden'&&distance(s.player,SWITCH)<75) {
       s.save.gardenOpen=!s.save.gardenOpen;cue('open');
     } else if(distance(s.player,EXIT)<85&&exitReady(s)) {

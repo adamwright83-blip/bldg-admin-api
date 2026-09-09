@@ -3,7 +3,7 @@ import { Application, Assets, Graphics, Sprite, Texture } from 'pixi.js';
 import { facingForVelocity } from '../../../pages/goldline/overworld/movement';
 import { getAudioManager, type AudioCueId } from '../../audio/AudioManager';
 import { arcadeFeedback, combatHurtFeedback } from '../../audio/haptics';
-import { createChapter, restoreChapter, retryChapter, stepChapter, ROOM_NAMES, WALLS, EXIT, SWITCH, SHORTCUT_CRATE, LAUNCHER, REDIRECTOR, exitReady, type Input, type ChapterState } from './model';
+import { createChapter, restoreChapter, retryChapter, stepChapter, ROOM_NAMES, WALLS, EXIT, SWITCH, SHORTCUT_CRATE, MANUAL_LATCH, LAUNCHER, REDIRECTOR, exitReady, type Input, type ChapterState } from './model';
 import './firstChapter.css';
 
 /** Slice 1 development entry. No API calls; host integration and server persistence are Slice 3. */
@@ -44,7 +44,10 @@ export default function FirstChapter() {
         art.circle(SWITCH.x,SWITCH.y,35).fill(0xc5a359);
         art.moveTo(SWITCH.x,SWITCH.y).lineTo(SWITCH.x+(s.save.gardenOpen?22:-22),SWITCH.y-30).stroke({color:0x214d4a,width:8});
         art.moveTo(600,200).lineTo(830,200).stroke({color:s.save.gardenOpen?0x238d82:0x9d6c55,width:18});
-        if(!s.save.latchOpen){const r=SHORTCUT_CRATE;art.rect(r.x,r.y,r.w,r.h).fill(0x8a6a45);art.rect(r.x,r.y,r.w,r.h).stroke({color:0x4a3a26,width:3});}
+        if(!s.save.latchOpen){
+          const r=SHORTCUT_CRATE;art.rect(r.x,r.y,r.w,r.h).fill(0x8a6a45);art.rect(r.x,r.y,r.w,r.h).stroke({color:0x4a3a26,width:3});
+          art.circle(MANUAL_LATCH.x,MANUAL_LATCH.y,18).fill(0xc9b896);art.circle(MANUAL_LATCH.x,MANUAL_LATCH.y,18).stroke({color:0x5c4a30,width:3});
+        }
       }
       const launcher=LAUNCHER[s.save.room];const redirector=REDIRECTOR[s.save.room];
       if(launcher){art.circle(launcher.x,launcher.y,26).fill(s.weight?0x8f9e6b:0xb8a15c);art.circle(launcher.x,launcher.y,26).stroke({color:0x3e3520,width:3});}
@@ -95,7 +98,7 @@ export default function FirstChapter() {
           input.current.dodge=false;input.current.attack=false;input.current.interact=false;
           if(sim.current.cue!==lastCue){
             lastCue=sim.current.cue;
-            const cues:Partial<Record<ChapterState['effect'],AudioCueId>>={hit:'strike_hit',hurt:'player_hurt',guard:'shield_clang',dodge:'dodge',open:'gate_unlock',win:'hostile_down',launch:'tower_launch',redirect:'mechanism_align',stagger:'weak_point_hit'};
+            const cues:Partial<Record<ChapterState['effect'],AudioCueId>>={hit:'strike_hit',hurt:'player_hurt',guard:'shield_clang',dodge:'dodge',open:'gate_unlock',win:'hostile_down',launch:'tower_launch',redirect:'mechanism_align',stagger:'weak_point_hit',saved:'barrier_release'};
             const cue=cues[sim.current.effect];if(cue)getAudioManager().play(cue);
             if(sim.current.effect==='hurt')combatHurtFeedback();else if(sim.current.effect==='hit')arcadeFeedback();
           }

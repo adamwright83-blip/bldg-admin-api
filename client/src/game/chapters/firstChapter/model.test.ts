@@ -1,5 +1,5 @@
 import { describe,it,expect } from 'vitest';
-import { createChapter,stepChapter,restoreChapter,retryChapter,EXIT,SWITCH,SHORTCUT_CRATE,LAUNCHER,REDIRECTOR,ROOMS, type ChapterState } from './model';
+import { createChapter,stepChapter,restoreChapter,retryChapter,EXIT,SWITCH,SHORTCUT_CRATE,MANUAL_LATCH,LAUNCHER,REDIRECTOR,ROOMS, type ChapterState } from './model';
 const idle={x:0,y:0};
 function tick(s:ChapterState,n:number,input=idle){for(let i=0;i<n;i++)s=stepChapter(s,20,input);return s;}
 function fireWeight(s:ChapterState,heading:'bridge'|'latch'|'confrontation'){
@@ -111,6 +111,37 @@ describe('first chapter fictional spine',()=>{
   s=fireWeight(s,'latch');
   const retry=retryChapter(s);
   expect(retry.save.latchOpen).toBe(true);expect(retry.weight).toBeNull();
+ });
+ it('Perrin\'s manual route opens the shortcut, remembers "preserve", and grants a saving grace',()=>{
+  let s=createChapter({...createChapter().save,room:'garden'});
+  expect(s.grace).toBe(false);
+  s.player={...MANUAL_LATCH};
+  s=stepChapter(s,20,{...idle,interact:true});
+  expect(s.save.latchOpen).toBe(true);expect(s.save.choice).toBe('preserve');
+  expect(retryChapter(s).grace).toBe(true);
+ });
+ it('Inez\'s redirect route remembers "break" instead, and buys a longer stagger window',()=>{
+  let base=createChapter({...createChapter().save,room:'gallery',cleared:['arrival'],choice:null});
+  base.enemy!.stage='charge';base.enemy!.clock=0;
+  const withoutChoice=fireWeight({...base},'confrontation');
+  let broke=createChapter({...createChapter().save,room:'garden'});
+  broke=fireWeight(broke,'latch');
+  expect(broke.save.choice).toBe('break');
+  let gallery=createChapter({...broke.save,room:'gallery',cleared:['arrival']});
+  gallery.enemy!.stage='charge';gallery.enemy!.clock=0;
+  gallery=fireWeight(gallery,'confrontation');
+  expect(gallery.enemy!.clock).toBeLessThan(withoutChoice.enemy!.clock);
+ });
+ it('a saving grace cancels one otherwise-fatal hit, once',()=>{
+  let s=createChapter({...createChapter().save,choice:'preserve'});
+  expect(s.grace).toBe(true);
+  s.hp=1;s.enemy={...s.enemy!,x:155,y:470,stage:'charge',target:{...s.player}};
+  s=stepChapter(s,20,idle);
+  expect(s.lost).toBe(false);expect(s.hp).toBe(1);expect(s.grace).toBe(false);
+  s=tick(s,10,idle);
+  s.hp=1;s.hurt=0;s.freeze=0;s.enemy={...s.enemy!,x:155,y:470,stage:'charge',target:{...s.player}};
+  s=stepChapter(s,20,idle);
+  expect(s.lost).toBe(true);
  });
  it('restores only validated fiction; malformed versions reset safely',()=>{
   const s=createChapter();s.save.gardenOpen=true;

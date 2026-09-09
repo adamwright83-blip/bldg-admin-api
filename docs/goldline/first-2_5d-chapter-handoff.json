@@ -3,9 +3,9 @@
   "latestCompletedMainSha": "6436f54258b809cb3412b8fc231dcd120c76cd05",
   "handoffBranch": "astra/first-2_5d-chapter-handoff",
   "handoffBranchSha": "8d0bc8b21590ab534f717dbd2adc75e416981a1d",
-  "completedSlices": [1, 2],
-  "activeSlice": 4,
-  "activeSliceStatus": "Slice 3 PARTIAL/BLOCKED BY DESIGN: server contract (schema, migration file, service, tRPC router) written and unit-tested (7/7), migration NOT applied to any database per Adam's explicit 'write only, don't run' choice for this hard-to-reverse infra change. Client not yet wired. Resume by getting Adam's go-ahead to run drizzle/0067_goldline_chapter_states.sql via applyDayforgeReleaseMigrations, then wire trpc.system.goldlineChapterState into the real chapter host once one exists (Slice 11). Slice 4 proceeds now on the existing localStorage save shape.",
+  "completedSlices": [1, 2, 4],
+  "activeSlice": 5,
+  "activeSliceStatus": "Slice 3 PARTIAL/BLOCKED BY DESIGN: server contract (schema, migration file, service, tRPC router) written and unit-tested (7/7), migration NOT applied to any database per Adam's explicit 'write only, don't run' choice for this hard-to-reverse infra change. Client not yet wired. Resume by getting Adam's go-ahead to run drizzle/0067_goldline_chapter_states.sql via applyDayforgeReleaseMigrations, then wire trpc.system.goldlineChapterState into the real chapter host once one exists (Slice 11). Slice 5 (real-business-event binding) touches production-adjacent data (Tower Wars paid ledger) and needs the same kind of check-in before writing anything live.",
   "chapterId": "the-last-valet",
   "canonicalBuilding": "century_park_east",
   "importantFiles": [
@@ -21,7 +21,7 @@
     "client/public/assets/goldline/chapters/the-last-valet/"
   ],
   "testsPassing": [
-    "client/src/game/chapters/firstChapter/model.test.ts (15/15)",
+    "client/src/game/chapters/firstChapter/model.test.ts (18/18)",
     "server/goldlineWorld/chapterStateService.test.ts (7/7)"
   ],
   "testsFailing": [],
@@ -29,8 +29,8 @@
     "drizzle/0067_goldline_chapter_states.sql written but not applied to any database — needs Adam's explicit approval to run before Slice 3's client wiring can be verified end-to-end"
   ],
   "nextActions": [
-    "Begin Slice 4: persistent fictional cast and a choice that changes gameplay, on the existing localStorage save shape",
-    "Ask Adam before running drizzle/0067_goldline_chapter_states.sql, then finish Slice 3 client wiring",
-    "Continue Slices 5-11 in order, stopping only at genuine hard-to-reverse/production-data boundaries (real business-event ledger writes in Slice 5, real customer follow-up data in Slice 6)"
+    "Ask Adam before Slice 5 touches the real Tower Wars paid-event ledger, and before Slice 3 runs drizzle/0067_goldline_chapter_states.sql",
+    "Ask Adam again before Slice 6 touches real customer follow-up data",
+    "Continue Slices 5-11 in order otherwise, stopping only at those two kinds of hard-to-reverse/production-data boundaries"
   ]
 }
