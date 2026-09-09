@@ -41,6 +41,7 @@ import { canonicalBuildingRouter } from "../canonicalBuilding/canonicalBuildingR
 import { googleRouter } from "../google/googleRouter";
 import { goldlineWorldRouter } from "../goldlineWorld/goldlineWorldRouter";
 import { chapterStateRouter } from "../goldlineWorld/chapterStateRouter";
+import { chapterEventBindingRouter } from "../goldlineWorld/chapterEventBindingRouter";
 import { cleancloudBrowserSyncRouter } from "../cleancloudBrowserSync/router";
 
 export const systemRouter = router({
@@ -85,6 +86,7 @@ export const systemRouter = router({
   google: googleRouter,
   goldlineWorld: goldlineWorldRouter,
   goldlineChapterState: chapterStateRouter,
+  goldlineChapterEventBinding: chapterEventBindingRouter,
   health: publicProcedure
     .input(
       z.object({

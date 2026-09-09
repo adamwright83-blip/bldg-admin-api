@@ -4,8 +4,8 @@
   "handoffBranch": "astra/first-2_5d-chapter-handoff",
   "handoffBranchSha": "8d0bc8b21590ab534f717dbd2adc75e416981a1d",
   "completedSlices": [1, 2, 4],
-  "activeSlice": 5,
-  "activeSliceStatus": "Slice 3 PARTIAL/BLOCKED BY DESIGN: server contract (schema, migration file, service, tRPC router) written and unit-tested (7/7), migration NOT applied to any database per Adam's explicit 'write only, don't run' choice for this hard-to-reverse infra change. Client not yet wired. Resume by getting Adam's go-ahead to run drizzle/0067_goldline_chapter_states.sql via applyDayforgeReleaseMigrations, then wire trpc.system.goldlineChapterState into the real chapter host once one exists (Slice 11). Slice 5 (real-business-event binding) touches production-adjacent data (Tower Wars paid ledger) and needs the same kind of check-in before writing anything live.",
+  "activeSlice": 6,
+  "activeSliceStatus": "Slice 3 and Slice 5 both PARTIAL/BLOCKED BY DESIGN: full server contracts written and unit-tested (7/7 and 8/8), migrations NOT applied to any database, no live Tower Wars ledger reads performed, per Adam's explicit instructions for these hard-to-reverse/production-adjacent actions. Client not wired for either. Resume both by getting Adam's go-ahead to (a) run drizzle/0067 and 0068 via applyDayforgeReleaseMigrations, (b) wire trpc.system.goldlineChapterState and .goldlineChapterEventBinding into a real chapter host (Slice 11). Slice 6 (Echo) proceeds now under the same 'code + tests only, no live reads' instruction Adam gave for both Slice 5 and Slice 6 together.",
   "chapterId": "the-last-valet",
   "canonicalBuilding": "century_park_east",
   "importantFiles": [
@@ -22,15 +22,18 @@
   ],
   "testsPassing": [
     "client/src/game/chapters/firstChapter/model.test.ts (18/18)",
-    "server/goldlineWorld/chapterStateService.test.ts (7/7)"
+    "server/goldlineWorld/chapterStateService.test.ts (7/7)",
+    "server/goldlineWorld/chapterEventBindingService.test.ts (8/8)"
   ],
   "testsFailing": [],
   "blockers": [
-    "drizzle/0067_goldline_chapter_states.sql written but not applied to any database — needs Adam's explicit approval to run before Slice 3's client wiring can be verified end-to-end"
+    "drizzle/0067_goldline_chapter_states.sql written but not applied to any database",
+    "drizzle/0068_goldline_chapter_event_bindings.sql written but not applied to any database",
+    "Both need Adam's explicit approval to run before their client wiring can be verified end-to-end against a real device switch / real event"
   ],
   "nextActions": [
-    "Ask Adam before Slice 5 touches the real Tower Wars paid-event ledger, and before Slice 3 runs drizzle/0067_goldline_chapter_states.sql",
-    "Ask Adam again before Slice 6 touches real customer follow-up data",
-    "Continue Slices 5-11 in order otherwise, stopping only at those two kinds of hard-to-reverse/production-data boundaries"
+    "Build Slice 6 (Echo) under the same 'code + tests only, no live reads' instruction already given for Slice 5",
+    "Continue Slices 7-11 in order",
+    "Before finishing (Slice 11), ask Adam to approve running drizzle/0067 and 0068, then wire the client to the three already-built server contracts"
   ]
 }

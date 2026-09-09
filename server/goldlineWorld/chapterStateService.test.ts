@@ -79,6 +79,7 @@ function sampleState(): GoldlineChapterFictionState {
     choice: null,
     restored: false,
     secretSeen: false,
+    prepared: { armedAt: null, resolvedEventId: null },
   };
 }
 

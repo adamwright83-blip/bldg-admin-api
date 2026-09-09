@@ -6407,6 +6407,34 @@ export const goldlineChapterStates = mysqlTable(
   })
 );
 
+/**
+ * Goldline chapter real-event binding (Slice 5). One row per tenant/chapter/
+ * building. Records ONLY that a qualifying TowerWarsBusinessEvent id was
+ * consumed and when the receiver was armed — never any order/payment/
+ * customer field from that event. `resolvedEventId` is set exactly once via
+ * a compare-and-set UPDATE guarded by `WHERE resolvedEventId IS NULL`.
+ */
+export const goldlineChapterEventBindings = mysqlTable(
+  "goldline_chapter_event_bindings",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    chapterId: varchar("chapterId", { length: 64 }).notNull(),
+    buildingId: varchar("buildingId", { length: 32 }).notNull(),
+    armedAt: timestamp("armedAt"),
+    resolvedEventId: varchar("resolvedEventId", { length: 191 }),
+    resolvedAt: timestamp("resolvedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    chapterBuildingUnique: uniqueIndex("uq_goldline_chapter_event_binding").on(
+      table.tenantId,
+      table.chapterId,
+      table.buildingId
+    ),
+  })
+);
+
 /** Stable authored baseline for a Lantern City operation. Business progress is derived. */
 export const goldlineLanternOperations = mysqlTable(
   "goldline_lantern_operations",

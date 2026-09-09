@@ -25,6 +25,11 @@ export const goldlineChapterFictionStateSchema = z.object({
   choice: z.enum(["preserve", "break"]).nullable(),
   restored: z.boolean(),
   secretSeen: z.boolean(),
+  /** Slice 5: the optional real-business-event binding. Never business truth itself. */
+  prepared: z.object({
+    armedAt: z.string().nullable(),
+    resolvedEventId: z.string().nullable(),
+  }),
 });
 export type GoldlineChapterFictionState = z.infer<
   typeof goldlineChapterFictionStateSchema
