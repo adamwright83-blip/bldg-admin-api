@@ -4,8 +4,8 @@
   "handoffBranch": "astra/first-2_5d-chapter-handoff",
   "handoffBranchSha": "8d0bc8b21590ab534f717dbd2adc75e416981a1d",
   "completedSlices": [1, 2, 4, 6, 7, 8],
-  "activeSlice": 9,
-  "activeSliceStatus": "Integration Gate complete at two layers: chapterIntegration.test.ts (4/4, service-level) and chapterHostIntegration.test.ts (4/4, real tRPC routers via createCaller, real auth middleware, only getDb + getTowerWarsToday mocked). PRODUCTION DATABASE ROUND-TRIP: NOT VERIFIED (no live/local MySQL reachable in this sandbox). SAFE INTEGRATED CONTRACT/HOST TEST: VERIFIED for cross-device revision handoff, event-binding consequence written into the same chapter-state row, Echo brief entitlement gating with no send/fabrication, and negative-outcome branching without faking a win. Remaining for Slice 11: apply drizzle/0067 + 0068 (needs Adam's approval) and build a real provider-wrapped chapter host page. Proceeding to Slice 9 (art) now per Adam's explicit sequencing.",
+  "activeSlice": 10,
+  "activeSliceStatus": "Integration Gate complete (see slice 3/5 blockers below). Slice 9 (art): BLOCKED on image generation (no image-gen tool available this session). Delivered instead per contract fallback: complete asset manifest (artManifest.ts), graceful-fallback loading hooks in FirstChapter.tsx (verified: identical rendering with zero art files present), and a full production-ready prompt catalog in first-2_5d-chapter-art-prompts.md, all PENDING. Proceeding to Slice 10 (polish/QA), which doesn't depend on finished art.",
   "chapterId": "the-last-valet",
   "canonicalBuilding": "century_park_east",
   "importantFiles": [
@@ -36,10 +36,11 @@
     "drizzle/0068_goldline_chapter_event_bindings.sql written but not applied to any database",
     "No live or local test MySQL is reachable in this sandbox, so the Integration Gate's cross-device/event/Echo/outcome proof runs against mocked persistence (same harness as the unit tests), not a real database",
     "Both migrations need Adam's explicit approval to run before real end-to-end verification is possible",
-    "No real provider-wrapped chapter host page exists yet — that's the remaining concrete task before Slice 11 can call Slices 3/5/6/7 truly live"
+    "No real provider-wrapped chapter host page exists yet — that's the remaining concrete task before Slice 11 can call Slices 3/5/6/7 truly live",
+    "Slice 9 art assets are all PENDING — no image-generation tool was available this session; manifest/hooks/prompts are ready for whenever art is generated"
   ],
   "nextActions": [
-    "Proceed to Slice 9: premium 2.5D art pass on the existing graybox geometry",
-    "Then Slice 10 (polish/QA) and Slice 11 (real chapter host, live migration approval, final player entry)"
+    "Proceed to Slice 10: full QA pass per the execution contract's definition-of-complete checklist",
+    "Then Slice 11 (real chapter host, live migration approval, final player entry)"
   ]
 }

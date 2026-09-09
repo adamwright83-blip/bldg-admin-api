@@ -3,8 +3,14 @@ import { Application, Assets, Graphics, Sprite, Texture } from 'pixi.js';
 import { facingForVelocity } from '../../../pages/goldline/overworld/movement';
 import { getAudioManager, type AudioCueId } from '../../audio/AudioManager';
 import { arcadeFeedback, combatHurtFeedback } from '../../audio/haptics';
-import { createChapter, restoreChapter, retryChapter, stepChapter, ROOM_NAMES, WALLS, EXIT, SWITCH, SHORTCUT_CRATE, MANUAL_LATCH, LAUNCHER, REDIRECTOR, BALCONY, exitReady, type Input, type ChapterState } from './model';
+import { createChapter, restoreChapter, retryChapter, stepChapter, ROOM_NAMES, WALLS, EXIT, SWITCH, SHORTCUT_CRATE, MANUAL_LATCH, LAUNCHER, REDIRECTOR, BALCONY, exitReady, type Input, type ChapterState, type Room } from './model';
+import { ROOM_BACKGROUNDS } from './artManifest';
 import './firstChapter.css';
+
+/** Best-effort art loader: missing files (the common case until Slice 9's art is generated) fail silently and the vector graybox keeps rendering. */
+async function tryLoadTexture(path: string): Promise<Texture | null> {
+  try { return await Assets.load<Texture>(path); } catch { return null; }
+}
 
 /** Slice 1 development entry. No API calls; host integration and server persistence are Slice 3. */
 export default function FirstChapter() {
@@ -23,14 +29,19 @@ export default function FirstChapter() {
   const pause=()=>{input.current={x:0,y:0};keys.current.clear();sim.current.paused=true;playingRef.current=false;setPlaying(false);};
   useEffect(()=>{
     let stopped=false,initialized=false,elapsed=0,lastCue=0,lastSave='';
-    const app=new Application();const art=new Graphics();const hero=new Sprite();
+    const app=new Application();const bg=new Sprite();const art=new Graphics();const hero=new Sprite();
     const textures:Record<string,Texture>={};
+    const roomBackgrounds:Partial<Record<Room,Texture>>={};
     try{sim.current=restoreChapter(localStorage.getItem(storageKey));}catch{sim.current=createChapter();}
     sim.current.paused=true;
     const paint=()=>{
       const s=sim.current;art.clear();
-      art.rect(0,0,960,640).fill(0xd5ebe8);
-      art.poly([60,100,900,100,950,560,10,560]).fill(0xe8dcc2);
+      const roomArt=roomBackgrounds[s.save.room];
+      if(roomArt){bg.texture=roomArt;bg.visible=true;bg.width=960;bg.height=640;}
+      else{bg.visible=false;
+        art.rect(0,0,960,640).fill(0xd5ebe8);
+        art.poly([60,100,900,100,950,560,10,560]).fill(0xe8dcc2);
+      }
       art.rect(60,100,840,450).stroke({color:0xc1a478,width:5});
       // Ground grid and raised obstacles are temporary registration geometry.
       for(let y=150;y<550;y+=50)art.moveTo(60,y).lineTo(900,y).stroke({color:0xd4c4a6,width:1});
@@ -87,12 +98,19 @@ export default function FirstChapter() {
       await app.init({width:960,height:640,backgroundAlpha:0,antialias:true,resolution:Math.min(devicePixelRatio||1,2),autoDensity:true});
       initialized=true;if(stopped){app.destroy(true,{children:true});return;}
       app.canvas.setAttribute('aria-label','Chapter playfield');
-      mount.current?.appendChild(app.canvas);app.stage.addChild(art);app.stage.addChild(hero);
+      mount.current?.appendChild(app.canvas);app.stage.addChild(bg);app.stage.addChild(art);app.stage.addChild(hero);
+      bg.visible=false;
       hero.anchor.set(.5,1);hero.width=64;hero.height=94;
       for(const facing of ['front','back','left','right']) {
         const texture=await Assets.load<Texture>(`/assets/goldline/characters/trailblazer/directional/idle-${facing}.webp`);
         if(stopped)return;textures[facing]=texture;
       }
+      // Slice 9 art: loaded opportunistically, never blocking — every room renders correctly with or without it.
+      await Promise.all((Object.keys(ROOM_BACKGROUNDS) as Room[]).map(async room=>{
+        const texture=await tryLoadTexture(ROOM_BACKGROUNDS[room].path);
+        if(texture)roomBackgrounds[room]=texture;
+      }));
+      if(stopped)return;
       hero.texture=textures.front;hero.width=64;hero.height=94;paint();setReady(true);setView({...sim.current});
       app.ticker.add(t=>{
         if(stopped)return;
