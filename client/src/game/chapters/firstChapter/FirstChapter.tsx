@@ -3,7 +3,7 @@ import { Application, Assets, Graphics, Sprite, Texture } from 'pixi.js';
 import { facingForVelocity } from '../../../pages/goldline/overworld/movement';
 import { getAudioManager, type AudioCueId } from '../../audio/AudioManager';
 import { arcadeFeedback, combatHurtFeedback } from '../../audio/haptics';
-import { createChapter, restoreChapter, retryChapter, stepChapter, ROOM_NAMES, WALLS, EXIT, SWITCH, SHORTCUT_CRATE, MANUAL_LATCH, LAUNCHER, REDIRECTOR, exitReady, type Input, type ChapterState } from './model';
+import { createChapter, restoreChapter, retryChapter, stepChapter, ROOM_NAMES, WALLS, EXIT, SWITCH, SHORTCUT_CRATE, MANUAL_LATCH, LAUNCHER, REDIRECTOR, BALCONY, exitReady, type Input, type ChapterState } from './model';
 import './firstChapter.css';
 
 /** Slice 1 development entry. No API calls; host integration and server persistence are Slice 3. */
@@ -16,6 +16,7 @@ export default function FirstChapter() {
   const [ready,setReady]=useState(false);
   const [error,setError]=useState<string|null>(null);
   const [playing,setPlaying]=useState(false);
+  const [endingSeen,setEndingSeen]=useState(false);
   const playingRef=useRef(false);
   const storageKey='goldline:chapter-dev:the-last-valet:v1';
   const resume=()=>{sim.current.paused=false;playingRef.current=true;setPlaying(true);getAudioManager().play('ui_tap');};
@@ -48,6 +49,11 @@ export default function FirstChapter() {
           const r=SHORTCUT_CRATE;art.rect(r.x,r.y,r.w,r.h).fill(0x8a6a45);art.rect(r.x,r.y,r.w,r.h).stroke({color:0x4a3a26,width:3});
           art.circle(MANUAL_LATCH.x,MANUAL_LATCH.y,18).fill(0xc9b896);art.circle(MANUAL_LATCH.x,MANUAL_LATCH.y,18).stroke({color:0x5c4a30,width:3});
         }
+      }
+      if(s.save.room==='arrival'){
+        art.roundRect(BALCONY.x-40,BALCONY.y-30,80,50,6).fill({color:0xc9b896,alpha:s.save.completed?1:.35});
+        art.roundRect(BALCONY.x-40,BALCONY.y-30,80,50,6).stroke({color:0x5c4a30,width:2,alpha:s.save.completed?1:.4});
+        if(!s.save.completed){art.rect(70,140,90,90).fill({color:0x263f38,alpha:.15});}
       }
       const launcher=LAUNCHER[s.save.room];const redirector=REDIRECTOR[s.save.room];
       if(launcher){art.circle(launcher.x,launcher.y,26).fill(s.weight?0x8f9e6b:0xb8a15c);art.circle(launcher.x,launcher.y,26).stroke({color:0x3e3520,width:3});}
@@ -98,7 +104,7 @@ export default function FirstChapter() {
           input.current.dodge=false;input.current.attack=false;input.current.interact=false;
           if(sim.current.cue!==lastCue){
             lastCue=sim.current.cue;
-            const cues:Partial<Record<ChapterState['effect'],AudioCueId>>={hit:'strike_hit',hurt:'player_hurt',guard:'shield_clang',dodge:'dodge',open:'gate_unlock',win:'hostile_down',launch:'tower_launch',redirect:'mechanism_align',stagger:'weak_point_hit',saved:'barrier_release'};
+            const cues:Partial<Record<ChapterState['effect'],AudioCueId>>={hit:'strike_hit',hurt:'player_hurt',guard:'shield_clang',dodge:'dodge',open:'gate_unlock',win:'hostile_down',launch:'tower_launch',redirect:'mechanism_align',stagger:'weak_point_hit',saved:'barrier_release',secret:'scout_discovery'};
             const cue=cues[sim.current.effect];if(cue)getAudioManager().play(cue);
             if(sim.current.effect==='hurt')combatHurtFeedback();else if(sim.current.effect==='hit')arcadeFeedback();
           }
@@ -125,14 +131,14 @@ export default function FirstChapter() {
   return <main className="fc" data-room={view.save.room} data-hp={view.hp} data-x={Math.round(view.player.x)} data-y={Math.round(view.player.y)} data-enemy-stage={view.enemy?.stage??'none'} data-enemy-hp={view.enemy?.hp??0} data-enemy-x={Math.round(view.enemy?.x??0)} data-enemy-y={Math.round(view.enemy?.y??0)} data-completed={view.save.completed}>
     <header><span>GOLDLINE · DEVELOPMENT BUILD</span><a href="/">Exit</a></header>
     <h1>{ROOM_NAMES[view.save.room]}</h1>
-    <div className="fc-hud"><span aria-label={`${view.hp} health remaining`}>{'●'.repeat(view.hp)}{'○'.repeat(3-view.hp)}</span><span>{view.enemy&&view.enemy.stage!=='down'?(view.enemy.stage==='recover'?'Opening — strike!':'Watch the dispatch line'):view.save.room==='garden'&&!view.save.gardenOpen?'Find the brass lever':'Reach the upper gate'}</span><button onClick={pause}>Pause</button></div>
+    <div className="fc-hud"><span aria-label={`${view.hp} health remaining`}>{'●'.repeat(view.hp)}{'○'.repeat(3-view.hp)}</span><span>{view.save.completed?(view.save.secretSeen?'Departure stopped. All quiet.':'The balcony looks reachable now.'):view.enemy&&view.enemy.stage!=='down'?(view.enemy.stage==='recover'?'Opening — strike!':'Watch the dispatch line'):view.save.room==='garden'&&!view.save.gardenOpen?'Find the brass lever':'Reach the upper gate'}</span><button onClick={pause}>Pause</button></div>
     <div ref={mount} className="fc-stage" />
     {error?<p role="alert">{error}</p>:null}
     {!playing&&!view.lost&&!view.save.completed?<div className="fc-message"><p>Temporary geometry · fictional play only</p><button disabled={!ready} onClick={resume}>{ready?'Enter / Resume':'Preparing…'}</button></div>:null}
     {view.lost?<div className="fc-message"><b>Try a different approach.</b><button onClick={()=>{sim.current=retryChapter(sim.current);setView({...sim.current});resume();}}>Retry checkpoint</button></div>:null}
-    {view.save.completed?<div className="fc-message"><b>Departure stopped.</b><p>The fictional chapter spine is complete. No business state changed.</p><button onClick={()=>{sim.current=createChapter();setView({...sim.current});resume();}}>Replay graybox</button></div>:null}
+    {view.save.completed&&!endingSeen?<div className="fc-message"><b>Departure stopped.</b><p>The fictional chapter spine is complete. No business state changed.</p><button onClick={()=>setEndingSeen(true)}>Continue exploring</button><button onClick={()=>{sim.current=createChapter();setView({...sim.current});setEndingSeen(false);resume();}}>Replay graybox</button></div>:null}
     <div className="fc-controls"><div className="fc-pad">{[['↑',0,-1],['←',-1,0],['↓',0,1],['→',1,0]].map(([label,x,y])=><button key={label} aria-label={`Move ${label}`} onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);input.current.x=Number(x);input.current.y=Number(y);}} onPointerUp={()=>{input.current.x=0;input.current.y=0;}} onPointerCancel={()=>{input.current.x=0;input.current.y=0;}}>{label}</button>)}</div>
-    <div>{(['dodge','attack','interact'] as const).map(action=><button key={action} disabled={!playing||view.lost||view.save.completed} onPointerDown={()=>{input.current[action]=true;}} onKeyDown={e=>{if(e.key==='Enter')input.current[action]=true;}}>{action}</button>)}</div></div>
+    <div>{(['dodge','attack','interact'] as const).map(action=><button key={action} disabled={!playing||view.lost} onPointerDown={()=>{input.current[action]=true;}} onKeyDown={e=>{if(e.key==='Enter')input.current[action]=true;}}>{action}</button>)}</div></div>
     <p className="fc-help">WASD / arrows · Space dodge · J strike · E use · Esc pause. Stationary play only.</p>
   </main>;
 }

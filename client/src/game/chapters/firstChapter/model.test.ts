@@ -1,5 +1,5 @@
 import { describe,it,expect } from 'vitest';
-import { createChapter,stepChapter,restoreChapter,retryChapter,EXIT,SWITCH,SHORTCUT_CRATE,MANUAL_LATCH,LAUNCHER,REDIRECTOR,ROOMS, type ChapterState } from './model';
+import { createChapter,stepChapter,restoreChapter,retryChapter,EXIT,SWITCH,SHORTCUT_CRATE,MANUAL_LATCH,LAUNCHER,REDIRECTOR,BALCONY,ROOMS, type ChapterState } from './model';
 const idle={x:0,y:0};
 function tick(s:ChapterState,n:number,input=idle){for(let i=0;i<n;i++)s=stepChapter(s,20,input);return s;}
 function fireWeight(s:ChapterState,heading:'bridge'|'latch'|'confrontation'){
@@ -142,6 +142,30 @@ describe('first chapter fictional spine',()=>{
   s.hp=1;s.hurt=0;s.freeze=0;s.enemy={...s.enemy!,x:155,y:470,stage:'charge',target:{...s.player}};
   s=stepChapter(s,20,idle);
   expect(s.lost).toBe(true);
+ });
+ it('completing the chapter returns the heroine to the court, per the locked ending beat',()=>{
+  let s=createChapter({...createChapter().save,room:'gallery',cleared:['arrival','garden']});
+  s.enemy!.stage='recover';s.player={x:s.enemy!.x-70,y:s.enemy!.y};s.facing={x:1,y:0};
+  while(s.enemy&&s.enemy.hp>0){
+    s=stepChapter(s,20,{...idle,attack:true});s.freeze=0;s.attackCooldown=0;
+    if(s.enemy&&s.enemy.hp>0){s.enemy.stage='recover';s.enemy.clock=0;}
+  }
+  s.freeze=0;s.player={...EXIT};
+  s=stepChapter(s,20,{...idle,interact:true});
+  expect(s.save.completed).toBe(true);expect(s.save.room).toBe('arrival');
+ });
+ it('the return secret is unreachable before completion and reachable — once — after',()=>{
+  let s=createChapter();
+  s.player={x:BALCONY.x,y:BALCONY.y+60};
+  s=tick(s,40,{x:0,y:-1});
+  expect(s.player.y).toBeGreaterThan(BALCONY.y+10);
+  let done=createChapter({...createChapter().save,completed:true});
+  done.player={...BALCONY};
+  done=stepChapter(done,20,{...idle,interact:true});
+  expect(done.save.secretSeen).toBe(true);expect(done.effect).toBe('secret');
+  const cueBefore=done.cue;
+  const again=stepChapter(done,20,{...idle,interact:true});
+  expect(again.cue).toBe(cueBefore);
  });
  it('restores only validated fiction; malformed versions reset safely',()=>{
   const s=createChapter();s.save.gardenOpen=true;

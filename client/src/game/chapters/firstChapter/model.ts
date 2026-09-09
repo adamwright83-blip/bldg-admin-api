@@ -20,6 +20,9 @@ export const WALLS: Record<Room, Array<{x:number;y:number;w:number;h:number}>> =
 export const SHORTCUT_CRATE = {x:560,y:440,w:70,h:40};
 /** Perrin's manual latch handle: an always-available alternative to Inez's redirect route. */
 export const MANUAL_LATCH = {x:660,y:460};
+/** The inspection balcony: visible from the start, reachable only once the chapter is complete. */
+export const BALCONY = {x:120,y:180};
+const BALCONY_GATE = {x:90,y:150,w:70,h:70};
 
 export type Heading = 'bridge'|'latch'|'confrontation';
 /** Launch/redirect machinery: one shared mechanism family reused for traversal, puzzle and combat. */
@@ -38,6 +41,7 @@ export const saveSchema = z.object({
   heading: z.enum(['bridge','latch','confrontation']).nullable(),
   latchOpen: z.boolean(),
   choice: z.enum(['preserve','break']).nullable(),
+  secretSeen: z.boolean(),
 });
 export type ChapterSave = z.infer<typeof saveSchema>;
 export type Enemy = Point & { hp:number; stage:'tell'|'charge'|'recover'|'down'; clock:number; target:Point };
@@ -48,13 +52,13 @@ export type ChapterState = {
   hurt:number; freeze:number; enemy:Enemy|null; weight:Weight|null; paused:boolean; lost:boolean;
   /** Perrin's remembered assistance: cancels one otherwise-fatal hit, once per run, only when `choice==='preserve'`. */
   grace:boolean;
-  cue:number; effect:'none'|'hit'|'hurt'|'guard'|'dodge'|'open'|'win'|'launch'|'redirect'|'stagger'|'saved';
+  cue:number; effect:'none'|'hit'|'hurt'|'guard'|'dodge'|'open'|'win'|'launch'|'redirect'|'stagger'|'saved'|'secret';
 };
 export function createChapter(save?: ChapterSave):ChapterState {
   const parsed = save ? saveSchema.safeParse(save) : null;
   const clean:ChapterSave = parsed?.success ? parsed.data : {
     chapterId:CHAPTER_ID,version:1,room:'arrival',cleared:[],gardenOpen:false,completed:false,
-    heading:null,latchOpen:false,choice:null,
+    heading:null,latchOpen:false,choice:null,secretSeen:false,
   };
   const enemy = clean.room === 'garden' || clean.cleared.includes(clean.room) ? null : {
     x:700,y:245,hp:clean.room==='gallery'?5:2,stage:'tell' as const,clock:0,target:{...START},
@@ -68,17 +72,18 @@ export function restoreChapter(raw:string|null):ChapterState {
 }
 export function retryChapter(s:ChapterState) { return createChapter(s.save); }
 export function distance(a:Point,b:Point) {return Math.hypot(a.x-b.x,a.y-b.y);}
-function blocked(p:Point,room:Room,latchOpen:boolean) {
+function blocked(p:Point,room:Room,latchOpen:boolean,completed:boolean) {
   if(WALLS[room].some(r=>p.x>r.x-16&&p.x<r.x+r.w+16&&p.y>r.y-16&&p.y<r.y+r.h+16)) return true;
   if(room==='garden'&&!latchOpen){const r=SHORTCUT_CRATE;if(p.x>r.x-16&&p.x<r.x+r.w+16&&p.y>r.y-16&&p.y<r.y+r.h+16) return true;}
+  if(room==='arrival'&&!completed){const r=BALCONY_GATE;if(p.x>r.x-16&&p.x<r.x+r.w+16&&p.y>r.y-16&&p.y<r.y+r.h+16) return true;}
   return false;
 }
-function move(p:Point,v:Point,dt:number,room:Room,latchOpen:boolean):Point {
+function move(p:Point,v:Point,dt:number,room:Room,latchOpen:boolean,completed:boolean):Point {
   const next={...p};
   const x=Math.max(76,Math.min(884,p.x+v.x*dt));
-  if(!blocked({x,y:next.y},room,latchOpen)) next.x=x;
+  if(!blocked({x,y:next.y},room,latchOpen,completed)) next.x=x;
   const y=Math.max(116,Math.min(534,p.y+v.y*dt));
-  if(!blocked({x:next.x,y},room,latchOpen)) next.y=y;
+  if(!blocked({x:next.x,y},room,latchOpen,completed)) next.y=y;
   return next;
 }
 export function exitReady(s:ChapterState) {
@@ -111,7 +116,7 @@ function stepWeight(s:ChapterState,ms:number,cue:(effect:ChapterState['effect'])
   s.weight=null;
 }
 export function stepChapter(previous:ChapterState,deltaMs:number,input:Input):ChapterState {
-  if(previous.paused||previous.lost||previous.save.completed) return previous;
+  if(previous.paused||previous.lost) return previous;
   const ms=Math.min(40,Math.max(0,Number.isFinite(deltaMs)?deltaMs:0));
   if(ms===0) return previous;
   const s:ChapterState={...previous,save:{...previous.save,cleared:[...previous.save.cleared]},
@@ -124,7 +129,7 @@ export function stepChapter(previous:ChapterState,deltaMs:number,input:Input):Ch
   const cue=(effect:ChapterState['effect'])=>{s.cue++;s.effect=effect;};
   if(input.dodge&&s.dodgeCooldown===0) {s.dodge=260;s.dodgeCooldown=850;cue('dodge');}
   s.velocity=s.dodge>0?{x:s.facing.x*460,y:s.facing.y*460}:stepVelocity(s.velocity,analog,ms/1000);
-  s.player=move(s.player,s.velocity,ms/1000,s.save.room,s.save.latchOpen);
+  s.player=move(s.player,s.velocity,ms/1000,s.save.room,s.save.latchOpen,s.save.completed);
   if(input.attack&&s.attackCooldown===0&&s.dodge===0) {
     s.attack=150;s.attackCooldown=380;
     const e=s.enemy;
@@ -160,7 +165,9 @@ export function stepChapter(previous:ChapterState,deltaMs:number,input:Input):Ch
     const room=s.save.room;
     const redirector=REDIRECTOR[room];
     const launcher=LAUNCHER[room];
-    if(redirector&&distance(s.player,redirector)<70&&!(s.weight&&s.weight.phase==='redirected')) {
+    if(room==='arrival'&&s.save.completed&&!s.save.secretSeen&&distance(s.player,BALCONY)<70) {
+      s.save.secretSeen=true;cue('secret');
+    } else if(redirector&&distance(s.player,redirector)<70&&!(s.weight&&s.weight.phase==='redirected')) {
       const options=HEADINGS[room];
       const index=s.save.heading?options.indexOf(s.save.heading):-1;
       s.save.heading=options[(index+1)%options.length]??null;
@@ -174,9 +181,14 @@ export function stepChapter(previous:ChapterState,deltaMs:number,input:Input):Ch
       cue('open');
     } else if(s.save.room==='garden'&&distance(s.player,SWITCH)<75) {
       s.save.gardenOpen=!s.save.gardenOpen;cue('open');
-    } else if(distance(s.player,EXIT)<85&&exitReady(s)) {
+    } else if(!s.save.completed&&distance(s.player,EXIT)<85&&exitReady(s)) {
       const index=ROOMS.indexOf(s.save.room);
-      if(index===2){s.save.completed=true;cue('win');}
+      if(index===2) {
+        // Departure stopped — the beat returns to the court, per the locked ending.
+        const epilogue=createChapter({...s.save,room:'arrival',
+          cleared:Array.from(new Set<Room>([...s.save.cleared,'gallery'])),completed:true});
+        epilogue.cue=s.cue+1;epilogue.effect='win';return epilogue;
+      }
       else {const next=createChapter({...s.save,room:ROOMS[index+1]});next.cue=s.cue+1;next.effect='open';return next;}
     }
   }
