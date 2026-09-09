@@ -30,6 +30,8 @@ export const goldlineChapterFictionStateSchema = z.object({
     armedAt: z.string().nullable(),
     resolvedEventId: z.string().nullable(),
   }),
+  /** Slice 7: which way a real, already-recorded outcome has branched the fiction. */
+  realOutcome: z.enum(["follow_up", "won", "lost"]).nullable(),
 });
 export type GoldlineChapterFictionState = z.infer<
   typeof goldlineChapterFictionStateSchema
