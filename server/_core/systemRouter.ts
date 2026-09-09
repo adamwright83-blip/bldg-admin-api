@@ -40,6 +40,7 @@ import { geographicTruthRouter } from "../geography/geographicTruthRouter";
 import { canonicalBuildingRouter } from "../canonicalBuilding/canonicalBuildingRouter";
 import { googleRouter } from "../google/googleRouter";
 import { goldlineWorldRouter } from "../goldlineWorld/goldlineWorldRouter";
+import { chapterStateRouter } from "../goldlineWorld/chapterStateRouter";
 import { cleancloudBrowserSyncRouter } from "../cleancloudBrowserSync/router";
 
 export const systemRouter = router({
@@ -83,6 +84,7 @@ export const systemRouter = router({
   canonicalBuilding: canonicalBuildingRouter,
   google: googleRouter,
   goldlineWorld: goldlineWorldRouter,
+  goldlineChapterState: chapterStateRouter,
   health: publicProcedure
     .input(
       z.object({

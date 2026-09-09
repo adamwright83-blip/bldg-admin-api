@@ -4,8 +4,8 @@
   "handoffBranch": "astra/first-2_5d-chapter-handoff",
   "handoffBranchSha": "8d0bc8b21590ab534f717dbd2adc75e416981a1d",
   "completedSlices": [1, 2],
-  "activeSlice": 3,
-  "activeSliceStatus": "Not started. Slice 2 complete: launch/redirect shared mechanism family with traversal/puzzle/combat/combined uses and two viable encounter approaches, 15/15 focused tests, TS/build clean, browser-verified.",
+  "activeSlice": 4,
+  "activeSliceStatus": "Slice 3 PARTIAL/BLOCKED BY DESIGN: server contract (schema, migration file, service, tRPC router) written and unit-tested (7/7), migration NOT applied to any database per Adam's explicit 'write only, don't run' choice for this hard-to-reverse infra change. Client not yet wired. Resume by getting Adam's go-ahead to run drizzle/0067_goldline_chapter_states.sql via applyDayforgeReleaseMigrations, then wire trpc.system.goldlineChapterState into the real chapter host once one exists (Slice 11). Slice 4 proceeds now on the existing localStorage save shape.",
   "chapterId": "the-last-valet",
   "canonicalBuilding": "century_park_east",
   "importantFiles": [
@@ -20,11 +20,17 @@
   "assetDirectories": [
     "client/public/assets/goldline/chapters/the-last-valet/"
   ],
-  "testsPassing": ["client/src/game/chapters/firstChapter/model.test.ts (15/15)"],
+  "testsPassing": [
+    "client/src/game/chapters/firstChapter/model.test.ts (15/15)",
+    "server/goldlineWorld/chapterStateService.test.ts (7/7)"
+  ],
   "testsFailing": [],
+  "blockers": [
+    "drizzle/0067_goldline_chapter_states.sql written but not applied to any database — needs Adam's explicit approval to run before Slice 3's client wiring can be verified end-to-end"
+  ],
   "nextActions": [
-    "Begin Slice 3: server-authenticated shared fiction state (room/checkpoint/mechanism/cleared/completed) keyed by tenant/player/chapter with revision compare-and-set, replacing localStorage as sole source of truth",
-    "Continue Slices 4-11 in order without stopping for a report between slices",
-    "Do not expose or deploy unfinished chapter"
+    "Begin Slice 4: persistent fictional cast and a choice that changes gameplay, on the existing localStorage save shape",
+    "Ask Adam before running drizzle/0067_goldline_chapter_states.sql, then finish Slice 3 client wiring",
+    "Continue Slices 5-11 in order, stopping only at genuine hard-to-reverse/production-data boundaries (real business-event ledger writes in Slice 5, real customer follow-up data in Slice 6)"
   ]
 }

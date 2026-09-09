@@ -6378,6 +6378,35 @@ export const goldlineCampaignRevisions = mysqlTable(
   })
 );
 
+/**
+ * Goldline chapter fiction state — shared checkpoint/mechanism state between
+ * desktop and mobile perspectives of the same chapter. Fiction only: room,
+ * checkpoint, mechanism headings, cleared rooms, completion. Never a business
+ * record. revision + lastRequestId support optimistic-concurrency writes and
+ * idempotent retry, mirroring goldlineCampaignInstances.
+ */
+export const goldlineChapterStates = mysqlTable(
+  "goldline_chapter_states",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorId: varchar("operatorId", { length: 128 }).notNull(),
+    chapterId: varchar("chapterId", { length: 64 }).notNull(),
+    revision: int("revision").notNull().default(1),
+    stateJson: json("stateJson").notNull(),
+    lastRequestId: varchar("lastRequestId", { length: 80 }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    playerChapterUnique: uniqueIndex("uq_goldline_chapter_state_player").on(
+      table.tenantId,
+      table.operatorId,
+      table.chapterId
+    ),
+  })
+);
+
 /** Stable authored baseline for a Lantern City operation. Business progress is derived. */
 export const goldlineLanternOperations = mysqlTable(
   "goldline_lantern_operations",
