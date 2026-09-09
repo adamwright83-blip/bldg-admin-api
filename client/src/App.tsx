@@ -31,6 +31,7 @@ const CommercialMissionAdmin = lazy(
 );
 const SalesIntelAdmin = lazy(() => import("./pages/SalesIntelAdmin"));
 const GoldlineEffectivenessAdmin = lazy(() => import("./pages/GoldlineEffectivenessAdmin"));
+const GoldlineChapterHost = lazy(() => import("./pages/GoldlineChapterHost"));
 const TowerForgeAdmin = lazy(() => import("./pages/TowerForgeAdmin"));
 const GuardianRosterPage = lazy(() => import("./pages/GuardianRosterPage"));
 const CommercialSalesMission = lazy(
@@ -204,6 +205,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/tower-forge",
   "/sales-intel",
   "/goldline-effectiveness",
+  "/goldline-chapter",
   "/commercial-proposal-settings",
   "/churn-radar",
   "/commercial-pipeline",
@@ -308,6 +310,14 @@ function AdminHostRouter() {
         <AdminAuthGate>
           <Suspense fallback={<PublicLandingFallback />}>
             <GoldlineEffectivenessAdmin />
+          </Suspense>
+        </AdminAuthGate>
+      </Route>
+      {/* Slice 11: internal, unlinked chapter host. Not the final player entry point. */}
+      <Route path="/goldline-chapter">
+        <AdminAuthGate>
+          <Suspense fallback={<PublicLandingFallback />}>
+            <GoldlineChapterHost />
           </Suspense>
         </AdminAuthGate>
       </Route>

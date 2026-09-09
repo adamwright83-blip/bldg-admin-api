@@ -5,7 +5,7 @@
   "handoffBranchSha": "8d0bc8b21590ab534f717dbd2adc75e416981a1d",
   "completedSlices": [1, 2, 4, 6, 7, 8, 10],
   "activeSlice": 11,
-  "activeSliceStatus": "Slice 10 QA complete: 170/170 tests across all chapter-touching suites, full-repo TypeScript baseline unchanged (40 pre-existing errors, zero touching chapter files), clean build, browser-verified desktop+mobile rendering/layout/reload/pause-on-hidden. Definition-of-complete checklist answered honestly in HANDOFF section 12h: game/characters/echo/art(graybox)/safety all TRUE; continuity/reality/outcomes TRUE at server-contract level but NOT YET live (no DB migration applied, no real host); finished art FALSE (Slice 9 generation-blocked); human fun-gate playtest not yet done (needs Adam). Slice 11 remains: apply drizzle/0067+0068 (Adam's approval needed), build the real provider-wrapped chapter host, generate final art, and ship the player entry point.",
+  "activeSliceStatus": "Slice 11 host wiring done: /goldline-chapter route added to the real app (client/src/pages/GoldlineChapterHost.tsx), AdminAuthGate-gated, unlinked, same pattern as /goldline-effectiveness. Calls trpc.system.goldlineChapterState.get/save with localStorage fallback, degrading silently until the migration is applied. Full-repo TS baseline unchanged (40 errors, 0 new), full client build succeeds, admin routing test suite still passes (13/13). NOT DONE (all need Adam directly): (1) apply drizzle/0067 + 0068 to a real database, (2) a live logged-in browser walkthrough of the new route once migrated, (3) generate the art from first-2_5d-chapter-art-prompts.md, (4) decide the final spoiler-free player entry surface/copy.",
   "chapterId": "the-last-valet",
   "canonicalBuilding": "century_park_east",
   "importantFiles": [
@@ -40,9 +40,9 @@
     "Slice 9 art assets are all PENDING — no image-generation tool was available this session; manifest/hooks/prompts are ready for whenever art is generated"
   ],
   "nextActions": [
-    "Slice 11: ask Adam to approve running drizzle/0067 and 0068 against a real database",
-    "Build a real provider-wrapped chapter host page/route replacing the standalone dev preview",
+    "Ask Adam to approve running drizzle/0067 and drizzle/0068 against a real database",
+    "Once migrated: a real logged-in browser walkthrough of /goldline-chapter to replace this session's code-level verification",
     "Generate the art in first-2_5d-chapter-art-prompts.md when an image-generation-capable session is available",
-    "Ship the final minimal player entry point and hand off with the spoiler-free summary format from the execution contract section 32"
+    "Adam decides the final spoiler-free player entry surface/copy; /goldline-chapter is ready to be linked from wherever he chooses"
   ]
 }
