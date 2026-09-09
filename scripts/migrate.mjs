@@ -737,33 +737,116 @@ await assertRequiredColumns("goldline_campaign_instances", [
 
 // Required, additive Gumballpals schema. Fail startup rather than accept imports
 // against a partially provisioned database.
-const gumballSql = await readFile(new URL("../server/cleancloudBrowserSync/schema.sql", import.meta.url), "utf8");
-for (const statement of gumballSql.replace(/^\s*--.*$/gm, "").split(";").map(value => value.trim()).filter(Boolean)) {
+const gumballSql = await readFile(
+  new URL("../server/cleancloudBrowserSync/schema.sql", import.meta.url),
+  "utf8"
+);
+for (const statement of gumballSql
+  .replace(/^\s*--.*$/gm, "")
+  .split(";")
+  .map(value => value.trim())
+  .filter(Boolean)) {
   await runRequired(statement, "Gumballpals schema");
 }
-await assertRequiredColumns("cleancloud_browser_sync_bindings", ["tenantId", "id", "storeId", "storeLabel", "createdBy", "lastSuccessAt"]);
-await assertRequiredColumns("cleancloud_browser_sync_receipts", ["id", "tenantId", "requestId", "digest", "storeId", "importBatchId", "receiptJson", "createdAt"]);
+await assertRequiredColumns("cleancloud_browser_sync_bindings", [
+  "tenantId",
+  "id",
+  "storeId",
+  "storeLabel",
+  "createdBy",
+  "lastSuccessAt",
+]);
+await assertRequiredColumns("cleancloud_browser_sync_receipts", [
+  "id",
+  "tenantId",
+  "requestId",
+  "digest",
+  "storeId",
+  "importBatchId",
+  "receiptJson",
+  "createdAt",
+]);
 
-const impactSql = await readFile(new URL("../server/towerWars/impactSchema.sql", import.meta.url), "utf8");
-for (const statement of impactSql.split(";").map(value => value.trim()).filter(Boolean))
+const impactSql = await readFile(
+  new URL("../server/towerWars/impactSchema.sql", import.meta.url),
+  "utf8"
+);
+for (const statement of impactSql
+  .split(";")
+  .map(value => value.trim())
+  .filter(Boolean))
   await runRequired(statement, "Tower Wars located impacts and seasons");
-await assertRequiredColumns("goldline_tower_impacts", ["id", "tenantId", "payload"]);
-const cargoSql = await readFile(new URL("../server/goldlineCargo/schema.sql", import.meta.url), "utf8");
-for (const statement of cargoSql.split(";").map(value => value.trim()).filter(Boolean))
+await assertRequiredColumns("goldline_tower_impacts", [
+  "id",
+  "tenantId",
+  "payload",
+]);
+const cargoSql = await readFile(
+  new URL("../server/goldlineCargo/schema.sql", import.meta.url),
+  "utf8"
+);
+for (const statement of cargoSql
+  .split(";")
+  .map(value => value.trim())
+  .filter(Boolean))
   await runRequired(statement, "Goldline vehicle cargo");
-const worldEventsSql = await readFile(new URL("../server/goldlineWorld/schema.sql", import.meta.url), "utf8");
-for (const statement of worldEventsSql.split(";").map(value => value.trim()).filter(Boolean))
+await assertRequiredColumns("goldline_field_cargo", [
+  "id",
+  "tenantId",
+  "vehicleId",
+  "requestId",
+  "customerDisplayName",
+  "itemDescription",
+  "vehicleState",
+  "linkedOrderId",
+]);
+const worldEventsSql = await readFile(
+  new URL("../server/goldlineWorld/schema.sql", import.meta.url),
+  "utf8"
+);
+for (const statement of worldEventsSql
+  .split(";")
+  .map(value => value.trim())
+  .filter(Boolean))
   await runRequired(statement, "Goldline world events");
-await assertRequiredColumns("goldline_world_events", ["id", "tenantId", "classification", "idempotencyKey"]);
-await assertRequiredColumns("goldline_territory_definitions", ["id", "tenantId"]);
+await assertRequiredColumns("goldline_world_events", [
+  "id",
+  "tenantId",
+  "classification",
+  "idempotencyKey",
+]);
+await assertRequiredColumns("goldline_territory_definitions", [
+  "id",
+  "tenantId",
+]);
 await assertRequiredColumns("physical_entities", ["id", "tenantId"]);
-await assertRequiredColumns("tower_forge_jobs", ["id", "tenantId", "state", "idempotencyKey"]);
-const onboardingSql = await readFile(new URL("../server/goldlineOnboarding/schema.sql", import.meta.url), "utf8");
-for (const statement of onboardingSql.split(";").map(value => value.trim()).filter(Boolean))
+await assertRequiredColumns("tower_forge_jobs", [
+  "id",
+  "tenantId",
+  "state",
+  "idempotencyKey",
+]);
+const onboardingSql = await readFile(
+  new URL("../server/goldlineOnboarding/schema.sql", import.meta.url),
+  "utf8"
+);
+for (const statement of onboardingSql
+  .split(";")
+  .map(value => value.trim())
+  .filter(Boolean))
   await runRequired(statement, "Goldline onboarding");
 
-const driverSalesSql = await readFile(new URL("../server/commercialMissions/driverSalesMotivationSchema.sql", import.meta.url), "utf8");
-for (const statement of driverSalesSql.split(";").map(value => value.trim()).filter(Boolean))
+const driverSalesSql = await readFile(
+  new URL(
+    "../server/commercialMissions/driverSalesMotivationSchema.sql",
+    import.meta.url
+  ),
+  "utf8"
+);
+for (const statement of driverSalesSql
+  .split(";")
+  .map(value => value.trim())
+  .filter(Boolean))
   await runRequired(statement, "Driver sales motivation");
 // Best-effort upgrade for a driver_sales_journals table already at the
 // pre-0061 (0047-only) shape: CREATE TABLE IF NOT EXISTS above is a no-op
@@ -789,7 +872,13 @@ await run(
     ADD KEY idx_driver_sales_journal_driver_date (tenantId,driverId,journalDate,createdAt)`,
   "driver_sales_journals: 0061 columns"
 );
-await assertRequiredColumns("driver_sales_journals", ["id", "tenantId", "driverId", "journalDate", "processingStatus"]);
+await assertRequiredColumns("driver_sales_journals", [
+  "id",
+  "tenantId",
+  "driverId",
+  "journalDate",
+  "processingStatus",
+]);
 
 await runRequired(
   `CREATE TABLE IF NOT EXISTS authored_days (

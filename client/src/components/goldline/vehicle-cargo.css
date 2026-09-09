@@ -205,6 +205,16 @@
 .gl-cargo-list em {
   color: #e1c991;
 }
+.gl-cargo-unlinked {
+  display: inline-block;
+  margin: 5px 0 2px;
+  padding: 2px 5px;
+  border: 1px solid #b9944f;
+  border-radius: 3px;
+  color: #e5cd91;
+  font-size: 9px;
+  letter-spacing: 0.07em;
+}
 .gl-cargo-list button,
 .gl-unassigned button {
   font-size: 10px;

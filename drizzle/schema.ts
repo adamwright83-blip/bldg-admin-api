@@ -5562,6 +5562,59 @@ export const externalOperationalOrders = mysqlTable(
   })
 );
 
+/** Physical cargo recorded before a customer/order identity necessarily exists. */
+export const goldlineFieldCargo = mysqlTable(
+  "goldline_field_cargo",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    vehicleId: varchar("vehicleId", { length: 128 }),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    requestId: varchar("requestId", { length: 64 }).notNull(),
+    transcript: text("transcript").notNull(),
+    customerDisplayName: varchar("customerDisplayName", {
+      length: 191,
+    }).notNull(),
+    itemDescription: varchar("itemDescription", { length: 255 }).notNull(),
+    quantity: int("quantity"),
+    serviceType: mysqlEnum("serviceType", ["dry_cleaning", "wash_fold"]),
+    vehicleState: mysqlEnum("vehicleState", [
+      "IN_VEHICLE",
+      "AT_PROCESSOR",
+      "REMOVED",
+    ])
+      .notNull()
+      .default("IN_VEHICLE"),
+    processingState: mysqlEnum("processingState", [
+      "unknown",
+      "unprocessed",
+      "processed",
+    ])
+      .notNull()
+      .default("unknown"),
+    location: varchar("location", { length: 512 }),
+    notes: text("notes"),
+    linkedOrderId: int("linkedOrderId"),
+    confirmedAt: timestamp("confirmedAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    requestIdx: uniqueIndex("uq_goldline_field_cargo_request").on(
+      table.tenantId,
+      table.requestId
+    ),
+    vehicleIdx: index("idx_goldline_field_cargo_vehicle").on(
+      table.tenantId,
+      table.vehicleId,
+      table.vehicleState
+    ),
+    orderIdx: index("idx_goldline_field_cargo_order").on(
+      table.tenantId,
+      table.linkedOrderId
+    ),
+  })
+);
+
 /** Field intel. See 0058_impact_signals.sql — stable schema, open vocabulary. */
 export const impactSignals = mysqlTable(
   "impact_signals",

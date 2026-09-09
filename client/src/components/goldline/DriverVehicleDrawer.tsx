@@ -1,7 +1,8 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { ChevronRight, Compass, LockKeyhole, X } from "lucide-react";
 import { VehicleCargo, type VehicleCargoItem } from "./VehicleCargo";
+import { VehicleCargoCapture } from "./VehicleCargoCapture";
 
 /** Presentation only: unlocking never changes vehicle custody. */
 export function DriverVehicleDrawer({
@@ -18,6 +19,8 @@ export function DriverVehicleDrawer({
   const gesture = useRef<{ x: number; y: number } | null>(null);
   const cancelled = useRef(false);
   const progress = total ? Math.round((completed / total) * 100) : 0;
+  const [fixtureCargo, setFixtureCargo] = useState(cargo);
+  useEffect(() => setFixtureCargo(cargo), [cargo]);
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
@@ -176,11 +179,42 @@ export function DriverVehicleDrawer({
               </span>
             </p>
           </section>
+          <VehicleCargoCapture
+            fixture={cargo !== undefined}
+            onFixtureConfirmed={proposal =>
+              setFixtureCargo(current => [
+                ...(current ?? []),
+                {
+                  id: `field:${crypto.randomUUID()}`,
+                  source: "field",
+                  firstName: proposal.customerDisplayName,
+                  customerDisplayName: proposal.customerDisplayName,
+                  itemDescription: proposal.itemDescription,
+                  quantity: proposal.quantity,
+                  serviceType: proposal.serviceType,
+                  processingState: proposal.processingState,
+                  unlinked: true,
+                  state:
+                    proposal.processingState === "processed"
+                      ? "IN_VEHICLE_PROCESSED"
+                      : "IN_VEHICLE_UNPROCESSED",
+                  appearance: {
+                    kind:
+                      proposal.processingState === "processed"
+                        ? "garment_bag"
+                        : "paper_bag",
+                    condition: proposal.itemDescription,
+                    next: "Processor handoff",
+                  },
+                },
+              ])
+            }
+          />
           <div className="gdp-garage-vehicle">
-            <VehicleCargo mode="hero" fixtureCargo={cargo} />
+            <VehicleCargo mode="hero" fixtureCargo={fixtureCargo} />
           </div>
           <p className="gdp-garage-hint">
-            Tap the vehicle to inspect cargo & handoffs.
+            Tap the vehicle to inspect cargo & handoffs. Record what you load.
           </p>
         </Dialog.Content>
       </Dialog.Portal>
