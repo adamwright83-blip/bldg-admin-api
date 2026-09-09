@@ -1243,6 +1243,14 @@ export class ExpeditionLayer {
       const taken = this.run.takeDamage(hit.damage);
       if (this.run.guardAbsorbedThisFrame) {
         this.callbacks.onGuardAbsorbed?.();
+        // A real successful guard had no hit-stop at all here, unlike the
+        // equivalent melee guard (70ms, stepHostiles above) — a blocked
+        // shot silently read as nothing happening. Shorter than the melee
+        // guard (a ranged impact is a lighter contact than a melee slam)
+        // and shorter than taking the same projectile's damage unguarded
+        // (60ms) — the same guard-is-lighter-than-a-landed-hit relationship
+        // stepHostiles already has between its 70ms guard and 90ms damage.
+        this.callbacks.onHitStop?.(45);
       } else if (taken > 0) {
         this.callbacks.onPlayerDamaged?.(taken, this.run.hp);
         this.callbacks.onHitStop?.(60);
