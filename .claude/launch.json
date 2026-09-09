@@ -47,6 +47,19 @@
       "port": 5186
     },
     {
+      "name": "goldline-first-chapter-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "--config",
+        "vite.chapter-preview.config.ts",
+        "--port",
+        "5191",
+        "--strictPort"
+      ],
+      "port": 5191
+    },
+    {
       "name": "living-la-railway",
       "runtimeExecutable": "railway",
       "runtimeArgs": [

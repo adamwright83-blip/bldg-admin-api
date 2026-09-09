@@ -2,24 +2,28 @@
   "startingMainSha": "6436f54258b809cb3412b8fc231dcd120c76cd05",
   "latestCompletedMainSha": "6436f54258b809cb3412b8fc231dcd120c76cd05",
   "handoffBranch": "astra/first-2_5d-chapter-handoff",
-  "handoffBranchSha": null,
-  "completedSlices": [],
-  "activeSlice": 1,
-  "activeSliceStatus": "Design locked; implementation not started (0/6 acceptance gates verified)",
+  "handoffBranchSha": "8d0bc8b21590ab534f717dbd2adc75e416981a1d",
+  "completedSlices": [1],
+  "activeSlice": 2,
+  "activeSliceStatus": "Not started. Slice 1 complete: 6/6 acceptance gates verified (tests, TS baseline, build, rendering, movement/combat, reload/checkpoint).",
   "chapterId": "the-last-valet",
   "canonicalBuilding": "century_park_east",
   "importantFiles": [
     "docs/goldline/HANDOFF-FIRST-2_5D-CHAPTER.md",
     "docs/goldline/first-2_5d-chapter-execution-contract.txt",
-    "docs/goldline/first-2_5d-chapter-continuity-contract.txt"
+    "docs/goldline/first-2_5d-chapter-continuity-contract.txt",
+    "client/src/game/chapters/firstChapter/model.ts",
+    "client/src/game/chapters/firstChapter/FirstChapter.tsx",
+    "client/src/game/chapters/firstChapter/model.test.ts",
+    "vite.chapter-preview.config.ts"
   ],
   "assetDirectories": [
     "client/public/assets/goldline/chapters/the-last-valet/"
   ],
-  "testsPassing": [],
+  "testsPassing": ["client/src/game/chapters/firstChapter/model.test.ts (10/10)"],
   "testsFailing": [],
   "nextActions": [
-    "Read handoff; implement Slice 1 using existing Pixi and movement/combat helpers",
+    "Begin Slice 2: two mechanically distinct building-derived behaviors, reusing Forge canonical valet/golf eligibility",
     "Do not expose or deploy unfinished chapter"
   ]
 }
