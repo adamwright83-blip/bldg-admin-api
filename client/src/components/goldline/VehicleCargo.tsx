@@ -5,10 +5,19 @@ import { trpc } from "@/lib/trpc";
 import "./vehicle-cargo.css";
 
 export type VehicleCargoItem = {
-  id: number;
+  id: number | string;
+  source?: "order" | "field";
+  fieldCargoId?: string;
   firstName?: string | null;
   lastName?: string | null;
   address?: string | null;
+  customerDisplayName?: string;
+  itemDescription?: string;
+  quantity?: number | null;
+  serviceType?: "wash_fold" | "dry_cleaning" | null;
+  processingState?: "unknown" | "unprocessed" | "processed";
+  linkedOrderId?: number | null;
+  unlinked?: boolean;
   state: "IN_VEHICLE_UNPROCESSED" | "IN_VEHICLE_PROCESSED";
   appearance: {
     kind: "paper_bag" | "garment_bag";
@@ -18,6 +27,8 @@ export type VehicleCargoItem = {
 };
 const ASSET = "/assets/goldline/vehicle-cargo/v1";
 const CAR_ASSET = "/assets/goldline/vehicle-cargo/v2/car-topdown-neutral.png";
+const CAR_FALLBACK =
+  "/assets/goldline/vehicle-cargo/v1/car-inactive-glow-neutral.jpg";
 const SLOTS = [
   { left: "30%", top: "56%" },
   { left: "66%", top: "56%" },
@@ -26,11 +37,17 @@ const SLOTS = [
 ] as const;
 
 export function cargoSprite(item: VehicleCargoItem) {
+  const variant =
+    typeof item.id === "number"
+      ? item.id
+      : item.id
+          .split("")
+          .reduce((sum, character) => sum + character.charCodeAt(0), 0);
   if (item.state === "IN_VEHICLE_PROCESSED")
-    return item.id % 2
+    return variant % 2
       ? `${ASSET}/cargo-processed-hanging-garments.jpg`
       : `${ASSET}/cargo-processed-folded-package.jpg`;
-  return item.id % 2
+  return variant % 2
     ? `${ASSET}/cargo-unprocessed-paper-bag-a.jpg`
     : `${ASSET}/cargo-unprocessed-paper-bag-b.jpg`;
 }
@@ -96,6 +113,10 @@ export function VehicleCargo({
                 className="gl-cargo-car"
                 src={CAR_ASSET}
                 alt="Top-down vehicle interior"
+                onError={event => {
+                  if (event.currentTarget.src.endsWith(CAR_FALLBACK)) return;
+                  event.currentTarget.src = CAR_FALLBACK;
+                }}
               />
               <div className="gl-cargo-sprites">
                 {projection.visible.map((item, index) => (
@@ -123,7 +144,7 @@ export function VehicleCargo({
               {state.isLoading && fixtureCargo === undefined
                 ? "READING CUSTODY…"
                 : cargo.length
-                  ? `${cargo.length} CUSTOMER ${cargo.length === 1 ? "ORDER" : "ORDERS"} IN VEHICLE`
+                  ? `${cargo.length} CARGO ${cargo.length === 1 ? "ITEM" : "ITEMS"} IN VEHICLE`
                   : unassigned.length
                     ? `${unassigned.length} PICKED UP · VEHICLE UNCONFIRMED`
                     : "VEHICLE EMPTY"}
@@ -151,17 +172,33 @@ export function VehicleCargo({
                 <img src={cargoSprite(item)} alt="" />
                 <span>
                   <strong>
-                    {item.firstName} {item.lastName}
+                    {item.customerDisplayName ??
+                      `${item.firstName ?? ""} ${item.lastName ?? ""}`.trim()}
                   </strong>
-                  <em>{item.appearance.condition}</em>
+                  <em>
+                    {item.quantity ? `${item.quantity} ` : ""}
+                    {item.itemDescription ?? item.appearance.condition}
+                  </em>
+                  {item.serviceType ? (
+                    <small>
+                      {item.serviceType === "dry_cleaning"
+                        ? "DRY CLEANING"
+                        : "WASH & FOLD"}
+                    </small>
+                  ) : null}
+                  {item.unlinked ? (
+                    <b className="gl-cargo-unlinked">UNLINKED FIELD CARGO</b>
+                  ) : null}
                   <small>{item.appearance.next}</small>
                 </span>
-                {item.state === "IN_VEHICLE_UNPROCESSED" ? (
+                {item.source !== "field" &&
+                typeof item.id === "number" &&
+                item.state === "IN_VEHICLE_UNPROCESSED" ? (
                   <button
                     disabled={transfer.isPending}
                     onClick={() =>
                       transfer.mutate({
-                        orderId: item.id,
+                        orderId: Number(item.id),
                         to: "AT_PROCESSOR",
                         confirmed: true,
                       })
