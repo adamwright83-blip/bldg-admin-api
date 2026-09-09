@@ -22,7 +22,7 @@ export class ChapterScene {
   }
   onTap(fn:(point:Point)=>void){this.pointerHandler=fn;}
   async load(){
-    const assets:Record<string,string>={scenery:'props/scenery-atlas.png',machinery:'mechanisms/machinery-atlas.png',props:'mechanisms/props-atlas.png',fx:'fx/impact-atlas.png',inez:'characters/inez-atlas.png',perrin:'characters/perrin-atlas.png',bellwether:'characters/bellwether-atlas.png',actions:'characters/heroine-actions.png'};
+    const assets:Record<string,string>={scenery:'mechanisms/scenery-atlas.png',machinery:'mechanisms/machinery-atlas.png',props:'mechanisms/props-atlas.png',fx:'fx/impact-atlas.png',inez:'characters/inez-atlas.png',perrin:'characters/perrin-atlas.png',bellwether:'characters/bellwether-atlas.png',actions:'characters/heroine-actions.png'};
     for(const [room,name] of Object.entries(rooms))assets[room]=`backgrounds/${name}.png`;
     for(const dir of ['front','back','left','right'])assets[`hero-${dir}`]=`/assets/goldline/characters/trailblazer/directional/idle-${dir}.webp`;
     await Promise.all(Object.entries(assets).map(async([key,path])=>{
@@ -82,7 +82,7 @@ export class ChapterScene {
       g.moveTo(620,197).lineTo(s.save.gardenOpen?841:710,197).stroke({color:0xe5c16e,width:15});
       this.sprite('lever','props',s.save.gardenOpen?2:1,SWITCH.x,SWITCH.y+15,67,87);
       if(!s.save.latchOpen){
-        const crate=this.sprite('crate','scenery',1,SHORTCUT_CRATE.x+35,SHORTCUT_CRATE.y+47,87,88,SHORTCUT_CRATE.y+40);
+        const crate=this.sprite('crate','scenery',4,SHORTCUT_CRATE.x+35,SHORTCUT_CRATE.y+47,87,88,SHORTCUT_CRATE.y+40);
         if(!crate){const r=SHORTCUT_CRATE;g.rect(r.x,r.y,r.w,r.h).fill(0x8a6a45);g.rect(r.x,r.y,r.w,r.h).stroke({color:0x4a3a26,width:3});}
       }
       else if(s.save.choice==='break') {g.poly([565,475,580,449,600,479,620,452]).stroke({color:0xa47a35,width:7});}
