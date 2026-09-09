@@ -3,9 +3,9 @@
   "latestCompletedMainSha": "6436f54258b809cb3412b8fc231dcd120c76cd05",
   "handoffBranch": "astra/first-2_5d-chapter-handoff",
   "handoffBranchSha": "8d0bc8b21590ab534f717dbd2adc75e416981a1d",
-  "completedSlices": [1, 2, 4],
-  "activeSlice": 6,
-  "activeSliceStatus": "Slice 3 and Slice 5 both PARTIAL/BLOCKED BY DESIGN: full server contracts written and unit-tested (7/7 and 8/8), migrations NOT applied to any database, no live Tower Wars ledger reads performed, per Adam's explicit instructions for these hard-to-reverse/production-adjacent actions. Client not wired for either. Resume both by getting Adam's go-ahead to (a) run drizzle/0067 and 0068 via applyDayforgeReleaseMigrations, (b) wire trpc.system.goldlineChapterState and .goldlineChapterEventBinding into a real chapter host (Slice 11). Slice 6 (Echo) proceeds now under the same 'code + tests only, no live reads' instruction Adam gave for both Slice 5 and Slice 6 together.",
+  "completedSlices": [1, 2, 4, 6],
+  "activeSlice": 7,
+  "activeSliceStatus": "Slice 3 and Slice 5 both PARTIAL/BLOCKED BY DESIGN: full server contracts written and unit-tested (7/7 and 8/8), migrations NOT applied to any database, no live Tower Wars ledger reads performed, per Adam's explicit instructions for these hard-to-reverse/production-adjacent actions. Client not wired for either. Resume both by getting Adam's go-ahead to (a) run drizzle/0067 and 0068 via applyDayforgeReleaseMigrations, (b) wire trpc.system.goldlineChapterState and .goldlineChapterEventBinding into a real chapter host (Slice 11). Slice 6 (Echo) is done for the deterministic-brief tier (7/7 tests, no live DB/LLM calls); the optional LLM draft tier is deferred, not required. Slice 7 (truthful outcome branching) is next.",
   "chapterId": "the-last-valet",
   "canonicalBuilding": "century_park_east",
   "importantFiles": [
@@ -23,7 +23,8 @@
   "testsPassing": [
     "client/src/game/chapters/firstChapter/model.test.ts (18/18)",
     "server/goldlineWorld/chapterStateService.test.ts (7/7)",
-    "server/goldlineWorld/chapterEventBindingService.test.ts (8/8)"
+    "server/goldlineWorld/chapterEventBindingService.test.ts (8/8)",
+    "server/goldlineWorld/echoFollowUpService.test.ts (7/7)"
   ],
   "testsFailing": [],
   "blockers": [
@@ -32,8 +33,8 @@
     "Both need Adam's explicit approval to run before their client wiring can be verified end-to-end against a real device switch / real event"
   ],
   "nextActions": [
-    "Build Slice 6 (Echo) under the same 'code + tests only, no live reads' instruction already given for Slice 5",
-    "Continue Slices 7-11 in order",
-    "Before finishing (Slice 11), ask Adam to approve running drizzle/0067 and 0068, then wire the client to the three already-built server contracts"
+    "Begin Slice 7: truthful outcome branching using only already-recorded statuses (no new production reads beyond what commercialPipeline/visit-outcome types already expose)",
+    "Continue Slices 8-11 in order",
+    "Before finishing (Slice 11), ask Adam to approve running drizzle/0067 and 0068, then wire the client to the three already-built server contracts (chapter state, event binding, Echo brief)"
   ]
 }

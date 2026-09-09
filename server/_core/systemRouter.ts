@@ -42,6 +42,7 @@ import { googleRouter } from "../google/googleRouter";
 import { goldlineWorldRouter } from "../goldlineWorld/goldlineWorldRouter";
 import { chapterStateRouter } from "../goldlineWorld/chapterStateRouter";
 import { chapterEventBindingRouter } from "../goldlineWorld/chapterEventBindingRouter";
+import { echoFollowUpRouter } from "../goldlineWorld/echoFollowUpRouter";
 import { cleancloudBrowserSyncRouter } from "../cleancloudBrowserSync/router";
 
 export const systemRouter = router({
@@ -87,6 +88,7 @@ export const systemRouter = router({
   goldlineWorld: goldlineWorldRouter,
   goldlineChapterState: chapterStateRouter,
   goldlineChapterEventBinding: chapterEventBindingRouter,
+  goldlineEchoFollowUp: echoFollowUpRouter,
   health: publicProcedure
     .input(
       z.object({
