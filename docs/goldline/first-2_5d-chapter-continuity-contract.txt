@@ -1,0 +1,528 @@
+CRITICAL CONTINUITY OVERRIDE — ASTRA HAS LIMITED USAGE REMAINING
+
+You have approximately 20% of the available Astra session budget left.
+
+DO NOT optimize for “finishing everything yourself.”
+
+Optimize for:
+
+1. making the highest-value creative and architectural decisions now
+2. completing as much real implementation as you safely can
+3. leaving a PERFECT resumable state for Claude Code if your session ends
+
+Claude Code must be able to pick up the project without Adam having to explain
+anything again.
+
+============================================================
+A. NEVER LEAVE IMPORTANT WORK ONLY IN YOUR CONTEXT WINDOW
+============================================================
+
+Anything another coding agent would need MUST exist in the repository.
+
+Create immediately:
+
+docs/goldline/HANDOFF-FIRST-2_5D-CHAPTER.md
+
+This is the authoritative continuation document.
+
+Write it BEFORE substantial implementation begins.
+
+Continuously update it as you work.
+
+Do not wait until the end.
+
+============================================================
+B. THE HANDOFF FILE MUST CONTAIN
+============================================================
+
+Maintain all of the following:
+
+# GOLDLINE FIRST 2.5D CHAPTER — IMPLEMENTATION HANDOFF
+
+## 1. Current status
+
+- starting origin/main SHA
+- current working SHA
+- current branch/worktree
+- completed slices
+- active slice
+- exact completion percentage/status of active slice
+
+## 2. Creative canon — SPOILERS ALLOWED HERE
+
+Adam is intentionally not reading this file before playing.
+
+Record the exact creative decisions so Claude does not reinvent them:
+
+- canonical building selected
+- chapter title
+- three playable spaces
+- spatial relationship between them
+- companion identity/personality/game ability
+- adversary identity/personality/motive/combat behavior
+- supporting character identity/personality/motive
+- relationship dynamics
+- attraction/chemistry decisions
+- tactical disagreement
+- key story beats
+- chapter opening
+- chapter climax
+- chapter ending
+- reason to return
+- inaccessible/secret element
+- intended reveals
+- important dialogue beats
+- tone
+- things that MUST NOT be spoiled to Adam
+
+Do not merely write “TBD” if you already made the decision.
+
+Externalize the actual decision.
+
+## 3. Gameplay design
+
+Record:
+
+- movement model
+- dodge
+- attack
+- interaction
+- traversal
+- enemy behaviors
+- boss/adversary behaviors
+- damage rules
+- hit-stop usage
+- failure/retry
+- checkpoints
+- puzzle rules
+- TWO building mechanical families
+- exact rules for each
+- how they interact
+- traversal use
+- puzzle use
+- combat use
+- two intended encounter approaches
+- any emergent/optional interaction discovered during implementation
+
+## 4. Desktop/mobile shared-state contract
+
+Document exact:
+
+- chapter id
+- persisted fictional state shape
+- mechanism state
+- checkpoint state
+- encounter phase
+- discovered routes
+- character choices
+- fictional damage/restoration
+- desktop → mobile mapping
+- mobile → desktop mapping
+- server authority
+- client-only transient state
+- reconnection behavior
+- idempotency behavior
+
+Claude must not have to infer this from scattered code.
+
+## 5. Real-business-event binding
+
+Document:
+
+- exact existing event type selected
+- exact business entity scope
+- evidence/truth class required
+- why it is legitimate
+- exactly-once behavior
+- fictional waiting state
+- fictional consequence
+- alternate route when event never occurs
+- duplicate behavior
+- wrong-entity behavior
+- offline behavior
+- explicit statement that it does NOT write business truth
+
+## 6. Echo workflow
+
+Document:
+
+- exact real workflow selected
+- source data
+- what Echo prepares
+- what stays human
+- current safe action path reused
+- draft safeguards
+- provenance
+- failure fallback
+- game presentation of Echo
+- what baseline AI assistance remains available before Echo
+
+## 7. Art direction
+
+Document ALL useful visual decisions.
+
+For every generated or authored asset:
+
+- repository path
+- purpose
+- dimensions
+- scene/layer
+- source/reference
+- generation prompt if applicable
+- image generation id if available
+- crop/registration notes
+- animation expectations
+- whether final / temporary / rejected
+- rejected alternatives and WHY they were rejected
+
+Keep actual usable files inside the repository.
+
+DO NOT leave generated images only in a temporary chat/session directory.
+
+If an asset cannot be stored directly, record exact reproducible generation
+instructions and source reference.
+
+## 8. Scene composition
+
+For each of the three spaces:
+
+- background layers
+- foreground layers
+- collision surfaces
+- occluders
+- interactive objects
+- mechanism positions
+- spawn points
+- safe checkpoints
+- enemy locations/logic
+- character staging
+- camera treatment
+- transitions
+- mobile layout
+- desktop layout
+
+## 9. Code map
+
+List EVERY important file touched or created and what it owns.
+
+Example:
+
+path/to/file.ts
+- owns persisted chapter state
+- safe extension points
+- tests
+
+No vague directory-only summaries.
+
+## 10. Integration map
+
+Document exactly what existing Goldline systems are reused:
+
+- Expedition
+- encounter lifecycle
+- campaign
+- fiction assignment
+- Forge
+- world events
+- Night Shift
+- Driver
+- Lantern City/Admin
+- Echo/follow-up/action infrastructure
+- any other existing source
+
+State clearly:
+
+REUSED
+EXTENDED
+NOT USED
+or DEFERRED
+
+for each relevant system.
+
+## 11. Tests
+
+Maintain:
+
+- tests already added
+- tests passing
+- tests failing
+- exact failure messages if unresolved
+- browser QA status
+- build status
+- TypeScript status
+- known baseline errors
+- test fixtures
+- safe QA limitations
+
+## 12. Remaining work
+
+Write the continuation as executable steps.
+
+Not:
+
+“Finish combat.”
+
+Instead:
+
+1. Open X.
+2. Extend Y reducer with Z state.
+3. Wire A handler into B.
+4. Add test cases C/D/E.
+5. Verify route F.
+6. Then move to Slice N.
+
+Claude Code should be able to begin without doing another architectural survey.
+
+## 13. Do-not-redesign list
+
+Record all decisions already made that Claude should preserve.
+
+## 14. Current blockers / open questions
+
+Only genuine blockers.
+
+Do not manufacture questions for Adam that another competent coding agent can
+resolve from repo truth.
+
+============================================================
+C. PRIORITIZE ASTRA-SPECIFIC VALUE
+============================================================
+
+Because your remaining usage is limited, spend your judgment where another
+coding agent would have the hardest time recreating it.
+
+PRIORITY ORDER:
+
+1. LOCK THE CREATIVE CHAPTER DESIGN
+2. LOCK THE GAMEPLAY MECHANICS
+3. LOCK THE THREE CHARACTERS / RELATIONSHIPS
+4. LOCK THE THREE SPACES / STORY CONTINUITY
+5. LOCK THE TWO building mechanic families
+6. LOCK desktop/mobile interaction design
+7. LOCK the real-event surprise
+8. LOCK the Echo presentation
+9. implement the playable spine
+10. continue implementation as usage allows
+
+Do not burn Astra budget repeatedly rediscovering TypeScript structure that
+Claude Code can inspect later.
+
+Do enough repo inspection to make correct decisions, then EXECUTE.
+
+============================================================
+D. COMPLETED WORK GOES TO MAIN
+============================================================
+
+For every COMPLETE slice:
+
+- tests
+- build as applicable
+- inspect diff
+- fetch origin
+- verify origin/main has not moved unexpectedly
+- commit
+- push to main
+- verify remote
+
+Completed work must survive your session.
+
+============================================================
+E. PARTIAL WORK MUST NEVER EXIST ONLY LOCALLY
+============================================================
+
+If your usage becomes low while a slice is incomplete:
+
+DO NOT push half-working code to main.
+
+Instead create/use a dedicated resumable branch:
+
+astra/first-2_5d-chapter-handoff
+
+Commit the partial working state there with message:
+
+WIP: hand off Goldline first 2.5D chapter slice <N>
+
+This WIP branch may contain unfinished code.
+
+Before committing:
+
+- make the state as coherent as possible
+- do not intentionally break existing main
+- update HANDOFF-FIRST-2_5D-CHAPTER.md with exact unfinished state
+
+Push the branch:
+
+git push origin HEAD:astra/first-2_5d-chapter-handoff
+
+Then record the exact branch SHA in the handoff file.
+
+Claude Code can continue from that branch or selectively port the work.
+
+DO NOT leave:
+
+- uncommitted source files
+- untracked assets
+- generated images only in temp directories
+- prompts only in chat
+- design decisions only in memory
+- TODO knowledge only in your private reasoning
+
+============================================================
+F. SAVE ASSETS EARLY
+============================================================
+
+Any art, character sheet, scenery layer, prop, design image, temporary sprite,
+sound specification, or generated visual that is worth preserving must be
+copied into the repo and referenced from the handoff file IMMEDIATELY.
+
+Use a clear chapter asset directory.
+
+For example:
+
+client/public/assets/goldline/chapters/<chapter-id>/
+
+with useful subfolders if appropriate:
+
+backgrounds/
+foregrounds/
+characters/
+props/
+mechanisms/
+fx/
+references/
+
+Do not wait until the end to organize this.
+
+============================================================
+G. SAVE CREATIVE PROMPTS
+============================================================
+
+If you generate art:
+
+save the effective prompts in:
+
+docs/goldline/first-2_5d-chapter-art-prompts.md
+
+For each prompt include:
+
+- asset
+- purpose
+- final prompt
+- source/reference images
+- generation id if available
+- accepted/rejected status
+- notes for regeneration
+
+Claude Code or a future image-generation session must be able to reproduce the
+visual direction.
+
+============================================================
+H. SAVE A MACHINE-READABLE STATE SUMMARY
+============================================================
+
+Also maintain:
+
+docs/goldline/first-2_5d-chapter-handoff.json
+
+Keep it simple and valid JSON.
+
+At minimum:
+
+{
+  "startingMainSha": "...",
+  "latestCompletedMainSha": "...",
+  "handoffBranch": "...",
+  "handoffBranchSha": "...",
+  "completedSlices": [],
+  "activeSlice": 1,
+  "chapterId": "...",
+  "canonicalBuilding": "...",
+  "importantFiles": [],
+  "assetDirectories": [],
+  "testsPassing": [],
+  "testsFailing": [],
+  "nextActions": []
+}
+
+This is not a replacement for the Markdown handoff.
+
+It exists so another agent can orient instantly.
+
+============================================================
+I. IF YOU DETECT YOU ARE NEARING SESSION EXHAUSTION
+============================================================
+
+STOP STARTING NEW FEATURES.
+
+Spend the remaining time on:
+
+1. making current work coherent
+2. updating handoff docs
+3. saving/gathering assets
+4. running the most important tests
+5. committing completed work to main
+6. committing incomplete work to the handoff branch
+7. pushing everything
+8. recording exact SHAs
+
+The last useful action of your session should be a PUSH, not another design idea.
+
+============================================================
+J. CLAUDE CODE RESUME CONTRACT
+============================================================
+
+Assume the next agent will receive ONLY this instruction:
+
+“Continue the Goldline first 2.5D chapter from the repository handoff.”
+
+Therefore the repository itself must answer:
+
+- what are we building?
+- why?
+- what has been decided?
+- what remains?
+- where are the assets?
+- where is the code?
+- what is safe to change?
+- what is forbidden?
+- which tests prove correctness?
+- what was the last completed slice?
+- what exact command/action comes next?
+
+If the repository cannot answer those questions without Adam retelling the
+project, the handoff is inadequate.
+
+============================================================
+K. PLAYER SPOILER RULE REMAINS
+============================================================
+
+The handoff docs MAY contain spoilers.
+
+Adam is deliberately not reading them.
+
+Keep player-facing updates spoiler-free.
+
+DO NOT sacrifice handoff completeness to avoid spoilers inside developer files.
+
+============================================================
+L. START NOW
+============================================================
+
+Do not spend the remaining Astra budget rewriting the big prompt.
+
+Treat the existing approved execution prompt as authoritative, with THIS
+continuity override added.
+
+Immediately:
+
+1. fetch latest main
+2. create the Markdown + JSON handoff files
+3. perform the focused repo inspection
+4. lock the creative/gameplay decisions in the handoff
+5. begin Slice 1
+6. push completed work as soon as it is complete
+7. continue until your available session budget no longer permits safe work
+
+Do not ask Adam for approval between steps.
+
+BUILD.

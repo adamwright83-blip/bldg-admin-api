@@ -1,0 +1,66 @@
+import { describe,it,expect } from 'vitest';
+import { createChapter,stepChapter,restoreChapter,retryChapter,EXIT,SWITCH,ROOMS, type ChapterState } from './model';
+const idle={x:0,y:0};
+function tick(s:ChapterState,n:number,input=idle){for(let i=0;i<n;i++)s=stepChapter(s,20,input);return s;}
+describe('first chapter fictional spine',()=>{
+ it('moves with existing acceleration and bounds huge suspended frames',()=>{
+  const s=createChapter();const moved=stepChapter(s,10000,{x:1,y:0});
+  expect(moved.player.x-s.player.x).toBeLessThan(2);expect(s.player.x).toBe(150);
+  expect(tick(s,300,{x:-1,y:0}).player.x).toBe(76);
+ });
+ it('stops at scenery and never tunnels during dodge',()=>{
+  let s=createChapter();s.player={x:330,y:310};s.facing={x:1,y:0};
+  s=stepChapter(s,40,{x:1,y:0,dodge:true});s=tick(s,10,{x:1,y:0});expect(s.player.x).toBeLessThanOrEqual(354);
+ });
+ it('normalizes diagonal input and pauses without advancing',()=>{
+  const a=tick(createChapter(),20,{x:1,y:0});const b=tick(createChapter(),20,{x:1,y:1});
+  expect(Math.hypot(b.velocity.x,b.velocity.y)).toBeLessThanOrEqual(190.01);
+  expect(a.player.x).toBeGreaterThan(b.player.x);
+  const paused={...a,paused:true};expect(stepChapter(paused,40,{...idle,attack:true})).toBe(paused);
+ });
+ it('requires reach and recovery, produces guard and hit stop',()=>{
+  let s=createChapter();s.player={x:625,y:245};s.facing={x:1,y:0};
+  let hit=stepChapter(s,20,{...idle,attack:true});expect(hit.effect).toBe('guard');expect(hit.enemy?.hp).toBe(2);expect(hit.freeze).toBe(70);
+  s.enemy!.stage='recover';hit=stepChapter(s,20,{...idle,attack:true});expect(hit.enemy?.hp).toBe(1);expect(hit.effect).toBe('hit');
+  expect(stepChapter(hit,20,{...idle,attack:true}).enemy?.hp).toBe(1);
+ });
+ it('does not hit behind the heroine or from across the room',()=>{
+  let s=createChapter();s.enemy!.stage='recover';expect(stepChapter(s,20,{...idle,attack:true}).enemy?.hp).toBe(2);
+  s.player={x:625,y:245};s.facing={x:-1,y:0};expect(stepChapter(s,20,{...idle,attack:true}).enemy?.hp).toBe(2);
+ });
+ it('dodge prevents charge damage and cannot restart during cooldown',()=>{
+  let s=createChapter();s.enemy = {...s.enemy!,x:155,y:470,stage:'charge',target:{x:150,y:470}};
+  const hurt=stepChapter(s,20,idle);expect(hurt.hp).toBe(2);expect(hurt.freeze).toBe(90);
+  const safe=stepChapter(s,20,{...idle,dodge:true});expect(safe.hp).toBe(3);
+  expect(stepChapter(safe,20,{...idle,dodge:true}).dodgeCooldown).toBe(830);
+ });
+ it('death retries a safe checkpoint and resets combat',()=>{
+  let s=createChapter();s.hp=1;s.enemy = {...s.enemy!,x:155,y:470,stage:'charge',target:{...s.player}};
+  s=stepChapter(s,20,idle);expect(s.lost).toBe(true);expect(stepChapter(s,20,idle)).toBe(s);
+  const retry=retryChapter(s);expect(retry.hp).toBe(3);expect(retry.lost).toBe(false);expect(retry.enemy?.hp).toBe(2);
+ });
+ it('requires actual proximity to manipulate or exit',()=>{
+  let s=createChapter();expect(stepChapter(s,20,{...idle,interact:true}).save.room).toBe('arrival');
+  s.save.room='garden';s.enemy=null;expect(stepChapter(s,20,{...idle,interact:true}).save.gardenOpen).toBe(false);
+  s.player={...SWITCH};expect(stepChapter(s,20,{...idle,interact:true}).save.gardenOpen).toBe(true);
+ });
+ it('completes all three rooms without any business input',()=>{
+  let s=createChapter();
+  for(const room of ROOMS){
+   expect(s.save.room).toBe(room);
+   // Fight via the public input transition; position adjacent during recovery.
+   while(s.enemy&&s.enemy.hp>0){s.enemy.stage='recover';s.enemy.clock=0;s.player={x:s.enemy.x-70,y:s.enemy.y};s.facing={x:1,y:0};s.freeze=0;s.attackCooldown=0;
+    s=stepChapter(s,20,{...idle,attack:true});}
+   if(room==='garden'){s.player={...SWITCH};s=stepChapter(s,20,{...idle,interact:true});}
+   s.freeze=0;s.player={...EXIT};s=stepChapter(s,20,{...idle,interact:true});
+  }
+  expect(s.save.completed).toBe(true);expect(s.save.cleared).toEqual(['arrival','gallery']);
+ });
+ it('restores only validated fiction; malformed versions reset safely',()=>{
+  const s=createChapter();s.save.gardenOpen=true;
+  const restored=restoreChapter(JSON.stringify({...s.save,revenue:999999,customer:'fake'}));
+  expect(restored.save.gardenOpen).toBe(true);expect(restored.save).not.toHaveProperty('revenue');
+  expect(restoreChapter('{oops').save.room).toBe('arrival');
+  expect(restoreChapter(JSON.stringify({...s.save,version:99})).save.gardenOpen).toBe(false);
+ });
+});

@@ -1,0 +1,1191 @@
+GOLDLINE — BUILD THE FIRST SPOILER-FREE PLAYABLE 2.5D CHAPTER
+
+You have approval to proceed with the bounded first playable chapter we designed.
+
+This prompt is the execution contract.
+
+The goal is NOT to prove that Goldline can display more beautiful game art.
+
+The goal is to prove that Goldline can become a game I voluntarily want to keep playing:
+
+- movement feels good
+- combat feels good
+- I care what happens to fictional characters
+- desktop and mobile feel like two perspectives into ONE adventure
+- buildings have mechanically different abilities, not merely different weapons/art
+- real business events can unexpectedly alter the fictional world
+- useful progression removes repetitive real work
+- the fictional game remains playable even when no new business event occurs
+
+I am intentionally delegating the creative execution.
+
+DO NOT spoil the chapter for me.
+
+I should eventually receive:
+
+“Something new is ready. Start here.”
+
+============================================================
+0. REPOSITORY / SAFETY PREFLIGHT
+============================================================
+
+REPO:
+adamwright83-blip/bldg-admin-api
+
+START FROM ACTUAL LATEST origin/main.
+
+Do not assume any SHA written in an old conversation is still current.
+
+At prompt-writing time, main was observed at:
+
+6436f54258b809cb3412b8fc231dcd120c76cd05
+
+But FETCH FIRST.
+
+Use an isolated clean checkout/worktree if another coding agent has dirty files in the existing checkout.
+
+Do not disturb unrelated uncommitted work.
+
+Preflight:
+
+git fetch origin
+git status
+git rev-parse HEAD
+git rev-parse origin/main
+git log --oneline -20
+
+If using a dirty/shared checkout would endanger another agent's work:
+CREATE OR USE A FRESH ISOLATED CHECKOUT.
+
+Do not stop merely because an unrelated old agent process exists elsewhere.
+
+REMOTE MAIN MOVEMENT is the race detector.
+
+Before each slice:
+git fetch origin
+record origin/main SHA
+
+Before each push:
+git fetch origin
+
+If origin/main changed unexpectedly during your slice:
+STOP.
+DO NOT FORCE PUSH.
+DO NOT overwrite another writer.
+
+Never force push.
+
+Never mutate production business data for QA.
+
+============================================================
+1. YOUR FIRST JOB: VERIFY THE EXISTING GAME BEFORE ADDING ANYTHING
+============================================================
+
+Do not build from the old conceptual description alone.
+
+Inspect the CURRENT implementation first.
+
+Relevant areas likely include, but are not limited to:
+
+- current Expedition / movement / combat renderer
+- hit-stop / combat feel work
+- encounter lifecycle
+- Ghost / Staller / Gatekeeper or current successors
+- Siege
+- Tower Wars
+- Tower Forge
+- fiction persistence
+- campaign bindings/compiler
+- Driver game host
+- Admin / Lantern City
+- action registry / business action bridge
+- world events / evidence ladder
+- authored day / Night Shift
+- companion capability architecture
+- current 2D / PixiJS renderer
+- current building art / strongholds
+
+The existing code is authority for what already works.
+
+REUSE good systems.
+
+Do not create parallel versions merely because this prompt names a capability differently.
+
+Before writing new architecture, determine:
+
+1. what current movement/combat already supports
+2. what current fictional state is already persisted
+3. what current business-event bridge already exists
+4. how current desktop and mobile game state can share identity
+5. what current Forge facts can safely drive mechanics
+6. what current follow-up assistance already exists
+7. what recent combat-quality work must be preserved
+
+Do not send Adam this implementation survey.
+
+Keep it in the development task.
+
+============================================================
+2. FIXED PRODUCT LAWS
+============================================================
+
+THE SAVE FILE IS THE BUSINESS.
+
+REALITY supplies business truth.
+
+FICTION supplies adventure.
+
+Fiction may invent:
+
+- characters
+- villains
+- locations/interiors
+- machinery
+- impossible architecture
+- danger
+- combat
+- physics
+- puzzles
+- secrets
+- vehicles
+- dialogue
+- attraction
+- betrayal
+- alliances
+- fictional outcomes
+
+Fiction may NOT invent:
+
+- customers
+- orders
+- payments
+- revenue
+- visits
+- messages
+- replies
+- meetings
+- promises
+- business relationships
+- sales outcomes
+- real-human emotions or intent
+- prospect facts
+- addresses/geography represented as real facts
+
+A fictional victory NEVER writes business truth.
+
+A real business event MAY change fictional possibilities.
+
+============================================================
+3. CRITICAL DESIGN LAW: THE FICTIONAL CHAPTER MUST BE COMPLETABLE WITHOUT A NEW BUSINESS EVENT
+============================================================
+
+This is non-negotiable.
+
+A customer reply, payment, order, visit, or other real event must NEVER become:
+
+“Come back when reality lets you continue playing.”
+
+Real evidence can earn:
+
+- a superior route
+- a combat advantage
+- a shortcut
+- activation of prepared machinery
+- access to an optional area
+- additional fictional consequences
+- a persistent transformation
+- better positioning
+- a special attack opportunity
+
+But the player must retain a legitimate FICTIONAL route through the chapter if that business event never occurs.
+
+That fallback:
+
+- cannot fabricate the business outcome
+- cannot award business-backed conquest
+- cannot pretend the event occurred
+- cannot create fake business progress
+
+Skill can win fiction.
+
+Reality determines reality.
+
+============================================================
+4. USEFUL AI ASSISTANCE EXISTS FROM THE START
+============================================================
+
+Do not intentionally make Adam perform tedious software work once merely so an unlock can remove it later.
+
+Preserve:
+
+THE WORLD THINKS FOR FREE.
+COMPANIONS / ECHOES ACT FOR YOU.
+
+Baseline intelligence may:
+
+- summarize
+- remember
+- organize
+- surface relevant context
+- prepare known information
+- route
+- schedule
+- identify legitimate obligations
+
+The Echo progression in this chapter is NOT:
+
+“First do a stupid CRM task manually, then unlock automation.”
+
+It is:
+
+“A repeatable real workflow has become sufficiently understood that Goldline can now automatically PREPARE more of it without Adam reconstructing it.”
+
+============================================================
+5. FIXED TECHNICAL ENVELOPE
+============================================================
+
+DO NOT EXPAND THIS INTO A FULL RPG.
+
+This release is:
+
+- browser-based
+- existing web stack
+- existing game renderer where practical
+- premium illustrated 2.5D
+- NO Unreal migration
+- NO Unity migration
+- NO Blender-dependent runtime architecture
+- NO unrestricted free 3D camera
+- NO giant new engine rewrite
+
+The approved art direction is:
+
+- bright
+- daylight / golden California light where appropriate
+- luxurious
+- saturated
+- warm ivory architecture
+- rich foliage
+- premium adventure-game finish
+- dimensional layered scenery
+- animated characters
+- foreground occlusion
+- depth
+- shadows
+- moving machinery
+- effects
+- deliberately staged cameras
+
+ABSOLUTELY NO DARK-MODE REDESIGN.
+
+The latest approved visual reference is the GOLDLINE 2.5D concept:
+CITY SCALE + ADVENTURE SCALE,
+sunny luxury architecture,
+layered dimensional scenery.
+
+Treat it as ART DIRECTION, not literal level geometry.
+
+============================================================
+6. HARD SCOPE BOUNDARY
+============================================================
+
+ONE CHAPTER.
+
+Exactly:
+
+- ONE primary canonical building/location
+- THREE connected playable spaces
+- THREE important fictional characters:
+  - one companion
+  - one adversary
+  - one supporting / uneasy-allied character
+- TWO implemented building-mechanic families
+- ONE real-business-event binding
+- ONE Echo workflow
+- ONE coherent narrative through all slices
+
+Target total fictional play:
+approximately 15–25 minutes,
+potentially experienced in shorter sessions around actual work.
+
+That duration is a TARGET, not a promise.
+
+DO NOT ADD:
+
+- a second chapter
+- a second city
+- a large NPC cast
+- citywide new mechanics
+- full romance system
+- unrestricted generated dialogue
+- multiplayer
+- hardware
+- public spectators
+- public Tower Wars
+- autonomous outbound messaging
+- major companion roadmap
+- generic skill trees
+- fake economy
+- coins
+- XP
+- gems
+- streaks
+
+Necessary persistence/integration work is allowed.
+
+Scope expansion disguised as “infrastructure” is not.
+
+============================================================
+7. CREATIVE AUTHORITY / SPOILER POLICY
+============================================================
+
+ADAM IS THE PLAYER.
+
+Do not turn him into the level designer.
+
+You have authority to choose:
+
+- which canonical building best supports this chapter
+- exact fictional environment
+- exact three spaces
+- exact fictional cast
+- adversary identity
+- companion personality
+- supporting character
+- attraction / chemistry
+- conflict
+- plot
+- dialogue
+- environmental puzzle
+- secrets
+- confrontation
+- enemy presentation
+- choreography
+- art assets
+- audio direction
+- effects
+- how mechanics are introduced
+- chapter ending
+- reason to return
+
+DO NOT ask Adam to approve routine creative decisions.
+
+DO NOT send him:
+
+- level maps
+- character art
+- story summaries
+- boss identity
+- screenshots
+- generated scene previews
+- plot beats
+- dialogue
+- surprise mechanics
+- hidden areas
+
+unless a genuine product/truth blocker requires his decision.
+
+Development task may contain all spoilers.
+
+Player-facing communication must remain spoiler-light.
+
+============================================================
+8. CRITICAL EXECUTION PRINCIPLE
+============================================================
+
+EVERY SLICE MUST EXTEND THE SAME PLAYABLE CHAPTER.
+
+DO NOT produce:
+
+- movement demo
+- separate Forge demo
+- separate event demo
+- separate Echo demo
+- separate story prototype
+
+and promise to integrate them later.
+
+There must be ONE continuously playable chapter from the earliest viable slice onward.
+
+Each slice deepens that same chapter.
+
+============================================================
+SLICE 1 — THE PLAYABLE SPINE
+============================================================
+
+Build the chapter first with TEMPORARY / SIMPLE VISUALS.
+
+Do NOT burn time generating finished artwork yet.
+
+Goal:
+
+Prove that controlling the character feels good.
+
+Use/reuse the strongest existing movement/combat architecture.
+
+The heroine needs a deliberately small control set:
+
+- move
+- dodge
+- primary attack or equivalent combat action
+- contextual interact/use
+- traversal action only if current architecture supports it cleanly
+
+Build all THREE connected spaces using simple geometry / temporary scenery.
+
+The player must be able to:
+
+- enter
+- traverse
+- encounter a problem
+- manipulate something
+- fight
+- fail
+- retry
+- reach the fictional chapter ending
+
+No business event is required to finish this baseline route.
+
+Preserve or improve current combat feel:
+
+- clear enemy telegraphs
+- readable contacts
+- hit-stop where appropriate
+- satisfying damage response
+- collision clarity
+- no invisible/unreadable hazards
+- checkpoints
+- resume after interruption
+
+TEST ACTUAL FEEL using the existing browser runtime where safely possible.
+
+Acceptance:
+
+- full chapter skeleton playable beginning → end
+- three spaces connected
+- movement reliable
+- failure/retry reliable
+- checkpoint persists
+- at least one encounter is genuinely playable
+- no business data mutation from combat
+- no business event required for completion
+
+Commit/push:
+
+Goldline: build the first 2.5D chapter spine
+
+============================================================
+SLICE 2 — TWO MECHANICAL FAMILIES THAT ACTUALLY FEEL DIFFERENT
+============================================================
+
+Now implement exactly TWO reusable building-derived game behaviors.
+
+Use current canonical Forge/building evidence where truthful.
+
+Preferred conceptual distinction:
+
+A. LAUNCH
+B. REDIRECT
+
+But inspect the actual selected canonical building(s) and current Forge truth before finalizing names/behavior.
+
+These are GAME mechanics.
+
+Example shape:
+
+LAUNCH:
+- imparts force / sends a fictional object into motion
+
+REDIRECT:
+- changes trajectory / orientation / destination of that object
+
+The key is INTERACTION.
+
+Do not create two buttons that play different animations.
+
+Build at least:
+
+- one traversal use
+- one combat use
+- one puzzle use
+
+using the SAME two behaviors.
+
+They should combine.
+
+Example concept only — DO NOT COPY if you have a better chapter-specific solution:
+
+- one mechanism launches an object
+- another redirects it
+- player creates an unexpected path or combat opening
+
+Real building facts only determine which mechanical family is eligible / themed.
+
+They do NOT imply fictional physics are real building capabilities.
+
+Acceptance:
+
+- two mechanics visibly/physically different
+- each has understandable rule
+- combined use exists
+- player can discover at least one nontrivial interaction
+- the encounter supports at least TWO viable approaches
+- mechanics are fun before any business action is considered
+
+Commit/push:
+
+Goldline: give canonical buildings distinct playable mechanics
+
+============================================================
+SLICE 3 — DESKTOP + MOBILE BECOME TWO VIEWS OF ONE ADVENTURE
+============================================================
+
+Implement the approved TWO-SCALE idea.
+
+DESKTOP / ADMIN:
+player manipulates a small number of CITY-SCALE / LARGE-SCALE fictional mechanisms.
+
+MOBILE / DRIVER:
+player controls the heroine at ADVENTURE SCALE inside the consequences of those mechanism positions.
+
+They must share:
+
+- chapter identity
+- mechanism state
+- encounter phase
+- fictional damage/restoration state where relevant
+- discovered routes
+- checkpoint
+- relevant character-choice state
+
+DO NOT require two simultaneous devices.
+
+Single-device flow must work.
+
+If using one device:
+the player switches perspectives.
+
+If using two:
+both can reflect shared persisted state.
+
+NO frame-perfect network coordination.
+
+Use STABLE MECHANICAL STATES / POSITIONS.
+
+Example experience:
+
+desktop:
+rotate/configure giant mechanism
+
+mobile:
+that same mechanism is now physically positioned within heroine-scale space and creates/removes a route
+
+The desktop cannot merely be a remote-control menu.
+
+It needs to look and feel like manipulating the CITY-SCALE world.
+
+Acceptance:
+
+- manipulate state on desktop
+- open/resume mobile
+- exact consequence is present
+- manipulate or progress mobile
+- return desktop
+- state remains coherent
+- closing either app and returning preserves progress
+- stale/refetch does not reroll world
+- ordinary business UI remains accessible
+
+Commit/push:
+
+Goldline: connect city scale and adventure scale
+
+============================================================
+SLICE 4 — THE CHARACTERS MAKE THE PLACE WORTH RETURNING TO
+============================================================
+
+Now add the THREE fictional characters.
+
+1. COMPANION
+- participates in gameplay
+- has agency
+- contributes one meaningful game action
+- has personality
+- can disagree with player
+- remembers explicit chapter choices
+
+2. ADVERSARY
+- recurring presence within chapter
+- recognizable tactics
+- understandable fictional objective
+- relationship with heroine develops
+- not simply a health bar with dialogue
+
+3. SUPPORTING / UNEASY ALLY
+- useful
+- has their own fictional agenda
+- creates a tactical disagreement / alternate route
+
+Include:
+
+- brief authored conversations
+- banter during play where useful
+- remembered player choice
+- chemistry / attraction if organically appropriate
+- no affection meter
+- no romance-stat grind
+- no chatbot monologues
+- skippable dialogue
+- concise writing
+
+At least ONE choice between characters must produce a tangible game difference:
+
+- alternate route
+- different assistance
+- changed encounter setup
+- different mechanism availability
+- different ending beat
+
+Do NOT connect fictional affection to revenue.
+
+Do NOT make real customers fictional characters.
+
+Acceptance:
+
+- player can identify all three personalities without reading exposition
+- companion changes gameplay
+- adversary changes tactics
+- supporting character creates real choice
+- at least one remembered choice persists through chapter conclusion
+- no business-truth contamination
+
+Commit/push:
+
+Goldline: give the first chapter a persistent fictional cast
+
+============================================================
+SLICE 5 — PREPARE SOMETHING, LEAVE, LET REALITY SURPRISE YOU
+============================================================
+
+Implement exactly ONE real-business-event → fictional-consequence binding.
+
+Choose from an event CURRENT GOLDLINE already captures authoritatively.
+
+Do NOT invent a new external integration merely to satisfy this slice.
+
+The fictional interaction must work like this:
+
+1. player prepares/positions/arms a fictional mechanism
+2. mechanism enters a stable WAITING state
+3. player can leave and continue life/game
+4. a qualifying real event may occur later
+5. existing truth/evidence system verifies it
+6. exactly-once fictional consequence occurs
+7. when player returns, the world is visibly different
+8. game explains causality concisely if needed
+
+The business event classification matters.
+
+Effort ≠ response ≠ outcome.
+
+Do not let operator attestation receive the same fictional significance as a verified paid order unless current truth rules explicitly support that relationship.
+
+MOST IMPORTANT:
+
+The real event must provide a meaningful ADVANTAGE / OPTIONAL CONSEQUENCE.
+
+It must NOT be required to finish the fictional chapter.
+
+If the event never happens:
+
+- alternate fictional route remains playable
+- no fake business progress
+- no fake conquest
+- no endless waiting screen
+- no pressure to spam a real customer
+
+Acceptance tests:
+
+- event absent → chapter completable
+- event arrives → meaningful advantage appears
+- duplicate event → consequence once
+- wrong event → no consequence
+- wrong entity → no consequence
+- stale reload → state persists
+- fiction cannot create business event
+- event can occur while player offline
+
+Commit/push:
+
+Goldline: let real events alter prepared fictional machinery
+
+============================================================
+SLICE 6 — ECHO REMOVES ONE REAL PIECE OF REPETITIVE WORK
+============================================================
+
+Build exactly ONE Echo workflow.
+
+Use a supported follow-up/preparation case that already exists in Goldline truth.
+
+Echo performs:
+
+- retrieval of relevant real history
+- summary of what actually happened
+- actual promise/obligation extraction where supported
+- timing/contact-channel retrieval where supported
+- unresolved-info identification
+- preparation brief
+- contextual draft if allowed by current outbound architecture
+
+Echo DOES NOT:
+
+- invent facts
+- invent promises
+- invent interest
+- place calls
+- send automatically
+- make commitments
+- choose unsupported discounts
+- claim a business result
+- bypass existing Arsenal/action safety
+
+CRITICAL:
+
+Useful baseline AI assistance remains available regardless of Echo.
+
+Echo represents:
+
+THIS REPEATABLE WORKFLOW IS NOW PREPARED AUTOMATICALLY.
+
+Do not manufacture a tedious first-run requirement.
+
+GAME PRESENTATION:
+
+Represent Echo diegetically in the chapter.
+
+The player should experience some version of:
+
+- a prior/ghost helper performs the computer-doable preparation
+- reaches the point where a human decision/action is required
+- stops for the player
+
+But execute creatively.
+
+Acceptance:
+
+- actual preparation workload is measurably reduced
+- source evidence available
+- unsupported fact cannot enter draft
+- player can edit/approve/discard
+- no autosend
+- failure falls back safely
+- Echo is represented in game, not merely a backend feature
+
+Commit/push:
+
+Goldline: let Echo prepare a proven follow-up workflow
+
+============================================================
+SLICE 7 — MAKE REAL OUTCOMES CHANGE THE STORY WITHOUT CALLING FAILURE A WIN
+============================================================
+
+Add truthful branching around REAL OUTCOMES where the current chapter has a relevant legitimate business interaction.
+
+A real:
+
+- no
+- no answer
+- callback
+- completed visit
+- response
+- order
+
+may change FICTION differently if those statuses are authoritatively supported.
+
+Do not fabricate unavailable branches.
+
+Key experience:
+
+A commercially negative outcome may still ADVANCE FICTION.
+
+Example principle:
+
+real rejection:
+business record = rejection / not fit
+game = route changes / door closes / escape or alternate pursuit opens
+
+DO NOT:
+
+- award revenue
+- call rejection a commercial win
+- immediately manufacture another outreach task
+- create fake optimism
+- force retry of a truthfully unsuitable prospect
+
+The adventure should absorb reality rather than punish the player with a dead screen.
+
+Acceptance:
+
+- at least one negative truthful outcome has a coherent fictional continuation
+- business state remains negative/closed where appropriate
+- no business fact rewritten by story
+- chapter momentum continues
+
+Commit/push:
+
+Goldline: let real outcomes reshape the adventure truthfully
+
+============================================================
+SLICE 8 — REVISIT / SECRET / REASON TO RETURN
+============================================================
+
+The chapter ending must NOT make the location disposable.
+
+Create at least ONE persistent inaccessible/partially-understood element during initial play.
+
+After a later capability/state within THIS chapter becomes available, returning allows a new discovery.
+
+Do not add a whole Metroidvania game.
+
+This is one proof that:
+
+OLD PLACES CAN BECOME INTERESTING AGAIN.
+
+Possible forms:
+
+- hidden route
+- newly usable mechanism
+- alternate traversal
+- optional character scene
+- secret chamber
+- mechanical shortcut
+- lore/environmental discovery
+- optional combat opportunity
+
+Business-critical information must NOT be hidden behind fictional skill.
+
+The secret is game reward / optional discovery.
+
+Acceptance:
+
+- player sees or senses something before they can access it
+- later chapter state changes accessibility
+- returning feels materially different
+- no additional citywide scope
+
+Commit/push:
+
+Goldline: give the first chapter a reason to return
+
+============================================================
+SLICE 9 — FINISHED 2.5D ART / ANIMATION / SOUND
+============================================================
+
+ONLY NOW replace temporary presentation with finished chapter art.
+
+Use the approved 2.5D direction.
+
+Create:
+
+- layered environment plates
+- foreground occlusion layers
+- interactive props
+- character animation
+- enemy animation
+- mechanism states
+- contact effects
+- lighting/shadow treatment
+- restrained particles
+- useful ambient animation
+- audio/SFX where supported by current stack
+- cinematic but reliable transitions
+
+DO NOT create one giant flattened screenshot and call it a level.
+
+The scene must be decomposed enough to support:
+
+- movement
+- collision
+- characters
+- mechanism changes
+- foreground/background separation
+- persistence
+- destruction/damage where required
+
+Keep generated art stylistically consistent.
+
+DO NOT show Adam the assets.
+
+Keep spoilers inside development workspace/task.
+
+Performance matters:
+mobile must remain usable.
+
+Acceptance:
+
+- gameplay remains readable after art pass
+- collisions align with visuals
+- interactive objects read clearly without SaaS labels everywhere
+- mobile performance acceptable
+- no dark-mode contamination
+- game looks recognizably related to approved 2.5D concept
+
+Commit/push:
+
+Goldline: finish the first chapter in premium 2.5D
+
+============================================================
+SLICE 10 — EXPERIENCE POLISH / INTERRUPTION / REAL-WORLD SAFETY
+============================================================
+
+Now treat this as something Adam will ACTUALLY PLAY.
+
+Test and fix:
+
+- first entry
+- control discoverability
+- movement feel
+- combat readability
+- hit-stop
+- dodge timing
+- interaction reach
+- checkpoints
+- death/retry
+- device switching
+- browser reload
+- app close/reopen
+- network drop
+- duplicate business events
+- event never arrives
+- event arrives offline
+- stale data
+- unavailable AI
+- unavailable business data
+- Echo failure
+- operational UI access
+- safe behavior while driving
+- mobile orientation/layouts
+- desktop common resolutions
+
+Never require game interaction while vehicle is moving.
+
+Navigation/driver safety wins over fiction.
+
+Do not make Adam discover technical bugs as part of “surprise.”
+
+Acceptance target:
+
+Adam’s first exposure should be PLAYER QA, not developer QA.
+
+Commit/push:
+
+Goldline: harden the first chapter for real play
+
+============================================================
+SLICE 11 — SPOILER-FREE PLAYER HANDOFF
+============================================================
+
+Do NOT write a giant release note explaining what you built.
+
+Do NOT tell Adam:
+
+- villain identity
+- character relationship
+- secret
+- puzzle solution
+- chapter ending
+- surprise real-event consequence
+- hidden return content
+
+Give him only what he needs to start.
+
+Example shape:
+
+FIRST GOLDLINE 2.5D CHAPTER: READY
+
+Start:
+<route / button / exact entry point>
+
+Requirements:
+<phone/desktop/login/etc only if necessary>
+
+Verified:
+- chapter completes without a new business event
+- desktop/mobile state persists
+- real event binding tested without production mutation
+- Echo truth safeguards tested
+- build passes
+- browser QA complete / exact blocker if not
+
+Then:
+
+“Play it before reading development details.”
+
+Keep the full technical verification in a separate collapsible/report artifact if needed.
+
+============================================================
+PER-SLICE COMMIT / PUSH RULE
+============================================================
+
+After EACH genuinely complete slice:
+
+1. run focused tests
+2. run relevant broader regression
+3. run build when slice changes production code
+4. inspect git diff
+5. git fetch origin
+6. confirm origin/main did not move during slice
+7. commit
+8. push directly to main
+9. fetch again
+10. verify HEAD == origin/main
+
+If credits end:
+completed slices must already be safely on main.
+
+Never push a half-working slice.
+
+Never force push.
+
+============================================================
+TESTING STANDARD
+============================================================
+
+Unit tests are necessary but insufficient.
+
+Use:
+
+- deterministic shared-state tests
+- event idempotency tests
+- evidence firewall tests
+- persistence tests
+- device-perspective integration tests
+- browser interaction tests where environment is safe
+- production build
+- TypeScript baseline comparison
+- real frame/update loop where relevant for movement/combat feel
+
+Do not mutate production business data.
+
+If production-backed browser QA would mutate truth:
+DO NOT DO IT.
+
+Report exact blocker.
+
+============================================================
+FAILURE CONDITIONS
+============================================================
+
+STOP AND CORRECT if this turns into:
+
+- mostly walking and reading
+- cutscene-heavy business training
+- a beautiful background with hotspots
+- two mechanics that feel identical
+- desktop as a configuration dashboard
+- Driver as a separate mini-game
+- waiting for customers to continue
+- CRM work hidden under animation
+- companion chatbot
+- generic generated dialogue
+- weak combat masked by pretty art
+- dozens of locations
+- giant architecture rewrite
+- full 3D migration
+- unrestricted scope growth
+- fictional state writing business truth
+- business state being altered because AI/story says so
+
+============================================================
+FINAL EXPERIENCE ACCEPTANCE TEST
+============================================================
+
+Before calling the chapter complete, you must be able to answer YES to all:
+
+1. Is moving through the chapter enjoyable?
+2. Is at least one fight enjoyable?
+3. Are there at least two meaningfully different ways through an encounter?
+4. Do the two building mechanics actually interact?
+5. Can desktop manipulation physically change mobile-scale gameplay?
+6. Can I close the app and return without losing the adventure?
+7. Can the chapter be completed with ZERO new real-business events?
+8. Can a legitimate later business event nevertheless create a meaningful surprise?
+9. Does a negative real outcome continue fiction without pretending the business won?
+10. Does one fictional character make me curious what happens to them next?
+11. Does Echo remove real preparation work rather than merely animate it?
+12. Does an old place become newly interesting later?
+13. Did fictional gameplay create ZERO fake customers/orders/revenue/relationships?
+14. Does the result look like the approved premium bright 2.5D Goldline direction?
+15. Would a skeptical player plausibly choose to spend another 10 minutes playing after the required business action is over?
+
+If #15 is NO:
+
+THE CHAPTER IS NOT DONE.
+
+Do not hide that fact behind test coverage.
+
+============================================================
+FINAL REPORT TO ADAM
+============================================================
+
+KEEP IT SPOILER-FREE.
+
+Report only:
+
+- starting origin/main SHA
+- final origin/main SHA
+- slices completed
+- commits
+- tests/build/browser status
+- desktop/mobile persistence: PASS/FAIL
+- business-event optionality: PASS/FAIL
+- truth firewall: PASS/FAIL
+- Echo real-work reduction: PASS/FAIL
+- movement/combat QA: PASS/FAIL
+- production data mutation: NONE / explain
+- scope deviations, if any
+- exact route/button where Adam should begin playing
+
+Then say:
+
+PLAY BEFORE READING THE SPOILER REPORT.
+
+Do not reveal the surprises.
+
+============================================================
+FINAL CREATIVE DIRECTIVE
+============================================================
+
+You are not being asked to prove you can implement a specification mechanically.
+
+You are being trusted to DIRECT A SMALL PIECE OF GOLDLINE.
+
+Within the fixed scope:
+
+SURPRISE ME.
+
+Make the environment strange.
+
+Make the characters memorable.
+
+Make the antagonist entertaining.
+
+Make the machinery absurd.
+
+Make the fight satisfying.
+
+Make me curious about something I cannot reach yet.
+
+Make the desktop and phone feel impossibly connected.
+
+Make something happen after I leave that makes me wonder what the hell changed.
+
+And when I eventually realize that part of the boring business preparation has quietly disappeared because Goldline learned how to carry it for me:
+
+that should feel like progression.
+
+Do not ask Adam to design those moments for you.
+
+Build them.
+
+BEGIN.

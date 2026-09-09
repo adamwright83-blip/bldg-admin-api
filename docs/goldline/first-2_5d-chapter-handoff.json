@@ -1,0 +1,25 @@
+{
+  "startingMainSha": "6436f54258b809cb3412b8fc231dcd120c76cd05",
+  "latestCompletedMainSha": "6436f54258b809cb3412b8fc231dcd120c76cd05",
+  "handoffBranch": "astra/first-2_5d-chapter-handoff",
+  "handoffBranchSha": null,
+  "completedSlices": [],
+  "activeSlice": 1,
+  "activeSliceStatus": "Design locked; implementation not started (0/6 acceptance gates verified)",
+  "chapterId": "the-last-valet",
+  "canonicalBuilding": "century_park_east",
+  "importantFiles": [
+    "docs/goldline/HANDOFF-FIRST-2_5D-CHAPTER.md",
+    "docs/goldline/first-2_5d-chapter-execution-contract.txt",
+    "docs/goldline/first-2_5d-chapter-continuity-contract.txt"
+  ],
+  "assetDirectories": [
+    "client/public/assets/goldline/chapters/the-last-valet/"
+  ],
+  "testsPassing": [],
+  "testsFailing": [],
+  "nextActions": [
+    "Read handoff; implement Slice 1 using existing Pixi and movement/combat helpers",
+    "Do not expose or deploy unfinished chapter"
+  ]
+}
