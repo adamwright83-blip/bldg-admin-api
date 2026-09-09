@@ -27,8 +27,7 @@ Purpose: frame 0 attack/strike lunge, frame 1 dodge-roll/crouch, frame 2 hurt/fl
 Runtime layout: 3 columns × 1 row. The committed strip is 576×192 (three 192×192 cells); `ChapterScene.ts` slices by actual texture dimensions, so the frames remain square and are rendered at 99×99 in-scene without distortion.
 Source generation: ChatGPT image generation in the 2026-09-09 continuation session. Generation id was not exposed to the repository-writing tool, so it is recorded as unavailable rather than invented.
 Source output: 1536×1024 RGB on white. The useful top 512px contained all three centered action poses. That region was cropped to a true 3×1 square-cell strip, then downsampled per cell to 192×192 and palette-optimized for the runtime asset. The character feet remain centered near each cell's lower edge, matching the sprite anchor convention.
-SHA-256 of the committed runtime bytes before GitHub upload: `19b8d2d30135fcb8f1e5e6a4a6b2d251710feef031b8e95d8f517d04f2650432`.
-Git blob: `3329a21c6c615ca5ba86bcf52078b21549b021bb`.
+Authoritative repository identity: Git blob `3329a21c6c615ca5ba86bcf52078b21549b021bb` (the binary contents endpoint is not UTF-8-readable through the connector, so no separate byte-level SHA-256 is asserted here).
 Status: ACCEPTED for the first playable chapter. The existing directional-idle fallback remains in code, so a failed asset load still cannot break movement or combat presentation.
 
 Exact generation brief used as authority:
