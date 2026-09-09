@@ -3,7 +3,7 @@ import { Application, Assets, Graphics, Sprite, Texture } from 'pixi.js';
 import { facingForVelocity } from '../../../pages/goldline/overworld/movement';
 import { getAudioManager, type AudioCueId } from '../../audio/AudioManager';
 import { arcadeFeedback, combatHurtFeedback } from '../../audio/haptics';
-import { createChapter, restoreChapter, retryChapter, stepChapter, ROOM_NAMES, WALLS, EXIT, SWITCH, exitReady, type Input, type ChapterState } from './model';
+import { createChapter, restoreChapter, retryChapter, stepChapter, ROOM_NAMES, WALLS, EXIT, SWITCH, SHORTCUT_CRATE, LAUNCHER, REDIRECTOR, exitReady, type Input, type ChapterState } from './model';
 import './firstChapter.css';
 
 /** Slice 1 development entry. No API calls; host integration and server persistence are Slice 3. */
@@ -43,8 +43,18 @@ export default function FirstChapter() {
       if(s.save.room==='garden'){
         art.circle(SWITCH.x,SWITCH.y,35).fill(0xc5a359);
         art.moveTo(SWITCH.x,SWITCH.y).lineTo(SWITCH.x+(s.save.gardenOpen?22:-22),SWITCH.y-30).stroke({color:0x214d4a,width:8});
-        art.moveTo(600,200).lineTo(780,200).stroke({color:s.save.gardenOpen?0x238d82:0x9d6c55,width:18});
+        art.moveTo(600,200).lineTo(830,200).stroke({color:s.save.gardenOpen?0x238d82:0x9d6c55,width:18});
+        if(!s.save.latchOpen){const r=SHORTCUT_CRATE;art.rect(r.x,r.y,r.w,r.h).fill(0x8a6a45);art.rect(r.x,r.y,r.w,r.h).stroke({color:0x4a3a26,width:3});}
       }
+      const launcher=LAUNCHER[s.save.room];const redirector=REDIRECTOR[s.save.room];
+      if(launcher){art.circle(launcher.x,launcher.y,26).fill(s.weight?0x8f9e6b:0xb8a15c);art.circle(launcher.x,launcher.y,26).stroke({color:0x3e3520,width:3});}
+      if(redirector){
+        const active=s.save.heading!=null;
+        art.circle(redirector.x,redirector.y,30).fill(active?0x4bb2a4:0x9c9077);
+        art.circle(redirector.x,redirector.y,30).stroke({color:0x2b3f3a,width:3});
+        if(s.save.heading)art.circle(redirector.x,redirector.y,8).fill(0xfaf3df);
+      }
+      if(s.weight){art.circle(s.weight.x,s.weight.y,12).fill(0x5a4632);art.circle(s.weight.x,s.weight.y,12).stroke({color:0xfaf3df,width:2});}
       const e=s.enemy;
       if(e&&e.stage!=='down'){
         if(e.stage==='tell'||e.stage==='charge'){
@@ -85,7 +95,7 @@ export default function FirstChapter() {
           input.current.dodge=false;input.current.attack=false;input.current.interact=false;
           if(sim.current.cue!==lastCue){
             lastCue=sim.current.cue;
-            const cues:Partial<Record<ChapterState['effect'],AudioCueId>>={hit:'strike_hit',hurt:'player_hurt',guard:'shield_clang',dodge:'dodge',open:'gate_unlock',win:'hostile_down'};
+            const cues:Partial<Record<ChapterState['effect'],AudioCueId>>={hit:'strike_hit',hurt:'player_hurt',guard:'shield_clang',dodge:'dodge',open:'gate_unlock',win:'hostile_down',launch:'tower_launch',redirect:'mechanism_align',stagger:'weak_point_hit'};
             const cue=cues[sim.current.effect];if(cue)getAudioManager().play(cue);
             if(sim.current.effect==='hurt')combatHurtFeedback();else if(sim.current.effect==='hit')arcadeFeedback();
           }

@@ -1,7 +1,15 @@
 import { describe,it,expect } from 'vitest';
-import { createChapter,stepChapter,restoreChapter,retryChapter,EXIT,SWITCH,ROOMS, type ChapterState } from './model';
+import { createChapter,stepChapter,restoreChapter,retryChapter,EXIT,SWITCH,SHORTCUT_CRATE,LAUNCHER,REDIRECTOR,ROOMS, type ChapterState } from './model';
 const idle={x:0,y:0};
 function tick(s:ChapterState,n:number,input=idle){for(let i=0;i<n;i++)s=stepChapter(s,20,input);return s;}
+function fireWeight(s:ChapterState,heading:'bridge'|'latch'|'confrontation'){
+  s.player={...REDIRECTOR[s.save.room]!};
+  while(s.save.heading!==heading)s=stepChapter(s,20,{...idle,interact:true});
+  s.player={...LAUNCHER[s.save.room]!};
+  s=stepChapter(s,20,{...idle,interact:true});
+  for(let i=0;i<200&&s.weight;i++)s=stepChapter(s,20,idle);
+  return s;
+}
 describe('first chapter fictional spine',()=>{
  it('moves with existing acceleration and bounds huge suspended frames',()=>{
   const s=createChapter();const moved=stepChapter(s,10000,{x:1,y:0});
@@ -55,6 +63,54 @@ describe('first chapter fictional spine',()=>{
    s.freeze=0;s.player={...EXIT};s=stepChapter(s,20,{...idle,interact:true});
   }
   expect(s.save.completed).toBe(true);expect(s.save.cleared).toEqual(['arrival','gallery']);
+ });
+ it('launch sends the weight toward the redirector at a fixed, bounded speed',()=>{
+  let s=createChapter({...createChapter().save,room:'garden'});
+  s.player={...LAUNCHER.garden!};
+  s=stepChapter(s,20,{...idle,interact:true});
+  expect(s.weight).not.toBeNull();
+  expect(s.weight!.phase).toBe('toRedirector');
+  const start={...s.weight!};
+  s=stepChapter(s,20,idle);
+  const moved=Math.hypot(s.weight!.x-start.x,s.weight!.y-start.y);
+  expect(moved).toBeGreaterThan(0);expect(moved).toBeLessThan(20);
+ });
+ it('redirect sends the same weight to a chosen heading — traversal use',()=>{
+  let s=createChapter({...createChapter().save,room:'garden'});
+  expect(s.save.gardenOpen).toBe(false);
+  s=fireWeight(s,'bridge');
+  expect(s.save.gardenOpen).toBe(true);expect(s.weight).toBeNull();
+ });
+ it('redirect to the latch opens the garden shortcut — puzzle use',()=>{
+  let s=createChapter({...createChapter().save,room:'garden'});
+  expect(s.save.latchOpen).toBe(false);
+  s.player={x:SHORTCUT_CRATE.x-40,y:SHORTCUT_CRATE.y+20};
+  s=tick(s,10,{x:1,y:0});
+  expect(s.player.x).toBeLessThanOrEqual(SHORTCUT_CRATE.x);
+  s=fireWeight(s,'latch');
+  expect(s.save.latchOpen).toBe(true);
+  s.player={x:SHORTCUT_CRATE.x-20,y:SHORTCUT_CRATE.y+20};
+  s=tick(s,40,{x:1,y:0});
+  expect(s.player.x).toBeGreaterThan(SHORTCUT_CRATE.x);
+ });
+ it('redirect to confrontation staggers the boss — combat use, and direct strike remains viable',()=>{
+  let s=createChapter({...createChapter().save,room:'gallery'});
+  s.enemy!.stage='charge';s.enemy!.clock=0;
+  s=fireWeight(s,'confrontation');
+  expect(s.enemy!.stage).toBe('recover');
+  s.player={x:s.enemy!.x-70,y:s.enemy!.y};s.facing={x:1,y:0};
+  s=stepChapter(s,20,{...idle,attack:true});
+  expect(s.enemy!.hp).toBe(4);
+  let direct=createChapter({...createChapter().save,room:'gallery'});
+  direct.enemy!.stage='recover';direct.player={x:direct.enemy!.x-70,y:direct.enemy!.y};direct.facing={x:1,y:0};
+  direct=stepChapter(direct,20,{...idle,attack:true});
+  expect(direct.enemy!.hp).toBe(4);
+ });
+ it('mechanism state and heading selection persist through checkpoint retry',()=>{
+  let s=createChapter({...createChapter().save,room:'garden'});
+  s=fireWeight(s,'latch');
+  const retry=retryChapter(s);
+  expect(retry.save.latchOpen).toBe(true);expect(retry.weight).toBeNull();
  });
  it('restores only validated fiction; malformed versions reset safely',()=>{
   const s=createChapter();s.save.gardenOpen=true;

@@ -16,56 +16,95 @@ export const WALLS: Record<Room, Array<{x:number;y:number;w:number;h:number}>> =
   garden: [{x:330,y:230,w:260,h:95}],
   gallery: [{x:360,y:360,w:120,h:70}],
 };
+/** A crate blocks the direct garden shortcut until the latch heading is thrown once. */
+export const SHORTCUT_CRATE = {x:560,y:440,w:70,h:40};
+
+export type Heading = 'bridge'|'latch'|'confrontation';
+/** Launch/redirect machinery: one shared mechanism family reused for traversal, puzzle and combat. */
+export const LAUNCHER: Partial<Record<Room, Point>> = {garden:{x:220,y:380}, gallery:{x:480,y:430}};
+export const REDIRECTOR: Partial<Record<Room, Point>> = {garden:{x:480,y:330}, gallery:{x:600,y:330}};
+export const HEADINGS: Record<Room, Heading[]> = {arrival:[], garden:['bridge','latch'], gallery:['confrontation']};
+export const HEADING_TARGETS: Partial<Record<Room, Partial<Record<Heading, Point>>>> = {
+  garden: {bridge:{x:830,y:200}, latch:{x:780,y:220}},
+};
+const WEIGHT_SPEED = 300;
+
 export const saveSchema = z.object({
   chapterId: z.literal(CHAPTER_ID), version: z.literal(1),
   room: z.enum(ROOMS), cleared: z.array(z.enum(ROOMS)).max(3),
   gardenOpen: z.boolean(), completed: z.boolean(),
+  heading: z.enum(['bridge','latch','confrontation']).nullable(),
+  latchOpen: z.boolean(),
 });
 export type ChapterSave = z.infer<typeof saveSchema>;
 export type Enemy = Point & { hp:number; stage:'tell'|'charge'|'recover'|'down'; clock:number; target:Point };
+export type Weight = { x:number; y:number; target:Point; heading:Heading|null; phase:'toRedirector'|'redirected' };
 export type ChapterState = {
   save:ChapterSave; player:Point; velocity:Point; facing:Point; hp:number;
   dodge:number; dodgeCooldown:number; attack:number; attackCooldown:number;
-  hurt:number; freeze:number; enemy:Enemy|null; paused:boolean; lost:boolean;
-  cue:number; effect:'none'|'hit'|'hurt'|'guard'|'dodge'|'open'|'win';
+  hurt:number; freeze:number; enemy:Enemy|null; weight:Weight|null; paused:boolean; lost:boolean;
+  cue:number; effect:'none'|'hit'|'hurt'|'guard'|'dodge'|'open'|'win'|'launch'|'redirect'|'stagger';
 };
 export function createChapter(save?: ChapterSave):ChapterState {
   const parsed = save ? saveSchema.safeParse(save) : null;
   const clean:ChapterSave = parsed?.success ? parsed.data : {
     chapterId:CHAPTER_ID,version:1,room:'arrival',cleared:[],gardenOpen:false,completed:false,
+    heading:null,latchOpen:false,
   };
   const enemy = clean.room === 'garden' || clean.cleared.includes(clean.room) ? null : {
     x:700,y:245,hp:clean.room==='gallery'?5:2,stage:'tell' as const,clock:0,target:{...START},
   };
   return {save:{...clean,cleared:[...clean.cleared]},player:{...START},velocity:{x:0,y:0},
     facing:{x:1,y:0},hp:3,dodge:0,dodgeCooldown:0,attack:0,attackCooldown:0,
-    hurt:0,freeze:0,enemy,paused:false,lost:false,cue:0,effect:'none'};
+    hurt:0,freeze:0,enemy,weight:null,paused:false,lost:false,cue:0,effect:'none'};
 }
 export function restoreChapter(raw:string|null):ChapterState {
   try { return createChapter(saveSchema.parse(JSON.parse(raw??'null'))); } catch { return createChapter(); }
 }
 export function retryChapter(s:ChapterState) { return createChapter(s.save); }
 export function distance(a:Point,b:Point) {return Math.hypot(a.x-b.x,a.y-b.y);}
-function blocked(p:Point,room:Room) {
-  return WALLS[room].some(r=>p.x>r.x-16&&p.x<r.x+r.w+16&&p.y>r.y-16&&p.y<r.y+r.h+16);
+function blocked(p:Point,room:Room,latchOpen:boolean) {
+  if(WALLS[room].some(r=>p.x>r.x-16&&p.x<r.x+r.w+16&&p.y>r.y-16&&p.y<r.y+r.h+16)) return true;
+  if(room==='garden'&&!latchOpen){const r=SHORTCUT_CRATE;if(p.x>r.x-16&&p.x<r.x+r.w+16&&p.y>r.y-16&&p.y<r.y+r.h+16) return true;}
+  return false;
 }
-function move(p:Point,v:Point,dt:number,room:Room):Point {
+function move(p:Point,v:Point,dt:number,room:Room,latchOpen:boolean):Point {
   const next={...p};
   const x=Math.max(76,Math.min(884,p.x+v.x*dt));
-  if(!blocked({x,y:next.y},room)) next.x=x;
+  if(!blocked({x,y:next.y},room,latchOpen)) next.x=x;
   const y=Math.max(116,Math.min(534,p.y+v.y*dt));
-  if(!blocked({x:next.x,y},room)) next.y=y;
+  if(!blocked({x:next.x,y},room,latchOpen)) next.y=y;
   return next;
 }
 export function exitReady(s:ChapterState) {
   return s.save.room==='garden'?s.save.gardenOpen:!s.enemy||s.enemy.stage==='down';
+}
+function stepWeight(s:ChapterState,ms:number,cue:(effect:ChapterState['effect'])=>void) {
+  const w=s.weight; if(!w) return;
+  const d=distance(w,w.target);
+  const step=Math.min(d,WEIGHT_SPEED*ms/1000);
+  if(d>0.001){w.x+=(w.target.x-w.x)/d*step;w.y+=(w.target.y-w.y)/d*step;}
+  if(distance(w,w.target)>1) return;
+  if(w.phase==='toRedirector') {
+    const room=s.save.room;
+    const heading=s.save.heading&&HEADINGS[room].includes(s.save.heading)?s.save.heading:HEADINGS[room][0]??null;
+    const target=room==='gallery'&&heading==='confrontation'&&s.enemy?{...s.enemy}:HEADING_TARGETS[room]?.[heading as Heading];
+    if(heading&&target) {w.phase='redirected';w.heading=heading;w.target=target;cue('redirect');return;}
+    s.weight=null;return;
+  }
+  if(w.heading==='bridge') s.save.gardenOpen=true;
+  else if(w.heading==='latch') s.save.latchOpen=true;
+  else if(w.heading==='confrontation'&&s.enemy&&s.enemy.stage!=='down') {s.enemy.stage='recover';s.enemy.clock=0;}
+  cue(w.heading==='confrontation'?'stagger':'open');
+  s.weight=null;
 }
 export function stepChapter(previous:ChapterState,deltaMs:number,input:Input):ChapterState {
   if(previous.paused||previous.lost||previous.save.completed) return previous;
   const ms=Math.min(40,Math.max(0,Number.isFinite(deltaMs)?deltaMs:0));
   if(ms===0) return previous;
   const s:ChapterState={...previous,save:{...previous.save,cleared:[...previous.save.cleared]},
-    player:{...previous.player},enemy:previous.enemy?{...previous.enemy,target:{...previous.enemy.target}}:null};
+    player:{...previous.player},enemy:previous.enemy?{...previous.enemy,target:{...previous.enemy.target}}:null,
+    weight:previous.weight?{...previous.weight,target:{...previous.weight.target}}:null};
   if(s.freeze>0) {s.freeze=Math.max(0,s.freeze-ms);return s;}
   for(const key of ['dodge','dodgeCooldown','attack','attackCooldown','hurt'] as const) s[key]=Math.max(0,s[key]-ms);
   const analog=remapAnalogInput(Number.isFinite(input.x)?input.x:0,Number.isFinite(input.y)?input.y:0);
@@ -73,7 +112,7 @@ export function stepChapter(previous:ChapterState,deltaMs:number,input:Input):Ch
   const cue=(effect:ChapterState['effect'])=>{s.cue++;s.effect=effect;};
   if(input.dodge&&s.dodgeCooldown===0) {s.dodge=260;s.dodgeCooldown=850;cue('dodge');}
   s.velocity=s.dodge>0?{x:s.facing.x*460,y:s.facing.y*460}:stepVelocity(s.velocity,analog,ms/1000);
-  s.player=move(s.player,s.velocity,ms/1000,s.save.room);
+  s.player=move(s.player,s.velocity,ms/1000,s.save.room,s.save.latchOpen);
   if(input.attack&&s.attackCooldown===0&&s.dodge===0) {
     s.attack=150;s.attackCooldown=380;
     const e=s.enemy;
@@ -102,8 +141,20 @@ export function stepChapter(previous:ChapterState,deltaMs:number,input:Input):Ch
       if(e.clock>=700||d<6){e.stage='recover';e.clock=0;}
     } else if(e.clock>=1400){e.stage='tell';e.clock=0;}
   }
+  stepWeight(s,ms,cue);
   if(input.interact&&!s.lost) {
-    if(s.save.room==='garden'&&distance(s.player,SWITCH)<75) {
+    const room=s.save.room;
+    const redirector=REDIRECTOR[room];
+    const launcher=LAUNCHER[room];
+    if(redirector&&distance(s.player,redirector)<70&&!(s.weight&&s.weight.phase==='redirected')) {
+      const options=HEADINGS[room];
+      const index=s.save.heading?options.indexOf(s.save.heading):-1;
+      s.save.heading=options[(index+1)%options.length]??null;
+      cue('redirect');
+    } else if(launcher&&distance(s.player,launcher)<70&&!s.weight) {
+      s.weight={x:launcher.x,y:launcher.y,target:REDIRECTOR[room]!,heading:null,phase:'toRedirector'};
+      cue('launch');
+    } else if(s.save.room==='garden'&&distance(s.player,SWITCH)<75) {
       s.save.gardenOpen=!s.save.gardenOpen;cue('open');
     } else if(distance(s.player,EXIT)<85&&exitReady(s)) {
       const index=ROOMS.indexOf(s.save.room);

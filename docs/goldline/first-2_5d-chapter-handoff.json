@@ -3,9 +3,9 @@
   "latestCompletedMainSha": "6436f54258b809cb3412b8fc231dcd120c76cd05",
   "handoffBranch": "astra/first-2_5d-chapter-handoff",
   "handoffBranchSha": "8d0bc8b21590ab534f717dbd2adc75e416981a1d",
-  "completedSlices": [1],
-  "activeSlice": 2,
-  "activeSliceStatus": "Not started. Slice 1 complete: 6/6 acceptance gates verified (tests, TS baseline, build, rendering, movement/combat, reload/checkpoint).",
+  "completedSlices": [1, 2],
+  "activeSlice": 3,
+  "activeSliceStatus": "Not started. Slice 2 complete: launch/redirect shared mechanism family with traversal/puzzle/combat/combined uses and two viable encounter approaches, 15/15 focused tests, TS/build clean, browser-verified.",
   "chapterId": "the-last-valet",
   "canonicalBuilding": "century_park_east",
   "importantFiles": [
@@ -20,10 +20,11 @@
   "assetDirectories": [
     "client/public/assets/goldline/chapters/the-last-valet/"
   ],
-  "testsPassing": ["client/src/game/chapters/firstChapter/model.test.ts (10/10)"],
+  "testsPassing": ["client/src/game/chapters/firstChapter/model.test.ts (15/15)"],
   "testsFailing": [],
   "nextActions": [
-    "Begin Slice 2: two mechanically distinct building-derived behaviors, reusing Forge canonical valet/golf eligibility",
+    "Begin Slice 3: server-authenticated shared fiction state (room/checkpoint/mechanism/cleared/completed) keyed by tenant/player/chapter with revision compare-and-set, replacing localStorage as sole source of truth",
+    "Continue Slices 4-11 in order without stopping for a report between slices",
     "Do not expose or deploy unfinished chapter"
   ]
 }
