@@ -56,7 +56,14 @@ export class ChapterScene {
     for(const [i,r] of Array.from(WALLS[room].entries())){
       this.shadow(r.x+r.w/2,r.y+r.h,r.w*.6);
       const a=this.sprite(`island-${i}`,'scenery',1,r.x+r.w/2,r.y+r.h+9,r.w+34,r.h+86,r.y+r.h);
-      if(!a){g.rect(r.x,r.y,r.w,r.h).fill(0x809b6c);}
+      if(!a){
+        // No standalone scenery atlas was generated; a warm stone bevel reads as raised
+        // machinery housing against every room's painted palette, unlike a flat color block.
+        g.rect(r.x-6,r.y+r.h-6,r.w+12,20).fill({color:0x8c6f43,alpha:.35});
+        g.rect(r.x,r.y,r.w,r.h).fill(0xd9c9a3);
+        g.rect(r.x,r.y,r.w,r.h).stroke({color:0xa9895a,width:3});
+        g.rect(r.x+8,r.y+8,r.w-16,r.h-16).stroke({color:0xc1a478,width:1,alpha:.6});
+      }
       g.rect(r.x,r.y+r.h-5,r.w,6).fill({color:0xa17e45,alpha:.75});
     }
     // The same gear shape and orientation remains legible at either scale.
@@ -74,7 +81,10 @@ export class ChapterScene {
       g.moveTo(620,202).lineTo(841,202).stroke({color:0x694e2c,width:22});
       g.moveTo(620,197).lineTo(s.save.gardenOpen?841:710,197).stroke({color:0xe5c16e,width:15});
       this.sprite('lever','props',s.save.gardenOpen?2:1,SWITCH.x,SWITCH.y+15,67,87);
-      if(!s.save.latchOpen)this.sprite('crate','scenery',1,SHORTCUT_CRATE.x+35,SHORTCUT_CRATE.y+47,87,88,SHORTCUT_CRATE.y+40);
+      if(!s.save.latchOpen){
+        const crate=this.sprite('crate','scenery',1,SHORTCUT_CRATE.x+35,SHORTCUT_CRATE.y+47,87,88,SHORTCUT_CRATE.y+40);
+        if(!crate){const r=SHORTCUT_CRATE;g.rect(r.x,r.y,r.w,r.h).fill(0x8a6a45);g.rect(r.x,r.y,r.w,r.h).stroke({color:0x4a3a26,width:3});}
+      }
       else if(s.save.choice==='break') {g.poly([565,475,580,449,600,479,620,452]).stroke({color:0xa47a35,width:7});}
       this.sprite('manual','props',s.save.latchOpen?2:1,MANUAL_LATCH.x,MANUAL_LATCH.y+14,64,80);
     }
@@ -136,7 +146,8 @@ export class ChapterScene {
       this.sprite('impact','fx',frame,pos.x,pos.y+18,110+this.fxAge*.12,110+this.fxAge*.12,800,1-this.fxAge/420);
     }
     // Occlusion is deliberately confined to the near rail and island bases.
-    for(let i=0;i<3;i++)this.sprite(`rail-${i}`,'scenery',2,160+i*320,632,345,125,700);
+    for(let i=0;i<3;i++){const rail=this.sprite(`rail-${i}`,'scenery',2,160+i*320,632,345,125,700);
+      if(!rail)o.rect(160+i*320-172,632-30,345,60).fill({color:0x1d332e,alpha:.16});}
     if(!this.reduced)for(let i=0;i<10;i++){const x=(i*117+this.age*.008)%960,y=60+(i*47)%470+Math.sin(this.age/1800+i)*10;this.atmosphere.circle(x,y,1.4).fill({color:0xffe7a8,alpha:.35});}
     if(this.transition>0)this.atmosphere.rect(0,0,960,640).fill({color:0xfff4d4,alpha:this.transition/650*.8});
     const scale=city?Math.min(width/960,height/640):height/640;

@@ -91,7 +91,7 @@ export default function FirstChapter({world=EMPTY_WORLD,onPrepare,onEcho,syncSta
     <h1>{ROOM_NAMES[view.save.room]}</h1>
     <div className="fc-hud"><span aria-label={`${view.hp} health remaining`}>{'●'.repeat(view.hp)}{'○'.repeat(3-view.hp)}</span><span>{view.save.completed?'The building is still.':view.enemy&&view.enemy.stage!=='down'?(view.enemy.stage==='recover'?'Opening — strike!':'Watch the dispatch line'):view.save.room==='garden'&&!view.save.gardenOpen?'Follow the brass track':'Reach the upper gate'}</span><button onClick={pause}>Pause</button></div>
     <div className="fc-playfield"><div ref={mount} className="fc-stage" />
-    {playing&&line.key!==dismissed?<button className="fc-dialogue" onClick={()=>setDismissed(line.key)} aria-label="Dismiss dialogue"><small>{line.speaker}</small><span>{line.text}</span><i>×</i></button>:null}
+    {playing&&!city&&line.key!==dismissed?<button className="fc-dialogue" onClick={()=>setDismissed(line.key)} aria-label="Dismiss dialogue"><small>{line.speaker}</small><span>{line.text}</span><i>×</i></button>:null}
     {playing&&hint&&!city?<span className="fc-interaction">{hint} <kbd>E</kbd></span>:null}
     {city?<div className="fc-city-note">The same machinery. A different distance.<br/><small>Touch a turntable to set its detent.</small>{onPrepare?<button onClick={onPrepare} disabled={world.armed}>{world.armed?'Receiver prepared':'Prepare receiver'}</button>:null}{onEcho?<button onClick={onEcho}>Trace the familiar motion</button>:null}</div>:null}
     </div>

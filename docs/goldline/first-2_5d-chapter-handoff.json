@@ -2,10 +2,11 @@
   "startingMainSha": "6436f54258b809cb3412b8fc231dcd120c76cd05",
   "latestCompletedMainSha": "6436f54258b809cb3412b8fc231dcd120c76cd05",
   "handoffBranch": "astra/first-2_5d-chapter-handoff",
-  "handoffBranchSha": "8d0bc8b21590ab534f717dbd2adc75e416981a1d",
+  "handoffBranchSha": "3f9b076",
   "completedSlices": [1, 2, 4, 6, 7, 8, 10],
+  "slice9Status": "SUBSTANTIALLY DONE, not fully complete: all 3 backgrounds, all 3 characters, and the mechanism/props/FX atlases are generated and integrated. Two atlases (props/scenery-atlas.png, characters/heroine-actions.png) remain BLOCKED on image generation, with safe visual fallbacks in place (see docs/goldline/first-2_5d-chapter-art-prompts.md).",
   "activeSlice": 11,
-  "activeSliceStatus": "Slice 11 host wiring done: /goldline-chapter route added to the real app (client/src/pages/GoldlineChapterHost.tsx), AdminAuthGate-gated, unlinked, same pattern as /goldline-effectiveness. Calls trpc.system.goldlineChapterState.get/save with localStorage fallback, degrading silently until the migration is applied. Full-repo TS baseline unchanged (40 errors, 0 new), full client build succeeds, admin routing test suite still passes (13/13). NOT DONE (all need Adam directly): (1) apply drizzle/0067 + 0068 to a real database, (2) a live logged-in browser walkthrough of the new route once migrated, (3) generate the art from first-2_5d-chapter-art-prompts.md, (4) decide the final spoiler-free player entry surface/copy.",
+  "activeSliceStatus": "Creative pass recovered from an uncommitted local Codex session that hit its usage limit: real generated art (backgrounds, 3 characters, mechanisms/props/FX), a dedicated ChapterScene presentation layer, contextual interaction hints, authored dialogue, a host-adapter fix preserving server-supplied fields on save, and live wiring of city-scale + Slice 5/6 prepare/echo actions into the actual UI. Two art gaps (props/scenery-atlas.png, characters/heroine-actions.png) remain BLOCKED on image generation but have safe visual fallbacks; one UI overlap bug (dialogue vs city-scale note) fixed. Slice 11 host wiring (/goldline-chapter, AdminAuthGate-gated, unlinked) still calls trpc.system.goldlineChapterState.get/save with localStorage fallback, degrading silently until the migration is applied. Full-repo TS baseline unchanged (40 errors, 0 new), full client build succeeds, 190/190 tests pass. NOT DONE (all need Adam directly): (1) apply drizzle/0067 + 0068 to a real database, (2) a live logged-in browser walkthrough of the route once migrated, (3) generate the two remaining art atlases, (4) decide the final spoiler-free player entry surface/copy.",
   "chapterId": "the-last-valet",
   "canonicalBuilding": "century_park_east",
   "importantFiles": [
@@ -14,35 +15,42 @@
     "docs/goldline/first-2_5d-chapter-continuity-contract.txt",
     "client/src/game/chapters/firstChapter/model.ts",
     "client/src/game/chapters/firstChapter/FirstChapter.tsx",
-    "client/src/game/chapters/firstChapter/model.test.ts",
+    "client/src/game/chapters/firstChapter/ChapterScene.ts",
+    "client/src/game/chapters/firstChapter/persistence.ts",
+    "client/src/game/chapters/firstChapter/presentation.ts",
+    "client/src/pages/GoldlineChapterHost.tsx",
+    "docs/goldline/creative-environment-provenance.md",
+    "docs/goldline/creative-mechanism-provenance.md",
+    "docs/goldline/creative-character-provenance.md",
     "vite.chapter-preview.config.ts"
   ],
   "assetDirectories": [
     "client/public/assets/goldline/chapters/the-last-valet/"
   ],
   "testsPassing": [
-    "client/src/game/chapters/firstChapter/model.test.ts (18/18)",
+    "client/src/game/chapters/firstChapter/model.test.ts (20/20)",
+    "client/src/game/chapters/firstChapter/creativePass.test.ts (7/7)",
     "server/goldlineWorld/chapterStateService.test.ts (7/7)",
     "server/goldlineWorld/chapterEventBindingService.test.ts (8/8)",
     "server/goldlineWorld/echoFollowUpService.test.ts (7/7)",
     "server/goldlineWorld/chapterOutcomeBranchService.test.ts (8/8)",
-    "client/src/game/chapters/firstChapter/model.test.ts (20/20)",
     "server/goldlineWorld/chapterIntegration.test.ts (4/4)",
-    "server/goldlineWorld/chapterHostIntegration.test.ts (4/4)"
+    "server/goldlineWorld/chapterHostIntegration.test.ts (4/4)",
+    "client/src/pages/adminLiveModel.test.ts (13/13)",
+    "full regression 190/190"
   ],
   "testsFailing": [],
   "blockers": [
     "drizzle/0067_goldline_chapter_states.sql written but not applied to any database",
     "drizzle/0068_goldline_chapter_event_bindings.sql written but not applied to any database",
-    "No live or local test MySQL is reachable in this sandbox, so the Integration Gate's cross-device/event/Echo/outcome proof runs against mocked persistence (same harness as the unit tests), not a real database",
+    "No live or local test MySQL is reachable in this sandbox, so all cross-device/event/Echo/outcome proof runs against mocked persistence, not a real database",
     "Both migrations need Adam's explicit approval to run before real end-to-end verification is possible",
-    "No real provider-wrapped chapter host page exists yet — that's the remaining concrete task before Slice 11 can call Slices 3/5/6/7 truly live",
-    "Slice 9 art assets are all PENDING — no image-generation tool was available this session; manifest/hooks/prompts are ready for whenever art is generated"
+    "props/scenery-atlas.png and characters/heroine-actions.png are BLOCKED on image generation — no image-generation tool available this session either; safe visual fallbacks are in place, exact prompts recorded in first-2_5d-chapter-art-prompts.md"
   ],
   "nextActions": [
     "Ask Adam to approve running drizzle/0067 and drizzle/0068 against a real database",
     "Once migrated: a real logged-in browser walkthrough of /goldline-chapter to replace this session's code-level verification",
-    "Generate the art in first-2_5d-chapter-art-prompts.md when an image-generation-capable session is available",
+    "Generate the two remaining art atlases in first-2_5d-chapter-art-prompts.md when an image-generation-capable session is available",
     "Adam decides the final spoiler-free player entry surface/copy; /goldline-chapter is ready to be linked from wherever he chooses"
   ]
 }
