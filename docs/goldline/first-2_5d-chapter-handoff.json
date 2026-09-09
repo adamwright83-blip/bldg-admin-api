@@ -3,9 +3,9 @@
   "latestCompletedMainSha": "6436f54258b809cb3412b8fc231dcd120c76cd05",
   "handoffBranch": "astra/first-2_5d-chapter-handoff",
   "handoffBranchSha": "8d0bc8b21590ab534f717dbd2adc75e416981a1d",
-  "completedSlices": [1, 2, 4, 6, 7, 8],
-  "activeSlice": 10,
-  "activeSliceStatus": "Integration Gate complete (see slice 3/5 blockers below). Slice 9 (art): BLOCKED on image generation (no image-gen tool available this session). Delivered instead per contract fallback: complete asset manifest (artManifest.ts), graceful-fallback loading hooks in FirstChapter.tsx (verified: identical rendering with zero art files present), and a full production-ready prompt catalog in first-2_5d-chapter-art-prompts.md, all PENDING. Proceeding to Slice 10 (polish/QA), which doesn't depend on finished art.",
+  "completedSlices": [1, 2, 4, 6, 7, 8, 10],
+  "activeSlice": 11,
+  "activeSliceStatus": "Slice 10 QA complete: 170/170 tests across all chapter-touching suites, full-repo TypeScript baseline unchanged (40 pre-existing errors, zero touching chapter files), clean build, browser-verified desktop+mobile rendering/layout/reload/pause-on-hidden. Definition-of-complete checklist answered honestly in HANDOFF section 12h: game/characters/echo/art(graybox)/safety all TRUE; continuity/reality/outcomes TRUE at server-contract level but NOT YET live (no DB migration applied, no real host); finished art FALSE (Slice 9 generation-blocked); human fun-gate playtest not yet done (needs Adam). Slice 11 remains: apply drizzle/0067+0068 (Adam's approval needed), build the real provider-wrapped chapter host, generate final art, and ship the player entry point.",
   "chapterId": "the-last-valet",
   "canonicalBuilding": "century_park_east",
   "importantFiles": [
@@ -40,7 +40,9 @@
     "Slice 9 art assets are all PENDING — no image-generation tool was available this session; manifest/hooks/prompts are ready for whenever art is generated"
   ],
   "nextActions": [
-    "Proceed to Slice 10: full QA pass per the execution contract's definition-of-complete checklist",
-    "Then Slice 11 (real chapter host, live migration approval, final player entry)"
+    "Slice 11: ask Adam to approve running drizzle/0067 and 0068 against a real database",
+    "Build a real provider-wrapped chapter host page/route replacing the standalone dev preview",
+    "Generate the art in first-2_5d-chapter-art-prompts.md when an image-generation-capable session is available",
+    "Ship the final minimal player entry point and hand off with the spoiler-free summary format from the execution contract section 32"
   ]
 }
