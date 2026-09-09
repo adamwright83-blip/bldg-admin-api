@@ -26,7 +26,8 @@ export type VehicleCargoItem = {
   };
 };
 const ASSET = "/assets/goldline/vehicle-cargo/v1";
-const CAR_ASSET = "/assets/goldline/vehicle-cargo/v2/car-topdown-neutral.png";
+const CAR_ASSET =
+  "/assets/goldline/vehicle-cargo/v2/car-topdown-neutral.png?v=20260909";
 const CAR_FALLBACK =
   "/assets/goldline/vehicle-cargo/v1/car-inactive-glow-neutral.jpg";
 const SLOTS = [
