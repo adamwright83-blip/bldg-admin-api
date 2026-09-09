@@ -148,16 +148,22 @@ export function stepChapter(previous:ChapterState,deltaMs:number,input:Input):Ch
     if(e.stage==='tell') {
       // Target stays visible during windup; release locks a trajectory, no homing.
       e.target={...s.player};
-      if(e.clock>=1000){e.stage='charge';e.clock=0;}
+      if(e.clock>=(s.save.room==='gallery'&&e.hp<=3?780:1000)){e.stage='charge';e.clock=0;}
     } else if(e.stage==='charge') {
       const d=distance(e,e.target);
-      if(d>5){const speed=Math.min(d,340*ms/1000);e.x+=(e.target.x-e.x)/d*speed;e.y+=(e.target.y-e.y)/d*speed;}
-      if(distance(e,s.player)<43&&s.dodge===0&&s.hurt===0) {
+      if(d>5){
+        const speed=Math.min(d,(s.save.room==='gallery'&&e.hp<=3?410:340)*ms/1000);
+        const next={x:e.x+(e.target.x-e.x)/d*speed,y:e.y+(e.target.y-e.y)/d*speed};
+        // Raised machinery is useful cover: a committed dispatch can strike it.
+        if(blocked(next,s.save.room,true,true)) {e.stage='recover';e.clock=-350;cue('stagger');}
+        else {e.x=next.x;e.y=next.y;}
+      }
+      if(e.stage==='charge'&&distance(e,s.player)<43&&s.dodge===0&&s.hurt===0) {
         s.hp--;s.hurt=1000;s.freeze=90;
         if(s.hp<=0&&s.grace) {s.hp=1;s.grace=false;cue('saved');}
         else {cue('hurt');if(s.hp<=0)s.lost=true;}
       }
-      if(e.clock>=700||d<6){e.stage='recover';e.clock=0;}
+      if(e.stage==='charge'&&(e.clock>=900||d<6)){e.stage='recover';e.clock=0;}
     } else if(e.clock>=1400){e.stage='tell';e.clock=0;}
   }
   stepWeight(s,ms,cue);

@@ -1,125 +1,75 @@
-import { useEffect, useRef, useState } from "react";
-import { trpc } from "@/lib/trpc";
-import FirstChapter from "@/game/chapters/firstChapter/FirstChapter";
-import {
-  saveSchema,
-  CHAPTER_ID,
-  type ChapterSave,
-} from "@/game/chapters/firstChapter/model";
-
-const STORAGE_KEY = `goldline:chapter-dev:${CHAPTER_ID}:v1`;
-
-/**
- * Slice 11: the first real, authenticated, provider-wrapped host for the
- * chapter — internal/hidden route, not linked from any nav, following the
- * same pattern as /goldline-effectiveness. Not the final polished player
- * entry point; that's a separate, later decision once art/QA are finished.
- *
- * Server sync is best-effort and additive: it never blocks the local game
- * from starting, and it fails silently (falling back to localStorage-only
- * play) until drizzle/0067_goldline_chapter_states.sql is actually applied
- * to a real database — which has not happened in this session and needs
- * Adam's separate approval. This is the concrete "wire the client" step the
- * earlier Slices 3/5/6/7 work was waiting on; it cannot be end-to-end
- * verified against a live table until that migration runs.
- */
-export default function GoldlineChapterHost() {
-  const revisionRef = useRef(0);
-  const [seeded, setSeeded] = useState(false);
-  const utils = trpc.useUtils();
-  const stateQuery = trpc.system.goldlineChapterState.get.useQuery(
-    { chapterId: CHAPTER_ID },
-    { retry: false }
-  );
-  const saveMutation = trpc.system.goldlineChapterState.save.useMutation();
-
-  // On load: adopt server state if present, otherwise keep whatever is
-  // already in localStorage (first visit, or server unavailable/unmigrated).
-  useEffect(() => {
-    if (stateQuery.isLoading) return;
-    if (stateQuery.data) {
-      const parsed = saveSchema.safeParse(stateQuery.data.state);
-      if (parsed.success) {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed.data));
-        } catch {
-          /* localStorage unavailable — game still plays from its in-memory default */
-        }
-        revisionRef.current = stateQuery.data.revision;
-      }
-    }
+import { useEffect, useRef, useState } from 'react';
+import { trpc } from '@/lib/trpc';
+import FirstChapter from '@/game/chapters/firstChapter/FirstChapter';
+import { CHAPTER_ID, saveSchema } from '@/game/chapters/firstChapter/model';
+import { chapterFromServer, chapterToServer } from '@/game/chapters/firstChapter/persistence';
+import { goldlineChapterFictionStateSchema, type GoldlineChapterFictionState } from '@shared/goldlineChapterState';
+const STORAGE_KEY=`goldline:chapter-dev:${CHAPTER_ID}:v1`;
+const BINDING={chapterId:CHAPTER_ID,buildingId:'century_park_east' as const};
+/** Authenticated host; all business evidence remains behind the existing server boundaries. */
+export default function GoldlineChapterHost(){
+  const revision=useRef(0),base=useRef<GoldlineChapterFictionState|null>(null),lastPushed=useRef(''),busy=useRef(false);
+  const [seeded,setSeeded]=useState(false),[generation,setGeneration]=useState(0),[status,setStatus]=useState('Saved on this device');
+  const [echoOpen,setEchoOpen]=useState(false),[echoEnabled,setEchoEnabled]=useState(false);
+  const state=trpc.system.goldlineChapterState.get.useQuery({chapterId:CHAPTER_ID},{retry:false,refetchOnWindowFocus:false});
+  const save=trpc.system.goldlineChapterState.save.useMutation();
+  const binding=trpc.system.goldlineChapterEventBinding.get.useQuery(BINDING,{retry:false,enabled:seeded&&!state.error,refetchOnWindowFocus:false});
+  const arm=trpc.system.goldlineChapterEventBinding.arm.useMutation();
+  const reconcile=trpc.system.goldlineChapterEventBinding.reconcile.useMutation();
+  const echo=trpc.system.goldlineEchoFollowUp.brief.useQuery(undefined,{enabled:echoEnabled,retry:false,refetchOnWindowFocus:echoEnabled});
+  const saveRef=useRef(save);saveRef.current=save;
+  function adopt(value:unknown,rev:number){
+    const parsed=goldlineChapterFictionStateSchema.safeParse(value),local=chapterFromServer(value);
+    if(!parsed.success||!local)return false;
+    base.current=parsed.data;revision.current=rev;
+    try{const raw=JSON.stringify(local);localStorage.setItem(STORAGE_KEY,raw);lastPushed.current=raw;}catch{return false;}
+    setGeneration(g=>g+1);return true;
+  }
+  useEffect(()=>{
+    if(state.isLoading)return;
+    if(state.data&&adopt(state.data.state,state.data.revision))setStatus('Checkpoint synchronized');
+    else if(state.error)setStatus('Local save · cross-device sync unavailable');
     setSeeded(true);
-  }, [stateQuery.isLoading, stateQuery.data]);
-
-  // Push local progress up periodically. Best-effort: a failed save (no live
-  // table yet, a revision conflict, or being offline) just gets retried on
-  // the next tick against whatever local state exists then.
-  useEffect(() => {
-    if (!seeded) return;
-    let lastPushed = "";
-    const interval = setInterval(() => {
-      let raw: string | null;
-      try {
-        raw = localStorage.getItem(STORAGE_KEY);
-      } catch {
-        return;
-      }
-      if (!raw || raw === lastPushed) return;
-      const parsed = saveSchema.safeParse(JSON.parse(raw));
-      if (!parsed.success) return;
-      const toServerState = toPersistedState(parsed.data);
-      saveMutation.mutate(
-        {
-          chapterId: CHAPTER_ID,
-          expectedRevision: revisionRef.current,
-          state: toServerState,
-          requestId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        },
-        {
-          onSuccess: result => {
-            if (result.ok) {
-              lastPushed = raw!;
-              revisionRef.current = result.revision;
-            } else if (result.latest) {
-              // Server has a newer write (another device) — adopt it rather than overwrite it.
-              revisionRef.current = result.latest.revision;
-              utils.system.goldlineChapterState.get.invalidate({ chapterId: CHAPTER_ID });
-            }
-          },
-        }
-      );
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [seeded, saveMutation, utils]);
-
-  return (
-    <main className="fc-host">
-      <header>
-        <small>INTERNAL · GOLDLINE CHAPTER — THE LAST VALET</small>
-      </header>
-      {!seeded ? <p>Loading…</p> : <FirstChapter />}
-    </main>
-  );
-}
-
-/** Maps the client's local save shape onto the server's persisted fiction contract. */
-function toPersistedState(save: ChapterSave) {
-  return {
-    chapterId: save.chapterId,
-    version: save.version,
-    room: save.room,
-    checkpoint: { room: save.room, x: 0, y: 0 },
-    mechanism: {
-      heading: save.heading,
-      gardenOpen: save.gardenOpen,
-      latchOpen: save.latchOpen,
-    },
-    cleared: save.cleared,
-    completed: save.completed,
-    choice: save.choice,
-    restored: false,
-    secretSeen: save.secretSeen,
-    prepared: { armedAt: null, resolvedEventId: null },
-    realOutcome: null,
-  };
+  },[state.isLoading,state.data,state.error]);
+  useEffect(()=>{
+    if(!seeded||state.error)return;
+    let disposed=false;
+    const interval=setInterval(async()=>{
+      if(busy.current)return;
+      let raw:string|null;try{raw=localStorage.getItem(STORAGE_KEY);}catch{return;}
+      if(!raw||raw===lastPushed.current)return;
+      let local;try{local=saveSchema.safeParse(JSON.parse(raw));}catch{return;}if(!local.success)return;
+      busy.current=true;
+      try{
+        const next=chapterToServer(local.data,base.current);
+        const result=await saveRef.current.mutateAsync({chapterId:CHAPTER_ID,expectedRevision:revision.current,state:next,requestId:crypto.randomUUID()});
+        if(disposed)return;
+        if(result.ok){revision.current=result.revision;base.current=next;lastPushed.current=raw;setStatus('Checkpoint synchronized');}
+        else if(result.latest){adopt(result.latest.state,result.latest.revision);setStatus('Newer checkpoint restored · resume when ready');}
+      }catch{if(!disposed)setStatus('Local save · sync will retry');}finally{busy.current=false;}
+    },4000);
+    return()=>{disposed=true;clearInterval(interval);};
+  },[seeded,state.error]);
+  const reconciled=useRef(false);
+  useEffect(()=>{
+    if(!binding.data?.armedAt||binding.data.resolvedEventId||reconciled.current)return;
+    reconciled.current=true;
+    void reconcile.mutateAsync(BINDING).then(()=>binding.refetch()).catch(()=>setStatus('Local save · world reconciliation unavailable'));
+  },[binding.data]);
+  const prepare=async()=>{try{await arm.mutateAsync(BINDING);await binding.refetch();}catch{setStatus('Receiver unavailable · local chapter remains playable');}};
+  const trace=()=>{setEchoEnabled(true);setEchoOpen(true);};
+  return <div className="fc-host">
+    {!seeded?<p>Preparing the passage…</p>:<FirstChapter key={generation} syncStatus={status}
+      world={{armed:!!binding.data?.armedAt,resolved:!!binding.data?.resolvedEventId,outcome:base.current?.realOutcome??null,echo:echoEnabled&&!!echo.data?.available}}
+      onPrepare={prepare} onEcho={trace}/>}
+    {echoOpen?<section className="fc-echo" aria-label="Recorded follow-up" tabIndex={-1}>
+      <h2>The familiar motion</h2>
+      {echo.isLoading?<p>Retrieving the recorded follow-up…</p>:echo.data?.available?<>
+        <p>{echo.data.note||'No note recorded.'}</p><dl><dt>Recorded due date</dt><dd>{echo.data.dueAt}</dd><dt>Assigned to</dt><dd>{echo.data.assignedTo??'Not recorded'}</dd></dl>
+        {echo.data.missingInfo.length?<p>{echo.data.missingInfo.join(' · ')}</p>:null}
+        <small>Source: recorded follow-up {echo.data.followUpId}. Prepared for your review; nothing sent.</small>
+      </>:<p>{echo.error?'The recorded follow-up is unavailable.':'No eligible recorded follow-up.'}</p>}
+      <button onClick={()=>setEchoOpen(false)}>Return to the machinery</button>
+    </section>:null}
+  </div>;
 }
