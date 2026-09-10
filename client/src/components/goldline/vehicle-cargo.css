@@ -249,6 +249,23 @@
   white-space: nowrap;
   pointer-events: none;
 }
+.gl-cargo-garment-charge-hint {
+  position: absolute;
+  left: 50%;
+  top: -10%;
+  padding: 2px 5px;
+  color: #fff;
+  background: #c81e1e;
+  border: 1px solid #7a0f0f;
+  border-radius: 3px;
+  transform: translateX(-50%);
+  font-size: 0.42rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  box-shadow: 0 2px 5px #0008;
+  pointer-events: none;
+}
 .gl-cargo-overflow {
   position: absolute;
   z-index: 5;
@@ -368,6 +385,31 @@
   padding: 8px;
   background: #74db9f;
   border: 0;
+}
+.gl-cargo-charge-due {
+  display: inline-block;
+  margin: 5px 0 2px;
+  padding: 2px 5px;
+  border: 1px solid #7a0f0f;
+  border-radius: 3px;
+  background: #c81e1e33;
+  color: #ff9d9d;
+  font-size: 9px;
+  letter-spacing: 0.07em;
+}
+a.gl-cargo-charge-cta {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 8px;
+  border: 0;
+  border-radius: 4px;
+  background: #c81e1e;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-align: center;
+  text-decoration: none;
 }
 .is-focused-entry {
   background: #ffe19a14;

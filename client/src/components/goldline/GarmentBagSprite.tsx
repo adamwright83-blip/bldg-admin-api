@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { Pencil } from "lucide-react";
-import type { VehicleCargoItem } from "./VehicleCargo";
+import { needsCharge, type VehicleCargoItem } from "./VehicleCargo";
 
 /**
  * The name a garment bag may show. Real data only — `firstName`/`lastName`
@@ -32,12 +32,13 @@ export function GarmentBagSprite({
 }) {
   const processed = item.state === "IN_VEHICLE_PROCESSED";
   const name = cargoDisplayName(item);
+  const chargeDue = needsCharge(item);
   return (
     <button
       type="button"
       className={`gl-cargo-garment ${processed ? "is-processed" : "is-unprocessed"}`}
       style={style}
-      aria-label={`${editable ? "Edit" : "View"} ${name ?? "customer"} cargo`}
+      aria-label={`${editable ? "Edit" : "View"} ${name ?? "customer"} cargo${chargeDue ? " — ready to charge" : ""}`}
       onClick={event => {
         event.stopPropagation();
         onSelect?.(item);
@@ -96,6 +97,9 @@ export function GarmentBagSprite({
         <span className="gl-cargo-garment-edit-hint" aria-hidden="true">
           <Pencil />
         </span>
+      ) : null}
+      {chargeDue ? (
+        <span className="gl-cargo-garment-charge-hint">READY TO CHARGE</span>
       ) : null}
     </button>
   );

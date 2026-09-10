@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   cargoSprite,
+  needsCharge,
   visibleCargo,
   type VehicleCargoItem,
 } from "./VehicleCargo";
@@ -51,4 +52,23 @@ describe("Vehicle Cargo home projection", () => {
     expect(result.visible.map(value => value.id)).toEqual([1, 2, 3, 4]);
     expect(result.overflow).toBe(2);
   });
+});
+
+describe("needsCharge — real payment truth only", () => {
+  it("flags order-sourced cargo whose order is confirmed unpaid", () =>
+    expect(
+      needsCharge({ ...item(1, "IN_VEHICLE_PROCESSED"), source: "order", paid: false })
+    ).toBe(true));
+  it("never flags a paid order", () =>
+    expect(
+      needsCharge({ ...item(1, "IN_VEHICLE_PROCESSED"), source: "order", paid: true })
+    ).toBe(false));
+  it("never flags field cargo, even if paid is somehow false", () =>
+    expect(
+      needsCharge({ ...item(1, "IN_VEHICLE_PROCESSED"), source: "field", paid: false })
+    ).toBe(false));
+  it("never flags cargo with no payment data loaded yet", () =>
+    expect(needsCharge({ ...item(1, "IN_VEHICLE_PROCESSED"), source: "order" })).toBe(
+      false
+    ));
 });

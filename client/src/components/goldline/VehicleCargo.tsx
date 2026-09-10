@@ -20,6 +20,12 @@ export type VehicleCargoItem = {
   notes?: string | null;
   linkedOrderId?: number | null;
   unlinked?: boolean;
+  /** Real payment truth from `orders`, order-sourced cargo only (see
+   *  server/goldlineCargo/cargoService.ts listCargo/listAtProcessor). Absent
+   *  for field cargo, which has no linked order to charge. */
+  paid?: boolean;
+  total?: number | null;
+  paidAt?: string | null;
   state: "IN_VEHICLE_UNPROCESSED" | "IN_VEHICLE_PROCESSED";
   appearance: {
     kind: "paper_bag" | "garment_bag";
@@ -53,6 +59,11 @@ export function cargoSprite(item: VehicleCargoItem) {
   return variant % 2
     ? `${ASSET}/cargo-unprocessed-paper-bag-a.jpg`
     : `${ASSET}/cargo-unprocessed-paper-bag-b.jpg`;
+}
+/** True only for order-linked cargo whose real order is confirmed unpaid.
+ *  Field cargo has no linked order and never shows a charge badge. */
+export function needsCharge(item: VehicleCargoItem): boolean {
+  return item.source === "order" && item.paid === false;
 }
 export function visibleCargo(cargo: VehicleCargoItem[]) {
   return {
@@ -448,6 +459,14 @@ export function VehicleCargo({
                           UNLINKED FIELD CARGO
                         </b>
                       ) : null}
+                      {needsCharge(item) ? (
+                        <b className="gl-cargo-charge-due">
+                          READY TO CHARGE
+                          {typeof item.total === "number" && item.total > 0
+                            ? ` · $${item.total.toFixed(2)}`
+                            : ""}
+                        </b>
+                      ) : null}
                       <small>{item.appearance.next}</small>
                     </span>
                   )}
@@ -479,6 +498,14 @@ export function VehicleCargo({
                     >
                       CONFIRM PROCESSOR HANDOFF
                     </button>
+                  ) : null}
+                  {!isEditing && needsCharge(item) ? (
+                    <a
+                      className="gl-cargo-charge-cta"
+                      href={`/intake?orderId=${item.id}`}
+                    >
+                      CHARGE THIS ORDER
+                    </a>
                   ) : null}
                 </article>
               );

@@ -96,8 +96,11 @@ export default function GoldlineDayPlanFixture({ state }: { state: string }) {
           },
           {
             id: 102,
+            source: "order",
             firstName: "Morgan",
             lastName: "Lane",
+            paid: false,
+            total: 48,
             state: "IN_VEHICLE_PROCESSED",
             appearance: {
               kind: "garment_bag",

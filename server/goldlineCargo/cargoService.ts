@@ -50,7 +50,7 @@ export async function listCargo(tenantId: string, vehicleId: string) {
   const nativeRows: any[] =
     (
       (await database.execute(
-        sql`SELECT c.state,c.vehicleId,c.transferredAt,c.evidenceJson,o.id,o.firstName,o.lastName,o.address,o.status,o.serviceType FROM goldline_vehicle_custody c JOIN orders o ON o.id=c.orderId AND o.tenantId=c.tenantId WHERE c.tenantId=${tenantId} AND c.vehicleId=${vehicleId} AND c.state IN ('IN_VEHICLE_UNPROCESSED','IN_VEHICLE_PROCESSED') AND o.status NOT IN ('delivered','cancelled') ORDER BY c.transferredAt,o.id`
+        sql`SELECT c.state,c.vehicleId,c.transferredAt,c.evidenceJson,o.id,o.firstName,o.lastName,o.address,o.status,o.serviceType,o.paid,o.total,o.paidAt FROM goldline_vehicle_custody c JOIN orders o ON o.id=c.orderId AND o.tenantId=c.tenantId WHERE c.tenantId=${tenantId} AND c.vehicleId=${vehicleId} AND c.state IN ('IN_VEHICLE_UNPROCESSED','IN_VEHICLE_PROCESSED') AND o.status NOT IN ('delivered','cancelled') ORDER BY c.transferredAt,o.id`
       )) as any
     )[0] ?? [];
   const fieldRows: any[] =
@@ -67,6 +67,9 @@ export async function listCargo(tenantId: string, vehicleId: string) {
         typeof row.evidenceJson === "string"
           ? JSON.parse(row.evidenceJson)
           : row.evidenceJson,
+      paid: Boolean(row.paid),
+      total: row.total == null ? null : Number(row.total),
+      paidAt: row.paidAt ? new Date(row.paidAt).toISOString() : null,
     })),
     ...fieldRows.map(row => ({
       id: `field:${row.id}`,
@@ -96,11 +99,18 @@ export async function listCargo(tenantId: string, vehicleId: string) {
 
 export async function listAtProcessor(tenantId: string) {
   const database = await db();
-  return ((
-    (await database.execute(
-      sql`SELECT c.state,c.vehicleId,c.transferredAt,c.evidenceJson,o.id,o.firstName,o.lastName,o.address,o.status FROM goldline_vehicle_custody c JOIN orders o ON o.id=c.orderId AND o.tenantId=c.tenantId WHERE c.tenantId=${tenantId} AND c.state='AT_PROCESSOR' AND o.status NOT IN ('delivered','cancelled') ORDER BY c.transferredAt,o.id`
-    )) as any
-  )[0] ?? []) as any[];
+  const rows: any[] =
+    (
+      (await database.execute(
+        sql`SELECT c.state,c.vehicleId,c.transferredAt,c.evidenceJson,o.id,o.firstName,o.lastName,o.address,o.status,o.paid,o.total,o.paidAt FROM goldline_vehicle_custody c JOIN orders o ON o.id=c.orderId AND o.tenantId=c.tenantId WHERE c.tenantId=${tenantId} AND c.state='AT_PROCESSOR' AND o.status NOT IN ('delivered','cancelled') ORDER BY c.transferredAt,o.id`
+      )) as any
+    )[0] ?? [];
+  return rows.map(row => ({
+    ...row,
+    paid: Boolean(row.paid),
+    total: row.total == null ? null : Number(row.total),
+    paidAt: row.paidAt ? new Date(row.paidAt).toISOString() : null,
+  }));
 }
 
 export async function listUnassignedPickedUp(tenantId: string) {
