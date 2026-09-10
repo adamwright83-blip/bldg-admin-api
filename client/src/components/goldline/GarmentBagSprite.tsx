@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { Pencil } from "lucide-react";
 import type { VehicleCargoItem } from "./VehicleCargo";
 
 /**
@@ -15,22 +16,32 @@ export function cargoDisplayName(item: VehicleCargoItem): string | null {
   return composed || null;
 }
 
-/** One hanging garment bag sprite, positioned by the caller. */
+/** One hanging garment bag sprite, positioned by the caller. Tappable —
+ *  the caller decides what tapping this exact item does (e.g. open it for
+ *  editing). */
 export function GarmentBagSprite({
   item,
   style,
+  onSelect,
+  editable,
 }: {
   item: VehicleCargoItem;
   style?: CSSProperties;
+  onSelect?: (item: VehicleCargoItem) => void;
+  editable?: boolean;
 }) {
   const processed = item.state === "IN_VEHICLE_PROCESSED";
   const name = cargoDisplayName(item);
   return (
-    <div
+    <button
+      type="button"
       className={`gl-cargo-garment ${processed ? "is-processed" : "is-unprocessed"}`}
       style={style}
-      role="img"
-      aria-label={`${name ?? "Customer"} cargo`}
+      aria-label={`${editable ? "Edit" : "View"} ${name ?? "customer"} cargo`}
+      onClick={event => {
+        event.stopPropagation();
+        onSelect?.(item);
+      }}
     >
       <svg
         className="gl-cargo-garment-art"
@@ -81,6 +92,11 @@ export function GarmentBagSprite({
           {name}
         </span>
       ) : null}
-    </div>
+      {editable ? (
+        <span className="gl-cargo-garment-edit-hint" aria-hidden="true">
+          <Pencil />
+        </span>
+      ) : null}
+    </button>
   );
 }

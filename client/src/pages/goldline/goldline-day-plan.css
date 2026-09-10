@@ -654,7 +654,7 @@
   position: fixed;
   z-index: 210;
   inset: 0 auto 0 0;
-  width: min(97vw, 460px);
+  width: min(82vw, 720px);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: max(24px, env(safe-area-inset-top)) 16px

@@ -16,6 +16,7 @@ import {
   listUnassignedPickedUp,
   proposeCargo,
   transferCustody,
+  updateFieldCargo,
 } from "./cargoService";
 
 function decodeAudio(dataUrl: string) {
@@ -164,6 +165,28 @@ export const goldlineCargoRouter = router({
         actorId: ctx.user.openId,
         fieldCargoId: input.fieldCargoId,
         orderId: input.orderId,
+      })
+    ),
+  update: procedure
+    .input(
+      z.object({
+        fieldCargoId: z.string().uuid(),
+        fields: cargoVoiceFieldsSchema.pick({
+          customerDisplayName: true,
+          itemDescription: true,
+          quantity: true,
+          serviceType: true,
+          processingState: true,
+          notes: true,
+        }),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      updateFieldCargo({
+        tenantId: ctx.tenantId,
+        vehicleId: ctx.user.openId,
+        fieldCargoId: input.fieldCargoId,
+        fields: input.fields,
       })
     ),
 });

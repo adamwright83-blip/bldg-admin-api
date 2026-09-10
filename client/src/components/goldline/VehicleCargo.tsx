@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { PackageOpen, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-import { GarmentBagSprite } from "./GarmentBagSprite";
+import { cargoDisplayName, GarmentBagSprite } from "./GarmentBagSprite";
 import "./vehicle-cargo.css";
 
 export type VehicleCargoItem = {
@@ -17,6 +17,7 @@ export type VehicleCargoItem = {
   quantity?: number | null;
   serviceType?: "wash_fold" | "dry_cleaning" | null;
   processingState?: "unknown" | "unprocessed" | "processed";
+  notes?: string | null;
   linkedOrderId?: number | null;
   unlinked?: boolean;
   state: "IN_VEHICLE_UNPROCESSED" | "IN_VEHICLE_PROCESSED";
@@ -60,14 +61,58 @@ export function visibleCargo(cargo: VehicleCargoItem[]) {
   };
 }
 
+/** Editable field set for an existing field-cargo entry — the same shape
+ *  the add flow already captures, minus vehicleAction/vehicleState which
+ *  don't apply to editing an item already in the vehicle. */
+export type CargoEditFields = {
+  customerDisplayName: string;
+  itemDescription: string;
+  quantity: number | null;
+  serviceType: "wash_fold" | "dry_cleaning" | null;
+  processingState: "unknown" | "unprocessed" | "processed";
+  notes: string | null;
+};
+type EditDraft = {
+  customerDisplayName: string;
+  itemDescription: string;
+  quantity: string;
+  serviceType: "" | "wash_fold" | "dry_cleaning";
+  processingState: "unknown" | "unprocessed" | "processed";
+  notes: string;
+};
+const draftFor = (item: VehicleCargoItem): EditDraft => ({
+  customerDisplayName: cargoDisplayName(item) ?? "",
+  itemDescription: item.itemDescription ?? "",
+  quantity: item.quantity != null ? String(item.quantity) : "",
+  serviceType: item.serviceType ?? "",
+  processingState: item.processingState ?? "unknown",
+  notes: item.notes ?? "",
+});
+
 export function VehicleCargo({
   mode = "floating",
   fixtureCargo,
+  onFixtureCargoUpdated,
 }: {
   mode?: "floating" | "hero";
   fixtureCargo?: VehicleCargoItem[];
+  /** Fixture/harness mode only — real mode saves through the update
+   *  mutation instead. Mirrors VehicleCargoCapture's onFixtureConfirmed. */
+  onFixtureCargoUpdated?: (
+    item: VehicleCargoItem,
+    fields: CargoEditFields
+  ) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [focusItemId, setFocusItemId] = useState<VehicleCargoItem["id"] | null>(
+    null
+  );
+  const [editingId, setEditingId] = useState<VehicleCargoItem["id"] | null>(
+    null
+  );
+  const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const articleRefs = useRef(new Map<VehicleCargoItem["id"], HTMLElement>());
   const onboarding = trpc.system.goldlineOnboarding.state.useQuery(undefined, {
     enabled: fixtureCargo === undefined,
     retry: false,
@@ -81,6 +126,18 @@ export function VehicleCargo({
   const transfer = trpc.system.goldlineCargo.transfer.useMutation({
     onSuccess: () => utils.system.goldlineCargo.state.invalidate(),
   });
+  const update = trpc.system.goldlineCargo.update.useMutation({
+    onSuccess: () => utils.system.goldlineCargo.state.invalidate(),
+  });
+  useEffect(() => {
+    if (!open || focusItemId == null) return;
+    const frame = requestAnimationFrame(() => {
+      articleRefs.current
+        .get(focusItemId)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [open, focusItemId]);
   const cargo = (fixtureCargo ?? state.data?.cargo ?? []) as VehicleCargoItem[];
   const unassigned = state.data?.unassigned ?? [],
     atProcessor = state.data?.atProcessor ?? [];
@@ -98,19 +155,87 @@ export function VehicleCargo({
   )
     return null;
   const projection = visibleCargo(cargo);
+  /** A bag on the car was tapped: open the cargo list already scrolled and
+   *  focused on THAT exact record. Field cargo opens straight into edit;
+   *  order-linked cargo has no free-text label of its own to edit, so it
+   *  opens to its existing real detail + handoff action instead. */
+  function selectItem(item: VehicleCargoItem) {
+    setEditError(null);
+    setOpen(true);
+    setFocusItemId(item.id);
+    if (item.source === "field") {
+      setEditingId(item.id);
+      setEditDraft(draftFor(item));
+    } else {
+      setEditingId(null);
+      setEditDraft(null);
+    }
+  }
+  function cancelEdit() {
+    setEditingId(null);
+    setEditDraft(null);
+    setEditError(null);
+  }
+  async function saveEdit(item: VehicleCargoItem) {
+    if (!editDraft) return;
+    const customerDisplayName = editDraft.customerDisplayName.trim();
+    const itemDescription = editDraft.itemDescription.trim();
+    if (!customerDisplayName || !itemDescription) {
+      setEditError("Name and item are required.");
+      return;
+    }
+    const fields: CargoEditFields = {
+      customerDisplayName,
+      itemDescription,
+      quantity: editDraft.quantity.trim() ? Number(editDraft.quantity) : null,
+      serviceType: editDraft.serviceType || null,
+      processingState: editDraft.processingState,
+      notes: editDraft.notes.trim() || null,
+    };
+    setEditError(null);
+    if (fixtureCargo !== undefined) {
+      onFixtureCargoUpdated?.(item, fields);
+      cancelEdit();
+      return;
+    }
+    try {
+      await update.mutateAsync({
+        fieldCargoId: item.fieldCargoId ?? String(item.id).replace(/^field:/, ""),
+        fields,
+      });
+      cancelEdit();
+    } catch (cause) {
+      setEditError(
+        cause instanceof Error ? cause.message : "Could not save this edit."
+      );
+    }
+  }
   return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
+    <Dialog.Root
+      open={open}
+      onOpenChange={next => {
+        setOpen(next);
+        if (!next) {
+          setFocusItemId(null);
+          cancelEdit();
+        }
+      }}
+    >
       <Dialog.Trigger asChild>
         <button
           data-testid="vehicle-cargo-cta"
           className={`gl-cargo-cta gl-cargo-cta--${mode} ${cargo.length ? "has-cargo" : "is-empty"}`}
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            setFocusItemId(null);
+            setOpen(true);
+          }}
         >
           {mode === "hero" ? (
             <div
               className="gl-cargo-hero-art"
               aria-label={`${cargo.length} customer orders in vehicle`}
             >
+              <div className="gl-cargo-ambient-glow" aria-hidden="true" />
               <img
                 className="gl-cargo-car"
                 src={CAR_ASSET}
@@ -120,12 +245,15 @@ export function VehicleCargo({
                   event.currentTarget.src = CAR_FALLBACK;
                 }}
               />
+              <div className="gl-cargo-sheen" aria-hidden="true" />
               <div className="gl-cargo-garments">
                 {projection.visible.map((item, index) => (
                   <GarmentBagSprite
                     key={item.id}
                     item={item}
                     style={SLOTS[index]}
+                    editable={item.source === "field"}
+                    onSelect={selectItem}
                   />
                 ))}
               </div>
@@ -159,7 +287,14 @@ export function VehicleCargo({
               <p>DRIVER · AUTHORITATIVE CUSTODY</p>
               <Dialog.Title>VEHICLE CARGO</Dialog.Title>
             </div>
-            <button onClick={() => setOpen(false)} aria-label="Close cargo">
+            <button
+              onClick={() => {
+                setOpen(false);
+                setFocusItemId(null);
+                cancelEdit();
+              }}
+              aria-label="Close cargo"
+            >
               <X />
             </button>
           </header>
@@ -167,48 +302,187 @@ export function VehicleCargo({
             What customer property is physically in my vehicle right now?
           </Dialog.Description>
           <section className="gl-cargo-list">
-            {cargo.map(item => (
-              <article key={item.id}>
-                <img src={cargoSprite(item)} alt="" />
-                <span>
-                  <strong>
-                    {item.customerDisplayName ??
-                      `${item.firstName ?? ""} ${item.lastName ?? ""}`.trim()}
-                  </strong>
-                  <em>
-                    {item.quantity ? `${item.quantity} ` : ""}
-                    {item.itemDescription ?? item.appearance.condition}
-                  </em>
-                  {item.serviceType ? (
-                    <small>
-                      {item.serviceType === "dry_cleaning"
-                        ? "DRY CLEANING"
-                        : "WASH & FOLD"}
-                    </small>
+            {cargo.map(item => {
+              const isEditing = editingId === item.id && editDraft;
+              return (
+                <article
+                  key={item.id}
+                  ref={el => {
+                    if (el) articleRefs.current.set(item.id, el);
+                    else articleRefs.current.delete(item.id);
+                  }}
+                  className={
+                    focusItemId === item.id ? "is-focused-entry" : undefined
+                  }
+                >
+                  <img src={cargoSprite(item)} alt="" />
+                  {isEditing && editDraft ? (
+                    <form
+                      className="gl-cargo-edit-form"
+                      onSubmit={event => {
+                        event.preventDefault();
+                        void saveEdit(item);
+                      }}
+                    >
+                      <label>
+                        NAME
+                        <input
+                          value={editDraft.customerDisplayName}
+                          onChange={event =>
+                            setEditDraft({
+                              ...editDraft,
+                              customerDisplayName: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        ITEM
+                        <input
+                          value={editDraft.itemDescription}
+                          onChange={event =>
+                            setEditDraft({
+                              ...editDraft,
+                              itemDescription: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        QUANTITY
+                        <input
+                          inputMode="numeric"
+                          value={editDraft.quantity}
+                          onChange={event =>
+                            setEditDraft({
+                              ...editDraft,
+                              quantity: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        SERVICE
+                        <select
+                          value={editDraft.serviceType}
+                          onChange={event =>
+                            setEditDraft({
+                              ...editDraft,
+                              serviceType: event.target
+                                .value as EditDraft["serviceType"],
+                            })
+                          }
+                        >
+                          <option value="">UNKNOWN</option>
+                          <option value="dry_cleaning">DRY CLEANING</option>
+                          <option value="wash_fold">WASH &amp; FOLD</option>
+                        </select>
+                      </label>
+                      <label>
+                        STATE
+                        <select
+                          value={editDraft.processingState}
+                          onChange={event =>
+                            setEditDraft({
+                              ...editDraft,
+                              processingState: event.target
+                                .value as EditDraft["processingState"],
+                            })
+                          }
+                        >
+                          <option value="unknown">UNKNOWN</option>
+                          <option value="unprocessed">UNPROCESSED</option>
+                          <option value="processed">PROCESSED</option>
+                        </select>
+                      </label>
+                      <label className="is-wide">
+                        NOTES
+                        <input
+                          value={editDraft.notes}
+                          onChange={event =>
+                            setEditDraft({
+                              ...editDraft,
+                              notes: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      {editError ? (
+                        <p role="alert" className="gl-cargo-edit-error">
+                          {editError}
+                        </p>
+                      ) : null}
+                      <div className="gl-cargo-edit-actions">
+                        <button type="button" onClick={cancelEdit}>
+                          CANCEL
+                        </button>
+                        <button
+                          type="submit"
+                          className="is-primary"
+                          disabled={update.isPending}
+                        >
+                          SAVE
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <span>
+                      <strong>
+                        {item.customerDisplayName ??
+                          `${item.firstName ?? ""} ${item.lastName ?? ""}`.trim()}
+                      </strong>
+                      <em>
+                        {item.quantity ? `${item.quantity} ` : ""}
+                        {item.itemDescription ?? item.appearance.condition}
+                      </em>
+                      {item.serviceType ? (
+                        <small>
+                          {item.serviceType === "dry_cleaning"
+                            ? "DRY CLEANING"
+                            : "WASH & FOLD"}
+                        </small>
+                      ) : null}
+                      {item.notes ? <small>{item.notes}</small> : null}
+                      {item.unlinked ? (
+                        <b className="gl-cargo-unlinked">
+                          UNLINKED FIELD CARGO
+                        </b>
+                      ) : null}
+                      <small>{item.appearance.next}</small>
+                    </span>
+                  )}
+                  {!isEditing && item.source === "field" ? (
+                    <button
+                      className="gl-cargo-edit-trigger"
+                      onClick={() => {
+                        setEditError(null);
+                        setEditingId(item.id);
+                        setEditDraft(draftFor(item));
+                      }}
+                    >
+                      EDIT
+                    </button>
                   ) : null}
-                  {item.unlinked ? (
-                    <b className="gl-cargo-unlinked">UNLINKED FIELD CARGO</b>
+                  {!isEditing &&
+                  item.source !== "field" &&
+                  typeof item.id === "number" &&
+                  item.state === "IN_VEHICLE_UNPROCESSED" ? (
+                    <button
+                      disabled={transfer.isPending}
+                      onClick={() =>
+                        transfer.mutate({
+                          orderId: Number(item.id),
+                          to: "AT_PROCESSOR",
+                          confirmed: true,
+                        })
+                      }
+                    >
+                      CONFIRM PROCESSOR HANDOFF
+                    </button>
                   ) : null}
-                  <small>{item.appearance.next}</small>
-                </span>
-                {item.source !== "field" &&
-                typeof item.id === "number" &&
-                item.state === "IN_VEHICLE_UNPROCESSED" ? (
-                  <button
-                    disabled={transfer.isPending}
-                    onClick={() =>
-                      transfer.mutate({
-                        orderId: Number(item.id),
-                        to: "AT_PROCESSOR",
-                        confirmed: true,
-                      })
-                    }
-                  >
-                    CONFIRM PROCESSOR HANDOFF
-                  </button>
-                ) : null}
-              </article>
-            ))}
+                </article>
+              );
+            })}
             {!cargo.length ? (
               <p>NO CUSTOMER PROPERTY RECORDED IN THIS VEHICLE</p>
             ) : null}

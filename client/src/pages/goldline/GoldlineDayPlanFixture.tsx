@@ -76,9 +76,17 @@ export default function GoldlineDayPlanFixture({ state }: { state: string }) {
       ? []
       : [
           {
-            id: 101,
+            id: "field:fixture-101",
+            source: "field",
+            fieldCargoId: "fixture-101",
             firstName: "Avery",
             lastName: "Stone",
+            customerDisplayName: "Avery Stone",
+            itemDescription: "two pairs of pants",
+            quantity: 2,
+            serviceType: "dry_cleaning",
+            processingState: "unprocessed",
+            unlinked: true,
             state: "IN_VEHICLE_UNPROCESSED",
             appearance: {
               kind: "paper_bag",
@@ -98,9 +106,17 @@ export default function GoldlineDayPlanFixture({ state }: { state: string }) {
             },
           },
           {
-            id: 103,
+            id: "field:fixture-103",
+            source: "field",
+            fieldCargoId: "fixture-103",
             firstName: "Jordan",
             lastName: "Pike",
+            customerDisplayName: "Jordan Pike",
+            itemDescription: "laundry",
+            quantity: null,
+            serviceType: "wash_fold",
+            processingState: "unprocessed",
+            unlinked: true,
             state: "IN_VEHICLE_UNPROCESSED",
             appearance: {
               kind: "paper_bag",

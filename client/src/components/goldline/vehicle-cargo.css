@@ -87,6 +87,94 @@
   mix-blend-mode: screen;
   opacity: 0.52;
 }
+/*
+ * "Car effect" — a restrained, self-contained pair of decorative layers so
+ * the transparent vehicle reads as alive without being gaudy or
+ * performance-heavy. Both only animate `opacity`/`transform` (cheap,
+ * compositor-only) and are easy to retune or swap independently:
+ *   - .gl-cargo-ambient-glow: a soft teal/gold halo breathing behind the
+ *     car, brighter once .has-cargo is true (echoes the existing green
+ *     "has cargo" signal elsewhere in this file).
+ *   - .gl-cargo-sheen: a single warm diagonal highlight that sweeps across
+ *     the glass on a slow loop, like light catching the windshield.
+ */
+.gl-cargo-ambient-glow {
+  position: absolute;
+  inset: -8%;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(
+    ellipse at 50% 55%,
+    rgba(46, 196, 182, 0.32),
+    rgba(212, 175, 55, 0.14) 45%,
+    transparent 72%
+  );
+  filter: blur(18px);
+  opacity: 0.45;
+  animation: gl-cargo-ambient-pulse 6s ease-in-out infinite;
+}
+.gl-cargo-cta--hero.has-cargo .gl-cargo-ambient-glow {
+  background: radial-gradient(
+    ellipse at 50% 55%,
+    rgba(60, 241, 119, 0.38),
+    rgba(212, 175, 55, 0.16) 45%,
+    transparent 72%
+  );
+}
+@keyframes gl-cargo-ambient-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.03);
+  }
+}
+.gl-cargo-sheen {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.gl-cargo-sheen::after {
+  content: "";
+  position: absolute;
+  top: -25%;
+  bottom: -25%;
+  left: -55%;
+  width: 35%;
+  background: linear-gradient(
+    75deg,
+    transparent,
+    rgba(255, 231, 162, 0.16) 45%,
+    rgba(255, 255, 255, 0.26) 50%,
+    rgba(255, 231, 162, 0.16) 55%,
+    transparent
+  );
+  animation: gl-cargo-sheen-sweep 8s ease-in-out infinite;
+}
+@keyframes gl-cargo-sheen-sweep {
+  0% {
+    transform: translateX(0);
+  }
+  30% {
+    transform: translateX(340%);
+  }
+  100% {
+    transform: translateX(340%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gl-cargo-ambient-glow,
+  .gl-cargo-sheen::after {
+    animation: none;
+  }
+}
 .gl-cargo-garments {
   position: absolute;
   inset: 0;
@@ -98,6 +186,20 @@
   aspect-ratio: 100 / 150;
   transform: translate(-50%, -50%);
   filter: drop-shadow(0 2px 4px #000a);
+  /* Reset — this is a <button> so it's a real tap target, not just an
+     <img>, but it must look exactly like the plain sprite it replaced. */
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.gl-cargo-garment:focus-visible {
+  outline: 2px solid #ffe19a;
+  outline-offset: 3px;
 }
 .gl-cargo-garment.is-processed {
   width: 36%;
@@ -106,6 +208,26 @@
   display: block;
   width: 100%;
   height: 100%;
+}
+.gl-cargo-garment-edit-hint {
+  position: absolute;
+  top: -4%;
+  right: -4%;
+  display: grid;
+  place-items: center;
+  width: 22%;
+  aspect-ratio: 1;
+  min-width: 16px;
+  max-width: 22px;
+  background: linear-gradient(160deg, #f2c766, #c9962e);
+  border: 1px solid #7a5a17;
+  border-radius: 50%;
+  color: #241a06;
+  box-shadow: 0 2px 5px #0008;
+}
+.gl-cargo-garment-edit-hint svg {
+  width: 55%;
+  height: 55%;
 }
 .gl-cargo-garment-name {
   position: absolute;
@@ -209,6 +331,9 @@
   border-top: 1px solid #ffffff22;
   padding: 12px;
 }
+.gl-cargo-list article:has(.gl-cargo-edit-form) {
+  align-items: flex-start;
+}
 .gl-cargo-list img {
   width: 84px;
   height: 84px;
@@ -243,6 +368,79 @@
   padding: 8px;
   background: #74db9f;
   border: 0;
+}
+.is-focused-entry {
+  background: #ffe19a14;
+  box-shadow: inset 3px 0 0 #e1b65c;
+}
+button.gl-cargo-edit-trigger {
+  align-self: flex-start;
+  padding: 8px 10px;
+  border: 1px solid #e1b65c88;
+  border-radius: 6px;
+  background: transparent;
+  color: #ffe19a;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+.gl-cargo-edit-form {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 10px;
+}
+.gl-cargo-edit-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #9db3a7;
+}
+.gl-cargo-edit-form label.is-wide {
+  grid-column: 1 / -1;
+}
+.gl-cargo-edit-form input,
+.gl-cargo-edit-form select {
+  padding: 7px 8px;
+  border: 1px solid #3d5850;
+  border-radius: 5px;
+  background: #06181c;
+  color: #eaf4ef;
+  font-size: 12px;
+}
+.gl-cargo-edit-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid #a85e4c;
+  border-radius: 5px;
+  background: #481a18a8;
+  color: #ffd9cd;
+  font-size: 10px;
+}
+.gl-cargo-edit-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+.gl-cargo-edit-actions button {
+  flex: 1;
+  padding: 9px;
+  border: 1px solid #71817c;
+  border-radius: 6px;
+  background: transparent;
+  color: #eaf4ef;
+  font-size: 11px;
+  font-weight: 800;
+}
+.gl-cargo-edit-actions button.is-primary {
+  border-color: #e1b65c;
+  background: linear-gradient(#ffe76b, #e9a91d);
+  color: #191408;
 }
 .gl-cargo-view footer {
   max-width: 760px;

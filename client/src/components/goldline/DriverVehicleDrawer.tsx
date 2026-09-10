@@ -211,7 +211,40 @@ export function DriverVehicleDrawer({
             }
           />
           <div className="gdp-garage-vehicle">
-            <VehicleCargo mode="hero" fixtureCargo={fixtureCargo} />
+            <VehicleCargo
+              mode="hero"
+              fixtureCargo={fixtureCargo}
+              onFixtureCargoUpdated={(item, fields) =>
+                setFixtureCargo(current =>
+                  (current ?? []).map(existing =>
+                    existing.id === item.id
+                      ? {
+                          ...existing,
+                          firstName: fields.customerDisplayName,
+                          customerDisplayName: fields.customerDisplayName,
+                          itemDescription: fields.itemDescription,
+                          quantity: fields.quantity,
+                          serviceType: fields.serviceType,
+                          processingState: fields.processingState,
+                          notes: fields.notes,
+                          state:
+                            fields.processingState === "processed"
+                              ? "IN_VEHICLE_PROCESSED"
+                              : "IN_VEHICLE_UNPROCESSED",
+                          appearance: {
+                            kind:
+                              fields.processingState === "processed"
+                                ? "garment_bag"
+                                : "paper_bag",
+                            condition: fields.itemDescription,
+                            next: existing.appearance.next,
+                          },
+                        }
+                      : existing
+                  )
+                )
+              }
+            />
           </div>
           <p className="gdp-garage-hint">
             Tap the vehicle to inspect cargo & handoffs. Record what you load.

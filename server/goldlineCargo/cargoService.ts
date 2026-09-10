@@ -87,6 +87,7 @@ export async function listCargo(tenantId: string, vehicleId: string) {
       linkedOrderId:
         row.linkedOrderId == null ? null : Number(row.linkedOrderId),
       unlinked: row.linkedOrderId == null,
+      notes: row.notes,
       transcript: row.transcript,
       confirmedAt: new Date(row.confirmedAt).toISOString(),
     })),
@@ -348,6 +349,39 @@ export async function confirmCargo(input: {
     id: String(stored[0]?.id ?? id),
     state: "IN_VEHICLE" as const,
   };
+}
+
+/**
+ * Edits an existing field-cargo entry in place — the same row the on-car
+ * garment bag / cargo list article already renders, identified by its real
+ * id. Scoped to this vehicle's own still-in-vehicle cargo so a driver can
+ * only edit their own current custody, never another vehicle's record or
+ * one that has already moved on (AT_PROCESSOR/REMOVED).
+ */
+export async function updateFieldCargo(input: {
+  tenantId: string;
+  vehicleId: string;
+  fieldCargoId: string;
+  fields: Pick<
+    CargoVoiceFields,
+    | "customerDisplayName"
+    | "itemDescription"
+    | "quantity"
+    | "serviceType"
+    | "processingState"
+    | "notes"
+  >;
+}) {
+  const database = await db();
+  const result: any = await database.execute(
+    sql`UPDATE goldline_field_cargo SET customerDisplayName=${input.fields.customerDisplayName},itemDescription=${input.fields.itemDescription},quantity=${input.fields.quantity},serviceType=${input.fields.serviceType},processingState=${input.fields.processingState},notes=${input.fields.notes} WHERE tenantId=${input.tenantId} AND id=${input.fieldCargoId} AND vehicleId=${input.vehicleId} AND vehicleState='IN_VEHICLE'`
+  );
+  const updated = Number(result?.[0]?.affectedRows ?? 0) === 1;
+  if (!updated)
+    throw new Error(
+      "That cargo entry is no longer in this vehicle, so it can't be edited here."
+    );
+  return { updated: true as const, id: input.fieldCargoId };
 }
 
 export async function linkFieldCargo(input: {
