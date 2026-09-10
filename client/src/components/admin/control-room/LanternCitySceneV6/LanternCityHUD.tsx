@@ -8,7 +8,10 @@ import {
   DollarSign,
   Lamp,
   CalendarDays,
+  Plus,
+  X,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { CityScene } from "./sceneTypes";
 import { rectStyle } from "./LanternCitySceneRenderer";
 import { LANTERN_CITY_V5_ASSETS as ASSETS } from "@/components/goldline/lanternCityV5Assets";
@@ -102,6 +105,7 @@ export function LanternCityHUD({
   onCommand,
   onLaunch,
   onKnownLight,
+  onNewOrder,
 }: {
   scene: CityScene;
   overview?: Overview;
@@ -112,8 +116,22 @@ export function LanternCityHUD({
   onCommand: (command: Command) => void;
   onLaunch: () => void;
   onKnownLight: (identityKey: string) => void;
+  onNewOrder: () => void;
 }) {
   const operation = overview?.featuredOperation;
+  const [campaignOpen, setCampaignOpen] = useState(false);
+  const [intelligenceOpen, setIntelligenceOpen] = useState(false);
+  useEffect(() => {
+    if (!campaignOpen && !intelligenceOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setCampaignOpen(false);
+      setIntelligenceOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [campaignOpen, intelligenceOpen]);
+  const primaryObjective = operation?.objectives[0];
   return (
     <>
       <header
@@ -195,11 +213,66 @@ export function LanternCityHUD({
           </span>
         </div>
       </section>
+      <article
+        className={styles.mobileQuest}
+        style={rectStyle(scene.hud.leftOperation)}
+        aria-label="Featured operation quick actions"
+      >
+        <button
+          type="button"
+          className={styles.mobileQuestDetails}
+          onClick={() => setCampaignOpen(true)}
+          aria-expanded={campaignOpen}
+        >
+          <small>FEATURED OPERATION</small>
+          <strong>{operation?.title ?? "CITY STANDING BY"}</strong>
+          <span>{operation?.briefing ?? "Loading real work…"}</span>
+          {primaryObjective ? (
+            <b>{primaryObjective.current} / {primaryObjective.target}</b>
+          ) : null}
+        </button>
+        <button
+          type="button"
+          className={styles.mobileQuestLaunch}
+          onClick={onLaunch}
+          disabled={!operation}
+        >
+          LAUNCH OPERATION <span>→</span>
+        </button>
+      </article>
+      <button
+        type="button"
+        className={styles.mobileIntelligenceButton}
+        style={rectStyle(scene.hud.rightDossier)}
+        onClick={() => setIntelligenceOpen(true)}
+        aria-expanded={intelligenceOpen}
+        aria-controls="lantern-city-intelligence"
+      >
+        CITY INTELLIGENCE
+      </button>
+      {campaignOpen || intelligenceOpen ? (
+        <button
+          type="button"
+          className={styles.mobileSheetBackdrop}
+          aria-label="Close city panel"
+          onClick={() => {
+            setCampaignOpen(false);
+            setIntelligenceOpen(false);
+          }}
+        />
+      ) : null}
       <aside
-        className={styles.operation}
+        className={`${styles.operation} ${campaignOpen ? styles.mobileSheetOpen : ""}`}
         style={rectStyle(scene.hud.leftOperation)}
         data-hud-zone="leftOperation"
+        aria-hidden={!campaignOpen ? undefined : false}
       >
+        <button
+          type="button"
+          className={styles.mobileSheetClose}
+          onClick={() => setCampaignOpen(false)}
+          aria-label="Close campaign information"
+        ><X aria-hidden /></button>
         <h2>FEATURED OPERATION</h2>
         <div className={styles.operationHero} aria-hidden>
           {operation?.territoryId && operation.environment ? (
@@ -253,10 +326,18 @@ export function LanternCityHUD({
         </div>
       </aside>
       <aside
-        className={styles.dossier}
+        id="lantern-city-intelligence"
+        className={`${styles.dossier} ${intelligenceOpen ? styles.mobileSheetOpen : ""}`}
         style={rectStyle(scene.hud.rightDossier)}
         data-hud-zone="rightDossier"
+        aria-hidden={!intelligenceOpen ? undefined : false}
       >
+        <button
+          type="button"
+          className={styles.mobileSheetClose}
+          onClick={() => setIntelligenceOpen(false)}
+          aria-label="Close city intelligence"
+        ><X aria-hidden /></button>
         <header>
           <h2>
             {dossier?.territoryName ??
@@ -359,6 +440,15 @@ export function LanternCityHUD({
           </button>
         ))}
       </nav>
+      <button
+        type="button"
+        className={styles.newOrderFab}
+        onClick={onNewOrder}
+        aria-label="New Order"
+        data-new-order-fab
+      >
+        <Plus aria-hidden />
+      </button>
     </>
   );
 }

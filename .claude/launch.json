@@ -34,6 +34,19 @@
       "port": 5173
     },
     {
+      "name": "goldline-verify-visual",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "VITE_ADMIN_VISUAL_TEST=1",
+        "npx",
+        "vite",
+        "--port",
+        "5178",
+        "--strictPort"
+      ],
+      "port": 5178
+    },
+    {
       "name": "goldline-expedition-stage1",
       "runtimeExecutable": "env",
       "runtimeArgs": [

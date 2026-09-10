@@ -397,6 +397,7 @@ export default function LanternCityScene({
           );
           setInspect(true);
         }}
+        onNewOrder={() => onNavigate("/new-order")}
       />
       {command !== "map" ? (
         <Room

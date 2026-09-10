@@ -68,6 +68,23 @@ export function territoryStateText(params: {
     : `${territoryVisualStateLabel(state)} · ${objectCustomerCount} customer${objectCustomerCount === 1 ? "" : "s"}`;
 }
 export function hudLayout(width: number, height: number) {
+  if (width <= 767) {
+    return {
+      // Capped at 200 for normal phones, but shrunk further on very narrow
+      // screens (e.g. 360px) so it never runs into the CITY INTELLIGENCE
+      // pill sitting at `width - 158` in the same row.
+      identity: { x: 10, y: 6, width: Math.min(200, width - 180), height: 48 },
+      topBar: { x: 8, y: 60, width: width - 16, height: 66 },
+      leftOperation: {
+        x: 10,
+        y: Math.max(136, height - 260),
+        width: Math.min(258, width - 92),
+        height: 154,
+      },
+      rightDossier: { x: width - 158, y: 7, width: 148, height: 44 },
+      deck: { x: 8, y: height - 82, width: width - 16, height: 74 },
+    };
+  }
   const compact = width < 1400;
   const leftWidth = compact ? 258 : width < 1700 ? 286 : 330;
   const rightWidth = compact ? 264 : width < 1700 ? 292 : 330;

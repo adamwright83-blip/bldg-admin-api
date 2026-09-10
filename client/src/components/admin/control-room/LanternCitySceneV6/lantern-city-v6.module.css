@@ -656,6 +656,20 @@
   font-size: 10px;
   color: #b8c7d0;
 }
+/*
+ * Mobile-only HUD elements (compact quest card, city intelligence button,
+ * sheet backdrop/close, New Order FAB). Hidden by default so the desktop
+ * layout — which shares the same rects/DOM nodes for the underlying
+ * .operation/.dossier panels — is completely unaffected; the phone
+ * breakpoint block further down is the only place that reveals them.
+ */
+.mobileQuest,
+.mobileIntelligenceButton,
+.mobileSheetBackdrop,
+.mobileSheetClose,
+.newOrderFab {
+  display: none;
+}
 .notice {
   position: absolute;
   z-index: 6;
@@ -751,6 +765,262 @@
   }
   .dossier > header h2 {
     font-size: 17px;
+  }
+}
+/*
+ * Phone breakpoint. Only this block may change mobile layout — everything
+ * above (including the 1399px "compact desktop" tier) stays untouched, and
+ * nothing here is reachable above 767px. The world stage itself needs no
+ * change: `.world { position: absolute; inset: 0 }` is already full-bleed
+ * behind the HUD, so shrinking the side panels down to a small card/button
+ * (via composeLanternCityScene's mobile hudLayout branch) is what actually
+ * gives the map its width back — these rules only style what that layout
+ * now positions.
+ */
+@media (max-width: 767px) {
+  .identity {
+    gap: 6px;
+  }
+  .identity > svg {
+    width: 22px;
+    height: 28px;
+  }
+  .identity > div {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    min-width: 0;
+  }
+  .identity span {
+    font-size: 8px;
+    letter-spacing: 0.12em;
+    white-space: nowrap;
+  }
+  .identity h1 {
+    margin: 0;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .identity small {
+    display: none;
+  }
+
+  .scoreboard {
+    display: flex;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .scoreboard::-webkit-scrollbar {
+    display: none;
+  }
+  .scoreboard > div {
+    flex: 0 0 auto;
+    min-width: 128px;
+  }
+  .overviewError {
+    flex: 0 0 100%;
+  }
+  .dateContext {
+    flex: 0 0 auto;
+  }
+
+  /* Compact floating quest card replacing the permanent left column. */
+  .mobileQuest {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 10px;
+    background: linear-gradient(160deg, #0b2a3ad9, #04141dcc);
+    border: 1px solid #d5a22c;
+    border-radius: 12px;
+    box-shadow:
+      inset 0 0 16px #1884b51a,
+      0 4px 14px #0009;
+    color: #fff0c4;
+  }
+  .mobileQuestDetails {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    text-align: left;
+  }
+  .mobileQuestDetails > small {
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    color: #ffd84f;
+    text-transform: uppercase;
+  }
+  .mobileQuestDetails > strong {
+    font:
+      700 14px/1.1 Georgia,
+      serif;
+    color: #ffe8a2;
+  }
+  .mobileQuestDetails > span {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 11px;
+    line-height: 1.25;
+    color: #d9e6ec;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  .mobileQuestDetails > b {
+    font-size: 11px;
+    color: white;
+  }
+  /* `button.` (not just `.mobileQuestLaunch`) so this beats the shared
+     `.scene button { font: inherit }` reset above at equal specificity via
+     source order — a bare class selector here would lose that fight and
+     the button would render at the browser-default font size instead. */
+  button.mobileQuestLaunch {
+    padding: 9px;
+    border: 1px solid #fff0a0;
+    border-radius: 7px;
+    background: linear-gradient(#ffe76b, #e9a91d);
+    color: #191408;
+    font-size: 12px;
+    font-weight: 900;
+  }
+  .mobileQuestLaunch:disabled {
+    opacity: 0.5;
+  }
+  .mobileQuestLaunch span {
+    margin-left: 4px;
+  }
+
+  /* Small tappable replacement for the permanent right column. `button.`
+     prefix for the same specificity reason as .mobileQuestLaunch above. */
+  button.mobileIntelligenceButton {
+    display: flex;
+    overflow: hidden;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 10px;
+    background: linear-gradient(160deg, #0b2a3aee, #04141df7);
+    border: 1px solid #d5a22c;
+    border-radius: 999px;
+    box-shadow: 0 3px 10px #0008;
+    color: #ffe8a2;
+    font-size: 9px;
+    font-weight: 800;
+    line-height: 1.2;
+    letter-spacing: 0.08em;
+    text-align: center;
+  }
+
+  .mobileSheetBackdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    border: none;
+    padding: 0;
+    background: #030d15b3;
+  }
+
+  /* On-demand sheets: the same .operation/.dossier panels desktop always
+     shows, converted to hidden-unless-open bottom sheets on phone. */
+  .operation,
+  .dossier {
+    display: none;
+  }
+  .operation.mobileSheetOpen,
+  .dossier.mobileSheetOpen {
+    position: fixed !important;
+    top: auto !important;
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 10px !important;
+    z-index: 50;
+    display: block;
+    width: auto !important;
+    height: min(70dvh, 520px) !important;
+    max-height: 80dvh;
+    overflow-y: auto;
+    border-radius: 16px;
+  }
+  .operation .mobileSheetClose,
+  .dossier .mobileSheetClose {
+    display: flex;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 2;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: 1px solid #d5a22c;
+    border-radius: 50%;
+    background: #0c2738;
+    color: #ffe8a2;
+  }
+  .operation .mobileSheetClose svg,
+  .dossier .mobileSheetClose svg {
+    width: 16px;
+    height: 16px;
+  }
+  /* The dossier header's own HOLDING/NEEDS ATTENTION badge sits at the same
+     right edge as the close button above it — reserve room so they don't
+     collide. */
+  .dossier.mobileSheetOpen > header {
+    padding-right: 44px;
+  }
+
+  /* Bottom command bar: keep every section, just compact + safe-area aware. */
+  .deck {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .deck button {
+    padding: 5px 2px;
+    gap: 2px;
+  }
+  .deck svg {
+    width: 16px;
+    height: 16px;
+  }
+  .deck strong {
+    font-size: 8px;
+  }
+  .deck small {
+    display: none;
+  }
+
+  /* Fast New Order entry. Lower-right, clear of the command deck below it. */
+  .newOrderFab {
+    display: flex;
+    position: absolute;
+    right: 16px;
+    bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+    z-index: 20;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+    height: 60px;
+    border: 2px solid #f2c766;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #1c4a63, #0a2333 70%);
+    box-shadow:
+      0 0 0 1px #0009,
+      0 6px 18px #000b,
+      0 0 22px #f2c76655;
+    color: #ffe8a2;
+  }
+  .newOrderFab svg {
+    width: 28px;
+    height: 28px;
+  }
+  .newOrderFab:active {
+    transform: scale(0.95);
   }
 }
 @media (prefers-reduced-motion: reduce) {
