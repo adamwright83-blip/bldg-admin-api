@@ -2,6 +2,7 @@ import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { PackageOpen, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { GarmentBagSprite } from "./GarmentBagSprite";
 import "./vehicle-cargo.css";
 
 export type VehicleCargoItem = {
@@ -119,14 +120,12 @@ export function VehicleCargo({
                   event.currentTarget.src = CAR_FALLBACK;
                 }}
               />
-              <div className="gl-cargo-sprites">
+              <div className="gl-cargo-garments">
                 {projection.visible.map((item, index) => (
-                  <img
+                  <GarmentBagSprite
                     key={item.id}
-                    className={`gl-cargo-sprite ${item.state === "IN_VEHICLE_PROCESSED" ? "is-processed" : "is-unprocessed"}`}
+                    item={item}
                     style={SLOTS[index]}
-                    src={cargoSprite(item)}
-                    alt={`${item.firstName ?? "Customer"} ${item.lastName ?? ""} cargo`}
                   />
                 ))}
               </div>

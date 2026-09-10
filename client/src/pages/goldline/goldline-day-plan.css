@@ -654,10 +654,10 @@
   position: fixed;
   z-index: 210;
   inset: 0 auto 0 0;
-  width: min(90vw, 420px);
+  width: min(97vw, 460px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: max(24px, env(safe-area-inset-top)) 20px
+  padding: max(24px, env(safe-area-inset-top)) 16px
     max(24px, env(safe-area-inset-bottom));
   border-right: 2px solid #b69a59;
   color: #f9ecc9;
@@ -786,17 +786,20 @@
 .gdp-garage .gl-cargo-cta--hero {
   position: relative;
   display: block;
+  box-sizing: border-box;
   inset: auto;
-  width: min(100%, 260px);
-  height: 400px;
+  width: 100%;
+  height: auto;
+  padding-bottom: 72px;
   margin: auto;
   animation: gdp-unfold 0.6s 0.1s both;
   transform-origin: center bottom;
 }
 .gdp-garage .gl-cargo-hero-art {
-  height: 338px;
+  height: auto;
+  aspect-ratio: 1024 / 1280;
   border: 0;
-  border-radius: 34% 34% 20% 20%;
+  border-radius: 22% 22% 12% 12%;
   background: transparent;
   box-shadow: none;
   mix-blend-mode: screen;
@@ -1161,10 +1164,8 @@
     margin-bottom: 12px;
   }
   .gdp-garage .gl-cargo-cta--hero {
-    height: 330px;
-  }
-  .gdp-garage .gl-cargo-hero-art {
-    height: 270px;
+    width: 78%;
+    padding-bottom: 60px;
   }
 }
 @keyframes gdp-unlock {
@@ -1257,25 +1258,20 @@
   }
 }
 
-.gdp-garage .gl-cargo-sprites {
+.gdp-garage .gl-cargo-garments {
   inset: 0 16%;
 }
-.gdp-garage .gl-cargo-sprite {
-  width: 29%;
-  height: 17%;
-  object-fit: contain;
+.gdp-garage .gl-cargo-garment {
+  width: 34%;
 }
-.gdp-garage .gl-cargo-sprite.is-processed {
-  width: 33%;
-  height: 20%;
+.gdp-garage .gl-cargo-garment.is-processed {
+  width: 38%;
 }
-/* Give black-matted source layers a painted backdrop to screen against, even
-   while the unfolding animation creates its own stacking context. */
+/* Give the car art's soft, semi-transparent edges a painted backdrop
+   consistent with the drawer's own background, even while the unfolding
+   animation creates its own stacking context. */
 .gdp-garage .gl-cargo-hero-art {
   background: #103129;
-}
-.gdp-garage .gl-cargo-sprites {
-  mix-blend-mode: screen;
 }
 .gdp-garage .gl-cargo-overflow {
   bottom: 13%;

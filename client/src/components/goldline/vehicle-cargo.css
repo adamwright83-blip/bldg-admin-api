@@ -87,23 +87,45 @@
   mix-blend-mode: screen;
   opacity: 0.52;
 }
-.gl-cargo-sprites {
+.gl-cargo-garments {
   position: absolute;
   inset: 0;
   z-index: 3;
 }
-.gl-cargo-sprite {
+.gl-cargo-garment {
   position: absolute;
   width: 30%;
-  height: 19%;
-  object-fit: cover;
+  aspect-ratio: 100 / 150;
   transform: translate(-50%, -50%);
-  mix-blend-mode: screen;
-  filter: drop-shadow(0 2px 4px #000);
+  filter: drop-shadow(0 2px 4px #000a);
 }
-.gl-cargo-sprite.is-processed {
-  width: 38%;
-  height: 23%;
+.gl-cargo-garment.is-processed {
+  width: 36%;
+}
+.gl-cargo-garment-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.gl-cargo-garment-name {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  max-width: 94%;
+  padding: 2px 4px;
+  overflow: hidden;
+  color: #ffe8a2;
+  background: #04141dcc;
+  border: 1px solid #d5a22c88;
+  border-radius: 4px;
+  transform: translate(-50%, -50%);
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
 }
 .gl-cargo-overflow {
   position: absolute;
