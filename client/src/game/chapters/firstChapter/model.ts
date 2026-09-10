@@ -134,7 +134,7 @@ export function stepChapter(previous:ChapterState,deltaMs:number,input:Input):Ch
     s.attack=150;s.attackCooldown=380;
     const e=s.enemy;
     const dot=e?((e.x-s.player.x)*s.facing.x+(e.y-s.player.y)*s.facing.y)/Math.max(1,distance(e,s.player)):0;
-    if(e&&e.stage!=='down'&&distance(e,s.player)<100&&dot>0.2) {
+    if(e&&e.stage!=='down'&&distance(e,s.player)<115&&dot>-0.35) {
       s.freeze=70;
       if(e.stage==='recover') {
         e.hp--;cue('hit');

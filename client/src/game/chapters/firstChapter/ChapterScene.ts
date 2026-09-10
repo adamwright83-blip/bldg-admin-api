@@ -126,7 +126,12 @@ export class ChapterScene {
       const enemy=this.sprite('enemy',room==='gallery'?'bellwether':'props',room==='gallery'?frame:5,e.x,e.y+8,room==='gallery'?118:84,room==='gallery'?165:95,e.y,e.stage==='down'?.65:1);
       if(enemy&&e.stage==='charge'&&!this.reduced)enemy.rotation=Math.sin(this.age/75)*.06;
       if(e.stage!=='down'){
-        for(let i=0;i<e.hp;i++)g.circle(e.x-((e.hp-1)*6)+i*12,e.y-(room==='gallery'?134:72),3.4).fill(0x933e2c);
+        for(let i=0;i<e.hp;i++){
+          const px=e.x-((e.hp-1)*8)+i*16,py=e.y-(room==='gallery'?134:72);
+          g.circle(px,py,6.5).fill({color:0x2a1510,alpha:.35});
+          g.circle(px,py,5.5).fill(0xc94a35);
+          g.circle(px,py,5.5).stroke({color:0xfff3d6,width:1.5});
+        }
         if(e.stage==='recover'){g.ellipse(e.x,e.y,33,13).stroke({color:0x65c7ab,width:3});this.label('opening','STRIKE',e.x,e.y-(room==='gallery'?143:83),0x2e7565,12);}
       }
     }
