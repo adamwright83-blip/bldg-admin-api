@@ -16,6 +16,14 @@
  * customers are listed once, honestly, rather than pinned to an invented
  * half of the building. When there is no real contributor data yet, this
  * renders an honest empty state instead of fabricating one.
+ *
+ * The activity panel and contributor chips are built in plain CSS rather
+ * than laid over the decorative nameplate/weekly-frame art: those frames
+ * are a fixed pixel aspect ratio sized for short placeholder text, and a
+ * real customer name of arbitrary length broke that layout (the frame's
+ * box could collapse under a long name, stacking the avatar and text on
+ * top of each other). Real, variable-length data needs a flexible
+ * container, not art sized for a mockup string.
  */
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -33,19 +41,23 @@ type Contributor = {
   events: Array<{ eventId: string; orderId: string | number | null; occurredAt: string; valueCents: number }>;
 };
 
-function ContributorRow({ contributor, onOpen }: { contributor: Contributor; onOpen: (c: Contributor) => void }) {
+function initialsFor(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function ContributorChip({ contributor, onOpen }: { contributor: Contributor; onOpen: (c: Contributor) => void }) {
   return (
     <button
       type="button"
-      className="oli-plate"
+      className="oli-chip"
       onClick={() => onOpen(contributor)}
       aria-label={`${contributor.customerDisplayName}, $${centsToDollars(contributor.contributedValueCents)}`}
     >
-      <img src={`${ASSETS}/nameplate-frame.png`} alt="" />
-      <span className="oli-plate-avatar">
-        {contributor.customerDisplayName.slice(0, 2).toUpperCase()}
-      </span>
-      <span className="oli-plate-text">
+      <span className="oli-chip-avatar">{initialsFor(contributor.customerDisplayName)}</span>
+      <span className="oli-chip-text">
         <b>{contributor.customerDisplayName}</b>
         <span>${centsToDollars(contributor.contributedValueCents)}</span>
       </span>
@@ -69,46 +81,47 @@ export function OpusLaInspection({ onNavigate }: { onNavigate: (path: string) =>
           <img className="oli-tower" src={`${ASSETS}/south-tower.png`} alt="Opus LA South Tower" />
         </div>
 
-        <div className="oli-weekly">
-          <div className="oli-weekly-title">REAL ACTIVITY</div>
-          <img src={`${ASSETS}/weekly-frame.png`} alt="" />
-          {towerWarsToday.isLoading ? (
-            <div className="oli-blk" style={{ top: "30%" }}>
-              <div className="oli-blk-h">Loading…</div>
-            </div>
-          ) : towerWarsToday.error ? (
-            <div className="oli-blk" style={{ top: "30%" }}>
-              <div className="oli-blk-h">Activity data unavailable</div>
-              <div className="oli-blk-l">Tower Wars settlement could not be reached.</div>
-            </div>
-          ) : topFive.length === 0 ? (
-            <div className="oli-blk" style={{ top: "30%" }}>
-              <div className="oli-blk-h">No recorded activity yet</div>
-              <div className="oli-blk-l">
-                No real orders at this building are recorded for the current
-                rivalry window.
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="oli-blk" style={{ top: "23%" }}>
-                <div className="oli-blk-h">TOP CONTRIBUTORS</div>
-                <div className="oli-blk-l">
-                  {topFive.map(c => (
-                    <div key={c.identityKey}>
-                      {c.customerDisplayName} ${centsToDollars(c.contributedValueCents)}
-                    </div>
-                  ))}
+        <div className="oli-activity" aria-label="Real activity at this building">
+          <div className="oli-activity-title">REAL ACTIVITY</div>
+          <div className="oli-activity-body">
+            {towerWarsToday.isLoading ? (
+              <p className="oli-activity-status">Loading…</p>
+            ) : towerWarsToday.error ? (
+              <p className="oli-activity-status">
+                Activity data unavailable — Tower Wars settlement could not be reached.
+              </p>
+            ) : topFive.length === 0 ? (
+              <p className="oli-activity-status">
+                No recorded activity yet. No real orders at this building are
+                recorded for the current rivalry window.
+              </p>
+            ) : (
+              <>
+                <div className="oli-activity-section">
+                  <div className="oli-activity-label">Top contributors</div>
+                  <ul className="oli-activity-list">
+                    {topFive.map(c => (
+                      <li key={c.identityKey}>
+                        <span className="oli-activity-name">{c.customerDisplayName}</span>
+                        <span className="oli-activity-value">${centsToDollars(c.contributedValueCents)}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              </div>
-              <div className="oli-blk" style={{ top: "58%" }}>
-                <div className="oli-blk-h">TOTAL RECORDED</div>
-                <div className="oli-blk-l">
-                  ${centsToDollars(totalValueCents)} · {contributors.length} customer(s)
+                <div className="oli-activity-divider" />
+                <div className="oli-activity-section">
+                  <div className="oli-activity-label">Total recorded</div>
+                  <div className="oli-activity-total">
+                    ${centsToDollars(totalValueCents)}
+                    <span className="oli-activity-total-count">
+                      {" "}
+                      · {contributors.length} customer{contributors.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </>
-          )}
+              </>
+            )}
+          </div>
         </div>
 
         <div className="oli-towerwrap oli-north">
@@ -118,9 +131,9 @@ export function OpusLaInspection({ onNavigate }: { onNavigate: (path: string) =>
       </div>
 
       {topFive.length > 0 ? (
-        <div className="oli-contributor-list" aria-label="Real contributors at this building">
+        <div className="oli-chip-row" aria-label="Real contributors at this building">
           {topFive.map(c => (
-            <ContributorRow key={c.identityKey} contributor={c} onOpen={setSelected} />
+            <ContributorChip key={c.identityKey} contributor={c} onOpen={setSelected} />
           ))}
         </div>
       ) : null}
@@ -134,6 +147,7 @@ export function OpusLaInspection({ onNavigate }: { onNavigate: (path: string) =>
       {selected ? (
         <div className="oli-overlay" onClick={() => setSelected(null)}>
           <div className="oli-card" onClick={e => e.stopPropagation()}>
+            <div className="oli-card-avatar">{initialsFor(selected.customerDisplayName)}</div>
             <h3>{selected.customerDisplayName}</h3>
             <div className="oli-card-stat">
               <span>Value</span>
