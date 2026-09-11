@@ -112,7 +112,7 @@ not change. Never rename. Never invent an eighth.
 
 | Companion | Species | Silhouette role in the set |
 |---|---|---|
-| Rook | rook / corvid | Tallest and narrowest. Long straight beak, wedge tail. |
+| Rook | corvid, loose | Lanky and narrow. Tall thin legs, long trailing tail, expressive wide mouth. Kit-laden explorer. **Canonical design is Adam's concept art — see `docs/goldline/companions/ROOK_CONCEPT_SPEC.md`.** |
 | Mara | eagle | Widest. Wings held spread, not folded. |
 | Sable | hound | Low horizontal, head down to the ground, tail up. |
 | Bront | bear | Squarest. Mass, small head sunk into shoulders. |
@@ -124,6 +124,14 @@ They appear in a HUD roster at 48px where **shape is the only thing that
 survives**. The first pass differentiated with surface detail — masks, satchels,
 goggles — and at 48px all seven collapsed into the same egg with bumps.
 Differentiate with proportion and with parts that break the body outline.
+
+**Rook is now set by concept art, not by this table.** Adam's design supersedes
+the earlier written description: a lanky, kit-laden explorer bird with a bucket
+hat, pushed-up goggles, a stuffed satchel, ink pots, brushes and scroll tubes,
+in a green-and-red palette. It is more characterful than what the brief
+described and it is the reference. The remaining six should be brought toward
+it, not the other way round — that is a set-wide decision for Adam, and the
+earlier ink-and-brass palette no longer describes Rook.
 
 Companions must not out-contrast Trailblazer, the heroine.
 
