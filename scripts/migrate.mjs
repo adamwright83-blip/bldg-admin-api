@@ -913,9 +913,6 @@ await assertRequiredColumns("authored_days", [
   "intelligence",
 ]);
 
-await conn.end();
-console.log("\nMigration complete.");
-
 await runRequired(
   `CREATE TABLE IF NOT EXISTS goldline_campaigns (
     id VARCHAR(36) PRIMARY KEY,
@@ -1072,3 +1069,6 @@ await assertRequiredColumns("mission_director_plans", [
   "inputFingerprint",
   "outcomeJson",
 ]);
+
+await conn.end();
+console.log("\nMigration complete.");
