@@ -180,6 +180,18 @@ if (!globalThis.chrome?.runtime?.id) {
         });
         await save("downloading");
         status("Retrieving the normal gumball report…");
+        // Chrome can silently withhold a file download triggered from a tab
+        // that is not the focused tab/window; focus it for the click itself.
+        try {
+          const sourceTabInfo = await chrome.tabs.get(sourceTab);
+          await chrome.tabs.update(sourceTab, { active: true });
+          if (sourceTabInfo.windowId !== undefined)
+            await chrome.windows.update(sourceTabInfo.windowId, {
+              focused: true,
+            });
+        } catch {
+          /* best-effort focus; proceed regardless */
+        }
         // A download may interrupt the response channel; don't click again. The
         // independently registered worker observes the actual download instead.
         await runInTab(sourceTab, clickExport, [source.storeLabel]).catch(
