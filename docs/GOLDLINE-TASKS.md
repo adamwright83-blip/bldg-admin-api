@@ -16,6 +16,19 @@ A generated mockup that leans medieval/fantasy-castle (even a little) is a miss,
 - Desktop can host a genuinely playable "game portion" for a Kingdom (e.g. Boreslay, the Headball-2-style PvP game, for the digital-marketing companion), but only once its companion is unlocked. This is the resolution to "does desktop play defeat the purpose since winning needs real-world action": desktop is never a way to skip the real action — the real action is the unlock gate for whichever companion makes that Kingdom's desktop game winnable at all. A kingdom you haven't earned the companion for has no viable desktop game yet.
 - Kingdom mission/challenge content itself (the mobile in-field "in-game" portion, e.g. THE LAST VALET) is mobile Driver-app specific, because winning requires real-world actions you can only take while out driving/working. Desktop's role for a Kingdom is the dossier/war-room view (recap, companion state, what real action is still needed) plus, once unlocked, that Kingdom's own desktop game — never a way to play/win the field mission itself from a desk.
 
+## The resident app depends on this repo in production — Adam will NOT remind you
+Adam has stated plainly he will never remember to mention this, to Claude or to ChatGPT. Assume every future session starts unaware of it. Full contract is in `CLAUDE.md` §1 (auto-loaded for Claude sessions; ChatGPT sessions must be pointed at it).
+
+The resident-facing app (HELD / `app.bldg.chat`) is a **separate repo** at `/Users/adamwrightpfi/Desktop/Cursor_residentapp`. It calls **into this repo** in production. Nothing here imports it; no test here covers it; it will never appear in a search run in this repo. Adam expects to return to it around **Jan 2027** to onboard more OPUS LA / Century Park East residents, but residents may be live on it today — treat it as a running consumer, not a dormant project.
+
+- Agent tools: `POST /api/agent/s2s/run-tool`, auth `ADMIN_AGENT_SHARED_SECRET`
+- Intake fallback: `POST /api/intake/from-bldg`, auth `APP_SHARED_API_SECRET`
+- Both default to `https://bldg-admin-api-production.up.railway.app`
+
+Breaks silently from inside this repo — no build error, no failing test: renaming/removing any of the eight tools resident calls (`createLaundryOrderTool`, `getResidentContextTool`, `draftCustomerMessageTool`, `createResidentAgentPlanTool`, `updateResidentAgentPlanTool`, `createResidentCoordinatedRequestTool`, `createOrderFollowupTaskTool`, `cancelResidentOrderTool`), dropping one from the `resident_agent` allowlist in `server/agents/permissions.ts` or from `s2sAgentToolAllowlist` in `server/agents/s2sEndpoint.ts`, changing a tool's input or response shape, or rotating either shared secret without updating the resident deployment. In-code warnings now sit at the top of `permissions.ts`, `s2sEndpoint.ts`, and `toolRegistry.ts`.
+
+**Nothing needs to be cloned out of the resident repo.** The agent runtime, permissions, approval gate and 47 tools are already native to THIS repo (see next section). What resident owns is a client for calling this service, which the Driver app does not need — Driver lives here and calls the tool registry in-process. What is worth carrying over is patterns, not files: plan deterministically before invoking an LLM; resolve to `pending_provider_confirmation`, never `confirmed`; verify after write rather than trusting the response.
+
 ## Existing agent infrastructure — READ BEFORE BUILDING ANY AGENTIC FEATURE
 Do not build a new agent runtime, tool dispatcher, permission layer, or approval gate. All of it already exists and is in production.
 

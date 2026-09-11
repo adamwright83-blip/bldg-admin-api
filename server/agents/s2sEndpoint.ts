@@ -5,6 +5,13 @@ import { logAgentEvent } from "./agentEvents";
 import { runAgentTool } from "./agentRuntime";
 import type { ActorType, AgentContext, AgentType } from "./permissions";
 
+/**
+ * EXTERNAL CONSUMER: the resident app (`app.bldg.chat`, separate repo at
+ * ~/Desktop/Cursor_residentapp) calls this endpoint in production, authenticated with
+ * ADMIN_AGENT_SHARED_SECRET. It also has a fallback path to POST /api/intake/from-bldg
+ * (APP_SHARED_API_SECRET). Removing a tool below, or changing its response shape, breaks
+ * live residents with no failing test in this repo. See CLAUDE.md §1.
+ */
 export const s2sAgentToolAllowlist = new Set([
   "createLaundryOrderTool",
   "getResidentContextTool",

@@ -1,3 +1,20 @@
+/**
+ * EXTERNAL CONSUMER — READ BEFORE EDITING THE `resident_agent` ALLOWLIST.
+ *
+ * The resident app (`app.bldg.chat`) lives in a SEPARATE repo at
+ * ~/Desktop/Cursor_residentapp and calls this service in production over
+ * `POST /api/agent/s2s/run-tool`. It invokes these tools by name:
+ *
+ *   createLaundryOrderTool, getResidentContextTool, draftCustomerMessageTool,
+ *   createResidentAgentPlanTool, updateResidentAgentPlanTool,
+ *   createResidentCoordinatedRequestTool, createOrderFollowupTaskTool,
+ *   cancelResidentOrderTool
+ *
+ * Renaming one, removing it from `resident_agent` below, or changing its input or
+ * response shape breaks live residents. Nothing in THIS repo will fail — no build
+ * error, no test. Keep `s2sAgentToolAllowlist` in ./s2sEndpoint.ts in sync, and see
+ * CLAUDE.md §1 for the full contract.
+ */
 export type AgentType =
   | "resident_agent"
   | "operator_voice_agent"

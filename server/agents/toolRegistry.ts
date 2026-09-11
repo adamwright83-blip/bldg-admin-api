@@ -1,3 +1,11 @@
+/**
+ * Tool names here are a PUBLIC CONTRACT, not internal identifiers. The resident app
+ * (separate repo, ~/Desktop/Cursor_residentapp) calls eight of them by name over
+ * `POST /api/agent/s2s/run-tool` in production, and reads specific response fields
+ * (orderId, planId, requestId, status, opsTaskId, orderCancelled). Renaming a tool or
+ * reshaping its result breaks live residents without failing anything here.
+ * See ./permissions.ts and CLAUDE.md §1 before refactoring.
+ */
 import type { AgentContext } from "./permissions";
 import { createLaundryOrderTool } from "./tools/createLaundryOrderTool";
 import { createPendingDryCleaningOrderTool } from "./tools/createPendingDryCleaningOrderTool";
