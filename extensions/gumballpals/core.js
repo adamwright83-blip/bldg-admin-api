@@ -31,12 +31,11 @@ export function validateRange(from, to, today = pacificToday()) {
     );
   return { from, to };
 }
+// All backlog history was already imported once. Every run since — scheduled
+// or manual — only needs that day's Orders (Sales), not a re-pull of history.
 export function initialRange(now = new Date()) {
   const to = pacificToday(now);
-  return {
-    from: new Date(dateNumber(to) - 29 * 86400000).toISOString().slice(0, 10),
-    to,
-  };
+  return { from: to, to };
 }
 // This is the normal Orders (Sales) export URL observed in Chrome, NOT the paid API.
 // Never accept arbitrary URLs received from a web page or a download event.
