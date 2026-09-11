@@ -45,7 +45,8 @@
     "goldline:territories:capture": "node scripts/capture-goldline-territories.mjs",
     "goldline:campaign:capture": "node scripts/capture-goldline-campaign.mjs",
     "goldline:admin:dev-setup": "tsx scripts/goldline-admin-dev-setup.ts",
-    "goldline:design-partner:tenant": "tsx scripts/goldline-design-partner-tenant.ts"
+    "goldline:design-partner:tenant": "tsx scripts/goldline-design-partner-tenant.ts",
+    "assets:scan": "node scripts/assets/scan-assets.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

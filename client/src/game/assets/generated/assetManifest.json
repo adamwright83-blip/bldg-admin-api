@@ -1,0 +1,5874 @@
+{
+ "generatedBy": "npm run assets:scan",
+ "count": 652,
+ "assets": [
+  {
+   "url": "/assets/admin/control-room/brand/goldline-admin-crest.svg",
+   "root": "public",
+   "bytes": 588,
+   "sha256": "52a8904aed0d95ac",
+   "format": "svg",
+   "width": null,
+   "height": null
+  },
+  {
+   "url": "/assets/admin/control-room/nav/customers.svg",
+   "root": "public",
+   "bytes": 488,
+   "sha256": "3d22da134a7ad248",
+   "format": "svg",
+   "width": null,
+   "height": null
+  },
+  {
+   "url": "/assets/admin/control-room/nav/growth.svg",
+   "root": "public",
+   "bytes": 328,
+   "sha256": "aaf60a0e0c78c2bf",
+   "format": "svg",
+   "width": null,
+   "height": null
+  },
+  {
+   "url": "/assets/admin/control-room/nav/home.svg",
+   "root": "public",
+   "bytes": 240,
+   "sha256": "911110eb2ec170db",
+   "format": "svg",
+   "width": null,
+   "height": null
+  },
+  {
+   "url": "/assets/admin/control-room/nav/money.svg",
+   "root": "public",
+   "bytes": 400,
+   "sha256": "29ba01425f74639c",
+   "format": "svg",
+   "width": null,
+   "height": null
+  },
+  {
+   "url": "/assets/admin/control-room/nav/operations.svg",
+   "root": "public",
+   "bytes": 358,
+   "sha256": "2f82efc5b78ce924",
+   "format": "svg",
+   "width": null,
+   "height": null
+  },
+  {
+   "url": "/assets/admin/control-room/nav/settings.svg",
+   "root": "public",
+   "bytes": 403,
+   "sha256": "7005712f9c1b5644",
+   "format": "svg",
+   "width": null,
+   "height": null
+  },
+  {
+   "url": "/assets/admin/control-room/opus-la-inspection/nameplate-frame.png",
+   "root": "public",
+   "bytes": 531345,
+   "sha256": "3906700f3c5600a0",
+   "format": "png",
+   "width": 2736,
+   "height": 912
+  },
+  {
+   "url": "/assets/admin/control-room/opus-la-inspection/north-tower.png",
+   "root": "public",
+   "bytes": 2545581,
+   "sha256": "977d53069d2578da",
+   "format": "png",
+   "width": 1192,
+   "height": 1320
+  },
+  {
+   "url": "/assets/admin/control-room/opus-la-inspection/south-tower.png",
+   "root": "public",
+   "bytes": 2199540,
+   "sha256": "7af1b3acb1ec3c49",
+   "format": "png",
+   "width": 1024,
+   "height": 1536
+  },
+  {
+   "url": "/assets/admin/control-room/opus-la-inspection/weapon.png",
+   "root": "public",
+   "bytes": 232167,
+   "sha256": "1ed9cd5e1702e93b",
+   "format": "png",
+   "width": 800,
+   "height": 1200
+  },
+  {
+   "url": "/assets/admin/control-room/opus-la-inspection/weekly-frame.png",
+   "root": "public",
+   "bytes": 610746,
+   "sha256": "be7f788df5483374",
+   "format": "png",
+   "width": 1120,
+   "height": 2240
+  },
+  {
+   "url": "/assets/admin/control-room/production/dispatch.svg",
+   "root": "public",
+   "bytes": 464,
+   "sha256": "6cfc0decdb7f833e",
+   "format": "svg",
+   "width": null,
+   "height": null
+  },
+  {
+   "url": "/assets/admin/control-room/production/processing.svg",
+   "root": "public",
+   "bytes": 460,
+   "sha256": "adcd79f8ddbf1297",
+   "format": "svg",
+   "width": null,
+   "height": null
+  },
+  {
+   "url": "/assets/admin/control-room/production/ready.svg",
+   "root": "public",
+   "bytes": 347,
+   "sha256": "d1b7177c59fe6114",
+   "format": "svg",
+   "width": null,
+   "height": null
+  },
+  {
+   "url": "/assets/admin/control-room/production/received.svg",
+   "root": "public",
+   "bytes": 358,
+   "sha256": "17b1849b1da02f25",
+   "format": "svg",
+   "width": null,
+   "height": null
+  },
+  {
+   "url": "/assets/admin/control-room/signals/clock-creature.png",
+   "root": "public",
+   "bytes": 1976985,
+   "sha256": "4c60a32aa9d8b4c5",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/admin/control-room/signals/fog.png",
+   "root": "public",
+   "bytes": 1547364,
+   "sha256": "312abde3a2ae5441",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/admin/control-room/signals/ghost.png",
+   "root": "public",
+   "bytes": 1033050,
+   "sha256": "6b2222f94e7efbe6",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/admin/control-room/signals/goblins.png",
+   "root": "public",
+   "bytes": 2523376,
+   "sha256": "2a7003664a7a0ee4",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/admin/control-room/signals/ruinbound.png",
+   "root": "public",
+   "bytes": 2325411,
+   "sha256": "726d1004feac6b60",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/admin/control-room/signals/vines.png",
+   "root": "public",
+   "bytes": 2313648,
+   "sha256": "d512d798729412bc",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/admin/control-room/status/action-required.svg",
+   "root": "public",
+   "bytes": 235,
+   "sha256": "8651e95bb11cd487",
+   "format": "svg",
+   "width": null,
+   "height": null
+  },
+  {
+   "url": "/assets/admin/control-room/status/info.svg",
+   "root": "public",
+   "bytes": 238,
+   "sha256": "8c21a5a65eadbc1a",
+   "format": "svg",
+   "width": null,
+   "height": null
+  },
+  {
+   "url": "/assets/admin/control-room/status/success.svg",
+   "root": "public",
+   "bytes": 259,
+   "sha256": "8334bdace85b9858",
+   "format": "svg",
+   "width": null,
+   "height": null
+  },
+  {
+   "url": "/assets/admin/control-room/tower-wars/battle-environment.jpg",
+   "root": "public",
+   "bytes": 716521,
+   "sha256": "6e216224f64d1a4c",
+   "format": "jpg",
+   "width": 1658,
+   "height": 949
+  },
+  {
+   "url": "/assets/admin/control-room/tower-wars/century-bazooka-overlay-v1.png",
+   "root": "public",
+   "bytes": 140760,
+   "sha256": "a461be6a13ec7da9",
+   "format": "png",
+   "width": 800,
+   "height": 1200
+  },
+  {
+   "url": "/assets/admin/control-room/tower-wars/century-park-east-tower-plate-v3.png",
+   "root": "public",
+   "bytes": 1293764,
+   "sha256": "0a615bacf3b87796",
+   "format": "png",
+   "width": 800,
+   "height": 1200
+  },
+  {
+   "url": "/assets/admin/control-room/tower-wars/century-park-east-tower-v2.png",
+   "root": "public",
+   "bytes": 1561856,
+   "sha256": "ecad1f7cce5dd33f",
+   "format": "png",
+   "width": 800,
+   "height": 1200
+  },
+  {
+   "url": "/assets/admin/control-room/tower-wars/opus-la-ball-v1.png",
+   "root": "public",
+   "bytes": 36331,
+   "sha256": "274a1a34e5a383dd",
+   "format": "png",
+   "width": 800,
+   "height": 1200
+  },
+  {
+   "url": "/assets/admin/control-room/tower-wars/opus-la-driver-overlay-v6.png",
+   "root": "public",
+   "bytes": 232167,
+   "sha256": "1ed9cd5e1702e93b",
+   "format": "png",
+   "width": 800,
+   "height": 1200
+  },
+  {
+   "url": "/assets/admin/control-room/tower-wars/opus-la-driver-v6.png",
+   "root": "public",
+   "bytes": 934716,
+   "sha256": "5a37944da1745721",
+   "format": "png",
+   "width": 1086,
+   "height": 1448
+  },
+  {
+   "url": "/assets/admin/control-room/tower-wars/opus-la-tower-plate-v4.png",
+   "root": "public",
+   "bytes": 984631,
+   "sha256": "079d6928675aeb15",
+   "format": "png",
+   "width": 800,
+   "height": 1200
+  },
+  {
+   "url": "/assets/admin/control-room/tower-wars/opus-la-tower-v2.png",
+   "root": "public",
+   "bytes": 1254594,
+   "sha256": "fd6bea49bcb7f606",
+   "format": "png",
+   "width": 800,
+   "height": 1200
+  },
+  {
+   "url": "/assets/admin/control-room/tower-wars/rolls-royce-projectile-v1.png",
+   "root": "public",
+   "bytes": 1809403,
+   "sha256": "4542ad220a79a9c6",
+   "format": "png",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "/assets/admin/control-room/tower-wars/valet-car.svg",
+   "root": "public",
+   "bytes": 1016,
+   "sha256": "fd9ec21680ddf428",
+   "format": "svg",
+   "width": null,
+   "height": null
+  },
+  {
+   "url": "/assets/admin/control-room/world/lantern-city-atlas-v2.png",
+   "root": "public",
+   "bytes": 3771989,
+   "sha256": "3c5b9fa1d16936b0",
+   "format": "png",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "/assets/admin/control-room/world/lantern-city-atlas-v2.webp",
+   "root": "public",
+   "bytes": 600330,
+   "sha256": "f76d93d581a2db27",
+   "format": "webp",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "/assets/admin/control-room/world/lantern-city-atlas-v3.png",
+   "root": "public",
+   "bytes": 3443847,
+   "sha256": "0bc448194e4c643e",
+   "format": "png",
+   "width": 1644,
+   "height": 957
+  },
+  {
+   "url": "/assets/admin/control-room/world/lantern-city-atlas-v4.png",
+   "root": "public",
+   "bytes": 3737465,
+   "sha256": "663f3e83f694b8c4",
+   "format": "png",
+   "width": 1645,
+   "height": 956
+  },
+  {
+   "url": "/assets/admin/control-room/world/lantern-city-atlas.jpg",
+   "root": "public",
+   "bytes": 867580,
+   "sha256": "52a06db1db5b9d79",
+   "format": "jpg",
+   "width": 1645,
+   "height": 956
+  },
+  {
+   "url": "/assets/admin/control-room/world/lantern-city-truth-reference.jpg",
+   "root": "public",
+   "bytes": 432371,
+   "sha256": "85ad4cd64bfe7c5a",
+   "format": "jpg",
+   "width": 1920,
+   "height": 1080
+  },
+  {
+   "url": "/assets/admin/control-room/world/opus-la-north-tower-v1.png",
+   "root": "public",
+   "bytes": 2545581,
+   "sha256": "977d53069d2578da",
+   "format": "png",
+   "width": 1192,
+   "height": 1320
+  },
+  {
+   "url": "/assets/admin/control-room/world/opus-la-south-tower-v1.png",
+   "root": "public",
+   "bytes": 2199540,
+   "sha256": "7af1b3acb1ec3c49",
+   "format": "png",
+   "width": 1024,
+   "height": 1536
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/adams-normandie.png",
+   "root": "public",
+   "bytes": 477167,
+   "sha256": "23d6b9a3406fd3a9",
+   "format": "png",
+   "width": 737,
+   "height": 536
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/adams-normandie.webp",
+   "root": "public",
+   "bytes": 130800,
+   "sha256": "c9986170772363b5",
+   "format": "webp",
+   "width": 737,
+   "height": 536
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/arlington-heights.png",
+   "root": "public",
+   "bytes": 1055223,
+   "sha256": "984c40f09650bf96",
+   "format": "png",
+   "width": 871,
+   "height": 892
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/arlington-heights.webp",
+   "root": "public",
+   "bytes": 286864,
+   "sha256": "aa3df6cd27500188",
+   "format": "webp",
+   "width": 871,
+   "height": 892
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/arts-district.png",
+   "root": "public",
+   "bytes": 415799,
+   "sha256": "5baa6ef3e99afa87",
+   "format": "png",
+   "width": 538,
+   "height": 766
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/arts-district.webp",
+   "root": "public",
+   "bytes": 166062,
+   "sha256": "5c29418ad821dae6",
+   "format": "webp",
+   "width": 538,
+   "height": 766
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/atwater-village.png",
+   "root": "public",
+   "bytes": 2158395,
+   "sha256": "c02a199b940334e7",
+   "format": "png",
+   "width": 1371,
+   "height": 1165
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/atwater-village.webp",
+   "root": "public",
+   "bytes": 588612,
+   "sha256": "4abe33e8c63de9e5",
+   "format": "webp",
+   "width": 1371,
+   "height": 1165
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/baldwin-hillscrenshaw.png",
+   "root": "public",
+   "bytes": 898734,
+   "sha256": "793228338465a00f",
+   "format": "png",
+   "width": 1905,
+   "height": 366
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/baldwin-hillscrenshaw.webp",
+   "root": "public",
+   "bytes": 236868,
+   "sha256": "377854987124058c",
+   "format": "webp",
+   "width": 1905,
+   "height": 366
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/bel-air.png",
+   "root": "public",
+   "bytes": 1363867,
+   "sha256": "aa01153fb554d72d",
+   "format": "png",
+   "width": 520,
+   "height": 2539
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/bel-air.webp",
+   "root": "public",
+   "bytes": 289342,
+   "sha256": "f3b31065a7983ed4",
+   "format": "webp",
+   "width": 520,
+   "height": 2539
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/beverly-crest.png",
+   "root": "public",
+   "bytes": 5929731,
+   "sha256": "0690acf1bf6b4380",
+   "format": "png",
+   "width": 2282,
+   "height": 2302
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/beverly-crest.webp",
+   "root": "public",
+   "bytes": 1311078,
+   "sha256": "e8dc151b98fb8c9e",
+   "format": "webp",
+   "width": 2282,
+   "height": 2302
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/beverly-grove.png",
+   "root": "public",
+   "bytes": 1834397,
+   "sha256": "464ece33c0e0683d",
+   "format": "png",
+   "width": 1224,
+   "height": 1228
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/beverly-grove.webp",
+   "root": "public",
+   "bytes": 484122,
+   "sha256": "ede9fb2f8f6d6c0a",
+   "format": "webp",
+   "width": 1224,
+   "height": 1228
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/beverly-hills.png",
+   "root": "public",
+   "bytes": 8151757,
+   "sha256": "29a11ef81f397e9e",
+   "format": "png",
+   "width": 2304,
+   "height": 2694
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/beverly-hills.webp",
+   "root": "public",
+   "bytes": 1875680,
+   "sha256": "361cf0b41ccd01fb",
+   "format": "webp",
+   "width": 2304,
+   "height": 2694
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/beverlywood.png",
+   "root": "public",
+   "bytes": 918279,
+   "sha256": "06f0486aed6b19fd",
+   "format": "png",
+   "width": 718,
+   "height": 793
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/beverlywood.webp",
+   "root": "public",
+   "bytes": 217702,
+   "sha256": "0a88a592a7228f81",
+   "format": "webp",
+   "width": 718,
+   "height": 793
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/boyle-heights.png",
+   "root": "public",
+   "bytes": 632591,
+   "sha256": "9fd2f9962eae12e0",
+   "format": "png",
+   "width": 322,
+   "height": 1916
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/boyle-heights.webp",
+   "root": "public",
+   "bytes": 235086,
+   "sha256": "3df4a081493ae97f",
+   "format": "webp",
+   "width": 322,
+   "height": 1916
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/carthay.png",
+   "root": "public",
+   "bytes": 547338,
+   "sha256": "bcb51fd16aaa0754",
+   "format": "png",
+   "width": 620,
+   "height": 572
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/carthay.webp",
+   "root": "public",
+   "bytes": 119880,
+   "sha256": "2f068f8a4ded61d5",
+   "format": "webp",
+   "width": 620,
+   "height": 572
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/central-alameda.png",
+   "root": "public",
+   "bytes": 355739,
+   "sha256": "37929ed8831ae50b",
+   "format": "png",
+   "width": 779,
+   "height": 302
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/central-alameda.webp",
+   "root": "public",
+   "bytes": 86480,
+   "sha256": "6289369ea362f569",
+   "format": "webp",
+   "width": 779,
+   "height": 302
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/century-city.png",
+   "root": "public",
+   "bytes": 958936,
+   "sha256": "93b72cf2311129f5",
+   "format": "png",
+   "width": 765,
+   "height": 821
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/century-city.webp",
+   "root": "public",
+   "bytes": 253908,
+   "sha256": "1ef1667ccd3e01d1",
+   "format": "webp",
+   "width": 765,
+   "height": 821
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/cheviot-hills.png",
+   "root": "public",
+   "bytes": 1892113,
+   "sha256": "ec5b6569d00edcee",
+   "format": "png",
+   "width": 1118,
+   "height": 1032
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/cheviot-hills.webp",
+   "root": "public",
+   "bytes": 470330,
+   "sha256": "fe1ccaad1e3f1679",
+   "format": "webp",
+   "width": 1118,
+   "height": 1032
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/chinatown.png",
+   "root": "public",
+   "bytes": 1001373,
+   "sha256": "2ec6948c88ef41e7",
+   "format": "png",
+   "width": 934,
+   "height": 757
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/chinatown.webp",
+   "root": "public",
+   "bytes": 255878,
+   "sha256": "38d1602153b48612",
+   "format": "webp",
+   "width": 934,
+   "height": 757
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/culver-city.png",
+   "root": "public",
+   "bytes": 3787714,
+   "sha256": "5cbb6bec30d8cef6",
+   "format": "png",
+   "width": 2908,
+   "height": 785
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/culver-city.webp",
+   "root": "public",
+   "bytes": 939676,
+   "sha256": "0dfdb2a7504d66c7",
+   "format": "webp",
+   "width": 2908,
+   "height": 785
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/cypress-park.png",
+   "root": "public",
+   "bytes": 788040,
+   "sha256": "8f079bbc8e3e1b90",
+   "format": "png",
+   "width": 517,
+   "height": 1094
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/cypress-park.webp",
+   "root": "public",
+   "bytes": 210224,
+   "sha256": "bc9abdb6bd73bcd1",
+   "format": "webp",
+   "width": 517,
+   "height": 1094
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/downtown.png",
+   "root": "public",
+   "bytes": 5137015,
+   "sha256": "179ccd0ae1f2cab4",
+   "format": "png",
+   "width": 1893,
+   "height": 1891
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/downtown.webp",
+   "root": "public",
+   "bytes": 1395830,
+   "sha256": "65153a3aaba87a2c",
+   "format": "webp",
+   "width": 1893,
+   "height": 1891
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/eagle-rock.png",
+   "root": "public",
+   "bytes": 416442,
+   "sha256": "af3312af634a7c6c",
+   "format": "png",
+   "width": 334,
+   "height": 839
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/eagle-rock.webp",
+   "root": "public",
+   "bytes": 118492,
+   "sha256": "493b351fcb4b9092",
+   "format": "webp",
+   "width": 334,
+   "height": 839
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/east-hollywood.png",
+   "root": "public",
+   "bytes": 1325498,
+   "sha256": "84da20c632c61a08",
+   "format": "png",
+   "width": 1056,
+   "height": 1145
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/east-hollywood.webp",
+   "root": "public",
+   "bytes": 397012,
+   "sha256": "73a486fecbfe3fb7",
+   "format": "webp",
+   "width": 1056,
+   "height": 1145
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/echo-park.png",
+   "root": "public",
+   "bytes": 3941377,
+   "sha256": "ebdd707fb8f455e6",
+   "format": "png",
+   "width": 1290,
+   "height": 1936
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/echo-park.webp",
+   "root": "public",
+   "bytes": 920118,
+   "sha256": "38c1a308f7344aa2",
+   "format": "webp",
+   "width": 1290,
+   "height": 1936
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/elysian-park.png",
+   "root": "public",
+   "bytes": 1652592,
+   "sha256": "adb6f44c5644c94f",
+   "format": "png",
+   "width": 952,
+   "height": 1293
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/elysian-park.webp",
+   "root": "public",
+   "bytes": 391324,
+   "sha256": "b41157f6881a05d2",
+   "format": "webp",
+   "width": 952,
+   "height": 1293
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/elysian-valley.png",
+   "root": "public",
+   "bytes": 1981883,
+   "sha256": "d83a76338b95ed21",
+   "format": "png",
+   "width": 1201,
+   "height": 1159
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/elysian-valley.webp",
+   "root": "public",
+   "bytes": 451020,
+   "sha256": "891d8c8357d53fde",
+   "format": "webp",
+   "width": 1201,
+   "height": 1159
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/exposition-park.png",
+   "root": "public",
+   "bytes": 588867,
+   "sha256": "6914eb3855f55d58",
+   "format": "png",
+   "width": 1603,
+   "height": 270
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/exposition-park.webp",
+   "root": "public",
+   "bytes": 154518,
+   "sha256": "e9e56b370e4bafac",
+   "format": "webp",
+   "width": 1603,
+   "height": 270
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/fairfax.png",
+   "root": "public",
+   "bytes": 660650,
+   "sha256": "5c102de3f15640e7",
+   "format": "png",
+   "width": 741,
+   "height": 904
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/fairfax.webp",
+   "root": "public",
+   "bytes": 189302,
+   "sha256": "e323403c9d037930",
+   "format": "webp",
+   "width": 741,
+   "height": 904
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/glassell-park.png",
+   "root": "public",
+   "bytes": 2785221,
+   "sha256": "42edb13563fc8c37",
+   "format": "png",
+   "width": 1141,
+   "height": 1730
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/glassell-park.webp",
+   "root": "public",
+   "bytes": 721616,
+   "sha256": "8f5050fccfb44e16",
+   "format": "webp",
+   "width": 1141,
+   "height": 1730
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/glendale.png",
+   "root": "public",
+   "bytes": 4792362,
+   "sha256": "880a07d1ed6837bc",
+   "format": "png",
+   "width": 3331,
+   "height": 1169
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/glendale.webp",
+   "root": "public",
+   "bytes": 1184046,
+   "sha256": "d8b1dfa1f7ab10b0",
+   "format": "webp",
+   "width": 3331,
+   "height": 1169
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/griffith-park.png",
+   "root": "public",
+   "bytes": 2975839,
+   "sha256": "8ee7d533ade44fdb",
+   "format": "png",
+   "width": 2660,
+   "height": 1038
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/griffith-park.webp",
+   "root": "public",
+   "bytes": 702372,
+   "sha256": "85d49010390fe9bc",
+   "format": "webp",
+   "width": 2660,
+   "height": 1038
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/hancock-park.png",
+   "root": "public",
+   "bytes": 700779,
+   "sha256": "c6d05cf0b090ec55",
+   "format": "png",
+   "width": 763,
+   "height": 969
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/hancock-park.webp",
+   "root": "public",
+   "bytes": 249606,
+   "sha256": "368fdfa7bcea3c9a",
+   "format": "webp",
+   "width": 763,
+   "height": 969
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/harvard-heights.png",
+   "root": "public",
+   "bytes": 509234,
+   "sha256": "000b5b5746ed516e",
+   "format": "png",
+   "width": 641,
+   "height": 708
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/harvard-heights.webp",
+   "root": "public",
+   "bytes": 143090,
+   "sha256": "3b604cb4c98ae178",
+   "format": "webp",
+   "width": 641,
+   "height": 708
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/historic-south-central.png",
+   "root": "public",
+   "bytes": 1390947,
+   "sha256": "48966f2f9c6e4cb0",
+   "format": "png",
+   "width": 1286,
+   "height": 698
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/historic-south-central.webp",
+   "root": "public",
+   "bytes": 372624,
+   "sha256": "fe246106f62a2a4b",
+   "format": "webp",
+   "width": 1286,
+   "height": 698
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/hollywood-hills-west.png",
+   "root": "public",
+   "bytes": 4770656,
+   "sha256": "68d08a51a18ed7ed",
+   "format": "png",
+   "width": 2199,
+   "height": 1803
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/hollywood-hills-west.webp",
+   "root": "public",
+   "bytes": 1102236,
+   "sha256": "2485dd960b718e68",
+   "format": "webp",
+   "width": 2199,
+   "height": 1803
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/hollywood-hills.png",
+   "root": "public",
+   "bytes": 3380315,
+   "sha256": "8ea897a2ea6bd6bc",
+   "format": "png",
+   "width": 2337,
+   "height": 1359
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/hollywood-hills.webp",
+   "root": "public",
+   "bytes": 799092,
+   "sha256": "3962e9d51f7779b6",
+   "format": "webp",
+   "width": 2337,
+   "height": 1359
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/hollywood.png",
+   "root": "public",
+   "bytes": 2115654,
+   "sha256": "ce4780caabd26bd8",
+   "format": "png",
+   "width": 2199,
+   "height": 1001
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/hollywood.webp",
+   "root": "public",
+   "bytes": 623402,
+   "sha256": "5c51372c8b4ffd59",
+   "format": "webp",
+   "width": 2199,
+   "height": 1001
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/jefferson-park.png",
+   "root": "public",
+   "bytes": 980345,
+   "sha256": "d4a832d3b506418c",
+   "format": "png",
+   "width": 1093,
+   "height": 723
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/jefferson-park.webp",
+   "root": "public",
+   "bytes": 249070,
+   "sha256": "85a440ae342f7a96",
+   "format": "webp",
+   "width": 1093,
+   "height": 723
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/koreatown.png",
+   "root": "public",
+   "bytes": 1706946,
+   "sha256": "6eae52a96fadf1b5",
+   "format": "png",
+   "width": 1512,
+   "height": 1081
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/koreatown.webp",
+   "root": "public",
+   "bytes": 536266,
+   "sha256": "4665982d18be519b",
+   "format": "webp",
+   "width": 1512,
+   "height": 1081
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/larchmont.png",
+   "root": "public",
+   "bytes": 218767,
+   "sha256": "6847a3873aee284f",
+   "format": "png",
+   "width": 712,
+   "height": 329
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/larchmont.webp",
+   "root": "public",
+   "bytes": 72286,
+   "sha256": "6a18c685b482d91d",
+   "format": "webp",
+   "width": 712,
+   "height": 329
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/leimert-park.png",
+   "root": "public",
+   "bytes": 176753,
+   "sha256": "c4069e7b9834a9fb",
+   "format": "png",
+   "width": 782,
+   "height": 174
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/leimert-park.webp",
+   "root": "public",
+   "bytes": 42710,
+   "sha256": "b5191a2917796c70",
+   "format": "webp",
+   "width": 782,
+   "height": 174
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/lincoln-heights.png",
+   "root": "public",
+   "bytes": 344164,
+   "sha256": "e6b229854e61e155",
+   "format": "png",
+   "width": 199,
+   "height": 1442
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/lincoln-heights.webp",
+   "root": "public",
+   "bytes": 110012,
+   "sha256": "f33e549ec9acfab0",
+   "format": "webp",
+   "width": 199,
+   "height": 1442
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/los-feliz.png",
+   "root": "public",
+   "bytes": 2435860,
+   "sha256": "0caa2011968987f4",
+   "format": "png",
+   "width": 1759,
+   "height": 1078
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/los-feliz.webp",
+   "root": "public",
+   "bytes": 622554,
+   "sha256": "aac3b671c37c58ad",
+   "format": "webp",
+   "width": 1759,
+   "height": 1078
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/mar-vista.png",
+   "root": "public",
+   "bytes": 740890,
+   "sha256": "15aa29dd80dbf5d3",
+   "format": "png",
+   "width": 1100,
+   "height": 380
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/mar-vista.webp",
+   "root": "public",
+   "bytes": 177936,
+   "sha256": "257972d9e0903113",
+   "format": "webp",
+   "width": 1100,
+   "height": 380
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/adams-normandie.png",
+   "root": "public",
+   "bytes": 5691,
+   "sha256": "088a379a5ab1d184",
+   "format": "png",
+   "width": 1024,
+   "height": 1324
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/arlington-heights.png",
+   "root": "public",
+   "bytes": 18745,
+   "sha256": "505ac2c9dd340ebd",
+   "format": "png",
+   "width": 1024,
+   "height": 1864
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/arts-district.png",
+   "root": "public",
+   "bytes": 22117,
+   "sha256": "703ecd99e7d09b9d",
+   "format": "png",
+   "width": 1024,
+   "height": 2594
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/atwater-village.png",
+   "root": "public",
+   "bytes": 19891,
+   "sha256": "b1dfb9f255098122",
+   "format": "png",
+   "width": 1024,
+   "height": 1547
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/baldwin-hillscrenshaw.png",
+   "root": "public",
+   "bytes": 15677,
+   "sha256": "d93a832a9e73dd77",
+   "format": "png",
+   "width": 2995,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/bel-air.png",
+   "root": "public",
+   "bytes": 14022,
+   "sha256": "afeb27d4cc3a4d30",
+   "format": "png",
+   "width": 1024,
+   "height": 3072
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/beverly-crest.png",
+   "root": "public",
+   "bytes": 25235,
+   "sha256": "5b9754cb4d8af424",
+   "format": "png",
+   "width": 1024,
+   "height": 1837
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/beverly-grove.png",
+   "root": "public",
+   "bytes": 14520,
+   "sha256": "8bf79d02d034e8bb",
+   "format": "png",
+   "width": 1024,
+   "height": 1826
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/beverly-hills.png",
+   "root": "public",
+   "bytes": 23840,
+   "sha256": "58a8f382e3605949",
+   "format": "png",
+   "width": 1024,
+   "height": 2128
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/beverlywood.png",
+   "root": "public",
+   "bytes": 22651,
+   "sha256": "b6e8f416ba2f41b1",
+   "format": "png",
+   "width": 1024,
+   "height": 2010
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/boyle-heights.png",
+   "root": "public",
+   "bytes": 18990,
+   "sha256": "73e659a786f4e776",
+   "format": "png",
+   "width": 1024,
+   "height": 3072
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/carthay.png",
+   "root": "public",
+   "bytes": 18967,
+   "sha256": "efc0788a489e97f9",
+   "format": "png",
+   "width": 1024,
+   "height": 1679
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/central-alameda.png",
+   "root": "public",
+   "bytes": 11375,
+   "sha256": "3355c689dfc86875",
+   "format": "png",
+   "width": 1486,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/century-city.png",
+   "root": "public",
+   "bytes": 23492,
+   "sha256": "f9b073eb009e4fc7",
+   "format": "png",
+   "width": 1024,
+   "height": 1956
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/cheviot-hills.png",
+   "root": "public",
+   "bytes": 20468,
+   "sha256": "ebffa2eaf2ad43cb",
+   "format": "png",
+   "width": 1024,
+   "height": 1678
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/chinatown.png",
+   "root": "public",
+   "bytes": 19787,
+   "sha256": "03ef3725179d4e57",
+   "format": "png",
+   "width": 1024,
+   "height": 1475
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/culver-city.png",
+   "root": "public",
+   "bytes": 15926,
+   "sha256": "d2cc8a7a35ac5854",
+   "format": "png",
+   "width": 2133,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/cypress-park.png",
+   "root": "public",
+   "bytes": 28731,
+   "sha256": "226504dfeeb67d9b",
+   "format": "png",
+   "width": 1024,
+   "height": 3072
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/downtown.png",
+   "root": "public",
+   "bytes": 22511,
+   "sha256": "e813ddb89cca88c1",
+   "format": "png",
+   "width": 1024,
+   "height": 1819
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/eagle-rock.png",
+   "root": "public",
+   "bytes": 15183,
+   "sha256": "dab3071dcb537a44",
+   "format": "png",
+   "width": 1024,
+   "height": 3072
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/east-hollywood.png",
+   "root": "public",
+   "bytes": 9973,
+   "sha256": "dd2ed0faf46af235",
+   "format": "png",
+   "width": 1024,
+   "height": 1975
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/echo-park.png",
+   "root": "public",
+   "bytes": 35492,
+   "sha256": "8dd056b39f359575",
+   "format": "png",
+   "width": 1024,
+   "height": 2732
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/elysian-park.png",
+   "root": "public",
+   "bytes": 31198,
+   "sha256": "d0149a45f38518eb",
+   "format": "png",
+   "width": 1024,
+   "height": 2473
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/elysian-valley.png",
+   "root": "public",
+   "bytes": 22179,
+   "sha256": "ec2f71fee1c03b95",
+   "format": "png",
+   "width": 1024,
+   "height": 1756
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/exposition-park.png",
+   "root": "public",
+   "bytes": 7360,
+   "sha256": "295bd2ee93138bf2",
+   "format": "png",
+   "width": 3072,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/fairfax.png",
+   "root": "public",
+   "bytes": 12109,
+   "sha256": "0f91f0325f5f752f",
+   "format": "png",
+   "width": 1024,
+   "height": 2220
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/glassell-park.png",
+   "root": "public",
+   "bytes": 31263,
+   "sha256": "fccecaa11229e422",
+   "format": "png",
+   "width": 1024,
+   "height": 2759
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/glendale.png",
+   "root": "public",
+   "bytes": 9632,
+   "sha256": "afa6fa4613861824",
+   "format": "png",
+   "width": 1642,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/griffith-park.png",
+   "root": "public",
+   "bytes": 12603,
+   "sha256": "0324c765ec063f76",
+   "format": "png",
+   "width": 1477,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/hancock-park.png",
+   "root": "public",
+   "bytes": 8750,
+   "sha256": "d402ec3f8dfcf40f",
+   "format": "png",
+   "width": 1024,
+   "height": 2314
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/harvard-heights.png",
+   "root": "public",
+   "bytes": 11573,
+   "sha256": "85a6da99f186706b",
+   "format": "png",
+   "width": 1024,
+   "height": 2009
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/historic-south-central.png",
+   "root": "public",
+   "bytes": 11483,
+   "sha256": "43be7007e109ed84",
+   "format": "png",
+   "width": 1062,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/hollywood-hills-west.png",
+   "root": "public",
+   "bytes": 21036,
+   "sha256": "d6d36d9f39e8d770",
+   "format": "png",
+   "width": 1024,
+   "height": 1492
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/hollywood-hills.png",
+   "root": "public",
+   "bytes": 14939,
+   "sha256": "6d2e4407390939b8",
+   "format": "png",
+   "width": 1024,
+   "height": 1059
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/hollywood.png",
+   "root": "public",
+   "bytes": 6572,
+   "sha256": "f9ff88c0de07b94f",
+   "format": "png",
+   "width": 1265,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/jefferson-park.png",
+   "root": "public",
+   "bytes": 7838,
+   "sha256": "d458f25d245b0677",
+   "format": "png",
+   "width": 1024,
+   "height": 1203
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/koreatown.png",
+   "root": "public",
+   "bytes": 9143,
+   "sha256": "0d8e7cb14f2f1150",
+   "format": "png",
+   "width": 1024,
+   "height": 1302
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/larchmont.png",
+   "root": "public",
+   "bytes": 4336,
+   "sha256": "e6d2113a5cd5282e",
+   "format": "png",
+   "width": 1247,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/leimert-park.png",
+   "root": "public",
+   "bytes": 10920,
+   "sha256": "47067ffd4d970c2a",
+   "format": "png",
+   "width": 2583,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/lincoln-heights.png",
+   "root": "public",
+   "bytes": 18988,
+   "sha256": "25e6accc629eaddc",
+   "format": "png",
+   "width": 1024,
+   "height": 3072
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/los-feliz.png",
+   "root": "public",
+   "bytes": 13633,
+   "sha256": "58e52ba057f30305",
+   "format": "png",
+   "width": 1024,
+   "height": 1115
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/mar-vista.png",
+   "root": "public",
+   "bytes": 12535,
+   "sha256": "e3970185185d09a2",
+   "format": "png",
+   "width": 1666,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/mid-city.png",
+   "root": "public",
+   "bytes": 15905,
+   "sha256": "4edc6382038fbf4d",
+   "format": "png",
+   "width": 1409,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/mid-wilshire.png",
+   "root": "public",
+   "bytes": 12392,
+   "sha256": "fd4b999ed7e264ec",
+   "format": "png",
+   "width": 1071,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/mount-washington.png",
+   "root": "public",
+   "bytes": 11326,
+   "sha256": "c7617ab37d178812",
+   "format": "png",
+   "width": 1024,
+   "height": 3072
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/palms.png",
+   "root": "public",
+   "bytes": 17692,
+   "sha256": "06444bc8e125788e",
+   "format": "png",
+   "width": 1385,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/pico-robertson.png",
+   "root": "public",
+   "bytes": 10059,
+   "sha256": "21ae4b947e4386d0",
+   "format": "png",
+   "width": 1024,
+   "height": 1187
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/pico-union.png",
+   "root": "public",
+   "bytes": 11595,
+   "sha256": "ffce7d7405fd2e08",
+   "format": "png",
+   "width": 1024,
+   "height": 1058
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/rancho-park.png",
+   "root": "public",
+   "bytes": 17075,
+   "sha256": "3c9d7a4a7ea83110",
+   "format": "png",
+   "width": 1024,
+   "height": 1232
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/sawtelle.png",
+   "root": "public",
+   "bytes": 24176,
+   "sha256": "5ae63f3a51883fa8",
+   "format": "png",
+   "width": 1024,
+   "height": 3072
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/sherman-oaks.png",
+   "root": "public",
+   "bytes": 17708,
+   "sha256": "4380b8d31aa2330b",
+   "format": "png",
+   "width": 1771,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/silver-lake.png",
+   "root": "public",
+   "bytes": 24603,
+   "sha256": "8fd3cb052de21e1c",
+   "format": "png",
+   "width": 1024,
+   "height": 2194
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/studio-city.png",
+   "root": "public",
+   "bytes": 26181,
+   "sha256": "b4d96927ec4884d9",
+   "format": "png",
+   "width": 2296,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/universal-city.png",
+   "root": "public",
+   "bytes": 14551,
+   "sha256": "0b8b1368401c4cc0",
+   "format": "png",
+   "width": 2551,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/university-park.png",
+   "root": "public",
+   "bytes": 10511,
+   "sha256": "b4396bd643f9cf3f",
+   "format": "png",
+   "width": 1024,
+   "height": 1852
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/west-adams.png",
+   "root": "public",
+   "bytes": 15333,
+   "sha256": "65138102a936dc22",
+   "format": "png",
+   "width": 1861,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/west-hollywood.png",
+   "root": "public",
+   "bytes": 11694,
+   "sha256": "9183a95d4e81c154",
+   "format": "png",
+   "width": 1297,
+   "height": 1024
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/west-los-angeles.png",
+   "root": "public",
+   "bytes": 22983,
+   "sha256": "692fa1430f80e5ae",
+   "format": "png",
+   "width": 1024,
+   "height": 1579
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/westlake.png",
+   "root": "public",
+   "bytes": 17237,
+   "sha256": "ff2c9e7faee152ab",
+   "format": "png",
+   "width": 1024,
+   "height": 1793
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/westwood.png",
+   "root": "public",
+   "bytes": 23575,
+   "sha256": "9a11ed24a58158df",
+   "format": "png",
+   "width": 1024,
+   "height": 2295
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/masks/windsor-square.png",
+   "root": "public",
+   "bytes": 12205,
+   "sha256": "ac2fb08678007d25",
+   "format": "png",
+   "width": 1024,
+   "height": 2239
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/mid-city.png",
+   "root": "public",
+   "bytes": 4605117,
+   "sha256": "6ded72fa968e0052",
+   "format": "png",
+   "width": 2690,
+   "height": 1099
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/mid-city.webp",
+   "root": "public",
+   "bytes": 1080458,
+   "sha256": "567dd9b6985ca869",
+   "format": "webp",
+   "width": 2690,
+   "height": 1099
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/mid-wilshire.png",
+   "root": "public",
+   "bytes": 2858158,
+   "sha256": "c3427607d684224d",
+   "format": "png",
+   "width": 1994,
+   "height": 1073
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/mid-wilshire.webp",
+   "root": "public",
+   "bytes": 759818,
+   "sha256": "5268512a7e359869",
+   "format": "webp",
+   "width": 1994,
+   "height": 1073
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/mount-washington.png",
+   "root": "public",
+   "bytes": 873487,
+   "sha256": "ced0031186b742fd",
+   "format": "png",
+   "width": 428,
+   "height": 1321
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/mount-washington.webp",
+   "root": "public",
+   "bytes": 211156,
+   "sha256": "54f54ccd442c5c8f",
+   "format": "webp",
+   "width": 428,
+   "height": 1321
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/palms.png",
+   "root": "public",
+   "bytes": 2271316,
+   "sha256": "bb671f6f1b4d3824",
+   "format": "png",
+   "width": 1782,
+   "height": 741
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/palms.webp",
+   "root": "public",
+   "bytes": 562292,
+   "sha256": "3c89607eab5799a8",
+   "format": "webp",
+   "width": 1782,
+   "height": 741
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/pico-robertson.png",
+   "root": "public",
+   "bytes": 1544248,
+   "sha256": "15cabae981be9818",
+   "format": "png",
+   "width": 1275,
+   "height": 831
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/pico-robertson.webp",
+   "root": "public",
+   "bytes": 330852,
+   "sha256": "86eff08d5b885987",
+   "format": "webp",
+   "width": 1275,
+   "height": 831
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/pico-union.png",
+   "root": "public",
+   "bytes": 1395777,
+   "sha256": "ef55539878b43c3f",
+   "format": "png",
+   "width": 1357,
+   "height": 788
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/pico-union.webp",
+   "root": "public",
+   "bytes": 406494,
+   "sha256": "22e2ee54d45b007e",
+   "format": "webp",
+   "width": 1357,
+   "height": 788
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/rancho-park.png",
+   "root": "public",
+   "bytes": 1148736,
+   "sha256": "926e1afa6e2c2e57",
+   "format": "png",
+   "width": 998,
+   "height": 675
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/rancho-park.webp",
+   "root": "public",
+   "bytes": 299814,
+   "sha256": "4acd3d426ac752f7",
+   "format": "webp",
+   "width": 998,
+   "height": 675
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/sawtelle.png",
+   "root": "public",
+   "bytes": 1555841,
+   "sha256": "8a05ba1aa4af112e",
+   "format": "png",
+   "width": 655,
+   "height": 1347
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/sawtelle.webp",
+   "root": "public",
+   "bytes": 368448,
+   "sha256": "c184a9e027b1917e",
+   "format": "webp",
+   "width": 655,
+   "height": 1347
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/sherman-oaks.png",
+   "root": "public",
+   "bytes": 759544,
+   "sha256": "5b020497ac279c05",
+   "format": "png",
+   "width": 1571,
+   "height": 511
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/sherman-oaks.webp",
+   "root": "public",
+   "bytes": 156712,
+   "sha256": "08a45224b6506f09",
+   "format": "webp",
+   "width": 1571,
+   "height": 511
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/silver-lake.png",
+   "root": "public",
+   "bytes": 3856799,
+   "sha256": "84d581591d8688fe",
+   "format": "png",
+   "width": 1432,
+   "height": 1727
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/silver-lake.webp",
+   "root": "public",
+   "bytes": 934848,
+   "sha256": "4421fe54e5b736ef",
+   "format": "webp",
+   "width": 1432,
+   "height": 1727
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/studio-city.png",
+   "root": "public",
+   "bytes": 2466132,
+   "sha256": "de13554905dd2b97",
+   "format": "png",
+   "width": 2944,
+   "height": 739
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/studio-city.webp",
+   "root": "public",
+   "bytes": 507142,
+   "sha256": "25b18fa48cfa6546",
+   "format": "webp",
+   "width": 2944,
+   "height": 739
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/universal-city.png",
+   "root": "public",
+   "bytes": 215427,
+   "sha256": "84ba3cc6bdd8403a",
+   "format": "png",
+   "width": 800,
+   "height": 181
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/universal-city.webp",
+   "root": "public",
+   "bytes": 55198,
+   "sha256": "541087a0df16caa7",
+   "format": "webp",
+   "width": 800,
+   "height": 181
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/university-park.png",
+   "root": "public",
+   "bytes": 754940,
+   "sha256": "e7f2d0f10321aa14",
+   "format": "png",
+   "width": 728,
+   "height": 742
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/university-park.webp",
+   "root": "public",
+   "bytes": 224418,
+   "sha256": "e84b12f368ea57d0",
+   "format": "webp",
+   "width": 728,
+   "height": 742
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/west-adams.png",
+   "root": "public",
+   "bytes": 1368905,
+   "sha256": "fd7d8f578157379c",
+   "format": "png",
+   "width": 1791,
+   "height": 554
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/west-adams.webp",
+   "root": "public",
+   "bytes": 352148,
+   "sha256": "07a5cfe5f0956ead",
+   "format": "webp",
+   "width": 1791,
+   "height": 554
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/west-hollywood.png",
+   "root": "public",
+   "bytes": 2521334,
+   "sha256": "5f1a0c0f1398a4c9",
+   "format": "png",
+   "width": 2198,
+   "height": 976
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/west-hollywood.webp",
+   "root": "public",
+   "bytes": 709022,
+   "sha256": "9ee2b148f6e27242",
+   "format": "webp",
+   "width": 2198,
+   "height": 976
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/west-los-angeles.png",
+   "root": "public",
+   "bytes": 1779484,
+   "sha256": "1044d1637ccea7c3",
+   "format": "png",
+   "width": 1069,
+   "height": 928
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/west-los-angeles.webp",
+   "root": "public",
+   "bytes": 409704,
+   "sha256": "99e17d65f18216be",
+   "format": "webp",
+   "width": 1069,
+   "height": 928
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/westlake.png",
+   "root": "public",
+   "bytes": 3139742,
+   "sha256": "4e2117933c98c769",
+   "format": "png",
+   "width": 1423,
+   "height": 1401
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/westlake.webp",
+   "root": "public",
+   "bytes": 816800,
+   "sha256": "79ca370f96482d82",
+   "format": "webp",
+   "width": 1423,
+   "height": 1401
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/westwood.png",
+   "root": "public",
+   "bytes": 3061427,
+   "sha256": "a4ac24439f60aada",
+   "format": "png",
+   "width": 1249,
+   "height": 1575
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/westwood.webp",
+   "root": "public",
+   "bytes": 677254,
+   "sha256": "ac0a28539b9565b6",
+   "format": "webp",
+   "width": 1249,
+   "height": 1575
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/windsor-square.png",
+   "root": "public",
+   "bytes": 344324,
+   "sha256": "0d150eafb2bc98a3",
+   "format": "png",
+   "width": 528,
+   "height": 650
+  },
+  {
+   "url": "/assets/admin/control-room/world/territories-v2/windsor-square.webp",
+   "root": "public",
+   "bytes": 115556,
+   "sha256": "cca4adb81af8439a",
+   "format": "webp",
+   "width": 528,
+   "height": 650
+  },
+  {
+   "url": "/assets/admin/ops-board/daniel-cha-avatar.png",
+   "root": "public",
+   "bytes": 12873,
+   "sha256": "cf0379ceb7184fec",
+   "format": "png",
+   "width": 93,
+   "height": 78
+  },
+  {
+   "url": "/assets/admin/ops-board/hero-three-buildings-road.png",
+   "root": "public",
+   "bytes": 2280276,
+   "sha256": "82094fa8e873adf4",
+   "format": "png",
+   "width": 1566,
+   "height": 1005
+  },
+  {
+   "url": "/assets/admin/ops-board/territory-progression.png",
+   "root": "public",
+   "bytes": 637044,
+   "sha256": "27a3e3b5ee64128d",
+   "format": "png",
+   "width": 1916,
+   "height": 821
+  },
+  {
+   "url": "/assets/boreslay-hero/battlefield-reference.png",
+   "root": "public",
+   "bytes": 2316411,
+   "sha256": "9ae0b546fe3566ce",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/boreslay-hero/procrastinator-reference.png",
+   "root": "public",
+   "bytes": 1243596,
+   "sha256": "1e9a2cb06be4fde2",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/boreslay-hero/scroll-reference.png",
+   "root": "public",
+   "bytes": 474605,
+   "sha256": "5ca58d1b4e4d1f76",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/boreslay-hero/spark-reference.png",
+   "root": "public",
+   "bytes": 1072950,
+   "sha256": "88dc96e4996fbed1",
+   "format": "png",
+   "width": 1158,
+   "height": 1359
+  },
+  {
+   "url": "/assets/boreslay-sections/closer-after.webp",
+   "root": "public",
+   "bytes": 30026,
+   "sha256": "49a67eaaf440cf4f",
+   "format": "webp",
+   "width": 828,
+   "height": 306
+  },
+  {
+   "url": "/assets/boreslay-sections/closer-before.webp",
+   "root": "public",
+   "bytes": 38124,
+   "sha256": "e54e69209a2ed20e",
+   "format": "webp",
+   "width": 828,
+   "height": 306
+  },
+  {
+   "url": "/assets/boreslay-sections/crew-closer.webp",
+   "root": "public",
+   "bytes": 146888,
+   "sha256": "6be5f80903ecd7f8",
+   "format": "webp",
+   "width": 504,
+   "height": 1016
+  },
+  {
+   "url": "/assets/boreslay-sections/crew-guardian.webp",
+   "root": "public",
+   "bytes": 151504,
+   "sha256": "e6ee32e02139edb9",
+   "format": "webp",
+   "width": 504,
+   "height": 1016
+  },
+  {
+   "url": "/assets/boreslay-sections/crew-treasurer.webp",
+   "root": "public",
+   "bytes": 152354,
+   "sha256": "efe6f8d7adfd7a7a",
+   "format": "webp",
+   "width": 504,
+   "height": 1016
+  },
+  {
+   "url": "/assets/boreslay-sections/final-panorama.webp",
+   "root": "public",
+   "bytes": 292028,
+   "sha256": "49e8ca2aebaacf67",
+   "format": "webp",
+   "width": 2172,
+   "height": 724
+  },
+  {
+   "url": "/assets/boreslay-sections/first-clock.webp",
+   "root": "public",
+   "bytes": 23080,
+   "sha256": "b8837a6a456ff2a6",
+   "format": "webp",
+   "width": 504,
+   "height": 760
+  },
+  {
+   "url": "/assets/boreslay-sections/first-collateral.webp",
+   "root": "public",
+   "bytes": 24256,
+   "sha256": "8f7dc5c82821de05",
+   "format": "webp",
+   "width": 504,
+   "height": 760
+  },
+  {
+   "url": "/assets/boreslay-sections/first-door.webp",
+   "root": "public",
+   "bytes": 35246,
+   "sha256": "a9504d7c536c869d",
+   "format": "webp",
+   "width": 504,
+   "height": 760
+  },
+  {
+   "url": "/assets/boreslay-sections/first-result.webp",
+   "root": "public",
+   "bytes": 26822,
+   "sha256": "28fad7addd64ebef",
+   "format": "webp",
+   "width": 504,
+   "height": 760
+  },
+  {
+   "url": "/assets/boreslay-sections/guardian-after.webp",
+   "root": "public",
+   "bytes": 52158,
+   "sha256": "ce0630b54f254bba",
+   "format": "webp",
+   "width": 828,
+   "height": 306
+  },
+  {
+   "url": "/assets/boreslay-sections/guardian-before.webp",
+   "root": "public",
+   "bytes": 29642,
+   "sha256": "a9a7f10f92d8a875",
+   "format": "webp",
+   "width": 828,
+   "height": 306
+  },
+  {
+   "url": "/assets/boreslay-sections/realm-clockwork.webp",
+   "root": "public",
+   "bytes": 134976,
+   "sha256": "d5a944ccd3eb1362",
+   "format": "webp",
+   "width": 716,
+   "height": 535
+  },
+  {
+   "url": "/assets/boreslay-sections/realm-sunbright.webp",
+   "root": "public",
+   "bytes": 125214,
+   "sha256": "759628779720d563",
+   "format": "webp",
+   "width": 716,
+   "height": 535
+  },
+  {
+   "url": "/assets/boreslay-sections/realm-void.webp",
+   "root": "public",
+   "bytes": 87104,
+   "sha256": "188e7c685faa0c4d",
+   "format": "webp",
+   "width": 716,
+   "height": 535
+  },
+  {
+   "url": "/assets/boreslay-sections/realm-wildwood.webp",
+   "root": "public",
+   "bytes": 118728,
+   "sha256": "c3d2befcd756929f",
+   "format": "webp",
+   "width": 716,
+   "height": 535
+  },
+  {
+   "url": "/assets/boreslay-sections/replay-complete.webp",
+   "root": "public",
+   "bytes": 10562,
+   "sha256": "18a5be488a71afff",
+   "format": "webp",
+   "width": 549,
+   "height": 463
+  },
+  {
+   "url": "/assets/boreslay-sections/replay-deployed.webp",
+   "root": "public",
+   "bytes": 19260,
+   "sha256": "d72e0180e7a1eec2",
+   "format": "webp",
+   "width": 550,
+   "height": 462
+  },
+  {
+   "url": "/assets/boreslay-sections/replay-payment.webp",
+   "root": "public",
+   "bytes": 19728,
+   "sha256": "0bca2d7385001a19",
+   "format": "webp",
+   "width": 549,
+   "height": 463
+  },
+  {
+   "url": "/assets/boreslay-sections/replay-reply.webp",
+   "root": "public",
+   "bytes": 27192,
+   "sha256": "0c214071abef55a2",
+   "format": "webp",
+   "width": 549,
+   "height": 462
+  },
+  {
+   "url": "/assets/boreslay-sections/replay-rift.webp",
+   "root": "public",
+   "bytes": 22508,
+   "sha256": "c97975c5dcc33177",
+   "format": "webp",
+   "width": 550,
+   "height": 463
+  },
+  {
+   "url": "/assets/boreslay-sections/replay-stake.webp",
+   "root": "public",
+   "bytes": 25034,
+   "sha256": "1cad27f9fedbc46b",
+   "format": "webp",
+   "width": 549,
+   "height": 462
+  },
+  {
+   "url": "/assets/boreslay-sections/treasurer-after.webp",
+   "root": "public",
+   "bytes": 27014,
+   "sha256": "c091019ef406974b",
+   "format": "webp",
+   "width": 828,
+   "height": 305
+  },
+  {
+   "url": "/assets/boreslay-sections/treasurer-before.webp",
+   "root": "public",
+   "bytes": 25782,
+   "sha256": "1da8f3131ae95763",
+   "format": "webp",
+   "width": 828,
+   "height": 305
+  },
+  {
+   "url": "/assets/dayforge-arcade/dayforge-arcade-landing.png",
+   "root": "public",
+   "bytes": 2560616,
+   "sha256": "6915a9d22c6144fb",
+   "format": "png",
+   "width": 941,
+   "height": 1672
+  },
+  {
+   "url": "/assets/dayforge-final/july-demo-territory-map.svg",
+   "root": "public",
+   "bytes": 8053,
+   "sha256": "0c72caa1b0bf0a01",
+   "format": "svg",
+   "width": null,
+   "height": null
+  },
+  {
+   "url": "/assets/dayforge-final/mission-foundry-hero.png",
+   "root": "public",
+   "bytes": 1713276,
+   "sha256": "8d0d52d8739bac57",
+   "format": "png",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "/assets/dayforge-final/screen-to-street.png",
+   "root": "public",
+   "bytes": 1511580,
+   "sha256": "bbbf75e0f0e3a1ad",
+   "format": "png",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "/assets/dayforge-final/unified-revenue-machine-hero.png",
+   "root": "public",
+   "bytes": 2065498,
+   "sha256": "411534021850a1b6",
+   "format": "png",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "/assets/goldline/chapters/the-last-valet/backgrounds/arrival-court.png",
+   "root": "public",
+   "bytes": 3087910,
+   "sha256": "c1dc5eb1a6d524f6",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/chapters/the-last-valet/backgrounds/departure-gallery.png",
+   "root": "public",
+   "bytes": 2488244,
+   "sha256": "2787fbd5eeb51293",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/chapters/the-last-valet/backgrounds/turntable-garden.png",
+   "root": "public",
+   "bytes": 3196554,
+   "sha256": "65c4e453834fda20",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/chapters/the-last-valet/characters/bellwether-atlas.png",
+   "root": "public",
+   "bytes": 1434862,
+   "sha256": "5563e6b18b0c2100",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/chapters/the-last-valet/characters/heroine-actions.png",
+   "root": "public",
+   "bytes": 18142,
+   "sha256": "922105c0dc807d61",
+   "format": "png",
+   "width": 576,
+   "height": 192
+  },
+  {
+   "url": "/assets/goldline/chapters/the-last-valet/characters/inez-atlas.png",
+   "root": "public",
+   "bytes": 1516850,
+   "sha256": "246e7b7c0292eee5",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/chapters/the-last-valet/characters/perrin-atlas.png",
+   "root": "public",
+   "bytes": 1498682,
+   "sha256": "1149a8de89440d98",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/chapters/the-last-valet/fx/impact-atlas.png",
+   "root": "public",
+   "bytes": 1216375,
+   "sha256": "aacdc55768f21f11",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/chapters/the-last-valet/mechanisms/machinery-atlas.png",
+   "root": "public",
+   "bytes": 1782994,
+   "sha256": "46d6ef1cd2c83044",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/chapters/the-last-valet/mechanisms/props-atlas.png",
+   "root": "public",
+   "bytes": 1900997,
+   "sha256": "a257729693f728e1",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/chapters/the-last-valet/mechanisms/scenery-atlas.png",
+   "root": "public",
+   "bytes": 701883,
+   "sha256": "48a42f8e6439ab55",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/chapters/the-last-valet/references/approved-art-direction.png",
+   "root": "public",
+   "bytes": 2663768,
+   "sha256": "c7b88af68f2d6f39",
+   "format": "png",
+   "width": 1774,
+   "height": 887
+  },
+  {
+   "url": "/assets/goldline/chapters/the-last-valet/references/golden_teal_fantasy_vfx_asset_atlas.png",
+   "root": "public",
+   "bytes": 2667398,
+   "sha256": "e5ddb6568b174e7a",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/chapters/the-last-valet/references/mediterranean_art_deco_rooftop_asset_sheet.png",
+   "root": "public",
+   "bytes": 2347799,
+   "sha256": "6f328aeb5664b287",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/_originals/action_sheet_source.png",
+   "root": "public",
+   "bytes": 2151195,
+   "sha256": "6a18a1b52797b526",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/_originals/climb_a.png",
+   "root": "public",
+   "bytes": 102256,
+   "sha256": "34db6946f7385952",
+   "format": "png",
+   "width": 307,
+   "height": 256
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/_originals/climb_b.png",
+   "root": "public",
+   "bytes": 102945,
+   "sha256": "31c0d5b105b4f032",
+   "format": "png",
+   "width": 307,
+   "height": 256
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/_originals/idle.png",
+   "root": "public",
+   "bytes": 1748651,
+   "sha256": "b3f361d2420f501e",
+   "format": "png",
+   "width": 1024,
+   "height": 1536
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/_originals/jump_air.png",
+   "root": "public",
+   "bytes": 93429,
+   "sha256": "dc1d5c427120ee31",
+   "format": "png",
+   "width": 307,
+   "height": 256
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/_originals/jump_start.png",
+   "root": "public",
+   "bytes": 91490,
+   "sha256": "047ac1aea0aa49ed",
+   "format": "png",
+   "width": 307,
+   "height": 256
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/_originals/land.png",
+   "root": "public",
+   "bytes": 104794,
+   "sha256": "a86112f6a421658a",
+   "format": "png",
+   "width": 307,
+   "height": 256
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/_originals/run_01.png",
+   "root": "public",
+   "bytes": 101349,
+   "sha256": "a72626e678b7a6c0",
+   "format": "png",
+   "width": 307,
+   "height": 256
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/_originals/run_02.png",
+   "root": "public",
+   "bytes": 109660,
+   "sha256": "60b198186f3b68a6",
+   "format": "png",
+   "width": 307,
+   "height": 256
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/_originals/run_03.png",
+   "root": "public",
+   "bytes": 113142,
+   "sha256": "60ed6dff85a8b6d4",
+   "format": "png",
+   "width": 307,
+   "height": 256
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/_originals/run_04.png",
+   "root": "public",
+   "bytes": 113732,
+   "sha256": "0e75e80c00461cd7",
+   "format": "png",
+   "width": 307,
+   "height": 256
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/_originals/run_05.png",
+   "root": "public",
+   "bytes": 106963,
+   "sha256": "127710aa4a5faca7",
+   "format": "png",
+   "width": 307,
+   "height": 256
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/_originals/vault.png",
+   "root": "public",
+   "bytes": 113245,
+   "sha256": "3a7c44902180906b",
+   "format": "png",
+   "width": 307,
+   "height": 256
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/climb_a.webp",
+   "root": "public",
+   "bytes": 30204,
+   "sha256": "6504abf26d8ae4b7",
+   "format": "webp",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/climb_b.webp",
+   "root": "public",
+   "bytes": 25880,
+   "sha256": "da22ba0ce6dfab88",
+   "format": "webp",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/idle-back.webp",
+   "root": "public",
+   "bytes": 26172,
+   "sha256": "d89c2df24f0bded3",
+   "format": "webp",
+   "width": 143,
+   "height": 310
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/idle-front.webp",
+   "root": "public",
+   "bytes": 27858,
+   "sha256": "23d0a98fdc3e5e4c",
+   "format": "webp",
+   "width": 142,
+   "height": 314
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/idle-left.webp",
+   "root": "public",
+   "bytes": 21946,
+   "sha256": "2d3d1ac1adbb6799",
+   "format": "webp",
+   "width": 104,
+   "height": 315
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/idle-right.webp",
+   "root": "public",
+   "bytes": 28852,
+   "sha256": "6d954872200859ef",
+   "format": "webp",
+   "width": 140,
+   "height": 309
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-back-01.webp",
+   "root": "public",
+   "bytes": 14110,
+   "sha256": "ef723305e5a5f16d",
+   "format": "webp",
+   "width": 99,
+   "height": 212
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-back-02.webp",
+   "root": "public",
+   "bytes": 14310,
+   "sha256": "6312ab9424702b1c",
+   "format": "webp",
+   "width": 99,
+   "height": 210
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-back-03.webp",
+   "root": "public",
+   "bytes": 15986,
+   "sha256": "bad867d3d1dc0e2c",
+   "format": "webp",
+   "width": 104,
+   "height": 213
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-back-04.webp",
+   "root": "public",
+   "bytes": 18564,
+   "sha256": "5a81e0cfa6b555a6",
+   "format": "webp",
+   "width": 112,
+   "height": 218
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-back-05.webp",
+   "root": "public",
+   "bytes": 18458,
+   "sha256": "62e5274790f2b0af",
+   "format": "webp",
+   "width": 108,
+   "height": 214
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-front-01.webp",
+   "root": "public",
+   "bytes": 14430,
+   "sha256": "f32e9f8528f93c03",
+   "format": "webp",
+   "width": 101,
+   "height": 207
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-front-02.webp",
+   "root": "public",
+   "bytes": 15136,
+   "sha256": "dd6393583ded5357",
+   "format": "webp",
+   "width": 102,
+   "height": 207
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-front-03.webp",
+   "root": "public",
+   "bytes": 15652,
+   "sha256": "bd80586f60e852b4",
+   "format": "webp",
+   "width": 101,
+   "height": 207
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-front-04.webp",
+   "root": "public",
+   "bytes": 15852,
+   "sha256": "0b3cf1d3ecfb1dbb",
+   "format": "webp",
+   "width": 103,
+   "height": 208
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-front-05.webp",
+   "root": "public",
+   "bytes": 16318,
+   "sha256": "e0202e90101fb5d8",
+   "format": "webp",
+   "width": 106,
+   "height": 206
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-left-01.webp",
+   "root": "public",
+   "bytes": 19578,
+   "sha256": "056e6ff3df7c209d",
+   "format": "webp",
+   "width": 115,
+   "height": 214
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-left-02.webp",
+   "root": "public",
+   "bytes": 17846,
+   "sha256": "f4990087c1b3752f",
+   "format": "webp",
+   "width": 105,
+   "height": 215
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-left-03.webp",
+   "root": "public",
+   "bytes": 19248,
+   "sha256": "8d21974b346f9345",
+   "format": "webp",
+   "width": 110,
+   "height": 214
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-left-04.webp",
+   "root": "public",
+   "bytes": 19788,
+   "sha256": "6b21c50de20296b4",
+   "format": "webp",
+   "width": 114,
+   "height": 215
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-left-05.webp",
+   "root": "public",
+   "bytes": 18700,
+   "sha256": "363a0a942419b491",
+   "format": "webp",
+   "width": 110,
+   "height": 222
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-right-01.webp",
+   "root": "public",
+   "bytes": 18774,
+   "sha256": "f0e79d18a6b00303",
+   "format": "webp",
+   "width": 128,
+   "height": 203
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-right-02.webp",
+   "root": "public",
+   "bytes": 18812,
+   "sha256": "d7b29fdd9306ec2e",
+   "format": "webp",
+   "width": 122,
+   "height": 207
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-right-03.webp",
+   "root": "public",
+   "bytes": 19388,
+   "sha256": "7f5214a06d851b7d",
+   "format": "webp",
+   "width": 132,
+   "height": 203
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-right-04.webp",
+   "root": "public",
+   "bytes": 18368,
+   "sha256": "8b2993e8d0c40d3a",
+   "format": "webp",
+   "width": 118,
+   "height": 203
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/directional/walk-right-05.webp",
+   "root": "public",
+   "bytes": 16624,
+   "sha256": "077b902348564007",
+   "format": "webp",
+   "width": 101,
+   "height": 204
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/idle.webp",
+   "root": "public",
+   "bytes": 36992,
+   "sha256": "630dcf075a10b474",
+   "format": "webp",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/jump_air.webp",
+   "root": "public",
+   "bytes": 39726,
+   "sha256": "f0c5921da3aa0bc3",
+   "format": "webp",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/jump_start.webp",
+   "root": "public",
+   "bytes": 53438,
+   "sha256": "0b288a5984399720",
+   "format": "webp",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/land.webp",
+   "root": "public",
+   "bytes": 58228,
+   "sha256": "61e679f3e70f9f15",
+   "format": "webp",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/run_01.webp",
+   "root": "public",
+   "bytes": 44414,
+   "sha256": "aaae4d455275a61c",
+   "format": "webp",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/run_02.webp",
+   "root": "public",
+   "bytes": 49232,
+   "sha256": "02bf5e5c119b8673",
+   "format": "webp",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/run_03.webp",
+   "root": "public",
+   "bytes": 45730,
+   "sha256": "177dfa157aeffacc",
+   "format": "webp",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/run_04.webp",
+   "root": "public",
+   "bytes": 41314,
+   "sha256": "a2222626c211e0ea",
+   "format": "webp",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/run_05.webp",
+   "root": "public",
+   "bytes": 40020,
+   "sha256": "edfc1a62e1b9794d",
+   "format": "webp",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/characters/trailblazer/vault.webp",
+   "root": "public",
+   "bytes": 56592,
+   "sha256": "c8d8a3b7235c1c35",
+   "format": "webp",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/colosseum/arena-background-hd.webp",
+   "root": "public",
+   "bytes": 685622,
+   "sha256": "79d7cc6b0a9d0c31",
+   "format": "webp",
+   "width": 941,
+   "height": 1672
+  },
+  {
+   "url": "/assets/goldline/colosseum/arena-background.jpg",
+   "root": "public",
+   "bytes": 7927,
+   "sha256": "775f7a9827919870",
+   "format": "jpg",
+   "width": 280,
+   "height": 497
+  },
+  {
+   "url": "/assets/goldline/colosseum/six-door-facade-hd.webp",
+   "root": "public",
+   "bytes": 694050,
+   "sha256": "5c3fabf3d8859a81",
+   "format": "webp",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "/assets/goldline/colosseum/six-door-facade.webp",
+   "root": "public",
+   "bytes": 6134,
+   "sha256": "1a5cbc0aa0e78dda",
+   "format": "webp",
+   "width": 360,
+   "height": 203
+  },
+  {
+   "url": "/assets/goldline/colosseum/villain-reveal-hd.webp",
+   "root": "public",
+   "bytes": 959254,
+   "sha256": "a5de856915b0ceb2",
+   "format": "webp",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "/assets/goldline/colosseum/villain-reveal.webp",
+   "root": "public",
+   "bytes": 6922,
+   "sha256": "6fdb46f345fc2cc9",
+   "format": "webp",
+   "width": 360,
+   "height": 203
+  },
+  {
+   "url": "/assets/goldline/corridor_01/_originals/effects.png",
+   "root": "public",
+   "bytes": 2036866,
+   "sha256": "c1fa539cdd25584e",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/corridor_01/_originals/far.png",
+   "root": "public",
+   "bytes": 2281620,
+   "sha256": "2372a3d483a1c86a",
+   "format": "png",
+   "width": 1024,
+   "height": 1536
+  },
+  {
+   "url": "/assets/goldline/corridor_01/_originals/foreground.png",
+   "root": "public",
+   "bytes": 2997274,
+   "sha256": "67aa34e3148cf6d1",
+   "format": "png",
+   "width": 1024,
+   "height": 1536
+  },
+  {
+   "url": "/assets/goldline/corridor_01/_originals/mid.png",
+   "root": "public",
+   "bytes": 3164491,
+   "sha256": "1e0430788680f8d0",
+   "format": "png",
+   "width": 1024,
+   "height": 1536
+  },
+  {
+   "url": "/assets/goldline/corridor_01/_originals/portal_coldcall.png",
+   "root": "public",
+   "bytes": 2533403,
+   "sha256": "f721929db05ba5cb",
+   "format": "png",
+   "width": 1024,
+   "height": 1536
+  },
+  {
+   "url": "/assets/goldline/corridor_01/_originals/stronghold.png",
+   "root": "public",
+   "bytes": 2638130,
+   "sha256": "051797b4f594f491",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/corridor_01/effects.webp",
+   "root": "public",
+   "bytes": 154948,
+   "sha256": "aa4e03fc01f2eb93",
+   "format": "webp",
+   "width": 1000,
+   "height": 666
+  },
+  {
+   "url": "/assets/goldline/corridor_01/far.webp",
+   "root": "public",
+   "bytes": 94288,
+   "sha256": "c3e927be7ee6ddf0",
+   "format": "webp",
+   "width": 800,
+   "height": 1200
+  },
+  {
+   "url": "/assets/goldline/corridor_01/foreground.webp",
+   "root": "public",
+   "bytes": 370228,
+   "sha256": "1fa7deab888325ff",
+   "format": "webp",
+   "width": 800,
+   "height": 1200
+  },
+  {
+   "url": "/assets/goldline/corridor_01/mid.webp",
+   "root": "public",
+   "bytes": 276538,
+   "sha256": "84513f7afab5b9ad",
+   "format": "webp",
+   "width": 933,
+   "height": 1400
+  },
+  {
+   "url": "/assets/goldline/corridor_01/occlusion-accents/left-frame.webp",
+   "root": "public",
+   "bytes": 280586,
+   "sha256": "445d715fe5cdcb74",
+   "format": "webp",
+   "width": 525,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/corridor_01/occlusion-accents/right-frame.webp",
+   "root": "public",
+   "bytes": 243380,
+   "sha256": "60a52a24a54498af",
+   "format": "webp",
+   "width": 700,
+   "height": 702
+  },
+  {
+   "url": "/assets/goldline/corridor_01/portal_coldcall.webp",
+   "root": "public",
+   "bytes": 121860,
+   "sha256": "b0a8911d36ec265c",
+   "format": "webp",
+   "width": 466,
+   "height": 700
+  },
+  {
+   "url": "/assets/goldline/corridor_01/stronghold.webp",
+   "root": "public",
+   "bytes": 178204,
+   "sha256": "fb1f330c43bc1c6e",
+   "format": "webp",
+   "width": 900,
+   "height": 600
+  },
+  {
+   "url": "/assets/goldline/corridor_02/effects.webp",
+   "root": "public",
+   "bytes": 204170,
+   "sha256": "0f4d9dd4f1e9990c",
+   "format": "webp",
+   "width": 1000,
+   "height": 666
+  },
+  {
+   "url": "/assets/goldline/corridor_02/far.webp",
+   "root": "public",
+   "bytes": 65592,
+   "sha256": "62d34389a75816a1",
+   "format": "webp",
+   "width": 800,
+   "height": 1200
+  },
+  {
+   "url": "/assets/goldline/corridor_02/foreground.webp",
+   "root": "public",
+   "bytes": 371004,
+   "sha256": "c7d84b29e5883388",
+   "format": "webp",
+   "width": 800,
+   "height": 1200
+  },
+  {
+   "url": "/assets/goldline/corridor_02/mid.webp",
+   "root": "public",
+   "bytes": 414900,
+   "sha256": "413a4ac152ca8b54",
+   "format": "webp",
+   "width": 933,
+   "height": 1400
+  },
+  {
+   "url": "/assets/goldline/guardians/approved-asset-sheet.png",
+   "root": "public",
+   "bytes": 2976843,
+   "sha256": "d94623832d6f4712",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/guardians/v1/cloud_duchess.png",
+   "root": "public",
+   "bytes": 378868,
+   "sha256": "9c24c00d034fcdb0",
+   "format": "png",
+   "width": 512,
+   "height": 599
+  },
+  {
+   "url": "/assets/goldline/guardians/v1/drizzle_detective.png",
+   "root": "public",
+   "bytes": 441683,
+   "sha256": "f0dc4bfdc971a959",
+   "format": "png",
+   "width": 512,
+   "height": 845
+  },
+  {
+   "url": "/assets/goldline/guardians/v1/gust_jester.png",
+   "root": "public",
+   "bytes": 522822,
+   "sha256": "47b10c2169163af8",
+   "format": "png",
+   "width": 512,
+   "height": 906
+  },
+  {
+   "url": "/assets/goldline/guardians/v1/lock-seal.png",
+   "root": "public",
+   "bytes": 1884937,
+   "sha256": "0a74e90bd9f5e991",
+   "format": "png",
+   "width": 1024,
+   "height": 1536
+  },
+  {
+   "url": "/assets/goldline/guardians/v1/sleepy_one_eye.png",
+   "root": "public",
+   "bytes": 306571,
+   "sha256": "b2beebed6053e507",
+   "format": "png",
+   "width": 512,
+   "height": 436
+  },
+  {
+   "url": "/assets/goldline/guardians/v1/thunder_king.png",
+   "root": "public",
+   "bytes": 464153,
+   "sha256": "9adac277eb7dcfa5",
+   "format": "png",
+   "width": 512,
+   "height": 614
+  },
+  {
+   "url": "/assets/goldline/guardians/v1/tiny_emperor.png",
+   "root": "public",
+   "bytes": 401009,
+   "sha256": "1036b9d281bae8b1",
+   "format": "png",
+   "width": 512,
+   "height": 587
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v2/lantern-gold-dim.png",
+   "root": "public",
+   "bytes": 35810,
+   "sha256": "54e2aead12a2b5de",
+   "format": "png",
+   "width": 108,
+   "height": 220
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v2/lantern-gold-lit.png",
+   "root": "public",
+   "bytes": 40543,
+   "sha256": "3753323dee9cba9f",
+   "format": "png",
+   "width": 111,
+   "height": 220
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v2/lantern-gold-off.png",
+   "root": "public",
+   "bytes": 36730,
+   "sha256": "64983449a912ab80",
+   "format": "png",
+   "width": 102,
+   "height": 220
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v2/projectile-opus-golf-ball.png",
+   "root": "public",
+   "bytes": 133965,
+   "sha256": "bb0ef9226a1d8f59",
+   "format": "png",
+   "width": 320,
+   "height": 315
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v2/projectile-valet-car.png",
+   "root": "public",
+   "bytes": 158895,
+   "sha256": "82fd9e30f21ab702",
+   "format": "png",
+   "width": 480,
+   "height": 221
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v2/tower-cpe-combat-clean.png",
+   "root": "public",
+   "bytes": 782318,
+   "sha256": "f1a84ee16c99b82b",
+   "format": "png",
+   "width": 595,
+   "height": 900
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v2/tower-opus-combat-clean.png",
+   "root": "public",
+   "bytes": 796996,
+   "sha256": "3c37742e83262d73",
+   "format": "png",
+   "width": 660,
+   "height": 900
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v3/cta-active-orders.png",
+   "root": "public",
+   "bytes": 1114876,
+   "sha256": "5c53f875d42d11cd",
+   "format": "png",
+   "width": 2172,
+   "height": 724
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v3/cta-backing-plate.png",
+   "root": "public",
+   "bytes": 664348,
+   "sha256": "5ce68c5112191abc",
+   "format": "png",
+   "width": 2172,
+   "height": 724
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v3/cta-customers.png",
+   "root": "public",
+   "bytes": 1035651,
+   "sha256": "7619e28cfc253462",
+   "format": "png",
+   "width": 2172,
+   "height": 724
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v3/cta-new-order.png",
+   "root": "public",
+   "bytes": 1142726,
+   "sha256": "1b30535ef5dd803b",
+   "format": "png",
+   "width": 2172,
+   "height": 724
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v3/frontier-balloon-locked.png",
+   "root": "public",
+   "bytes": 2203696,
+   "sha256": "ade8ae6f6711f31b",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v3/frontier-excursion-locked.png",
+   "root": "public",
+   "bytes": 2136095,
+   "sha256": "438e7efefae19a40",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v3/frontier-expedition-locked.png",
+   "root": "public",
+   "bytes": 2520964,
+   "sha256": "ff7f4320f6e62668",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v3/frontier-helicopter-locked.png",
+   "root": "public",
+   "bytes": 1754170,
+   "sha256": "9a0780e8790c15c0",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v3/frontier-toy-flight-locked.png",
+   "root": "public",
+   "bytes": 2207063,
+   "sha256": "6d21d4775dfecd4d",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v3/global-future-cage.png",
+   "root": "public",
+   "bytes": 2110362,
+   "sha256": "d84e9cc5b8223c9e",
+   "format": "png",
+   "width": 1122,
+   "height": 1402
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v3/tower-century-park-east.png",
+   "root": "public",
+   "bytes": 2367867,
+   "sha256": "4948edf1ae6c72d9",
+   "format": "png",
+   "width": 1086,
+   "height": 1448
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v3/tower-opus-la.png",
+   "root": "public",
+   "bytes": 2030112,
+   "sha256": "72a3f802fcc72518",
+   "format": "png",
+   "width": 1086,
+   "height": 1448
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v4/city-intelligence.png",
+   "root": "public",
+   "bytes": 143273,
+   "sha256": "808d6dc285ff4d69",
+   "format": "png",
+   "width": 731,
+   "height": 210
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v4/global-future-cage.png",
+   "root": "public",
+   "bytes": 1747813,
+   "sha256": "803e2657c34c9170",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v4/lantern-bright.png",
+   "root": "public",
+   "bytes": 656292,
+   "sha256": "99fe2cf02127f43b",
+   "format": "png",
+   "width": 543,
+   "height": 724
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v4/lantern-dim.png",
+   "root": "public",
+   "bytes": 367038,
+   "sha256": "d2028697e1418d98",
+   "format": "png",
+   "width": 543,
+   "height": 724
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v4/lantern-normal.png",
+   "root": "public",
+   "bytes": 591461,
+   "sha256": "2a6ec7b1e4a0405b",
+   "format": "png",
+   "width": 543,
+   "height": 724
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v4/lantern-off.png",
+   "root": "public",
+   "bytes": 350204,
+   "sha256": "72b517c04efa8d61",
+   "format": "png",
+   "width": 537,
+   "height": 724
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v4/tower-century-park-east.png",
+   "root": "public",
+   "bytes": 1129674,
+   "sha256": "e47c1fc7ffead5e6",
+   "format": "png",
+   "width": 724,
+   "height": 1048
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v4/tower-opus-la.png",
+   "root": "public",
+   "bytes": 1002835,
+   "sha256": "7c92c47ddaeff7f0",
+   "format": "png",
+   "width": 718,
+   "height": 1038
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v4/utilities.png",
+   "root": "public",
+   "bytes": 101026,
+   "sha256": "5fc5990b72f77d4d",
+   "format": "png",
+   "width": 524,
+   "height": 270
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v4/world-title.png",
+   "root": "public",
+   "bytes": 468275,
+   "sha256": "457e6d1382e7516e",
+   "format": "png",
+   "width": 1137,
+   "height": 345
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/arsenal-wheel-frame.png",
+   "root": "public",
+   "bytes": 1771839,
+   "sha256": "12a23d02f2298f42",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/cockroach-hero.png",
+   "root": "public",
+   "bytes": 1393686,
+   "sha256": "eb2571c4f951e6e1",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/cockroach-swarm.png",
+   "root": "public",
+   "bytes": 1060926,
+   "sha256": "f4b020ba9ec75ec8",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/command-button-active.png",
+   "root": "public",
+   "bytes": 1936280,
+   "sha256": "6b5cb25d5722160e",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/command-button-idle.png",
+   "root": "public",
+   "bytes": 1802977,
+   "sha256": "6fa5ebd8520d96cf",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/command-dock-frame.png",
+   "root": "public",
+   "bytes": 1494019,
+   "sha256": "d321fa8c2c160f4d",
+   "format": "png",
+   "width": 2172,
+   "height": 724
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/construction-boarded-block.png",
+   "root": "public",
+   "bytes": 2384195,
+   "sha256": "7e83a2865018641a",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/construction-plywood-barricade.png",
+   "root": "public",
+   "bytes": 1870006,
+   "sha256": "d3bd49d11f760ba3",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/construction-road-barriers.png",
+   "root": "public",
+   "bytes": 1637898,
+   "sha256": "e19d09a053487b0f",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/construction-scaffold-cluster.png",
+   "root": "public",
+   "bytes": 2388379,
+   "sha256": "20e193a7ebf6732c",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/frontier-balloon-dormant-v5.png",
+   "root": "public",
+   "bytes": 1975778,
+   "sha256": "6db4e4204fb2c842",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/frontier-excursion-dormant-v5.png",
+   "root": "public",
+   "bytes": 1955103,
+   "sha256": "17335f125254cf69",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/frontier-expedition-dormant-v5.png",
+   "root": "public",
+   "bytes": 2440461,
+   "sha256": "e7a77b930e469ee7",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/frontier-helicopter-dormant-v5.png",
+   "root": "public",
+   "bytes": 2020477,
+   "sha256": "7285cecde7cce2b7",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/frontier-lock.png",
+   "root": "public",
+   "bytes": 1694694,
+   "sha256": "fc28c206bbc850d8",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/frontier-toy-flight-dormant-v5.png",
+   "root": "public",
+   "bytes": 1993528,
+   "sha256": "2c31dfe51bf4c44a",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/gel-at-risk.png",
+   "root": "public",
+   "bytes": 1887859,
+   "sha256": "07f5fd6c5be0a46d",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/gel-closed-construction.png",
+   "root": "public",
+   "bytes": 2083829,
+   "sha256": "d4994c6944759037",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/gel-cooling.png",
+   "root": "public",
+   "bytes": 1873813,
+   "sha256": "2557b9baf2ed9a98",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/gel-healthy.png",
+   "root": "public",
+   "bytes": 1813823,
+   "sha256": "f23c5deaab0f38d7",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/gel-infested.png",
+   "root": "public",
+   "bytes": 1806286,
+   "sha256": "38d3eb7ba6be05f0",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/gel-locked-opportunity.png",
+   "root": "public",
+   "bytes": 1705150,
+   "sha256": "a92f0dc354e94181",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/gel-lost-ground.png",
+   "root": "public",
+   "bytes": 1925925,
+   "sha256": "dfb3641a454a4e00",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/gel-overgrown.png",
+   "root": "public",
+   "bytes": 1844626,
+   "sha256": "4ef82bcce5f163dc",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/icon-arsenal.png",
+   "root": "public",
+   "bytes": 1500536,
+   "sha256": "5960354eeaf56514",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/icon-buildings.png",
+   "root": "public",
+   "bytes": 1467508,
+   "sha256": "9bc9641c213396ac",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/icon-companions.png",
+   "root": "public",
+   "bytes": 1657925,
+   "sha256": "4970194322f25d40",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/icon-conquest.png",
+   "root": "public",
+   "bytes": 1770348,
+   "sha256": "277d83f775e2fb4e",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/icon-map.png",
+   "root": "public",
+   "bytes": 1855750,
+   "sha256": "0ccb84a4acc2225d",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/icon-missions.png",
+   "root": "public",
+   "bytes": 1633826,
+   "sha256": "4116ce4197669aeb",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/lantern-active.png",
+   "root": "public",
+   "bytes": 1066104,
+   "sha256": "4e07ed8235f3afa1",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/lantern-answer-ember.png",
+   "root": "public",
+   "bytes": 1043548,
+   "sha256": "031be82239270dcb",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/lantern-city-foreground-depth-v5.png",
+   "root": "public",
+   "bytes": 1698349,
+   "sha256": "9ad8e7b49ba686a1",
+   "format": "png",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/lantern-city-master-v5.png",
+   "root": "public",
+   "bytes": 3908600,
+   "sha256": "df6edd75a2709ec6",
+   "format": "png",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/lantern-cooling.png",
+   "root": "public",
+   "bytes": 802023,
+   "sha256": "f14365d8252f8768",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/lantern-hearth-recurring.png",
+   "root": "public",
+   "bytes": 1392362,
+   "sha256": "64c44c2caebe894a",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/lantern-opportunity.png",
+   "root": "public",
+   "bytes": 1089349,
+   "sha256": "685e5b875389e01b",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/lantern-quiet.png",
+   "root": "public",
+   "bytes": 791448,
+   "sha256": "a70267ded3b45fd9",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/lantern-restored-burst.png",
+   "root": "public",
+   "bytes": 1476839,
+   "sha256": "8b770e38fd00d6ff",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/lantern-signal-spark.png",
+   "root": "public",
+   "bytes": 913590,
+   "sha256": "5a175a8b3ac1afae",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/lost-abandoned-helipad.png",
+   "root": "public",
+   "bytes": 2511471,
+   "sha256": "1c01994acc1d1eaf",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/lost-balloon-mooring.png",
+   "root": "public",
+   "bytes": 1087063,
+   "sha256": "c5f94ab0f2e39060",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/lost-expedition-camp.png",
+   "root": "public",
+   "bytes": 2095331,
+   "sha256": "eb53c117fdc29575",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/lost-lantern-lighter-wagon.png",
+   "root": "public",
+   "bytes": 2625397,
+   "sha256": "575bed09007c5b01",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/map-legend-frame.png",
+   "root": "public",
+   "bytes": 2180815,
+   "sha256": "d9e6e2362d74c983",
+   "format": "png",
+   "width": 1086,
+   "height": 1448
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/neglect-trash-grime.png",
+   "root": "public",
+   "bytes": 1545918,
+   "sha256": "d552f5da635e7788",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/overgrowth-vines-a.png",
+   "root": "public",
+   "bytes": 1855583,
+   "sha256": "9769e13f5e892fad",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/overgrowth-vines-b.png",
+   "root": "public",
+   "bytes": 2183871,
+   "sha256": "4dfe455d712701f5",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/rat-hero.png",
+   "root": "public",
+   "bytes": 2385331,
+   "sha256": "8a4868423d145b84",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/rat-swarm.png",
+   "root": "public",
+   "bytes": 1479499,
+   "sha256": "21990a5812d48c4f",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/today-quest-parchment.png",
+   "root": "public",
+   "bytes": 2069668,
+   "sha256": "086b5d114f4d2ed8",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/tool-cooldown-rune.png",
+   "root": "public",
+   "bytes": 1847788,
+   "sha256": "b7975bc29213034f",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/tool-courier-sprite.png",
+   "root": "public",
+   "bytes": 1678588,
+   "sha256": "2525cc73d37009ac",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/tool-golden-seal.png",
+   "root": "public",
+   "bytes": 2003200,
+   "sha256": "3cad333675b3ba88",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/tool-recall-bell.png",
+   "root": "public",
+   "bytes": 1639535,
+   "sha256": "8e103d2da2739670",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/tool-signal-flare.png",
+   "root": "public",
+   "bytes": 1080143,
+   "sha256": "96b9debb5f7c2125",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/toxic-fumes-a.png",
+   "root": "public",
+   "bytes": 1738649,
+   "sha256": "879102e19e33ad4b",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v5/toxic-fumes-b.png",
+   "root": "public",
+   "bytes": 1537336,
+   "sha256": "bcf0532b72a4a080",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/arts-district/cooling.png",
+   "root": "public",
+   "bytes": 2344055,
+   "sha256": "f037978438db77e3",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/arts-district/healthy.png",
+   "root": "public",
+   "bytes": 2500949,
+   "sha256": "745e037a7753a0a1",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/arts-district/infested.png",
+   "root": "public",
+   "bytes": 2231897,
+   "sha256": "f7300890b16dff44",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/arts-district/locked.png",
+   "root": "public",
+   "bytes": 2236505,
+   "sha256": "d8b373b69a31f2ec",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/beverly-hills/cooling.png",
+   "root": "public",
+   "bytes": 2297394,
+   "sha256": "9cc328896a948b9e",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/beverly-hills/healthy.png",
+   "root": "public",
+   "bytes": 2408719,
+   "sha256": "77f84f6f71923004",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/beverly-hills/infested.png",
+   "root": "public",
+   "bytes": 2234920,
+   "sha256": "a2052e40d7f36a7a",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/beverly-hills/locked.png",
+   "root": "public",
+   "bytes": 2230772,
+   "sha256": "bc84075bfbd41166",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/century-city/cooling.png",
+   "root": "public",
+   "bytes": 2976679,
+   "sha256": "6a95f5cbc631ccf6",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/century-city/healthy.png",
+   "root": "public",
+   "bytes": 3029371,
+   "sha256": "46f96f8cd2215fcb",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/century-city/infested.png",
+   "root": "public",
+   "bytes": 3044975,
+   "sha256": "ca02dd2226762dd6",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/century-city/locked.png",
+   "root": "public",
+   "bytes": 2626929,
+   "sha256": "d8d62fa53f203d25",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/downtown/cooling.png",
+   "root": "public",
+   "bytes": 2365046,
+   "sha256": "2e1aa8c4fa4b2012",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/downtown/healthy.png",
+   "root": "public",
+   "bytes": 2531618,
+   "sha256": "3384d336f6157484",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/downtown/infested.png",
+   "root": "public",
+   "bytes": 2248630,
+   "sha256": "aa8b0a83254f01aa",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/downtown/locked.png",
+   "root": "public",
+   "bytes": 2262598,
+   "sha256": "54dc12b8bb5d1aa6",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/east-hollywood/cooling.png",
+   "root": "public",
+   "bytes": 2351845,
+   "sha256": "5d5cd8d233a1a568",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/east-hollywood/healthy.png",
+   "root": "public",
+   "bytes": 2548959,
+   "sha256": "bf82ce8af6396daf",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/east-hollywood/infested.png",
+   "root": "public",
+   "bytes": 2209669,
+   "sha256": "b39511da0f7be101",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/east-hollywood/locked.png",
+   "root": "public",
+   "bytes": 2222361,
+   "sha256": "30c1bc1ea1b06683",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/echo-park/cooling.png",
+   "root": "public",
+   "bytes": 2437035,
+   "sha256": "1b71921ef8d48320",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/echo-park/healthy.png",
+   "root": "public",
+   "bytes": 2565578,
+   "sha256": "b91efc4e423fe1dd",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/echo-park/infested.png",
+   "root": "public",
+   "bytes": 2357680,
+   "sha256": "0c72c614cddb37ee",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/echo-park/locked.png",
+   "root": "public",
+   "bytes": 2359634,
+   "sha256": "dc89c95325aeccfc",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/hollywood/cooling.png",
+   "root": "public",
+   "bytes": 2267326,
+   "sha256": "643a4a7475ef1e6d",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/hollywood/healthy.png",
+   "root": "public",
+   "bytes": 2431790,
+   "sha256": "1c7a7f51040b2a32",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/hollywood/infested.png",
+   "root": "public",
+   "bytes": 2183009,
+   "sha256": "0a99576ec2e81e2d",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/hollywood/locked.png",
+   "root": "public",
+   "bytes": 2188742,
+   "sha256": "9f86de1c471feea4",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/hollywood-hills-west/cooling.png",
+   "root": "public",
+   "bytes": 2106260,
+   "sha256": "66e18c909ba05b3c",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/hollywood-hills-west/healthy.png",
+   "root": "public",
+   "bytes": 2274337,
+   "sha256": "04993d54ba45463d",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/hollywood-hills-west/infested.png",
+   "root": "public",
+   "bytes": 2043089,
+   "sha256": "8b2b59885f86434c",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/hollywood-hills-west/locked.png",
+   "root": "public",
+   "bytes": 2030174,
+   "sha256": "c30f23ffc279495b",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/koreatown/cooling.png",
+   "root": "public",
+   "bytes": 2839692,
+   "sha256": "0eeeebc5ffebbff4",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/koreatown/healthy.png",
+   "root": "public",
+   "bytes": 3603541,
+   "sha256": "b57f83375cdb7cee",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/koreatown/infested.png",
+   "root": "public",
+   "bytes": 3432762,
+   "sha256": "79b000f0ed7278de",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/koreatown/locked.png",
+   "root": "public",
+   "bytes": 2751824,
+   "sha256": "67d5eb62f2d2f2a4",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/los-feliz/cooling.png",
+   "root": "public",
+   "bytes": 2337949,
+   "sha256": "5de48166c67de23e",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/los-feliz/healthy.png",
+   "root": "public",
+   "bytes": 2487277,
+   "sha256": "dac2b1900ffe71d6",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/los-feliz/infested.png",
+   "root": "public",
+   "bytes": 2247188,
+   "sha256": "524766bec88a75f5",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/los-feliz/locked.png",
+   "root": "public",
+   "bytes": 2249045,
+   "sha256": "cdb20800f934c5f0",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/mid-city/cooling.png",
+   "root": "public",
+   "bytes": 2499994,
+   "sha256": "76ed91ddcfae0766",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/mid-city/healthy.png",
+   "root": "public",
+   "bytes": 2578099,
+   "sha256": "e13d49cf37a79794",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/mid-city/infested.png",
+   "root": "public",
+   "bytes": 2446235,
+   "sha256": "3b794b918c1bcf8e",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/mid-city/locked.png",
+   "root": "public",
+   "bytes": 2448267,
+   "sha256": "161378e6de075169",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/silver-lake/cooling.png",
+   "root": "public",
+   "bytes": 2397798,
+   "sha256": "d7f7a563baa40e98",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/silver-lake/healthy.png",
+   "root": "public",
+   "bytes": 2506081,
+   "sha256": "2e8bb6fe22d9d335",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/silver-lake/infested.png",
+   "root": "public",
+   "bytes": 2330530,
+   "sha256": "4856fd8f284ffa67",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/silver-lake/locked.png",
+   "root": "public",
+   "bytes": 2319591,
+   "sha256": "1f686eeb8e082949",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/west-hollywood/cooling.png",
+   "root": "public",
+   "bytes": 2492477,
+   "sha256": "e55331fda55fa075",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/west-hollywood/healthy.png",
+   "root": "public",
+   "bytes": 2550414,
+   "sha256": "ef11de8d83d481dd",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/west-hollywood/infested.png",
+   "root": "public",
+   "bytes": 2459026,
+   "sha256": "b656a23d89501416",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/west-hollywood/locked.png",
+   "root": "public",
+   "bytes": 2458438,
+   "sha256": "75d5a786e1b2f230",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/westlake/cooling.png",
+   "root": "public",
+   "bytes": 2380318,
+   "sha256": "66ad0b76d32c7821",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/westlake/healthy.png",
+   "root": "public",
+   "bytes": 2526163,
+   "sha256": "c035da2c467520a8",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/westlake/infested.png",
+   "root": "public",
+   "bytes": 2266715,
+   "sha256": "28f3944a7c4bfa56",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/territories/westlake/locked.png",
+   "root": "public",
+   "bytes": 2275186,
+   "sha256": "03061cbd3601b298",
+   "format": "png",
+   "width": 1536,
+   "height": 994
+  },
+  {
+   "url": "/assets/goldline/lantern-city/v6/world-neutral.png",
+   "root": "public",
+   "bytes": 13266256,
+   "sha256": "e3cc2998b74b64d0",
+   "format": "png",
+   "width": 3840,
+   "height": 2160
+  },
+  {
+   "url": "/assets/goldline/orders/delivery-active.webp",
+   "root": "public",
+   "bytes": 39038,
+   "sha256": "151f8dd540199e00",
+   "format": "webp",
+   "width": 272,
+   "height": 283
+  },
+  {
+   "url": "/assets/goldline/orders/delivery-blocked.webp",
+   "root": "public",
+   "bytes": 34174,
+   "sha256": "7581162dc162cba1",
+   "format": "webp",
+   "width": 260,
+   "height": 279
+  },
+  {
+   "url": "/assets/goldline/orders/delivery-completed.webp",
+   "root": "public",
+   "bytes": 36302,
+   "sha256": "69e2599e3e7b73f9",
+   "format": "webp",
+   "width": 259,
+   "height": 285
+  },
+  {
+   "url": "/assets/goldline/orders/delivery-idle.webp",
+   "root": "public",
+   "bytes": 36740,
+   "sha256": "c5e3536d72e1fa12",
+   "format": "webp",
+   "width": 263,
+   "height": 282
+  },
+  {
+   "url": "/assets/goldline/orders/pickup-active.webp",
+   "root": "public",
+   "bytes": 50632,
+   "sha256": "97309a3165d58f51",
+   "format": "webp",
+   "width": 302,
+   "height": 312
+  },
+  {
+   "url": "/assets/goldline/orders/pickup-completed.webp",
+   "root": "public",
+   "bytes": 26622,
+   "sha256": "2f90fa3d60237985",
+   "format": "webp",
+   "width": 257,
+   "height": 205
+  },
+  {
+   "url": "/assets/goldline/orders/pickup-idle.webp",
+   "root": "public",
+   "bytes": 38172,
+   "sha256": "0fdbd90f315fd98b",
+   "format": "webp",
+   "width": 304,
+   "height": 285
+  },
+  {
+   "url": "/assets/goldline/population/coastal_roles.webp",
+   "root": "public",
+   "bytes": 214462,
+   "sha256": "f2d602d667c74877",
+   "format": "webp",
+   "width": 1536,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/procedural-world-v1/01-background-water-sky.png",
+   "root": "public",
+   "bytes": 2309222,
+   "sha256": "694114cb981bfbe0",
+   "format": "png",
+   "width": 1920,
+   "height": 1080
+  },
+  {
+   "url": "/assets/goldline/procedural-world-v1/02-territory-island-generic.png",
+   "root": "public",
+   "bytes": 747279,
+   "sha256": "0fb587d1b8e34a39",
+   "format": "png",
+   "width": 1024,
+   "height": 768
+  },
+  {
+   "url": "/assets/goldline/procedural-world-v1/03-bridge-ne-sw.png",
+   "root": "public",
+   "bytes": 308725,
+   "sha256": "0b4ca94064e9ec6f",
+   "format": "png",
+   "width": 768,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/procedural-world-v1/04-bridge-sw-ne.png",
+   "root": "public",
+   "bytes": 309607,
+   "sha256": "73224495d1874fde",
+   "format": "png",
+   "width": 768,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/procedural-world-v1/05-bridge-nw-se.png",
+   "root": "public",
+   "bytes": 342301,
+   "sha256": "37af937e6846cd06",
+   "format": "png",
+   "width": 768,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/procedural-world-v1/06-bridge-se-nw.png",
+   "root": "public",
+   "bytes": 343089,
+   "sha256": "e99379f5288964d9",
+   "format": "png",
+   "width": 768,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/procedural-world-v1/07-coastline-glow-overlay.png",
+   "root": "public",
+   "bytes": 339251,
+   "sha256": "5fc5435b564cd991",
+   "format": "png",
+   "width": 1024,
+   "height": 768
+  },
+  {
+   "url": "/assets/goldline/procedural-world-v1/08-cloud-fog-overlay.png",
+   "root": "public",
+   "bytes": 504711,
+   "sha256": "a9b605931b231429",
+   "format": "png",
+   "width": 1024,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/procedural-world-v1/09-water-reflection-overlay.png",
+   "root": "public",
+   "bytes": 210562,
+   "sha256": "e39813171a34eee6",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/procedural-world-v1/10-sun-glow-overlay.png",
+   "root": "public",
+   "bytes": 157904,
+   "sha256": "ab776821e0da8c6c",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/procedural-world-v1/preview-contact-sheet.png",
+   "root": "public",
+   "bytes": 572405,
+   "sha256": "abea918682a843ea",
+   "format": "png",
+   "width": 1000,
+   "height": 1400
+  },
+  {
+   "url": "/assets/goldline/pwa/icon-192.png",
+   "root": "public",
+   "bytes": 36299,
+   "sha256": "c2e0e55c2871ae71",
+   "format": "png",
+   "width": 192,
+   "height": 192
+  },
+  {
+   "url": "/assets/goldline/pwa/icon-512.png",
+   "root": "public",
+   "bytes": 218064,
+   "sha256": "825a385cfe783586",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/siege/courtyard.png",
+   "root": "public",
+   "bytes": 3289435,
+   "sha256": "8bc50933845a5135",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/siege/defense-atlas.png",
+   "root": "public",
+   "bytes": 2871683,
+   "sha256": "62be4dacc71c28b3",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/siege/ruinbound-atlas.png",
+   "root": "public",
+   "bytes": 2657386,
+   "sha256": "f0bcf64efe244aba",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/vehicle-cargo/v1/car-active-glow-green.jpg",
+   "root": "public",
+   "bytes": 81135,
+   "sha256": "e8bd652d9f7ea507",
+   "format": "jpg",
+   "width": 1024,
+   "height": 1280
+  },
+  {
+   "url": "/assets/goldline/vehicle-cargo/v1/car-inactive-glow-neutral.jpg",
+   "root": "public",
+   "bytes": 50356,
+   "sha256": "2084bf63dd1a2bcb",
+   "format": "jpg",
+   "width": 1024,
+   "height": 1280
+  },
+  {
+   "url": "/assets/goldline/vehicle-cargo/v1/car-interior-base.jpg",
+   "root": "public",
+   "bytes": 121479,
+   "sha256": "c53c629b17ef9133",
+   "format": "jpg",
+   "width": 1024,
+   "height": 1280
+  },
+  {
+   "url": "/assets/goldline/vehicle-cargo/v1/car-topdown-glass-overlay.jpg",
+   "root": "public",
+   "bytes": 120917,
+   "sha256": "9917dd50087f7e88",
+   "format": "jpg",
+   "width": 1024,
+   "height": 1280
+  },
+  {
+   "url": "/assets/goldline/vehicle-cargo/v1/cargo-processed-folded-package.jpg",
+   "root": "public",
+   "bytes": 232276,
+   "sha256": "95ede044554869d2",
+   "format": "jpg",
+   "width": 1280,
+   "height": 1280
+  },
+  {
+   "url": "/assets/goldline/vehicle-cargo/v1/cargo-processed-hanging-garments.jpg",
+   "root": "public",
+   "bytes": 162346,
+   "sha256": "892e026527a083de",
+   "format": "jpg",
+   "width": 1280,
+   "height": 1280
+  },
+  {
+   "url": "/assets/goldline/vehicle-cargo/v1/cargo-unprocessed-paper-bag-a.jpg",
+   "root": "public",
+   "bytes": 169731,
+   "sha256": "f34f00a8b061eef4",
+   "format": "jpg",
+   "width": 1280,
+   "height": 1280
+  },
+  {
+   "url": "/assets/goldline/vehicle-cargo/v1/cargo-unprocessed-paper-bag-b.jpg",
+   "root": "public",
+   "bytes": 142365,
+   "sha256": "62f17f4673b53dcb",
+   "format": "jpg",
+   "width": 1280,
+   "height": 1280
+  },
+  {
+   "url": "/assets/goldline/vehicle-cargo/v1/vehicle-cargo-premium-preview.jpg",
+   "root": "public",
+   "bytes": 188629,
+   "sha256": "245a6b4b689d62d4",
+   "format": "jpg",
+   "width": 1280,
+   "height": 1280
+  },
+  {
+   "url": "/assets/goldline/vehicle-cargo/v2/car-topdown-neutral.png",
+   "root": "public",
+   "bytes": 1403304,
+   "sha256": "845cd7e8b8186a81",
+   "format": "png",
+   "width": 1024,
+   "height": 1280
+  },
+  {
+   "url": "/assets/goldline/wayward/awakening-ship-deck.webp",
+   "root": "public",
+   "bytes": 469282,
+   "sha256": "6a38562b9b0d7d10",
+   "format": "webp",
+   "width": 1536,
+   "height": 658
+  },
+  {
+   "url": "/assets/goldline/wayward/bridge-to-mooring-city.webp",
+   "root": "public",
+   "bytes": 252842,
+   "sha256": "ec6fb9555f384e01",
+   "format": "webp",
+   "width": 1536,
+   "height": 658
+  },
+  {
+   "url": "/assets/goldline/wayward/broken-span-tether-ring.webp",
+   "root": "public",
+   "bytes": 317178,
+   "sha256": "97b53e05315ab594",
+   "format": "webp",
+   "width": 1536,
+   "height": 658
+  },
+  {
+   "url": "/assets/goldline/wayward/ship-deck-foreground.webp",
+   "root": "public",
+   "bytes": 288254,
+   "sha256": "35f57f01c1b0fc71",
+   "format": "webp",
+   "width": 1536,
+   "height": 658
+  },
+  {
+   "url": "/assets/goldline/wayward/tether-guardian.webp",
+   "root": "public",
+   "bytes": 268998,
+   "sha256": "b14b83381a7d5971",
+   "format": "webp",
+   "width": 720,
+   "height": 900
+  },
+  {
+   "url": "/assets/held-landing/held-command-screen.png",
+   "root": "public",
+   "bytes": 644180,
+   "sha256": "21ab89e9d6144032",
+   "format": "png",
+   "width": 497,
+   "height": 943
+  },
+  {
+   "url": "/assets/level4/emptygameboard.png",
+   "root": "public",
+   "bytes": 2521924,
+   "sha256": "d012c3051617aae1",
+   "format": "png",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "/assets/level4/family-back-side.png",
+   "root": "public",
+   "bytes": 2551933,
+   "sha256": "4bf599503a1379f2",
+   "format": "png",
+   "width": 1041,
+   "height": 1511
+  },
+  {
+   "url": "/assets/level4/family.png",
+   "root": "public",
+   "bytes": 2441406,
+   "sha256": "d8e5e1752642b544",
+   "format": "png",
+   "width": 1041,
+   "height": 1511
+  },
+  {
+   "url": "/assets/level4/hero_back.png",
+   "root": "public",
+   "bytes": 971205,
+   "sha256": "bede05b912aedd45",
+   "format": "png",
+   "width": 1024,
+   "height": 1536
+  },
+  {
+   "url": "/assets/level4/hero_front.png",
+   "root": "public",
+   "bytes": 991628,
+   "sha256": "feaa30e4a3fb1f1d",
+   "format": "png",
+   "width": 1041,
+   "height": 1511
+  },
+  {
+   "url": "/assets/level4/level4-boss-scene.png",
+   "root": "public",
+   "bytes": 2845634,
+   "sha256": "e2ec83d7bec9db3f",
+   "format": "png",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "/assets/level4/level4-clean-scene.png",
+   "root": "public",
+   "bytes": 2471612,
+   "sha256": "597c9a6b174e151c",
+   "format": "png",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "/assets/level4/level4-hero.png",
+   "root": "public",
+   "bytes": 828047,
+   "sha256": "ae22429f496ad14c",
+   "format": "png",
+   "width": 1201,
+   "height": 1309
+  },
+  {
+   "url": "/assets/level4/level4-mission-card.png",
+   "root": "public",
+   "bytes": 2494998,
+   "sha256": "5612079db68ff9e5",
+   "format": "png",
+   "width": 1557,
+   "height": 1010
+  },
+  {
+   "url": "/assets/level4/level4-speech-itcanwait.png",
+   "root": "public",
+   "bytes": 990889,
+   "sha256": "72a0e142b09a8906",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/level4/level4-speech-mondaysbetter.png",
+   "root": "public",
+   "bytes": 985709,
+   "sha256": "6f4c51064b93117d",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "/assets/level4/level4-system-telemetry.png",
+   "root": "public",
+   "bytes": 2417919,
+   "sha256": "3106bd0bfb071ca9",
+   "format": "png",
+   "width": 1305,
+   "height": 1205
+  },
+  {
+   "url": "/assets/level4/level4-titletext.png",
+   "root": "public",
+   "bytes": 1522166,
+   "sha256": "5b12fefd8b100be1",
+   "format": "png",
+   "width": 2172,
+   "height": 724
+  },
+  {
+   "url": "/assets/level4/level4-weaponloaded-strike.png",
+   "root": "public",
+   "bytes": 2986058,
+   "sha256": "2c102559b07cb97d",
+   "format": "png",
+   "width": 1709,
+   "height": 920
+  },
+  {
+   "url": "/assets/level4/operator-back.png",
+   "root": "public",
+   "bytes": 782662,
+   "sha256": "590b85dde7d8a0ca",
+   "format": "png",
+   "width": 1024,
+   "height": 1536
+  },
+  {
+   "url": "/assets/level4/procrastinator-villain.png",
+   "root": "public",
+   "bytes": 2071174,
+   "sha256": "fc288a6c0a246949",
+   "format": "png",
+   "width": 1086,
+   "height": 1448
+  },
+  {
+   "url": "/assets/level4/villain.png",
+   "root": "public",
+   "bytes": 1848353,
+   "sha256": "29773082d1f7f097",
+   "format": "png",
+   "width": 1461,
+   "height": 1077
+  },
+  {
+   "url": "/assets/level4/vision-reference.png",
+   "root": "public",
+   "bytes": 2605515,
+   "sha256": "3eed9fddc47b4dd3",
+   "format": "png",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "/assets/level4/youdontwannaseempushy.png",
+   "root": "public",
+   "bytes": 98785,
+   "sha256": "569504488bd170d9",
+   "format": "png",
+   "width": 366,
+   "height": 254
+  },
+  {
+   "url": "/assets/saleslay/background.png",
+   "root": "public",
+   "bytes": 2170175,
+   "sha256": "2759baa7bd07be07",
+   "format": "png",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "/assets/saleslay/dragon_idle.png",
+   "root": "public",
+   "bytes": 1512312,
+   "sha256": "87f8550206ad69c9",
+   "format": "png",
+   "width": 1302,
+   "height": 1454
+  },
+  {
+   "url": "/assets/saleslay/hud/board_blockers.png",
+   "root": "public",
+   "bytes": 1870760,
+   "sha256": "14b57f6fda3d075a",
+   "format": "png",
+   "width": 1923,
+   "height": 818
+  },
+  {
+   "url": "/assets/saleslay/hud/meter_frame.png",
+   "root": "public",
+   "bytes": 764704,
+   "sha256": "40a01b2c3f21b175",
+   "format": "png",
+   "width": 2172,
+   "height": 724
+  },
+  {
+   "url": "/assets/saleslay/hud/meter_knot.png",
+   "root": "public",
+   "bytes": 1587628,
+   "sha256": "665e8b449c1d32d8",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/saleslay/hud/sage_cta_frame.png",
+   "root": "public",
+   "bytes": 1090523,
+   "sha256": "40938334ab1c930d",
+   "format": "png",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "/assets/saleslay/hud/sign_truenet.png",
+   "root": "public",
+   "bytes": 1502461,
+   "sha256": "e851b06e9106ed39",
+   "format": "png",
+   "width": 1825,
+   "height": 862
+  },
+  {
+   "url": "/assets/saleslay/sage_awakened.png",
+   "root": "public",
+   "bytes": 1704988,
+   "sha256": "796e7c568e16d912",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/saleslay/sage_idle.png",
+   "root": "public",
+   "bytes": 1027714,
+   "sha256": "c4dfb829a9e5f75d",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/saleslay/villain_attack.png",
+   "root": "public",
+   "bytes": 1084821,
+   "sha256": "a5eba2c07a7d9de1",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/saleslay/villain_defeat.png",
+   "root": "public",
+   "bytes": 1248748,
+   "sha256": "e39245052c7c1ade",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/saleslay/villain_hit.png",
+   "root": "public",
+   "bytes": 1261761,
+   "sha256": "8128de69e4d2bb55",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "/assets/saleslay/villain_idle.png",
+   "root": "public",
+   "bytes": 1401162,
+   "sha256": "2dda9699b85c954b",
+   "format": "png",
+   "width": 1122,
+   "height": 1402
+  },
+  {
+   "url": "@/assets/boreslay-rally/arena-background.webp",
+   "root": "bundled",
+   "bytes": 221870,
+   "sha256": "a2312450bff92fea",
+   "format": "webp",
+   "width": 1704,
+   "height": 923
+  },
+  {
+   "url": "@/assets/boreslay-rally/clockhead-sheet.webp",
+   "root": "bundled",
+   "bytes": 224836,
+   "sha256": "0a1903a40f5489b7",
+   "format": "webp",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "@/assets/boreslay-rally/clockhead-villain.webp",
+   "root": "bundled",
+   "bytes": 141686,
+   "sha256": "be3e3fb041042a82",
+   "format": "webp",
+   "width": 700,
+   "height": 971
+  },
+  {
+   "url": "@/assets/boreslay-rally/concept-v2-showpiece.png",
+   "root": "bundled",
+   "bytes": 2808107,
+   "sha256": "c8e44f8f0f302c9d",
+   "format": "png",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "@/assets/boreslay-rally/duel-arena-background.png",
+   "root": "bundled",
+   "bytes": 2275210,
+   "sha256": "3241f7523ebecbb5",
+   "format": "png",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "@/assets/boreslay-rally/excuse-sheet.webp",
+   "root": "bundled",
+   "bytes": 68032,
+   "sha256": "b3a2529b89b2dcfc",
+   "format": "webp",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "@/assets/boreslay-rally/p0-browser-proof.png",
+   "root": "bundled",
+   "bytes": 146501,
+   "sha256": "ae697f7d065f2665",
+   "format": "png",
+   "width": null,
+   "height": null
+  },
+  {
+   "url": "@/assets/boreslay-rally/p1-browser-proof.png",
+   "root": "bundled",
+   "bytes": 1249338,
+   "sha256": "ae071199710c14a9",
+   "format": "png",
+   "width": 1440,
+   "height": 1000
+  },
+  {
+   "url": "@/assets/boreslay-rally/p2-browser-proof.png",
+   "root": "bundled",
+   "bytes": 1214194,
+   "sha256": "8a47458858c01b44",
+   "format": "png",
+   "width": 1440,
+   "height": 1000
+  },
+  {
+   "url": "@/assets/boreslay-rally/p3-browser-proof.png",
+   "root": "bundled",
+   "bytes": 1508484,
+   "sha256": "21d55d813b58836d",
+   "format": "png",
+   "width": 1440,
+   "height": 913
+  },
+  {
+   "url": "@/assets/boreslay-rally/p5-desktop-simulated-proof.png",
+   "root": "bundled",
+   "bytes": 1311902,
+   "sha256": "e10bd0c7d7d4070a",
+   "format": "png",
+   "width": 1440,
+   "height": 913
+  },
+  {
+   "url": "@/assets/boreslay-rally/p5-final-browser-proof.png",
+   "root": "bundled",
+   "bytes": 1504080,
+   "sha256": "064a42f35574071d",
+   "format": "png",
+   "width": 1440,
+   "height": 913
+  },
+  {
+   "url": "@/assets/boreslay-rally/p5-mobile-landscape-reduced-proof.png",
+   "root": "bundled",
+   "bytes": 329603,
+   "sha256": "0cc8c68e088b6faf",
+   "format": "png",
+   "width": 844,
+   "height": 390
+  },
+  {
+   "url": "@/assets/boreslay-rally/p5-portal-proof.png",
+   "root": "bundled",
+   "bytes": 1538358,
+   "sha256": "699c502d74aa7120",
+   "format": "png",
+   "width": 1440,
+   "height": 913
+  },
+  {
+   "url": "@/assets/boreslay-rally/procrastinator-cuckoo-target.png",
+   "root": "bundled",
+   "bytes": 1605960,
+   "sha256": "f2c6e64f738608c9",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "@/assets/boreslay-rally/procrastinator-v2.png",
+   "root": "bundled",
+   "bytes": 942305,
+   "sha256": "9951bc2401034888",
+   "format": "png",
+   "width": 1178,
+   "height": 1335
+  },
+  {
+   "url": "@/assets/boreslay-rally/spark-butt-left.png",
+   "root": "bundled",
+   "bytes": 38178,
+   "sha256": "4e7ae85f41376995",
+   "format": "png",
+   "width": 218,
+   "height": 224
+  },
+  {
+   "url": "@/assets/boreslay-rally/spark-butt-right.png",
+   "root": "bundled",
+   "bytes": 37722,
+   "sha256": "68bad8a68a5279f5",
+   "format": "png",
+   "width": 228,
+   "height": 224
+  },
+  {
+   "url": "@/assets/boreslay-rally/spark-sheet.webp",
+   "root": "bundled",
+   "bytes": 203002,
+   "sha256": "723292cc00ec300c",
+   "format": "webp",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "@/assets/codex-l-final/owner-westview-entry.jpg",
+   "root": "bundled",
+   "bytes": 221452,
+   "sha256": "b70252129479388d",
+   "format": "jpg",
+   "width": 1200,
+   "height": 675
+  },
+  {
+   "url": "@/assets/codex-l-final/printed-leave-behind.jpg",
+   "root": "bundled",
+   "bytes": 173159,
+   "sha256": "a48223d3757656fe",
+   "format": "jpg",
+   "width": 960,
+   "height": 720
+  },
+  {
+   "url": "@/assets/codex-l-final/rent-reaper-interrupt.jpg",
+   "root": "bundled",
+   "bytes": 211918,
+   "sha256": "4a2672d8adaa2e5c",
+   "format": "jpg",
+   "width": 1200,
+   "height": 675
+  },
+  {
+   "url": "@/assets/codex-l-final/rent-reaper-victory.jpg",
+   "root": "bundled",
+   "bytes": 251769,
+   "sha256": "a68a2cdc90974ed3",
+   "format": "jpg",
+   "width": 1200,
+   "height": 675
+  },
+  {
+   "url": "@/assets/dayforge-flagship/boss-the-drain.jpg",
+   "root": "bundled",
+   "bytes": 94247,
+   "sha256": "83f6eaa7afa4e7d1",
+   "format": "jpg",
+   "width": 560,
+   "height": 620
+  },
+  {
+   "url": "@/assets/dayforge-flagship/founder-two-worlds-v2.jpg",
+   "root": "bundled",
+   "bytes": 339291,
+   "sha256": "65fb19a9d6ebe1b6",
+   "format": "jpg",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "@/assets/dayforge-flagship/printed-leave-behind.jpg",
+   "root": "bundled",
+   "bytes": 277355,
+   "sha256": "d9aa217e002ed46d",
+   "format": "jpg",
+   "width": 1200,
+   "height": 900
+  },
+  {
+   "url": "@/assets/dayforge-flagship/victory-account.jpg",
+   "root": "bundled",
+   "bytes": 398376,
+   "sha256": "3eb5c1566153efe3",
+   "format": "jpg",
+   "width": 1400,
+   "height": 788
+  },
+  {
+   "url": "@/assets/driver/laundry-run/bg-street.png",
+   "root": "bundled",
+   "bytes": 3311240,
+   "sha256": "ffc8799e46f3df55",
+   "format": "png",
+   "width": 2172,
+   "height": 724
+  },
+  {
+   "url": "@/assets/driver/laundry-run/player-jump.png",
+   "root": "bundled",
+   "bytes": 1022804,
+   "sha256": "3f10394b2a7cd867",
+   "format": "png",
+   "width": 1086,
+   "height": 1448
+  },
+  {
+   "url": "@/assets/driver/laundry-run/player-run.png",
+   "root": "bundled",
+   "bytes": 1226410,
+   "sha256": "b176573e8b28f4cd",
+   "format": "png",
+   "width": 1086,
+   "height": 1448
+  },
+  {
+   "url": "@/assets/driver/laundry-run/player-slide.png",
+   "root": "bundled",
+   "bytes": 1201539,
+   "sha256": "3d2f9d906f1d9469",
+   "format": "png",
+   "width": 1371,
+   "height": 1148
+  },
+  {
+   "url": "@/assets/driver/signal-override/grunge-texture.png",
+   "root": "bundled",
+   "bytes": 15208,
+   "sha256": "32f97141dd6cb951",
+   "format": "png",
+   "width": 1254,
+   "height": 800
+  },
+  {
+   "url": "@/assets/driver/signal-override/hud-background.png",
+   "root": "bundled",
+   "bytes": 1602841,
+   "sha256": "125df4fda1fc97f4",
+   "format": "png",
+   "width": 941,
+   "height": 1672
+  },
+  {
+   "url": "@/assets/driver/signal-override/portrait-card.png",
+   "root": "bundled",
+   "bytes": 2301076,
+   "sha256": "8e3e5e7533869c17",
+   "format": "png",
+   "width": 1254,
+   "height": 1254
+  },
+  {
+   "url": "@/assets/driver/signal-override/timing-meter-panel.png",
+   "root": "bundled",
+   "bytes": 770336,
+   "sha256": "fec7f746de8350fa",
+   "format": "png",
+   "width": 2000,
+   "height": 450
+  },
+  {
+   "url": "@/assets/goldline/action-objects.png",
+   "root": "bundled",
+   "bytes": 1841583,
+   "sha256": "91f8957f8f45d4d5",
+   "format": "png",
+   "width": 1983,
+   "height": 793
+  },
+  {
+   "url": "@/assets/goldline/generated/goldline-overworld-clean.png",
+   "root": "bundled",
+   "bytes": 3289693,
+   "sha256": "cac5d22bc6da2418",
+   "format": "png",
+   "width": 848,
+   "height": 1854
+  },
+  {
+   "url": "@/assets/goldline/generated/goldline-overworld.png",
+   "root": "bundled",
+   "bytes": 3359678,
+   "sha256": "1e32cd7e172c9b4a",
+   "format": "png",
+   "width": 853,
+   "height": 1844
+  },
+  {
+   "url": "@/assets/goldline/generated/goldline-world-empty.png",
+   "root": "bundled",
+   "bytes": 2684600,
+   "sha256": "577413142989f8ff",
+   "format": "png",
+   "width": 862,
+   "height": 1825
+  },
+  {
+   "url": "@/assets/goldline/generated/trailblazer-operator.png",
+   "root": "bundled",
+   "bytes": 987322,
+   "sha256": "a5c0124625b5f075",
+   "format": "png",
+   "width": 1024,
+   "height": 1536
+  },
+  {
+   "url": "@/assets/goldline/goldline-world.png",
+   "root": "bundled",
+   "bytes": 2744181,
+   "sha256": "2859dab94075935c",
+   "format": "png",
+   "width": 862,
+   "height": 1825
+  },
+  {
+   "url": "@/assets/goldline/heartbeat/linehook_grapple_ring.png",
+   "root": "bundled",
+   "bytes": 241363,
+   "sha256": "92a5f7da4fb45d0b",
+   "format": "png",
+   "width": 384,
+   "height": 384
+  },
+  {
+   "url": "@/assets/goldline/heartbeat/pickup_cache_objective.png",
+   "root": "bundled",
+   "bytes": 287865,
+   "sha256": "98b446af0094f80a",
+   "format": "png",
+   "width": 448,
+   "height": 448
+  },
+  {
+   "url": "@/assets/goldline/heartbeat/ruinbound_hunter.png",
+   "root": "bundled",
+   "bytes": 212953,
+   "sha256": "bae573a0ab6ff61f",
+   "format": "png",
+   "width": 341,
+   "height": 512
+  },
+  {
+   "url": "@/assets/goldline/heartbeat/ruinbound_shieldbearer.png",
+   "root": "bundled",
+   "bytes": 308533,
+   "sha256": "884b07d3f5c96fed",
+   "format": "png",
+   "width": 341,
+   "height": 512
+  },
+  {
+   "url": "@/assets/goldline/heartbeat/ruinbound_slinger.png",
+   "root": "bundled",
+   "bytes": 239198,
+   "sha256": "08cc453421bf55d7",
+   "format": "png",
+   "width": 341,
+   "height": 512
+  },
+  {
+   "url": "@/assets/goldline/heartbeat/suspended_cargo_hazard.png",
+   "root": "bundled",
+   "bytes": 207743,
+   "sha256": "282f3b0966492f58",
+   "format": "png",
+   "width": 448,
+   "height": 448
+  },
+  {
+   "url": "@/assets/goldline/heartbeat/trailblazer_idle_front.png",
+   "root": "bundled",
+   "bytes": 130408,
+   "sha256": "c1677dc71d2871e0",
+   "format": "png",
+   "width": 341,
+   "height": 512
+  },
+  {
+   "url": "@/assets/goldline/heartbeat/ui_act_linehook.png",
+   "root": "bundled",
+   "bytes": 165285,
+   "sha256": "16b0ebeb3358660b",
+   "format": "png",
+   "width": 320,
+   "height": 320
+  },
+  {
+   "url": "@/assets/goldline/heartbeat/ui_move_joystick.png",
+   "root": "bundled",
+   "bytes": 142636,
+   "sha256": "8578f997e393c41c",
+   "format": "png",
+   "width": 320,
+   "height": 320
+  },
+  {
+   "url": "@/assets/goldline/vorgan.png",
+   "root": "bundled",
+   "bytes": 2294812,
+   "sha256": "570f252bf9105baf",
+   "format": "png",
+   "width": 1122,
+   "height": 1402
+  },
+  {
+   "url": "@/assets/l4/board.png",
+   "root": "bundled",
+   "bytes": 5601271,
+   "sha256": "04bf302feb7cee16",
+   "format": "png",
+   "width": 2000,
+   "height": 2000
+  },
+  {
+   "url": "@/assets/l4/center_grit_bg_1920.png",
+   "root": "bundled",
+   "bytes": 5066837,
+   "sha256": "ed9c1249bfc2f799",
+   "format": "png",
+   "width": 2752,
+   "height": 1536
+  },
+  {
+   "url": "@/assets/l4/crusher.png",
+   "root": "bundled",
+   "bytes": 5817908,
+   "sha256": "f085d51bd5725212",
+   "format": "png",
+   "width": 2816,
+   "height": 1536
+  },
+  {
+   "url": "@/assets/l4/frame_texture_2k.png",
+   "root": "bundled",
+   "bytes": 5223251,
+   "sha256": "1dd980d74fbd21f7",
+   "format": "png",
+   "width": 2048,
+   "height": 2048
+  },
+  {
+   "url": "@/assets/l4/hud_overlay_plate.png",
+   "root": "bundled",
+   "bytes": 4316858,
+   "sha256": "9a00895ca7bb1906",
+   "format": "png",
+   "width": 3200,
+   "height": 1312
+  },
+  {
+   "url": "@/assets/l4/man.png",
+   "root": "bundled",
+   "bytes": 1958763,
+   "sha256": "fe0efb42d55d4d3a",
+   "format": "png",
+   "width": 2000,
+   "height": 2000
+  },
+  {
+   "url": "@/assets/l4/map_panel_art.png",
+   "root": "bundled",
+   "bytes": 9619503,
+   "sha256": "cbca8ad1f195df0c",
+   "format": "png",
+   "width": 1792,
+   "height": 2400
+  },
+  {
+   "url": "@/assets/l4/panel_face_tile_1k.png",
+   "root": "bundled",
+   "bytes": 3034928,
+   "sha256": "19f840bce25fd90a",
+   "format": "png",
+   "width": 2048,
+   "height": 2048
+  },
+  {
+   "url": "@/assets/l4/woman.png",
+   "root": "bundled",
+   "bytes": 3112713,
+   "sha256": "61c62ccbb4d3c613",
+   "format": "png",
+   "width": 2000,
+   "height": 2000
+  },
+  {
+   "url": "@/assets/l4/you_are_here_badge.png",
+   "root": "bundled",
+   "bytes": 5670080,
+   "sha256": "609f841adb93e25b",
+   "format": "png",
+   "width": 2912,
+   "height": 1440
+  },
+  {
+   "url": "@/assets/landing-final/spark-breath.png",
+   "root": "bundled",
+   "bytes": 142210,
+   "sha256": "98084202b3017dab",
+   "format": "png",
+   "width": 418,
+   "height": 470
+  },
+  {
+   "url": "@/assets/landing-final/spark-victory.png",
+   "root": "bundled",
+   "bytes": 147447,
+   "sha256": "51cadea0f168d135",
+   "format": "png",
+   "width": 418,
+   "height": 471
+  },
+  {
+   "url": "@/assets/pnl/brightblankcanvas.png",
+   "root": "bundled",
+   "bytes": 2197839,
+   "sha256": "8f7e039f690febe0",
+   "format": "png",
+   "width": 1448,
+   "height": 1086
+  },
+  {
+   "url": "@/assets/pnl/cockpit-bg.png",
+   "root": "bundled",
+   "bytes": 1760144,
+   "sha256": "0ee23e1ca0180128",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "@/assets/pnl/cockpit-frame.png",
+   "root": "bundled",
+   "bytes": 1610121,
+   "sha256": "1ab408336744eadd",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "@/assets/pnl/cockpit-shell.png",
+   "root": "bundled",
+   "bytes": 1506045,
+   "sha256": "2c081c8d20ecc201",
+   "format": "png",
+   "width": 1672,
+   "height": 941
+  },
+  {
+   "url": "@/assets/pnl/icons/basket.png",
+   "root": "bundled",
+   "bytes": 79577,
+   "sha256": "e23d24e31d9cef8c",
+   "format": "png",
+   "width": 306,
+   "height": 285
+  },
+  {
+   "url": "@/assets/pnl/icons/flyers.png",
+   "root": "bundled",
+   "bytes": 87739,
+   "sha256": "4e0c1365cde7c69a",
+   "format": "png",
+   "width": 321,
+   "height": 283
+  },
+  {
+   "url": "@/assets/pnl/icons/people.png",
+   "root": "bundled",
+   "bytes": 115543,
+   "sha256": "52ac3cee90f54cef",
+   "format": "png",
+   "width": 320,
+   "height": 285
+  },
+  {
+   "url": "@/assets/pnl/icons/plane.png",
+   "root": "bundled",
+   "bytes": 103192,
+   "sha256": "b83e9f8dd234a120",
+   "format": "png",
+   "width": 353,
+   "height": 299
+  },
+  {
+   "url": "@/assets/pnl/icons/star.png",
+   "root": "bundled",
+   "bytes": 54504,
+   "sha256": "4596db156b5fadcd",
+   "format": "png",
+   "width": 273,
+   "height": 278
+  },
+  {
+   "url": "@/assets/pnl/icons/trophy.png",
+   "root": "bundled",
+   "bytes": 99919,
+   "sha256": "369bf3a1b88347de",
+   "format": "png",
+   "width": 333,
+   "height": 283
+  },
+  {
+   "url": "@/assets/pnl/mission-icons.png",
+   "root": "bundled",
+   "bytes": 807950,
+   "sha256": "d1fc90ad98b19d72",
+   "format": "png",
+   "width": 2172,
+   "height": 724
+  },
+  {
+   "url": "@/assets/pnl/sky-cliff.png",
+   "root": "bundled",
+   "bytes": 2324492,
+   "sha256": "5e089a9a9482cd55",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "@/assets/pnl/sky-cloud2.png",
+   "root": "bundled",
+   "bytes": 1951566,
+   "sha256": "9e0fcee307285d14",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "@/assets/pnl/sky-cloud3.png",
+   "root": "bundled",
+   "bytes": 2191541,
+   "sha256": "feda934346ba4208",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  },
+  {
+   "url": "@/assets/pnl/sky-hover.png",
+   "root": "bundled",
+   "bytes": 2247430,
+   "sha256": "fd5eeacc8fbe03f4",
+   "format": "png",
+   "width": 1536,
+   "height": 1024
+  }
+ ]
+}
