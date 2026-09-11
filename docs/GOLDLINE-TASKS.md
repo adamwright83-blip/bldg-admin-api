@@ -15,7 +15,7 @@ A generated mockup that leans medieval/fantasy-castle (even a little) is a miss,
 - Kingdom mission/challenge content itself (the mobile in-field "in-game" portion, e.g. THE LAST VALET) is mobile Driver-app specific, because winning requires real-world actions you can only take while out driving/working. Desktop's role for a Kingdom is the dossier/war-room view (recap, companion state, what real action is still needed) plus, once unlocked, that Kingdom's own desktop game — never a way to play/win the field mission itself from a desk.
 
 ## Backlog
-- [claude] Build the real mission director — reads tomorrow's route, finds time pockets, picks primary + fallback mission, preps assets ahead
+- [claude] Build the real mission director — spec written: `docs/goldline/SLICE_4_MISSION_DIRECTOR.md`. BLOCKED on the Slice 1 campaign library (no campaign_library/growth_campaign table exists yet). Do not start without it.
 - [adam] Build vetted library of real growth campaigns — door hangers, referral asks, office pitches, retention, digital footprint; the clay for missions
 - [chatgpt] Define Kingdom 3's real growth challenge — must come before Companion 2 design, the sequence works backward from this
 - [claude] Rewrite The Last Valet's business binding — swap the passive paid-order trigger for a controllable field-action campaign
@@ -28,6 +28,7 @@ A generated mockup that leans medieval/fantasy-castle (even a little) is a miss,
 ## Blocked
 - [adam] Approve and run drizzle/0067 + 0068 migrations — needed before chapter state, event binding, and Echo can go live
 - [chatgpt] Design Companion 2's agentic power — blocked on Kingdom 3 definition, power must make K3 genuinely require it
+- [claude] Mission Director (Slice 4) — blocked on the Slice 1 campaign library. Spec and data contract are done and reviewable at `docs/goldline/SLICE_4_MISSION_DIRECTOR.md`.
 
 ## Done
 - [adam] Fix combat aim/cooldown feel — widened hit cone, cooldown button feedback shipped and verified
