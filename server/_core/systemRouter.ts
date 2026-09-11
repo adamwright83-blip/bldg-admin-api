@@ -47,6 +47,7 @@ import { cleancloudBrowserSyncRouter } from "../cleancloudBrowserSync/router";
 import { campaignLibraryRouter } from "../campaignLibrary/campaignLibraryRouter";
 import { kingdomRouter } from "../goldlineKingdoms/kingdomRouter";
 import { companionRouter } from "../companions/companionRouter";
+import { missionDirectorRouter } from "../missionDirector/missionDirectorRouter";
 
 export const systemRouter = router({
   goldlineCargo: goldlineCargoRouter,
@@ -95,6 +96,7 @@ export const systemRouter = router({
   campaignLibrary: campaignLibraryRouter,
   goldlineKingdoms: kingdomRouter,
   goldlineCompanions: companionRouter,
+  missionDirector: missionDirectorRouter,
   health: publicProcedure
     .input(
       z.object({

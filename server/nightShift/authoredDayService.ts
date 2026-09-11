@@ -28,11 +28,7 @@ import { classifyTerritory } from "../../shared/lanternTerritories";
 import { getDb } from "../db";
 import { ENV } from "../_core/env";
 import { invokeLLM } from "../_core/llm";
-import {
-  getBusinessDayWindow,
-  getDashboardTimeZone,
-  zonedDayStartUtc,
-} from "../dashboardZoned";
+import { getBusinessDayWindow, getDashboardTimeZone } from "../dashboardZoned";
 import { getFieldToday } from "../field/fieldTodayService";
 import { listFuturePressure } from "../goldlineWorld/futurePressureService";
 import { getGeographicTruth } from "../geography/geographicTruthService";
@@ -129,8 +125,14 @@ export async function gatherNightShiftInputs(input: {
   userId: string;
 }): Promise<NightShiftInputBundle> {
   const timeZone = getDashboardTimeZone();
-  const targetStart = zonedDayStartUtc(input.businessDate, timeZone);
-  const now = new Date(targetStart.getTime() + 60 * 60 * 1000);
+  // Slice 4 fix: getFieldToday now takes a real businessDate parameter
+  // instead of a synthetic `now` faked to fall on the target date. A faked
+  // `now` silently corrupted urgency classification and nextFixedCommitment
+  // for any date other than the real present — see
+  // docs/goldline/SLICE_4_MISSION_DIRECTOR.md §3. `now` here is the real
+  // present, used only for geographic-truth freshness, which is unrelated
+  // to which business date is being authored.
+  const now = new Date();
   const db = await getDb();
   const eventRows = db
     ? await db
@@ -143,7 +145,7 @@ export async function gatherNightShiftInputs(input: {
       tenantId: input.tenantId,
       userId: input.userId,
       includeAllAssignees: true,
-      now,
+      businessDate: input.businessDate,
       timeZone,
     }),
     listFuturePressure({ tenantId: input.tenantId, date: input.businessDate }),

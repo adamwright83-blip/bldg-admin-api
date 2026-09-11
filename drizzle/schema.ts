@@ -6775,3 +6775,34 @@ export const goldlineCompanionUnlocks = mysqlTable(
     ),
   })
 );
+
+/**
+ * Slice 4 — Mission Director plans. Append-only revisions per business
+ * date — a plan is never overwritten, so it stays provable what the plan
+ * said before the day changed. Follows the authoredDays stableKey /
+ * inputFingerprint pattern.
+ */
+export const missionDirectorPlans = mysqlTable(
+  "mission_director_plans",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorId: varchar("operatorId", { length: 128 }).notNull(),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    stableKey: varchar("stableKey", { length: 191 }).notNull(),
+    revision: int("revision").notNull().default(1),
+    inputFingerprint: varchar("inputFingerprint", { length: 80 }).notNull(),
+    outcomeJson: json("outcomeJson").notNull(),
+    usageOutcome: varchar("usageOutcome", { length: 16 }),
+    usageReportedAt: timestamp("usageReportedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    revisionUnique: uniqueIndex("uq_mission_director_plan_revision").on(
+      table.tenantId,
+      table.operatorId,
+      table.businessDate,
+      table.revision
+    ),
+  })
+);

@@ -1045,3 +1045,30 @@ await assertRequiredColumns("goldline_companion_unlocks", [
   "companionId",
   "evidenceOpsTaskId",
 ]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS mission_director_plans (
+    id VARCHAR(36) PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorId VARCHAR(128) NOT NULL,
+    businessDate VARCHAR(10) NOT NULL,
+    stableKey VARCHAR(191) NOT NULL,
+    revision INT NOT NULL DEFAULT 1,
+    inputFingerprint VARCHAR(80) NOT NULL,
+    outcomeJson JSON NOT NULL,
+    usageOutcome VARCHAR(16) NULL,
+    usageReportedAt TIMESTAMP NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_mission_director_plan_revision (tenantId,operatorId,businessDate,revision)
+  )`,
+  "CREATE TABLE mission_director_plans"
+);
+
+await assertRequiredColumns("mission_director_plans", [
+  "tenantId",
+  "operatorId",
+  "businessDate",
+  "revision",
+  "inputFingerprint",
+  "outcomeJson",
+]);

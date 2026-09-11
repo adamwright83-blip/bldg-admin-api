@@ -92,12 +92,23 @@ export async function getFieldToday(input: {
   includeAllAssignees: boolean;
   now?: Date;
   timeZone?: string;
+  /**
+   * Slice 4 (docs/goldline/SLICE_4_MISSION_DIRECTOR.md §3): project a
+   * different business date than `now` falls on — e.g. tomorrow, for the
+   * Mission Director. `now` still means the real present and keeps driving
+   * urgency classification and nextFixedCommitment honestly; it is never
+   * faked to "move" the date. When `businessDate` is a future date,
+   * nextFixedCommitment is simply the day's first scheduled item rather
+   * than the first item after `now`.
+   */
+  businessDate?: string;
 }): Promise<FieldTodayProjection> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const now = input.now ?? new Date();
   const timeZone = input.timeZone ?? "America/Los_Angeles";
-  const date = businessDate(now, timeZone);
+  const date = input.businessDate ?? businessDate(now, timeZone);
+  const isFutureDate = date > businessDate(now, timeZone);
   const [orderRows, commercialItems, completedFollowUps, recoveries, forgeJobs, pressure] = await Promise.all([
     db.select().from(orders).where(sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId} AND (${orders.pickupDate} = ${date} OR ${orders.deliveryDate} = ${date})`).orderBy(asc(orders.pickupDate), asc(orders.id)),
     listDayforgeToday({ tenantId: input.tenantId, userId: input.userId, includeAllAssignees: input.includeAllAssignees }),
@@ -281,7 +292,15 @@ export async function getFieldToday(input: {
 
   const sorted = sortFieldTimeline(timeline);
   const nextFixedCommitment = sorted
-    .filter(item => item.scheduledAt && Date.parse(item.scheduledAt) >= now.getTime() && ["pickup", "delivery", "job"].includes(item.kind))
+    .filter(
+      item =>
+        item.scheduledAt &&
+        // Projecting a future date: the day's first scheduled item is "next",
+        // not the first item after the real present `now`. Projecting today:
+        // unchanged, still relative to the real present.
+        (isFutureDate || Date.parse(item.scheduledAt) >= now.getTime()) &&
+        ["pickup", "delivery", "job"].includes(item.kind)
+    )
     .sort((a, b) => Date.parse(a.scheduledAt!) - Date.parse(b.scheduledAt!))[0] ?? null;
   return {
     generatedAt: now.toISOString(), businessDate: date, currentUserId: input.userId, timeline: sorted,

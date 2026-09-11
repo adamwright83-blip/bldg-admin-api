@@ -12,6 +12,7 @@ import type {
   ProcessingLocation,
 } from "@shared/dayDirector";
 import type { AuthoredDayRecord } from "@shared/authoredDay";
+import type { MissionPlanOutcome } from "@shared/missionDirector";
 import { compileGoldlineAdventure, type TerritoryBundleHint } from "@shared/goldlineAdventure";
 import { applyAuthoredDayOrdering } from "@shared/authoredDay";
 import { projectStopsOntoCampaign } from "@shared/goldlineCampaignRuntime";
@@ -168,6 +169,13 @@ export type DayPlanProjection = {
   cleanCloudCount: number;
   growthCoverage: "covered" | "underfilled" | "blocked" | "unknown";
   authoredDay?: Pick<AuthoredDayRecord, "headline" | "framing" | "lines" | "status"> | null;
+  /**
+   * Slice 4 — the Mission Director's primary/fallback growth mission for
+   * this business date, when available. Rendering this is Slice 5's job
+   * (docs/goldline/BUILD_BRIEF_SLICES_1_5.md §5.3); this field is the
+   * contract addition Slice 4 owns.
+   */
+  missionPlan?: MissionPlanOutcome | null;
 };
 
 function nameForOrder(order: Order): string {
@@ -334,6 +342,7 @@ export function buildDayPlanProjection(input: {
   territoryBundles?: TerritoryBundleHint[];
   campaignChapters?: Array<{ objectiveIds: readonly string[] }>;
   authoredDay?: Pick<AuthoredDayRecord, "headline" | "framing" | "lines" | "status"> | null;
+  missionPlan?: MissionPlanOutcome | null;
 }): DayPlanProjection {
   const fixedCount = [
     ...(input.pickups ?? []),
@@ -538,5 +547,6 @@ export function buildDayPlanProjection(input: {
         ? "blocked"
         : "underfilled",
     authoredDay: input.authoredDay ?? null,
+    missionPlan: input.missionPlan ?? null,
   };
 }
