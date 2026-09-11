@@ -4,6 +4,8 @@ Shared task list for Driver/Admin work, tracked across Claude and ChatGPT (Astra
 
 Sections: Backlog / In Progress / Blocked / Done. One line per task: `- [owner] Title — note`.
 
+**The build brief is `docs/goldline/BUILD_BRIEF_SLICES_1_5.md`.** It replaces the original five-slice prompt and is written against the code on `main`. Read it before starting any slice.
+
 ## Visual reference guide (read before generating ANY mockup/concept art)
 Adam's favorite games, and the ONLY reference feel to pull from: Tomb Raider II, Twisted Metal 2, Metal Gear Solid, Super Mario 3D World. Think: modern-ish adventure grit, velocity/spectacle with personality, stealth-tech military cool, bright dimensional platforming wonder.
 Explicitly BANNED, even accidentally: anything Castlevania/gothic-vampire/Transylvania, "knight in shining armor" medieval fantasy, crown iconography, "kingdom" read literally as a medieval castle/throne aesthetic. "Kingdom" is a business-strategy abstraction, not a visual direction — never illustrate it as one.
@@ -19,14 +21,15 @@ A generated mockup that leans medieval/fantasy-castle (even a little) is a miss,
 - [adam] Build vetted library of real growth campaigns — spec: `docs/goldline/SLICES_1_3_REVISED.md`. Extends the existing `shared/leadHunt.ts` contract; reconciles with `server/opsTasks.ts` types and `server/churnRadar`. Do not build a parallel grammar.
 - [chatgpt] Define Kingdom 3's real growth challenge — must come before Companion 2 design, the sequence works backward from this. Read `docs/goldline/SLICES_1_3_REVISED.md` §2 first: the five/ten target boundary in the brief is imprecise.
 - [claude] Add The Last Valet's controllable campaign — NOT a binding rewrite. The paid-order binding is already non-blocking by its own fiction law. The gap is that no Adam-controlled campaign exists. See `docs/goldline/SLICES_1_3_REVISED.md` §3.3.
-- [claude] Add Coliseum + Valet as Lantern City thresholds — connect active kingdom state to the Driver day plan, not just Admin
-- [adam] Decide the final player entry surface for the chapter — where /goldline-chapter actually gets linked from, and what it says
+- [claude] PRIORITY: OpusLaInspection.tsx renders hardcoded customer names, lifetime values and pitch text in Admin — the only live standing-rule violation. Wire to real data or render nothing. Dead "Approve & Queue Win-Back" button too.
+- [claude] Add Coliseum + Valet as Lantern City thresholds — connect active kingdom state to the Driver day plan, not just Admin. NOTE: the Opus LA inspection -> Initiate Tower War flow is already shipped; verify, do not rebuild.
+- [adam] Decide the final player entry surface for the chapter — where /goldline-chapter actually gets linked from, and what it says. It is a registered route in App.tsx linked from nowhere.
 
 ## In Progress
 (nothing currently)
 
 ## Blocked
-- [adam] Approve and run drizzle/0067 + 0068 migrations — needed before chapter state, event binding, and Echo can go live
+- [adam] Approve and run drizzle/0067 + 0068 migrations — needed before chapter state, event binding, and Echo can go live. Also needs hand-written blocks in scripts/migrate.mjs; FirstChapter.tsx is localStorage-only today while persistence.ts sits unused.
 - [chatgpt] Design Companion 2's agentic power — blocked on Kingdom 3 definition, power must make K3 genuinely require it
 - [adam] DECIDE: does Slice 3 build the companion model, or only record the assignment? No companion exists in code — Mara/Sable/Bront/Ilex/Luma/Orren are doc-only. Slice 5's tap-for-help depends on this.
 - [adam] DECIDE: Rook name collision. `dayforgeCoachingRuntime.ts` already ships a field-sales coach named Rook, on the public Dayforge landing page. Unify with the Goldline companion, or rename one.
