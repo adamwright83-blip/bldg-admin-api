@@ -1,0 +1,27 @@
+{
+ "id": "rook",
+ "source": "rook.jpg",
+ "source_size": [
+  1024,
+  1024
+ ],
+ "output_size": [
+  1112,
+  1112
+ ],
+ "background_px_removed": 822793,
+ "speckle_islands_removed": 25,
+ "source_bbox": [
+  324,
+  41,
+  842,
+  1000
+ ],
+ "coverage": 0.183,
+ "opaque_islands": 2,
+ "files": {
+  "cutout": "artifacts/rook/rook-cutout.png",
+  "trellis_input": "artifacts/rook/rook-trellis-input.png",
+  "silhouette": "artifacts/rook/rook-silhouette-48.png"
+ }
+}

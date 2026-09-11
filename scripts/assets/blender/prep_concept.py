@@ -12,38 +12,86 @@ import argparse, json, os, sys
 from PIL import Image, ImageFilter
 
 
-def strip_background(im, tol=34):
+def strip_background(im, tol=26, sat_max=14):
     """
-    Flood the outer background to transparent from the four corners.
+    Flood the outer background to transparent, following a gradient.
 
-    Gradients and cast shadows get baked in as geometry, so they have to go. A
-    corner flood is used rather than a colour key because the subject may share
-    hues with the backdrop; only background CONNECTED to the border is removed,
-    so an enclosed pocket of similar colour inside the character survives.
+    Gradients and cast shadows bake into geometry, so they have to go. The naive
+    version of this compared every pixel against a fixed corner colour, which on a
+    smooth studio gradient stops dead at the tolerance isoline and leaves a bright
+    arc of background stuck to the subject. It looked like wings.
+
+    So the test is LOCAL: a pixel joins the background if it is close to the pixel
+    the flood arrived from. That tracks an arbitrarily long gradient. Two guards
+    stop it leaking into the character:
+
+      - saturation. Studio backdrops are near-grey; this subject is saturated
+        green and red. A pixel above `sat_max` chroma is never background. That threshold must sit well BELOW the
+        subject's least saturated part: at 42 it ate this character's olive tail
+        highlights, whose chroma runs lower than the body green.
+      - connectivity to the border, so an enclosed pocket of background-coloured
+        pixels inside the character survives.
     """
     im = im.convert("RGBA")
     w, h = im.size
     px = im.load()
-    seeds = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]
-    ref = [px[s][:3] for s in seeds]
     seen = bytearray(w * h)
-    stack = list(seeds)
+    stack = [(x, 0) for x in range(0, w, 2)] + [(x, h - 1) for x in range(0, w, 2)] \
+          + [(0, y) for y in range(0, h, 2)] + [(w - 1, y) for y in range(0, h, 2)]
+    stack = [(x, y, px[x, y][:3]) for (x, y) in stack]
     hits = 0
     while stack:
-        x, y = stack.pop()
+        x, y, came_from = stack.pop()
         if x < 0 or y < 0 or x >= w or y >= h:
             continue
         i = y * w + x
         if seen[i]:
             continue
         r, g, b, a = px[x, y]
-        if not any(abs(r - c[0]) + abs(g - c[1]) + abs(b - c[2]) <= tol * 3 for c in ref):
+        if max(r, g, b) - min(r, g, b) > sat_max:      # saturated: this is the subject
+            continue
+        if abs(r - came_from[0]) + abs(g - came_from[1]) + abs(b - came_from[2]) > tol * 3:
             continue
         seen[i] = 1
         px[x, y] = (r, g, b, 0)
         hits += 1
-        stack.extend(((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))
+        here = (r, g, b)
+        stack.extend(((x + 1, y, here), (x - 1, y, here), (x, y + 1, here), (x, y - 1, here)))
     return im, hits
+
+
+def despeckle(im, min_px=24):
+    """
+    Drop stray opaque islands left by soft edges and shadow residue.
+
+    The island count is the signal for whether limbs are fused, so it is only
+    meaningful once speckle is gone. Removes small islands, keeps real detached
+    detail like hanging charms.
+    """
+    a = im.split()[3]
+    w, h = im.size
+    px = a.load()
+    seen = [[False] * h for _ in range(w)]
+    removed = 0
+    op = im.load()
+    for sy in range(h):
+        for sx in range(w):
+            if seen[sx][sy] or px[sx, sy] <= 128:
+                continue
+            stack, cells = [(sx, sy)], []
+            while stack:
+                x, y = stack.pop()
+                if x < 0 or y < 0 or x >= w or y >= h or seen[x][y] or px[x, y] <= 128:
+                    continue
+                seen[x][y] = True
+                cells.append((x, y))
+                stack.extend(((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))
+            if len(cells) < min_px:
+                for (x, y) in cells:
+                    r, g, b, _ = op[x, y]
+                    op[x, y] = (r, g, b, 0)
+                removed += 1
+    return im, removed
 
 
 def trim_and_pad(im, margin=0.08):
@@ -106,12 +154,13 @@ def main():
     ap.add_argument("image")
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--id", required=True)
-    ap.add_argument("--tol", type=int, default=34)
+    ap.add_argument("--tol", type=int, default=26)
     a = ap.parse_args()
     os.makedirs(a.out_dir, exist_ok=True)
 
     src = Image.open(a.image).convert("RGBA")
     cut, removed = strip_background(src, a.tol)
+    cut, speckles = despeckle(cut)
     framed, bbox = trim_and_pad(cut)
     plate = on_flat(framed)
 
@@ -126,7 +175,7 @@ def main():
 
     meta = {"id": a.id, "source": os.path.basename(a.image),
             "source_size": list(src.size), "output_size": list(framed.size),
-            "background_px_removed": removed, "source_bbox": bbox,
+            "background_px_removed": removed, "speckle_islands_removed": speckles, "source_bbox": bbox,
             **report(framed), "files": paths}
     with open(os.path.join(a.out_dir, f"{a.id}-prep.json"), "w") as fh:
         json.dump(meta, fh, indent=1)
