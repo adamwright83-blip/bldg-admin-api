@@ -16,6 +16,21 @@ A generated mockup that leans medieval/fantasy-castle (even a little) is a miss,
 - Desktop can host a genuinely playable "game portion" for a Kingdom (e.g. Boreslay, the Headball-2-style PvP game, for the digital-marketing companion), but only once its companion is unlocked. This is the resolution to "does desktop play defeat the purpose since winning needs real-world action": desktop is never a way to skip the real action — the real action is the unlock gate for whichever companion makes that Kingdom's desktop game winnable at all. A kingdom you haven't earned the companion for has no viable desktop game yet.
 - Kingdom mission/challenge content itself (the mobile in-field "in-game" portion, e.g. THE LAST VALET) is mobile Driver-app specific, because winning requires real-world actions you can only take while out driving/working. Desktop's role for a Kingdom is the dossier/war-room view (recap, companion state, what real action is still needed) plus, once unlocked, that Kingdom's own desktop game — never a way to play/win the field mission itself from a desk.
 
+## Existing agent infrastructure — READ BEFORE BUILDING ANY AGENTIC FEATURE
+Do not build a new agent runtime, tool dispatcher, permission layer, or approval gate. All of it already exists and is in production.
+
+**Admin repo (`server/agents/`)** — `agentRuntime.ts`, `toolRegistry.ts`, `costTracking.ts`, `agentEvents.ts`, `s2sEndpoint.ts`, and 47 tools in `tools/`.
+- `permissions.ts` — per-`AgentType` tool allowlist with a hard throw (`assertToolPermission`). Eight agent types exist, including `driver_agent`. **This is the runtime enforcement layer for companion may/may-not rules.**
+- `humanApproval.ts` — `approvalRequiredToolNames`; a gated tool is refused without `ctx.approvedByUserId`. `draftCustomerMessageTool` is ungated, `sendCustomerReminderTool` is gated — i.e. the "drafts only, never sends without approval" companion rule is already enforced in code.
+
+**Resident repo (`/Users/adamwrightpfi/Desktop/Cursor_residentapp`, `server/agents/`)** — proves the pattern end to end: `residentAgent.ts` (1,183 lines) calls *into* admin's `/api/agent/s2s/run-tool` over a shared secret. Two directly reusable precedents:
+- Truth discipline already encoded — coordinated requests resolve to `pending_provider_confirmation`, "never 'confirmed', preserving the truth rule" (`residentAgentClient.ts`).
+- `residentMultiIntentPlanner.ts` classifies intent with regex + confidence scores, no LLM in the decision path — the same "deterministic and inspectable" principle Mission Director follows.
+
+**Known residual gap:** tool allowlisting controls *actions*, not *assertions*. Nothing yet stops a drafting tool from producing text that claims a customer already replied. That output-claim check is the only genuinely missing piece.
+
+**Companion → existing capability map:** Rook → `draftCustomerMessageTool` (+ gated send). Orren → `createDriverStopTool`/`createDriverMissionTool` + `server/missionDirector/`. Sable → `getResidentContextTool` + `goldlineWorldEvents`. Mara → `searchNetworkVendorsTool`/`prefillVendorFromWebTool` + `server/google/googlePlaces*`. Bront → `createVendorPricingRecommendationTool` + `server/commercialProposals/`. Ilex → `server/impactSignals/impactSignalExtraction.ts`. Luma → thinnest fit, only `level4OffensiveCopy.ts`.
+
 ## Resolved decisions (2026-09-11, Adam)
 - Slice 3 companion scope: build the real companion model now (roster rows, may/may-not rules as data, earned/unearned state, unlock transition). Not deferred.
 - Rook collision: if Rook wins the Kingdom 3 capability evaluation, unify with the existing shipped Dayforge coach persona rather than renaming either.
@@ -32,10 +47,27 @@ A generated mockup that leans medieval/fantasy-castle (even a little) is a miss,
 - [claude/adam] Lantern City visual threshold signals for Coliseum/Valet (brief §5.2) — NOT attempted. `LanternCityScene.tsx` is a 588-line live pixi rendering surface with no existing marker-array abstraction to extend safely, and there is no database available in the build environment to visually verify a change there. Real Kingdom status is already queryable (`system.goldlineKingdoms.list`, self-healing) — someone with a running dev environment and the art pipeline should wire the visual signal in, rather than have it guessed blind.
 - [adam] Apply drizzle/0067 + 0068 via `DAYFORGE_RELEASE_DB=1` (see Corrections above) — the only remaining step for chapter state / event binding / Echo to go live. The code path is already built and already degrades gracefully without it.
 
+### Added 2026-09-11 (Adam)
+- [adam/chatgpt] Create animal companion image assets — the eccentric-sidekick presentation layer for the existing seven companions (Mara/Sable/Rook/Bront/Ilex/Luma/Orren). Decide first whether companions render as animals or stay as named characters; if animals, remap the existing seven rather than inventing a parallel roster. Concept renders exist but use non-canon names (Freddy/Skylar/Brewstin/Widget) and a banned crown motif.
+- [chatgpt] Repo-wide security audit — full pass by GPT/Astra across admin + resident repos.
+- [claude] Repo-wide operational audit — verify every CTA links to what it claims and actually functions. Prompted by a real case: the Opus LA marker silently routed to Tower Wars because the fix was applied to a component that wasn't on the live path.
+- [claude/chatgpt] Repo-wide design matching — pages still styled from the Boreslay/Dayforge era need updating to the current Goldline direction.
+- [claude] Sales Intelligence feature operational check — confirm `/sales-intel` actually works end to end, not just that the page renders.
+- [claude] Repo-wide naming system — names must make missing code impossible to miss. Prompted by a real failure: the agent permission/approval layer already existed at `server/agents/permissions.ts`, was reported as non-existent, and was only found by way of the resident repo. Nothing discoverable should depend on knowing where to look.
+- [chatgpt] Kingdom game polish — the playable game portions need professional-grade feel (look, motion, sound, game feel). Assigned to GPT/Astra.
+
+### Added 2026-09-11 (Claude — proposed, veto freely)
+- [claude] Map the seven companions onto `permissions.ts` as agent types — give each companion an `AgentType` + tool allowlist derived from its may/may-not lists, and add the missing output-claim check. This is the concrete next step that turns the companion roster from data into working behavior; it is config + a thin guard over proven infrastructure, not new AI.
+- [adam/claude] Get a dev environment with real database access for browser verification — recurring blocker: Slices 4 and 5 both shipped with "not verified in a running browser, no database available," and the Opus LA routing bug reached production because it could not be exercised locally behind the admin password gate. This is the root cause behind several wrong-first-time fixes.
+- [claude] LLM model version sweep — resident's `server/_core/llm.ts` is pinned to `claude-sonnet-4-5-20250929`; audit the ~10 admin services with LLM calls for the same staleness and move to the current Claude 5 family.
+
 ## Blocked
 - [chatgpt] Design Companion 2's agentic power — blocked on Kingdom 3 definition, power must make K3 genuinely require it
 
 ## Done
+- [claude] Light lanterns for scattered non-tower customers (`9675915`) — `listCityWorldEntities` only lit a lantern for customers whose address already matched a `physical_entity_aliases` row, so every Laundry Farm customer outside Opus LA / Century Park East was geocoded but had no map entity. Added `ensurePropertyEntitiesForUnmatchedCustomers` in `server/goldlineWorld/cityWorldService.ts`, which find-or-creates a `kind:'property'`, `identityStatus:'provisional'` entity plus its normalized-address alias. Existing towers and alias matching untouched; territory clustering picks these up with no further change.
+- [claude] Fix stableKey overflow that took Lantern City down (`d8539a6`) — the above change surfaced a latent bug: `stableTerritoryKey` concatenated every cluster member's raw UUID, overflowing the `varchar(191)` `stableKey` column once a territory had ~8 members, which threw `ER_DATA_TOO_LONG` on every `listPresentedTerritories`/`lanternCityOverview` call and blanked the entire map. Replaced with a fixed-width 64-bit digest of the sorted member list; still deterministic and order-independent. Caught in Railway logs, fixed same session.
+- [claude] Opus LA tower inspection screen + Lantern City routing (`f37b971`, `187a4f2`) — new `/growth/opus-la-inspection` (South vs North towers, approved art assets, weekly panel, real Opus LA driver weapon overlay) with an INITIATE TOWER WAR! CTA into the existing Tower Wars page. NOTE the failure worth remembering: the first commit wired the redirect into `WorldGeographySurface.tsx`, which only powers Home's mini city view — the live Lantern City screen renders `LanternCitySceneV6/LanternCityScene.tsx`, which has its own separate navigation call sites. Clicking Opus LA kept going straight to Tower Wars until the second commit fixed the real path. Slice 5 §5.1 later replaced this screen's placeholder data with real `system.towerWars.today` contributors.
 - [adam] Fix combat aim/cooldown feel — widened hit cone, cooldown button feedback shipped and verified
 - [claude] Recover and integrate scenery + heroine art atlases — both art gaps closed from ChatGPT source sheets
 - [claude] Slice 1 — Growth campaign library. `server/campaignLibrary/` (schema, service, router), Admin surface at `/goldline-campaigns`, 7 seed campaigns plus the Colosseum campaign expressed through the same model, round-trip test proves byte-identical `LeadHuntDefinition` projection to the existing `COLOSSEUM_LEAD_HUNT`. Verified: `npx vitest run server/campaignLibrary` passes, `tsc --noEmit` clean on touched files.
