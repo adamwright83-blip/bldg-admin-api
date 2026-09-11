@@ -16,9 +16,9 @@ A generated mockup that leans medieval/fantasy-castle (even a little) is a miss,
 
 ## Backlog
 - [claude] Build the real mission director — spec written: `docs/goldline/SLICE_4_MISSION_DIRECTOR.md`. BLOCKED on the Slice 1 campaign library (no campaign_library/growth_campaign table exists yet). Do not start without it.
-- [adam] Build vetted library of real growth campaigns — door hangers, referral asks, office pitches, retention, digital footprint; the clay for missions
-- [chatgpt] Define Kingdom 3's real growth challenge — must come before Companion 2 design, the sequence works backward from this
-- [claude] Rewrite The Last Valet's business binding — swap the passive paid-order trigger for a controllable field-action campaign
+- [adam] Build vetted library of real growth campaigns — spec: `docs/goldline/SLICES_1_3_REVISED.md`. Extends the existing `shared/leadHunt.ts` contract; reconciles with `server/opsTasks.ts` types and `server/churnRadar`. Do not build a parallel grammar.
+- [chatgpt] Define Kingdom 3's real growth challenge — must come before Companion 2 design, the sequence works backward from this. Read `docs/goldline/SLICES_1_3_REVISED.md` §2 first: the five/ten target boundary in the brief is imprecise.
+- [claude] Add The Last Valet's controllable campaign — NOT a binding rewrite. The paid-order binding is already non-blocking by its own fiction law. The gap is that no Adam-controlled campaign exists. See `docs/goldline/SLICES_1_3_REVISED.md` §3.3.
 - [claude] Add Coliseum + Valet as Lantern City thresholds — connect active kingdom state to the Driver day plan, not just Admin
 - [adam] Decide the final player entry surface for the chapter — where /goldline-chapter actually gets linked from, and what it says
 
@@ -28,6 +28,9 @@ A generated mockup that leans medieval/fantasy-castle (even a little) is a miss,
 ## Blocked
 - [adam] Approve and run drizzle/0067 + 0068 migrations — needed before chapter state, event binding, and Echo can go live
 - [chatgpt] Design Companion 2's agentic power — blocked on Kingdom 3 definition, power must make K3 genuinely require it
+- [adam] DECIDE: does Slice 3 build the companion model, or only record the assignment? No companion exists in code — Mara/Sable/Bront/Ilex/Luma/Orren are doc-only. Slice 5's tap-for-help depends on this.
+- [adam] DECIDE: Rook name collision. `dayforgeCoachingRuntime.ts` already ships a field-sales coach named Rook, on the public Dayforge landing page. Unify with the Goldline companion, or rename one.
+- [adam] CONFIRM: amend GREYSTAR_COLOSSEUM_SNAPSHOT.md with the precise five/ten boundary — `day1TenDoors` owns ten real targets, `COLOSSEUM_LEAD_HUNT` is the five-target projection.
 - [claude] Mission Director (Slice 4) — blocked on the Slice 1 campaign library. Spec and data contract are done and reviewable at `docs/goldline/SLICE_4_MISSION_DIRECTOR.md`.
 
 ## Done
