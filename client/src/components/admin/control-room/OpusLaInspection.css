@@ -1,0 +1,147 @@
+.oli-page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #8fd3ff, #eaf6ff 70%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.oli-stage {
+  position: relative;
+  width: 1280px;
+  max-width: 100%;
+  height: 720px;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+  background: linear-gradient(180deg, #8fd3ff, #eaf6ff 70%);
+}
+.oli-weapon {
+  position: absolute;
+  top: 2%;
+  right: 2%;
+  width: 200px;
+  z-index: 5;
+  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.3));
+  transform: rotate(32deg);
+}
+.oli-towerwrap { position: absolute; bottom: -40px; width: 34%; }
+.oli-towerwrap.oli-south { left: -2%; }
+.oli-towerwrap.oli-north { right: 6%; }
+.oli-tower { width: 100%; display: block; filter: drop-shadow(0 18px 26px rgba(20, 30, 50, 0.3)); }
+.oli-label {
+  position: absolute;
+  top: 16px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 5px 14px;
+  font-weight: 800;
+  font-size: 14px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
+  z-index: 3;
+  color: #16324a;
+}
+.oli-towerwrap.oli-south .oli-label { left: 8%; }
+.oli-towerwrap.oli-north .oli-label { right: 2%; text-align: right; }
+.oli-plate-pos { position: absolute; z-index: 4; }
+.oli-plate {
+  position: relative;
+  width: 210px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  display: block;
+}
+.oli-plate img { width: 100%; display: block; }
+.oli-plate-avatar {
+  position: absolute;
+  left: 2.5%;
+  top: 12%;
+  bottom: 12%;
+  width: 22%;
+  border-radius: 8px;
+  background: #2a3a52;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9fd8ea;
+  font-weight: 800;
+  font-size: 15px;
+}
+.oli-plate-text {
+  position: absolute;
+  left: 28%;
+  right: 6%;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  color: #eaf2ff;
+  text-align: left;
+}
+.oli-plate-text b { font-size: 13px; line-height: 1.15; }
+.oli-plate-text span { font-size: 11px; color: #c9d6ff; }
+.oli-weekly { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 210px; z-index: 2; }
+.oli-weekly img { width: 100%; display: block; }
+.oli-weekly-title {
+  position: absolute;
+  top: -34px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  border-radius: 8px;
+  padding: 4px 16px;
+  font-weight: 800;
+  font-size: 13px;
+  color: #16324a;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
+  white-space: nowrap;
+}
+.oli-blk { position: absolute; left: 23%; right: 23%; color: #dff7ff; text-align: left; }
+.oli-blk-h { font-size: 9.5px; letter-spacing: 0.04em; color: #8fd8e6; font-weight: 800; margin-bottom: 2px; }
+.oli-blk-l { font-size: 9.5px; color: #eaffff; line-height: 1.5; white-space: nowrap; }
+.oli-cta-row { margin-top: 18px; }
+.oli-cta {
+  background: #ff7a1a;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 16px 32px;
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(255, 122, 26, 0.4);
+}
+.oli-cta:hover { filter: brightness(1.05); }
+.oli-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 20, 30, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+.oli-card { background: #fff; border-radius: 18px; padding: 22px; width: 340px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3); }
+.oli-card h3 { margin: 0 0 2px; color: #16324a; font-size: 19px; }
+.oli-card-meta { color: #6a8199; font-size: 13px; margin-bottom: 14px; }
+.oli-card-stat { display: flex; justify-content: space-between; font-size: 14px; color: #16324a; margin-bottom: 6px; font-weight: 600; }
+.oli-card-status { color: #d9432b; }
+.oli-card-ai {
+  margin-top: 14px;
+  background: #fff4ea;
+  border-left: 4px solid #ff7a1a;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #5a3a1a;
+  line-height: 1.4;
+}
+.oli-card-ai b { display: block; color: #ff7a1a; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.oli-card-approve { margin-top: 16px; width: 100%; background: #ff7a1a; color: #fff; border: none; border-radius: 10px; padding: 12px; font-weight: 800; font-size: 14px; cursor: pointer; }
+.oli-card-close { background: none; border: none; color: #6a8199; font-weight: 700; margin-top: 6px; width: 100%; padding: 8px; cursor: pointer; }

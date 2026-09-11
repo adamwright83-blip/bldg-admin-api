@@ -36,6 +36,8 @@ import LanternCityAtlas from "@/components/admin/control-room/LanternCityAtlas";
 import LanternCityScene from "@/components/admin/control-room/LanternCitySceneV6/LanternCityScene";
 import DriverIntelligenceOverview from "@/components/admin/control-room/DriverIntelligenceOverview";
 import { TowerWars } from "@/components/admin/control-room/TowerWars";
+import { OpusLaInspection } from "@/components/admin/control-room/OpusLaInspection";
+import "@/components/admin/control-room/OpusLaInspection.css";
 import "@/components/admin/control-room/admin-control-room.css";
 import "@/components/admin/control-room/goldline-game-shell.css";
 import { WorldTransitionProvider } from "@/components/admin/control-room/WorldTransitionProvider";
@@ -187,6 +189,7 @@ export default function AdminHostApp() {
     new URLSearchParams(window.location.search).get("worldTruth") === "1";
   const worldHomePath = ["localhost", "127.0.0.1"].includes(window.location.hostname) ? "/home" : "/";
   const isTowerWars = path === "/growth/tower-wars";
+  const isOpusLaInspection = path === "/growth/opus-la-inspection";
   const isSandbox = path === "/growth/sandbox";
   const isDriverIntelligence = path.startsWith("/growth/driver-intelligence");
   const isGrowthBuildings = path === "/growth/buildings";
@@ -201,6 +204,7 @@ export default function AdminHostApp() {
     isGrowth ||
     isLanternCity ||
     isTowerWars ||
+    isOpusLaInspection ||
     isSandbox ||
     isDriverIntelligence ||
     isGrowthBuildings ||
@@ -443,6 +447,8 @@ export default function AdminHostApp() {
           />
         ) : isTowerWars ? (
           <TowerWars onNavigate={nextPath => navigate(nextPath)} />
+        ) : isOpusLaInspection ? (
+          <OpusLaInspection onNavigate={nextPath => navigate(nextPath)} />
         ) : isSandbox ? (
           <Suspense fallback={<div className="cr-route-loading">Checking sandbox gate…</div>}><SandboxMode onNavigate={nextPath => navigate(nextPath)} /></Suspense>
         ) : isDriverIntelligence ? (

@@ -399,7 +399,11 @@ export function WorldGeographySurface({
                 className={`pwc-building ${tower.id === "opus_la" ? "opus" : "cpe"}${towerAttachedClusters?.get(tower.id) ? " has-attached-customers" : ""}`}
                 onNavigate={path => {
                   onSelectBuilding?.(tower.id);
-                  onNavigate?.(path);
+                  // Opus LA gets its own tower-inspection screen before Tower Wars;
+                  // every other building keeps going straight there unchanged.
+                  onNavigate?.(
+                    tower.id === "opus_la" ? "/growth/opus-la-inspection" : path
+                  );
                 }}
                 subtitle={
                   combatPresentation
