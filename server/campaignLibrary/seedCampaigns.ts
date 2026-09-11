@@ -289,4 +289,42 @@ export const SEED_CAMPAIGNS: Array<{
       legacyContractRef: { leadHuntId: "greystar-koreatown-five" },
     },
   },
+  {
+    campaignId: "the-last-valet-recurring-account-pitch",
+    campaign: {
+      enabled: true,
+      title: "The Last Valet — Recurring Account Pitch",
+      objective:
+        "Pitch a hospitality venue (hotel, event space, or short-term rental operator) on a recurring valet-adjacent laundry account — linens, uniforms, or guest laundry on a standing schedule.",
+      completionCondition:
+        "An in-person pitch, drafted and personalized to the specific venue, was delivered to a decision-maker.",
+      prepLeadDays: 1,
+      prepCondition:
+        "A candidate venue and a drafted, personalized pitch must exist before visiting.",
+      pocketKind: "between_stops",
+      pocketMinutesMin: 30,
+      fallbackVariant: {
+        title: "Drop-and-follow",
+        completionCondition:
+          "A pitch packet is left with the venue's front desk/ops manager when the decision-maker is unavailable, and a follow-up is scheduled.",
+        pocketMinutesMin: 10,
+      },
+      autoVerifiable: ["GPS arrival at the target venue address"],
+      selfReported: [
+        "Whether a decision-maker was actually present",
+        "Pitch outcome (interested / not interested / follow-up needed)",
+      ],
+      missionCategory: "account_acquisition",
+      companionAbilityId: "rook.outreach_drafting",
+      timingAssumptions: [
+        assumption(
+          "Hospitality ops managers are more reachable on weekday mornings before check-in/check-out rushes.",
+          "Adam's own field notes, informal"
+        ),
+      ],
+      opsTaskType: "office_account_pitch",
+      legacyContract: null,
+      legacyContractRef: null,
+    },
+  },
 ];

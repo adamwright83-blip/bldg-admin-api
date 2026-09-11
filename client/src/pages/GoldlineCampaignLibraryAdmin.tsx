@@ -34,7 +34,7 @@ export default function GoldlineCampaignLibraryAdmin() {
   } | null>(null);
 
   if (authLoading) return null;
-  if (!isAuthenticated) return <LoginForm />;
+  if (!isAuthenticated) return <LoginForm role="admin" onSuccess={() => window.location.reload()} />;
 
   const campaigns = listQuery.data ?? [];
 

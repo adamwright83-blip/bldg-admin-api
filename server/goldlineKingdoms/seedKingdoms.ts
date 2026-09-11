@@ -34,12 +34,14 @@ export async function seedGoldlineKingdoms(tenantId: string) {
     kingdom: {
       sequence: 2,
       title: "The Last Valet",
-      // Slice 3 assigns this once the real controllable campaign exists.
-      realCampaignId: null,
+      // Slice 3: the real controllable campaign, assigned. See
+      // docs/goldline/campaigns/KINGDOM_2_COMPANION_EVALUATION.md for why
+      // Rook is the companion this campaign earns.
+      realCampaignId: "the-last-valet-recurring-account-pitch",
       fictionalFieldMission: "the-last-valet",
       lanternCityStatus: "locked",
       driverDayRelevance:
-        "Surface once Kingdom 1 is complete and this Kingdom's real campaign is assigned (Slice 3).",
+        "Surface once Kingdom 1 (the Greystar hunt) is complete, when a real hospitality-venue pitch opportunity is reachable today.",
       companionEarnedId: null,
       enablesKingdomId: "kingdom-3",
       capabilityRequirement: null,

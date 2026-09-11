@@ -1,3 +1,11 @@
+/**
+ * This Rook persona is unified with the Goldline companion "Rook"
+ * (server/companions/seedCompanions.ts, companionId "rook") per Adam's
+ * decision, 2026-09-11 — same character, not a fork or a rename. See
+ * docs/goldline/campaigns/KINGDOM_2_COMPANION_EVALUATION.md. Changes here
+ * should stay consistent with Rook's protected may/may-not contract in
+ * docs/goldline/REALITY_BRIDGE.md §6.
+ */
 import { ENV } from "../_core/env";
 import { invokeLLM, type InvokeResult } from "../_core/llm";
 import { getCommercialMission } from "../commercialMissions/commercialMissionStore";

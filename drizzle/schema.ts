@@ -6717,3 +6717,61 @@ export const goldlineKingdoms = mysqlTable(
     ),
   })
 );
+
+/**
+ * Slice 3 — companion roster. The protected may/may-not contract as data,
+ * sourced verbatim from docs/goldline/REALITY_BRIDGE.md. Editing a
+ * companion's rules is a deliberate act on this table, never a prose edit.
+ */
+export const goldlineCompanions = mysqlTable(
+  "goldline_companions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    companionId: varchar("companionId", { length: 32 }).notNull(),
+    name: varchar("name", { length: 64 }).notNull(),
+    fictionTruth: varchar("fictionTruth", { length: 512 }).notNull(),
+    afterAvailableText: varchar("afterAvailableText", { length: 512 }).notNull(),
+    mayJson: json("mayJson").notNull(),
+    mayNotJson: json("mayNotJson").notNull(),
+    fantasyExpressionJson: json("fantasyExpressionJson").notNull(),
+    abilityId: varchar("abilityId", { length: 64 }).notNull(),
+    abilityDescription: varchar("abilityDescription", { length: 512 }).notNull(),
+    unifiedProductPersona: boolean("unifiedProductPersona").notNull().default(false),
+    productPersonaNote: varchar("productPersonaNote", { length: 512 }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    companionUnique: uniqueIndex("uq_goldline_companion_id").on(
+      table.tenantId,
+      table.companionId
+    ),
+  })
+);
+
+/**
+ * Per-operator earned state. Written only after real evidence — a completed
+ * ops_tasks row — of finishing the earning campaign. Never granted by
+ * fictional persistence alone.
+ */
+export const goldlineCompanionUnlocks = mysqlTable(
+  "goldline_companion_unlocks",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorId: varchar("operatorId", { length: 128 }).notNull(),
+    companionId: varchar("companionId", { length: 32 }).notNull(),
+    earnedAt: timestamp("earnedAt").notNull().defaultNow(),
+    earnedViaKingdomId: varchar("earnedViaKingdomId", { length: 64 }).notNull(),
+    earnedViaCampaignId: varchar("earnedViaCampaignId", { length: 64 }).notNull(),
+    evidenceOpsTaskId: int("evidenceOpsTaskId").notNull(),
+  },
+  table => ({
+    unlockUnique: uniqueIndex("uq_goldline_companion_unlock").on(
+      table.tenantId,
+      table.operatorId,
+      table.companionId
+    ),
+  })
+);

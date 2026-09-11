@@ -46,6 +46,7 @@ import { echoFollowUpRouter } from "../goldlineWorld/echoFollowUpRouter";
 import { cleancloudBrowserSyncRouter } from "../cleancloudBrowserSync/router";
 import { campaignLibraryRouter } from "../campaignLibrary/campaignLibraryRouter";
 import { kingdomRouter } from "../goldlineKingdoms/kingdomRouter";
+import { companionRouter } from "../companions/companionRouter";
 
 export const systemRouter = router({
   goldlineCargo: goldlineCargoRouter,
@@ -93,6 +94,7 @@ export const systemRouter = router({
   goldlineEchoFollowUp: echoFollowUpRouter,
   campaignLibrary: campaignLibraryRouter,
   goldlineKingdoms: kingdomRouter,
+  goldlineCompanions: companionRouter,
   health: publicProcedure
     .input(
       z.object({

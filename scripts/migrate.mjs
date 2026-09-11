@@ -994,3 +994,54 @@ await assertRequiredColumns("goldline_kingdoms", [
   "fictionalFieldMission",
   "lanternCityStatus",
 ]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_companions (
+    id VARCHAR(36) PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    companionId VARCHAR(32) NOT NULL,
+    name VARCHAR(64) NOT NULL,
+    fictionTruth VARCHAR(512) NOT NULL,
+    afterAvailableText VARCHAR(512) NOT NULL,
+    mayJson JSON NOT NULL,
+    mayNotJson JSON NOT NULL,
+    fantasyExpressionJson JSON NOT NULL,
+    abilityId VARCHAR(64) NOT NULL,
+    abilityDescription VARCHAR(512) NOT NULL,
+    unifiedProductPersona BOOLEAN NOT NULL DEFAULT false,
+    productPersonaNote VARCHAR(512) NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_goldline_companion_id (tenantId,companionId)
+  )`,
+  "CREATE TABLE goldline_companions"
+);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_companion_unlocks (
+    id VARCHAR(36) PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorId VARCHAR(128) NOT NULL,
+    companionId VARCHAR(32) NOT NULL,
+    earnedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    earnedViaKingdomId VARCHAR(64) NOT NULL,
+    earnedViaCampaignId VARCHAR(64) NOT NULL,
+    evidenceOpsTaskId INT NOT NULL,
+    UNIQUE KEY uq_goldline_companion_unlock (tenantId,operatorId,companionId)
+  )`,
+  "CREATE TABLE goldline_companion_unlocks"
+);
+
+await assertRequiredColumns("goldline_companions", [
+  "tenantId",
+  "companionId",
+  "mayJson",
+  "mayNotJson",
+  "abilityId",
+]);
+await assertRequiredColumns("goldline_companion_unlocks", [
+  "tenantId",
+  "operatorId",
+  "companionId",
+  "evidenceOpsTaskId",
+]);

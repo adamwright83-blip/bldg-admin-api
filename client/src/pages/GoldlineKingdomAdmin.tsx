@@ -30,7 +30,7 @@ export default function GoldlineKingdomAdmin() {
   const [capabilityRequirement, setCapabilityRequirement] = useState("");
 
   if (authLoading) return null;
-  if (!isAuthenticated) return <LoginForm />;
+  if (!isAuthenticated) return <LoginForm role="admin" onSuccess={() => window.location.reload()} />;
 
   const kingdoms = kingdomsQuery.data ?? [];
   const campaigns = campaignsQuery.data ?? [];

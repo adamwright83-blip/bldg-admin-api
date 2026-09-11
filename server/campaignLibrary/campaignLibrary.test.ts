@@ -6,8 +6,8 @@ import { SEED_CAMPAIGNS } from "./seedCampaigns";
 import { POCKET_KINDS, MISSION_CATEGORIES } from "./campaignLibraryTypes";
 
 describe("campaign library seeds", () => {
-  it("has all seven business campaigns plus the Colosseum campaign", () => {
-    expect(SEED_CAMPAIGNS.length).toBe(8);
+  it("has all seven business campaigns plus the Colosseum and Last Valet campaigns", () => {
+    expect(SEED_CAMPAIGNS.length).toBe(9);
     const ids = SEED_CAMPAIGNS.map(seed => seed.campaignId);
     expect(new Set(ids).size).toBe(ids.length);
   });
