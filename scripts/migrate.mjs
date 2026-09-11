@@ -915,3 +915,52 @@ await assertRequiredColumns("authored_days", [
 
 await conn.end();
 console.log("\nMigration complete.");
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_campaigns (
+    id VARCHAR(36) PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    campaignId VARCHAR(64) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    title VARCHAR(191) NOT NULL,
+    objective VARCHAR(512) NOT NULL,
+    completionCondition VARCHAR(512) NOT NULL,
+    prepLeadDays INT NOT NULL DEFAULT 0,
+    prepCondition VARCHAR(512) NULL,
+    pocketKind VARCHAR(32) NOT NULL,
+    pocketMinutesMin INT NOT NULL,
+    fallbackVariantJson JSON NULL,
+    autoVerifiableJson JSON NOT NULL,
+    selfReportedJson JSON NOT NULL,
+    missionCategory VARCHAR(64) NOT NULL,
+    companionAbilityId VARCHAR(64) NULL,
+    timingAssumptionsJson JSON NOT NULL,
+    opsTaskType VARCHAR(64) NOT NULL,
+    legacyContract VARCHAR(32) NULL,
+    legacyContractRefJson JSON NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_goldline_campaign_id (tenantId,campaignId)
+  )`,
+  "CREATE TABLE goldline_campaigns"
+);
+
+await assertRequiredColumns("goldline_campaigns", [
+  "tenantId",
+  "campaignId",
+  "enabled",
+  "pocketKind",
+  "pocketMinutesMin",
+  "opsTaskType",
+]);
+
+await run(
+  `ALTER TABLE ops_tasks MODIFY COLUMN taskType ENUM(
+    'intake_missing_price','unpaid_order','vague_intake','missed_pickup',
+    'stale_customer','revenue_leak','referral_ask','vendor_followup',
+    'gm_followup','manual_operator_task','dry_clean_receipt_intake',
+    'emergency_task','door_hanger_operation','office_account_pitch',
+    'review_request','digital_footprint_post','partnership_outreach'
+  ) NOT NULL`,
+  "ops_tasks: widen taskType enum for campaign library types"
+);

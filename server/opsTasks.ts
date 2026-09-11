@@ -27,6 +27,11 @@ export const OPS_TASK_TYPES = [
   "manual_operator_task",
   "dry_clean_receipt_intake",
   "emergency_task",
+  "door_hanger_operation",
+  "office_account_pitch",
+  "review_request",
+  "digital_footprint_post",
+  "partnership_outreach",
 ] as const;
 export const OPS_TASK_SOURCES = ["manual", "agent_suggested", "system_detected", "level_4", "voice", "quick_input", "emergency_composer"] as const;
 export const OPS_TASK_EVENT_TYPES = [

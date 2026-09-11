@@ -16,26 +16,24 @@ A generated mockup that leans medieval/fantasy-castle (even a little) is a miss,
 - Desktop can host a genuinely playable "game portion" for a Kingdom (e.g. Boreslay, the Headball-2-style PvP game, for the digital-marketing companion), but only once its companion is unlocked. This is the resolution to "does desktop play defeat the purpose since winning needs real-world action": desktop is never a way to skip the real action — the real action is the unlock gate for whichever companion makes that Kingdom's desktop game winnable at all. A kingdom you haven't earned the companion for has no viable desktop game yet.
 - Kingdom mission/challenge content itself (the mobile in-field "in-game" portion, e.g. THE LAST VALET) is mobile Driver-app specific, because winning requires real-world actions you can only take while out driving/working. Desktop's role for a Kingdom is the dossier/war-room view (recap, companion state, what real action is still needed) plus, once unlocked, that Kingdom's own desktop game — never a way to play/win the field mission itself from a desk.
 
-## Backlog
-- [claude] Build the real mission director — spec written: `docs/goldline/SLICE_4_MISSION_DIRECTOR.md`. BLOCKED on the Slice 1 campaign library (no campaign_library/growth_campaign table exists yet). Do not start without it.
-- [adam] Build vetted library of real growth campaigns — spec: `docs/goldline/SLICES_1_3_REVISED.md`. Extends the existing `shared/leadHunt.ts` contract; reconciles with `server/opsTasks.ts` types and `server/churnRadar`. Do not build a parallel grammar.
-- [chatgpt] Define Kingdom 3's real growth challenge — must come before Companion 2 design, the sequence works backward from this. Read `docs/goldline/SLICES_1_3_REVISED.md` §2 first: the five/ten target boundary in the brief is imprecise.
-- [claude] Add The Last Valet's controllable campaign — NOT a binding rewrite. The paid-order binding is already non-blocking by its own fiction law. The gap is that no Adam-controlled campaign exists. See `docs/goldline/SLICES_1_3_REVISED.md` §3.3.
-- [claude] PRIORITY: OpusLaInspection.tsx renders hardcoded customer names, lifetime values and pitch text in Admin — the only live standing-rule violation. Wire to real data or render nothing. Dead "Approve & Queue Win-Back" button too.
-- [claude] Add Coliseum + Valet as Lantern City thresholds — connect active kingdom state to the Driver day plan, not just Admin. NOTE: the Opus LA inspection -> Initiate Tower War flow is already shipped; verify, do not rebuild.
-- [adam] Decide the final player entry surface for the chapter — where /goldline-chapter actually gets linked from, and what it says. It is a registered route in App.tsx linked from nowhere.
+## Resolved decisions (2026-09-11, Adam)
+- Slice 3 companion scope: build the real companion model now (roster rows, may/may-not rules as data, earned/unearned state, unlock transition). Not deferred.
+- Rook collision: if Rook wins the Kingdom 3 capability evaluation, unify with the existing shipped Dayforge coach persona rather than renaming either.
+- Greystar snapshot: five/ten wording confirmed as described. `day1TenDoors` owns ten real targets, `COLOSSEUM_LEAD_HUNT` is the five-target projection defining Kingdom 1 completion. Amend the protected snapshot doc with this.
+- Chapter entry: `/goldline-chapter` is reached through Kingdom 2, which unlocks only after Kingdom 1 (the Greystar hunt + in-fiction Clockhead defeat) is complete. Kingdom 2 is locked on the map until then.
 
 ## In Progress
-(nothing currently)
+- [claude] Slice 2 — Kingdom sequence and campaign contracts
+
+## Backlog
+- [chatgpt] Define Kingdom 3's real growth challenge — must come before Companion 2 design, the sequence works backward from this. Read `docs/goldline/SLICES_1_3_REVISED.md` §2 first: the five/ten target boundary in the brief is imprecise.
+- [claude] Slice 4 — Mission Director v1. Spec: `docs/goldline/SLICE_4_MISSION_DIRECTOR.md`. Unblocked now that Slice 1's campaign library exists.
+- [claude] Slice 5 — Lantern City, Driver, entry point, persistence. Brief: `docs/goldline/BUILD_BRIEF_SLICES_1_5.md` §5.
 
 ## Blocked
-- [adam] Approve and run drizzle/0067 + 0068 migrations — needed before chapter state, event binding, and Echo can go live. Also needs hand-written blocks in scripts/migrate.mjs; FirstChapter.tsx is localStorage-only today while persistence.ts sits unused.
 - [chatgpt] Design Companion 2's agentic power — blocked on Kingdom 3 definition, power must make K3 genuinely require it
-- [adam] DECIDE: does Slice 3 build the companion model, or only record the assignment? No companion exists in code — Mara/Sable/Bront/Ilex/Luma/Orren are doc-only. Slice 5's tap-for-help depends on this.
-- [adam] DECIDE: Rook name collision. `dayforgeCoachingRuntime.ts` already ships a field-sales coach named Rook, on the public Dayforge landing page. Unify with the Goldline companion, or rename one.
-- [adam] CONFIRM: amend GREYSTAR_COLOSSEUM_SNAPSHOT.md with the precise five/ten boundary — `day1TenDoors` owns ten real targets, `COLOSSEUM_LEAD_HUNT` is the five-target projection.
-- [claude] Mission Director (Slice 4) — blocked on the Slice 1 campaign library. Spec and data contract are done and reviewable at `docs/goldline/SLICE_4_MISSION_DIRECTOR.md`.
 
 ## Done
 - [adam] Fix combat aim/cooldown feel — widened hit cone, cooldown button feedback shipped and verified
 - [claude] Recover and integrate scenery + heroine art atlases — both art gaps closed from ChatGPT source sheets
+- [claude] Slice 1 — Growth campaign library. `server/campaignLibrary/` (schema, service, router), Admin surface at `/goldline-campaigns`, 7 seed campaigns plus the Colosseum campaign expressed through the same model, round-trip test proves byte-identical `LeadHuntDefinition` projection to the existing `COLOSSEUM_LEAD_HUNT`. Verified: `npx vitest run server/campaignLibrary` passes, `tsc --noEmit` clean on touched files.

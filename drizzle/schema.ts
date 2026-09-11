@@ -1112,6 +1112,11 @@ export const opsTasks = mysqlTable(
       "manual_operator_task",
       "dry_clean_receipt_intake",
       "emergency_task",
+      "door_hanger_operation",
+      "office_account_pitch",
+      "review_request",
+      "digital_footprint_post",
+      "partnership_outreach",
     ]).notNull(),
     title: varchar("title", { length: 255 }).notNull(),
     description: text("description"),
@@ -6635,6 +6640,45 @@ export const towerWarsPromises = mysqlTable(
       table.tenantId,
       table.buildingId,
       table.fulfilledAt
+    ),
+  })
+);
+
+/**
+ * Slice 1 — growth campaign library. A durable, editable campaign template.
+ * Never business truth by itself; an `ops_tasks` row is the real instance of
+ * doing one on a given day. See docs/goldline/BUILD_BRIEF_SLICES_1_5.md.
+ */
+export const goldlineCampaigns = mysqlTable(
+  "goldline_campaigns",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    campaignId: varchar("campaignId", { length: 64 }).notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    title: varchar("title", { length: 191 }).notNull(),
+    objective: varchar("objective", { length: 512 }).notNull(),
+    completionCondition: varchar("completionCondition", { length: 512 }).notNull(),
+    prepLeadDays: int("prepLeadDays").notNull().default(0),
+    prepCondition: varchar("prepCondition", { length: 512 }),
+    pocketKind: varchar("pocketKind", { length: 32 }).notNull(),
+    pocketMinutesMin: int("pocketMinutesMin").notNull(),
+    fallbackVariantJson: json("fallbackVariantJson"),
+    autoVerifiableJson: json("autoVerifiableJson").notNull(),
+    selfReportedJson: json("selfReportedJson").notNull(),
+    missionCategory: varchar("missionCategory", { length: 64 }).notNull(),
+    companionAbilityId: varchar("companionAbilityId", { length: 64 }),
+    timingAssumptionsJson: json("timingAssumptionsJson").notNull(),
+    opsTaskType: varchar("opsTaskType", { length: 64 }).notNull(),
+    legacyContract: varchar("legacyContract", { length: 32 }),
+    legacyContractRefJson: json("legacyContractRefJson"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    campaignUnique: uniqueIndex("uq_goldline_campaign_id").on(
+      table.tenantId,
+      table.campaignId
     ),
   })
 );

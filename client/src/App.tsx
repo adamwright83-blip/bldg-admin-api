@@ -31,6 +31,7 @@ const CommercialMissionAdmin = lazy(
 );
 const SalesIntelAdmin = lazy(() => import("./pages/SalesIntelAdmin"));
 const GoldlineEffectivenessAdmin = lazy(() => import("./pages/GoldlineEffectivenessAdmin"));
+const GoldlineCampaignLibraryAdmin = lazy(() => import("./pages/GoldlineCampaignLibraryAdmin"));
 const GoldlineChapterHost = lazy(() => import("./pages/GoldlineChapterHost"));
 const TowerForgeAdmin = lazy(() => import("./pages/TowerForgeAdmin"));
 const GuardianRosterPage = lazy(() => import("./pages/GuardianRosterPage"));
@@ -205,6 +206,7 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/commercial-missions",
   "/tower-forge",
   "/sales-intel",
+  "/goldline-campaigns",
   "/goldline-effectiveness",
   "/goldline-chapter",
   "/commercial-proposal-settings",
@@ -307,6 +309,13 @@ function AdminHostRouter() {
         <AdminAuthGate><Suspense fallback={<PublicLandingFallback />}><TowerForgeAdmin /></Suspense></AdminAuthGate>
       </Route>
       <Route path="/sales-intel" component={AdminHostApp} />
+      <Route path="/goldline-campaigns">
+        <AdminAuthGate>
+          <Suspense fallback={<PublicLandingFallback />}>
+            <GoldlineCampaignLibraryAdmin />
+          </Suspense>
+        </AdminAuthGate>
+      </Route>
       <Route path="/goldline-effectiveness">
         <AdminAuthGate>
           <Suspense fallback={<PublicLandingFallback />}>
