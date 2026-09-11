@@ -100,7 +100,10 @@ export default function FirstChapter({world=EMPTY_WORLD,onPrepare,onEcho,syncSta
     {view.lost?<div className="fc-message"><b>Try a different approach.</b><button onClick={()=>{sim.current=retryChapter(sim.current);setView({...sim.current});resume();}}>Retry checkpoint</button></div>:null}
     {view.save.completed&&!endingSeen?<div className="fc-message"><b>Departure stopped.</b><p>{view.save.choice==='break'?'A rough new silence settles over the court.':'For once, everything stays where it belongs.'}</p><button onClick={()=>{setEndingSeen(true);resume();}}>Continue exploring</button><button onClick={()=>{sim.current=createChapter();setView({...sim.current});setEndingSeen(false);resume();}}>Begin again</button></div>:null}
     <div className="fc-controls" aria-label="Chapter controls"><div className="fc-pad">{[['↑',0,-1],['←',-1,0],['↓',0,1],['→',1,0]].map(([label,x,y])=><button key={label} aria-label={`Move ${label}`} disabled={!playing||view.lost||city} onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);input.current.x=Number(x);input.current.y=Number(y);}} onPointerUp={()=>{input.current.x=0;input.current.y=0;}} onPointerCancel={()=>{input.current.x=0;input.current.y=0;}}>{label}</button>)}</div>
-    <div>{(['dodge','attack','interact'] as const).map(action=><button key={action} disabled={!playing||view.lost||city} onPointerDown={()=>{input.current[action]=true;}} onClick={e=>{if(e.detail===0)input.current[action]=true;}}>{action==='interact'?(hint??'Use'):action==='attack'?'Strike':'Dodge'}</button>)}</div></div>
+    <div>{(['dodge','attack','interact'] as const).map(action=>{
+      const cooling=action==='dodge'?view.dodgeCooldown>0:action==='attack'?view.attackCooldown>0:false;
+      return <button key={action} className={cooling?'fc-cooling':undefined} disabled={!playing||view.lost||city||cooling} onPointerDown={()=>{input.current[action]=true;}} onClick={e=>{if(e.detail===0)input.current[action]=true;}}>{action==='interact'?(hint??'Use'):action==='attack'?'Strike':'Dodge'}</button>;
+    })}</div></div>
     <p className="fc-help">WASD / arrows · Space dodge · J strike · E use · Esc pause. Stationary play only. <span>{syncStatus}</span></p>
   </main>;
 }
