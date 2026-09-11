@@ -79,6 +79,33 @@ as many modular pieces and the naive export is a draw-call disaster.
   for. The CC0 animal `.blend` files measured above answer "how is a real
   low-poly mesh built" without touching anyone's shipped game.
 
+
+## Third round — technique recall, and the project's own skill
+
+| Skill(s) | Source | Licence | Why |
+|---|---|---|---|
+| `blender-python-scripting`, `blender-modeling-modifiers`, `blender-shader-nodes`, `blender-animation-rigging`, `blender-geometry-nodes`, `blender-compositing-nodes`, `blender-physics-simulation`, `blender-scene-rendering` | `ra100/blender-claude-plugin` | MIT | API and technique recall rather than another opinion about art. Complements the artistic skills instead of overlapping them. |
+| `goldline-companion-modeling` | **written for this repo** | — | The rig contract, the seven silhouette roles, the scope boundary, and every failure this project already made. |
+
+### Not installed, third round
+
+`theneoai/awesome-skills` `blender-expert` is a role prompt — "you are a senior
+3D artist with 10+ years of experience" — rather than technique. Adding it means
+adding another voice with slightly different opinions to a set that already has
+forty. Skipped on those grounds, not on quality.
+
+### On collecting more repos
+
+More skills is not monotonically better. Overlapping skills that disagree degrade
+output rather than improving it. The set is now deep on hard surface, organic
+creatures, environments, rigging, shading, export and QA. The remaining gap was
+never another public repo — it was Goldline's own rules, which is what
+`goldline-companion-modeling` is.
+
+Skills are strong guidance, not law. They reduce the failure rate; they do not
+eliminate it. This session shipped a test that silently passed everything, mangled
+asset paths twice, and spent two passes "fixing" an outline that already worked.
+
 ## Standing rule
 
 Every skill here is method. None of them authorise producing art. Character
