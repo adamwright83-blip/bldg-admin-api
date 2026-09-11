@@ -964,3 +964,33 @@ await run(
   ) NOT NULL`,
   "ops_tasks: widen taskType enum for campaign library types"
 );
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_kingdoms (
+    id VARCHAR(36) PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    kingdomId VARCHAR(64) NOT NULL,
+    sequence INT NOT NULL,
+    title VARCHAR(191) NOT NULL,
+    realCampaignId VARCHAR(64) NULL,
+    fictionalFieldMission VARCHAR(191) NOT NULL,
+    lanternCityStatus VARCHAR(32) NOT NULL DEFAULT 'locked',
+    driverDayRelevance VARCHAR(512) NOT NULL,
+    companionEarnedId VARCHAR(64) NULL,
+    enablesKingdomId VARCHAR(64) NULL,
+    capabilityRequirement VARCHAR(512) NULL,
+    selectedAt TIMESTAMP NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_goldline_kingdom_id (tenantId,kingdomId)
+  )`,
+  "CREATE TABLE goldline_kingdoms"
+);
+
+await assertRequiredColumns("goldline_kingdoms", [
+  "tenantId",
+  "kingdomId",
+  "sequence",
+  "fictionalFieldMission",
+  "lanternCityStatus",
+]);

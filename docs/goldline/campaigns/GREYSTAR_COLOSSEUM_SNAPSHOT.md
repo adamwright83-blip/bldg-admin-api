@@ -8,7 +8,14 @@ The Colosseum presents six fictional architectural doors and Clockhead as an are
 
 ## Reality contract
 
-The authoritative campaign contains five real Greystar Koreatown targets. Completion comes only from the existing `system.day1TenDoors` campaign and its recorded target outcomes. Do not derive completion from fictional door count, combat, Wayward exploration, Relics or local fantasy persistence.
+`system.day1TenDoors` owns TEN real targets (`shared/day1TenDoors.ts` `DAY1_TARGETS`), SEVEN of them Greystar, across Koreatown, West Hollywood, and Beverly Hills — all sourced, none invented. The Colosseum campaign's completion condition is a five-target projection over that list, `COLOSSEUM_LEAD_HUNT` (`shared/leadHunt.ts` via `client/src/pages/goldline/colosseumCampaign.ts`), naming five specific Koreatown properties and their recorded outcomes. Neither number is wrong — they answer different questions. Completion comes only from `COLOSSEUM_LEAD_HUNT`'s five recorded outcomes. Do not derive completion from fictional door count, combat, Wayward exploration, Relics or local fantasy persistence.
+
+Two moves are forbidden, because both look like "fixing" the five/ten difference and both are not:
+
+1. Narrowing `DAY1_TARGETS` to five to match the Colosseum campaign. This deletes five real sourced businesses from a live mission (day1TenDoors serves all ten independent of Kingdom 1).
+2. Widening `COLOSSEUM_LEAD_HUNT` to include more of the seven Greystar properties. This is the real meaning of "never invent a sixth property" below — not conjuring a fake business, but promoting an existing real target into the Colosseum campaign to move a completion number.
+
+Guarded by `shared/greystarColosseumBoundary.test.ts`.
 
 ## Current implementation seams
 

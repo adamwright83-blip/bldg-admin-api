@@ -23,10 +23,10 @@ A generated mockup that leans medieval/fantasy-castle (even a little) is a miss,
 - Chapter entry: `/goldline-chapter` is reached through Kingdom 2, which unlocks only after Kingdom 1 (the Greystar hunt + in-fiction Clockhead defeat) is complete. Kingdom 2 is locked on the map until then.
 
 ## In Progress
-- [claude] Slice 2 — Kingdom sequence and campaign contracts
+- [claude] Slice 3 — companion model + The Last Valet as Kingdom 2
 
 ## Backlog
-- [chatgpt] Define Kingdom 3's real growth challenge — must come before Companion 2 design, the sequence works backward from this. Read `docs/goldline/SLICES_1_3_REVISED.md` §2 first: the five/ten target boundary in the brief is imprecise.
+- [chatgpt] Define Kingdom 3's real growth challenge — a campaign is now recorded via the Admin review surface at `/goldline-kingdoms`, but the underlying challenge itself should still be reviewed/refined by ChatGPT per the original task intent.
 - [claude] Slice 4 — Mission Director v1. Spec: `docs/goldline/SLICE_4_MISSION_DIRECTOR.md`. Unblocked now that Slice 1's campaign library exists.
 - [claude] Slice 5 — Lantern City, Driver, entry point, persistence. Brief: `docs/goldline/BUILD_BRIEF_SLICES_1_5.md` §5.
 
@@ -37,3 +37,4 @@ A generated mockup that leans medieval/fantasy-castle (even a little) is a miss,
 - [adam] Fix combat aim/cooldown feel — widened hit cone, cooldown button feedback shipped and verified
 - [claude] Recover and integrate scenery + heroine art atlases — both art gaps closed from ChatGPT source sheets
 - [claude] Slice 1 — Growth campaign library. `server/campaignLibrary/` (schema, service, router), Admin surface at `/goldline-campaigns`, 7 seed campaigns plus the Colosseum campaign expressed through the same model, round-trip test proves byte-identical `LeadHuntDefinition` projection to the existing `COLOSSEUM_LEAD_HUNT`. Verified: `npx vitest run server/campaignLibrary` passes, `tsc --noEmit` clean on touched files.
+- [claude] Slice 2 — Kingdom sequence and campaign contracts. `server/goldlineKingdoms/` (schema, service, router named `goldline_kingdoms`, distinct from the unrelated `CommandLanternKingdom` feature), Kingdom 1 seeded wired to the real Colosseum campaign, Kingdom 2/3 seeded locked and unassigned, Kingdom 3 review/select surface at `/goldline-kingdoms`. Amended `GREYSTAR_COLOSSEUM_SNAPSHOT.md` with the confirmed five/ten wording, guarded by `shared/greystarColosseumBoundary.test.ts`. Verified: tests pass, `tsc --noEmit` clean on touched files.

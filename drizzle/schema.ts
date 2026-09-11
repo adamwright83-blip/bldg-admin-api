@@ -6682,3 +6682,38 @@ export const goldlineCampaigns = mysqlTable(
     ),
   })
 );
+
+/**
+ * Slice 2 — Kingdom sequence and campaign contracts. Connects a real
+ * campaign (goldlineCampaigns) to its fictional field mission, Lantern City
+ * status, Driver-day relevance, the companion it earns, and the next
+ * Kingdom it enables. Named "goldline_kingdoms" deliberately, distinct from
+ * the unrelated shipped CommandLanternKingdom feature — see
+ * docs/goldline/BUILD_BRIEF_SLICES_1_5.md Slice 2 §2.3.
+ */
+export const goldlineKingdoms = mysqlTable(
+  "goldline_kingdoms",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    kingdomId: varchar("kingdomId", { length: 64 }).notNull(),
+    sequence: int("sequence").notNull(),
+    title: varchar("title", { length: 191 }).notNull(),
+    realCampaignId: varchar("realCampaignId", { length: 64 }),
+    fictionalFieldMission: varchar("fictionalFieldMission", { length: 191 }).notNull(),
+    lanternCityStatus: varchar("lanternCityStatus", { length: 32 }).notNull().default("locked"),
+    driverDayRelevance: varchar("driverDayRelevance", { length: 512 }).notNull(),
+    companionEarnedId: varchar("companionEarnedId", { length: 64 }),
+    enablesKingdomId: varchar("enablesKingdomId", { length: 64 }),
+    capabilityRequirement: varchar("capabilityRequirement", { length: 512 }),
+    selectedAt: timestamp("selectedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    kingdomUnique: uniqueIndex("uq_goldline_kingdom_id").on(
+      table.tenantId,
+      table.kingdomId
+    ),
+  })
+);
