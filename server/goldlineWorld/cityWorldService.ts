@@ -34,8 +34,9 @@ import {
   presentObligations,
   projectObligations,
 } from "../../shared/goldlineObligations";
-import { getGeographicTruth } from "../geography/geographicTruthService";
-import { physicalAliasesMatch } from "./identityResolver";
+import { randomUUID } from "node:crypto";
+import { getGeographicTruth, normalizeSourceAddress } from "../geography/geographicTruthService";
+import { normalizePhysicalAlias, physicalAliasesMatch } from "./identityResolver";
 import { getDb } from "../db";
 
 function eventFromRow(row: typeof goldlineWorldEvents.$inferSelect): GoldlineWorldEvent {
@@ -87,6 +88,60 @@ function latestEvent(
   return null;
 }
 
+/**
+ * A paid order's address is already geocoded tenant-wide (see
+ * `getGeographicTruth`), whether or not it belongs to a recognised tower. A
+ * customer who never matches an existing alias would otherwise have a real
+ * doorway and no lantern to stand in. This gives them one: a plain `property`
+ * entity, `provisional` (never `confirmed` — nobody has verified it by hand),
+ * keyed to the same normalized address the resident-matching pass already
+ * checks against. Buildings are untouched; this only fills gaps.
+ */
+async function ensurePropertyEntitiesForUnmatchedCustomers(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  tenantId: string,
+  geography: GeographicTruth
+): Promise<void> {
+  const existingAliases = await db
+    .select()
+    .from(physicalEntityAliases)
+    .where(
+      and(
+        eq(physicalEntityAliases.tenantId, tenantId),
+        eq(physicalEntityAliases.aliasType, "normalized_address")
+      )
+    );
+  const knownNormalized = new Set(
+    existingAliases.map(alias => normalizePhysicalAlias(alias.aliasValue))
+  );
+  const seenThisPass = new Set<string>();
+  for (const customer of geography.customers) {
+    const address = customer.location?.canonicalAddress ?? null;
+    if (!address) continue;
+    const normalized = normalizePhysicalAlias(address);
+    if (!normalized || knownNormalized.has(normalized) || seenThisPass.has(normalized))
+      continue;
+    seenThisPass.add(normalized);
+    const entityId = randomUUID();
+    await db.insert(physicalEntities).values({
+      id: entityId,
+      tenantId,
+      kind: "property",
+      displayName: address,
+      identityStatus: "provisional",
+    });
+    await db.insert(physicalEntityAliases).values({
+      id: randomUUID(),
+      tenantId,
+      physicalEntityId: entityId,
+      aliasType: "normalized_address",
+      aliasValue: address,
+      normalizedAliasValue: normalizeSourceAddress(address),
+      evidenceReference: "cleancloud_order_geocode",
+    });
+  }
+}
+
 export async function listCityWorldEntities(input: {
   tenantId: string;
   /** The tenant-local date used to decide what is due. Defaults to today. */
@@ -95,6 +150,8 @@ export async function listCityWorldEntities(input: {
   const today = input.today ?? new Date().toISOString().slice(0, 10);
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const geography = await getGeographicTruth({ tenantId: input.tenantId });
+  await ensurePropertyEntitiesForUnmatchedCustomers(db, input.tenantId, geography);
   const entities = await db
     .select()
     .from(physicalEntities)
@@ -112,7 +169,7 @@ export async function listCityWorldEntities(input: {
   if (!entities.length) return [];
 
   const ids = entities.map(entity => entity.id);
-  const [aliases, bindings, eventRows, evidence, assets, geography] =
+  const [aliases, bindings, eventRows, evidence, assets] =
     await Promise.all([
       db
         .select()
@@ -162,7 +219,6 @@ export async function listCityWorldEntities(input: {
             eq(towerAssetVersions.approvalStatus, "approved")
           )
         ),
-      getGeographicTruth({ tenantId: input.tenantId }),
     ]);
 
   /**
