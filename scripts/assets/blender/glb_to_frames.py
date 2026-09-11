@@ -15,7 +15,8 @@ mesh from anywhere else — they all arrive here as a GLB and leave as the same 
 import bpy, sys, os, json, math, argparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from rig import build_rig, normalize, TARGET_HEIGHT
+from rig import build_rig, normalize, TARGET_HEIGHT, AZIMUTH
+from toon import toon_material, add_outline
 
 
 def clear():
@@ -26,6 +27,36 @@ def import_glb(path):
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=path)
     return [o for o in bpy.data.objects if o not in before]
+
+
+def apply_toon(objects):
+    """
+    Replace whatever shading arrived with the flat cel treatment, then outline.
+
+    Image-to-3D output ships PBR materials, and PBR is a defined failure here: the
+    characters sit inside painted 2D backgrounds and glossy output makes them look
+    pasted on. This is not optional polish, so it runs unconditionally.
+    """
+    for obj in [o for o in objects if o.type == "MESH"]:
+        swapped = []
+        for slot in obj.material_slots:
+            m = slot.material
+            if not m:
+                continue
+            rgba = (0.6, 0.6, 0.6, 1)
+            try:
+                bsdf = m.node_tree.nodes.get("Principled BSDF")
+                if bsdf:
+                    rgba = tuple(bsdf.inputs["Base Color"].default_value)
+            except Exception:
+                pass
+            swapped.append(toon_material(m.name.replace("gl_", ""), rgba))
+        if not swapped:
+            swapped = [toon_material("default", (0.6, 0.6, 0.6, 1))]
+        obj.data.materials.clear()
+        for m in swapped:
+            obj.data.materials.append(m)
+        add_outline(obj)
 
 
 def bake_state(objects, state, frames, out_dir, asset_id, res):
@@ -79,6 +110,8 @@ def main():
     ap.add_argument("--states", default="idle,turn")
     ap.add_argument("--frames", type=int, default=8)
     ap.add_argument("--res", type=int, default=512)
+    ap.add_argument("--keep-pbr", action="store_true",
+                    help="Skip toon shading. Diagnostic only — PBR output is not shippable.")
     a = ap.parse_args(argv)
 
     os.makedirs(a.out, exist_ok=True)
@@ -86,6 +119,8 @@ def main():
     build_rig()
     imported = import_glb(a.glb)
     info = normalize(imported)
+    if not a.keep_pbr:
+        apply_toon(imported)
     objects = list(bpy.data.objects)
 
     states = {}
@@ -102,6 +137,8 @@ def main():
         "normalization": info,
         "states": {k: {"frames": len(v), "files": v} for k, v in states.items()},
         "rig": "scripts/assets/blender/rig.py",
+        "cameraAzimuth": AZIMUTH,
+        "shading": "pbr" if a.keep_pbr else "toon",
     }
     with open(os.path.join(a.out, f"{a.id}.frames.json"), "w") as fh:
         json.dump(meta, fh, indent=1)

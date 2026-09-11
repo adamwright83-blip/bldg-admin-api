@@ -16,14 +16,38 @@ import bpy, math
 TARGET_HEIGHT = 1.75   # blender units, tallest point of a standing companion
 ORTHO_SCALE = 2.95
 
+# Camera azimuth, in degrees around the character. 0 is dead front.
+#
+# This was 30.5 and it was wrong. At 30.5 a forward-pointing feature aims almost
+# straight down the lens and collapses into the body: Rook's beak, its single
+# strongest silhouette cue, did not appear until frame 3 of a turnaround. A study
+# at 30.5 / 45 / 60 / 75 / 90 showed 60 to 75 read the beak clearly while keeping
+# three-quarter appeal; 90 flattens the body into a profile card.
+#
+# Settling this BEFORE the other six animals are made is what stops all seven
+# being remade. Do not change it per-companion — the set is shot on one camera.
+AZIMUTH = 60.0
+ELEVATION = 21.0
+DISTANCE = 5.6
+TARGET = (0.0, 0.0, 0.88)
+
 
 def build_rig():
     """Camera and lights. Call on an empty scene, before adding geometry."""
     scn = bpy.context.scene
 
-    bpy.ops.object.camera_add(location=(2.55, -4.30, 2.32))
+    bpy.ops.object.empty_add(location=TARGET)
+    target = bpy.context.active_object
+    target.name = "rig_target"
+    a, e = math.radians(AZIMUTH), math.radians(ELEVATION)
+    bpy.ops.object.camera_add(location=(
+        TARGET[0] + DISTANCE * math.cos(e) * math.sin(a),
+        TARGET[1] - DISTANCE * math.cos(e) * math.cos(a),
+        TARGET[2] + DISTANCE * math.sin(e)))
     cam = bpy.context.active_object
-    cam.rotation_euler = (math.radians(69), 0, math.radians(30.5))
+    track = cam.constraints.new("TRACK_TO")
+    track.target = target
+    track.track_axis, track.up_axis = "TRACK_NEGATIVE_Z", "UP_Y"
     cam.data.type = "ORTHO"          # ortho keeps scale comparable between species
     cam.data.ortho_scale = ORTHO_SCALE
     scn.camera = cam
