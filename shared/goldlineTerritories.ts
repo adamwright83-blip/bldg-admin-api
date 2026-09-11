@@ -183,7 +183,13 @@ export function stableTerritoryKey(input: {
   physicalEntityIds: readonly string[];
 }): string {
   const members = [...input.physicalEntityIds].sort().join(",");
-  return `territory:${input.tenantId}:${input.grammar}:${members}`;
+  // Concatenating every member's raw UUID grew unboundedly with cluster size
+  // and overflowed the varchar(191) `stableKey` column once a territory had
+  // more than a handful of members. A 64-bit digest keeps the key fixed-width
+  // (collision risk is negligible at this dataset's scale) while staying
+  // fully deterministic and order-independent, same as before.
+  const digest = `${stableHash(members).toString(36)}${stableHash(`${members}:2`).toString(36)}`;
+  return `territory:${input.tenantId}:${input.grammar}:${digest}`;
 }
 
 /**
