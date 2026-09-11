@@ -81,6 +81,15 @@ export default function GoldlineKingdomAdmin() {
                   <strong>Capability requirement:</strong> {kingdom.capabilityRequirement}
                 </div>
               )}
+              {kingdom.kingdomId === "kingdom-2-the-last-valet" &&
+              kingdom.lanternCityStatus !== "locked" ? (
+                <a
+                  href="/goldline-chapter"
+                  style={{ display: "inline-block", marginTop: 8, fontWeight: 600 }}
+                >
+                  Enter The Last Valet →
+                </a>
+              ) : null}
             </div>
           </div>
         ))}

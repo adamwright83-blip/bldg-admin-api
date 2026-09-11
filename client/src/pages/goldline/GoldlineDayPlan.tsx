@@ -19,6 +19,7 @@ import type {
   ProcessingLocation,
 } from "@shared/dayDirector";
 import type { AuthoredDayRecord } from "@shared/authoredDay";
+import type { MissionPlanOutcome } from "@shared/missionDirector";
 import type { OpenChannelMission } from "../../../../server/openChannel/openChannelTypes";
 import {
   buildDayPlanProjection,
@@ -66,6 +67,10 @@ export type GoldlineDayPlanProps = {
   onCompleteCommitment?: (commitmentId: string) => Promise<void>;
   authoredDay?: Pick<AuthoredDayRecord, "headline" | "framing" | "lines" | "status"> | null;
   cargoFixture?: VehicleCargoItem[];
+  /** Slice 4/5: the Mission Director's plan for tomorrow, surfaced unprompted. */
+  missionPlan?: MissionPlanOutcome | null;
+  /** Slice 5 §5.4: shown when Kingdom 2 has unlocked (Kingdom 1 complete). */
+  onEnterChapter?: () => void;
 };
 
 const KIND_LABEL = {
@@ -230,6 +235,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         commitments: props.commitments,
         now,
         authoredDay: props.authoredDay,
+        missionPlan: props.missionPlan,
       }),
     [
       props.businessDate,
@@ -240,6 +246,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       props.salesMissions,
       props.liveObjectives,
       props.territoryBundles,
+      props.missionPlan,
       props.campaignChapters,
       props.nextCommitmentAt,
       props.processingLocation,
@@ -285,6 +292,40 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           <p className="gdp-authored-framing" data-testid="authored-day-framing">
             {plan.authoredDay.framing}
           </p>
+        ) : null}
+        {plan.missionPlan ? (
+          <div className="gdp-mission-plan" data-testid="mission-director-plan">
+            {plan.missionPlan.status === "planned" ? (
+              <>
+                <p>
+                  <strong>Tomorrow's growth mission:</strong> {plan.missionPlan.primary.title}
+                </p>
+                <p className="gdp-mission-explanation">{plan.missionPlan.explanation}</p>
+                <p className="gdp-mission-fallback">
+                  If the day changes: {plan.missionPlan.fallback.title}
+                </p>
+              </>
+            ) : plan.missionPlan.status === "fallback_only" ? (
+              <>
+                <p>
+                  <strong>Tomorrow's fallback mission:</strong> {plan.missionPlan.fallback.title}
+                </p>
+                <p className="gdp-mission-explanation">{plan.missionPlan.explanation}</p>
+              </>
+            ) : (
+              <p className="gdp-mission-explanation">{plan.missionPlan.remedy}</p>
+            )}
+          </div>
+        ) : null}
+        {props.onEnterChapter ? (
+          <button
+            type="button"
+            className="gdp-chapter-entry"
+            onClick={props.onEnterChapter}
+            data-testid="enter-chapter-button"
+          >
+            A new Kingdom has opened — enter The Last Valet
+          </button>
         ) : null}
         <button
           className="gdp-menu-button"

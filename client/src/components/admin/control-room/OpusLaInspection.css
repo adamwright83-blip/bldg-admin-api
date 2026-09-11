@@ -104,6 +104,13 @@
 .oli-blk { position: absolute; left: 23%; right: 23%; color: #dff7ff; text-align: left; }
 .oli-blk-h { font-size: 9.5px; letter-spacing: 0.04em; color: #8fd8e6; font-weight: 800; margin-bottom: 2px; }
 .oli-blk-l { font-size: 9.5px; color: #eaffff; line-height: 1.5; white-space: nowrap; }
+.oli-contributor-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 16px;
+}
 .oli-cta-row { margin-top: 18px; }
 .oli-cta {
   background: #ff7a1a;

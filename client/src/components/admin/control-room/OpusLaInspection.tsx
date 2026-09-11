@@ -1,134 +1,129 @@
 /**
- * Opus LA tower inspection — South vs North, real Opus LA art.
+ * Opus LA tower inspection — real Opus LA art, real contributor data.
  *
  * Reached from Opus LA's marker in both the live Lantern City scene
  * (LanternCitySceneV6/LanternCityScene.tsx) and Home's mini city view
  * (WorldGeographySurface.tsx, via AdminHome.tsx).
  * Every other building still goes straight to Tower Wars, unchanged.
  *
- * The name/dollar figures below are placeholder content, not yet wired to a
- * real per-tower revenue/customer query — that backend work is a separate
- * follow-up. This screen's job right now is the navigation shape (Lantern
- * City -> inspection -> Tower Wars) and the real approved art, not real data.
+ * Slice 5 §5.1 (docs/goldline/BUILD_BRIEF_SLICES_1_5.md): this screen used
+ * to render hardcoded customer names, dollar figures, and invented "AI
+ * pitch" reasoning — a standing-rule violation (no invented customers,
+ * ever). It now reads real revenue contributors from
+ * system.towerWars.today, the same authoritative source Tower Wars
+ * itself uses. There is no real "South tower vs North tower" split within
+ * Opus LA — that was never anything but decorative fiction — so real
+ * customers are listed once, honestly, rather than pinned to an invented
+ * half of the building. When there is no real contributor data yet, this
+ * renders an honest empty state instead of fabricating one.
  */
 import { useState } from "react";
+import { trpc } from "@/lib/trpc";
+import { centsToDollars } from "@shared/pricing";
 
 const ASSETS = "/assets/admin/control-room/opus-la-inspection";
 
-type Customer = {
-  name: string;
-  initials: string;
-  tower: "South" | "North";
-  level: number;
-  lifetimeValue: string;
-  orders: number;
-  status: string;
-  aiPitch: string;
+type Contributor = {
+  identityKey: string;
+  customerIdentity: string | null;
+  customerDisplayName: string;
+  customerPhone: string | null;
+  contributedValueCents: number;
+  orderCount: number;
+  events: Array<{ eventId: string; orderId: string | number | null; occurredAt: string; valueCents: number }>;
 };
 
-const CUSTOMERS: Customer[] = [
-  {
-    name: "REED, K.",
-    initials: "KR",
-    tower: "South",
-    level: 12,
-    lifetimeValue: "$850",
-    orders: 6,
-    status: "No order in 52 days",
-    aiPitch:
-      "Reed switched to biweekly last spring then stopped after a late pickup. A one-time free rush credit plus a same-day slot would likely win them back — no discount pattern to reinforce.",
-  },
-  {
-    name: "J. PARK",
-    initials: "JP",
-    tower: "North",
-    level: 18,
-    lifetimeValue: "$4,820",
-    orders: 12,
-    status: "Active customer",
-    aiPitch:
-      "Park is fully active and the highest-value resident here — no win-back needed. Best move is a referral ask, not a retention offer.",
-  },
-  {
-    name: "M. CHEN",
-    initials: "MC",
-    tower: "North",
-    level: 9,
-    lifetimeValue: "$1,200",
-    orders: 9,
-    status: "No order in 38 days",
-    aiPitch:
-      "Chen is a high-frequency lapsed customer, not a discount shopper. A personal note referencing their usual order (bedding, folded) outperforms a coupon here.",
-  },
-];
-
-function NamePlate({ customer, onOpen }: { customer: Customer; onOpen: (c: Customer) => void }) {
+function ContributorRow({ contributor, onOpen }: { contributor: Contributor; onOpen: (c: Contributor) => void }) {
   return (
-    <button type="button" className="oli-plate" onClick={() => onOpen(customer)} aria-label={`${customer.name}, ${customer.lifetimeValue}`}>
+    <button
+      type="button"
+      className="oli-plate"
+      onClick={() => onOpen(contributor)}
+      aria-label={`${contributor.customerDisplayName}, $${centsToDollars(contributor.contributedValueCents)}`}
+    >
       <img src={`${ASSETS}/nameplate-frame.png`} alt="" />
-      <span className="oli-plate-avatar">{customer.initials}</span>
+      <span className="oli-plate-avatar">
+        {contributor.customerDisplayName.slice(0, 2).toUpperCase()}
+      </span>
       <span className="oli-plate-text">
-        <b>{customer.name}</b>
-        <span>{customer.lifetimeValue}</span>
+        <b>{contributor.customerDisplayName}</b>
+        <span>${centsToDollars(contributor.contributedValueCents)}</span>
       </span>
     </button>
   );
 }
 
 export function OpusLaInspection({ onNavigate }: { onNavigate: (path: string) => void }) {
-  const [selected, setSelected] = useState<Customer | null>(null);
-  const southCustomers = CUSTOMERS.filter(c => c.tower === "South");
-  const northCustomers = CUSTOMERS.filter(c => c.tower === "North");
+  const [selected, setSelected] = useState<Contributor | null>(null);
+  const towerWarsToday = trpc.system.towerWars.today.useQuery(undefined, { retry: false });
+  const contributors = (towerWarsToday.data?.contributors?.opus_la ?? []) as Contributor[];
+  const totalValueCents = contributors.reduce((sum, c) => sum + c.contributedValueCents, 0);
+  const topFive = contributors.slice(0, 5);
 
   return (
     <div className="oli-page">
       <div className="oli-stage">
         <img className="oli-weapon" src={`${ASSETS}/weapon.png`} alt="" />
         <div className="oli-towerwrap oli-south">
-          <div className="oli-label">SOUTH TOWER - LEADING</div>
+          <div className="oli-label">SOUTH TOWER</div>
           <img className="oli-tower" src={`${ASSETS}/south-tower.png`} alt="Opus LA South Tower" />
-          {southCustomers.map((c, i) => (
-            <div key={c.name} className="oli-plate-pos" style={{ top: `${34 + i * 18}%`, left: "2%" }}>
-              <NamePlate customer={c} onOpen={setSelected} />
-            </div>
-          ))}
         </div>
 
         <div className="oli-weekly">
-          <div className="oli-weekly-title">WEEKLY</div>
+          <div className="oli-weekly-title">REAL ACTIVITY</div>
           <img src={`${ASSETS}/weekly-frame.png`} alt="" />
-          <div className="oli-blk" style={{ top: "23%" }}>
-            <div className="oli-blk-h">SOUTH TOP</div>
-            <div className="oli-blk-l">
-              {southCustomers.map(c => (
-                <div key={c.name}>{c.name} {c.lifetimeValue}</div>
-              ))}
+          {towerWarsToday.isLoading ? (
+            <div className="oli-blk" style={{ top: "30%" }}>
+              <div className="oli-blk-h">Loading…</div>
             </div>
-          </div>
-          <div className="oli-blk" style={{ top: "40.5%" }}>
-            <div className="oli-blk-h">NORTH TOP</div>
-            <div className="oli-blk-l">
-              {northCustomers.map(c => (
-                <div key={c.name}>{c.name} {c.lifetimeValue}</div>
-              ))}
+          ) : towerWarsToday.error ? (
+            <div className="oli-blk" style={{ top: "30%" }}>
+              <div className="oli-blk-h">Activity data unavailable</div>
+              <div className="oli-blk-l">Tower Wars settlement could not be reached.</div>
             </div>
-          </div>
-          <div className="oli-blk" style={{ top: "58%" }}>
-            <div className="oli-blk-h">WEEK TOTAL</div>
-            <div className="oli-blk-l">Both towers: $6,870</div>
-          </div>
+          ) : topFive.length === 0 ? (
+            <div className="oli-blk" style={{ top: "30%" }}>
+              <div className="oli-blk-h">No recorded activity yet</div>
+              <div className="oli-blk-l">
+                No real orders at this building are recorded for the current
+                rivalry window.
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="oli-blk" style={{ top: "23%" }}>
+                <div className="oli-blk-h">TOP CONTRIBUTORS</div>
+                <div className="oli-blk-l">
+                  {topFive.map(c => (
+                    <div key={c.identityKey}>
+                      {c.customerDisplayName} ${centsToDollars(c.contributedValueCents)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="oli-blk" style={{ top: "58%" }}>
+                <div className="oli-blk-h">TOTAL RECORDED</div>
+                <div className="oli-blk-l">
+                  ${centsToDollars(totalValueCents)} · {contributors.length} customer(s)
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="oli-towerwrap oli-north">
-          <div className="oli-label">NORTH TOWER - CATCHING UP</div>
+          <div className="oli-label">NORTH TOWER</div>
           <img className="oli-tower" src={`${ASSETS}/north-tower.png`} alt="Opus LA North Tower" />
-          {northCustomers.map((c, i) => (
-            <div key={c.name} className="oli-plate-pos" style={{ top: `${20 + i * 20}%`, left: "34%" }}>
-              <NamePlate customer={c} onOpen={setSelected} />
-            </div>
-          ))}
         </div>
       </div>
+
+      {topFive.length > 0 ? (
+        <div className="oli-contributor-list" aria-label="Real contributors at this building">
+          {topFive.map(c => (
+            <ContributorRow key={c.identityKey} contributor={c} onOpen={setSelected} />
+          ))}
+        </div>
+      ) : null}
 
       <div className="oli-cta-row">
         <button type="button" className="oli-cta" onClick={() => onNavigate("/growth/tower-wars?building=opus_la")}>
@@ -139,15 +134,21 @@ export function OpusLaInspection({ onNavigate }: { onNavigate: (path: string) =>
       {selected ? (
         <div className="oli-overlay" onClick={() => setSelected(null)}>
           <div className="oli-card" onClick={e => e.stopPropagation()}>
-            <h3>{selected.name}</h3>
-            <div className="oli-card-meta">{selected.tower} · Level {selected.level}</div>
-            <div className="oli-card-stat"><span>Value</span><span>{selected.lifetimeValue} lifetime · {selected.orders} orders</span></div>
-            <div className="oli-card-stat"><span>Status</span><span className="oli-card-status">{selected.status}</span></div>
-            <div className="oli-card-ai">
-              <b>Agentic AI — proposed approach</b>
-              {selected.aiPitch}
+            <h3>{selected.customerDisplayName}</h3>
+            <div className="oli-card-stat">
+              <span>Value</span>
+              <span>
+                ${centsToDollars(selected.contributedValueCents)} recorded · {selected.orderCount} order(s)
+              </span>
             </div>
-            <button type="button" className="oli-card-approve">Approve &amp; Queue Win-Back</button>
+            <div className="oli-card-stat">
+              <span>Last recorded event</span>
+              <span className="oli-card-status">
+                {selected.events[selected.events.length - 1]?.occurredAt
+                  ? new Date(selected.events[selected.events.length - 1].occurredAt).toLocaleDateString()
+                  : "Unknown"}
+              </span>
+            </div>
             <button type="button" className="oli-card-close" onClick={() => setSelected(null)}>Close</button>
           </div>
         </div>

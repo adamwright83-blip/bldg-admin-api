@@ -82,6 +82,40 @@
   margin: 10px 0 9px;
   letter-spacing: 0.07em;
 }
+.gdp-mission-plan {
+  margin: 0 0 9px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  text-align: left;
+}
+.gdp-mission-plan p {
+  margin: 2px 0;
+  font-size: 10px;
+  color: #fff5d6;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.gdp-mission-explanation {
+  color: #c9d6ff;
+}
+.gdp-mission-fallback {
+  color: #9fd8ea;
+}
+.gdp-chapter-entry {
+  display: block;
+  margin: 0 0 9px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: none;
+  background: #ff7a1a;
+  color: #fff;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  width: 100%;
+}
 .gdp-menu-button {
   position: absolute;
   right: 16px;

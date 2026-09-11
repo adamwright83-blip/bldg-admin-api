@@ -364,6 +364,24 @@ function LiveGoldlineDriverController({
     refetchInterval: 60_000,
     retry: false,
   });
+  // Slice 4/5: tomorrow's Mission Director plan, surfaced before Adam asks.
+  const tomorrowBusinessDate = useMemo(
+    () => getLocalYmd(new Date(Date.now() + 24 * 60 * 60 * 1000)),
+    []
+  );
+  const missionDirectorPlan = trpc.system.missionDirector.planForDate.useQuery(
+    { businessDate: tomorrowBusinessDate },
+    { refetchInterval: 60_000, retry: false }
+  );
+  // Slice 5 §5.4: Kingdom 2 unlocks after Kingdom 1 (the Greystar hunt) is
+  // complete, and leads to /goldline-chapter access, per Adam's decision.
+  const goldlineKingdoms = trpc.system.goldlineKingdoms.list.useQuery(undefined, {
+    staleTime: 30_000,
+    retry: false,
+  });
+  const kingdomTwoUnlocked = goldlineKingdoms.data?.some(
+    kingdom => kingdom.kingdomId === "kingdom-2-the-last-valet" && kingdom.lanternCityStatus !== "locked"
+  );
   const territories = trpc.system.goldlineWorld.territories.useQuery(
     undefined,
     {
@@ -1338,6 +1356,14 @@ function LiveGoldlineDriverController({
         campaignChapters={campaign.data?.campaign.chapters}
         authoredDay={
           authoredDay.data?.available ? authoredDay.data.authoredDay : null
+        }
+        missionPlan={missionDirectorPlan.data?.outcome ?? null}
+        onEnterChapter={
+          kingdomTwoUnlocked
+            ? () => {
+                window.location.href = "/goldline-chapter";
+              }
+            : undefined
         }
         processingLocation={dayDirectorState.data?.processingLocation}
         commitments={dayDirectorState.data?.commitments}

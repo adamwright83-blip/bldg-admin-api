@@ -2,24 +2,29 @@ import { z } from "zod";
 import { adminProcedure, dayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import {
   getKingdom,
-  listKingdoms,
   selectKingdomCampaign,
   setKingdomCompanion,
   setKingdomStatus,
 } from "./kingdomService";
 import { seedGoldlineKingdoms } from "./seedKingdoms";
+import { deriveKingdomStatuses } from "./kingdomUnlocks";
 import { LANTERN_CITY_STATUSES } from "./kingdomTypes";
+import { dayDirectorActorId } from "../dayDirector/dayDirectorActor";
 
 export const kingdomRouter = router({
+  /** Self-healing: derives real Kingdom-completion status on every read. */
   list: dayforgeTenantMemberProcedure.query(({ ctx }) =>
-    listKingdoms({ tenantId: ctx.tenantId })
+    deriveKingdomStatuses({ tenantId: ctx.tenantId, operatorId: dayDirectorActorId(ctx) })
   ),
   get: dayforgeTenantMemberProcedure
     .input(z.object({ kingdomId: z.string() }))
     .query(({ ctx, input }) => getKingdom({ tenantId: ctx.tenantId, ...input })),
   seedDefaults: adminProcedure.mutation(async ({ ctx }) => {
     await seedGoldlineKingdoms(ctx.tenantId ?? "default");
-    return listKingdoms({ tenantId: ctx.tenantId ?? "default" });
+    return deriveKingdomStatuses({
+      tenantId: ctx.tenantId ?? "default",
+      operatorId: dayDirectorActorId(ctx),
+    });
   }),
   selectCampaign: adminProcedure
     .input(
