@@ -4,6 +4,11 @@ Shared task list for Driver/Admin work, tracked across Claude and ChatGPT (Astra
 
 Sections: Backlog / In Progress / Blocked / Done. One line per task: `- [owner] Title — note`.
 
+## Canon (standing design facts — not tasks, don't re-derive or re-litigate)
+- Each Kingdom's companion is themed to one specific real growth skill (digital marketing/Instagram ads, door-to-door, referrals, retention, etc). The companion is earned through real field work first — it is not a starting option.
+- Desktop can host a genuinely playable "game portion" for a Kingdom (e.g. Boreslay, the Headball-2-style PvP game, for the digital-marketing companion), but only once its companion is unlocked. This is the resolution to "does desktop play defeat the purpose since winning needs real-world action": desktop is never a way to skip the real action — the real action is the unlock gate for whichever companion makes that Kingdom's desktop game winnable at all. A kingdom you haven't earned the companion for has no viable desktop game yet.
+- Kingdom mission/challenge content itself (the mobile in-field "in-game" portion, e.g. THE LAST VALET) is mobile Driver-app specific, because winning requires real-world actions you can only take while out driving/working. Desktop's role for a Kingdom is the dossier/war-room view (recap, companion state, what real action is still needed) plus, once unlocked, that Kingdom's own desktop game — never a way to play/win the field mission itself from a desk.
+
 ## Backlog
 - [claude] Build the real mission director — reads tomorrow's route, finds time pockets, picks primary + fallback mission, preps assets ahead
 - [adam] Build vetted library of real growth campaigns — door hangers, referral asks, office pitches, retention, digital footprint; the clay for missions
