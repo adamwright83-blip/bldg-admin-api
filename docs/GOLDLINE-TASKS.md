@@ -4,6 +4,11 @@ Shared task list for Driver/Admin work, tracked across Claude and ChatGPT (Astra
 
 Sections: Backlog / In Progress / Blocked / Done. One line per task: `- [owner] Title — note`.
 
+## Visual reference guide (read before generating ANY mockup/concept art)
+Adam's favorite games, and the ONLY reference feel to pull from: Tomb Raider II, Twisted Metal 2, Metal Gear Solid, Super Mario 3D World. Think: modern-ish adventure grit, velocity/spectacle with personality, stealth-tech military cool, bright dimensional platforming wonder.
+Explicitly BANNED, even accidentally: anything Castlevania/gothic-vampire/Transylvania, "knight in shining armor" medieval fantasy, crown iconography, "kingdom" read literally as a medieval castle/throne aesthetic. "Kingdom" is a business-strategy abstraction, not a visual direction — never illustrate it as one.
+A generated mockup that leans medieval/fantasy-castle (even a little) is a miss, not a starting point to iterate from — regenerate from this guide, don't patch gold-and-crown UI chrome onto it.
+
 ## Canon (standing design facts — not tasks, don't re-derive or re-litigate)
 - Each Kingdom's companion is themed to one specific real growth skill (digital marketing/Instagram ads, door-to-door, referrals, retention, etc). The companion is earned through real field work first — it is not a starting option.
 - Desktop can host a genuinely playable "game portion" for a Kingdom (e.g. Boreslay, the Headball-2-style PvP game, for the digital-marketing companion), but only once its companion is unlocked. This is the resolution to "does desktop play defeat the purpose since winning needs real-world action": desktop is never a way to skip the real action — the real action is the unlock gate for whichever companion makes that Kingdom's desktop game winnable at all. A kingdom you haven't earned the companion for has no viable desktop game yet.
