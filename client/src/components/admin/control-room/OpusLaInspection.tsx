@@ -1,7 +1,9 @@
 /**
  * Opus LA tower inspection — South vs North, real Opus LA art.
  *
- * Reached only from Lantern City's Opus LA marker (see WorldGeographySurface).
+ * Reached from Opus LA's marker in both the live Lantern City scene
+ * (LanternCitySceneV6/LanternCityScene.tsx) and Home's mini city view
+ * (WorldGeographySurface.tsx, via AdminHome.tsx).
  * Every other building still goes straight to Tower Wars, unchanged.
  *
  * The name/dollar figures below are placeholder content, not yet wired to a

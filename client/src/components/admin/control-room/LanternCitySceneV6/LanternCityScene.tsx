@@ -340,7 +340,13 @@ export default function LanternCityScene({
         returnPath: "/growth/lantern-city",
         kind: "traversal",
       });
-      onNavigate(`/growth/tower-wars?building=${object.buildingId}`);
+      // Opus LA gets its own tower-inspection screen before Tower Wars;
+      // every other building keeps going straight there unchanged.
+      onNavigate(
+        object.buildingId === "opus_la"
+          ? "/growth/opus-la-inspection"
+          : `/growth/tower-wars?building=${object.buildingId}`
+      );
       return;
     }
     if (object.cluster || object.prospectId) {
@@ -455,7 +461,11 @@ export default function LanternCityScene({
                 <button
                   key={id}
                   onClick={() =>
-                    onNavigate(`/growth/tower-wars?building=${id}`)
+                    onNavigate(
+                      id === "opus_la"
+                        ? "/growth/opus-la-inspection"
+                        : `/growth/tower-wars?building=${id}`
+                    )
                   }
                 >
                   {geo.name}
