@@ -87,6 +87,32 @@ export type Surface =
   | "chrome"
   | "none";
 
+/**
+ * WHICH PIPELINE OWNS THIS ART. Scope boundary, recorded as data because a memo
+ * gets forgotten and this one is expensive to forget.
+ *
+ * - `authored_2d`      painted, drawn or generated as a 2D image. Ships as-is.
+ *                      Re-rendering any of it in 3D destroys approved work.
+ * - `blender_rendered` baked from a 3D model through scripts/assets/blender.
+ *                      ONLY for characters that animate and need many consistent
+ *                      frames of the same subject. Roughly ten characters, never
+ *                      the other 640 images.
+ * - `not_art`          masks, references, working files. Not rendered in product.
+ */
+export type Pipeline = "authored_2d" | "blender_rendered" | "not_art";
+
+/**
+ * The only groups permitted to be `blender_rendered`. Anything else declaring it
+ * fails the test. Buildings do not animate and already have a working pivot
+ * contract; UI chrome, painted backgrounds, territory art and every marketing
+ * asset stay exactly as they are.
+ */
+export const BLENDER_ELIGIBLE_GROUPS: readonly string[] = [
+  "companions",
+  "characters.trailblazer",
+  "characters.trailblazer.directional",
+];
+
 export type AssetGroup = {
   /** Stable id. Referenced by docs and by the inventory report. */
   readonly id: string;
@@ -99,6 +125,8 @@ export type AssetGroup = {
   readonly status: AssetStatus;
   readonly style: StyleTag;
   readonly pivot: Pivot;
+  /** Defaults to `authored_2d` when omitted. Only ever set deliberately. */
+  readonly pipeline?: Pipeline;
   readonly artSpace?: ArtSpace;
   /**
    * Whether consumers build these paths at runtime (template literals, a shipped
@@ -263,6 +291,7 @@ export const ASSET_GROUPS: readonly AssetGroup[] = [
     style: "not_rendered",
     pivot: "top_left",
     dynamic: true,
+    pipeline: "not_art",
     loadedBy: ["client/public/assets/admin/control-room/world/territories-v2/manifest.json"],
     note: "Per-territory hit/clip masks, referenced from the same manifest.",
   },
@@ -381,6 +410,7 @@ export const ASSET_GROUPS: readonly AssetGroup[] = [
     status: "reference",
     style: "not_rendered",
     pivot: "top_left",
+    pipeline: "not_art",
     loadedBy: [],
     note: "Approved art direction and two asset sheets. Never rendered in product.",
   },
@@ -421,6 +451,7 @@ export const ASSET_GROUPS: readonly AssetGroup[] = [
     status: "source",
     style: "not_rendered",
     pivot: "top_left",
+    pipeline: "not_art",
     loadedBy: [],
     note: "Pre-composite working files. Not shipped.",
   },
@@ -465,6 +496,7 @@ export const ASSET_GROUPS: readonly AssetGroup[] = [
     status: "source",
     style: "not_rendered",
     pivot: "top_left",
+    pipeline: "not_art",
     loadedBy: [],
     note: "Pre-composite working files. Not shipped.",
   },
@@ -842,6 +874,7 @@ export type ManifestAsset = {
 
 export type AssetEntry = ManifestAsset & {
   readonly group: AssetGroup;
+  readonly pipeline: Pipeline;
   readonly status: AssetStatus;
   readonly surface: Surface;
   readonly style: StyleTag;
@@ -873,6 +906,7 @@ export function allAssets(): readonly AssetEntry[] {
     return [{
       ...asset,
       group,
+      pipeline: group.pipeline ?? "authored_2d",
       status: group.status,
       surface: group.surface,
       style: group.style,

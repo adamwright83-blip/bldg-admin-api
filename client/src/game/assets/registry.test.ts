@@ -10,6 +10,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import {
   ASSET_GROUPS,
+  BLENDER_ELIGIBLE_GROUPS,
   DUPLICATE_SETS,
   KNOWN_MISSING_REFERENCES,
   RETIRED_ASSETS,
@@ -238,6 +239,38 @@ describe("recorded duplicates stay accurate", () => {
       `The same picture is stored twice without being recorded in DUPLICATE_SETS. ` +
         `This is how art gets regenerated that already exists.`,
     ).toEqual([]);
+  });
+});
+
+describe("pipeline ownership boundary", () => {
+  it("only eligible groups may be blender_rendered", () => {
+    const eligible = new Set(BLENDER_ELIGIBLE_GROUPS);
+    const rogue = ASSET_GROUPS.filter(
+      (g) => g.pipeline === "blender_rendered" && !eligible.has(g.id),
+    ).map((g) => g.id);
+    expect(
+      rogue,
+      `These groups claim the Blender pipeline but are not eligible for it. ` +
+        `Blender renders are ONLY for characters that animate. Buildings, UI chrome, ` +
+        `painted backgrounds, territory art and marketing assets stay authored_2d.`,
+    ).toEqual([]);
+  });
+
+  it("approved building art is never routed through Blender", () => {
+    for (const id of ["tower_wars.buildings", "opus_la.inspection"]) {
+      const group = ASSET_GROUPS.find((g) => g.id === id);
+      expect(group, `missing group ${id}`).toBeDefined();
+      expect(
+        group?.pipeline ?? "authored_2d",
+        `${id} is approved art with a working pivot contract, and buildings do not animate`,
+      ).toBe("authored_2d");
+    }
+  });
+
+  it("every asset resolves to exactly one owning pipeline", () => {
+    const valid = new Set(["authored_2d", "blender_rendered", "not_art"]);
+    const bad = allAssets().filter((a) => !valid.has(a.pipeline));
+    expect(bad.map((a) => a.url)).toEqual([]);
   });
 });
 

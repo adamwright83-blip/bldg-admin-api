@@ -58,6 +58,57 @@ different style.
 
 ---
 
+## SCOPE CONSTRAINT — the Blender pipeline
+
+**This document constrains future Goldline work.** Added 2026-09-11 after the pipeline
+was proven on blockout geometry and the boundary turned out to be unwritten.
+
+The brief said "apply animation to the chapter, then the companion" and never scoped
+which asset classes go through Blender. Unsaid, that reads as an invitation to
+re-render 652 images in 3D. It is not.
+
+**Blender renders are only for characters that animate and need many consistent frames
+of the same subject.** The seven companions, Trailblazer, and later Bellwether and
+Clockhead if needed. Roughly ten characters.
+
+**Do not put any of these through Blender. They stay exactly as they are:**
+
+- Canonical building art (OPUS LA, Century Park East). Approved, already has a working
+  pivot and art-space contract in `buildingArt.ts`, and buildings do not animate.
+- UI chrome: nameplate frames, weekly panels, HUD, icons, buttons.
+- Chapter background and scenery atlases. Painted 2D, already integrated.
+- Lantern, territory and world map art.
+- All marketing and landing assets: `boreslay-*`, `dayforge-*`, `held-landing`,
+  `level4`, `saleslay`.
+
+Re-rendering any of that in 3D destroys approved work to gain nothing.
+
+**This boundary is enforced as data, not memory.** Every group in
+`client/src/game/assets/registry.ts` carries a `pipeline` field, and
+`BLENDER_ELIGIBLE_GROUPS` lists the only groups allowed to claim `blender_rendered`.
+`registry.test.ts` fails if anything else does, and fails specifically if approved
+building art is routed through Blender.
+
+### Style requirement, and it is a requirement
+
+Character renders must be shaded to sit inside the existing painted 2D art: flat or
+toon shading, matched palette, matched light direction. **Default PBR output is a
+failure even when the geometry is correct.** Painted 2D backgrounds with 3D characters
+on top is a proven combination, but only when the characters are shaded to match. Left
+plasticky, the animals look pasted onto the world.
+
+This was already observed in practice. The first companion pass rendered as glossy
+plastic blobs, which was diagnosed as a geometry problem when it was also a shading
+problem. The toon shading pass is not yet built.
+
+### Approval gate
+
+**Do not render, re-render, replace or "upgrade" any existing approved asset without
+asking first.** New character art is produced one character at a time, each with
+explicit approval, never batch-generated.
+
+---
+
 ## Slice A — Asset registry and style contract
 
 **Problem:** nobody, human or agent, can answer "what art do we already have?"
