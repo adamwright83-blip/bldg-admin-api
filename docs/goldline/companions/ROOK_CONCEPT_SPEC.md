@@ -77,27 +77,66 @@ crown, gothic, vampire. No crown badge, no heraldry, not even as a satchel buckl
 
 ---
 
-## Prompt starting point
+## The prompt
 
-Adjust freely, but keep every clause from the hard requirements table.
+Written as prose rather than comma-separated tags, because Gemini reads prose
+better. Lives at `ROOK_PROMPT.txt` for copy-paste. Every clause is load-bearing:
+the sixty-degree turn exists so the beak reads, the wing gap exists so wings do
+not fuse into the torso during reconstruction, and the flat background exists
+because image-to-3D bakes busy backgrounds into geometry.
 
-> Full body character design of a stylised cartoon rook, a black corvid bird, standing
-> upright and facing three-quarters toward camera. Tall narrow build, high hunched
-> shoulders, long straight slate-grey beak pointing forward, hard wedge-shaped tail
-> angled down and back. Wearing a brass-buckled leather messenger satchel on one hip.
-> Ink-black and charcoal feathers, amber legs and feet. Eccentric and characterful,
-> chunky stylised game character, Super Mario 3D World proportions with a gritty
-> practical prop design. Neutral standing pose, wings folded but held slightly clear of
-> the body, arms not touching the torso. Even soft neutral studio lighting, no harsh
-> shadows. Plain flat light grey background. Full body visible head to feet, nothing
-> cropped. Sharp focus throughout, no motion blur, no depth of field, no glow.
-> Square image.
+```
+A full-body character design of Rook, an eccentric stylised cartoon corvid, a
+scruffy black rook bird standing upright on two legs like a small person. Turned
+about sixty degrees away from the camera so the head is seen in near-profile and
+the long straight slate-grey beak is fully visible along its whole length,
+projecting clearly forward into empty space and never overlapping the chest.
 
-**Negative / avoid:** background scenery, multiple characters, action pose, flying,
-wings spread, cropped feet, dramatic rim lighting, heavy shadow, motion blur, bokeh,
-text, watermark, crown, castle, medieval, gothic.
+Build and silhouette: tall and noticeably narrow, the lankiest possible bird.
+High hunched shoulders that sit up around the head giving a hard shoulder line, a
+small head set low between them, a straight back, and a stiff wedge-shaped tail
+angled down and back away from the body. Skinny amber-yellow legs with big
+splayed three-toed feet. Wings folded but held slightly away from the torso so a
+clear gap of background is visible between each wing and the body.
 
----
+Character: a socially fearless messenger, permanently mid-errand, the sort who
+will talk to anyone whether or not they want to be talked to. Unkempt and busy.
+A few feathers stick up at the back of the head in a cowlick. A worn brown
+leather messenger satchel with a brass buckle hangs on one hip, stuffed too full,
+with three or four rolled paper message tubes and a couple of pens poking out of
+it at odd angles. One extra pen is tucked behind the head. A single brass cuff on
+one leg. The beak tip and one foot are stained with dark ink. Head tilted very
+slightly, one eye a touch wider than the other, as though about to start talking.
+
+Keep all the clutter zoned to the satchel hip. The chest, back and wings stay
+clean and undetailed so the busy area reads against them.
+
+Colour: ink-black and charcoal feathers with visible cool blue-grey in the light
+areas, a slate-grey beak, warm brass hardware, amber-yellow legs and feet, and
+one small teal accent on the satchel strap. Keep the bird genuinely dark. Rich
+blacks, not washed-out grey.
+
+Style: chunky stylised video-game character with clean readable shapes and bold
+simple forms, the proportions and appeal of Super Mario 3D World, combined with
+the gritty practical prop design and lived-in worn materials of Tomb Raider II
+and Metal Gear Solid. Flat painterly shading with soft simple gradients, like
+hand-painted game concept art. Not photorealistic, not anime, not a glossy
+plastic mascot, not cute or babyish. Eccentric and characterful.
+
+Presentation: one single character alone, nothing else in the frame. Completely
+plain flat light grey background with no gradient, no vignette, no shadow, no
+floor and no scenery. Whole body visible from the top of the head to the bottom
+of the feet with generous empty margin on all four sides. Neutral standing pose,
+weight evenly on both feet, arms and wings not touching the torso. Flat, even,
+soft studio lighting from the front with no harsh shadows and no dramatic rim
+light. Everything in sharp focus, no motion blur, no depth of field, no glow, no
+lens flare. Square image.
+
+Avoid: any background scenery or environment, more than one character, action or
+flying poses, spread wings, cropped or cut-off feet, dramatic or moody lighting,
+heavy shadows, motion blur, bokeh, glow, text, watermarks, logos, and anything
+medieval, gothic, castle, crown, heraldic or vampire.
+```
 
 ## Acceptance check before it goes into the pipeline
 
