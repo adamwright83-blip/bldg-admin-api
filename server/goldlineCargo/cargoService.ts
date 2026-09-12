@@ -514,6 +514,7 @@ export async function confirmCargo(input: {
   requestId: string;
   transcript: string;
   fields: CargoVoiceFields;
+  custodyLocation?: CustodyLocationKey;
   selectedOrderId?: number | null;
   confirmed: boolean;
 }) {
@@ -524,6 +525,7 @@ export async function confirmCargo(input: {
     transcript: input.transcript,
   });
   const fields = input.fields;
+  const custodyLocation = input.custodyLocation ?? "vehicle";
   if (fields.vehicleAction === "remove") {
     const database = await db();
     const rows: any[] =
@@ -556,23 +558,42 @@ export async function confirmCargo(input: {
     );
     if (!candidate)
       throw new Error("The selected order is not an authoritative match.");
-    const result = await transferCustody({
-      tenantId: input.tenantId,
-      actorId: input.actorId,
-      vehicleId: input.vehicleId,
-      orderId: selected,
-      to:
-        candidate.status === "ready"
-          ? "IN_VEHICLE_PROCESSED"
-          : "IN_VEHICLE_UNPROCESSED",
-      confirmed: true,
-    });
-    return { kind: "order" as const, id: selected, state: result.state };
+    const result =
+      custodyLocation === "vehicle"
+        ? await transferCustody({
+            tenantId: input.tenantId,
+            actorId: input.actorId,
+            vehicleId: input.vehicleId,
+            orderId: selected,
+            to:
+              candidate.status === "ready"
+                ? "IN_VEHICLE_PROCESSED"
+                : "IN_VEHICLE_UNPROCESSED",
+            confirmed: true,
+          })
+        : await transferToLocation({
+            tenantId: input.tenantId,
+            actorId: input.actorId,
+            vehicleId: input.vehicleId,
+            orderId: selected,
+            toLocation: custodyLocation,
+            confirmed: true,
+          });
+    return {
+      kind: "order" as const,
+      id: selected,
+      state: "state" in result ? result.state : custodyLocation,
+      custodyLocation,
+    };
   }
   const database = await db();
   const id = randomUUID();
+  const vehicleState =
+    custodyLocation === "vehicle" ? "IN_VEHICLE" : "AT_PROCESSOR";
+  const processingState =
+    custodyLocation === "home_closet" ? "processed" : fields.processingState;
   await database.execute(
-    sql`INSERT INTO goldline_field_cargo (id,tenantId,vehicleId,actorId,requestId,transcript,customerDisplayName,itemDescription,quantity,serviceType,processingState,location,notes) VALUES (${id},${input.tenantId},${input.vehicleId},${input.actorId},${input.requestId},${input.transcript.trim()},${fields.customerDisplayName},${fields.itemDescription},${fields.quantity},${fields.serviceType},${fields.processingState},${fields.location},${fields.notes}) ON DUPLICATE KEY UPDATE requestId=requestId`
+    sql`INSERT INTO goldline_field_cargo (id,tenantId,vehicleId,actorId,requestId,transcript,customerDisplayName,itemDescription,quantity,serviceType,vehicleState,processingState,location,notes) VALUES (${id},${input.tenantId},${input.vehicleId},${input.actorId},${input.requestId},${input.transcript.trim()},${fields.customerDisplayName},${fields.itemDescription},${fields.quantity},${fields.serviceType},${vehicleState},${processingState},${custodyLocation},${fields.notes}) ON DUPLICATE KEY UPDATE requestId=requestId`
   );
   const stored: any[] =
     (

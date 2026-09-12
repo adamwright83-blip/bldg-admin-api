@@ -26,6 +26,7 @@ describe("VehicleCargo — editing reuses the existing cargo model and mutation 
     expect(source).toContain("onSelectItem={openTransfer}");
     expect(source).toContain("CustodyLocationCarousel");
     expect(source).toContain("CustodyTransferSheet");
+    expect(source).toContain("onAddToLocation={onAddToLocation}");
   });
 
   it("only offers a text edit for field cargo — the entries that actually have an editable label in the real data model", () => {

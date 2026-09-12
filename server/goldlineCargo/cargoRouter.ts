@@ -135,6 +135,7 @@ export const goldlineCargoRouter = router({
         requestId: z.string().uuid(),
         transcript: z.string().trim().min(1).max(4000),
         fields: cargoVoiceFieldsSchema,
+        custodyLocation: z.enum(CUSTODY_LOCATION_ORDER).optional(),
         selectedOrderId: z.number().int().positive().nullable().optional(),
         confirmed: z.literal(true),
       })

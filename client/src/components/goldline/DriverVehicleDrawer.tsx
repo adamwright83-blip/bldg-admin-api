@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { ChevronRight, Compass, LockKeyhole, X } from "lucide-react";
+import type { CustodyLocationKey } from "@shared/custodyLocations";
 import { VehicleCargo, type VehicleCargoItem } from "./VehicleCargo";
 import { VehicleCargoCapture } from "./VehicleCargoCapture";
 
@@ -20,6 +21,10 @@ export function DriverVehicleDrawer({
   const cancelled = useRef(false);
   const progress = total ? Math.round((completed / total) * 100) : 0;
   const [fixtureCargo, setFixtureCargo] = useState(cargo);
+  const [activeLocation, setActiveLocation] =
+    useState<CustodyLocationKey>("vehicle");
+  const [manualAddLocation, setManualAddLocation] =
+    useState<CustodyLocationKey | null>(null);
   useEffect(() => setFixtureCargo(cargo), [cargo]);
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
@@ -181,7 +186,10 @@ export function DriverVehicleDrawer({
           </section>
           <VehicleCargoCapture
             fixture={cargo !== undefined}
-            onFixtureConfirmed={proposal =>
+            targetLocation={manualAddLocation ?? activeLocation}
+            manualAddRequest={manualAddLocation}
+            onManualAddRequestConsumed={() => setManualAddLocation(null)}
+            onFixtureConfirmed={(proposal, location) =>
               setFixtureCargo(current => [
                 ...(current ?? []),
                 {
@@ -192,19 +200,28 @@ export function DriverVehicleDrawer({
                   itemDescription: proposal.itemDescription,
                   quantity: proposal.quantity,
                   serviceType: proposal.serviceType,
-                  processingState: proposal.processingState,
+                  processingState:
+                    location === "home_closet"
+                      ? "processed"
+                      : proposal.processingState,
+                  custodyLocation: location,
                   unlinked: true,
                   state:
+                    location === "home_closet" ||
                     proposal.processingState === "processed"
                       ? "IN_VEHICLE_PROCESSED"
                       : "IN_VEHICLE_UNPROCESSED",
                   appearance: {
                     kind:
+                      location === "home_closet" ||
                       proposal.processingState === "processed"
                         ? "garment_bag"
                         : "paper_bag",
                     condition: proposal.itemDescription,
-                    next: "Processor handoff",
+                    next:
+                      location === "home_closet"
+                        ? "Staged for return"
+                        : "Processor handoff",
                   },
                 },
               ])
@@ -214,6 +231,8 @@ export function DriverVehicleDrawer({
             <VehicleCargo
               mode="hero"
               fixtureCargo={fixtureCargo}
+              onActiveLocationChange={setActiveLocation}
+              onAddToLocation={setManualAddLocation}
               onFixtureCargoUpdated={(item, fields) =>
                 setFixtureCargo(current =>
                   (current ?? []).map(existing =>
@@ -279,7 +298,8 @@ export function DriverVehicleDrawer({
             />
           </div>
           <p className="gdp-garage-hint">
-            Flick between car, cleaners, and closet. Tap a bag to move it.
+            Flick right through car, cleaners, and closet. Tap + to add, tap a
+            bag to move it.
           </p>
         </Dialog.Content>
       </Dialog.Portal>

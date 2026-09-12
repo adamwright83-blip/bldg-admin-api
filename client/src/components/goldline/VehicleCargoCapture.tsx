@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Mic, PenLine, RotateCcw, Square, X } from "lucide-react";
+import {
+  CUSTODY_LOCATIONS,
+  type CustodyLocationKey,
+} from "@shared/custodyLocations";
 import { trpc } from "@/lib/trpc";
 import {
   parseCargoTranscript,
@@ -33,9 +37,18 @@ type Proposal = CargoVoiceFields & {
 export function VehicleCargoCapture({
   fixture = false,
   onFixtureConfirmed,
+  targetLocation = "vehicle",
+  manualAddRequest = null,
+  onManualAddRequestConsumed,
 }: {
   fixture?: boolean;
-  onFixtureConfirmed?: (proposal: Proposal) => void;
+  onFixtureConfirmed?: (
+    proposal: Proposal,
+    location: CustodyLocationKey
+  ) => void;
+  targetLocation?: CustodyLocationKey;
+  manualAddRequest?: CustodyLocationKey | null;
+  onManualAddRequestConsumed?: () => void;
 }) {
   const utils = trpc.useUtils();
   const propose = trpc.system.goldlineCargo.propose.useMutation();
@@ -55,6 +68,12 @@ export function VehicleCargoCapture({
     streamRef.current = null;
   };
   useEffect(() => () => stopTracks(), []);
+  useEffect(() => {
+    if (!manualAddRequest) return;
+    setError(null);
+    setMode("manual");
+    onManualAddRequestConsumed?.();
+  }, [manualAddRequest, onManualAddRequestConsumed]);
   useEffect(() => {
     if (mode !== "listening") return;
     const timer = window.setInterval(
@@ -172,12 +191,16 @@ export function VehicleCargoCapture({
     setError(null);
     try {
       if (fixture) {
-        onFixtureConfirmed?.(proposal);
+        onFixtureConfirmed?.(proposal, targetLocation);
         setMode("idle");
         setProposal(null);
         setTranscript("");
         return;
       }
+      const processingState =
+        targetLocation === "home_closet"
+          ? "processed"
+          : proposal.processingState;
       await confirm.mutateAsync({
         requestId: crypto.randomUUID(),
         transcript: proposal.transcript,
@@ -188,10 +211,11 @@ export function VehicleCargoCapture({
           serviceType: proposal.serviceType,
           vehicleAction: proposal.vehicleAction,
           vehicleState: "IN_VEHICLE",
-          processingState: proposal.processingState,
-          location: proposal.location,
+          processingState,
+          location: targetLocation,
           notes: proposal.notes,
         },
+        custodyLocation: targetLocation,
         selectedOrderId,
         confirmed: true,
       });
@@ -254,12 +278,16 @@ export function VehicleCargoCapture({
         }}
       >
         <label>
-          WHAT IS IN THE VEHICLE?
+          WHAT IS IN {CUSTODY_LOCATIONS[targetLocation].label.toUpperCase()}?
           <textarea
             autoFocus
             value={transcript}
             onChange={event => setTranscript(event.target.value)}
-            placeholder="Yazi’s two pairs of pants for dry cleaning"
+            placeholder={
+              targetLocation === "home_closet"
+                ? "Arlene’s processed dry cleaning — out of town"
+                : "Yazi’s two pairs of pants for dry cleaning"
+            }
           />
         </label>
         <div>
@@ -281,7 +309,7 @@ export function VehicleCargoCapture({
       >
         <header>
           <span>PROPOSED ACTION</span>
-          <strong>CONFIRM VEHICLE TRUTH</strong>
+          <strong>CONFIRM {CUSTODY_LOCATIONS[targetLocation].shortLabel} TRUTH</strong>
         </header>
         <blockquote>“{proposal.transcript}”</blockquote>
         <div className="gdp-proposal-fields">
@@ -405,8 +433,8 @@ export function VehicleCargoCapture({
             onClick={addToVehicle}
           >
             {proposal.vehicleAction === "remove"
-              ? "REMOVE FROM VEHICLE"
-              : "ADD TO VEHICLE"}
+              ? `REMOVE FROM ${CUSTODY_LOCATIONS[targetLocation].shortLabel.toUpperCase()}`
+              : `ADD TO ${CUSTODY_LOCATIONS[targetLocation].shortLabel.toUpperCase()}`}
           </button>
         </footer>
       </section>

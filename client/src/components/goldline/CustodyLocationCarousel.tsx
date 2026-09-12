@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { Plus } from "lucide-react";
 import {
   CUSTODY_LOCATION_ORDER,
   CUSTODY_LOCATIONS,
@@ -15,14 +16,19 @@ const CAR_FALLBACK =
 export function CustodyLocationCarousel({
   byLocation,
   hasCargo,
+  location,
+  onLocationChange,
   onSelectItem,
+  onAddToLocation,
 }: {
   byLocation: Record<CustodyLocationKey, VehicleCargoItem[]>;
   hasCargo: boolean;
+  location: CustodyLocationKey;
+  onLocationChange: (location: CustodyLocationKey) => void;
   onSelectItem: (item: VehicleCargoItem, location: CustodyLocationKey) => void;
+  onAddToLocation?: (location: CustodyLocationKey) => void;
 }) {
-  const [location, setLocation] = useState<CustodyLocationKey>("vehicle");
-  const gesture = useRef<{ x: number; y: number } | null>(null);
+  const gesture = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const [dragX, setDragX] = useState(0);
   const def = CUSTODY_LOCATIONS[location];
   const items = byLocation[location] ?? [];
@@ -33,8 +39,9 @@ export function CustodyLocationCarousel({
   );
 
   function finishSwipe(deltaX: number) {
-    if (deltaX <= -48) setLocation(nextCustodyLocation(location));
-    else if (deltaX >= 48) setLocation(previousCustodyLocation(location));
+    // Thumb flick right advances: car → coast → paragon → closet → car.
+    if (deltaX >= 48) onLocationChange(nextCustodyLocation(location));
+    else if (deltaX <= -48) onLocationChange(previousCustodyLocation(location));
     setDragX(0);
   }
 
@@ -45,7 +52,11 @@ export function CustodyLocationCarousel({
         aria-label={`${def.label} custody board`}
         onPointerDown={event => {
           if (event.button !== 0) return;
-          gesture.current = { x: event.clientX, y: event.clientY };
+          gesture.current = {
+            x: event.clientX,
+            y: event.clientY,
+            moved: false,
+          };
           event.currentTarget.setPointerCapture(event.pointerId);
         }}
         onPointerMove={event => {
@@ -55,11 +66,14 @@ export function CustodyLocationCarousel({
             setDragX(0);
             return;
           }
-          setDragX(event.clientX - gesture.current.x);
+          const deltaX = event.clientX - gesture.current.x;
+          if (Math.abs(deltaX) > 6) gesture.current.moved = true;
+          setDragX(deltaX);
         }}
         onPointerUp={event => {
           if (!gesture.current) return;
-          finishSwipe(event.clientX - gesture.current.x);
+          const deltaX = event.clientX - gesture.current.x;
+          if (gesture.current.moved) finishSwipe(deltaX);
           gesture.current = null;
         }}
         onPointerCancel={() => {
@@ -100,6 +114,20 @@ export function CustodyLocationCarousel({
         {projection.overflow > 0 ? (
           <strong className="gl-cargo-overflow">+{projection.overflow} MORE</strong>
         ) : null}
+        {onAddToLocation ? (
+          <button
+            type="button"
+            className="gl-custody-add-btn"
+            aria-label={`Add item to ${def.label}`}
+            onPointerDown={event => event.stopPropagation()}
+            onClick={event => {
+              event.stopPropagation();
+              onAddToLocation(location);
+            }}
+          >
+            <Plus aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
       <div className="gl-custody-carousel-meta">
         <p className="gl-custody-carousel-label">
@@ -125,7 +153,7 @@ export function CustodyLocationCarousel({
                 aria-selected={key === location}
                 aria-label={`${CUSTODY_LOCATIONS[key].label}${count ? `, ${count} items` : ""}`}
                 className={key === location ? "is-active" : undefined}
-                onClick={() => setLocation(key)}
+                onClick={() => onLocationChange(key)}
               >
                 <i />
                 {count > 0 ? <b>{count}</b> : null}
@@ -134,7 +162,7 @@ export function CustodyLocationCarousel({
           })}
         </div>
         <p className="gl-custody-carousel-hint">
-          Flick right or left to change location · {totalCount} total in custody
+          Flick right for next stop · {totalCount} total in custody
         </p>
       </div>
     </div>

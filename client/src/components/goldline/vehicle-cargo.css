@@ -859,3 +859,32 @@ button.gl-cargo-move-trigger {
 .gdp-shell .gl-custody-carousel-meta {
   bottom: 7.1dvh;
 }
+.gl-custody-add-btn {
+  position: absolute;
+  right: 6%;
+  bottom: 10%;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  width: clamp(34px, 10cqw, 48px);
+  aspect-ratio: 1;
+  padding: 0;
+  border: 2px solid #e1b65c;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #ffe76b, #e9a91d);
+  color: #191408;
+  box-shadow: 0 4px 14px #0009;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.gl-custody-add-btn svg {
+  width: 58%;
+  height: 58%;
+  stroke-width: 2.6;
+}
+.gl-custody-add-btn:active {
+  transform: scale(0.96);
+}
+.gdp-shell .gl-custody-add-btn {
+  bottom: 12%;
+}
