@@ -43,6 +43,7 @@ import { QuickNewOrderSheet } from "./QuickNewOrderSheet";
 import { compressImageForMissionPreview } from "./driverMissionStorage";
 import { BuildMissionSheet } from "./BuildMissionSheet";
 import { SalesJournalSheet, SalesMomentumMeter } from "./SalesMomentum";
+import { CompanionUnlockCard } from "./CompanionUnlockCard";
 
 const HERO_CITYSCAPE =
   "https://d2xsxph8kpxj0f.cloudfront.net/310519663281332025/bVTWnxw2cr9EUVzVBCF5PW/hero-cityscape-ibzWyN4yDNboMUDQd8P4Lh.webp";
@@ -1306,6 +1307,9 @@ export default function CommandCenter({
         onLogWalkIn={onLogWalkIn}
         isLoading={isLoading}
       />
+      <div style={{ padding: "0 16px" }}>
+        <CompanionUnlockCard id="rook" />
+      </div>
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

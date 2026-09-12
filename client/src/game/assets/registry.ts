@@ -456,6 +456,22 @@ export const ASSET_GROUPS: readonly AssetGroup[] = [
     note: "Pre-composite working files. Not shipped.",
   },
 
+  {
+    id: "companions.rook_concept",
+    dir: "/assets/goldline/companions",
+    surface: "expedition",
+    status: "live",
+    style: "goldline_current",
+    pivot: "center",
+    pipeline: "authored_2d",
+    loadedBy: ["client/src/components/driver/CompanionUnlockCard.tsx"],
+    note:
+      "Adam's own concept art for Rook, shown as-is in the driver app as a " +
+      "Colosseum-completion reward. Not the Blender pipeline output (blocked on " +
+      "a gated Hugging Face model as of 2026-09-11) — a 2D reward image, labelled " +
+      "as concept art rather than final companion art. See ROOK_CONCEPT_SPEC.md.",
+  },
+
   /* ---- Other Goldline surfaces -------------------------------------------- */
   {
     id: "colosseum",

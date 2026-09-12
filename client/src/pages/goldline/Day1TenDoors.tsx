@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import ColosseumBossGate from "./ColosseumBossGate";
+import { unlockCompanion } from "../../components/driver/companionUnlockStorage";
 import type { Day1TargetOutcome } from "../../../../shared/day1TenDoors";
 import type { Day1TenDoorsMissionView } from "./Day1FieldMission";
 
@@ -53,7 +54,12 @@ export default function Day1TenDoors({
       mission={mission}
       isRecordingOutcome={isRecordingOutcome}
       onRecordOutcome={onRecordOutcome}
-      onBossDefeated={onDismiss}
+      onBossDefeated={() => {
+        // Rook is Kingdom 2's companion; the Clockhead duel win is the
+        // closest thing today to a durable "Colosseum complete" signal.
+        unlockCompanion("rook");
+        onDismiss();
+      }}
     />
   );
 }

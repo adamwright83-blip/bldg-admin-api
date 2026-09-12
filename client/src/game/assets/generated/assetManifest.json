@@ -1,6 +1,6 @@
 {
  "generatedBy": "npm run assets:scan",
- "count": 652,
+ "count": 656,
  "assets": [
   {
    "url": "/assets/admin/control-room/brand/goldline-admin-crest.svg",
@@ -2991,6 +2991,15 @@
    "height": 203
   },
   {
+   "url": "/assets/goldline/companions/rook-concept-v1.png",
+   "root": "public",
+   "bytes": 620535,
+   "sha256": "95946f72627e036a",
+   "format": "png",
+   "width": 1112,
+   "height": 1112
+  },
+  {
    "url": "/assets/goldline/corridor_01/_originals/effects.png",
    "root": "public",
    "bytes": 2036866,
@@ -4825,6 +4834,33 @@
    "format": "png",
    "width": 1024,
    "height": 1280
+  },
+  {
+   "url": "/assets/goldline/vehicle-cargo/v3/locations/coast-cleaners.jpg",
+   "root": "public",
+   "bytes": 126535,
+   "sha256": "42b5d19cd8d1e131",
+   "format": "jpg",
+   "width": 1024,
+   "height": 892
+  },
+  {
+   "url": "/assets/goldline/vehicle-cargo/v3/locations/home-closet.jpg",
+   "root": "public",
+   "bytes": 49592,
+   "sha256": "2f1e53170693dfbb",
+   "format": "jpg",
+   "width": 824,
+   "height": 1024
+  },
+  {
+   "url": "/assets/goldline/vehicle-cargo/v3/locations/paragon-cleaners.jpg",
+   "root": "public",
+   "bytes": 186329,
+   "sha256": "5b24e2e7a86080f6",
+   "format": "jpg",
+   "width": 1020,
+   "height": 1024
   },
   {
    "url": "/assets/goldline/wayward/awakening-ship-deck.webp",
