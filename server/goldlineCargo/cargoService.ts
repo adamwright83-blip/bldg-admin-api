@@ -2,6 +2,11 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { orders } from "../../drizzle/schema";
 import {
+  type CustodyLocationKey,
+  custodyLocationFromEvidence,
+  custodyLocationFromFieldRow,
+} from "../../shared/custodyLocations";
+import {
   matchingCargoOrders,
   parseCargoTranscript,
   type CargoVoiceFields,
@@ -45,6 +50,93 @@ async function db() {
   return database;
 }
 
+function parseEvidenceJson(value: unknown) {
+  if (value == null) return {};
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  }
+  return value as Record<string, unknown>;
+}
+
+function mapOrderCustodyRow(row: any) {
+  const evidenceJson = parseEvidenceJson(row.evidenceJson);
+  const custodyLocation = custodyLocationFromEvidence(row.state, evidenceJson);
+  return {
+    ...row,
+    source: "order" as const,
+    evidenceJson,
+    custodyLocation,
+    paid: Boolean(row.paid),
+    total: row.total == null ? null : Number(row.total),
+    paidAt: row.paidAt ? new Date(row.paidAt).toISOString() : null,
+  };
+}
+
+function mapFieldCustodyRow(row: any) {
+  const custodyLocation = custodyLocationFromFieldRow(row);
+  return {
+    id: `field:${row.id}`,
+    fieldCargoId: row.id,
+    source: "field" as const,
+    firstName: row.customerDisplayName,
+    lastName: null,
+    address: row.location,
+    state:
+      row.processingState === "processed"
+        ? "IN_VEHICLE_PROCESSED"
+        : "IN_VEHICLE_UNPROCESSED",
+    custodyLocation,
+    customerDisplayName: row.customerDisplayName,
+    itemDescription: row.itemDescription,
+    quantity: row.quantity == null ? null : Number(row.quantity),
+    serviceType: row.serviceType,
+    processingState: row.processingState,
+    linkedOrderId:
+      row.linkedOrderId == null ? null : Number(row.linkedOrderId),
+    unlinked: row.linkedOrderId == null,
+    notes: row.notes,
+    transcript: row.transcript,
+    confirmedAt: new Date(row.confirmedAt).toISOString(),
+  };
+}
+
+function emptyCustodyBoard(): Record<CustodyLocationKey, any[]> {
+  return {
+    vehicle: [],
+    coast_1hr: [],
+    paragon: [],
+    home_closet: [],
+  };
+}
+
+export async function listCustodyBoard(tenantId: string, vehicleId: string) {
+  const database = await db();
+  const nativeRows: any[] =
+    (
+      (await database.execute(
+        sql`SELECT c.state,c.vehicleId,c.transferredAt,c.evidenceJson,o.id,o.firstName,o.lastName,o.address,o.status,o.serviceType,o.paid,o.total,o.paidAt FROM goldline_vehicle_custody c JOIN orders o ON o.id=c.orderId AND o.tenantId=c.tenantId WHERE c.tenantId=${tenantId} AND o.status NOT IN ('delivered','cancelled') AND ((c.state IN ('IN_VEHICLE_UNPROCESSED','IN_VEHICLE_PROCESSED') AND c.vehicleId=${vehicleId}) OR c.state='AT_PROCESSOR' OR (c.state='IN_VEHICLE_PROCESSED' AND c.vehicleId IS NULL)) ORDER BY c.transferredAt,o.id`
+      )) as any
+    )[0] ?? [];
+  const fieldRows: any[] =
+    (
+      (await database.execute(
+        sql`SELECT * FROM goldline_field_cargo WHERE tenantId=${tenantId} AND vehicleId=${vehicleId} AND vehicleState IN ('IN_VEHICLE','AT_PROCESSOR') ORDER BY confirmedAt,id`
+      )) as any
+    )[0] ?? [];
+  const board = emptyCustodyBoard();
+  for (const row of nativeRows.map(mapOrderCustodyRow)) {
+    board[row.custodyLocation].push(row);
+  }
+  for (const row of fieldRows.map(mapFieldCustodyRow)) {
+    board[row.custodyLocation].push(row);
+  }
+  return board;
+}
+
 export async function listCargo(tenantId: string, vehicleId: string) {
   const database = await db();
   const nativeRows: any[] =
@@ -60,41 +152,9 @@ export async function listCargo(tenantId: string, vehicleId: string) {
       )) as any
     )[0] ?? [];
   return [
-    ...nativeRows.map(row => ({
-      ...row,
-      source: "order" as const,
-      evidenceJson:
-        typeof row.evidenceJson === "string"
-          ? JSON.parse(row.evidenceJson)
-          : row.evidenceJson,
-      paid: Boolean(row.paid),
-      total: row.total == null ? null : Number(row.total),
-      paidAt: row.paidAt ? new Date(row.paidAt).toISOString() : null,
-    })),
-    ...fieldRows.map(row => ({
-      id: `field:${row.id}`,
-      fieldCargoId: row.id,
-      source: "field" as const,
-      firstName: row.customerDisplayName,
-      lastName: null,
-      address: row.location,
-      state:
-        row.processingState === "processed"
-          ? "IN_VEHICLE_PROCESSED"
-          : "IN_VEHICLE_UNPROCESSED",
-      customerDisplayName: row.customerDisplayName,
-      itemDescription: row.itemDescription,
-      quantity: row.quantity == null ? null : Number(row.quantity),
-      serviceType: row.serviceType,
-      processingState: row.processingState,
-      linkedOrderId:
-        row.linkedOrderId == null ? null : Number(row.linkedOrderId),
-      unlinked: row.linkedOrderId == null,
-      notes: row.notes,
-      transcript: row.transcript,
-      confirmedAt: new Date(row.confirmedAt).toISOString(),
-    })),
-  ];
+    ...nativeRows.map(mapOrderCustodyRow),
+    ...fieldRows.map(mapFieldCustodyRow),
+  ].filter(item => item.custodyLocation === "vehicle");
 }
 
 export async function listAtProcessor(tenantId: string) {
@@ -105,12 +165,42 @@ export async function listAtProcessor(tenantId: string) {
         sql`SELECT c.state,c.vehicleId,c.transferredAt,c.evidenceJson,o.id,o.firstName,o.lastName,o.address,o.status,o.paid,o.total,o.paidAt FROM goldline_vehicle_custody c JOIN orders o ON o.id=c.orderId AND o.tenantId=c.tenantId WHERE c.tenantId=${tenantId} AND c.state='AT_PROCESSOR' AND o.status NOT IN ('delivered','cancelled') ORDER BY c.transferredAt,o.id`
       )) as any
     )[0] ?? [];
-  return rows.map(row => ({
-    ...row,
-    paid: Boolean(row.paid),
-    total: row.total == null ? null : Number(row.total),
-    paidAt: row.paidAt ? new Date(row.paidAt).toISOString() : null,
-  }));
+  return rows.map(row => {
+    const mapped = mapOrderCustodyRow(row);
+    return {
+      ...mapped,
+      custodyLocation: mapped.custodyLocation,
+    };
+  });
+}
+
+function custodyTargetForLocation(
+  location: CustodyLocationKey,
+  orderStatus: string,
+  vehicleId: string
+) {
+  if (location === "vehicle") {
+    return {
+      state:
+        orderStatus === "ready"
+          ? ("IN_VEHICLE_PROCESSED" as CargoState)
+          : ("IN_VEHICLE_UNPROCESSED" as CargoState),
+      vehicleId,
+      custodyLocation: location,
+    };
+  }
+  if (location === "home_closet") {
+    return {
+      state: "IN_VEHICLE_PROCESSED" as CargoState,
+      vehicleId: null,
+      custodyLocation: location,
+    };
+  }
+  return {
+    state: "AT_PROCESSOR" as CargoState,
+    vehicleId: null,
+    custodyLocation: location,
+  };
 }
 
 export async function listUnassignedPickedUp(tenantId: string) {
@@ -176,19 +266,155 @@ export async function transferCustody(input: {
         `Custody cannot move from ${from} to ${input.to} while order is ${order.status}.`
       );
     }
+    const custodyLocation =
+      input.to === "AT_PROCESSOR"
+        ? "coast_1hr"
+        : input.to === "IN_VEHICLE_PROCESSED" && prior[0]?.state === "AT_PROCESSOR"
+          ? "vehicle"
+          : "vehicle";
     const evidence = {
       confirmedBy: input.actorId,
       confirmedAt: new Date().toISOString(),
       from,
       to: input.to,
+      custodyLocation,
       orderStatus: order.status,
       claims: { gpsProvesTransfer: false },
     };
     await tx.execute(
       sql`INSERT INTO goldline_vehicle_custody (tenantId,orderId,state,vehicleId,actorId,evidenceJson) VALUES (${input.tenantId},${input.orderId},${input.to},${input.to === "AT_PROCESSOR" ? null : input.vehicleId},${input.actorId},${JSON.stringify(evidence)}) ON DUPLICATE KEY UPDATE state=VALUES(state),vehicleId=VALUES(vehicleId),actorId=VALUES(actorId),evidenceJson=VALUES(evidenceJson),revision=revision+1,transferredAt=CURRENT_TIMESTAMP`
     );
-    return { state: input.to, idempotent: false };
+    return { state: input.to, custodyLocation, idempotent: false };
   });
+}
+
+export async function transferToLocation(input: {
+  tenantId: string;
+  actorId: string;
+  vehicleId: string;
+  orderId?: number;
+  fieldCargoId?: string;
+  toLocation: CustodyLocationKey;
+  confirmed: boolean;
+}) {
+  if (!input.confirmed)
+    throw new Error("Physical transfer must be explicitly confirmed.");
+  if (!input.orderId && !input.fieldCargoId)
+    throw new Error("Choose which cargo item to move.");
+  if (input.orderId)
+    return transferOrderToLocation({
+      tenantId: input.tenantId,
+      actorId: input.actorId,
+      vehicleId: input.vehicleId,
+      orderId: input.orderId,
+      toLocation: input.toLocation,
+    });
+  return transferFieldCargoToLocation({
+    tenantId: input.tenantId,
+    actorId: input.actorId,
+    vehicleId: input.vehicleId,
+    fieldCargoId: input.fieldCargoId!,
+    toLocation: input.toLocation,
+  });
+}
+
+async function transferOrderToLocation(input: {
+  tenantId: string;
+  actorId: string;
+  vehicleId: string;
+  orderId: number;
+  toLocation: CustodyLocationKey;
+}) {
+  const database = await db();
+  return database.transaction(async tx => {
+    const [order] = await tx
+      .select()
+      .from(orders)
+      .where(
+        and(eq(orders.tenantId, input.tenantId), eq(orders.id, input.orderId))
+      )
+      .limit(1);
+    if (!order) throw new Error("Order not found in this tenant.");
+    if (
+      !(["collected", "processing", "ready"] as string[]).includes(order.status)
+    )
+      throw new Error("Order status does not support this custody transfer.");
+    const prior: any[] =
+      (
+        (await tx.execute(
+          sql`SELECT state,revision,evidenceJson FROM goldline_vehicle_custody WHERE tenantId=${input.tenantId} AND orderId=${input.orderId} FOR UPDATE`
+        )) as any
+      )[0] ?? [];
+    const from: CargoState | "AWAITING_PICKUP" =
+      prior[0]?.state ?? "AWAITING_PICKUP";
+    const fromLocation = prior[0]
+      ? custodyLocationFromEvidence(from, parseEvidenceJson(prior[0].evidenceJson))
+      : "vehicle";
+    if (from === "AWAITING_PICKUP" && input.toLocation !== "vehicle")
+      throw new Error("Load this order into the vehicle before moving it elsewhere.");
+    const target = custodyTargetForLocation(
+      input.toLocation,
+      order.status,
+      input.vehicleId
+    );
+    if (
+      from === target.state &&
+      fromLocation === target.custodyLocation &&
+      (target.vehicleId == null || prior[0]?.vehicleId === target.vehicleId)
+    ) {
+      return {
+        state: target.state,
+        custodyLocation: target.custodyLocation,
+        idempotent: true,
+      };
+    }
+    const evidence = {
+      confirmedBy: input.actorId,
+      confirmedAt: new Date().toISOString(),
+      from,
+      fromLocation,
+      to: target.state,
+      toLocation: input.toLocation,
+      custodyLocation: target.custodyLocation,
+      orderStatus: order.status,
+      claims: { gpsProvesTransfer: false },
+    };
+    await tx.execute(
+      sql`INSERT INTO goldline_vehicle_custody (tenantId,orderId,state,vehicleId,actorId,evidenceJson) VALUES (${input.tenantId},${input.orderId},${target.state},${target.vehicleId},${input.actorId},${JSON.stringify(evidence)}) ON DUPLICATE KEY UPDATE state=VALUES(state),vehicleId=VALUES(vehicleId),actorId=VALUES(actorId),evidenceJson=VALUES(evidenceJson),revision=revision+1,transferredAt=CURRENT_TIMESTAMP`
+    );
+    return {
+      state: target.state,
+      custodyLocation: target.custodyLocation,
+      idempotent: false,
+    };
+  });
+}
+
+async function transferFieldCargoToLocation(input: {
+  tenantId: string;
+  actorId: string;
+  vehicleId: string;
+  fieldCargoId: string;
+  toLocation: CustodyLocationKey;
+}) {
+  const database = await db();
+  const vehicleState = input.toLocation === "vehicle" ? "IN_VEHICLE" : "AT_PROCESSOR";
+  const processingState =
+    input.toLocation === "home_closet" ? "processed" : undefined;
+  const result: any = await database.execute(
+    processingState
+      ? sql`UPDATE goldline_field_cargo SET vehicleState=${vehicleState},location=${input.toLocation},processingState=${processingState},actorId=${input.actorId} WHERE tenantId=${input.tenantId} AND id=${input.fieldCargoId} AND vehicleId=${input.vehicleId} AND vehicleState IN ('IN_VEHICLE','AT_PROCESSOR')`
+      : sql`UPDATE goldline_field_cargo SET vehicleState=${vehicleState},location=${input.toLocation},actorId=${input.actorId} WHERE tenantId=${input.tenantId} AND id=${input.fieldCargoId} AND vehicleId=${input.vehicleId} AND vehicleState IN ('IN_VEHICLE','AT_PROCESSOR')`
+  );
+  const updated = Number(result?.[0]?.affectedRows ?? 0) === 1;
+  if (!updated)
+    throw new Error(
+      "That cargo entry is no longer editable in this custody board."
+    );
+  return {
+    custodyLocation: input.toLocation,
+    idempotent: false,
+  };
 }
 
 export function cargoAppearance(

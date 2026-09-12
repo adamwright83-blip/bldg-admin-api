@@ -244,10 +244,42 @@ export function DriverVehicleDrawer({
                   )
                 )
               }
+              onFixtureLocationTransfer={(item, toLocation) =>
+                setFixtureCargo(current =>
+                  (current ?? []).map(existing =>
+                    existing.id === item.id
+                      ? {
+                          ...existing,
+                          custodyLocation: toLocation,
+                          state:
+                            toLocation === "home_closet" ||
+                            (toLocation === "vehicle" &&
+                              existing.processingState === "processed")
+                              ? "IN_VEHICLE_PROCESSED"
+                              : toLocation === "vehicle"
+                                ? "IN_VEHICLE_UNPROCESSED"
+                                : existing.state,
+                          processingState:
+                            toLocation === "home_closet"
+                              ? "processed"
+                              : existing.processingState,
+                          appearance: {
+                            ...existing.appearance,
+                            kind:
+                              toLocation === "home_closet" ||
+                              existing.processingState === "processed"
+                                ? "garment_bag"
+                                : "paper_bag",
+                          },
+                        }
+                      : existing
+                  )
+                )
+              }
             />
           </div>
           <p className="gdp-garage-hint">
-            Tap the vehicle to inspect cargo & handoffs. Record what you load.
+            Flick between car, cleaners, and closet. Tap a bag to move it.
           </p>
         </Dialog.Content>
       </Dialog.Portal>

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   cargoSprite,
+  groupCargoByLocation,
   needsCharge,
+  totalCargoCount,
   visibleCargo,
   type VehicleCargoItem,
 } from "./VehicleCargo";
@@ -51,6 +53,18 @@ describe("Vehicle Cargo home projection", () => {
     );
     expect(result.visible.map(value => value.id)).toEqual([1, 2, 3, 4]);
     expect(result.overflow).toBe(2);
+  });
+
+  it("groups cargo into location columns for the kanban board", () => {
+    const board = groupCargoByLocation([
+      { ...item(1, "IN_VEHICLE_UNPROCESSED"), custodyLocation: "vehicle" },
+      { ...item(2, "IN_VEHICLE_UNPROCESSED"), custodyLocation: "paragon" },
+      { ...item(3, "IN_VEHICLE_PROCESSED"), custodyLocation: "home_closet" },
+    ]);
+    expect(board.vehicle.map(entry => entry.id)).toEqual([1]);
+    expect(board.paragon.map(entry => entry.id)).toEqual([2]);
+    expect(board.home_closet.map(entry => entry.id)).toEqual([3]);
+    expect(totalCargoCount(board)).toBe(3);
   });
 });
 

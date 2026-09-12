@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { CUSTODY_LOCATION_ORDER } from "../../shared/custodyLocations";
 import { cargoVoiceFieldsSchema } from "../../shared/goldlineCargoVoice";
 import {
   router,
@@ -13,9 +14,11 @@ import {
   linkFieldCargo,
   listAtProcessor,
   listCargo,
+  listCustodyBoard,
   listUnassignedPickedUp,
   proposeCargo,
   transferCustody,
+  transferToLocation,
   updateFieldCargo,
 } from "./cargoService";
 
@@ -68,20 +71,33 @@ async function transcriptFromAudio(input: {
 
 export const goldlineCargoRouter = router({
   state: procedure.query(async ({ ctx }) => {
-    const [cargo, unassigned, atProcessor] = await Promise.all([
+    const [cargo, byLocation, unassigned, atProcessor] = await Promise.all([
       listCargo(ctx.tenantId, ctx.user.openId),
+      listCustodyBoard(ctx.tenantId, ctx.user.openId),
       listUnassignedPickedUp(ctx.tenantId),
       listAtProcessor(ctx.tenantId),
     ]);
+    const withAppearance = (
+      item: (typeof cargo)[number]
+    ) => ({
+      ...item,
+      appearance: cargoAppearance(
+        item.state as "IN_VEHICLE_UNPROCESSED" | "IN_VEHICLE_PROCESSED"
+      ),
+    });
     return {
       atProcessor,
       vehicleId: ctx.user.openId,
-      cargo: cargo.map(item => ({
-        ...item,
-        appearance: cargoAppearance(
-          item.state as "IN_VEHICLE_UNPROCESSED" | "IN_VEHICLE_PROCESSED"
-        ),
-      })),
+      cargo: cargo.map(withAppearance),
+      byLocation: Object.fromEntries(
+        CUSTODY_LOCATION_ORDER.map(key => [
+          key,
+          byLocation[key].map(withAppearance),
+        ])
+      ) as Record<
+        (typeof CUSTODY_LOCATION_ORDER)[number],
+        ReturnType<typeof withAppearance>[]
+      >,
       unassigned: unassigned.map(order => ({
         orderId: order.id,
         customer: `${order.firstName} ${order.lastName}`.trim(),
@@ -149,6 +165,31 @@ export const goldlineCargoRouter = router({
         actorId: ctx.user.openId,
         vehicleId: ctx.user.openId,
         ...input,
+      })
+    ),
+  transferLocation: procedure
+    .input(
+      z
+        .object({
+          orderId: z.number().int().optional(),
+          fieldCargoId: z.string().uuid().optional(),
+          toLocation: z.enum(CUSTODY_LOCATION_ORDER),
+          confirmed: z.literal(true),
+        })
+        .refine(
+          input => Boolean(input.orderId || input.fieldCargoId),
+          "Choose which cargo item to move."
+        )
+    )
+    .mutation(({ ctx, input }) =>
+      transferToLocation({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        vehicleId: ctx.user.openId,
+        orderId: input.orderId,
+        fieldCargoId: input.fieldCargoId,
+        toLocation: input.toLocation,
+        confirmed: input.confirmed,
       })
     ),
   link: procedure
