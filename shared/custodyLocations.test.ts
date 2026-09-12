@@ -7,8 +7,10 @@ import {
 } from "./custodyLocations";
 
 describe("custodyLocations", () => {
-  it("cycles forward and backward through the driver kanban", () => {
+  it("cycles forward through car → coast → paragon → closet → car", () => {
     expect(nextCustodyLocation("vehicle")).toBe("coast_1hr");
+    expect(nextCustodyLocation("coast_1hr")).toBe("paragon");
+    expect(nextCustodyLocation("paragon")).toBe("home_closet");
     expect(nextCustodyLocation("home_closet")).toBe("vehicle");
     expect(previousCustodyLocation("vehicle")).toBe("home_closet");
     expect(previousCustodyLocation("coast_1hr")).toBe("vehicle");

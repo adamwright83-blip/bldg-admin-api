@@ -134,6 +134,8 @@ export function VehicleCargo({
   fixtureCargo,
   onFixtureCargoUpdated,
   onFixtureLocationTransfer,
+  onAddToLocation,
+  onActiveLocationChange,
 }: {
   mode?: "floating" | "hero";
   fixtureCargo?: VehicleCargoItem[];
@@ -147,7 +149,11 @@ export function VehicleCargo({
     item: VehicleCargoItem,
     toLocation: CustodyLocationKey
   ) => void;
+  onAddToLocation?: (location: CustodyLocationKey) => void;
+  onActiveLocationChange?: (location: CustodyLocationKey) => void;
 }) {
+  const [activeLocation, setActiveLocation] =
+    useState<CustodyLocationKey>("vehicle");
   const [open, setOpen] = useState(false);
   const [transferItem, setTransferItem] = useState<{
     item: VehicleCargoItem;
@@ -191,6 +197,9 @@ export function VehicleCargo({
   const update = trpc.system.goldlineCargo.update.useMutation({
     onSuccess: () => utils.system.goldlineCargo.state.invalidate(),
   });
+  useEffect(() => {
+    onActiveLocationChange?.(activeLocation);
+  }, [activeLocation, onActiveLocationChange]);
   useEffect(() => {
     if (!open || focusItemId == null) return;
     const frame = requestAnimationFrame(() => {
@@ -325,7 +334,10 @@ export function VehicleCargo({
           <CustodyLocationCarousel
             byLocation={byLocation}
             hasCargo={custodyTotal > 0}
+            location={activeLocation}
+            onLocationChange={setActiveLocation}
             onSelectItem={openTransfer}
+            onAddToLocation={onAddToLocation}
           />
           <button
             type="button"
