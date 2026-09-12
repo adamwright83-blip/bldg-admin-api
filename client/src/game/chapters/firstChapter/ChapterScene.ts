@@ -1,4 +1,5 @@
 import { Assets, Container, Graphics, Rectangle, Sprite, Texture, Text } from 'pixi.js';
+import { GROUND_PLANES, scaleAt, shadowAt } from './groundPlane';
 import { WALLS, EXIT, SWITCH, SHORTCUT_CRATE, MANUAL_LATCH, LAUNCHER, REDIRECTOR, BALCONY, HEADING_TARGETS, distance, exitReady, type ChapterState, type Room, type Point } from './model';
 
 const BASE='/assets/goldline/chapters/the-last-valet';
@@ -46,7 +47,24 @@ export class ChapterScene {
   private label(id:string,text:string,x:number,y:number,color=0x33564c,size=13){
     let l=this.labels.get(id);if(!l){l=new Text({text,style:{fontFamily:'Georgia',fontSize:size,fill:color,fontWeight:'600',dropShadow:{color:0xfff8df,alpha:.8,blur:3,distance:0}}});l.anchor.set(.5,1);this.labels.set(id,l);this.actors.addChild(l);}l.text=text;l.position.set(x,y);l.zIndex=900;l.visible=true;
   }
-  private shadow(x:number,y:number,w=25){this.ground.ellipse(x+7,y+3,w,w*.35).fill({color:0x173c35,alpha:.22});}
+  /**
+   * Dual-layer contact shadow. A tight dark core where the figure meets the
+   * floor, plus a wide faint ambient wash. Both scale and fade with depth via
+   * the room's ground plane. The previous single 25px ellipse at a flat 22%
+   * alpha was the same size whether the actor stood at the balustrade or at
+   * the camera, which is one of the loudest sticker tells there is.
+   */
+  private shadow(x:number,y:number,w=25){
+    const plane=GROUND_PLANES[this.lastRoom??'arrival']??GROUND_PLANES.arrival;
+    const {core,ambient}=shadowAt(plane,y,w);
+    this.ground.ellipse(x+5,y+ambient.dy,ambient.rx,ambient.ry).fill({color:0x173c35,alpha:ambient.alpha});
+    this.ground.ellipse(x+2,y+core.dy,core.rx,core.ry).fill({color:0x0d241f,alpha:core.alpha});
+  }
+  /** Sprite scale for a foot y in the current room. */
+  private groundScale(y:number){
+    const plane=GROUND_PLANES[this.lastRoom??'arrival']??GROUND_PLANES.arrival;
+    return scaleAt(plane,y);
+  }
   paint(s:ChapterState,ms:number,width:number,height:number,city:boolean,world:WorldPresentation){
     if(!s.paused&&!s.lost)this.age+=ms;
     if(s.cue!==this.lastCue){this.lastCue=s.cue;this.fxAge=0;}else this.fxAge+=ms;
@@ -119,8 +137,8 @@ export class ChapterScene {
     const inez=room==='arrival'?{x:252,y:404}:room==='garden'?{x:535,y:400}:{x:542,y:499};
     const walk=!city&&!s.paused&&Math.hypot(s.velocity.x,s.velocity.y)>20;
     this.shadow(inez.x,inez.y,20);
-    this.sprite('inez','inez',s.weight?3:walk?1+Math.floor(this.age/280)%2:0,inez.x,inez.y+(this.reduced?0:Math.sin(this.age/650)*1.2),88,122);
-    if(room!=='arrival'||s.save.completed){const p=room==='garden'?{x:713,y:465}:{x:800,y:415};this.shadow(p.x,p.y,20);this.sprite('perrin','perrin',s.save.choice==='break'?4:5,p.x,p.y,86,118);}
+    {const k=this.groundScale(inez.y);this.sprite('inez','inez',s.weight?3:walk?1+Math.floor(this.age/280)%2:0,inez.x,inez.y+(this.reduced?0:Math.sin(this.age/650)*1.2),88*k,122*k);}
+    if(room!=='arrival'||s.save.completed){const p=room==='garden'?{x:713,y:465}:{x:800,y:415};this.shadow(p.x,p.y,20);const k=this.groundScale(p.y);this.sprite('perrin','perrin',s.save.choice==='break'?4:5,p.x,p.y,86*k,118*k);}
     const e=s.enemy;
     if(e){
       if(e.stage==='tell'||e.stage==='charge'){
@@ -154,8 +172,9 @@ export class ChapterScene {
     else this.walkPhase=0;
     const walkKey=walk&&!this.reduced?`walk-${dir}-${Math.floor(this.walkPhase/26)%5+1}`:null;
     const poseKey=walkKey&&this.textures.has(walkKey)?walkKey:`hero-${dir}`;
-    let hero=action===null?this.sprite('hero',poseKey,null,s.player.x,s.player.y,58,86):this.sprite('hero-action','actions',action,s.player.x,s.player.y,99,99,s.player.y,1,3,1);
-    if(!hero)hero=this.sprite('hero',poseKey,null,s.player.x,s.player.y,58,86);
+    const hk=this.groundScale(s.player.y);
+    let hero=action===null?this.sprite('hero',poseKey,null,s.player.x,s.player.y,58*hk,86*hk):this.sprite('hero-action','actions',action,s.player.x,s.player.y,99*hk,99*hk,s.player.y,1,3,1);
+    if(!hero)hero=this.sprite('hero',poseKey,null,s.player.x,s.player.y,58*hk,86*hk);
     if(hero){
       hero.alpha=s.hurt>0&&Math.floor(s.hurt/80)%2===0?.42:1;
       // Express the hitstop the simulation already computes. model.ts sets
