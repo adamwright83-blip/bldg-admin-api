@@ -12,7 +12,7 @@ export class ChapterScene {
   private actors=new Container(); private overlay=new Graphics(); private atmosphere=new Graphics();
   private sprites=new Map<string,Sprite>(); private textures=new Map<string,Texture>();
   private labels=new Map<string,Text>(); private fxAge=1000; private lastCue=-1; private lastRoom:Room|null=null;
-  private age=0;private transition=0;private cameraX=0; private reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  private age=0;private transition=0;private cameraX=0;private walkPhase=0; private reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
   private pointerHandler:((point:Point)=>void)|null=null;
   constructor(){
     this.actors.sortableChildren=true;
@@ -24,7 +24,14 @@ export class ChapterScene {
   async load(){
     const assets:Record<string,string>={scenery:'mechanisms/scenery-atlas.png',machinery:'mechanisms/machinery-atlas.png',props:'mechanisms/props-atlas.png',fx:'fx/impact-atlas.png',inez:'characters/inez-atlas.png',perrin:'characters/perrin-atlas.png',bellwether:'characters/bellwether-atlas.png',actions:'characters/heroine-actions.png'};
     for(const [room,name] of Object.entries(rooms))assets[room]=`backgrounds/${name}.png`;
-    for(const dir of ['front','back','left','right'])assets[`hero-${dir}`]=`/assets/goldline/characters/trailblazer/directional/idle-${dir}.webp`;
+    // The chapter used to load ONLY the idle stance and fake walking with a sine
+    // bob. The 5-frame walk cycle has existed on disk the whole time and is already
+    // driven sequentially by the expedition runtime (GoldlineGame.ts). Same art,
+    // same files — the chapter simply never loaded it.
+    for(const dir of ['front','back','left','right']){
+      assets[`hero-${dir}`]=`/assets/goldline/characters/trailblazer/directional/idle-${dir}.webp`;
+      for(let f=1;f<=5;f+=1)assets[`walk-${dir}-${f}`]=`/assets/goldline/characters/trailblazer/directional/walk-${dir}-0${f}.webp`;
+    }
     await Promise.all(Object.entries(assets).map(async([key,path])=>{
       try{const t=await Assets.load<Texture>(path.startsWith('/')?path:`${BASE}/${path}`);this.textures.set(key,t);}catch{/* local graybox remains playable while art loads */}
     }));
@@ -140,9 +147,30 @@ export class ChapterScene {
     this.shadow(s.player.x,s.player.y,18);
     const dir=Math.abs(s.facing.x)>Math.abs(s.facing.y)?s.facing.x>0?'right':'left':s.facing.y>0?'front':'back';
     const action=s.dodge>0?1:s.attack>0?0:s.hurt>700?2:null;
-    let hero=action===null?this.sprite('hero',`hero-${dir}`,null,s.player.x,s.player.y,58,86):this.sprite('hero-action','actions',action,s.player.x,s.player.y,99,99,s.player.y,1,3,1);
-    if(!hero)hero=this.sprite('hero',`hero-${dir}`,null,s.player.x,s.player.y,58,86);
-    if(hero){hero.alpha=s.hurt>0&&Math.floor(s.hurt/80)%2===0?.42:1;if(action===null&&walk&&!this.reduced){hero.y-=Math.abs(Math.sin(this.age/105))*3;hero.rotation=Math.sin(this.age/105)*.018;}}
+    // Walk pose: a real 5-frame cycle stepped on distance travelled, so the feet
+    // keep pace with the body instead of drifting against a wall-clock timer.
+    // Falls back to the idle stance if the frame is missing or motion is reduced.
+    if(walk&&!this.reduced)this.walkPhase+=Math.hypot(s.velocity.x,s.velocity.y)*ms/1000;
+    else this.walkPhase=0;
+    const walkKey=walk&&!this.reduced?`walk-${dir}-${Math.floor(this.walkPhase/26)%5+1}`:null;
+    const poseKey=walkKey&&this.textures.has(walkKey)?walkKey:`hero-${dir}`;
+    let hero=action===null?this.sprite('hero',poseKey,null,s.player.x,s.player.y,58,86):this.sprite('hero-action','actions',action,s.player.x,s.player.y,99,99,s.player.y,1,3,1);
+    if(!hero)hero=this.sprite('hero',poseKey,null,s.player.x,s.player.y,58,86);
+    if(hero){
+      hero.alpha=s.hurt>0&&Math.floor(s.hurt/80)%2===0?.42:1;
+      // Express the hitstop the simulation already computes. model.ts sets
+      // freeze=70 on a landed hit and freeze=90 on damage taken, then returns
+      // early so the world stops — but the view never read it, so the most
+      // important 70ms in the game looked identical to any other frame.
+      // No new timing is invented here; this only makes existing frames visible.
+      if(s.freeze>0&&!this.reduced){
+        const bite=Math.min(1,s.freeze/70);
+        hero.scale.set(hero.scale.x*(1+bite*0.14),hero.scale.y*(1-bite*0.09));
+        if(s.hurt>0)hero.tint=0xffd0c4;
+      }
+      // The bob is kept ONLY as the reduced-motion and missing-frame fallback.
+      if(action===null&&walk&&!this.reduced&&poseKey===`hero-${dir}`){hero.y-=Math.abs(Math.sin(this.age/105))*3;hero.rotation=Math.sin(this.age/105)*.018;}
+    }
     if(s.dodge>0)this.sprite('dodge','fx',1,s.player.x-s.facing.x*28,s.player.y+12,102,90,s.player.y+1,.6);
     if(s.attack>0)o.arc(s.player.x+s.facing.x*38,s.player.y+s.facing.y*38-18,27,-1.4,1.4).stroke({color:0xfff4c7,width:5,alpha:s.attack/150});
     if(this.fxAge<420&&s.effect!=='none'){
