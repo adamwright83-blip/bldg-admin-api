@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { orders } from "../../drizzle/schema";
+import { getOrderById, updateOrderStatus } from "../db";
 import {
   type CustodyLocationKey,
   custodyLocationFromEvidence,
   custodyLocationFromFieldRow,
+  isCustodyLocationKey,
 } from "../../shared/custodyLocations";
 import {
   matchingCargoOrders,
@@ -18,6 +20,36 @@ export type CargoState =
   | "AT_PROCESSOR"
   | "IN_VEHICLE_PROCESSED";
 let schemaReady: Promise<void> | null = null;
+let deliverySchemaReady: Promise<void> | null = null;
+
+async function ensureDeliveryAttestationTable(database: Awaited<ReturnType<typeof getDb>>) {
+  if (!database) throw new Error("Database not available");
+  if (!deliverySchemaReady) {
+    deliverySchemaReady = database
+      .execute(
+        sql.raw(`CREATE TABLE IF NOT EXISTS goldline_custody_deliveries (
+      id varchar(36) NOT NULL,
+      tenantId varchar(64) NOT NULL,
+      actorId varchar(128) NOT NULL,
+      vehicleId varchar(128) NULL,
+      orderId int NULL,
+      fieldCargoId varchar(36) NULL,
+      customerDisplayName varchar(191) NOT NULL,
+      custodyLocation varchar(64) NULL,
+      deliveredAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_custody_deliveries_tenant (tenantId, deliveredAt),
+      KEY idx_custody_deliveries_actor (tenantId, actorId, deliveredAt)
+    )`)
+      )
+      .then(() => undefined)
+      .catch(error => {
+        deliverySchemaReady = null;
+        throw error;
+      });
+  }
+  await deliverySchemaReady;
+}
 
 async function db() {
   const database = await getDb();
@@ -639,6 +671,135 @@ export async function updateFieldCargo(input: {
       "That cargo entry is no longer in this vehicle, so it can't be edited here."
     );
   return { updated: true as const, id: input.fieldCargoId };
+}
+
+export async function countCustodyDeliveries(
+  tenantId: string,
+  actorId: string
+) {
+  const database = await db();
+  await ensureDeliveryAttestationTable(database);
+  const rows: any[] =
+    (
+      (await database.execute(
+        sql`SELECT COUNT(*) AS total, MAX(deliveredAt) AS lastDeliveredAt FROM goldline_custody_deliveries WHERE tenantId=${tenantId} AND actorId=${actorId}`
+      )) as any
+    )[0] ?? [];
+  const row = rows[0] ?? {};
+  return {
+    total: Number(row.total ?? 0),
+    lastDeliveredAt: row.lastDeliveredAt
+      ? new Date(row.lastDeliveredAt).toISOString()
+      : null,
+  };
+}
+
+export async function deliverCustodyToCustomer(input: {
+  tenantId: string;
+  actorId: string;
+  vehicleId: string;
+  orderId?: number;
+  fieldCargoId?: string;
+  confirmed: boolean;
+}) {
+  if (!input.confirmed)
+    throw new Error("Delivery must be explicitly confirmed.");
+  if (!input.orderId && !input.fieldCargoId)
+    throw new Error("Choose which cargo item was delivered.");
+
+  const database = await db();
+  await ensureDeliveryAttestationTable(database);
+
+  if (input.orderId) {
+    const order = await getOrderById(input.orderId);
+    if (!order || order.tenantId !== input.tenantId)
+      throw new Error("Order not found in this tenant.");
+    if (!order.paid)
+      throw new Error("Charge the order before marking it delivered.");
+    if (["delivered", "cancelled"].includes(order.status))
+      return {
+        delivered: true,
+        idempotent: true,
+        deliveryCount: (await countCustodyDeliveries(input.tenantId, input.actorId))
+          .total,
+      };
+    if (
+      !(["collected", "processing", "ready"] as string[]).includes(order.status)
+    )
+      throw new Error("Order status does not support delivery attestation.");
+
+    const prior: any[] =
+      (
+        (await database.execute(
+          sql`SELECT state,evidenceJson FROM goldline_vehicle_custody WHERE tenantId=${input.tenantId} AND orderId=${input.orderId} LIMIT 1`
+        )) as any
+      )[0] ?? [];
+    const custodyLocation = prior[0]
+      ? custodyLocationFromEvidence(
+          prior[0].state,
+          parseEvidenceJson(prior[0].evidenceJson)
+        )
+      : "vehicle";
+    const customerDisplayName =
+      `${order.firstName} ${order.lastName}`.trim() || `Order #${order.id}`;
+
+    await updateOrderStatus(input.orderId, "delivered", {
+      source: "custody_board_deliver",
+      actorUserId: input.actorId,
+    });
+
+    const id = randomUUID();
+    await database.execute(
+      sql`INSERT INTO goldline_custody_deliveries (id,tenantId,actorId,vehicleId,orderId,customerDisplayName,custodyLocation) VALUES (${id},${input.tenantId},${input.actorId},${input.vehicleId},${input.orderId},${customerDisplayName},${custodyLocation})`
+    );
+
+    const stats = await countCustodyDeliveries(input.tenantId, input.actorId);
+    return {
+      delivered: true,
+      idempotent: false,
+      deliveryCount: stats.total,
+      lastDeliveredAt: stats.lastDeliveredAt,
+    };
+  }
+
+  const fieldRows: any[] =
+    (
+      (await database.execute(
+        sql`SELECT id,customerDisplayName,location,vehicleState FROM goldline_field_cargo WHERE tenantId=${input.tenantId} AND id=${input.fieldCargoId} AND vehicleId=${input.vehicleId} AND vehicleState IN ('IN_VEHICLE','AT_PROCESSOR') LIMIT 1`
+      )) as any
+    )[0] ?? [];
+  const field = fieldRows[0];
+  if (!field)
+    throw new Error(
+      "That cargo entry is no longer on this custody board."
+    );
+
+  const result: any = await database.execute(
+    sql`UPDATE goldline_field_cargo SET vehicleState='REMOVED',actorId=${input.actorId} WHERE tenantId=${input.tenantId} AND id=${input.fieldCargoId} AND vehicleId=${input.vehicleId} AND vehicleState IN ('IN_VEHICLE','AT_PROCESSOR')`
+  );
+  const updated = Number(result?.[0]?.affectedRows ?? 0) === 1;
+  if (!updated)
+    throw new Error(
+      "That cargo entry is no longer on this custody board."
+    );
+
+  const custodyLocation = isCustodyLocationKey(field.location)
+    ? field.location
+    : field.vehicleState === "AT_PROCESSOR"
+      ? "coast_1hr"
+      : "vehicle";
+  const id = randomUUID();
+  await database.execute(
+    sql`INSERT INTO goldline_custody_deliveries (id,tenantId,actorId,vehicleId,fieldCargoId,customerDisplayName,custodyLocation) VALUES (${id},${input.tenantId},${input.actorId},${input.vehicleId},${input.fieldCargoId},${field.customerDisplayName},${custodyLocation})`
+  );
+
+  const stats = await countCustodyDeliveries(input.tenantId, input.actorId);
+  return {
+    delivered: true,
+    idempotent: false,
+    deliveryCount: stats.total,
+    lastDeliveredAt: stats.lastDeliveredAt,
+  };
 }
 
 export async function linkFieldCargo(input: {

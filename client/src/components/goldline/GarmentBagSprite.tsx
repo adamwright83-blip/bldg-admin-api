@@ -22,12 +22,10 @@ export function cargoDisplayName(item: VehicleCargoItem): string | null {
 export function GarmentBagSprite({
   item,
   style,
-  onSelect,
   editable,
 }: {
   item: VehicleCargoItem;
   style?: CSSProperties;
-  onSelect?: (item: VehicleCargoItem) => void;
   editable?: boolean;
 }) {
   const processed = item.state === "IN_VEHICLE_PROCESSED";
@@ -38,11 +36,8 @@ export function GarmentBagSprite({
       type="button"
       className={`gl-cargo-garment ${processed ? "is-processed" : "is-unprocessed"}`}
       style={style}
+      data-custody-bag-id={String(item.id)}
       aria-label={`${editable ? "Edit" : "View"} ${name ?? "customer"} cargo${chargeDue ? " — ready to charge" : ""}`}
-      onClick={event => {
-        event.stopPropagation();
-        onSelect?.(item);
-      }}
     >
       <svg
         className="gl-cargo-garment-art"

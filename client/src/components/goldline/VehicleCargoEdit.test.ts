@@ -5,17 +5,12 @@ import { describe, expect, it } from "vitest";
 const read = (name: string) =>
   fs.readFileSync(path.resolve(import.meta.dirname, name), "utf8");
 
-describe("GarmentBagSprite — tappable, mapped to the real cargo item", () => {
+describe("GarmentBagSprite — tappable custody target", () => {
   const sprite = read("./GarmentBagSprite.tsx");
 
-  it("renders as a real button, not a decorative image, and stops the tap from also opening the whole-car dialog", () => {
+  it("renders as a real button with a stable data id for carousel tap routing", () => {
     expect(sprite).toContain("<button");
-    expect(sprite).toContain("event.stopPropagation();");
-    expect(sprite).toContain("onSelect?.(item);");
-  });
-
-  it("passes the exact item object through onSelect — never an index or a copy — so an edit lands on the right record", () => {
-    expect(sprite).toContain("onSelect?: (item: VehicleCargoItem) => void;");
+    expect(sprite).toContain("data-custody-bag-id={String(item.id)}");
   });
 });
 
@@ -27,6 +22,8 @@ describe("VehicleCargo — editing reuses the existing cargo model and mutation 
     expect(source).toContain("CustodyLocationCarousel");
     expect(source).toContain("CustodyTransferSheet");
     expect(source).toContain("onAddToLocation={onAddToLocation}");
+    expect(source).toContain("trpc.system.goldlineCargo.deliver.useMutation(");
+    expect(source).toContain("DELIVERED TO CUSTOMER");
   });
 
   it("only offers a text edit for field cargo — the entries that actually have an editable label in the real data model", () => {

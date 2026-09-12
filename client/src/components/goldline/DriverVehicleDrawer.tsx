@@ -295,11 +295,16 @@ export function DriverVehicleDrawer({
                   )
                 )
               }
+              onFixtureDelivered={item =>
+                setFixtureCargo(current =>
+                  (current ?? []).filter(existing => existing.id !== item.id)
+                )
+              }
             />
           </div>
           <p className="gdp-garage-hint">
-            Flick right through car, cleaners, and closet. Tap + to add, tap a
-            bag to move it.
+            Swipe or tap arrows through car, cleaners, and closet. Tap + to
+            add, tap a bag to move or deliver it.
           </p>
         </Dialog.Content>
       </Dialog.Portal>

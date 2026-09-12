@@ -134,6 +134,7 @@ export function VehicleCargo({
   fixtureCargo,
   onFixtureCargoUpdated,
   onFixtureLocationTransfer,
+  onFixtureDelivered,
   onAddToLocation,
   onActiveLocationChange,
 }: {
@@ -149,6 +150,7 @@ export function VehicleCargo({
     item: VehicleCargoItem,
     toLocation: CustodyLocationKey
   ) => void;
+  onFixtureDelivered?: (item: VehicleCargoItem) => void;
   onAddToLocation?: (location: CustodyLocationKey) => void;
   onActiveLocationChange?: (location: CustodyLocationKey) => void;
 }) {
@@ -160,6 +162,8 @@ export function VehicleCargo({
     location: CustodyLocationKey;
   } | null>(null);
   const [transferError, setTransferError] = useState<string | null>(null);
+  const [deliverError, setDeliverError] = useState<string | null>(null);
+  const [fixtureDeliveryCount, setFixtureDeliveryCount] = useState(0);
   const [focusItemId, setFocusItemId] = useState<VehicleCargoItem["id"] | null>(
     null
   );
@@ -197,6 +201,18 @@ export function VehicleCargo({
   const update = trpc.system.goldlineCargo.update.useMutation({
     onSuccess: () => utils.system.goldlineCargo.state.invalidate(),
   });
+  const deliver = trpc.system.goldlineCargo.deliver.useMutation({
+    onSuccess: () => {
+      utils.system.goldlineCargo.state.invalidate();
+      setTransferItem(null);
+      setDeliverError(null);
+    },
+    onError: cause => {
+      setDeliverError(
+        cause instanceof Error ? cause.message : "Could not record delivery."
+      );
+    },
+  });
   useEffect(() => {
     onActiveLocationChange?.(activeLocation);
   }, [activeLocation, onActiveLocationChange]);
@@ -221,6 +237,10 @@ export function VehicleCargo({
     return groupCargoByLocation(cargo);
   }, [cargo, fixtureCargo, state.data?.byLocation]);
   const custodyTotal = totalCargoCount(byLocation);
+  const deliveryCount =
+    fixtureCargo !== undefined
+      ? fixtureDeliveryCount
+      : (state.data?.deliveryStats?.total ?? 0);
   const unassigned = state.data?.unassigned ?? [],
     atProcessor = state.data?.atProcessor ?? [];
   const relevant =
@@ -256,6 +276,23 @@ export function VehicleCargo({
       setEditingId(null);
       setEditDraft(null);
     }
+  }
+  async function deliverItem(item: VehicleCargoItem) {
+    setDeliverError(null);
+    if (fixtureCargo !== undefined) {
+      onFixtureDelivered?.(item);
+      setFixtureDeliveryCount(count => count + 1);
+      setTransferItem(null);
+      return;
+    }
+    await deliver.mutateAsync({
+      orderId: typeof item.id === "number" ? item.id : undefined,
+      fieldCargoId:
+        item.source === "field"
+          ? item.fieldCargoId ?? String(item.id).replace(/^field:/, "")
+          : undefined,
+      confirmed: true,
+    });
   }
   async function moveToLocation(toLocation: CustodyLocationKey) {
     if (!transferItem) return;
@@ -356,6 +393,12 @@ export function VehicleCargo({
                   : unassigned.length
                     ? `${unassigned.length} PICKED UP · VEHICLE UNCONFIRMED`
                     : "ALL LOCATIONS EMPTY"}
+              {deliveryCount > 0 ? (
+                <span className="gl-custody-delivery-stats">
+                  {deliveryCount} DELIVERED TO CUSTOMER
+                  {deliveryCount === 1 ? "" : " (ALL TIME)"}
+                </span>
+              ) : null}
             </small>
           </button>
           {transferItem ? (
@@ -363,12 +406,18 @@ export function VehicleCargo({
               item={transferItem.item}
               currentLocation={transferItem.location}
               pending={transferLocation.isPending}
+              deliverPending={deliver.isPending}
               error={transferError ?? transferLocation.error?.message ?? null}
+              deliverError={deliverError ?? deliver.error?.message ?? null}
               onClose={() => {
                 setTransferItem(null);
                 setTransferError(null);
+                setDeliverError(null);
               }}
               onTransfer={location => void moveToLocation(location)}
+              onDeliver={() =>
+                transferItem ? void deliverItem(transferItem.item) : undefined
+              }
             />
           ) : null}
         </div>
@@ -596,10 +645,19 @@ export function VehicleCargo({
                   {!isEditing ? (
                     <button
                       className="gl-cargo-move-trigger"
-                      disabled={transferLocation.isPending}
+                      disabled={transferLocation.isPending || deliver.isPending}
                       onClick={() => openTransfer(item, location)}
                     >
                       MOVE
+                    </button>
+                  ) : null}
+                  {!isEditing && !needsCharge(item) ? (
+                    <button
+                      className="gl-cargo-deliver-trigger"
+                      disabled={transferLocation.isPending || deliver.isPending}
+                      onClick={() => void deliverItem(item)}
+                    >
+                      DELIVERED
                     </button>
                   ) : null}
                   {!isEditing &&
@@ -701,12 +759,18 @@ export function VehicleCargo({
               item={transferItem.item}
               currentLocation={transferItem.location}
               pending={transferLocation.isPending}
+              deliverPending={deliver.isPending}
               error={transferError ?? transferLocation.error?.message ?? null}
+              deliverError={deliverError ?? deliver.error?.message ?? null}
               onClose={() => {
                 setTransferItem(null);
                 setTransferError(null);
+                setDeliverError(null);
               }}
               onTransfer={location => void moveToLocation(location)}
+              onDeliver={() =>
+                transferItem ? void deliverItem(transferItem.item) : undefined
+              }
             />
           ) : null}
           <footer>

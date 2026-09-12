@@ -11,6 +11,8 @@ import { storageDelete, storageGet, storagePut } from "../storage";
 import {
   cargoAppearance,
   confirmCargo,
+  countCustodyDeliveries,
+  deliverCustodyToCustomer,
   linkFieldCargo,
   listAtProcessor,
   listCargo,
@@ -71,11 +73,13 @@ async function transcriptFromAudio(input: {
 
 export const goldlineCargoRouter = router({
   state: procedure.query(async ({ ctx }) => {
-    const [cargo, byLocation, unassigned, atProcessor] = await Promise.all([
+    const [cargo, byLocation, unassigned, atProcessor, deliveryStats] =
+      await Promise.all([
       listCargo(ctx.tenantId, ctx.user.openId),
       listCustodyBoard(ctx.tenantId, ctx.user.openId),
       listUnassignedPickedUp(ctx.tenantId),
       listAtProcessor(ctx.tenantId),
+      countCustodyDeliveries(ctx.tenantId, ctx.user.openId),
     ]);
     const withAppearance = (
       item: (typeof cargo)[number]
@@ -103,6 +107,7 @@ export const goldlineCargoRouter = router({
         customer: `${order.firstName} ${order.lastName}`.trim(),
         address: order.address,
       })),
+      deliveryStats,
     };
   }),
   propose: procedure
@@ -229,6 +234,29 @@ export const goldlineCargoRouter = router({
         vehicleId: ctx.user.openId,
         fieldCargoId: input.fieldCargoId,
         fields: input.fields,
+      })
+    ),
+  deliver: procedure
+    .input(
+      z
+        .object({
+          orderId: z.number().int().optional(),
+          fieldCargoId: z.string().uuid().optional(),
+          confirmed: z.literal(true),
+        })
+        .refine(
+          input => Boolean(input.orderId || input.fieldCargoId),
+          "Choose which cargo item was delivered."
+        )
+    )
+    .mutation(({ ctx, input }) =>
+      deliverCustodyToCustomer({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        vehicleId: ctx.user.openId,
+        orderId: input.orderId,
+        fieldCargoId: input.fieldCargoId,
+        confirmed: input.confirmed,
       })
     ),
 });
