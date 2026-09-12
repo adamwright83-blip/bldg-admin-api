@@ -22,9 +22,10 @@ describe("GarmentBagSprite — tappable, mapped to the real cargo item", () => {
 describe("VehicleCargo — editing reuses the existing cargo model and mutation path", () => {
   const source = read("./VehicleCargo.tsx");
 
-  it("wires every on-car bag to selectItem, keyed by its real cargo item", () => {
-    expect(source).toContain("onSelect={selectItem}");
-    expect(source).toContain("editable={item.source === \"field\"}");
+  it("wires hero kanban bags to openTransfer through the location carousel", () => {
+    expect(source).toContain("onSelectItem={openTransfer}");
+    expect(source).toContain("CustodyLocationCarousel");
+    expect(source).toContain("CustodyTransferSheet");
   });
 
   it("only offers a text edit for field cargo — the entries that actually have an editable label in the real data model", () => {

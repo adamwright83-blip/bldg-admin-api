@@ -1,7 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { PackageOpen, X } from "lucide-react";
+import {
+  CUSTODY_LOCATION_ORDER,
+  CUSTODY_LOCATIONS,
+  type CustodyLocationKey,
+} from "@shared/custodyLocations";
 import { trpc } from "@/lib/trpc";
+import { CustodyLocationCarousel } from "./CustodyLocationCarousel";
+import { CustodyTransferSheet } from "./CustodyTransferSheet";
 import { cargoDisplayName, GarmentBagSprite } from "./GarmentBagSprite";
 import "./vehicle-cargo.css";
 
@@ -27,6 +34,7 @@ export type VehicleCargoItem = {
   total?: number | null;
   paidAt?: string | null;
   state: "IN_VEHICLE_UNPROCESSED" | "IN_VEHICLE_PROCESSED";
+  custodyLocation?: CustodyLocationKey;
   appearance: {
     kind: "paper_bag" | "garment_bag";
     condition: string;
@@ -65,11 +73,32 @@ export function cargoSprite(item: VehicleCargoItem) {
 export function needsCharge(item: VehicleCargoItem): boolean {
   return item.source === "order" && item.paid === false;
 }
-export function visibleCargo(cargo: VehicleCargoItem[]) {
+export function visibleCargo(cargo: VehicleCargoItem[], maxSlots = SLOTS.length) {
   return {
-    visible: cargo.slice(0, SLOTS.length),
-    overflow: Math.max(0, cargo.length - SLOTS.length),
+    visible: cargo.slice(0, maxSlots),
+    overflow: Math.max(0, cargo.length - maxSlots),
   };
+}
+
+export function groupCargoByLocation(
+  items: VehicleCargoItem[]
+): Record<CustodyLocationKey, VehicleCargoItem[]> {
+  const board = Object.fromEntries(
+    CUSTODY_LOCATION_ORDER.map(key => [key, [] as VehicleCargoItem[]])
+  ) as Record<CustodyLocationKey, VehicleCargoItem[]>;
+  for (const item of items) {
+    board[item.custodyLocation ?? "vehicle"].push(item);
+  }
+  return board;
+}
+
+export function totalCargoCount(
+  byLocation: Record<CustodyLocationKey, VehicleCargoItem[]>
+) {
+  return CUSTODY_LOCATION_ORDER.reduce(
+    (sum, key) => sum + byLocation[key].length,
+    0
+  );
 }
 
 /** Editable field set for an existing field-cargo entry — the same shape
@@ -104,6 +133,7 @@ export function VehicleCargo({
   mode = "floating",
   fixtureCargo,
   onFixtureCargoUpdated,
+  onFixtureLocationTransfer,
 }: {
   mode?: "floating" | "hero";
   fixtureCargo?: VehicleCargoItem[];
@@ -113,8 +143,17 @@ export function VehicleCargo({
     item: VehicleCargoItem,
     fields: CargoEditFields
   ) => void;
+  onFixtureLocationTransfer?: (
+    item: VehicleCargoItem,
+    toLocation: CustodyLocationKey
+  ) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [transferItem, setTransferItem] = useState<{
+    item: VehicleCargoItem;
+    location: CustodyLocationKey;
+  } | null>(null);
+  const [transferError, setTransferError] = useState<string | null>(null);
   const [focusItemId, setFocusItemId] = useState<VehicleCargoItem["id"] | null>(
     null
   );
@@ -137,6 +176,18 @@ export function VehicleCargo({
   const transfer = trpc.system.goldlineCargo.transfer.useMutation({
     onSuccess: () => utils.system.goldlineCargo.state.invalidate(),
   });
+  const transferLocation = trpc.system.goldlineCargo.transferLocation.useMutation({
+    onSuccess: () => {
+      utils.system.goldlineCargo.state.invalidate();
+      setTransferItem(null);
+      setTransferError(null);
+    },
+    onError: cause => {
+      setTransferError(
+        cause instanceof Error ? cause.message : "Could not move this cargo."
+      );
+    },
+  });
   const update = trpc.system.goldlineCargo.update.useMutation({
     onSuccess: () => utils.system.goldlineCargo.state.invalidate(),
   });
@@ -150,12 +201,23 @@ export function VehicleCargo({
     return () => cancelAnimationFrame(frame);
   }, [open, focusItemId]);
   const cargo = (fixtureCargo ?? state.data?.cargo ?? []) as VehicleCargoItem[];
+  const byLocation = useMemo(() => {
+    if (fixtureCargo !== undefined) return groupCargoByLocation(fixtureCargo);
+    if (state.data?.byLocation) {
+      return state.data.byLocation as Record<
+        CustodyLocationKey,
+        VehicleCargoItem[]
+      >;
+    }
+    return groupCargoByLocation(cargo);
+  }, [cargo, fixtureCargo, state.data?.byLocation]);
+  const custodyTotal = totalCargoCount(byLocation);
   const unassigned = state.data?.unassigned ?? [],
     atProcessor = state.data?.atProcessor ?? [];
   const relevant =
     onboarding.data?.session?.interpretation?.profile
       .transportsCustomerProperty === true ||
-    cargo.length > 0 ||
+    custodyTotal > 0 ||
     unassigned.length > 0 ||
     atProcessor.length > 0;
   if (
@@ -165,11 +227,15 @@ export function VehicleCargo({
     !relevant
   )
     return null;
-  const projection = visibleCargo(cargo);
-  /** A bag on the car was tapped: open the cargo list already scrolled and
-   *  focused on THAT exact record. Field cargo opens straight into edit;
-   *  order-linked cargo has no free-text label of its own to edit, so it
-   *  opens to its existing real detail + handoff action instead. */
+  const allCargo = CUSTODY_LOCATION_ORDER.flatMap(key => byLocation[key]);
+  /** Hero kanban: tap a bag to move custody. Detail dialog: open the record. */
+  function openTransfer(
+    item: VehicleCargoItem,
+    location: CustodyLocationKey
+  ) {
+    setTransferError(null);
+    setTransferItem({ item, location });
+  }
   function selectItem(item: VehicleCargoItem) {
     setEditError(null);
     setOpen(true);
@@ -181,6 +247,25 @@ export function VehicleCargo({
       setEditingId(null);
       setEditDraft(null);
     }
+  }
+  async function moveToLocation(toLocation: CustodyLocationKey) {
+    if (!transferItem) return;
+    const { item } = transferItem;
+    setTransferError(null);
+    if (fixtureCargo !== undefined) {
+      onFixtureLocationTransfer?.(item, toLocation);
+      setTransferItem(null);
+      return;
+    }
+    await transferLocation.mutateAsync({
+      orderId: typeof item.id === "number" ? item.id : undefined,
+      fieldCargoId:
+        item.source === "field"
+          ? item.fieldCargoId ?? String(item.id).replace(/^field:/, "")
+          : undefined,
+      toLocation,
+      confirmed: true,
+    });
   }
   function cancelEdit() {
     setEditingId(null);
@@ -232,71 +317,81 @@ export function VehicleCargo({
         }
       }}
     >
-      <Dialog.Trigger asChild>
-        <button
+      {mode === "hero" ? (
+        <div
           data-testid="vehicle-cargo-cta"
-          className={`gl-cargo-cta gl-cargo-cta--${mode} ${cargo.length ? "has-cargo" : "is-empty"}`}
-          onClick={() => {
-            setFocusItemId(null);
-            setOpen(true);
-          }}
+          className={`gl-cargo-cta gl-cargo-cta--${mode} ${custodyTotal ? "has-cargo" : "is-empty"}`}
         >
-          {mode === "hero" ? (
-            <div
-              className="gl-cargo-hero-art"
-              aria-label={`${cargo.length} customer orders in vehicle`}
-            >
-              <div className="gl-cargo-ambient-glow" aria-hidden="true" />
-              <img
-                className="gl-cargo-car"
-                src={CAR_ASSET}
-                alt="Top-down vehicle interior"
-                onError={event => {
-                  if (event.currentTarget.src.endsWith(CAR_FALLBACK)) return;
-                  event.currentTarget.src = CAR_FALLBACK;
-                }}
-              />
-              <div className="gl-cargo-sheen" aria-hidden="true" />
-              <div className="gl-cargo-garments">
-                {projection.visible.map((item, index) => (
-                  <GarmentBagSprite
-                    key={item.id}
-                    item={item}
-                    style={SLOTS[index]}
-                    editable={item.source === "field"}
-                    onSelect={selectItem}
-                  />
-                ))}
-              </div>
-              {projection.overflow > 0 ? (
-                <strong className="gl-cargo-overflow">
-                  +{projection.overflow} MORE
-                </strong>
-              ) : null}
-            </div>
-          ) : (
-            <PackageOpen />
-          )}
-          <span>
-            <strong>VEHICLE CARGO</strong>
+          <CustodyLocationCarousel
+            byLocation={byLocation}
+            hasCargo={custodyTotal > 0}
+            onSelectItem={openTransfer}
+          />
+          <button
+            type="button"
+            className="gl-cargo-detail-trigger"
+            onClick={() => {
+              setFocusItemId(null);
+              setOpen(true);
+            }}
+          >
+            <strong>CUSTODY BOARD</strong>
             <small>
               {state.isLoading && fixtureCargo === undefined
                 ? "READING CUSTODY…"
-                : cargo.length
-                  ? `${cargo.length} CARGO ${cargo.length === 1 ? "ITEM" : "ITEMS"} IN VEHICLE`
+                : custodyTotal
+                  ? `${custodyTotal} ${custodyTotal === 1 ? "ITEM" : "ITEMS"} ACROSS ${CUSTODY_LOCATION_ORDER.filter(key => byLocation[key].length > 0).length || 0} LOCATIONS`
                   : unassigned.length
                     ? `${unassigned.length} PICKED UP · VEHICLE UNCONFIRMED`
-                    : "VEHICLE EMPTY"}
+                    : "ALL LOCATIONS EMPTY"}
             </small>
-          </span>
-        </button>
-      </Dialog.Trigger>
+          </button>
+          {transferItem ? (
+            <CustodyTransferSheet
+              item={transferItem.item}
+              currentLocation={transferItem.location}
+              pending={transferLocation.isPending}
+              error={transferError ?? transferLocation.error?.message ?? null}
+              onClose={() => {
+                setTransferItem(null);
+                setTransferError(null);
+              }}
+              onTransfer={location => void moveToLocation(location)}
+            />
+          ) : null}
+        </div>
+      ) : (
+        <Dialog.Trigger asChild>
+          <button
+            data-testid="vehicle-cargo-cta"
+            className={`gl-cargo-cta gl-cargo-cta--${mode} ${cargo.length ? "has-cargo" : "is-empty"}`}
+            onClick={() => {
+              setFocusItemId(null);
+              setOpen(true);
+            }}
+          >
+            <PackageOpen />
+            <span>
+              <strong>VEHICLE CARGO</strong>
+              <small>
+                {state.isLoading && fixtureCargo === undefined
+                  ? "READING CUSTODY…"
+                  : cargo.length
+                    ? `${cargo.length} CARGO ${cargo.length === 1 ? "ITEM" : "ITEMS"} IN VEHICLE`
+                    : unassigned.length
+                      ? `${unassigned.length} PICKED UP · VEHICLE UNCONFIRMED`
+                      : "VEHICLE EMPTY"}
+              </small>
+            </span>
+          </button>
+        </Dialog.Trigger>
+      )}
       <Dialog.Portal>
         <Dialog.Content className="gl-cargo-view">
           <header>
             <div>
               <p>DRIVER · AUTHORITATIVE CUSTODY</p>
-              <Dialog.Title>VEHICLE CARGO</Dialog.Title>
+              <Dialog.Title>CUSTODY BOARD</Dialog.Title>
             </div>
             <button
               onClick={() => {
@@ -310,10 +405,11 @@ export function VehicleCargo({
             </button>
           </header>
           <Dialog.Description className="gl-cargo-question">
-            What customer property is physically in my vehicle right now?
+            Where is every customer order right now — car, cleaner, or closet?
           </Dialog.Description>
           <section className="gl-cargo-list">
-            {cargo.map(item => {
+            {allCargo.map(item => {
+              const location = item.custodyLocation ?? "vehicle";
               const isEditing = editingId === item.id && editDraft;
               return (
                 <article
@@ -446,6 +542,9 @@ export function VehicleCargo({
                         {item.quantity ? `${item.quantity} ` : ""}
                         {item.itemDescription ?? item.appearance.condition}
                       </em>
+                      <small className="gl-cargo-location-pill">
+                        {CUSTODY_LOCATIONS[location].label}
+                      </small>
                       {item.serviceType ? (
                         <small>
                           {item.serviceType === "dry_cleaning"
@@ -482,6 +581,15 @@ export function VehicleCargo({
                       EDIT
                     </button>
                   ) : null}
+                  {!isEditing ? (
+                    <button
+                      className="gl-cargo-move-trigger"
+                      disabled={transferLocation.isPending}
+                      onClick={() => openTransfer(item, location)}
+                    >
+                      MOVE
+                    </button>
+                  ) : null}
                   {!isEditing &&
                   item.source !== "field" &&
                   typeof item.id === "number" &&
@@ -510,8 +618,8 @@ export function VehicleCargo({
                 </article>
               );
             })}
-            {!cargo.length ? (
-              <p>NO CUSTOMER PROPERTY RECORDED IN THIS VEHICLE</p>
+            {!allCargo.length ? (
+              <p>NO CUSTOMER PROPERTY RECORDED IN CUSTODY</p>
             ) : null}
           </section>
           {unassigned.length ? (
@@ -573,6 +681,22 @@ export function VehicleCargo({
             </section>
           ) : null}
           {transfer.error ? <p role="alert">{transfer.error.message}</p> : null}
+          {transferLocation.error ? (
+            <p role="alert">{transferLocation.error.message}</p>
+          ) : null}
+          {transferItem && open ? (
+            <CustodyTransferSheet
+              item={transferItem.item}
+              currentLocation={transferItem.location}
+              pending={transferLocation.isPending}
+              error={transferError ?? transferLocation.error?.message ?? null}
+              onClose={() => {
+                setTransferItem(null);
+                setTransferError(null);
+              }}
+              onTransfer={location => void moveToLocation(location)}
+            />
+          ) : null}
           <footer>
             GPS may prompt a transfer, but never performs one. Cargo remains
             until explicit custody evidence or delivery.

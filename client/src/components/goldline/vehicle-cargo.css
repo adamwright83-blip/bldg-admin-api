@@ -569,7 +569,7 @@ button.gl-cargo-edit-trigger {
   bottom: 4%;
   font-size: clamp(5px, 1.4cqw, 8px);
 }
-.gdp-shell .gl-cargo-cta--hero > span {
+.gdp-shell .gl-cargo-detail-trigger {
   position: absolute;
   right: 0;
   bottom: 0.2dvh;
@@ -583,18 +583,279 @@ button.gl-cargo-edit-trigger {
   border-radius: 1cqw;
   background: linear-gradient(#164323f5, #07170ef5);
 }
-.gdp-shell .gl-cargo-cta--hero.has-cargo > span {
+.gdp-shell .gl-cargo-cta--hero.has-cargo .gl-cargo-detail-trigger {
   border-color: #3cf177;
   box-shadow:
     0 0 2.8cqw #20ea66aa,
     inset 0 0 2cqw #49ff7a44;
 }
-.gdp-shell .gl-cargo-cta--hero > span strong {
+.gdp-shell .gl-cargo-detail-trigger strong {
   font-size: clamp(7px, 2.6cqw, 13px);
   line-height: 1.05;
 }
-.gdp-shell .gl-cargo-cta--hero > span small {
+.gdp-shell .gl-cargo-detail-trigger small {
   margin-top: 0.35dvh;
   font-size: clamp(4px, 1.35cqw, 7px);
   line-height: 1.1;
+}
+
+.gl-custody-carousel {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: 1fr auto;
+}
+.gl-custody-carousel-art {
+  touch-action: pan-y;
+  transition: transform 120ms ease-out;
+}
+.gl-cargo-car.is-location {
+  object-fit: contain;
+  object-position: center center;
+  padding: 8% 6% 12%;
+  filter: drop-shadow(0 8px 18px #0008);
+}
+.gl-custody-carousel-meta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6.8dvh;
+  z-index: 4;
+  padding: 0 0.4rem;
+  text-align: center;
+  pointer-events: none;
+}
+.gl-custody-carousel-label {
+  margin: 0;
+  color: #fff8d4;
+  text-shadow: 0 2px 3px #001;
+}
+.gl-custody-carousel-label strong {
+  display: block;
+  font:
+    800 0.72rem Georgia,
+    serif;
+  letter-spacing: 0.05em;
+}
+.gl-custody-carousel-label span {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.48rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.gl-custody-carousel-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.45rem;
+  margin-top: 0.45rem;
+  pointer-events: auto;
+}
+.gl-custody-carousel-dots button {
+  position: relative;
+  width: 0.55rem;
+  height: 0.55rem;
+  padding: 0;
+  border: 1px solid #d5a22c88;
+  border-radius: 50%;
+  background: #04141dcc;
+  cursor: pointer;
+}
+.gl-custody-carousel-dots button i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: #6d7f79;
+}
+.gl-custody-carousel-dots button.is-active i {
+  background: #63f795;
+  box-shadow: 0 0 8px #2bf66c99;
+}
+.gl-custody-carousel-dots button b {
+  position: absolute;
+  top: -0.45rem;
+  right: -0.35rem;
+  min-width: 0.7rem;
+  padding: 0 0.15rem;
+  border-radius: 999px;
+  background: #c9962e;
+  color: #241a06;
+  font-size: 0.42rem;
+  line-height: 1.2;
+}
+.gl-custody-carousel-hint {
+  margin: 0.35rem 0 0;
+  color: #b7c9c2;
+  font-size: 0.42rem;
+  letter-spacing: 0.04em;
+}
+.gl-cargo-detail-trigger {
+  position: absolute;
+  right: 0;
+  bottom: 0.2dvh;
+  left: 0;
+  z-index: 5;
+  min-height: 6.6dvh;
+  box-sizing: border-box;
+  display: grid;
+  align-content: center;
+  padding: 0.7dvh 1cqw;
+  border: max(1px, 0.45cqw) solid #947337;
+  border-radius: 1cqw;
+  background: linear-gradient(#164323f5, #07170ef5);
+  color: #fff8d4;
+  text-shadow: 0 2px 3px #001;
+  cursor: pointer;
+}
+.gl-cargo-cta--hero.has-cargo .gl-cargo-detail-trigger {
+  border-color: #3cf177;
+  box-shadow:
+    0 0 2.8cqw #20ea66aa,
+    inset 0 0 2cqw #49ff7a44;
+}
+.gl-cargo-detail-trigger strong,
+.gl-cargo-detail-trigger small {
+  display: block;
+  text-align: center;
+}
+.gl-cargo-detail-trigger strong {
+  font:
+    800 clamp(7px, 2.6cqw, 13px) Georgia,
+    serif;
+  letter-spacing: 0.04em;
+}
+.gl-cargo-detail-trigger small {
+  margin-top: 0.35dvh;
+  font-size: clamp(4px, 1.35cqw, 7px);
+  letter-spacing: 0.03em;
+}
+.gl-cargo-location-pill {
+  display: inline-block;
+  margin: 4px 0;
+  padding: 2px 5px;
+  border: 1px solid #5f8f74;
+  border-radius: 999px;
+  color: #b9f0c8;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+button.gl-cargo-move-trigger {
+  align-self: flex-start;
+  padding: 8px 10px;
+  border: 1px solid #74db9f;
+  border-radius: 6px;
+  background: #0d2f24;
+  color: #d8ffe8;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+.gl-custody-transfer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 420;
+  display: grid;
+  align-items: end;
+  padding: 12px;
+  background: #001a22bb;
+}
+.gl-custody-transfer-sheet {
+  width: min(420px, 100%);
+  margin: 0 auto;
+  padding: 14px;
+  border: 2px solid #e1b65c;
+  border-radius: 16px 16px 12px 12px;
+  background: linear-gradient(#0d2f2d, #04161d);
+  color: #eaf4ef;
+  box-shadow: 0 18px 40px #000a;
+}
+.gl-custody-transfer-sheet header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.gl-custody-transfer-sheet header p {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: #9db3a7;
+}
+.gl-custody-transfer-sheet header h3 {
+  margin: 0.2rem 0 0;
+  font:
+    700 1.2rem Georgia,
+    serif;
+}
+.gl-custody-transfer-sheet header button {
+  border: 0;
+  background: none;
+  color: #fff;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.gl-custody-transfer-copy {
+  margin: 0.8rem 0 0.9rem;
+  color: #d2e8de;
+  font-size: 0.92rem;
+}
+.gl-custody-transfer-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.gl-custody-transfer-actions button {
+  display: grid;
+  gap: 2px;
+  min-height: 58px;
+  padding: 10px;
+  border: 1px solid #5f8f74;
+  border-radius: 10px;
+  background: #08231f;
+  color: #eaf4ef;
+  text-align: left;
+  cursor: pointer;
+}
+.gl-custody-transfer-actions button strong {
+  font-size: 0.95rem;
+}
+.gl-custody-transfer-actions button small {
+  color: #9db3a7;
+  font-size: 0.72rem;
+}
+.gl-custody-transfer-actions button.is-current {
+  opacity: 0.55;
+  cursor: default;
+}
+.gl-custody-transfer-actions button:not(.is-current):active {
+  transform: translateY(1px);
+  background: #0f3a31;
+}
+.gl-custody-transfer-error {
+  margin: 0.8rem 0 0;
+  padding: 8px;
+  border: 1px solid #a85e4c;
+  border-radius: 6px;
+  background: #481a18a8;
+  color: #ffd9cd;
+  font-size: 0.82rem;
+}
+.gdp-shell .gl-custody-carousel-art {
+  position: absolute;
+  right: -4%;
+  bottom: 7.4dvh;
+  left: -4%;
+  width: 108%;
+  height: auto;
+  aspect-ratio: 971 / 1619;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.gdp-shell .gl-custody-carousel-meta {
+  bottom: 7.1dvh;
 }
