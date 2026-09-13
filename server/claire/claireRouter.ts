@@ -25,6 +25,28 @@ import {
 
 const uuid = z.string().uuid();
 
+function rethrowClairePhoneProviderError(error: unknown): never {
+  const providerError = error as {
+    status?: number;
+    code?: number;
+    message?: string;
+  };
+
+  if (providerError?.status === 401 || providerError?.code === 20003) {
+    console.error("[Claire] phone provider rejected configured credentials", {
+      status: providerError.status,
+      code: providerError.code,
+    });
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message:
+        "Claire's phone provider rejected its credentials. Update the Twilio Account SID and Auth Token in Railway.",
+    });
+  }
+
+  throw error;
+}
+
 async function assertClaireMissionAccess(input: {
   tenantId: string;
   missionId: number;
@@ -132,13 +154,17 @@ export const claireRouter = router({
         timeZone: z.string().trim().min(1).max(100).optional(),
       })
     )
-    .mutation(({ ctx, input }) =>
-      startClairePreDriveCall({
-        tenantId: ctx.tenantId,
-        actorId: ctx.user.openId,
-        timeZone: input.timeZone,
-      })
-    ),
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await startClairePreDriveCall({
+          tenantId: ctx.tenantId,
+          actorId: ctx.user.openId,
+          timeZone: input.timeZone,
+        });
+      } catch (error) {
+        rethrowClairePhoneProviderError(error);
+      }
+    }),
 
   callAfterStop: dayforgeMissionFieldProcedure
     .input(
@@ -155,13 +181,17 @@ export const claireRouter = router({
         userId: ctx.user.openId,
         isAdmin,
       });
-      return startClairePostStopCall({
-        tenantId: ctx.tenantId,
-        actorId: ctx.user.openId,
-        missionId: input.missionId,
-        missionAccess: isAdmin ? "operator" : "field",
-        timeZone: input.timeZone,
-      });
+      try {
+        return await startClairePostStopCall({
+          tenantId: ctx.tenantId,
+          actorId: ctx.user.openId,
+          missionId: input.missionId,
+          missionAccess: isAdmin ? "operator" : "field",
+          timeZone: input.timeZone,
+        });
+      } catch (error) {
+        rethrowClairePhoneProviderError(error);
+      }
     }),
 
   scanReactivation: dayforgeChurnProcedure
