@@ -1,0 +1,548 @@
+/*
+ * DRIVER HOME — APPROVED PLAYABLE-WORLD COMPOSITION
+ *
+ * Acceptance target: the daily route should read as one illustrated game scene,
+ * not a dashboard layered over a background image. The world owns the screen;
+ * operational UI is allowed to occupy only the space it genuinely needs.
+ *
+ * This file intentionally loads after the legacy day-plan stylesheet and the
+ * world-tool stylesheet. It is a composition pass, not a new truth/runtime path.
+ */
+
+html,
+body,
+#root,
+.driver-day-home {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.driver-day-home {
+  background: #102b2a;
+}
+
+.gdp-shell,
+.gdp-shell.gdp-shell--forced-mobile {
+  width: 100%;
+  max-width: none;
+  min-height: 100svh;
+  margin: 0;
+  padding-bottom: calc(178px + env(safe-area-inset-bottom));
+  overflow: clip;
+  box-shadow: none;
+  background-color: #18362f;
+  background-image:
+    linear-gradient(180deg, rgba(255, 244, 201, 0.08), transparent 20%),
+    linear-gradient(90deg, rgba(20, 45, 39, 0.09), transparent 22%, transparent 78%, rgba(20, 45, 39, 0.09)),
+    var(--gdp-world);
+  background-position: center top;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+.gdp-shell::before {
+  background:
+    radial-gradient(circle at 50% 10%, rgba(255, 244, 188, 0.17), transparent 27%),
+    linear-gradient(180deg, transparent 0 68%, rgba(8, 28, 25, 0.11) 100%);
+}
+
+/* ---------- HEADER: title + date only. Claire/Manifest are world objects. ---------- */
+.gdp-header {
+  min-height: 142px;
+  padding: max(12px, env(safe-area-inset-top)) 106px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: center;
+  pointer-events: none;
+}
+
+.gdp-brand {
+  width: 100%;
+  color: #60491f;
+  text-shadow:
+    0 1px 0 rgba(255, 248, 218, 0.9),
+    0 3px 10px rgba(255, 236, 166, 0.5);
+}
+
+.gdp-brand > svg {
+  width: 25px;
+  height: 25px;
+  margin-bottom: 0;
+  color: #6b5429;
+  filter: drop-shadow(0 1px 0 rgba(255, 248, 218, 0.85));
+}
+
+.gdp-brand strong {
+  margin-top: 1px;
+  color: #4b391d;
+  font: 700 clamp(20px, 5.8vw, 28px) / 1 Georgia, serif;
+  letter-spacing: 0.035em;
+  white-space: nowrap;
+}
+
+.gdp-brand small {
+  margin-top: 5px;
+  color: #705a34;
+  font-size: 7px;
+  letter-spacing: 0.15em;
+  text-shadow: 0 1px rgba(255, 249, 226, 0.8);
+}
+
+.gdp-header > p:not(.gdp-authored-framing) {
+  margin: 7px 0 0;
+  color: #5f4d2f;
+  font: 700 10px/1.2 Georgia, serif;
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px rgba(255, 250, 228, 0.85);
+}
+
+/* These were useful diagnostics, but visually turn the world back into SaaS. */
+.gdp-counts,
+.gdp-summary,
+.gdp-chapter-invite,
+.gdp-trail-heading,
+.gdp-authored-framing,
+.gdp-mission-plan,
+.gdp-chapter-entry {
+  display: none !important;
+}
+
+/* Hidden functional hooks stay available to the diegetic Manifest/Overland art. */
+.gdp-import,
+.gdp-world-entry {
+  display: none !important;
+}
+
+/* ---------- DIEGETIC WORLD TOOLS ---------- */
+.gdp-world-tools {
+  position: absolute;
+  inset: 0;
+  z-index: 34;
+  pointer-events: none;
+}
+
+.gdp-world-tool {
+  position: absolute;
+}
+
+.gdp-claire-tool {
+  left: 2px;
+  top: max(18px, env(safe-area-inset-top));
+  width: clamp(112px, 31vw, 142px);
+  z-index: 38;
+}
+
+.gdp-claire-tool > img {
+  opacity: 0.98;
+  filter:
+    drop-shadow(0 12px 10px rgba(20, 27, 17, 0.42))
+    drop-shadow(0 0 12px rgba(255, 211, 72, 0.55));
+}
+
+.gdp-world-tool-state {
+  left: 19%;
+  bottom: 10%;
+  min-width: 62%;
+  padding: 3px 6px;
+  background: rgba(19, 70, 58, 0.92);
+  box-shadow:
+    0 4px 9px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    0 0 11px rgba(95, 255, 220, 0.3);
+  font-size: 6px;
+}
+
+.gdp-manifest-tool {
+  right: 2px;
+  top: max(22px, calc(env(safe-area-inset-top) + 4px));
+  width: clamp(88px, 24vw, 108px);
+  z-index: 37;
+}
+
+.gdp-manifest-tool > img {
+  filter:
+    drop-shadow(0 12px 10px rgba(35, 23, 4, 0.46))
+    drop-shadow(0 0 10px rgba(255, 191, 47, 0.5));
+}
+
+.gdp-manifest-live-copy {
+  left: 16%;
+  right: 10%;
+  bottom: 14%;
+  min-height: 25%;
+  padding: 3px 2px;
+}
+
+.gdp-manifest-live-copy b {
+  font-size: 7px;
+}
+
+.gdp-manifest-live-copy small {
+  font-size: 5px;
+}
+
+.gdp-overland-tool {
+  right: -2px;
+  top: 355px;
+  width: clamp(102px, 28vw, 124px);
+  z-index: 35;
+}
+
+.gdp-first-spark-tool {
+  right: -2px;
+  top: 650px;
+  width: clamp(108px, 29vw, 132px);
+  z-index: 35;
+}
+
+.gdp-overland-tool > img,
+.gdp-first-spark-tool > img {
+  filter:
+    drop-shadow(0 13px 11px rgba(27, 18, 4, 0.53))
+    drop-shadow(0 0 11px rgba(255, 187, 33, 0.56));
+}
+
+/* Vehicle key is another physical world tool, not a fixed browser widget. */
+.gdp-vehicle-key {
+  position: absolute;
+  left: 0;
+  top: 500px;
+  width: 58px;
+  height: 106px;
+  z-index: 36;
+  filter:
+    drop-shadow(0 10px 9px rgba(0, 0, 0, 0.5))
+    drop-shadow(0 0 7px rgba(255, 221, 127, 0.35));
+}
+
+/* ---------- THE DAILY LINE IS THE HERO ---------- */
+.gdp-route {
+  position: relative;
+  z-index: 2;
+  min-height: 780px;
+  margin-top: -22px;
+  padding: 102px 24px 220px 42px;
+  gap: 84px;
+  justify-content: flex-start;
+}
+
+.gdp-line {
+  z-index: 0;
+  left: 17%;
+  top: 44px;
+  width: 66%;
+  height: calc(100% - 120px);
+  opacity: 0.98;
+  filter:
+    drop-shadow(0 0 4px rgba(255, 207, 64, 0.92))
+    drop-shadow(0 0 10px rgba(255, 199, 42, 0.46));
+}
+
+.gdp-line path {
+  stroke: #fff3a8;
+  stroke-width: 2.5;
+}
+
+.gdp-line path:first-child {
+  stroke: #eeb53b;
+  stroke-width: 4.5;
+}
+
+.gdp-route-step {
+  display: contents;
+}
+
+/* Stops are landmarks attached to the line, not dashboard cards. */
+.gdp-stop {
+  position: relative;
+  z-index: 3;
+  width: min(68%, 286px);
+  min-height: 82px;
+  padding: 10px 11px 9px 27px;
+  border: 1px solid rgba(142, 103, 43, 0.88);
+  border-radius: 3px 9px 3px 9px;
+  background:
+    linear-gradient(118deg, rgba(255, 249, 226, 0.98), rgba(231, 211, 165, 0.97));
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 251, 230, 0.72),
+    0 9px 17px rgba(28, 22, 10, 0.3),
+    0 1px 0 rgba(255, 255, 255, 0.88);
+  backdrop-filter: none;
+}
+
+.gdp-stop--left {
+  align-self: flex-start;
+}
+
+.gdp-stop--right {
+  align-self: flex-end;
+}
+
+.gdp-stop--ready {
+  border-color: #c7912e;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 251, 230, 0.78),
+    0 0 16px rgba(255, 193, 54, 0.38),
+    0 9px 17px rgba(28, 22, 10, 0.32);
+}
+
+.gdp-stop::after {
+  bottom: -38px;
+  left: 51%;
+  font-size: 12px;
+  color: #fff0a1;
+  text-shadow:
+    0 0 8px #ffc442,
+    0 1px 2px #513000;
+}
+
+.gdp-node {
+  left: -15px;
+  top: -9px;
+  width: 31px;
+  height: 31px;
+  border-width: 2px;
+  font-size: 14px;
+  box-shadow:
+    0 0 0 1px #795522,
+    0 5px 7px rgba(19, 20, 10, 0.25),
+    0 0 10px rgba(255, 203, 75, 0.28);
+}
+
+.gdp-card-kicker {
+  justify-content: flex-start;
+  gap: 5px;
+  font-size: 8px;
+  letter-spacing: 0.055em;
+}
+
+.gdp-card-kicker strong {
+  display: none;
+}
+
+.gdp-card-copy h2 {
+  margin: 4px 0 2px;
+  font: 700 15px/1.08 Georgia, serif;
+  letter-spacing: -0.015em;
+}
+
+.gdp-stop-open {
+  min-height: 26px;
+  gap: 5px;
+}
+
+.gdp-stop-open svg {
+  width: 15px;
+  height: 15px;
+}
+
+.gdp-card-meta {
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.gdp-source {
+  display: none;
+}
+
+.gdp-complete {
+  margin-top: 4px;
+  font-size: 8px;
+}
+
+/* The avatar is a board piece standing on the route, not a thumbnail beside it. */
+.gdp-now {
+  position: relative;
+  z-index: 5;
+  align-self: center;
+  width: 74px;
+  height: 96px;
+  margin: -66px 0 -60px;
+  display: grid;
+  place-items: end center;
+  pointer-events: none;
+}
+
+.gdp-now::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 34px;
+  height: 13px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(255, 244, 164, 0.95), rgba(255, 190, 33, 0.58) 46%, transparent 72%);
+  filter: blur(1px);
+  box-shadow: 0 0 16px rgba(255, 198, 44, 0.66);
+}
+
+.gdp-now img {
+  position: relative;
+  z-index: 2;
+  width: 68px;
+  height: 112px;
+  object-fit: contain;
+  filter:
+    drop-shadow(0 5px 5px rgba(0, 0, 0, 0.5))
+    drop-shadow(0 0 6px rgba(255, 220, 111, 0.22));
+}
+
+/* Operational exceptions can still surface, but should not become the scene. */
+.gdp-load-error,
+.gdp-empty,
+.gdp-director {
+  position: relative;
+  z-index: 8;
+  width: min(82%, 330px);
+  align-self: center;
+  border-radius: 7px;
+  box-shadow: 0 8px 22px rgba(11, 23, 17, 0.34);
+}
+
+/* ---------- BOTTOM COMMAND STRIP ---------- */
+.gdp-next-up {
+  z-index: 70;
+  bottom: calc(68px + env(safe-area-inset-bottom));
+  width: min(calc(100% - 18px), 560px);
+  min-height: 72px;
+  padding: 9px 11px 9px 14px;
+  border: 2px solid #8b6630;
+  border-radius: 4px;
+  background:
+    linear-gradient(112deg, #f3dfb4, #fff1c9 58%, #d2b47a);
+  box-shadow:
+    0 0 0 4px rgba(29, 27, 20, 0.82),
+    0 -2px 0 rgba(230, 195, 116, 0.76),
+    0 7px 20px rgba(0, 0, 0, 0.42),
+    inset 0 0 0 2px rgba(255, 248, 220, 0.62);
+}
+
+.gdp-next-up small {
+  font-size: 7px;
+}
+
+.gdp-next-up strong {
+  font-size: 13px;
+}
+
+.gdp-next-up span {
+  font-size: 8px;
+}
+
+.gdp-next-up button {
+  width: 102px;
+  min-height: 42px;
+  border-color: #a67d35;
+  background: linear-gradient(180deg, #315c5b, #173f42);
+  color: #fff0bd;
+  font-size: 9px;
+}
+
+.gdp-game-nav {
+  z-index: 69;
+  width: 100%;
+  height: calc(64px + env(safe-area-inset-bottom));
+  padding: 2px 3px calc(2px + env(safe-area-inset-bottom));
+  border: 0;
+  border-top: 1px solid rgba(200, 158, 76, 0.62);
+  background:
+    linear-gradient(180deg, rgba(45, 38, 27, 0.97), rgba(18, 20, 17, 0.99));
+  box-shadow:
+    0 -8px 20px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 rgba(255, 221, 143, 0.2);
+}
+
+.gdp-game-nav button,
+.gdp-game-nav a {
+  gap: 3px;
+  border-right-color: rgba(201, 164, 91, 0.2);
+  color: #e7ce92;
+  font-size: 8px;
+  letter-spacing: 0.055em;
+}
+
+.gdp-game-nav svg {
+  width: 22px;
+  height: 22px;
+  color: #e6c56e;
+  filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.7));
+}
+
+.gdp-game-nav .is-active {
+  color: #fff0bc;
+  background: linear-gradient(180deg, rgba(141, 101, 34, 0.25), transparent);
+  outline: 0;
+  box-shadow: inset 0 2px 0 rgba(240, 192, 79, 0.76);
+}
+
+@media (max-width: 380px) {
+  .gdp-header {
+    min-height: 136px;
+    padding-inline: 96px;
+  }
+
+  .gdp-brand strong {
+    font-size: 19px;
+  }
+
+  .gdp-claire-tool {
+    width: 108px;
+  }
+
+  .gdp-manifest-tool {
+    width: 84px;
+  }
+
+  .gdp-route {
+    padding-left: 36px;
+    padding-right: 18px;
+  }
+
+  .gdp-stop {
+    width: 70%;
+  }
+
+  .gdp-overland-tool {
+    width: 100px;
+  }
+
+  .gdp-first-spark-tool {
+    width: 106px;
+  }
+}
+
+@media (min-width: 600px) {
+  .gdp-shell {
+    max-width: 520px;
+    margin-inline: auto;
+  }
+
+  .gdp-header {
+    padding-inline: 128px;
+  }
+
+  .gdp-route {
+    padding-inline: 54px 36px;
+  }
+
+  .gdp-stop {
+    width: 62%;
+  }
+
+  .gdp-game-nav {
+    width: min(100%, 520px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gdp-now img,
+  .gdp-line,
+  .gdp-world-tool {
+    transition: none !important;
+    animation: none !important;
+  }
+}
