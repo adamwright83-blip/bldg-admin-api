@@ -18,6 +18,7 @@ import {
 
 const DEBRIEF_PATH = "/api/claire/twilio/debrief";
 const CONFIRM_PATH = "/api/claire/twilio/confirm";
+const CLAIRE_VOICE = "Polly.Joanna-Neural";
 const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim() ?? "";
 const authToken = process.env.TWILIO_AUTH_TOKEN?.trim() ?? "";
 const fromNumber = process.env.CLAIRE_TWILIO_FROM_NUMBER?.trim() ?? "";
@@ -97,7 +98,28 @@ function assertMissionAccess(input: {
 
 function speakAndHangUp(text: string): string {
   const response = new twilio.twiml.VoiceResponse();
-  response.say({ voice: "Polly.Joanna" }, text);
+  const say = response.say(
+    { voice: CLAIRE_VOICE, language: "en-US" },
+    ""
+  );
+  say.prosody({ rate: "88%" }, text);
+  response.hangup();
+  return response.toString();
+}
+
+function preDriveTwiML(text: string): string {
+  const response = new twilio.twiml.VoiceResponse();
+  response.say(
+    { voice: CLAIRE_VOICE, language: "en-US" },
+    "Adam. Claire here."
+  );
+  response.pause({ length: 1 });
+  const say = response.say(
+    { voice: CLAIRE_VOICE, language: "en-US" },
+    ""
+  );
+  say.prosody({ rate: "88%" }, text);
+  response.pause({ length: 1 });
   response.hangup();
   return response.toString();
 }
@@ -138,7 +160,7 @@ export async function startClairePreDriveCall(input: {
   const call = await client!.calls.create({
     to,
     from: assertPhone(fromNumber),
-    twiml: speakAndHangUp(brief),
+    twiml: preDriveTwiML(brief),
     record: false,
   });
   return { callSid: call.sid, brief };
@@ -194,11 +216,11 @@ export async function startClairePostStopCall(input: {
     method: "POST",
   });
   gather.say(
-    { voice: "Polly.Joanna" },
+    { voice: CLAIRE_VOICE, language: "en-US" },
     `You're clear of ${context.mission.accountName}. Tell me what actually happened. I won't mark anything won, lost, or followed up unless you say it.`
   );
   response.say(
-    { voice: "Polly.Joanna" },
+    { voice: CLAIRE_VOICE, language: "en-US" },
     "I didn't catch a debrief. Nothing was changed."
   );
   response.hangup();
@@ -286,11 +308,11 @@ export function registerClaireRoutes(app: Express): void {
         method: "POST",
       });
       gather.say(
-        { voice: "Polly.Joanna" },
+        { voice: CLAIRE_VOICE, language: "en-US" },
         `I heard: ${proposal.summary}. I would record this as ${outcomeLabel(proposal.proposedOutcome)}. Say confirm to save that outcome, or cancel to leave only your raw debrief.`
       );
       response.say(
-        { voice: "Polly.Joanna" },
+        { voice: CLAIRE_VOICE, language: "en-US" },
         "No confirmation received. I kept your raw debrief, but did not record an outcome."
       );
       response.hangup();
