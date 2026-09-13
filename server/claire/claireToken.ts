@@ -26,6 +26,10 @@ export type ClaireTokenPayload =
   | ClaireDriveTokenPayload
   | ClaireApprovalTokenPayload;
 
+export type ClaireTokenInput =
+  | Omit<ClaireDriveTokenPayload, "v" | "exp">
+  | Omit<ClaireApprovalTokenPayload, "v" | "exp">;
+
 function secretOrThrow(explicit?: string): string {
   const secret = explicit ?? process.env.JWT_SECRET ?? "";
   if (!secret) throw new Error("JWT_SECRET is required for Claire call tokens");
@@ -36,8 +40,8 @@ function signature(body: string, secret: string): string {
   return createHmac("sha256", secret).update(body).digest("base64url");
 }
 
-export function issueClaireToken<T extends Omit<ClaireTokenPayload, "v" | "exp">>(
-  payload: T,
+export function issueClaireToken(
+  payload: ClaireTokenInput,
   options?: { ttlSeconds?: number; nowMs?: number; secret?: string }
 ): string {
   const nowMs = options?.nowMs ?? Date.now();
