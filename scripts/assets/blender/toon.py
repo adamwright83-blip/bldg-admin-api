@@ -116,3 +116,53 @@ def add_outline(obj, thickness=0.022):
     mod.use_rim = False
     mod.material_offset = len(obj.data.materials) - 1
     mod.material_offset_rim = len(obj.data.materials) - 1
+
+
+def toon_textured_material(name, image):
+    """
+    Cel shading that keeps a baked colour texture.
+
+    Image-to-3D output carries its colour in a baked texture, not a flat base
+    colour. The flat-colour path reads Principled Base Color's default value,
+    which is meaningless when a texture is linked into it, so a green-and-red
+    Rook would come out uniform grey. Here the bands only decide light level and
+    the texture decides colour: grey bands MULTIPLY the texture. Multiplying is
+    safe in this path because the colour lives in the texture, not in a
+    near-black base value.
+    """
+    key = f"toon_tex_{name}"
+    if key in bpy.data.materials:
+        return bpy.data.materials[key]
+    mat = bpy.data.materials.new(key)
+    mat.use_nodes = True
+    nt = mat.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new("ShaderNodeOutputMaterial"); out.location = (800, 0)
+
+    diffuse = nt.nodes.new("ShaderNodeBsdfDiffuse"); diffuse.location = (-300, 0)
+    diffuse.inputs["Color"].default_value = (1, 1, 1, 1)
+    to_rgb = nt.nodes.new("ShaderNodeShaderToRGB"); to_rgb.location = (-100, 0)
+    nt.links.new(diffuse.outputs["BSDF"], to_rgb.inputs["Shader"])
+
+    ramp = nt.nodes.new("ShaderNodeValToRGB"); ramp.location = (100, 0)
+    ramp.color_ramp.interpolation = "CONSTANT"
+    els = ramp.color_ramp.elements
+    while len(els) > 1:
+        els.remove(els[-1])
+    els[0].position, els[0].color = 0.00, (0.56, 0.58, 0.64, 1)   # cool shadow band
+    e = els.new(0.34); e.color = (0.86, 0.86, 0.86, 1)
+    e = els.new(0.66); e.color = (1.06, 1.03, 0.97, 1)           # warm lit band
+    nt.links.new(to_rgb.outputs["Color"], ramp.inputs["Fac"])
+
+    tex = nt.nodes.new("ShaderNodeTexImage"); tex.location = (100, -260)
+    tex.image = image
+    mix = nt.nodes.new("ShaderNodeMixRGB"); mix.location = (400, 0)
+    mix.blend_type = "MULTIPLY"
+    mix.inputs["Fac"].default_value = 1.0
+    nt.links.new(ramp.outputs["Color"], mix.inputs["Color1"])
+    nt.links.new(tex.outputs["Color"], mix.inputs["Color2"])
+
+    emit = nt.nodes.new("ShaderNodeEmission"); emit.location = (600, 0)
+    nt.links.new(mix.outputs["Color"], emit.inputs["Color"])
+    nt.links.new(emit.outputs["Emission"], out.inputs["Surface"])
+    return mat

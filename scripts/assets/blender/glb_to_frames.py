@@ -16,7 +16,7 @@ import bpy, sys, os, json, math, argparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from rig import build_rig, normalize, TARGET_HEIGHT, AZIMUTH
-from toon import toon_material, add_outline
+from toon import toon_material, toon_textured_material, add_outline
 
 
 def clear():
@@ -44,13 +44,27 @@ def apply_toon(objects):
             if not m:
                 continue
             rgba = (0.6, 0.6, 0.6, 1)
+            image = None
             try:
-                bsdf = m.node_tree.nodes.get("Principled BSDF")
+                nodes = m.node_tree.nodes
+                bsdf = nodes.get("Principled BSDF")
                 if bsdf:
                     rgba = tuple(bsdf.inputs["Base Color"].default_value)
+                    base = bsdf.inputs["Base Color"]
+                    if base.is_linked and base.links[0].from_node.type == "TEX_IMAGE":
+                        image = base.links[0].from_node.image
+                if image is None:
+                    # glTF import sometimes routes colour through an intermediate
+                    # node; any colour image on the material is the albedo here.
+                    for n in nodes:
+                        if n.type == "TEX_IMAGE" and n.image and "normal" not in n.image.name.lower() \
+                                and "rough" not in n.image.name.lower() and "metal" not in n.image.name.lower():
+                            image = n.image
+                            break
             except Exception:
                 pass
-            swapped.append(toon_material(m.name.replace("gl_", ""), rgba))
+            name = m.name.replace("gl_", "")
+            swapped.append(toon_textured_material(name, image) if image else toon_material(name, rgba))
         if not swapped:
             swapped = [toon_material("default", (0.6, 0.6, 0.6, 1))]
         obj.data.materials.clear()
