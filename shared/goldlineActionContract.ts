@@ -1,7 +1,23 @@
-import type {
-  GoldlineActionDescriptor,
-  GoldlineActionKind,
-} from "../client/src/game/actions/actionRegistry";
+export const GOLDLINE_ACTION_KINDS = [
+  "CALL",
+  "VISIT",
+  "FOLLOW_UP",
+  "RECOVER",
+  "SCOUT",
+  "REVIEW",
+  "WAIT",
+  "PICKUP",
+  "DELIVERY",
+] as const;
+
+export type GoldlineActionKind = (typeof GOLDLINE_ACTION_KINDS)[number];
+
+export type GoldlineActionDescriptorLike = {
+  kind: GoldlineActionKind;
+  mode: "write" | "external" | "read";
+  missionId: number | null;
+  label: string;
+};
 
 export const GOLDLINE_AUTHORITIES = [
   "AUTO",
@@ -40,7 +56,7 @@ export type GoldlineActionTarget = {
 
 export type CanonicalGoldlineAction = {
   actionId: string;
-  kind: string;
+  kind: GoldlineActionKind;
   target: GoldlineActionTarget;
   reason: string;
   authority: GoldlineAuthority;
@@ -101,7 +117,7 @@ export function defaultAuthorityForGoldlineAction(
 }
 
 export function canonicalActionFromDescriptor(input: {
-  descriptor: GoldlineActionDescriptor;
+  descriptor: GoldlineActionDescriptorLike;
   reason: string;
   target?: GoldlineActionTarget;
   sourceReferences?: string[];
