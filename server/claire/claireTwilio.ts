@@ -16,6 +16,7 @@ const CONFIRM_PATH = "/api/claire/twilio/confirm";
 const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim() ?? "";
 const authToken = process.env.TWILIO_AUTH_TOKEN?.trim() ?? "";
 const fromNumber = process.env.CLAIRE_TWILIO_FROM_NUMBER?.trim() ?? "";
+const operatorNumber = process.env.CLAIRE_OPERATOR_PHONE?.trim() ?? "";
 const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
 
 function publicBaseUrl(): string {
@@ -37,11 +38,16 @@ function assertPhone(value: string): string {
 }
 
 function assertTwilioConfigured(): void {
-  if (!client || !fromNumber) {
+  if (!client || !fromNumber || !operatorNumber) {
     throw new Error(
-      "Claire calling is not configured (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and CLAIRE_TWILIO_FROM_NUMBER are required)"
+      "Claire calling is not configured (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, CLAIRE_TWILIO_FROM_NUMBER, and CLAIRE_OPERATOR_PHONE are required)"
     );
   }
+}
+
+function configuredOperatorPhone(): string {
+  assertTwilioConfigured();
+  return assertPhone(operatorNumber);
 }
 
 function stableRequestId(callSid: string, suffix: string): string {
@@ -99,11 +105,9 @@ function outcomeLabel(outcome: string): string {
 export async function startClairePreDriveCall(input: {
   tenantId: string;
   actorId: string;
-  operatorPhone: string;
   timeZone?: string;
 }): Promise<{ callSid: string; brief: string }> {
-  assertTwilioConfigured();
-  const to = assertPhone(input.operatorPhone);
+  const to = configuredOperatorPhone();
   const context = await assembleClaireDriveContext({
     tenantId: input.tenantId,
     actorId: input.actorId,
@@ -126,12 +130,10 @@ export async function startClairePreDriveCall(input: {
 export async function startClairePostStopCall(input: {
   tenantId: string;
   actorId: string;
-  operatorPhone: string;
   missionId: number;
   timeZone?: string;
 }): Promise<{ callSid: string }> {
-  assertTwilioConfigured();
-  const to = assertPhone(input.operatorPhone);
+  const to = configuredOperatorPhone();
   const context = await assembleClaireDriveContext({
     tenantId: input.tenantId,
     actorId: input.actorId,
