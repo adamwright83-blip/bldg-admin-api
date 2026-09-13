@@ -1,0 +1,85 @@
+/*
+ * Physical-phone fallback for browsers that expose a desktop-sized layout
+ * viewport. Keep proportional vw sizing here because the browser page-scale
+ * converts these values back to readable physical dimensions.
+ */
+.gdp-shell.gdp-shell--forced-mobile .gdp-claire-tool {
+  left: 0.5vw !important;
+  top: 4.5vw !important;
+  width: 31vw !important;
+}
+
+.gdp-shell.gdp-shell--forced-mobile .gdp-manifest-tool {
+  right: 0.5vw !important;
+  top: 5.5vw !important;
+  width: 24vw !important;
+}
+
+.gdp-shell.gdp-shell--forced-mobile .gdp-overland-tool {
+  right: -0.5vw !important;
+  top: 89vw !important;
+  width: 28vw !important;
+}
+
+.gdp-shell.gdp-shell--forced-mobile .gdp-first-spark-tool {
+  right: -0.5vw !important;
+  top: 162vw !important;
+  width: 29vw !important;
+}
+
+.gdp-shell.gdp-shell--forced-mobile .gdp-vehicle-key {
+  left: 0 !important;
+  top: 125vw !important;
+  width: 15vw !important;
+  height: 27vw !important;
+}
+
+.gdp-shell.gdp-shell--forced-mobile .gdp-world-tool-state {
+  padding: 0.8vw 1.4vw;
+  font-size: 2vw;
+}
+
+.gdp-shell.gdp-shell--forced-mobile .gdp-manifest-live-copy {
+  padding: 0.8vw 0.5vw;
+}
+
+.gdp-shell.gdp-shell--forced-mobile .gdp-manifest-live-copy b {
+  font-size: 2.2vw;
+}
+
+.gdp-shell.gdp-shell--forced-mobile .gdp-manifest-live-copy small {
+  font-size: 1.7vw;
+}
+
+.gdp-shell.gdp-shell--forced-mobile .gdp-chapter-entry {
+  left: 2vw;
+  top: 180vw;
+  width: 43vw;
+  min-height: 16vw;
+  grid-template-columns: 8vw 1fr;
+  gap: 2vw;
+  padding: 2.3vw 2.5vw 2.3vw 3vw;
+  border-width: 0.3vw;
+  border-radius: 2vw 0.8vw 2vw 0.8vw;
+}
+
+.gdp-shell.gdp-shell--forced-mobile .gdp-chapter-entry::before {
+  width: 8vw;
+  height: 9vw;
+  font-size: 3.6vw;
+}
+
+.gdp-shell.gdp-shell--forced-mobile .gdp-chapter-entry::after {
+  font-size: 3.1vw;
+  line-height: 1.18;
+}
+
+/* Preserve the P1-readable stop/navigation sizes from the earlier safety file. */
+.gdp-shell.gdp-shell--forced-mobile .gdp-stop--left,
+.gdp-shell.gdp-shell--forced-mobile .gdp-stop--right {
+  transform: none;
+}
+
+.gdp-shell.gdp-shell--forced-mobile .gdp-next-up {
+  bottom: calc(17vw + env(safe-area-inset-bottom));
+}
