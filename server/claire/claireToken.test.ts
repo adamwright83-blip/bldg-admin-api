@@ -11,6 +11,7 @@ describe("Claire call tokens", () => {
         tenantId: "tenant-1",
         userId: "adam",
         missionId: 42,
+        missionAccess: "field",
         phase: "post_stop",
       },
       { secret, nowMs: 1_000_000, ttlSeconds: 60 }
@@ -20,6 +21,7 @@ describe("Claire call tokens", () => {
       tenantId: "tenant-1",
       userId: "adam",
       missionId: 42,
+      missionAccess: "field",
       phase: "post_stop",
     });
   });
@@ -31,6 +33,7 @@ describe("Claire call tokens", () => {
         tenantId: "tenant-1",
         userId: "adam",
         missionId: 42,
+        missionAccess: "field",
         phase: "post_stop",
       },
       { secret, nowMs: 1_000_000 }
@@ -47,6 +50,7 @@ describe("Claire call tokens", () => {
         tenantId: "tenant-1",
         userId: "adam",
         missionId: 42,
+        missionAccess: "field",
         phase: "post_stop",
       },
       { secret, nowMs: 1_000_000, ttlSeconds: 1 }
