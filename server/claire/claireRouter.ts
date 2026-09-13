@@ -87,7 +87,6 @@ export const claireRouter = router({
   callBeforeDrive: dayforgeTenantMemberProcedure
     .input(
       z.object({
-        operatorPhone: z.string().trim().min(8).max(32),
         timeZone: z.string().trim().min(1).max(100).optional(),
       })
     )
@@ -95,7 +94,6 @@ export const claireRouter = router({
       startClairePreDriveCall({
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,
-        operatorPhone: input.operatorPhone,
         timeZone: input.timeZone,
       })
     ),
@@ -103,7 +101,6 @@ export const claireRouter = router({
   callAfterStop: dayforgeTenantMemberProcedure
     .input(
       z.object({
-        operatorPhone: z.string().trim().min(8).max(32),
         missionId: z.number().int().positive(),
         timeZone: z.string().trim().min(1).max(100).optional(),
       })
@@ -112,7 +109,6 @@ export const claireRouter = router({
       startClairePostStopCall({
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,
-        operatorPhone: input.operatorPhone,
         missionId: input.missionId,
         timeZone: input.timeZone,
       })
