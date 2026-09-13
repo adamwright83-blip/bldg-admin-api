@@ -1,6 +1,6 @@
 {
  "generatedBy": "npm run assets:scan",
- "count": 656,
+ "count": 680,
  "assets": [
   {
    "url": "/assets/admin/control-room/brand/goldline-admin-crest.svg",
@@ -2989,6 +2989,222 @@
    "format": "webp",
    "width": 360,
    "height": 203
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-01.png",
+   "root": "public",
+   "bytes": 152520,
+   "sha256": "458de04b3d6d153e",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-02.png",
+   "root": "public",
+   "bytes": 152661,
+   "sha256": "96bbed161ab39648",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-03.png",
+   "root": "public",
+   "bytes": 153243,
+   "sha256": "4d790c6ea57e9317",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-04.png",
+   "root": "public",
+   "bytes": 153035,
+   "sha256": "83b415d4e84e6464",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-05.png",
+   "root": "public",
+   "bytes": 153074,
+   "sha256": "6abcca06d0a77646",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-06.png",
+   "root": "public",
+   "bytes": 153100,
+   "sha256": "fe360808510d54cb",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-07.png",
+   "root": "public",
+   "bytes": 152964,
+   "sha256": "715a0aa1c2f33a59",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-08.png",
+   "root": "public",
+   "bytes": 153100,
+   "sha256": "81a4d0c9811dea10",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-09.png",
+   "root": "public",
+   "bytes": 153074,
+   "sha256": "324c8de212904e8b",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-10.png",
+   "root": "public",
+   "bytes": 153035,
+   "sha256": "3af549730964cdd2",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-11.png",
+   "root": "public",
+   "bytes": 153243,
+   "sha256": "93098279d380ddf5",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-12.png",
+   "root": "public",
+   "bytes": 152661,
+   "sha256": "260d7f4d03a3ae81",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-13.png",
+   "root": "public",
+   "bytes": 152520,
+   "sha256": "6cc88f41f2b6787a",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-14.png",
+   "root": "public",
+   "bytes": 152951,
+   "sha256": "6af4a9977945433e",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-15.png",
+   "root": "public",
+   "bytes": 152561,
+   "sha256": "4b882d5672c0f86d",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-16.png",
+   "root": "public",
+   "bytes": 152708,
+   "sha256": "7e00e47f98184c3a",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-17.png",
+   "root": "public",
+   "bytes": 152379,
+   "sha256": "f1f3af9928f24818",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-18.png",
+   "root": "public",
+   "bytes": 152233,
+   "sha256": "f119f651b0c3f0ec",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-19.png",
+   "root": "public",
+   "bytes": 152298,
+   "sha256": "3780619745d21485",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-20.png",
+   "root": "public",
+   "bytes": 152233,
+   "sha256": "eccdbb9d55cf3ead",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-21.png",
+   "root": "public",
+   "bytes": 152379,
+   "sha256": "8118983d753896f0",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-22.png",
+   "root": "public",
+   "bytes": 152708,
+   "sha256": "5a19faa5b64e7114",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-23.png",
+   "root": "public",
+   "bytes": 152561,
+   "sha256": "217210e48f737133",
+   "format": "png",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "url": "/assets/goldline/companions/rook/rook-idle-24.png",
+   "root": "public",
+   "bytes": 152951,
+   "sha256": "7f5a9b2eaf83a666",
+   "format": "png",
+   "width": 512,
+   "height": 512
   },
   {
    "url": "/assets/goldline/companions/rook-concept-v1.png",
