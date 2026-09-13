@@ -187,7 +187,7 @@
   z-index: 56;
 }
 
-html[data-goldline-first-spark-available="false"] .gdp-first-spark-tool {
+html:not([data-goldline-first-spark-available="true"]) .gdp-first-spark-tool {
   display: none;
 }
 
