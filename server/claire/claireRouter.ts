@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   approveCustomerRecoveryDraft,
@@ -14,6 +15,8 @@ import {
   router,
 } from "../_core/trpc";
 import type { CanonicalGoldlineAction } from "../../shared/goldlineActionContract";
+import { assertDriverCanReadMission } from "../commercialMissions/commercialMissionAuthorization";
+import { getCommercialMission } from "../commercialMissions/commercialMissionStore";
 import { assembleClaireDriveContext } from "./contextAssembler";
 import {
   startClairePostStopCall,
@@ -21,6 +24,36 @@ import {
 } from "./claireTwilio";
 
 const uuid = z.string().uuid();
+
+async function assertClaireMissionAccess(input: {
+  tenantId: string;
+  missionId: number;
+  userId: string;
+  isAdmin: boolean;
+}): Promise<void> {
+  const mission = await getCommercialMission({
+    tenantId: input.tenantId,
+    missionId: input.missionId,
+  });
+  if (!mission) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Commercial mission not found",
+    });
+  }
+  try {
+    assertDriverCanReadMission({
+      mission,
+      userId: input.userId,
+      isAdmin: input.isAdmin,
+    });
+  } catch (error) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: (error as Error).message,
+    });
+  }
+}
 
 function recoveryAction(
   detail: NonNullable<Awaited<ReturnType<typeof getRecoveryInterventionDetail>>>
@@ -75,15 +108,23 @@ export const claireRouter = router({
         timeZone: z.string().trim().min(1).max(100).optional(),
       })
     )
-    .query(({ ctx, input }) =>
-      assembleClaireDriveContext({
+    .query(async ({ ctx, input }) => {
+      if (input.missionId != null) {
+        await assertClaireMissionAccess({
+          tenantId: ctx.tenantId,
+          missionId: input.missionId,
+          userId: ctx.user.openId,
+          isAdmin: ctx.dayforgeMembership.role !== "field",
+        });
+      }
+      return assembleClaireDriveContext({
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,
         phase: input.phase,
         missionId: input.missionId,
         timeZone: input.timeZone,
-      })
-    ),
+      });
+    }),
 
   callBeforeDrive: dayforgeMissionFieldProcedure
     .input(
@@ -106,14 +147,22 @@ export const claireRouter = router({
         timeZone: z.string().trim().min(1).max(100).optional(),
       })
     )
-    .mutation(({ ctx, input }) =>
-      startClairePostStopCall({
+    .mutation(async ({ ctx, input }) => {
+      const isAdmin = ctx.dayforgeMembership.role !== "field";
+      await assertClaireMissionAccess({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+        userId: ctx.user.openId,
+        isAdmin,
+      });
+      return startClairePostStopCall({
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,
         missionId: input.missionId,
+        missionAccess: isAdmin ? "operator" : "field",
         timeZone: input.timeZone,
-      })
-    ),
+      });
+    }),
 
   scanReactivation: dayforgeChurnProcedure
     .input(z.object({ requestId: uuid }))
