@@ -1,12 +1,15 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { ClaireDebriefProposal } from "./reasoning";
 
+export type ClaireMissionAccess = "field" | "operator";
+
 export type ClaireDriveTokenPayload = {
   v: 1;
   kind: "drive_call";
   tenantId: string;
   userId: string;
   missionId: number;
+  missionAccess: ClaireMissionAccess;
   phase: "post_stop";
   exp: number;
 };
@@ -17,6 +20,7 @@ export type ClaireApprovalTokenPayload = {
   tenantId: string;
   userId: string;
   missionId: number;
+  missionAccess: ClaireMissionAccess;
   requestId: string;
   proposal: ClaireDebriefProposal;
   exp: number;
@@ -80,6 +84,7 @@ export function verifyClaireToken(
     typeof parsed.tenantId !== "string" ||
     typeof parsed.userId !== "string" ||
     typeof parsed.missionId !== "number" ||
+    (parsed.missionAccess !== "field" && parsed.missionAccess !== "operator") ||
     (parsed.kind !== "drive_call" && parsed.kind !== "debrief_approval")
   ) {
     throw new Error("Claire token payload is invalid");
