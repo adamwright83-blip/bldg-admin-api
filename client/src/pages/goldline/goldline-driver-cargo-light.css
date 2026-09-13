@@ -1,0 +1,184 @@
+/* Vehicle/custody surfaces inherit the driver's light adventure language. */
+body .gdp-vehicle-key span {
+  color: #4d381b !important;
+  background: rgba(255, 244, 207, 0.94) !important;
+  border-color: rgba(143, 99, 33, 0.58) !important;
+  box-shadow: 0 3px 7px rgba(65, 43, 9, 0.18);
+}
+
+body .gl-cargo-cta--floating {
+  color: #3d2e1b !important;
+  background: rgba(255, 246, 216, 0.96) !important;
+  border-color: #9e7837 !important;
+  box-shadow: 0 8px 24px rgba(68, 47, 13, 0.2) !important;
+}
+
+body .gdp-garage .gl-cargo-hero-art {
+  background: rgba(255, 248, 220, 0.32) !important;
+  border-color: rgba(151, 108, 43, 0.42) !important;
+  box-shadow: 0 10px 24px rgba(73, 49, 12, 0.12) !important;
+}
+
+body .gdp-garage .gl-cargo-detail-trigger,
+body .gdp-garage .gl-cargo-cta--hero > span {
+  color: #3c2c18 !important;
+  background: linear-gradient(180deg, rgba(255, 249, 226, 0.97), rgba(224, 197, 139, 0.97)) !important;
+  border-color: #987035 !important;
+  text-shadow: none !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75) !important;
+}
+
+body .gdp-garage .gl-cargo-garment-name {
+  color: #3b2a15 !important;
+  background: rgba(255, 244, 206, 0.94) !important;
+  border-color: rgba(151, 105, 34, 0.62) !important;
+}
+
+body .gdp-garage .gl-custody-carousel-nav {
+  background: rgba(255, 247, 216, 0.94) !important;
+  color: #5a411e !important;
+  border-color: rgba(151, 105, 34, 0.58) !important;
+  box-shadow: 0 2px 8px rgba(72, 47, 10, 0.2) !important;
+}
+
+body .gdp-garage .gl-custody-carousel-label {
+  color: #4b381d !important;
+  text-shadow: 0 1px rgba(255, 250, 226, 0.8) !important;
+}
+
+body .gdp-garage .gl-custody-carousel-dots button {
+  background: #f3e2b4 !important;
+  border-color: #a87d34 !important;
+}
+
+body .gdp-garage .gl-custody-carousel-dots button i {
+  background: #9f8c62 !important;
+}
+
+body .gdp-garage .gl-custody-carousel-dots button.is-active i {
+  background: #598354 !important;
+  box-shadow: 0 0 7px rgba(70, 122, 63, 0.42) !important;
+}
+
+body .gdp-garage .gl-custody-carousel-hint {
+  color: #6d5a38 !important;
+}
+
+/* Full cargo detail view. */
+body .gl-cargo-view {
+  color: #352819 !important;
+  background:
+    radial-gradient(circle at 50% 18%, #fff9df, #f1ddb0 58%, #dbc28a 100%) !important;
+}
+
+body .gl-cargo-view header button {
+  color: #5a411e !important;
+}
+
+body .gl-cargo-question,
+body .gl-cargo-list em,
+body .gl-cargo-unlinked,
+body button.gl-cargo-edit-trigger {
+  color: #6c5226 !important;
+}
+
+body .gl-cargo-list article,
+body .gl-unassigned article {
+  border-top-color: rgba(121, 86, 31, 0.2) !important;
+}
+
+body .gl-cargo-unlinked {
+  border-color: rgba(154, 111, 43, 0.58) !important;
+}
+
+body .is-focused-entry {
+  background: rgba(223, 182, 81, 0.12) !important;
+  box-shadow: inset 3px 0 0 #b8872f !important;
+}
+
+body button.gl-cargo-edit-trigger {
+  border-color: rgba(161, 116, 39, 0.55) !important;
+  background: rgba(255, 248, 221, 0.72) !important;
+}
+
+body .gl-cargo-edit-form label {
+  color: #6b5938 !important;
+}
+
+body .gl-cargo-edit-form input,
+body .gl-cargo-edit-form select {
+  color: #352819 !important;
+  background: rgba(255, 252, 239, 0.94) !important;
+  border-color: rgba(137, 102, 50, 0.45) !important;
+}
+
+body .gl-cargo-edit-actions button {
+  color: #4f3d22 !important;
+  background: rgba(255, 248, 221, 0.72) !important;
+  border-color: rgba(127, 94, 44, 0.42) !important;
+}
+
+body .gl-cargo-view footer {
+  color: #6b5b3c !important;
+}
+
+body .gl-cargo-location-pill {
+  color: #4f6c44 !important;
+  border-color: #6f9869 !important;
+}
+
+body button.gl-cargo-move-trigger,
+body button.gl-cargo-deliver-trigger {
+  color: #35503c !important;
+  background: rgba(245, 238, 204, 0.94) !important;
+  border-color: #759367 !important;
+}
+
+/* Custody transfer sheet becomes a light bottom sheet, not a dark-mode detour. */
+body .gl-custody-transfer-backdrop {
+  background: rgba(83, 62, 24, 0.22) !important;
+  backdrop-filter: blur(4px);
+}
+
+body .gl-custody-transfer-sheet {
+  color: #382a19 !important;
+  background: linear-gradient(#fff6d9, #e6cf9c) !important;
+  border-color: #ad8134 !important;
+  box-shadow: 0 18px 42px rgba(73, 49, 13, 0.24) !important;
+}
+
+body .gl-custody-transfer-sheet header p,
+body .gl-custody-transfer-copy,
+body .gl-custody-transfer-actions button small {
+  color: #6b5938 !important;
+}
+
+body .gl-custody-transfer-sheet header button {
+  color: #5a411e !important;
+}
+
+body .gl-custody-transfer-actions button {
+  color: #3d2f1d !important;
+  background: rgba(255, 250, 229, 0.82) !important;
+  border-color: rgba(123, 91, 42, 0.42) !important;
+}
+
+body .gl-custody-transfer-actions button:not(.is-current):active {
+  background: #f1deb0 !important;
+}
+
+body .gl-custody-deliver-btn {
+  color: #fff4ce !important;
+  background: linear-gradient(160deg, #5f8060, #3e654c) !important;
+  border-color: #668b62 !important;
+}
+
+body .gl-custody-deliver-note,
+body .gl-custody-transfer-error {
+  color: #7d3e2a !important;
+}
+
+body .gl-custody-transfer-error {
+  background: rgba(174, 90, 56, 0.1) !important;
+  border-color: rgba(153, 72, 42, 0.28) !important;
+}
