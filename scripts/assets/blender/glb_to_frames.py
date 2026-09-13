@@ -193,4 +193,8 @@ def main():
     print("FRAMES " + json.dumps({k: len(v) for k, v in states.items()}))
 
 
-main()
+
+
+# Guarded so other pipeline scripts can reuse import_glb and bake_state.
+if __name__ == "__main__":
+    main()
