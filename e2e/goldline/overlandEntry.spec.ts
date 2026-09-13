@@ -10,24 +10,31 @@ async function login(page: Page) {
 }
 
 test.describe("canonical driver entry", () => {
-  test("a fresh driver session begins on Overland, not inside Clockhead", async ({
+  test("a fresh driver session begins on Today's Day Plan and enters Overland deliberately", async ({
     page,
   }) => {
     await login(page);
     await page.goto("/driver");
 
-    await expect(
-      page.getByRole("region", { name: "Goldline global overworld" })
-    ).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId("goldline-shell")).toHaveCount(0);
-    await expect(page.getByText("CLOCKHEAD", { exact: false })).toHaveCount(0);
-
-    await page.getByRole("button", { name: "Open Field Operations" }).click();
-    await expect(page.getByTestId("goldline-shell")).toBeVisible({
+    // The real day is now the canonical home. Neither the traversal renderer
+    // nor Overland should swallow the route before the operator chooses them.
+    await expect(page.getByTestId("driver-day-home")).toBeVisible({
       timeout: 30_000,
     });
+    await expect(page.locator(".gdp-shell")).toBeVisible();
+    await expect(page.getByTestId("goldline-shell")).toHaveCount(0);
     await expect(
       page.getByRole("region", { name: "Goldline global overworld" })
     ).toHaveCount(0);
+    await expect(page.getByText("CLOCKHEAD", { exact: false })).toHaveCount(0);
+
+    // World entry is now a deliberate action from Today, not the default boot
+    // surface and not an old Field Operations dashboard detour.
+    await page.getByRole("button", { name: /ENTER THE WORLD/i }).click();
+    await expect(
+      page.getByRole("region", { name: "Goldline global overworld" })
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("driver-day-home")).toHaveCount(0);
+    await expect(page.getByTestId("goldline-shell")).toHaveCount(0);
   });
 });
