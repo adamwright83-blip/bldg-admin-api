@@ -12,6 +12,8 @@ import "./goldline/goldline-legibility.css";
 import "./goldline/goldline-live-fix.css";
 import "./goldline/goldline-import-overlay.css";
 import "./goldline/goldline-day-plan-concept.css";
+import "./goldline/goldline-day-plan-p1-fixes.css";
+import "./goldline/goldline-day-plan-p1-followup.css";
 
 const WaywardTetheredDeck = lazy(
   () => import("./goldline/stages/WaywardTetheredDeck")

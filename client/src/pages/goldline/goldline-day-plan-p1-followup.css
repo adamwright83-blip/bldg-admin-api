@@ -1,0 +1,11 @@
+/* Follow-up to the PR #122 P1 repair: production renders the Kingdom 2 CTA
+   as a plain-text button, so size the button itself rather than relying on
+   nested label markup. Keep this after the main P1 safety overrides. */
+.gdp-shell .gdp-chapter-entry {
+  font: 700 11px/1.15 Georgia, serif;
+}
+
+.gdp-shell--forced-mobile .gdp-chapter-entry {
+  font-size: 3.3vw;
+  line-height: 1.15;
+}
