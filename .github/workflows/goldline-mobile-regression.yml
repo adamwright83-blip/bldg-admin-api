@@ -1,6 +1,9 @@
 name: Goldline mobile regression
 
 on:
+  push:
+    branches:
+      - "codex/verify-goldline-mobile-main"
   pull_request:
     paths:
       - "client/src/game/**"
