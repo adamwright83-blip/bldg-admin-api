@@ -8,7 +8,11 @@ import {
   prepareCustomerRecoveryManualContact,
   runCustomerChurnScan,
 } from "../churnRadar/customerChurnService";
-import { dayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import {
+  dayforgeChurnProcedure,
+  dayforgeTenantMemberProcedure,
+  router,
+} from "../_core/trpc";
 import type { CanonicalGoldlineAction } from "../../shared/goldlineActionContract";
 import { assembleClaireDriveContext } from "./contextAssembler";
 import {
@@ -18,7 +22,9 @@ import {
 
 const uuid = z.string().uuid();
 
-function recoveryAction(detail: NonNullable<Awaited<ReturnType<typeof getRecoveryInterventionDetail>>>): CanonicalGoldlineAction {
+function recoveryAction(
+  detail: NonNullable<Awaited<ReturnType<typeof getRecoveryInterventionDetail>>>
+): CanonicalGoldlineAction {
   const completed = detail.status === "recovered";
   const contacted = detail.status === "contacted";
   return {
@@ -112,7 +118,7 @@ export const claireRouter = router({
       })
     ),
 
-  scanReactivation: dayforgeTenantMemberProcedure
+  scanReactivation: dayforgeChurnProcedure
     .input(z.object({ requestId: uuid }))
     .mutation(({ ctx, input }) =>
       runCustomerChurnScan({
@@ -122,7 +128,7 @@ export const claireRouter = router({
       })
     ),
 
-  prepareReactivation: dayforgeTenantMemberProcedure
+  prepareReactivation: dayforgeChurnProcedure
     .input(z.object({ snapshotId: uuid, requestId: uuid }))
     .mutation(async ({ ctx, input }) => {
       const detail = await createCustomerRecoveryIntervention({
@@ -135,7 +141,7 @@ export const claireRouter = router({
       return { detail, action: recoveryAction(detail) };
     }),
 
-  reactivationStatus: dayforgeTenantMemberProcedure
+  reactivationStatus: dayforgeChurnProcedure
     .input(z.object({ interventionId: uuid }))
     .query(async ({ ctx, input }) => {
       const all = await listRecoveryInterventions(ctx.tenantId);
@@ -144,7 +150,7 @@ export const claireRouter = router({
       return { detail, action: recoveryAction(detail) };
     }),
 
-  approveReactivation: dayforgeTenantMemberProcedure
+  approveReactivation: dayforgeChurnProcedure
     .input(
       z.object({
         interventionId: uuid,
@@ -167,7 +173,7 @@ export const claireRouter = router({
       return { detail, action: recoveryAction(detail) };
     }),
 
-  prepareManualReactivation: dayforgeTenantMemberProcedure
+  prepareManualReactivation: dayforgeChurnProcedure
     .input(z.object({ interventionId: uuid, requestId: uuid }))
     .mutation(async ({ ctx, input }) => {
       const detail = await getRecoveryInterventionDetail({
@@ -193,7 +199,7 @@ export const claireRouter = router({
       };
     }),
 
-  markReactivationContacted: dayforgeTenantMemberProcedure
+  markReactivationContacted: dayforgeChurnProcedure
     .input(
       z.object({
         interventionId: uuid,
