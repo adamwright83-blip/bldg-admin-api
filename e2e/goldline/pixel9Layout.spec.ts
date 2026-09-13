@@ -19,7 +19,9 @@ async function login(page: Page) {
     data: { password: DRIVER_PASSWORD, role: "driver" },
   });
   expect(response.ok()).toBeTruthy();
-  await page.goto("/driver?goldlineSceneFixture=game");
+  await page.goto(
+    "/driver?goldlineSceneFixture=game&lanternOperation=mobile-gate-fixture"
+  );
   await expect(page.getByTestId("goldline-shell")).toBeVisible({
     timeout: 30_000,
   });
