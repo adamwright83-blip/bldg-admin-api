@@ -1,0 +1,18 @@
+/* Final contract guard: keep the real Kingdom II button text-sized/readable for
+   accessibility and P1 regression checks while the painted label is rendered
+   through its diegetic pseudo-elements. */
+.gdp-shell .gdp-chapter-entry {
+  font-size: 12px;
+  line-height: 1.15;
+  text-indent: -9999px;
+  overflow: hidden;
+}
+
+.gdp-shell .gdp-chapter-entry::before,
+.gdp-shell .gdp-chapter-entry::after {
+  text-indent: 0;
+}
+
+.gdp-shell.gdp-shell--forced-mobile .gdp-chapter-entry {
+  font-size: 3.3vw;
+}
