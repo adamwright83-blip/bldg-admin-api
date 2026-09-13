@@ -48,6 +48,7 @@ import { campaignLibraryRouter } from "../campaignLibrary/campaignLibraryRouter"
 import { kingdomRouter } from "../goldlineKingdoms/kingdomRouter";
 import { companionRouter } from "../companions/companionRouter";
 import { missionDirectorRouter } from "../missionDirector/missionDirectorRouter";
+import { claireRouter } from "../claire/claireRouter";
 
 export const systemRouter = router({
   goldlineCargo: goldlineCargoRouter,
@@ -97,6 +98,7 @@ export const systemRouter = router({
   goldlineKingdoms: kingdomRouter,
   goldlineCompanions: companionRouter,
   missionDirector: missionDirectorRouter,
+  claire: claireRouter,
   health: publicProcedure
     .input(
       z.object({
