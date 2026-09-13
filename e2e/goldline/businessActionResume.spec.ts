@@ -16,7 +16,13 @@ async function login(page: Page) {
     data: { password: DRIVER_PASSWORD, role: "driver" },
   });
   expect(response.ok()).toBeTruthy();
-  await page.goto("/driver?goldlineSceneFixture=game");
+  // Today's Day Plan is now the production home. Tests that explicitly prove
+  // the mounted traversal world must therefore provide an operation launch
+  // context as well as the game scene fixture; otherwise the truthful Day Plan
+  // correctly wins and the canvas is never mounted.
+  await page.goto(
+    "/driver?goldlineSceneFixture=game&lanternOperation=mobile-gate-fixture"
+  );
   await expect(page.getByTestId("goldline-shell")).toBeVisible({
     timeout: 30_000,
   });
