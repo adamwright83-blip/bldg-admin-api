@@ -12,7 +12,8 @@ mesh from anywhere else — they all arrive here as a GLB and leave as the same 
         --glb rook.glb --out client/public/assets/goldline/companions/rook \
         --id rook --states idle,turn --res 512
 """
-import bpy, sys, os, json, math, argparse
+import bpy, bmesh, sys, os, json, math, argparse
+from mathutils import Matrix
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from rig import build_rig, normalize, TARGET_HEIGHT, AZIMUTH
@@ -23,10 +24,38 @@ def clear():
     bpy.ops.wm.read_factory_settings(use_empty=True)
 
 
-def import_glb(path):
+def import_glb(path, rotate_x_deg=0.0):
+    """
+    Import a GLB and repair what image-to-3D output gets wrong.
+
+    - Up axis. TRELLIS.2's to_glb writes height along what arrives in Blender
+      as Y, so the character imports lying on its side. `rotate_x_deg` rotates
+      the mesh DATA about X. It is applied to data rather than via
+      transform_apply because that operator silently no-ops outside a proper
+      context — the first fix attempt changed nothing and rendered identically
+      at +90 and -90. For TRELLIS.2 Rook, -90 puts the feet on the ground.
+    - Normals. Generated meshes carry inconsistently wound faces. With the
+      importer's backface culling on, about half the faces vanish and the model
+      reads as lace; under the cel shader each flipped face picks a random band
+      and the surface speckles. Recalculate outward normals and disable culling.
+    """
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=path)
-    return [o for o in bpy.data.objects if o not in before]
+    objs = [o for o in bpy.data.objects if o not in before]
+    for o in objs:
+        if o.type != "MESH":
+            continue
+        if rotate_x_deg:
+            o.data.transform(Matrix.Rotation(math.radians(rotate_x_deg), 4, "X"))
+            o.data.update()
+        bm = bmesh.new(); bm.from_mesh(o.data)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        bm.to_mesh(o.data); bm.free()
+        for slot in o.material_slots:
+            if slot.material:
+                slot.material.use_backface_culling = False
+    bpy.context.view_layer.update()
+    return objs
 
 
 def apply_toon(objects):
@@ -124,16 +153,20 @@ def main():
     ap.add_argument("--states", default="idle,turn")
     ap.add_argument("--frames", type=int, default=8)
     ap.add_argument("--res", type=int, default=512)
-    ap.add_argument("--keep-pbr", action="store_true",
-                    help="Skip toon shading. Diagnostic only — PBR output is not shippable.")
+    ap.add_argument("--rotate-x", type=float, default=0.0,
+                    help="Rotate mesh data about X before framing. TRELLIS.2 output needs -90.")
+    ap.add_argument("--shading", choices=["toon", "raw"], default="toon",
+                    help="toon: cel bands + outline (scripted meshes). raw: the mesh's own baked "
+                         "texture, no outline. On TRELLIS.2 Rook the outline smeared on a noisy "
+                         "200K-face surface and banding amplified a mottled bake, so raw read cleaner.")
     a = ap.parse_args(argv)
 
     os.makedirs(a.out, exist_ok=True)
     clear()
     build_rig()
-    imported = import_glb(a.glb)
+    imported = import_glb(a.glb, a.rotate_x)
     info = normalize(imported)
-    if not a.keep_pbr:
+    if a.shading == "toon":
         apply_toon(imported)
     objects = list(bpy.data.objects)
 
@@ -152,7 +185,8 @@ def main():
         "states": {k: {"frames": len(v), "files": v} for k, v in states.items()},
         "rig": "scripts/assets/blender/rig.py",
         "cameraAzimuth": AZIMUTH,
-        "shading": "pbr" if a.keep_pbr else "toon",
+        "shading": a.shading,
+        "rotateX": a.rotate_x,
     }
     with open(os.path.join(a.out, f"{a.id}.frames.json"), "w") as fh:
         json.dump(meta, fh, indent=1)
