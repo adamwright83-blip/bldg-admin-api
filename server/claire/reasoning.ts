@@ -11,9 +11,10 @@ const DEBRIEF_OUTCOMES = [
 ] as const;
 
 const DECISION_MAKER_STATUSES = ["met", "unavailable", "not_recorded"] as const;
+const MAX_DEBRIEF_SUMMARY_CHARS = 240;
 
 const debriefSchema = z.object({
-  summary: z.string().trim().min(1).max(1000),
+  summary: z.string().trim().min(1).max(MAX_DEBRIEF_SUMMARY_CHARS),
   proposedOutcome: z.enum(DEBRIEF_OUTCOMES),
   decisionMakerStatus: z.enum(DECISION_MAKER_STATUSES),
   collateralDelivered: z.boolean(),
@@ -32,7 +33,7 @@ const DEBRIEF_JSON_SCHEMA = {
     type: "object",
     additionalProperties: false,
     properties: {
-      summary: { type: "string" },
+      summary: { type: "string", maxLength: MAX_DEBRIEF_SUMMARY_CHARS },
       proposedOutcome: { type: "string", enum: DEBRIEF_OUTCOMES },
       decisionMakerStatus: {
         type: "string",
@@ -76,7 +77,9 @@ export function conservativeDebriefFallback(
   transcript: string
 ): ClaireDebriefProposal {
   return {
-    summary: transcript.trim().slice(0, 1000) || "Operator debrief recorded.",
+    summary:
+      transcript.trim().slice(0, MAX_DEBRIEF_SUMMARY_CHARS) ||
+      "Operator debrief recorded.",
     proposedOutcome: "no_decision",
     decisionMakerStatus: "not_recorded",
     collateralDelivered: false,
@@ -155,6 +158,7 @@ export async function extractClaireDebrief(input: {
             "Use no_contact only when the operator clearly reached nobody relevant. If any conversation happened but no business decision occurred, use no_decision.",
             "decisionMakerStatus is met only if the operator explicitly says they met the decision maker; unavailable only if the operator explicitly says the decision maker was unavailable; otherwise not_recorded.",
             "followUpAt must be null unless the operator supplied enough date AND clock-time information to produce an exact instant. Never choose a sensible time. A weekday with no clock time stays null.",
+            "Keep summary to one short sentence under 240 characters.",
             "This output is only a proposal. A human voice confirmation is still required before it can become a visit outcome.",
           ].join(" "),
         },
