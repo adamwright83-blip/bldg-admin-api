@@ -1,0 +1,346 @@
+/*
+ * DRIVER HOME — POST-#122 MOBILE SAFETY OVERRIDES
+ *
+ * Keep this file loaded after goldline-day-plan-concept.css. PR #122 made the
+ * illustrated world the primary composition, but two older contracts still
+ * matter on real phones:
+ *
+ * 1. Some mobile browsers expose a ~980px layout viewport while the physical
+ *    screen is ~390px wide. In that mode fixed pixel values are browser-scaled
+ *    down to illegible sizes. The runtime adds .gdp-shell--forced-mobile; the
+ *    proportional vw values below preserve physical readability.
+ * 2. Kingdom 2 is a real unlocked destination. It must remain reachable when
+ *    onEnterChapter exists, without bringing the old dashboard banner back.
+ */
+
+/* Kingdom 2 becomes a compact world sign rather than dashboard chrome. */
+.gdp-shell .gdp-chapter-entry {
+  display: flex !important;
+  position: absolute;
+  left: 8px;
+  top: 720px;
+  z-index: 35;
+  width: min(42%, 168px);
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px 9px 12px;
+  border: 1px solid rgba(125, 83, 26, 0.92);
+  border-radius: 8px 3px 8px 3px;
+  background:
+    linear-gradient(118deg, rgba(255, 245, 207, 0.97), rgba(205, 166, 89, 0.97));
+  color: #3f2d15;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 10px 16px rgba(30, 22, 7, 0.35),
+    0 0 13px rgba(255, 196, 54, 0.32);
+  text-align: left;
+  pointer-events: auto;
+}
+
+.gdp-shell .gdp-chapter-entry::before {
+  content: "II";
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid rgba(101, 65, 18, 0.78);
+  border-radius: 50% 50% 42% 42%;
+  background: radial-gradient(circle at 50% 28%, #fff1a8, #d29a32 70%);
+  color: #513916;
+  font: 800 13px/1 Georgia, serif;
+  box-shadow: 0 4px 8px rgba(46, 29, 5, 0.28);
+}
+
+.gdp-shell .gdp-chapter-entry > span:first-of-type {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.gdp-shell .gdp-chapter-entry small {
+  color: #76521f;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.gdp-shell .gdp-chapter-entry strong {
+  color: #382711;
+  font: 700 11px/1.1 Georgia, serif;
+}
+
+.gdp-shell .gdp-chapter-entry > span:last-child {
+  flex: 0 0 auto;
+  color: #6e4b1d;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.gdp-shell .gdp-chapter-entry:focus-visible {
+  outline: 3px solid #fff0a6;
+  outline-offset: 3px;
+}
+
+/*
+ * Runtime compatibility path for phones exposing desktop-sized layout
+ * viewports. 1vw is intentionally relative to that wide layout viewport:
+ * after the browser's page scale is applied, these values land at readable
+ * physical dimensions instead of shrinking fixed 10–15px type to ~4–6px.
+ */
+.gdp-shell.gdp-shell--forced-mobile {
+  width: 100vw;
+  max-width: 100vw;
+  min-height: 100svh;
+  margin: 0;
+  padding-bottom: calc(44vw + env(safe-area-inset-bottom));
+  overflow: clip;
+  background-position: center top;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+.gdp-shell--forced-mobile .gdp-header {
+  min-height: 35vw;
+  padding: 3.2vw 26vw 0;
+}
+
+.gdp-shell--forced-mobile .gdp-brand > svg {
+  width: 6vw;
+  height: 6vw;
+}
+
+.gdp-shell--forced-mobile .gdp-brand strong {
+  font-size: 5.2vw;
+}
+
+.gdp-shell--forced-mobile .gdp-brand small {
+  margin-top: 1.2vw;
+  font-size: 2.1vw;
+}
+
+.gdp-shell--forced-mobile .gdp-header > p:not(.gdp-authored-framing) {
+  margin-top: 1.8vw;
+  font-size: 2.8vw;
+}
+
+.gdp-shell--forced-mobile .gdp-claire-tool {
+  left: 0.5vw;
+  top: 4.5vw;
+  width: 31vw;
+}
+
+.gdp-shell--forced-mobile .gdp-world-tool-state {
+  padding: 0.8vw 1.4vw;
+  font-size: 2vw;
+}
+
+.gdp-shell--forced-mobile .gdp-manifest-tool {
+  right: 0.5vw;
+  top: 5.5vw;
+  width: 24vw;
+}
+
+.gdp-shell--forced-mobile .gdp-manifest-live-copy {
+  padding: 0.8vw 0.5vw;
+}
+
+.gdp-shell--forced-mobile .gdp-manifest-live-copy b {
+  font-size: 2.2vw;
+}
+
+.gdp-shell--forced-mobile .gdp-manifest-live-copy small {
+  font-size: 1.7vw;
+}
+
+.gdp-shell--forced-mobile .gdp-overland-tool {
+  right: -0.5vw;
+  top: 89vw;
+  width: 28vw;
+}
+
+.gdp-shell--forced-mobile .gdp-first-spark-tool {
+  right: -0.5vw;
+  top: 162vw;
+  width: 29vw;
+}
+
+.gdp-shell--forced-mobile .gdp-vehicle-key {
+  left: 0;
+  top: 125vw;
+  width: 15vw;
+  height: 27vw;
+}
+
+.gdp-shell--forced-mobile .gdp-route {
+  min-height: 195vw;
+  margin-top: -5.5vw;
+  padding: 25vw 6vw 55vw 10vw;
+  gap: 21vw;
+}
+
+.gdp-shell--forced-mobile .gdp-line {
+  top: 11vw;
+  height: calc(100% - 30vw);
+}
+
+.gdp-shell--forced-mobile .gdp-line path {
+  stroke-width: 2.5;
+}
+
+.gdp-shell--forced-mobile .gdp-line path:first-child {
+  stroke-width: 4.5;
+}
+
+.gdp-shell--forced-mobile .gdp-stop {
+  width: 72vw;
+  max-width: none;
+  min-height: 24vw;
+  box-sizing: border-box;
+  padding: 3vw 3vw 2.8vw 7vw;
+  border-width: 0.28vw;
+  border-radius: 0.8vw 2.2vw 0.8vw 2.2vw;
+}
+
+.gdp-shell--forced-mobile .gdp-stop::after {
+  bottom: -9.5vw;
+  font-size: 3.2vw;
+}
+
+.gdp-shell--forced-mobile .gdp-node {
+  left: -3.8vw;
+  top: -2.3vw;
+  width: 8vw;
+  height: 8vw;
+  border-width: 0.5vw;
+  font-size: 3.7vw;
+}
+
+.gdp-shell--forced-mobile .gdp-card-kicker {
+  gap: 1.2vw;
+  font-size: 3vw;
+}
+
+.gdp-shell--forced-mobile .gdp-card-copy h2 {
+  margin: 1.1vw 0 0.7vw;
+  font-size: 4.4vw;
+  line-height: 1.08;
+}
+
+.gdp-shell--forced-mobile .gdp-stop-open {
+  min-height: 7vw;
+  gap: 1.2vw;
+}
+
+.gdp-shell--forced-mobile .gdp-stop-open svg {
+  width: 4vw;
+  height: 4vw;
+}
+
+.gdp-shell--forced-mobile .gdp-card-meta {
+  font-size: 3.4vw;
+  line-height: 1.25;
+}
+
+.gdp-shell--forced-mobile .gdp-complete {
+  margin-top: 1vw;
+  font-size: 2.7vw;
+}
+
+.gdp-shell--forced-mobile .gdp-now {
+  width: 19vw;
+  height: 25vw;
+  margin: -17vw 0 -15vw;
+}
+
+.gdp-shell--forced-mobile .gdp-now::after {
+  bottom: 0.8vw;
+  width: 9vw;
+  height: 3.4vw;
+}
+
+.gdp-shell--forced-mobile .gdp-now img {
+  width: 17.5vw;
+  height: 29vw;
+  max-height: none;
+}
+
+.gdp-shell--forced-mobile .gdp-chapter-entry {
+  left: 2vw;
+  top: 180vw;
+  width: 43vw;
+  min-height: 16vw;
+  gap: 2vw;
+  padding: 2.3vw 2.5vw 2.3vw 3vw;
+  border-width: 0.3vw;
+  border-radius: 2vw 0.8vw 2vw 0.8vw;
+}
+
+.gdp-shell--forced-mobile .gdp-chapter-entry::before {
+  flex-basis: 8vw;
+  width: 8vw;
+  height: 9vw;
+  font-size: 3.6vw;
+}
+
+.gdp-shell--forced-mobile .gdp-chapter-entry small {
+  font-size: 2.4vw;
+}
+
+.gdp-shell--forced-mobile .gdp-chapter-entry strong {
+  font-size: 3.3vw;
+}
+
+.gdp-shell--forced-mobile .gdp-chapter-entry > span:last-child {
+  font-size: 5vw;
+}
+
+.gdp-shell--forced-mobile .gdp-next-up {
+  bottom: calc(17vw + env(safe-area-inset-bottom));
+  width: calc(100vw - 4vw);
+  min-height: 19vw;
+  padding: 2.3vw 2.8vw 2.3vw 3.5vw;
+  border-width: 0.5vw;
+  box-shadow:
+    0 0 0 1vw rgba(29, 27, 20, 0.82),
+    0 -0.5vw 0 rgba(230, 195, 116, 0.76),
+    0 1.8vw 5vw rgba(0, 0, 0, 0.42),
+    inset 0 0 0 0.5vw rgba(255, 248, 220, 0.62);
+}
+
+.gdp-shell--forced-mobile .gdp-next-up small {
+  font-size: 2.4vw;
+}
+
+.gdp-shell--forced-mobile .gdp-next-up strong {
+  font-size: 3.8vw;
+}
+
+.gdp-shell--forced-mobile .gdp-next-up span {
+  font-size: 3.1vw;
+}
+
+.gdp-shell--forced-mobile .gdp-next-up button {
+  width: 27vw;
+  min-height: 11vw;
+  font-size: 3.1vw;
+}
+
+.gdp-shell--forced-mobile .gdp-game-nav {
+  width: 100vw;
+  height: calc(16vw + env(safe-area-inset-bottom));
+  padding: 0.5vw 0.8vw calc(0.5vw + env(safe-area-inset-bottom));
+}
+
+.gdp-shell--forced-mobile .gdp-game-nav button,
+.gdp-shell--forced-mobile .gdp-game-nav a {
+  gap: 0.8vw;
+  font-size: 2.7vw;
+}
+
+.gdp-shell--forced-mobile .gdp-game-nav svg {
+  width: 5.6vw;
+  height: 5.6vw;
+}
