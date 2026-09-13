@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import twilio from "twilio";
 import { ENV } from "../_core/env";
+import { assertDriverCanReadMission } from "../commercialMissions/commercialMissionAuthorization";
 import {
   getCommercialMissionFieldState,
   recordCommercialMissionVisitOutcome,
@@ -9,7 +10,11 @@ import {
 } from "../commercialMissions/commercialMissionFieldService";
 import { assembleClaireDriveContext } from "./contextAssembler";
 import { extractClaireDebrief, writeClairePreDriveBrief } from "./reasoning";
-import { issueClaireToken, verifyClaireToken } from "./claireToken";
+import {
+  issueClaireToken,
+  verifyClaireToken,
+  type ClaireMissionAccess,
+} from "./claireToken";
 
 const DEBRIEF_PATH = "/api/claire/twilio/debrief";
 const CONFIRM_PATH = "/api/claire/twilio/confirm";
@@ -78,6 +83,18 @@ function validTwilioRequest(req: Request): boolean {
   );
 }
 
+function assertMissionAccess(input: {
+  mission: Parameters<typeof assertDriverCanReadMission>[0]["mission"];
+  userId: string;
+  missionAccess: ClaireMissionAccess;
+}): void {
+  assertDriverCanReadMission({
+    mission: input.mission,
+    userId: input.userId,
+    isAdmin: input.missionAccess === "operator",
+  });
+}
+
 function speakAndHangUp(text: string): string {
   const response = new twilio.twiml.VoiceResponse();
   response.say({ voice: "Polly.Joanna" }, text);
@@ -131,9 +148,27 @@ export async function startClairePostStopCall(input: {
   tenantId: string;
   actorId: string;
   missionId: number;
+  missionAccess: ClaireMissionAccess;
   timeZone?: string;
 }): Promise<{ callSid: string }> {
   const to = configuredOperatorPhone();
+  const current = await getCommercialMissionFieldState({
+    tenantId: input.tenantId,
+    missionId: input.missionId,
+  });
+  if (!current) throw new Error("Commercial mission not found");
+  assertMissionAccess({
+    mission: current.mission,
+    userId: input.actorId,
+    missionAccess: input.missionAccess,
+  });
+  if (!current.field?.arrivedAt) {
+    throw new Error("Claire debrief requires an authoritative arrived field state");
+  }
+  if (current.visitOutcome) {
+    throw new Error("This visit already has a recorded outcome");
+  }
+
   const context = await assembleClaireDriveContext({
     tenantId: input.tenantId,
     actorId: input.actorId,
@@ -142,18 +177,13 @@ export async function startClairePostStopCall(input: {
     timeZone: input.timeZone,
   });
   if (!context.mission) throw new Error("Commercial mission not found");
-  if (!context.mission.field?.arrivedAt) {
-    throw new Error("Claire debrief requires an authoritative arrived field state");
-  }
-  if (context.mission.visitOutcome) {
-    throw new Error("This visit already has a recorded outcome");
-  }
 
   const token = issueClaireToken({
     kind: "drive_call",
     tenantId: input.tenantId,
     userId: input.actorId,
     missionId: input.missionId,
+    missionAccess: input.missionAccess,
     phase: "post_stop",
   });
   const response = new twilio.twiml.VoiceResponse();
@@ -210,6 +240,11 @@ export function registerClaireRoutes(app: Express): void {
           speakAndHangUp("Goldline does not have verified arrival for this stop, so I left business truth unchanged.")
         );
       }
+      assertMissionAccess({
+        mission: current.mission,
+        userId: claims.userId,
+        missionAccess: claims.missionAccess,
+      });
       if (current.visitOutcome) {
         return res.send(speakAndHangUp("This visit already has a recorded outcome."));
       }
@@ -239,6 +274,7 @@ export function registerClaireRoutes(app: Express): void {
         tenantId: claims.tenantId,
         userId: claims.userId,
         missionId: claims.missionId,
+        missionAccess: claims.missionAccess,
         requestId: stableRequestId(callSid, "confirmed-outcome"),
         proposal,
       });
@@ -293,6 +329,11 @@ export function registerClaireRoutes(app: Express): void {
           speakAndHangUp("Verified arrival is missing, so I did not change the visit outcome.")
         );
       }
+      assertMissionAccess({
+        mission: current.mission,
+        userId: claims.userId,
+        missionAccess: claims.missionAccess,
+      });
       if (current.visitOutcome) {
         return res.send(speakAndHangUp("That outcome was already saved."));
       }
