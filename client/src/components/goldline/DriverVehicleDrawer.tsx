@@ -6,10 +6,10 @@ import { trpc } from "@/lib/trpc";
 import type { CustodyLocationKey } from "@shared/custodyLocations";
 import { VehicleCargo, type VehicleCargoItem } from "./VehicleCargo";
 import { VehicleCargoCapture } from "./VehicleCargoCapture";
-import claireHologram from "@/assets/goldline/generated/claire-hologram.png";
-import todayManifest from "@/assets/goldline/generated/today-manifest.png";
-import overlandPortal from "@/assets/goldline/generated/overland-portal.png";
-import firstSpark from "@/assets/goldline/generated/first-spark.png";
+import claireHologram from "@/assets/goldline/generated/claire-hologram.webp";
+import todayManifest from "@/assets/goldline/generated/today-manifest.webp";
+import overlandPortal from "@/assets/goldline/generated/overland-portal.webp";
+import firstSpark from "@/assets/goldline/generated/first-spark.webp";
 import "./driver-world-tools.css";
 
 function clickHiddenDayControl(selector: string, unavailableMessage: string) {
