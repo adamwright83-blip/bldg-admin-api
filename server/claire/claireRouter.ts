@@ -36,7 +36,8 @@ function recoveryAction(
       displayName: detail.customer.customerName,
     },
     reason: detail.customer.reasons.join(" · "),
-    authority: contacted ? "AUTO_INFORM" : "APPROVAL_REQUIRED",
+    authority:
+      contacted || completed ? "HUMAN_EXECUTION" : "APPROVAL_REQUIRED",
     status: completed
       ? "completed"
       : contacted
