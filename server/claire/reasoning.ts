@@ -98,14 +98,18 @@ export async function writeClairePreDriveBrief(input: {
     const next = input.context.nextFixedCommitment;
     const blockers = input.context.blockers;
     if (next && blockers.length) {
-      return `Your next fixed commitment is ${next.title}. Before that, ${blockers[0].title} needs attention.`;
+      return `Your next field commitment is ${next.title}. Before that, ${blockers[0].title} needs attention. Keep the rest of the drive focused on the route.`;
     }
-    if (next) return `Your next fixed commitment is ${next.title}.`;
-    if (blockers.length) return `${blockers[0].title} needs attention today.`;
+    if (next) {
+      return `Your next field commitment is ${next.title}. Keep the drive focused on that stop, and leave anything not on the route for later.`;
+    }
+    if (blockers.length) {
+      return `${blockers[0].title} is the field issue that needs attention first. Once that is clear, continue with the route.`;
+    }
     const first = input.context.relevantTimeline[0];
     return first
-      ? `First useful move on the board is ${first.title}.`
-      : "Goldline has no required field move for you right now.";
+      ? `The first useful field move is ${first.title}. Keep this drive centered on that real-world stop.`
+      : "There is no required field move on the route right now. Keep the line open for the next pickup, delivery, or commercial stop.";
   })();
 
   try {
@@ -120,8 +124,12 @@ export async function writeClairePreDriveBrief(input: {
             "You are Claire, Goldline's concise operations partner calling before a drive.",
             "Use only the supplied business context. Never invent a customer, outcome, deadline, address, revenue, commitment, or completed action.",
             "The game cannot create business truth. Derived suggestions are suggestions, never facts.",
-            "Speak naturally in 2 to 5 short sentences. Lead with the next fixed commitment or blocker, then one useful optional move at most.",
-            "Do not narrate the game. Do not mention JSON, databases, confidence systems, or internal architecture.",
+            "This is a field-operations call. Discuss only real pickups, deliveries, commercial visits or calls, route blockers, customer recovery, or other real field work present in the supplied context.",
+            "Never mention software development, code, repositories, GitHub, Codex, commits, pull requests, deployments, archiving, internal engineering chores, JSON, databases, confidence systems, or internal architecture.",
+            "If the supplied context has no useful field move, say that plainly rather than filling the call with unrelated work.",
+            "Speak naturally in 2 to 4 short sentences, usually 35 to 70 spoken words. Lead with the next field commitment or blocker, then one useful optional move at most.",
+            "Use conversational spoken English. Avoid slash-separated phrases, dense abbreviations, or wording that is hard to understand over a phone line.",
+            "Do not narrate the game.",
           ].join(" "),
         },
         { role: "user", content: compactContext(input.context) },

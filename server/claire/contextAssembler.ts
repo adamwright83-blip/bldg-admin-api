@@ -48,6 +48,25 @@ export type ClaireDriveContext = {
   };
 };
 
+const PRE_DRIVE_KINDS = new Set<FieldTodayItem["kind"]>([
+  "job",
+  "pickup",
+  "delivery",
+  "follow_up",
+  "commercial_visit",
+  "commercial_call",
+  "mission_dispatch",
+  "customer_recovery",
+  "payment_blocker",
+  "route_exception",
+]);
+
+function relevantToDriveBrief(item: FieldTodayItem): boolean {
+  if (!PRE_DRIVE_KINDS.has(item.kind)) return false;
+  if (item.kind === "job") return Boolean(item.destination);
+  return true;
+}
+
 function simplify(item: FieldTodayItem): ClaireTimelineItem {
   return {
     id: item.id,
@@ -118,17 +137,29 @@ export async function assembleClaireDriveContext(input: {
       }
     : null;
 
+  const driveTimeline =
+    input.phase === "pre_drive"
+      ? today.timeline.filter(relevantToDriveBrief)
+      : today.timeline;
+  const nextFixedCommitment =
+    today.nextFixedCommitment &&
+    (input.phase !== "pre_drive" || relevantToDriveBrief(today.nextFixedCommitment))
+      ? simplify(today.nextFixedCommitment)
+      : null;
+  const blockers = today.blockers
+    .filter(item => input.phase !== "pre_drive" || relevantToDriveBrief(item))
+    .slice(0, 3)
+    .map(simplify);
+
   return {
     phase: input.phase,
     generatedAt: new Date().toISOString(),
     businessDate: today.businessDate,
     actorId: input.actorId,
     truthLaw: "game_projection_never_creates_business_truth",
-    nextFixedCommitment: today.nextFixedCommitment
-      ? simplify(today.nextFixedCommitment)
-      : null,
-    blockers: today.blockers.slice(0, 3).map(simplify),
-    relevantTimeline: today.timeline.slice(0, 8).map(simplify),
+    nextFixedCommitment,
+    blockers,
+    relevantTimeline: driveTimeline.slice(0, 8).map(simplify),
     mission,
   };
 }
