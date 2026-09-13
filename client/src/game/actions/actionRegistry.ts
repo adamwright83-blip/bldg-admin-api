@@ -2,25 +2,18 @@ import type {
   CapabilityEvaluation,
   ScoutReport,
 } from "../../../../shared/expansionScout";
+import {
+  GOLDLINE_ACTION_KINDS,
+  type GoldlineActionKind,
+} from "../../../../shared/goldlineActionContract";
 import type { PlayableMission } from "../state/GameState";
 import {
   projectMissionAffordance,
   type MissionAffordance,
 } from "../encounters/missionAffordance";
 
-export const GOLDLINE_ACTION_KINDS = [
-  "CALL",
-  "VISIT",
-  "FOLLOW_UP",
-  "RECOVER",
-  "SCOUT",
-  "REVIEW",
-  "WAIT",
-  "PICKUP",
-  "DELIVERY",
-] as const;
-
-export type GoldlineActionKind = (typeof GOLDLINE_ACTION_KINDS)[number];
+export { GOLDLINE_ACTION_KINDS };
+export type { GoldlineActionKind };
 
 export type AuthoritativeFollowUp = {
   pipelineId: number;
