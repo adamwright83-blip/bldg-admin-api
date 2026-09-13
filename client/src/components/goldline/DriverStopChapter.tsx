@@ -184,7 +184,7 @@ export function DriverStopChapter({
               ) : (
                 <p className="chapter-muted">
                   {operational
-                    ? "No address is recorded. Check the order in field operations before setting out."
+                    ? "No address is recorded. Check the order details before setting out."
                     : "A flexible chapter in your day."}
                 </p>
               )}
@@ -229,10 +229,7 @@ export function DriverStopChapter({
                 </>
               ) : (
                 <button className="chapter-primary" onClick={onEnter}>
-                  OPEN{" "}
-                  {action?.type === "commercial"
-                    ? "SALES MISSION"
-                    : "FIELD OPERATIONS"}
+                  ENTER {action?.type === "commercial" ? "SALES MISSION" : "CHAPTER"}
                   <ChevronRight size={18} />
                 </button>
               )}
