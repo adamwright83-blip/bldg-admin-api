@@ -1,7 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { FirstMissionDriver } from "@/components/goldline/onboarding/FirstMissionDriver";
 import { Loader2 } from "lucide-react";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
 import GoldlineDriverController from "./driver/GoldlineDriverController";
@@ -93,6 +93,21 @@ function AuthenticatedDriver() {
   const [sideQuestOpen, setSideQuestOpen] = useState(false);
   const { loading: authLoading, isAuthenticated } = useAuth();
   const firstWorld=trpc.system.goldlineOnboarding.state.useQuery(undefined,{enabled:isAuthenticated,retry:false});
+  const firstMission = firstWorld.data?.session?.status === "COMPLETE" ? firstWorld.data.session.mission : null;
+  const firstSparkAvailable = Boolean(firstMission && !firstMission.gameplayCompletedAt);
+
+  useEffect(() => {
+    document.documentElement.dataset.goldlineFirstSparkAvailable = String(firstSparkAvailable);
+    const openFirstSpark = () => {
+      if (firstSparkAvailable) setSideQuestOpen(true);
+    };
+    window.addEventListener("goldline:first-spark", openFirstSpark);
+    return () => {
+      window.removeEventListener("goldline:first-spark", openFirstSpark);
+      delete document.documentElement.dataset.goldlineFirstSparkAvailable;
+    };
+  }, [firstSparkAvailable]);
+
   if (authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
@@ -121,12 +136,11 @@ function AuthenticatedDriver() {
     );
   }
 
-  const firstMission = firstWorld.data?.session?.status === "COMPLETE" ? firstWorld.data.session.mission : null;
   // Onboarding never owns the driver's route. The first chapter is optional,
   // and opening it always leaves an explicit way back to today's work.
   if (sideQuestOpen && firstMission) return <>
     <button className="driver-return-home" onClick={() => setSideQuestOpen(false)}>← YOUR DAY</button>
     <FirstMissionDriver session={firstWorld.data!.session!} />
   </>;
-  return <GoldlineDriverController onOpenFirstMission={firstMission && !firstMission.gameplayCompletedAt ? () => setSideQuestOpen(true) : undefined} />;
+  return <GoldlineDriverController onOpenFirstMission={firstSparkAvailable ? () => setSideQuestOpen(true) : undefined} />;
 }
