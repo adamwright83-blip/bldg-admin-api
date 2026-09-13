@@ -10,7 +10,7 @@ import {
 } from "../churnRadar/customerChurnService";
 import {
   dayforgeChurnProcedure,
-  dayforgeTenantMemberProcedure,
+  dayforgeMissionFieldProcedure,
   router,
 } from "../_core/trpc";
 import type { CanonicalGoldlineAction } from "../../shared/goldlineActionContract";
@@ -67,7 +67,7 @@ function recoveryAction(
 }
 
 export const claireRouter = router({
-  driveContext: dayforgeTenantMemberProcedure
+  driveContext: dayforgeMissionFieldProcedure
     .input(
       z.object({
         phase: z.enum(["pre_drive", "post_stop"]),
@@ -85,7 +85,7 @@ export const claireRouter = router({
       })
     ),
 
-  callBeforeDrive: dayforgeTenantMemberProcedure
+  callBeforeDrive: dayforgeMissionFieldProcedure
     .input(
       z.object({
         timeZone: z.string().trim().min(1).max(100).optional(),
@@ -99,7 +99,7 @@ export const claireRouter = router({
       })
     ),
 
-  callAfterStop: dayforgeTenantMemberProcedure
+  callAfterStop: dayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
