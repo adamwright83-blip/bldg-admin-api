@@ -11,6 +11,7 @@ import type { Order } from "@shared/types";
 import "./goldline/goldline-legibility.css";
 import "./goldline/goldline-live-fix.css";
 import "./goldline/goldline-import-overlay.css";
+import "./goldline/goldline-day-plan-concept.css";
 
 const WaywardTetheredDeck = lazy(
   () => import("./goldline/stages/WaywardTetheredDeck")
