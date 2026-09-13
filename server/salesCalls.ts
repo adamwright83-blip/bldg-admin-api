@@ -33,6 +33,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "./db";
 import { salesCallAttempts, type SalesCallAttempt } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { registerClaireRoutes } from "./claire/claireTwilio";
 
 const CALL_STATUS_PATH = "/api/saleslay/twilio/call-status";
 const CONNECTED_DURATION_THRESHOLD_SEC = 20;
@@ -119,6 +120,10 @@ export async function startBoldPitchCall(
 /** TwiML served to the REP leg once Twilio connects the call to the rep's
  * cellphone. Dials the customer leg only now — after the rep has answered. */
 export function registerSalesCallRoutes(app: Express): void {
+  // Claire shares the already-established Twilio HTTP surface, but writes
+  // business state only through existing Goldline mission/recovery services.
+  registerClaireRoutes(app);
+
   app.post("/api/saleslay/twilio/bridge-twiml/:attemptId", async (req: Request, res: Response) => {
     res.type("text/xml");
     try {

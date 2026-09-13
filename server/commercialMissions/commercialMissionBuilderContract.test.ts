@@ -59,10 +59,9 @@ describe("driver mission builder contract", () => {
 
   it("keeps mission stops separate from operational order records", () => {
     expect(driver).toMatch(
-      // Driver's default render is the Goldline controller. Pinning the exact
-      // spelling tracked formatting, not the contract, and broke when Vehicle
-      // Cargo began rendering alongside it.
-      /return <>?<GoldlineDriverController \/>/
+      // Driver's authenticated default route still resolves through the Goldline
+      // controller. Props may evolve independently of the mission/order boundary.
+      /return\s+<GoldlineDriverController\b/
     );
     expect(driverController).toContain("salesMissions: builtMissions.data");
     expect(goldline).toContain("function toSalesStop");
