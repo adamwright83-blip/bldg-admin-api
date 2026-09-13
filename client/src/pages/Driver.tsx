@@ -14,6 +14,7 @@ import "./goldline/goldline-import-overlay.css";
 import "./goldline/goldline-day-plan-concept.css";
 import "./goldline/goldline-day-plan-p1-fixes.css";
 import "./goldline/goldline-day-plan-p1-followup.css";
+import "./goldline/goldline-driver-ui-polish.css";
 
 const WaywardTetheredDeck = lazy(
   () => import("./goldline/stages/WaywardTetheredDeck")
@@ -55,7 +56,7 @@ export default function Driver() {
     return (
       <Suspense
         fallback={
-          <div style={{ minHeight: "100dvh", background: "#03070c" }} />
+          <div style={{ minHeight: "100dvh", background: "#f2e4bd" }} />
         }
       >
         <WaywardTetheredDeck
@@ -132,7 +133,7 @@ function AuthenticatedDriver() {
     return (
       <main className="min-h-screen bg-[#f7d982] p-4">
         <GoldlineDriverController />
-        <div className="fixed inset-0 z-[200] grid place-items-end bg-[#17385e55] p-3 sm:place-items-center">
+        <div className="fixed inset-0 z-[200] grid place-items-end bg-[#8a6a2f33] p-3 sm:place-items-center">
           <SalesJournalSheet open onOpenChange={() => {}} />
         </div>
       </main>
