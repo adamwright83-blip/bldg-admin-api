@@ -6,6 +6,7 @@ import { QuickNewOrderSheet } from "@/components/driver/QuickNewOrderSheet";
 import { AddExternalWorkSheet } from "@/components/driver/AddExternalWorkSheet";
 import { LogSignalSheet } from "@/components/driver/LogSignalSheet";
 import { SalesJournalSheet } from "@/components/driver/SalesMomentum";
+import { CompanionUnlockReveal } from "@/components/driver/CompanionUnlockReveal";
 import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
 import GoldlineHome, {
   type ArrivedOperatorStop,
@@ -1590,6 +1591,7 @@ function LiveGoldlineDriverController({
       data-lantern-rendered-host={requestedGameplayHost ?? undefined}
     >
       {returnToDay}
+      <CompanionUnlockReveal id="rook" />
       <Suspense fallback={<GoldlineHome {...gameHomeProps} />}>
         <GoldlineGameHome
           {...gameHomeProps}

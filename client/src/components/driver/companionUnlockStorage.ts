@@ -42,3 +42,36 @@ export function unlockCompanion(id: CompanionId): void {
     // won't persist across a reload, which is a lesser failure than crashing.
   }
 }
+
+/**
+ * Whether the one-time unlock reveal has been shown. Kept in a separate key so
+ * the existing unlock record (`{ rook: true }`) stays valid for anyone who
+ * already has it.
+ */
+const COMPANION_REVEAL_SEEN_KEY = "driverCompanionRevealSeen:v1";
+
+function readSeen(): Record<string, true> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(COMPANION_REVEAL_SEEN_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export function isCompanionRevealSeen(id: CompanionId): boolean {
+  return readSeen()[id] === true;
+}
+
+export function markCompanionRevealSeen(id: CompanionId): void {
+  if (typeof window === "undefined") return;
+  try {
+    const seen = readSeen();
+    seen[id] = true;
+    window.localStorage.setItem(COMPANION_REVEAL_SEEN_KEY, JSON.stringify(seen));
+  } catch {
+    // Private browsing can refuse storage; the reveal may show again, which is harmless.
+  }
+}
