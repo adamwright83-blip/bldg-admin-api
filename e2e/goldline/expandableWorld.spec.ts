@@ -14,6 +14,10 @@ import { expect, test, type Page } from "@playwright/test";
 const PORTRAIT = { width: 412, height: 923 };
 const LANDSCAPE = { width: 923, height: 412 };
 const DRIVER_PASSWORD = process.env.DRIVER_PASSWORD ?? "pixel-driver-pass";
+const GAME_WORLD_ROUTE =
+  "/driver?goldlineSceneFixture=game&lanternOperation=mobile-gate-fixture";
+const GAME_WORLD_AWAY_ROUTE =
+  "/driver?view=away&goldlineSceneFixture=game&lanternOperation=mobile-gate-fixture";
 
 async function login(page: Page, fixture?: "CALL") {
   await page.addInitScript(() => {
@@ -34,10 +38,11 @@ async function login(page: Page, fixture?: "CALL") {
     data: { password: DRIVER_PASSWORD, role: "driver" },
   });
   expect(response.ok()).toBeTruthy();
+  // Today's Day Plan is the canonical production root. These tests explicitly
+  // prove the mounted traversal world, so non-action-harness cases carry an
+  // operation launch context that intentionally bypasses the Day Plan home.
   await page.goto(
-    fixture
-      ? `/driver?goldlineFixture=${fixture}`
-      : "/driver?goldlineSceneFixture=game"
+    fixture ? `/driver?goldlineFixture=${fixture}` : GAME_WORLD_ROUTE
   );
   await expect(page.getByTestId("goldline-shell")).toBeVisible({
     timeout: 30_000,
@@ -308,9 +313,9 @@ test.describe("Pixi lifecycle stays clean across repeated mounts", () => {
     for (let iteration = 0; iteration < 5; iteration += 1) {
       // Leave the Goldline route entirely, then return — the same teardown
       // path a real player triggers by navigating.
-      await page.goto("/driver?view=away&goldlineSceneFixture=game");
+      await page.goto(GAME_WORLD_AWAY_ROUTE);
       await page.waitForTimeout(250);
-      await page.goto("/driver?goldlineSceneFixture=game");
+      await page.goto(GAME_WORLD_ROUTE);
       await expect(page.getByTestId("goldline-shell")).toBeVisible({
         timeout: 30_000,
       });
@@ -330,9 +335,9 @@ test.describe("Pixi lifecycle stays clean across repeated mounts", () => {
 
     await login(page);
     for (let iteration = 0; iteration < 3; iteration += 1) {
-      await page.goto("/driver?view=away&goldlineSceneFixture=game");
+      await page.goto(GAME_WORLD_AWAY_ROUTE);
       await page.waitForTimeout(200);
-      await page.goto("/driver?goldlineSceneFixture=game");
+      await page.goto(GAME_WORLD_ROUTE);
       await expect(page.getByTestId("goldline-shell")).toBeVisible({
         timeout: 30_000,
       });
