@@ -7,7 +7,10 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  reporter: "list",
+  reporter: [
+    ["list"],
+    ["json", { outputFile: "test-results/goldline-mobile-results.json" }],
+  ],
   use: {
     baseURL,
     viewport: { width: 412, height: 923 },
