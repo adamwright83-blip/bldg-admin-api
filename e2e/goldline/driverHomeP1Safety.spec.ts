@@ -30,26 +30,32 @@ test.describe("driver home P1 safety fixes", () => {
     expect(shellStyles.maxWidth).not.toBe("520px");
   });
 
-  test("unlocked Kingdom 2 entry remains visible and tappable", async ({ page }) => {
+  test("real Kingdom 2 button markup stays visible, readable, and tappable", async ({ page }) => {
     await page.goto("/driver?goldlineDayPlanFixture=active");
     const shell = page.locator(".gdp-shell");
     await expect(shell).toBeVisible();
+    await shell.evaluate(element => element.classList.add("gdp-shell--forced-mobile"));
 
     await shell.evaluate(element => {
       const button = document.createElement("button");
       button.className = "gdp-chapter-entry";
       button.type = "button";
-      button.innerHTML =
-        "<span><small>KINGDOM 2 READY</small><strong>Enter your next chapter</strong></span><span aria-hidden='true'>↗</span>";
+      button.dataset.testid = "enter-chapter-button";
+      button.textContent = "A new Kingdom has opened — enter The Last Valet";
       button.addEventListener("click", () => {
         document.body.dataset.chapterEntryClicked = "true";
       });
       element.appendChild(button);
     });
 
-    const chapter = page.locator(".gdp-chapter-entry");
+    const chapter = page.getByTestId("enter-chapter-button");
     await expect(chapter).toBeVisible();
     await expect(chapter).toBeEnabled();
+    const chapterFontSize = await chapter.evaluate(element =>
+      Number.parseFloat(getComputedStyle(element).fontSize)
+    );
+    expect(chapterFontSize).toBeGreaterThanOrEqual(12);
+
     await chapter.click();
     await expect
       .poll(() => page.evaluate(() => document.body.dataset.chapterEntryClicked))
