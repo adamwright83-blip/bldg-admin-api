@@ -29,7 +29,12 @@ test.describe("real-day ignition on the live driver controller", () => {
       data: { password: DRIVER_PASSWORD, role: "driver" },
     });
     expect(response.ok()).toBeTruthy();
-    await page.goto("/driver?goldlineSceneFixture=game");
+    // This test proves the world-side Open Channel loop. Since the production
+    // root now opens Today's Day Plan first, provide an explicit operation
+    // launch context so the test reaches the world it is asserting against.
+    await page.goto(
+      "/driver?goldlineSceneFixture=game&lanternOperation=mobile-gate-fixture"
+    );
     await expect(page.getByTestId("goldline-shell")).toBeVisible({
       timeout: 30_000,
     });
