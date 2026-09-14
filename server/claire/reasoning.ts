@@ -1,11 +1,44 @@
 import { z } from "zod";
 import { invokeLLM, invokeTextLLM } from "../_core/llm";
+import { compileClaireCharacterContext } from "./character/compiler";
+import { listClaireRelationshipEvents } from "./character/relationshipEvents";
+import { getClaireRelationshipState } from "./character/relationshipState";
 import type { ClaireDriveContext } from "./contextAssembler";
 import {
   recordClaireGeneration,
   safeClaireFailureReason,
   type ClaireGenerationDiagnostic,
 } from "./generationTelemetry";
+
+/**
+ * Assembles the compact character context for a given phase/operator.
+ * Fails closed to Tier 0 / empty history whenever the DB or identity is
+ * unavailable — never throws, since character context is an enhancement
+ * on top of the existing business-truth generation, never a precondition
+ * for it (Slice 15/16).
+ */
+async function compileContextFor(input: {
+  tenantId: string;
+  operatorUserId: string | null;
+  mode: "pre_drive" | "post_stop";
+}) {
+  const relationshipState = await getClaireRelationshipState({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+  });
+  const recentSharedHistory = input.operatorUserId
+    ? await listClaireRelationshipEvents({
+        tenantId: input.tenantId,
+        operatorUserId: input.operatorUserId,
+        limit: 5,
+      })
+    : [];
+  return compileClaireCharacterContext({
+    mode: input.mode,
+    relationshipState,
+    recentSharedHistory,
+  });
+}
 
 const DEBRIEF_OUTCOMES = [
   "no_contact",
@@ -128,6 +161,11 @@ export async function writeClairePreDriveBrief(
   const invokeText = dependencies.invokeText ?? invokeTextLLM;
   const recordGeneration =
     dependencies.recordGeneration ?? recordClaireGeneration;
+  const compiled = await compileContextFor({
+    tenantId: input.tenantId,
+    operatorUserId: input.context.actorId ?? null,
+    mode: "pre_drive",
+  });
   try {
     const text = (
       await invokeText({
@@ -148,6 +186,7 @@ export async function writeClairePreDriveBrief(
             "Speak naturally in 2 to 4 short sentences and 35 to 70 spoken words; never exceed 70 words. Lead with the next field commitment or blocker, then one useful optional move at most.",
               "Use conversational spoken English. Avoid slash-separated phrases, dense abbreviations, or wording that is hard to understand over a phone line.",
               "Do not narrate the game.",
+              compiled.promptSection,
             ].join(" "),
           },
           { role: "user", content: compactContext(input.context) },
@@ -166,6 +205,12 @@ export async function writeClairePreDriveBrief(
       tenantId: input.tenantId,
       diagnostic,
       latencyMs: Date.now() - startedAt,
+      reviewDetail: {
+        operatorUserId: input.context.actorId ?? null,
+        generatedText: text,
+        compiled,
+        businessContextSummary: input.context.businessDate,
+      },
     });
     input.onGeneration?.(diagnostic);
     return text;
@@ -184,6 +229,12 @@ export async function writeClairePreDriveBrief(
       tenantId: input.tenantId,
       diagnostic,
       latencyMs: Date.now() - startedAt,
+      reviewDetail: {
+        operatorUserId: input.context.actorId ?? null,
+        generatedText: fallback,
+        compiled,
+        businessContextSummary: input.context.businessDate,
+      },
     });
     input.onGeneration?.(diagnostic);
     return fallback;

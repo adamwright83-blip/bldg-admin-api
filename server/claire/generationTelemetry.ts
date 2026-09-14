@@ -1,4 +1,6 @@
 import { logAgentEvent } from "../agents/agentEvents";
+import { appendClaireGenerationLog } from "./character/generationLog";
+import type { ClaireCompiledContext } from "./character/types";
 
 export type ClaireGenerationKind = "opening_brief" | "follow_up";
 export type ClaireGenerationSource = "model" | "fallback";
@@ -6,6 +8,19 @@ export type ClaireGenerationDiagnostic = {
   kind: ClaireGenerationKind;
   source: ClaireGenerationSource;
   failureReason: string | null;
+};
+
+/**
+ * Optional richer record for the field-test review tool (Slice 2) and
+ * version traceability (Slice 1). Kept separate from ClaireGenerationDiagnostic
+ * itself so existing call sites and tests that only know kind/source/failureReason
+ * are unaffected — this is additive telemetry, not a shape change.
+ */
+export type ClaireGenerationReviewDetail = {
+  operatorUserId: string | null;
+  generatedText: string;
+  compiled: ClaireCompiledContext;
+  businessContextSummary?: string | null;
 };
 
 const counters = new Map<string, { attempts: number; fallbacks: number }>();
@@ -28,6 +43,7 @@ export async function recordClaireGeneration(input: {
   tenantId: string;
   diagnostic: ClaireGenerationDiagnostic;
   latencyMs: number;
+  reviewDetail?: ClaireGenerationReviewDetail;
 }): Promise<void> {
   const key = `${input.tenantId}:${input.diagnostic.kind}`;
   const current = counters.get(key) ?? { attempts: 0, fallbacks: 0 };
@@ -61,6 +77,26 @@ export async function recordClaireGeneration(input: {
       kind: input.diagnostic.kind,
       reason: safeClaireFailureReason(error),
     });
+  }
+
+  if (input.reviewDetail) {
+    try {
+      await appendClaireGenerationLog({
+        tenantId: input.tenantId,
+        operatorUserId: input.reviewDetail.operatorUserId,
+        generationKind: input.diagnostic.kind,
+        generationSource: input.diagnostic.source,
+        fallbackReason: input.diagnostic.failureReason,
+        generatedText: input.reviewDetail.generatedText,
+        compiled: input.reviewDetail.compiled,
+        businessContextSummary: input.reviewDetail.businessContextSummary ?? null,
+      });
+    } catch (error) {
+      console.warn("[Claire] generation review-log persistence failed", {
+        kind: input.diagnostic.kind,
+        reason: safeClaireFailureReason(error),
+      });
+    }
   }
 }
 

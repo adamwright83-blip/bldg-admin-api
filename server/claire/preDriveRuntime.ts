@@ -1,3 +1,6 @@
+import { CLAIRE_COMPILER_VERSION } from "./character/compiler";
+import { CLAIRE_CHARACTER_VERSION } from "./character/characterDefinition";
+import { getClaireRelationshipState } from "./character/relationshipState";
 import { assembleClaireDriveContext } from "./contextAssembler";
 import {
   getClaireGenerationStats,
@@ -43,6 +46,10 @@ export async function previewClairePreDrive(
   dependencies: Parameters<typeof generateClairePreDriveOutput>[1] = {}
 ) {
   const generated = await generateClairePreDriveOutput(input, dependencies);
+  const relationshipState = await getClaireRelationshipState({
+    tenantId: input.tenantId,
+    operatorUserId: input.actorId,
+  });
   return {
     brief: generated.brief,
     source: generated.diagnostic.source,
@@ -50,6 +57,17 @@ export async function previewClairePreDrive(
     generatedAt: generated.context.generatedAt,
     businessDate: generated.context.businessDate,
     generationStats: getClaireGenerationStats(input.tenantId),
+    // Slice 1/2: which compiled Claire produced this line, and at what
+    // relationship state — for the 30-day field-test review pass.
+    characterVersion: CLAIRE_CHARACTER_VERSION,
+    compilerVersion: CLAIRE_COMPILER_VERSION,
+    disclosureTier: relationshipState.disclosureTier,
+    relationshipDimensions: {
+      professionalRespect: relationshipState.professionalRespect,
+      reliability: relationshipState.reliability,
+      disclosureSafety: relationshipState.disclosureSafety,
+      familiarity: relationshipState.familiarity,
+    },
     writesBusinessTruth: false as const,
   };
 }
