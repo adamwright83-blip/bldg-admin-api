@@ -40,6 +40,18 @@ describe("Claire pre-drive conversation", () => {
     ).toBe(false);
   });
 
+  it("answers what today's field context is from authoritative context", () => {
+    expect(
+      conservativeClaireFollowUp({
+        utterance: "What is today's field context?",
+        brief: "Visit The Wilshire and ask about management effort.",
+        context,
+      })
+    ).toBe(
+      "Your next field commitment is The Wilshire at 100 Wilshire Boulevard."
+    );
+  });
+
   it("does not invent a person when asked who the operator is meeting", () => {
     expect(
       conservativeClaireFollowUp({
