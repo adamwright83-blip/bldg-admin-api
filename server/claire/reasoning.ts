@@ -12,6 +12,24 @@ const DEBRIEF_OUTCOMES = [
 
 const DECISION_MAKER_STATUSES = ["met", "unavailable", "not_recorded"] as const;
 const MAX_DEBRIEF_SUMMARY_CHARS = 240;
+const MAX_PRE_DRIVE_BRIEF_CHARS = 900;
+
+const preDriveBriefSchema = z.object({
+  brief: z.string().trim().min(1).max(MAX_PRE_DRIVE_BRIEF_CHARS),
+});
+
+const PRE_DRIVE_BRIEF_JSON_SCHEMA = {
+  name: "claire_pre_drive_brief",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      brief: { type: "string", maxLength: MAX_PRE_DRIVE_BRIEF_CHARS },
+    },
+    required: ["brief"],
+  },
+} as const;
 
 const debriefSchema = z.object({
   summary: z.string().trim().min(1).max(MAX_DEBRIEF_SUMMARY_CHARS),
@@ -117,6 +135,7 @@ export async function writeClairePreDriveBrief(input: {
       tenantId: input.tenantId,
       maxTokens: 320,
       temperature: 0.15,
+      outputSchema: PRE_DRIVE_BRIEF_JSON_SCHEMA,
       messages: [
         {
           role: "system",
@@ -135,8 +154,10 @@ export async function writeClairePreDriveBrief(input: {
         { role: "user", content: compactContext(input.context) },
       ],
     });
-    return resultText(result).trim().slice(0, 900) || fallback;
-  } catch {
+    const parsed = preDriveBriefSchema.safeParse(JSON.parse(resultText(result)));
+    return parsed.success ? parsed.data.brief : fallback;
+  } catch (error) {
+    console.error("[Claire] pre-drive brief generation failed", error);
     return fallback;
   }
 }
