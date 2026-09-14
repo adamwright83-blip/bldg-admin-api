@@ -1,6 +1,11 @@
 import { z } from "zod";
-import { invokeLLM } from "../_core/llm";
+import { invokeLLM, invokeTextLLM } from "../_core/llm";
 import type { ClaireDriveContext } from "./contextAssembler";
+import {
+  recordClaireGeneration,
+  safeClaireFailureReason,
+  type ClaireGenerationDiagnostic,
+} from "./generationTelemetry";
 
 const DEBRIEF_OUTCOMES = [
   "no_contact",
@@ -90,10 +95,17 @@ export function conservativeDebriefFallback(
   };
 }
 
-export async function writeClairePreDriveBrief(input: {
-  tenantId: string;
-  context: ClaireDriveContext;
-}): Promise<string> {
+export async function writeClairePreDriveBrief(
+  input: {
+    tenantId: string;
+    context: ClaireDriveContext;
+    onGeneration?: (diagnostic: ClaireGenerationDiagnostic) => void;
+  },
+  dependencies: {
+    invokeText?: typeof invokeTextLLM;
+    recordGeneration?: typeof recordClaireGeneration;
+  } = {}
+): Promise<string> {
   const fallback = (() => {
     const next = input.context.nextFixedCommitment;
     const blockers = input.context.blockers;
@@ -112,31 +124,67 @@ export async function writeClairePreDriveBrief(input: {
       : "There is no required field move on the route right now. Keep the line open for the next pickup, delivery, or commercial stop.";
   })();
 
+  const startedAt = Date.now();
+  const invokeText = dependencies.invokeText ?? invokeTextLLM;
+  const recordGeneration =
+    dependencies.recordGeneration ?? recordClaireGeneration;
   try {
-    const result = await invokeLLM({
+    const text = (
+      await invokeText({
+        tenantId: input.tenantId,
+        maxTokens: 320,
+        temperature: 0.15,
+        messages: [
+          {
+            role: "system",
+            content: [
+              "You are Claire, Goldline's concise operations partner calling before a drive.",
+              "Use only the supplied business context. Never invent a customer, outcome, deadline, address, revenue, commitment, or completed action.",
+              "The game cannot create business truth. Derived suggestions are suggestions, never facts.",
+              "This is a field-operations call. Discuss only real pickups, deliveries, commercial visits or calls, route blockers, customer recovery, or other real field work present in the supplied context.",
+              "Never mention software development, code, repositories, GitHub, Codex, commits, pull requests, deployments, archiving, internal engineering chores, JSON, databases, confidence systems, or internal architecture.",
+              "If the supplied context has no useful field move, say that plainly rather than filling the call with unrelated work.",
+              "Speak naturally in 2 to 4 short sentences, usually 35 to 70 spoken words. Lead with the next field commitment or blocker, then one useful optional move at most.",
+              "Use conversational spoken English. Avoid slash-separated phrases, dense abbreviations, or wording that is hard to understand over a phone line.",
+              "Do not narrate the game.",
+            ].join(" "),
+          },
+          { role: "user", content: compactContext(input.context) },
+        ],
+      })
+    )
+      .trim()
+      .slice(0, 900);
+    if (!text) throw new Error("Claire opening brief produced empty output");
+    const diagnostic: ClaireGenerationDiagnostic = {
+      kind: "opening_brief",
+      source: "model",
+      failureReason: null,
+    };
+    await recordGeneration({
       tenantId: input.tenantId,
-      maxTokens: 320,
-      temperature: 0.15,
-      messages: [
-        {
-          role: "system",
-          content: [
-            "You are Claire, Goldline's concise operations partner calling before a drive.",
-            "Use only the supplied business context. Never invent a customer, outcome, deadline, address, revenue, commitment, or completed action.",
-            "The game cannot create business truth. Derived suggestions are suggestions, never facts.",
-            "This is a field-operations call. Discuss only real pickups, deliveries, commercial visits or calls, route blockers, customer recovery, or other real field work present in the supplied context.",
-            "Never mention software development, code, repositories, GitHub, Codex, commits, pull requests, deployments, archiving, internal engineering chores, JSON, databases, confidence systems, or internal architecture.",
-            "If the supplied context has no useful field move, say that plainly rather than filling the call with unrelated work.",
-            "Speak naturally in 2 to 4 short sentences, usually 35 to 70 spoken words. Lead with the next field commitment or blocker, then one useful optional move at most.",
-            "Use conversational spoken English. Avoid slash-separated phrases, dense abbreviations, or wording that is hard to understand over a phone line.",
-            "Do not narrate the game.",
-          ].join(" "),
-        },
-        { role: "user", content: compactContext(input.context) },
-      ],
+      diagnostic,
+      latencyMs: Date.now() - startedAt,
     });
-    return resultText(result).trim().slice(0, 900) || fallback;
-  } catch {
+    input.onGeneration?.(diagnostic);
+    return text;
+  } catch (error) {
+    const failureReason = safeClaireFailureReason(error);
+    console.error("[Claire] opening brief generation failed", {
+      failureReason,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
+    const diagnostic: ClaireGenerationDiagnostic = {
+      kind: "opening_brief",
+      source: "fallback",
+      failureReason,
+    };
+    await recordGeneration({
+      tenantId: input.tenantId,
+      diagnostic,
+      latencyMs: Date.now() - startedAt,
+    });
+    input.onGeneration?.(diagnostic);
     return fallback;
   }
 }
@@ -177,7 +225,9 @@ export async function extractClaireDebrief(input: {
       ],
     });
     const parsed = debriefSchema.safeParse(JSON.parse(resultText(result)));
-    return parsed.success ? parsed.data : conservativeDebriefFallback(transcript);
+    return parsed.success
+      ? parsed.data
+      : conservativeDebriefFallback(transcript);
   } catch {
     return conservativeDebriefFallback(transcript);
   }

@@ -10,6 +10,7 @@ import {
   runCustomerChurnScan,
 } from "../churnRadar/customerChurnService";
 import {
+  adminProcedure,
   dayforgeChurnProcedure,
   dayforgeMissionFieldProcedure,
   router,
@@ -22,6 +23,7 @@ import {
   startClairePostStopCall,
   startClairePreDriveCall,
 } from "./claireTwilio";
+import { previewClairePreDrive } from "./preDriveRuntime";
 
 const uuid = z.string().uuid();
 
@@ -69,8 +71,7 @@ function recoveryAction(
       displayName: detail.customer.customerName,
     },
     reason: detail.customer.reasons.join(" · "),
-    authority:
-      contacted || completed ? "HUMAN_EXECUTION" : "APPROVAL_REQUIRED",
+    authority: contacted || completed ? "HUMAN_EXECUTION" : "APPROVAL_REQUIRED",
     status: completed
       ? "completed"
       : contacted
@@ -100,6 +101,20 @@ function recoveryAction(
 }
 
 export const claireRouter = router({
+  previewPreDrive: adminProcedure
+    .input(
+      z.object({
+        timeZone: z.string().trim().min(1).max(100).optional(),
+      })
+    )
+    .query(({ ctx, input }) =>
+      previewClairePreDrive({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        timeZone: input.timeZone,
+      })
+    ),
+
   driveContext: dayforgeMissionFieldProcedure
     .input(
       z.object({
