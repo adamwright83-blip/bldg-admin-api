@@ -94,11 +94,13 @@ function validTwilioRequest(req: Request): boolean {
   if (!authToken) return process.env.NODE_ENV !== "production";
   const signature = req.headers["x-twilio-signature"];
   if (typeof signature !== "string" || !signature) return false;
-  return twilio.validateRequest(
-    authToken,
-    signature,
+  const body = (req.body ?? {}) as Record<string, string>;
+  const candidateUrls = new Set([
     publicUrlFor(req),
-    (req.body ?? {}) as Record<string, string>
+    `${publicBaseUrl()}${req.originalUrl}`,
+  ]);
+  return Array.from(candidateUrls).some(url =>
+    twilio.validateRequest(authToken, signature, url, body)
   );
 }
 
