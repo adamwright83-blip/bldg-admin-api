@@ -6,7 +6,7 @@ vi.mock("../_core/env", () => ({
 
 import { preDriveConversationTwiML } from "./claireTwilio";
 
-describe("Claire Twilio pre-drive TwiML", () => {
+describe("H — existing Claire conversational loop remains intact", () => {
   it("uses a conversational voice and gathers barge-in speech around the opening", () => {
     const xml = preDriveConversationTwiML({
       text: "Your next stop is The Wilshire. Ask how laundry works today.",

@@ -9,7 +9,8 @@ import {
   saveCommercialMissionFieldNotes,
 } from "../commercialMissions/commercialMissionFieldService";
 import { assembleClaireDriveContext } from "./contextAssembler";
-import { extractClaireDebrief, writeClairePreDriveBrief } from "./reasoning";
+import { extractClaireDebrief } from "./reasoning";
+import { generateClairePreDriveOutput } from "./preDriveRuntime";
 import {
   answerClairePreDriveFollowUp,
   isClaireCallComplete,
@@ -183,16 +184,12 @@ export async function startClairePreDriveCall(input: {
   timeZone?: string;
 }): Promise<{ callSid: string; brief: string }> {
   const to = configuredOperatorPhone();
-  const context = await assembleClaireDriveContext({
+  const generated = await generateClairePreDriveOutput({
     tenantId: input.tenantId,
     actorId: input.actorId,
-    phase: "pre_drive",
     timeZone: input.timeZone,
   });
-  const brief = await writeClairePreDriveBrief({
-    tenantId: input.tenantId,
-    context,
-  });
+  const { brief, context } = generated;
   clearExpiredPreDriveConversations();
   const conversationId = randomUUID();
   preDriveConversations.set(conversationId, {

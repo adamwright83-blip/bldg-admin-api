@@ -4,7 +4,10 @@ import Anthropic, {
   RateLimitError,
 } from "@anthropic-ai/sdk";
 import { ENV } from "./env";
-import { assertAiSpendAvailable, trackModelUsage } from "../agents/costTracking";
+import {
+  assertAiSpendAvailable,
+  trackModelUsage,
+} from "../agents/costTracking";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -25,7 +28,12 @@ export type FileContent = {
   type: "file_url";
   file_url: {
     url: string;
-    mime_type?: "audio/mpeg" | "audio/wav" | "application/pdf" | "audio/mp4" | "video/mp4";
+    mime_type?:
+      | "audio/mpeg"
+      | "audio/wav"
+      | "application/pdf"
+      | "audio/mp4"
+      | "video/mp4";
   };
 };
 
@@ -56,7 +64,10 @@ export type ToolChoiceExplicit = {
   };
 };
 
-export type ToolChoice = ToolChoicePrimitive | ToolChoiceByName | ToolChoiceExplicit;
+export type ToolChoice =
+  | ToolChoicePrimitive
+  | ToolChoiceByName
+  | ToolChoiceExplicit;
 
 export type InvokeParams = {
   messages: Message[];
@@ -102,6 +113,25 @@ export type InvokeResult = {
     total_tokens: number;
   };
 };
+
+export type InvokeTextParams = Pick<
+  InvokeParams,
+  "messages" | "tenantId" | "model" | "maxTokens" | "max_tokens" | "temperature"
+>;
+
+export class TextLLMInvocationError extends Error {
+  readonly code: "invalid_request" | "provider_failure";
+
+  constructor(
+    code: "invalid_request" | "provider_failure",
+    message: string,
+    options?: ErrorOptions
+  ) {
+    super(message, options);
+    this.name = "TextLLMInvocationError";
+    this.code = code;
+  }
+}
 
 export type JsonSchema = {
   name: string;
@@ -156,17 +186,25 @@ export function messageContentToAnthropicBlocks(
         );
       }
       const mt = parsed.mime.toLowerCase();
-      const allowed = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
-      const mediaType = (allowed.includes(mt as (typeof allowed)[number])
-        ? mt
-        : "image/jpeg") as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+      const allowed = [
+        "image/jpeg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+      ] as const;
+      const mediaType = (
+        allowed.includes(mt as (typeof allowed)[number]) ? mt : "image/jpeg"
+      ) as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
       blocks.push({
         type: "image",
         source: { type: "base64", media_type: mediaType, data: parsed.base64 },
       });
       continue;
     }
-    if (part.type === "file_url" && part.file_url.mime_type === "application/pdf") {
+    if (
+      part.type === "file_url" &&
+      part.file_url.mime_type === "application/pdf"
+    ) {
       const parsed = parseDataUrl(part.file_url.url);
       if (!parsed) {
         throw new Error(
@@ -175,7 +213,11 @@ export function messageContentToAnthropicBlocks(
       }
       blocks.push({
         type: "document",
-        source: { type: "base64", media_type: "application/pdf", data: parsed.base64 },
+        source: {
+          type: "base64",
+          media_type: "application/pdf",
+          data: parsed.base64,
+        },
       });
       continue;
     }
@@ -213,7 +255,9 @@ const normalizeResponseFormat = ({
       explicitFormat.type === "json_schema" &&
       !explicitFormat.json_schema?.schema
     ) {
-      throw new Error("responseFormat json_schema requires a defined schema object");
+      throw new Error(
+        "responseFormat json_schema requires a defined schema object"
+      );
     }
     return explicitFormat;
   }
@@ -233,7 +277,9 @@ const normalizeResponseFormat = ({
   };
 };
 
-function inputSchemaForAnthropic(schema: Record<string, unknown>): Record<string, unknown> {
+function inputSchemaForAnthropic(
+  schema: Record<string, unknown>
+): Record<string, unknown> {
   const clone = JSON.parse(JSON.stringify(schema)) as Record<string, unknown>;
   delete clone.strict;
   return clone;
@@ -273,7 +319,9 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   await assertAiSpendAvailable(tenantId);
 
   if (params.tools?.length) {
-    throw new Error("invokeLLM with Anthropic does not support custom tools; use outputSchema only.");
+    throw new Error(
+      "invokeLLM with Anthropic does not support custom tools; use outputSchema only."
+    );
   }
 
   const normalizedFormat = normalizeResponseFormat({
@@ -319,12 +367,17 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   }
 
   if (anthropicMessages.length === 0) {
-    throw new Error("At least one user message is required for Anthropic invoke.");
+    throw new Error(
+      "At least one user message is required for Anthropic invoke."
+    );
   }
 
   const client = new Anthropic({ apiKey: ENV.anthropicApiKey });
   const model = params.model ?? ENV.anthropicModel;
-  const maxTokens = Math.min(params.maxTokens ?? params.max_tokens ?? 8192, 8192);
+  const maxTokens = Math.min(
+    params.maxTokens ?? params.max_tokens ?? 8192,
+    8192
+  );
 
   try {
     const response = await client.messages.create({
@@ -341,7 +394,11 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
           input_schema: inputSchema as Anthropic.Tool.InputSchema,
         },
       ],
-      tool_choice: { type: "tool", name: toolName, disable_parallel_tool_use: true },
+      tool_choice: {
+        type: "tool",
+        name: toolName,
+        disable_parallel_tool_use: true,
+      },
     });
 
     const toolBlock = response.content.find(
@@ -349,7 +406,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     );
     if (!toolBlock) {
       const summary = response.content
-        .map((b) => (b.type === "text" ? b.text : `[${b.type}]`))
+        .map(b => (b.type === "text" ? b.text : `[${b.type}]`))
         .join(" ")
         .slice(0, 500);
       throw new Error(
@@ -382,7 +439,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
         ? {
             prompt_tokens: response.usage.input_tokens,
             completion_tokens: response.usage.output_tokens,
-            total_tokens: response.usage.input_tokens + response.usage.output_tokens,
+            total_tokens:
+              response.usage.input_tokens + response.usage.output_tokens,
           }
         : undefined,
     };
@@ -397,5 +455,78 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     return result;
   } catch (e) {
     throw toAnthropicCallerError(e);
+  }
+}
+
+/** Plain-text Anthropic generation. Structured callers must continue to use invokeLLM. */
+export async function invokeTextLLM(params: InvokeTextParams): Promise<string> {
+  try {
+    assertAnthropicApiKey();
+    const tenantId = params.tenantId ?? "default";
+    await assertAiSpendAvailable(tenantId);
+
+    const systemParts: string[] = [];
+    const anthropicMessages: Anthropic.MessageParam[] = [];
+    for (const message of params.messages) {
+      if (message.role !== "system" && message.role !== "user") {
+        throw new TextLLMInvocationError(
+          "invalid_request",
+          `Unsupported message role for Anthropic text invoke: ${message.role}`
+        );
+      }
+      const parts = ensureArray(message.content).map(normalizeContentPart);
+      if (parts.some(part => part.type !== "text")) {
+        throw new TextLLMInvocationError(
+          "invalid_request",
+          "Anthropic text invoke supports text message content only."
+        );
+      }
+      const text = parts.map(part => (part as TextContent).text).join("\n");
+      if (message.role === "system") systemParts.push(text);
+      else anthropicMessages.push({ role: "user", content: text });
+    }
+    if (anthropicMessages.length === 0) {
+      throw new TextLLMInvocationError(
+        "invalid_request",
+        "At least one user message is required for Anthropic text invoke."
+      );
+    }
+
+    const client = new Anthropic({ apiKey: ENV.anthropicApiKey });
+    const response = await client.messages.create({
+      model: params.model ?? ENV.anthropicModel,
+      max_tokens: Math.min(params.maxTokens ?? params.max_tokens ?? 8192, 8192),
+      temperature: params.temperature ?? 0,
+      ...(systemParts.length ? { system: systemParts.join("\n\n") } : {}),
+      messages: anthropicMessages,
+    });
+    const text = response.content
+      .filter((block): block is Anthropic.TextBlock => block.type === "text")
+      .map(block => block.text)
+      .join("\n")
+      .trim();
+    if (!text) {
+      throw new TextLLMInvocationError(
+        "provider_failure",
+        "Anthropic returned no assistant text."
+      );
+    }
+    if (response.usage) {
+      await trackModelUsage({
+        tenantId,
+        modelUsed: response.model,
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+      });
+    }
+    return text;
+  } catch (error) {
+    if (error instanceof TextLLMInvocationError) throw error;
+    const callerError = toAnthropicCallerError(error);
+    throw new TextLLMInvocationError(
+      "provider_failure",
+      `Anthropic text generation failed: ${callerError.message}`,
+      { cause: callerError }
+    );
   }
 }
