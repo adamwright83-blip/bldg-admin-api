@@ -71,4 +71,24 @@ describe("Claire pre-drive conversation", () => {
       })
     ).toBe("I mean this: Visit The Wilshire and ask about management effort.");
   });
+
+  it("treats natural confusion as a request to clarify the frozen brief", () => {
+    expect(
+      conservativeClaireFollowUp({
+        utterance: "What are you talking about?",
+        brief: "Visit The Wilshire and ask about management effort.",
+        context,
+      })
+    ).toBe("I mean this: Visit The Wilshire and ask about management effort.");
+  });
+
+  it("keeps unclear telephone speech grounded by returning to the frozen brief", () => {
+    expect(
+      conservativeClaireFollowUp({
+        utterance: "Claire, answer my... give it to me.",
+        brief: "Visit The Wilshire and ask about management effort.",
+        context,
+      })
+    ).toContain("Visit The Wilshire and ask about management effort.");
+  });
 });
