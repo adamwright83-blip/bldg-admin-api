@@ -109,6 +109,7 @@ function compactContext(context: ClaireDriveContext): string {
     blockers: context.blockers,
     relevantTimeline: context.relevantTimeline,
     mission: context.mission,
+    missionSalesBrief: context.missionSalesBrief,
   });
 }
 
@@ -187,6 +188,8 @@ export async function writeClairePreDriveBrief(
             "Speak naturally in 2 to 4 short sentences and 35 to 70 spoken words; never exceed 70 words. Lead with the next field commitment or blocker, then one useful optional move at most.",
               "Use conversational spoken English. Avoid slash-separated phrases, dense abbreviations, or wording that is hard to understand over a phone line.",
               "Do not narrate the game.",
+              "If the context includes missionSalesBrief, that is the one authoritative sales strategy for this mission — prioritize its primaryObjective and keyUnknown over generic pitching, and do not repeat anything listed in its thingsToAvoid.",
+              "Never state a missionSalesBrief unknown, questionsToAsk item, or recommendation as if it were already a known fact. If the operator asks what an unknown answer is, say plainly that it is not known and that finding out is the point of this visit.",
               compiled.promptSection,
             ].join(" "),
           },
@@ -379,6 +382,17 @@ export async function writeClaireOutcomeConfirmation(
     operatorUserId: string | null;
     outcome: string;
     outcomeLabel: string;
+    /**
+     * Claire Pass 2: what the MissionSalesBrief believed before this
+     * outcome vs. what the newly generated version now knows/recommends —
+     * lets Claire say why the strategy changed without inventing the
+     * reason. Omit when no mission brief is in play.
+     */
+    strategyChange?: {
+      previousObjective: string | null;
+      newObjective: string | null;
+      newlyKnown: string[];
+    } | null;
   },
   dependencies: {
     invokeText?: typeof invokeTextLLM;
@@ -418,10 +432,20 @@ export async function writeClaireOutcomeConfirmation(
                   ? "Own it plainly if relevant, no reassurance, no blame — one short factual line."
                   : "Stay neutral and brief.",
               "One short spoken sentence, under 30 words.",
+              input.strategyChange
+                ? "If strategyChange is present, you may briefly note that the plan changed and why, using ONLY newlyKnown — never invent a different reason. If strategyChange is absent, say nothing about strategy."
+                : "",
               compiled.promptSection,
             ].join(" "),
           },
-          { role: "user", content: JSON.stringify({ outcome: input.outcome, outcomeLabel: input.outcomeLabel }) },
+          {
+            role: "user",
+            content: JSON.stringify({
+              outcome: input.outcome,
+              outcomeLabel: input.outcomeLabel,
+              strategyChange: input.strategyChange ?? null,
+            }),
+          },
         ],
       })
     ).trim();

@@ -90,6 +90,12 @@ export default function CommercialSalesMission() {
     { missionId: validMissionId ? missionId : 1 },
     { enabled: isAuthenticated && validMissionId, retry: false }
   );
+  // The same MissionSalesBrief Claire uses (system.missionSalesBrief.fieldBrief) —
+  // never independently regenerated here, only rendered.
+  const salesBriefQuery = trpc.system.missionSalesBrief.fieldBrief.useQuery(
+    { missionId: validMissionId ? missionId : 1 },
+    { enabled: isAuthenticated && validMissionId, retry: false }
+  );
   const startPreparation =
     trpc.system.commercialMission.fieldStartPreparation.useMutation();
   const checklistMutation =
@@ -961,6 +967,53 @@ export default function CommercialSalesMission() {
                   <p key={question}>{question}</p>
                 ))}
               </div>
+              {salesBriefQuery.data ? (
+                <div className="csm-script" data-brief-id={salesBriefQuery.data.briefId} data-brief-version={salesBriefQuery.data.version}>
+                  <small>FIELD BRIEF v{salesBriefQuery.data.version}</small>
+                  <h3>{salesBriefQuery.data.primaryObjective}</h3>
+                  {salesBriefQuery.data.known.length ? (
+                    <div className="csm-question-list">
+                      <h3>KNOWN</h3>
+                      {salesBriefQuery.data.known.map(fact => (
+                        <p key={fact}>{fact}</p>
+                      ))}
+                    </div>
+                  ) : null}
+                  {salesBriefQuery.data.keyUnknown ? (
+                    <div className="csm-question-list">
+                      <h3>UNKNOWN</h3>
+                      <p>{salesBriefQuery.data.keyUnknown}</p>
+                    </div>
+                  ) : null}
+                  {salesBriefQuery.data.ask.length ? (
+                    <div className="csm-question-list">
+                      <h3>ASK</h3>
+                      {salesBriefQuery.data.ask.map(question => (
+                        <p key={question}>{question}</p>
+                      ))}
+                    </div>
+                  ) : null}
+                  {salesBriefQuery.data.avoid.length ? (
+                    <div className="csm-question-list">
+                      <h3>DO NOT REPEAT</h3>
+                      {salesBriefQuery.data.avoid.map(item => (
+                        <p key={item}>{item}</p>
+                      ))}
+                    </div>
+                  ) : null}
+                  {salesBriefQuery.data.previousRelevantOutcome ? (
+                    <div className="csm-question-list">
+                      <h3>PRIOR OUTCOME</h3>
+                      <p>{salesBriefQuery.data.previousRelevantOutcome}</p>
+                    </div>
+                  ) : null}
+                  {salesBriefQuery.data.frameworkId ? (
+                    <p>
+                      <small>Framework: {salesBriefQuery.data.frameworkId}</small>
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
               <label className="csm-notes">
                 <span>VISIT NOTES</span>
                 <textarea
