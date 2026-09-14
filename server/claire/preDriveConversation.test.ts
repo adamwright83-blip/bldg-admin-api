@@ -61,4 +61,14 @@ describe("Claire pre-drive conversation", () => {
       })
     ).toContain("doesn't confirm their laundry setup");
   });
+
+  it("repeats the frozen brief when the operator could not hear it", () => {
+    expect(
+      conservativeClaireFollowUp({
+        utterance: "What did you say? I can't hear you.",
+        brief: "Visit The Wilshire and ask about management effort.",
+        context,
+      })
+    ).toBe("I mean this: Visit The Wilshire and ask about management effort.");
+  });
 });

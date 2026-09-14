@@ -14,7 +14,9 @@ describe("Claire Twilio pre-drive TwiML", () => {
       opening: true,
     });
 
-    expect(xml).toContain('voice="Google.en-US-Chirp3-HD-Aoede"');
+    expect(xml).toContain('voice="Polly.Ruth-Generative"');
+    expect(xml).toContain('rate="90%"');
+    expect(xml).toContain('volume="+6dB"');
     expect(xml).toContain('input="speech"');
     expect(xml).toContain('bargeIn="true"');
     expect(xml).toContain('speechModel="experimental_conversations"');

@@ -23,7 +23,7 @@ import {
 const DEBRIEF_PATH = "/api/claire/twilio/debrief";
 const CONFIRM_PATH = "/api/claire/twilio/confirm";
 const PRE_DRIVE_PATH = "/api/claire/twilio/pre-drive";
-const CLAIRE_VOICE = "Google.en-US-Chirp3-HD-Aoede";
+const CLAIRE_VOICE = "Polly.Ruth-Generative";
 const PRE_DRIVE_CONVERSATION_TTL_MS = 30 * 60 * 1_000;
 const MAX_PRE_DRIVE_TURNS = 8;
 const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim() ?? "";
@@ -118,7 +118,8 @@ function assertMissionAccess(input: {
 
 function speakAndHangUp(text: string): string {
   const response = new twilio.twiml.VoiceResponse();
-  response.say({ voice: CLAIRE_VOICE, language: "en-US" }, text);
+  const say = response.say({ voice: CLAIRE_VOICE, language: "en-US" }, "");
+  say.prosody({ rate: "90%", volume: "+6dB" }, text);
   response.hangup();
   return response.toString();
 }
@@ -142,8 +143,9 @@ export function preDriveConversationTwiML(input: {
     bargeIn: true,
     hints: "got it, I'm good, that's enough, end call, hang up, goodbye",
   });
-  gather.say(
-    { voice: CLAIRE_VOICE, language: "en-US" },
+  const say = gather.say({ voice: CLAIRE_VOICE, language: "en-US" }, "");
+  say.prosody(
+    { rate: "90%", volume: "+6dB" },
     input.opening ? `Adam. Claire here. ${input.text}` : input.text
   );
   response.hangup();
