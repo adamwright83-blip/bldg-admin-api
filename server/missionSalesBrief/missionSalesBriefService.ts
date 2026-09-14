@@ -34,11 +34,9 @@ async function generateNextVersion(input: {
   tenantId: string;
   missionId: number;
   previous: MissionSalesBrief | null;
+  evidence: Awaited<ReturnType<typeof assembleMissionSalesBriefEvidence>>;
 }): Promise<MissionSalesBrief | null> {
-  const evidence = await assembleMissionSalesBriefEvidence({
-    tenantId: input.tenantId,
-    missionId: input.missionId,
-  });
+  const evidence = input.evidence;
   if (!evidence) return null;
 
   const eligible = await listEligibleSalesIntel();
@@ -142,7 +140,7 @@ export async function ensureCurrentMissionSalesBrief(input: {
     return previous;
   }
 
-  return generateNextVersion({ ...input, previous });
+  return generateNextVersion({ ...input, previous, evidence });
 }
 
 export async function getLatestMissionSalesBrief(input: {

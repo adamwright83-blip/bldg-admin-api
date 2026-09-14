@@ -11,6 +11,10 @@ import {
 import { recordClaireMissionOutcomeEvents, recordQualifyingClaireInteraction } from "./character/relationshipEmitters";
 import { assembleClaireDriveContext } from "./contextAssembler";
 import {
+  ensureCurrentMissionSalesBrief,
+  getLatestMissionSalesBrief,
+} from "../missionSalesBrief/missionSalesBriefService";
+import {
   extractClaireDebrief,
   writeClaireOutcomeConfirmation,
   writeClairePostStopOpening,
@@ -552,6 +556,10 @@ export function registerClaireRoutes(app: Express): void {
       if (current.visitOutcome) {
         return res.send(speakAndHangUp("That outcome was already saved."));
       }
+      const priorBrief = await getLatestMissionSalesBrief({
+        tenantId: claims.tenantId,
+        missionId: claims.missionId,
+      }).catch(() => null);
       await recordCommercialMissionVisitOutcome({
         tenantId: claims.tenantId,
         missionId: claims.missionId,
@@ -578,11 +586,30 @@ export function registerClaireRoutes(app: Express): void {
           outcome: claims.proposal.proposedOutcome,
         })
       );
+      // Real evidence (the just-persisted visit outcome) has changed, so
+      // the next request for the mission's brief creates a new immutable
+      // version rather than mutating v1 — never triggered by Claire's own
+      // wording, only by this authoritative business-truth write.
+      const newBrief = await ensureCurrentMissionSalesBrief({
+        tenantId: claims.tenantId,
+        missionId: claims.missionId,
+      }).catch(() => null);
+      const strategyChange =
+        newBrief && priorBrief && newBrief.version !== priorBrief.version
+          ? {
+              previousObjective: priorBrief.recommendedApproach.primaryObjective,
+              newObjective: newBrief.recommendedApproach.primaryObjective,
+              newlyKnown: newBrief.knownFacts
+                .filter(fact => !priorBrief.knownFacts.some(prior => prior.text === fact.text))
+                .map(fact => fact.text),
+            }
+          : null;
       const confirmationLine = await writeClaireOutcomeConfirmation({
         tenantId: claims.tenantId,
         operatorUserId: claims.userId,
         outcome: claims.proposal.proposedOutcome,
         outcomeLabel: outcomeLabel(claims.proposal.proposedOutcome),
+        strategyChange,
       });
       return res.send(speakAndHangUp(confirmationLine));
     } catch (error) {
