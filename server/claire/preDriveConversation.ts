@@ -43,13 +43,19 @@ export function conservativeClaireFollowUp(input: {
     return "The current context doesn't confirm their laundry setup. Don't assume. Ask how laundry works today and what, if anything, management has to coordinate.";
   }
   if (
-    /\b(what do you mean|what did you say|say that again|repeat|can't hear|cannot hear|why|explain|clarify)\b/.test(
+    /\b(what do you mean|what are you talking about|what did you say|what was that|say that again|repeat|can't hear|cannot hear|tell me (?:the )?brief|give (?:me|it)|why|explain|clarify)\b/.test(
       question
     )
   ) {
     return `I mean this: ${input.brief}`.slice(0, MAX_SPOKEN_ANSWER_CHARS);
   }
-  return "I only have today's field context and the brief I just gave you. I don't have a grounded answer to that, so I won't guess.";
+  if (/^(hello|hey|hi)[.! ]*$/.test(question.trim())) {
+    return `I'm here. ${input.brief}`.slice(0, MAX_SPOKEN_ANSWER_CHARS);
+  }
+  return `I can only clarify today's field brief, so I won't guess beyond it. The brief is: ${input.brief}`.slice(
+    0,
+    MAX_SPOKEN_ANSWER_CHARS
+  );
 }
 
 function compactConversationContext(context: ClaireDriveContext): string {
