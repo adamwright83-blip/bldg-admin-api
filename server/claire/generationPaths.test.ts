@@ -39,6 +39,10 @@ describe("Claire natural-language generation", () => {
     expect(result).not.toContain("Your next field commitment is");
     const request = invokeText.mock.calls[0][0];
     expect(request).not.toHaveProperty("outputSchema");
+    expect(request.messages[0].content).toContain(
+      "Do not introduce yourself"
+    );
+    expect(request.messages[0].content).toContain("never exceed 70 words");
     expect(JSON.parse(request.messages[1].content)).toEqual({
       businessDate: context.businessDate,
       nextFixedCommitment: context.nextFixedCommitment,
