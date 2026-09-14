@@ -109,6 +109,7 @@ function compactContext(context: ClaireDriveContext): string {
     blockers: context.blockers,
     relevantTimeline: context.relevantTimeline,
     mission: context.mission,
+    missionSalesBrief: context.missionSalesBrief,
   });
 }
 
@@ -187,6 +188,8 @@ export async function writeClairePreDriveBrief(
             "Speak naturally in 2 to 4 short sentences and 35 to 70 spoken words; never exceed 70 words. Lead with the next field commitment or blocker, then one useful optional move at most.",
               "Use conversational spoken English. Avoid slash-separated phrases, dense abbreviations, or wording that is hard to understand over a phone line.",
               "Do not narrate the game.",
+              "If the context includes missionSalesBrief, that is the one authoritative sales strategy for this mission — prioritize its primaryObjective and keyUnknown over generic pitching, and do not repeat anything listed in its thingsToAvoid.",
+              "Never state a missionSalesBrief unknown, questionsToAsk item, or recommendation as if it were already a known fact. If the operator asks what an unknown answer is, say plainly that it is not known and that finding out is the point of this visit.",
               compiled.promptSection,
             ].join(" "),
           },

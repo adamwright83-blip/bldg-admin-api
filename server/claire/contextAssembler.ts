@@ -1,6 +1,11 @@
 import { getCommercialMissionFieldState } from "../commercialMissions/commercialMissionFieldService";
 import { getFieldToday } from "../field/fieldTodayService";
 import type { FieldTodayItem } from "../field/types";
+import { ensureCurrentMissionSalesBrief } from "../missionSalesBrief/missionSalesBriefService";
+import {
+  toCompactMissionSalesBriefForClaire,
+  type CompactMissionSalesBriefForClaire,
+} from "../../shared/missionSalesBrief";
 
 export type ClairePhase = "pre_drive" | "post_stop";
 
@@ -46,6 +51,14 @@ export type ClaireDriveContext = {
       decisionMakerStatus: string;
     };
   };
+  /**
+   * The same MissionSalesBrief the FIELD BRIEF surface renders (Claire
+   * Pass 2) — optional so existing ClaireDriveContext literals stay valid.
+   * Absent (not merely null) whenever no mission is in play or the brief
+   * could not be produced, so it never appears in the serialized prompt
+   * unless it is real.
+   */
+  missionSalesBrief?: CompactMissionSalesBriefForClaire | null;
 };
 
 const PRE_DRIVE_KINDS = new Set<FieldTodayItem["kind"]>([
@@ -137,6 +150,22 @@ export async function assembleClaireDriveContext(input: {
       }
     : null;
 
+  let missionSalesBrief: CompactMissionSalesBriefForClaire | null | undefined;
+  if (input.missionId != null) {
+    try {
+      const brief = await ensureCurrentMissionSalesBrief({
+        tenantId: input.tenantId,
+        missionId: input.missionId,
+      });
+      missionSalesBrief = brief ? toCompactMissionSalesBriefForClaire(brief) : undefined;
+    } catch (error) {
+      // Never let a mission-brief failure block Claire's core business-truth
+      // generation (Slice 16 / Pass 1's fail-closed-never-fatal pattern).
+      console.warn("[Claire] mission sales brief unavailable", error);
+      missionSalesBrief = undefined;
+    }
+  }
+
   const driveTimeline =
     input.phase === "pre_drive"
       ? today.timeline.filter(relevantToDriveBrief)
@@ -161,5 +190,6 @@ export async function assembleClaireDriveContext(input: {
     blockers,
     relevantTimeline: driveTimeline.slice(0, 8).map(simplify),
     mission,
+    ...(missionSalesBrief !== undefined ? { missionSalesBrief } : {}),
   };
 }

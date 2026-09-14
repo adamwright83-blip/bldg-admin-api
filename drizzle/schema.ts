@@ -6814,6 +6814,42 @@ export const missionDirectorPlans = mysqlTable(
  * Append-only: never updated or deleted, so relationship state can always
  * be reproduced and audited from this log alone (see tierEngine.ts).
  */
+/**
+ * Claire Pass 2 — the single authoritative, versioned sales brief for one
+ * commercial mission. Append-only: a new mission reality generates a new
+ * version row rather than mutating the previous one, so a prior strategy
+ * remains historically inspectable (see server/missionSalesBrief/).
+ */
+export const missionSalesBriefs = mysqlTable(
+  "mission_sales_briefs",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    missionId: int("missionId").notNull(),
+    accountId: int("accountId"),
+    version: int("version").notNull().default(1),
+    briefJson: json("briefJson").notNull(),
+    source: varchar("source", { length: 16 }).notNull(),
+    compilerVersion: varchar("compilerVersion", { length: 64 }).notNull(),
+    frameworkId: varchar("frameworkId", { length: 36 }),
+    confidence: int("confidence").notNull().default(0),
+    generatedFromEvidenceThrough: timestamp("generatedFromEvidenceThrough").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    versionUnique: uniqueIndex("uq_mission_sales_brief_version").on(
+      table.tenantId,
+      table.missionId,
+      table.version
+    ),
+    tenantMissionLookup: index("idx_mission_sales_brief_tenant_mission").on(
+      table.tenantId,
+      table.missionId,
+      table.version
+    ),
+  })
+);
+
 export const claireRelationshipEvents = mysqlTable(
   "claire_relationship_events",
   {

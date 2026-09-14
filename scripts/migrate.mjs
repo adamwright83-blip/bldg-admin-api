@@ -1196,5 +1196,37 @@ await assertRequiredColumns("claire_generation_logs", [
   "generatedText",
 ]);
 
+// ── Claire Pass 2: MissionSalesBrief ──────────────────────────────
+// The single authoritative, versioned sales brief per commercial mission.
+// Append-only — a new mission reality creates a new version row.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS mission_sales_briefs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    missionId INT NOT NULL,
+    accountId INT NULL,
+    version INT NOT NULL DEFAULT 1,
+    briefJson JSON NOT NULL,
+    source VARCHAR(16) NOT NULL,
+    compilerVersion VARCHAR(64) NOT NULL,
+    frameworkId VARCHAR(36) NULL,
+    confidence INT NOT NULL DEFAULT 0,
+    generatedFromEvidenceThrough TIMESTAMP NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_mission_sales_brief_version (tenantId,missionId,version),
+    KEY idx_mission_sales_brief_tenant_mission (tenantId,missionId,version)
+  )`,
+  "CREATE TABLE mission_sales_briefs"
+);
+await assertRequiredColumns("mission_sales_briefs", [
+  "tenantId",
+  "missionId",
+  "version",
+  "briefJson",
+  "source",
+  "compilerVersion",
+  "generatedFromEvidenceThrough",
+]);
+
 await conn.end();
 console.log("\nMigration complete.");
