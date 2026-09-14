@@ -30,9 +30,9 @@ export async function appendClaireGenerationLog(input: {
     generationSource: input.generationSource,
     disclosureTier: input.compiled.disclosureTier,
     generatedText: input.generatedText.slice(0, 1024),
-    relationshipDimensionsJson: { disclosureTier: input.compiled.disclosureTier },
-    sharedHistoryEventIdsJson: input.compiled.sharedHistorySummaries,
-    canonFragmentIdsJson: input.compiled.eligibleCanonFacts,
+    relationshipDimensionsJson: input.compiled.relationshipDimensions,
+    sharedHistoryEventIdsJson: input.compiled.sharedHistoryEventIds,
+    canonFragmentIdsJson: input.compiled.eligibleCanonFragmentIds,
     businessContextSummary: input.businessContextSummary?.slice(0, 512) ?? null,
     fallbackReason: input.fallbackReason,
   });

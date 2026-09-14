@@ -1,11 +1,6 @@
-import { and, eq } from "drizzle-orm";
-import {
-  claireRelationshipState,
-  claireTierTransitions,
-} from "../../../drizzle/schema";
-import { getDb } from "../../db";
 import { CLAIRE_CHARACTER_DEFINITION } from "./characterDefinition";
 import { listClaireRelationshipEvents } from "./relationshipEvents";
+import { getClaireRelationshipStore } from "./store";
 import { computeClaireDisclosureTier, deriveClaireRelationshipDimensions } from "./tierEngine";
 import {
   CLAIRE_DEFAULT_RELATIONSHIP_STATE,
@@ -27,25 +22,6 @@ function defaultState(
   };
 }
 
-function toState(
-  row: typeof claireRelationshipState.$inferSelect
-): ClaireRelationshipState {
-  return {
-    tenantId: row.tenantId,
-    operatorUserId: row.operatorUserId,
-    characterId: row.characterId as CharacterId,
-    professionalRespect: row.professionalRespect,
-    reliability: row.reliability,
-    disclosureSafety: row.disclosureSafety,
-    familiarity: row.familiarity,
-    disclosureTier: row.disclosureTier as ClaireRelationshipState["disclosureTier"],
-    qualifyingInteractionCount: row.qualifyingInteractionCount,
-    distinctInteractionDays: row.distinctInteractionDays,
-    lastEventId: row.lastEventId ?? null,
-    updatedAt: row.updatedAt.toISOString(),
-  };
-}
-
 /**
  * Read-only, cache-first accessor. Fails closed to Tier 0 whenever the DB
  * is unavailable, no operatorUserId was resolvable, or no state has been
@@ -60,20 +36,12 @@ export async function getClaireRelationshipState(input: {
   if (!input.operatorUserId) {
     return defaultState(input.tenantId, "unresolved", characterId);
   }
-  const db = await getDb();
-  if (!db) return defaultState(input.tenantId, input.operatorUserId, characterId);
-  const [row] = await db
-    .select()
-    .from(claireRelationshipState)
-    .where(
-      and(
-        eq(claireRelationshipState.tenantId, input.tenantId),
-        eq(claireRelationshipState.operatorUserId, input.operatorUserId),
-        eq(claireRelationshipState.characterId, characterId)
-      )
-    )
-    .limit(1);
-  return row ? toState(row) : defaultState(input.tenantId, input.operatorUserId, characterId);
+  const row = await getClaireRelationshipStore().getState({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    characterId,
+  });
+  return row ?? defaultState(input.tenantId, input.operatorUserId, characterId);
 }
 
 /**
@@ -89,10 +57,9 @@ export async function recomputeClaireRelationshipState(input: {
   characterId?: CharacterId;
 }): Promise<ClaireRelationshipState> {
   const characterId = input.characterId ?? "claire";
-  const db = await getDb();
-  if (!db) return defaultState(input.tenantId, input.operatorUserId, characterId);
+  const store = getClaireRelationshipStore();
 
-  const previous = await getClaireRelationshipState(input);
+  const previous = await getClaireRelationshipState({ ...input, characterId });
   const events = await listClaireRelationshipEvents({
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
@@ -105,47 +72,33 @@ export async function recomputeClaireRelationshipState(input: {
   );
   const lastEventId = events.length ? events[events.length - 1].id : null;
 
-  await db
-    .insert(claireRelationshipState)
-    .values({
-      tenantId: input.tenantId,
-      operatorUserId: input.operatorUserId,
-      characterId,
-      professionalRespect: dimensions.professionalRespect,
-      reliability: dimensions.reliability,
-      disclosureSafety: dimensions.disclosureSafety,
-      familiarity: dimensions.familiarity,
-      disclosureTier: tierComputation.tier,
-      qualifyingInteractionCount: dimensions.qualifyingInteractionCount,
-      distinctInteractionDays: dimensions.distinctInteractionDays,
-      lastEventId,
-    })
-    .onDuplicateKeyUpdate({
-      set: {
-        professionalRespect: dimensions.professionalRespect,
-        reliability: dimensions.reliability,
-        disclosureSafety: dimensions.disclosureSafety,
-        familiarity: dimensions.familiarity,
-        disclosureTier: tierComputation.tier,
-        qualifyingInteractionCount: dimensions.qualifyingInteractionCount,
-        distinctInteractionDays: dimensions.distinctInteractionDays,
-        lastEventId,
-      },
-    });
+  await store.upsertState({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    characterId,
+    professionalRespect: dimensions.professionalRespect,
+    reliability: dimensions.reliability,
+    disclosureSafety: dimensions.disclosureSafety,
+    familiarity: dimensions.familiarity,
+    disclosureTier: tierComputation.tier,
+    qualifyingInteractionCount: dimensions.qualifyingInteractionCount,
+    distinctInteractionDays: dimensions.distinctInteractionDays,
+    lastEventId,
+  });
 
   if (tierComputation.tier !== previous.disclosureTier) {
-    await db.insert(claireTierTransitions).values({
+    await store.insertTierTransition({
       tenantId: input.tenantId,
       operatorUserId: input.operatorUserId,
       characterId,
       fromTier: previous.disclosureTier,
       toTier: tierComputation.tier,
-      reasonsJson: tierComputation.reasons,
-      supportingEventIdsJson: tierComputation.supportingEventIds,
+      reasons: tierComputation.reasons,
+      supportingEventIds: tierComputation.supportingEventIds,
     });
   }
 
-  return getClaireRelationshipState(input);
+  return getClaireRelationshipState({ ...input, characterId });
 }
 
 export async function listClaireTierTransitions(input: {
@@ -153,16 +106,9 @@ export async function listClaireTierTransitions(input: {
   operatorUserId: string;
   characterId?: CharacterId;
 }) {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select()
-    .from(claireTierTransitions)
-    .where(
-      and(
-        eq(claireTierTransitions.tenantId, input.tenantId),
-        eq(claireTierTransitions.operatorUserId, input.operatorUserId),
-        eq(claireTierTransitions.characterId, input.characterId ?? "claire")
-      )
-    );
+  return getClaireRelationshipStore().listTierTransitions({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    characterId: input.characterId ?? "claire",
+  });
 }

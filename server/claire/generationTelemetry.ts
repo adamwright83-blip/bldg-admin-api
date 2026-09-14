@@ -2,7 +2,11 @@ import { logAgentEvent } from "../agents/agentEvents";
 import { appendClaireGenerationLog } from "./character/generationLog";
 import type { ClaireCompiledContext } from "./character/types";
 
-export type ClaireGenerationKind = "opening_brief" | "follow_up";
+export type ClaireGenerationKind =
+  | "opening_brief"
+  | "follow_up"
+  | "post_stop_opening"
+  | "outcome_confirmation";
 export type ClaireGenerationSource = "model" | "fallback";
 export type ClaireGenerationDiagnostic = {
   kind: ClaireGenerationKind;
@@ -101,7 +105,9 @@ export async function recordClaireGeneration(input: {
 }
 
 export function getClaireGenerationStats(tenantId: string) {
-  const stats = (["opening_brief", "follow_up"] as const).map(kind => {
+  const stats = (
+    ["opening_brief", "follow_up", "post_stop_opening", "outcome_confirmation"] as const
+  ).map(kind => {
     const value = counters.get(`${tenantId}:${kind}`) ?? {
       attempts: 0,
       fallbacks: 0,

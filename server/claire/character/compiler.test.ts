@@ -59,6 +59,37 @@ describe("B/M/N/P — runtime character compiler", () => {
     expect(fieldMode.eligibleCanonFacts.join(" ")).not.toMatch(/six-year/i);
   });
 
+  it("exposes full observability fields for the review tool (Slice 8): dimensions, shared-history ids, canon fragment ids", () => {
+    const compiled = compileClaireCharacterContext({
+      mode: "casual",
+      relationshipState: { ...baseState, disclosureTier: 1, professionalRespect: 12, reliability: 5, disclosureSafety: 3, familiarity: 7 },
+      recentSharedHistory: [
+        {
+          id: 55,
+          tenantId: "tenant-1",
+          operatorUserId: "operator-1",
+          characterId: "claire",
+          eventType: "operator_follow_through",
+          summary: "did the thing",
+          provenance: "test",
+          relatedEntityType: null,
+          relatedEntityId: null,
+          evidenceSource: null,
+          occurredAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    });
+    expect(compiled.relationshipDimensions).toEqual({
+      professionalRespect: 12,
+      reliability: 5,
+      disclosureSafety: 3,
+      familiarity: 7,
+    });
+    expect(compiled.sharedHistoryEventIds).toEqual([55]);
+    expect(compiled.eligibleCanonFragmentIds).toContain("core_age");
+  });
+
   it("carries bounded shared-history summaries, never a full transcript dump", () => {
     const events: ClaireRelationshipEvent[] = Array.from({ length: 20 }, (_, index) => ({
       id: index + 1,

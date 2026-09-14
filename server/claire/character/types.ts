@@ -177,9 +177,19 @@ export type ClaireCompiledContext = {
   version: ClaireVersionStamp;
   mode: ClaireMode;
   disclosureTier: ClaireDisclosureTier;
+  relationshipDimensions: {
+    professionalRespect: number;
+    reliability: number;
+    disclosureSafety: number;
+    familiarity: number;
+  };
   personalityLock: string;
   sharedHistorySummaries: string[];
+  /** Ids of the retrieved shared-history events backing sharedHistorySummaries — for review telemetry (Slice 8), never sent to the model. */
+  sharedHistoryEventIds: number[];
   eligibleCanonFacts: string[];
+  /** Ids of the retrieved canon fragments backing eligibleCanonFacts — for review telemetry (Slice 8), never sent to the model. */
+  eligibleCanonFragmentIds: string[];
   fewShotBlock: string | null;
   promptSection: string;
 };

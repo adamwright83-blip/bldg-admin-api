@@ -3,6 +3,7 @@ import { invokeLLM, invokeTextLLM } from "../_core/llm";
 import { compileClaireCharacterContext } from "./character/compiler";
 import { listClaireRelationshipEvents } from "./character/relationshipEvents";
 import { getClaireRelationshipState } from "./character/relationshipState";
+import type { ClaireMode } from "./character/types";
 import type { ClaireDriveContext } from "./contextAssembler";
 import {
   recordClaireGeneration,
@@ -20,7 +21,7 @@ import {
 async function compileContextFor(input: {
   tenantId: string;
   operatorUserId: string | null;
-  mode: "pre_drive" | "post_stop";
+  mode: ClaireMode;
 }) {
   const relationshipState = await getClaireRelationshipState({
     tenantId: input.tenantId,
@@ -282,5 +283,173 @@ export async function extractClaireDebrief(input: {
       : conservativeDebriefFallback(transcript);
   } catch {
     return conservativeDebriefFallback(transcript);
+  }
+}
+
+/**
+ * Post-stop mode (Slice 6): the opening line of the debrief call. Grounded
+ * only to the account name already verified by field state — never
+ * invents anything about the visit itself, since nothing about the visit
+ * is known yet at this point in the flow. Falls back to the exact
+ * previous static line if generation fails, so this is a strict
+ * enhancement over the old behavior, never a regression risk.
+ */
+export async function writeClairePostStopOpening(
+  input: {
+    tenantId: string;
+    operatorUserId: string | null;
+    accountName: string;
+  },
+  dependencies: {
+    invokeText?: typeof invokeTextLLM;
+    recordGeneration?: typeof recordClaireGeneration;
+  } = {}
+): Promise<string> {
+  const fallback = `You're clear of ${input.accountName}. Tell me what actually happened. I won't mark anything won, lost, or followed up unless you say it.`;
+  const invokeText = dependencies.invokeText ?? invokeTextLLM;
+  const recordGeneration = dependencies.recordGeneration ?? recordClaireGeneration;
+  const startedAt = Date.now();
+  const compiled = await compileContextFor({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    mode: "post_stop",
+  });
+  try {
+    const text = (
+      await invokeText({
+        tenantId: input.tenantId,
+        maxTokens: 120,
+        temperature: 0.1,
+        messages: [
+          {
+            role: "system",
+            content: [
+              "You are Claire, opening a post-stop debrief call.",
+              `The only fact you know about this visit is the account name: ${input.accountName}.`,
+              "You do not yet know what happened. Never guess or assume an outcome, a person met, or anything else about the visit.",
+              "State that the operator is clear of that account and ask what actually happened. Make clear you will not record won, lost, or a follow-up unless the operator says so.",
+              "One or two short spoken sentences, under 40 words.",
+              compiled.promptSection,
+            ].join(" "),
+          },
+          { role: "user", content: JSON.stringify({ accountName: input.accountName }) },
+        ],
+      })
+    ).trim();
+    const result = text || fallback;
+    await recordGeneration({
+      tenantId: input.tenantId,
+      diagnostic: { kind: "post_stop_opening", source: text ? "model" : "fallback", failureReason: text ? null : "unusable_output" },
+      latencyMs: Date.now() - startedAt,
+      reviewDetail: {
+        operatorUserId: input.operatorUserId,
+        generatedText: result,
+        compiled,
+        businessContextSummary: input.accountName,
+      },
+    });
+    return result;
+  } catch (error) {
+    await recordGeneration({
+      tenantId: input.tenantId,
+      diagnostic: { kind: "post_stop_opening", source: "fallback", failureReason: safeClaireFailureReason(error) },
+      latencyMs: Date.now() - startedAt,
+      reviewDetail: {
+        operatorUserId: input.operatorUserId,
+        generatedText: fallback,
+        compiled,
+        businessContextSummary: input.accountName,
+      },
+    });
+    return fallback;
+  }
+}
+
+/**
+ * post_stop / failure_review / success_review modes (Slice 6): the closing
+ * confirmation line after a mission outcome has already been confirmed
+ * and persisted as business truth. Grounded strictly to the outcome/summary
+ * that was already confirmed — this narrates a fact that already happened,
+ * it never proposes or invents one. Falls back to the exact previous
+ * static line if generation fails.
+ */
+export async function writeClaireOutcomeConfirmation(
+  input: {
+    tenantId: string;
+    operatorUserId: string | null;
+    outcome: string;
+    outcomeLabel: string;
+  },
+  dependencies: {
+    invokeText?: typeof invokeTextLLM;
+    recordGeneration?: typeof recordClaireGeneration;
+  } = {}
+): Promise<string> {
+  const fallback = `Confirmed. I saved ${input.outcomeLabel} and left anything you didn't report unresolved.`;
+  const mode: ClaireMode =
+    input.outcome === "won"
+      ? "success_review"
+      : input.outcome === "lost"
+        ? "failure_review"
+        : "post_stop";
+  const invokeText = dependencies.invokeText ?? invokeTextLLM;
+  const recordGeneration = dependencies.recordGeneration ?? recordClaireGeneration;
+  const startedAt = Date.now();
+  const compiled = await compileContextFor({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    mode,
+  });
+  try {
+    const text = (
+      await invokeText({
+        tenantId: input.tenantId,
+        maxTokens: 120,
+        temperature: 0.15,
+        messages: [
+          {
+            role: "system",
+            content: [
+              `Claire just confirmed a mission outcome that is already saved as business truth: ${input.outcomeLabel}.`,
+              "State only that this exact outcome was saved, and that anything not reported stays unresolved. Never add a detail, cause, or judgment beyond that.",
+              mode === "success_review"
+                ? "Acknowledge the win briefly without gushing — sparing with praise, still Claire."
+                : mode === "failure_review"
+                  ? "Own it plainly if relevant, no reassurance, no blame — one short factual line."
+                  : "Stay neutral and brief.",
+              "One short spoken sentence, under 30 words.",
+              compiled.promptSection,
+            ].join(" "),
+          },
+          { role: "user", content: JSON.stringify({ outcome: input.outcome, outcomeLabel: input.outcomeLabel }) },
+        ],
+      })
+    ).trim();
+    const result = text || fallback;
+    await recordGeneration({
+      tenantId: input.tenantId,
+      diagnostic: { kind: "outcome_confirmation", source: text ? "model" : "fallback", failureReason: text ? null : "unusable_output" },
+      latencyMs: Date.now() - startedAt,
+      reviewDetail: {
+        operatorUserId: input.operatorUserId,
+        generatedText: result,
+        compiled,
+        businessContextSummary: input.outcomeLabel,
+      },
+    });
+    return result;
+  } catch (error) {
+    await recordGeneration({
+      tenantId: input.tenantId,
+      diagnostic: { kind: "outcome_confirmation", source: "fallback", failureReason: safeClaireFailureReason(error) },
+      latencyMs: Date.now() - startedAt,
+      reviewDetail: {
+        operatorUserId: input.operatorUserId,
+        generatedText: fallback,
+        compiled,
+        businessContextSummary: input.outcomeLabel,
+      },
+    });
+    return fallback;
   }
 }

@@ -1,30 +1,9 @@
-import { and, desc, eq } from "drizzle-orm";
-import { claireRelationshipEvents } from "../../../drizzle/schema";
-import { getDb } from "../../db";
+import { getClaireRelationshipStore } from "./store";
 import type {
   CharacterId,
   ClaireRelationshipEvent,
   ClaireRelationshipEventInput,
 } from "./types";
-
-function toRecord(
-  row: typeof claireRelationshipEvents.$inferSelect
-): ClaireRelationshipEvent {
-  return {
-    id: row.id,
-    tenantId: row.tenantId,
-    operatorUserId: row.operatorUserId,
-    characterId: row.characterId as CharacterId,
-    eventType: row.eventType as ClaireRelationshipEvent["eventType"],
-    summary: row.summary,
-    provenance: row.provenance,
-    relatedEntityType: row.relatedEntityType ?? null,
-    relatedEntityId: row.relatedEntityId ?? null,
-    evidenceSource: row.evidenceSource ?? null,
-    occurredAt: row.occurredAt.toISOString(),
-    createdAt: row.createdAt.toISOString(),
-  };
-}
 
 /**
  * Append-only write. There is no update/delete for relationship events —
@@ -35,29 +14,7 @@ function toRecord(
 export async function appendClaireRelationshipEvent(
   input: ClaireRelationshipEventInput
 ): Promise<ClaireRelationshipEvent | null> {
-  const db = await getDb();
-  if (!db) return null;
-  const occurredAt = input.occurredAt ?? new Date();
-  const [result] = await db.insert(claireRelationshipEvents).values({
-    tenantId: input.tenantId,
-    operatorUserId: input.operatorUserId,
-    characterId: input.characterId ?? "claire",
-    eventType: input.eventType,
-    summary: input.summary,
-    provenance: input.provenance,
-    relatedEntityType: input.relatedEntityType ?? null,
-    relatedEntityId: input.relatedEntityId ?? null,
-    evidenceSource: input.evidenceSource ?? null,
-    occurredAt,
-  });
-  const insertedId = (result as { insertId?: number }).insertId;
-  if (!insertedId) return null;
-  const [row] = await db
-    .select()
-    .from(claireRelationshipEvents)
-    .where(eq(claireRelationshipEvents.id, insertedId))
-    .limit(1);
-  return row ? toRecord(row) : null;
+  return getClaireRelationshipStore().appendEvent(input);
 }
 
 /**
@@ -73,19 +30,10 @@ export async function listClaireRelationshipEvents(input: {
   characterId?: CharacterId;
   limit?: number;
 }): Promise<ClaireRelationshipEvent[]> {
-  const db = await getDb();
-  if (!db) return [];
-  const query = db
-    .select()
-    .from(claireRelationshipEvents)
-    .where(
-      and(
-        eq(claireRelationshipEvents.tenantId, input.tenantId),
-        eq(claireRelationshipEvents.operatorUserId, input.operatorUserId),
-        eq(claireRelationshipEvents.characterId, input.characterId ?? "claire")
-      )
-    )
-    .orderBy(desc(claireRelationshipEvents.occurredAt));
-  const rows = input.limit ? await query.limit(input.limit) : await query;
-  return rows.map(toRecord).reverse();
+  return getClaireRelationshipStore().listEvents({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    characterId: input.characterId ?? "claire",
+    limit: input.limit,
+  });
 }

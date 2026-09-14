@@ -1,5 +1,5 @@
 import { CLAIRE_CHARACTER_DEFINITION, CLAIRE_CHARACTER_VERSION } from "./characterDefinition";
-import { eligibleClaireCanonFacts } from "./canonStore";
+import { retrieveEligibleClaireCanon } from "./canonStore";
 import { CLAIRE_ROUTINE_FEW_SHOTS } from "./fewShots";
 import { CLAIRE_FIELD_MODE_OVERRIDE, CLAIRE_PERSONALITY_LOCK } from "./personalityLock";
 import type {
@@ -36,13 +36,17 @@ export function compileClaireCharacterContext(input: {
   explicitlyRequestedTopic?: string;
 }): ClaireCompiledContext {
   const modePolicy = CLAIRE_CHARACTER_DEFINITION.modes[input.mode];
+  const recentEvents = input.recentSharedHistory.slice(-5);
   const sharedHistorySummaries = summarizeSharedHistory(input.recentSharedHistory);
-  const eligibleCanonFacts = eligibleClaireCanonFacts({
+  const sharedHistoryEventIds = recentEvents.map(event => event.id);
+  const eligibleCanonFragments = retrieveEligibleClaireCanon({
     disclosureTier: input.relationshipState.disclosureTier,
     mode: input.mode,
     fieldOverride: modePolicy.fieldOverride,
     explicitlyRequestedTopic: input.explicitlyRequestedTopic,
   });
+  const eligibleCanonFacts = eligibleCanonFragments.map(fragment => fragment.fact);
+  const eligibleCanonFragmentIds = eligibleCanonFragments.map(fragment => fragment.id);
 
   const lines: string[] = [CLAIRE_PERSONALITY_LOCK];
   if (modePolicy.fieldOverride) lines.push(CLAIRE_FIELD_MODE_OVERRIDE);
@@ -68,9 +72,17 @@ export function compileClaireCharacterContext(input: {
     },
     mode: input.mode,
     disclosureTier: input.relationshipState.disclosureTier,
+    relationshipDimensions: {
+      professionalRespect: input.relationshipState.professionalRespect,
+      reliability: input.relationshipState.reliability,
+      disclosureSafety: input.relationshipState.disclosureSafety,
+      familiarity: input.relationshipState.familiarity,
+    },
     personalityLock: CLAIRE_PERSONALITY_LOCK,
     sharedHistorySummaries,
+    sharedHistoryEventIds,
     eligibleCanonFacts,
+    eligibleCanonFragmentIds,
     fewShotBlock:
       modePolicy.fieldOverride && CLAIRE_ROUTINE_FEW_SHOTS.length
         ? CLAIRE_ROUTINE_FEW_SHOTS.map(shot => shot.text).join("\n---\n")
