@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import twilio from "twilio";
 import { ENV } from "../_core/env";
@@ -11,6 +11,10 @@ import {
 import { assembleClaireDriveContext } from "./contextAssembler";
 import { extractClaireDebrief, writeClairePreDriveBrief } from "./reasoning";
 import {
+  answerClairePreDriveFollowUp,
+  isClaireCallComplete,
+} from "./preDriveConversation";
+import {
   issueClaireToken,
   verifyClaireToken,
   type ClaireMissionAccess,
@@ -18,12 +22,26 @@ import {
 
 const DEBRIEF_PATH = "/api/claire/twilio/debrief";
 const CONFIRM_PATH = "/api/claire/twilio/confirm";
-const CLAIRE_VOICE = "Polly.Joanna-Neural";
+const PRE_DRIVE_PATH = "/api/claire/twilio/pre-drive";
+const CLAIRE_VOICE = "Google.en-US-Chirp3-HD-Aoede";
+const PRE_DRIVE_CONVERSATION_TTL_MS = 30 * 60 * 1_000;
+const MAX_PRE_DRIVE_TURNS = 8;
 const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim() ?? "";
 const authToken = process.env.TWILIO_AUTH_TOKEN?.trim() ?? "";
 const fromNumber = process.env.CLAIRE_TWILIO_FROM_NUMBER?.trim() ?? "";
 const operatorNumber = process.env.CLAIRE_OPERATOR_PHONE?.trim() ?? "";
 const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
+
+type PreDriveConversation = {
+  tenantId: string;
+  actorId: string;
+  brief: string;
+  context: Awaited<ReturnType<typeof assembleClaireDriveContext>>;
+  turns: number;
+  touchedAt: number;
+};
+
+const preDriveConversations = new Map<string, PreDriveConversation>();
 
 function publicBaseUrl(): string {
   return ENV.adminBaseUrl.replace(/\/$/, "");
@@ -98,30 +116,44 @@ function assertMissionAccess(input: {
 
 function speakAndHangUp(text: string): string {
   const response = new twilio.twiml.VoiceResponse();
-  const say = response.say(
-    { voice: CLAIRE_VOICE, language: "en-US" },
-    ""
-  );
-  say.prosody({ rate: "88%" }, text);
+  response.say({ voice: CLAIRE_VOICE, language: "en-US" }, text);
   response.hangup();
   return response.toString();
 }
 
-function preDriveTwiML(text: string): string {
+export function preDriveConversationTwiML(input: {
+  text: string;
+  token: string;
+  opening?: boolean;
+}): string {
   const response = new twilio.twiml.VoiceResponse();
-  response.say(
+  const gather = response.gather({
+    input: ["speech"],
+    action: `${publicBaseUrl()}${PRE_DRIVE_PATH}?token=${encodeURIComponent(input.token)}`,
+    method: "POST",
+    language: "en-US",
+    speechModel: "experimental_conversations",
+    speechTimeout: "2",
+    timeout: 5,
+    maxSpeechTime: 20,
+    actionOnEmptyResult: true,
+    bargeIn: true,
+    hints: "got it, I'm good, that's enough, end call, hang up, goodbye",
+  });
+  gather.say(
     { voice: CLAIRE_VOICE, language: "en-US" },
-    "Adam. Claire here."
+    input.opening ? `Adam. Claire here. ${input.text}` : input.text
   );
-  response.pause({ length: 1 });
-  const say = response.say(
-    { voice: CLAIRE_VOICE, language: "en-US" },
-    ""
-  );
-  say.prosody({ rate: "88%" }, text);
-  response.pause({ length: 1 });
   response.hangup();
   return response.toString();
+}
+
+function clearExpiredPreDriveConversations(now = Date.now()): void {
+  preDriveConversations.forEach((conversation, id) => {
+    if (now - conversation.touchedAt > PRE_DRIVE_CONVERSATION_TTL_MS) {
+      preDriveConversations.delete(id);
+    }
+  });
 }
 
 function outcomeLabel(outcome: string): string {
@@ -157,13 +189,34 @@ export async function startClairePreDriveCall(input: {
     tenantId: input.tenantId,
     context,
   });
-  const call = await client!.calls.create({
-    to,
-    from: assertPhone(fromNumber),
-    twiml: preDriveTwiML(brief),
-    record: false,
+  clearExpiredPreDriveConversations();
+  const conversationId = randomUUID();
+  preDriveConversations.set(conversationId, {
+    tenantId: input.tenantId,
+    actorId: input.actorId,
+    brief,
+    context,
+    turns: 0,
+    touchedAt: Date.now(),
   });
-  return { callSid: call.sid, brief };
+  const token = issueClaireToken({
+    kind: "pre_drive_conversation",
+    tenantId: input.tenantId,
+    userId: input.actorId,
+    conversationId,
+  });
+  try {
+    const call = await client!.calls.create({
+      to,
+      from: assertPhone(fromNumber),
+      twiml: preDriveConversationTwiML({ text: brief, token, opening: true }),
+      record: false,
+    });
+    return { callSid: call.sid, brief };
+  } catch (error) {
+    preDriveConversations.delete(conversationId);
+    throw error;
+  }
 }
 
 export async function startClairePostStopCall(input: {
@@ -185,7 +238,9 @@ export async function startClairePostStopCall(input: {
     missionAccess: input.missionAccess,
   });
   if (!current.field?.arrivedAt) {
-    throw new Error("Claire debrief requires an authoritative arrived field state");
+    throw new Error(
+      "Claire debrief requires an authoritative arrived field state"
+    );
   }
   if (current.visitOutcome) {
     throw new Error("This visit already has a recorded outcome");
@@ -235,22 +290,102 @@ export async function startClairePostStopCall(input: {
 }
 
 export function registerClaireRoutes(app: Express): void {
+  app.post(PRE_DRIVE_PATH, async (req: Request, res: Response) => {
+    res.type("text/xml");
+    if (!validTwilioRequest(req)) {
+      return res
+        .status(403)
+        .send(speakAndHangUp("This Claire call could not be verified."));
+    }
+    try {
+      const claims = verifyClaireToken(String(req.query.token ?? ""));
+      if (claims.kind !== "pre_drive_conversation") {
+        return res.send(
+          speakAndHangUp("This pre-drive conversation is no longer valid.")
+        );
+      }
+      clearExpiredPreDriveConversations();
+      const conversation = preDriveConversations.get(claims.conversationId);
+      if (
+        !conversation ||
+        conversation.tenantId !== claims.tenantId ||
+        conversation.actorId !== claims.userId
+      ) {
+        return res.send(
+          speakAndHangUp(
+            "I lost the current brief, so I won't guess. We'll pick this up in Goldline."
+          )
+        );
+      }
+
+      const transcript = String(
+        ((req.body ?? {}) as Record<string, string>).SpeechResult ?? ""
+      ).trim();
+      if (!transcript) {
+        preDriveConversations.delete(claims.conversationId);
+        return res.send(
+          speakAndHangUp("All right. I'll let you focus on the drive.")
+        );
+      }
+      if (isClaireCallComplete(transcript)) {
+        preDriveConversations.delete(claims.conversationId);
+        return res.send(speakAndHangUp("You've got it. Drive safe."));
+      }
+      if (conversation.turns >= MAX_PRE_DRIVE_TURNS) {
+        preDriveConversations.delete(claims.conversationId);
+        return res.send(
+          speakAndHangUp(
+            "That's the useful part of this brief. Drive safe, and take it one stop at a time."
+          )
+        );
+      }
+
+      const answer = await answerClairePreDriveFollowUp({
+        tenantId: conversation.tenantId,
+        utterance: transcript,
+        brief: conversation.brief,
+        context: conversation.context,
+      });
+      conversation.turns += 1;
+      conversation.touchedAt = Date.now();
+      return res.send(
+        preDriveConversationTwiML({
+          text: answer,
+          token: String(req.query.token),
+        })
+      );
+    } catch (error) {
+      console.error("[Claire] pre-drive conversation webhook error", error);
+      return res.send(
+        speakAndHangUp(
+          "I couldn't answer that safely from today's brief, so I won't guess. Drive safe."
+        )
+      );
+    }
+  });
+
   app.post(DEBRIEF_PATH, async (req: Request, res: Response) => {
     res.type("text/xml");
     if (!validTwilioRequest(req)) {
-      return res.status(403).send(speakAndHangUp("This Claire call could not be verified."));
+      return res
+        .status(403)
+        .send(speakAndHangUp("This Claire call could not be verified."));
     }
     try {
       const token = String(req.query.token ?? "");
       const claims = verifyClaireToken(token);
       if (claims.kind !== "drive_call" || claims.phase !== "post_stop") {
-        return res.send(speakAndHangUp("This debrief link is no longer valid."));
+        return res.send(
+          speakAndHangUp("This debrief link is no longer valid.")
+        );
       }
       const body = (req.body ?? {}) as Record<string, string>;
       const transcript = String(body.SpeechResult ?? "").trim();
       const callSid = String(body.CallSid ?? "unknown-call");
       if (!transcript) {
-        return res.send(speakAndHangUp("I didn't catch that. Nothing was changed."));
+        return res.send(
+          speakAndHangUp("I didn't catch that. Nothing was changed.")
+        );
       }
 
       const current = await getCommercialMissionFieldState({
@@ -259,7 +394,9 @@ export function registerClaireRoutes(app: Express): void {
       });
       if (!current?.field?.arrivedAt) {
         return res.send(
-          speakAndHangUp("Goldline does not have verified arrival for this stop, so I left business truth unchanged.")
+          speakAndHangUp(
+            "Goldline does not have verified arrival for this stop, so I left business truth unchanged."
+          )
         );
       }
       assertMissionAccess({
@@ -268,7 +405,9 @@ export function registerClaireRoutes(app: Express): void {
         missionAccess: claims.missionAccess,
       });
       if (current.visitOutcome) {
-        return res.send(speakAndHangUp("This visit already has a recorded outcome."));
+        return res.send(
+          speakAndHangUp("This visit already has a recorded outcome.")
+        );
       }
 
       await saveCommercialMissionFieldNotes({
@@ -320,7 +459,9 @@ export function registerClaireRoutes(app: Express): void {
     } catch (error) {
       console.error("[Claire] debrief webhook error", error);
       return res.send(
-        speakAndHangUp("I couldn't safely interpret that. Your business outcome was not changed.")
+        speakAndHangUp(
+          "I couldn't safely interpret that. Your business outcome was not changed."
+        )
       );
     }
   });
@@ -328,18 +469,26 @@ export function registerClaireRoutes(app: Express): void {
   app.post(CONFIRM_PATH, async (req: Request, res: Response) => {
     res.type("text/xml");
     if (!validTwilioRequest(req)) {
-      return res.status(403).send(speakAndHangUp("This Claire call could not be verified."));
+      return res
+        .status(403)
+        .send(speakAndHangUp("This Claire call could not be verified."));
     }
     try {
       const claims = verifyClaireToken(String(req.query.token ?? ""));
       if (claims.kind !== "debrief_approval") {
-        return res.send(speakAndHangUp("This confirmation is no longer valid."));
+        return res.send(
+          speakAndHangUp("This confirmation is no longer valid.")
+        );
       }
       const body = (req.body ?? {}) as Record<string, string>;
-      const confirmation = String(body.SpeechResult ?? "").trim().toLowerCase();
+      const confirmation = String(body.SpeechResult ?? "")
+        .trim()
+        .toLowerCase();
       if (!/\b(confirm|confirmed|yes|save it|correct)\b/.test(confirmation)) {
         return res.send(
-          speakAndHangUp("Cancelled. I kept the raw debrief but did not record a business outcome.")
+          speakAndHangUp(
+            "Cancelled. I kept the raw debrief but did not record a business outcome."
+          )
         );
       }
       const current = await getCommercialMissionFieldState({
@@ -348,7 +497,9 @@ export function registerClaireRoutes(app: Express): void {
       });
       if (!current?.field || !current.field.arrivedAt) {
         return res.send(
-          speakAndHangUp("Verified arrival is missing, so I did not change the visit outcome.")
+          speakAndHangUp(
+            "Verified arrival is missing, so I did not change the visit outcome."
+          )
         );
       }
       assertMissionAccess({
@@ -378,12 +529,16 @@ export function registerClaireRoutes(app: Express): void {
         followUpRequested: claims.proposal.followUpRequested,
       });
       return res.send(
-        speakAndHangUp(`Confirmed. I saved ${outcomeLabel(claims.proposal.proposedOutcome)} and left anything you didn't report unresolved.`)
+        speakAndHangUp(
+          `Confirmed. I saved ${outcomeLabel(claims.proposal.proposedOutcome)} and left anything you didn't report unresolved.`
+        )
       );
     } catch (error) {
       console.error("[Claire] confirm webhook error", error);
       return res.send(
-        speakAndHangUp("I couldn't safely save that outcome, so business truth was left unchanged.")
+        speakAndHangUp(
+          "I couldn't safely save that outcome, so business truth was left unchanged."
+        )
       );
     }
   });

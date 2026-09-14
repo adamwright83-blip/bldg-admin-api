@@ -3,6 +3,15 @@ import type { ClaireDebriefProposal } from "./reasoning";
 
 export type ClaireMissionAccess = "field" | "operator";
 
+export type ClairePreDriveTokenPayload = {
+  v: 1;
+  kind: "pre_drive_conversation";
+  tenantId: string;
+  userId: string;
+  conversationId: string;
+  exp: number;
+};
+
 export type ClaireDriveTokenPayload = {
   v: 1;
   kind: "drive_call";
@@ -27,12 +36,15 @@ export type ClaireApprovalTokenPayload = {
 };
 
 export type ClaireTokenPayload =
+  | ClairePreDriveTokenPayload
   | ClaireDriveTokenPayload
   | ClaireApprovalTokenPayload;
 
-export type ClaireTokenInput =
-  | Omit<ClaireDriveTokenPayload, "v" | "exp">
-  | Omit<ClaireApprovalTokenPayload, "v" | "exp">;
+type UnsignedClaireToken<T> = T extends ClaireTokenPayload
+  ? Omit<T, "v" | "exp">
+  : never;
+
+export type ClaireTokenInput = UnsignedClaireToken<ClaireTokenPayload>;
 
 function secretOrThrow(explicit?: string): string {
   const secret = explicit ?? process.env.JWT_SECRET ?? "";
@@ -64,7 +76,8 @@ export function verifyClaireToken(
   options?: { nowMs?: number; secret?: string }
 ): ClaireTokenPayload {
   const [body, suppliedSignature, extra] = token.split(".");
-  if (!body || !suppliedSignature || extra) throw new Error("Invalid Claire token");
+  if (!body || !suppliedSignature || extra)
+    throw new Error("Invalid Claire token");
   const expected = signature(body, secretOrThrow(options?.secret));
   const suppliedBytes = Buffer.from(suppliedSignature);
   const expectedBytes = Buffer.from(expected);
@@ -74,8 +87,9 @@ export function verifyClaireToken(
   ) {
     throw new Error("Invalid Claire token signature");
   }
-  const parsed = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as
-    Partial<ClaireTokenPayload>;
+  const parsed = JSON.parse(
+    Buffer.from(body, "base64url").toString("utf8")
+  ) as Partial<ClaireTokenPayload>;
   const now = Math.floor((options?.nowMs ?? Date.now()) / 1000);
   if (parsed.v !== 1 || typeof parsed.exp !== "number" || parsed.exp <= now) {
     throw new Error("Claire token expired or invalid");
@@ -83,9 +97,23 @@ export function verifyClaireToken(
   if (
     typeof parsed.tenantId !== "string" ||
     typeof parsed.userId !== "string" ||
+    (parsed.kind !== "pre_drive_conversation" &&
+      parsed.kind !== "drive_call" &&
+      parsed.kind !== "debrief_approval")
+  ) {
+    throw new Error("Claire token payload is invalid");
+  }
+  if (parsed.kind === "pre_drive_conversation") {
+    if (typeof parsed.conversationId !== "string" || !parsed.conversationId) {
+      throw new Error("Claire token payload is invalid");
+    }
+    return parsed as ClairePreDriveTokenPayload;
+  }
+  if (
+    !("missionId" in parsed) ||
     typeof parsed.missionId !== "number" ||
-    (parsed.missionAccess !== "field" && parsed.missionAccess !== "operator") ||
-    (parsed.kind !== "drive_call" && parsed.kind !== "debrief_approval")
+    !("missionAccess" in parsed) ||
+    (parsed.missionAccess !== "field" && parsed.missionAccess !== "operator")
   ) {
     throw new Error("Claire token payload is invalid");
   }

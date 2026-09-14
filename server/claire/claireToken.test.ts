@@ -4,6 +4,26 @@ import { issueClaireToken, verifyClaireToken } from "./claireToken";
 const secret = "test-secret-long-enough-for-signing";
 
 describe("Claire call tokens", () => {
+  it("round-trips a scoped pre-drive conversation reference", () => {
+    const token = issueClaireToken(
+      {
+        kind: "pre_drive_conversation",
+        tenantId: "tenant-1",
+        userId: "adam",
+        conversationId: "conversation-1",
+      },
+      { secret, nowMs: 1_000_000, ttlSeconds: 60 }
+    );
+    expect(
+      verifyClaireToken(token, { secret, nowMs: 1_010_000 })
+    ).toMatchObject({
+      kind: "pre_drive_conversation",
+      tenantId: "tenant-1",
+      userId: "adam",
+      conversationId: "conversation-1",
+    });
+  });
+
   it("round-trips signed drive claims without carrying business truth", () => {
     const token = issueClaireToken(
       {
@@ -16,7 +36,9 @@ describe("Claire call tokens", () => {
       },
       { secret, nowMs: 1_000_000, ttlSeconds: 60 }
     );
-    expect(verifyClaireToken(token, { secret, nowMs: 1_010_000 })).toMatchObject({
+    expect(
+      verifyClaireToken(token, { secret, nowMs: 1_010_000 })
+    ).toMatchObject({
       kind: "drive_call",
       tenantId: "tenant-1",
       userId: "adam",
