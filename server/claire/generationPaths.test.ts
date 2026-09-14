@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ClaireDriveContext } from "./contextAssembler";
 import { answerClairePreDriveFollowUp } from "./preDriveConversation";
-import { writeClairePreDriveBrief } from "./reasoning";
+import {
+  writeClaireOutcomeConfirmation,
+  writeClairePostStopOpening,
+  writeClairePreDriveBrief,
+} from "./reasoning";
 
 const context: ClaireDriveContext = {
   phase: "pre_drive",
@@ -147,6 +151,58 @@ describe("Claire natural-language generation", () => {
     expect(log).toHaveBeenCalledWith(
       "[Claire] follow-up generation failed",
       expect.objectContaining({ failureReason: "generation_failed" })
+    );
+  });
+
+  it("E — post-stop opening falls back to the exact original static line on failure", async () => {
+    const result = await writeClairePostStopOpening(
+      { tenantId: "tenant-1", operatorUserId: null, accountName: "The Wilshire" },
+      { invokeText: vi.fn().mockRejectedValue(new Error("provider down")) }
+    );
+    expect(result).toBe(
+      "You're clear of The Wilshire. Tell me what actually happened. I won't mark anything won, lost, or followed up unless you say it."
+    );
+  });
+
+  it("E — post-stop opening uses model text and stays grounded to only the account name", async () => {
+    const invokeText = vi.fn().mockResolvedValue("Clear of The Wilshire. What happened?");
+    const result = await writeClairePostStopOpening(
+      { tenantId: "tenant-1", operatorUserId: null, accountName: "The Wilshire" },
+      { invokeText }
+    );
+    expect(result).toBe("Clear of The Wilshire. What happened?");
+    expect(invokeText.mock.calls[0][0].messages[0].content).toContain(
+      "Never guess or assume an outcome"
+    );
+  });
+
+  it("F — outcome confirmation falls back to the exact original static line on failure", async () => {
+    const result = await writeClaireOutcomeConfirmation(
+      { tenantId: "tenant-1", operatorUserId: null, outcome: "won", outcomeLabel: "won" },
+      { invokeText: vi.fn().mockRejectedValue(new Error("provider down")) }
+    );
+    expect(result).toBe(
+      "Confirmed. I saved won and left anything you didn't report unresolved."
+    );
+  });
+
+  it("F — outcome confirmation picks success_review for won and failure_review for lost", async () => {
+    const wonInvoke = vi.fn().mockResolvedValue("Confirmed, won.");
+    await writeClaireOutcomeConfirmation(
+      { tenantId: "tenant-1", operatorUserId: null, outcome: "won", outcomeLabel: "won" },
+      { invokeText: wonInvoke }
+    );
+    expect(wonInvoke.mock.calls[0][0].messages[0].content).toContain(
+      "Acknowledge the win briefly without gushing"
+    );
+
+    const lostInvoke = vi.fn().mockResolvedValue("Confirmed, lost.");
+    await writeClaireOutcomeConfirmation(
+      { tenantId: "tenant-1", operatorUserId: null, outcome: "lost", outcomeLabel: "lost" },
+      { invokeText: lostInvoke }
+    );
+    expect(lostInvoke.mock.calls[0][0].messages[0].content).toContain(
+      "Own it plainly if relevant, no reassurance, no blame"
     );
   });
 });

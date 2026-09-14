@@ -18,6 +18,15 @@ import {
 import type { CanonicalGoldlineAction } from "../../shared/goldlineActionContract";
 import { assertDriverCanReadMission } from "../commercialMissions/commercialMissionAuthorization";
 import { getCommercialMission } from "../commercialMissions/commercialMissionStore";
+import {
+  CLAIRE_ATTESTABLE_EVENT_TYPES,
+  recordClaireAttestedEvent,
+} from "./character/relationshipEmitters";
+import { listClaireRelationshipEvents } from "./character/relationshipEvents";
+import {
+  getClaireRelationshipState,
+  listClaireTierTransitions,
+} from "./character/relationshipState";
 import { assembleClaireDriveContext } from "./contextAssembler";
 import {
   startClairePostStopCall,
@@ -26,6 +35,9 @@ import {
 import { previewClairePreDrive } from "./preDriveRuntime";
 
 const uuid = z.string().uuid();
+
+const ATTESTATION_CONFIRMATION =
+  "I witnessed this exactly as described and attest it happened" as const;
 
 async function assertClaireMissionAccess(input: {
   tenantId: string;
@@ -287,4 +299,67 @@ export const claireRouter = router({
       if (!updated) throw new Error("Recovery intervention not found");
       return { detail: updated, action: recoveryAction(updated) };
     }),
+
+  // ── Claire relationship state (Pass 1) ──────────────────────────
+  // Read-only self-view: an operator can see their own standing with
+  // Claire. Never exposes another operator's state.
+  relationshipState: dayforgeMissionFieldProcedure.query(({ ctx }) =>
+    getClaireRelationshipState({
+      tenantId: ctx.tenantId,
+      operatorUserId: ctx.user.openId,
+    })
+  ),
+
+  // Bounded, self-scoped shared-history view — never a full transcript
+  // dump (Slice 4).
+  relationshipHistory: dayforgeMissionFieldProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(20).default(10) }))
+    .query(({ ctx, input }) =>
+      listClaireRelationshipEvents({
+        tenantId: ctx.tenantId,
+        operatorUserId: ctx.user.openId,
+        limit: input.limit,
+      })
+    ),
+
+  // Human-attested relationship events (Slice: "operator-confirmed"
+  // evidence). Restricted to event types that cannot be truthfully
+  // inferred from runtime telemetry alone (see relationshipEmitters.ts) —
+  // operator_follow_through/shared_hard_win/shared_failure are written
+  // automatically from confirmed business outcomes and are NOT accepted
+  // here, so this surface can never be used to self-award them.
+  // Requires an explicit confirmation literal, matching the debrief-confirm
+  // pattern used elsewhere for consequential, human-attested writes.
+  recordRelationshipObservation: dayforgeMissionFieldProcedure
+    .input(
+      z.object({
+        eventType: z.enum(CLAIRE_ATTESTABLE_EVENT_TYPES),
+        summary: z.string().trim().min(1).max(512),
+        relatedEntityType: z.string().trim().min(1).max(64).optional(),
+        relatedEntityId: z.string().trim().min(1).max(64).optional(),
+        confirmation: z.literal(ATTESTATION_CONFIRMATION),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      recordClaireAttestedEvent({
+        tenantId: ctx.tenantId,
+        operatorUserId: ctx.user.openId,
+        eventType: input.eventType as (typeof CLAIRE_ATTESTABLE_EVENT_TYPES)[number],
+        summary: input.summary,
+        relatedEntityType: input.relatedEntityType,
+        relatedEntityId: input.relatedEntityId,
+        attestedByUserId: ctx.user.openId,
+      })
+    ),
+
+  // Admin-only audit trail: which tier transitions happened for a given
+  // operator, with reasons and supporting event ids (Slice 7).
+  relationshipTierTransitions: adminProcedure
+    .input(z.object({ operatorUserId: z.string().trim().min(1) }))
+    .query(({ ctx, input }) =>
+      listClaireTierTransitions({
+        tenantId: ctx.tenantId,
+        operatorUserId: input.operatorUserId,
+      })
+    ),
 });

@@ -8,8 +8,13 @@ import {
   recordCommercialMissionVisitOutcome,
   saveCommercialMissionFieldNotes,
 } from "../commercialMissions/commercialMissionFieldService";
+import { recordClaireMissionOutcomeEvents, recordQualifyingClaireInteraction } from "./character/relationshipEmitters";
 import { assembleClaireDriveContext } from "./contextAssembler";
-import { extractClaireDebrief } from "./reasoning";
+import {
+  extractClaireDebrief,
+  writeClaireOutcomeConfirmation,
+  writeClairePostStopOpening,
+} from "./reasoning";
 import { generateClairePreDriveOutput } from "./preDriveRuntime";
 import {
   answerClairePreDriveFollowUp,
@@ -153,6 +158,24 @@ export function preDriveConversationTwiML(input: {
   return response.toString();
 }
 
+/**
+ * Relationship-event writes are best-effort telemetry on top of the real
+ * call flow, never a precondition for it — a failure here must never
+ * change what Claire says or does on the call, and must never surface to
+ * the caller. See character/relationshipEmitters.ts for the fail-closed
+ * identity contract (operatorUserId here is always the token-verified
+ * `claims.userId`/`conversation.actorId`, never a Twilio ANI/CallerId).
+ */
+async function safeRecordRelationshipEvent(
+  work: () => Promise<unknown>
+): Promise<void> {
+  try {
+    await work();
+  } catch (error) {
+    console.warn("[Claire] relationship-event recording failed", error);
+  }
+}
+
 function clearExpiredPreDriveConversations(now = Date.now()): void {
   preDriveConversations.forEach((conversation, id) => {
     if (now - conversation.touchedAt > PRE_DRIVE_CONVERSATION_TTL_MS) {
@@ -264,6 +287,11 @@ export async function startClairePostStopCall(input: {
     missionAccess: input.missionAccess,
     phase: "post_stop",
   });
+  const opening = await writeClairePostStopOpening({
+    tenantId: input.tenantId,
+    operatorUserId: input.actorId,
+    accountName: context.mission.accountName,
+  });
   const response = new twilio.twiml.VoiceResponse();
   const gather = response.gather({
     input: ["speech"],
@@ -271,10 +299,7 @@ export async function startClairePostStopCall(input: {
     action: `${publicBaseUrl()}${DEBRIEF_PATH}?token=${encodeURIComponent(token)}`,
     method: "POST",
   });
-  gather.say(
-    { voice: CLAIRE_VOICE, language: "en-US" },
-    `You're clear of ${context.mission.accountName}. Tell me what actually happened. I won't mark anything won, lost, or followed up unless you say it.`
-  );
+  gather.say({ voice: CLAIRE_VOICE, language: "en-US" }, opening);
   response.say(
     { voice: CLAIRE_VOICE, language: "en-US" },
     "I didn't catch a debrief. Nothing was changed."
@@ -330,10 +355,26 @@ export function registerClaireRoutes(app: Express): void {
       }
       if (isClaireCallComplete(transcript)) {
         preDriveConversations.delete(claims.conversationId);
+        await safeRecordRelationshipEvent(() =>
+          recordQualifyingClaireInteraction({
+            tenantId: claims.tenantId,
+            operatorUserId: claims.userId,
+            conversationId: claims.conversationId,
+            reason: "closing_phrase",
+          })
+        );
         return res.send(speakAndHangUp("You've got it. Drive safe."));
       }
       if (conversation.turns >= MAX_PRE_DRIVE_TURNS) {
         preDriveConversations.delete(claims.conversationId);
+        await safeRecordRelationshipEvent(() =>
+          recordQualifyingClaireInteraction({
+            tenantId: claims.tenantId,
+            operatorUserId: claims.userId,
+            conversationId: claims.conversationId,
+            reason: "turn_cap_reached",
+          })
+        );
         return res.send(
           speakAndHangUp(
             "That's the useful part of this brief. Drive safe, and take it one stop at a time."
@@ -529,11 +570,21 @@ export function registerClaireRoutes(app: Express): void {
         pilotRequested: claims.proposal.pilotRequested,
         followUpRequested: claims.proposal.followUpRequested,
       });
-      return res.send(
-        speakAndHangUp(
-          `Confirmed. I saved ${outcomeLabel(claims.proposal.proposedOutcome)} and left anything you didn't report unresolved.`
-        )
+      await safeRecordRelationshipEvent(() =>
+        recordClaireMissionOutcomeEvents({
+          tenantId: claims.tenantId,
+          operatorUserId: claims.userId,
+          missionId: claims.missionId,
+          outcome: claims.proposal.proposedOutcome,
+        })
       );
+      const confirmationLine = await writeClaireOutcomeConfirmation({
+        tenantId: claims.tenantId,
+        operatorUserId: claims.userId,
+        outcome: claims.proposal.proposedOutcome,
+        outcomeLabel: outcomeLabel(claims.proposal.proposedOutcome),
+      });
+      return res.send(speakAndHangUp(confirmationLine));
     } catch (error) {
       console.error("[Claire] confirm webhook error", error);
       return res.send(

@@ -6806,3 +6806,132 @@ export const missionDirectorPlans = mysqlTable(
     ),
   })
 );
+
+/**
+ * Claire Pass 1 — durable, append-only shared-history events (Slice 3).
+ * Operator scope is tenantId + operatorUserId + characterId, decided
+ * before implementation; never widen this to phone number or device.
+ * Append-only: never updated or deleted, so relationship state can always
+ * be reproduced and audited from this log alone (see tierEngine.ts).
+ */
+export const claireRelationshipEvents = mysqlTable(
+  "claire_relationship_events",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    characterId: varchar("characterId", { length: 32 }).notNull().default("claire"),
+    eventType: varchar("eventType", { length: 48 }).notNull(),
+    summary: varchar("summary", { length: 512 }).notNull(),
+    provenance: varchar("provenance", { length: 128 }).notNull(),
+    relatedEntityType: varchar("relatedEntityType", { length: 64 }),
+    relatedEntityId: varchar("relatedEntityId", { length: 64 }),
+    evidenceSource: varchar("evidenceSource", { length: 128 }),
+    occurredAt: timestamp("occurredAt").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    operatorLookup: index("idx_claire_relationship_event_operator").on(
+      table.tenantId,
+      table.operatorUserId,
+      table.characterId,
+      table.occurredAt
+    ),
+  })
+);
+
+/**
+ * Server-owned, model-unwritable cached relationship state. Always
+ * reproducible from claire_relationship_events via tierEngine.ts — this
+ * table exists purely so a phone call doesn't have to replay the full
+ * event log on every turn, not as a second source of truth.
+ */
+export const claireRelationshipState = mysqlTable(
+  "claire_relationship_state",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    characterId: varchar("characterId", { length: 32 }).notNull().default("claire"),
+    professionalRespect: int("professionalRespect").notNull().default(0),
+    reliability: int("reliability").notNull().default(0),
+    disclosureSafety: int("disclosureSafety").notNull().default(0),
+    familiarity: int("familiarity").notNull().default(0),
+    disclosureTier: int("disclosureTier").notNull().default(0),
+    qualifyingInteractionCount: int("qualifyingInteractionCount").notNull().default(0),
+    distinctInteractionDays: int("distinctInteractionDays").notNull().default(0),
+    lastEventId: int("lastEventId"),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    stateUnique: uniqueIndex("uq_claire_relationship_state").on(
+      table.tenantId,
+      table.operatorUserId,
+      table.characterId
+    ),
+  })
+);
+
+/**
+ * Auditable tier-transition log (Slice 7). Every tier change must explain
+ * itself — no opaque jumps.
+ */
+export const claireTierTransitions = mysqlTable(
+  "claire_tier_transitions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    characterId: varchar("characterId", { length: 32 }).notNull().default("claire"),
+    fromTier: int("fromTier").notNull(),
+    toTier: int("toTier").notNull(),
+    reasonsJson: json("reasonsJson").notNull(),
+    supportingEventIdsJson: json("supportingEventIdsJson").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    operatorLookup: index("idx_claire_tier_transition_operator").on(
+      table.tenantId,
+      table.operatorUserId,
+      table.characterId,
+      table.createdAt
+    ),
+  })
+);
+
+/**
+ * Structured, queryable generation log for the field-test review tool
+ * (Slice 2) and version traceability (Slice 1). Distinct from the generic
+ * agent_events log so reviewers can filter/label without parsing opaque
+ * JSON blobs.
+ */
+export const claireGenerationLogs = mysqlTable(
+  "claire_generation_logs",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }),
+    characterId: varchar("characterId", { length: 32 }).notNull().default("claire"),
+    characterVersion: varchar("characterVersion", { length: 32 }).notNull(),
+    compilerVersion: varchar("compilerVersion", { length: 32 }).notNull(),
+    mode: varchar("mode", { length: 32 }).notNull(),
+    generationKind: varchar("generationKind", { length: 32 }).notNull(),
+    generationSource: varchar("generationSource", { length: 16 }).notNull(),
+    disclosureTier: int("disclosureTier").notNull(),
+    generatedText: varchar("generatedText", { length: 1024 }).notNull(),
+    relationshipDimensionsJson: json("relationshipDimensionsJson").notNull(),
+    sharedHistoryEventIdsJson: json("sharedHistoryEventIdsJson").notNull(),
+    canonFragmentIdsJson: json("canonFragmentIdsJson").notNull(),
+    businessContextSummary: varchar("businessContextSummary", { length: 512 }),
+    fallbackReason: varchar("fallbackReason", { length: 64 }),
+    reviewLabel: varchar("reviewLabel", { length: 32 }),
+    reviewedByUserId: varchar("reviewedByUserId", { length: 128 }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    tenantLookup: index("idx_claire_generation_log_tenant").on(
+      table.tenantId,
+      table.createdAt
+    ),
+  })
+);

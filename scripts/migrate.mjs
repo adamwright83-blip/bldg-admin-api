@@ -1070,5 +1070,131 @@ await assertRequiredColumns("mission_director_plans", [
   "outcomeJson",
 ]);
 
+// ── Claire Pass 1: persistent character runtime substrate ────────
+// Operator scope is tenantId + operatorUserId + characterId. Relationship
+// events are append-only; relationship state is a reproducible cache
+// derived from them (server/claire/character/tierEngine.ts).
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS claire_relationship_events (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NOT NULL,
+    characterId VARCHAR(32) NOT NULL DEFAULT 'claire',
+    eventType VARCHAR(48) NOT NULL,
+    summary VARCHAR(512) NOT NULL,
+    provenance VARCHAR(128) NOT NULL,
+    relatedEntityType VARCHAR(64) NULL,
+    relatedEntityId VARCHAR(64) NULL,
+    evidenceSource VARCHAR(128) NULL,
+    occurredAt TIMESTAMP NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_claire_relationship_event_operator (tenantId,operatorUserId,characterId,occurredAt)
+  )`,
+  "CREATE TABLE claire_relationship_events"
+);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS claire_relationship_state (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NOT NULL,
+    characterId VARCHAR(32) NOT NULL DEFAULT 'claire',
+    professionalRespect INT NOT NULL DEFAULT 0,
+    reliability INT NOT NULL DEFAULT 0,
+    disclosureSafety INT NOT NULL DEFAULT 0,
+    familiarity INT NOT NULL DEFAULT 0,
+    disclosureTier INT NOT NULL DEFAULT 0,
+    qualifyingInteractionCount INT NOT NULL DEFAULT 0,
+    distinctInteractionDays INT NOT NULL DEFAULT 0,
+    lastEventId INT NULL,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_claire_relationship_state (tenantId,operatorUserId,characterId)
+  )`,
+  "CREATE TABLE claire_relationship_state"
+);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS claire_tier_transitions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NOT NULL,
+    characterId VARCHAR(32) NOT NULL DEFAULT 'claire',
+    fromTier INT NOT NULL,
+    toTier INT NOT NULL,
+    reasonsJson JSON NOT NULL,
+    supportingEventIdsJson JSON NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_claire_tier_transition_operator (tenantId,operatorUserId,characterId,createdAt)
+  )`,
+  "CREATE TABLE claire_tier_transitions"
+);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS claire_generation_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NULL,
+    characterId VARCHAR(32) NOT NULL DEFAULT 'claire',
+    characterVersion VARCHAR(32) NOT NULL,
+    compilerVersion VARCHAR(32) NOT NULL,
+    mode VARCHAR(32) NOT NULL,
+    generationKind VARCHAR(32) NOT NULL,
+    generationSource VARCHAR(16) NOT NULL,
+    disclosureTier INT NOT NULL,
+    generatedText VARCHAR(1024) NOT NULL,
+    relationshipDimensionsJson JSON NOT NULL,
+    sharedHistoryEventIdsJson JSON NOT NULL,
+    canonFragmentIdsJson JSON NOT NULL,
+    businessContextSummary VARCHAR(512) NULL,
+    fallbackReason VARCHAR(64) NULL,
+    reviewLabel VARCHAR(32) NULL,
+    reviewedByUserId VARCHAR(128) NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_claire_generation_log_tenant (tenantId,createdAt)
+  )`,
+  "CREATE TABLE claire_generation_logs"
+);
+
+await assertRequiredColumns("claire_relationship_events", [
+  "tenantId",
+  "operatorUserId",
+  "characterId",
+  "eventType",
+  "summary",
+  "provenance",
+  "occurredAt",
+]);
+await assertRequiredColumns("claire_relationship_state", [
+  "tenantId",
+  "operatorUserId",
+  "characterId",
+  "professionalRespect",
+  "reliability",
+  "disclosureSafety",
+  "familiarity",
+  "disclosureTier",
+  "qualifyingInteractionCount",
+  "distinctInteractionDays",
+]);
+await assertRequiredColumns("claire_tier_transitions", [
+  "tenantId",
+  "operatorUserId",
+  "characterId",
+  "fromTier",
+  "toTier",
+  "reasonsJson",
+  "supportingEventIdsJson",
+]);
+await assertRequiredColumns("claire_generation_logs", [
+  "tenantId",
+  "characterVersion",
+  "compilerVersion",
+  "mode",
+  "generationKind",
+  "generationSource",
+  "disclosureTier",
+  "generatedText",
+]);
+
 await conn.end();
 console.log("\nMigration complete.");
