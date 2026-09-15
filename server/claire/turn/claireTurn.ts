@@ -41,6 +41,7 @@ import { businessDateFor, loadDayWork, operationsQuestion, speakDayWork } from "
 import { isUnpaidQuestion, loadUnpaidOrders, speakUnpaidOrders } from "../knowledge/openOrdersKnowledge";
 import { zonedDayStartUtc } from "../../dashboardZoned";
 import { addDaysYmd } from "../../analytics/businessPeriods";
+import { ensureAdamBoard, explainProactive, handleDoctrineTurn } from "../proactive/boardService";
 
 /**
  * One Claire turn, for the phone and the desk alike.
@@ -72,6 +73,7 @@ export type ClaireTurnState = PendingProposalState &
     pendingFragment?: string | null;
     focusAccount?: AccountRef | null;
     consecutiveEmptyTranscripts?: number;
+    proactiveMorning?: boolean;
   };
 
 export type ClaireTurnInput = {
@@ -127,6 +129,8 @@ export type ClaireTurnDeps = {
   searchMemory: typeof searchOperatorConversation;
   memoryBetween: typeof operatorTurnsBetween;
   encyclopedia: ((input: { tenantId: string; operatorUserId: string; utterance: string; surface: "voice" | "text"; history: ClaireTurnHistoryEntry[] }) => Promise<string | null>) | null;
+  watchBoard?: (input: { tenantId: string; operatorUserId: string; actorId: string }) => Promise<{ brief: string }>;
+  doctrineTurn?: (input: { tenantId: string; operatorUserId: string; utterance: string; today: string }) => Promise<string | null>;
 };
 
 export function defaultClaireTurnDeps(): ClaireTurnDeps {
@@ -149,6 +153,8 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     searchMemory: searchOperatorConversation,
     memoryBetween: operatorTurnsBetween,
     encyclopedia: null,
+    watchBoard: ({ tenantId, operatorUserId, actorId }) => ensureAdamBoard({ tenantId, operatorUserId, actorId }),
+    doctrineTurn: handleDoctrineTurn,
   };
 }
 
@@ -265,6 +271,33 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   };
   const history = () => (state.history ?? []).map(entry => ({ speaker: entry.speaker, text: entry.text }));
   const lower = normalizeUtterance(utterance);
+
+  const doctrineSpeak = deps.doctrineTurn
+    ? await deps.doctrineTurn({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, utterance, today })
+    : null;
+  if (doctrineSpeak) return finish({ speak: doctrineSpeak, kind: "answered" });
+
+  const shortCheckIn = utterance.trim().split(/\s+/).filter(Boolean).length <= 8;
+  if (
+    !state.proactiveMorning &&
+    shortCheckIn &&
+    /^(?:good )?morning\b|^hey claire\b|^what should i (?:do|know)\b|^what(?:'s| is) the most important\b|^what do i need to know\b/i.test(utterance)
+  ) {
+    state.proactiveMorning = true;
+    if (deps.watchBoard) {
+      const board = await deps.watchBoard({
+        tenantId: input.tenantId,
+        operatorUserId: input.operatorUserId,
+        actorId: input.dayDirectorActorId,
+      }).catch(() => ({ brief: "" }));
+      if (board.brief) return finish({ speak: board.brief, kind: "answered" });
+    }
+  }
+
+  if (/\bwhy (?:is|are|did you|are you)\b/.test(lower)) {
+    const why = await explainProactive(input.tenantId, input.operatorUserId, utterance).catch(() => null);
+    if (why) return finish({ speak: why, kind: "answered" });
+  }
 
   // ── 2. What Claire is holding ─────────────────────────────────────────────
   if (state.pendingAccountFollowUp) {

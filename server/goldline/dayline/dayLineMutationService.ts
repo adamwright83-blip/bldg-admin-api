@@ -6,6 +6,7 @@ import {
   dayDirectorCommitments,
 } from "../../../drizzle/schema";
 import { getDb } from "../../db";
+import { ensureAdamBoard } from "../../claire/proactive/boardService";
 import { getDayDirectorState } from "../../dayDirector/dayDirectorService";
 import { listDayforgeToday } from "../../dayforgeToday/dayforgeTodayService";
 import { getCommercialMission, listCommercialMissions } from "../../commercialMissions/commercialMissionStore";
@@ -38,6 +39,13 @@ export async function listActiveDayLineItems(input: {
   operatorUserId?: string;
   businessDate: string;
 }): Promise<DayLineItemRef[]> {
+  await ensureAdamBoard({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId ?? input.actorId,
+    actorId: input.actorId,
+  }).catch(error => {
+    console.warn("[ClaireProactive] board sweep skipped", error instanceof Error ? error.message : error);
+  });
   const actorIds = Array.from(
     new Set([input.actorId, input.operatorUserId].filter((value): value is string => Boolean(value)))
   );

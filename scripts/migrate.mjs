@@ -1235,6 +1235,33 @@ await assertRequiredColumns("claire_conversation_states", [
   "expiresAt",
 ]);
 
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS claire_operator_doctrine (
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NOT NULL,
+    rulesJson JSON NOT NULL,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_claire_operator_doctrine (tenantId, operatorUserId)
+  )`,
+  "CREATE TABLE claire_operator_doctrine"
+);
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS claire_proactive_obligations (
+    id VARCHAR(191) PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NOT NULL,
+    kind VARCHAR(32) NOT NULL,
+    subjectKey VARCHAR(191) NOT NULL,
+    payloadJson JSON NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    dueDate VARCHAR(10) NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_claire_proactive_open (tenantId, operatorUserId, status, dueDate)
+  )`,
+  "CREATE TABLE claire_proactive_obligations"
+);
+
 // ── Claire Pass 2: MissionSalesBrief ──────────────────────────────
 // The single authoritative, versioned sales brief per commercial mission.
 // Append-only — a new mission reality creates a new version row.
