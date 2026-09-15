@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Gumballpals",
-  "version": "0.1.6",
-  "description": "Bring your authorized gumball order exports into Goldline using your signed-in browser.",
+  "version": "0.2.0",
+  "description": "Export authorized CleanCloud Orders (Sales) reports into the durable Gumball Inbox for Jawbreaker.",
   "minimum_chrome_version": "116",
   "permissions": ["storage", "scripting", "downloads", "alarms"],
   "optional_host_permissions": [
