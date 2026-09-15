@@ -35,6 +35,12 @@ import {
 } from "./claireTwilio";
 import { previewClairePreDrive } from "./preDriveRuntime";
 import { setActiveMacroGoal } from "./macroGoalService";
+import { answerClairePreDriveFollowUp } from "./preDriveConversation";
+import {
+  assembleTomorrowCandidates,
+  confirmWorkdayPlan,
+  previewWorkdayLoop,
+} from "./workdayPlanService";
 
 const uuid = z.string().uuid();
 
@@ -142,8 +148,97 @@ export const claireRouter = router({
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,
         timeZone: input.timeZone,
+        dayDirectorActorId: dayDirectorActorId(ctx),
       })
     ),
+
+  previewWorkday: dayforgeMissionFieldProcedure
+    .input(
+      z.object({
+        timeZone: z.string().trim().min(1).max(100).optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const context = await assembleClaireDriveContext({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        phase: "pre_drive",
+        timeZone: input.timeZone,
+      });
+      const actorId = dayDirectorActorId(ctx);
+      const workday = await previewWorkdayLoop({
+        tenantId: ctx.tenantId,
+        actorId,
+        context,
+      });
+      return {
+        session: workday.session,
+        eveningSpeak: workday.eveningSpeak,
+        morningSpeak: workday.morningSpeak,
+        tomorrowDraft: workday.tomorrowDraft,
+        deltas: workday.deltas,
+        confirmedAt: workday.confirmed?.confirmedAt ?? null,
+        writesBusinessTruth: false as const,
+      };
+    }),
+
+  confirmTomorrow: dayforgeMissionFieldProcedure
+    .input(
+      z.object({
+        timeZone: z.string().trim().min(1).max(100).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const context = await assembleClaireDriveContext({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        phase: "pre_drive",
+        timeZone: input.timeZone,
+      });
+      const snapshot = await confirmWorkdayPlan({
+        tenantId: ctx.tenantId,
+        actorId: dayDirectorActorId(ctx),
+        businessDate: context.clock?.tomorrowBusinessDate ?? context.businessDate,
+        items: assembleTomorrowCandidates(context),
+      });
+      return { confirmedAt: snapshot.confirmedAt, itemCount: snapshot.items.length };
+    }),
+
+  talk: adminProcedure
+    .input(
+      z.object({
+        utterance: z.string().trim().min(1).max(4000),
+        timeZone: z.string().trim().min(1).max(100).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const preview = await previewClairePreDrive({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        timeZone: input.timeZone,
+        dayDirectorActorId: dayDirectorActorId(ctx),
+      });
+      const context = await assembleClaireDriveContext({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        phase: "pre_drive",
+        timeZone: input.timeZone,
+      });
+      context.workday = preview.workday ?? undefined;
+      const reply = await answerClairePreDriveFollowUp({
+        tenantId: ctx.tenantId,
+        utterance: input.utterance,
+        brief: preview.brief,
+        context,
+      });
+      return {
+        reply,
+        brief: preview.brief,
+        workday: preview.workday,
+        relationshipDimensions: preview.relationshipDimensions,
+        disclosureTier: preview.disclosureTier,
+      };
+    }),
 
   driveContext: dayforgeMissionFieldProcedure
     .input(

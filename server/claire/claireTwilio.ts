@@ -19,6 +19,7 @@ import {
   trackEmptyTranscript,
   trackNonEmptyTranscript,
 } from "./voiceCommitmentLoop";
+import { assembleTomorrowCandidates, confirmWorkdayPlan } from "./workdayPlanService";
 import type { DayDirectorProposal } from "../../shared/dayDirector";
 import {
   extractClaireDebrief,
@@ -63,6 +64,7 @@ type PreDriveConversation = {
   clarifyingUtterance?: string | null;
   /** Consecutive empty Twilio speech results — only two in a row end the call. */
   consecutiveEmptyTranscripts?: number;
+  sessionKind?: "evening_planning" | "morning_reconciliation" | "field_debrief" | "pre_drive";
 };
 
 const preDriveConversations = new Map<string, PreDriveConversation>();
@@ -233,6 +235,7 @@ export async function startClairePreDriveCall(input: {
     actorId: input.actorId,
     timeZone: input.timeZone,
     missionId: input.missionId,
+    dayDirectorActorId: input.dayDirectorActorId,
   });
   const { brief, context } = generated;
   clearExpiredPreDriveConversations();
@@ -245,6 +248,7 @@ export async function startClairePreDriveCall(input: {
     context,
     turns: 0,
     touchedAt: Date.now(),
+    sessionKind: context.workday?.session,
   });
   const token = issueClaireToken({
     kind: "pre_drive_conversation",
@@ -424,6 +428,16 @@ export function registerClaireRoutes(app: Express): void {
           businessDate: conversation.context.businessDate,
           utterance: transcript,
           state: conversation,
+        }, {
+          confirmPlan: () =>
+            confirmWorkdayPlan({
+              tenantId: conversation.tenantId,
+              actorId: conversation.dayDirectorActorId,
+              businessDate:
+                conversation.context.clock?.tomorrowBusinessDate ??
+                conversation.context.businessDate,
+              items: assembleTomorrowCandidates(conversation.context),
+            }).then(() => undefined),
         });
       } catch (error) {
         // Hard truth rule: never let conversational fluency outrun system

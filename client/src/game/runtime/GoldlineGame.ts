@@ -2657,12 +2657,12 @@ export class GoldlineGame {
       return;
     }
 
-    // Monument: a low dark stone slab, limestone rim, brass inlay line. The
-    // one authored sentence ("THE LINE ENDS HERE — BEYOND IS UNWRITTEN")
-    // renders as a DOM chip (GoldlineGameHome's end-of-world-marker), not
-    // canvas text — every other player-facing sentence in this world is DOM,
-    // and Pixi's text subsystem is not otherwise pulled into this bundle.
-    // This slab is the physical object the copy is anchored to.
+    // Monument: a low dark stone slab, limestone rim, brass inlay line. Calm
+    // end-of-approach copy renders as a DOM chip (GoldlineGameHome's
+    // end-of-world-marker), not canvas text — every other player-facing
+    // sentence in this world is DOM, and Pixi's text subsystem is not
+    // otherwise pulled into this bundle. This slab is the physical object
+    // the copy is anchored to.
     this.routeMarker
       .roundRect(x - 44, y - 30, 88, 30, 4)
       .fill({ color: 0x11151a, alpha: 0.93 })

@@ -32,8 +32,8 @@ describe("Goldline world-claim truth boundary", () => {
 
   it("the no-action state distinguishes 'a real objective exists, keep moving' from 'nothing exists right now'", () => {
     expect(source).toContain("FOLLOW THE GOLD LINE");
-    expect(source).toContain("NO ACTIVE OBJECTIVE");
-    expect(source).toContain("No unresolved route work right now.");
+    expect(source).toContain("NO REQUIRED WORK RIGHT NOW");
+    expect(source).toContain("Optional play stays available");
     // The truthful-objective branch must actually check for a real mission,
     // order, or approved objective — not render unconditionally.
     //

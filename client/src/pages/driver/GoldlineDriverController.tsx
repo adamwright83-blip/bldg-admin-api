@@ -1052,10 +1052,9 @@ function LiveGoldlineDriverController({
       expectedFieldVersion: current.field.version,
     });
     if (!next) throw new Error("Visit result was not persisted");
-    // Only the successful real visit mutation opens the debrief. Loading,
-    // polling, arrival and fictional completion never start a microphone.
+    // Claire conversational debrief is the primary capture path. The Field
+    // Journal remains available as fallback/review; it is not required here.
     setDebrief({ missionId: input.missionId, buildingName: builtMissions.data?.find(mission => mission.id === input.missionId)?.account.name ?? "Your field visit" });
-    setJournalOpen(true);
     return next;
   }
 

@@ -12,6 +12,8 @@ import {
 } from "./generationTelemetry";
 import { assembleClaireRuntimeView } from "./runtimeView";
 import { CLAIRE_V1_REASONING_POLICY } from "../../shared/claireRuntime";
+import { detectWorkdaySession, speakEveningPlan } from "../../shared/claireWorkday";
+import { assembleTomorrowCandidates } from "./workdayPlanService";
 
 /**
  * Assembles the compact character context for a given phase/operator.
@@ -131,6 +133,7 @@ function compactContext(context: ClaireDriveContext): string {
       alreadyExists: item.alreadyExists,
       relationToMacroGoal: item.relationToMacroGoal,
     })),
+    workday: context.workday ?? null,
   });
 }
 
@@ -161,6 +164,18 @@ export function buildClaireOpeningFallback(context: ClaireDriveContext): string 
     return lines.slice(0, 3).join(" ");
   }
   lines.push(`${targetPhrase(goal.targetValue, goal.unit)} is still the target.`);
+  const session = detectWorkdaySession({
+    fieldSalesDayState: clock?.fieldSalesDayState,
+    daypart: clock?.daypart,
+  });
+  if (session === "evening_planning") {
+    lines.push(context.workday?.eveningSpeak ?? speakEveningPlan(assembleTomorrowCandidates(context)));
+    return lines.slice(0, 3).join(" ");
+  }
+  if (session === "morning_reconciliation" && context.workday?.hasConfirmedPlan) {
+    lines.push(context.workday.morningSpeak);
+    return lines.slice(0, 3).join(" ");
+  }
   const runtime = context.runtime ?? assembleClaireRuntimeView(context);
   if (metric?.completeness === "complete" && metric.value !== null) {
     lines.push(`The verified 30-calendar-day active-customer count is ${metric.value}.`);
@@ -229,10 +244,19 @@ export async function writeClairePreDriveBrief(
   const invokeText = dependencies.invokeText ?? invokeTextLLM;
   const recordGeneration =
     dependencies.recordGeneration ?? recordClaireGeneration;
+  const session = detectWorkdaySession({
+    fieldSalesDayState: input.context.clock?.fieldSalesDayState,
+    daypart: input.context.clock?.daypart,
+  });
   const compiled = await compileContextFor({
     tenantId: input.tenantId,
     operatorUserId: input.context.actorId ?? null,
-    mode: "pre_drive",
+    mode:
+      session === "evening_planning"
+        ? "evening_planning"
+        : session === "morning_reconciliation"
+          ? "morning_reconciliation"
+          : "pre_drive",
   });
   try {
     const text = (

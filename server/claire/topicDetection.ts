@@ -21,7 +21,7 @@ export function detectClaireConversationalMode(
   utterance: string
 ): "operational" | "casual" | "personal" | "post_action_review" {
   if (detectRequestedClaireTopic(utterance)) return "personal";
-  if (/\b(how (?:did|does) that go|what happened with|after you (?:finish|done))\b/i.test(utterance)) {
+  if (/\b(how (?:did|does) that go|what happened with|after you (?:finish|done)|let me tell you what happened)\b/i.test(utterance)) {
     return "post_action_review";
   }
   if (/\b(how are you|what's new|good morning|good evening)\b/i.test(utterance)) return "casual";

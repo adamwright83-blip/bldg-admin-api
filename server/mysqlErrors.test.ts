@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMysqlDuplicateKeyError } from "./mysqlErrors";
+import { isMysqlDuplicateKeyError, isMysqlMissingTableError } from "./mysqlErrors";
 
 describe("MySQL duplicate-key recovery", () => {
   it("recognizes direct and Drizzle-wrapped duplicate errors", () => {
@@ -24,5 +24,29 @@ describe("MySQL duplicate-key recovery", () => {
         cause: { cause: { cause: { cause: { cause: { errno: 1062 } } } } },
       })
     ).toBe(false);
+  });
+});
+
+describe("MySQL missing-table recovery", () => {
+  it("recognizes direct and Drizzle-wrapped missing tables", () => {
+    expect(isMysqlMissingTableError({ code: "ER_NO_SUCH_TABLE", errno: 1146 })).toBe(
+      true
+    );
+    expect(
+      isMysqlMissingTableError({
+        message: "Failed query",
+        cause: { code: "ER_NO_SUCH_TABLE", errno: 1146 },
+      })
+    ).toBe(true);
+    expect(
+      isMysqlMissingTableError(
+        new Error("Table 'dayforge_release.claire_relationship_events' doesn't exist")
+      )
+    ).toBe(true);
+  });
+
+  it("does not treat unrelated errors as missing tables", () => {
+    expect(isMysqlMissingTableError(new Error("connection closed"))).toBe(false);
+    expect(isMysqlDuplicateKeyError({ code: "ER_NO_SUCH_TABLE" })).toBe(false);
   });
 });

@@ -46,14 +46,14 @@ test.describe("first 30 seconds produce a real next action", () => {
     // action that creates a truthful plan from their own briefing.
     const briefing = page.getByTestId("empty-day-briefing");
     await expect(briefing).toBeVisible();
-    await expect(briefing).toContainText("BRIEF ME");
-    await expect(page.locator(".open-channel-dialogue")).toContainText(/today and tomorrow/i);
-    await expect(page.locator(".open-channel-dialogue")).toContainText(/duties|promises|goals/i);
+    await expect(briefing).toContainText("PLAN TOMORROW WITH CLAIRE");
+    await expect(page.locator(".open-channel-dialogue")).toContainText(/Goldline knows/i);
+    await expect(page.locator(".open-channel-dialogue")).toContainText(/missing/i);
 
     // The world behind the briefing remains honest: the briefing is an input
     // mechanic for creating a proposed mission, not a fabricated objective.
     await expect(page.getByTestId("no-active-objective")).toContainText(
-      "NO ACTIVE OBJECTIVE"
+      "NO REQUIRED WORK RIGHT NOW"
     );
     await expect(page.getByText("MOVE TO NEXT ACTION ZONE")).toHaveCount(0);
   });

@@ -7,9 +7,17 @@ import {
   type ClaireGenerationDiagnostic,
 } from "./generationTelemetry";
 import { writeClairePreDriveBrief } from "./reasoning";
+import { previewWorkdayLoop } from "./workdayPlanService";
+import { detectWorkdaySession } from "../../shared/claireWorkday";
 
 export async function generateClairePreDriveOutput(
-  input: { tenantId: string; actorId: string; timeZone?: string; missionId?: number },
+  input: {
+    tenantId: string;
+    actorId: string;
+    timeZone?: string;
+    missionId?: number;
+    dayDirectorActorId?: string;
+  },
   dependencies: {
     assemble?: typeof assembleClaireDriveContext;
     writeBrief?: typeof writeClairePreDriveBrief;
@@ -24,6 +32,33 @@ export async function generateClairePreDriveOutput(
     timeZone: input.timeZone,
     missionId: input.missionId,
   });
+  try {
+    const workday = await previewWorkdayLoop({
+      tenantId: input.tenantId,
+      actorId: input.dayDirectorActorId ?? input.actorId,
+      context,
+    });
+    context.workday = {
+      session: workday.session,
+      eveningSpeak: workday.eveningSpeak,
+      morningSpeak: workday.morningSpeak,
+      tomorrowCount: workday.tomorrowDraft.length,
+      deltaCount: workday.deltas.length,
+      hasConfirmedPlan: Boolean(workday.confirmed),
+    };
+  } catch {
+    context.workday = {
+      session: detectWorkdaySession({
+        fieldSalesDayState: context.clock?.fieldSalesDayState,
+        daypart: context.clock?.daypart,
+      }),
+      eveningSpeak: "",
+      morningSpeak: "",
+      tomorrowCount: 0,
+      deltaCount: 0,
+      hasConfirmedPlan: false,
+    };
+  }
   let diagnostic: ClaireGenerationDiagnostic | undefined;
   const brief = await writeBrief({
     tenantId: input.tenantId,
@@ -44,6 +79,7 @@ export async function previewClairePreDrive(
     actorId: string;
     timeZone?: string;
     missionId?: number;
+    dayDirectorActorId?: string;
   },
   dependencies: Parameters<typeof generateClairePreDriveOutput>[1] = {}
 ) {
@@ -86,5 +122,6 @@ export async function previewClairePreDrive(
     verifiedMetricsPresent: Boolean(generated.context.verifiedMetrics),
     needsDetailsActions:
       generated.context.runtime?.workItems.filter(item => item.detailState === "NEEDS_DETAILS") ?? [],
+    workday: generated.context.workday ?? null,
   };
 }

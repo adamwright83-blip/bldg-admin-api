@@ -74,7 +74,6 @@ import {
   DEFAULT_CORRIDOR_ID,
   corridorSectionTitle,
   isPlayableCorridor,
-  nextPlayableCorridorId,
 } from "./world/corridorRegistry";
 import { CorridorTransitionController } from "./runtime/corridorTransition";
 import type { CorridorTransitionPhase } from "./runtime/corridorTransition";
@@ -182,6 +181,11 @@ import {
   campaignObjectiveMissionId,
   campaignObjectiveOrderId,
 } from "../../../shared/goldlineCampaignRuntime";
+import {
+  endOfAuthoredApproachCopy,
+  nextApproachCorridor,
+  resolveApproachRoute,
+} from "../../../shared/claireApproach";
 import { selectFictionForMission } from "./fiction/fictionDirector";
 import { reconcileFictionOnResume } from "./fiction/longHorizonResume";
 import type { FictionMissionInstance } from "./fiction/fictionDirector";
@@ -354,9 +358,9 @@ function stateTone(state: PlayableMission["state"]) {
 }
 
 function branchCopy(branch: CorridorBranch) {
-  if (branch === "safe") return "SAFE LINE · LOWER FRICTION / LONGER ROUTE";
-  if (branch === "upper") return "UPPER LINE · VAULT REQUIRED / EXECUTION EDGE";
-  return "INTEL LINE · OPTIONAL ENCOUNTER PREP";
+  if (branch === "safe") return "EASIER APPROACH";
+  if (branch === "upper") return "DIRECT APPROACH";
+  return "PREPARED APPROACH";
 }
 
 function Joystick(props: {
@@ -1212,7 +1216,14 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       props.scoutReport?.discoveries.length ?? 0
     );
   }, [props.progression, props.scoutReport?.discoveries.length]);
-  const nextCorridorId = nextPlayableCorridorId(activeCorridorIdRef.current);
+  const approachRoute = resolveApproachRoute({
+    campaignHost: props.requestedGameplayHost ?? null,
+    objectiveId: props.focusedCampaignObjectiveId ?? null,
+  });
+  const nextCorridorId = nextApproachCorridor(
+    approachRoute,
+    activeCorridorIdRef.current
+  );
   const equippedAbilities = useMemo(
     () => equipAnchorAbilities(props.armory?.items ?? []),
     [props.armory?.items]
@@ -3210,7 +3221,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             role="status"
             data-testid="end-of-world-marker"
           >
-            THE LINE ENDS HERE — BEYOND IS UNWRITTEN
+            {endOfAuthoredApproachCopy({
+              route: approachRoute,
+              atExitBand: true,
+              currentCorridorId: activeCorridorId,
+            }) ?? "Nothing required ahead. Optional play stays available."}
           </div>
         ) : null}
         {networkStatus === "offline" ? (
@@ -3230,7 +3245,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             <span>
               <Radio /> FIELD LINK
             </span>
-            <b>{activeMission?.name ?? preparedObjective?.label ?? "NO ACTIVE MISSION"}</b>
+            <b>{activeMission?.name ?? preparedObjective?.label ?? "YOUR DAY"}</b>
             <small>STATIONARY PLAY · TEMP • INSIDE GAME LOOP</small>
           </div>
           <button
@@ -3278,7 +3293,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                 </button>
               ))}
               {!history.length ? (
-                <small>NO MISSIONS RESOLVED YET</small>
+                <small>No completed route history yet</small>
               ) : null}
             </div>
           </aside>
@@ -3384,8 +3399,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                 >
                   <Route />
                   <span>
-                    <b>NO ACTIVE OBJECTIVE</b>
-                    <small>No unresolved route work right now.</small>
+                    <b>NO REQUIRED WORK RIGHT NOW</b>
+                    <small>Optional play stays available. Claire can still orient you.</small>
                   </span>
                 </div>
               )}

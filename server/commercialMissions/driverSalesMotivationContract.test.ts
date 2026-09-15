@@ -28,7 +28,7 @@ describe("driver sales motivation contract", () => {
 
   it("captures verbal journals, extracts structured memory, and exposes them to tenant admins", () => {
     expect(momentum).toContain("MediaRecorder");
-    expect(momentum).toContain("Capture what happened");
+    expect(momentum).toContain("Review or correct evidence");
     expect(processing).toContain("transcribeAudio");
     expect(processing).toContain("extractFieldJournal");
     expect(livingWorldMigration).toContain("DROP INDEX `uq_driver_sales_journal_tenant_driver_date`");

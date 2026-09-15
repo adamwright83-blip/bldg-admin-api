@@ -14,7 +14,7 @@ import type {
  * when the compiler's composition logic changes even if canon/DNA didn't
  * (Slice 1).
  */
-export const CLAIRE_COMPILER_VERSION = "claire-runtime-2";
+export const CLAIRE_COMPILER_VERSION = "claire-runtime-3";
 
 function summarizeSharedHistory(
   events: ClaireRelationshipEvent[],

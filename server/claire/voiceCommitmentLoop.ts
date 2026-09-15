@@ -24,6 +24,7 @@ import {
   type WorkClassificationV1,
 } from "../../shared/claireRuntime";
 import { recordClaireConversionJoin } from "./conversionJoins";
+import { confirmTomorrowUtterance } from "../../shared/claireWorkday";
 
 /**
  * The only place a live Claire phone conversation may cause a durable
@@ -206,6 +207,7 @@ export type PendingProposalState = {
   pendingFieldCapture?: ConversationalFieldOutcome | null;
   lastAcceptedCommitmentId?: string | null;
   blockerKind?: BlockerKind | null;
+  sessionKind?: "evening_planning" | "morning_reconciliation" | "field_debrief" | "pre_drive";
 };
 
 export type VoiceCommitmentTurnResult =
@@ -218,6 +220,7 @@ export type VoiceCommitmentTurnResult =
   | { kind: "clarifying"; speak: string }
   | { kind: "coaching"; speak: string }
   | { kind: "field_captured"; speak: string }
+  | { kind: "plan_confirmed"; speak: string }
   | { kind: "not_applicable" };
 
 export async function handleVoiceCommitmentTurn(
@@ -237,6 +240,7 @@ export async function handleVoiceCommitmentTurn(
     getState?: typeof getDayDirectorState;
     updateCommitment?: typeof updateDayDirectorCommitment;
     persistFieldCapture?: (outcome: ConversationalFieldOutcome) => Promise<{ ok: boolean; id?: string }>;
+    confirmPlan?: () => Promise<void>;
   } = {}
 ): Promise<VoiceCommitmentTurnResult> {
   const propose = dependencies.propose ?? proposeCommitment;
@@ -436,6 +440,19 @@ export async function handleVoiceCommitmentTurn(
     return {
       kind: "coaching",
       speak: `${nextBlockerQuestion(kind)} ${nextReadinessPrompt(kind)}`.trim(),
+    };
+  }
+
+  if (
+    (confirmTomorrowUtterance(input.utterance) ||
+      (input.state.sessionKind === "evening_planning" &&
+        detectConfirmation(input.utterance) === "yes")) &&
+    dependencies.confirmPlan
+  ) {
+    await dependencies.confirmPlan();
+    return {
+      kind: "plan_confirmed",
+      speak: "Tomorrow is confirmed. I'll reconcile any overnight changes in the morning.",
     };
   }
 
