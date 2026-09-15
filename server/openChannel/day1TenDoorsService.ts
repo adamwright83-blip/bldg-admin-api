@@ -155,6 +155,15 @@ async function findExistingDay1Mission(input: {
   return null;
 }
 
+/** Pure lookup for Claire and other read surfaces. It deliberately skips the
+ * schema guard and all get-or-create branches, so it cannot write anything. */
+export async function getDay1TenDoorsMissionReadOnly(input: {
+  tenantId: string;
+  driverId: string;
+}): Promise<Day1TenDoorsMission | null> {
+  return findExistingDay1Mission(input);
+}
+
 async function loadWritableDay1Mission(input: {
   tenantId: string;
   driverId: string;

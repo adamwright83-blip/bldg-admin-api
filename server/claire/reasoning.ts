@@ -105,12 +105,57 @@ function resultText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
 function compactContext(context: ClaireDriveContext): string {
   return JSON.stringify({
     businessDate: context.businessDate,
+    clock: context.clock,
+    workPicture: context.workPicture,
+    macroGoalKnown: context.macroGoalKnown,
+    macroGoal: context.macroGoal,
+    verifiedMetrics: context.verifiedMetrics,
+    campaign: context.campaign,
     nextFixedCommitment: context.nextFixedCommitment,
     blockers: context.blockers,
     relevantTimeline: context.relevantTimeline,
     mission: context.mission,
     missionSalesBrief: context.missionSalesBrief,
   });
+}
+
+function targetPhrase(value: number, unit: string): string {
+  return `${Number.isInteger(value) ? value : value.toFixed(2)} ${unit}`;
+}
+
+export function buildClaireOpeningFallback(context: ClaireDriveContext): string {
+  const clock = context.clock;
+  const goal = context.macroGoal;
+  const metric = context.verifiedMetrics?.activeCustomers;
+  const tomorrow = context.workPicture?.tomorrow;
+  const campaign = context.campaign;
+  const remote = context.workPicture?.today.items.find(item => ["commercial_call", "follow_up"].includes(item.kind));
+  const lines: string[] = [];
+
+  if (clock) {
+    if (clock.fieldSalesDayState === "over") {
+      lines.push(`It's ${clock.weekday} evening, and the normal property-visit window is over${remote ? `, but ${remote.title} can still move remotely` : ""}.`);
+    } else if (clock.fieldSalesDayState === "winding_down") {
+      lines.push(`It's late ${clock.weekday} afternoon, so the property-visit window is winding down.`);
+    } else {
+      lines.push(`It's ${clock.weekday} ${clock.daypart.replace("_", " ")}.`);
+    }
+  }
+  if (context.macroGoalKnown === false || !goal) {
+    lines.push("The macro goal isn't recorded yet—what are we actually trying to accomplish?");
+    return lines.slice(0, 3).join(" ");
+  }
+  lines.push(`${targetPhrase(goal.targetValue, goal.unit)} is still the target.`);
+  if (metric?.completeness === "complete" && metric.value !== null) {
+    lines.push(`The verified 30-calendar-day active-customer count is ${metric.value}.`);
+  } else if (metric?.completeness === "partial" && metric.value !== null) {
+    lines.push(`I can verify ${metric.value} from ${metric.sources.join(" and ")}, but that is not the full active-customer total.`);
+  } else if (campaign?.active && campaign.remainingCount > 0) {
+    lines.push(`${campaign.remainingCount} Greystar property visits remain open.`);
+  } else if (tomorrow) {
+    lines.push(`Tomorrow has ${tomorrow.counts.pickups} pickups and ${tomorrow.counts.dropoffs} dropoffs.`);
+  }
+  return lines.slice(0, 3).join(" ");
 }
 
 export function conservativeDebriefFallback(
@@ -142,6 +187,9 @@ export async function writeClairePreDriveBrief(
   } = {}
 ): Promise<string> {
   const fallback = (() => {
+    if (input.context.clock || input.context.macroGoalKnown !== undefined) {
+      return buildClaireOpeningFallback(input.context);
+    }
     const next = input.context.nextFixedCommitment;
     const blockers = input.context.blockers;
     if (next && blockers.length) {
@@ -181,11 +229,15 @@ export async function writeClairePreDriveBrief(
               "You are Claire, Goldline's concise operations partner calling before a drive.",
               "Use only the supplied business context. Never invent a customer, outcome, deadline, address, revenue, commitment, or completed action.",
               "The game cannot create business truth. Derived suggestions are suggestions, never facts.",
-              "This is a field-operations call. Discuss only real pickups, deliveries, commercial visits or calls, route blockers, customer recovery, or other real field work present in the supplied context.",
+              "This is an orientation brief, not a coaching conversation. Use the supplied clock, macro goal, verified metric, work picture, and campaign state only.",
+              "Every factual clause must map directly to a supplied field. Omit missing facts. Never calculate a metric or infer a total.",
+              "If fieldSalesDayState is winding_down or over, distinguish property-visit viability from remote calls, follow-ups, research, or tomorrow's field opportunity when those items exist.",
+              "For a partial active-customer metric, state only the verified subset and explicitly say it is not the full total. For unavailable, omit the count.",
+              "Name at most one strategic operational fact. Use real-work language such as Greystar visits, never fantasy or NPC language.",
               "Never mention software development, code, repositories, GitHub, Codex, commits, pull requests, deployments, archiving, internal engineering chores, JSON, databases, confidence systems, or internal architecture.",
-            "If the supplied context has no useful field move, say that plainly rather than filling the call with unrelated work.",
+            "If the macro goal is unknown, ask what the macro goal is rather than inventing it.",
             "The phone wrapper already introduces Claire. Do not introduce yourself, say your name, greet the operator, or mention Goldline.",
-            "Speak naturally in 2 to 4 short sentences and 35 to 70 spoken words; never exceed 70 words. Lead with the next field commitment or blocker, then one useful optional move at most.",
+            "Speak naturally in no more than 3 concise sentences and never exceed 70 words.",
               "Use conversational spoken English. Avoid slash-separated phrases, dense abbreviations, or wording that is hard to understand over a phone line.",
               "Do not narrate the game.",
               "If the context includes missionSalesBrief, that is the one authoritative sales strategy for this mission — prioritize its primaryObjective and keyUnknown over generic pitching, and do not repeat anything listed in its thingsToAvoid.",
@@ -214,6 +266,7 @@ export async function writeClairePreDriveBrief(
         generatedText: text,
         compiled,
         businessContextSummary: input.context.businessDate,
+        orientationContext: input.context,
       },
     });
     input.onGeneration?.(diagnostic);
@@ -238,6 +291,7 @@ export async function writeClairePreDriveBrief(
         generatedText: fallback,
         compiled,
         businessContextSummary: input.context.businessDate,
+        orientationContext: input.context,
       },
     });
     input.onGeneration?.(diagnostic);

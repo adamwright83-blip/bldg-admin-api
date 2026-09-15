@@ -1,6 +1,7 @@
 import { logAgentEvent } from "../agents/agentEvents";
 import { appendClaireGenerationLog } from "./character/generationLog";
 import type { ClaireCompiledContext } from "./character/types";
+import type { ClaireDriveContext } from "./contextAssembler";
 
 export type ClaireGenerationKind =
   | "opening_brief"
@@ -25,6 +26,7 @@ export type ClaireGenerationReviewDetail = {
   generatedText: string;
   compiled: ClaireCompiledContext;
   businessContextSummary?: string | null;
+  orientationContext?: ClaireDriveContext;
 };
 
 const counters = new Map<string, { attempts: number; fallbacks: number }>();
@@ -61,6 +63,9 @@ export async function recordClaireGeneration(input: {
     source: input.diagnostic.source,
     failureReason: input.diagnostic.failureReason,
     fallbackRate: current.attempts ? current.fallbacks / current.attempts : 0,
+    ...(input.reviewDetail?.orientationContext
+      ? orientationTelemetry(input.reviewDetail.orientationContext, input.diagnostic.source === "fallback")
+      : {}),
   };
   console.info("[Claire] generation", event);
   try {
@@ -102,6 +107,28 @@ export async function recordClaireGeneration(input: {
       });
     }
   }
+}
+
+export function orientationTelemetry(context: ClaireDriveContext, fallbackUsed: boolean) {
+  return {
+    businessLocalTimestamp: context.clock
+      ? `${context.clock.businessDate} ${context.clock.localTime} ${context.clock.timeZone}`
+      : null,
+    businessDate: context.clock?.businessDate ?? context.businessDate,
+    weekday: context.clock?.weekday ?? null,
+    daypart: context.clock?.daypart ?? null,
+    fieldSalesDayState: context.clock?.fieldSalesDayState ?? null,
+    macroGoalId: context.macroGoal?.id ?? null,
+    macroGoalMetricKey: context.macroGoal?.metricKey ?? null,
+    macroGoalTargetValue: context.macroGoal?.targetValue ?? null,
+    activeCustomerValue: context.verifiedMetrics?.activeCustomers.value ?? null,
+    activeCustomerCompleteness: context.verifiedMetrics?.activeCustomers.completeness ?? "unavailable",
+    todayItemCounts: context.workPicture?.today.counts ?? null,
+    tomorrowItemCounts: context.workPicture?.tomorrow.counts ?? null,
+    campaignName: context.campaign?.campaignName ?? null,
+    campaignRemainingCount: context.campaign?.remainingCount ?? null,
+    fallbackUsed,
+  };
 }
 
 export function getClaireGenerationStats(tenantId: string) {

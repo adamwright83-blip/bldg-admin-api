@@ -6971,3 +6971,42 @@ export const claireGenerationLogs = mysqlTable(
     ),
   })
 );
+
+/**
+ * Prompt A — the operator's durable, attested business objective. This is
+ * deliberately separate from campaign-template objectives and is not writable
+ * from model text. Service logic serializes replacements per scoped metric.
+ */
+export const operatorMacroGoals = mysqlTable(
+  "operator_macro_goals",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    objective: varchar("objective", { length: 512 }).notNull(),
+    metricKey: varchar("metricKey", { length: 64 }).notNull(),
+    targetValue: decimal("targetValue", { precision: 15, scale: 2 }).notNull(),
+    unit: varchar("unit", { length: 64 }).notNull(),
+    urgencyText: varchar("urgencyText", { length: 191 }),
+    targetDate: varchar("targetDate", { length: 10 }),
+    source: mysqlEnum("source", ["operator_attested", "admin"]).notNull(),
+    sourceNote: varchar("sourceNote", { length: 512 }).notNull(),
+    status: mysqlEnum("status", ["active", "superseded", "closed"])
+      .notNull()
+      .default("active"),
+    supersededById: varchar("supersededById", { length: 36 }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    activeLookup: index("idx_operator_macro_goals_active").on(
+      table.tenantId,
+      table.operatorUserId,
+      table.metricKey,
+      table.status
+    ),
+  })
+);
+
+export type OperatorMacroGoal = typeof operatorMacroGoals.$inferSelect;
+export type InsertOperatorMacroGoal = typeof operatorMacroGoals.$inferInsert;
