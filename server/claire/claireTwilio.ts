@@ -14,6 +14,8 @@ import {
   ensureCurrentMissionSalesBrief,
   getLatestMissionSalesBrief,
 } from "../missionSalesBrief/missionSalesBriefService";
+import { handleVoiceCommitmentTurn } from "./voiceCommitmentLoop";
+import type { DayDirectorProposal } from "../../shared/dayDirector";
 import {
   extractClaireDebrief,
   writeClaireOutcomeConfirmation,
@@ -49,6 +51,8 @@ type PreDriveConversation = {
   context: Awaited<ReturnType<typeof assembleClaireDriveContext>>;
   turns: number;
   touchedAt: number;
+  /** Voice commitment loop: a proposed Day Director commitment awaiting explicit yes/no. */
+  pendingProposal?: DayDirectorProposal | null;
 };
 
 const preDriveConversations = new Map<string, PreDriveConversation>();
@@ -385,6 +389,24 @@ export function registerClaireRoutes(app: Express): void {
           speakAndHangUp(
             "That's the useful part of this brief. Drive safe, and take it one stop at a time."
           )
+        );
+      }
+
+      const commitmentTurn = await handleVoiceCommitmentTurn({
+        tenantId: conversation.tenantId,
+        actorId: conversation.actorId,
+        businessDate: conversation.context.businessDate,
+        utterance: transcript,
+        state: conversation,
+      });
+      if (commitmentTurn.kind !== "not_applicable") {
+        conversation.turns += 1;
+        conversation.touchedAt = Date.now();
+        return res.send(
+          preDriveConversationTwiML({
+            text: commitmentTurn.speak,
+            token: String(req.query.token),
+          })
         );
       }
 
