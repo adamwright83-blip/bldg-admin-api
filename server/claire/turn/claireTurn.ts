@@ -227,6 +227,7 @@ function proposalAsItem(proposal: DayDirectorProposal, today: string, minutesNow
 }
 
 function singleIntentFlow(utterance: string): boolean {
+  if (looksLikeQuestion(utterance)) return false;
   return Boolean(
     looksLikeCancelRequest(utterance) ||
       looksLikeEditRequest(utterance) ||

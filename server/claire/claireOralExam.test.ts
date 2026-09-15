@@ -240,6 +240,12 @@ describe("F — account thread", () => {
 });
 
 describe("G — sales history thread", () => {
+  it("a question about a prior visit never enters the field-outcome proposal loop", async () => {
+    const { ask, deps } = exam();
+    const answer = await ask("What happened last time I went to The Louise?");
+    expect(answer).toContain("The last visit outcome was follow up");
+    expect(deps.commitment).not.toHaveBeenCalled();
+  });
   it("what happened, last contact, what I said, whether a follow-up is owed", async () => {
     const { ask } = exam();
     expect(await ask("What happened with The Louise?")).toContain("The Louise has one mission on file, set up August 6, currently in follow-up.");
