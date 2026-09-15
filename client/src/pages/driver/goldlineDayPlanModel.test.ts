@@ -365,6 +365,50 @@ describe("the authoritative day becomes playable objectives", () => {
   });
 });
 
+describe("Day Director commitments (incl. Claire voice commitments) reach the Driver dayline — no shadow list", () => {
+  it("an accepted commitment produces a visible DayPlanStop", () => {
+    const plan = buildDayPlanProjection({
+      businessDate: "2026-09-14",
+      commitments: [
+        {
+          id: "commitment-1",
+          businessDate: "2026-09-14",
+          title: "Evaluate Zeely.ai for Instagram ads",
+          kind: "growth",
+          quantity: null,
+          provenance: "user_reported",
+          status: "open",
+          completedAt: null,
+        },
+      ],
+    });
+    const stop = plan.stops.find(s => s.id === "commitment-commitment-1");
+    expect(stop).toBeDefined();
+    expect(stop?.title).toBe("Evaluate Zeely.ai for Instagram ads");
+    expect(stop?.action).toEqual({ type: "commitment", id: "commitment-1" });
+    expect(stop?.source).toBe("user_commitment");
+  });
+
+  it("an 'operations'-kind commitment (e.g. a Colosseum-adjacent field visit) still appears, not filtered by kind", () => {
+    const plan = buildDayPlanProjection({
+      businessDate: "2026-09-14",
+      commitments: [
+        {
+          id: "commitment-2",
+          businessDate: "2026-09-14",
+          title: "Visit remaining prospecting stops",
+          kind: "operations",
+          quantity: 3,
+          provenance: "user_reported",
+          status: "open",
+          completedAt: null,
+        },
+      ],
+    });
+    expect(plan.stops.some(s => s.id === "commitment-commitment-2")).toBe(true);
+  });
+});
+
 describe("commercial-mission linkage survives the living-world projection", () => {
   it("The Louise follow-up (kind: follow_up, missionId: 8) projects to a commercial DayPlanStop action for mission 8", () => {
     const objectives = liveObjectivesFromFieldToday([
