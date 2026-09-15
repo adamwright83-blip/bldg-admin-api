@@ -5,10 +5,10 @@ import {
   parseCleanCloudMoneyCents,
 } from "../cleancloudPaidOrders";
 import {
-  parseCsv,
-  validateExportUrl,
-  validateRange,
-} from "../../extensions/gumballpals/core.js";
+  parseOrdersSalesCsv,
+  validateOrdersSalesExportUrl,
+  validateOrdersSalesRange,
+} from "../cleancloudIngestion/ordersSalesCsv";
 import { normalizePropertyTower } from "../../shared/propertyTowers";
 import { fromZonedTime, formatInTimeZone } from "date-fns-tz";
 
@@ -92,26 +92,8 @@ export function sourceDate(raw: string): Date | null {
     : null;
 }
 
-export function validatePayload(
-  input: {
-    csv: string;
-    exportUrl: string;
-    from: string;
-    to: string;
-    storeId: string;
-  },
-  tenantId: string
-) {
-  let rows: Record<string, string>[];
-  try {
-    const range = validateRange(input.from, input.to);
-    if (validateExportUrl(input.exportUrl, range).storeId !== input.storeId)
-      invalid("Export store does not match the paired store.");
-    rows = parseCsv(input.csv);
-  } catch (error) {
-    invalid(error instanceof Error ? error.message : "Invalid report.");
-  }
-  const normalized = rows!.map((row, index) => {
+function normalizeRows(rows: Record<string, string>[], tenantId: string) {
+  return rows.map((row, index) => {
     const prefix = `Row ${index + 2}: `;
     const paid = row.Paid.trim().toLowerCase();
     if (
@@ -130,7 +112,7 @@ export function validatePayload(
       invalid(prefix + "amount outside supported range.");
     const result = normalizeCleanCloudPaidOrderRow(row, {
       sourceReportType: "orders_sales",
-      sourceFileName: "browser-sync.csv",
+      sourceFileName: "ingestion.csv",
       importBatchId: 0,
       tenantId,
     });
@@ -154,6 +136,28 @@ export function validatePayload(
     // Never manufacture a source timestamp, infer a payment, or map by customer name.
     return order;
   });
+}
+
+export function validatePayload(
+  input: {
+    csv: string;
+    exportUrl: string;
+    from: string;
+    to: string;
+    storeId: string;
+  },
+  tenantId: string
+) {
+  let rows: Record<string, string>[];
+  try {
+    const range = validateOrdersSalesRange(input.from, input.to);
+    if (validateOrdersSalesExportUrl(input.exportUrl, range).storeId !== input.storeId)
+      invalid("Export store does not match the paired store.");
+    rows = parseOrdersSalesCsv(input.csv);
+  } catch (error) {
+    invalid(error instanceof Error ? error.message : "Invalid report.");
+  }
+  const normalized = normalizeRows(rows!, tenantId);
   return {
     normalized,
     digest: createHash("sha256")
@@ -166,6 +170,28 @@ export function validatePayload(
         })
       )
       .digest("hex"),
+  };
+}
+
+/**
+ * Validate a durable Gumball Inbox artifact. Jawbreaker proves the actual file
+ * bytes with artifactSha256; store ownership is checked separately against the
+ * tenant's pinned CleanCloud binding by the Jawbreaker router.
+ */
+export function validateJawbreakerArtifact(
+  input: { csv: string; from: string; to: string },
+  tenantId: string
+) {
+  let rows: Record<string, string>[];
+  try {
+    validateOrdersSalesRange(input.from, input.to);
+    rows = parseOrdersSalesCsv(input.csv);
+  } catch (error) {
+    invalid(error instanceof Error ? error.message : "Invalid report.");
+  }
+  return {
+    normalized: normalizeRows(rows!, tenantId),
+    artifactSha256: createHash("sha256").update(Buffer.from(input.csv, "utf8")).digest("hex"),
   };
 }
 
