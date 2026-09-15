@@ -17,6 +17,7 @@ import {
 } from "../_core/trpc";
 import type { CanonicalGoldlineAction } from "../../shared/goldlineActionContract";
 import { assertDriverCanReadMission } from "../commercialMissions/commercialMissionAuthorization";
+import { dayDirectorActorId } from "../dayDirector/dayDirectorActor";
 import { getCommercialMission } from "../commercialMissions/commercialMissionStore";
 import {
   CLAIRE_ATTESTABLE_EVENT_TYPES,
@@ -172,6 +173,12 @@ export const claireRouter = router({
       return startClairePreDriveCall({
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,
+        // Day Director's own commitments (and therefore the Driver dayline
+        // that renders them) are keyed by dayDirectorActorId(ctx) — the
+        // numeric user id, not the openId Claire otherwise uses. Any
+        // commitment the voice loop creates must use this exact id or it
+        // will never appear on Driver after the call.
+        dayDirectorActorId: dayDirectorActorId(ctx),
         timeZone: input.timeZone,
         missionId: input.missionId,
       });

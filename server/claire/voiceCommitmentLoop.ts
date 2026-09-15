@@ -14,10 +14,23 @@ import { acceptProposal, proposeCommitment } from "../dayDirector/dayDirectorSer
 const ADD_WORK_TRIGGER =
   /\b(i need to|i have to|we need to|can you add|please add|add (?:a|this) (?:task|to-do|commitment)|make a note|remind me to|put (?:this|that) on (?:my|the) list|i need you to (?:add|track|remember)|(?:need|have) to (?:decide|choose|select) between)\b/i;
 
+/**
+ * Existing-work signal (Slice: existing vs new work). A statement that
+ * names itself as part of an already-running initiative, or describes
+ * remaining/incomplete progress on one, is discussion of existing open
+ * work — never a new commitment — even if it also happens to contain
+ * add-work phrasing like "I have to". Deliberately generic (no campaign
+ * name is hardcoded here): it fires on the SHAPE of "this already belongs
+ * to something", not on any specific business/campaign name.
+ */
+const EXISTING_INITIATIVE_PATTERN =
+  /\b(part of (?:the|a|my|our)?\s*[\w\s.,'-]{0,60}?(?:challenge|campaign|mission|kingdom|program)|already (?:tracked|assigned|on (?:the|my) (?:list|board|plan)|part of)|still (?:have|haven'?t|need) to (?:finish|complete|do)|remain(?:ing|s)?\b)/i;
+
 const YES_PATTERN = /\b(yes|yeah|yep|confirm|confirmed|correct|do it|go ahead|add it|save it)\b/i;
 const NO_PATTERN = /\b(no|nope|nah|cancel|never ?mind|don'?t|do not|stop|not now)\b/i;
 
 export function detectAddWorkIntent(utterance: string): boolean {
+  if (EXISTING_INITIATIVE_PATTERN.test(utterance)) return false;
   return ADD_WORK_TRIGGER.test(utterance);
 }
 

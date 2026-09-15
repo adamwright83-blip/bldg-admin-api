@@ -47,6 +47,8 @@ const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
 type PreDriveConversation = {
   tenantId: string;
   actorId: string;
+  /** The identity Day Director commitments are actually keyed by — see dayDirectorActorId(ctx). Never inferred from speech. */
+  dayDirectorActorId: string;
   brief: string;
   context: Awaited<ReturnType<typeof assembleClaireDriveContext>>;
   turns: number;
@@ -214,6 +216,8 @@ export async function startClairePreDriveCall(input: {
   actorId: string;
   timeZone?: string;
   missionId?: number;
+  /** The identity Day Director commitments (and Driver's dayline) are actually keyed by — see dayDirectorActorId(ctx). */
+  dayDirectorActorId?: string;
 }): Promise<{ callSid: string; brief: string }> {
   const to = configuredOperatorPhone();
   const generated = await generateClairePreDriveOutput({
@@ -228,6 +232,7 @@ export async function startClairePreDriveCall(input: {
   preDriveConversations.set(conversationId, {
     tenantId: input.tenantId,
     actorId: input.actorId,
+    dayDirectorActorId: input.dayDirectorActorId ?? input.actorId,
     brief,
     context,
     turns: 0,
@@ -392,13 +397,28 @@ export function registerClaireRoutes(app: Express): void {
         );
       }
 
-      const commitmentTurn = await handleVoiceCommitmentTurn({
-        tenantId: conversation.tenantId,
-        actorId: conversation.actorId,
-        businessDate: conversation.context.businessDate,
-        utterance: transcript,
-        state: conversation,
-      });
+      let commitmentTurn: Awaited<ReturnType<typeof handleVoiceCommitmentTurn>>;
+      try {
+        commitmentTurn = await handleVoiceCommitmentTurn({
+          tenantId: conversation.tenantId,
+          actorId: conversation.dayDirectorActorId,
+          businessDate: conversation.context.businessDate,
+          utterance: transcript,
+          state: conversation,
+        });
+      } catch (error) {
+        // Hard truth rule: never let conversational fluency outrun system
+        // truth. A failed persistence must never be reported as a success.
+        console.error("[Claire] voice commitment turn failed", error);
+        conversation.turns += 1;
+        conversation.touchedAt = Date.now();
+        return res.send(
+          preDriveConversationTwiML({
+            text: "I understood it, but I couldn't save it. Let's try again in a moment.",
+            token: String(req.query.token),
+          })
+        );
+      }
       if (commitmentTurn.kind !== "not_applicable") {
         conversation.turns += 1;
         conversation.touchedAt = Date.now();
