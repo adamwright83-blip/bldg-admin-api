@@ -94,8 +94,9 @@ export function isCompositionQuestion(lower: string, scopeMentioned: boolean): b
   );
 }
 
+/** Arithmetic on numbers already in the thread — not a Day Line "add". */
 export function isCombineRequest(lower: string): boolean {
-  return /\b(add (?:them|those|these|those two|both|it all|them all)(?: up| together)?|combined?|all together|put (?:them|those) together|sum (?:of )?(?:them|those)|total (?:of )?(?:them|those|both)|together)\b/.test(
+  return /\b(?:add (?:them|those|these|those two|both|it all|them all)(?: up| together)|(?:put|add) (?:them|those) together|sum (?:(?:of|up) )?(?:them|those|these|both)|total(?: of)? (?:them|those|both)|combined?|all together)\b/.test(
     lower
   );
 }

@@ -1,4 +1,5 @@
 import { parseSpokenNumber } from "../../analytics/businessPeriods";
+import { isCombineRequest } from "../business/businessLanguage";
 import { dayMention, parseTiming, TIME_TOKEN } from "./briefingTiming";
 import type { BriefingClock, BriefingItem, BriefingTiming, ParsedBriefing } from "./briefingTypes";
 
@@ -328,6 +329,10 @@ export function parseBriefingDeterministically(utterance: string, clock: Briefin
       // It must reach the business thread instead of becoming a Day Line task.
       if (/^(?:only|just|exclude|include)\s+(?:the\s+)?(?:people|customers|clients|residents)\b/i.test(bare) &&
           /\b(?:orders?|ordered|more than|at least|since|this year|last \d+ days)\b/i.test(bare)) {
+        questions.push(bare);
+        continue;
+      }
+      if (isCombineRequest(bare.toLowerCase())) {
         questions.push(bare);
         continue;
       }

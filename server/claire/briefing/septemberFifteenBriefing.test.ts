@@ -144,6 +144,14 @@ describe("natural briefing forms", () => {
     expect(parsed.items).toEqual([]);
     expect(parsed.questions).toEqual(["Only people with more than one order"]);
   });
+  it("thread arithmetic using add as a verb is a question, not work", () => {
+    const together = parseBriefingDeterministically("Add them together.", clock);
+    expect(together.items).toEqual([]);
+    expect(together.questions).toEqual(["Add them together"]);
+    const summed = parseBriefingDeterministically("Sum those.", clock);
+    expect(summed.items).toEqual([]);
+    expect(summed.questions).toEqual(["Sum those"]);
+  });
   it("today X, Y and Z, and tomorrow A", () => {
     const parsed = parseBriefingDeterministically(
       "Today I need to pick up Sophie's comforter, drop off the Maybourne flyers and call Todd, and tomorrow I need to deliver Rebecca's laundry.",

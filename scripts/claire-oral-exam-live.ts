@@ -216,6 +216,17 @@ const ACCEPTANCE: Array<[string, string[]]> = [
   ["Sales history", ["What happened with The Louise?", "When was my last contact?", "What did I say happened there?", "Do I owe them a follow-up?"]],
   ["Operations", ["What do I have left today?", "What did I already finish?", "What is tomorrow?"]],
   ["Profit and coverage", ["What was profit last month?", "What data do you have?", "Who still owes money?"]],
+  [
+    "Novel routing paraphrases",
+    [
+      "What was revenue the last 30 days?",
+      "How much is Stripe?",
+      "What about Clearent?",
+      "Add them together.",
+      "Tell me what happened last time I went to The Louise",
+      "Remind me whether I owe them a follow-up",
+    ],
+  ],
 ];
 
 async function redTeam(): Promise<Exchange[]> {

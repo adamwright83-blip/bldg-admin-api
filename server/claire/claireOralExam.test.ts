@@ -246,6 +246,16 @@ describe("G — sales history thread", () => {
     expect(answer).toContain("The last visit outcome was follow up");
     expect(deps.commitment).not.toHaveBeenCalled();
   });
+  it("a history question without a question mark still does not enter field-outcome capture", async () => {
+    const { ask, deps } = exam();
+    deps.commitment = vi.fn(async () => ({
+      kind: "clarifying" as const,
+      speak: "A field visit was reported. Say yes if I should save that field outcome, or no to leave it unrecorded.",
+    })) as never;
+    const answer = await ask("Tell me what happened last time I went to The Louise");
+    expect(answer).toContain("The last visit outcome was follow up");
+    expect(deps.commitment).not.toHaveBeenCalled();
+  });
   it("what happened, last contact, what I said, whether a follow-up is owed", async () => {
     const { ask } = exam();
     expect(await ask("What happened with The Louise?")).toContain("The Louise has one mission on file, set up August 6, currently in follow-up.");
@@ -299,11 +309,16 @@ describe("I — source / filter thread, and business lineage", () => {
   });
 
   it("add them together does not double count, and building scope refines the same question", async () => {
-    const { ask } = exam();
+    const { ask, deps } = exam();
+    deps.commitment = vi.fn(async () => ({
+      kind: "clarifying" as const,
+      speak: "Do you want me to add something, change something, or are you just catching me up?",
+    })) as never;
     await ask("What was revenue the last 30 days?");
     await ask("How much is Stripe?");
     await ask("What about Clearent?");
     expect(await ask("Add them together.")).toContain("come to $569 across 11 orders");
+    expect(deps.commitment).not.toHaveBeenCalled();
     expect(await ask("Does that include OPUS?")).toContain("was OPUS LA");
     expect(await ask("Exclude OPUS.")).toContain("excluding OPUS LA");
   });

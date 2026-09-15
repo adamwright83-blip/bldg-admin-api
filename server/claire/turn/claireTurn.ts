@@ -1,12 +1,12 @@
 import { businessToday } from "../../analytics/businessPeriods";
 import { getDashboardTimeZone } from "../../dashboardZoned";
 import type { DayDirectorProposal } from "../../../shared/dayDirector";
-import { classifyIntentHeuristics, detectAvoidanceDisclosure, extractConversationalFieldOutcome } from "../../../shared/claireRuntime";
+import { classifyIntentHeuristics, detectAvoidanceDisclosure, extractConversationalFieldOutcome, looksLikeKnowledgeSeeking } from "../../../shared/claireRuntime";
 import { confirmTomorrowUtterance } from "../../../shared/claireWorkday";
 import { looksLikeCancelRequest, looksLikeEditRequest } from "../../../shared/goldlineDayLine";
 import { ENV } from "../../_core/env";
 import { answerClaireBusinessTurn, looksLikeWorkRequest, type ClaireAnalyticsState, type ClaireBusinessTurnDeps } from "../businessConversation";
-import { normalizeUtterance } from "../business/businessLanguage";
+import { isCombineRequest, normalizeUtterance } from "../business/businessLanguage";
 import { getClaireCampaignSummary } from "../campaignAwareness";
 import type { ClaireDriveContext } from "../contextAssembler";
 import { answerClairePreDriveFollowUp } from "../preDriveConversation";
@@ -207,7 +207,7 @@ function isShortReply(utterance: string): boolean {
 
 /** A question is never an answer to "should I add that?". */
 function looksLikeQuestion(utterance: string): boolean {
-  return /\?\s*$/.test(utterance.trim()) || /^(?:how|what|what's|whats|who|when|which|where|why|did|does|do we|is|are|was|were|has|have)\b/i.test(utterance.trim());
+  return looksLikeKnowledgeSeeking(utterance);
 }
 
 function proposalAsItem(proposal: DayDirectorProposal, today: string, minutesNow: number): BriefingItem {
@@ -448,7 +448,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   }
 
   // ── 5. Established single-intent work flows ───────────────────────────────
-  if (!commitmentTried && (singleFlow || (parsed.items.length === 1 && parsed.questions.length === 0))) {
+  // Thread arithmetic ("add them together") uses the verb "add" but is not work.
+  if (isCombineRequest(lower) && parsed.items.length <= 1) {
+    parsed = { ...parsed, items: [], questions: parsed.questions.length ? parsed.questions : [utterance] };
+  }
+  if (!commitmentTried && !isCombineRequest(lower) && (singleFlow || (parsed.items.length === 1 && parsed.questions.length === 0))) {
     commitmentTried = true;
     const turn = await deps.commitment(
       { tenantId: input.tenantId, actorId: input.dayDirectorActorId, businessDate: today, utterance, state, conversationId: input.conversationKey },
@@ -470,7 +474,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     return finish({ speak: `${answer}${reminder}`, kind: "answered" });
   }
 
-  if (!commitmentTried && !parsed.questions.length && !singleFlow && parsed.items.length === 0 && !/\?\s*$/.test(utterance)) {
+  if (!commitmentTried && !isCombineRequest(lower) && !parsed.questions.length && !singleFlow && parsed.items.length === 0 && !looksLikeQuestion(utterance)) {
     commitmentTried = true;
     const turn = await deps.commitment(
       { tenantId: input.tenantId, actorId: input.dayDirectorActorId, businessDate: today, utterance, state, conversationId: input.conversationKey },
