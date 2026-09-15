@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { ClaireAnalysisInbox } from "@/components/goldline/ClaireAnalysisInbox";
 
 /**
  * Desktop Claire — same operator, same brain, richer form factor.
@@ -55,6 +56,7 @@ export default function ClaireDesk() {
       <p style={{ letterSpacing: "0.18em", fontWeight: 800, fontSize: 12, color: "#9b6410" }}>
         CLAIRE
       </p>
+      <ClaireAnalysisInbox />
       <h1 style={{ fontSize: 36, margin: "8px 0 12px" }}>Same Claire. Deeper desk.</h1>
       <p style={{ maxWidth: 560, lineHeight: 1.5, color: "#3a5f7e" }}>
         This is not a second brain. Desktop just has room for more of the same

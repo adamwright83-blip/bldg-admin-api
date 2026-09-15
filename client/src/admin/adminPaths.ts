@@ -82,7 +82,7 @@ const MONEY_PATHS = new Set(["/money", "/payment-reconciliation", "/pnl"]);
 const SETTINGS_PATHS = new Set(["/settings", "/catalog", "/pricing"]);
 
 export function northDomainForPath(path: string): AdminNorthDomain | null {
-  if (isAdminCommandCenterPath(path) || path === "/demo" || path === "/operator-reflection" || path === "/claire") return "home";
+  if (isAdminCommandCenterPath(path) || path === "/demo" || path === "/operator-reflection" || path === "/claire" || path.startsWith("/claire/")) return "home";
   if (OPERATIONS_PATHS.has(path)) return "operations";
   if (CUSTOMER_PATHS.has(path)) return "customers";
   if (

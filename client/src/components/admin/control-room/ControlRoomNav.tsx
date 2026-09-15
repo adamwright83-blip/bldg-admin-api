@@ -106,6 +106,7 @@ function isWestActive(path: string, itemPath: string) {
   if (itemPath === "/" && (path === "/" || path === "/home")) return true;
   if (itemPath === "/operations" && path === "/live") return true;
   if (itemPath === "/catalog" && path === "/pricing") return true;
+  if (itemPath === "/claire" && path.startsWith("/claire")) return true;
   return path === itemPath;
 }
 

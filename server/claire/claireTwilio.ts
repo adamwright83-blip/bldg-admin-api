@@ -36,10 +36,29 @@ import {
   verifyClaireToken,
   type ClaireMissionAccess,
 } from "./claireToken";
+import { isClaireVoiceRecordingEnabled } from "./conversation/consent";
+import {
+  attachCallSid,
+  createConversationSession,
+  persistSpokenTurn,
+} from "./conversation/ledgerService";
+import {
+  endClaireCallLedger,
+  linkClaireCallAction,
+  persistOperatorAndClaire,
+  safeClaireLedger,
+} from "./conversation/liveCall";
+import {
+  handleCallCompleted,
+  handleRecordingStatus,
+} from "./conversation/pipeline";
+import { isValidTwilioWebhook } from "./conversation/twilioSignature";
 
 const DEBRIEF_PATH = "/api/claire/twilio/debrief";
 const CONFIRM_PATH = "/api/claire/twilio/confirm";
 const PRE_DRIVE_PATH = "/api/claire/twilio/pre-drive";
+export const CLAIRE_RECORDING_STATUS_PATH = "/api/claire/twilio/recording-status";
+export const CLAIRE_CALL_STATUS_PATH = "/api/claire/twilio/call-status";
 const CLAIRE_VOICE = "Polly.Ruth-Generative";
 const PRE_DRIVE_CONVERSATION_TTL_MS = 30 * 60 * 1_000;
 const MAX_PRE_DRIVE_TURNS = 24;
@@ -117,17 +136,50 @@ function publicUrlFor(req: Request): string {
 }
 
 function validTwilioRequest(req: Request): boolean {
-  if (!authToken) return process.env.NODE_ENV !== "production";
-  const signature = req.headers["x-twilio-signature"];
-  if (typeof signature !== "string" || !signature) return false;
   const body = (req.body ?? {}) as Record<string, string>;
-  const candidateUrls = new Set([
-    publicUrlFor(req),
-    `${publicBaseUrl()}${req.originalUrl}`,
-  ]);
-  return Array.from(candidateUrls).some(url =>
-    twilio.validateRequest(authToken, signature, url, body)
-  );
+  return isValidTwilioWebhook({
+    authToken,
+    signature: req.headers["x-twilio-signature"],
+    urls: [publicUrlFor(req), `${publicBaseUrl()}${req.originalUrl}`],
+    body,
+    nodeEnv: process.env.NODE_ENV ?? "development",
+  });
+}
+
+export function spokenClaireText(text: string, opening = false): string {
+  return opening ? `Adam. Claire here. ${text}` : text;
+}
+
+export function claireVoiceCallCreateOptions(): {
+  record: boolean;
+  recordingChannels?: "dual";
+  recordingStatusCallback?: string;
+  recordingStatusCallbackEvent?: Array<"completed" | "absent">;
+  recordingStatusCallbackMethod?: "POST";
+  statusCallback: string;
+  statusCallbackEvent: ["completed"];
+  statusCallbackMethod: "POST";
+} {
+  const recordingEnabled = isClaireVoiceRecordingEnabled();
+  return {
+    record: recordingEnabled,
+    ...(recordingEnabled
+      ? {
+          recordingChannels: "dual" as const,
+          recordingStatusCallback: `${publicBaseUrl()}${CLAIRE_RECORDING_STATUS_PATH}`,
+          recordingStatusCallbackEvent: ["completed" as const, "absent" as const],
+          recordingStatusCallbackMethod: "POST" as const,
+        }
+      : {}),
+    statusCallback: `${publicBaseUrl()}${CLAIRE_CALL_STATUS_PATH}`,
+    statusCallbackEvent: ["completed"],
+    statusCallbackMethod: "POST",
+  };
+}
+
+function callSidFrom(req: Request): string | undefined {
+  const sid = String(((req.body ?? {}) as Record<string, string>).CallSid ?? "").trim();
+  return sid || undefined;
 }
 
 function assertMissionAccess(input: {
@@ -172,7 +224,7 @@ export function preDriveConversationTwiML(input: {
   const say = gather.say({ voice: CLAIRE_VOICE, language: "en-US" }, "");
   say.prosody(
     { rate: "90%", volume: "+6dB" },
-    input.opening ? `Adam. Claire here. ${input.text}` : input.text
+    spokenClaireText(input.text, input.opening)
   );
   response.hangup();
   return response.toString();
@@ -256,16 +308,43 @@ export async function startClairePreDriveCall(input: {
     userId: input.actorId,
     conversationId,
   });
+  const recordingEnabled = isClaireVoiceRecordingEnabled();
+  await safeClaireLedger(() =>
+    createConversationSession({
+      tenantId: input.tenantId,
+      operatorUserId: input.actorId,
+      claireConversationId: conversationId,
+      conversationKind: context.workday?.session ?? "pre_drive",
+      missionId: input.missionId ?? null,
+      recordingEnabled,
+    })
+  );
   try {
     const call = await client!.calls.create({
       to,
       from: assertPhone(fromNumber),
       twiml: preDriveConversationTwiML({ text: brief, token, opening: true }),
-      record: false,
+      ...claireVoiceCallCreateOptions(),
+    });
+    await safeClaireLedger(async () => {
+      await attachCallSid({
+        claireConversationId: conversationId,
+        callSid: call.sid,
+      });
+      await persistSpokenTurn({
+        claireConversationId: conversationId,
+        callSid: call.sid,
+        speaker: "CLAIRE",
+        text: spokenClaireText(brief, true),
+      });
     });
     return { callSid: call.sid, brief };
   } catch (error) {
     preDriveConversations.delete(conversationId);
+    await endClaireCallLedger({
+      claireConversationId: conversationId,
+      reason: "call_create_failed",
+    });
     throw error;
   }
 }
@@ -333,11 +412,34 @@ export async function startClairePostStopCall(input: {
   );
   response.hangup();
 
+  const conversationId = randomUUID();
+  await safeClaireLedger(() =>
+    createConversationSession({
+      tenantId: input.tenantId,
+      operatorUserId: input.actorId,
+      claireConversationId: conversationId,
+      conversationKind: "field_debrief",
+      missionId: input.missionId,
+      recordingEnabled: isClaireVoiceRecordingEnabled(),
+    })
+  );
   const call = await client!.calls.create({
     to,
     from: assertPhone(fromNumber),
     twiml: response.toString(),
-    record: false,
+    ...claireVoiceCallCreateOptions(),
+  });
+  await safeClaireLedger(async () => {
+    await attachCallSid({
+      claireConversationId: conversationId,
+      callSid: call.sid,
+    });
+    await persistSpokenTurn({
+      claireConversationId: conversationId,
+      callSid: call.sid,
+      speaker: "CLAIRE",
+      text: opening,
+    });
   });
   return { callSid: call.sid };
 }
@@ -364,28 +466,44 @@ export function registerClaireRoutes(app: Express): void {
         conversation.tenantId !== claims.tenantId ||
         conversation.actorId !== claims.userId
       ) {
-        return res.send(
-          speakAndHangUp(
-            "I lost the current brief, so I won't guess. We'll pick this up in Goldline."
-          )
-        );
+        const hangup =
+          "I lost the current brief, so I won't guess. We'll pick this up in Goldline.";
+        await endClaireCallLedger({
+          callSid: callSidFrom(req),
+          claireConversationId: claims.conversationId,
+          claireText: hangup,
+          reason: "lost_in_memory_conversation",
+        });
+        return res.send(speakAndHangUp(hangup));
       }
 
       const transcript = String(
         ((req.body ?? {}) as Record<string, string>).SpeechResult ?? ""
       ).trim();
+      const callSid = callSidFrom(req);
       if (!transcript) {
         conversation.touchedAt = Date.now();
         const { shouldEndCall } = trackEmptyTranscript(conversation);
         if (shouldEndCall) {
           preDriveConversations.delete(claims.conversationId);
-          return res.send(
-            speakAndHangUp("All right. I'll let you focus on the drive.")
-          );
+          const hangup = "All right. I'll let you focus on the drive.";
+          await endClaireCallLedger({
+            callSid,
+            claireConversationId: claims.conversationId,
+            claireText: hangup,
+            reason: "empty_transcript",
+          });
+          return res.send(speakAndHangUp(hangup));
         }
+        const prompt = "Go ahead, I'm listening.";
+        await persistOperatorAndClaire({
+          callSid,
+          claireConversationId: claims.conversationId,
+          claireText: prompt,
+        });
         return res.send(
           preDriveConversationTwiML({
-            text: "Go ahead, I'm listening.",
+            text: prompt,
             token: String(req.query.token),
           })
         );
@@ -401,7 +519,15 @@ export function registerClaireRoutes(app: Express): void {
             reason: "closing_phrase",
           })
         );
-        return res.send(speakAndHangUp("You've got it. Drive safe."));
+        const hangup = "You've got it. Drive safe.";
+        await endClaireCallLedger({
+          callSid,
+          claireConversationId: claims.conversationId,
+          operatorText: transcript,
+          claireText: hangup,
+          reason: "closing_phrase",
+        });
+        return res.send(speakAndHangUp(hangup));
       }
       if (conversation.turns >= MAX_PRE_DRIVE_TURNS) {
         preDriveConversations.delete(claims.conversationId);
@@ -413,11 +539,16 @@ export function registerClaireRoutes(app: Express): void {
             reason: "turn_cap_reached",
           })
         );
-        return res.send(
-          speakAndHangUp(
-            "That's the useful part of this brief. Drive safe, and take it one stop at a time."
-          )
-        );
+        const hangup =
+          "That's the useful part of this brief. Drive safe, and take it one stop at a time.";
+        await endClaireCallLedger({
+          callSid,
+          claireConversationId: claims.conversationId,
+          operatorText: transcript,
+          claireText: hangup,
+          reason: "turn_cap_reached",
+        });
+        return res.send(speakAndHangUp(hangup));
       }
 
       let commitmentTurn: Awaited<ReturnType<typeof handleVoiceCommitmentTurn>>;
@@ -428,6 +559,7 @@ export function registerClaireRoutes(app: Express): void {
           businessDate: conversation.context.businessDate,
           utterance: transcript,
           state: conversation,
+          conversationId: claims.conversationId,
         }, {
           confirmPlan: () =>
             confirmWorkdayPlan({
@@ -445,9 +577,16 @@ export function registerClaireRoutes(app: Express): void {
         console.error("[Claire] voice commitment turn failed", error);
         conversation.turns += 1;
         conversation.touchedAt = Date.now();
+        const retry = "I understood it, but I couldn't save it. Let's try again in a moment.";
+        await persistOperatorAndClaire({
+          callSid,
+          claireConversationId: claims.conversationId,
+          operatorText: transcript,
+          claireText: retry,
+        });
         return res.send(
           preDriveConversationTwiML({
-            text: "I understood it, but I couldn't save it. Let's try again in a moment.",
+            text: retry,
             token: String(req.query.token),
           })
         );
@@ -455,6 +594,17 @@ export function registerClaireRoutes(app: Express): void {
       if (commitmentTurn.kind !== "not_applicable") {
         conversation.turns += 1;
         conversation.touchedAt = Date.now();
+        await persistOperatorAndClaire({
+          callSid,
+          claireConversationId: claims.conversationId,
+          operatorText: transcript,
+          claireText: commitmentTurn.speak,
+        });
+        await linkClaireCallAction({
+          callSid,
+          claireConversationId: claims.conversationId,
+          turn: commitmentTurn,
+        });
         return res.send(
           preDriveConversationTwiML({
             text: commitmentTurn.speak,
@@ -471,6 +621,12 @@ export function registerClaireRoutes(app: Express): void {
       });
       conversation.turns += 1;
       conversation.touchedAt = Date.now();
+      await persistOperatorAndClaire({
+        callSid,
+        claireConversationId: claims.conversationId,
+        operatorText: transcript,
+        claireText: answer,
+      });
       return res.send(
         preDriveConversationTwiML({
           text: answer,
@@ -505,10 +661,15 @@ export function registerClaireRoutes(app: Express): void {
       const body = (req.body ?? {}) as Record<string, string>;
       const transcript = String(body.SpeechResult ?? "").trim();
       const callSid = String(body.CallSid ?? "unknown-call");
+      const ledgerCallSid = callSidFrom(req);
       if (!transcript) {
-        return res.send(
-          speakAndHangUp("I didn't catch that. Nothing was changed.")
-        );
+        const hangup = "I didn't catch that. Nothing was changed.";
+        await endClaireCallLedger({
+          callSid: ledgerCallSid,
+          claireText: hangup,
+          reason: "empty_debrief",
+        });
+        return res.send(speakAndHangUp(hangup));
       }
 
       const current = await getCommercialMissionFieldState({
@@ -578,6 +739,11 @@ export function registerClaireRoutes(app: Express): void {
         "No confirmation received. I kept your raw debrief, but did not record an outcome."
       );
       response.hangup();
+      await persistOperatorAndClaire({
+        callSid: ledgerCallSid,
+        operatorText: transcript,
+        claireText: `I heard: ${proposal.summary}. I would record this as ${outcomeLabel(proposal.proposedOutcome)}. Say confirm to save that outcome, or cancel to leave only your raw debrief.`,
+      });
       return res.send(response.toString());
     } catch (error) {
       console.error("[Claire] debrief webhook error", error);
@@ -607,12 +773,17 @@ export function registerClaireRoutes(app: Express): void {
       const confirmation = String(body.SpeechResult ?? "")
         .trim()
         .toLowerCase();
+      const ledgerCallSid = callSidFrom(req);
       if (!/\b(confirm|confirmed|yes|save it|correct)\b/.test(confirmation)) {
-        return res.send(
-          speakAndHangUp(
-            "Cancelled. I kept the raw debrief but did not record a business outcome."
-          )
-        );
+        const hangup =
+          "Cancelled. I kept the raw debrief but did not record a business outcome.";
+        await endClaireCallLedger({
+          callSid: ledgerCallSid,
+          operatorText: confirmation,
+          claireText: hangup,
+          reason: "debrief_cancelled",
+        });
+        return res.send(speakAndHangUp(hangup));
       }
       const current = await getCommercialMissionFieldState({
         tenantId: claims.tenantId,
@@ -688,6 +859,12 @@ export function registerClaireRoutes(app: Express): void {
         outcomeLabel: outcomeLabel(claims.proposal.proposedOutcome),
         strategyChange,
       });
+      await endClaireCallLedger({
+        callSid: ledgerCallSid,
+        operatorText: confirmation,
+        claireText: confirmationLine,
+        reason: "debrief_confirmed",
+      });
       return res.send(speakAndHangUp(confirmationLine));
     } catch (error) {
       console.error("[Claire] confirm webhook error", error);
@@ -697,5 +874,39 @@ export function registerClaireRoutes(app: Express): void {
         )
       );
     }
+  });
+
+  app.post(CLAIRE_RECORDING_STATUS_PATH, async (req: Request, res: Response) => {
+    if (!validTwilioRequest(req)) {
+      return res.status(403).send("Forbidden");
+    }
+    const body = (req.body ?? {}) as Record<string, string>;
+    res.status(204).end();
+    void handleRecordingStatus({
+      callSid: String(body.CallSid ?? ""),
+      recordingSid: String(body.RecordingSid ?? ""),
+      recordingStatus: String(body.RecordingStatus ?? ""),
+      recordingDuration: body.RecordingDuration,
+      recordingChannels: body.RecordingChannels,
+      recordingTrack: body.RecordingTrack,
+      accountSid,
+      authToken,
+    }).catch(error => {
+      console.error("[ClaireLedger] recording-status failed", error);
+    });
+  });
+
+  app.post(CLAIRE_CALL_STATUS_PATH, async (req: Request, res: Response) => {
+    if (!validTwilioRequest(req)) {
+      return res.status(403).send("Forbidden");
+    }
+    const body = (req.body ?? {}) as Record<string, string>;
+    res.status(204).end();
+    void handleCallCompleted({
+      callSid: String(body.CallSid ?? ""),
+      callStatus: String(body.CallStatus ?? body.CallStatusEvent ?? ""),
+    }).catch(error => {
+      console.error("[ClaireLedger] call-status failed", error);
+    });
   });
 }
