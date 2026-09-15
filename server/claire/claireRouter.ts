@@ -43,6 +43,12 @@ import {
 import { answerClairePreDriveFollowUp } from "./preDriveConversation";
 import { handleVoiceCommitmentTurn, type PendingProposalState } from "./voiceCommitmentLoop";
 import {
+  answerClaireBusinessTurn,
+  CLAIRE_ANALYTICS_SESSION_TTL_MS,
+  hasPendingClaireAction,
+  type ClaireAnalyticsState,
+} from "./businessConversation";
+import {
   getClaireCallAnalysis,
   getClaireCallAudio,
   listClaireAnalysisInbox,
@@ -135,6 +141,8 @@ function recoveryAction(
 }
 
 const deskTalkStates = new Map<string, PendingProposalState>();
+/** Analytical follow-up context per desktop conversation, bounded by TTL. */
+const deskAnalyticsStates = new Map<string, ClaireAnalyticsState & { touchedAt: number }>();
 
 export const claireRouter = router({
   setMacroGoal: adminProcedure
@@ -225,6 +233,7 @@ export const claireRouter = router({
       z.object({
         utterance: z.string().trim().min(1).max(4000),
         timeZone: z.string().trim().min(1).max(100).optional(),
+        conversationId: z.string().trim().min(8).max(64).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -245,6 +254,31 @@ export const claireRouter = router({
       const stateKey = `${ctx.tenantId}:${actorId}`;
       const state = deskTalkStates.get(stateKey) ?? {};
       deskTalkStates.set(stateKey, state);
+      if (!hasPendingClaireAction(state)) {
+        const nowMs = Date.now();
+        deskAnalyticsStates.forEach((entry, key) => {
+          if (nowMs - entry.touchedAt > CLAIRE_ANALYTICS_SESSION_TTL_MS) deskAnalyticsStates.delete(key);
+        });
+        const analyticsKey = `${stateKey}:${input.conversationId ?? "desk"}`;
+        const analyticsState = deskAnalyticsStates.get(analyticsKey) ?? { touchedAt: nowMs };
+        analyticsState.touchedAt = nowMs;
+        deskAnalyticsStates.set(analyticsKey, analyticsState);
+        const businessTurn = await answerClaireBusinessTurn({
+          tenantId: ctx.tenantId,
+          utterance: input.utterance,
+          state: analyticsState,
+          surface: "text",
+        });
+        if (businessTurn.handled) {
+          return {
+            reply: businessTurn.speak,
+            brief: preview.brief,
+            workday: preview.workday,
+            relationshipDimensions: preview.relationshipDimensions,
+            disclosureTier: preview.disclosureTier,
+          };
+        }
+      }
       const commitmentTurn = await handleVoiceCommitmentTurn({
         tenantId: ctx.tenantId,
         actorId,

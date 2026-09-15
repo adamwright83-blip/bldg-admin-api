@@ -32,6 +32,11 @@ import {
   isClaireCallComplete,
 } from "./preDriveConversation";
 import {
+  answerClaireBusinessTurn,
+  hasPendingClaireAction,
+  type ClaireAnalyticsSession,
+} from "./businessConversation";
+import {
   issueClaireToken,
   verifyClaireToken,
   type ClaireMissionAccess,
@@ -84,6 +89,8 @@ type PreDriveConversation = {
   /** Consecutive empty Twilio speech results — only two in a row end the call. */
   consecutiveEmptyTranscripts?: number;
   sessionKind?: "evening_planning" | "morning_reconciliation" | "field_debrief" | "pre_drive";
+  /** Analytical follow-up context for this call only. Never business truth. */
+  analytics?: ClaireAnalyticsSession | null;
 };
 
 const preDriveConversations = new Map<string, PreDriveConversation>();
@@ -549,6 +556,33 @@ export function registerClaireRoutes(app: Express): void {
           reason: "turn_cap_reached",
         });
         return res.send(speakAndHangUp(hangup));
+      }
+
+      // Business questions are answered from deterministic analytics before
+      // the work classifier runs, unless a yes/no confirmation is pending.
+      if (!hasPendingClaireAction(conversation)) {
+        const businessTurn = await answerClaireBusinessTurn({
+          tenantId: conversation.tenantId,
+          utterance: transcript,
+          state: conversation,
+          surface: "voice",
+        });
+        if (businessTurn.handled) {
+          conversation.turns += 1;
+          conversation.touchedAt = Date.now();
+          await persistOperatorAndClaire({
+            callSid,
+            claireConversationId: claims.conversationId,
+            operatorText: transcript,
+            claireText: businessTurn.speak,
+          });
+          return res.send(
+            preDriveConversationTwiML({
+              text: businessTurn.speak,
+              token: String(req.query.token),
+            })
+          );
+        }
       }
 
       let commitmentTurn: Awaited<ReturnType<typeof handleVoiceCommitmentTurn>>;

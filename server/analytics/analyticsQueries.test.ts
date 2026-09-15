@@ -1,228 +1,239 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("../db", () => ({ getDb: vi.fn().mockResolvedValue(null) }));
+
+import { getDb } from "../db";
 import {
-  getRevenueSummary,
-  getOrderStats,
-  getOpenOrderStats,
-  getRepeatCustomerStats,
-  getMetricComparison,
+  ALWAYS_MISSING_SOURCES,
+  AnalyticsUnavailableError,
   getDataCompleteness,
+  getMetricComparison,
+  getOpenOrderStats,
+  getOrderStats,
+  getRepeatCustomerStats,
+  getRevenueSummary,
+  getTopCustomersByRevenue,
+  previousEqualPeriod,
+  type AnalyticsQueryDeps,
 } from "./analyticsQueries";
 import { normalizeRange } from "./composerAgent";
+import {
+  loadPaidOrderLedger,
+  type CleanCloudOrderRow,
+  type LedgerLoaders,
+  type NativeOrderRow,
+} from "./paidOrderLedger";
 
-/**
- * Unit tests against the safe-zero path (no DB in test env) and
- * the date normalization / clamping logic.
- *
- * Cross-tenant isolation: proven structurally — every query has
- * `eq(orders.tenantId, tenantId)` in its WHERE clause. An integration
- * test with real rows is deferred until an integration DB fixture exists.
- */
+const TZ = "America/Los_Angeles";
 
-describe("getRevenueSummary", () => {
-  it("returns safe zero-state when db is unavailable", async () => {
-    const result = await getRevenueSummary("tenant_a", {
-      range: { start: "2025-01-01", end: "2025-01-31" },
-      groupBy: "day",
-    });
-    expect(result.totalRevenue).toBe(0);
-    expect(result.orderCount).toBe(0);
-    expect(result.avgOrderValue).toBe(0);
-    expect(result.series).toEqual([]);
+function native(overrides: Partial<NativeOrderRow> & { id: number; paidAt: Date; total: string }): NativeOrderRow {
+  return {
+    paid: true,
+    stripePaymentIntentId: `pi_${overrides.id}`,
+    serviceType: "wash_fold",
+    firstName: "Ava",
+    lastName: "Stone",
+    phone: "3105550100",
+    email: null,
+    bldgUserId: null,
+    ...overrides,
+  };
+}
+
+function cleancloud(overrides: Partial<CleanCloudOrderRow> & { cleancloudOrderId: string }): CleanCloudOrderRow {
+  return {
+    cleancloudCustomerId: null,
+    sourceReportType: "orders_sales",
+    paymentDateUtc: new Date("2026-09-10T20:00:00Z"),
+    paidDateUtc: null,
+    paid: true,
+    totalCents: 2500,
+    customerName: "Ben Ortiz",
+    customerPhone: "3105550199",
+    customerEmail: null,
+    ...overrides,
+  };
+}
+
+function depsWith(loaders: LedgerLoaders): AnalyticsQueryDeps {
+  return {
+    loadLedger: input => loadPaidOrderLedger(input, loaders),
+    timeZone: () => TZ,
+  };
+}
+
+const failing: LedgerLoaders = {
+  laundry_butler: async () => {
+    throw new Error("down");
+  },
+  cleancloud: async () => {
+    throw new Error("down");
+  },
+};
+
+const empty: LedgerLoaders = { laundry_butler: async () => [], cleancloud: async () => [] };
+
+beforeEach(() => {
+  vi.mocked(getDb).mockResolvedValue(null);
+});
+
+describe("unavailable is never zero", () => {
+  it("revenue throws AnalyticsUnavailableError when no paid-order source can be read", async () => {
+    await expect(
+      getRevenueSummary("tenant_a", { range: { start: "2026-09-01", end: "2026-09-10" }, groupBy: "day" }, depsWith(failing))
+    ).rejects.toBeInstanceOf(AnalyticsUnavailableError);
   });
 
-  it("returns safe zero for week groupBy", async () => {
-    const result = await getRevenueSummary("tenant_a", {
-      range: { start: "2025-06-01", end: "2025-06-30" },
-      groupBy: "week",
-    });
+  it("revenue with the real database loaders and no database also throws", async () => {
+    await expect(
+      getRevenueSummary("tenant_a", { range: { start: "2026-09-01", end: "2026-09-10" }, groupBy: "day" })
+    ).rejects.toBeInstanceOf(AnalyticsUnavailableError);
+  });
+
+  it("order stats, open orders, repeat customers, comparison and completeness all refuse without a database", async () => {
+    await expect(getOrderStats("tenant_a", { range: { start: "2026-09-01", end: "2026-09-10" } })).rejects.toBeInstanceOf(AnalyticsUnavailableError);
+    await expect(getOpenOrderStats("tenant_a")).rejects.toBeInstanceOf(AnalyticsUnavailableError);
+    await expect(getRepeatCustomerStats("tenant_a", { range: { start: "2026-09-01", end: "2026-09-10" } }, depsWith(failing))).rejects.toBeInstanceOf(AnalyticsUnavailableError);
+    await expect(
+      getMetricComparison("tenant_a", { metricId: "revenue_paid_stripe", currentRange: { start: "2026-09-01", end: "2026-09-10" }, groupBy: "day" }, depsWith(failing))
+    ).rejects.toBeInstanceOf(AnalyticsUnavailableError);
+    await expect(getDataCompleteness("tenant_a")).rejects.toBeInstanceOf(AnalyticsUnavailableError);
+  });
+
+  it("a legitimate empty period stays a real zero with complete coverage", async () => {
+    const result = await getRevenueSummary(
+      "tenant_a",
+      { range: { start: "2026-09-01", end: "2026-09-10" }, groupBy: "day" },
+      depsWith(empty)
+    );
     expect(result).toMatchObject({ totalRevenue: 0, orderCount: 0, series: [] });
-  });
-
-  it("returns safe zero for month groupBy with paidAt basis", async () => {
-    const result = await getRevenueSummary("tenant_a", {
-      range: { start: "2025-01-01", end: "2025-06-30" },
-      groupBy: "month",
-      basis: "paidAt",
-    });
-    expect(result).toMatchObject({ totalRevenue: 0, series: [] });
+    expect(result.coverage?.completeness).toBe("complete");
   });
 });
 
-describe("getOrderStats", () => {
-  it("returns safe zero-state when db is unavailable", async () => {
-    const result = await getOrderStats("tenant_a", {
-      range: { start: "2025-01-01", end: "2025-01-31" },
-    });
-    expect(result.totalOrders).toBe(0);
-    expect(result.byStatus).toEqual({});
-    expect(result.byServiceType).toEqual({});
-    expect(result.totalWeightLbs).toBe(0);
-    expect(result.avgOrderValue).toBe(0);
+describe("ledger-backed revenue", () => {
+  const loaders: LedgerLoaders = {
+    laundry_butler: async () => [
+      native({ id: 1, paidAt: new Date("2026-09-10T18:00:00Z"), total: "40.00" }),
+      native({ id: 2, paidAt: new Date("2026-09-10T19:00:00Z"), total: "99.00", stripePaymentIntentId: null }),
+    ],
+    cleancloud: async () => [
+      cleancloud({ cleancloudOrderId: "cc-1" }),
+      cleancloud({ cleancloudOrderId: "cc-1", sourceReportType: "orders_revenue", paymentDateUtc: null, paidDateUtc: new Date("2026-09-10T21:00:00Z") }),
+    ],
+  };
+
+  it("counts Stripe-verified native orders and each CleanCloud order once, and reports unverified native orders", async () => {
+    const result = await getRevenueSummary(
+      "tenant_a",
+      { range: { start: "2026-09-10", end: "2026-09-10" }, groupBy: "day" },
+      depsWith(loaders)
+    );
+    expect(result.totalRevenue).toBe(65);
+    expect(result.orderCount).toBe(2);
+    expect(result.coverage).toMatchObject({ unverifiedNativeCount: 1, unverifiedNativeCents: 9900, completeness: "complete" });
   });
 
-  it("returns zero state for filtered service type", async () => {
-    const result = await getOrderStats("tenant_b", {
-      range: { start: "2025-06-01", end: "2025-06-30" },
-      serviceType: "wash_fold",
-    });
-    expect(result.totalOrders).toBe(0);
+  it("buckets by business-local date, not UTC date", async () => {
+    const lateEvening: LedgerLoaders = {
+      laundry_butler: async () => [native({ id: 3, paidAt: new Date("2026-09-11T05:30:00Z"), total: "10.00" })],
+      cleancloud: async () => [],
+    };
+    const result = await getRevenueSummary(
+      "tenant_a",
+      { range: { start: "2026-09-10", end: "2026-09-10" }, groupBy: "day" },
+      depsWith(lateEvening)
+    );
+    expect(result.series).toEqual([{ bucket: "2026-09-10", revenue: 10, orderCount: 1 }]);
   });
 
-  it("cross-tenant: different tenantId args use separate WHERE clauses", async () => {
-    const a = await getOrderStats("tenant_a", { range: { start: "2025-01-01", end: "2025-12-31" } });
-    const b = await getOrderStats("tenant_b", { range: { start: "2025-01-01", end: "2025-12-31" } });
-    expect(a.totalOrders).toBe(0);
-    expect(b.totalOrders).toBe(0);
-  });
-});
-
-describe("getOpenOrderStats", () => {
-  it("returns safe zero-state when db is unavailable", async () => {
-    const result = await getOpenOrderStats("tenant_a");
-    expect(result.openTotal).toBe(0);
-    expect(result.awaitingPayment).toBe(0);
-    expect(result.byStatus).toEqual({});
-  });
-});
-
-describe("getRepeatCustomerStats", () => {
-  it("returns safe zero-state when db is unavailable", async () => {
-    const result = await getRepeatCustomerStats("tenant_a", {
-      range: { start: "2025-01-01", end: "2025-01-31" },
-    });
-    expect(result.totalCustomers).toBe(0);
-    expect(result.repeatCustomers).toBe(0);
-    expect(result.repeatRate).toBe(0);
-  });
-});
-
-describe("getMetricComparison", () => {
-  it("returns safe zeros when db is unavailable", async () => {
-    const result = await getMetricComparison("tenant_a", {
-      metricId: "revenue_paid_stripe",
-      currentRange: { start: "2025-06-22", end: "2025-06-29" },
-      groupBy: "day",
-    });
-    expect(result.current).toBe(0);
-    expect(result.previous).toBe(0);
-    expect(result.absChange).toBe(0);
-    expect(result.pctChange).toBe(0);
-    expect(result.volumeEffect).toBe(0);
-    expect(result.aovEffect).toBe(0);
+  it("repeat customers and top customers share the same identity grouping", async () => {
+    const shared: LedgerLoaders = {
+      laundry_butler: async () => [
+        native({ id: 10, paidAt: new Date("2026-09-05T18:00:00Z"), total: "30.00", phone: "+1 (310) 555-0100", email: "ava@example.com" }),
+      ],
+      cleancloud: async () => [
+        cleancloud({ cleancloudOrderId: "cc-9", customerName: "Ava Stone", customerPhone: null, customerEmail: "AVA@example.com", totalCents: 4500 }),
+      ],
+    };
+    const range = { start: "2026-09-01", end: "2026-09-14" };
+    const repeat = await getRepeatCustomerStats("tenant_a", { range }, depsWith(shared));
+    const top = await getTopCustomersByRevenue("tenant_a", { range, limit: 5 }, depsWith(shared));
+    expect(repeat).toMatchObject({ totalCustomers: 1, repeatCustomers: 1 });
+    expect(top.customers).toEqual([{ customerName: "Ava Stone", phone: "", revenue: 75, orderCount: 2, avgOrderValue: 37.5 }]);
   });
 
-  // Patch 2: metric-aware comparison returns correct unit per metricId
-  it("returns unit=currency for revenue_paid_stripe (db unavailable)", async () => {
-    const result = await getMetricComparison("tenant_a", {
-      metricId: "revenue_paid_stripe",
-      currentRange: { start: "2025-06-22", end: "2025-06-29" },
-      groupBy: "day",
-    });
-    expect(result.unit).toBe("currency");
-  });
-
-  it("returns unit=count for orders_created when db unavailable", async () => {
-    const result = await getMetricComparison("tenant_a", {
-      metricId: "orders_created",
-      currentRange: { start: "2025-06-22", end: "2025-06-29" },
-      groupBy: "day",
-    });
-    expect(result.unit).toBe("count");
-    expect(result.current).toBe(0);
-  });
-
-  it("returns unit=count for orders_paid when db unavailable", async () => {
-    const result = await getMetricComparison("tenant_a", {
-      metricId: "orders_paid",
-      currentRange: { start: "2025-06-22", end: "2025-06-29" },
-      groupBy: "day",
-    });
-    expect(result.unit).toBe("count");
-  });
-
-  it("returns unit=weight_lbs for wash_fold_weight when db unavailable", async () => {
-    const result = await getMetricComparison("tenant_a", {
-      metricId: "wash_fold_weight",
-      currentRange: { start: "2025-06-22", end: "2025-06-29" },
-      groupBy: "day",
-    });
-    expect(result.unit).toBe("weight_lbs");
-  });
-
-  it("returns unit=currency for revenue_paid_stripe when db unavailable", async () => {
-    const result = await getMetricComparison("tenant_a", {
-      metricId: "revenue_paid_stripe",
-      currentRange: { start: "2025-06-22", end: "2025-06-29" },
-      groupBy: "day",
-    });
-    expect(result.unit).toBe("currency");
+  it("comparison bridge uses the same ledger for both periods", async () => {
+    const twoPeriods: LedgerLoaders = {
+      laundry_butler: async () => [
+        native({ id: 20, paidAt: new Date("2026-09-12T18:00:00Z"), total: "50.00" }),
+        native({ id: 21, paidAt: new Date("2026-09-13T18:00:00Z"), total: "50.00" }),
+        native({ id: 22, paidAt: new Date("2026-09-05T18:00:00Z"), total: "40.00" }),
+      ],
+      cleancloud: async () => [],
+    };
+    const result = await getMetricComparison(
+      "tenant_a",
+      { metricId: "revenue_paid_stripe", currentRange: { start: "2026-09-08", end: "2026-09-14" }, groupBy: "day" },
+      depsWith(twoPeriods)
+    );
+    expect(result).toMatchObject({ unit: "currency", current: 100, previous: 40, currentOrders: 2, previousOrders: 1, volumeEffect: 40, aovEffect: 20 });
   });
 });
 
 describe("getDataCompleteness", () => {
-  it("always includes the four always-missing categories", async () => {
-    const result = await getDataCompleteness("tenant_a");
-    const missingLabels = result.missing.map((m) => m.source);
-    expect(missingLabels).toContain("Payroll / labor");
-    expect(missingLabels).toContain("Machine revenue (coin-op)");
-    expect(missingLabels).toContain("Cash drawer / POS");
-    expect(missingLabels).toContain("Supply costs (detergent, bags, hangers)");
-  });
+  function fakeDb(count: number) {
+    return {
+      select: () => ({
+        from: () => ({
+          where: async () => [{ cnt: count }],
+          then: (resolve: (rows: Array<{ cnt: number }>) => unknown) => resolve([{ cnt: count }]),
+        }),
+      }),
+    };
+  }
 
-  it("missing entries each have a prevents string", async () => {
-    const result = await getDataCompleteness("tenant_a");
-    for (const m of result.missing) {
-      expect(typeof m.prevents).toBe("string");
-      expect(m.prevents.length).toBeGreaterThan(0);
-    }
+  it("always includes the four always-missing categories", () => {
+    expect(ALWAYS_MISSING_SOURCES.map(m => m.source)).toEqual([
+      "Payroll / labor",
+      "Machine revenue (coin-op)",
+      "Cash drawer / POS",
+      "Supply costs (detergent, bags, hangers)",
+    ]);
   });
 
   // Patch 4 (MANDATORY): Clearent global-scope leak — a non-default tenant must never
   // appear Clearent-connected based on global clearentTransactions rows.
-  it("Clearent / XplorPay is NOT in connected for non-default tenant (no tenantId column)", async () => {
+  it("Clearent is never connected for a non-default tenant and explains why", async () => {
+    vi.mocked(getDb).mockResolvedValue(fakeDb(5) as never);
     const result = await getDataCompleteness("some_other_laundromat_tenant");
-    const connectedSources = result.connected.map((c) => c.source);
-    expect(connectedSources).not.toContain("Clearent / XplorPay");
-  });
-
-  it("Clearent appears in missing for non-default tenant with a prevents explanation", async () => {
-    const result = await getDataCompleteness("some_other_laundromat_tenant");
-    const clearentMissing = result.missing.find((m) => m.source === "Clearent / XplorPay");
-    expect(clearentMissing).toBeDefined();
-    expect(clearentMissing?.prevents).toContain("not tenant-scoped");
+    expect(result.connected.map(c => c.source)).not.toContain("Clearent / XplorPay");
+    expect(result.missing.find(m => m.source === "Clearent / XplorPay")?.prevents).toContain("not tenant-scoped");
+    expect(result.missing.map(m => m.source)).toContain("Supply costs (detergent, bags, hangers)");
   });
 });
 
-// ── Date range normalization ─────────────────────────────────────────────────
+describe("date ranges", () => {
+  it("previous equal period is the same length immediately before", () => {
+    expect(previousEqualPeriod({ start: "2026-08-17", end: "2026-09-15" })).toEqual({ start: "2026-07-18", end: "2026-08-16" });
+  });
 
-describe("normalizeRange", () => {
-  it("returns last 7 days for invalid date strings", () => {
+  it("normalizeRange returns last 7 days for invalid date strings", () => {
     const result = normalizeRange({ start: "not-a-date", end: "also-bad" });
     const spanDays = (Date.parse(result.end) - Date.parse(result.start)) / 864e5;
     expect(spanDays).toBeCloseTo(6, 0);
   });
 
-  it("swaps reversed start/end", () => {
-    const result = normalizeRange({ start: "2025-06-29", end: "2025-06-01" });
-    expect(result.start).toBe("2025-06-01");
-    expect(result.end).toBe("2025-06-29");
+  it("normalizeRange swaps reversed start/end", () => {
+    expect(normalizeRange({ start: "2025-06-29", end: "2025-06-01" })).toEqual({ start: "2025-06-01", end: "2025-06-29" });
   });
 
-  it("clamps spans > 366 days", () => {
+  it("normalizeRange clamps spans > 366 days", () => {
     const result = normalizeRange({ start: "2023-01-01", end: "2025-06-29" });
-    const spanDays = (Date.parse(result.end) - Date.parse(result.start)) / 864e5;
-    expect(spanDays).toBeLessThanOrEqual(366);
+    expect((Date.parse(result.end) - Date.parse(result.start)) / 864e5).toBeLessThanOrEqual(366);
   });
 
-  it("returns last 7 days when range is undefined", () => {
-    const result = normalizeRange({});
-    const spanDays = (Date.parse(result.end) - Date.parse(result.start)) / 864e5;
-    expect(spanDays).toBeCloseTo(6, 0);
-  });
-
-  it("passes valid ISO dates unchanged", () => {
-    const result = normalizeRange({ start: "2025-06-01", end: "2025-06-30" });
-    expect(result.start).toBe("2025-06-01");
-    expect(result.end).toBe("2025-06-30");
+  it("normalizeRange passes valid ISO dates unchanged", () => {
+    expect(normalizeRange({ start: "2025-06-01", end: "2025-06-30" })).toEqual({ start: "2025-06-01", end: "2025-06-30" });
   });
 });
