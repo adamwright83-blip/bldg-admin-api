@@ -172,19 +172,40 @@ describe("live Claire call answers business questions in the call (U)", () => {
     expect(await say(handlers, callA, "Who are they?")).toContain("Ava Stone");
   });
 
-  it("work requests still go to the work loop, and pending confirmations win", async () => {
+  it("single work goes to the work loop; a question while it waits is answered and the proposal is kept", async () => {
     const handlers = routes();
     const token = await startCall();
     hoisted.commitment.mockImplementationOnce(async input => {
-      input.state.pendingProposal = { title: "Review revenue" };
+      input.state.pendingProposal = { title: "Review revenue", sourceText: "Add reviewing last month's revenue." };
       return { kind: "proposed", speak: "I heard: Review revenue. Should I add that to today's plan? Say yes or no." };
     });
-    const proposed = await say(handlers, token, "Add reviewing last month's revenue tomorrow.");
+    const proposed = await say(handlers, token, "Add reviewing last month's revenue.");
     expect(proposed).toContain("Should I add that");
     expect(hoisted.commitment).toHaveBeenCalledTimes(1);
 
-    await say(handlers, token, "What was revenue last month?");
+    const answered = await say(handlers, token, "What was revenue last month?");
+    expect(answered).toContain("Paid revenue last month was");
+    expect(answered).toContain('I\'m still holding "Review revenue"');
+    expect(hoisted.commitment).toHaveBeenCalledTimes(1);
+
+    hoisted.commitment.mockImplementationOnce(async input => {
+      input.state.pendingProposal = null;
+      return { kind: "accepted", speak: "Added: Review revenue. What else?" };
+    });
+    expect(await say(handlers, token, "Yes.")).toContain("Added: Review revenue.");
     expect(hoisted.commitment).toHaveBeenCalledTimes(2);
+  });
+
+  it("dated work becomes one briefing proposal, and a save that fails is never spoken as saved", async () => {
+    const handlers = routes();
+    const token = await startCall();
+    const proposed = await say(handlers, token, "Add reviewing last month's revenue tomorrow.");
+    expect(proposed).toContain("Tomorrow: add reviewing last month's revenue.");
+    expect(proposed).toContain("Want me to put that on the Day Line?");
+    expect(hoisted.commitment).not.toHaveBeenCalled();
+    const saved = await say(handlers, token, "Yes.");
+    expect(saved).toContain("nothing saved");
+    expect(saved).not.toMatch(/\bDone\b/);
   });
 
   it("ordinary conversation still reaches Claire's normal follow-up", async () => {

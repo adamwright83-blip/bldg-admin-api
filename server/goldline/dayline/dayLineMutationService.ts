@@ -116,8 +116,17 @@ export function resolveDayLineTargets(
   utterance: string
 ): DayLineItemRef[] {
   const active = items.filter(item => item.status === "active");
-  const matches = active.filter(item => matchDayLineItem(item, utterance));
-  if (matches.length) return dedupe(matches);
+  const matches = dedupe(active.filter(item => matchDayLineItem(item, utterance)));
+  if (matches.length > 1) {
+    // "Louise North" names one item exactly even when "Louise South" shares a word.
+    const said = utterance.toLowerCase().replace(/[^a-z0-9]+/g, " ");
+    const exact = matches.filter(item => {
+      const title = item.displayTitle.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      return title.length > 0 && said.includes(title);
+    });
+    if (exact.length === 1) return exact;
+  }
+  if (matches.length) return matches;
   const completed = items
     .filter(item => item.status === "completed")
     .filter(item => matchDayLineItem(item, utterance));

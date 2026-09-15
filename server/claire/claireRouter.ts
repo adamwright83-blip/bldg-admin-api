@@ -40,14 +40,9 @@ import {
   confirmWorkdayPlan,
   previewWorkdayLoop,
 } from "./workdayPlanService";
-import { answerClairePreDriveFollowUp } from "./preDriveConversation";
-import { handleVoiceCommitmentTurn, type PendingProposalState } from "./voiceCommitmentLoop";
-import {
-  answerClaireBusinessTurn,
-  CLAIRE_ANALYTICS_SESSION_TTL_MS,
-  hasPendingClaireAction,
-  type ClaireAnalyticsState,
-} from "./businessConversation";
+import { runClaireTurn, type ClaireTurnState } from "./turn/claireTurn";
+import { claireConversationStateStore } from "./turn/conversationStateStore";
+import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
 import {
   getClaireCallAnalysis,
   getClaireCallAudio,
@@ -140,9 +135,8 @@ function recoveryAction(
   };
 }
 
-const deskTalkStates = new Map<string, PendingProposalState>();
-/** Analytical follow-up context per desktop conversation, bounded by TTL. */
-const deskAnalyticsStates = new Map<string, ClaireAnalyticsState & { touchedAt: number }>();
+/** A desk conversation's working state survives restarts and deploys for a working day. */
+const DESK_CONVERSATION_TTL_MS = 12 * 60 * 60 * 1000;
 
 export const claireRouter = router({
   setMacroGoal: adminProcedure
@@ -251,59 +245,38 @@ export const claireRouter = router({
       });
       context.workday = preview.workday ?? undefined;
       const actorId = dayDirectorActorId(ctx);
-      const stateKey = `${ctx.tenantId}:${actorId}`;
-      const state = deskTalkStates.get(stateKey) ?? {};
-      deskTalkStates.set(stateKey, state);
-      if (!hasPendingClaireAction(state)) {
-        const nowMs = Date.now();
-        deskAnalyticsStates.forEach((entry, key) => {
-          if (nowMs - entry.touchedAt > CLAIRE_ANALYTICS_SESSION_TTL_MS) deskAnalyticsStates.delete(key);
-        });
-        const analyticsKey = `${stateKey}:${input.conversationId ?? "desk"}`;
-        const analyticsState = deskAnalyticsStates.get(analyticsKey) ?? { touchedAt: nowMs };
-        analyticsState.touchedAt = nowMs;
-        deskAnalyticsStates.set(analyticsKey, analyticsState);
-        const businessTurn = await answerClaireBusinessTurn({
+      // Same Claire brain as the phone: one durable state per desk conversation.
+      const key = `claire-desk:${ctx.tenantId}:${actorId}:${input.conversationId ?? "desk"}`;
+      const store = claireConversationStateStore();
+      const stored = await store.load<ClaireTurnState>(key);
+      const state: ClaireTurnState =
+        stored && stored.tenantId === ctx.tenantId && stored.operatorUserId === ctx.user.openId ? stored.state : {};
+      const result = await runClaireTurn(
+        {
           tenantId: ctx.tenantId,
-          utterance: input.utterance,
-          state: analyticsState,
+          operatorUserId: ctx.user.openId,
+          dayDirectorActorId: actorId,
           surface: "text",
-        });
-        if (businessTurn.handled) {
-          return {
-            reply: businessTurn.speak,
-            brief: preview.brief,
-            workday: preview.workday,
-            relationshipDimensions: preview.relationshipDimensions,
-            disclosureTier: preview.disclosureTier,
-          };
-        }
-      }
-      const commitmentTurn = await handleVoiceCommitmentTurn({
-        tenantId: ctx.tenantId,
-        actorId,
-        businessDate: context.businessDate,
-        utterance: input.utterance,
-        state,
-        conversationId: `desk:${stateKey}`,
-      });
-      if (commitmentTurn.kind !== "not_applicable") {
-        return {
-          reply: "speak" in commitmentTurn ? commitmentTurn.speak : preview.brief,
+          utterance: input.utterance,
+          state,
+          conversationKey: key,
           brief: preview.brief,
-          workday: preview.workday,
-          relationshipDimensions: preview.relationshipDimensions,
-          disclosureTier: preview.disclosureTier,
-        };
-      }
-      const reply = await answerClairePreDriveFollowUp({
-        tenantId: ctx.tenantId,
-        utterance: input.utterance,
-        brief: preview.brief,
-        context,
-      });
+          context,
+        },
+        {
+          confirmPlan: () =>
+            confirmWorkdayPlan({
+              tenantId: ctx.tenantId,
+              actorId,
+              businessDate: context.clock?.tomorrowBusinessDate ?? context.businessDate,
+              items: assembleTomorrowCandidates(context),
+            }).then(() => undefined),
+          encyclopedia: claireEncyclopediaFor({ dayDirectorActorId: actorId }),
+        }
+      );
+      await store.save(key, { tenantId: ctx.tenantId, operatorUserId: ctx.user.openId, surface: "text" }, state, DESK_CONVERSATION_TTL_MS);
       return {
-        reply,
+        reply: result.speak || preview.brief,
         brief: preview.brief,
         workday: preview.workday,
         relationshipDimensions: preview.relationshipDimensions,

@@ -582,9 +582,29 @@ export type ConversationalFieldOutcome = {
   rawUtterance: string;
 };
 
+/**
+ * Asking about the past is not the same as reporting a visit. "I went to"
+ * inside a history question must not open field-outcome capture.
+ */
+export function looksLikeKnowledgeSeeking(utterance: string): boolean {
+  const text = utterance.trim();
+  if (/\?\s*$/.test(text)) return true;
+  if (
+    /^(?:how|what|what's|whats|who|when|which|where|why|did|does|do we|do i|is|are|was|were|has|have|can you tell|tell me|give me|compare|show me|walk me through|remind me what)\b/i.test(
+      text
+    )
+  ) {
+    return true;
+  }
+  return /\b(?:what happened|what did (?:i|we)|when did i|do i owe|did i (?:tell|say|mention|visit|go)|last time i (?:went|was|visited|went by)|have i (?:been|told|said))\b/i.test(
+    text
+  );
+}
+
 export function extractConversationalFieldOutcome(
   utterance: string
 ): ConversationalFieldOutcome | null {
+  if (looksLikeKnowledgeSeeking(utterance)) return null;
   if (
     !/\b(wasn't there|was not there|nobody (?:was|in)|left the (?:flyer|card)|front desk|dropped off|not in when i|i went (?:by|to))\b/i.test(
       utterance

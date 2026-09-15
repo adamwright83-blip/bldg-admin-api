@@ -149,6 +149,11 @@ describe("Claire V1 truth/action seams", () => {
     expect(outcome?.attestedFacts.join(" ")).not.toMatch(/confirmed schedule/i);
   });
 
+  it("does not treat a history question containing I went to as a new field outcome", () => {
+    expect(extractConversationalFieldOutcome("What happened last time I went to The Louise?")).toBeNull();
+    expect(extractConversationalFieldOutcome("Tell me what happened last time I went to The Louise")).toBeNull();
+  });
+
   it("mobile and desktop share one operator key", () => {
     expect(claireOperatorKey("default", "adam-admin")).toBe("default:adam-admin");
   });

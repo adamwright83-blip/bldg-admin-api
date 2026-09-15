@@ -29,13 +29,19 @@ export function productionConversationStore(): ClaireConversationStore {
   return ensureClaireConversationStore(createDrizzleClaireConversationStore);
 }
 
+/**
+ * Identity of one spoken turn. Two separate "yes" replies in the same call are
+ * different turns, so the key includes the conversation's turn position; a
+ * retried webhook for the same turn reuses the same turnKey and stays idempotent.
+ */
 export function turnIdempotencyKey(input: {
   callSid: string;
   speaker: ConversationSpeaker;
   text: string;
+  turnKey?: string | number | null;
 }): string {
   return createHash("sha256")
-    .update(`${input.callSid}|${input.speaker}|${input.text}`)
+    .update(`${input.callSid}|${input.speaker}|${input.turnKey ?? ""}|${input.text}`)
     .digest("hex")
     .slice(0, 64);
 }
@@ -107,6 +113,8 @@ export async function persistSpokenTurn(input: {
   speaker: ConversationSpeaker;
   text: string;
   providerMetadata?: Record<string, unknown> | null;
+  /** The live conversation's turn number. Without it, a retried identical turn stays idempotent by text. */
+  turnKey?: string | number | null;
 }): Promise<ConversationTurn | null> {
   const text = input.text.trim();
   if (!text) return null;
@@ -132,6 +140,7 @@ export async function persistSpokenTurn(input: {
       callSid,
       speaker: input.speaker,
       text,
+      turnKey: input.turnKey ?? null,
     }),
     providerMetadata: input.providerMetadata ?? null,
     occurredAt: new Date().toISOString(),

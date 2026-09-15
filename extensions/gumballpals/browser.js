@@ -291,6 +291,7 @@ export async function goldlineRequest(operation, input) {
       import: "POST",
       receipt: "GET",
       resolve: "POST",
+      reportFailure: "POST",
     };
     if (!Object.hasOwn(methods, operation))
       throw new Error("Unknown operation.");

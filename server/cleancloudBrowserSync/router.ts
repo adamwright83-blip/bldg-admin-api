@@ -12,7 +12,7 @@ import {
   cleancloudPaidOrders,
   cleancloudImportBatches,
 } from "../../drizzle/schema";
-import { browserSyncBindings, browserSyncReceipts } from "./schema";
+import { browserSyncAttempts, browserSyncBindings, browserSyncReceipts } from "./schema";
 import { validatePayload, summarizeOrders } from "./validation";
 import { enqueueEconomicSnapshot } from "./worldOutbox";
 import { findPhysicalEntityIdByAddress } from "../goldlineWorld/entityLookup";
@@ -74,6 +74,77 @@ function businessFields(row: Record<string, unknown>) {
     return value;
   };
   return JSON.stringify(canonical(business));
+}
+
+/**
+ * Import-attempt evidence for "is GUMBALL working?". Best effort: logging an
+ * attempt must never change the import's own result.
+ */
+async function recordAttempt(input: {
+  tenantId: string;
+  requestId?: string | null;
+  outcome: string;
+  message?: string | null;
+  from?: string | null;
+  to?: string | null;
+  rowCount?: number | null;
+}) {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await db.insert(browserSyncAttempts).values({
+      id: randomUUID(),
+      tenantId: input.tenantId,
+      requestId: input.requestId ?? null,
+      outcome: input.outcome.slice(0, 32),
+      message: input.message ? input.message.slice(0, 512) : null,
+      rangeFrom: input.from ?? null,
+      rangeTo: input.to ?? null,
+      rowCount: input.rowCount ?? null,
+    });
+  } catch (error) {
+    console.warn("[gumball] attempt log unavailable", error instanceof Error ? error.message : error);
+  }
+}
+
+function attemptOutcome(error: unknown): string {
+  if (error instanceof TRPCError) {
+    if (error.code === "CONFLICT") return "conflict";
+    if (error.code === "BAD_REQUEST") return "rejected";
+    if (error.code === "FORBIDDEN") return "unpaired";
+    if (error.code === "SERVICE_UNAVAILABLE") return "unavailable";
+  }
+  return "failed";
+}
+
+async function runRecordedImport<T>(
+  ctx: { tenantId: string },
+  input: { requestId: string; from: string; to: string },
+  work: () => Promise<T>
+): Promise<T> {
+  try {
+    const result = await work();
+    const receipt = (result ?? {}) as Record<string, unknown>;
+    await recordAttempt({
+      tenantId: ctx.tenantId,
+      requestId: input.requestId,
+      outcome: receipt.completedAt ? "imported" : "replayed",
+      from: input.from,
+      to: input.to,
+      rowCount: Number(receipt.inserted ?? 0) + Number(receipt.updated ?? 0),
+    });
+    return result;
+  } catch (error) {
+    await recordAttempt({
+      tenantId: ctx.tenantId,
+      requestId: input.requestId,
+      outcome: attemptOutcome(error),
+      message: error instanceof Error ? error.message : String(error),
+      from: input.from,
+      to: input.to,
+    });
+    throw error;
+  }
 }
 
 export const cleancloudBrowserSyncRouter = router({
@@ -187,7 +258,7 @@ export const cleancloudBrowserSyncRouter = router({
     }),
   import: dayforgeTenantOperatorProcedure
     .input(importInput)
-    .mutation(async ({ ctx, input }) => {
+    .mutation(({ ctx, input }) => runRecordedImport(ctx, input, async () => {
       assertAccount(ctx, input);
       // Validate ALL rows before any write. Existing CSV endpoint permits partial
       // imports; this transport deliberately requires an atomic, auditable result.
@@ -322,5 +393,28 @@ export const cleancloudBrowserSyncRouter = router({
           .where(eq(browserSyncBindings.tenantId, ctx.tenantId));
         return receipt;
       });
+    })),
+  /** The extension reports failures that happen before an import reaches Goldline. */
+  reportFailure: dayforgeTenantOperatorProcedure
+    .input(
+      account.extend({
+        requestId: z.string().uuid().optional(),
+        stage: z.string().trim().min(1).max(20).optional(),
+        message: z.string().trim().min(1).max(500),
+        from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      assertAccount(ctx, input);
+      await recordAttempt({
+        tenantId: ctx.tenantId,
+        requestId: input.requestId ?? null,
+        outcome: `extension_${input.stage ?? "failed"}`,
+        message: input.message,
+        from: input.from ?? null,
+        to: input.to ?? null,
+      });
+      return { recorded: true as const };
     }),
 });

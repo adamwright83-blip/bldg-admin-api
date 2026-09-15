@@ -20,6 +20,8 @@ export async function persistOperatorAndClaire(input: {
   claireConversationId?: string;
   operatorText?: string | null;
   claireText?: string | null;
+  /** The live conversation's turn number, so identical replies on different turns are all kept. */
+  turnKey?: string | number | null;
 }): Promise<void> {
   await safeClaireLedger(async () => {
     if (input.operatorText?.trim()) {
@@ -28,6 +30,7 @@ export async function persistOperatorAndClaire(input: {
         claireConversationId: input.claireConversationId,
         speaker: "OPERATOR",
         text: input.operatorText,
+        turnKey: input.turnKey,
       });
     }
     if (input.claireText?.trim()) {
@@ -36,9 +39,24 @@ export async function persistOperatorAndClaire(input: {
         claireConversationId: input.claireConversationId,
         speaker: "CLAIRE",
         text: input.claireText,
+        turnKey: input.turnKey,
       });
     }
   });
+}
+
+/** Links every Day Line / pipeline record a Claire turn wrote to the call. */
+export async function linkClaireActionIds(input: {
+  callSid?: string;
+  claireConversationId?: string;
+  actionIds: string[];
+}): Promise<void> {
+  for (const actionId of input.actionIds) {
+    if (!actionId) continue;
+    await safeClaireLedger(() =>
+      linkRelatedAction({ callSid: input.callSid, claireConversationId: input.claireConversationId, actionId })
+    );
+  }
 }
 
 export async function linkClaireCallAction(input: {
