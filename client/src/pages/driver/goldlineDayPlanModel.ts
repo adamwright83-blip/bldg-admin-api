@@ -32,6 +32,10 @@ export type LiveAdventureObjective = {
   explanation: string;
   sourceEvidenceReference: string;
   sourceOccurredAt: string | null;
+  /** Preserved commercial-mission linkage, when this objective is backed by one. */
+  missionId?: number | null;
+  pipelineId?: number | null;
+  destinationPath?: string | null;
 };
 
 /** The parts of a field-today item this projection is allowed to read. */
@@ -48,6 +52,9 @@ type FieldTodaySource = {
   whySurfaced?: string | null;
   whySourceOccurredAt?: string | null;
   source: { sourceReference: string };
+  missionId?: number | null;
+  pipelineId?: number | null;
+  destinationPath?: string | null;
 };
 
 const LIVE_OBJECTIVE_KINDS = [
@@ -105,6 +112,9 @@ export function liveObjectivesFromFieldToday(
       explanation: item.whySurfaced ?? item.subtitle,
       sourceEvidenceReference: item.source.sourceReference,
       sourceOccurredAt: item.whySourceOccurredAt ?? null,
+      missionId: item.missionId ?? null,
+      pipelineId: item.pipelineId ?? null,
+      destinationPath: item.destinationPath ?? null,
     }));
 }
 
@@ -450,6 +460,10 @@ export function buildDayPlanProjection(input: {
       kind: objective.kind,
       title: objective.title,
       source: "living_world",
+      action:
+        objective.missionId != null
+          ? { type: "commercial", missionId: objective.missionId }
+          : undefined,
       sourceLabel: `${objective.sourceLabel} · ${objective.explanation}`,
       timeLabel: objective.dueAt ? `Due ${new Date(objective.dueAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "Flexible today",
       sortKey: objective.dueAt ?? `72:${objective.id}`,

@@ -364,3 +364,39 @@ describe("the authoritative day becomes playable objectives", () => {
     ]);
   });
 });
+
+describe("commercial-mission linkage survives the living-world projection", () => {
+  it("The Louise follow-up (kind: follow_up, missionId: 8) projects to a commercial DayPlanStop action for mission 8", () => {
+    const objectives = liveObjectivesFromFieldToday([
+      fieldItem({
+        id: "living-world-follow-up:aea4bdae-c62d-4b27-833a-ab0181289f09",
+        kind: "follow_up",
+        title: "The Louise",
+        missionId: 8,
+        pipelineId: 8,
+        destinationPath: "/driver/sales-mission/8",
+      }),
+    ]);
+    expect(objectives).toHaveLength(1);
+    expect(objectives[0]!.missionId).toBe(8);
+
+    const plan = buildDayPlanProjection({
+      businessDate: "2026-09-14",
+      liveObjectives: objectives,
+    });
+    const stop = plan.stops.find(s =>
+      s.id.includes("living-world-follow-up:aea4bdae-c62d-4b27-833a-ab0181289f09")
+    );
+    expect(stop?.action).toEqual({ type: "commercial", missionId: 8 });
+  });
+
+  it("a living-world objective with no missionId gets no action, so it cannot invoke a mission-aware call", () => {
+    const objectives = liveObjectivesFromFieldToday([fieldItem()]);
+    const plan = buildDayPlanProjection({
+      businessDate: "2026-09-14",
+      liveObjectives: objectives,
+    });
+    const stop = plan.stops.find(s => s.id.includes("recovery:abc"));
+    expect(stop?.action).toBeUndefined();
+  });
+});

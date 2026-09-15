@@ -39,7 +39,7 @@ const uuid = z.string().uuid();
 const ATTESTATION_CONFIRMATION =
   "I witnessed this exactly as described and attest it happened" as const;
 
-async function assertClaireMissionAccess(input: {
+export async function assertClaireMissionAccess(input: {
   tenantId: string;
   missionId: number;
   userId: string;
@@ -157,15 +157,25 @@ export const claireRouter = router({
     .input(
       z.object({
         timeZone: z.string().trim().min(1).max(100).optional(),
+        missionId: z.number().int().positive().optional(),
       })
     )
-    .mutation(({ ctx, input }) =>
-      startClairePreDriveCall({
+    .mutation(async ({ ctx, input }) => {
+      if (input.missionId != null) {
+        await assertClaireMissionAccess({
+          tenantId: ctx.tenantId,
+          missionId: input.missionId,
+          userId: ctx.user.openId,
+          isAdmin: ctx.dayforgeMembership.role !== "field",
+        });
+      }
+      return startClairePreDriveCall({
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,
         timeZone: input.timeZone,
-      })
-    ),
+        missionId: input.missionId,
+      });
+    }),
 
   callAfterStop: dayforgeMissionFieldProcedure
     .input(

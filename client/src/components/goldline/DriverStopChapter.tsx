@@ -19,6 +19,7 @@ export function DriverStopChapter({
   onEnter,
   onJournal,
   onPlay,
+  onCallClaireForMission,
 }: {
   stop: DayPlanStop;
   onClose: () => void;
@@ -26,6 +27,8 @@ export function DriverStopChapter({
   onEnter: () => void;
   onJournal: () => void;
   onPlay: () => void;
+  /** Mission-aware Claire call for this exact commercial stop. Absent for non-commercial stops. */
+  onCallClaireForMission?: (missionId: number) => Promise<void>;
 }) {
   const [returnFocus] = useState(
     () => document.activeElement as HTMLElement | null
@@ -34,6 +37,8 @@ export function DriverStopChapter({
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [claireCallState, setClaireCallState] = useState<"ready" | "calling" | "called">("ready");
+  const [claireCallError, setClaireCallError] = useState<string | null>(null);
   const pending = useRef(false);
   const complete = saved || stop.status === "completed";
   const action = stop.action;
@@ -58,6 +63,20 @@ export function DriverStopChapter({
       : "I have physically handed this order to the customer or their approved location."
     : "I have completed this task in the real world.";
   const cityUrl = `https://admin.bldg.chat/growth/lantern-city${stop.physicalEntityId ? `?entity=${encodeURIComponent(stop.physicalEntityId)}` : ""}`;
+  async function callClaireForMission() {
+    if (action?.type !== "commercial" || !onCallClaireForMission || claireCallState === "calling") return;
+    setClaireCallState("calling");
+    setClaireCallError(null);
+    try {
+      await onCallClaireForMission(action.missionId);
+      setClaireCallState("called");
+    } catch (cause) {
+      setClaireCallState("ready");
+      setClaireCallError(
+        cause instanceof Error ? cause.message : "Claire could not place the call."
+      );
+    }
+  }
   async function resolve() {
     if (!confirmed || pending.current || !canResolve || paymentBlocked) return;
     pending.current = true;
@@ -232,6 +251,24 @@ export function DriverStopChapter({
                   ENTER {action?.type === "commercial" ? "SALES MISSION" : "CHAPTER"}
                   <ChevronRight size={18} />
                 </button>
+              )}
+              {action?.type === "commercial" && onCallClaireForMission && (
+                <button
+                  className="chapter-secondary"
+                  onClick={() => void callClaireForMission()}
+                  disabled={claireCallState === "calling"}
+                >
+                  {claireCallState === "calling"
+                    ? "CALLING CLAIRE…"
+                    : claireCallState === "called"
+                      ? "CLAIRE IS CALLING — CALL AGAIN"
+                      : "CALL CLAIRE FOR THIS MISSION"}
+                </button>
+              )}
+              {claireCallError && (
+                <p className="chapter-error" role="alert">
+                  {claireCallError}
+                </p>
               )}
               {error && (
                 <p className="chapter-error" role="alert">

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { trpc } from "@/lib/trpc";
 import {
   Check,
   ChevronRight,
@@ -184,6 +185,7 @@ function StopCard({
   );
 }
 export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
+  const callClaireForMission = trpc.system.claire.callBeforeDrive.useMutation();
   const [activeStop, setActiveStop] = useState<DayPlanStop | null>(null);
   const [playing, setPlaying] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -704,6 +706,12 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           stop={activeStop}
           onClose={() => setActiveStop(null)}
           onResolve={props.onResolveStop}
+          onCallClaireForMission={async missionId => {
+            await callClaireForMission.mutateAsync({
+              missionId,
+              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            });
+          }}
           onEnter={() => {
             props.onEnterWorld(activeStop.id);
             setActiveStop(null);

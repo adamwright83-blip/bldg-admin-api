@@ -209,12 +209,14 @@ export async function startClairePreDriveCall(input: {
   tenantId: string;
   actorId: string;
   timeZone?: string;
+  missionId?: number;
 }): Promise<{ callSid: string; brief: string }> {
   const to = configuredOperatorPhone();
   const generated = await generateClairePreDriveOutput({
     tenantId: input.tenantId,
     actorId: input.actorId,
     timeZone: input.timeZone,
+    missionId: input.missionId,
   });
   const { brief, context } = generated;
   clearExpiredPreDriveConversations();
