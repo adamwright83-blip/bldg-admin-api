@@ -1,8 +1,35 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, eq, gte, lt, sql } from "drizzle-orm";
+import { getDashboardTimeZone, zonedDayStartUtc } from "../dashboardZoned";
 import { getDb } from "../db";
 import { orders, cleancloudPaidOrders, clearentTransactions } from "../../drizzle/schema";
+import {
+  activeCustomerPopulation,
+  bucketSeries,
+  compareTotals,
+  eventsInSpan,
+  summarizeTotals,
+  topCustomers,
+} from "./businessMetrics";
+import { ALL_TIME_START, addDaysYmd, daysInclusive, isValidYmd } from "./businessPeriods";
+import {
+  AnalyticsUnavailableError,
+  loadPaidOrderLedger,
+  type LedgerCompleteness,
+  type LedgerSource,
+  type PaidOrderLedger,
+} from "./paidOrderLedger";
 
-export type DateRange = { start: string; end: string }; // ISO yyyy-mm-dd inclusive
+export { AnalyticsUnavailableError };
+
+export type DateRange = { start: string; end: string }; // business-local YYYY-MM-DD, inclusive
+
+export type AnalyticsCoverage = {
+  completeness: LedgerCompleteness;
+  loadedSources: LedgerSource[];
+  failedSources: LedgerSource[];
+  unverifiedNativeCount: number;
+  unverifiedNativeCents: number;
+};
 
 export type RevenuePoint = { bucket: string; revenue: number; orderCount: number };
 
@@ -11,6 +38,7 @@ export type RevenueSummary = {
   orderCount: number;
   avgOrderValue: number;
   series: RevenuePoint[];
+  coverage?: AnalyticsCoverage;
 };
 
 export type OrderStats = {
@@ -32,6 +60,7 @@ export type RepeatCustomerStats = {
   repeatCustomers: number;
   oneTimeCustomers: number;
   repeatRate: number;
+  coverage?: AnalyticsCoverage;
 };
 
 export type CustomerRevenueRow = {
@@ -50,6 +79,7 @@ export type CustomerRevenueWindow = CustomerRevenueRow & {
 export type CustomerRevenueStats = {
   customers: CustomerRevenueRow[];
   windows?: CustomerRevenueWindow[];
+  coverage?: AnalyticsCoverage;
 };
 
 export type MetricUnit = "currency" | "count" | "weight_lbs";
@@ -68,6 +98,7 @@ export type MetricComparison = {
   volumeEffect: number;
   aovEffect: number;
   driversByServiceType: Array<{ key: string; cur: number; prev: number; delta: number }>;
+  coverage?: AnalyticsCoverage;
 };
 
 export type DataCompleteness = {
@@ -75,14 +106,75 @@ export type DataCompleteness = {
   missing: Array<{ source: string; prevents: string }>;
 };
 
+export type AnalyticsQueryDeps = {
+  loadLedger: typeof loadPaidOrderLedger;
+  timeZone: () => string;
+};
+
+const defaultDeps: AnalyticsQueryDeps = {
+  loadLedger: loadPaidOrderLedger,
+  timeZone: getDashboardTimeZone,
+};
+
+const dollars = (cents: number) => Math.round(cents) / 100;
+
+function boundedRange(range: DateRange): DateRange {
+  let start = isValidYmd(range.start) ? range.start : range.end;
+  let end = isValidYmd(range.end) ? range.end : start;
+  if (start > end) [start, end] = [end, start];
+  if (start < ALL_TIME_START) start = ALL_TIME_START;
+  return { start, end };
+}
+
 /**
- * Revenue totals + time series for paid orders within a date range.
- * basis defaults to "paidAt". groupBy controls time bucket granularity.
- *
- * MySQL date-bucketing:
- *   day   -> DATE(col)
- *   week  -> DATE(col - INTERVAL WEEKDAY(col) DAY)  Monday-anchored
- *   month -> DATE_FORMAT(col, '%Y-%m')
+ * Paid revenue for analytics comes only from the shared paid-order ledger
+ * (native Stripe-verified orders + deduplicated CleanCloud orders). When no
+ * source can be read this throws — an outage is never reported as $0.
+ */
+async function ledgerFor(
+  tenantId: string,
+  ranges: DateRange[],
+  deps: AnalyticsQueryDeps
+): Promise<PaidOrderLedger> {
+  const timeZone = deps.timeZone();
+  const bounded = ranges.map(boundedRange);
+  const start = bounded.map(r => r.start).sort()[0]!;
+  const end = bounded.map(r => r.end).sort().reverse()[0]!;
+  const ledger = await deps.loadLedger({
+    tenantId,
+    startUtc: zonedDayStartUtc(start, timeZone),
+    endExclusiveUtc: zonedDayStartUtc(addDaysYmd(end, 1), timeZone),
+    timeZone,
+  });
+  if (ledger.completeness === "unavailable") {
+    throw new AnalyticsUnavailableError("No paid-order source could be read");
+  }
+  return ledger;
+}
+
+function coverageOf(ledger: PaidOrderLedger, ranges: DateRange[]): AnalyticsCoverage {
+  const bounded = ranges.map(boundedRange);
+  const unverified = ledger.unverifiedNative.filter(order =>
+    bounded.some(range => order.businessDate >= range.start && order.businessDate <= range.end)
+  );
+  return {
+    completeness: ledger.completeness,
+    loadedSources: ledger.loadedSources,
+    failedSources: ledger.failedSources,
+    unverifiedNativeCount: unverified.length,
+    unverifiedNativeCents: unverified.reduce((sum, order) => sum + order.cents, 0),
+  };
+}
+
+async function requireDb() {
+  const db = await getDb();
+  if (!db) throw new AnalyticsUnavailableError("Database not available");
+  return db;
+}
+
+/**
+ * Paid revenue totals + business-local time series. Revenue is always dated
+ * by payment; `basis` is accepted for older callers but does not change that.
  */
 export async function getRevenueSummary(
   tenantId: string,
@@ -90,58 +182,28 @@ export async function getRevenueSummary(
     range: DateRange;
     groupBy: "day" | "week" | "month";
     basis?: "paidAt" | "createdAt";
-  }
+  },
+  deps: AnalyticsQueryDeps = defaultDeps
 ): Promise<RevenueSummary> {
-  const db = await getDb();
-  if (!db) return { totalRevenue: 0, orderCount: 0, avgOrderValue: 0, series: [] };
-
-  const col = params.basis === "createdAt" ? orders.createdAt : orders.paidAt;
-
-  const bucketExpr =
-    params.groupBy === "day"
-      ? sql<string>`DATE(${col})`
-      : params.groupBy === "week"
-        ? sql<string>`DATE(${col} - INTERVAL WEEKDAY(${col}) DAY)`
-        : sql<string>`DATE_FORMAT(${col}, '%Y-%m')`;
-
-  const rows = await db
-    .select({
-      bucket: bucketExpr,
-      revenue: sql<string>`COALESCE(SUM(${orders.total}), 0)`,
-      orderCount: sql<number>`COUNT(*)`,
-    })
-    .from(orders)
-    .where(
-      and(
-        eq(orders.tenantId, tenantId),
-        sql`${orders.paid} = true`,
-        sql`DATE(${col}) >= ${params.range.start}`,
-        sql`DATE(${col}) <= ${params.range.end}`
-      )
-    )
-    .groupBy(bucketExpr)
-    .orderBy(bucketExpr);
-
-  const series: RevenuePoint[] = rows.map((r) => ({
-    bucket: String(r.bucket ?? ""),
-    revenue: Number(r.revenue),
-    orderCount: Number(r.orderCount),
-  }));
-
-  const totalRevenue = series.reduce((acc, p) => acc + p.revenue, 0);
-  const orderCount = series.reduce((acc, p) => acc + p.orderCount, 0);
-
+  const ledger = await ledgerFor(tenantId, [params.range], deps);
+  const events = eventsInSpan(ledger.events, boundedRange(params.range));
+  const totals = summarizeTotals(events);
   return {
-    totalRevenue: Math.round(totalRevenue * 100) / 100,
-    orderCount,
-    avgOrderValue: orderCount > 0 ? Math.round((totalRevenue / orderCount) * 100) / 100 : 0,
-    series,
+    totalRevenue: dollars(totals.revenueCents),
+    orderCount: totals.orderCount,
+    avgOrderValue: totals.aovCents == null ? 0 : dollars(totals.aovCents),
+    series: bucketSeries(events, params.groupBy).map(point => ({
+      bucket: point.bucket,
+      revenue: dollars(point.revenueCents),
+      orderCount: point.orderCount,
+    })),
+    coverage: coverageOf(ledger, [params.range]),
   };
 }
 
 /**
- * Order volume, status mix, service-type mix, and lbs for a date range.
- * Uses createdAt (orders exist before payment).
+ * Operational order volume, status mix, service mix and lbs for native
+ * Goldline orders created in the business-local range (paid or not).
  */
 export async function getOrderStats(
   tenantId: string,
@@ -149,17 +211,16 @@ export async function getOrderStats(
     range: DateRange;
     serviceType?: "wash_fold" | "dry_cleaning";
     status?: string;
-  }
+  },
+  deps: AnalyticsQueryDeps = defaultDeps
 ): Promise<OrderStats> {
-  const db = await getDb();
-  if (!db) {
-    return { totalOrders: 0, byStatus: {}, byServiceType: {}, totalWeightLbs: 0, avgOrderValue: 0 };
-  }
-
+  const db = await requireDb();
+  const timeZone = deps.timeZone();
+  const range = boundedRange(params.range);
   const conditions = [
-    eq(orders.tenantId, tenantId),
-    sql`DATE(${orders.createdAt}) >= ${params.range.start}`,
-    sql`DATE(${orders.createdAt}) <= ${params.range.end}`,
+    sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`,
+    gte(orders.createdAt, zonedDayStartUtc(range.start, timeZone)),
+    lt(orders.createdAt, zonedDayStartUtc(addDaysYmd(range.end, 1), timeZone)),
   ];
   if (params.serviceType) conditions.push(eq(orders.serviceType, params.serviceType));
   if (params.status) conditions.push(sql`${orders.status} = ${params.status}`);
@@ -195,17 +256,15 @@ export async function getOrderStats(
   };
 }
 
-/** Active orders snapshot (not delivered / not cancelled). */
+/** Active native orders snapshot (not delivered / not cancelled). */
 export async function getOpenOrderStats(tenantId: string): Promise<OpenOrderStats> {
-  const db = await getDb();
-  if (!db) return { openTotal: 0, byStatus: {}, awaitingPayment: 0 };
-
+  const db = await requireDb();
   const rows = await db
     .select({ status: orders.status, paid: orders.paid })
     .from(orders)
     .where(
       and(
-        eq(orders.tenantId, tenantId),
+        sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`,
         sql`${orders.status} NOT IN ('delivered', 'cancelled')`
       )
     );
@@ -223,86 +282,41 @@ export async function getOpenOrderStats(tenantId: string): Promise<OpenOrderStat
   return { openTotal: rows.length, byStatus, awaitingPayment };
 }
 
-/** Distinct customers: repeat (≥2 orders) vs first-time within the date range. */
+/** Customer identities with paid orders in the range: repeat (≥2) vs one-time. */
 export async function getRepeatCustomerStats(
   tenantId: string,
-  params: { range: DateRange }
+  params: { range: DateRange },
+  deps: AnalyticsQueryDeps = defaultDeps
 ): Promise<RepeatCustomerStats> {
-  const db = await getDb();
-  if (!db) return { totalCustomers: 0, repeatCustomers: 0, oneTimeCustomers: 0, repeatRate: 0 };
-
-  const rows = await db
-    .select({
-      phone: orders.phone,
-      orderCount: sql<number>`COUNT(*)`,
-    })
-    .from(orders)
-    .where(
-      and(
-        eq(orders.tenantId, tenantId),
-        sql`DATE(${orders.createdAt}) >= ${params.range.start}`,
-        sql`DATE(${orders.createdAt}) <= ${params.range.end}`
-      )
-    )
-    .groupBy(orders.phone);
-
-  const totalCustomers = rows.length;
-  const repeatCustomers = rows.filter((r) => Number(r.orderCount) >= 2).length;
-  const oneTimeCustomers = totalCustomers - repeatCustomers;
-
+  const ledger = await ledgerFor(tenantId, [params.range], deps);
+  const population = activeCustomerPopulation(ledger.events, boundedRange(params.range), 1);
+  const totalCustomers = population.count;
+  const repeatCustomers = population.members.filter(member => member.orderCount >= 2).length;
   return {
     totalCustomers,
     repeatCustomers,
-    oneTimeCustomers,
+    oneTimeCustomers: totalCustomers - repeatCustomers,
     repeatRate: totalCustomers > 0 ? Math.round((repeatCustomers / totalCustomers) * 100) / 100 : 0,
+    coverage: coverageOf(ledger, [params.range]),
   };
 }
 
-/** Paid revenue grouped by customer, highest grossing first. */
+/** Paid revenue grouped by customer identity, highest grossing first. */
 export async function getTopCustomersByRevenue(
   tenantId: string,
-  params: { range: DateRange; limit?: number }
+  params: { range: DateRange; limit?: number },
+  deps: AnalyticsQueryDeps = defaultDeps
 ): Promise<CustomerRevenueStats> {
-  const db = await getDb();
-  if (!db) return { customers: [] };
-
-  const revenueExpr = sql<string>`COALESCE(SUM(${orders.total}), 0)`;
-  const orderCountExpr = sql<number>`COUNT(*)`;
-
-  const rows = await db
-    .select({
-      firstName: orders.firstName,
-      lastName: orders.lastName,
-      phone: orders.phone,
-      revenue: revenueExpr,
-      orderCount: orderCountExpr,
-    })
-    .from(orders)
-    .where(
-      and(
-        eq(orders.tenantId, tenantId),
-        sql`${orders.paid} = true`,
-        sql`DATE(${orders.paidAt}) >= ${params.range.start}`,
-        sql`DATE(${orders.paidAt}) <= ${params.range.end}`
-      )
-    )
-    .groupBy(orders.phone, orders.firstName, orders.lastName)
-    .orderBy(desc(revenueExpr))
-    .limit(params.limit ?? 5);
-
+  const ledger = await ledgerFor(tenantId, [params.range], deps);
   return {
-    customers: rows.map((row) => {
-      const revenue = Number(row.revenue);
-      const orderCount = Number(row.orderCount);
-      const customerName = `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim() || "Unknown customer";
-      return {
-        customerName,
-        phone: row.phone ?? "",
-        revenue: Math.round(revenue * 100) / 100,
-        orderCount,
-        avgOrderValue: orderCount > 0 ? Math.round((revenue / orderCount) * 100) / 100 : 0,
-      };
-    }),
+    customers: topCustomers(ledger.events, boundedRange(params.range), params.limit ?? 5).map(member => ({
+      customerName: member.displayName,
+      phone: "",
+      revenue: dollars(member.revenueCents),
+      orderCount: member.orderCount,
+      avgOrderValue: member.orderCount ? dollars(Math.round(member.revenueCents / member.orderCount)) : 0,
+    })),
+    coverage: coverageOf(ledger, [params.range]),
   };
 }
 
@@ -310,13 +324,9 @@ export async function getTopCustomersByRevenue(
  * Metric-aware comparison: compares currentRange vs comparisonRange for the given metricId.
  * comparisonRange defaults to the equal-length period immediately preceding currentRange.
  *
- * Revenue bridge (volumeEffect / aovEffect) only applies to revenue_paid_stripe.
- * Other metrics return unit-appropriate current/previous values with zero bridge fields.
- *
  * Bridge identities (revenue only):
  *   volumeEffect  = (orders_cur - orders_prev) * aov_prev
  *   aovEffect     = (aov_cur - aov_prev) * orders_cur
- *   sum ≈ absChange (within rounding)
  */
 export async function getMetricComparison(
   tenantId: string,
@@ -326,7 +336,8 @@ export async function getMetricComparison(
     comparisonRange?: DateRange;
     groupBy: "day" | "week" | "month";
     basis?: "paidAt" | "createdAt";
-  }
+  },
+  deps: AnalyticsQueryDeps = defaultDeps
 ): Promise<MetricComparison> {
   const emptyResult = (unit: MetricUnit): MetricComparison => ({
     unit, current: 0, previous: 0, absChange: 0, pctChange: 0,
@@ -334,194 +345,173 @@ export async function getMetricComparison(
     volumeEffect: 0, aovEffect: 0, driversByServiceType: [],
   });
 
-  const db = await getDb();
-  if (!db) {
-    const unitForMetric: MetricUnit =
-      params.metricId === "orders_created" || params.metricId === "orders_paid"
-        ? "count"
-        : params.metricId === "wash_fold_weight"
-          ? "weight_lbs"
-          : "currency";
-    return emptyResult(unitForMetric);
-  }
-
-  const compRange = params.comparisonRange ?? previousEqualPeriod(params.currentRange);
-
+  const currentRange = boundedRange(params.currentRange);
+  const compRange = params.comparisonRange ? boundedRange(params.comparisonRange) : previousEqualPeriod(currentRange);
   const computePct = (cur: number, prev: number) =>
     prev > 0 ? Math.round(((cur - prev) / prev) * 10000) / 100 : 0;
   const r2 = (n: number) => Math.round(n * 100) / 100;
 
   switch (params.metricId) {
-    case "revenue_paid_stripe": {
-      const [cur, prev] = await Promise.all([
-        getRevenueSummary(tenantId, { range: params.currentRange, groupBy: params.groupBy, basis: params.basis }),
-        getRevenueSummary(tenantId, { range: compRange, groupBy: params.groupBy, basis: params.basis }),
-      ]);
-      const [curStats, prevStats] = await Promise.all([
-        getOrderStats(tenantId, { range: params.currentRange }),
-        getOrderStats(tenantId, { range: compRange }),
-      ]);
-      const absChange = r2(cur.totalRevenue - prev.totalRevenue);
-      const allServiceTypes = Array.from(new Set([
-        ...Object.keys(curStats.byServiceType),
-        ...Object.keys(prevStats.byServiceType),
-      ]));
+    case "revenue_paid_stripe":
+    case "orders_paid":
+    case "avg_order_value": {
+      const ledger = await ledgerFor(tenantId, [currentRange, compRange], deps);
+      const curEvents = eventsInSpan(ledger.events, currentRange);
+      const prevEvents = eventsInSpan(ledger.events, compRange);
+      const bridge = compareTotals(summarizeTotals(curEvents), summarizeTotals(prevEvents));
+      const coverage = coverageOf(ledger, [currentRange, compRange]);
+      const curAov = bridge.current.aovCents == null ? 0 : dollars(bridge.current.aovCents);
+      const prevAov = bridge.previous.aovCents == null ? 0 : dollars(bridge.previous.aovCents);
+      if (params.metricId === "orders_paid") {
+        return {
+          ...emptyResult("count"),
+          current: bridge.current.orderCount,
+          previous: bridge.previous.orderCount,
+          absChange: bridge.orderChange,
+          pctChange: computePct(bridge.current.orderCount, bridge.previous.orderCount),
+          coverage,
+        };
+      }
+      if (params.metricId === "avg_order_value") {
+        return {
+          ...emptyResult("currency"),
+          current: curAov,
+          previous: prevAov,
+          absChange: r2(curAov - prevAov),
+          pctChange: computePct(curAov, prevAov),
+          coverage,
+        };
+      }
+      const serviceCounts = (events: typeof curEvents) =>
+        events.reduce<Record<string, number>>((acc, event) => {
+          if (event.serviceType) acc[event.serviceType] = (acc[event.serviceType] ?? 0) + 1;
+          return acc;
+        }, {});
+      const cur = serviceCounts(curEvents);
+      const prev = serviceCounts(prevEvents);
+      const keys = Array.from(new Set([...Object.keys(cur), ...Object.keys(prev)]));
       return {
         unit: "currency",
-        current: cur.totalRevenue,
-        previous: prev.totalRevenue,
-        absChange,
-        pctChange: computePct(cur.totalRevenue, prev.totalRevenue),
-        currentOrders: cur.orderCount,
-        previousOrders: prev.orderCount,
-        currentAov: cur.avgOrderValue,
-        previousAov: prev.avgOrderValue,
-        volumeEffect: r2((cur.orderCount - prev.orderCount) * (prev.avgOrderValue ?? 0)),
-        aovEffect: r2((cur.avgOrderValue - prev.avgOrderValue) * cur.orderCount),
-        driversByServiceType: allServiceTypes.map((key) => ({
+        current: dollars(bridge.current.revenueCents),
+        previous: dollars(bridge.previous.revenueCents),
+        absChange: dollars(bridge.revenueChangeCents),
+        pctChange: computePct(bridge.current.revenueCents, bridge.previous.revenueCents),
+        currentOrders: bridge.current.orderCount,
+        previousOrders: bridge.previous.orderCount,
+        currentAov: curAov,
+        previousAov: prevAov,
+        volumeEffect: dollars(bridge.volumeEffectCents ?? 0),
+        aovEffect: dollars(bridge.aovEffectCents ?? 0),
+        driversByServiceType: keys.map(key => ({
           key,
-          cur: curStats.byServiceType[key] ?? 0,
-          prev: prevStats.byServiceType[key] ?? 0,
-          delta: (curStats.byServiceType[key] ?? 0) - (prevStats.byServiceType[key] ?? 0),
+          cur: cur[key] ?? 0,
+          prev: prev[key] ?? 0,
+          delta: (cur[key] ?? 0) - (prev[key] ?? 0),
         })),
-      };
-    }
-
-    case "orders_paid": {
-      const [cur, prev] = await Promise.all([
-        getRevenueSummary(tenantId, { range: params.currentRange, groupBy: params.groupBy, basis: "paidAt" }),
-        getRevenueSummary(tenantId, { range: compRange, groupBy: params.groupBy, basis: "paidAt" }),
-      ]);
-      const absChange = cur.orderCount - prev.orderCount;
-      return {
-        ...emptyResult("count"),
-        current: cur.orderCount,
-        previous: prev.orderCount,
-        absChange,
-        pctChange: computePct(cur.orderCount, prev.orderCount),
-      };
-    }
-
-    case "avg_order_value": {
-      const [cur, prev] = await Promise.all([
-        getRevenueSummary(tenantId, { range: params.currentRange, groupBy: params.groupBy, basis: "paidAt" }),
-        getRevenueSummary(tenantId, { range: compRange, groupBy: params.groupBy, basis: "paidAt" }),
-      ]);
-      const absChange = r2(cur.avgOrderValue - prev.avgOrderValue);
-      return {
-        ...emptyResult("currency"),
-        current: cur.avgOrderValue,
-        previous: prev.avgOrderValue,
-        absChange,
-        pctChange: computePct(cur.avgOrderValue, prev.avgOrderValue),
+        coverage,
       };
     }
 
     case "orders_created": {
       const [curStats, prevStats] = await Promise.all([
-        getOrderStats(tenantId, { range: params.currentRange }),
-        getOrderStats(tenantId, { range: compRange }),
+        getOrderStats(tenantId, { range: currentRange }, deps),
+        getOrderStats(tenantId, { range: compRange }, deps),
       ]);
-      const absChange = curStats.totalOrders - prevStats.totalOrders;
       return {
         ...emptyResult("count"),
         current: curStats.totalOrders,
         previous: prevStats.totalOrders,
-        absChange,
+        absChange: curStats.totalOrders - prevStats.totalOrders,
         pctChange: computePct(curStats.totalOrders, prevStats.totalOrders),
       };
     }
 
     case "wash_fold_weight": {
       const [curStats, prevStats] = await Promise.all([
-        getOrderStats(tenantId, { range: params.currentRange, serviceType: "wash_fold" }),
-        getOrderStats(tenantId, { range: compRange, serviceType: "wash_fold" }),
+        getOrderStats(tenantId, { range: currentRange, serviceType: "wash_fold" }, deps),
+        getOrderStats(tenantId, { range: compRange, serviceType: "wash_fold" }, deps),
       ]);
-      const absChange = r2(curStats.totalWeightLbs - prevStats.totalWeightLbs);
       return {
         ...emptyResult("weight_lbs"),
         current: curStats.totalWeightLbs,
         previous: prevStats.totalWeightLbs,
-        absChange,
+        absChange: r2(curStats.totalWeightLbs - prevStats.totalWeightLbs),
         pctChange: computePct(curStats.totalWeightLbs, prevStats.totalWeightLbs),
       };
     }
 
     default:
-      // Unknown metricId — fallback to revenue comparison
-      return getMetricComparison(tenantId, { ...params, metricId: "revenue_paid_stripe" });
+      return getMetricComparison(tenantId, { ...params, metricId: "revenue_paid_stripe" }, deps);
   }
 }
 
-function previousEqualPeriod(range: DateRange): DateRange {
-  const start = Date.parse(range.start);
-  const end = Date.parse(range.end);
-  const span = end - start; // ms
-  const prevEnd = new Date(start - 1).toISOString().slice(0, 10);
-  const prevStart = new Date(start - 1 - span).toISOString().slice(0, 10);
-  return { start: prevStart, end: prevEnd };
+export function previousEqualPeriod(range: DateRange): DateRange {
+  const days = daysInclusive(range.start, range.end);
+  const end = addDaysYmd(range.start, -1);
+  return { start: addDaysYmd(end, -(days - 1)), end };
 }
+
+/** Categories Goldline has never connected for any tenant. */
+export const ALWAYS_MISSING_SOURCES: DataCompleteness["missing"] = [
+  { source: "Payroll / labor", prevents: "cannot calculate labor margin or labor-cost percentage" },
+  { source: "Machine revenue (coin-op)", prevents: "cannot calculate full store revenue" },
+  { source: "Cash drawer / POS", prevents: "cannot reconcile total daily sales across all payment types" },
+  { source: "Supply costs (detergent, bags, hangers)", prevents: "cannot calculate true gross profit" },
+];
 
 /**
  * Brutally honest data-completeness report.
  * Connected = we have actual rows for this tenant.
  * Missing   = what absence prevents (upsell lever).
+ * Throws when the database cannot be read, rather than implying nothing is connected.
  */
 export async function getDataCompleteness(tenantId: string): Promise<DataCompleteness> {
-  const db = await getDb();
+  const db = await requireDb();
 
   const connected: DataCompleteness["connected"] = [];
   const missing: DataCompleteness["missing"] = [];
 
-  if (db) {
-    // Stripe-paid orders
-    const [paidRow] = await db
-      .select({ cnt: sql<number>`COUNT(*)` })
-      .from(orders)
-      .where(and(eq(orders.tenantId, tenantId), sql`${orders.paid} = true`));
-    if (Number(paidRow?.cnt ?? 0) > 0) {
-      connected.push({ source: "Stripe-paid orders", description: "Revenue, order volume, avg order value" });
-    } else {
-      missing.push({ source: "Stripe-paid orders", prevents: "cannot calculate any revenue or order volume" });
-    }
-
-    // CleanCloud import
-    const [ccRow] = await db
-      .select({ cnt: sql<number>`COUNT(*)` })
-      .from(cleancloudPaidOrders)
-      .where(eq(cleancloudPaidOrders.tenantId, tenantId));
-    if (Number(ccRow?.cnt ?? 0) > 0) {
-      connected.push({ source: "CleanCloud import", description: "Legacy order history imported" });
-    }
-
-    // Clearent / XplorPay — clearentTransactions has no tenantId column, so global rows
-    // cannot prove this tenant's connection. Only mark connected for the internal default
-    // tenant (platform-level data); all other tenants get the not-tenant-confirmed entry.
-    if (tenantId === "default") {
-      const [clearRow] = await db
-        .select({ cnt: sql<number>`COUNT(*)` })
-        .from(clearentTransactions);
-      if (Number(clearRow?.cnt ?? 0) > 0) {
-        connected.push({ source: "Clearent / XplorPay", description: "Card-reader transactions imported (platform-level)" });
-      }
-    }
+  const [paidRow] = await db
+    .select({ cnt: sql<number>`COUNT(*)` })
+    .from(orders)
+    .where(
+      and(
+        sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`,
+        sql`${orders.paid} = true`,
+        sql`${orders.stripePaymentIntentId} IS NOT NULL`
+      )
+    );
+  if (Number(paidRow?.cnt ?? 0) > 0) {
+    connected.push({ source: "Stripe-paid orders", description: "Native Goldline orders with Stripe payment evidence" });
+  } else {
+    missing.push({ source: "Stripe-paid orders", prevents: "no native paid orders with payment evidence yet" });
   }
 
-  // Non-default tenants: Clearent is not tenant-scoped — always report as unconfirmed.
-  if (tenantId !== "default") {
+  const [ccRow] = await db
+    .select({ cnt: sql<number>`COUNT(*)` })
+    .from(cleancloudPaidOrders)
+    .where(eq(cleancloudPaidOrders.tenantId, tenantId));
+  if (Number(ccRow?.cnt ?? 0) > 0) {
+    connected.push({ source: "CleanCloud import", description: "Paid CleanCloud orders, counted once per order" });
+  }
+
+  // Clearent / XplorPay — clearentTransactions has no tenantId column, so global rows
+  // cannot prove this tenant's connection. Only mark connected for the internal default
+  // tenant (platform-level data); all other tenants get the not-tenant-confirmed entry.
+  if (tenantId === "default") {
+    const [clearRow] = await db
+      .select({ cnt: sql<number>`COUNT(*)` })
+      .from(clearentTransactions);
+    if (Number(clearRow?.cnt ?? 0) > 0) {
+      connected.push({ source: "Clearent / XplorPay", description: "Card-reader transactions imported (platform-level, reconciliation only)" });
+    }
+  } else {
     missing.push({
       source: "Clearent / XplorPay",
       prevents: "platform import exists but tenant-specific connection is not confirmed — clearentTransactions is not tenant-scoped",
     });
   }
 
-  // Always-missing categories (not yet connected in any tenant).
-  missing.push(
-    { source: "Payroll / labor", prevents: "cannot calculate labor margin or labor-cost percentage" },
-    { source: "Machine revenue (coin-op)", prevents: "cannot calculate full store revenue" },
-    { source: "Cash drawer / POS", prevents: "cannot reconcile total daily sales across all payment types" },
-    { source: "Supply costs (detergent, bags, hangers)", prevents: "cannot calculate true gross profit" }
-  );
-
+  missing.push(...ALWAYS_MISSING_SOURCES);
   return { connected, missing };
 }

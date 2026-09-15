@@ -26,13 +26,15 @@ export type MetricDef = {
 
 // Shared source strings — canonical; used in meta receipts and completeness scanner.
 export const STRIPE_INCLUDED = [
-  "Orders marked paid in admin (Stripe/native)",
-  "Column: orders.paid=true, orders.total",
+  "Native Goldline orders with Stripe payment evidence (orders.stripePaymentIntentId), dated by payment",
+  "Paid CleanCloud orders, counted once across Orders (Sales) and Orders (Revenue) exports",
+  "Business-local dates (ADMIN_DASHBOARD_TIMEZONE, default America/Los_Angeles)",
 ];
 export const STRIPE_EXCLUDED = [
-  "Legacy CleanCloud imports (separate table)",
-  "Clearent / XplorPay transactions",
+  "Native orders marked paid without processor evidence (reported, not counted)",
+  "Clearent / XplorPay settlements (reconciliation only, not added to revenue)",
   "Cash drawer / unrecorded POS sales",
+  "Machine (coin-op) revenue",
 ];
 export const CREATED_INCLUDED = [
   "All orders created in admin system",
@@ -146,9 +148,13 @@ export const METRICS: Record<string, MetricDef> = {
     id: "repeat_customer_count",
     label: "Repeat customers",
     unit: "count",
-    dateBasis: "createdAt",
-    includedSources: ["Distinct phone numbers with ≥2 orders in period"],
-    excludedSources: CREATED_EXCLUDED,
+    dateBasis: "paidAt",
+    includedSources: [
+      "Customer identities with ≥2 paid orders in period",
+      "Identity: matched by normalized phone, email, Goldline resident id, or CleanCloud customer id",
+      ...STRIPE_INCLUDED,
+    ],
+    excludedSources: STRIPE_EXCLUDED,
     allowedGroupBy: [],
     allowedChartTypes: ["bar"],
     supportsComparison: false,
@@ -160,9 +166,8 @@ export const METRICS: Record<string, MetricDef> = {
     unit: "currency",
     dateBasis: "paidAt",
     includedSources: [
-      "Orders marked paid in admin (Stripe/native)",
-      "Grouped by customer name and phone",
-      "Columns: orders.firstName, orders.lastName, orders.phone, orders.total",
+      ...STRIPE_INCLUDED,
+      "Grouped by customer identity (phone, email, Goldline resident id, or CleanCloud customer id)",
     ],
     excludedSources: STRIPE_EXCLUDED,
     allowedGroupBy: [],

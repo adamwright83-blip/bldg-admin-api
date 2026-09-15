@@ -80,6 +80,16 @@ export const GOLDLINE_CAPABILITY_REGISTRY: GoldlineCapability[] = [
     permissionLevel: "operator",
     implementation: "recordCommercialMissionVisitOutcome",
   },
+  {
+    id: "analytics.business_query",
+    domain: "analytics",
+    description:
+      "Answer read-only questions about paid revenue, paid orders, average order value, open orders, active/new/dormant/top customers, and one customer's history from Goldline and CleanCloud order records, stating assumptions. Profit is not calculable: cost data is not connected.",
+    status: "SUPPORTED",
+    allowedSurfaces: ["phone", "desktop", "mobile"],
+    permissionLevel: "operator",
+    implementation: "answerClaireBusinessTurn",
+  },
 ];
 
 export function getGoldlineCapability(id: string): GoldlineCapability | undefined {

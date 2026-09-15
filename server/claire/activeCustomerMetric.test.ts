@@ -6,13 +6,52 @@ import {
   qualifiesActiveCustomerOrder,
   type ActiveCustomerLoaders,
 } from "./activeCustomerMetric";
+import type { CleanCloudOrderRow, NativeOrderRow } from "../analytics/paidOrderLedger";
 
 const now = new Date("2026-09-15T02:00:00.000Z");
 const observation = (source: "laundry_butler" | "cleancloud", phone: string | null, email: string | null) => ({ source, phone, email });
-function loaders(lb: unknown, cc: unknown): ActiveCustomerLoaders {
+
+function nativeRow(id: number, phone: string, paidAt = new Date("2026-09-10T18:00:00Z")): NativeOrderRow {
   return {
-    laundry_butler: async () => { if (lb instanceof Error) throw lb; return lb as never; },
-    cleancloud: async () => { if (cc instanceof Error) throw cc; return cc as never; },
+    id,
+    paid: true,
+    paidAt,
+    total: "30.00",
+    stripePaymentIntentId: `pi_${id}`,
+    serviceType: "wash_fold",
+    firstName: "Ava",
+    lastName: "Stone",
+    phone,
+    email: null,
+    bldgUserId: null,
+  };
+}
+
+function cleanCloudRow(id: string, phone: string | null): CleanCloudOrderRow {
+  return {
+    cleancloudOrderId: id,
+    cleancloudCustomerId: null,
+    sourceReportType: "orders_sales",
+    paymentDateUtc: new Date("2026-09-11T18:00:00Z"),
+    paidDateUtc: null,
+    paid: true,
+    totalCents: 2000,
+    customerName: "Ava Stone",
+    customerPhone: phone,
+    customerEmail: null,
+  };
+}
+
+function loaders(lb: NativeOrderRow[] | Error, cc: CleanCloudOrderRow[] | Error): ActiveCustomerLoaders {
+  return {
+    laundry_butler: async () => {
+      if (lb instanceof Error) throw lb;
+      return lb;
+    },
+    cleancloud: async () => {
+      if (cc instanceof Error) throw cc;
+      return cc;
+    },
   };
 }
 
@@ -46,21 +85,25 @@ describe("active customer metric", () => {
     ])).toEqual({ value: 2, unmatchedCount: 1 });
   });
 
-  it("does not count a duplicate customer twice", async () => {
-    const metric = await getActiveCustomerMetric({ tenantId: "tenant-1", now }, loaders(
-      [observation("laundry_butler", "3105550100", null)],
-      [observation("cleancloud", "310-555-0100", null)]
-    ));
-    expect(metric).toMatchObject({ value: 1, completeness: "complete", unmatchedCount: 0 });
+  it("does not count a duplicate customer twice across sources", async () => {
+    const metric = await getActiveCustomerMetric(
+      { tenantId: "tenant-1", now, timeZone: "America/Los_Angeles" },
+      loaders([nativeRow(1, "3105550100")], [cleanCloudRow("cc-1", "310-555-0100")])
+    );
+    expect(metric).toMatchObject({ value: 1, completeness: "complete", unmatchedCount: 0, sources: ["laundry_butler", "cleancloud"] });
   });
 
   it("marks one available source as partial, never an approximate total", async () => {
-    expect(await getActiveCustomerMetric({ tenantId: "tenant-1", now }, loaders(
-      [observation("laundry_butler", "3105550100", null)], new Error("missing")
-    ))).toMatchObject({ value: 1, completeness: "partial", sources: ["laundry_butler"] });
+    expect(await getActiveCustomerMetric(
+      { tenantId: "tenant-1", now, timeZone: "America/Los_Angeles" },
+      loaders([nativeRow(1, "3105550100")], new Error("missing"))
+    )).toMatchObject({ value: 1, completeness: "partial", sources: ["laundry_butler"] });
   });
 
   it("returns unavailable without a count when both sources fail", async () => {
-    expect(await getActiveCustomerMetric({ tenantId: "tenant-1", now }, loaders(new Error("missing"), new Error("missing")))).toMatchObject({ value: null, completeness: "unavailable", sources: [] });
+    expect(await getActiveCustomerMetric(
+      { tenantId: "tenant-1", now, timeZone: "America/Los_Angeles" },
+      loaders(new Error("missing"), new Error("missing"))
+    )).toMatchObject({ value: null, completeness: "unavailable", sources: [] });
   });
 });

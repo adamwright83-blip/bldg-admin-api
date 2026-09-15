@@ -1,5 +1,7 @@
 import { invokeLLM } from "../_core/llm";
 import { ENV } from "../_core/env";
+import { getDashboardTimeZone, zonedYmd } from "../dashboardZoned";
+import { addDaysYmd } from "./businessPeriods";
 import {
   getRevenueSummary,
   getOrderStats,
@@ -129,6 +131,10 @@ export const defaultComposerDeps: ComposerDeps = {
 
 // ── Date validation / clamping (Step 2) ───────────────────────────────────────
 
+export function businessTodayYmd(): string {
+  return zonedYmd(new Date(), getDashboardTimeZone());
+}
+
 export function normalizeRange(range: { start?: string; end?: string }): DateRange {
   // Patch 7: strict ISO date validation with round-trip — reject impossible dates like 2026-02-31
   // that Date.parse normalizes silently (would become 2026-03-03).
@@ -138,9 +144,8 @@ export function normalizeRange(range: { start?: string; end?: string }): DateRan
     return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === s;
   };
 
-  const today = new Date();
-  const fallbackEnd = today.toISOString().slice(0, 10);
-  const fallbackStart = new Date(today.getTime() - 6 * 864e5).toISOString().slice(0, 10);
+  const fallbackEnd = businessTodayYmd();
+  const fallbackStart = addDaysYmd(fallbackEnd, -6);
 
   let start = isISO(range.start) ? range.start : fallbackStart;
   let end = isISO(range.end) ? range.end : fallbackEnd;
@@ -239,6 +244,8 @@ type QueryResults = {
   customerRevenue: CustomerRevenueStats | null;
   comparison: MetricComparison | null;
   completeness: DataCompleteness | null;
+  /** Metrics that failed to load. Never rendered as zero. */
+  unavailable: string[];
 };
 
 function formatCurrency(n: number): string {
@@ -553,6 +560,35 @@ function buildHeadline(results: QueryResults, headlineLabel: string): ComposerHe
 
 // ── Metric execution engine ───────────────────────────────────────────────────
 
+async function settle<T>(
+  label: string,
+  needed: boolean,
+  run: () => Promise<T> | T,
+  unavailable: string[]
+): Promise<T | null> {
+  if (!needed) return null;
+  try {
+    return await run();
+  } catch (error) {
+    console.warn("[Composer] metric unavailable", {
+      label,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    if (!unavailable.includes(label)) unavailable.push(label);
+    return null;
+  }
+}
+
+export function unavailableAnswer(unavailable: string[]): string {
+  return `I couldn't load ${unavailable.join(", ")} reliably right now, so I'm not showing numbers rather than showing zeros. Try again in a moment.`;
+}
+
+function withUnavailableNote(answer: string, unavailable: string[]): string {
+  return unavailable.length
+    ? `${answer} (Not loaded right now: ${unavailable.join(", ")} — unavailable, not zero.)`
+    : answer;
+}
+
 async function executeMetrics(
   tenantId: string,
   plan: PlannerOutput,
@@ -568,6 +604,7 @@ async function executeMetrics(
     customerRevenue: null,
     comparison: null,
     completeness: null,
+    unavailable: [],
   };
 
   const ids = new Set(plan.metricIds);
@@ -582,38 +619,36 @@ async function executeMetrics(
 
   const groupBy = plan.groupBy;
 
+  const unavailable = results.unavailable;
   const [revenue, stats, openOrders, repeatCustomers, customerRevenue, comparison, completeness] =
     await Promise.all([
-      needsRevenue
-        ? source.getRevenueSummary(tenantId, { range, groupBy })
-        : Promise.resolve(null),
-      needsStats
-        ? source.getOrderStats(tenantId, { range })
-        : Promise.resolve(null),
-      needsOpen
-        ? source.getOpenOrderStats(tenantId)
-        : Promise.resolve(null),
-      needsRepeat
-        ? source.getRepeatCustomerStats(tenantId, { range })
-        : Promise.resolve(null),
-      needsCustomerRevenue
-        ? source.getTopCustomersByRevenue(tenantId, { range, limit: 6 })
-        : Promise.resolve(null),
-      needsComparison
-        ? source.getMetricComparison(tenantId, {
+      settle("revenue", needsRevenue, () => source.getRevenueSummary(tenantId, { range, groupBy }), unavailable),
+      settle("order stats", needsStats, () => source.getOrderStats(tenantId, { range }), unavailable),
+      settle("open orders", needsOpen, () => source.getOpenOrderStats(tenantId), unavailable),
+      settle("repeat customers", needsRepeat, () => source.getRepeatCustomerStats(tenantId, { range }), unavailable),
+      settle(
+        "customer revenue",
+        needsCustomerRevenue,
+        () => source.getTopCustomersByRevenue(tenantId, { range, limit: 6 }),
+        unavailable
+      ),
+      settle(
+        "comparison",
+        needsComparison,
+        () =>
+          source.getMetricComparison(tenantId, {
             metricId: plan.metricIds.find((id) => METRICS[id]?.supportsComparison) ?? "revenue_paid_stripe",
             currentRange: range,
             groupBy,
-          })
-        : Promise.resolve(null),
-      needsCompleteness
-        ? source.getDataCompleteness(tenantId)
-        : Promise.resolve(null),
+          }),
+        unavailable
+      ),
+      settle("data completeness", needsCompleteness, () => source.getDataCompleteness(tenantId), unavailable),
     ]);
 
   let customerRevenueWithWindows = customerRevenue;
   if (needsCustomerRevenue && customerRevenue && options?.includeCustomerRevenueWindows) {
-    const today = options.today ?? new Date().toISOString().slice(0, 10);
+    const today = options.today ?? businessTodayYmd();
     const windowSpecs: Array<{ label: string; range: DateRange }> = [
       { label: "Past 7 days", range: daysAgoRange(today, 7) },
       { label: "Past 30 days", range: daysAgoRange(today, 30) },
@@ -621,8 +656,13 @@ async function executeMetrics(
     ];
     const windows = await Promise.all(
       windowSpecs.map(async (spec) => {
-        const stats = await source.getTopCustomersByRevenue(tenantId, { range: spec.range, limit: 1 });
-        const top = stats.customers[0];
+        const stats = await settle(
+          `customer revenue (${spec.label})`,
+          true,
+          () => source.getTopCustomersByRevenue(tenantId, { range: spec.range, limit: 1 }),
+          unavailable
+        );
+        const top = stats?.customers[0];
         return top ? { ...top, label: spec.label, range: spec.range } : null;
       })
     );
@@ -653,19 +693,13 @@ export async function runBoardMeetingSummary(
   }: { tenantId: string; period?: "this_week"; demoMode?: boolean },
   deps: ComposerDeps = defaultComposerDeps
 ): Promise<ComposerAnswer> {
-  const today = new Date();
+  const today = businessTodayYmd();
   const model = ENV.anthropicModel;
   const source = demoMode ? deps.demoSource : deps.liveSource;
 
-  // Monday of this week → today
-  const dayOfWeek = today.getUTCDay();
-  const daysToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  const weekStart = new Date(today);
-  weekStart.setUTCDate(today.getUTCDate() + daysToMon);
-  const range: DateRange = {
-    start: weekStart.toISOString().slice(0, 10),
-    end: today.toISOString().slice(0, 10),
-  };
+  // Business-local Monday of this week → today
+  const dow = new Date(`${today}T00:00:00Z`).getUTCDay();
+  const range: DateRange = { start: addDaysYmd(today, dow === 0 ? -6 : 1 - dow), end: today };
 
   const fixedMetricIds = [
     "revenue_paid_stripe",
@@ -676,11 +710,17 @@ export async function runBoardMeetingSummary(
     "service_mix",
   ];
 
+  const unavailable: string[] = [];
   const [revenue, stats, openOrders, comparison] = await Promise.all([
-    source.getRevenueSummary(tenantId, { range, groupBy: "day" }),
-    source.getOrderStats(tenantId, { range }),
-    source.getOpenOrderStats(tenantId),
-    source.getMetricComparison(tenantId, { metricId: "revenue_paid_stripe", currentRange: range, groupBy: "day" }),
+    settle("revenue", true, () => source.getRevenueSummary(tenantId, { range, groupBy: "day" }), unavailable),
+    settle("order stats", true, () => source.getOrderStats(tenantId, { range }), unavailable),
+    settle("open orders", true, () => source.getOpenOrderStats(tenantId), unavailable),
+    settle(
+      "comparison",
+      true,
+      () => source.getMetricComparison(tenantId, { metricId: "revenue_paid_stripe", currentRange: range, groupBy: "day" }),
+      unavailable
+    ),
   ]);
 
   const results: QueryResults = {
@@ -691,9 +731,18 @@ export async function runBoardMeetingSummary(
     repeatCustomers: null,
     customerRevenue: null,
     completeness: null,
+    unavailable,
   };
 
-  const dataContext = JSON.stringify({ revenue, stats, openOrders, comparison, period, range });
+  const meta: QueryMeta & { dateRange: DateRange } = {
+    ...buildQueryMeta(fixedMetricIds, tenantId, demoMode),
+    dateRange: range,
+  };
+  if (!revenue && !stats && !openOrders && !comparison) {
+    return { answer: unavailableAnswer(unavailable), headline: null, chart: null, table: null, actions: [], meta };
+  }
+
+  const dataContext = JSON.stringify({ revenue, stats, openOrders, comparison, unavailable, period, range });
 
   const answerResult = await deps.invokeLLM({
     tenantId,
@@ -705,8 +754,9 @@ export async function runBoardMeetingSummary(
       {
         role: "system",
         content: [
-          `You are an Operator Analyst for a laundromat. Today is ${today.toISOString().slice(0, 10)}.`,
+          `You are an Operator Analyst for a laundromat. Today is ${today}.`,
           "You are writing a weekly board summary. Only reference numbers from queryResults — never invent.",
+          "If queryResults.unavailable lists a metric, say it could not be loaded. Never describe an unavailable metric as zero.",
           "answer: 3-5 sentences covering revenue, volume, and the single most important operational item.",
           "chartType: choose bar (weekly revenue comparison vs prior week).",
           "headlineLabel: 'This week so far'",
@@ -722,13 +772,8 @@ export async function runBoardMeetingSummary(
     typeof answerContent === "string" ? answerContent : JSON.stringify(answerContent)
   );
 
-  const meta: QueryMeta & { dateRange: DateRange } = {
-    ...buildQueryMeta(fixedMetricIds, tenantId, demoMode),
-    dateRange: range,
-  };
-
   return {
-    answer: llmOutput.answer,
+    answer: withUnavailableNote(llmOutput.answer, unavailable),
     headline: buildHeadline(results, "This week so far"),
     chart: buildChart(results, "bar", fixedMetricIds),
     table: buildTable(results),
@@ -759,7 +804,7 @@ export async function runComposerTurn(
     return runBoardMeetingSummary({ tenantId, demoMode }, deps);
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessTodayYmd();
   const model = ENV.anthropicModel;
   const source = demoMode ? deps.demoSource : deps.liveSource;
 
@@ -819,8 +864,27 @@ export async function runComposerTurn(
     today,
   });
 
+  // Meta is always backend-built; LLM never writes it.
+  const meta: QueryMeta & { dateRange: DateRange } = {
+    ...buildQueryMeta(metricIds, tenantId, demoMode),
+    dateRange: range,
+  };
+  const hasData = [
+    results.revenue,
+    results.stats,
+    results.openOrders,
+    results.repeatCustomers,
+    results.customerRevenue,
+    results.comparison,
+    results.completeness,
+  ].some(Boolean);
+  if (!hasData && results.unavailable.length) {
+    return { answer: unavailableAnswer(results.unavailable), headline: null, chart: null, table: null, actions: [], meta };
+  }
+
   // ── Build data structures deterministically ────────────────────────────────
   const dataContext = JSON.stringify({
+    unavailable: results.unavailable,
     revenue: results.revenue,
     stats: results.stats,
     openOrders: results.openOrders,
@@ -849,6 +913,7 @@ export async function runComposerTurn(
         content: [
           `You are an Operator Analyst for a laundromat. Today is ${today}.`,
           "Only state figures present in queryResults — never estimate or invent numbers.",
+          "If queryResults.unavailable lists a metric, say it could not be loaded right now. Never describe an unavailable metric as zero.",
           "answer: 1-3 plain-English sentences. Format dollars as $1,482.75.",
           `chartType: choose from ${allowedChartTypes.length ? allowedChartTypes.join(", ") : "bar, line, area, pie"}, or 'none' if data is empty.`,
           "headlineLabel: short label for the main metric (e.g. 'Revenue last 7 days').",
@@ -895,11 +960,5 @@ export async function runComposerTurn(
     answer = `${top.customerName} is the top grossing customer ${timeframe}, with ${formatCurrency(top.revenue)} across ${top.orderCount} paid orders. Average order value is ${formatCurrency(top.avgOrderValue)}.${windowCopy}`;
   }
 
-  // Meta is always backend-built; LLM never writes it.
-  const meta: QueryMeta & { dateRange: DateRange } = {
-    ...buildQueryMeta(metricIds, tenantId, demoMode),
-    dateRange: range,
-  };
-
-  return { answer, headline, chart, table, actions, meta };
+  return { answer: withUnavailableNote(answer, results.unavailable), headline, chart, table, actions, meta };
 }

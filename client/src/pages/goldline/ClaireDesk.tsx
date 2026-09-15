@@ -8,6 +8,11 @@ import { trpc } from "@/lib/trpc";
 export default function ClaireDesk() {
   const [utterance, setUtterance] = useState("");
   const [log, setLog] = useState<Array<{ role: "you" | "claire"; text: string }>>([]);
+  const [conversationId] = useState(() =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `desk-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  );
   const preview = trpc.system.claire.previewPreDrive.useQuery(
     { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
     { staleTime: 15_000 }
@@ -25,6 +30,7 @@ export default function ClaireDesk() {
       const result = await talk.mutateAsync({
         utterance: text,
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        conversationId,
       });
       setLog(current => [...current, { role: "claire", text: result.reply }]);
     } catch (error) {
