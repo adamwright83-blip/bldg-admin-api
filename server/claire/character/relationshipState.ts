@@ -36,12 +36,18 @@ export async function getClaireRelationshipState(input: {
   if (!input.operatorUserId) {
     return defaultState(input.tenantId, "unresolved", characterId);
   }
-  const row = await getClaireRelationshipStore().getState({
-    tenantId: input.tenantId,
-    operatorUserId: input.operatorUserId,
-    characterId,
-  });
-  return row ?? defaultState(input.tenantId, input.operatorUserId, characterId);
+  try {
+    const row = await getClaireRelationshipStore().getState({
+      tenantId: input.tenantId,
+      operatorUserId: input.operatorUserId,
+      characterId,
+    });
+    return row ?? defaultState(input.tenantId, input.operatorUserId, characterId);
+  } catch {
+    // Slice 17: missing table, unreachable DB, or wrapped driver errors
+    // never increase disclosure. CI MySQL is live before Claire tables exist.
+    return defaultState(input.tenantId, input.operatorUserId, characterId);
+  }
 }
 
 /**

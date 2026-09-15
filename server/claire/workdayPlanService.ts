@@ -60,20 +60,24 @@ export async function loadConfirmedWorkdayPlan(input: {
 }): Promise<ConfirmedWorkdayPlan | null> {
   const db = await getDb();
   if (!db) return null;
-  const [row] = await db
-    .select()
-    .from(dayDirectorCommitments)
-    .where(
-      and(
-        eq(dayDirectorCommitments.tenantId, input.tenantId),
-        eq(dayDirectorCommitments.actorId, input.actorId),
-        eq(dayDirectorCommitments.businessDate, input.businessDate),
-        eq(dayDirectorCommitments.idempotencyKey, planIdempotencyKey(input.businessDate))
+  try {
+    const [row] = await db
+      .select()
+      .from(dayDirectorCommitments)
+      .where(
+        and(
+          eq(dayDirectorCommitments.tenantId, input.tenantId),
+          eq(dayDirectorCommitments.actorId, input.actorId),
+          eq(dayDirectorCommitments.businessDate, input.businessDate),
+          eq(dayDirectorCommitments.idempotencyKey, planIdempotencyKey(input.businessDate))
+        )
       )
-    )
-    .limit(1);
-  const snapshot = (row?.metadataJson as { snapshot?: ConfirmedWorkdayPlan } | null)?.snapshot;
-  return snapshot && Array.isArray(snapshot.items) ? snapshot : null;
+      .limit(1);
+    const snapshot = (row?.metadataJson as { snapshot?: ConfirmedWorkdayPlan } | null)?.snapshot;
+    return snapshot && Array.isArray(snapshot.items) ? snapshot : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function confirmWorkdayPlan(input: {
