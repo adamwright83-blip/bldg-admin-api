@@ -9,91 +9,61 @@
   <body>
     <main>
       <header>
-        <p class="eyebrow">GUMBALLPALS 0.1.6 · BROWSER CONNECTION</p>
-        <h1>Your real work.<br />Your living city.</h1>
+        <p class="eyebrow">GUMBALLPALS 0.2.0 · CLEAN CLOUD EXPORTER</p>
+        <h1>Export once.<br />Jawbreaker takes it from there.</h1>
         <p>
-          Bring Laundry Farm orders into Goldline. Your gumball login stays
-          in Chrome.
+          Gumball exports the signed-in CleanCloud Orders (Sales) report into
+          <strong>Downloads/Gumball Inbox</strong>. It never imports the file into
+          Goldline itself.
         </p>
       </header>
+
       <section aria-labelledby="connection-title">
-        <h2 id="connection-title">Sync gumball</h2>
+        <h2 id="connection-title">Export Gumball</h2>
         <p id="connection">
-          Connect to your signed-in gumball and Goldline accounts.
+          Connect the signed-in CleanCloud store to its existing Goldline pairing.
         </p>
         <div class="dates">
-          <label>From <input id="from" type="date" required /></label
-          ><label>Through <input id="to" type="date" required /></label>
+          <label>From <input id="from" type="date" required /></label>
+          <label>Through <input id="to" type="date" required /></label>
         </div>
         <p class="hint">
-          Dates use Los Angeles time. Up to 32 days per run. Re-running a period
-          updates matching orders—it does not add duplicate revenue.
+          Dates use Los Angeles time. Up to 32 days per export. Chrome creates the
+          Gumball Inbox automatically. Jawbreaker later validates and imports the
+          completed file independently.
         </p>
-        <button id="start">Connect and prepare sync</button
-        ><button id="cancel" class="secondary" hidden>
-          Cancel before import
-        </button>
-        <div id="approval" hidden>
-          <h3>Confirm the connection</h3>
-          <p id="pair-details"></p>
-          <p>
-            This imports order/customer/payment records into the account shown
-            above. It does not charge customers, edit gumball orders, or send
-            messages.
-          </p>
-          <button id="confirm">Confirm connection and import</button>
-        </div>
+        <button id="start">Export to Gumball Inbox</button>
+        <button id="cancel" class="secondary" hidden>Cancel export</button>
         <p id="status" role="status" aria-live="polite">Ready when you are.</p>
-        <button id="check" class="secondary" hidden>
-          Check interrupted import
-        </button>
       </section>
-      <section id="receipt" hidden aria-labelledby="receipt-title">
-        <h2 id="receipt-title">Sync receipt</h2>
-        <p id="receipt-summary"></p>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Building</th>
-                <th>Payment date</th>
-                <th>Paid orders</th>
-                <th>Amount</th>
-              </tr>
-            </thead>
-            <tbody id="totals"></tbody>
-          </table>
-        </div>
-        <p id="receipt-scope" class="hint"></p>
-        <p id="receipt-time"></p>
-        <a
-          href="https://admin.bldg.chat/growth/tower-wars"
-          target="_blank"
-          rel="noopener"
-          >Open Tower Wars</a
-        >
-        ·
-        <a
-          href="https://admin.bldg.chat/growth/lantern-city"
-          target="_blank"
-          rel="noopener"
-          >Open Lantern City</a
-        >
-      </section>
+
       <section aria-labelledby="schedule-title">
-        <h2 id="schedule-title">A daily pulse</h2>
-        <p>Automatically sync at 6:00 PM Los Angeles time. Chrome must be running and both accounts signed in. Missed runs catch up when Chrome reopens. First complete a manual import to verify your account and store.</p>
-        <button id="enable-schedule">Enable daily sync for this paired account</button>
-        <button id="disable-schedule" class="secondary">Pause daily sync</button>
-        <p id="schedule-status" role="status">Daily sync is off.</p>
+        <h2 id="schedule-title">A daily export</h2>
+        <p>
+          Automatically export today's Orders (Sales) at 6:00 PM Los Angeles
+          time. Chrome must be running and CleanCloud and Goldline must remain
+          signed in. A missed run catches up when Chrome reopens. Complete one
+          manual export first to verify the paired store.
+        </p>
+        <button id="enable-schedule">Enable daily Gumball export</button>
+        <button id="disable-schedule" class="secondary">Pause daily export</button>
+        <p id="schedule-status" role="status">Daily export is off.</p>
       </section>
+
+      <section aria-labelledby="boundary-title">
+        <h2 id="boundary-title">The handoff</h2>
+        <p>
+          <strong>Gumball succeeds when Chrome finishes the actual file in Gumball Inbox.</strong>
+          Jawbreaker has a separate success/failure record for importing that artifact.
+          Export success never means import success.
+        </p>
+      </section>
+
       <footer>
-        Keep this tab open while syncing. A normal gumball report download
-        may remain in Chrome; you never need to upload or manage it. No
-        paid gumball API. Scheduled runs open a sync tab automatically.
-        <button id="disconnect" class="secondary">
-          Disconnect this browser
-        </button>
+        Gumball does not re-fetch the CSV, parse it, or keep an import transaction
+        alive in this browser tab. The completed source file remains visible in
+        Downloads/Gumball Inbox for Jawbreaker.
+        <button id="disconnect" class="secondary">Disconnect this browser</button>
       </footer>
     </main>
     <script type="module" src="sync.js"></script>
