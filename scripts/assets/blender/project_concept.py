@@ -92,9 +92,15 @@ def project(obj, concept_path, yaw, elev):
 
     weight = (facing * visible * a_samp).astype(np.float32)
 
-    # concept's mean colour over its opaque body, for calming the fallback
+    # Fallback colour for surfaces the concept cannot see. The mean of ALL opaque
+    # pixels averages green feathers, red face, white lips and brown leather
+    # into khaki, and the first render's back half came out stone-grey. Take
+    # the dominant feather green only: pixels where green clearly leads.
     body = rgba[alpha > 0.5][:, :3]
-    mean_body = body.mean(0)
+    r, g, b = body[:, 0], body[:, 1], body[:, 2]
+    feathers = body[(g > r * 1.12) & (g > b * 1.25) & (g > 0.12)]
+    mean_body = feathers.mean(0) if len(feathers) > 500 else body.mean(0)
+    print("FALLBACK feathers=%d rgb=%s" % (len(feathers), np.round(mean_body, 3)))
 
     # write per-vertex attributes the shader reads
     for name, data, dtype in (("proj_uv", np.stack([u_px / W, 1 - v_px / H], 1).ravel(), "FLOAT2"),
@@ -106,7 +112,7 @@ def project(obj, concept_path, yaw, elev):
     return img, mean_body, float((weight > 0.5).mean())
 
 
-def projection_material(obj, concept_img, mean_body, calm=0.45):
+def projection_material(obj, concept_img, mean_body, calm=0.72):
     old = obj.material_slots[0].material if obj.material_slots else None
     gen_img = None
     if old and old.use_nodes:
