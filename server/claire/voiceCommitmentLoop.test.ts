@@ -57,6 +57,23 @@ describe("detectConfirmation", () => {
   });
 });
 
+const realGreystarUtterance =
+  "And then I have to go to three additional grey star properties, to pitch the general managers and that is part of the Gold Line. Coliseum Kingdom challenge in order to";
+
+describe("existing initiative vs new work (Part 4 regression — production defect)", () => {
+  it("does not treat 'part of the ... challenge' phrasing as new work, even with add-work language present", () => {
+    expect(detectAddWorkIntent(realGreystarUtterance)).toBe(false);
+  });
+
+  it("does not treat 'remain' phrasing as new work", () => {
+    expect(detectAddWorkIntent("I still have three properties remaining on that campaign")).toBe(false);
+  });
+
+  it("genuinely new work with no existing-initiative language still triggers normally", () => {
+    expect(detectAddWorkIntent(zeelyUtterance)).toBe(true);
+  });
+});
+
 describe("handleVoiceCommitmentTurn — the only mutation surface for a live call", () => {
   it("A — a proposal is generated from the verbatim Zeely comparison request, and nothing is persisted yet", async () => {
     const propose = vi.fn().mockResolvedValue(proposalFixture());
@@ -168,5 +185,22 @@ describe("handleVoiceCommitmentTurn — the only mutation surface for a live cal
     expect(accept).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: "tenant-from-token", actorId: "operator-from-token" })
     );
+  });
+
+  it("HARD TRUTH RULE — a failed acceptProposal never produces an 'accepted'/saved result; the caller must not speak success", async () => {
+    const accept = vi.fn().mockRejectedValue(new Error("Database not available"));
+    const state: PendingProposalState = { pendingProposal: proposalFixture() };
+    await expect(
+      handleVoiceCommitmentTurn(
+        { tenantId: "tenant-1", actorId: "operator-1", businessDate: "2026-09-14", utterance: "yes", state },
+        { accept }
+      )
+    ).rejects.toThrow("Database not available");
+    // The pending proposal was already cleared (so a retry can't double-fire),
+    // but no "accepted"/"speak: Added..." result was ever produced — the
+    // caller (claireTwilio.ts) falls through to its existing generic error
+    // TwiML, never a success message, because this function threw instead
+    // of returning a kind:"accepted" result.
+    expect(state.pendingProposal).toBeNull();
   });
 });
