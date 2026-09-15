@@ -127,6 +127,11 @@ export function orientationTelemetry(context: ClaireDriveContext, fallbackUsed: 
     tomorrowItemCounts: context.workPicture?.tomorrow.counts ?? null,
     campaignName: context.campaign?.campaignName ?? null,
     campaignRemainingCount: context.campaign?.remainingCount ?? null,
+    pictureSufficient: context.runtime?.picture.sufficient ?? null,
+    pictureReason: context.runtime?.picture.reason ?? null,
+    needsDetailsCount: context.runtime?.workItems.filter(item => item.detailState === "NEEDS_DETAILS").length ?? 0,
+    missionSalesBriefId: context.missionSalesBrief?.briefId ?? null,
+    missionSalesBriefVersion: context.missionSalesBrief?.version ?? null,
     fallbackUsed,
   };
 }

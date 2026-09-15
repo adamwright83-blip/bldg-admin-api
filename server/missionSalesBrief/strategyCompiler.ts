@@ -144,6 +144,31 @@ export function deterministicFallbackStrategy(
  * the deterministic strategy on any failure so the operator's workday is
  * never blocked by a model failure.
  */
+function hasUnsupportedBusinessFact(
+  parsed: z.infer<typeof strategySchema>,
+  evidence: MissionSalesBriefEvidence,
+  knownFacts: MissionSalesBriefFact[]
+): boolean {
+  const corpus = JSON.stringify({
+    knownFacts,
+    priorOutcomes: evidence.priorOutcomes,
+    mission: evidence.mission,
+    currentVisitOutcome: evidence.currentVisitOutcome,
+  }).toLowerCase();
+  const claims = [
+    parsed.primaryObjective,
+    parsed.successDefinition,
+    ...parsed.questionsToAsk,
+    ...parsed.thingsToAvoid,
+    ...parsed.actionsToTake,
+  ]
+    .join(" ")
+    .toLowerCase();
+  if (/\bobject(?:ion|ed)\b/.test(claims) && !/\bobject/.test(corpus)) return true;
+  if (/\bcompetitor/.test(claims) && !/\bcompetitor/.test(corpus)) return true;
+  return false;
+}
+
 export async function compileMissionSalesStrategy(input: {
   tenantId: string;
   evidence: MissionSalesBriefEvidence;
@@ -187,6 +212,9 @@ export async function compileMissionSalesStrategy(input: {
       JSON.parse(typeof text === "string" ? text : "")
     );
     if (!parsed.success) return fallback;
+    if (hasUnsupportedBusinessFact(parsed.data, input.evidence, input.knownFacts)) {
+      return fallback;
+    }
     return {
       recommendedApproach: {
         primaryObjective: parsed.data.primaryObjective,

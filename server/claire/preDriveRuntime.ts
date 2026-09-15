@@ -71,5 +71,20 @@ export async function previewClairePreDrive(
       familiarity: relationshipState.familiarity,
     },
     writesBusinessTruth: false as const,
+    clock: generated.context.clock ?? null,
+    macroGoal: generated.context.macroGoal
+      ? {
+          id: generated.context.macroGoal.id,
+          objective: generated.context.macroGoal.objective,
+          targetValue: generated.context.macroGoal.targetValue,
+          unit: generated.context.macroGoal.unit,
+        }
+      : null,
+    campaign: generated.context.campaign ?? null,
+    runtime: generated.context.runtime ?? null,
+    missionSalesBrief: generated.context.missionSalesBrief ?? null,
+    verifiedMetricsPresent: Boolean(generated.context.verifiedMetrics),
+    needsDetailsActions:
+      generated.context.runtime?.workItems.filter(item => item.detailState === "NEEDS_DETAILS") ?? [],
   };
 }

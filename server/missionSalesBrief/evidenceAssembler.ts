@@ -24,6 +24,7 @@ export type MissionSalesBriefEvidence = {
     notes: string | null;
     decisionMakerStatus: string;
     followUpAt: string | null;
+    recordedAt: string | null;
   } | null;
   /** Other missions for the same account, most recent first, excluding the current mission. */
   priorOutcomes: MissionSalesBriefFact[];
@@ -126,6 +127,7 @@ export async function assembleMissionSalesBriefEvidence(input: {
         notes: state.visitOutcome.notes ?? null,
         decisionMakerStatus: state.visitOutcome.decisionMakerStatus,
         followUpAt: state.visitOutcome.followUpAt ?? null,
+        recordedAt: state.visitOutcome.createdAt ?? null,
       }
     : null;
 
@@ -157,6 +159,8 @@ export async function assembleMissionSalesBriefEvidence(input: {
     mission.updatedAt,
     state.field?.arrivedAt ?? null,
     state.field?.departedAt ?? null,
+    currentVisitOutcome?.followUpAt ?? null,
+    currentVisitOutcome?.recordedAt ?? null,
   ]
     .filter((value): value is string => Boolean(value))
     .sort()

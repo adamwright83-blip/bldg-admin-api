@@ -140,7 +140,9 @@ function StopCard({
 }) {
   return (
     <article
-      className={`gdp-stop gdp-stop--${stop.kind} gdp-stop--${stop.status} gdp-stop--${index % 2 ? "right" : "left"}`}
+      className={`gdp-stop gdp-stop--${stop.kind} gdp-stop--${stop.status} gdp-stop--${index % 2 ? "right" : "left"}${
+        stop.attentionState === "needs_details" ? " gdp-stop--needs-details" : ""
+      }`}
       data-testid={`day-plan-stop-${stop.id}`}
     >
       <div className="gdp-node" aria-hidden="true">
@@ -154,7 +156,9 @@ function StopCard({
               ? "SEALED"
               : stop.status === "blocked"
                 ? "BLOCKED"
-                : "OPEN"}
+                : stop.attentionState === "needs_details"
+                  ? "NEEDS DETAILS"
+                  : "OPEN"}
           </strong>
         </div>
         <h2>

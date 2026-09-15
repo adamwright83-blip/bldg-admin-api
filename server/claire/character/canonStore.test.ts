@@ -84,4 +84,16 @@ describe("I/J/K/L — canon retrieval gating", () => {
     expect(facts.join(" ")).not.toMatch(/childhood/i);
     expect(facts.join(" ")).not.toMatch(/six-year/i);
   });
+
+  it("explicit personal question in field mode retrieves only the matching eligible topic", () => {
+    const facts = eligibleClaireCanonFacts({
+      disclosureTier: 3,
+      mode: "pre_drive",
+      fieldOverride: true,
+      explicitlyRequestedTopic: "father",
+    });
+    expect(facts.join(" ")).toMatch(/father/i);
+    expect(facts.join(" ")).not.toMatch(/six-year/i);
+    expect(facts.join(" ")).not.toMatch(/last exchange/i);
+  });
 });

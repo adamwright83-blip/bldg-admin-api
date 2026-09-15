@@ -98,16 +98,29 @@ export async function getDayDirectorState(input: {
           address: locations[0].address,
         }
       : null,
-    commitments: commitments.map(row => ({
-      id: row.id,
-      businessDate: row.businessDate,
-      title: row.title,
-      kind: row.kind,
-      quantity: row.quantity,
-      provenance: row.provenance,
-      status: row.status,
-      completedAt: row.completedAt?.toISOString() ?? null,
-    })),
+    commitments: commitments.map(row => {
+      const metadata =
+        row.metadataJson && typeof row.metadataJson === "object"
+          ? (row.metadataJson as Record<string, unknown>)
+          : {};
+      const detailState =
+        metadata.detailState === "NEEDS_DETAILS" ? "NEEDS_DETAILS" : "COMPLETE";
+      return {
+        id: row.id,
+        businessDate: row.businessDate,
+        title: row.title,
+        kind: row.kind,
+        quantity: row.quantity,
+        provenance: row.provenance,
+        status: row.status,
+        completedAt: row.completedAt?.toISOString() ?? null,
+        detailState,
+        missingDetails: Array.isArray(metadata.missingDetails)
+          ? metadata.missingDetails.map(String)
+          : [],
+        detailNote: typeof metadata.detailNote === "string" ? metadata.detailNote : null,
+      };
+    }),
     dismissedPromptKeys: prompts.map(row => row.promptKey),
     intelligenceAvailable: Boolean(ENV.anthropicApiKey?.trim()),
   };
@@ -207,6 +220,9 @@ export async function acceptProposal(input: {
     metadataJson: {
       prerequisites: input.proposal.prerequisites,
       intelligence: input.proposal.intelligence,
+      detailState: input.proposal.detailState ?? "COMPLETE",
+      missingDetails: input.proposal.missingDetails ?? [],
+      detailNote: input.proposal.detailNote ?? null,
     },
   };
   await db
@@ -309,3 +325,52 @@ export async function completeDayDirectorCommitment(input: {
     return { ok: true as const, alreadyCompleted };
   });
 }
+
+export async function updateDayDirectorCommitment(input: {
+  tenantId: string;
+  actorId: string;
+  commitmentId: string;
+  patch: {
+    detailState?: "COMPLETE" | "NEEDS_DETAILS";
+    missingDetails?: string[];
+    detailNote?: string | null;
+    scheduleKind?: string;
+    scheduleLabel?: string | null;
+  };
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [existing] = await db
+    .select()
+    .from(dayDirectorCommitments)
+    .where(
+      and(
+        eq(dayDirectorCommitments.tenantId, input.tenantId),
+        eq(dayDirectorCommitments.actorId, input.actorId),
+        eq(dayDirectorCommitments.id, input.commitmentId)
+      )
+    )
+    .limit(1);
+  if (!existing) throw new Error("Day Director commitment not found");
+  const current =
+    existing.metadataJson && typeof existing.metadataJson === "object"
+      ? (existing.metadataJson as Record<string, unknown>)
+      : {};
+  await db
+    .update(dayDirectorCommitments)
+    .set({
+      metadataJson: {
+        ...current,
+        ...input.patch,
+      },
+    })
+    .where(
+      and(
+        eq(dayDirectorCommitments.tenantId, input.tenantId),
+        eq(dayDirectorCommitments.actorId, input.actorId),
+        eq(dayDirectorCommitments.id, input.commitmentId)
+      )
+    );
+  return { ok: true as const, id: existing.id };
+}
+

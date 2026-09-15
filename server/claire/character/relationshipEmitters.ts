@@ -72,7 +72,7 @@ export async function recordQualifyingClaireInteraction(input: {
   return appendAndRecompute({
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
-    eventType: "operator_follow_through",
+    eventType: "call_completed",
     summary: "Completed a pre-drive Claire call.",
     provenance: "pre_drive_call",
     relatedEntityType: "claire_conversation",

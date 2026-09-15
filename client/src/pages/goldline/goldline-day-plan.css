@@ -310,6 +310,14 @@
     0 0 18px #ffc85866,
     0 5px 15px #071b1b88;
 }
+.gdp-stop--needs-details {
+  border-color: #e6b350;
+  box-shadow:
+    inset 0 0 0 3px #fff5d199,
+    0 0 18px #ffc85866,
+    0 5px 15px #071b1b88;
+  background: linear-gradient(112deg, #fff6d8f7, #f3e3a8f5);
+}
 .gdp-node {
   position: absolute;
   left: -17px;

@@ -14,6 +14,11 @@ vi.mock("./evidenceAssembler", () => ({
 vi.mock("./salesIntelEligibility", () => ({
   listEligibleSalesIntel: mocks.listEligibleSalesIntel,
   selectRelevantSalesIntel: mocks.selectRelevantSalesIntel,
+  selectSalesIntelWithAudit: (input: { eligible: unknown[]; situationText: string }) => ({
+    selected: mocks.selectRelevantSalesIntel(input),
+    considered: [],
+    excluded: [],
+  }),
 }));
 vi.mock("./strategyCompiler", () => ({
   compileMissionSalesStrategy: mocks.compileMissionSalesStrategy,
@@ -108,7 +113,7 @@ describe("MissionSalesBrief service — end to end (in-memory store)", () => {
 
     mocks.assembleMissionSalesBriefEvidence.mockResolvedValueOnce(
       baseEvidence({
-        currentVisitOutcome: { outcome: "follow_up", notes: "Corporate must approve all vendors.", decisionMakerStatus: "met", followUpAt: null },
+        currentVisitOutcome: { outcome: "follow_up", notes: "Corporate must approve all vendors.", decisionMakerStatus: "met", followUpAt: null, recordedAt: "2026-01-02T00:00:00.000Z" },
         evidenceThrough: "2026-01-02T00:00:00.000Z",
       })
     );

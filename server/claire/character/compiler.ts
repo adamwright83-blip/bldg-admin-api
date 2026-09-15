@@ -14,12 +14,20 @@ import type {
  * when the compiler's composition logic changes even if canon/DNA didn't
  * (Slice 1).
  */
-export const CLAIRE_COMPILER_VERSION = "claire-runtime-1";
+export const CLAIRE_COMPILER_VERSION = "claire-runtime-2";
 
-function summarizeSharedHistory(events: ClaireRelationshipEvent[]): string[] {
-  // Bounded: prompt-time retrieval takes at most the 5 most recent events,
-  // never a full transcript dump (Slice 4).
-  return events.slice(-5).map(event => event.summary);
+function summarizeSharedHistory(
+  events: ClaireRelationshipEvent[],
+  topic?: string
+): string[] {
+  const ranked = topic
+    ? [...events].sort((left, right) => {
+        const leftHit = left.summary.toLowerCase().includes(topic) ? 1 : 0;
+        const rightHit = right.summary.toLowerCase().includes(topic) ? 1 : 0;
+        return rightHit - leftHit;
+      })
+    : events;
+  return ranked.slice(-5).map(event => event.summary);
 }
 
 /**
@@ -37,7 +45,10 @@ export function compileClaireCharacterContext(input: {
 }): ClaireCompiledContext {
   const modePolicy = CLAIRE_CHARACTER_DEFINITION.modes[input.mode];
   const recentEvents = input.recentSharedHistory.slice(-5);
-  const sharedHistorySummaries = summarizeSharedHistory(input.recentSharedHistory);
+  const sharedHistorySummaries = summarizeSharedHistory(
+    input.recentSharedHistory,
+    input.explicitlyRequestedTopic
+  );
   const sharedHistoryEventIds = recentEvents.map(event => event.id);
   const eligibleCanonFragments = retrieveEligibleClaireCanon({
     disclosureTier: input.relationshipState.disclosureTier,
@@ -56,7 +67,7 @@ export function compileClaireCharacterContext(input: {
       `Durable shared history with this operator (most recent last, use only if relevant, never contradict it): ${sharedHistorySummaries.join(" | ")}`
     );
   }
-  if (eligibleCanonFacts.length && !modePolicy.fieldOverride) {
+  if (eligibleCanonFacts.length && (!modePolicy.fieldOverride || input.explicitlyRequestedTopic)) {
     lines.push(
       `Eligible personal canon at this operator's disclosure tier (${input.relationshipState.disclosureTier}) — reveal only if it naturally fits, never force it: ${eligibleCanonFacts.join(" | ")}`
     );

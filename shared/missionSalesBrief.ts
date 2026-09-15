@@ -79,8 +79,11 @@ export type MissionSalesBrief = {
 
   salesIntel: {
     includedIntelIds: string[];
+    teachingId: string | null;
     frameworkId: string | null;
     rationale: string | null;
+    considered: Array<{ id: string; reason: string }>;
+    excluded: Array<{ id: string; reason: string }>;
   };
 
   provenance: {

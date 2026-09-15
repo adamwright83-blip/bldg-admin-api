@@ -7,6 +7,9 @@ export type DayDirectorCommitment = {
   provenance: "user_reported" | "manual";
   status: "open" | "completed";
   completedAt: string | null;
+  detailState?: "COMPLETE" | "NEEDS_DETAILS";
+  missingDetails?: string[];
+  detailNote?: string | null;
 };
 
 export type DayDirectorProposal = {
@@ -18,6 +21,9 @@ export type DayDirectorProposal = {
   prerequisites: string[];
   question: string | null;
   intelligence: "anthropic" | "manual_fallback";
+  detailState?: "COMPLETE" | "NEEDS_DETAILS";
+  missingDetails?: string[];
+  detailNote?: string | null;
 };
 
 export type ProcessingLocation = {

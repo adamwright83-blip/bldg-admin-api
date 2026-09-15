@@ -169,6 +169,7 @@ describe("Claire Pass 2 — the one true end-to-end loop", () => {
         notes: "Dana said corporate has to approve every resident vendor.",
         decisionMakerStatus: "met",
         followUpAt: null,
+        recordedAt: "2026-01-02T00:00:00.000Z",
       },
       priorOutcomes: [],
       knownFacts: [
@@ -220,6 +221,7 @@ describe("Claire Pass 2 — the one true end-to-end loop", () => {
         notes: "Dana said corporate has to approve every resident vendor.",
         decisionMakerStatus: "met",
         followUpAt: null,
+        recordedAt: "2026-01-02T00:00:00.000Z",
       },
       priorOutcomes: [],
       knownFacts: v2!.knownFacts,

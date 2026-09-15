@@ -10,6 +10,8 @@ import {
   safeClaireFailureReason,
   type ClaireGenerationDiagnostic,
 } from "./generationTelemetry";
+import { assembleClaireRuntimeView } from "./runtimeView";
+import { CLAIRE_V1_REASONING_POLICY } from "../../shared/claireRuntime";
 
 /**
  * Assembles the compact character context for a given phase/operator.
@@ -103,6 +105,7 @@ function resultText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
 }
 
 function compactContext(context: ClaireDriveContext): string {
+  const runtime = context.runtime ?? assembleClaireRuntimeView(context);
   return JSON.stringify({
     businessDate: context.businessDate,
     clock: context.clock,
@@ -116,6 +119,18 @@ function compactContext(context: ClaireDriveContext): string {
     relevantTimeline: context.relevantTimeline,
     mission: context.mission,
     missionSalesBrief: context.missionSalesBrief,
+    picture: runtime.picture,
+    workItems: runtime.workItems.map(item => ({
+      id: item.id,
+      title: item.title,
+      category: item.category,
+      staleness: item.staleness,
+      ageDays: item.ageDays,
+      permissionLevel: item.permissionLevel,
+      detailState: item.detailState,
+      alreadyExists: item.alreadyExists,
+      relationToMacroGoal: item.relationToMacroGoal,
+    })),
   });
 }
 
@@ -146,10 +161,13 @@ export function buildClaireOpeningFallback(context: ClaireDriveContext): string 
     return lines.slice(0, 3).join(" ");
   }
   lines.push(`${targetPhrase(goal.targetValue, goal.unit)} is still the target.`);
+  const runtime = context.runtime ?? assembleClaireRuntimeView(context);
   if (metric?.completeness === "complete" && metric.value !== null) {
     lines.push(`The verified 30-calendar-day active-customer count is ${metric.value}.`);
   } else if (metric?.completeness === "partial" && metric.value !== null) {
     lines.push(`I can verify ${metric.value} from ${metric.sources.join(" and ")}, but that is not the full active-customer total.`);
+  } else if (!runtime.picture.sufficient) {
+    lines.push(runtime.picture.summary);
   } else if (campaign?.active && campaign.remainingCount > 0) {
     lines.push(`${campaign.remainingCount} Greystar property visits remain open.`);
   } else if (tomorrow) {
@@ -229,7 +247,8 @@ export async function writeClairePreDriveBrief(
               "You are Claire, Goldline's concise operations partner calling before a drive.",
               "Use only the supplied business context. Never invent a customer, outcome, deadline, address, revenue, commitment, or completed action.",
               "The game cannot create business truth. Derived suggestions are suggestions, never facts.",
-              "This is an orientation brief, not a coaching conversation. Use the supplied clock, macro goal, verified metric, work picture, and campaign state only.",
+              "This is an orientation brief from a strategic operating partner. Use the supplied clock, macro goal, verified metric, work picture, campaign, and runtime picture only.",
+              CLAIRE_V1_REASONING_POLICY,
               "Every factual clause must map directly to a supplied field. Omit missing facts. Never calculate a metric or infer a total.",
               "If fieldSalesDayState is winding_down or over, distinguish property-visit viability from remote calls, follow-ups, research, or tomorrow's field opportunity when those items exist.",
               "For a partial active-customer metric, state only the verified subset and explicitly say it is not the full total. For unavailable, omit the count.",

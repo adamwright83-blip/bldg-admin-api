@@ -47,12 +47,13 @@ describe("Claire natural-language generation", () => {
       "Do not introduce yourself"
     );
     expect(request.messages[0].content).toContain("never exceed 70 words");
-    expect(JSON.parse(request.messages[1].content)).toEqual({
+    expect(JSON.parse(request.messages[1].content)).toMatchObject({
       businessDate: context.businessDate,
       nextFixedCommitment: context.nextFixedCommitment,
       blockers: context.blockers,
       relevantTimeline: context.relevantTimeline,
       mission: context.mission,
+      picture: { sufficient: true },
     });
     expect(recordGeneration).toHaveBeenCalledWith(
       expect.objectContaining({

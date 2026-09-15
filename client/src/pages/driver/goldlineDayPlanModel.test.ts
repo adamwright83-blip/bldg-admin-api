@@ -407,6 +407,31 @@ describe("Day Director commitments (incl. Claire voice commitments) reach the Dr
     });
     expect(plan.stops.some(s => s.id === "commitment-commitment-2")).toBe(true);
   });
+
+  it("NEEDS_DETAILS projects as needs-attention presentation, not a new status", () => {
+    const plan = buildDayPlanProjection({
+      businessDate: "2026-09-14",
+      commitments: [
+        {
+          id: "commitment-details",
+          businessDate: "2026-09-14",
+          title: "Research Zeely and alternatives",
+          kind: "growth",
+          quantity: null,
+          provenance: "user_reported",
+          status: "open",
+          completedAt: null,
+          detailState: "NEEDS_DETAILS",
+          missingDetails: ["comparison criteria"],
+          detailNote: "Preserved with incomplete details",
+        },
+      ],
+    });
+    const stop = plan.stops.find(s => s.id === "commitment-commitment-details");
+    expect(stop?.attentionState).toBe("needs_details");
+    expect(stop?.status).toBe("upcoming");
+    expect(stop?.whySurfaced).toMatch(/Needs details/i);
+  });
 });
 
 describe("commercial-mission linkage survives the living-world projection", () => {

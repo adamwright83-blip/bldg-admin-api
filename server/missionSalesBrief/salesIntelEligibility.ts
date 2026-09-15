@@ -27,6 +27,12 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
   closing: ["close", "sign", "commit", "approve"],
 };
 
+export type SalesIntelSelectionAudit = {
+  selected: MissionSalesBriefIntelReference | null;
+  considered: Array<{ id: string; reason: string }>;
+  excluded: Array<{ id: string; reason: string }>;
+};
+
 /**
  * Relevance selection (Slice 5) + one-framework-maximum (Slice 7). Never
  * stacks multiple teachings — returns at most one, and only when a
@@ -35,26 +41,52 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
  * eligible intel exists. Returns null when nothing materially fits —
  * that is a valid, often-preferable answer.
  */
-export function selectRelevantSalesIntel(input: {
+export function selectSalesIntelWithAudit(input: {
   eligible: SalesIntelTeaching[];
   situationText: string;
-}): MissionSalesBriefIntelReference | null {
+}): SalesIntelSelectionAudit {
   const haystack = input.situationText.toLowerCase();
+  const considered: Array<{ id: string; reason: string }> = [];
+  const excluded: Array<{ id: string; reason: string }> = [];
   let best: { teaching: SalesIntelTeaching; score: number } | null = null;
 
   for (const teaching of input.eligible) {
+    considered.push({ id: teaching.id, reason: `eligible ${teaching.category}` });
     const keywords = CATEGORY_KEYWORDS[teaching.category] ?? [];
     const matchCount = keywords.filter(keyword => haystack.includes(keyword)).length;
-    if (matchCount === 0) continue;
+    if (matchCount === 0) {
+      excluded.push({ id: teaching.id, reason: "no material category match" });
+      continue;
+    }
     const score = matchCount * 10 + (teaching.confidence ?? 0);
     if (!best || score > best.score) best = { teaching, score };
   }
 
-  if (!best) return null;
+  if (best) {
+    for (const teaching of input.eligible) {
+      if (teaching.id !== best.teaching.id && !excluded.some(entry => entry.id === teaching.id)) {
+        excluded.push({ id: teaching.id, reason: "one teaching maximum" });
+      }
+    }
+  }
+
   return {
-    teachingId: best.teaching.id,
-    category: best.teaching.category,
-    title: best.teaching.title,
-    rationale: `Matched the mission's situation (category: ${best.teaching.category}).`,
+    selected: best
+      ? {
+          teachingId: best.teaching.id,
+          category: best.teaching.category,
+          title: best.teaching.title,
+          rationale: `Matched the mission's situation (category: ${best.teaching.category}).`,
+        }
+      : null,
+    considered,
+    excluded,
   };
+}
+
+export function selectRelevantSalesIntel(input: {
+  eligible: SalesIntelTeaching[];
+  situationText: string;
+}): MissionSalesBriefIntelReference | null {
+  return selectSalesIntelWithAudit(input).selected;
 }
