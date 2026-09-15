@@ -45,6 +45,10 @@ export type FieldTodayItem = {
   money: ProvenancedValue<number> | null;
   verificationClass: VerificationClass;
   actions: Array<{ type: string; label: string; href: string | null; mutation: string | null }>;
+  /** Preserved so downstream projections (day-plan stops, Claire) can still open the real commercial mission. Null/absent when this item isn't tied to one. */
+  missionId?: number | null;
+  pipelineId?: number | null;
+  destinationPath?: string | null;
 };
 
 export type FieldTodayProjection = {

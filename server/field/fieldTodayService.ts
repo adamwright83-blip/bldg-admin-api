@@ -205,6 +205,9 @@ export async function getFieldToday(input: {
       money: item.estimatedValueCents == null ? null : deterministicEstimate(item.estimatedValueCents, `commercial_pipeline_records:${item.pipelineId}`, "medium"),
       verificationClass: "VERIFIED",
       actions: [{ type: "open", label: "Open", href: item.destinationPath, mutation: null }],
+      missionId: item.missionId ?? null,
+      pipelineId: item.pipelineId ?? null,
+      destinationPath: item.destinationPath ?? null,
     });
   }
   const openRecoveries = recoveries.filter(item =>

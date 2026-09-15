@@ -9,7 +9,7 @@ import {
 import { writeClairePreDriveBrief } from "./reasoning";
 
 export async function generateClairePreDriveOutput(
-  input: { tenantId: string; actorId: string; timeZone?: string },
+  input: { tenantId: string; actorId: string; timeZone?: string; missionId?: number },
   dependencies: {
     assemble?: typeof assembleClaireDriveContext;
     writeBrief?: typeof writeClairePreDriveBrief;
@@ -22,6 +22,7 @@ export async function generateClairePreDriveOutput(
     actorId: input.actorId,
     phase: "pre_drive",
     timeZone: input.timeZone,
+    missionId: input.missionId,
   });
   let diagnostic: ClaireGenerationDiagnostic | undefined;
   const brief = await writeBrief({
@@ -42,6 +43,7 @@ export async function previewClairePreDrive(
     tenantId: string;
     actorId: string;
     timeZone?: string;
+    missionId?: number;
   },
   dependencies: Parameters<typeof generateClairePreDriveOutput>[1] = {}
 ) {
