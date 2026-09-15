@@ -16,6 +16,7 @@ export type VendorResponseSnapshot = {
   direction?: string | null;
   channel?: string | null;
   eventStatus?: string | null;
+  eventType?: string | null;
   occurredAt?: Date | null;
   summary: string;
   rawPayload: Record<string, unknown>;

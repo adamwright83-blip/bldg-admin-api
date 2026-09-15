@@ -9,9 +9,31 @@ export type TimePocket = {
   minutes: number | null;
   kind: "between_stops" | "open_ended";
   boundedBy: { before: string | null; after: string | null };
+  /** Named safety reserve. Not verified travel duration. */
   travelReserveMinutes: number;
+  /**
+   * Named conservative deduction when stop service duration is unknown.
+   * Null when no between-stops pocket exists.
+   */
+  unknownStopWorkReserveMinutes: number | null;
   usableMinutes: number | null;
   confidence: "high" | "low";
+  warnings: string[];
+};
+
+export type RankFactor = {
+  name: string;
+  value: string | number | boolean | null;
+  source: string;
+  effect: number;
+  confidence: "high" | "low" | "unknown";
+};
+
+export type MissionRankEvidence = {
+  campaignId: string;
+  score: number;
+  confidence: "high" | "low";
+  factors: RankFactor[];
   warnings: string[];
 };
 
@@ -40,6 +62,7 @@ export type MissionSelection = {
   completionCondition: string;
   pocket: TimePocket;
   isFallbackVariant: boolean;
+  rankEvidence: MissionRankEvidence;
 };
 
 export type MissionPlanOutcome =
@@ -49,17 +72,20 @@ export type MissionPlanOutcome =
       fallback: MissionSelection;
       explanation: string;
       intelligence: "deterministic" | "anthropic" | "deterministic_fallback";
+      ranking: MissionRankEvidence[];
     }
   | {
       status: "fallback_only";
       fallback: MissionSelection;
       reason: FallbackOnlyReason;
       explanation: string;
+      ranking: MissionRankEvidence[];
     }
   | {
       status: "no_plan";
       reason: NoPlanReason;
       remedy: string;
+      ranking?: MissionRankEvidence[];
     };
 
 export type MissionDirectorPlan = {

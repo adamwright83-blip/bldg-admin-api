@@ -117,7 +117,7 @@ export type GoldlineVisitEvidence = {
   visitOutcomeId: number;
   missionId: number;
   recordedBy: string;
-  outcome: "follow_up" | "won" | "lost";
+  outcome: "follow_up" | "won" | "lost" | "no_contact" | "no_decision";
   createdAt: string;
 };
 

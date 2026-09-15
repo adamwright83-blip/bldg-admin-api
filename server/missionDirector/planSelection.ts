@@ -1,16 +1,23 @@
 /**
  * Slice 4 §§4-6 — deterministic primary/fallback selection.
  *
- * This is the core the intelligence-boundary invariant test guards: with the
- * same campaigns and pockets, this function's output never changes based on
- * whether an LLM is available. Only the surrounding explanation text does.
+ * Ranking is grounded and inspectable. campaignId is the final equal-score
+ * tie-break only. LLM availability never changes this function's selection.
  */
 import type { GrowthCampaign } from "../campaignLibrary/campaignLibraryTypes";
 import type {
   MissionPlanOutcome,
+  MissionRankEvidence,
   MissionSelection,
   TimePocket,
 } from "./missionDirectorTypes";
+import { rankCampaigns, type RankingContext } from "./missionRank";
+
+export const EMPTY_RANKING_CONTEXT: RankingContext = {
+  businessDate: "1970-01-01",
+  macroGoal: null,
+  openTasks: [],
+};
 
 function fitsPocket(
   pocketMinutesMin: number,
@@ -22,7 +29,6 @@ function fitsPocket(
   return pocket.usableMinutes >= pocketMinutesMin;
 }
 
-/** Best (largest usableMinutes) high-confidence pocket a campaign's full version fits. */
 function bestPocketFor(
   campaign: GrowthCampaign,
   pockets: readonly TimePocket[]
@@ -34,7 +40,6 @@ function bestPocketFor(
   return fits.sort((a, b) => (b.usableMinutes ?? 0) - (a.usableMinutes ?? 0))[0];
 }
 
-/** Best pocket (any confidence) a campaign's fallback variant fits. */
 function bestFallbackPocketFor(
   campaign: GrowthCampaign,
   pockets: readonly TimePocket[]
@@ -47,7 +52,26 @@ function bestFallbackPocketFor(
   return fits.sort((a, b) => (b.usableMinutes ?? 0) - (a.usableMinutes ?? 0))[0];
 }
 
-function toFullSelection(campaign: GrowthCampaign, pocket: TimePocket): MissionSelection {
+function evidenceFor(
+  ranking: readonly MissionRankEvidence[],
+  campaignId: string
+): MissionRankEvidence {
+  return (
+    ranking.find(item => item.campaignId === campaignId) ?? {
+      campaignId,
+      score: 0,
+      confidence: "low",
+      factors: [],
+      warnings: ["Ranking evidence missing for this campaign."],
+    }
+  );
+}
+
+function toFullSelection(
+  campaign: GrowthCampaign,
+  pocket: TimePocket,
+  rankEvidence: MissionRankEvidence
+): MissionSelection {
   return {
     campaignId: campaign.campaignId,
     title: campaign.title,
@@ -55,10 +79,15 @@ function toFullSelection(campaign: GrowthCampaign, pocket: TimePocket): MissionS
     completionCondition: campaign.completionCondition,
     pocket,
     isFallbackVariant: false,
+    rankEvidence,
   };
 }
 
-function toFallbackSelection(campaign: GrowthCampaign, pocket: TimePocket): MissionSelection {
+function toFallbackSelection(
+  campaign: GrowthCampaign,
+  pocket: TimePocket,
+  rankEvidence: MissionRankEvidence
+): MissionSelection {
   const variant = campaign.fallbackVariant!;
   return {
     campaignId: campaign.campaignId,
@@ -67,21 +96,35 @@ function toFallbackSelection(campaign: GrowthCampaign, pocket: TimePocket): Miss
     completionCondition: variant.completionCondition,
     pocket,
     isFallbackVariant: true,
+    rankEvidence,
   };
+}
+
+function byRank(eligible: readonly GrowthCampaign[], ranking: readonly MissionRankEvidence[]) {
+  const order = new Map(ranking.map((item, index) => [item.campaignId, index]));
+  return [...eligible].sort(
+    (a, b) => (order.get(a.campaignId) ?? 999) - (order.get(b.campaignId) ?? 999)
+  );
 }
 
 export function selectMissionPlan(input: {
   eligible: readonly GrowthCampaign[];
   pockets: readonly TimePocket[];
-  /** Total campaigns in the library, enabled or not — for CAMPAIGN_LIBRARY_EMPTY vs ALL_CAMPAIGNS_DISABLED. */
   libraryTotalCount: number;
   libraryEnabledCount: number;
+  rankingContext?: RankingContext;
 }): MissionPlanOutcome {
+  const ranking = rankCampaigns({
+    campaigns: input.eligible,
+    context: input.rankingContext ?? EMPTY_RANKING_CONTEXT,
+    pockets: input.pockets,
+  });
   if (input.libraryTotalCount === 0) {
     return {
       status: "no_plan",
       reason: "CAMPAIGN_LIBRARY_EMPTY",
       remedy: "Add at least one campaign to the growth campaign library.",
+      ranking,
     };
   }
   if (input.libraryEnabledCount === 0) {
@@ -89,6 +132,7 @@ export function selectMissionPlan(input: {
       status: "no_plan",
       reason: "ALL_CAMPAIGNS_DISABLED",
       remedy: "Enable at least one campaign in the growth campaign library.",
+      ranking,
     };
   }
   if (input.pockets.length === 0) {
@@ -96,13 +140,14 @@ export function selectMissionPlan(input: {
       status: "no_plan",
       reason: "SCHEDULE_DATA_INSUFFICIENT",
       remedy: "Tomorrow's schedule could not be read — check the route/calendar data source.",
+      ranking,
     };
   }
 
-  // Deterministic order (already sorted by eligibility.ts).
+  const ordered = byRank(input.eligible, ranking);
   let primaryCampaign: GrowthCampaign | null = null;
   let primaryPocket: TimePocket | null = null;
-  for (const campaign of input.eligible) {
+  for (const campaign of ordered) {
     const pocket = bestPocketFor(campaign, input.pockets);
     if (pocket) {
       primaryCampaign = campaign;
@@ -113,7 +158,7 @@ export function selectMissionPlan(input: {
 
   let fallbackCampaign: GrowthCampaign | null = null;
   let fallbackPocket: TimePocket | null = null;
-  for (const campaign of input.eligible) {
+  for (const campaign of ordered) {
     if (campaign.campaignId === primaryCampaign?.campaignId) continue;
     const pocket = bestFallbackPocketFor(campaign, input.pockets);
     if (pocket) {
@@ -122,8 +167,6 @@ export function selectMissionPlan(input: {
       break;
     }
   }
-  // A campaign may serve as both primary and its own fallback if no other
-  // eligible campaign has a fitting fallback variant.
   if (!fallbackCampaign && primaryCampaign) {
     const pocket = bestFallbackPocketFor(primaryCampaign, input.pockets);
     if (pocket) {
@@ -133,15 +176,21 @@ export function selectMissionPlan(input: {
   }
 
   if (primaryCampaign && primaryPocket && fallbackCampaign && fallbackPocket) {
-    // fallbackCampaign is always chosen via bestFallbackPocketFor, above —
-    // it is always its fallbackVariant, whether it's the primary's own or
-    // a different campaign's.
     return {
       status: "planned",
-      primary: toFullSelection(primaryCampaign, primaryPocket),
-      fallback: toFallbackSelection(fallbackCampaign, fallbackPocket),
+      primary: toFullSelection(
+        primaryCampaign,
+        primaryPocket,
+        evidenceFor(ranking, primaryCampaign.campaignId)
+      ),
+      fallback: toFallbackSelection(
+        fallbackCampaign,
+        fallbackPocket,
+        evidenceFor(ranking, fallbackCampaign.campaignId)
+      ),
       explanation: "",
       intelligence: "deterministic",
+      ranking,
     };
   }
 
@@ -151,9 +200,14 @@ export function selectMissionPlan(input: {
       : ("NO_QUALIFYING_POCKET" as const);
     return {
       status: "fallback_only",
-      fallback: toFallbackSelection(fallbackCampaign, fallbackPocket),
+      fallback: toFallbackSelection(
+        fallbackCampaign,
+        fallbackPocket,
+        evidenceFor(ranking, fallbackCampaign.campaignId)
+      ),
       reason,
       explanation: "",
+      ranking,
     };
   }
 
@@ -162,5 +216,6 @@ export function selectMissionPlan(input: {
     reason: "NO_PREPARED_FALLBACK",
     remedy:
       "No enabled campaign has a fallback variant that fits today's available time pockets. Prepare a low-effort fallback for at least one campaign.",
+    ranking,
   };
 }

@@ -10,6 +10,7 @@ const highPocket: TimePocket = {
   kind: "between_stops",
   boundedBy: { before: "a", after: "b" },
   travelReserveMinutes: 15,
+  unknownStopWorkReserveMinutes: 10,
   usableMinutes: 45,
   confidence: "high",
   warnings: [],
@@ -22,6 +23,7 @@ const openEnded: TimePocket = {
   kind: "open_ended",
   boundedBy: { before: null, after: null },
   travelReserveMinutes: 15,
+  unknownStopWorkReserveMinutes: null,
   usableMinutes: null,
   confidence: "low",
   warnings: [],
@@ -108,7 +110,7 @@ describe("selectMissionPlan", () => {
       libraryTotalCount: 1,
       libraryEnabledCount: 1,
     });
-    expect(outcome).toEqual({
+    expect(outcome).toMatchObject({
       status: "no_plan",
       reason: "NO_PREPARED_FALLBACK",
       remedy: expect.any(String),

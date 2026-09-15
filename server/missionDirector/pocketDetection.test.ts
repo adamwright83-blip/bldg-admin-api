@@ -24,9 +24,12 @@ describe("detectTimePockets", () => {
     expect(pockets).toHaveLength(1);
     expect(pockets[0].kind).toBe("between_stops");
     expect(pockets[0].minutes).toBe(90);
-    expect(pockets[0].usableMinutes).toBe(75);
+    expect(pockets[0].usableMinutes).toBe(65);
+    expect(pockets[0].unknownStopWorkReserveMinutes).toBe(10);
     expect(pockets[0].confidence).toBe("high");
     expect(pockets[0].boundedBy).toEqual({ before: "p1", after: "d1" });
+    expect(pockets[0].warnings.join(" ")).toMatch(/named safety reserve/);
+    expect(pockets[0].warnings.join(" ")).toMatch(/conservative assumption/);
   });
 
   it("never emits a pocket for an item with no real scheduledAt", () => {
@@ -38,6 +41,26 @@ describe("detectTimePockets", () => {
     });
     // Only one fixed item — no pair to bound a between_stops pocket.
     expect(pockets).toHaveLength(0);
+  });
+
+  it("uses measured stop duration when the scheduled item supplies it", () => {
+    const pockets = detectTimePockets({
+      timeline: [
+        {
+          id: "p1",
+          title: "Pickup",
+          scheduledAt: "2026-09-12T15:00:00.000Z",
+          kind: "pickup",
+          durationMinutes: 20,
+        },
+        { id: "d1", title: "Delivery", scheduledAt: "2026-09-12T16:30:00.000Z", kind: "delivery" },
+      ],
+      travelReserveMinutes: 15,
+    });
+    expect(pockets[0].usableMinutes).toBe(55);
+    expect(pockets[0].unknownStopWorkReserveMinutes).toBeNull();
+    expect(pockets[0].warnings.join(" ")).toMatch(/20 minutes was used/);
+    expect(pockets[0].warnings.join(" ")).not.toMatch(/conservative assumption/);
   });
 
   it("floors usableMinutes at zero when the reserve exceeds the gap", () => {

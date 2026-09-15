@@ -6,7 +6,7 @@ import {
   dayDirectorPromptStates,
   towerWarsPromises,
 } from "../../drizzle/schema";
-import type { DayDirectorProposal } from "../../shared/dayDirector";
+import type { DayDirectorCommitment, DayDirectorProposal } from "../../shared/dayDirector";
 import {
   dayLineDisplayTitle,
   readDayLineOverlay,
@@ -126,7 +126,7 @@ export async function getDayDirectorState(input: {
           ? metadata.missingDetails.map(String)
           : [],
         detailNote: typeof metadata.detailNote === "string" ? metadata.detailNote : null,
-      };
+      } satisfies DayDirectorCommitment;
     }).filter((row): row is NonNullable<typeof row> => row != null),
     dismissedPromptKeys: prompts.map(row => row.promptKey),
     intelligenceAvailable: Boolean(ENV.anthropicApiKey?.trim()),

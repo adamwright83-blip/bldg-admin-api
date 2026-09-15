@@ -31,7 +31,7 @@ export function eligibleCampaigns(input: {
     }
     eligible.push(campaign);
   }
-  // Deterministic order: campaignId, never anything the model influences.
+  // Stable list order only. Business ranking lives in rankCampaigns / selectMissionPlan.
   eligible.sort((a, b) => a.campaignId.localeCompare(b.campaignId));
   return { eligible, rejected };
 }

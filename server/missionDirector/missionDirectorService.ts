@@ -3,20 +3,142 @@
  * See docs/goldline/SLICE_4_MISSION_DIRECTOR.md.
  */
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
-import { missionDirectorPlans } from "../../drizzle/schema";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import { missionDirectorPlans, opsTasks } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { getFieldToday } from "../field/fieldTodayService";
 import { listCampaigns } from "../campaignLibrary/campaignLibraryService";
-import { detectTimePockets } from "./pocketDetection";
+import { getActiveMacroGoal } from "../claire/macroGoalService";
+import { detectTimePockets, DEFAULT_TRAVEL_RESERVE_MINUTES, DEFAULT_UNKNOWN_STOP_WORK_RESERVE_MINUTES } from "./pocketDetection";
 import { eligibleCampaigns } from "./eligibility";
 import { selectMissionPlan } from "./planSelection";
 import { explainMissionPlan } from "./explainPlan";
 import { computePrepReadiness } from "./prepReadiness";
+import type { RankingContext, RankingOpenTask } from "./missionRank";
 import type { MissionDirectorPlan, MissionPlanOutcome } from "./missionDirectorTypes";
 
 function fingerprint(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
+}
+
+async function loadRankingContext(input: {
+  tenantId: string;
+  operatorId: string;
+  businessDate: string;
+}): Promise<RankingContext> {
+  let macroGoal: RankingContext["macroGoal"] = null;
+  try {
+    const goal = await getActiveMacroGoal({
+      tenantId: input.tenantId,
+      operatorUserId: input.operatorId,
+    });
+    if (goal) {
+      macroGoal = {
+        metricKey: goal.metricKey,
+        targetValue: Number(goal.targetValue),
+        objective: goal.objective,
+      };
+    }
+  } catch {
+    macroGoal = null;
+  }
+  const db = await getDb();
+  const openTasks: RankingOpenTask[] = [];
+  if (db) {
+    const rows = await db
+      .select({
+        taskType: opsTasks.taskType,
+        status: opsTasks.status,
+        priority: opsTasks.priority,
+        metadataJson: opsTasks.metadataJson,
+      })
+      .from(opsTasks)
+      .where(
+        and(
+          eq(opsTasks.tenantId, input.tenantId),
+          inArray(opsTasks.status, ["open", "accepted", "in_progress"])
+        )
+      );
+    for (const row of rows) {
+      const metadata =
+        row.metadataJson && typeof row.metadataJson === "object"
+          ? (row.metadataJson as Record<string, unknown>)
+          : {};
+      const dueAt =
+        typeof metadata.dueAt === "string"
+          ? metadata.dueAt
+          : typeof metadata.dueDate === "string"
+            ? metadata.dueDate
+            : null;
+      openTasks.push({
+        taskType: row.taskType,
+        status: row.status,
+        priority: row.priority,
+        dueAt,
+      });
+    }
+  }
+  return { businessDate: input.businessDate, macroGoal, openTasks };
+}
+
+export function planningCampaignFingerprint(campaign: {
+  campaignId: string;
+  enabled: boolean;
+  objective: string;
+  completionCondition: string;
+  prepLeadDays: number;
+  prepCondition: string | null;
+  pocketKind: string;
+  pocketMinutesMin: number;
+  fallbackVariant: unknown;
+  missionCategory: string;
+  opsTaskType: string;
+  timingAssumptions: unknown;
+}) {
+  return {
+    campaignId: campaign.campaignId,
+    enabled: campaign.enabled,
+    objective: campaign.objective,
+    completionCondition: campaign.completionCondition,
+    prepLeadDays: campaign.prepLeadDays,
+    prepCondition: campaign.prepCondition,
+    pocketKind: campaign.pocketKind,
+    pocketMinutesMin: campaign.pocketMinutesMin,
+    fallbackVariant: campaign.fallbackVariant,
+    missionCategory: campaign.missionCategory,
+    opsTaskType: campaign.opsTaskType,
+    timingAssumptions: campaign.timingAssumptions,
+  };
+}
+
+export function computePlanningFingerprint(input: {
+  businessDate: string;
+  fieldItemIds: readonly string[];
+  fieldScheduledAts: readonly (string | null)[];
+  campaigns: readonly Parameters<typeof planningCampaignFingerprint>[0][];
+  prepReady: Record<string, boolean>;
+  rankingContext: RankingContext;
+}): string {
+  return fingerprint({
+    businessDate: input.businessDate,
+    fieldItemIds: input.fieldItemIds,
+    fieldScheduledAts: input.fieldScheduledAts,
+    campaigns: input.campaigns.map(planningCampaignFingerprint),
+    prepReady: input.prepReady,
+    ranking: {
+      businessDate: input.rankingContext.businessDate,
+      macroGoal: input.rankingContext.macroGoal,
+      openTasks: input.rankingContext.openTasks.map(task => ({
+        taskType: task.taskType,
+        status: task.status,
+        priority: task.priority,
+        dueAt: task.dueAt,
+      })),
+      campaignPriorityById: input.rankingContext.campaignPriorityById ?? {},
+    },
+    travelReserveMinutes: DEFAULT_TRAVEL_RESERVE_MINUTES,
+    unknownStopWorkReserveMinutes: DEFAULT_UNKNOWN_STOP_WORK_RESERVE_MINUTES,
+  });
 }
 
 function stableKeyFor(tenantId: string, operatorId: string, businessDate: string): string {
@@ -108,6 +230,11 @@ export async function computeMissionPlan(input: {
     businessDate: input.businessDate,
     campaigns: enabledCampaigns,
   });
+  const rankingContext = await loadRankingContext({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    businessDate: input.businessDate,
+  });
   const { eligible } = eligibleCampaigns({ campaigns: enabledCampaigns, prepReady });
   const pockets = detectTimePockets({ timeline: fieldToday.timeline });
   const bare = selectMissionPlan({
@@ -115,6 +242,7 @@ export async function computeMissionPlan(input: {
     pockets,
     libraryTotalCount: allCampaigns.length,
     libraryEnabledCount: enabledCampaigns.length,
+    rankingContext,
   });
   const { explanation, intelligence } = await explainMissionPlan({
     tenantId: input.tenantId,
@@ -127,12 +255,13 @@ export async function computeMissionPlan(input: {
         ? { ...bare, explanation }
         : { ...bare, explanation, intelligence };
 
-  const inputFingerprint = fingerprint({
+  const inputFingerprint = computePlanningFingerprint({
     businessDate: input.businessDate,
     fieldItemIds: fieldToday.timeline.map(item => item.id),
     fieldScheduledAts: fieldToday.timeline.map(item => item.scheduledAt),
-    campaignIds: enabledCampaigns.map(c => c.campaignId).sort(),
+    campaigns: enabledCampaigns,
     prepReady,
+    rankingContext,
   });
   return { outcome, inputFingerprint };
 }

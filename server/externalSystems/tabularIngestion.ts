@@ -37,7 +37,7 @@ function normalizedCell(value: unknown): string {
 }
 
 function headerScore(row: unknown[]): number {
-  return row.reduce((score, cell) => {
+  return row.reduce<number>((score, cell) => {
     const text = normalizedCell(cell).toLowerCase().replace(/\s+/g, " ");
     return score + (KNOWN_HEADER_TOKENS.has(text) ? 1 : 0);
   }, 0);

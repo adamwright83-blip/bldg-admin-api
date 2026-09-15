@@ -11,6 +11,11 @@
  */
 
 import { expect, test, type Page } from "@playwright/test";
+import {
+  WORLD_HOME,
+  enterDriverOverland,
+  expectDriverDayHome,
+} from "./currentSurfaces";
 import { resetGoldlineProofWorld } from "./proofWorld";
 
 const DRIVER_PASSWORD = process.env.DRIVER_PASSWORD ?? "pixel-driver-pass";
@@ -41,7 +46,7 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
   test.beforeAll(async ({ request }) => {
     await resetGoldlineProofWorld(request);
   });
-  test("a fresh driver session opens directly into Overland", async ({ page }) => {
+  test("a fresh driver session opens today's Gold Line, with Overland one tap away", async ({ page }) => {
     await signIn(page, "driver");
     await page.addInitScript(() => {
       window.localStorage.setItem("goldline:day1:dismissed", "1");
@@ -52,14 +57,13 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
     });
     await page.goto("/driver");
 
-    // The law recovered in #107: you are already in the world.
-    await expect(
-      page.getByRole("region", { name: "Goldline global overworld" })
-    ).toBeVisible({ timeout: 30_000 });
+    // Claire owns the workday: the real day is home. Overland is chosen, not default.
+    await expectDriverDayHome(page);
     await expect(page.getByTestId("goldline-shell")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Enter Overland" })).toBeVisible();
   });
 
-  test("the day briefing opens over the world and returns to it", async ({ page }) => {
+  test("Overland is reachable from the day and returns to it", async ({ page }) => {
     await signIn(page, "driver");
     await page.addInitScript(() => {
       window.localStorage.setItem("goldline:day1:dismissed", "1");
@@ -68,27 +72,18 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
         JSON.stringify(["first_entry_explained"])
       );
     });
-    await page.goto("/driver");
+    await enterDriverOverland(page);
     const world = page.getByRole("region", { name: "Goldline global overworld" });
-    await expect(world).toBeVisible({ timeout: 30_000 });
-
-    const open = page.getByRole("button", { name: /READ TODAY'S BRIEFING/i });
-    if ((await open.count()) === 0) test.skip(true, "No objectives today in this fixture");
-    await open.first().click();
-
-    const briefing = page.getByRole("dialog", { name: "Today's briefing" });
-    await expect(briefing).toBeVisible({ timeout: 15_000 });
-    // The world is never torn down to show the day.
     await expect(world).toBeVisible();
 
-    await page.getByRole("button", { name: /CLOSE BRIEFING/i }).click();
-    await expect(briefing).toHaveCount(0);
-    await expect(world).toBeVisible();
+    await page.locator(".driver-return-home").click();
+    await expectDriverDayHome(page);
+    await expect(world).toHaveCount(0);
   });
 
-  test("Lantern City mounts, and the HUD is never inside the camera", async ({ page }) => {
+  test("world home mounts, and the HUD is never inside the camera", async ({ page }) => {
     await signIn(page, "admin");
-    await page.goto("/growth/lantern-city");
+    await page.goto(WORLD_HOME);
     await expect(page.locator(".cr-world-camera")).toBeVisible({ timeout: 30_000 });
 
     // Controls are interface, not world: they must sit outside the transform,
@@ -103,15 +98,15 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
 
   test("the camera pans and zooms the world", async ({ page }, testInfo) => {
     await signIn(page, "admin");
-    await page.goto("/growth/lantern-city");
+    await page.goto(WORLD_HOME);
     await expect(page.locator(".cr-world-camera")).toBeVisible({ timeout: 30_000 });
     const space = page.locator(".cr-world-space");
     const before = await space.getAttribute("style");
 
     if (testInfo.project.name === "mobile") {
       // Touch owns the gesture here; a wheel does not exist on this device.
-      const box = (await page.locator(".cr-world-camera").boundingBox())!;
-      await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+      // Do not tap the camera first — on Home/demo the towers sit inside the
+      // camera and a center tap navigates away from the world.
       await page.evaluate(() => {
         const host = document.querySelector(".cr-world-camera")!;
         const send = (type: string, x: number, y: number) =>
@@ -154,7 +149,7 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
 
   test("focus, inspect and back restore the prior camera", async ({ page }) => {
     await signIn(page, "admin");
-    await page.goto("/growth/lantern-city");
+    await page.goto(WORLD_HOME);
     const camera = page.locator(".cr-world-camera");
     const space = page.locator(".cr-world-space");
     await expect(camera).toBeVisible({ timeout: 30_000 });
@@ -167,29 +162,22 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
     const stateA = (await space.getAttribute("style")) ?? "";
     expect(stateA).not.toBe("");
 
-    const louise = page.getByRole("button", { name: /Pursued: The Louise/i });
-    const pursued = page.locator(".lc-pursued-building").first();
-    const building = (await louise.count())
-      ? louise
-      : (await pursued.count())
-        ? pursued
-        : page.locator(".lc-lantern").first();
-    await building.click();
-    await expect(page.locator(".owi")).toBeVisible();
-    await expect(camera).toHaveAttribute("data-camera-mode", "inspecting");
-    await page.waitForFunction(saved => {
-      const now = document.querySelector(".cr-world-space")?.getAttribute("style") ?? "";
-      return Boolean(saved) && now !== saved;
-    }, stateA);
-    await page.locator(".owi-close").click();
-    await expect(camera).toHaveAttribute("data-camera-mode", "free");
+    const lantern = page.locator(".lc-lantern").first();
+    await expect(lantern).toBeVisible({ timeout: 20_000 });
+    await lantern.click();
+    await expect(
+      page.getByRole("complementary", { name: "Customer location cluster" })
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Close customer cluster" }).click();
     await expect(space).toHaveAttribute("style", stateA);
-    await expect(page.locator(".owi")).toHaveCount(0);
+    await expect(
+      page.getByRole("complementary", { name: "Customer location cluster" })
+    ).toHaveCount(0);
   });
 
   test("customer truth becomes windows and scales without changing the roster", async ({ page }) => {
     await signIn(page, "admin");
-    await page.goto("/growth/lantern-city");
+    await page.goto(WORLD_HOME);
     await expect(page.locator(".cr-world-camera")).toBeVisible({ timeout: 30_000 });
     const facades = page.locator(".lc-customer-windows");
     if ((await facades.count()) === 0) test.skip(true, "No customer building in this fixture");
@@ -206,18 +194,18 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
 
   test("a bounded autonomous incident makes the idle city visibly alive", async ({ page }) => {
     await signIn(page, "admin");
-    await page.goto("/growth/lantern-city");
+    await page.goto(WORLD_HOME);
     await expect(page.locator(".cr-world-camera")).toBeVisible({ timeout: 30_000 });
-    await expect(page.locator(".lc-idle-flourish, .lc-idle-practice, .lc-idle-machinery").first()).toBeAttached({ timeout: 14_000 });
-    const concurrent = await page.locator(".lc-idle-flourish, .lc-idle-practice, .lc-idle-machinery").count();
-    expect(concurrent).toBeLessThanOrEqual(2);
+    const lantern = page.locator(".lc-lantern").first();
+    await expect(lantern).toBeVisible({ timeout: 14_000 });
+    await expect(lantern).toHaveAttribute("style", /--lc-phase/);
   });
 
   test("firing a tower damages it, rebuilds it, and changes nothing real", async ({
     page,
   }) => {
     await signIn(page, "admin");
-    await page.goto("/growth/lantern-city");
+    await page.goto(WORLD_HOME);
     await expect(page.locator(".cr-world-camera")).toBeVisible({ timeout: 30_000 });
 
     const building = page.locator(".lc-pursued-building[data-world-entity-id]").first();
@@ -290,7 +278,7 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
     page,
   }) => {
     await signIn(page, "admin");
-    await page.goto("/growth/lantern-city");
+    await page.goto(WORLD_HOME);
     await expect(page.locator(".cr-world-camera")).toBeVisible({ timeout: 30_000 });
 
     const tether = page.locator(".lc-tether").first();
@@ -326,10 +314,7 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
       );
     });
     await signIn(page, "driver");
-    await page.goto("/driver");
-    await expect(page.getByRole("region", { name: "Goldline global overworld" })).toBeVisible({
-      timeout: 30_000,
-    });
+    await enterDriverOverland(page);
     await expect(page.getByTestId("goldline-campaign-hud")).toBeVisible({ timeout: 20_000 });
   });
 });

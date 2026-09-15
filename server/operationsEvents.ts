@@ -7,7 +7,8 @@ export type OperationsEventSource =
   | "driver_app_bldg"
   | "cleancloud_csv"
   | "cleancloud_playbook"
-  | "system_backfill";
+  | "system_backfill"
+  | "custody_board_deliver";
 
 export type OperationsEventActorContext = {
   source?: OperationsEventSource;
@@ -101,6 +102,25 @@ export function buildOperationEventForOrderStatusChange(input: {
   });
 }
 
+function persistableOperationsEventSource(
+  source: OperationsEventSource | undefined
+): InsertOperationsEvent["source"] {
+  if (
+    source === "cleancloud_csv" ||
+    source === "cleancloud_playbook" ||
+    source === "system_backfill" ||
+    source === "driver_app_bldg"
+  ) {
+    return source;
+  }
+  // SCHEMA DEBT: operations_events.source is a MySQL enum without
+  // custody_board_deliver. Pickup/dropoff business truth, dashboard filters,
+  // and duplicate detection use sourceEventType, not this column. CSV exports
+  // the column as a coarse actor-surface label. Keep the real actor in
+  // rawJson.source until an additive enum migration is approved.
+  return "driver_app_bldg";
+}
+
 function buildCompletedOperationEventForOrder(input: {
   order: Order;
   sourceEventType: "pickup_completed" | "dropoff_completed";
@@ -114,11 +134,12 @@ function buildCompletedOperationEventForOrder(input: {
   const tenantId = order.tenantId ?? "default";
   const scheduledDate = isPickup ? order.pickupDate : order.deliveryDate;
   const scheduledWindow = isPickup ? order.pickupTimeWindow : order.deliveryTimeWindow;
+  const actorSource = input.actor?.source ?? "driver_app_bldg";
 
   return {
     tenantId,
     businessUnitLabel: tenantLabel(tenantId),
-    source: input.actor?.source ?? "driver_app_bldg",
+    source: persistableOperationsEventSource(actorSource),
     sourceEventType: input.sourceEventType,
     eventStatus: "completed",
     orderId: order.id,
@@ -138,7 +159,7 @@ function buildCompletedOperationEventForOrder(input: {
     garmentCount: order.garmentCount ?? null,
     weightLbs: order.weightLbs ?? null,
     rawJson: {
-      source: input.actor?.source ?? "driver_app_bldg",
+      source: actorSource,
       ...input.rawJson,
       orderSnapshot: order,
       capturedAt: actualEventTimestamp.toISOString(),

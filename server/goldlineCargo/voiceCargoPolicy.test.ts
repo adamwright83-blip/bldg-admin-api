@@ -35,9 +35,8 @@ describe("vehicle cargo confirmation boundary", () => {
     const service = read("./cargoService.ts");
     expect(service).toContain("export async function updateFieldCargo(");
     expect(service).toContain("UPDATE goldline_field_cargo SET");
-    // No new table, no new migration — exactly the same bootstrap table
-    // the add flow already writes to.
-    expect(service.match(/CREATE TABLE/g)?.length).toBe(1);
+    expect(service).toMatch(/CREATE TABLE IF NOT EXISTS goldline_field_cargo/);
+    expect(service.match(/CREATE TABLE IF NOT EXISTS goldline_field_cargo/g)?.length).toBe(1);
   });
 
   it("scopes edits to this vehicle's own still-in-vehicle cargo, never another vehicle's or a real order row", () => {

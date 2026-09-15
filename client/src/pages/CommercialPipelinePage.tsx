@@ -667,6 +667,8 @@ export default function CommercialPipelinePage() {
                                   pipelineId: selected.id,
                                   followUpId: item.id,
                                   requestId: crypto.randomUUID(),
+                                  outcome: "contacted_no_decision",
+                                  notes: "Completed from pipeline without a terminal result.",
                                 });
                                 setNotice("Follow-up completed");
                               })

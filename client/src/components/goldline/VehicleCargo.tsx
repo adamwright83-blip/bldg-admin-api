@@ -73,7 +73,7 @@ export function cargoSprite(item: VehicleCargoItem) {
 export function needsCharge(item: VehicleCargoItem): boolean {
   return item.source === "order" && item.paid === false;
 }
-export function visibleCargo(cargo: VehicleCargoItem[], maxSlots = SLOTS.length) {
+export function visibleCargo(cargo: VehicleCargoItem[], maxSlots: number = SLOTS.length) {
   return {
     visible: cargo.slice(0, maxSlots),
     overflow: Math.max(0, cargo.length - maxSlots),

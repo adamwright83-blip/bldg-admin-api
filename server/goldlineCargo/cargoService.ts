@@ -161,10 +161,16 @@ export async function listCustodyBoard(tenantId: string, vehicleId: string) {
     )[0] ?? [];
   const board = emptyCustodyBoard();
   for (const row of nativeRows.map(mapOrderCustodyRow)) {
-    board[row.custodyLocation].push(row);
+    const location: CustodyLocationKey = isCustodyLocationKey(row.custodyLocation)
+      ? row.custodyLocation
+      : "vehicle";
+    board[location].push(row);
   }
   for (const row of fieldRows.map(mapFieldCustodyRow)) {
-    board[row.custodyLocation].push(row);
+    const location: CustodyLocationKey = isCustodyLocationKey(row.custodyLocation)
+      ? row.custodyLocation
+      : "vehicle";
+    board[location].push(row);
   }
   return board;
 }

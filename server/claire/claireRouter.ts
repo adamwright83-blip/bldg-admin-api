@@ -35,6 +35,11 @@ import {
 } from "./claireTwilio";
 import { previewClairePreDrive } from "./preDriveRuntime";
 import { setActiveMacroGoal } from "./macroGoalService";
+import {
+  assembleTomorrowCandidates,
+  confirmWorkdayPlan,
+  previewWorkdayLoop,
+} from "./workdayPlanService";
 import { answerClairePreDriveFollowUp } from "./preDriveConversation";
 import { handleVoiceCommitmentTurn, type PendingProposalState } from "./voiceCommitmentLoop";
 import {

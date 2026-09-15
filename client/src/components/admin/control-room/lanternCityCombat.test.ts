@@ -34,7 +34,8 @@ const hud = read("RivalryHud.tsx");
 const battlefield = read("FactionBattlefieldLayer.tsx");
 const towerButton = read("CityTowerButton.tsx");
 const surface = read("WorldGeographySurface.tsx");
-const atlas = read("LanternCityAtlas.tsx");
+const scene = read("LanternCitySceneV6/LanternCityScene.tsx");
+const renderer = read("LanternCitySceneV6/LanternCitySceneRenderer.tsx");
 const css = read("admin-control-room.css");
 const shellCss = read("goldline-game-shell.css");
 const host = readFileSync(
@@ -92,7 +93,11 @@ describe("supplied combat assets", () => {
       COMBAT_TOWER_ART.century_park_east.clean,
       COMBAT_TOWER_ART.opus_la.clean,
     ]);
-    expect(atlas).toContain("CRITICAL_COMBAT_ASSETS");
+    expect(CRITICAL_COMBAT_ASSETS).toHaveLength(2);
+    // Live V6 paints buildings through CanonicalBuildingArt, not a combat-plate
+    // preload list. Home's mini-city still preloads the world/lantern pack.
+    expect(renderer).toContain("CanonicalBuildingArt");
+    expect(surface).toContain("LANTERN_CITY_V5_PRELOAD");
   });
 });
 
@@ -142,12 +147,16 @@ describe("damage art derives from authoritative Tower Wars state", () => {
   });
 
   it("reads damage from towerWars.today and only when evidence is sufficient", () => {
-    expect(atlas).toContain("trpc.system.towerWars.today.useQuery");
-    expect(atlas).toContain('data.evidenceSufficient !== true) return undefined');
-    expect(atlas).toContain("data.state.buildings.century_park_east.damage");
-    expect(atlas).toContain("data.state.buildings.opus_la.damage");
+    expect(scene).toContain("trpc.system.towerWars.today.useQuery");
+    expect(scene).toContain("battle.data?.evidenceSufficient");
+    expect(scene).toContain("battle.data.state.buildings.opus_la.damage");
+    expect(scene).toContain(
+      "battle.data.state.buildings.century_park_east.damage"
+    );
+    expect(scene).toMatch(/evidenceSufficient[\s\S]{0,180}undefined/);
     // The button must never fetch its own damage — one source, handed down.
     expect(towerButton).not.toContain("useQuery");
+    expect(renderer).not.toContain("useQuery");
   });
 });
 
@@ -160,11 +169,12 @@ describe("projectiles require a real attack", () => {
   });
 
   it("sources the attack count from the same gated Tower Wars state", () => {
-    expect(atlas).toContain(
-      "data.state.buildings.century_park_east.attackCount"
-    );
-    expect(atlas).toContain("data.state.buildings.opus_la.attackCount");
-    expect(atlas).toContain("buildingAttacks={buildingAttacks}");
+    // Projectiles live on CityTowerButton for Home's mini-city combat path.
+    // The live V6 scene does not fly a city-map projectile; Tower Wars owns
+    // the exchange. Home still hands the count down rather than fetching it.
+    expect(surface).toContain("attacksToday={buildingAttacks?.[tower.id] ?? null}");
+    expect(towerButton).toContain("attacksToday");
+    expect(towerButton).not.toContain("useQuery");
   });
 
   it("keeps the round still — no permanent flying projectile", () => {
@@ -187,15 +197,18 @@ describe("lanterns keep deriving from real customer cadence", () => {
     ]);
   });
 
-  it("paints the lantern from the cadence class the atlas already computed", () => {
-    expect(atlas).toContain("clusterLanternState(cluster)");
-    expect(atlas).toContain("lanternAssetForClusterState(lanternState)");
-    expect(atlas).toContain("lanternNeedsRekindling(lanternState)");
+  it("paints the lantern from the cadence class the scene already computed", () => {
+    expect(renderer).toContain("clusterLanternState(object.cluster)");
+    expect(renderer).toContain("lanternAssetForClusterState(clusterLanternState(object.cluster))");
+    expect(scene).toContain("RekindlingArsenal");
+    expect(scene).toContain("o.cluster.active < o.cluster.total");
   });
 
   it("keeps the physical lantern silhouette rather than becoming a glow", () => {
-    expect(atlas).toContain("lc-v5-lantern-art");
-    expect(read("lantern-city-v5.css")).toContain(".lc-v5-lantern-art");
+    expect(renderer).toContain("styles.lanternArt");
+    expect(read("LanternCitySceneV6/lantern-city-v6.module.css")).toContain(
+      ".objectArt .lanternArt"
+    );
   });
 
   it("does not turn a lantern into a faction object", () => {
@@ -271,7 +284,7 @@ function withoutComments(source: string): string {
 
 describe("no fabricated game state", () => {
   const surfaces = Object.fromEntries(
-    Object.entries({ hud, battlefield, towerButton, atlas, host, combat }).map(
+    Object.entries({ hud, battlefield, towerButton, scene, renderer, host, combat }).map(
       ([name, source]) => [name, withoutComments(source)]
     )
   );

@@ -18,6 +18,7 @@ import {
   LANTERN_CITY_V5_ASSETS,
   LANTERN_CITY_V5_PRELOAD,
 } from "@/components/goldline/lanternCityV5Assets";
+import type { DistrictOpportunityMetric } from "@shared/opportunityPressure";
 import type { GeographicCustomer, CustomerLocationCluster } from "./customerGeography";
 import { classifyTerritory } from "@shared/lanternTerritories";
 import { TowerAttachedCustomerLantern } from "./TowerAttachedCustomerLantern";
@@ -302,7 +303,7 @@ export function WorldGeographySurface({
       {/* 3. Places Aggregate Opportunity Density / Territory Glow */}
       {showOpportunityLayer && opportunity && !googleVisible ? (
         <div className="cr-opportunity-layer" aria-hidden="true">
-          {opportunity.districts.map(district => (
+          {opportunity.districts.map((district: DistrictOpportunityMetric) => (
             <div
               key={district.districtId}
               className={`cr-district-glow pressure-${district.opportunityPressure}`}

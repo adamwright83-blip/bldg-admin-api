@@ -412,11 +412,11 @@ export default function Home() {
                     </div>
 
                     <div data-hero-trust className="mt-auto grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-                      {[
+                      {([
                         [ShieldCheck, "Door-to-door service"],
                         [Sparkles, "Expert garment care"],
                         [Star, "Five-star trusted"],
-                      ].map(([Icon, label]) => (
+                      ] as const).map(([Icon, label]) => (
                         <div
                           key={label}
                           className="flex min-h-[86px] flex-col rounded-[20px] border bg-white px-3 py-3"
@@ -463,12 +463,12 @@ export default function Home() {
                   Trusted by busy professionals and families in Beverly Hills &amp; Century City
                 </p>
                 <div className="grid gap-2 sm:grid-cols-2 lg:w-[64%] lg:grid-cols-4">
-                  {[
+                  {([
                     [Clock3, "2-Hour Pickup"],
                     [PackageCheck, "Same-Day Return"],
                     [Star, "5.0 Client Rating"],
                     [Leaf, "Sustainably Minded"],
-                  ].map(([Icon, label]) => (
+                  ] as const).map(([Icon, label]) => (
                     <div
                       key={label}
                       className="inline-flex h-11 items-center justify-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold"
@@ -643,12 +643,12 @@ export default function Home() {
               </p>
 
               <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                {[
+                {([
                   [ShieldCheck, "Concierge manner"],
                   [Sparkles, "White-glove handling"],
                   [Clock3, "Delivered on your schedule"],
                   [Leaf, "Sustainably minded"],
-                ].map(([Icon, label]) => (
+                ] as const).map(([Icon, label]) => (
                   <div key={label} className="inline-flex items-center gap-2 rounded-xl border border-white/18 bg-white/8 px-3 py-2 text-[14px] text-white/95">
                     <Icon className="h-4 w-4 text-[#ffd4e8]" aria-hidden />
                     {label}

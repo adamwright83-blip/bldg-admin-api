@@ -6,6 +6,7 @@
  */
 
 import { expect, test, type Page } from "@playwright/test";
+import { enterDriverOverland, expectLanternCityV6 } from "./currentSurfaces";
 import { resetGoldlineProofWorld } from "./proofWorld";
 
 const DRIVER_PASSWORD = process.env.DRIVER_PASSWORD ?? "pixel-driver-pass";
@@ -92,10 +93,7 @@ test.describe("Goldline campaign smoke", () => {
       );
     });
     await signIn(page, "driver");
-    await page.goto("/driver");
-    await expect(page.getByRole("region", { name: "Goldline global overworld" })).toBeVisible({
-      timeout: 30_000,
-    });
+    await enterDriverOverland(page);
     await expect(page.getByTestId("goldline-campaign-hud")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("goldline-campaign-host")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("goldline-campaign-host")).toHaveAttribute(
@@ -113,7 +111,6 @@ test.describe("Goldline campaign smoke", () => {
     expect(admin.campaign.id).toBe(driver.campaign.id);
     expect(admin.campaign.revision).toBe(driver.campaign.revision);
     await page.goto("/growth/lantern-city");
-    await expect(page.locator(".cr-world-camera")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId("goldline-campaign-hud")).toBeVisible({ timeout: 20_000 });
+    await expectLanternCityV6(page);
   });
 });

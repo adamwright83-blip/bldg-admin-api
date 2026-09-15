@@ -521,7 +521,7 @@ export async function importClearentTransactions(input: TabularFileInput & {
           importBatchId,
           sourceReportBasis,
         });
-        if (!normalizedSummary) {
+        if (!normalizedSummary?.sourceReportBasis) {
           skippedRowCount += 1;
           skippedSummaryRowCount += 1;
           continue;
@@ -725,9 +725,9 @@ export function buildClearentRevenueSummaryFromDailyRows(
   let settledCents = 0;
   for (const row of rows) {
     if (row.reportDateUtc < bounds.startUtc || row.reportDateUtc >= bounds.endUtc) continue;
-    if (row.sourceReportBasis === "entered_date") collectedCents += row.totalSalesCents;
+    if (row.sourceReportBasis === "entered_date") collectedCents += row.totalSalesCents ?? 0;
     if (row.sourceReportBasis === "settled_date") {
-      settledCents += row.depositAmountCents ?? row.netSalesCents ?? row.totalSalesCents;
+      settledCents += row.depositAmountCents ?? row.netSalesCents ?? row.totalSalesCents ?? 0;
     }
   }
   return { bounds, collectedCents, settledCents };

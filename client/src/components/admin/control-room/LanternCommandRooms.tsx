@@ -37,7 +37,7 @@ export function LanternBuildingsRoom({
               className="lc-v5-building-card"
               onClick={() => onNavigate?.(building.path)}
             >
-              <img src={art.hero} alt="" />
+              <img src={art.clean} alt="" />
               <div>
                 <strong>{geo.name}</strong>
                 <span>{building.neighborhood}</span>
