@@ -37,10 +37,13 @@ import { previewClairePreDrive } from "./preDriveRuntime";
 import { setActiveMacroGoal } from "./macroGoalService";
 import { answerClairePreDriveFollowUp } from "./preDriveConversation";
 import {
-  assembleTomorrowCandidates,
-  confirmWorkdayPlan,
-  previewWorkdayLoop,
-} from "./workdayPlanService";
+  getClaireCallAnalysis,
+  getClaireCallAudio,
+  listClaireAnalysisInbox,
+  markClaireAnalysisNotificationRead,
+  markClaireCallAnalysisWrong,
+  markClaireCallReviewed,
+} from "./conversation/conversationQuery";
 
 const uuid = z.string().uuid();
 
@@ -489,6 +492,83 @@ export const claireRouter = router({
       listClaireTierTransitions({
         tenantId: ctx.tenantId,
         operatorUserId: input.operatorUserId,
+      })
+    ),
+
+  analysisInbox: dayforgeMissionFieldProcedure.query(({ ctx }) =>
+    listClaireAnalysisInbox({
+      tenantId: ctx.tenantId,
+      operatorUserId: ctx.user.openId,
+    })
+  ),
+
+  markAnalysisNotificationRead: dayforgeMissionFieldProcedure
+    .input(z.object({ id: uuid }))
+    .mutation(({ ctx, input }) =>
+      markClaireAnalysisNotificationRead({
+        tenantId: ctx.tenantId,
+        operatorUserId: ctx.user.openId,
+        id: input.id,
+      })
+    ),
+
+  callAnalysis: dayforgeMissionFieldProcedure
+    .input(
+      z
+        .object({
+          sessionId: uuid.optional(),
+          callSid: z.string().trim().min(1).max(64).optional(),
+        })
+        .refine(input => Boolean(input.sessionId || input.callSid), {
+          message: "sessionId or callSid is required",
+        })
+    )
+    .query(({ ctx, input }) =>
+      getClaireCallAnalysis({
+        tenantId: ctx.tenantId,
+        operatorUserId: ctx.user.openId,
+        isAdmin: ctx.user.role === "admin" || ctx.dayforgeMembership.role !== "field",
+        sessionId: input.sessionId,
+        callSid: input.callSid,
+      })
+    ),
+
+  callAudio: dayforgeMissionFieldProcedure
+    .input(z.object({ sessionId: uuid }))
+    .query(({ ctx, input }) =>
+      getClaireCallAudio({
+        tenantId: ctx.tenantId,
+        operatorUserId: ctx.user.openId,
+        isAdmin: ctx.user.role === "admin" || ctx.dayforgeMembership.role !== "field",
+        sessionId: input.sessionId,
+      })
+    ),
+
+  markCallReviewed: dayforgeMissionFieldProcedure
+    .input(z.object({ sessionId: uuid }))
+    .mutation(({ ctx, input }) =>
+      markClaireCallReviewed({
+        tenantId: ctx.tenantId,
+        operatorUserId: ctx.user.openId,
+        isAdmin: ctx.user.role === "admin" || ctx.dayforgeMembership.role !== "field",
+        sessionId: input.sessionId,
+      })
+    ),
+
+  markCallAnalysisWrong: dayforgeMissionFieldProcedure
+    .input(
+      z.object({
+        sessionId: uuid,
+        note: z.string().trim().min(1).max(1000),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      markClaireCallAnalysisWrong({
+        tenantId: ctx.tenantId,
+        operatorUserId: ctx.user.openId,
+        isAdmin: ctx.user.role === "admin" || ctx.dayforgeMembership.role !== "field",
+        sessionId: input.sessionId,
+        note: input.note,
       })
     ),
 });

@@ -1,10 +1,12 @@
 import {
+  bigint,
   boolean,
   customType,
   decimal,
   index,
   int,
   json,
+  mediumtext,
   mysqlEnum,
   mysqlTable,
   text,
@@ -7010,3 +7012,183 @@ export const operatorMacroGoals = mysqlTable(
 
 export type OperatorMacroGoal = typeof operatorMacroGoals.$inferSelect;
 export type InsertOperatorMacroGoal = typeof operatorMacroGoals.$inferInsert;
+
+export const claireConversationSessions = mysqlTable(
+  "claire_conversation_sessions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    provider: varchar("provider", { length: 32 }).notNull().default("twilio"),
+    providerCallSid: varchar("providerCallSid", { length: 64 }),
+    claireConversationId: varchar("claireConversationId", { length: 36 }).notNull(),
+    conversationKind: varchar("conversationKind", { length: 32 }).notNull(),
+    missionId: int("missionId"),
+    relatedActionIdsJson: json("relatedActionIdsJson").notNull(),
+    status: varchar("status", { length: 32 }).notNull(),
+    completionReason: varchar("completionReason", { length: 64 }),
+    recordingStatus: varchar("recordingStatus", { length: 32 }).notNull(),
+    transcriptionStatus: varchar("transcriptionStatus", { length: 32 }).notNull(),
+    analysisStatus: varchar("analysisStatus", { length: 32 }).notNull(),
+    notificationStatus: varchar("notificationStatus", { length: 32 }).notNull(),
+    recordingConsent: varchar("recordingConsent", { length: 32 }).notNull(),
+    recordingSid: varchar("recordingSid", { length: 64 }),
+    recordingDurationSeconds: int("recordingDurationSeconds"),
+    recordingChannels: varchar("recordingChannels", { length: 16 }),
+    recordingTrack: varchar("recordingTrack", { length: 16 }),
+    recordingProviderUrl: varchar("recordingProviderUrl", { length: 512 }),
+    audioStorageProvider: varchar("audioStorageProvider", { length: 32 }),
+    audioStorageKey: varchar("audioStorageKey", { length: 512 }),
+    audioCompletedAt: timestamp("audioCompletedAt"),
+    audioRetainUntil: timestamp("audioRetainUntil"),
+    transcriptRetainUntil: timestamp("transcriptRetainUntil"),
+    analysisRetainUntil: timestamp("analysisRetainUntil"),
+    claireCompilerVersion: varchar("claireCompilerVersion", { length: 32 }),
+    claireCharacterVersion: varchar("claireCharacterVersion", { length: 32 }),
+    llmModel: varchar("llmModel", { length: 64 }),
+    voiceProvider: varchar("voiceProvider", { length: 32 }),
+    voiceName: varchar("voiceName", { length: 64 }),
+    gitSha: varchar("gitSha", { length: 64 }),
+    frontendRelease: varchar("frontendRelease", { length: 64 }),
+    startedAt: timestamp("startedAt").notNull().defaultNow(),
+    endedAt: timestamp("endedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    claireIdUnique: uniqueIndex("uq_claire_conversation_claire_id").on(
+      table.claireConversationId
+    ),
+    callSidUnique: uniqueIndex("uq_claire_conversation_call_sid").on(
+      table.providerCallSid
+    ),
+    recordingSidUnique: uniqueIndex("uq_claire_conversation_recording_sid").on(
+      table.recordingSid
+    ),
+    operatorLookup: index("idx_claire_conversation_operator").on(
+      table.tenantId,
+      table.operatorUserId,
+      table.startedAt
+    ),
+    pipelineLookup: index("idx_claire_conversation_pipeline").on(
+      table.tenantId,
+      table.analysisStatus,
+      table.notificationStatus
+    ),
+  })
+);
+
+export const claireConversationTurns = mysqlTable(
+  "claire_conversation_turns",
+  {
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+    sessionId: varchar("sessionId", { length: 36 }).notNull(),
+    ordinal: int("ordinal").notNull(),
+    speaker: varchar("speaker", { length: 16 }).notNull(),
+    text: text("text").notNull(),
+    source: varchar("source", { length: 32 }).notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 64 }).notNull(),
+    providerMetadataJson: json("providerMetadataJson"),
+    occurredAt: timestamp("occurredAt").notNull().defaultNow(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_claire_conversation_turn_idempotency").on(
+      table.idempotencyKey
+    ),
+    ordinalUnique: uniqueIndex("uq_claire_conversation_turn_ordinal").on(
+      table.sessionId,
+      table.ordinal
+    ),
+    sessionLookup: index("idx_claire_conversation_turns_session").on(
+      table.sessionId,
+      table.ordinal
+    ),
+  })
+);
+
+export const claireConversationTranscripts = mysqlTable(
+  "claire_conversation_transcripts",
+  {
+    id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+    sessionId: varchar("sessionId", { length: 36 }).notNull(),
+    source: varchar("source", { length: 32 }).notNull(),
+    provider: varchar("provider", { length: 32 }).notNull(),
+    providerVersion: varchar("providerVersion", { length: 64 }),
+    text: mediumtext("text").notNull(),
+    payloadJson: json("payloadJson"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    sourceUnique: uniqueIndex("uq_claire_conversation_transcript_source").on(
+      table.sessionId,
+      table.source
+    ),
+    sessionLookup: index("idx_claire_conversation_transcript_session").on(
+      table.sessionId,
+      table.createdAt
+    ),
+  })
+);
+
+export const claireConversationAnalyses = mysqlTable(
+  "claire_conversation_analyses",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    sessionId: varchar("sessionId", { length: 36 }).notNull(),
+    evaluatorVersion: varchar("evaluatorVersion", { length: 32 }).notNull(),
+    model: varchar("model", { length: 64 }).notNull(),
+    researchFlag: varchar("researchFlag", { length: 32 }).notNull(),
+    resultJson: json("resultJson").notNull(),
+    summaryText: text("summaryText").notNull(),
+    copyBundleText: mediumtext("copyBundleText").notNull(),
+    acceptedActionCount: int("acceptedActionCount").notNull().default(0),
+    completedActionCount: int("completedActionCount").notNull().default(0),
+    outcomeCount: int("outcomeCount").notNull().default(0),
+    humanReviewStatus: varchar("humanReviewStatus", { length: 32 })
+      .notNull()
+      .default("unreviewed"),
+    humanFeedbackKind: varchar("humanFeedbackKind", { length: 32 }),
+    humanFeedbackNote: varchar("humanFeedbackNote", { length: 512 }),
+    reviewedAt: timestamp("reviewedAt"),
+    reviewedByUserId: varchar("reviewedByUserId", { length: 128 }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    sessionUnique: uniqueIndex("uq_claire_conversation_analysis_session").on(
+      table.sessionId
+    ),
+    reviewLookup: index("idx_claire_conversation_analysis_review").on(
+      table.humanReviewStatus,
+      table.createdAt
+    ),
+  })
+);
+
+export const claireConversationNotifications = mysqlTable(
+  "claire_conversation_notifications",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    sessionId: varchar("sessionId", { length: 36 }).notNull(),
+    kind: varchar("kind", { length: 48 }).notNull(),
+    title: varchar("title", { length: 191 }).notNull(),
+    body: varchar("body", { length: 512 }).notNull(),
+    ctaLabel: varchar("ctaLabel", { length: 64 }).notNull(),
+    href: varchar("href", { length: 255 }).notNull(),
+    readAt: timestamp("readAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    kindUnique: uniqueIndex("uq_claire_conversation_notification_kind").on(
+      table.sessionId,
+      table.kind
+    ),
+    inboxLookup: index("idx_claire_conversation_notification_inbox").on(
+      table.tenantId,
+      table.operatorUserId,
+      table.createdAt
+    ),
+  })
+);

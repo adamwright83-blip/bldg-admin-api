@@ -4,7 +4,14 @@ vi.mock("../_core/env", () => ({
   ENV: { adminBaseUrl: "https://api.example.test" },
 }));
 
-import { preDriveConversationTwiML } from "./claireTwilio";
+import {
+  claireVoiceCallCreateOptions,
+  CLAIRE_CALL_STATUS_PATH,
+  CLAIRE_RECORDING_STATUS_PATH,
+  preDriveConversationTwiML,
+  spokenClaireText,
+} from "./claireTwilio";
+import { isClaireVoiceRecordingEnabled } from "./conversation/consent";
 
 describe("H — existing Claire conversational loop remains intact", () => {
   it("uses a conversational voice and gathers barge-in speech around the opening", () => {
@@ -27,6 +34,9 @@ describe("H — existing Claire conversational loop remains intact", () => {
       xml.indexOf("</Gather>")
     );
     expect(xml).toContain("/api/claire/twilio/pre-drive?token=signed-token");
+    expect(spokenClaireText("Your next stop is The Wilshire. Ask how laundry works today.", true)).toBe(
+      "Adam. Claire here. Your next stop is The Wilshire. Ask how laundry works today."
+    );
   });
 
   it("keeps each follow-up answer inside another speech gather", () => {
@@ -42,5 +52,26 @@ describe("H — existing Claire conversational loop remains intact", () => {
     expect(xml.indexOf("The context names the building")).toBeLessThan(
       xml.indexOf("</Gather>")
     );
+  });
+});
+
+describe("Claire voice recording gate", () => {
+  it("stays off unless the explicit env flag is set", () => {
+    expect(isClaireVoiceRecordingEnabled({} as NodeJS.ProcessEnv)).toBe(false);
+    expect(isClaireVoiceRecordingEnabled({ CLAIRE_VOICE_RECORDING_ENABLED: "true" } as NodeJS.ProcessEnv)).toBe(true);
+    const previous = process.env.CLAIRE_VOICE_RECORDING_ENABLED;
+    delete process.env.CLAIRE_VOICE_RECORDING_ENABLED;
+    const disabled = claireVoiceCallCreateOptions();
+    expect(disabled.record).toBe(false);
+    expect(disabled.recordingStatusCallback).toBeUndefined();
+    expect(disabled.statusCallback).toContain(CLAIRE_CALL_STATUS_PATH);
+    process.env.CLAIRE_VOICE_RECORDING_ENABLED = "true";
+    const enabled = claireVoiceCallCreateOptions();
+    expect(enabled.record).toBe(true);
+    expect(enabled.recordingChannels).toBe("dual");
+    expect(enabled.recordingStatusCallback).toContain(CLAIRE_RECORDING_STATUS_PATH);
+    expect(enabled.recordingStatusCallbackEvent).toEqual(["completed", "absent"]);
+    if (previous === undefined) delete process.env.CLAIRE_VOICE_RECORDING_ENABLED;
+    else process.env.CLAIRE_VOICE_RECORDING_ENABLED = previous;
   });
 });

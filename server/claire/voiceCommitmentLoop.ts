@@ -212,7 +212,7 @@ export type PendingProposalState = {
 
 export type VoiceCommitmentTurnResult =
   | { kind: "proposed"; speak: string }
-  | { kind: "accepted"; speak: string; proposal: DayDirectorProposal }
+  | { kind: "accepted"; speak: string; proposal: DayDirectorProposal; commitmentId?: string }
   | { kind: "updated"; speak: string; commitmentId: string }
   | { kind: "declined"; speak: string }
   | { kind: "reask"; speak: string }
@@ -282,6 +282,7 @@ export async function handleVoiceCommitmentTurn(
             ? `Added: ${proposal.title}. I flagged it because we still need ${(proposal.missingDetails ?? []).join(" and ") || "a couple of details"}. What else?`
             : `Added: ${proposal.title}. What else?`,
         proposal,
+        commitmentId: storedId || undefined,
       };
     }
     if (decision === "no") {
