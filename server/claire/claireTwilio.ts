@@ -14,7 +14,11 @@ import {
   ensureCurrentMissionSalesBrief,
   getLatestMissionSalesBrief,
 } from "../missionSalesBrief/missionSalesBriefService";
-import { handleVoiceCommitmentTurn } from "./voiceCommitmentLoop";
+import {
+  handleVoiceCommitmentTurn,
+  trackEmptyTranscript,
+  trackNonEmptyTranscript,
+} from "./voiceCommitmentLoop";
 import type { DayDirectorProposal } from "../../shared/dayDirector";
 import {
   extractClaireDebrief,
@@ -55,6 +59,10 @@ type PreDriveConversation = {
   touchedAt: number;
   /** Voice commitment loop: a proposed Day Director commitment awaiting explicit yes/no. */
   pendingProposal?: DayDirectorProposal | null;
+  /** An utterance whose new-vs-existing-work status was ambiguous; awaiting the operator's clarifying reply. */
+  clarifyingUtterance?: string | null;
+  /** Consecutive empty Twilio speech results — only two in a row end the call. */
+  consecutiveEmptyTranscripts?: number;
 };
 
 const preDriveConversations = new Map<string, PreDriveConversation>();
@@ -363,11 +371,22 @@ export function registerClaireRoutes(app: Express): void {
         ((req.body ?? {}) as Record<string, string>).SpeechResult ?? ""
       ).trim();
       if (!transcript) {
-        preDriveConversations.delete(claims.conversationId);
+        conversation.touchedAt = Date.now();
+        const { shouldEndCall } = trackEmptyTranscript(conversation);
+        if (shouldEndCall) {
+          preDriveConversations.delete(claims.conversationId);
+          return res.send(
+            speakAndHangUp("All right. I'll let you focus on the drive.")
+          );
+        }
         return res.send(
-          speakAndHangUp("All right. I'll let you focus on the drive.")
+          preDriveConversationTwiML({
+            text: "Go ahead, I'm listening.",
+            token: String(req.query.token),
+          })
         );
       }
+      trackNonEmptyTranscript(conversation);
       if (isClaireCallComplete(transcript)) {
         preDriveConversations.delete(claims.conversationId);
         await safeRecordRelationshipEvent(() =>
