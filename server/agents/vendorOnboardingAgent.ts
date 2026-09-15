@@ -486,7 +486,7 @@ function deterministicPlan(ctx: VendorOnboardingContext, vendorMessage: string):
   }
 
   if (ctx.services.length === 0 && previousServices.length > 0 && saysYes && ctx.session.vendorId != null) {
-    const servicesToSave = previousServices.map((service) => metadataObject(service));
+    const servicesToSave = previousServices.map((service: Record<string, unknown>) => metadataObject(service));
     const toolCalls = serviceCatalogToolCalls(ctx, servicesToSave);
     return {
       intent: "confirm_prefilled_services",
@@ -675,7 +675,7 @@ function sanitizePlan(rawPlan: VendorOnboardingPlan, ctx: VendorOnboardingContex
   const fallback = deterministicPlan(ctx, "");
   const validStatuses = new Set(["started", "collecting_details", "pricing_setup", "availability_setup", "payment_setup", "admin_configured", "completed", "abandoned"]);
   const statePatch = rawPlan.statePatch ?? fallback.statePatch;
-  const toolCalls = Array.isArray(rawPlan.toolCalls)
+  const toolCalls: VendorOnboardingToolCall[] = Array.isArray(rawPlan.toolCalls)
     ? rawPlan.toolCalls
         .filter((call) => vendorOnboardingAllowedTools.has(call.toolName))
         .filter((call) => call.requiresApproval !== true)

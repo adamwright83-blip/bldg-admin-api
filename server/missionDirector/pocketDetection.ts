@@ -12,12 +12,16 @@
 import type { TimePocket } from "./missionDirectorTypes";
 
 export const DEFAULT_TRAVEL_RESERVE_MINUTES = 15;
+/** Conservative named deduction when stop service/work duration is unknown. Not a measured duration. */
+export const DEFAULT_UNKNOWN_STOP_WORK_RESERVE_MINUTES = 10;
 
 type ScheduledItem = {
   id: string;
   title: string;
   scheduledAt: string | null;
   kind: string;
+  /** Measured stop/service duration in minutes when an authoritative source supplies it. */
+  durationMinutes?: number | null;
 };
 
 const FIXED_KINDS = new Set(["pickup", "delivery", "job"]);
@@ -25,9 +29,12 @@ const FIXED_KINDS = new Set(["pickup", "delivery", "job"]);
 export function detectTimePockets(input: {
   timeline: readonly ScheduledItem[];
   travelReserveMinutes?: number;
+  unknownStopWorkReserveMinutes?: number;
 }): TimePocket[] {
   const travelReserveMinutes =
     input.travelReserveMinutes ?? DEFAULT_TRAVEL_RESERVE_MINUTES;
+  const unknownStopWorkReserveMinutes =
+    input.unknownStopWorkReserveMinutes ?? DEFAULT_UNKNOWN_STOP_WORK_RESERVE_MINUTES;
   const fixed = input.timeline
     .filter(item => FIXED_KINDS.has(item.kind) && item.scheduledAt)
     .map(item => ({ ...item, at: Date.parse(item.scheduledAt!) }))
@@ -43,10 +50,12 @@ export function detectTimePockets(input: {
         kind: "open_ended",
         boundedBy: { before: null, after: null },
         travelReserveMinutes,
+        unknownStopWorkReserveMinutes: null,
         usableMinutes: null,
         confidence: "low",
         warnings: [
           "No fixed scheduled commitments for this day — pocket duration cannot be claimed, only that the day is open.",
+          "Travel duration is unavailable; travelReserveMinutes is a named safety reserve, not verified travel time.",
         ],
       },
     ];
@@ -57,7 +66,27 @@ export function detectTimePockets(input: {
     const before = fixed[i];
     const after = fixed[i + 1];
     const minutes = Math.max(0, Math.round((after.at - before.at) / 60_000));
-    const usableMinutes = Math.max(0, minutes - travelReserveMinutes);
+    const measuredStopWork = before.durationMinutes;
+    const stopWorkMinutes =
+      measuredStopWork != null && Number.isFinite(measuredStopWork)
+        ? Math.max(0, Math.round(measuredStopWork))
+        : unknownStopWorkReserveMinutes;
+    const usableMinutes = Math.max(
+      0,
+      minutes - travelReserveMinutes - stopWorkMinutes
+    );
+    const warnings = [
+      "Travel duration is unavailable; travelReserveMinutes is a named safety reserve, not verified travel time.",
+    ];
+    if (measuredStopWork != null && Number.isFinite(measuredStopWork)) {
+      warnings.push(
+        `Stop service duration of ${stopWorkMinutes} minutes was used from the scheduled item.`
+      );
+    } else {
+      warnings.push(
+        "Stop service duration is unknown; unknownStopWorkReserveMinutes is a named conservative assumption, not a measured duration."
+      );
+    }
     pockets.push({
       startsAt: before.scheduledAt,
       endsAt: after.scheduledAt,
@@ -65,10 +94,13 @@ export function detectTimePockets(input: {
       kind: "between_stops",
       boundedBy: { before: before.id, after: after.id },
       travelReserveMinutes,
+      unknownStopWorkReserveMinutes:
+        measuredStopWork != null && Number.isFinite(measuredStopWork)
+          ? null
+          : unknownStopWorkReserveMinutes,
       usableMinutes,
-      // Both bounds are real scheduled times by construction (filtered above).
       confidence: "high",
-      warnings: [],
+      warnings,
     });
   }
   return pockets;

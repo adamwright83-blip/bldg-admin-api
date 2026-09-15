@@ -44,7 +44,7 @@ export type LiveWeatherInput = {
   isDaytime: boolean;
   sunriseIso?: string;
   sunsetIso?: string;
-  source: "google_weather" | "authored_fallback";
+  source: "google_weather" | "authored_fallback" | "open_meteo_fallback";
   observedAt: string;
 };
 

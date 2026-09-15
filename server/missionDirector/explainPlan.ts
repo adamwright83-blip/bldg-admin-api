@@ -36,7 +36,11 @@ function contentText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
 
 function deterministicExplanation(outcome: MissionPlanOutcome): string {
   if (outcome.status === "planned") {
-    return `Primary: ${outcome.primary.title} — ${outcome.primary.objective} Complete when: ${outcome.primary.completionCondition} Fallback if the day changes: ${outcome.fallback.title}.`;
+    const why = outcome.primary.rankEvidence.factors
+      .filter(factor => factor.effect > 0)
+      .map(factor => `${factor.name}=${String(factor.value)}`)
+      .join("; ");
+    return `WHY SELECTED: ${why || "equal grounded scores; campaignId tie-break"}. CONFIDENCE: ${outcome.primary.rankEvidence.confidence.toUpperCase()}. Primary: ${outcome.primary.title} — ${outcome.primary.objective} Complete when: ${outcome.primary.completionCondition} Fallback if the day changes: ${outcome.fallback.title}.`;
   }
   if (outcome.status === "fallback_only") {
     return `Only the fallback fits today (${outcome.reason.replace(/_/g, " ").toLowerCase()}): ${outcome.fallback.title} — ${outcome.fallback.objective} Complete when: ${outcome.fallback.completionCondition}`;

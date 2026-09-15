@@ -81,7 +81,7 @@ describe("Persona A — laundry route operator with imported customers", () => {
     const cargo = repo("server", "goldlineCargo", "cargoService.ts");
     // Custody is authoritative: an order status alone never puts property in a vehicle.
     expect(cargo).toContain("Physical transfer must be explicitly confirmed.");
-    expect(cargo).toContain("gpsProvesTransfer:false");
+    expect(cargo).toContain("gpsProvesTransfer: false");
     expect(cargo).toContain("o.status NOT IN ('delivered','cancelled')");
   });
 

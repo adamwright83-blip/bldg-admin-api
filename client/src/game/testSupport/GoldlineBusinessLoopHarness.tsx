@@ -9,6 +9,7 @@ import type {
   CommercialMission,
   CommercialMissionStatus,
 } from "../../../../shared/commercialMission";
+import { missionStatusForFieldVisitOutcome } from "../../../../shared/commercialMissionField";
 import type {
   DriverGameWorldNode,
   WorldMissionState,
@@ -349,9 +350,11 @@ export default function GoldlineBusinessLoopHarness(props: {
           missionId: input.missionId,
           requestId: input.requestId,
         });
-        visit.current = visitContext(input.outcome, 6);
+        const missionStatus =
+          missionStatusForFieldVisitOutcome(input.outcome) ?? visit.current.mission.status;
+        visit.current = visitContext(missionStatus, 6);
         stageTruth({
-          missionStatus: input.outcome,
+          missionStatus,
           visualState:
             input.outcome === "won"
               ? "captured"

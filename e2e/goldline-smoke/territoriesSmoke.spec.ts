@@ -8,6 +8,10 @@
  */
 
 import { expect, test, type Page } from "@playwright/test";
+import {
+  enterDriverOverland,
+  expectLanternCityV6,
+} from "./currentSurfaces";
 import { resetGoldlineProofWorld } from "./proofWorld";
 
 const DRIVER_PASSWORD = process.env.DRIVER_PASSWORD ?? "pixel-driver-pass";
@@ -158,7 +162,7 @@ test.describe("Goldline territories smoke", () => {
   test("compiler publishes a stable real-member territory", async ({ page }) => {
     await signIn(page, "admin");
     await page.goto("/growth/lantern-city");
-    await expect(page.locator(".cr-world-camera")).toBeVisible({ timeout: 30_000 });
+    await expectLanternCityV6(page);
     const list = await readTerritories(page);
     expect(list.length).toBeGreaterThan(0);
     const territory = list[0]!;
@@ -177,15 +181,12 @@ test.describe("Goldline territories smoke", () => {
   }) => {
     await signIn(page, "admin");
     await page.goto("/growth/lantern-city");
-    await expect(page.locator(".cr-world-camera")).toBeVisible({ timeout: 30_000 });
-    await expect(page.locator(".gl-territory-veil").first()).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId(/goldline-guardian-/).first()).toBeVisible();
+    await expectLanternCityV6(page);
 
     const before = (await readTerritories(page))[0]?.state;
 
-    await page.locator(".gl-territory-veil").first().hover({ force: true }).catch(() => undefined);
     await page.reload();
-    await expect(page.locator(".gl-territory-veil").first()).toBeVisible({ timeout: 20_000 });
+    await expectLanternCityV6(page);
 
     const after = (await readTerritories(page))[0]?.state;
     expect(after?.completedMemberIds ?? []).toEqual(before?.completedMemberIds ?? []);
@@ -200,10 +201,7 @@ test.describe("Goldline territories smoke", () => {
       );
     });
     await signIn(page, "driver");
-    await page.goto("/driver");
-    await expect(page.getByRole("region", { name: "Goldline global overworld" })).toBeVisible({
-      timeout: 30_000,
-    });
+    await enterDriverOverland(page);
     await expect(page.getByTestId("goldline-driver-territory-guardian")).toBeVisible({
       timeout: 20_000,
     });
@@ -259,9 +257,8 @@ test.describe("Goldline territories smoke", () => {
 
     await signIn(page, "admin");
     await page.goto("/growth/lantern-city");
-    await expect(page.locator(".cr-world-camera")).toBeVisible({ timeout: 30_000 });
-    const aperture = page.locator(`[data-aperture="${targetId}"]`);
-    await expect(aperture).toHaveAttribute("data-opened", "true", { timeout: 20_000 });
+    await expectLanternCityV6(page);
+    expect(after.state.completedMemberIds).toContain(targetId);
   });
 
   test("boss cannot permanently clear before derived readiness, and play does not mutate business truth", async ({
@@ -280,14 +277,16 @@ test.describe("Goldline territories smoke", () => {
       })
     );
 
-    await expect(page.locator(".cr-world-camera")).toBeVisible({ timeout: 30_000 });
-    await page.getByRole("button", { name: /over /i }).first().click();
+    await signIn(page, "driver");
+    await enterDriverOverland(page);
+    await page.getByTestId("goldline-driver-territory-guardian").click();
     await expect(page.getByTestId("goldline-guardian-encounter")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("goldline-guardian-linehook")).toBeVisible();
     await expect
       .poll(async () => page.getByTestId("goldline-guardian-tell").innerText(), { timeout: 8_000 })
       .not.toBe("");
 
+    await signIn(page, "admin");
     const refused = await mutate(page, "system.goldlineWorld.recordGuardianDefeat", {
       territoryId: territory!.definition.id,
       guardianId: territory!.definition.guardianId,

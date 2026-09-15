@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { dayforgePipelineProcedure, router } from "../_core/trpc";
+import { COMMERCIAL_FOLLOW_UP_OUTCOMES } from "../../shared/commercialPipeline";
 import {
   advanceCommercialRelationshipStage,
   approveCommercialAgreement,
@@ -96,6 +97,9 @@ export const commercialPipelineRouter = router({
         pipelineId: z.number().int().positive(),
         followUpId: z.string().uuid(),
         requestId,
+        outcome: z.enum(COMMERCIAL_FOLLOW_UP_OUTCOMES),
+        notes: z.string().trim().min(1).max(20_000),
+        nextFollowUpAt: z.coerce.date().optional(),
       })
     )
     .mutation(({ ctx, input }) =>

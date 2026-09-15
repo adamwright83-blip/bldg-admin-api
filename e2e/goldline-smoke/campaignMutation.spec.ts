@@ -3,6 +3,7 @@
  */
 
 import { expect, test, type Page } from "@playwright/test";
+import { enterDriverOverland } from "./currentSurfaces";
 import { resetGoldlineProofWorld } from "./proofWorld";
 
 const DRIVER_PASSWORD = process.env.DRIVER_PASSWORD ?? "pixel-driver-pass";
@@ -103,10 +104,7 @@ test.describe("Goldline campaign mutations", () => {
           JSON.stringify(["first_entry_explained"])
         );
       });
-      await page.goto("/driver");
-      await expect(page.getByRole("region", { name: "Goldline global overworld" })).toBeVisible({
-        timeout: 30_000,
-      });
+      await enterDriverOverland(page);
       await expect(page.getByTestId("goldline-campaign-hud")).toBeVisible({ timeout: 20_000 });
       await expect(page.getByTestId("goldline-campaign-revision-why")).toBeVisible({
         timeout: 20_000,

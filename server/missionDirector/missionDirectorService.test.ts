@@ -39,11 +39,27 @@ describe("Mission Director — intelligence boundary (§5 invariant)", () => {
           kind: "open_ended" as const,
           boundedBy: { before: null, after: null },
           travelReserveMinutes: 15,
+          unknownStopWorkReserveMinutes: null,
           usableMinutes: null,
           confidence: "low" as const,
           warnings: [],
         },
         isFallbackVariant: false,
+        rankEvidence: {
+          campaignId: "referral-ask",
+          score: 20,
+          confidence: "high",
+          factors: [
+            {
+              name: "prep_readiness",
+              value: true,
+              source: "eligibility",
+              effect: 20,
+              confidence: "high",
+            },
+          ],
+          warnings: [],
+        },
       },
       fallback: {
         campaignId: "review-request",
@@ -57,14 +73,31 @@ describe("Mission Director — intelligence boundary (§5 invariant)", () => {
           kind: "open_ended" as const,
           boundedBy: { before: null, after: null },
           travelReserveMinutes: 15,
+          unknownStopWorkReserveMinutes: null,
           usableMinutes: null,
           confidence: "low" as const,
           warnings: [],
         },
         isFallbackVariant: false,
+        rankEvidence: {
+          campaignId: "referral-ask",
+          score: 20,
+          confidence: "high",
+          factors: [
+            {
+              name: "prep_readiness",
+              value: true,
+              source: "eligibility",
+              effect: 20,
+              confidence: "high",
+            },
+          ],
+          warnings: [],
+        },
       },
       explanation: "",
       intelligence: "deterministic" as const,
+      ranking: [],
     };
     const result = await explainMissionPlan({ tenantId: "default", outcome });
     expect(Object.keys(result).sort()).toEqual(["explanation", "intelligence"]);

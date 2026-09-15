@@ -1,7 +1,9 @@
 import { ENV } from "../_core/env";
 import { recordGoogleTelemetry } from "./googleTelemetry";
-import { computeOpportunityPressure } from "../../shared/opportunityPressure";
-import type { OpportunityPressureProjection } from "../../shared/opportunityPressure";
+import {
+  computeOpportunityPressure,
+  type TerritoryOpportunityProjection,
+} from "../../shared/opportunityPressure";
 
 /**
  * Uses the real Google Area Insights API (areainsights.googleapis.com/v1:computeInsights)
@@ -31,14 +33,14 @@ const STRATEGIC_DISTRICT_CIRCLES = [
 // Cache 6 hours — housing density doesn't change rapidly
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 let cachedResult: {
-  projection: OpportunityPressureProjection;
+  projection: TerritoryOpportunityProjection;
   rawCounts: Record<string, number | null>;
   timestamp: number;
 } | null = null;
 
 export type PlacesAggregateResult = {
   status: "available" | "partial" | "unavailable" | "unconfigured";
-  projection: OpportunityPressureProjection;
+  projection: TerritoryOpportunityProjection;
   rawCounts: Record<string, number | null>;
   errorDistricts: string[];
 };

@@ -58,11 +58,7 @@ describe("driver mission builder contract", () => {
   });
 
   it("keeps mission stops separate from operational order records", () => {
-    expect(driver).toMatch(
-      // Driver's authenticated default route still resolves through the Goldline
-      // controller. Props may evolve independently of the mission/order boundary.
-      /return\s+<GoldlineDriverController\b/
-    );
+    expect(driver).toMatch(/<GoldlineDriverController\b/);
     expect(driverController).toContain("salesMissions: builtMissions.data");
     expect(goldline).toContain("function toSalesStop");
     expect(goldline).toContain("function toRouteStop");

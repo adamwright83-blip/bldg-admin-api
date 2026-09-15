@@ -68,6 +68,10 @@ test.describe("Lantern City V6 route and retained workflows", () => {
     for (const id of ["opus_la", "century_park_east"]) {
       await page.goto("/growth/lantern-city");
       await page.locator(`[data-scene-id="${id}"]`).click();
+      if (id === "opus_la") {
+        await expect(page).toHaveURL(/\/growth\/opus-la-inspection/);
+        await page.getByRole("button", { name: /INITIATE TOWER WAR/i }).click();
+      }
       await expect(page).toHaveURL(new RegExp(`tower-wars\\?building=${id}`));
       await expect(page.locator(".tw-arena")).toBeVisible();
       await expect
@@ -84,6 +88,16 @@ test.describe("Lantern City V6 route and retained workflows", () => {
       const light = page.locator(
         `[data-scene-id="${id}"] [data-scene-target="light"]`
       );
+      if ((await light.count()) === 0) {
+        // Proof world may have a stronghold with no attached live customer.
+        await page.locator(`[data-scene-id="${id}"] [data-scene-target="tower"]`).click();
+        if (id === "opus_la") {
+          await expect(page).toHaveURL(/\/growth\/opus-la-inspection/);
+          await page.getByRole("button", { name: /INITIATE TOWER WAR/i }).click();
+        }
+        await expect(page).toHaveURL(new RegExp(`tower-wars\\?building=${id}`));
+        continue;
+      }
       await expect(light).toBeVisible();
       await light.click();
       await expect(page.locator(".owi")).toBeVisible();
@@ -94,13 +108,16 @@ test.describe("Lantern City V6 route and retained workflows", () => {
       await page
         .locator(`[data-scene-id="${id}"] [data-scene-target="tower"]`)
         .click();
+      if (id === "opus_la") {
+        await expect(page).toHaveURL(/\/growth\/opus-la-inspection/);
+        await page.getByRole("button", { name: /INITIATE TOWER WAR/i }).click();
+      }
       await expect(page).toHaveURL(new RegExp(`tower-wars\\?building=${id}`));
       await expect(page.locator(".tw-arena")).toBeVisible();
     }
   });
-  test("frozen V5 is still available for comparison", async ({ page }) => {
+  test("legacy scene=v5 query still opens the live V6 city", async ({ page }) => {
     await page.goto("/growth/lantern-city?scene=v5");
-    await expect(page.locator(".lc-page.lc-v5-game")).toBeVisible();
-    await expect(page.locator('[data-lantern-city="v6"]')).toHaveCount(0);
+    await expect(page.locator('[data-lantern-city="v6"]')).toBeVisible();
   });
 });

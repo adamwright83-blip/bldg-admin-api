@@ -1,10 +1,17 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import {
+  describeWorldPresentation,
+  orderByProminence,
+  presentWorldState,
+} from "@shared/goldlineWorldPresentation";
+import { projectPhysicalWorldState } from "@shared/goldlineWorld";
 
 const read = (file: string) => readFileSync(join(__dirname, file), "utf8");
 
-const atlas = read("./LanternCityAtlas.tsx");
+const scene = read("./LanternCitySceneV6/LanternCityScene.tsx");
+const renderer = read("./LanternCitySceneV6/LanternCitySceneRenderer.tsx");
 const inspector = read("./WorldEntityInspector.tsx");
 /** Collapsed whitespace, so prose assertions survive reformatting. */
 const inspectorProse = inspector.replace(/\s+/g, " ");
@@ -15,45 +22,66 @@ const service = readFileSync(
 
 describe("Lantern City is the living world", () => {
   it("lets one building be one building by matching identity on the server", () => {
-    // A second normaliser in the browser could disagree with the resolver that
-    // owns physical identity and split one building across two markers.
-    expect(atlas).not.toMatch(/const normalizeAddress\s*=/);
-    expect(atlas).not.toContain('aliasType === "normalized_address"');
+    expect(scene).not.toMatch(/const normalizeAddress\s*=/);
+    expect(scene).not.toContain('aliasType === "normalized_address"');
     expect(service).toContain("normalizePhysicalAlias");
   });
 
   it("wears history and knowledge on the building itself", () => {
-    expect(atlas).toContain("WorldMarkerAtmosphere");
-    expect(atlas).toContain("lc-veil");
-    expect(atlas).toContain("lc-marks");
-    expect(atlas).toContain("presentation.marks.map");
+    expect(inspector).toContain("presentation.veilExplanation");
+    expect(inspector).toContain("owi-knowledge");
+    expect(renderer).toContain("CanonicalBuildingArt");
   });
 
   it("says every visible atmosphere out loud as well", () => {
-    // Uncertainty that can only be seen is uncertainty some users never get.
-    expect(atlas).toContain("describeWorldPresentation");
-    expect(atlas).toContain("aria-label={markerLabel(");
+    const projection = projectPhysicalWorldState({
+      physicalEntityId: "building-1",
+      events: [],
+      residentCount: 0,
+      activeResidentCount: 0,
+      epistemicState: "unknown",
+    });
+    const presentation = presentWorldState(projection);
+    const spoken = describeWorldPresentation("OPUS LA", presentation);
+    expect(spoken).toContain("OPUS LA");
+    expect(spoken.length).toBeGreaterThan("OPUS LA".length);
     expect(inspector).toContain("presentation.veilExplanation");
+    expect(renderer).toContain("aria-label=");
   });
 
   it("lets attention emphasise a place without rewriting it", () => {
-    expect(atlas).toContain("orderByProminence");
-    expect(atlas).toContain("attention-${presentation.prominenceTier}");
-    // Attention may reorder and highlight. It must not mutate any record.
-    expect(atlas).not.toMatch(/attention[\s\S]{0,120}mutate\(/);
+    const base = presentWorldState(
+      projectPhysicalWorldState({
+        physicalEntityId: "building-1",
+        events: [],
+        residentCount: 0,
+        activeResidentCount: 0,
+        epistemicState: "unknown",
+      })
+    );
+    const items = [
+      { id: "quiet", presentation: { ...base, prominence: 0.1 } },
+      { id: "loud", presentation: { ...base, prominence: 0.9 } },
+    ];
+    const ranked = orderByProminence(items, item => item.presentation);
+    expect(ranked.map(item => item.id)).toEqual(["loud", "quiet"]);
+    expect(items[0]?.id).toBe("quiet");
+    expect(scene).not.toMatch(/attention[\s\S]{0,120}mutate\(/);
+    expect(scene).toContain("composeLanternCityScene");
   });
 
   it("reveals a deep-linked place instead of silently selecting it", () => {
-    expect(atlas).toContain("scrollIntoView");
-    expect(atlas).toContain("is-revealing");
-    expect(atlas).toContain("setRevealing");
+    expect(scene).toMatch(/\.get\(\s*"entity"\s*\)/);
+    expect(scene).toContain("requestedEntityId && entity");
+    expect(scene).toContain("WorldEntityInspector");
   });
 
   it("embodies the pursued place as a building rather than a glyph", () => {
-    expect(atlas).toContain("lc-pursued-building");
-    // The old flame glyph stood in for a building that can now be drawn.
-    expect(atlas).not.toContain("lc-pursued-flame");
-    expect(atlas).not.toContain("♨");
+    expect(renderer).toContain("CanonicalBuildingArt");
+    expect(renderer).toContain('object.kind === "prospect"');
+    expect(scene).not.toContain("lc-pursued-flame");
+    expect(renderer).not.toContain("♨");
+    expect(scene).not.toContain("♨");
   });
 });
 
@@ -79,7 +107,6 @@ describe("recovery stays honest at both ends", () => {
       join(__dirname, "../../../../../server/goldlineWorld/entityLookup.ts"),
       "utf8"
     );
-    // An address bound to two entities is a conflict, not a coin flip.
     expect(lookup).toContain("unique.size === 1");
   });
 });

@@ -176,12 +176,10 @@ export function evaluateVendorProposalApprovalGate(
     proposal.proposalDetails?.confidence === "low";
   const hasUnclearTerms =
     proposal.reasons?.includes("vendor_requested_clarification") ||
-    proposal.reasons?.includes("needs_clarification") ||
-    proposal.status === "proposal_needs_clarification";
+    proposal.reasons?.includes("needs_clarification");
   const hasUnsupportedConstraints =
     proposal.reasons?.includes("vendor_unsupported_request") ||
-    proposal.reasons?.includes("unsupported") ||
-    proposal.status === "proposal_unsupported";
+    proposal.reasons?.includes("unsupported");
 
   const operatorReviewRequired =
     hasRiskFlags ||

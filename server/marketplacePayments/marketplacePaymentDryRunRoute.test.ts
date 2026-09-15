@@ -35,12 +35,16 @@ function makeReqRes(body: unknown, headers: Record<string, string> = {}) {
 
 const ROUTE = "/api/internal/marketplace-payments/dry-run";
 
+function isoFromNow(days: number) {
+  return new Date(Date.now() + days * 86_400_000).toISOString();
+}
+
 const authorityBody = {
   authorityType: "guest_readiness",
   status: "active",
   budgetCapCents: 30_000,
-  deadlineAt: "2026-06-22T12:00:00.000Z",
-  expiresAt: "2026-06-22T12:00:00.000Z",
+  deadlineAt: isoFromNow(7),
+  expiresAt: isoFromNow(7),
   revokedAt: null,
   allowedRiskCategories: ["low", "medium"],
   disallowedCategories: [],
@@ -50,15 +54,15 @@ const actionBody = {
   authorityType: "guest_readiness",
   category: "flowers",
   spendCents: 5_000,
-  scheduledAt: "2026-06-20T12:00:00.000Z",
+  scheduledAt: isoFromNow(1),
   accessPattern: "no_entry",
 };
 const acceptanceBody = {
   acceptanceType: "provider_accepted",
   acceptanceStatus: "accepted",
-  expiresAt: "2026-06-21T12:00:00.000Z",
-  serviceWindowStart: "2026-06-20T10:00:00.000Z",
-  serviceWindowEnd: "2026-06-20T12:00:00.000Z",
+  expiresAt: isoFromNow(2),
+  serviceWindowStart: isoFromNow(1),
+  serviceWindowEnd: isoFromNow(1.05),
   acceptedPriceCents: 5_000,
 };
 
@@ -94,7 +98,7 @@ describe("Marketplace payment dry-run route", () => {
         authorizationState: "authorized",
         acceptance: { ...acceptanceBody, acceptanceStatus: "offered" },
         budgetCapCents: 30_000,
-        planDeadlineAt: "2026-06-22T12:00:00.000Z",
+        planDeadlineAt: isoFromNow(7),
       },
     });
     await handlers.get(ROUTE)!(req, res, vi.fn());
@@ -113,7 +117,7 @@ describe("Marketplace payment dry-run route", () => {
         authorizationState: "authorization_pending",
         acceptance: acceptanceBody,
         budgetCapCents: 30_000,
-        planDeadlineAt: "2026-06-22T12:00:00.000Z",
+        planDeadlineAt: isoFromNow(7),
       },
     });
     await handlers.get(ROUTE)!(req, res, vi.fn());
@@ -133,7 +137,7 @@ describe("Marketplace payment dry-run route", () => {
       authorization: { authority: authorityBody, action: actionBody, residentApprovalGranted: false },
       capture: {
         authorizationState: "authorized", acceptance: acceptanceBody,
-        budgetCapCents: 30_000, planDeadlineAt: "2026-06-22T12:00:00.000Z",
+        budgetCapCents: 30_000, planDeadlineAt: isoFromNow(7),
       },
     });
     await handlers.get(ROUTE)!(req, res, vi.fn());

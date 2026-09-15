@@ -197,10 +197,34 @@ describe("operations event capture", () => {
     });
   });
 
+  it("maps custody_board_deliver onto driver_app_bldg without changing event type or actor provenance", () => {
+    const event = buildOperationEventForOrderStatusChange({
+      order: order({ status: "ready" }),
+      previousStatus: "ready",
+      nextStatus: "delivered",
+      actor: {
+        source: "custody_board_deliver",
+        actorUserId: "driver-1",
+        actorDisplayName: "Adam",
+        actualEventTimestamp: new Date("2026-05-15T01:00:00.000Z"),
+      },
+    });
+    expect(event).toMatchObject({
+      source: "driver_app_bldg",
+      sourceEventType: "dropoff_completed",
+      actorUserId: "driver-1",
+    });
+    expect((event?.rawJson as { source?: string }).source).toBe("custody_board_deliver");
+  });
+
   it("DB helpers avoid duplicate pickup events across sources", () => {
     const source = readFileSync(new URL("./db.ts", import.meta.url), "utf8");
     expect(source).toContain("ensurePickupCompletedOperationsEventForOrder");
-    expect(source).toContain("eq(operationsEvents.orderId, orderId), eq(operationsEvents.sourceEventType, \"pickup_completed\")");
-    expect(source).toContain("eq(operationsEvents.orderId, orderId), eq(operationsEvents.sourceEventType, event.sourceEventType)");
+    expect(source).toMatch(
+      /eq\(operationsEvents\.orderId,\s*orderId\)[\s\S]{0,80}eq\(operationsEvents\.sourceEventType,\s*"pickup_completed"\)/
+    );
+    expect(source).toMatch(
+      /eq\(operationsEvents\.orderId,\s*orderId\)[\s\S]{0,80}eq\(operationsEvents\.sourceEventType,\s*event\.sourceEventType\)/
+    );
   });
 });

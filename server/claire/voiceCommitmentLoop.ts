@@ -694,7 +694,11 @@ export async function handleVoiceCommitmentTurn(
         commitmentId: match.id,
         title: match.title,
         patch: {
-          detailState: completingDetails ? "COMPLETE" : match.detailState,
+          detailState: completingDetails
+            ? "COMPLETE"
+            : match.detailState === "NEEDS_DETAILS"
+              ? "NEEDS_DETAILS"
+              : undefined,
           missingDetails: completingDetails ? [] : match.missingDetails,
           detailNote: completingDetails ? "Details supplied by operator" : match.detailNote,
           scheduleKind: schedule.kind,

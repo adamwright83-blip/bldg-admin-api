@@ -54,13 +54,7 @@ describe("driver mobile actions", () => {
   });
 
   it("routes the active driver through Goldline without an admin mission redirect", () => {
-    expect(driverSource).toMatch(
-      // The law is that Driver's default render IS the Goldline controller, with
-      // no admin ProductShell redirect. The literal spelling was incidental: it
-      // broke when Vehicle Cargo began riding alongside the controller, which is
-      // a source-formatting signal rather than a truth signal.
-      /return <>?<GoldlineDriverController \/>/
-    );
+    expect(driverSource).toMatch(/<GoldlineDriverController\b/);
     expect(driverSource).not.toContain("ProductShell");
     expect(goldlineSource).toContain("Goldline daily adventure map");
     expect(fieldHomeSource).toContain('href="/product/hunt"');

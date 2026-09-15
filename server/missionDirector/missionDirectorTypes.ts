@@ -11,8 +11,10 @@ export {
   type FallbackOnlyReason,
   type MissionDirectorPlan,
   type MissionPlanOutcome,
+  type MissionRankEvidence,
   type MissionSelection,
   type NoPlanReason,
+  type RankFactor,
   type TimePocket,
 } from "../../shared/missionDirector";
 

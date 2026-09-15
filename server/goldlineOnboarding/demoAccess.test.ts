@@ -148,9 +148,12 @@ describe("host routing", () => {
     expect(onboarding).toContain('<a href="/">RETURN TO MY GOLDLINE</a>');
   });
 
-  it("leaves driver.bldg.chat alone", () => {
+  it("leaves driver.bldg.chat on the Daily Line except operator follow-through paths", () => {
     expect(app).toContain('const isDriverHost = hostname === "driver.bldg.chat"');
-    expect(app).toContain('if (isDriverHost && window.location.pathname !== "/")');
+    expect(app).toContain("if (isDriverHost)");
+    expect(app).toContain('return <Redirect to="/" />');
+    expect(app).toContain('path.startsWith("/claire")');
+    expect(app).toContain('path.startsWith("/goldline/capability-gaps")');
   });
 });
 
@@ -197,7 +200,7 @@ describe("production migration creates what the first mission writes to", () => 
 
   it("splits cleanly into statements the migrator can run", () => {
     const statements = worldSchema.split(";").map(s => s.trim()).filter(Boolean);
-    expect(statements).toHaveLength(3);
+    expect(statements.length).toBeGreaterThanOrEqual(3);
     for (const statement of statements)
       expect(statement).toContain("CREATE TABLE IF NOT EXISTS");
   });

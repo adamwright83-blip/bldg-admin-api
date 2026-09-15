@@ -82,23 +82,18 @@ describe("reveal shows real projections, never cinematic constants", () => {
 
 describe("day two returns to the world, never to the interview", () => {
   it("routes a completed session to the persistent world instead of the questions", () => {
-    expect(host).toContain('goldlineEntry.data?.session?.status === "COMPLETE"');
-    expect(host).toContain("if (isWorldHome && designPartnerWorld)");
-    expect(host).toContain("if (isTowerWars && designPartnerWorld)");
-    // The interview only renders while the session is NOT complete.
     expect(host).toContain('goldlineEntry.data.session?.status !== "COMPLETE"');
-    // The reveal is never mounted without the world and mission it dereferences.
-    expect(host).toContain("goldlineEntry.data.session.world &&");
-    expect(host).toContain("goldlineEntry.data.session.mission");
+    expect(host).toContain("Lantern City is the canonical returning-user world");
+    expect(host).toContain("if (isWorldHome &&");
+    expect(host).not.toContain("if (isWorldHome && designPartnerWorld)");
+    expect(host).not.toContain("if (isTowerWars && designPartnerWorld)");
   });
 
   it("hands Driver back to the real controller once the first mission is resolved", () => {
     expect(driver).toContain("!firstMission.gameplayCompletedAt");
-    expect(driver).toContain("<GoldlineDriverController />");
-    // First mission retains its cargo control; the real Daily Line mounts the
-    // hero cargo composition inside GoldlineDayPlan itself.
-    expect(driver).toContain("<VehicleCargo />");
-    expect(dayPlan).toContain('mode="hero"');
+    expect(driver).toContain("<GoldlineDriverController");
+    expect(dayPlan).toContain("DriverVehicleDrawer");
+    expect(dayPlan).toContain("cargo={props.cargoFixture}");
   });
 
   it("keeps an unfinished mission visible on return", () => {

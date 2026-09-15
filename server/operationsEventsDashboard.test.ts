@@ -152,7 +152,11 @@ describe("operations events dashboard helpers", () => {
   it("does not exclude tenantId default rows when business unit filter is All", () => {
     const query = whereSql({ businessUnit: "all" });
     expect(query.sql).not.toContain("`operations_events`.`tenantId` = ?");
-    expect(operationEventWithinDashboardDateRange(event({ tenantId: "default" }), normalizeOperationsEventsFilters({}))).toBe(true);
+    const filters = normalizeOperationsEventsFilters(
+      { startDate: "2026-05-01", endDate: "2026-05-31" },
+      new Date("2026-05-14T19:00:00.000Z")
+    );
+    expect(operationEventWithinDashboardDateRange(event({ tenantId: "default" }), filters)).toBe(true);
   });
 
   it("summarizes the verified fixture rows as total 2, pickup 1, dropoff 1", () => {
@@ -267,13 +271,14 @@ describe("operations events dashboard helpers", () => {
 
   it("chargeCard persists Stripe payment truth before non-critical side effects", () => {
     const source = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
-    const stripeCreate = source.indexOf("paymentIntent = await stripe.paymentIntents.create");
-    const paidUpdate = source.indexOf("await updateOrderIntake(input.orderId, {\n            paid: true");
-    const ensureEvent = source.indexOf("await ensurePickupCompletedOperationsEventForOrder(input.orderId");
-    const receipt = source.indexOf("const receiptToken = await new jose.SignJWT");
-    const sms = source.indexOf("await notifyCardCharged(order.phone");
-    const sheets = source.indexOf("await writeOrderToSheet(order, input.amountCents)");
-    const opsTask = source.indexOf("const task = await createOpsTask");
+    const chargeStart = source.indexOf("chargeCard:");
+    const stripeCreate = source.indexOf("paymentIntent = await stripe.paymentIntents.create", chargeStart);
+    const paidUpdate = source.indexOf("paid: true", stripeCreate);
+    const ensureEvent = source.indexOf("await ensurePickupCompletedOperationsEventForOrder(input.orderId", paidUpdate);
+    const receipt = source.indexOf("const receiptToken = await new jose.SignJWT", paidUpdate);
+    const sms = source.indexOf("await notifyCardCharged", paidUpdate);
+    const sheets = source.indexOf("await writeOrderToSheet(order, input.amountCents)", paidUpdate);
+    const opsTask = source.indexOf("const task = await createOpsTask", paidUpdate);
 
     expect(stripeCreate).toBeGreaterThan(-1);
     expect(paidUpdate).toBeGreaterThan(stripeCreate);

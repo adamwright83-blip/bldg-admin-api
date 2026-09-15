@@ -13,10 +13,17 @@ const bootstrap = fs.readFileSync(
   path.join(root, "scripts/migrate.mjs"),
   "utf8"
 );
-const atlas = fs.readFileSync(
+const scene = fs.readFileSync(
   path.join(
     root,
-    "client/src/components/admin/control-room/LanternCityAtlas.tsx"
+    "client/src/components/admin/control-room/LanternCitySceneV6/LanternCityScene.tsx"
+  ),
+  "utf8"
+);
+const surface = fs.readFileSync(
+  path.join(
+    root,
+    "client/src/components/admin/control-room/WorldGeographySurface.tsx"
   ),
   "utf8"
 );
@@ -50,9 +57,9 @@ describe("Goldline geographic truth contract", () => {
   });
 
   it("has no heuristic neighborhood placement fallback", () => {
-    expect(atlas).not.toContain("resolveCustomerMapLocation");
-    expect(atlas).not.toMatch(/90069|90210|wilshire blvd/i);
-    expect(atlas).toContain("customer.location");
+    expect(scene).not.toContain("resolveCustomerMapLocation");
+    expect(scene).not.toMatch(/90069|90210|wilshire blvd/i);
+    expect(surface).toContain("customer.location");
   });
 
   it("does not limit multiplied prospect joins before deduplication", () => {

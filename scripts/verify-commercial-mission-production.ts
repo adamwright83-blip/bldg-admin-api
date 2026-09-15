@@ -361,6 +361,8 @@ detail = await admin.system.commercialPipeline.completeFollowUp.mutate({
   pipelineId: pipeline.id,
   followUpId: followUp.id,
   requestId: randomUUID(),
+  outcome: "contacted_no_decision",
+  notes: "Synthetic production verification follow-up completed without a terminal result.",
 });
 if (detail.followUps.find(item => item.id === followUp!.id)?.status !== "completed") {
   throw new Error("Follow-up completion was not persisted");

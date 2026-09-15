@@ -90,7 +90,7 @@ export type ClaireDriveContext = {
     };
     visitOutcome: null | {
       outcome: string;
-      notes: string;
+      notes: string | null;
       followUpAt: string | null;
       decisionMakerStatus: string;
     };
@@ -378,7 +378,17 @@ export async function assembleClaireDriveContext(input: {
     nextFixedCommitment,
     blockers,
     relevantTimeline: driveTimeline.slice(0, 8).map(simplify),
-    mission,
+    mission: mission
+      ? {
+          id: mission.id,
+          version: mission.version,
+          status: mission.status,
+          accountName: mission.accountName,
+          address: mission.address,
+          field: mission.field,
+          visitOutcome: mission.visitOutcome,
+        }
+      : null,
     clock,
     workPicture: {
       today: buildClaireWorkDay(today),
