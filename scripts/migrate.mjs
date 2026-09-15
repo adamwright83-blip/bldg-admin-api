@@ -1228,5 +1228,32 @@ await assertRequiredColumns("mission_sales_briefs", [
   "generatedFromEvidenceThrough",
 ]);
 
+// ── Claire Prompt A: durable operator macro goals ────────────────
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS operator_macro_goals (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NOT NULL,
+    objective VARCHAR(512) NOT NULL,
+    metricKey VARCHAR(64) NOT NULL,
+    targetValue DECIMAL(15,2) NOT NULL,
+    unit VARCHAR(64) NOT NULL,
+    urgencyText VARCHAR(191) NULL,
+    targetDate VARCHAR(10) NULL,
+    source ENUM('operator_attested','admin') NOT NULL,
+    sourceNote VARCHAR(512) NOT NULL,
+    status ENUM('active','superseded','closed') NOT NULL DEFAULT 'active',
+    supersededById VARCHAR(36) NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_operator_macro_goals_active (tenantId,operatorUserId,metricKey,status)
+  )`,
+  "CREATE TABLE operator_macro_goals"
+);
+await assertRequiredColumns("operator_macro_goals", [
+  "tenantId", "operatorUserId", "objective", "metricKey", "targetValue",
+  "unit", "source", "sourceNote", "status", "supersededById",
+]);
+
 await conn.end();
 console.log("\nMigration complete.");

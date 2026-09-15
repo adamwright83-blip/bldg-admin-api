@@ -34,6 +34,7 @@ import {
   startClairePreDriveCall,
 } from "./claireTwilio";
 import { previewClairePreDrive } from "./preDriveRuntime";
+import { setActiveMacroGoal } from "./macroGoalService";
 
 const uuid = z.string().uuid();
 
@@ -114,6 +115,22 @@ function recoveryAction(
 }
 
 export const claireRouter = router({
+  setMacroGoal: adminProcedure
+    .input(
+      z.object({
+        operatorUserId: z.string().trim().min(1).max(128),
+        objective: z.string().trim().min(1).max(512),
+        metricKey: z.string().trim().min(1).max(64),
+        targetValue: z.number().finite(),
+        unit: z.string().trim().min(1).max(64),
+        urgencyText: z.string().trim().min(1).max(191).nullable().optional(),
+        targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+        source: z.enum(["operator_attested", "admin"]),
+        sourceNote: z.string().trim().min(1).max(512),
+      })
+    )
+    .mutation(({ ctx, input }) => setActiveMacroGoal({ tenantId: ctx.tenantId, ...input })),
+
   previewPreDrive: adminProcedure
     .input(
       z.object({
