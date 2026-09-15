@@ -63,7 +63,7 @@ const CATEGORIES: OpenChannelTaskCategory[] = [
 ];
 
 const OPERATOR_OPENING =
-  "The Line is quiet. Brief me on today and tomorrow: duties, promises, pickups, dropoffs, sales targets, deadlines, constraints, and goals. Say everything that matters. I’ll turn only what you tell me into a draft mission for you to review before anything becomes active.";
+  "I already know what Goldline knows about tomorrow. Tell me only what I'm missing — a constraint, a person, a stop that isn't in the system yet. You don't have to re-enter the route.";
 
 type DraftTask = OpenChannelEditableTask & { clientKey: string };
 
@@ -131,6 +131,7 @@ export default function OpenChannel({
   const utils = trpc.useUtils();
   const completeTask = trpc.system.openChannel.completeTask.useMutation();
   const transcribeBriefing = trpc.system.openChannel.transcribeBriefing.useMutation();
+  const callClaire = trpc.system.claire.callBeforeDrive.useMutation();
   const cancelDraft = trpc.system.openChannel.cancelDraft.useMutation();
   const [transcript, setTranscript] = useState("");
   const [audioDataUrl, setAudioDataUrl] = useState<string | null>(null);
@@ -409,12 +410,12 @@ export default function OpenChannel({
         <Radio />
         <span style={{ display: "grid", gap: "3px" }}>
           <b style={{ fontSize: "18px" }}>
-            {firstPendingTask ? firstPendingTask.title : "BRIEF THE LINE"}
+            {firstPendingTask ? firstPendingTask.title : "PLAN TOMORROW WITH CLAIRE"}
           </b>
           <small style={{ fontSize: "14px", opacity: 0.8 }}>
             {firstPendingTask
               ? "CURRENT REAL OBJECTIVE · TAP TO CONTINUE"
-              : "NO WORK LOADED · TELL GOLDLINE WHAT TODAY ACTUALLY CONTAINS"}
+              : "NO WORK LOADED · TALK TO CLAIRE"}
           </small>
         </span>
       </button>
@@ -445,7 +446,7 @@ export default function OpenChannel({
           <span><Radio /></span>
           <div>
             <small>GOLDLINE FIELD COMMS</small>
-            <h2>{!mission ? "BRIEF THE LINE" : "OPEN CHANNEL"}</h2>
+            <h2>{!mission ? "PLAN TOMORROW WITH CLAIRE" : "OPEN CHANNEL"}</h2>
           </div>
           <em>LIVE</em>
         </header>
@@ -472,6 +473,34 @@ export default function OpenChannel({
 
         {!mission ? (
           <section className="open-channel-console" data-testid="empty-day-briefing">
+            <button
+              type="button"
+              className="open-channel-primary"
+              data-testid="plan-tomorrow-with-claire"
+              disabled={callClaire.isPending}
+              onClick={() =>
+                void callClaire.mutateAsync({
+                  timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                })
+              }
+            >
+              {callClaire.isPending ? (
+                <><Loader2 className="spin" /> CALLING CLAIRE…</>
+              ) : (
+                <><Sparkles /> PLAN TOMORROW WITH CLAIRE</>
+              )}
+            </button>
+            {callClaire.error ? (
+              <p className="open-channel-error">
+                {callClaire.error.message || "Claire could not place the call."}
+              </p>
+            ) : (
+              <p className="open-channel-review-note">
+                Claire already has known pickups, dropoffs, commitments, and campaign work. You only supply what's missing.
+              </p>
+            )}
+            <details className="open-channel-fallback">
+              <summary>Fallback: type a briefing</summary>
             <div className="open-channel-capture">
               <button
                 type="button"
@@ -528,6 +557,7 @@ export default function OpenChannel({
                 <><Sparkles /> TURN THIS INTO A DRAFT MISSION</>
               )}
             </button>
+            </details>
           </section>
         ) : null}
 

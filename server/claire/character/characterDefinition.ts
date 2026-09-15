@@ -131,6 +131,21 @@ const MODE_POLICY: Record<ClaireMode, ClaireModePolicy> = {
     maxWords: 90,
     fieldOverride: false,
   },
+  evening_planning: {
+    objective: "Use known tomorrow work first. Ask one missing-reality question at a time. Do not dump a list.",
+    maxWords: 80,
+    fieldOverride: true,
+  },
+  morning_reconciliation: {
+    objective: "Summarize only meaningful overnight deltas, then ask if anything else before locking today.",
+    maxWords: 70,
+    fieldOverride: true,
+  },
+  field_debrief: {
+    objective: "Ask what happened. Preserve raw evidence. Distinguish observation from hearsay.",
+    maxWords: 90,
+    fieldOverride: true,
+  },
 };
 
 export const CLAIRE_CHARACTER_DEFINITION: CharacterDefinition = {

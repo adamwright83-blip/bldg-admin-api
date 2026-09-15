@@ -70,7 +70,7 @@ test.describe("empty-day ignition", () => {
     await expect(briefing).toHaveCount(0);
     const ignition = page.getByTestId("open-channel-ignition-cta");
     await expect(ignition).toBeVisible();
-    await expect(ignition).toContainText("BRIEF THE LINE");
+    await expect(ignition).toContainText("PLAN TOMORROW WITH CLAIRE");
     await expect(ignition).toContainText(/NO WORK LOADED/i);
 
     // Movement remains real and unobstructed if the operator deliberately

@@ -313,6 +313,7 @@ function AdminHostRouter() {
         <AdminAuthGate><Suspense fallback={<PublicLandingFallback />}><TowerForgeAdmin /></Suspense></AdminAuthGate>
       </Route>
       <Route path="/sales-intel" component={AdminHostApp} />
+      <Route path="/claire" component={AdminHostApp} />
       <Route path="/goldline-campaigns">
         <AdminAuthGate>
           <Suspense fallback={<PublicLandingFallback />}>

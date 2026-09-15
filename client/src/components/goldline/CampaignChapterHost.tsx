@@ -12,17 +12,17 @@ import { trpc } from "@/lib/trpc";
 import "./goldline-campaign.css";
 
 const HOST_COPY: Record<GameplayBinding, string> = {
-  expedition: "Continue the existing expedition",
-  authoritative_visit_route: "Follow the frozen visit route",
-  local_target_run: "Continue the target run",
-  action_grammar: "Play this as the assigned action",
-  encounter: "A fictional encounter sits between real beats",
-  recovery: "Recover the dormant relationship",
-  territory_push: "The territory is already in this world",
-  guardian_finale: "The Guardian is derived-ready",
-  field_journal: "Capture evidence in the Field Journal",
-  direct_real_action: "The real action is the climax",
-  world_exploration: "The city stays playable",
+  expedition: "CONTINUE",
+  authoritative_visit_route: "START MISSION",
+  local_target_run: "CONTINUE",
+  action_grammar: "START",
+  encounter: "CONTINUE",
+  recovery: "START",
+  territory_push: "CONTINUE",
+  guardian_finale: "CONTINUE",
+  field_journal: "REVIEW WITH CLAIRE",
+  direct_real_action: "START",
+  world_exploration: "CONTINUE",
 };
 
 export function CampaignChapterHost({

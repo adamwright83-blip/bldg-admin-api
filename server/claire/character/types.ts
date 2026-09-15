@@ -140,7 +140,10 @@ export type ClaireMode =
   | "strategy"
   | "casual"
   | "personal"
-  | "post_action_review";
+  | "post_action_review"
+  | "evening_planning"
+  | "morning_reconciliation"
+  | "field_debrief";
 
 export type ClaireModePolicy = {
   objective: string;

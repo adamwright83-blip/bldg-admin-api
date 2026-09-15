@@ -78,7 +78,11 @@ export function DriverVehicleDrawer({
               ? "CALLING…"
               : claireState === "called"
                 ? "CALL AGAIN"
-                : "TAP FOR BRIEF"}
+                : new Date().getHours() >= 18
+                  ? "PLAN TOMORROW"
+                  : new Date().getHours() < 11
+                    ? "REVIEW WITH CLAIRE"
+                    : "TAP FOR BRIEF"}
           </span>
         </button>
 

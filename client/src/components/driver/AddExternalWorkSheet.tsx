@@ -140,7 +140,7 @@ export function AddExternalWorkSheet(props: AddExternalWorkSheetProps) {
             data-testid="import-cleancloud-day"
             onClick={() => setMode("import")}
           >
-            <b>IMPORT CLEAN CLOUD DAY</b>
+            <b>IMPORT TODAY'S CLEANCLOUD WORK</b>
             <small>Upload screenshots of today's driver list</small>
           </button>
           <button

@@ -51,6 +51,7 @@ const ArchivedLevel4OffensiveHost = lazy(() =>
 const CommercialPipelinePage = lazy(() => import("./CommercialPipelinePage"));
 const ChurnRadarPage = lazy(() => import("./ChurnRadarPage"));
 const SalesIntelAdmin = lazy(() => import("./SalesIntelAdmin"));
+const ClaireDesk = lazy(() => import("./goldline/ClaireDesk"));
 const SandboxMode = lazy(() => import("@/components/admin/control-room/SandboxMode"));
 
 const LIVE_INTERNAL_TABS = new Set<AdminWorkspaceTab>([
@@ -197,6 +198,7 @@ export default function AdminHostApp() {
   const isCommercialPipeline = path === "/commercial-pipeline";
   const isChurnRadar = path === "/churn-radar";
   const isSalesIntel = path === "/sales-intel";
+  const isClaireDesk = path === "/claire";
   const isMoney = path === "/money";
   const isSettings = path === "/settings";
   const isCatalog = path === "/catalog" || path === "/pricing";
@@ -212,6 +214,7 @@ export default function AdminHostApp() {
     isCommercialPipeline ||
     isChurnRadar ||
     isSalesIntel ||
+    isClaireDesk ||
     isMoney ||
     isSettings ||
     isCatalog;
@@ -484,6 +487,14 @@ export default function AdminHostApp() {
             }
           >
             <SalesIntelAdmin />
+          </Suspense>
+        ) : isClaireDesk ? (
+          <Suspense
+            fallback={
+              <div className="cr-route-loading">Loading Claire…</div>
+            }
+          >
+            <ClaireDesk />
           </Suspense>
         ) : isMoney ? (
           <MoneyControlRoom />

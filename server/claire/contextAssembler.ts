@@ -112,6 +112,14 @@ export type ClaireDriveContext = {
   verifiedMetrics?: { activeCustomers: ActiveCustomerMetric };
   campaign?: ClaireCampaignSummary | null;
   runtime?: { workItems: UnifiedWorkItem[]; picture: PictureCompleteness };
+  workday?: {
+    session: "evening_planning" | "morning_reconciliation" | "field_debrief" | "pre_drive";
+    eveningSpeak: string;
+    morningSpeak: string;
+    tomorrowCount: number;
+    deltaCount: number;
+    hasConfirmedPlan: boolean;
+  };
 };
 
 const PRE_DRIVE_KINDS = new Set<FieldTodayItem["kind"]>([

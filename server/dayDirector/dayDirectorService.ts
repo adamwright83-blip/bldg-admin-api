@@ -105,6 +105,7 @@ export async function getDayDirectorState(input: {
           : {};
       const detailState =
         metadata.detailState === "NEEDS_DETAILS" ? "NEEDS_DETAILS" : "COMPLETE";
+      if (metadata.hiddenFromDayPlan === true) return null;
       return {
         id: row.id,
         businessDate: row.businessDate,
@@ -120,7 +121,7 @@ export async function getDayDirectorState(input: {
           : [],
         detailNote: typeof metadata.detailNote === "string" ? metadata.detailNote : null,
       };
-    }),
+    }).filter((row): row is NonNullable<typeof row> => row != null),
     dismissedPromptKeys: prompts.map(row => row.promptKey),
     intelligenceAvailable: Boolean(ENV.anthropicApiKey?.trim()),
   };
