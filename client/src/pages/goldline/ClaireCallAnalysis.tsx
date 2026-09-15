@@ -1,7 +1,6 @@
 import { FormEvent, useMemo, useState, type CSSProperties } from "react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { ClaireAnalysisInbox } from "@/components/goldline/ClaireAnalysisInbox";
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -76,7 +75,6 @@ export default function ClaireCallAnalysis({ sessionId }: { sessionId: string })
         minHeight: "100%",
       }}
     >
-      <ClaireAnalysisInbox compact />
       <p style={{ letterSpacing: "0.18em", fontWeight: 800, fontSize: 12, color: "#9b6410" }}>
         CLAIRE CALL ANALYSIS
       </p>

@@ -12,6 +12,7 @@ import {
 } from "./generationTelemetry";
 import { assembleClaireRuntimeView } from "./runtimeView";
 import { CLAIRE_V1_REASONING_POLICY } from "../../shared/claireRuntime";
+import { formatCapabilityBriefing } from "../../shared/goldlineCapabilities";
 import { detectWorkdaySession, speakEveningPlan } from "../../shared/claireWorkday";
 import { assembleTomorrowCandidates } from "./workdayPlanService";
 
@@ -273,6 +274,7 @@ export async function writeClairePreDriveBrief(
               "The game cannot create business truth. Derived suggestions are suggestions, never facts.",
               "This is an orientation brief from a strategic operating partner. Use the supplied clock, macro goal, verified metric, work picture, campaign, and runtime picture only.",
               CLAIRE_V1_REASONING_POLICY,
+              formatCapabilityBriefing(),
               "Every factual clause must map directly to a supplied field. Omit missing facts. Never calculate a metric or infer a total.",
               "If fieldSalesDayState is winding_down or over, distinguish property-visit viability from remote calls, follow-ups, research, or tomorrow's field opportunity when those items exist.",
               "For a partial active-customer metric, state only the verified subset and explicitly say it is not the full total. For unavailable, omit the count.",

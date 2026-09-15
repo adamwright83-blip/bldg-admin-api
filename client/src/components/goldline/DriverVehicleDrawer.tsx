@@ -3,7 +3,6 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { ChevronRight, Compass, LockKeyhole, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { ClaireAnalysisInbox } from "@/components/goldline/ClaireAnalysisInbox";
 import type { CustodyLocationKey } from "@shared/custodyLocations";
 import { VehicleCargo, type VehicleCargoItem } from "./VehicleCargo";
 import { VehicleCargoCapture } from "./VehicleCargoCapture";
@@ -128,7 +127,6 @@ export function DriverVehicleDrawer({
           <img src={firstSpark} alt="The First Spark" />
         </button>
       </div>
-      <ClaireAnalysisInbox compact />
 
       <Dialog.Root open={open} onOpenChange={setOpen}>
         <Dialog.Trigger asChild>

@@ -7192,3 +7192,38 @@ export const claireConversationNotifications = mysqlTable(
     ),
   })
 );
+
+export const goldlineCapabilityGaps = mysqlTable(
+  "goldline_capability_gaps",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    capabilityKey: varchar("capabilityKey", { length: 64 }).notNull(),
+    operatorRequest: text("operatorRequest").notNull(),
+    conversationSessionId: varchar("conversationSessionId", { length: 36 }),
+    status: varchar("status", { length: 32 }).notNull().default("IDENTIFIED"),
+    engineeringSessionId: varchar("engineeringSessionId", { length: 128 }),
+    engineeringStatus: varchar("engineeringStatus", { length: 32 }),
+    terminalResultJson: json("terminalResultJson"),
+    branch: varchar("branch", { length: 191 }),
+    prUrl: varchar("prUrl", { length: 512 }),
+    blocker: text("blocker"),
+    requiresHumanApproval: boolean("requiresHumanApproval").notNull().default(false),
+    demandCount: int("demandCount").notNull().default(1),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    capabilityLookup: index("idx_goldline_capability_gap_key").on(
+      table.tenantId,
+      table.capabilityKey,
+      table.status
+    ),
+    operatorLookup: index("idx_goldline_capability_gap_operator").on(
+      table.tenantId,
+      table.operatorUserId,
+      table.createdAt
+    ),
+  })
+);

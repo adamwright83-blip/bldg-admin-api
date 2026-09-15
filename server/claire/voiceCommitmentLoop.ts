@@ -25,6 +25,29 @@ import {
 } from "../../shared/claireRuntime";
 import { recordClaireConversionJoin } from "./conversionJoins";
 import { confirmTomorrowUtterance } from "../../shared/claireWorkday";
+import { capabilityIsActionable } from "../../shared/goldlineCapabilities";
+import {
+  extractCancellationReason,
+  extractRequestedActionTitle,
+  looksLikeCancelRequest,
+  looksLikeEditRequest,
+} from "../../shared/goldlineDayLine";
+import {
+  cancelDayLineItem,
+  editDayLineItem,
+  listActiveDayLineItems,
+  resolveDayLineTargets,
+  speakAmbiguousTargets,
+  speakCancelResult,
+  speakCompletedHistory,
+  speakEditResult,
+} from "../goldline/dayline/dayLineMutationService";
+import {
+  approveCapabilityEngineering,
+  speakEngineeringStatus,
+  speakUnsupportedCapability,
+} from "../goldline/engineering/capabilityEngineeringService";
+import { latestOperatorCapabilityGap } from "../goldline/engineering/capabilityGapStore";
 
 /**
  * The only place a live Claire phone conversation may cause a durable
@@ -74,6 +97,9 @@ const classificationSchema = z.object({
     "new_work",
     "existing_work",
     "update_existing_work",
+    "edit_existing_work",
+    "cancel_existing_work",
+    "complete_existing_work",
     "fyi_context",
     "uncertain",
     "not_work",
@@ -94,6 +120,9 @@ const CLASSIFY_JSON_SCHEMA = {
           "new_work",
           "existing_work",
           "update_existing_work",
+          "edit_existing_work",
+          "cancel_existing_work",
+          "complete_existing_work",
           "fyi_context",
           "uncertain",
           "not_work",
@@ -143,10 +172,13 @@ export async function classifyVoiceWorkStatement(
         {
           role: "system",
           content: [
-            "Classify the operator's statement into exactly one category: new_work, existing_work, update_existing_work, fyi_context, uncertain, or not_work.",
+            "Classify the operator's statement into exactly one category: new_work, existing_work, update_existing_work, edit_existing_work, cancel_existing_work, complete_existing_work, fyi_context, uncertain, or not_work.",
             "new_work: describes or requests adding a task/decision/action the system does not already track. Secondary missing details (deadline, criteria) do NOT make this uncertain — that is still new_work.",
             "existing_work: describes work that already belongs to a named ongoing campaign/mission/challenge, or references progress/remaining/completed count on something already tracked.",
             "update_existing_work: asks to change timing, details, or status of work that already exists, not to create a copy.",
+            "edit_existing_work: asks to change the action/display title of existing Day Line work, not the account name.",
+            "cancel_existing_work: asks to remove, drop, stop pursuing, or take existing Day Line work off the day. This is not uncertain just because cancellation may be new.",
+            "complete_existing_work: asks to mark existing work done.",
             "fyi_context: catching Claire up, frustration, background, with no action request.",
             "uncertain: you genuinely cannot tell whether the user wants an action, what action, what target, or what consequential effect is intended.",
             "not_work: a question, small talk, or anything clearly not describing actionable work at all.",
@@ -208,6 +240,16 @@ export type PendingProposalState = {
   lastAcceptedCommitmentId?: string | null;
   blockerKind?: BlockerKind | null;
   sessionKind?: "evening_planning" | "morning_reconciliation" | "field_debrief" | "pre_drive";
+  pendingEngineeringOffer?: {
+    capabilityKey: string;
+    operatorRequest: string;
+    itemTitle?: string | null;
+  } | null;
+  pendingDayLineChoice?: {
+    operation: "edit" | "cancel";
+    actionTitle?: string | null;
+    reason?: string | null;
+  } | null;
 };
 
 export type VoiceCommitmentTurnResult =
@@ -221,6 +263,9 @@ export type VoiceCommitmentTurnResult =
   | { kind: "coaching"; speak: string }
   | { kind: "field_captured"; speak: string }
   | { kind: "plan_confirmed"; speak: string }
+  | { kind: "edited"; speak: string; sourceId: string }
+  | { kind: "cancelled"; speak: string; sourceId: string }
+  | { kind: "capability_gap"; speak: string }
   | { kind: "not_applicable" };
 
 export async function handleVoiceCommitmentTurn(
@@ -241,6 +286,10 @@ export async function handleVoiceCommitmentTurn(
     updateCommitment?: typeof updateDayDirectorCommitment;
     persistFieldCapture?: (outcome: ConversationalFieldOutcome) => Promise<{ ok: boolean; id?: string }>;
     confirmPlan?: () => Promise<void>;
+    listDayLineItems?: typeof listActiveDayLineItems;
+    editItem?: typeof editDayLineItem;
+    cancelItem?: typeof cancelDayLineItem;
+    approveEngineering?: typeof approveCapabilityEngineering;
   } = {}
 ): Promise<VoiceCommitmentTurnResult> {
   const propose = dependencies.propose ?? proposeCommitment;
@@ -249,6 +298,90 @@ export async function handleVoiceCommitmentTurn(
   const getCampaignSummary = dependencies.getCampaignSummary ?? getClaireCampaignSummary;
   const getState = dependencies.getState ?? getDayDirectorState;
   const updateCommitment = dependencies.updateCommitment ?? updateDayDirectorCommitment;
+  const listItems = dependencies.listDayLineItems ?? listActiveDayLineItems;
+  const editItem = dependencies.editItem ?? editDayLineItem;
+  const cancelItem = dependencies.cancelItem ?? cancelDayLineItem;
+  const approveEngineering = dependencies.approveEngineering ?? approveCapabilityEngineering;
+
+  async function operateDayLine(
+    operation: "edit" | "cancel",
+    utterance: string
+  ): Promise<VoiceCommitmentTurnResult> {
+    const items = await listItems({
+      tenantId: input.tenantId,
+      actorId: input.actorId,
+      businessDate: input.businessDate,
+    });
+    const matches = resolveDayLineTargets(items, utterance);
+    const completedOnly =
+      matches.length === 0
+        ? items.filter(item => item.status === "completed" && matchOpenWorkTitle(item.displayTitle, utterance))
+        : matches.filter(item => item.status === "completed");
+    const activeMatches = matches.filter(item => item.status === "active");
+    if (activeMatches.length > 1) {
+      input.state.pendingDayLineChoice = {
+        operation,
+        actionTitle: extractRequestedActionTitle(utterance),
+        reason: extractCancellationReason(utterance),
+      };
+      return { kind: "clarifying", speak: speakAmbiguousTargets(activeMatches) };
+    }
+    if (!activeMatches.length && completedOnly.length) {
+      return {
+        kind: "acknowledged_existing",
+        speak: speakCompletedHistory(completedOnly[0].displayTitle),
+      };
+    }
+    if (!activeMatches.length) {
+      return {
+        kind: "clarifying",
+        speak: "I don't see that on the Day Line. Which stop do you mean?",
+      };
+    }
+    const item = activeMatches[0];
+    const capabilityKey = operation === "edit" ? "dayline.edit" : "dayline.cancel";
+    if (!capabilityIsActionable(capabilityKey)) {
+      input.state.pendingEngineeringOffer = {
+        capabilityKey,
+        operatorRequest: utterance,
+        itemTitle: item.displayTitle,
+      };
+      return {
+        kind: "capability_gap",
+        speak: speakUnsupportedCapability({ capabilityKey, itemTitle: item.displayTitle }),
+      };
+    }
+    if (operation === "edit") {
+      const actionTitle = extractRequestedActionTitle(utterance);
+      if (!actionTitle) {
+        return {
+          kind: "clarifying",
+          speak: `What should ${item.displayTitle} say instead?`,
+        };
+      }
+      const result = await editItem({
+        tenantId: input.tenantId,
+        actorId: input.actorId,
+        item,
+        actionTitle,
+      });
+      return { kind: "edited", speak: speakEditResult(result.displayTitle), sourceId: result.sourceId };
+    }
+    try {
+      const result = await cancelItem({
+        tenantId: input.tenantId,
+        actorId: input.actorId,
+        item,
+        reason: extractCancellationReason(utterance),
+      });
+      return { kind: "cancelled", speak: speakCancelResult(result), sourceId: result.sourceId };
+    } catch (error) {
+      if (error instanceof Error && error.message === "completed_history") {
+        return { kind: "acknowledged_existing", speak: speakCompletedHistory(item.displayTitle) };
+      }
+      throw error;
+    }
+  }
 
   if (input.state.pendingProposal) {
     const proposal = input.state.pendingProposal;
@@ -408,6 +541,46 @@ export async function handleVoiceCommitmentTurn(
     };
   }
 
+  if (input.state.pendingEngineeringOffer) {
+    const pending = input.state.pendingEngineeringOffer;
+    const decision = detectConfirmation(input.utterance);
+    if (decision === "yes") {
+      input.state.pendingEngineeringOffer = null;
+      const sent = await approveEngineering({
+        tenantId: input.tenantId,
+        operatorUserId: input.actorId,
+        capabilityKey: pending.capabilityKey,
+        operatorRequest: pending.operatorRequest,
+        conversationSessionId: input.conversationId ?? null,
+      });
+      return { kind: "capability_gap", speak: sent.speak };
+    }
+    if (decision === "no") {
+      input.state.pendingEngineeringOffer = null;
+      return { kind: "declined", speak: "Okay, I won't send it to engineering." };
+    }
+    return {
+      kind: "reask",
+      speak: "Want me to send that capability to engineering? Say yes or no.",
+    };
+  }
+
+  if (input.state.pendingDayLineChoice) {
+    const pending = input.state.pendingDayLineChoice;
+    input.state.pendingDayLineChoice = null;
+    return operateDayLine(pending.operation, input.utterance);
+  }
+
+  if (/\b(what happened with|did engineering|that remove-task|capability)\b/i.test(input.utterance)) {
+    const gap = await latestOperatorCapabilityGap({
+      tenantId: input.tenantId,
+      operatorUserId: input.actorId,
+    });
+    if (gap) {
+      return { kind: "capability_gap", speak: speakEngineeringStatus(gap) };
+    }
+  }
+
   if (input.state.clarifyingUtterance) {
     const original = input.state.clarifyingUtterance;
     const decision = detectConfirmation(input.utterance);
@@ -487,6 +660,20 @@ export async function handleVoiceCommitmentTurn(
 
   if (classification === "fyi_context") {
     return { kind: "not_applicable" };
+  }
+
+  if (
+    classification === "cancel_existing_work" ||
+    looksLikeCancelRequest(input.utterance)
+  ) {
+    return operateDayLine("cancel", input.utterance);
+  }
+
+  if (
+    classification === "edit_existing_work" ||
+    looksLikeEditRequest(input.utterance)
+  ) {
+    return operateDayLine("edit", input.utterance);
   }
 
   if (classification === "update_existing_work") {

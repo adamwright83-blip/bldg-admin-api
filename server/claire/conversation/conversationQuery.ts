@@ -1,4 +1,10 @@
+import { and, desc, eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import {
+  claireConversationAnalyses,
+  claireConversationSessions,
+} from "../../../drizzle/schema";
+import { getDb } from "../../db";
 import { storageGet } from "../../storage";
 import { renderFullTranscript } from "../analysis/copyBundle";
 import { enrichAnalysisCounts } from "../analysis/conversationAnalysisService";
@@ -6,9 +12,9 @@ import {
   qualitativeEvaluationSchema,
   type QualitativeEvaluation,
 } from "../analysis/conversationAnalysisSchema";
-import { POST_CALL_TRANSCRIPT_SOURCE } from "./types";
+import { ANALYSIS_NOTIFICATION_KIND, POST_CALL_TRANSCRIPT_SOURCE } from "./types";
 import { productionConversationStore } from "./ledgerService";
-import type { ConversationSession } from "./types";
+import type { ConversationNotification, ConversationSession } from "./types";
 
 function publicSession(session: ConversationSession): Omit<
   ConversationSession,
@@ -40,13 +46,63 @@ export async function requireClaireCallSession(input: {
   return session;
 }
 
+async function analysesWithoutNotification(input: {
+  tenantId: string;
+  operatorUserId: string;
+}): Promise<ConversationNotification[]> {
+  const db = await getDb();
+  if (!db) return [];
+  try {
+    const rows = await db
+      .select({
+        sessionId: claireConversationSessions.id,
+        startedAt: claireConversationSessions.startedAt,
+        analysisId: claireConversationAnalyses.id,
+        summaryText: claireConversationAnalyses.summaryText,
+        humanReviewStatus: claireConversationAnalyses.humanReviewStatus,
+      })
+      .from(claireConversationAnalyses)
+      .innerJoin(
+        claireConversationSessions,
+        eq(claireConversationAnalyses.sessionId, claireConversationSessions.id)
+      )
+      .where(
+        and(
+          eq(claireConversationSessions.tenantId, input.tenantId),
+          eq(claireConversationSessions.operatorUserId, input.operatorUserId)
+        )
+      )
+      .orderBy(desc(claireConversationAnalyses.createdAt))
+      .limit(8);
+    return rows
+      .filter(row => row.humanReviewStatus === "unreviewed")
+      .map(row => ({
+        id: `analysis-fallback:${row.analysisId}`,
+        tenantId: input.tenantId,
+        operatorUserId: input.operatorUserId,
+        sessionId: row.sessionId,
+        kind: ANALYSIS_NOTIFICATION_KIND,
+        title: "CLAIRE CALL ANALYSIS READY",
+        body: (row.summaryText || "Call analysis is ready to review.").slice(0, 512),
+        ctaLabel: "VIEW ANALYSIS",
+        href: `/claire/calls/${row.sessionId}`,
+        readAt: null,
+        createdAt: row.startedAt?.toISOString?.() ?? new Date().toISOString(),
+      }));
+  } catch {
+    return [];
+  }
+}
+
 export async function listClaireAnalysisInbox(input: {
   tenantId: string;
   operatorUserId: string;
 }) {
   const store = productionConversationStore();
   const rows = await store.listNotifications(input);
-  return rows.filter(row => row.readAt == null);
+  const unread = rows.filter(row => row.readAt == null);
+  if (unread.length) return unread;
+  return analysesWithoutNotification(input);
 }
 
 export async function markClaireAnalysisNotificationRead(input: {

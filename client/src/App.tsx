@@ -314,6 +314,7 @@ function AdminHostRouter() {
       </Route>
       <Route path="/sales-intel" component={AdminHostApp} />
       <Route path="/claire/calls/:sessionId" component={AdminHostApp} />
+      <Route path="/goldline/capability-gaps/:gapId" component={AdminHostApp} />
       <Route path="/claire" component={AdminHostApp} />
       <Route path="/goldline-campaigns">
         <AdminAuthGate>
@@ -451,10 +452,20 @@ function Router() {
     ? hostname.replace(".ops.bldg.chat", "")
     : null;
 
-  // driver.bldg.chat has one product URL: the root. Old bookmarks or
-  // accidental historical paths are collapsed invisibly back to /.
-  if (isDriverHost && window.location.pathname !== "/") {
-    return <Redirect to="/" />;
+  // driver.bldg.chat has one product URL: the Daily Line. Claire analysis and
+  // engineering-request pages are operator follow-through from that line.
+  if (isDriverHost) {
+    const path = window.location.pathname;
+    if (
+      path !== "/" &&
+      !path.startsWith("/claire") &&
+      !path.startsWith("/goldline/capability-gaps")
+    ) {
+      return <Redirect to="/" />;
+    }
+    if (path.startsWith("/claire") || path.startsWith("/goldline/capability-gaps")) {
+      return <AdminHostApp />;
+    }
   }
 
   if (isBoreslayHost && window.location.pathname === "/boreslay-rally") {

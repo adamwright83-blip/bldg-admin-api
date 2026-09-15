@@ -9,6 +9,11 @@ import {
   commercialPipelineRecords,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
+import {
+  dayLineDisplayTitle,
+  isDayLineCancelled,
+  readDayLineOverlay,
+} from "../../shared/goldlineDayLine";
 
 export type DayforgeTodayItem = {
   id: string;
@@ -18,6 +23,7 @@ export type DayforgeTodayItem = {
   pipelineId: number | null;
   followUpId: string | null;
   accountName: string;
+  displayTitle: string;
   missionCode: string;
   status: string;
   dueAt: string | null;
@@ -69,6 +75,7 @@ export async function listDayforgeToday(input: {
       missionId: commercialMissions.id,
       missionCode: commercialMissions.code,
       missionStatus: commercialMissions.status,
+      missionBriefJson: commercialMissions.missionBriefJson,
       assignedTo: commercialMissions.assignedTo,
       estimatedValueCents: commercialPipelineRecords.estimatedContractValueCents,
       accountId: commercialAccounts.id,
@@ -87,9 +94,12 @@ export async function listDayforgeToday(input: {
       eq(commercialPipelineRecords.tenantId, input.tenantId),
       notInArray(commercialPipelineRecords.stage, [...TERMINAL_STAGES])
     ));
-  const visible = pipelines.filter(row =>
-    input.includeAllAssignees || row.assignedTo === null || row.assignedTo === input.userId
-  );
+  const visible = pipelines.filter(row => {
+    if (!(input.includeAllAssignees || row.assignedTo === null || row.assignedTo === input.userId)) {
+      return false;
+    }
+    return !isDayLineCancelled(readDayLineOverlay(row.missionBriefJson));
+  });
   if (!visible.length) return [];
   const pipelineIds = visible.map(row => row.pipelineId);
   const missionIds = visible.map(row => row.missionId);
@@ -122,10 +132,13 @@ export async function listDayforgeToday(input: {
       ?? locations.find(item => item.accountId === row.accountId);
     const contact = contacts.find(item => item.accountId === row.accountId && item.email)
       ?? contacts.find(item => item.accountId === row.accountId);
+    const overlay = readDayLineOverlay(row.missionBriefJson);
+    const displayTitle = dayLineDisplayTitle(overlay, row.accountName);
     const base = {
       missionId: row.missionId,
       pipelineId: row.pipelineId,
       accountName: row.accountName,
+      displayTitle,
       missionCode: row.missionCode,
       status: row.missionStatus,
       address: location?.address ?? null,

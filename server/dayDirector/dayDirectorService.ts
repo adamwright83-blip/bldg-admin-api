@@ -7,6 +7,10 @@ import {
   towerWarsPromises,
 } from "../../drizzle/schema";
 import type { DayDirectorProposal } from "../../shared/dayDirector";
+import {
+  dayLineDisplayTitle,
+  readDayLineOverlay,
+} from "../../shared/goldlineDayLine";
 import { getDb } from "../db";
 import { invokeLLM } from "../_core/llm";
 import { ENV } from "../_core/env";
@@ -103,13 +107,15 @@ export async function getDayDirectorState(input: {
         row.metadataJson && typeof row.metadataJson === "object"
           ? (row.metadataJson as Record<string, unknown>)
           : {};
+      const overlay = readDayLineOverlay(metadata);
       const detailState =
         metadata.detailState === "NEEDS_DETAILS" ? "NEEDS_DETAILS" : "COMPLETE";
       if (metadata.hiddenFromDayPlan === true) return null;
+      if (overlay.notPursuing || overlay.cancelledAt) return null;
       return {
         id: row.id,
         businessDate: row.businessDate,
-        title: row.title,
+        title: dayLineDisplayTitle(overlay, row.title),
         kind: row.kind,
         quantity: row.quantity,
         provenance: row.provenance,

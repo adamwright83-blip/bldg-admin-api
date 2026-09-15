@@ -3,7 +3,7 @@ import { sortDayforgeTodayItems, type DayforgeTodayItem } from "./dayforgeTodayS
 
 const base: DayforgeTodayItem = {
   id: "base", kind: "missing_next_action", urgency: "exception", missionId: 1,
-  pipelineId: 1, followUpId: null, accountName: "Hotel", missionCode: "DF-1",
+  pipelineId: 1, followUpId: null, accountName: "Hotel", displayTitle: "Hotel", missionCode: "DF-1",
   status: "candidate", dueAt: null, note: null, address: null, phone: null,
   email: null, destinationPath: "/commercial-missions", estimatedValueCents: null,
 };

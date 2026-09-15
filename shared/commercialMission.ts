@@ -101,6 +101,14 @@ export type CommercialMissionBrief = {
   openingLine: string;
   discoveryQuestions: string[];
   objections: string[];
+  goldlineDayLine?: {
+    actionTitleOverride?: string | null;
+    originalTitle?: string | null;
+    cancelledAt?: string | null;
+    cancelledBy?: string | null;
+    cancelledReason?: string | null;
+    notPursuing?: boolean;
+  };
 };
 
 export const COMMERCIAL_MISSION_STEP_TYPES = [

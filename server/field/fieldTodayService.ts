@@ -199,7 +199,7 @@ export async function getFieldToday(input: {
       source: { entityType: item.kind === "follow_up" ? "commercial_follow_up" : "commercial_mission", entityId: item.followUpId ?? String(item.missionId), sourceReference: item.kind === "follow_up" ? `commercial_follow_ups:${item.followUpId}` : `commercial_missions:${item.missionId}` },
       physicalEntityId: addressKey ? physicalEntityIdsByAddress.get(addressKey) ?? null : null,
       scheduledAt: item.dueAt, urgency: item.urgency === "overdue" ? "overdue" : item.urgency === "urgent" ? "urgent" : item.urgency === "upcoming" ? "upcoming" : "flexible",
-      title: item.accountName, subtitle: item.note ?? item.missionCode, status: item.status,
+      title: item.displayTitle ?? item.accountName, subtitle: item.note ?? item.missionCode, status: item.status,
       destination: item.address ? { address: item.address, latitude: null, longitude: null } : null,
       customer: { name: item.accountName, phone: item.phone, email: item.email },
       money: item.estimatedValueCents == null ? null : deterministicEstimate(item.estimatedValueCents, `commercial_pipeline_records:${item.pipelineId}`, "medium"),

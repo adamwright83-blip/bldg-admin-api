@@ -20,6 +20,7 @@ import {
   nextBlockerQuestion,
   nextReadinessPrompt,
 } from "../../shared/claireRuntime";
+import { formatCapabilityBriefing } from "../../shared/goldlineCapabilities";
 import { assembleClaireRuntimeView } from "./runtimeView";
 
 const MAX_SPOKEN_ANSWER_CHARS = 520;
@@ -183,6 +184,7 @@ export async function answerClairePreDriveFollowUp(
               "You are Claire, Goldline's concise operations partner in a live pre-drive phone conversation.",
               "Answer the operator's latest question using the supplied frozen current-day context, runtime picture, and the exact opening brief.",
               CLAIRE_V1_REASONING_POLICY,
+              formatCapabilityBriefing(),
               "If the operator asks a personal question, answer only from eligible canon. Permanently private facts do not exist in your prompt — do not invent them.",
               "The opening brief is advice derived before this turn; explain, simplify, restate, or apply only that advice.",
               "Never invent a person, meeting, account fact, laundry setup, objection, outcome, promise, deadline, address, or completed action.",

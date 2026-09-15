@@ -115,6 +115,9 @@ export type WorkClassificationV1 =
   | "new_work"
   | "existing_work"
   | "update_existing_work"
+  | "edit_existing_work"
+  | "cancel_existing_work"
+  | "complete_existing_work"
   | "fyi_context"
   | "uncertain"
   | "not_work";
@@ -415,6 +418,22 @@ export function assessAmbiguity(utterance: string): AmbiguityAssessment {
 
 export function classifyIntentHeuristics(utterance: string): WorkClassificationV1 | null {
   const text = utterance.toLowerCase();
+  if (
+    /\b(remove|take .{0,80} off|take (?:it |them |that )?(?:off|out)|get rid|not pursuing|don't want to (?:move forward|pursue)|do not want to (?:move forward|pursue)|off my day)\b/.test(
+      text
+    )
+  ) {
+    return "cancel_existing_work";
+  }
+  if (
+    /\b(change|rename|make (?:it|that) say|edit)\b/.test(text) &&
+    !/\b(move|reschedule|change when|push (?:it|them)|this week instead|not tonight)\b/.test(text)
+  ) {
+    return "edit_existing_work";
+  }
+  if (/\b(mark (?:it |that )?(?:done|complete)|completed that)\b/.test(text)) {
+    return "complete_existing_work";
+  }
   if (/\b(move|reschedule|change when|push (?:it|them)|this week instead|not tonight)\b/.test(text)) {
     return "update_existing_work";
   }

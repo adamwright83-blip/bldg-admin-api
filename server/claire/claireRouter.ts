@@ -36,6 +36,7 @@ import {
 import { previewClairePreDrive } from "./preDriveRuntime";
 import { setActiveMacroGoal } from "./macroGoalService";
 import { answerClairePreDriveFollowUp } from "./preDriveConversation";
+import { handleVoiceCommitmentTurn, type PendingProposalState } from "./voiceCommitmentLoop";
 import {
   getClaireCallAnalysis,
   getClaireCallAudio,
@@ -44,6 +45,11 @@ import {
   markClaireCallAnalysisWrong,
   markClaireCallReviewed,
 } from "./conversation/conversationQuery";
+import {
+  continueCapabilityEngineering,
+  loadCapabilityGapForOperator,
+} from "../goldline/engineering/capabilityEngineeringService";
+import { GOLDLINE_CAPABILITY_REGISTRY } from "../../shared/goldlineCapabilities";
 
 const uuid = z.string().uuid();
 
@@ -122,6 +128,8 @@ function recoveryAction(
       : null,
   };
 }
+
+const deskTalkStates = new Map<string, PendingProposalState>();
 
 export const claireRouter = router({
   setMacroGoal: adminProcedure
@@ -228,6 +236,27 @@ export const claireRouter = router({
         timeZone: input.timeZone,
       });
       context.workday = preview.workday ?? undefined;
+      const actorId = dayDirectorActorId(ctx);
+      const stateKey = `${ctx.tenantId}:${actorId}`;
+      const state = deskTalkStates.get(stateKey) ?? {};
+      deskTalkStates.set(stateKey, state);
+      const commitmentTurn = await handleVoiceCommitmentTurn({
+        tenantId: ctx.tenantId,
+        actorId,
+        businessDate: context.businessDate,
+        utterance: input.utterance,
+        state,
+        conversationId: `desk:${stateKey}`,
+      });
+      if (commitmentTurn.kind !== "not_applicable") {
+        return {
+          reply: "speak" in commitmentTurn ? commitmentTurn.speak : preview.brief,
+          brief: preview.brief,
+          workday: preview.workday,
+          relationshipDimensions: preview.relationshipDimensions,
+          disclosureTier: preview.disclosureTier,
+        };
+      }
       const reply = await answerClairePreDriveFollowUp({
         tenantId: ctx.tenantId,
         utterance: input.utterance,
@@ -569,6 +598,35 @@ export const claireRouter = router({
         isAdmin: ctx.user.role === "admin" || ctx.dayforgeMembership.role !== "field",
         sessionId: input.sessionId,
         note: input.note,
+      })
+    ),
+
+  capabilities: dayforgeMissionFieldProcedure.query(() => GOLDLINE_CAPABILITY_REGISTRY),
+
+  capabilityGap: dayforgeMissionFieldProcedure
+    .input(z.object({ id: uuid }))
+    .query(({ ctx, input }) =>
+      loadCapabilityGapForOperator({
+        tenantId: ctx.tenantId,
+        operatorUserId: ctx.user.openId,
+        id: input.id,
+        isAdmin: ctx.user.role === "admin",
+      })
+    ),
+
+  continueCapabilityEngineering: dayforgeMissionFieldProcedure
+    .input(
+      z.object({
+        id: uuid,
+        approve: z.boolean(),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      continueCapabilityEngineering({
+        tenantId: ctx.tenantId,
+        operatorUserId: ctx.user.openId,
+        gapId: input.id,
+        approve: input.approve,
       })
     ),
 });

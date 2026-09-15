@@ -42,6 +42,7 @@ import "@/components/admin/control-room/admin-control-room.css";
 import "@/components/admin/control-room/goldline-game-shell.css";
 import { WorldTransitionProvider } from "@/components/admin/control-room/WorldTransitionProvider";
 import { WorldDayPhaseIndicator } from "@/components/admin/control-room/WorldDayPhase";
+import { ClaireAnalysisInbox } from "@/components/goldline/ClaireAnalysisInbox";
 
 const ArchivedLevel4OffensiveHost = lazy(() =>
   import("@/components/Level4OffensiveHost").then(module => ({
@@ -53,6 +54,7 @@ const ChurnRadarPage = lazy(() => import("./ChurnRadarPage"));
 const SalesIntelAdmin = lazy(() => import("./SalesIntelAdmin"));
 const ClaireDesk = lazy(() => import("./goldline/ClaireDesk"));
 const ClaireCallAnalysis = lazy(() => import("./goldline/ClaireCallAnalysis"));
+const CapabilityGapPage = lazy(() => import("./goldline/CapabilityGapPage"));
 const SandboxMode = lazy(() => import("@/components/admin/control-room/SandboxMode"));
 
 const LIVE_INTERNAL_TABS = new Set<AdminWorkspaceTab>([
@@ -201,7 +203,8 @@ export default function AdminHostApp() {
   const isSalesIntel = path === "/sales-intel";
   const isClaireDesk = path === "/claire";
   const isClaireCallAnalysis = path.startsWith("/claire/calls/");
-  const isClaireSurface = isClaireDesk || isClaireCallAnalysis;
+  const isCapabilityGap = path.startsWith("/goldline/capability-gaps/");
+  const isClaireSurface = isClaireDesk || isClaireCallAnalysis || isCapabilityGap;
   const isMoney = path === "/money";
   const isSettings = path === "/settings";
   const isCatalog = path === "/catalog" || path === "/pricing";
@@ -340,6 +343,7 @@ export default function AdminHostApp() {
   return (
     <WorldTransitionProvider>
     <div className={`cr-shell gl-game-shell${isWorldHome ? " is-world-home" : " is-utility"}${isLanternCity ? " is-lantern-city-v5" : ""}${worldIntelOpen ? " is-world-intel" : ""}`}>
+      <ClaireAnalysisInbox />
       {isCounter && activeWorkspace !== "held_corporate" ? (
         <ResidentFollowupAlert />
       ) : null}
@@ -498,6 +502,14 @@ export default function AdminHostApp() {
             }
           >
             <ClaireCallAnalysis sessionId={path.split("/claire/calls/")[1]?.split("/")[0] ?? ""} />
+          </Suspense>
+        ) : isCapabilityGap ? (
+          <Suspense
+            fallback={
+              <div className="cr-route-loading">Loading engineering request…</div>
+            }
+          >
+            <CapabilityGapPage gapId={path.split("/goldline/capability-gaps/")[1]?.split("/")[0] ?? ""} />
           </Suspense>
         ) : isClaireDesk ? (
           <Suspense

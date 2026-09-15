@@ -7,6 +7,7 @@ import { LoginForm } from "@/components/LoginForm";
 import GoldlineDriverController from "./driver/GoldlineDriverController";
 import GoldlineOverworld from "./goldline/GoldlineOverworld";
 import { SalesJournalSheet } from "@/components/driver/SalesMomentum";
+import { ClaireAnalysisInbox } from "@/components/goldline/ClaireAnalysisInbox";
 import type { Order } from "@shared/types";
 import "./goldline/goldline-legibility.css";
 import "./goldline/goldline-live-fix.css";
@@ -150,5 +151,10 @@ function AuthenticatedDriver() {
     <button className="driver-return-home" onClick={() => setSideQuestOpen(false)}>← YOUR DAY</button>
     <FirstMissionDriver session={firstWorld.data!.session!} />
   </>;
-  return <GoldlineDriverController onOpenFirstMission={firstSparkAvailable ? () => setSideQuestOpen(true) : undefined} />;
+  return (
+    <>
+      <ClaireAnalysisInbox />
+      <GoldlineDriverController onOpenFirstMission={firstSparkAvailable ? () => setSideQuestOpen(true) : undefined} />
+    </>
+  );
 }

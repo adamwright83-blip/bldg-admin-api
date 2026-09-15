@@ -1,5 +1,10 @@
 import type { Order } from "@shared/types";
 import type { CommercialMission } from "@shared/commercialMission";
+import {
+  dayLineDisplayTitle,
+  isDayLineCancelled,
+  readDayLineOverlay,
+} from "@shared/goldlineDayLine";
 import type { ExternalOperationalOrder } from "@shared/externalOperationalOrder";
 import { formatExternalWindow } from "@shared/externalOperationalOrder";
 import type {
@@ -308,6 +313,7 @@ function commercialStop(
   mission: CommercialMission,
   ready: boolean
 ): DayPlanStop {
+  const overlay = readDayLineOverlay(mission.brief);
   const step = mission.steps.find(
     item => item.status === "active" || item.status === "ready"
   );
@@ -322,7 +328,7 @@ function commercialStop(
     id: `commercial-${mission.id}`,
     action: { type: "commercial", missionId: mission.id },
     kind: "sales",
-    title: mission.account.name,
+    title: dayLineDisplayTitle(overlay, mission.account.name),
     source: "commercial_mission",
     sourceLabel: mission.code,
     timeLabel: deadline
@@ -390,6 +396,7 @@ export function buildDayPlanProjection(input: {
         )
       : []),
     ...(input.salesMissions ?? []).flatMap(mission => {
+      if (isDayLineCancelled(readDayLineOverlay(mission.brief))) return [];
       const primary = commercialStop(
         mission,
         gap.available &&

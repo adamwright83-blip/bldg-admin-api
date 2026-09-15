@@ -469,3 +469,37 @@ describe("commercial-mission linkage survives the living-world projection", () =
     expect(stop?.action).toBeUndefined();
   });
 });
+
+describe("Day Line overlay projection", () => {
+  it("shows the action title without renaming the account identity", () => {
+    const mission = {
+      ...greystar("game_ready"),
+      id: 8,
+      code: "LOUISE-8",
+      account: { name: "The Louise", address: "1 Louise" },
+      brief: { laundryOpportunity: "", salesAngle: "", openingLine: "", discoveryQuestions: [], objections: [], goldlineDayLine: { actionTitleOverride: "Call Dana w/ THE LOUISE" } },
+    } as CommercialMission;
+    const plan = buildDayPlanProjection({
+      businessDate: "2026-09-14",
+      salesMissions: [mission],
+    });
+    const stop = plan.stops.find(item => item.id === "commercial-8");
+    expect(stop?.title).toBe("Call Dana w/ THE LOUISE");
+    expect(mission.account.name).toBe("The Louise");
+  });
+
+  it("does not resurrect a cancelled commercial mission after rebuild", () => {
+    const mission = {
+      ...greystar("game_ready"),
+      id: 9,
+      code: "MAYBOURNE-9",
+      account: { name: "Maybourne Beverly Hills", address: "2 Maybourne" },
+      brief: { laundryOpportunity: "", salesAngle: "", openingLine: "", discoveryQuestions: [], objections: [], goldlineDayLine: { notPursuing: true, cancelledAt: "2026-09-15T00:00:00.000Z" } },
+    } as CommercialMission;
+    const plan = buildDayPlanProjection({
+      businessDate: "2026-09-14",
+      salesMissions: [mission],
+    });
+    expect(plan.stops.some(item => /Maybourne/i.test(item.title))).toBe(false);
+  });
+});

@@ -479,3 +479,161 @@ describe("Claire V1 incomplete work, field capture, and avoidance", () => {
     expect(persistFieldCapture).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("Day Line edit and cancel through Claire", () => {
+  const louise = {
+    sourceType: "commercial_mission" as const,
+    sourceId: "8",
+    displayTitle: "The Louise",
+    accountName: "The Louise",
+    missionId: 8,
+    editableCapabilities: ["dayline.edit" as const, "dayline.cancel" as const],
+    status: "active" as const,
+  };
+  const maybourne = {
+    sourceType: "commercial_follow_up" as const,
+    sourceId: "fu-m",
+    displayTitle: "Maybourne Beverly Hills",
+    accountName: "Maybourne Beverly Hills",
+    missionId: 9,
+    followupId: "fu-m",
+    editableCapabilities: ["dayline.edit" as const, "dayline.cancel" as const],
+    status: "active" as const,
+  };
+
+  it("edits The Louise in place with a short response and no duplicate", async () => {
+    const editItem = vi.fn().mockResolvedValue({
+      ok: true,
+      sourceType: "commercial_mission",
+      sourceId: "8",
+      previousTitle: "The Louise",
+      displayTitle: "Call Dana w/ THE LOUISE",
+      accountName: "The Louise",
+    });
+    const result = await handleVoiceCommitmentTurn(
+      {
+        tenantId: "tenant-1",
+        actorId: "operator-1",
+        businessDate: "2026-09-14",
+        utterance: "Change The Louise to ‘Call Dana w/ THE LOUISE.’",
+        state: {},
+      },
+      {
+        classify: vi.fn().mockResolvedValue("edit_existing_work"),
+        getCampaignSummary: vi.fn().mockResolvedValue(null),
+        listDayLineItems: vi.fn().mockResolvedValue([louise, maybourne]),
+        editItem,
+      }
+    );
+    expect(result.kind).toBe("edited");
+    if (result.kind === "edited") {
+      expect(result.speak).toContain("Call Dana w/ THE LOUISE");
+      expect(result.sourceId).toBe("8");
+    }
+    expect(editItem).toHaveBeenCalledTimes(1);
+    expect(editItem.mock.calls[0][0].actionTitle).toBe("Call Dana w/ THE LOUISE");
+    expect(editItem.mock.calls[0][0].item.accountName).toBe("The Louise");
+  });
+
+  it("soft-cancels Maybourne without asking are-you-sure", async () => {
+    const cancelItem = vi.fn().mockResolvedValue({
+      ok: true,
+      sourceType: "commercial_follow_up",
+      sourceId: "fu-m",
+      reasonStored: true,
+      accountName: "Maybourne Beverly Hills",
+      displayTitle: "Maybourne",
+    });
+    const result = await handleVoiceCommitmentTurn(
+      {
+        tenantId: "tenant-1",
+        actorId: "operator-1",
+        businessDate: "2026-09-14",
+        utterance:
+          "Remove The Maybourne. I decided I don’t want to pursue them because I don’t want us taking on the liability of potentially damaging extremely expensive clothing.",
+        state: {},
+      },
+      {
+        classify: vi.fn().mockResolvedValue("cancel_existing_work"),
+        getCampaignSummary: vi.fn().mockResolvedValue(null),
+        listDayLineItems: vi.fn().mockResolvedValue([louise, maybourne]),
+        cancelItem,
+      }
+    );
+    expect(result.kind).toBe("cancelled");
+    if (result.kind === "cancelled") {
+      expect(result.speak).toMatch(/Removed Maybourne/);
+      expect(result.speak).toMatch(/kept the reason/);
+    }
+    expect(cancelItem).toHaveBeenCalledTimes(1);
+    expect(cancelItem.mock.calls[0][0].reason).toMatch(/liability/i);
+  });
+
+  it("asks one clarification when two Louise items match", async () => {
+    const result = await handleVoiceCommitmentTurn(
+      {
+        tenantId: "tenant-1",
+        actorId: "operator-1",
+        businessDate: "2026-09-14",
+        utterance: "Remove Louise",
+        state: {},
+      },
+      {
+        classify: vi.fn().mockResolvedValue("cancel_existing_work"),
+        getCampaignSummary: vi.fn().mockResolvedValue(null),
+        listDayLineItems: vi.fn().mockResolvedValue([
+          louise,
+          { ...louise, sourceId: "81", missionId: 81 },
+        ]),
+        cancelItem: vi.fn(),
+      }
+    );
+    expect(result.kind).toBe("clarifying");
+    if (result.kind === "clarifying") expect(result.speak).toMatch(/Which one/i);
+  });
+
+  it("will not erase completed history", async () => {
+    const result = await handleVoiceCommitmentTurn(
+      {
+        tenantId: "tenant-1",
+        actorId: "operator-1",
+        businessDate: "2026-09-14",
+        utterance: "Remove Maybourne",
+        state: {},
+      },
+      {
+        classify: vi.fn().mockResolvedValue("cancel_existing_work"),
+        getCampaignSummary: vi.fn().mockResolvedValue(null),
+        listDayLineItems: vi.fn().mockResolvedValue([
+          { ...maybourne, status: "completed" as const, editableCapabilities: [] },
+        ]),
+        cancelItem: vi.fn(),
+      }
+    );
+    expect(result.kind).toBe("acknowledged_existing");
+    if (result.kind === "acknowledged_existing") {
+      expect(result.speak).toMatch(/completed history/);
+    }
+  });
+
+  it("does not send engineering without explicit yes", async () => {
+    const approveEngineering = vi.fn();
+    const state: PendingProposalState = {};
+    const first = await handleVoiceCommitmentTurn(
+      {
+        tenantId: "tenant-1",
+        actorId: "operator-1",
+        businessDate: "2026-09-14",
+        utterance: "Teleport the Zeely task to Mars",
+        state,
+      },
+      {
+        classify: vi.fn().mockResolvedValue("not_work"),
+        getCampaignSummary: vi.fn().mockResolvedValue(null),
+        approveEngineering,
+      }
+    );
+    expect(first.kind).toBe("not_applicable");
+    expect(approveEngineering).not.toHaveBeenCalled();
+  });
+});
