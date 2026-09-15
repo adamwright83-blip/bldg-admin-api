@@ -49,6 +49,15 @@ describe("E — relationship dimensions are derived, never model-writable", () =
     expect(dims.reliability).toBeGreaterThan(0);
   });
 
+  it("completed phone calls do not farm qualifying interactions or respect", () => {
+    const events = daySeries(12, "call_completed");
+    const dims = deriveClaireRelationshipDimensions(events);
+    expect(dims.qualifyingInteractionCount).toBe(0);
+    expect(dims.professionalRespect).toBe(0);
+    expect(dims.reliability).toBe(0);
+    expect(computeClaireDisclosureTier(events, policy).tier).toBe(0);
+  });
+
   it("dimensions move independently — a boundary violation doesn't touch professionalRespect", () => {
     const events = [
       ...daySeries(3, "operator_follow_through"),

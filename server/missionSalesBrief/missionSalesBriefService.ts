@@ -5,7 +5,7 @@ import type {
 import { assembleMissionSalesBriefEvidence } from "./evidenceAssembler";
 import {
   listEligibleSalesIntel,
-  selectRelevantSalesIntel,
+  selectSalesIntelWithAudit,
 } from "./salesIntelEligibility";
 import {
   compileMissionSalesStrategy,
@@ -40,7 +40,7 @@ async function generateNextVersion(input: {
   if (!evidence) return null;
 
   const eligible = await listEligibleSalesIntel();
-  const intel = selectRelevantSalesIntel({
+  const intel = selectSalesIntelWithAudit({
     eligible,
     situationText: situationText({
       knownFacts: evidence.knownFacts,
@@ -52,7 +52,7 @@ async function generateNextVersion(input: {
     tenantId: input.tenantId,
     evidence,
     knownFacts: evidence.knownFacts,
-    intel,
+    intel: intel.selected,
   });
 
   const warnings: string[] = [];
@@ -73,21 +73,24 @@ async function generateNextVersion(input: {
       accountType: evidence.mission.account.accountType ?? null,
     },
     mission: {
-      missionType: evidence.mission.status,
+      missionType: evidence.mission.account.accountType ?? "commercial_account",
       currentStatus: evidence.mission.status,
       objective: strategy.recommendedApproach.primaryObjective,
     },
     knownFacts: evidence.knownFacts,
-    priorInteractions: evidence.priorOutcomes,
+    priorInteractions: [],
     priorOutcomes: evidence.priorOutcomes,
-    relevantSignals: [],
+    relevantSignals: evidence.knownFacts,
     unknowns: strategy.unknowns,
     unresolvedQuestions: strategy.unknowns.map(unknown => unknown.question),
     recommendedApproach: strategy.recommendedApproach,
     salesIntel: {
-      includedIntelIds: intel ? [intel.teachingId] : [],
-      frameworkId: intel?.teachingId ?? null,
-      rationale: intel?.rationale ?? null,
+      includedIntelIds: intel.selected ? [intel.selected.teachingId] : [],
+      teachingId: intel.selected?.teachingId ?? null,
+      frameworkId: null,
+      rationale: intel.selected?.rationale ?? null,
+      considered: intel.considered,
+      excluded: intel.excluded,
     },
     provenance: {
       sourceReferences: [

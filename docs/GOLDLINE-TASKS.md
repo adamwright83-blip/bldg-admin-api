@@ -82,6 +82,9 @@ Full brief: `docs/goldline/BUILD_BRIEF_PRESENTATION.md`. Independent of the prod
 - [adam/claude] Get a dev environment with real database access for browser verification — recurring blocker: Slices 4 and 5 both shipped with "not verified in a running browser, no database available," and the Opus LA routing bug reached production because it could not be exercised locally behind the admin password gate. This is the root cause behind several wrong-first-time fixes.
 - [claude] LLM model version sweep — resident's `server/_core/llm.ts` is pinned to `claude-sonnet-4-5-20250929`; audit the ~10 admin services with LLM calls for the same staleness and move to the current Claude 5 family.
 
+## In Progress
+- [cursor] Claire V1 completion (goal-driven operator loop + minimal truth/action seams) — Prompt A already merged/deployed/live-tested. Program: `docs/goldline/CLAIRE_V1_LEDGER.md`. No UA/BDA, no generalized Goldline Runtime, no new migration unless later slices force one. `NEEDS_DETAILS` uses existing `day_director_commitments.metadataJson`.
+
 ## Blocked
 - [chatgpt] Design Companion 2's agentic power — blocked on Kingdom 3 definition, power must make K3 genuinely require it
 

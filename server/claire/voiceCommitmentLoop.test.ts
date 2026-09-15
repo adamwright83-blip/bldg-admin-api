@@ -406,3 +406,76 @@ describe("natural phrasing — new-work recognition must not depend on fixed tri
     expect(invoke).toHaveBeenCalled();
   });
 });
+
+describe("Claire V1 incomplete work, field capture, and avoidance", () => {
+  it("research with missing optional details is proposed as NEEDS_DETAILS and stays open after accept", async () => {
+    const proposal = proposalFixture({ title: "Research Zeely and alternatives" });
+    const propose = vi.fn().mockResolvedValue(proposal);
+    const accept = vi.fn().mockResolvedValue({ id: "c-zeely" });
+    const state: PendingProposalState = {};
+    const proposed = await handleVoiceCommitmentTurn(
+      {
+        tenantId: "tenant-1",
+        actorId: "operator-1",
+        businessDate: "2026-09-14",
+        utterance: "I need to research Zeely and the other options.",
+        state,
+      },
+      {
+        propose,
+        accept,
+        classify: vi.fn().mockResolvedValue("new_work"),
+        getCampaignSummary: vi.fn().mockResolvedValue(null),
+      }
+    );
+    expect(proposed.kind).toBe("proposed");
+    expect(state.pendingProposal?.detailState).toBe("NEEDS_DETAILS");
+    const accepted = await handleVoiceCommitmentTurn(
+      {
+        tenantId: "tenant-1",
+        actorId: "operator-1",
+        businessDate: "2026-09-14",
+        utterance: "yes",
+        state,
+      },
+      { propose, accept }
+    );
+    expect(accepted.kind).toBe("accepted");
+    if (accepted.kind === "accepted") {
+      expect(accepted.speak).toMatch(/^Added:/);
+      expect(accepted.speak).toMatch(/flagged|still need/i);
+      expect(accepted.speak).toMatch(/What else/);
+    }
+  });
+
+  it("conversational field capture distinguishes hearsay and does not persist until yes", async () => {
+    const persistFieldCapture = vi.fn().mockResolvedValue({ ok: true, id: "outcome-1" });
+    const state: PendingProposalState = {};
+    const proposed = await handleVoiceCommitmentTurn(
+      {
+        tenantId: "tenant-1",
+        actorId: "operator-1",
+        businessDate: "2026-09-14",
+        utterance:
+          "Dana wasn't there. Front desk said she's usually in later than ten. I left the flyer.",
+        state,
+      },
+      { persistFieldCapture, propose: vi.fn() }
+    );
+    expect(proposed.kind).toBe("clarifying");
+    expect(proposed.kind === "clarifying" && proposed.speak).toMatch(/hearsay/i);
+    expect(persistFieldCapture).not.toHaveBeenCalled();
+    const saved = await handleVoiceCommitmentTurn(
+      {
+        tenantId: "tenant-1",
+        actorId: "operator-1",
+        businessDate: "2026-09-14",
+        utterance: "yes",
+        state,
+      },
+      { persistFieldCapture, propose: vi.fn() }
+    );
+    expect(saved.kind).toBe("field_captured");
+    expect(persistFieldCapture).toHaveBeenCalledTimes(1);
+  });
+});

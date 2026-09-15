@@ -9,6 +9,8 @@ import {
 import { getActiveMacroGoal, type MacroGoal } from "./macroGoalService";
 import type { ActiveCustomerMetric } from "./activeCustomerMetric";
 import { getClaireCampaignSummary, type ClaireCampaignSummary } from "./campaignAwareness";
+import { assembleClaireRuntimeView } from "./runtimeView";
+import type { PictureCompleteness, UnifiedWorkItem } from "../../shared/claireRuntime";
 
 export type ClairePhase = "pre_drive" | "post_stop";
 
@@ -109,6 +111,7 @@ export type ClaireDriveContext = {
   macroGoal?: MacroGoal | null;
   verifiedMetrics?: { activeCustomers: ActiveCustomerMetric };
   campaign?: ClaireCampaignSummary | null;
+  runtime?: { workItems: UnifiedWorkItem[]; picture: PictureCompleteness };
 };
 
 const PRE_DRIVE_KINDS = new Set<FieldTodayItem["kind"]>([
@@ -358,7 +361,7 @@ export async function assembleClaireDriveContext(input: {
     .slice(0, 3)
     .map(simplify);
 
-  return {
+  const assembled: ClaireDriveContext = {
     phase: input.phase,
     generatedAt: now.toISOString(),
     businessDate: today.businessDate,
@@ -378,4 +381,6 @@ export async function assembleClaireDriveContext(input: {
     campaign,
     ...(missionSalesBrief !== undefined ? { missionSalesBrief } : {}),
   };
+  assembled.runtime = assembleClaireRuntimeView(assembled, now);
+  return assembled;
 }

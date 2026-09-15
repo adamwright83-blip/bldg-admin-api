@@ -8,6 +8,19 @@ import {
   safeClaireFailureReason,
   type ClaireGenerationDiagnostic,
 } from "./generationTelemetry";
+import { detectClaireConversationalMode, detectRequestedClaireTopic } from "./topicDetection";
+import {
+  CLAIRE_V1_REASONING_POLICY,
+  detectAvoidanceDisclosure,
+  detectClaireWasWrong,
+  detectUnnecessarySoloWork,
+  detectVagueBusinessClaim,
+  inferBlockerKind,
+  isPermanentlyPrivateTopicProbe,
+  nextBlockerQuestion,
+  nextReadinessPrompt,
+} from "../../shared/claireRuntime";
+import { assembleClaireRuntimeView } from "./runtimeView";
 
 const MAX_SPOKEN_ANSWER_CHARS = 520;
 
@@ -41,6 +54,37 @@ export function conservativeClaireFollowUp(input: {
 }): string {
   const question = input.utterance.toLowerCase();
   const stop = currentStop(input.context);
+  const goal = input.context.macroGoal;
+
+  if (detectAvoidanceDisclosure(input.utterance)) {
+    const kind = inferBlockerKind(input.utterance);
+    return `${nextBlockerQuestion(kind)} ${nextReadinessPrompt(kind)}`.slice(0, MAX_SPOKEN_ANSWER_CHARS);
+  }
+  if (isPermanentlyPrivateTopicProbe(input.utterance)) {
+    return "That's not something I talk about. Ask something else.";
+  }
+  if (detectClaireWasWrong(input.utterance)) {
+    return "I was wrong about that. I won't keep pushing the same recommendation. What did the outcome actually show?";
+  }
+  if (detectVagueBusinessClaim(input.utterance)) {
+    return "I don't have an authoritative number for that, so I won't invent one. What exact figure are we using before we decide?";
+  }
+  if (detectUnnecessarySoloWork(input.utterance)) {
+    return "You could spend time inferring that, or ask the person who already knows. Is there a reason not to ask them?";
+  }
+  if (!input.context.macroGoalKnown && /\b(what (?:should|are) we|priority|trying to)\b/.test(question)) {
+    return "What are we actually trying to accomplish?";
+  }
+  if (goal && /\b(ads?|advertis|channel|zeely|instagram|tactic)\b/.test(question + input.utterance)) {
+    return `${goal.targetValue ?? ""} ${goal.unit ?? ""} is the target. Advertising is a channel, not the goal. What are we actually trying to learn or decide?`
+      .replace(/^\s+/, "")
+      .slice(0, MAX_SPOKEN_ANSWER_CHARS);
+  }
+  if (input.context.runtime?.picture && !input.context.runtime.picture.sufficient) {
+    if (/\b(today|plan|what(?:'s| is) (?:on|next))\b/.test(question)) {
+      return input.context.runtime.picture.summary.slice(0, MAX_SPOKEN_ANSWER_CHARS);
+    }
+  }
 
   if (/\b(who|meeting|seeing|talk(?:ing)? to)\b/.test(question)) {
     return stop
@@ -67,13 +111,19 @@ export function conservativeClaireFollowUp(input: {
 }
 
 function compactConversationContext(context: ClaireDriveContext): string {
+  const runtime = context.runtime ?? assembleClaireRuntimeView(context);
   return JSON.stringify({
     businessDate: context.businessDate,
+    clock: context.clock,
+    macroGoalKnown: context.macroGoalKnown,
+    macroGoal: context.macroGoal,
     nextFixedCommitment: context.nextFixedCommitment,
     blockers: context.blockers,
     relevantTimeline: context.relevantTimeline,
     mission: context.mission,
     missionSalesBrief: context.missionSalesBrief,
+    picture: runtime.picture,
+    workItems: runtime.workItems.slice(0, 8),
   });
 }
 
@@ -106,10 +156,19 @@ export async function answerClairePreDriveFollowUp(
         limit: 5,
       })
     : [];
+  const conversationalMode = detectClaireConversationalMode(input.utterance);
   const compiled = compileClaireCharacterContext({
-    mode: "pre_drive",
+    mode:
+      conversationalMode === "personal"
+        ? "personal"
+        : conversationalMode === "casual"
+          ? "casual"
+          : conversationalMode === "post_action_review"
+            ? "post_action_review"
+            : "pre_drive",
     relationshipState,
     recentSharedHistory,
+    explicitlyRequestedTopic: detectRequestedClaireTopic(input.utterance),
   });
   try {
     const text = (
@@ -122,7 +181,9 @@ export async function answerClairePreDriveFollowUp(
             role: "system",
             content: [
               "You are Claire, Goldline's concise operations partner in a live pre-drive phone conversation.",
-              "Answer the operator's latest question using only the supplied frozen current-day context and the exact opening brief.",
+              "Answer the operator's latest question using the supplied frozen current-day context, runtime picture, and the exact opening brief.",
+              CLAIRE_V1_REASONING_POLICY,
+              "If the operator asks a personal question, answer only from eligible canon. Permanently private facts do not exist in your prompt — do not invent them.",
               "The opening brief is advice derived before this turn; explain, simplify, restate, or apply only that advice.",
               "Never invent a person, meeting, account fact, laundry setup, objection, outcome, promise, deadline, address, or completed action.",
               "If the answer is absent, say exactly what is known and that you do not know the missing fact.",

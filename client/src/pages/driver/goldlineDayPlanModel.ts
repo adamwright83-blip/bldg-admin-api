@@ -165,6 +165,11 @@ export type DayPlanStop = {
   navigationUrl: string | null;
   missionTarget: "colosseum" | null;
   completedAt: string | null;
+  /**
+   * Presentation only. NEEDS_DETAILS is the business semantic;
+   * yellow/needs-attention is how Goldline may surface it.
+   */
+  attentionState?: "none" | "needs_details";
   /** Human-readable reason/evidence for carried-forward world pressure. */
   whySurfaced?: string | null;
   sourceEvidenceReference?: string | null;
@@ -453,6 +458,11 @@ export function buildDayPlanProjection(input: {
         navigationUrl: null,
         missionTarget: null,
         completedAt: commitment.completedAt,
+        attentionState: commitment.detailState === "NEEDS_DETAILS" ? "needs_details" : "none",
+        whySurfaced:
+          commitment.detailState === "NEEDS_DETAILS"
+            ? `Needs details: ${(commitment.missingDetails ?? []).join(", ") || commitment.detailNote || "more information"}`
+            : undefined,
       })
     ),
     ...(input.liveObjectives ?? []).map((objective): DayPlanStop => ({

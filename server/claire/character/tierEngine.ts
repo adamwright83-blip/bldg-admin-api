@@ -53,6 +53,8 @@ export function deriveClaireRelationshipDimensions(
 
   for (const event of sorted) {
     switch (event.eventType) {
+      case "call_completed":
+        break;
       case "operator_follow_through":
         professionalRespect += 3;
         reliability += 2;
@@ -88,11 +90,12 @@ export function deriveClaireRelationshipDimensions(
         disclosureSafety -= 10;
         break;
     }
-    familiarity += 0.5; // interaction volume contributes to familiarity regardless of type
+    if (event.eventType !== "call_completed") familiarity += 0.5;
   }
 
+  const qualifying = sorted.filter(event => event.eventType !== "call_completed");
   const distinctDays = new Set(
-    sorted.map(event => event.occurredAt.slice(0, 10))
+    qualifying.map(event => event.occurredAt.slice(0, 10))
   );
 
   return {
@@ -100,7 +103,7 @@ export function deriveClaireRelationshipDimensions(
     reliability: clamp(Math.round(reliability)),
     disclosureSafety: clamp(Math.round(disclosureSafety)),
     familiarity: clamp(Math.round(familiarity)),
-    qualifyingInteractionCount: sorted.length,
+    qualifyingInteractionCount: qualifying.length,
     distinctInteractionDays: distinctDays.size,
   };
 }

@@ -32,7 +32,9 @@ export function retrieveEligibleClaireCanon(
 
     // Fail closed #2: field mode suppresses all personal canon outright,
     // regardless of tier — field-mode brevity/usefulness outranks depth.
-    if (input.fieldOverride && fragment.accessClass !== "core") return false;
+    if (input.fieldOverride && fragment.accessClass !== "core") {
+      if (input.explicitlyRequestedTopic !== fragment.topic) return false;
+    }
 
     // Fail closed #3: tier gate.
     if (input.disclosureTier < fragment.minTier) return false;

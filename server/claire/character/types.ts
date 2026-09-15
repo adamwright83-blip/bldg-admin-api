@@ -13,6 +13,7 @@
 export type CharacterId = "claire";
 
 export type ClaireRelationshipEventType =
+  | "call_completed"
   | "operator_follow_through"
   | "operator_avoidance"
   | "operator_owned_mistake"
@@ -137,7 +138,9 @@ export type ClaireMode =
   | "failure_review"
   | "success_review"
   | "strategy"
-  | "casual";
+  | "casual"
+  | "personal"
+  | "post_action_review";
 
 export type ClaireModePolicy = {
   objective: string;

@@ -21,6 +21,27 @@ function dayOffset(n: number): Date {
   return new Date(2026, 0, n + 1, 12, 0, 0);
 }
 
+async function recordFollowThroughEvent(input: {
+  tenantId: string;
+  operatorUserId: string | null | undefined;
+  conversationId: string;
+  reason?: "closing_phrase" | "turn_cap_reached";
+  occurredAt?: Date;
+}) {
+  if (!input.operatorUserId) return null;
+  await recordClaireMissionOutcomeEvents({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    missionId: Math.abs(Array.from(input.conversationId).reduce((sum, char) => sum + char.charCodeAt(0), 0)) || 1,
+    outcome: "no_decision",
+    occurredAt: input.occurredAt,
+  });
+  return getClaireRelationshipState({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+  });
+}
+
 /**
  * End-to-end regression tests for the Claire relationship loop, running
  * against a deterministic in-memory store (no live MySQL is available in
@@ -40,7 +61,7 @@ describe("Claire relationship loop — end to end", () => {
 
   it("isolates state: same tenant, different operators never share relationship state", async () => {
     for (let day = 0; day < policy.tier0to1.minQualifyingInteractions; day += 1) {
-      await recordQualifyingClaireInteraction({
+      await recordFollowThroughEvent({
         tenantId: "tenant-1",
         operatorUserId: "operator-A",
         conversationId: `conv-A-${day}`,
@@ -63,7 +84,7 @@ describe("Claire relationship loop — end to end", () => {
 
   it("isolates state: same operator, different tenants never share relationship state", async () => {
     for (let day = 0; day < policy.tier0to1.minQualifyingInteractions; day += 1) {
-      await recordQualifyingClaireInteraction({
+      await recordFollowThroughEvent({
         tenantId: "tenant-1",
         operatorUserId: "operator-shared",
         conversationId: `conv-${day}`,
@@ -85,7 +106,7 @@ describe("Claire relationship loop — end to end", () => {
   });
 
   it("fails closed: unresolved operator identity gets Tier 0 and writes nothing", async () => {
-    const result = await recordQualifyingClaireInteraction({
+    const result = await recordFollowThroughEvent({
       tenantId: "tenant-1",
       operatorUserId: null,
       conversationId: "conv-anonymous",
@@ -107,7 +128,7 @@ describe("Claire relationship loop — end to end", () => {
   it("progresses Tier 0 -> Tier 1 deterministically once, and only once, thresholds are met", async () => {
     const belowThreshold = policy.tier0to1.minQualifyingInteractions - 1;
     for (let i = 0; i < belowThreshold; i += 1) {
-      await recordQualifyingClaireInteraction({
+      await recordFollowThroughEvent({
         tenantId: "tenant-1",
         operatorUserId: "operator-C",
         conversationId: `conv-${i}`,
@@ -121,7 +142,7 @@ describe("Claire relationship loop — end to end", () => {
     });
     expect(beforeThreshold.disclosureTier).toBe(0);
 
-    const finalState = await recordQualifyingClaireInteraction({
+    const finalState = await recordFollowThroughEvent({
       tenantId: "tenant-1",
       operatorUserId: "operator-C",
       conversationId: `conv-${belowThreshold}`,
@@ -142,7 +163,7 @@ describe("Claire relationship loop — end to end", () => {
 
   it("insufficient events cannot progress the tier", async () => {
     for (let i = 0; i < policy.tier0to1.minQualifyingInteractions - 2; i += 1) {
-      await recordQualifyingClaireInteraction({
+      await recordFollowThroughEvent({
         tenantId: "tenant-1",
         operatorUserId: "operator-D",
         conversationId: `conv-${i}`,
@@ -166,7 +187,7 @@ describe("Claire relationship loop — end to end", () => {
     const tenantId = "tenant-1";
     const operatorUserId = "operator-E";
     for (let i = 0; i < policy.tier1to2.minQualifyingInteractions - 1; i += 1) {
-      await recordQualifyingClaireInteraction({
+      await recordFollowThroughEvent({
         tenantId,
         operatorUserId,
         conversationId: `conv-${i}`,
@@ -238,7 +259,7 @@ describe("Claire relationship loop — end to end", () => {
     const tenantId = "tenant-1";
     const operatorUserId = "operator-G";
     for (let i = 0; i < 12; i += 1) {
-      await recordQualifyingClaireInteraction({
+      await recordFollowThroughEvent({
         tenantId,
         operatorUserId,
         conversationId: `conv-${i}`,
@@ -254,7 +275,7 @@ describe("Claire relationship loop — end to end", () => {
   it("deeper canon is never retrieved before disclosure-tier eligibility, even with real shared history present", async () => {
     const tenantId = "tenant-1";
     const operatorUserId = "operator-H";
-    await recordQualifyingClaireInteraction({
+    await recordFollowThroughEvent({
       tenantId,
       operatorUserId,
       conversationId: "conv-1",
@@ -361,7 +382,7 @@ describe("Claire relationship loop — end to end", () => {
     const operatorUserId = "operator-narrative";
 
     // Day 1: an ordinary completed call. No relationship yet.
-    const day1State = await recordQualifyingClaireInteraction({
+    const day1State = await recordFollowThroughEvent({
       tenantId,
       operatorUserId,
       conversationId: "conv-day1",
@@ -392,5 +413,44 @@ describe("Claire relationship loop — end to end", () => {
     // the model narrating it — recomputing again with no new events is stable/idempotent.
     const stableState = await getClaireRelationshipState({ tenantId, operatorUserId });
     expect(stableState).toEqual(laterState);
+  });
+
+  it("completed phone calls do not farm relationship progression by themselves", async () => {
+    for (let day = 0; day < policy.tier0to1.minQualifyingInteractions + 3; day += 1) {
+      await recordQualifyingClaireInteraction({
+        tenantId: "tenant-1",
+        operatorUserId: "operator-calls-only",
+        conversationId: `call-${day}`,
+        reason: "closing_phrase",
+        occurredAt: dayOffset(day),
+      });
+    }
+    const state = await getClaireRelationshipState({
+      tenantId: "tenant-1",
+      operatorUserId: "operator-calls-only",
+    });
+    expect(state.disclosureTier).toBe(0);
+    expect(state.qualifyingInteractionCount).toBe(0);
+    expect(state.professionalRespect).toBe(0);
+    expect(state.reliability).toBe(0);
+  });
+
+  it("subscription, voice minutes, and packaging never change relationship tier or canon access", async () => {
+    const paidPlans = ["free", "individual", "team", "enterprise", "claire_deluxe", "goldline_command", "goldline_play"] as const;
+    for (const plan of paidPlans) {
+      const state = await getClaireRelationshipState({
+        tenantId: "tenant-plan",
+        operatorUserId: `op-${plan}`,
+      });
+      expect(state.disclosureTier).toBe(0);
+      expect(state.qualifyingInteractionCount).toBe(0);
+      const compiled = compileClaireCharacterContext({
+        mode: "casual",
+        relationshipState: { ...state, disclosureTier: 0 },
+        recentSharedHistory: [],
+      });
+      expect(compiled.promptSection).not.toMatch(/father|married|childhood/i);
+      void plan;
+    }
   });
 });

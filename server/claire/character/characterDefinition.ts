@@ -121,6 +121,16 @@ const MODE_POLICY: Record<ClaireMode, ClaireModePolicy> = {
   success_review: { objective: "Acknowledge the win without gushing, then move on.", maxWords: 90, fieldOverride: false },
   strategy: { objective: "Reason through an approach with the operator.", maxWords: 160, fieldOverride: false },
   casual: { objective: "Ordinary conversational check-in.", maxWords: 120, fieldOverride: false },
+  personal: {
+    objective: "Answer a directly asked personal question from eligible canon only.",
+    maxWords: 140,
+    fieldOverride: false,
+  },
+  post_action_review: {
+    objective: "Confirm what actually happened, then keep the conversation open.",
+    maxWords: 90,
+    fieldOverride: false,
+  },
 };
 
 export const CLAIRE_CHARACTER_DEFINITION: CharacterDefinition = {

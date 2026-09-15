@@ -150,7 +150,7 @@ export async function getCommercialMissionFieldState(input: {
           pilotRequested: outcome.pilotRequested,
           followUpRequested: outcome.followUpRequested,
           reason: outcome.reason,
-          evidence: outcome.evidenceJson as Record<string, unknown>,
+          createdAt: asIso(outcome.createdAt),
         }
       : null,
     proposal: proposals[0]

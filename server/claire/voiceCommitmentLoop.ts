@@ -1,8 +1,29 @@
 import { z } from "zod";
 import { invokeLLM } from "../_core/llm";
 import type { DayDirectorProposal } from "../../shared/dayDirector";
-import { acceptProposal, proposeCommitment } from "../dayDirector/dayDirectorService";
+import {
+  acceptProposal,
+  getDayDirectorState,
+  proposeCommitment,
+  updateDayDirectorCommitment,
+} from "../dayDirector/dayDirectorService";
 import { getClaireCampaignSummary, type ClaireCampaignSummary } from "./campaignAwareness";
+import {
+  assessAmbiguity,
+  classifyIntentHeuristics,
+  detectAvoidanceDisclosure,
+  extractConversationalFieldOutcome,
+  inferBlockerKind,
+  matchOpenWorkTitle,
+  nextBlockerQuestion,
+  nextReadinessPrompt,
+  parseScheduleFromUtterance,
+  speakFieldCaptureReadback,
+  type BlockerKind,
+  type ConversationalFieldOutcome,
+  type WorkClassificationV1,
+} from "../../shared/claireRuntime";
+import { recordClaireConversionJoin } from "./conversionJoins";
 
 /**
  * The only place a live Claire phone conversation may cause a durable
@@ -40,11 +61,22 @@ export function detectConfirmation(utterance: string): "yes" | "no" | "ambiguous
 
 export function describeProposalForReadback(proposal: DayDirectorProposal): string {
   const quantityPart = proposal.quantity ? `, quantity ${proposal.quantity}` : "";
-  return `I heard: ${proposal.title}${quantityPart}. Should I add that to today's plan? Say yes or no.`;
+  const detailPart =
+    proposal.detailState === "NEEDS_DETAILS"
+      ? " I can add it now and flag the missing details."
+      : "";
+  return `I heard: ${proposal.title}${quantityPart}.${detailPart} Should I add that to today's plan? Say yes or no.`;
 }
 
 const classificationSchema = z.object({
-  classification: z.enum(["new_work", "existing_work", "uncertain", "not_work"]),
+  classification: z.enum([
+    "new_work",
+    "existing_work",
+    "update_existing_work",
+    "fyi_context",
+    "uncertain",
+    "not_work",
+  ]),
   reason: z.string().max(200),
 });
 
@@ -55,7 +87,17 @@ const CLASSIFY_JSON_SCHEMA = {
     type: "object",
     additionalProperties: false,
     properties: {
-      classification: { type: "string", enum: ["new_work", "existing_work", "uncertain", "not_work"] },
+      classification: {
+        type: "string",
+        enum: [
+          "new_work",
+          "existing_work",
+          "update_existing_work",
+          "fyi_context",
+          "uncertain",
+          "not_work",
+        ],
+      },
       reason: { type: "string", maxLength: 200 },
     },
     required: ["classification", "reason"],
@@ -67,7 +109,7 @@ function contentText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
   return typeof value === "string" ? value : "";
 }
 
-export type WorkClassification = "new_work" | "existing_work" | "uncertain" | "not_work";
+export type WorkClassification = WorkClassificationV1;
 
 /**
  * Grounded in real campaign state, not phrase-matching. Fails closed to
@@ -87,6 +129,8 @@ export async function classifyVoiceWorkStatement(
   dependencies: { invoke?: typeof invokeLLM } = {}
 ): Promise<WorkClassification> {
   if (CLEAR_ADD_WORK_FAST_PATH.test(input.utterance)) return "new_work";
+  const heuristic = classifyIntentHeuristics(input.utterance);
+  if (heuristic) return heuristic;
   const invoke = dependencies.invoke ?? invokeLLM;
   try {
     const result = await invoke({
@@ -98,10 +142,12 @@ export async function classifyVoiceWorkStatement(
         {
           role: "system",
           content: [
-            "Classify the operator's statement into exactly one category: new_work, existing_work, uncertain, or not_work.",
-            "new_work: describes or requests adding a task/decision/action the system does not already track — however it's phrased ('I need to figure out...', 'put this on my radar', 'another thing I have to do', 'there's something else', 'oh, and I forgot', 'Russell also wants me to...', etc).",
+            "Classify the operator's statement into exactly one category: new_work, existing_work, update_existing_work, fyi_context, uncertain, or not_work.",
+            "new_work: describes or requests adding a task/decision/action the system does not already track. Secondary missing details (deadline, criteria) do NOT make this uncertain — that is still new_work.",
             "existing_work: describes work that already belongs to a named ongoing campaign/mission/challenge, or references progress/remaining/completed count on something already tracked.",
-            "uncertain: the statement plausibly could be new work OR could just be the operator catching Claire up / thinking out loud, and you genuinely cannot tell which from the wording alone.",
+            "update_existing_work: asks to change timing, details, or status of work that already exists, not to create a copy.",
+            "fyi_context: catching Claire up, frustration, background, with no action request.",
+            "uncertain: you genuinely cannot tell whether the user wants an action, what action, what target, or what consequential effect is intended.",
             "not_work: a question, small talk, or anything clearly not describing actionable work at all.",
             "Prefer uncertain over guessing when genuinely unclear — never silently classify unclear statements as not_work merely because the wording doesn't match a fixed phrase.",
             input.campaignSummary
@@ -146,15 +192,32 @@ export type PendingProposalState = {
   pendingProposal?: DayDirectorProposal | null;
   /** An utterance whose new-vs-existing-work status was ambiguous; awaiting the operator's clarifying reply. */
   clarifyingUtterance?: string | null;
+  pendingUpdate?: {
+    commitmentId: string;
+    title: string;
+    patch: {
+      detailState?: "COMPLETE" | "NEEDS_DETAILS";
+      missingDetails?: string[];
+      detailNote?: string | null;
+      scheduleKind?: string;
+      scheduleLabel?: string | null;
+    };
+  } | null;
+  pendingFieldCapture?: ConversationalFieldOutcome | null;
+  lastAcceptedCommitmentId?: string | null;
+  blockerKind?: BlockerKind | null;
 };
 
 export type VoiceCommitmentTurnResult =
   | { kind: "proposed"; speak: string }
   | { kind: "accepted"; speak: string; proposal: DayDirectorProposal }
+  | { kind: "updated"; speak: string; commitmentId: string }
   | { kind: "declined"; speak: string }
   | { kind: "reask"; speak: string }
   | { kind: "acknowledged_existing"; speak: string }
   | { kind: "clarifying"; speak: string }
+  | { kind: "coaching"; speak: string }
+  | { kind: "field_captured"; speak: string }
   | { kind: "not_applicable" };
 
 export async function handleVoiceCommitmentTurn(
@@ -164,41 +227,58 @@ export async function handleVoiceCommitmentTurn(
     businessDate: string;
     utterance: string;
     state: PendingProposalState;
+    conversationId?: string;
   },
   dependencies: {
     propose?: typeof proposeCommitment;
     accept?: typeof acceptProposal;
     classify?: typeof classifyVoiceWorkStatement;
     getCampaignSummary?: typeof getClaireCampaignSummary;
+    getState?: typeof getDayDirectorState;
+    updateCommitment?: typeof updateDayDirectorCommitment;
+    persistFieldCapture?: (outcome: ConversationalFieldOutcome) => Promise<{ ok: boolean; id?: string }>;
   } = {}
 ): Promise<VoiceCommitmentTurnResult> {
   const propose = dependencies.propose ?? proposeCommitment;
   const accept = dependencies.accept ?? acceptProposal;
   const classify = dependencies.classify ?? classifyVoiceWorkStatement;
   const getCampaignSummary = dependencies.getCampaignSummary ?? getClaireCampaignSummary;
+  const getState = dependencies.getState ?? getDayDirectorState;
+  const updateCommitment = dependencies.updateCommitment ?? updateDayDirectorCommitment;
 
   if (input.state.pendingProposal) {
     const proposal = input.state.pendingProposal;
     const decision = detectConfirmation(input.utterance);
     if (decision === "yes") {
-      // Cleared synchronously, before the first await, so a duplicate
-      // Twilio delivery arriving for the same turn can never see a
-      // pending proposal to re-confirm — it falls through to ordinary
-      // conversation instead. acceptProposal's own idempotencyKey
-      // (derived from the verbatim source text) is the second,
-      // DB-level line of defense against a duplicate commitment.
       input.state.pendingProposal = null;
-      await accept({
+      const stored = await accept({
         tenantId: input.tenantId,
         actorId: input.actorId,
         businessDate: input.businessDate,
         proposal,
       });
-      // A successful mutation is never a terminal conversation state —
-      // production evidence showed a terse "Added: X." with no invitation
-      // to continue led to the call ending on the next silence. Always
-      // hand the turn back.
-      return { kind: "accepted", speak: `Added: ${proposal.title}. What else?`, proposal };
+      const storedId =
+        stored && typeof stored === "object" && "id" in stored
+          ? String((stored as { id?: unknown }).id ?? "")
+          : "";
+      if (storedId) input.state.lastAcceptedCommitmentId = storedId;
+      recordClaireConversionJoin({
+        tenantId: input.tenantId,
+        operatorUserId: input.actorId,
+        conversationId: input.conversationId,
+        stage: "accepted",
+        actionId: storedId || null,
+        proposalTitle: proposal.title,
+        detailState: proposal.detailState ?? "COMPLETE",
+      });
+      return {
+        kind: "accepted",
+        speak:
+          proposal.detailState === "NEEDS_DETAILS"
+            ? `Added: ${proposal.title}. I flagged it because we still need ${(proposal.missingDetails ?? []).join(" and ") || "a couple of details"}. What else?`
+            : `Added: ${proposal.title}. What else?`,
+        proposal,
+      };
     }
     if (decision === "no") {
       input.state.pendingProposal = null;
@@ -210,6 +290,119 @@ export async function handleVoiceCommitmentTurn(
     };
   }
 
+  if (input.state.pendingUpdate) {
+    const pending = input.state.pendingUpdate;
+    const decision = detectConfirmation(input.utterance);
+    if (decision === "yes") {
+      input.state.pendingUpdate = null;
+      await updateCommitment({
+        tenantId: input.tenantId,
+        actorId: input.actorId,
+        commitmentId: pending.commitmentId,
+        patch: pending.patch,
+      });
+      recordClaireConversionJoin({
+        tenantId: input.tenantId,
+        operatorUserId: input.actorId,
+        conversationId: input.conversationId,
+        stage: "details_supplied",
+        actionId: pending.commitmentId,
+        proposalTitle: pending.title,
+        detailState: pending.patch.detailState ?? "COMPLETE",
+      });
+      return {
+        kind: "updated",
+        speak: `Updated: ${pending.title}. Same item, no duplicate. What else?`,
+        commitmentId: pending.commitmentId,
+      };
+    }
+    if (decision === "no") {
+      input.state.pendingUpdate = null;
+      return { kind: "declined", speak: "Okay, I won't change that. Anything else?" };
+    }
+    return {
+      kind: "reask",
+      speak: `Sorry — should I update "${pending.title}"? Say yes or no.`,
+    };
+  }
+
+  if (input.state.pendingFieldCapture) {
+    const pending = input.state.pendingFieldCapture;
+    const decision = detectConfirmation(input.utterance);
+    if (decision === "yes") {
+      input.state.pendingFieldCapture = null;
+      const persist =
+        dependencies.persistFieldCapture ??
+        (async (outcome: ConversationalFieldOutcome) => {
+          if (!input.state.lastAcceptedCommitmentId) {
+            const proposal = await propose({
+              tenantId: input.tenantId,
+              sourceText: outcome.rawUtterance,
+            });
+            proposal.title = `Field outcome: ${outcome.attestedFacts[0] ?? "operator-attested visit"}`.slice(
+              0,
+              255
+            );
+            proposal.detailNote = JSON.stringify({
+              fieldOutcome: outcome,
+              hearsay: outcome.hearsay,
+            });
+            const stored = await accept({
+              tenantId: input.tenantId,
+              actorId: input.actorId,
+              businessDate: input.businessDate,
+              proposal,
+            });
+            const id =
+              stored && typeof stored === "object" && "id" in stored
+                ? String((stored as { id?: unknown }).id ?? "")
+                : "";
+            return { ok: true, id };
+          }
+          await updateCommitment({
+            tenantId: input.tenantId,
+            actorId: input.actorId,
+            commitmentId: input.state.lastAcceptedCommitmentId,
+            patch: {
+              detailNote: JSON.stringify({
+                fieldOutcome: pending,
+                hearsay: pending.hearsay,
+              }),
+            },
+          });
+          return { ok: true, id: input.state.lastAcceptedCommitmentId };
+        });
+      const saved = await persist(pending);
+      if (!saved.ok) {
+        return {
+          kind: "clarifying",
+          speak: "I understood it, but I couldn't save it. Let's try again in a moment.",
+        };
+      }
+      recordClaireConversionJoin({
+        tenantId: input.tenantId,
+        operatorUserId: input.actorId,
+        conversationId: input.conversationId,
+        stage: "outcome",
+        actionId: saved.id ?? null,
+        outcomeId: saved.id ?? null,
+        proposalTitle: pending.attestedFacts[0] ?? "field outcome",
+      });
+      return {
+        kind: "field_captured",
+        speak: "Saved as operator-attested. Hearsay stayed hearsay. What else?",
+      };
+    }
+    if (decision === "no") {
+      input.state.pendingFieldCapture = null;
+      return { kind: "declined", speak: "Okay, I won't record that. Anything else?" };
+    }
+    return {
+      kind: "reask",
+      speak: "Sorry — should I save that field outcome? Say yes or no.",
+    };
+  }
+
   if (input.state.clarifyingUtterance) {
     const original = input.state.clarifyingUtterance;
     const decision = detectConfirmation(input.utterance);
@@ -217,6 +410,14 @@ export async function handleVoiceCommitmentTurn(
       input.state.clarifyingUtterance = null;
       const proposal = await propose({ tenantId: input.tenantId, sourceText: original });
       input.state.pendingProposal = proposal;
+      recordClaireConversionJoin({
+        tenantId: input.tenantId,
+        operatorUserId: input.actorId,
+        conversationId: input.conversationId,
+        stage: "proposal",
+        proposalTitle: proposal.title,
+        detailState: proposal.detailState ?? "COMPLETE",
+      });
       return { kind: "proposed", speak: describeProposalForReadback(proposal) };
     }
     if (decision === "no") {
@@ -227,6 +428,21 @@ export async function handleVoiceCommitmentTurn(
       kind: "clarifying",
       speak: "Sorry — do you want me to add that as work, or were you just catching me up?",
     };
+  }
+
+  if (detectAvoidanceDisclosure(input.utterance)) {
+    const kind = inferBlockerKind(input.utterance);
+    input.state.blockerKind = kind;
+    return {
+      kind: "coaching",
+      speak: `${nextBlockerQuestion(kind)} ${nextReadinessPrompt(kind)}`.trim(),
+    };
+  }
+
+  const fieldOutcome = extractConversationalFieldOutcome(input.utterance);
+  if (fieldOutcome) {
+    input.state.pendingFieldCapture = fieldOutcome;
+    return { kind: "clarifying", speak: speakFieldCaptureReadback(fieldOutcome) };
   }
 
   const campaignSummary = await getCampaignSummary({
@@ -244,18 +460,57 @@ export async function handleVoiceCommitmentTurn(
   }
 
   if (classification === "uncertain") {
-    // Fail-closed means NO MUTATION WITHOUT CONFIDENCE — it does not mean
-    // dumping an unclear statement into generic Q&A. Ask, don't guess.
     input.state.clarifyingUtterance = input.utterance;
     return {
       kind: "clarifying",
-      speak: "Do you want me to add that, or are you just catching me up?",
+      speak: "Do you want me to add something, change something, or are you just catching me up?",
+    };
+  }
+
+  if (classification === "fyi_context") {
+    return { kind: "not_applicable" };
+  }
+
+  if (classification === "update_existing_work") {
+    const state = await getState({
+      tenantId: input.tenantId,
+      actorId: input.actorId,
+      businessDate: input.businessDate,
+    });
+    const open = (state.commitments ?? []).filter(item => item.status === "open");
+    const match =
+      open.find(item => matchOpenWorkTitle(item.title, input.utterance)) ??
+      open.find(item => item.id === input.state.lastAcceptedCommitmentId) ??
+      open.find(item => item.detailState === "NEEDS_DETAILS");
+    if (match) {
+      const schedule = parseScheduleFromUtterance(input.utterance, new Date());
+      const completingDetails = Boolean(match.detailState === "NEEDS_DETAILS");
+      input.state.pendingUpdate = {
+        commitmentId: match.id,
+        title: match.title,
+        patch: {
+          detailState: completingDetails ? "COMPLETE" : match.detailState,
+          missingDetails: completingDetails ? [] : match.missingDetails,
+          detailNote: completingDetails ? "Details supplied by operator" : match.detailNote,
+          scheduleKind: schedule.kind,
+          scheduleLabel: schedule.label,
+        },
+      };
+      return {
+        kind: "clarifying",
+        speak: `I can update "${match.title}" in place — no duplicate.${
+          completingDetails ? " That would clear the missing-details flag." : ""
+        } Say yes or no.`,
+      };
+    }
+    return {
+      kind: "acknowledged_existing",
+      speak:
+        "I can update the existing work rather than add a copy. If this is campaign field work, I won't duplicate the visits — tell me the timing change and confirm yes.",
     };
   }
 
   if (classification === "existing_work") {
-    // Authoritative campaign state already covers this — never duplicate
-    // it into a new Day Director commitment merely because it was said.
     return {
       kind: "acknowledged_existing",
       speak:
@@ -263,10 +518,35 @@ export async function handleVoiceCommitmentTurn(
     };
   }
 
+  const ambiguity = assessAmbiguity(input.utterance);
+  if (ambiguity.blocksExecution) {
+    return {
+      kind: "clarifying",
+      speak: `I can't execute that yet. I need the ${ambiguity.missingDetails.join(" and ")}.`,
+    };
+  }
+
   const proposal = await propose({
     tenantId: input.tenantId,
     sourceText: input.utterance,
   });
+  if (ambiguity.kind === "non_critical") {
+    proposal.detailState = "NEEDS_DETAILS";
+    proposal.missingDetails = ambiguity.missingDetails;
+    proposal.detailNote = "Preserved with incomplete details";
+  }
+  const schedule = parseScheduleFromUtterance(input.utterance, new Date());
+  if (schedule.kind !== "UNSCHEDULED") {
+    proposal.detailNote = [proposal.detailNote, schedule.label].filter(Boolean).join(" · ");
+  }
   input.state.pendingProposal = proposal;
+  recordClaireConversionJoin({
+    tenantId: input.tenantId,
+    operatorUserId: input.actorId,
+    conversationId: input.conversationId,
+    stage: "proposal",
+    proposalTitle: proposal.title,
+    detailState: proposal.detailState ?? "COMPLETE",
+  });
   return { kind: "proposed", speak: describeProposalForReadback(proposal) };
 }
