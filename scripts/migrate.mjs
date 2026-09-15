@@ -766,6 +766,14 @@ await assertRequiredColumns("cleancloud_browser_sync_receipts", [
   "receiptJson",
   "createdAt",
 ]);
+await assertRequiredColumns("cleancloud_browser_sync_attempts", [
+  "id",
+  "tenantId",
+  "requestId",
+  "outcome",
+  "rowCount",
+  "createdAt",
+]);
 
 const impactSql = await readFile(
   new URL("../server/towerWars/impactSchema.sql", import.meta.url),
@@ -1194,6 +1202,37 @@ await assertRequiredColumns("claire_generation_logs", [
   "generationSource",
   "disclosureTier",
   "generatedText",
+]);
+
+// ── Claire durable conversation state ────────────────────────────
+// A live call or desk conversation's working state (pending confirmations,
+// pending briefings, analytical thread, recent turns). Not business truth;
+// persisted so a deploy, restart, or replica switch can't make Claire forget
+// what she and the operator were discussing mid-conversation.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS claire_conversation_states (
+    id VARCHAR(191) PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NOT NULL,
+    surface VARCHAR(16) NOT NULL,
+    stateJson JSON NOT NULL,
+    version INT NOT NULL DEFAULT 1,
+    expiresAt TIMESTAMP NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_claire_conversation_state_operator (tenantId,operatorUserId,updatedAt),
+    KEY idx_claire_conversation_state_expiry (expiresAt)
+  )`,
+  "CREATE TABLE claire_conversation_states"
+);
+await assertRequiredColumns("claire_conversation_states", [
+  "id",
+  "tenantId",
+  "operatorUserId",
+  "surface",
+  "stateJson",
+  "version",
+  "expiresAt",
 ]);
 
 // ── Claire Pass 2: MissionSalesBrief ──────────────────────────────

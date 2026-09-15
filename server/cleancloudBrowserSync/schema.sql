@@ -30,3 +30,15 @@ CREATE TABLE IF NOT EXISTS cleancloud_browser_sync_receipts (
   createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_cc_browser_sync_request (tenantId, requestId)
 );
+CREATE TABLE IF NOT EXISTS cleancloud_browser_sync_attempts (
+  id VARCHAR(36) PRIMARY KEY,
+  tenantId VARCHAR(64) NOT NULL,
+  requestId VARCHAR(36) NULL,
+  outcome VARCHAR(32) NOT NULL,
+  message VARCHAR(512) NULL,
+  rangeFrom VARCHAR(10) NULL,
+  rangeTo VARCHAR(10) NULL,
+  rowCount INT NULL,
+  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_cc_browser_sync_attempts_tenant (tenantId, createdAt)
+);

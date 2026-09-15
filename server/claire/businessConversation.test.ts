@@ -93,7 +93,7 @@ describe("Claire business conversation — revenue thread (A–C)", () => {
     const text = await say(ask, "What about just wash and fold?");
     expect(text).toContain("paid wash-and-fold revenue");
     expect(text).toContain("$100 across 2 orders");
-    expect(text).toContain("CleanCloud orders don't record a service type");
+    expect(text).toContain("1 CleanCloud order worth $30.00 couldn't be classified as laundry or dry cleaning");
   });
 
   it("explains a change from grounded drivers only", async () => {
@@ -167,13 +167,12 @@ describe("Claire business conversation — other questions", () => {
     if (turn.handled) expect(turn.speak).toContain("$150");
   });
 
-  it("does not filter by building or customer type it cannot prove (M)", async () => {
+  it("scopes to a building from order records, and still refuses customer types it cannot prove (M)", async () => {
     const { ask } = claire();
     const building = await ask("What was revenue from OPUS last month?");
     expect(building).toMatchObject({ handled: true });
     if (building.handled) {
-      expect(building.speak).toContain("can't split revenue by building");
-      expect(building.speak).not.toMatch(/\$/);
+      expect(building.speak).toBe("Paid revenue at OPUS LA last month was $0.00 across 0 orders.");
     }
     await say(ask, "How many active customers do we have?");
     const commercial = await ask("Exclude commercial accounts.");

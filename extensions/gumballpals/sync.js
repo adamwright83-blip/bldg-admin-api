@@ -49,6 +49,24 @@ const request = (operation, input) =>
     input === undefined ? [operation] : [operation, input]
   );
 const uuid = () => crypto.randomUUID();
+// Failures before an import reaches Goldline are otherwise invisible to
+// "is GUMBALL working?". Best effort only: never changes the sync outcome.
+async function reportFailure(stage, error) {
+  try {
+    const { run } = await chrome.storage.local.get("run");
+    if (!goldlineTab || !run?.tenantId || !run?.actorId) return;
+    await request("reportFailure", {
+      tenantId: run.tenantId,
+      actorId: run.actorId,
+      ...(run.requestId ? { requestId: run.requestId } : {}),
+      stage,
+      message: String(error?.message ?? error ?? "Sync failed").slice(0, 500),
+      ...(run.range?.from ? { from: run.range.from, to: run.range.to } : {}),
+    });
+  } catch {
+    // Reporting must never mask the original failure.
+  }
+}
 
 if (!globalThis.chrome?.runtime?.id) {
   status(
@@ -250,6 +268,7 @@ if (!globalThis.chrome?.runtime?.id) {
     } catch (error) {
       status(error.message, true);
       if (scheduled) await scheduleStatus(`blocked: ${error.message}`);
+      await reportFailure("export", error);
       const { run } = await chrome.storage.local.get("run");
       if (!["importing", "outcome_unknown"].includes(run?.phase))
         await save("failed");
@@ -336,6 +355,7 @@ if (!globalThis.chrome?.runtime?.id) {
       });
     } catch (error) {
       if (scheduled) await scheduleStatus(`needs attention: ${error.message}`);
+      await reportFailure("import", error);
       const { run } = await chrome.storage.local.get("run");
       if (run?.phase === "importing") {
         await save("outcome_unknown");

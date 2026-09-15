@@ -95,20 +95,24 @@ describe("desktop Claire business questions (V)", () => {
 
   it("work requests and ordinary conversation are unaffected (Q, R)", async () => {
     const claire = caller(103);
-    await claire.talk({ utterance: "Add reviewing revenue tomorrow.", conversationId: "desk-conversation-q" });
+    await claire.talk({ utterance: "Add reviewing revenue.", conversationId: "desk-conversation-q" });
     expect(hoisted.commitment).toHaveBeenCalledTimes(1);
     const ordinary = await claire.talk({ utterance: "Who am I meeting today?", conversationId: "desk-conversation-q" });
     expect(ordinary.reply).toBe("Follow-up answer.");
   });
 
-  it("a pending yes/no confirmation takes precedence over analytics (T)", async () => {
+  it("a pending confirmation survives a business question, and yes still confirms it (T)", async () => {
     const claire = caller(104);
     hoisted.commitment.mockImplementationOnce(async input => {
-      input.state.pendingProposal = { title: "Review revenue" };
+      input.state.pendingProposal = { title: "Review revenue", sourceText: "Add reviewing revenue." };
       return { kind: "proposed", speak: "Should I add that to today's plan? Say yes or no." };
     });
-    await claire.talk({ utterance: "Add reviewing revenue tomorrow.", conversationId: "desk-conversation-t" });
-    await claire.talk({ utterance: "What was revenue last month?", conversationId: "desk-conversation-t" });
+    await claire.talk({ utterance: "Add reviewing revenue.", conversationId: "desk-conversation-t" });
+    const answer = await claire.talk({ utterance: "What was revenue last month?", conversationId: "desk-conversation-t" });
+    expect(answer.reply).toContain("last month");
+    expect(answer.reply).toContain('still holding "Review revenue"');
+    expect(hoisted.commitment).toHaveBeenCalledTimes(1);
+    await claire.talk({ utterance: "Yes.", conversationId: "desk-conversation-t" });
     expect(hoisted.commitment).toHaveBeenCalledTimes(2);
   });
 

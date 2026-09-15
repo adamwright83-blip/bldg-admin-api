@@ -1,7 +1,19 @@
 import { and, eq, gte, inArray, isNotNull, lt, or, sql } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
 import { cleancloudPaidOrders, orders } from "../../drizzle/schema";
+import { browserSyncBindings } from "../cleancloudBrowserSync/schema";
 import { getDb } from "../db";
+import {
+  buildingFor,
+  cleanCloudBusinessLine,
+  cleanCloudProcessor,
+  serviceTypeFromCleanCloudClass,
+  type BuildingKey,
+  type BusinessLine,
+  type LedgerSource,
+  type PaymentProcessor,
+} from "./businessLineage";
+import { classifyCleanCloudService, type LaundryFarmServiceClass } from "./cleancloudServiceClass";
 import { identityKeysFor, type IdentityEvidence } from "./customerIdentityResolution";
 
 /**
@@ -17,9 +29,12 @@ import { identityKeysFor, type IdentityEvidence } from "./customerIdentityResolu
  * - Native and CleanCloud orders share no order key, so cross-source overlap
  *   cannot be removed. It is probed (same customer, business day and amount)
  *   and disclosed instead.
+ *
+ * Every event also carries its lineage (business line, processor, building,
+ * service class, event time vs. ingestion time) — see businessLineage.ts.
  */
 
-export type LedgerSource = "laundry_butler" | "cleancloud";
+export type { BusinessLine, LedgerSource, PaymentProcessor } from "./businessLineage";
 export const LEDGER_SOURCES: readonly LedgerSource[] = ["laundry_butler", "cleancloud"];
 
 export type ServiceType = "wash_fold" | "dry_cleaning";
@@ -30,10 +45,23 @@ export type PaidOrderEvent = {
   occurredAt: Date;
   businessDate: string;
   cents: number;
-  /** Only native orders record a service type. */
+  /** Native orders record a service type; CleanCloud orders are classified from their summary. */
   serviceType: ServiceType | null;
   customerName: string | null;
   identity: IdentityEvidence;
+  /** The order number in its own system ("233", CleanCloud "577"). */
+  orderNumber?: string;
+  businessLine?: BusinessLine | null;
+  processor?: PaymentProcessor;
+  building?: BuildingKey | null;
+  address?: string | null;
+  serviceClass?: LaundryFarmServiceClass | "native";
+  /** Short human description of what was ordered, when the source records one. */
+  summary?: string | null;
+  /** When the order was placed (event time), when known. */
+  placedAt?: Date | null;
+  /** When Goldline first recorded this row (ingestion time) — for imported sources only. */
+  ingestedAt?: Date | null;
 };
 
 export type UnverifiedPaidOrder = { eventKey: string; businessDate: string; cents: number };
@@ -70,6 +98,10 @@ export type NativeOrderRow = {
   phone: string | null;
   email: string | null;
   bldgUserId: number | null;
+  address?: string | null;
+  unit?: string | null;
+  buildingSlug?: string | null;
+  createdAt?: Date | null;
 };
 
 export type CleanCloudOrderRow = {
@@ -83,6 +115,15 @@ export type CleanCloudOrderRow = {
   customerName: string | null;
   customerPhone: string | null;
   customerEmail: string | null;
+  address?: string | null;
+  buildingSlug?: string | null;
+  paymentType?: string | null;
+  cardPaymentType?: string | null;
+  summaryText?: string | null;
+  placedAtUtc?: Date | null;
+  createdAt?: Date | null;
+  /** The tenant's GUMBALL-paired CleanCloud store label, when paired. */
+  storeLabel?: string | null;
 };
 
 export type LedgerWindow = { tenantId: string; startUtc: Date; endExclusiveUtc: Date };
@@ -98,6 +139,34 @@ function inWindow(value: Date | null, window: { startUtc: Date; endExclusiveUtc:
 
 function businessDateOf(value: Date, timeZone: string): string {
   return formatInTimeZone(value, timeZone, "yyyy-MM-dd");
+}
+
+function serviceLabel(serviceType: string | null): string | null {
+  if (serviceType === "wash_fold") return "wash and fold";
+  if (serviceType === "dry_cleaning") return "dry cleaning";
+  return null;
+}
+
+/** CleanCloud's order summary as something that reads aloud: items, then pounds, no discount lines. */
+export function cleanCloudSummaryText(summaryText: string | null | undefined): string | null {
+  const lines = String(summaryText ?? "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .split(/\n+/)
+    .map(line => line.trim())
+    .filter(line => line && !/^(discount|credit)\b/i.test(line));
+  const weights = lines.filter(line => /^\d+(?:\.\d+)?\s*lbs?$/i.test(line)).map(line => Number.parseFloat(line));
+  const items = lines
+    .filter(line => !/^\d+(?:\.\d+)?\s*lbs?$/i.test(line))
+    .map(line => {
+      const cleaned = line.replace(/\(\d+\)\s*/g, "").replace(/\(D\)\s*/gi, "").replace(/\s+/g, " ").trim();
+      // Pound-priced laundry repeats its weight as the quantity; the weight is said once below.
+      return weights.length && /fluff|wash|fold/i.test(cleaned) ? cleaned.replace(/\s+x\s+[\d.]+$/i, "") : cleaned;
+    })
+    .filter(Boolean);
+  if (!items.length) return null;
+  const pounds = weights.reduce((sum, value) => sum + value, 0);
+  const weight = pounds > 0 ? `, ${Number.isInteger(pounds) ? pounds : pounds.toFixed(1)} lb` : "";
+  return `${items.join("; ")}${weight}`.slice(0, 240);
 }
 
 export function mapNativeOrders(
@@ -116,15 +185,26 @@ export function mapNativeOrders(
       unverified.push({ eventKey, businessDate, cents });
       continue;
     }
+    const serviceType =
+      row.serviceType === "wash_fold" || row.serviceType === "dry_cleaning" ? row.serviceType : null;
     events.push({
       source: "laundry_butler",
       eventKey,
       occurredAt: row.paidAt,
       businessDate,
       cents,
-      serviceType: row.serviceType === "wash_fold" || row.serviceType === "dry_cleaning" ? row.serviceType : null,
+      serviceType,
       customerName: `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim() || null,
       identity: { phone: row.phone, email: row.email, bldgUserId: row.bldgUserId },
+      orderNumber: String(row.id),
+      businessLine: "laundry_butler",
+      processor: "stripe",
+      building: buildingFor({ buildingSlug: row.buildingSlug, address: row.address }),
+      address: [row.address, row.unit ? `Unit ${row.unit}` : null].filter(Boolean).join(", ") || null,
+      serviceClass: "native",
+      summary: serviceLabel(serviceType),
+      placedAt: row.createdAt ?? null,
+      ingestedAt: null,
     });
   }
   return { events, unverified };
@@ -147,19 +227,29 @@ export function mapCleanCloudOrders(
   for (const row of Array.from(preferred.values())) {
     const occurredAt = row.sourceReportType === "orders_sales" ? row.paymentDateUtc : row.paidDateUtc;
     if (!inWindow(occurredAt, window)) continue;
+    const serviceClass = classifyCleanCloudService({ summaryText: row.summaryText ?? null });
     events.push({
       source: "cleancloud",
       eventKey: `cleancloud:${row.cleancloudOrderId}`,
       occurredAt,
       businessDate: businessDateOf(occurredAt, timeZone),
       cents: Math.round(Number(row.totalCents ?? 0)),
-      serviceType: null,
+      serviceType: serviceTypeFromCleanCloudClass(serviceClass),
       customerName: row.customerName?.trim() || null,
       identity: {
         phone: row.customerPhone,
         email: row.customerEmail,
         cleancloudCustomerId: row.cleancloudCustomerId,
       },
+      orderNumber: row.cleancloudOrderId,
+      businessLine: cleanCloudBusinessLine(row.storeLabel),
+      processor: cleanCloudProcessor(row.paymentType, row.cardPaymentType),
+      building: buildingFor({ buildingSlug: row.buildingSlug, address: row.address }),
+      address: row.address?.trim() || null,
+      serviceClass,
+      summary: cleanCloudSummaryText(row.summaryText),
+      placedAt: row.placedAtUtc ?? null,
+      ingestedAt: row.createdAt ?? null,
     });
   }
   return events;
@@ -172,6 +262,22 @@ async function requireDb() {
 }
 
 const ID_CHUNK = 500;
+
+async function pairedStoreLabel(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, tenantId: string) {
+  try {
+    const [binding] = await db
+      .select({ storeLabel: browserSyncBindings.storeLabel })
+      .from(browserSyncBindings)
+      .where(eq(browserSyncBindings.tenantId, tenantId))
+      .limit(1);
+    return binding?.storeLabel ?? null;
+  } catch (error) {
+    // Lineage is attribution, not revenue: a missing binding table leaves
+    // CleanCloud orders unattributed instead of failing the ledger.
+    console.warn("[Analytics] GUMBALL store binding unavailable", error instanceof Error ? error.message : error);
+    return null;
+  }
+}
 
 export const databaseLedgerLoaders: LedgerLoaders = {
   async laundry_butler(window) {
@@ -189,6 +295,10 @@ export const databaseLedgerLoaders: LedgerLoaders = {
         phone: orders.phone,
         email: orders.email,
         bldgUserId: orders.bldgUserId,
+        address: orders.address,
+        unit: orders.unit,
+        buildingSlug: orders.buildingSlug,
+        createdAt: orders.createdAt,
       })
       .from(orders)
       .where(
@@ -214,6 +324,13 @@ export const databaseLedgerLoaders: LedgerLoaders = {
       customerName: cleancloudPaidOrders.customerName,
       customerPhone: cleancloudPaidOrders.customerPhone,
       customerEmail: cleancloudPaidOrders.customerEmail,
+      address: cleancloudPaidOrders.address,
+      buildingSlug: cleancloudPaidOrders.buildingSlug,
+      paymentType: cleancloudPaidOrders.paymentType,
+      cardPaymentType: cleancloudPaidOrders.cardPaymentType,
+      summaryText: cleancloudPaidOrders.summaryText,
+      placedAtUtc: cleancloudPaidOrders.placedAtUtc,
+      createdAt: cleancloudPaidOrders.createdAt,
     };
     const rows: CleanCloudOrderRow[] = await db
       .select(columns)
@@ -256,7 +373,8 @@ export const databaseLedgerLoaders: LedgerLoaders = {
         );
       rows.push(...twins);
     }
-    return rows;
+    const storeLabel = rows.length ? await pairedStoreLabel(db, window.tenantId) : null;
+    return rows.map(row => ({ ...row, storeLabel }));
   },
 };
 

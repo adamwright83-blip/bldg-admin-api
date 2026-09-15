@@ -133,7 +133,7 @@ export async function approveCapabilityEngineering(input: {
       gap: null,
       reused: false,
       unavailableReason: inserted.reason,
-      speak: "Sent. I'll let you know what engineering finds.",
+      speak: "I couldn't save that request for engineering just now, so nothing was sent. Ask me again in a bit.",
     };
   }
   const gap = inserted;
@@ -142,7 +142,7 @@ export async function approveCapabilityEngineering(input: {
       gap,
       reused: true,
       unavailableReason: null,
-      speak: "Sent. I'll let you know what engineering finds.",
+      speak: "Engineering is already working on that one. I'll let you know what they find.",
     };
   }
   const config = capabilityEngineeringConfig();
@@ -162,12 +162,18 @@ export async function approveCapabilityEngineering(input: {
       body: `Engineering cannot start until ${config.missing.join(", ")} is configured.`,
       ctaLabel: "VIEW ENGINEERING REQUEST",
     });
-    return { gap, reused: false, unavailableReason: null, speak: "Sent. I'll let you know what engineering finds." };
+    return {
+      gap,
+      reused: false,
+      unavailableReason: null,
+      speak: "I saved the request, but engineering can't start until it's configured, so it's waiting.",
+    };
   }
   await updateCapabilityGap(gap.id, {
     status: "ENGINEERING_RUNNING",
     engineeringStatus: "RUNNING",
   });
+  let startFailed: string | null = null;
   try {
     const started = await createCapabilityBuilderSession({
       config,
@@ -190,6 +196,7 @@ export async function approveCapabilityEngineering(input: {
     }
   } catch (error) {
     const authFailure = Boolean((error as { authFailure?: boolean }).authFailure);
+    startFailed = authFailure ? "authentication failed" : "it couldn't start";
     await updateCapabilityGap(gap.id, {
       status: authFailure ? "IDENTIFIED" : "BLOCKED",
       engineeringStatus: authFailure ? "RETRYABLE_AUTH" : "BLOCKED",
@@ -212,7 +219,14 @@ export async function approveCapabilityEngineering(input: {
       ctaLabel: "VIEW ENGINEERING REQUEST",
     });
   }
-  return { gap, reused: Boolean(existing), unavailableReason: null, speak: "Sent. I'll let you know what engineering finds." };
+  return {
+    gap,
+    reused: Boolean(existing),
+    unavailableReason: null,
+    speak: startFailed
+      ? `I saved the request, but engineering ${startFailed === "authentication failed" ? "couldn't authenticate" : "couldn't start"}, so it's blocked for now.`
+      : "Sent to engineering. I'll let you know what they find.",
+  };
 }
 
 async function notifyForTerminal(gap: CapabilityGapRecord, terminal: EngineeringTerminalResult) {

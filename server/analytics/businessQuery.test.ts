@@ -48,7 +48,7 @@ describe("runBusinessQuery", () => {
     expect(new Set(seen)).toEqual(new Set(["tenant-a"]));
   });
 
-  it("marks a service filter as native-only when CleanCloud orders are in scope", async () => {
+  it("discloses in-scope CleanCloud orders a service filter cannot classify", async () => {
     const result = await runBusinessQuery(
       "tenant-1",
       { ...defaultBusinessQuery("revenue"), serviceType: "wash_fold" },
@@ -57,7 +57,7 @@ describe("runBusinessQuery", () => {
     expect(result).toMatchObject({
       status: "ok",
       data: { current: { revenueCents: 10000, orderCount: 2 } },
-      coverage: { serviceFilterExcludedCleanCloud: true },
+      coverage: { serviceFilterUnclassified: { orders: 1, cents: 3000 } },
     });
   });
 });

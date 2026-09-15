@@ -14,28 +14,15 @@ import {
   ensureCurrentMissionSalesBrief,
   getLatestMissionSalesBrief,
 } from "../missionSalesBrief/missionSalesBriefService";
-import {
-  handleVoiceCommitmentTurn,
-  trackEmptyTranscript,
-  trackNonEmptyTranscript,
-} from "./voiceCommitmentLoop";
+import { trackEmptyTranscript, trackNonEmptyTranscript } from "./voiceCommitmentLoop";
 import { assembleTomorrowCandidates, confirmWorkdayPlan } from "./workdayPlanService";
-import type { DayDirectorProposal } from "../../shared/dayDirector";
 import {
   extractClaireDebrief,
   writeClaireOutcomeConfirmation,
   writeClairePostStopOpening,
 } from "./reasoning";
 import { generateClairePreDriveOutput } from "./preDriveRuntime";
-import {
-  answerClairePreDriveFollowUp,
-  isClaireCallComplete,
-} from "./preDriveConversation";
-import {
-  answerClaireBusinessTurn,
-  hasPendingClaireAction,
-  type ClaireAnalyticsSession,
-} from "./businessConversation";
+import { isClaireCallComplete } from "./preDriveConversation";
 import {
   issueClaireToken,
   verifyClaireToken,
@@ -49,6 +36,7 @@ import {
 } from "./conversation/ledgerService";
 import {
   endClaireCallLedger,
+  linkClaireActionIds,
   linkClaireCallAction,
   persistOperatorAndClaire,
   safeClaireLedger,
@@ -58,22 +46,37 @@ import {
   handleRecordingStatus,
 } from "./conversation/pipeline";
 import { isValidTwilioWebhook } from "./conversation/twilioSignature";
+import { runClaireTurn, type ClaireTurnState } from "./turn/claireTurn";
+import { claireConversationStateStore } from "./turn/conversationStateStore";
+import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
+import { loadBusinessVocabulary, speechHints } from "./knowledge/businessVocabulary";
 
 const DEBRIEF_PATH = "/api/claire/twilio/debrief";
 const CONFIRM_PATH = "/api/claire/twilio/confirm";
 const PRE_DRIVE_PATH = "/api/claire/twilio/pre-drive";
+const CONTINUE_PATH = "/api/claire/twilio/pre-drive/continue";
 export const CLAIRE_RECORDING_STATUS_PATH = "/api/claire/twilio/recording-status";
 export const CLAIRE_CALL_STATUS_PATH = "/api/claire/twilio/call-status";
 const CLAIRE_VOICE = "Polly.Ruth-Generative";
-const PRE_DRIVE_CONVERSATION_TTL_MS = 30 * 60 * 1_000;
-const MAX_PRE_DRIVE_TURNS = 24;
+const PRE_DRIVE_CONVERSATION_TTL_MS = 45 * 60 * 1_000;
+const MAX_PRE_DRIVE_TURNS = 80;
+/** Twilio abandons a call webhook at 15 seconds; answer or hand off well before that. */
+const TURN_BUDGET_MS = 11_000;
+const MAX_HINT_CHARS = 2_200;
 const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim() ?? "";
 const authToken = process.env.TWILIO_AUTH_TOKEN?.trim() ?? "";
 const fromNumber = process.env.CLAIRE_TWILIO_FROM_NUMBER?.trim() ?? "";
 const operatorNumber = process.env.CLAIRE_OPERATOR_PHONE?.trim() ?? "";
 const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
 
-type PreDriveConversation = {
+const DEFAULT_HINTS = "got it, I'm good, that's enough, end call, hang up, goodbye";
+
+/**
+ * A live call's working state. It is persisted (claire_conversation_states),
+ * so a deploy, a restart, or a webhook landing on another replica does not
+ * make Claire forget the brief, a pending briefing, or the thread.
+ */
+type PreDriveConversation = ClaireTurnState & {
   tenantId: string;
   actorId: string;
   /** The identity Day Director commitments are actually keyed by — see dayDirectorActorId(ctx). Never inferred from speech. */
@@ -82,18 +85,34 @@ type PreDriveConversation = {
   context: Awaited<ReturnType<typeof assembleClaireDriveContext>>;
   turns: number;
   touchedAt: number;
-  /** Voice commitment loop: a proposed Day Director commitment awaiting explicit yes/no. */
-  pendingProposal?: DayDirectorProposal | null;
-  /** An utterance whose new-vs-existing-work status was ambiguous; awaiting the operator's clarifying reply. */
-  clarifyingUtterance?: string | null;
-  /** Consecutive empty Twilio speech results — only two in a row end the call. */
-  consecutiveEmptyTranscripts?: number;
   sessionKind?: "evening_planning" | "morning_reconciliation" | "field_debrief" | "pre_drive";
-  /** Analytical follow-up context for this call only. Never business truth. */
-  analytics?: ClaireAnalyticsSession | null;
+  /** Business names for speech recognition, loaded once per call. */
+  hints?: string;
 };
 
-const preDriveConversations = new Map<string, PreDriveConversation>();
+function callStateKey(conversationId: string): string {
+  return `claire-call:${conversationId}`;
+}
+
+async function loadCall(conversationId: string): Promise<PreDriveConversation | null> {
+  const stored = await claireConversationStateStore().load<PreDriveConversation>(callStateKey(conversationId));
+  return stored?.state ?? null;
+}
+
+async function saveCall(conversationId: string, conversation: PreDriveConversation): Promise<void> {
+  await claireConversationStateStore().save(
+    callStateKey(conversationId),
+    { tenantId: conversation.tenantId, operatorUserId: conversation.actorId, surface: "voice" },
+    conversation,
+    PRE_DRIVE_CONVERSATION_TTL_MS
+  );
+}
+
+async function dropCall(conversationId: string): Promise<void> {
+  await claireConversationStateStore()
+    .remove(callStateKey(conversationId))
+    .catch(error => console.warn("[Claire] could not clear call state", error));
+}
 
 function publicBaseUrl(): string {
   return ENV.adminBaseUrl.replace(/\/$/, "");
@@ -113,16 +132,39 @@ function assertPhone(value: string): string {
   return normalized;
 }
 
+function operatorPhoneMap(): Record<string, string> | null {
+  const raw = process.env.CLAIRE_OPERATOR_PHONES?.trim();
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("not an object");
+    return Object.fromEntries(Object.entries(parsed as Record<string, unknown>).filter(([, value]) => typeof value === "string")) as Record<string, string>;
+  } catch {
+    throw new Error("CLAIRE_OPERATOR_PHONES must be a JSON object mapping operator id to phone number");
+  }
+}
+
 function assertTwilioConfigured(): void {
-  if (!client || !fromNumber || !operatorNumber) {
+  if (!client || !fromNumber || (!operatorNumber && !process.env.CLAIRE_OPERATOR_PHONES?.trim())) {
     throw new Error(
-      "Claire calling is not configured (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, CLAIRE_TWILIO_FROM_NUMBER, and CLAIRE_OPERATOR_PHONE are required)"
+      "Claire calling is not configured (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, CLAIRE_TWILIO_FROM_NUMBER, and CLAIRE_OPERATOR_PHONE or CLAIRE_OPERATOR_PHONES are required)"
     );
   }
 }
 
-function configuredOperatorPhone(): string {
+/**
+ * The number Claire dials for this operator. When CLAIRE_OPERATOR_PHONES is
+ * configured, an operator without an entry is never dialed on someone else's
+ * phone; otherwise the single configured operator phone is used.
+ */
+export function operatorPhoneFor(actorId: string): string {
   assertTwilioConfigured();
+  const map = operatorPhoneMap();
+  if (map) {
+    const phone = map[actorId];
+    if (!phone) throw new Error("No Claire phone number is configured for this operator");
+    return assertPhone(phone);
+  }
   return assertPhone(operatorNumber);
 }
 
@@ -209,10 +251,19 @@ function speakAndHangUp(text: string): string {
   return response.toString();
 }
 
+function boundedHints(hints: string | null | undefined): string {
+  const value = hints?.trim() || DEFAULT_HINTS;
+  if (value.length <= MAX_HINT_CHARS) return value;
+  return value.slice(0, value.lastIndexOf(",", MAX_HINT_CHARS)).trim();
+}
+
 export function preDriveConversationTwiML(input: {
   text: string;
   token: string;
   opening?: boolean;
+  hints?: string | null;
+  /** Listen without speaking — the operator paused mid-thought. */
+  listenOnly?: boolean;
 }): string {
   const response = new twilio.twiml.VoiceResponse();
   const gather = response.gather({
@@ -221,19 +272,38 @@ export function preDriveConversationTwiML(input: {
     method: "POST",
     language: "en-US",
     speechModel: "experimental_conversations",
-    speechTimeout: "2",
-    timeout: 5,
-    maxSpeechTime: 20,
+    // A morning briefing is a list spoken with pauses. Wait for three seconds
+    // of silence before closing a turn, and allow a full minute of speech.
+    speechTimeout: "3",
+    timeout: input.listenOnly ? 4 : 6,
+    maxSpeechTime: 60,
     actionOnEmptyResult: true,
     bargeIn: true,
-    hints: "got it, I'm good, that's enough, end call, hang up, goodbye",
+    hints: boundedHints(input.hints),
   });
-  const say = gather.say({ voice: CLAIRE_VOICE, language: "en-US" }, "");
-  say.prosody(
-    { rate: "90%", volume: "+6dB" },
-    spokenClaireText(input.text, input.opening)
-  );
+  if (!input.listenOnly && input.text.trim()) {
+    const say = gather.say({ voice: CLAIRE_VOICE, language: "en-US" }, "");
+    say.prosody(
+      { rate: "90%", volume: "+6dB" },
+      spokenClaireText(input.text, input.opening)
+    );
+  }
   response.hangup();
+  return response.toString();
+}
+
+function stillWorkingTwiML(token: string, attempt: number): string {
+  const response = new twilio.twiml.VoiceResponse();
+  if (attempt === 0) {
+    const say = response.say({ voice: CLAIRE_VOICE, language: "en-US" }, "");
+    say.prosody({ rate: "90%", volume: "+6dB" }, "One second.");
+  } else {
+    response.pause({ length: 1 });
+  }
+  response.redirect(
+    { method: "POST" },
+    `${publicBaseUrl()}${CONTINUE_PATH}?token=${encodeURIComponent(token)}&n=${attempt + 1}`
+  );
   return response.toString();
 }
 
@@ -255,14 +325,6 @@ async function safeRecordRelationshipEvent(
   }
 }
 
-function clearExpiredPreDriveConversations(now = Date.now()): void {
-  preDriveConversations.forEach((conversation, id) => {
-    if (now - conversation.touchedAt > PRE_DRIVE_CONVERSATION_TTL_MS) {
-      preDriveConversations.delete(id);
-    }
-  });
-}
-
 function outcomeLabel(outcome: string): string {
   switch (outcome) {
     case "no_contact":
@@ -280,6 +342,102 @@ function outcomeLabel(outcome: string): string {
   }
 }
 
+/** In-flight turn computations, so a continuation redirect can collect a slow answer. The state itself is durable. */
+const inflightTurns = new Map<string, Promise<string>>();
+
+async function withinBudget<T>(work: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<null>(resolve => {
+        timer = setTimeout(() => resolve(null), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function startVoiceTurn(input: {
+  conversationId: string;
+  conversation: PreDriveConversation;
+  utterance: string;
+  rawTranscript: string | null;
+  allowFragmentWait: boolean;
+  callSid?: string;
+  token: string;
+}): Promise<string> {
+  const { conversationId, conversation, token } = input;
+  const turnKey = conversation.turns;
+  const job = (async () => {
+    try {
+      const result = await runClaireTurn(
+        {
+          tenantId: conversation.tenantId,
+          operatorUserId: conversation.actorId,
+          dayDirectorActorId: conversation.dayDirectorActorId,
+          surface: "voice",
+          utterance: input.utterance,
+          state: conversation,
+          conversationKey: callStateKey(conversationId),
+          brief: conversation.brief,
+          context: conversation.context,
+          allowFragmentWait: input.allowFragmentWait,
+        },
+        {
+          confirmPlan: () =>
+            confirmWorkdayPlan({
+              tenantId: conversation.tenantId,
+              actorId: conversation.dayDirectorActorId,
+              businessDate: conversation.context.clock?.tomorrowBusinessDate ?? conversation.context.businessDate,
+              items: assembleTomorrowCandidates(conversation.context),
+            }).then(() => undefined),
+          encyclopedia: claireEncyclopediaFor({ dayDirectorActorId: conversation.dayDirectorActorId }),
+        }
+      );
+      conversation.touchedAt = Date.now();
+      await saveCall(conversationId, conversation);
+      await persistOperatorAndClaire({
+        callSid: input.callSid,
+        claireConversationId: conversationId,
+        operatorText: input.rawTranscript,
+        claireText: result.speak,
+        turnKey,
+      });
+      if (result.commitmentTurn) {
+        await linkClaireCallAction({ callSid: input.callSid, claireConversationId: conversationId, turn: result.commitmentTurn });
+      } else if (result.actionIds?.length) {
+        await linkClaireActionIds({ callSid: input.callSid, claireConversationId: conversationId, actionIds: result.actionIds });
+      }
+      if (result.listenOnly) {
+        return preDriveConversationTwiML({ text: "", token, hints: conversation.hints, listenOnly: true });
+      }
+      return preDriveConversationTwiML({ text: result.speak || "Go ahead.", token, hints: conversation.hints });
+    } catch (error) {
+      // Hard truth rule: a failure is never spoken as success.
+      console.error("[Claire] voice turn failed", error);
+      await saveCall(conversationId, conversation).catch(() => undefined);
+      const retry = "I understood it, but I couldn't finish that just now. Nothing changed. Say it again?";
+      await persistOperatorAndClaire({
+        callSid: input.callSid,
+        claireConversationId: conversationId,
+        operatorText: input.rawTranscript,
+        claireText: retry,
+        turnKey,
+      });
+      return preDriveConversationTwiML({ text: retry, token, hints: conversation.hints });
+    }
+  })();
+  inflightTurns.set(conversationId, job);
+  void job.finally(() => {
+    setTimeout(() => {
+      if (inflightTurns.get(conversationId) === job) inflightTurns.delete(conversationId);
+    }, 60_000).unref?.();
+  });
+  return job;
+}
+
 export async function startClairePreDriveCall(input: {
   tenantId: string;
   actorId: string;
@@ -288,7 +446,7 @@ export async function startClairePreDriveCall(input: {
   /** The identity Day Director commitments (and Driver's dayline) are actually keyed by — see dayDirectorActorId(ctx). */
   dayDirectorActorId?: string;
 }): Promise<{ callSid: string; brief: string }> {
-  const to = configuredOperatorPhone();
+  const to = operatorPhoneFor(input.actorId);
   const generated = await generateClairePreDriveOutput({
     tenantId: input.tenantId,
     actorId: input.actorId,
@@ -297,17 +455,20 @@ export async function startClairePreDriveCall(input: {
     dayDirectorActorId: input.dayDirectorActorId,
   });
   const { brief, context } = generated;
-  clearExpiredPreDriveConversations();
   const conversationId = randomUUID();
-  preDriveConversations.set(conversationId, {
+  const hints = speechHints(await loadBusinessVocabulary(input.tenantId).catch(() => [] as string[]));
+  const now = Date.now();
+  await saveCall(conversationId, {
     tenantId: input.tenantId,
     actorId: input.actorId,
     dayDirectorActorId: input.dayDirectorActorId ?? input.actorId,
     brief,
     context,
     turns: 0,
-    touchedAt: Date.now(),
+    touchedAt: now,
     sessionKind: context.workday?.session,
+    hints: boundedHints(hints),
+    history: [{ speaker: "claire", text: spokenClaireText(brief, true), at: now }],
   });
   const token = issueClaireToken({
     kind: "pre_drive_conversation",
@@ -330,7 +491,7 @@ export async function startClairePreDriveCall(input: {
     const call = await client!.calls.create({
       to,
       from: assertPhone(fromNumber),
-      twiml: preDriveConversationTwiML({ text: brief, token, opening: true }),
+      twiml: preDriveConversationTwiML({ text: brief, token, opening: true, hints }),
       ...claireVoiceCallCreateOptions(),
     });
     await safeClaireLedger(async () => {
@@ -343,11 +504,12 @@ export async function startClairePreDriveCall(input: {
         callSid: call.sid,
         speaker: "CLAIRE",
         text: spokenClaireText(brief, true),
+        turnKey: 0,
       });
     });
     return { callSid: call.sid, brief };
   } catch (error) {
-    preDriveConversations.delete(conversationId);
+    await dropCall(conversationId);
     await endClaireCallLedger({
       claireConversationId: conversationId,
       reason: "call_create_failed",
@@ -363,7 +525,7 @@ export async function startClairePostStopCall(input: {
   missionAccess: ClaireMissionAccess;
   timeZone?: string;
 }): Promise<{ callSid: string }> {
-  const to = configuredOperatorPhone();
+  const to = operatorPhoneFor(input.actorId);
   const current = await getCommercialMissionFieldState({
     tenantId: input.tenantId,
     missionId: input.missionId,
@@ -409,6 +571,7 @@ export async function startClairePostStopCall(input: {
   const gather = response.gather({
     input: ["speech"],
     speechTimeout: "auto",
+    maxSpeechTime: 60,
     action: `${publicBaseUrl()}${DEBRIEF_PATH}?token=${encodeURIComponent(token)}`,
     method: "POST",
   });
@@ -446,6 +609,7 @@ export async function startClairePostStopCall(input: {
       callSid: call.sid,
       speaker: "CLAIRE",
       text: opening,
+      turnKey: 0,
     });
   });
   return { callSid: call.sid };
@@ -466,8 +630,7 @@ export function registerClaireRoutes(app: Express): void {
           speakAndHangUp("This pre-drive conversation is no longer valid.")
         );
       }
-      clearExpiredPreDriveConversations();
-      const conversation = preDriveConversations.get(claims.conversationId);
+      const conversation = await loadCall(claims.conversationId);
       if (
         !conversation ||
         conversation.tenantId !== claims.tenantId ||
@@ -479,45 +642,59 @@ export function registerClaireRoutes(app: Express): void {
           callSid: callSidFrom(req),
           claireConversationId: claims.conversationId,
           claireText: hangup,
-          reason: "lost_in_memory_conversation",
+          reason: "lost_conversation_state",
         });
         return res.send(speakAndHangUp(hangup));
       }
 
-      const transcript = String(
+      const token = String(req.query.token);
+      const callSid = callSidFrom(req);
+      const rawTranscript = String(
         ((req.body ?? {}) as Record<string, string>).SpeechResult ?? ""
       ).trim();
-      const callSid = callSidFrom(req);
-      if (!transcript) {
-        conversation.touchedAt = Date.now();
-        const { shouldEndCall } = trackEmptyTranscript(conversation);
-        if (shouldEndCall) {
-          preDriveConversations.delete(claims.conversationId);
-          const hangup = "All right. I'll let you focus on the drive.";
-          await endClaireCallLedger({
+      let utterance = rawTranscript;
+      let allowFragmentWait = true;
+      if (!rawTranscript) {
+        if (conversation.pendingFragment) {
+          // Adam went quiet after an unfinished thought: take it as said.
+          utterance = conversation.pendingFragment;
+          conversation.pendingFragment = null;
+          allowFragmentWait = false;
+          trackNonEmptyTranscript(conversation);
+        } else {
+          conversation.touchedAt = Date.now();
+          const { shouldEndCall } = trackEmptyTranscript(conversation);
+          if (shouldEndCall) {
+            await dropCall(claims.conversationId);
+            const hangup = "All right. I'll let you focus on the drive.";
+            await endClaireCallLedger({
+              callSid,
+              claireConversationId: claims.conversationId,
+              claireText: hangup,
+              reason: "empty_transcript",
+            });
+            return res.send(speakAndHangUp(hangup));
+          }
+          await saveCall(claims.conversationId, conversation);
+          const prompt = conversation.pendingBriefing ? "Still there? Say yes and I'll add the list." : "Go ahead, I'm listening.";
+          await persistOperatorAndClaire({
             callSid,
             claireConversationId: claims.conversationId,
-            claireText: hangup,
-            reason: "empty_transcript",
+            claireText: prompt,
+            turnKey: `empty-${conversation.turns}-${conversation.consecutiveEmptyTranscripts ?? 0}`,
           });
-          return res.send(speakAndHangUp(hangup));
+          return res.send(
+            preDriveConversationTwiML({ text: prompt, token, hints: conversation.hints })
+          );
         }
-        const prompt = "Go ahead, I'm listening.";
-        await persistOperatorAndClaire({
-          callSid,
-          claireConversationId: claims.conversationId,
-          claireText: prompt,
-        });
-        return res.send(
-          preDriveConversationTwiML({
-            text: prompt,
-            token: String(req.query.token),
-          })
-        );
+      } else {
+        trackNonEmptyTranscript(conversation);
       }
-      trackNonEmptyTranscript(conversation);
-      if (isClaireCallComplete(transcript)) {
-        preDriveConversations.delete(claims.conversationId);
+
+      const words = utterance.split(/\s+/).filter(Boolean).length;
+      const holding = Boolean(conversation.pendingBriefing || conversation.pendingProposal || conversation.pendingAccountFollowUp);
+      if (words <= 6 && !holding && isClaireCallComplete(utterance)) {
+        await dropCall(claims.conversationId);
         await safeRecordRelationshipEvent(() =>
           recordQualifyingClaireInteraction({
             tenantId: claims.tenantId,
@@ -530,14 +707,14 @@ export function registerClaireRoutes(app: Express): void {
         await endClaireCallLedger({
           callSid,
           claireConversationId: claims.conversationId,
-          operatorText: transcript,
+          operatorText: rawTranscript,
           claireText: hangup,
           reason: "closing_phrase",
         });
         return res.send(speakAndHangUp(hangup));
       }
       if (conversation.turns >= MAX_PRE_DRIVE_TURNS) {
-        preDriveConversations.delete(claims.conversationId);
+        await dropCall(claims.conversationId);
         await safeRecordRelationshipEvent(() =>
           recordQualifyingClaireInteraction({
             tenantId: claims.tenantId,
@@ -547,126 +724,30 @@ export function registerClaireRoutes(app: Express): void {
           })
         );
         const hangup =
-          "That's the useful part of this brief. Drive safe, and take it one stop at a time.";
+          "That's a long call. Let's pick the rest up in Goldline. Drive safe.";
         await endClaireCallLedger({
           callSid,
           claireConversationId: claims.conversationId,
-          operatorText: transcript,
+          operatorText: rawTranscript,
           claireText: hangup,
           reason: "turn_cap_reached",
         });
         return res.send(speakAndHangUp(hangup));
       }
 
-      // Business questions are answered from deterministic analytics before
-      // the work classifier runs, unless a yes/no confirmation is pending.
-      if (!hasPendingClaireAction(conversation)) {
-        const businessTurn = await answerClaireBusinessTurn({
-          tenantId: conversation.tenantId,
-          utterance: transcript,
-          state: conversation,
-          surface: "voice",
-        });
-        if (businessTurn.handled) {
-          conversation.turns += 1;
-          conversation.touchedAt = Date.now();
-          await persistOperatorAndClaire({
-            callSid,
-            claireConversationId: claims.conversationId,
-            operatorText: transcript,
-            claireText: businessTurn.speak,
-          });
-          return res.send(
-            preDriveConversationTwiML({
-              text: businessTurn.speak,
-              token: String(req.query.token),
-            })
-          );
-        }
-      }
-
-      let commitmentTurn: Awaited<ReturnType<typeof handleVoiceCommitmentTurn>>;
-      try {
-        commitmentTurn = await handleVoiceCommitmentTurn({
-          tenantId: conversation.tenantId,
-          actorId: conversation.dayDirectorActorId,
-          businessDate: conversation.context.businessDate,
-          utterance: transcript,
-          state: conversation,
-          conversationId: claims.conversationId,
-        }, {
-          confirmPlan: () =>
-            confirmWorkdayPlan({
-              tenantId: conversation.tenantId,
-              actorId: conversation.dayDirectorActorId,
-              businessDate:
-                conversation.context.clock?.tomorrowBusinessDate ??
-                conversation.context.businessDate,
-              items: assembleTomorrowCandidates(conversation.context),
-            }).then(() => undefined),
-        });
-      } catch (error) {
-        // Hard truth rule: never let conversational fluency outrun system
-        // truth. A failed persistence must never be reported as a success.
-        console.error("[Claire] voice commitment turn failed", error);
-        conversation.turns += 1;
-        conversation.touchedAt = Date.now();
-        const retry = "I understood it, but I couldn't save it. Let's try again in a moment.";
-        await persistOperatorAndClaire({
-          callSid,
-          claireConversationId: claims.conversationId,
-          operatorText: transcript,
-          claireText: retry,
-        });
-        return res.send(
-          preDriveConversationTwiML({
-            text: retry,
-            token: String(req.query.token),
-          })
-        );
-      }
-      if (commitmentTurn.kind !== "not_applicable") {
-        conversation.turns += 1;
-        conversation.touchedAt = Date.now();
-        await persistOperatorAndClaire({
-          callSid,
-          claireConversationId: claims.conversationId,
-          operatorText: transcript,
-          claireText: commitmentTurn.speak,
-        });
-        await linkClaireCallAction({
-          callSid,
-          claireConversationId: claims.conversationId,
-          turn: commitmentTurn,
-        });
-        return res.send(
-          preDriveConversationTwiML({
-            text: commitmentTurn.speak,
-            token: String(req.query.token),
-          })
-        );
-      }
-
-      const answer = await answerClairePreDriveFollowUp({
-        tenantId: conversation.tenantId,
-        utterance: transcript,
-        brief: conversation.brief,
-        context: conversation.context,
-      });
       conversation.turns += 1;
       conversation.touchedAt = Date.now();
-      await persistOperatorAndClaire({
+      const job = startVoiceTurn({
+        conversationId: claims.conversationId,
+        conversation,
+        utterance,
+        rawTranscript: rawTranscript || null,
+        allowFragmentWait,
         callSid,
-        claireConversationId: claims.conversationId,
-        operatorText: transcript,
-        claireText: answer,
+        token,
       });
-      return res.send(
-        preDriveConversationTwiML({
-          text: answer,
-          token: String(req.query.token),
-        })
-      );
+      const twiml = await withinBudget(job, TURN_BUDGET_MS);
+      return res.send(twiml ?? stillWorkingTwiML(token, 0));
     } catch (error) {
       console.error("[Claire] pre-drive conversation webhook error", error);
       return res.send(
@@ -674,6 +755,43 @@ export function registerClaireRoutes(app: Express): void {
           "I couldn't answer that safely from today's brief, so I won't guess. Drive safe."
         )
       );
+    }
+  });
+
+  app.post(CONTINUE_PATH, async (req: Request, res: Response) => {
+    res.type("text/xml");
+    if (!validTwilioRequest(req)) {
+      return res.status(403).send(speakAndHangUp("This Claire call could not be verified."));
+    }
+    try {
+      const claims = verifyClaireToken(String(req.query.token ?? ""));
+      if (claims.kind !== "pre_drive_conversation") {
+        return res.send(speakAndHangUp("This pre-drive conversation is no longer valid."));
+      }
+      const token = String(req.query.token);
+      const attempt = Number(req.query.n ?? 1);
+      const job = inflightTurns.get(claims.conversationId);
+      if (!job) {
+        const conversation = await loadCall(claims.conversationId);
+        return res.send(
+          preDriveConversationTwiML({
+            text: "I lost that last thought. Say it again?",
+            token,
+            hints: conversation?.hints,
+          })
+        );
+      }
+      const twiml = await withinBudget(job, TURN_BUDGET_MS);
+      if (twiml) return res.send(twiml);
+      if (attempt >= 3) {
+        return res.send(
+          preDriveConversationTwiML({ text: "That's taking too long, so I stopped. Nothing changed. Ask me again?", token })
+        );
+      }
+      return res.send(stillWorkingTwiML(token, attempt));
+    } catch (error) {
+      console.error("[Claire] continuation webhook error", error);
+      return res.send(speakAndHangUp("I couldn't finish that safely, so I won't guess. Drive safe."));
     }
   });
 
@@ -777,6 +895,7 @@ export function registerClaireRoutes(app: Express): void {
         callSid: ledgerCallSid,
         operatorText: transcript,
         claireText: `I heard: ${proposal.summary}. I would record this as ${outcomeLabel(proposal.proposedOutcome)}. Say confirm to save that outcome, or cancel to leave only your raw debrief.`,
+        turnKey: "debrief",
       });
       return res.send(response.toString());
     } catch (error) {

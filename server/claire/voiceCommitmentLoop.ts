@@ -305,7 +305,8 @@ export async function handleVoiceCommitmentTurn(
 
   async function operateDayLine(
     operation: "edit" | "cancel",
-    utterance: string
+    utterance: string,
+    preset: { actionTitle?: string | null; reason?: string | null } = {}
   ): Promise<VoiceCommitmentTurnResult> {
     const items = await listItems({
       tenantId: input.tenantId,
@@ -321,8 +322,8 @@ export async function handleVoiceCommitmentTurn(
     if (activeMatches.length > 1) {
       input.state.pendingDayLineChoice = {
         operation,
-        actionTitle: extractRequestedActionTitle(utterance),
-        reason: extractCancellationReason(utterance),
+        actionTitle: preset.actionTitle ?? extractRequestedActionTitle(utterance),
+        reason: preset.reason ?? extractCancellationReason(utterance),
       };
       return { kind: "clarifying", speak: speakAmbiguousTargets(activeMatches) };
     }
@@ -352,7 +353,7 @@ export async function handleVoiceCommitmentTurn(
       };
     }
     if (operation === "edit") {
-      const actionTitle = extractRequestedActionTitle(utterance);
+      const actionTitle = preset.actionTitle ?? extractRequestedActionTitle(utterance);
       if (!actionTitle) {
         return {
           kind: "clarifying",
@@ -372,7 +373,7 @@ export async function handleVoiceCommitmentTurn(
         tenantId: input.tenantId,
         actorId: input.actorId,
         item,
-        reason: extractCancellationReason(utterance),
+        reason: preset.reason ?? extractCancellationReason(utterance),
       });
       return { kind: "cancelled", speak: speakCancelResult(result), sourceId: result.sourceId };
     } catch (error) {
@@ -568,7 +569,7 @@ export async function handleVoiceCommitmentTurn(
   if (input.state.pendingDayLineChoice) {
     const pending = input.state.pendingDayLineChoice;
     input.state.pendingDayLineChoice = null;
-    return operateDayLine(pending.operation, input.utterance);
+    return operateDayLine(pending.operation, input.utterance, { actionTitle: pending.actionTitle, reason: pending.reason });
   }
 
   if (/\b(what happened with|did engineering|that remove-task|capability)\b/i.test(input.utterance)) {
