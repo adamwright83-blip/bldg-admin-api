@@ -137,3 +137,12 @@ tmp/goldline-openchannel-frames/
 
 # Goldline external-order frames
 tmp/goldline-external-frames/
+
+# Root-level scratch/render output from 3D asset generation and pipeline QA
+# (Blender renders, comparison frames, territory-art inputs). Does not cover
+# client/public/assets or client/src/assets, which are real served assets.
+/artifacts/
+
+# Python bytecode cache
+__pycache__/
+*.pyc
