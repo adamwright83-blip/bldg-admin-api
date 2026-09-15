@@ -1,17 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  detectAddWorkIntent,
+  classifyVoiceWorkStatement,
   detectConfirmation,
   handleVoiceCommitmentTurn,
   type PendingProposalState,
 } from "./voiceCommitmentLoop";
 import type { DayDirectorProposal } from "../../shared/dayDirector";
+import type { ClaireCampaignSummary } from "./campaignAwareness";
 
 const zeelyUtterance =
-  "I need to decide between Zeely dot A I and a competitor for AI generated Instagram ads for the pickup and delivery laundry service.";
+  "I need to evaluate Zeely dot A I for Instagram ads to grow our customer count.";
 
-const greystarStatement =
-  "Three Greystar properties remain in the Colosseum mission.";
+const realGreystarUtterance =
+  "And then I have to go to three additional grey star properties, to pitch the general managers and that is part of the Gold Line. Coliseum Kingdom challenge in order to";
 
 function proposalFixture(overrides: Partial<DayDirectorProposal> = {}): DayDirectorProposal {
   return {
@@ -27,22 +28,15 @@ function proposalFixture(overrides: Partial<DayDirectorProposal> = {}): DayDirec
   };
 }
 
-describe("detectAddWorkIntent — deterministic, never model-based", () => {
-  it("triggers on the verbatim Zeely-versus-competitor decision request", () => {
-    expect(detectAddWorkIntent(zeelyUtterance)).toBe(true);
-  });
+function mockClassification(classification: "new_work" | "existing_work" | "not_work", reason = "test") {
+  return {
+    choices: [{ message: { content: JSON.stringify({ classification, reason }) } }],
+  };
+}
 
-  it("does NOT trigger on an informational Greystar/Colosseum status statement (existing campaign context, not new work)", () => {
-    expect(detectAddWorkIntent(greystarStatement)).toBe(false);
-  });
+const activeCampaign: ClaireCampaignSummary = { active: true, completedCount: 7, remainingCount: 3 };
 
-  it("does not trigger on ordinary mission-brief conversation", () => {
-    expect(detectAddWorkIntent("What do you think the objection is?")).toBe(false);
-    expect(detectAddWorkIntent("Do you think the blocker is price?")).toBe(false);
-  });
-});
-
-describe("detectConfirmation", () => {
+describe("detectConfirmation — the actual mutation gate, still pure regex", () => {
   it("recognizes a clear yes", () => {
     expect(detectConfirmation("yes, go ahead")).toBe("yes");
     expect(detectConfirmation("Yeah do it")).toBe("yes");
@@ -57,31 +51,66 @@ describe("detectConfirmation", () => {
   });
 });
 
-const realGreystarUtterance =
-  "And then I have to go to three additional grey star properties, to pitch the general managers and that is part of the Gold Line. Coliseum Kingdom challenge in order to";
-
-describe("existing initiative vs new work (Part 4 regression — production defect)", () => {
-  it("does not treat 'part of the ... challenge' phrasing as new work, even with add-work language present", () => {
-    expect(detectAddWorkIntent(realGreystarUtterance)).toBe(false);
+describe("classifyVoiceWorkStatement — authoritative, not phrase-matching", () => {
+  it("classifies genuinely new work as new_work using the model, grounded in real campaign state", async () => {
+    const invoke = vi.fn().mockResolvedValue(mockClassification("new_work"));
+    const result = await classifyVoiceWorkStatement(
+      { tenantId: "tenant-1", utterance: zeelyUtterance, campaignSummary: activeCampaign },
+      { invoke }
+    );
+    expect(result).toBe("new_work");
+    const prompt = invoke.mock.calls[0][0].messages[0].content;
+    expect(prompt).toMatch(/3 real stops remaining/);
   });
 
-  it("does not treat 'remain' phrasing as new work", () => {
-    expect(detectAddWorkIntent("I still have three properties remaining on that campaign")).toBe(false);
+  it("PRODUCTION REGRESSION — the exact Greystar utterance that wrongly created a duplicate commitment now classifies as existing_work when campaign state confirms open work", async () => {
+    const invoke = vi.fn().mockResolvedValue(mockClassification("existing_work"));
+    const result = await classifyVoiceWorkStatement(
+      { tenantId: "tenant-1", utterance: realGreystarUtterance, campaignSummary: activeCampaign },
+      { invoke }
+    );
+    expect(result).toBe("existing_work");
   });
 
-  it("genuinely new work with no existing-initiative language still triggers normally", () => {
-    expect(detectAddWorkIntent(zeelyUtterance)).toBe(true);
+  it("fails closed to not_work when the classifier errors — never mutates on a failure", async () => {
+    const invoke = vi.fn().mockRejectedValue(new Error("provider down"));
+    const result = await classifyVoiceWorkStatement(
+      { tenantId: "tenant-1", utterance: zeelyUtterance, campaignSummary: null },
+      { invoke }
+    );
+    expect(result).toBe("not_work");
+  });
+
+  it("fails closed to not_work on malformed model output", async () => {
+    const invoke = vi.fn().mockResolvedValue({ choices: [{ message: { content: "not json" } }] });
+    const result = await classifyVoiceWorkStatement(
+      { tenantId: "tenant-1", utterance: zeelyUtterance, campaignSummary: null },
+      { invoke }
+    );
+    expect(result).toBe("not_work");
+  });
+
+  it("the clear fast-path phrasing never even calls the model", async () => {
+    const invoke = vi.fn();
+    const result = await classifyVoiceWorkStatement(
+      { tenantId: "tenant-1", utterance: "please add a task to call the vendor", campaignSummary: null },
+      { invoke }
+    );
+    expect(result).toBe("new_work");
+    expect(invoke).not.toHaveBeenCalled();
   });
 });
 
 describe("handleVoiceCommitmentTurn — the only mutation surface for a live call", () => {
-  it("A — a proposal is generated from the verbatim Zeely comparison request, and nothing is persisted yet", async () => {
+  it("A — new work is classified, proposed, and nothing is persisted yet", async () => {
+    const classify = vi.fn().mockResolvedValue("new_work");
+    const getCampaignSummary = vi.fn().mockResolvedValue(null);
     const propose = vi.fn().mockResolvedValue(proposalFixture());
     const accept = vi.fn();
     const state: PendingProposalState = {};
     const result = await handleVoiceCommitmentTurn(
       { tenantId: "tenant-1", actorId: "operator-1", businessDate: "2026-09-14", utterance: zeelyUtterance, state },
-      { propose, accept }
+      { classify, getCampaignSummary, propose, accept }
     );
     expect(result.kind).toBe("proposed");
     expect(propose).toHaveBeenCalledWith({ tenantId: "tenant-1", sourceText: zeelyUtterance });
@@ -129,46 +158,58 @@ describe("handleVoiceCommitmentTurn — the only mutation surface for a live cal
     );
     expect(result.kind).toBe("reask");
     expect(accept).not.toHaveBeenCalled();
-    expect(state.pendingProposal).toBe(proposal); // untouched, still pending
+    expect(state.pendingProposal).toBe(proposal);
   });
 
   it("E — repeated Twilio webhook delivery of the same 'yes' is idempotent: the retry finds no pending proposal", async () => {
     const accept = vi.fn().mockResolvedValue({ id: "commitment-1" });
+    const classify = vi.fn().mockResolvedValue("not_work");
+    const getCampaignSummary = vi.fn().mockResolvedValue(null);
     const state: PendingProposalState = { pendingProposal: proposalFixture() };
     const first = await handleVoiceCommitmentTurn(
       { tenantId: "tenant-1", actorId: "operator-1", businessDate: "2026-09-14", utterance: "yes", state },
-      { accept }
+      { accept, classify, getCampaignSummary }
     );
     expect(first.kind).toBe("accepted");
-    // Twilio redelivers the identical webhook — same conversation state object, same utterance.
     const retry = await handleVoiceCommitmentTurn(
       { tenantId: "tenant-1", actorId: "operator-1", businessDate: "2026-09-14", utterance: "yes", state },
-      { accept }
+      { accept, classify, getCampaignSummary }
     );
-    expect(retry.kind).toBe("not_applicable"); // "yes" alone never triggers a fresh proposal
-    expect(accept).toHaveBeenCalledTimes(1); // never called twice
+    expect(retry.kind).toBe("not_applicable"); // classified not_work; nothing pending
+    expect(accept).toHaveBeenCalledTimes(1);
   });
 
-  it("F — existing Greystar/Colosseum work is not duplicated: an informational statement never proposes or accepts anything", async () => {
+  it("F — PRODUCTION REGRESSION: existing Colosseum work (real utterance) is acknowledged, never proposed or persisted", async () => {
+    const classify = vi.fn().mockResolvedValue("existing_work");
+    const getCampaignSummary = vi.fn().mockResolvedValue(activeCampaign);
     const propose = vi.fn();
     const accept = vi.fn();
     const state: PendingProposalState = {};
     const result = await handleVoiceCommitmentTurn(
-      { tenantId: "tenant-1", actorId: "operator-1", businessDate: "2026-09-14", utterance: greystarStatement, state },
-      { propose, accept }
+      {
+        tenantId: "tenant-1",
+        actorId: "operator-1",
+        businessDate: "2026-09-14",
+        utterance: realGreystarUtterance,
+        state,
+      },
+      { classify, getCampaignSummary, propose, accept }
     );
-    expect(result.kind).toBe("not_applicable");
+    expect(result.kind).toBe("acknowledged_existing");
     expect(propose).not.toHaveBeenCalled();
     expect(accept).not.toHaveBeenCalled();
+    expect(state.pendingProposal).toBeUndefined();
   });
 
-  it("G — unrelated conversation cannot trigger a mutation", async () => {
+  it("G — unrelated conversation (not_work) cannot trigger a mutation", async () => {
+    const classify = vi.fn().mockResolvedValue("not_work");
+    const getCampaignSummary = vi.fn().mockResolvedValue(null);
     const propose = vi.fn();
     const accept = vi.fn();
     const state: PendingProposalState = {};
     const result = await handleVoiceCommitmentTurn(
       { tenantId: "tenant-1", actorId: "operator-1", businessDate: "2026-09-14", utterance: "What's my next stop?", state },
-      { propose, accept }
+      { classify, getCampaignSummary, propose, accept }
     );
     expect(result.kind).toBe("not_applicable");
     expect(propose).not.toHaveBeenCalled();
@@ -196,11 +237,21 @@ describe("handleVoiceCommitmentTurn — the only mutation surface for a live cal
         { accept }
       )
     ).rejects.toThrow("Database not available");
-    // The pending proposal was already cleared (so a retry can't double-fire),
-    // but no "accepted"/"speak: Added..." result was ever produced — the
-    // caller (claireTwilio.ts) falls through to its existing generic error
-    // TwiML, never a success message, because this function threw instead
-    // of returning a kind:"accepted" result.
     expect(state.pendingProposal).toBeNull();
+  });
+
+  it("I — new-work classification calls the real campaign summary lookup so it can ground the decision", async () => {
+    const classify = vi.fn().mockResolvedValue("new_work");
+    const getCampaignSummary = vi.fn().mockResolvedValue(activeCampaign);
+    const propose = vi.fn().mockResolvedValue(proposalFixture());
+    const state: PendingProposalState = {};
+    await handleVoiceCommitmentTurn(
+      { tenantId: "tenant-1", actorId: "operator-1", businessDate: "2026-09-14", utterance: zeelyUtterance, state },
+      { classify, getCampaignSummary, propose }
+    );
+    expect(getCampaignSummary).toHaveBeenCalledWith({ tenantId: "tenant-1", actorId: "operator-1" });
+    expect(classify).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: "tenant-1", utterance: zeelyUtterance, campaignSummary: activeCampaign })
+    );
   });
 });
