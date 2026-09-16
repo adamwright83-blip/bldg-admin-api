@@ -3,7 +3,25 @@ import { and, desc, eq } from "drizzle-orm";
 import { operatorMacroGoals, type OperatorMacroGoal } from "../../drizzle/schema";
 import { getDb } from "../db";
 
-export type MacroGoal = Omit<OperatorMacroGoal, "targetValue"> & { targetValue: number };
+export const GOAL_METRIC_TYPES = [
+  "new_paying_customers",
+  "active_customers",
+  "paid_orders_per_period",
+  "net_sales_per_period",
+] as const;
+
+export type GoalMetricType = (typeof GOAL_METRIC_TYPES)[number] | string;
+
+export type SecondaryTarget = {
+  metricType: GoalMetricType;
+  targetValue: number;
+  unit?: string;
+};
+
+export type MacroGoal = Omit<OperatorMacroGoal, "targetValue"> & {
+  targetValue: number;
+  secondaryTargets?: SecondaryTarget[];
+};
 export type MacroGoalSource = "operator_attested" | "admin";
 
 export type SetActiveMacroGoalInput = {
@@ -15,9 +33,27 @@ export type SetActiveMacroGoalInput = {
   unit: string;
   urgencyText?: string | null;
   targetDate?: string | null;
+  secondaryTargets?: SecondaryTarget[];
   source: MacroGoalSource;
   sourceNote: string;
 };
+
+export function formatGoalVoiceReadback(input: {
+  metricKey: string;
+  targetValue: number;
+  targetDate: string;
+}): string {
+  const metricLabel = input.metricKey.replace(/_/g, " ");
+  return `You confirmed a target of ${input.targetValue} ${metricLabel} by ${input.targetDate}. Did I get that right?`;
+}
+
+export function validateVoiceReadbackConfirmation(transcript: string): boolean {
+  const normalized = transcript.trim().toLowerCase();
+  return (
+    /\b(?:yes|correct|that's right|right|confirmed|yep|yeah|sure)\b/i.test(normalized) &&
+    !/\b(?:no|not right|incorrect|wrong|wait)\b/i.test(normalized)
+  );
+}
 
 export type MacroGoalPersistence = {
   getActive(input: { tenantId: string; operatorUserId: string; metricKey?: string }): Promise<OperatorMacroGoal | null>;

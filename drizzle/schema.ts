@@ -7357,3 +7357,65 @@ export type GoldlineCampaignRunTarget = typeof goldlineCampaignRunTargets.$infer
 export type InsertGoldlineCampaignRunTarget = typeof goldlineCampaignRunTargets.$inferInsert;
 export type GoldlineCampaignTargetEvent = typeof goldlineCampaignTargetEvents.$inferSelect;
 export type InsertGoldlineCampaignTargetEvent = typeof goldlineCampaignTargetEvents.$inferInsert;
+
+/**
+ * StrategyEngine Playground Rules (Slice 3).
+ * Append-only versioned rules for autonomous spending boundary and approval categories.
+ */
+export const playgroundRules = mysqlTable(
+  "playground_rules",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    version: int("version").notNull().default(1),
+    monthlySpendCeilingCents: int("monthlySpendCeilingCents").notNull().default(0),
+    currency: varchar("currency", { length: 8 }).notNull().default("USD"),
+    approvalCategoriesJson: json("approvalCategoriesJson").notNull(),
+    effectiveFrom: timestamp("effectiveFrom").notNull().defaultNow(),
+    effectiveTo: timestamp("effectiveTo"),
+    source: mysqlEnum("source", ["operator_attested", "admin"]).notNull().default("admin"),
+    macroGoalId: varchar("macroGoalId", { length: 36 }),
+    status: mysqlEnum("status", ["active", "superseded"]).notNull().default("active"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantStatusIdx: index("idx_playground_rules_tenant_status").on(table.tenantId, table.status),
+    tenantVersionIdx: index("idx_playground_rules_tenant_version").on(table.tenantId, table.version),
+  })
+);
+
+export type PlaygroundRule = typeof playgroundRules.$inferSelect;
+export type InsertPlaygroundRule = typeof playgroundRules.$inferInsert;
+
+/**
+ * StrategyEngine Spend Ledger (Slice 3).
+ * Records planned, committed, and released autonomous spend per tenant per business-local month.
+ */
+export const strategySpendLedger = mysqlTable(
+  "strategy_spend_ledger",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    businessMonth: varchar("businessMonth", { length: 7 }).notNull(),
+    category: varchar("category", { length: 64 }).notNull(),
+    amountCents: int("amountCents").notNull(),
+    currency: varchar("currency", { length: 8 }).notNull().default("USD"),
+    status: mysqlEnum("status", ["planned", "committed", "released"]).notNull(),
+    sourcePlayId: varchar("sourcePlayId", { length: 64 }),
+    sourceMissionId: varchar("sourceMissionId", { length: 64 }),
+    sourceRef: varchar("sourceRef", { length: 191 }),
+    dedupeKey: varchar("dedupeKey", { length: 191 }).notNull(),
+    approvedByUserId: varchar("approvedByUserId", { length: 128 }),
+    metadataJson: json("metadataJson"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantDedupeUnique: uniqueIndex("uq_strategy_spend_tenant_dedupe").on(table.tenantId, table.dedupeKey),
+    tenantMonthStatusIdx: index("idx_strategy_spend_tenant_month_status").on(table.tenantId, table.businessMonth, table.status),
+  })
+);
+
+export type StrategySpendLedgerRow = typeof strategySpendLedger.$inferSelect;
+export type InsertStrategySpendLedgerRow = typeof strategySpendLedger.$inferInsert;

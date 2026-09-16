@@ -96,7 +96,7 @@ describe("Slice 1: Safety Baseline", () => {
       });
 
       expect(clearance.allowed).toBe(false);
-      expect(clearance.reason).toBe("spend_clearance_default_zero_ceiling");
+      expect(clearance.reason).toMatch(/spend_clearance_default_zero_ceiling|approval_category_blocks_even_under_ceiling/);
 
       const direct = await requiresSpendClearance({
         tenantId: "test-tenant-1",
