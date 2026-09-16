@@ -51,8 +51,10 @@ import { companionRouter } from "../companions/companionRouter";
 import { missionDirectorRouter } from "../missionDirector/missionDirectorRouter";
 import { claireRouter } from "../claire/claireRouter";
 import { missionSalesBriefRouter } from "../missionSalesBrief/missionSalesBriefRouter";
+import { strategyRouter } from "../strategy/strategyRouter";
 
 export const systemRouter = router({
+  strategy: strategyRouter,
   goldlineCargo: goldlineCargoRouter,
   goldlineOnboarding: goldlineOnboardingRouter,
   gumball: cleancloudBrowserSyncRouter,
