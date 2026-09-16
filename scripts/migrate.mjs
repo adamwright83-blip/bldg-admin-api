@@ -1565,5 +1565,81 @@ await assertRequiredColumns("strategy_path_choices", [
   "tenantId", "playId", "chosenOnSurface",
 ]);
 
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS strategy_mission_plan (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    playId VARCHAR(64) NOT NULL,
+    dayDirectorCommitmentId VARCHAR(36) NULL,
+    commercialMissionId INT NULL,
+    businessDate VARCHAR(10) NOT NULL,
+    missionType ENUM('growth','support') NOT NULL DEFAULT 'growth',
+    status ENUM('planned','wait_approval','active','completed','cancelled') NOT NULL DEFAULT 'planned',
+    title VARCHAR(255) NOT NULL,
+    geographyCluster VARCHAR(128) NULL,
+    stopCount INT NOT NULL DEFAULT 1,
+    spendReservationId VARCHAR(64) NULL,
+    spendCategory VARCHAR(64) NULL,
+    spendCents INT NOT NULL DEFAULT 0,
+    preparedSalesPrepJson JSON NOT NULL,
+    dedupeKey VARCHAR(191) NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_strategy_mission_plan_dedupe (tenantId, dedupeKey),
+    KEY idx_strategy_mission_plan_date (tenantId, businessDate),
+    KEY idx_strategy_mission_plan_play (tenantId, playId),
+    KEY idx_strategy_mission_plan_status (tenantId, status)
+  )`,
+  "CREATE TABLE strategy_mission_plan"
+);
+await assertRequiredColumns("strategy_mission_plan", [
+  "tenantId", "playId", "businessDate", "status", "preparedSalesPrepJson", "dedupeKey",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS communication_permissions (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    subjectType ENUM('lead','contact','customer','property') NOT NULL,
+    subjectId VARCHAR(128) NOT NULL,
+    channel ENUM('sms','email','call','visit','any') NOT NULL DEFAULT 'any',
+    status ENUM('opted_in','opted_out','refused','unspecified') NOT NULL DEFAULT 'unspecified',
+    reason TEXT NULL,
+    lastOutreachAt TIMESTAMP NULL DEFAULT NULL,
+    frequencyCapDays INT NOT NULL DEFAULT 7,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_comm_perm_subject_channel (tenantId, subjectType, subjectId, channel),
+    KEY idx_comm_perm_tenant_status (tenantId, status)
+  )`,
+  "CREATE TABLE communication_permissions"
+);
+await assertRequiredColumns("communication_permissions", [
+  "tenantId", "subjectType", "subjectId", "status",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS property_activation_tracks (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    propertyId VARCHAR(128) NOT NULL,
+    propertyName VARCHAR(255) NOT NULL,
+    agreedServiceDetailsJson JSON NOT NULL,
+    residentCommunicationPermitted TINYINT(1) NOT NULL DEFAULT 0,
+    bookingInstructions TEXT NULL,
+    pickupArrangements TEXT NULL,
+    stage ENUM('access_granted','flyer_distribution','resident_announcement','first_order','repeat_orders') NOT NULL DEFAULT 'access_granted',
+    blockedReason TEXT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_property_activation_property (tenantId, propertyId),
+    KEY idx_property_activation_stage (tenantId, stage)
+  )`,
+  "CREATE TABLE property_activation_tracks"
+);
+await assertRequiredColumns("property_activation_tracks", [
+  "tenantId", "propertyId", "propertyName", "stage",
+]);
+
 await conn.end();
 console.log("\nMigration complete.");

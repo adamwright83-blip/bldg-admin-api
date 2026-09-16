@@ -7539,3 +7539,103 @@ export const strategyPathChoices = mysqlTable(
 
 export type StrategyPathChoiceRow = typeof strategyPathChoices.$inferSelect;
 export type InsertStrategyPathChoice = typeof strategyPathChoices.$inferInsert;
+
+/**
+ * Strategy Mission Plan (Slice 7).
+ * Missions sequenced under the active play, linked to Day Director commitments.
+ */
+export const strategyMissionPlan = mysqlTable(
+  "strategy_mission_plan",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    playId: varchar("playId", { length: 64 }).notNull(),
+    dayDirectorCommitmentId: varchar("dayDirectorCommitmentId", { length: 36 }),
+    commercialMissionId: int("commercialMissionId"),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    missionType: mysqlEnum("missionType", ["growth", "support"]).notNull().default("growth"),
+    status: mysqlEnum("status", ["planned", "wait_approval", "active", "completed", "cancelled"]).notNull().default("planned"),
+    title: varchar("title", { length: 255 }).notNull(),
+    geographyCluster: varchar("geographyCluster", { length: 128 }),
+    stopCount: int("stopCount").notNull().default(1),
+    spendReservationId: varchar("spendReservationId", { length: 64 }),
+    spendCategory: varchar("spendCategory", { length: 64 }),
+    spendCents: int("spendCents").notNull().default(0),
+    preparedSalesPrepJson: json("preparedSalesPrepJson").notNull(),
+    dedupeKey: varchar("dedupeKey", { length: 191 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantDedupeUnique: uniqueIndex("uq_strategy_mission_plan_dedupe").on(table.tenantId, table.dedupeKey),
+    tenantDateIdx: index("idx_strategy_mission_plan_date").on(table.tenantId, table.businessDate),
+    tenantPlayIdx: index("idx_strategy_mission_plan_play").on(table.tenantId, table.playId),
+    tenantStatusIdx: index("idx_strategy_mission_plan_status").on(table.tenantId, table.status),
+  })
+);
+
+export type StrategyMissionPlanRow = typeof strategyMissionPlan.$inferSelect;
+export type InsertStrategyMissionPlan = typeof strategyMissionPlan.$inferInsert;
+
+/**
+ * Communication Permissions (Slice 7, G14).
+ * Binding refusals, opt-outs, and frequency limits.
+ */
+export const communicationPermissions = mysqlTable(
+  "communication_permissions",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    subjectType: mysqlEnum("subjectType", ["lead", "contact", "customer", "property"]).notNull(),
+    subjectId: varchar("subjectId", { length: 128 }).notNull(),
+    channel: mysqlEnum("channel", ["sms", "email", "call", "visit", "any"]).notNull().default("any"),
+    status: mysqlEnum("status", ["opted_in", "opted_out", "refused", "unspecified"]).notNull().default("unspecified"),
+    reason: text("reason"),
+    lastOutreachAt: timestamp("lastOutreachAt"),
+    frequencyCapDays: int("frequencyCapDays").notNull().default(7),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantSubjectChannelUnique: uniqueIndex("uq_comm_perm_subject_channel").on(
+      table.tenantId,
+      table.subjectType,
+      table.subjectId,
+      table.channel
+    ),
+    tenantStatusIdx: index("idx_comm_perm_tenant_status").on(table.tenantId, table.status),
+  })
+);
+
+export type CommunicationPermissionRow = typeof communicationPermissions.$inferSelect;
+export type InsertCommunicationPermission = typeof communicationPermissions.$inferInsert;
+
+/**
+ * Property Activation Tracks (Slice 7, laundry template).
+ * Per-approved property activation tracking: flyers, announcements, booking, repeat orders.
+ */
+export const propertyActivationTracks = mysqlTable(
+  "property_activation_tracks",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    propertyId: varchar("propertyId", { length: 128 }).notNull(),
+    propertyName: varchar("propertyName", { length: 255 }).notNull(),
+    agreedServiceDetailsJson: json("agreedServiceDetailsJson").notNull(),
+    residentCommunicationPermitted: boolean("residentCommunicationPermitted").notNull().default(false),
+    bookingInstructions: text("bookingInstructions"),
+    pickupArrangements: text("pickupArrangements"),
+    stage: mysqlEnum("stage", ["access_granted", "flyer_distribution", "resident_announcement", "first_order", "repeat_orders"]).notNull().default("access_granted"),
+    blockedReason: text("blockedReason"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantPropertyUnique: uniqueIndex("uq_property_activation_property").on(table.tenantId, table.propertyId),
+    tenantStageIdx: index("idx_property_activation_stage").on(table.tenantId, table.stage),
+  })
+);
+
+export type PropertyActivationTrackRow = typeof propertyActivationTracks.$inferSelect;
+export type InsertPropertyActivationTrack = typeof propertyActivationTracks.$inferInsert;
+

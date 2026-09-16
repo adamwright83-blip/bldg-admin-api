@@ -21,8 +21,15 @@ import {
 import { getTodayFeaturedOperation } from "./todayFeaturedService";
 import { getOrCreatePathOffer, getStrategyPlayById } from "./playGenerator";
 import { chooseStrategicPath, getActiveStrategicPath } from "./pathChoiceService";
+import { sequenceDailyMissions, getSequencedMissionsForDate } from "./missionSequencer";
+import {
+  checkCommunicationPermission,
+  recordCommunicationPermission,
+  recordOutreachAttempt,
+} from "./communicationPermissionService";
 
 export const strategyRouter = router({
+
   activeCustomers: adminProcedure.query(async ({ ctx }) => {
     return getStrategyActiveCustomers({ tenantId: ctx.tenantId });
   }),
@@ -148,8 +155,103 @@ export const strategyRouter = router({
       }),
 
     active: adminProcedure.query(async ({ ctx }) => {
-      const activeId = getActiveStrategicPath(ctx.tenantId);
-      return activeId ? getStrategyPlayById(activeId) : null;
+      const activeState = await getActiveStrategicPath(ctx.tenantId);
+      return activeState.activePlay;
     }),
   }),
+
+  missions: router({
+    sequence: adminProcedure
+      .input(
+        z.object({
+          businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          forceReplan: z.boolean().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        let snapshot = await getLatestStrategySnapshot(ctx.tenantId);
+        if (!snapshot) {
+          snapshot = await buildStrategySnapshot(ctx.tenantId);
+        }
+        return sequenceDailyMissions({
+          tenantId: ctx.tenantId,
+          actorId: ctx.user?.id ? String(ctx.user.id) : "admin",
+          businessDate: input.businessDate,
+          snapshot,
+          forceReplan: input.forceReplan,
+        });
+      }),
+
+    forDate: adminProcedure
+      .input(
+        z.object({
+          businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        })
+      )
+      .query(async ({ ctx, input }) => {
+        return getSequencedMissionsForDate(ctx.tenantId, input.businessDate);
+      }),
+  }),
+
+  permissions: router({
+    check: adminProcedure
+      .input(
+        z.object({
+          subjectType: z.enum(["lead", "contact", "customer", "property"]),
+          subjectId: z.string(),
+          channel: z.enum(["sms", "email", "call", "visit", "any"]).optional(),
+        })
+      )
+      .query(async ({ ctx, input }) => {
+        return checkCommunicationPermission({
+          tenantId: ctx.tenantId,
+          subjectType: input.subjectType,
+          subjectId: input.subjectId,
+          channel: input.channel,
+        });
+      }),
+
+    record: adminProcedure
+      .input(
+        z.object({
+          subjectType: z.enum(["lead", "contact", "customer", "property"]),
+          subjectId: z.string(),
+          channel: z.enum(["sms", "email", "call", "visit", "any"]).optional(),
+          status: z.enum(["opted_in", "opted_out", "refused", "unspecified"]),
+          reason: z.string().optional(),
+          frequencyCapDays: z.number().int().positive().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await recordCommunicationPermission({
+          tenantId: ctx.tenantId,
+          subjectType: input.subjectType,
+          subjectId: input.subjectId,
+          channel: input.channel,
+          status: input.status,
+          reason: input.reason,
+          frequencyCapDays: input.frequencyCapDays,
+        });
+        return { success: true };
+      }),
+
+    recordOutreach: adminProcedure
+      .input(
+        z.object({
+          subjectType: z.enum(["lead", "contact", "customer", "property"]),
+          subjectId: z.string(),
+          channel: z.enum(["sms", "email", "call", "visit", "any"]).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await recordOutreachAttempt({
+          tenantId: ctx.tenantId,
+          subjectType: input.subjectType,
+          subjectId: input.subjectId,
+          channel: input.channel,
+        });
+        return { success: true };
+      }),
+  }),
 });
+
