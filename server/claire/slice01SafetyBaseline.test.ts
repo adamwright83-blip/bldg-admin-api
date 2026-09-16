@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   isWarmthEmissionAllowed,
   WARMTH_EMISSION_ALLOWLIST,
@@ -13,6 +13,8 @@ import {
 import { assertClaireRuntimeRouting } from "./runtimeRepairCheck";
 import { invokeLLM, invokeTextLLM } from "../_core/llm";
 import { ENV } from "../_core/env";
+import * as dbModule from "../db";
+import * as costTracking from "../agents/costTracking";
 import {
   isStrategyFeatureEnabled,
   setStrategyFeatureFlag,
@@ -89,22 +91,30 @@ describe("Slice 1: Safety Baseline", () => {
 
   describe("guardrail.G6.pr148_cannot_spend_without_clearance", () => {
     it("enforces $0 default ceiling and blocks any PR #148 spend without clearance", async () => {
-      const clearance = await requiresPr148SpendClearance({
-        tenantId: "test-tenant-1",
-        amountCents: 5000,
-        category: "paid_ads",
-      });
+      // This is a deterministic unit check of the default rules. The DayForge CI
+      // job intentionally exposes an empty MySQL database before migrations run,
+      // so pin this test to the service's explicit DB-unavailable/in-memory seam.
+      const dbSpy = vi.spyOn(dbModule, "getDb").mockResolvedValue(null);
+      try {
+        const clearance = await requiresPr148SpendClearance({
+          tenantId: "test-tenant-1",
+          amountCents: 5000,
+          category: "paid_ads",
+        });
 
-      expect(clearance.allowed).toBe(false);
-      expect(clearance.reason).toMatch(/spend_clearance_default_zero_ceiling|approval_category_blocks_even_under_ceiling/);
+        expect(clearance.allowed).toBe(false);
+        expect(clearance.reason).toMatch(/spend_clearance_default_zero_ceiling|approval_category_blocks_even_under_ceiling/);
 
-      const direct = await requiresSpendClearance({
-        tenantId: "test-tenant-1",
-        category: "print_order",
-        amountCents: 100,
-      });
-      expect(direct.cleared).toBe(false);
-      expect(direct.status).toBe("needs_approval");
+        const direct = await requiresSpendClearance({
+          tenantId: "test-tenant-1",
+          category: "print_order",
+          amountCents: 100,
+        });
+        expect(direct.cleared).toBe(false);
+        expect(direct.status).toBe("needs_approval");
+      } finally {
+        dbSpy.mockRestore();
+      }
     });
 
     it("supports disabling PR #148 wholesale via claire.strategy.legacyAutonomy", () => {
@@ -158,13 +168,14 @@ describe("Slice 1: Safety Baseline", () => {
     it("confirms invokeTextLLM exists and invokeLLM requires outputSchema", async () => {
       const prevKey = ENV.anthropicApiKey;
       ENV.anthropicApiKey = "test-key";
+      const spendSpy = vi.spyOn(costTracking, "assertAiSpendAvailable").mockResolvedValue(undefined);
       try {
         const routing = assertClaireRuntimeRouting();
         expect(routing.ok).toBe(true);
         expect(routing.textLlmConfigured).toBe(true);
         expect(typeof invokeTextLLM).toBe("function");
 
-        // invokeLLM without outputSchema throws an error
+        // invokeLLM without outputSchema throws an error before provider invocation.
         await expect(
           invokeLLM({
             messages: [{ role: "user", content: "test" }],
@@ -173,6 +184,7 @@ describe("Slice 1: Safety Baseline", () => {
           })
         ).rejects.toThrow(/requires outputSchema/);
       } finally {
+        spendSpy.mockRestore();
         ENV.anthropicApiKey = prevKey;
       }
     });
