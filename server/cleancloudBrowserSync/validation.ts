@@ -174,9 +174,10 @@ export function validatePayload(
 }
 
 /**
- * Validate a durable Gumball Inbox artifact. Jawbreaker proves the actual file
- * bytes with artifactSha256; store ownership is checked separately against the
- * tenant's pinned CleanCloud binding by the Jawbreaker router.
+ * Validate a durable Gumball Inbox artifact after the Jawbreaker router has
+ * already authenticated and verified the SHA-256 of the exact uploaded bytes.
+ * Do not re-hash decoded text here: UTF-8 decoding can legitimately remove a
+ * BOM, so the byte-level digest must remain authoritative.
  */
 export function validateJawbreakerArtifact(
   input: { csv: string; from: string; to: string },
@@ -191,7 +192,6 @@ export function validateJawbreakerArtifact(
   }
   return {
     normalized: normalizeRows(rows!, tenantId),
-    artifactSha256: createHash("sha256").update(Buffer.from(input.csv, "utf8")).digest("hex"),
   };
 }
 
