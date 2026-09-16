@@ -138,7 +138,15 @@ async function recoverProcessing() {
 }
 
 function terminalArtifactFailure(error: unknown) {
-  return error instanceof RemoteError && (error.status === 400 || error.status === 409 || error.status === 422);
+  if (!(error instanceof RemoteError)) return false;
+  if (error.status === 400 || error.status === 409 || error.status === 422) return true;
+  // A file whose store can never match this tenant must not block every newer
+  // valid artifact in the oldest-first queue. Other authorization/configuration
+  // failures remain retryable so a repaired secret/config can recover in place.
+  return (
+    error.status === 403 &&
+    /artifact store does not match (?:this|the) tenant'?s paired cleancloud store/i.test(error.message)
+  );
 }
 
 async function processOne(name: string) {
