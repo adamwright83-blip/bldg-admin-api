@@ -138,6 +138,7 @@ if (!globalThis.chrome?.runtime?.id) {
     busy(true);
     cancelled = false;
     $("cancel").hidden = false;
+    let completedReceipt = null;
     try {
       await withLock(async () => {
         const range = validateRange($("from").value, $("to").value);
@@ -213,6 +214,30 @@ if (!globalThis.chrome?.runtime?.id) {
           throw new Error("The completed export belongs to a different CleanCloud store.");
         }
 
+        // Chrome has now durably completed the real source artifact. Persist that
+        // truth before any optional pairing follow-up so pairing/network failure
+        // cannot rewrite a successful export as a failed one.
+        completedReceipt = {
+          requestId,
+          storeId: capture.storeId,
+          storeLabel: source.storeLabel,
+          from: range.from,
+          to: range.to,
+          completedAt: capture.completedAt,
+          relativeFilename: capture.relativeFilename,
+          fileSize: capture.fileSize ?? null,
+        };
+        await save("exported", { receipt: completedReceipt, pairingWarning: null });
+        const relative = capture.relativeFilename || "Gumball Inbox";
+        status(
+          `Export complete: Downloads/${relative}. Gumball is finished; Jawbreaker imports the file independently.`
+        );
+        await reportRun(
+          "exported",
+          `Gumball export completed in Downloads/${relative}. Jawbreaker import is a separate stage.`
+        );
+        if (scheduled) await scheduleStatus("exported to Gumball Inbox");
+
         const binding =
           context.binding ||
           (await request("pair", {
@@ -226,7 +251,7 @@ if (!globalThis.chrome?.runtime?.id) {
           binding.storeId !== capture.storeId ||
           binding.storeLabel !== source.storeLabel
         ) {
-          throw new Error("Goldline's paired CleanCloud store changed during export.");
+          throw new Error("Goldline's paired CleanCloud store changed after export.");
         }
 
         const verifiedPairing = {
@@ -236,35 +261,25 @@ if (!globalThis.chrome?.runtime?.id) {
           storeLabel: binding.storeLabel,
         };
         await chrome.storage.local.set({ verifiedPairing });
-
-        const receipt = {
-          requestId,
-          storeId: binding.storeId,
-          storeLabel: binding.storeLabel,
-          from: range.from,
-          to: range.to,
-          completedAt: capture.completedAt,
-          relativeFilename: capture.relativeFilename,
-          fileSize: capture.fileSize ?? null,
-        };
-        await save("exported", { receipt });
         $("connection").textContent = `${binding.storeLabel} → ${context.accountLabel} · Goldline tenant ${context.tenantId}`;
-        const relative = capture.relativeFilename || "Gumball Inbox";
-        status(
-          `Export complete: Downloads/${relative}. Gumball is finished; Jawbreaker imports the file independently.`
-        );
-        await reportRun(
-          "exported",
-          `Gumball export completed in Downloads/${relative}. Jawbreaker import is a separate stage.`
-        );
-        if (scheduled) await scheduleStatus("exported to Gumball Inbox");
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      status(message, true);
-      if (scheduled) await scheduleStatus(`blocked: ${message}`);
-      await reportRun("export", message);
-      await save("failed", { message });
+      if (completedReceipt) {
+        const relative = completedReceipt.relativeFilename || "Gumball Inbox";
+        await save("exported", { receipt: completedReceipt, pairingWarning: message });
+        status(
+          `Export complete: Downloads/${relative}. Pairing follow-up needs attention: ${message}`,
+          true
+        );
+        if (scheduled) await scheduleStatus(`exported; pairing warning: ${message}`);
+        await reportRun("pairing", message);
+      } else {
+        status(message, true);
+        if (scheduled) await scheduleStatus(`blocked: ${message}`);
+        await reportRun("export", message);
+        await save("failed", { message });
+      }
     } finally {
       busy(false);
       $("cancel").hidden = true;
@@ -327,7 +342,10 @@ if (!globalThis.chrome?.runtime?.id) {
     );
   } else if (saved?.phase === "exported" && saved.receipt?.relativeFilename) {
     status(
-      `Last Gumball export: Downloads/${saved.receipt.relativeFilename}. Jawbreaker import status is separate.`
+      saved.pairingWarning
+        ? `Last Gumball export: Downloads/${saved.receipt.relativeFilename}. Pairing warning: ${saved.pairingWarning}`
+        : `Last Gumball export: Downloads/${saved.receipt.relativeFilename}. Jawbreaker import status is separate.`,
+      Boolean(saved.pairingWarning)
     );
   } else if (saved?.message) {
     status(saved.message, saved.phase === "failed");
