@@ -137,14 +137,59 @@ So the three legs are separated:
 | **Placement** | operator attestation, per target | `operator_reported` |
 | **Photo** | optional supporting evidence; depicts what it depicts | `operator_reported` |
 
-A target qualifies when territory presence was recorded during the window **and**
-placement was reported for that target.
+A placement qualifies only when **every** leg holds:
 
-`17/40` therefore means: *seventeen of forty real, named addresses reported
-placed, by an operator whose device confirmed presence in that territory.* That
-sentence is true, and it is enough to justify `DETECTOR 17 ONLINE` on screen.
+1. it names a territory-presence event **from the same run**;
+2. that presence was recorded by the **same operator**;
+3. that presence happened **before** the placement;
+4. the placement is still inside `PRESENCE_VALIDITY_MINUTES` of it;
+5. the address it names currently **occupies a slot in this run**.
+
+`17/24` therefore means: *seventeen of twenty-four real, named addresses
+reported placed, each by an operator whose device was measured inside the
+territory shortly beforehand.* That sentence is true, and it is enough to
+justify `DETECTOR 17 ONLINE` on screen.
 
 **Presence is never placement.** Standing in the neighborhood completes nothing.
+
+**One ping is not a season pass.** Without leg 4, a single GPS hit on day one
+would silently authorize every placement for the rest of the campaign, which
+would quietly restate "I was in the territory during that session" as "I entered
+the territory once, ever". `PRESENCE_VALIDITY_MINUTES` is a named, editable
+policy in the manner of Slice 4's `travelReserveMinutes` — never an estimate of
+anything.
+
+**Presence is measured, never asserted.** A presence event carries coordinates
+and the device's own accuracy reading, and the server checks it against the run's
+real targets before it will write `device_location` provenance. A caller that
+cannot produce a position that checks out does not get a presence event. Accuracy
+widens the radius, capped, mirroring `effectiveArrivalRadiusMeters` in
+`day1TenDoors.ts` so one noisy reading cannot silently swallow the city.
+
+**The server owns the clock.** `occurredAt` on presence and placement is server
+time. Both the validity window and cadence grading read it, so a caller-chosen
+timestamp would be a backdating tool.
+
+### The denominator is frozen, and replacement substitutes
+
+A run is a fixed list of **slots**, snapshotted when it starts. Freezing more
+targets into the underlying set afterwards cannot turn a running 24 into a 25 —
+the run never re-reads the set for its denominator.
+
+A `target_replaced` event moves a **new occupant into the slot**, and that slot
+returns to incomplete. Retiring an unreachable address must never shrink the
+denominator: a run that could complete by dropping its hard doors would be a run
+that completes by giving up, and `24` would stop meaning anything. The
+replacement must already exist as sourced truth in the set, and may not already
+occupy another slot.
+
+### Who may write evidence
+
+A run names one operator. Evidence is accepted from that operator, while the run
+is `active`, and from nobody else. There is deliberately no endpoint anywhere
+that sets progress, marks a target placed without naming its presence event, or
+completes a run directly. Completion is computed from evidence or it does not
+happen.
 
 ---
 
@@ -182,6 +227,12 @@ different countability and different proof.
 `requires: SlotName[]` array that refuses to render a line whose slots are
 missing. That is the mechanism, with the safety property we want. Extend the bank
 system; do not build a parallel one.
+
+The refusal law covers **every string a pack can show**, not only its beats.
+Victory lines, tempo tails, Echo and failure copy derive their own requirements
+from their text and refuse the same way, so no pack can ship a raw `{territory}`
+to a screen. A pack referencing a slot the system does not have fails validation
+at module load.
 
 ### 4.2 Beats are fractions, and may not introduce state
 
@@ -279,6 +330,10 @@ deleted. Ten placed is ten placed permanently.
 
 `failureSequence` is legal **only** when the campaign declares a real
 `failureCondition` — a 10am appointment not attended, an event that ended Sunday.
+**That fact is read from campaign truth on the server.** A surface may never tell
+Goldline that a real-world failure condition occurred; if the UI could assert it,
+it would be fiction writing to the truth layer, which is the one direction this
+whole document forbids.
 Reality genuinely closed that door, and pretending otherwise would be the system
 lying in the other direction. `ops_tasks` already distinguishes `expired` from
 `dismissed`. Even there: the world closed; the operator did not blow it.

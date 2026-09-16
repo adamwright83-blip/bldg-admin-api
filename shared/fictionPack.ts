@@ -169,6 +169,26 @@ export function validateFictionPack(pack: FictionPack): FictionPack {
     }
   }
 
+  const freeform: Array<[string, string]> = [
+    ["victoryBeat", pack.victoryBeat],
+    ["echoPresentation", pack.echoPresentation],
+    ...TEMPO_TIERS.map(
+      tier => [`tempoTails.${tier}`, pack.tempoTails[tier]] as [string, string]
+    ),
+    ...(pack.failureSequence
+      ? ([["failureSequence", pack.failureSequence]] as Array<[string, string]>)
+      : []),
+  ];
+  for (const [field, template] of freeform) {
+    for (const match of template.matchAll(/\{(\w+)\}/g)) {
+      if (!(FICTION_SLOT_NAMES as readonly string[]).includes(match[1])) {
+        throw new Error(
+          `Fiction pack ${pack.id} references unknown slot {${match[1]}} in ${field}`
+        );
+      }
+    }
+  }
+
   const nouns = findBusinessNouns(pack);
   if (nouns.length > 0) {
     throw new Error(
@@ -196,6 +216,34 @@ export function renderSlots(
     const value = slots[name as FictionSlotName];
     return value == null || value === "" ? whole : value;
   });
+}
+
+/**
+ * Every known slot a template actually references. Unknown `{words}` are left
+ * alone — they are prose, not slots.
+ */
+export function requiredSlotsIn(template: string): FictionSlotName[] {
+  const found = new Set<FictionSlotName>();
+  for (const match of template.matchAll(/\{(\w+)\}/g)) {
+    const name = match[1] as FictionSlotName;
+    if ((FICTION_SLOT_NAMES as readonly string[]).includes(name)) {
+      found.add(name);
+    }
+  }
+  return [...found];
+}
+
+/**
+ * Renders a template that carries no explicit `requires` list, deriving the
+ * requirement from the text itself. Victory lines, tempo tails and Echo copy
+ * go through here, so the refusal law covers every string a pack can show and
+ * not just its beats.
+ */
+export function renderStrict(
+  template: string,
+  slots: FictionSlots
+): string | null {
+  return renderSlots(template, requiredSlotsIn(template), slots);
 }
 
 /**
@@ -249,11 +297,14 @@ export function composeCompletion(
   slots: FictionSlots
 ): CompletionCopy {
   const tier = gradeTempo(tempo);
-  return {
-    victory: renderSlots(pack.victoryBeat, [], slots) ?? pack.victoryBeat,
-    tail: renderSlots(pack.tempoTails[tier], [], slots) ?? pack.tempoTails[tier],
-    tier,
-  };
+  const victory = renderStrict(pack.victoryBeat, slots);
+  const tail = renderStrict(pack.tempoTails[tier], slots);
+  if (victory == null || tail == null) {
+    throw new Error(
+      `Fiction pack ${pack.id} cannot render its completion: a required slot was not supplied`
+    );
+  }
+  return { victory, tail, tier };
 }
 
 /**
@@ -271,13 +322,19 @@ export function resolveIncompleteCopy(
     input.failureConditionMet &&
     pack.failureSequence
   ) {
-    return {
-      kind: "failure",
-      text: renderSlots(pack.failureSequence, [], slots) ?? pack.failureSequence,
-    };
+    const text = renderStrict(pack.failureSequence, slots);
+    if (text == null) {
+      throw new Error(
+        `Fiction pack ${pack.id} cannot render its failure sequence: a required slot was not supplied`
+      );
+    }
+    return { kind: "failure", text };
   }
-  return {
-    kind: "echo",
-    text: renderSlots(pack.echoPresentation, [], slots) ?? pack.echoPresentation,
-  };
+  const echo = renderStrict(pack.echoPresentation, slots);
+  if (echo == null) {
+    throw new Error(
+      `Fiction pack ${pack.id} cannot render its echo: a required slot was not supplied`
+    );
+  }
+  return { kind: "echo", text: echo };
 }

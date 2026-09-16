@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   composeCompletion,
+  renderStrict,
+  requiredSlotsIn,
   findBusinessNouns,
   gradeTempo,
   renderSlots,
@@ -184,5 +186,47 @@ describe("resolveIncompleteCopy", () => {
       { count: "10", remaining: "14" }
     );
     expect(result.kind).toBe("failure");
+  });
+});
+
+describe("the refusal law covers every string a pack can show", () => {
+  it("derives a template's required slots from the template itself", () => {
+    expect(requiredSlotsIn("{count} of {total}, {notASlot}").sort()).toEqual([
+      "count",
+      "total",
+    ]);
+  });
+
+  it("refuses strict copy whose slots were not supplied", () => {
+    expect(renderStrict("{territory} is dark", {})).toBeNull();
+    expect(renderStrict("{territory} is dark", { territory: "the district" })).toBe(
+      "the district is dark"
+    );
+  });
+
+  it("throws rather than shipping a raw brace in a victory line", () => {
+    expect(() =>
+      composeCompletion(
+        pack({ victoryBeat: "{territory} IS CLEAR." }),
+        { sessionCount: 1, largestGapDays: 0 },
+        { count: "24" }
+      )
+    ).toThrow(/required slot/);
+  });
+
+  it("throws rather than shipping a raw brace in an echo", () => {
+    expect(() =>
+      resolveIncompleteCopy(
+        pack({ echoPresentation: "{territory} holds at {count}." }),
+        { campaignHasFailureCondition: false, failureConditionMet: false },
+        { count: "10" }
+      )
+    ).toThrow(/required slot/);
+  });
+
+  it("rejects a pack that references a slot the system does not have", () => {
+    expect(() =>
+      validateFictionPack(pack({ echoPresentation: "{weather} is poor." }))
+    ).toThrow(/unknown slot/);
   });
 });

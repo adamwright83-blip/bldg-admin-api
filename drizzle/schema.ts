@@ -7293,6 +7293,28 @@ export const goldlineCampaignTargets = mysqlTable(
   })
 );
 
+export const goldlineCampaignRunTargets = mysqlTable(
+  "goldline_campaign_run_targets",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    campaignRunId: varchar("campaignRunId", { length: 36 }).notNull(),
+    slotId: varchar("slotId", { length: 64 }).notNull(),
+    originalTargetId: varchar("originalTargetId", { length: 64 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    slotUnique: uniqueIndex("uq_goldline_campaign_run_slot").on(
+      table.campaignRunId,
+      table.slotId
+    ),
+    runIdx: index("idx_goldline_campaign_run_targets_run").on(
+      table.tenantId,
+      table.campaignRunId
+    ),
+  })
+);
+
 export const goldlineCampaignTargetEvents = mysqlTable(
   "goldline_campaign_target_events",
   {
@@ -7307,6 +7329,9 @@ export const goldlineCampaignTargetEvents = mysqlTable(
     epistemicState: varchar("epistemicState", { length: 32 }).notNull(),
     supportingPresenceEventId: varchar("supportingPresenceEventId", { length: 36 }),
     replacementTargetId: varchar("replacementTargetId", { length: 64 }),
+    lat: decimal("lat", { precision: 10, scale: 7 }),
+    lng: decimal("lng", { precision: 10, scale: 7 }),
+    accuracyMeters: int("accuracyMeters"),
     note: varchar("note", { length: 512 }),
     payloadJson: json("payloadJson"),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
@@ -7328,5 +7353,7 @@ export type GoldlineCampaignRun = typeof goldlineCampaignRuns.$inferSelect;
 export type InsertGoldlineCampaignRun = typeof goldlineCampaignRuns.$inferInsert;
 export type GoldlineCampaignTarget = typeof goldlineCampaignTargets.$inferSelect;
 export type InsertGoldlineCampaignTarget = typeof goldlineCampaignTargets.$inferInsert;
+export type GoldlineCampaignRunTarget = typeof goldlineCampaignRunTargets.$inferSelect;
+export type InsertGoldlineCampaignRunTarget = typeof goldlineCampaignRunTargets.$inferInsert;
 export type GoldlineCampaignTargetEvent = typeof goldlineCampaignTargetEvents.$inferSelect;
 export type InsertGoldlineCampaignTargetEvent = typeof goldlineCampaignTargetEvents.$inferInsert;

@@ -17,6 +17,7 @@ import { listFictionPacks } from "../fictionPacks/fictionPackRegistry";
 import {
   freezeTargetSet,
   getRunProjection,
+  listRunSlots,
   listTargets,
   recordPlacement,
   recordTerritoryPresence,
@@ -45,6 +46,12 @@ export const campaignRunRouter = router({
         role: pack.role,
         premise: pack.premise,
       }))
+    ),
+
+  listRunSlots: dayforgeTenantMemberProcedure
+    .input(z.object({ campaignRunId: z.string() }))
+    .query(({ ctx, input }) =>
+      listRunSlots({ tenantId: ctx.tenantId, ...input })
     ),
 
   listTargets: dayforgeTenantMemberProcedure
@@ -87,22 +94,21 @@ export const campaignRunRouter = router({
     ),
 
   projection: dayforgeTenantMemberProcedure
-    .input(
-      z.object({
-        campaignRunId: z.string(),
-        campaignHasFailureCondition: z.boolean().optional(),
-        failureConditionMet: z.boolean().optional(),
-      })
-    )
+    .input(z.object({ campaignRunId: z.string() }))
     .query(({ ctx, input }) =>
       getRunProjection({ tenantId: ctx.tenantId, ...input })
     ),
 
+  /* Coordinates are required and checked server-side. A caller cannot declare
+   * `device_location`, and cannot choose the timestamp the validity window
+   * and cadence are both read from. */
   recordPresence: dayforgeTenantMemberProcedure
     .input(
       z.object({
         campaignRunId: z.string(),
-        occurredAt: z.string().optional(),
+        lat: z.number().min(-90).max(90),
+        lng: z.number().min(-180).max(180),
+        accuracyMeters: z.number().nonnegative().max(100_000).nullable().optional(),
         note: z.string().max(512).nullable().optional(),
       })
     )
@@ -120,7 +126,6 @@ export const campaignRunRouter = router({
         campaignRunId: z.string(),
         targetId: z.string().min(1).max(64),
         supportingPresenceEventId: z.string().min(1),
-        occurredAt: z.string().optional(),
         note: z.string().max(512).nullable().optional(),
       })
     )

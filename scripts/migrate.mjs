@@ -1375,6 +1375,23 @@ await assertRequiredColumns("goldline_campaign_targets", [
 ]);
 
 await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_campaign_run_targets (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    campaignRunId VARCHAR(36) NOT NULL,
+    slotId VARCHAR(64) NOT NULL,
+    originalTargetId VARCHAR(64) NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_goldline_campaign_run_slot (campaignRunId,slotId),
+    KEY idx_goldline_campaign_run_targets_run (tenantId,campaignRunId)
+  )`,
+  "CREATE TABLE goldline_campaign_run_targets"
+);
+await assertRequiredColumns("goldline_campaign_run_targets", [
+  "tenantId", "campaignRunId", "slotId", "originalTargetId",
+]);
+
+await runRequired(
   `CREATE TABLE IF NOT EXISTS goldline_campaign_target_events (
     id VARCHAR(36) NOT NULL PRIMARY KEY,
     tenantId VARCHAR(64) NOT NULL,
@@ -1387,6 +1404,9 @@ await runRequired(
     epistemicState VARCHAR(32) NOT NULL,
     supportingPresenceEventId VARCHAR(36) NULL,
     replacementTargetId VARCHAR(64) NULL,
+    lat DECIMAL(10,7) NULL,
+    lng DECIMAL(10,7) NULL,
+    accuracyMeters INT NULL,
     note VARCHAR(512) NULL,
     payloadJson JSON NULL,
     createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1398,6 +1418,7 @@ await runRequired(
 await assertRequiredColumns("goldline_campaign_target_events", [
   "tenantId", "campaignRunId", "targetId", "kind", "operatorUserId",
   "provenance", "epistemicState", "supportingPresenceEventId", "replacementTargetId",
+  "lat", "lng", "accuracyMeters",
 ]);
 
 await conn.end();

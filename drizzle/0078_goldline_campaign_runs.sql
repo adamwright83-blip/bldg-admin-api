@@ -43,6 +43,21 @@ CREATE TABLE IF NOT EXISTS goldline_campaign_targets (
   KEY idx_goldline_campaign_targets_set (tenantId,targetSetId)
 );
 
+-- The frozen denominator. Snapshotted when a run starts, so freezing more
+-- targets into the underlying set afterwards cannot turn a running 24 into 25.
+-- Replacement moves a slot's occupant through the event log; this table is
+-- never edited after the run begins.
+CREATE TABLE IF NOT EXISTS goldline_campaign_run_targets (
+  id VARCHAR(36) NOT NULL PRIMARY KEY,
+  tenantId VARCHAR(64) NOT NULL,
+  campaignRunId VARCHAR(36) NOT NULL,
+  slotId VARCHAR(64) NOT NULL,
+  originalTargetId VARCHAR(64) NOT NULL,
+  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_goldline_campaign_run_slot (campaignRunId,slotId),
+  KEY idx_goldline_campaign_run_targets_run (tenantId,campaignRunId)
+);
+
 -- Evidence. Append-only in practice: progress is derived from these rows and
 -- never stored as a counter. Follows the opsTaskEvents philosophy.
 CREATE TABLE IF NOT EXISTS goldline_campaign_target_events (
@@ -57,6 +72,9 @@ CREATE TABLE IF NOT EXISTS goldline_campaign_target_events (
   epistemicState VARCHAR(32) NOT NULL,
   supportingPresenceEventId VARCHAR(36) NULL,
   replacementTargetId VARCHAR(64) NULL,
+  lat DECIMAL(10,7) NULL,
+  lng DECIMAL(10,7) NULL,
+  accuracyMeters INT NULL,
   note VARCHAR(512) NULL,
   payloadJson JSON NULL,
   createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
