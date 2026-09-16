@@ -12,14 +12,16 @@ import {
   qualitativeEvaluationSchema,
   type QualitativeEvaluation,
 } from "../analysis/conversationAnalysisSchema";
-import { ANALYSIS_NOTIFICATION_KIND, POST_CALL_TRANSCRIPT_SOURCE } from "./types";
+import {
+  ANALYSIS_NOTIFICATION_KIND,
+  POST_CALL_TRANSCRIPT_SOURCE,
+} from "./types";
 import { productionConversationStore } from "./ledgerService";
 import type { ConversationNotification, ConversationSession } from "./types";
 
-function publicSession(session: ConversationSession): Omit<
-  ConversationSession,
-  "recordingProviderUrl"
-> {
+function publicSession(
+  session: ConversationSession
+): Omit<ConversationSession, "recordingProviderUrl"> {
   const { recordingProviderUrl: _hidden, ...rest } = session;
   return rest;
 }
@@ -38,10 +40,16 @@ export async function requireClaireCallSession(input: {
       ? await store.getSessionByCallSid(input.callSid)
       : null;
   if (!session || session.tenantId !== input.tenantId) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Claire call not found" });
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Claire call not found",
+    });
   }
   if (!input.isAdmin && session.operatorUserId !== input.operatorUserId) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Claire call not found" });
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Claire call not found",
+    });
   }
   return session;
 }
@@ -83,7 +91,10 @@ async function analysesWithoutNotification(input: {
         sessionId: row.sessionId,
         kind: ANALYSIS_NOTIFICATION_KIND,
         title: "CLAIRE CALL ANALYSIS READY",
-        body: (row.summaryText || "Call analysis is ready to review.").slice(0, 512),
+        body: (row.summaryText || "Call analysis is ready to review.").slice(
+          0,
+          512
+        ),
         ctaLabel: "VIEW ANALYSIS",
         href: `/claire/calls/${row.sessionId}`,
         readAt: null,
@@ -101,7 +112,9 @@ export async function listClaireAnalysisInbox(input: {
   const store = productionConversationStore();
   const rows = await store.listNotifications(input);
   const unread = rows.filter(row => row.readAt == null);
-  if (unread.length) return unread;
+  // Once a notification has existed, its read state is authoritative. Falling
+  // back to the analysis row here would recreate a dismissed notification.
+  if (rows.length) return unread;
   return analysesWithoutNotification(input);
 }
 
@@ -139,9 +152,9 @@ export async function getClaireCallAnalysis(input: {
     analysis: analysis
       ? {
           ...analysis,
-          result: (evaluation?.success
-            ? evaluation.data
-            : analysis.result) as QualitativeEvaluation | Record<string, unknown>,
+          result: (evaluation?.success ? evaluation.data : analysis.result) as
+            | QualitativeEvaluation
+            | Record<string, unknown>,
         }
       : null,
     copyBundleText: analysis?.copyBundleText ?? "",

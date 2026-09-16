@@ -52,6 +52,7 @@ export type GoldlineDayPlanProps = {
   loadError?: string | null;
   onRetry?: () => void;
   onResolveStop?: (stop: DayPlanStop) => Promise<boolean>;
+  onArchiveStop?: (stop: DayPlanStop) => Promise<boolean>;
   onOpenJournal?: () => void;
   onOpenFirstMission?: () => void;
   onOpenImport: () => void;
@@ -66,7 +67,10 @@ export type GoldlineDayPlanProps = {
   onAcceptProposal?: (proposal: DayDirectorProposal) => Promise<void>;
   onDismissProposal?: (promptKey: string) => Promise<void>;
   onCompleteCommitment?: (commitmentId: string) => Promise<void>;
-  authoredDay?: Pick<AuthoredDayRecord, "headline" | "framing" | "lines" | "status"> | null;
+  authoredDay?: Pick<
+    AuthoredDayRecord,
+    "headline" | "framing" | "lines" | "status"
+  > | null;
   cargoFixture?: VehicleCargoItem[];
   /** Slice 4/5: the Mission Director's plan for tomorrow, surfaced unprompted. */
   missionPlan?: MissionPlanOutcome | null;
@@ -141,7 +145,9 @@ function StopCard({
   return (
     <article
       className={`gdp-stop gdp-stop--${stop.kind} gdp-stop--${stop.status} gdp-stop--${index % 2 ? "right" : "left"}${
-        stop.attentionState === "needs_details" ? " gdp-stop--needs-details" : ""
+        stop.attentionState === "needs_details"
+          ? " gdp-stop--needs-details"
+          : ""
       }`}
       data-testid={`day-plan-stop-${stop.id}`}
     >
@@ -292,10 +298,15 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           {plan.authoredDay?.headline ??
             (props.campaignTitle ? `${props.campaignTitle} · ` : "TODAY · ")}
           {!plan.authoredDay?.headline && dateHeading(props.businessDate)}
-          {plan.authoredDay?.headline ? ` · ${dateHeading(props.businessDate)}` : null}
+          {plan.authoredDay?.headline
+            ? ` · ${dateHeading(props.businessDate)}`
+            : null}
         </p>
         {plan.authoredDay?.framing ? (
-          <p className="gdp-authored-framing" data-testid="authored-day-framing">
+          <p
+            className="gdp-authored-framing"
+            data-testid="authored-day-framing"
+          >
             {plan.authoredDay.framing}
           </p>
         ) : null}
@@ -304,9 +315,12 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
             {plan.missionPlan.status === "planned" ? (
               <>
                 <p>
-                  <strong>Tomorrow's growth mission:</strong> {plan.missionPlan.primary.title}
+                  <strong>Tomorrow's growth mission:</strong>{" "}
+                  {plan.missionPlan.primary.title}
                 </p>
-                <p className="gdp-mission-explanation">{plan.missionPlan.explanation}</p>
+                <p className="gdp-mission-explanation">
+                  {plan.missionPlan.explanation}
+                </p>
                 <p className="gdp-mission-fallback">
                   If the day changes: {plan.missionPlan.fallback.title}
                 </p>
@@ -314,12 +328,17 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
             ) : plan.missionPlan.status === "fallback_only" ? (
               <>
                 <p>
-                  <strong>Tomorrow's fallback mission:</strong> {plan.missionPlan.fallback.title}
+                  <strong>Tomorrow's fallback mission:</strong>{" "}
+                  {plan.missionPlan.fallback.title}
                 </p>
-                <p className="gdp-mission-explanation">{plan.missionPlan.explanation}</p>
+                <p className="gdp-mission-explanation">
+                  {plan.missionPlan.explanation}
+                </p>
               </>
             ) : (
-              <p className="gdp-mission-explanation">{plan.missionPlan.remedy}</p>
+              <p className="gdp-mission-explanation">
+                {plan.missionPlan.remedy}
+              </p>
             )}
           </div>
         ) : null}
@@ -710,6 +729,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           stop={activeStop}
           onClose={() => setActiveStop(null)}
           onResolve={props.onResolveStop}
+          onArchive={props.onArchiveStop}
           onCallClaireForMission={async missionId => {
             await callClaireForMission.mutateAsync({
               missionId,

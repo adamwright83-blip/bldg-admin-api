@@ -16,6 +16,7 @@ export function DriverStopChapter({
   stop,
   onClose,
   onResolve,
+  onArchive,
   onEnter,
   onJournal,
   onPlay,
@@ -24,6 +25,7 @@ export function DriverStopChapter({
   stop: DayPlanStop;
   onClose: () => void;
   onResolve?: (stop: DayPlanStop) => Promise<boolean>;
+  onArchive?: (stop: DayPlanStop) => Promise<boolean>;
   onEnter: () => void;
   onJournal: () => void;
   onPlay: () => void;
@@ -37,7 +39,10 @@ export function DriverStopChapter({
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [claireCallState, setClaireCallState] = useState<"ready" | "calling" | "called">("ready");
+  const [archiveConfirm, setArchiveConfirm] = useState(false);
+  const [claireCallState, setClaireCallState] = useState<
+    "ready" | "calling" | "called"
+  >("ready");
   const [claireCallError, setClaireCallError] = useState<string | null>(null);
   const pending = useRef(false);
   const complete = saved || stop.status === "completed";
@@ -50,6 +55,10 @@ export function DriverStopChapter({
       stop.status !== "cancelled"
   );
   const paymentBlocked = action?.type === "order" && !action.eligible;
+  const canArchive =
+    action?.type === "commercial" &&
+    stop.status !== "completed" &&
+    Boolean(onArchive);
   const isPickup = stop.kind === "pickup";
   const operational = isPickup || stop.kind === "dropoff";
   const label = operational
@@ -64,7 +73,12 @@ export function DriverStopChapter({
     : "I have completed this task in the real world.";
   const cityUrl = `https://admin.bldg.chat/growth/lantern-city${stop.physicalEntityId ? `?entity=${encodeURIComponent(stop.physicalEntityId)}` : ""}`;
   async function callClaireForMission() {
-    if (action?.type !== "commercial" || !onCallClaireForMission || claireCallState === "calling") return;
+    if (
+      action?.type !== "commercial" ||
+      !onCallClaireForMission ||
+      claireCallState === "calling"
+    )
+      return;
     setClaireCallState("calling");
     setClaireCallError(null);
     try {
@@ -73,7 +87,9 @@ export function DriverStopChapter({
     } catch (cause) {
       setClaireCallState("ready");
       setClaireCallError(
-        cause instanceof Error ? cause.message : "Claire could not place the call."
+        cause instanceof Error
+          ? cause.message
+          : "Claire could not place the call."
       );
     }
   }
@@ -93,6 +109,25 @@ export function DriverStopChapter({
         cause instanceof Error
           ? cause.message
           : "Could not save. Your stop is still open."
+      );
+    } finally {
+      pending.current = false;
+      setBusy(false);
+    }
+  }
+  async function archive() {
+    if (pending.current || !canArchive) return;
+    pending.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      if (await onArchive?.(stop)) onClose();
+      else setError("That sales stop could not be archived. Please try again.");
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "That sales stop could not be archived. Please try again."
       );
     } finally {
       pending.current = false;
@@ -248,7 +283,8 @@ export function DriverStopChapter({
                 </>
               ) : (
                 <button className="chapter-primary" onClick={onEnter}>
-                  ENTER {action?.type === "commercial" ? "SALES MISSION" : "CHAPTER"}
+                  ENTER{" "}
+                  {action?.type === "commercial" ? "SALES MISSION" : "CHAPTER"}
                   <ChevronRight size={18} />
                 </button>
               )}
@@ -270,6 +306,42 @@ export function DriverStopChapter({
                   {claireCallError}
                 </p>
               )}
+              {canArchive &&
+                (archiveConfirm ? (
+                  <div
+                    className="chapter-archive-confirm"
+                    role="group"
+                    aria-label="Confirm archive sales stop"
+                  >
+                    <p>Remove this sales stop from your active Driver day?</p>
+                    <div>
+                      <button
+                        type="button"
+                        className="chapter-archive"
+                        disabled={busy}
+                        onClick={() => void archive()}
+                      >
+                        {busy ? "ARCHIVING…" : "YES, ARCHIVE STOP"}
+                      </button>
+                      <button
+                        type="button"
+                        className="chapter-secondary"
+                        disabled={busy}
+                        onClick={() => setArchiveConfirm(false)}
+                      >
+                        KEEP STOP
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="chapter-secondary"
+                    onClick={() => setArchiveConfirm(true)}
+                  >
+                    ARCHIVE SALES STOP
+                  </button>
+                ))}
               {error && (
                 <p className="chapter-error" role="alert">
                   {error}

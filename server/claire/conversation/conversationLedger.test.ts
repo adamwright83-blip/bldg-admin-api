@@ -6,17 +6,27 @@ const evaluatorMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../analysis/conversationEvaluator", async importOriginal => {
-  const actual = await importOriginal<typeof import("../analysis/conversationEvaluator")>();
+  const actual =
+    await importOriginal<typeof import("../analysis/conversationEvaluator")>();
   return {
     ...actual,
     evaluateConversationQualitative: evaluatorMocks.evaluate,
   };
 });
-import { qualitativeEvaluationSchema, researchFlagFor, type QualitativeEvaluation } from "../analysis/conversationAnalysisSchema";
+import {
+  qualitativeEvaluationSchema,
+  researchFlagFor,
+  type QualitativeEvaluation,
+} from "../analysis/conversationAnalysisSchema";
 import { runConversationAnalysis } from "../analysis/conversationAnalysisService";
-import { renderCopyAnalysisBundle, renderFullTranscript } from "../analysis/copyBundle";
+import {
+  renderCopyAnalysisBundle,
+  renderFullTranscript,
+} from "../analysis/copyBundle";
 import {
   getClaireCallAnalysis,
+  listClaireAnalysisInbox,
+  markClaireAnalysisNotificationRead,
   markClaireCallAnalysisWrong,
   requireClaireCallSession,
 } from "./conversationQuery";
@@ -38,7 +48,9 @@ import {
 import { POST_CALL_TRANSCRIPT_SOURCE } from "./types";
 import { isValidTwilioWebhook } from "./twilioSignature";
 
-const evaluationFixture = (overrides: Partial<QualitativeEvaluation> = {}): QualitativeEvaluation =>
+const evaluationFixture = (
+  overrides: Partial<QualitativeEvaluation> = {}
+): QualitativeEvaluation =>
   qualitativeEvaluationSchema.parse({
     conversationPurpose: "Plan tomorrow",
     operatorObjective: "Add a Greystar walk",
@@ -91,7 +103,13 @@ describe("Claire conversation ledger", () => {
       recordingEnabled: false,
       providerCallSid: "CA123",
     });
-    expect(await persistSpokenTurn({ callSid: "CA123", speaker: "OPERATOR", text: "   " })).toBeNull();
+    expect(
+      await persistSpokenTurn({
+        callSid: "CA123",
+        speaker: "OPERATOR",
+        text: "   ",
+      })
+    ).toBeNull();
     const operator = await persistSpokenTurn({
       callSid: "CA123",
       speaker: "OPERATOR",
@@ -129,8 +147,12 @@ describe("Claire conversation ledger", () => {
       text: "yes",
     });
     expect(retry?.id).toBe(first?.id);
-    expect(turnIdempotencyKey({ callSid: "CA456", speaker: "OPERATOR", text: "yes" })).toHaveLength(64);
-    const turns = await productionConversationStore().listTurns(first!.sessionId);
+    expect(
+      turnIdempotencyKey({ callSid: "CA456", speaker: "OPERATOR", text: "yes" })
+    ).toHaveLength(64);
+    const turns = await productionConversationStore().listTurns(
+      first!.sessionId
+    );
     expect(turns).toHaveLength(1);
   });
 
@@ -160,9 +182,9 @@ describe("Claire conversation ledger", () => {
     const turns = await store.listTurns(session.id);
     expect(turns).toHaveLength(1);
     expect(turns[0]?.text).toContain("Adam. Claire here.");
-    expect((await store.getTranscript(session.id, POST_CALL_TRANSCRIPT_SOURCE))?.text).toContain(
-      "misattributed blob"
-    );
+    expect(
+      (await store.getTranscript(session.id, POST_CALL_TRANSCRIPT_SOURCE))?.text
+    ).toContain("misattributed blob");
   });
 
   it("analyzes the live ledger when recording is skipped or absent", async () => {
@@ -183,10 +205,16 @@ describe("Claire conversation ledger", () => {
       callSid: "CA-skip",
       reason: "closing_phrase",
     });
-    const analyzed = await productionConversationStore().getAnalysis(skipped.id);
+    const analyzed = await productionConversationStore().getAnalysis(
+      skipped.id
+    );
     expect(evaluatorMocks.evaluate).toHaveBeenCalled();
-    expect(analyzed?.copyBundleText).toContain("FULL TRANSCRIPT AVAILABLE IN GOLDLINE");
-    expect(analyzed?.copyBundleText.toLowerCase()).not.toMatch(/chatgpt|openai|copy for chatgpt/);
+    expect(analyzed?.copyBundleText).toContain(
+      "FULL TRANSCRIPT AVAILABLE IN GOLDLINE"
+    );
+    expect(analyzed?.copyBundleText.toLowerCase()).not.toMatch(
+      /chatgpt|openai|copy for chatgpt/
+    );
 
     const absent = await createConversationSession({
       tenantId: "tenant-1",
@@ -205,9 +233,10 @@ describe("Claire conversation ledger", () => {
       callSid: "CA-absent",
       reason: "remote_hangup",
     });
-    expect((await productionConversationStore().getSession(absent.id))?.analysisStatus).toBe(
-      "pending"
-    );
+    expect(
+      (await productionConversationStore().getSession(absent.id))
+        ?.analysisStatus
+    ).toBe("pending");
     await handleRecordingStatus({
       callSid: "CA-absent",
       recordingSid: "RE-missing",
@@ -215,10 +244,13 @@ describe("Claire conversation ledger", () => {
       accountSid: "AC",
       authToken: "token",
     });
-    expect((await productionConversationStore().getSession(absent.id))?.recordingStatus).toBe(
-      "failed"
-    );
-    expect((await productionConversationStore().getAnalysis(absent.id))?.sessionId).toBe(absent.id);
+    expect(
+      (await productionConversationStore().getSession(absent.id))
+        ?.recordingStatus
+    ).toBe("failed");
+    expect(
+      (await productionConversationStore().getAnalysis(absent.id))?.sessionId
+    ).toBe(absent.id);
   });
 
   it("creates a Claire Call Analysis Ready inbox item after evaluation", async () => {
@@ -235,7 +267,10 @@ describe("Claire conversation ledger", () => {
       speaker: "OPERATOR",
       text: "Plan tomorrow",
     });
-    await finishConversationAndMaybeAnalyze({ callSid: "CA-notify", reason: "closing_phrase" });
+    await finishConversationAndMaybeAnalyze({
+      callSid: "CA-notify",
+      reason: "closing_phrase",
+    });
     await runConversationAnalysis(session.id, {
       evaluate: async () => evaluationFixture(),
     });
@@ -246,6 +281,43 @@ describe("Claire conversation ledger", () => {
     expect(inbox[0]?.title).toBe("Claire Call Analysis Ready");
     expect(inbox[0]?.ctaLabel).toBe("VIEW ANALYSIS");
     expect(inbox[0]?.href).toBe(`/claire/calls/${session.id}`);
+  });
+
+  it("does not recreate a dismissed analysis notification from its analysis row", async () => {
+    const session = await createConversationSession({
+      tenantId: "tenant-1",
+      operatorUserId: "adam",
+      claireConversationId: "conv-dismiss",
+      conversationKind: "evening_planning",
+      recordingEnabled: false,
+      providerCallSid: "CA-dismiss",
+    });
+    await persistSpokenTurn({
+      callSid: "CA-dismiss",
+      speaker: "OPERATOR",
+      text: "Plan tomorrow",
+    });
+    await runConversationAnalysis(session.id, {
+      evaluate: async () => evaluationFixture(),
+    });
+
+    const [notification] = await listClaireAnalysisInbox({
+      tenantId: "tenant-1",
+      operatorUserId: "adam",
+    });
+    expect(notification).toBeDefined();
+    await markClaireAnalysisNotificationRead({
+      tenantId: "tenant-1",
+      operatorUserId: "adam",
+      id: notification!.id,
+    });
+
+    expect(
+      await listClaireAnalysisInbox({
+        tenantId: "tenant-1",
+        operatorUserId: "adam",
+      })
+    ).toEqual([]);
   });
 
   it("does not let the evaluator rewrite live turns and flags high-value examples", async () => {
@@ -263,7 +335,9 @@ describe("Claire conversation ledger", () => {
       text: "Add the walk",
     });
     const store = productionConversationStore();
-    await store.updateSession(session.id, { relatedActionIds: ["commitment-1"] });
+    await store.updateSession(session.id, {
+      relatedActionIds: ["commitment-1"],
+    });
     await runConversationAnalysis(session.id, {
       evaluate: async () => evaluationFixture(),
     });
@@ -331,9 +405,9 @@ describe("Claire conversation ledger", () => {
     });
     expect(disputed.transcriptUnchanged).toBe(true);
     expect(disputed.analysis?.humanFeedbackKind).toBe("analysis_is_wrong");
-    expect((await productionConversationStore().listTurns(session.id))[0]?.text).toBe(
-      "Drive safe."
-    );
+    expect(
+      (await productionConversationStore().listTurns(session.id))[0]?.text
+    ).toBe("Drive safe.");
   });
 
   it("renders a provider-neutral COPY ANALYSIS bundle from live turns", () => {
@@ -398,19 +472,21 @@ describe("Claire conversation ledger", () => {
     expect(bundle).toContain("CLAIRE CALL ANALYSIS");
     expect(bundle).toContain("FULL TRANSCRIPT AVAILABLE IN GOLDLINE");
     expect(bundle).not.toMatch(/ChatGPT|GPT|Claude\.ai/i);
-    expect(renderFullTranscript([
-      {
-        id: 1,
-        sessionId: "s1",
-        ordinal: 1,
-        speaker: "OPERATOR",
-        text: "Add a Greystar walk",
-        source: "twilio_speech_result",
-        idempotencyKey: "k",
-        providerMetadata: null,
-        occurredAt: "2026-09-14T12:00:10.000Z",
-      },
-    ])).toBe("ADAM: Add a Greystar walk");
+    expect(
+      renderFullTranscript([
+        {
+          id: 1,
+          sessionId: "s1",
+          ordinal: 1,
+          speaker: "OPERATOR",
+          text: "Add a Greystar walk",
+          source: "twilio_speech_result",
+          idempotencyKey: "k",
+          providerMetadata: null,
+          occurredAt: "2026-09-14T12:00:10.000Z",
+        },
+      ])
+    ).toBe("ADAM: Add a Greystar walk");
   });
 });
 
@@ -451,24 +527,42 @@ describe("Twilio recording signature and hangup completion", () => {
       speaker: "OPERATOR",
       text: "wait",
     });
-    await handleCallCompleted({ callSid: "CA-hangup", callStatus: "completed" });
+    await handleCallCompleted({
+      callSid: "CA-hangup",
+      callStatus: "completed",
+    });
     const latest = await productionConversationStore().getSession(session.id);
     expect(latest?.status).toBe("complete");
     expect(latest?.completionReason).toBe("remote_hangup");
-    expect(await productionConversationStore().listTurns(session.id)).toHaveLength(1);
+    expect(
+      await productionConversationStore().listTurns(session.id)
+    ).toHaveLength(1);
   });
 });
 
 describe("Goldline-owned evaluator boundary", () => {
   it("does not import relationship emitters or Day Director writes", () => {
-    const evaluator = readFileSync(new URL("../analysis/conversationEvaluator.ts", import.meta.url), "utf8");
-    const service = readFileSync(new URL("../analysis/conversationAnalysisService.ts", import.meta.url), "utf8");
-    const page = readFileSync(
-      new URL("../../../client/src/pages/goldline/ClaireCallAnalysis.tsx", import.meta.url),
+    const evaluator = readFileSync(
+      new URL("../analysis/conversationEvaluator.ts", import.meta.url),
       "utf8"
     );
-    expect(evaluator).not.toMatch(/relationshipEmitters|acceptProposal|updateDayDirectorCommitment/);
-    expect(service).not.toMatch(/acceptProposal|recordClaire|updateDayDirectorCommitment/);
+    const service = readFileSync(
+      new URL("../analysis/conversationAnalysisService.ts", import.meta.url),
+      "utf8"
+    );
+    const page = readFileSync(
+      new URL(
+        "../../../client/src/pages/goldline/ClaireCallAnalysis.tsx",
+        import.meta.url
+      ),
+      "utf8"
+    );
+    expect(evaluator).not.toMatch(
+      /relationshipEmitters|acceptProposal|updateDayDirectorCommitment/
+    );
+    expect(service).not.toMatch(
+      /acceptProposal|recordClaire|updateDayDirectorCommitment/
+    );
     expect(page).toContain("COPY ANALYSIS");
     expect(page).not.toMatch(/ChatGPT|Copy for ChatGPT/i);
   });

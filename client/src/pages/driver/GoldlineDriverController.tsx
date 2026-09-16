@@ -226,7 +226,10 @@ function LiveGoldlineDriverController({
   // depend on a second React render before choosing structured Field Intel vs
   // Diane's ordinary raw-first journal.
   const operatorStopRef = useRef<ArrivedOperatorStop | null>(null);
-  const [debrief, setDebrief] = useState<{ missionId: number; buildingName: string } | null>(null);
+  const [debrief, setDebrief] = useState<{
+    missionId: number;
+    buildingName: string;
+  } | null>(null);
   const [journalOpen, setJournalOpen] = useState(
     launchSurface === "field_journal"
   );
@@ -375,12 +378,17 @@ function LiveGoldlineDriverController({
   );
   // Slice 5 §5.4: Kingdom 2 unlocks after Kingdom 1 (the Greystar hunt) is
   // complete, and leads to /goldline-chapter access, per Adam's decision.
-  const goldlineKingdoms = trpc.system.goldlineKingdoms.list.useQuery(undefined, {
-    staleTime: 30_000,
-    retry: false,
-  });
+  const goldlineKingdoms = trpc.system.goldlineKingdoms.list.useQuery(
+    undefined,
+    {
+      staleTime: 30_000,
+      retry: false,
+    }
+  );
   const kingdomTwoUnlocked = goldlineKingdoms.data?.some(
-    kingdom => kingdom.kingdomId === "kingdom-2-the-last-valet" && kingdom.lanternCityStatus !== "locked"
+    kingdom =>
+      kingdom.kingdomId === "kingdom-2-the-last-valet" &&
+      kingdom.lanternCityStatus !== "locked"
   );
   const territories = trpc.system.goldlineWorld.territories.useQuery(
     undefined,
@@ -401,6 +409,8 @@ function LiveGoldlineDriverController({
     undefined,
     { refetchInterval: 15_000 }
   );
+  const archiveSalesStop =
+    trpc.system.commercialMission.archiveDayLineStop.useMutation();
   const dispatches = trpc.system.commercialMission.myDispatches.useQuery(
     undefined,
     { refetchInterval: 15_000 }
@@ -1054,7 +1064,12 @@ function LiveGoldlineDriverController({
     if (!next) throw new Error("Visit result was not persisted");
     // Claire conversational debrief is the primary capture path. The Field
     // Journal remains available as fallback/review; it is not required here.
-    setDebrief({ missionId: input.missionId, buildingName: builtMissions.data?.find(mission => mission.id === input.missionId)?.account.name ?? "Your field visit" });
+    setDebrief({
+      missionId: input.missionId,
+      buildingName:
+        builtMissions.data?.find(mission => mission.id === input.missionId)
+          ?.account.name ?? "Your field visit",
+    });
     return next;
   }
 
@@ -1324,6 +1339,14 @@ function LiveGoldlineDriverController({
         onOpenFirstMission={onOpenFirstMission}
         onOpenJournal={() => setJournalOpen(true)}
         onResolveStop={resolveDayStop}
+        onArchiveStop={async stop => {
+          if (stop.action?.type !== "commercial") return false;
+          await archiveSalesStop.mutateAsync({
+            missionId: stop.action.missionId,
+          });
+          await Promise.all([builtMissions.refetch(), fieldToday.refetch()]);
+          return true;
+        }}
         loadError={
           pickups.isError || deliveries.isError || externalOrders.isError
             ? "Some stops could not be loaded. Any available work is shown below; reconnect and retry for your complete day."
@@ -1421,7 +1444,10 @@ function LiveGoldlineDriverController({
       />
       <SalesJournalSheet
         open={journalOpen}
-        onOpenChange={open => { setJournalOpen(open); if (!open) setDebrief(null); }}
+        onOpenChange={open => {
+          setJournalOpen(open);
+          if (!open) setDebrief(null);
+        }}
         debrief={debrief}
         location={location}
         onSaved={() => {
@@ -1740,7 +1766,10 @@ function LiveGoldlineDriverController({
       />
       <SalesJournalSheet
         open={journalOpen}
-        onOpenChange={open => { setJournalOpen(open); if (!open) setDebrief(null); }}
+        onOpenChange={open => {
+          setJournalOpen(open);
+          if (!open) setDebrief(null);
+        }}
         debrief={debrief}
         location={location}
         onSaved={() => {

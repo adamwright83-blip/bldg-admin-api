@@ -46,10 +46,24 @@ import {
   updateCommercialMissionFieldChecklist,
 } from "./commercialMissionFieldService";
 import { logCommercialWalkIn } from "./commercialWalkInService";
-import { advanceCommercialMissionIrlStep, applyLuxuryHotelIrlPlan } from "./commercialMissionIrlPlanService";
-import { dispatchCommercialMission, listCommercialMissionDispatches, openCommercialMissionDispatch } from "./commercialMissionDispatchService";
-import { listCommercialMissionProofs, reviewCommercialMissionProof, submitCommercialMissionProof } from "./commercialMissionProofService";
-import { generateDayforgeMissionCoaching, getActiveDayforgeCoachingArtifact } from "../dayforgeCoaching/dayforgeCoachingRuntime";
+import {
+  advanceCommercialMissionIrlStep,
+  applyLuxuryHotelIrlPlan,
+} from "./commercialMissionIrlPlanService";
+import {
+  dispatchCommercialMission,
+  listCommercialMissionDispatches,
+  openCommercialMissionDispatch,
+} from "./commercialMissionDispatchService";
+import {
+  listCommercialMissionProofs,
+  reviewCommercialMissionProof,
+  submitCommercialMissionProof,
+} from "./commercialMissionProofService";
+import {
+  generateDayforgeMissionCoaching,
+  getActiveDayforgeCoachingArtifact,
+} from "../dayforgeCoaching/dayforgeCoachingRuntime";
 import {
   COMMERCIAL_MISSION_CALL_OUTCOMES,
   listCommercialMissionCallAttempts,
@@ -71,6 +85,7 @@ import {
   listDriverSalesJournals,
   saveDriverSalesJournal,
 } from "./driverSalesMotivationService";
+import { cancelDayLineItem } from "../goldline/dayline/dayLineMutationService";
 
 function httpUrl(maxLength: number) {
   return z
@@ -84,47 +99,61 @@ function httpUrl(maxLength: number) {
     }, "Only HTTP(S) URLs are allowed");
 }
 
-export const commercialMissionAccountInputSchema = z.object({
-  providerName: z.string().trim().min(1).max(64).nullable().optional(),
-  providerAccountId: z.string().trim().min(1).max(191).nullable().optional(),
-  name: z.string().trim().min(1).max(255),
-  accountType: z.string().trim().min(1).max(96),
-  website: httpUrl(512).nullable().optional(),
-  address: z.string().trim().min(1).max(512),
-  latitude: z.number().min(-90).max(90).nullable(),
-  longitude: z.number().min(-180).max(180).nullable(),
-  locationCount: z.number().int().positive(),
-  decisionMaker: z.object({
-    name: z.string().trim().min(1).max(255).nullable(),
-    title: z.string().trim().min(1).max(255).nullable(),
-    email: z.string().trim().email().max(320).nullable().optional(),
-    phone: z.string().trim().min(7).max(64).nullable().optional(),
-    relationshipType: z.enum(COMMERCIAL_CONTACT_RELATIONSHIP_TYPES).nullable().optional(),
-    preferredChannel: z.enum(COMMERCIAL_CONTACT_PREFERRED_CHANNELS).nullable().optional(),
-    source: z.enum(COMMERCIAL_CONTACT_SOURCES).nullable().optional(),
-    sourceUrl: httpUrl(1024).nullable().optional(),
-    sourcedAt: z.string().datetime().nullable().optional(),
-    notes: z.string().trim().max(4000).nullable().optional(),
-  }).strict(),
-}).strict().superRefine((account, ctx) => {
-  if ((account.latitude === null) !== (account.longitude === null)) {
-    ctx.addIssue({
-      code: "custom",
-      path: [account.latitude === null ? "latitude" : "longitude"],
-      message: "Latitude and longitude must both be supplied or both be unknown",
-    });
-  }
-});
+export const commercialMissionAccountInputSchema = z
+  .object({
+    providerName: z.string().trim().min(1).max(64).nullable().optional(),
+    providerAccountId: z.string().trim().min(1).max(191).nullable().optional(),
+    name: z.string().trim().min(1).max(255),
+    accountType: z.string().trim().min(1).max(96),
+    website: httpUrl(512).nullable().optional(),
+    address: z.string().trim().min(1).max(512),
+    latitude: z.number().min(-90).max(90).nullable(),
+    longitude: z.number().min(-180).max(180).nullable(),
+    locationCount: z.number().int().positive(),
+    decisionMaker: z
+      .object({
+        name: z.string().trim().min(1).max(255).nullable(),
+        title: z.string().trim().min(1).max(255).nullable(),
+        email: z.string().trim().email().max(320).nullable().optional(),
+        phone: z.string().trim().min(7).max(64).nullable().optional(),
+        relationshipType: z
+          .enum(COMMERCIAL_CONTACT_RELATIONSHIP_TYPES)
+          .nullable()
+          .optional(),
+        preferredChannel: z
+          .enum(COMMERCIAL_CONTACT_PREFERRED_CHANNELS)
+          .nullable()
+          .optional(),
+        source: z.enum(COMMERCIAL_CONTACT_SOURCES).nullable().optional(),
+        sourceUrl: httpUrl(1024).nullable().optional(),
+        sourcedAt: z.string().datetime().nullable().optional(),
+        notes: z.string().trim().max(4000).nullable().optional(),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((account, ctx) => {
+    if ((account.latitude === null) !== (account.longitude === null)) {
+      ctx.addIssue({
+        code: "custom",
+        path: [account.latitude === null ? "latitude" : "longitude"],
+        message:
+          "Latitude and longitude must both be supplied or both be unknown",
+      });
+    }
+  });
 
-export const commercialMissionOpportunityInputSchema = z.object({
-  estimatedAnnualValueCents: z.number().int().nonnegative().nullable(),
-  estimateConfidence: z.enum(["low", "medium", "high"]),
-  score: z.number().int().min(0).max(100),
-  primarySignal: z.string().trim().min(1).max(2000),
-  reasons: z.array(z.string().trim().min(1).max(1000)).max(25),
-  risks: z.array(z.string().trim().min(1).max(1000)).max(25),
-  evidence: z.array(z.record(z.string(), z.unknown())).max(50).optional(),
-}).strict();
+export const commercialMissionOpportunityInputSchema = z
+  .object({
+    estimatedAnnualValueCents: z.number().int().nonnegative().nullable(),
+    estimateConfidence: z.enum(["low", "medium", "high"]),
+    score: z.number().int().min(0).max(100),
+    primarySignal: z.string().trim().min(1).max(2000),
+    reasons: z.array(z.string().trim().min(1).max(1000)).max(25),
+    risks: z.array(z.string().trim().min(1).max(1000)).max(25),
+    evidence: z.array(z.record(z.string(), z.unknown())).max(50).optional(),
+  })
+  .strict();
 
 const briefSchema = z.object({
   laundryOpportunity: z.string().trim().min(1).max(4000),
@@ -134,32 +163,44 @@ const briefSchema = z.object({
   objections: z.array(z.string().trim().min(1).max(1000)).max(25),
 });
 
-export const commercialMissionStepInputSchema = z.object({
-  key: z.string().trim().min(1).max(64),
-  label: z.string().trim().min(1).max(255),
-  detail: z.string().trim().min(1).max(4000),
-  type: z.enum(COMMERCIAL_MISSION_STEP_TYPES).optional(),
-  status: z.enum(["locked", "ready", "active", "skipped", "cancelled"]),
-  position: z.number().int().nonnegative(),
-  instructionText: z.string().trim().max(4000).nullable().optional(),
-  revealPolicy: z.enum(["sequential", "immediate", "admin_only"]).optional(),
-  destinationName: z.string().trim().max(255).nullable().optional(),
-  destinationAddress: z.string().trim().max(512).nullable().optional(),
-  destinationLatitude: z.number().min(-90).max(90).nullable().optional(),
-  destinationLongitude: z.number().min(-180).max(180).nullable().optional(),
-  mapsUrl: httpUrl(2048).nullable().optional(),
-  countdownDurationSeconds: z.number().int().min(0).max(86_400).nullable().optional(),
-  proofRequirement: z.enum(["none", "confirmation", "photo", "photo_optional"]).optional(),
-  referenceImageUrl: httpUrl(2048).nullable().optional(),
-  instructionVideoUrl: httpUrl(2048).nullable().optional(),
-  fulfillmentMode: z.enum([
-    "not_applicable",
-    "live_provider",
-    "staged_demo",
-    "manual_fulfillment",
-  ]).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-}).strict();
+export const commercialMissionStepInputSchema = z
+  .object({
+    key: z.string().trim().min(1).max(64),
+    label: z.string().trim().min(1).max(255),
+    detail: z.string().trim().min(1).max(4000),
+    type: z.enum(COMMERCIAL_MISSION_STEP_TYPES).optional(),
+    status: z.enum(["locked", "ready", "active", "skipped", "cancelled"]),
+    position: z.number().int().nonnegative(),
+    instructionText: z.string().trim().max(4000).nullable().optional(),
+    revealPolicy: z.enum(["sequential", "immediate", "admin_only"]).optional(),
+    destinationName: z.string().trim().max(255).nullable().optional(),
+    destinationAddress: z.string().trim().max(512).nullable().optional(),
+    destinationLatitude: z.number().min(-90).max(90).nullable().optional(),
+    destinationLongitude: z.number().min(-180).max(180).nullable().optional(),
+    mapsUrl: httpUrl(2048).nullable().optional(),
+    countdownDurationSeconds: z
+      .number()
+      .int()
+      .min(0)
+      .max(86_400)
+      .nullable()
+      .optional(),
+    proofRequirement: z
+      .enum(["none", "confirmation", "photo", "photo_optional"])
+      .optional(),
+    referenceImageUrl: httpUrl(2048).nullable().optional(),
+    instructionVideoUrl: httpUrl(2048).nullable().optional(),
+    fulfillmentMode: z
+      .enum([
+        "not_applicable",
+        "live_provider",
+        "staged_demo",
+        "manual_fulfillment",
+      ])
+      .optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
 
 export const commercialMissionStepsInputSchema = z
   .array(commercialMissionStepInputSchema)
@@ -199,43 +240,111 @@ export const commercialMissionRouter = router({
     getDriverSalesMeter({ tenantId: ctx.tenantId, driverId: ctx.user.openId })
   ),
   mySalesJournals: dayforgeMissionFieldProcedure.query(({ ctx }) =>
-    listDriverSalesJournals({ tenantId: ctx.tenantId, driverId: ctx.user.openId, limit: 14 })
+    listDriverSalesJournals({
+      tenantId: ctx.tenantId,
+      driverId: ctx.user.openId,
+      limit: 14,
+    })
   ),
   saveSalesJournal: dayforgeMissionFieldProcedure
-    .input(z.object({
-      journalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      clientRequestId: z.string().uuid(),
-      debriefMissionId: z.number().int().positive().optional(),
-      audioDataUrl: z.string().max(16_500_000).optional(),
-      transcript: z.string().trim().max(20_000).optional(),
-      location: z.object({
-        latitude: z.number().min(-90).max(90),
-        longitude: z.number().min(-180).max(180),
-        accuracyMeters: z.number().nonnegative().max(100_000),
-        capturedAt: z.string().datetime(),
-        contemporaneous: z.boolean(),
-      }).optional(),
-    }).refine(value => Boolean(value.audioDataUrl || value.transcript), "A recording or transcript is required"))
-    .mutation(({ ctx, input }) => saveDriverSalesJournal({
-      ...input, tenantId: ctx.tenantId, driverId: ctx.user.openId,
-    })),
+    .input(
+      z
+        .object({
+          journalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          clientRequestId: z.string().uuid(),
+          debriefMissionId: z.number().int().positive().optional(),
+          audioDataUrl: z.string().max(16_500_000).optional(),
+          transcript: z.string().trim().max(20_000).optional(),
+          location: z
+            .object({
+              latitude: z.number().min(-90).max(90),
+              longitude: z.number().min(-180).max(180),
+              accuracyMeters: z.number().nonnegative().max(100_000),
+              capturedAt: z.string().datetime(),
+              contemporaneous: z.boolean(),
+            })
+            .optional(),
+        })
+        .refine(
+          value => Boolean(value.audioDataUrl || value.transcript),
+          "A recording or transcript is required"
+        )
+    )
+    .mutation(({ ctx, input }) =>
+      saveDriverSalesJournal({
+        ...input,
+        tenantId: ctx.tenantId,
+        driverId: ctx.user.openId,
+      })
+    ),
   salesJournalsAdmin: dayforgeTenantAdminProcedure
     .input(z.object({ limit: z.number().int().min(1).max(100).default(30) }))
-    .query(({ ctx, input }) => listDriverSalesJournals({ tenantId: ctx.tenantId, limit: input.limit, includeAudio: true })),
+    .query(({ ctx, input }) =>
+      listDriverSalesJournals({
+        tenantId: ctx.tenantId,
+        limit: input.limit,
+        includeAudio: true,
+      })
+    ),
   salesMomentumAdmin: dayforgeTenantAdminProcedure.query(({ ctx }) =>
     getTenantSalesMomentum({ tenantId: ctx.tenantId })
   ),
   myBuiltMissions: dayforgeMissionFieldProcedure.query(({ ctx }) =>
-    listDriverBuiltMissions({ tenantId: ctx.tenantId, driverId: ctx.user.openId })
+    listDriverBuiltMissions({
+      tenantId: ctx.tenantId,
+      driverId: ctx.user.openId,
+    })
   ),
+  archiveDayLineStop: dayforgeMissionFieldProcedure
+    .input(z.object({ missionId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+      if (!mission) return notFound();
+      try {
+        assertDriverCanReadMission({
+          mission,
+          userId: ctx.user.openId,
+          isAdmin: ctx.dayforgeMembership.role !== "field",
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: (error as Error).message,
+        });
+      }
+      return cancelDayLineItem({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        reason: "Archived from Goldline Driver",
+        item: {
+          sourceType: "commercial_mission",
+          sourceId: String(mission.id),
+          displayTitle: mission.account.name,
+          accountName: mission.account.name,
+          missionId: mission.id,
+          editableCapabilities: ["dayline.cancel"],
+          status: ["game_completed", "visit_completed", "won", "lost"].includes(
+            mission.status
+          )
+            ? "completed"
+            : "active",
+          assignedTo: mission.assignedTo,
+        },
+      });
+    }),
   buildForDriver: dayforgeMissionFieldProcedure
-    .input(z.object({
-      missionType: z.enum(DRIVER_MISSION_TYPES),
-      venueType: z.enum(DRIVER_MISSION_VENUES),
-      searchNear: z.string().trim().min(5).max(512),
-      requestId: z.string().uuid(),
-      count: z.number().int().min(1).max(5).default(3),
-    }))
+    .input(
+      z.object({
+        missionType: z.enum(DRIVER_MISSION_TYPES),
+        venueType: z.enum(DRIVER_MISSION_VENUES),
+        searchNear: z.string().trim().min(5).max(512),
+        requestId: z.string().uuid(),
+        count: z.number().int().min(1).max(5).default(3),
+      })
+    )
     .mutation(({ ctx, input }) =>
       buildDriverMissions({
         ...input,
@@ -247,12 +356,14 @@ export const commercialMissionRouter = router({
     listCommercialMissionFieldAssignees(ctx.tenantId)
   ),
   activateForField: dayforgeMissionOperatorProcedure
-    .input(z.object({
-      missionId: z.number().int().positive(),
-      expectedVersion: z.number().int().positive(),
-      assignedTo: z.string().trim().min(1).max(128),
-      requestId: z.string().uuid(),
-    }))
+    .input(
+      z.object({
+        missionId: z.number().int().positive(),
+        expectedVersion: z.number().int().positive(),
+        assignedTo: z.string().trim().min(1).max(128),
+        requestId: z.string().uuid(),
+      })
+    )
     .mutation(({ ctx, input }) =>
       activateCommercialMissionForField({
         ...input,
@@ -279,12 +390,14 @@ export const commercialMissionRouter = router({
       });
     }),
   logCallAttempt: dayforgeMissionFieldProcedure
-    .input(z.object({
-      missionId: z.number().int().positive(),
-      requestId: z.string().uuid(),
-      outcome: z.enum(COMMERCIAL_MISSION_CALL_OUTCOMES),
-      notes: z.string().trim().min(1).max(2_000),
-    }))
+    .input(
+      z.object({
+        missionId: z.number().int().positive(),
+        requestId: z.string().uuid(),
+        outcome: z.enum(COMMERCIAL_MISSION_CALL_OUTCOMES),
+        notes: z.string().trim().min(1).max(2_000),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       const mission = await getCommercialMission({
         tenantId: ctx.tenantId,
@@ -302,97 +415,247 @@ export const commercialMissionRouter = router({
         actorId: ctx.user.openId,
       });
       const worldEvent = await appendGoldlineWorldEvent({
-        tenantId: ctx.tenantId, physicalEntityId: null, eventType: "call_completed", classification: "action", actorType: "field", actorId: ctx.user.openId,
-        occurredAt: new Date().toISOString(), observedAt: null, sourceType: "commercial_mission_call_attempts", sourceId: String(input.requestId), sourceEvidenceReference: `commercial_missions:${input.missionId}`,
-        provenanceClass: "operator_reported", verificationClass: "ATTESTED", confidence: "high", idempotencyKey: `call-completed:${ctx.tenantId}:${input.requestId}`, correlationId: `commercial-mission:${input.missionId}`,
-        metadata: { missionId: input.missionId, outcome: input.outcome, actionOnly: true },
+        tenantId: ctx.tenantId,
+        physicalEntityId: null,
+        eventType: "call_completed",
+        classification: "action",
+        actorType: "field",
+        actorId: ctx.user.openId,
+        occurredAt: new Date().toISOString(),
+        observedAt: null,
+        sourceType: "commercial_mission_call_attempts",
+        sourceId: String(input.requestId),
+        sourceEvidenceReference: `commercial_missions:${input.missionId}`,
+        provenanceClass: "operator_reported",
+        verificationClass: "ATTESTED",
+        confidence: "high",
+        idempotencyKey: `call-completed:${ctx.tenantId}:${input.requestId}`,
+        correlationId: `commercial-mission:${input.missionId}`,
+        metadata: {
+          missionId: input.missionId,
+          outcome: input.outcome,
+          actionOnly: true,
+        },
       });
       return { ...result, worldEvent };
     }),
-  createLuxuryHotelIrlPlan: dayforgeMissionOperatorProcedure.input(z.object({
-    missionId: z.number().int().positive(), requestId: z.string().uuid(),
-    referenceImageUrl: httpUrl(2048).nullable().optional(), trainingVideoUrl: httpUrl(2048).nullable().optional(),
-    printShopName: z.string().trim().min(1).max(255), printShopAddress: z.string().trim().min(1).max(512),
-    convenienceStoreName: z.string().trim().min(1).max(255), convenienceStoreAddress: z.string().trim().min(1).max(512),
-    hotelName: z.string().trim().max(255).nullable().optional(), hotelAddress: z.string().trim().max(512).nullable().optional(),
-    printFulfillmentMode: z.enum(["staged_demo", "manual_fulfillment"]),
-    printCreditDisplayCopy: z.string().trim().max(255).nullable().optional(),
-  })).mutation(({ ctx, input }) => applyLuxuryHotelIrlPlan({ ...input, tenantId: ctx.tenantId, actorId: ctx.user.openId })),
-  advanceIrlStep: dayforgeMissionFieldProcedure.input(z.object({
-    missionId: z.number().int().positive(), stepKey: z.string().trim().min(1).max(64),
-    requestId: z.string().uuid(), action: z.enum(["start", "complete"]),
-  })).mutation(async ({ ctx, input }) => {
-    const mission = await getCommercialMission({ tenantId: ctx.tenantId, missionId: input.missionId });
-    if (!mission) return notFound();
-    assertDriverCanReadMission({ mission, userId: ctx.user.openId, isAdmin: ctx.dayforgeMembership.role !== "field" });
-    return advanceCommercialMissionIrlStep({ ...input, tenantId: ctx.tenantId, actorId: ctx.user.openId });
-  }),
-  submitProof: dayforgeMissionFieldProcedure.input(z.object({
-    missionId: z.number().int().positive(), missionStepId: z.number().int().positive(),
-    requestId: z.string().uuid(), mimeType: z.enum(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]),
-    dataBase64: z.string().min(4).max(14_000_000),
-  })).mutation(({ ctx, input }) => submitCommercialMissionProof({
-    tenantId: ctx.tenantId, missionId: input.missionId, missionStepId: input.missionStepId,
-    actorId: ctx.user.openId, actorRole: ctx.dayforgeMembership.role,
-    requestId: input.requestId, mimeType: input.mimeType,
-    data: Buffer.from(input.dataBase64, "base64"),
-  })),
-  proofs: dayforgeMissionFieldProcedure.input(z.object({ missionId: z.number().int().positive() })).query(({ ctx, input }) =>
-    listCommercialMissionProofs({ ...input, tenantId: ctx.tenantId, actorId: ctx.user.openId, actorRole: ctx.dayforgeMembership.role })
+  createLuxuryHotelIrlPlan: dayforgeMissionOperatorProcedure
+    .input(
+      z.object({
+        missionId: z.number().int().positive(),
+        requestId: z.string().uuid(),
+        referenceImageUrl: httpUrl(2048).nullable().optional(),
+        trainingVideoUrl: httpUrl(2048).nullable().optional(),
+        printShopName: z.string().trim().min(1).max(255),
+        printShopAddress: z.string().trim().min(1).max(512),
+        convenienceStoreName: z.string().trim().min(1).max(255),
+        convenienceStoreAddress: z.string().trim().min(1).max(512),
+        hotelName: z.string().trim().max(255).nullable().optional(),
+        hotelAddress: z.string().trim().max(512).nullable().optional(),
+        printFulfillmentMode: z.enum(["staged_demo", "manual_fulfillment"]),
+        printCreditDisplayCopy: z
+          .string()
+          .trim()
+          .max(255)
+          .nullable()
+          .optional(),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      applyLuxuryHotelIrlPlan({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      })
+    ),
+  advanceIrlStep: dayforgeMissionFieldProcedure
+    .input(
+      z.object({
+        missionId: z.number().int().positive(),
+        stepKey: z.string().trim().min(1).max(64),
+        requestId: z.string().uuid(),
+        action: z.enum(["start", "complete"]),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+      if (!mission) return notFound();
+      assertDriverCanReadMission({
+        mission,
+        userId: ctx.user.openId,
+        isAdmin: ctx.dayforgeMembership.role !== "field",
+      });
+      return advanceCommercialMissionIrlStep({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      });
+    }),
+  submitProof: dayforgeMissionFieldProcedure
+    .input(
+      z.object({
+        missionId: z.number().int().positive(),
+        missionStepId: z.number().int().positive(),
+        requestId: z.string().uuid(),
+        mimeType: z.enum([
+          "image/jpeg",
+          "image/png",
+          "image/webp",
+          "image/heic",
+          "image/heif",
+        ]),
+        dataBase64: z.string().min(4).max(14_000_000),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      submitCommercialMissionProof({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+        missionStepId: input.missionStepId,
+        actorId: ctx.user.openId,
+        actorRole: ctx.dayforgeMembership.role,
+        requestId: input.requestId,
+        mimeType: input.mimeType,
+        data: Buffer.from(input.dataBase64, "base64"),
+      })
+    ),
+  proofs: dayforgeMissionFieldProcedure
+    .input(z.object({ missionId: z.number().int().positive() }))
+    .query(({ ctx, input }) =>
+      listCommercialMissionProofs({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        actorRole: ctx.dayforgeMembership.role,
+      })
+    ),
+  reviewProof: dayforgeTenantAdminProcedure
+    .input(
+      z.object({
+        proofId: z.string().uuid(),
+        requestId: z.string().uuid(),
+        decision: z.enum(["approve", "reject", "override"]),
+        note: z.string().trim().max(2000).nullable().optional(),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      reviewCommercialMissionProof({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        actorRole: ctx.dayforgeMembership.role,
+      })
+    ),
+  coaching: dayforgeMissionFieldProcedure
+    .input(
+      z.object({
+        missionId: z.number().int().positive(),
+        stepId: z.number().int().positive().nullable(),
+      })
+    )
+    .query(({ ctx, input }) =>
+      getActiveDayforgeCoachingArtifact({
+        ...input,
+        tenantId: ctx.tenantId,
+        missionStepId: input.stepId,
+      })
+    ),
+  generateCoaching: dayforgeMissionFieldProcedure
+    .input(
+      z.object({
+        missionId: z.number().int().positive(),
+        stepId: z.number().int().positive().nullable(),
+        requestId: z.string().uuid(),
+        refresh: z.boolean().optional(),
+      })
+    )
+    .mutation(({ ctx, input }) =>
+      generateDayforgeMissionCoaching({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      })
+    ),
+  dispatchIrl: dayforgeMissionOperatorProcedure
+    .input(
+      z.object({
+        missionId: z.number().int().positive(),
+        requestId: z.string().uuid(),
+        handoffId: z.string().uuid().nullable().optional(),
+        includeSms: z.boolean().optional(),
+        dispatchPolicy: z
+          .enum(["manual", "on_game_complete"])
+          .default("manual"),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+      if (!mission?.steps.some(step => step.type !== "generic"))
+        throw new Error("Create an IRL step plan before dispatch");
+      return dispatchCommercialMission({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      });
+    }),
+  myDispatches: dayforgeMissionFieldProcedure.query(({ ctx }) =>
+    listCommercialMissionDispatches({
+      tenantId: ctx.tenantId,
+      assignedTo:
+        ctx.dayforgeMembership.role === "field" ? ctx.user.openId : undefined,
+    })
   ),
-  reviewProof: dayforgeTenantAdminProcedure.input(z.object({
-    proofId: z.string().uuid(), requestId: z.string().uuid(), decision: z.enum(["approve", "reject", "override"]),
-    note: z.string().trim().max(2000).nullable().optional(),
-  })).mutation(({ ctx, input }) => reviewCommercialMissionProof({
-    ...input, tenantId: ctx.tenantId, actorId: ctx.user.openId, actorRole: ctx.dayforgeMembership.role,
-  })),
-  coaching: dayforgeMissionFieldProcedure.input(z.object({ missionId: z.number().int().positive(), stepId: z.number().int().positive().nullable() })).query(({ ctx, input }) =>
-    getActiveDayforgeCoachingArtifact({ ...input, tenantId: ctx.tenantId, missionStepId: input.stepId })
-  ),
-  generateCoaching: dayforgeMissionFieldProcedure.input(z.object({
-    missionId: z.number().int().positive(), stepId: z.number().int().positive().nullable(), requestId: z.string().uuid(), refresh: z.boolean().optional(),
-  })).mutation(({ ctx, input }) => generateDayforgeMissionCoaching({ ...input, tenantId: ctx.tenantId, actorId: ctx.user.openId })),
-  dispatchIrl: dayforgeMissionOperatorProcedure.input(z.object({
-    missionId: z.number().int().positive(), requestId: z.string().uuid(),
-    handoffId: z.string().uuid().nullable().optional(), includeSms: z.boolean().optional(),
-    dispatchPolicy: z.enum(["manual", "on_game_complete"]).default("manual"),
-  })).mutation(async ({ ctx, input }) => {
-    const mission = await getCommercialMission({ tenantId: ctx.tenantId, missionId: input.missionId });
-    if (!mission?.steps.some(step => step.type !== "generic")) throw new Error("Create an IRL step plan before dispatch");
-    return dispatchCommercialMission({ ...input, tenantId: ctx.tenantId, actorId: ctx.user.openId });
-  }),
-  myDispatches: dayforgeMissionFieldProcedure.query(({ ctx }) => listCommercialMissionDispatches({
-    tenantId: ctx.tenantId, assignedTo: ctx.dayforgeMembership.role === "field" ? ctx.user.openId : undefined,
-  })),
-  openDispatch: dayforgeMissionFieldProcedure.input(z.object({ dispatchId: z.string().uuid() })).mutation(({ ctx, input }) =>
-    openCommercialMissionDispatch({ ...input, tenantId: ctx.tenantId, actorId: ctx.user.openId })
-  ),
+  openDispatch: dayforgeMissionFieldProcedure
+    .input(z.object({ dispatchId: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      openCommercialMissionDispatch({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      })
+    ),
   logWalkIn: dayforgeMissionFieldProcedure
-    .input(z.object({
-      idempotencyKey: z.string().trim().min(8).max(191),
-      requestId: z.string().uuid(),
-      businessName: z.string().trim().min(1).max(255),
-      businessType: z.string().trim().min(1).max(96),
-      address: z.string().trim().min(1).max(512),
-      website: httpUrl(512).nullable().optional(),
-      contactName: z.string().trim().max(255).nullable().optional(),
-      contactTitle: z.string().trim().max(255).nullable().optional(),
-      contactEmail: z.string().trim().email().max(320).nullable().optional(),
-      contactPhone: z.string().trim().min(7).max(64).nullable().optional(),
-      relationshipType: z.enum(COMMERCIAL_CONTACT_RELATIONSHIP_TYPES).nullable().optional(),
-      conversationNotes: z.string().trim().min(1).max(4000),
-      visitResult: z.enum(["follow_up", "won", "lost", "no_contact"]),
-      nextAction: z.string().trim().min(1).max(2000),
-      followUpAt: z.coerce.date().nullable().optional(),
-      assignedTo: z.string().trim().max(128).nullable().optional(),
-      estimatedAnnualValueCents: z.number().int().positive().nullable().optional(),
-      estimateConfidence: z.enum(["low", "medium", "high"]).optional(),
-      campaign: z.string().trim().max(128).nullable().optional(),
-      placement: z.string().trim().max(128).nullable().optional(),
-      collateralDelivered: z.boolean().optional(),
-      quoteRequested: z.boolean().optional(),
-      pilotRequested: z.boolean().optional(),
-    }))
+    .input(
+      z.object({
+        idempotencyKey: z.string().trim().min(8).max(191),
+        requestId: z.string().uuid(),
+        businessName: z.string().trim().min(1).max(255),
+        businessType: z.string().trim().min(1).max(96),
+        address: z.string().trim().min(1).max(512),
+        website: httpUrl(512).nullable().optional(),
+        contactName: z.string().trim().max(255).nullable().optional(),
+        contactTitle: z.string().trim().max(255).nullable().optional(),
+        contactEmail: z.string().trim().email().max(320).nullable().optional(),
+        contactPhone: z.string().trim().min(7).max(64).nullable().optional(),
+        relationshipType: z
+          .enum(COMMERCIAL_CONTACT_RELATIONSHIP_TYPES)
+          .nullable()
+          .optional(),
+        conversationNotes: z.string().trim().min(1).max(4000),
+        visitResult: z.enum(["follow_up", "won", "lost", "no_contact"]),
+        nextAction: z.string().trim().min(1).max(2000),
+        followUpAt: z.coerce.date().nullable().optional(),
+        assignedTo: z.string().trim().max(128).nullable().optional(),
+        estimatedAnnualValueCents: z
+          .number()
+          .int()
+          .positive()
+          .nullable()
+          .optional(),
+        estimateConfidence: z.enum(["low", "medium", "high"]).optional(),
+        campaign: z.string().trim().max(128).nullable().optional(),
+        placement: z.string().trim().max(128).nullable().optional(),
+        collateralDelivered: z.boolean().optional(),
+        quoteRequested: z.boolean().optional(),
+        pilotRequested: z.boolean().optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       const result = await logCommercialWalkIn({
         ...input,
@@ -400,16 +663,36 @@ export const commercialMissionRouter = router({
         actorId: ctx.user.openId,
         assignedTo: input.assignedTo ?? ctx.user.openId,
       });
-      const { findPhysicalEntityIdByAddress } = await import("../goldlineWorld/entityLookup");
+      const { findPhysicalEntityIdByAddress } = await import(
+        "../goldlineWorld/entityLookup"
+      );
       const physicalEntityId = await findPhysicalEntityIdByAddress({
         tenantId: ctx.tenantId,
         address: input.address,
       });
       const worldEvent = await appendGoldlineWorldEvent({
-        tenantId: ctx.tenantId, physicalEntityId, eventType: "visited", classification: "action", actorType: "field", actorId: ctx.user.openId,
-        occurredAt: new Date().toISOString(), observedAt: null, sourceType: "commercial_walk_ins", sourceId: String(input.requestId), sourceEvidenceReference: `commercial_walk_ins:${input.requestId}`,
-        provenanceClass: "operator_reported", verificationClass: "ATTESTED", confidence: "high", idempotencyKey: `commercial-visit:${ctx.tenantId}:${input.requestId}`, correlationId: `walk-in:${input.requestId}`,
-        metadata: { businessName: input.businessName, visitResult: input.visitResult, actionOnly: true, doesNotImplyOutcome: true },
+        tenantId: ctx.tenantId,
+        physicalEntityId,
+        eventType: "visited",
+        classification: "action",
+        actorType: "field",
+        actorId: ctx.user.openId,
+        occurredAt: new Date().toISOString(),
+        observedAt: null,
+        sourceType: "commercial_walk_ins",
+        sourceId: String(input.requestId),
+        sourceEvidenceReference: `commercial_walk_ins:${input.requestId}`,
+        provenanceClass: "operator_reported",
+        verificationClass: "ATTESTED",
+        confidence: "high",
+        idempotencyKey: `commercial-visit:${ctx.tenantId}:${input.requestId}`,
+        correlationId: `walk-in:${input.requestId}`,
+        metadata: {
+          businessName: input.businessName,
+          visitResult: input.visitResult,
+          actionOnly: true,
+          doesNotImplyOutcome: true,
+        },
       });
       return { ...result, worldEvent };
     }),
@@ -943,7 +1226,13 @@ export const commercialMissionRouter = router({
           expectedMissionVersion: z.number().int().positive(),
           expectedFieldVersion: z.number().int().positive(),
           requestId: z.string().uuid(),
-          outcome: z.enum(["follow_up", "won", "lost", "no_contact", "no_decision"]),
+          outcome: z.enum([
+            "follow_up",
+            "won",
+            "lost",
+            "no_contact",
+            "no_decision",
+          ]),
           notes: z.string().trim().min(1).max(20_000),
           followUpAt: z.coerce.date().optional(),
           decisionMakerStatus: z.enum(["met", "unavailable", "not_recorded"]),
