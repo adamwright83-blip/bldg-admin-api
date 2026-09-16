@@ -26,6 +26,14 @@ describe("Orders (Sales) canonical parser", () => {
     expect(rows[0]?.["Order ID"]).toBe("123");
   });
 
+  it("accepts a UTF-8 BOM without changing the CSV business content", () => {
+    const rows = parseOrdersSalesCsv(
+      `\uFEFF${header}\n123,2026-09-15 10:00:00,Jane,77,LA,yes,2026-09-15 10:05:00,$42.50\n`
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.["Order ID"]).toBe("123");
+  });
+
   it("rejects html/login responses", () => {
     expect(() => parseOrdersSalesCsv("<html>sign in</html>")).toThrow(/page instead of CSV/i);
   });
