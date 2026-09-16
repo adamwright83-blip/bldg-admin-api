@@ -91,6 +91,41 @@ describe("operator macro goals", () => {
     expect(await getActiveMacroGoal({ tenantId: "tenant-1", operatorUserId: "operator-1" }, persistence)).toMatchObject({ id: saved.id, objective: "Get to 60 active customers" });
   });
 
+  it("persists and restores secondaryTargets structured metadata", async () => {
+    const saved = await setActiveMacroGoal({
+      tenantId: "tenant-secondary-1",
+      operatorUserId: "operator-1",
+      objective: "Expand route revenue",
+      metricKey: "paid_orders_per_period",
+      targetValue: 100,
+      unit: "orders",
+      secondaryTargets: [
+        { metricType: "active_customers", targetValue: 35, unit: "accounts" },
+        { metricType: "net_sales_per_period", targetValue: 5000, unit: "USD" },
+      ],
+      source: "admin",
+      sourceNote: "Secondary metric stretch targets",
+    });
+
+    expect(saved.targetValue).toBe(100);
+    expect(saved.secondaryTargets).toEqual([
+      { metricType: "active_customers", targetValue: 35, unit: "accounts" },
+      { metricType: "net_sales_per_period", targetValue: 5000, unit: "USD" },
+    ]);
+
+    const retrieved = await getActiveMacroGoal({
+      tenantId: "tenant-secondary-1",
+      operatorUserId: "operator-1",
+      metricKey: "paid_orders_per_period",
+    });
+
+    expect(retrieved).not.toBeNull();
+    expect(retrieved?.secondaryTargets).toEqual([
+      { metricType: "active_customers", targetValue: 35, unit: "accounts" },
+      { metricType: "net_sales_per_period", targetValue: 5000, unit: "USD" },
+    ]);
+  });
+
   it("exposes goal writes only through the structured admin mutation, not the voice loop", () => {
     const router = readFileSync(new URL("./claireRouter.ts", import.meta.url), "utf8");
     const voiceLoop = readFileSync(new URL("./voiceCommitmentLoop.ts", import.meta.url), "utf8");
@@ -98,3 +133,4 @@ describe("operator macro goals", () => {
     expect(voiceLoop).not.toContain("setActiveMacroGoal");
   });
 });
+

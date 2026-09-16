@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS `operator_macro_goals` (
   `targetDate` varchar(10) NULL,
   `source` enum('operator_attested','admin') NOT NULL,
   `sourceNote` varchar(512) NOT NULL,
+  `secondaryTargetsJson` json NULL,
   `status` enum('active','superseded','closed') NOT NULL DEFAULT 'active',
   `supersededById` varchar(36) NULL,
   `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,

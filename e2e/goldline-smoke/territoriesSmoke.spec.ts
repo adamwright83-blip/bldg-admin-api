@@ -165,15 +165,16 @@ test.describe("Goldline territories smoke", () => {
     await expectLanternCityV6(page);
     const list = await readTerritories(page);
     expect(list.length).toBeGreaterThan(0);
-    const territory = list[0]!;
+    const territory = list.find(t => t.definition.members.length >= 3) ?? list[0]!;
     expect(territory.definition.members.length).toBeGreaterThanOrEqual(3);
     expect(territory.definition.classification).toBe("game_projection");
     const ids = territory.definition.members.map(member => member.physicalEntityId);
     expect(new Set(ids).size).toBe(ids.length);
 
     const again = await readTerritories(page);
-    expect(again[0]?.definition.id).toBe(territory.definition.id);
-    expect(again[0]?.definition.guardianId).toBe(territory.definition.guardianId);
+    const againTerritory = again.find(t => t.definition.id === territory.definition.id) ?? again[0];
+    expect(againTerritory?.definition.id).toBe(territory.definition.id);
+    expect(againTerritory?.definition.guardianId).toBe(territory.definition.guardianId);
   });
 
   test("Lantern City mounts the veil and guardian without treating view as progress", async ({

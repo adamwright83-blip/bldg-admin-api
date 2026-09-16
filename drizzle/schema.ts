@@ -6993,6 +6993,7 @@ export const operatorMacroGoals = mysqlTable(
     targetDate: varchar("targetDate", { length: 10 }),
     source: mysqlEnum("source", ["operator_attested", "admin"]).notNull(),
     sourceNote: varchar("sourceNote", { length: 512 }).notNull(),
+    secondaryTargetsJson: json("secondaryTargetsJson"),
     status: mysqlEnum("status", ["active", "superseded", "closed"])
       .notNull()
       .default("active"),

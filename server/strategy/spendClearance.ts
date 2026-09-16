@@ -222,12 +222,36 @@ export async function reserveSpend(
           },
           { isolationLevel: "serializable" }
         );
-      } catch {
-        // Fall back to in-memory implementation
+      } catch (err) {
+        // G6 fail-closed: on database error, do NOT silently fall back to in-memory.
+        // Fail closed immediately by rejecting spend clearance.
+        console.error("[SpendClearance] G6 fail-closed on database error:", err);
+        return {
+          cleared: false,
+          status: "over_ceiling",
+          reason: `database_error: ${err instanceof Error ? err.message : String(err)}`,
+          category: input.category,
+          amountCents: input.amountCents,
+          remainingCents: 0,
+          ceilingCents,
+        };
       }
     }
 
-    // In-memory fallback
+    // In production, if database is unavailable, fail closed
+    if (process.env.NODE_ENV === "production") {
+      return {
+        cleared: false,
+        status: "over_ceiling",
+        reason: "database_unavailable_in_production",
+        category: input.category,
+        amountCents: input.amountCents,
+        remainingCents: 0,
+        ceilingCents,
+      };
+    }
+
+    // In-memory fallback (only for non-production environments without a configured database)
     const list = inMemoryLedger.get(input.tenantId) ?? [];
     const existing = list.find(r => r.dedupeKey === dedupeKey);
     if (existing) {
@@ -345,9 +369,16 @@ export async function commitSpend(input: {
           )
         );
       return true;
-    } catch {
-      // Fall through to in-memory
+    } catch (err) {
+      console.error("[SpendClearance] Database error during commitSpend:", err);
+      if (process.env.NODE_ENV === "production") {
+        return false;
+      }
     }
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    return false;
   }
 
   const list = inMemoryLedger.get(input.tenantId) ?? [];
@@ -384,9 +415,16 @@ export async function releaseSpend(input: {
           )
         );
       return true;
-    } catch {
-      // Fall through to in-memory
+    } catch (err) {
+      console.error("[SpendClearance] Database error during releaseSpend:", err);
+      if (process.env.NODE_ENV === "production") {
+        return false;
+      }
     }
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    return false;
   }
 
   const list = inMemoryLedger.get(input.tenantId) ?? [];
@@ -421,9 +459,16 @@ export async function cleanupStalePlannedReservations(
           )
         );
       return 1;
-    } catch {
-      // Fall through
+    } catch (err) {
+      console.error("[SpendClearance] Database error during cleanupStalePlannedReservations:", err);
+      if (process.env.NODE_ENV === "production") {
+        return 0;
+      }
     }
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    return 0;
   }
 
   const list = inMemoryLedger.get(tenantId) ?? [];
@@ -481,9 +526,16 @@ export async function getMonthToDateSpend(
         remainingCents: Math.max(0, ceilingCents - (plannedCents + committedCents)),
         currency: rules.currency,
       };
-    } catch {
-      // Fall through to in-memory
+    } catch (err) {
+      console.error("[SpendClearance] Database error during getMonthToDateSpend:", err);
+      if (process.env.NODE_ENV === "production") {
+        throw new Error(`Spend ledger database unavailable: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Spend ledger database unavailable in production");
   }
 
   const list = inMemoryLedger.get(tenantId) ?? [];

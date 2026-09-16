@@ -35,3 +35,18 @@ CREATE TABLE IF NOT EXISTS strategy_spend_ledger (
   UNIQUE KEY uq_strategy_spend_tenant_dedupe (tenantId, dedupeKey),
   KEY idx_strategy_spend_tenant_month_status (tenantId, businessMonth, status)
 );
+
+SET @macro_goals_secondary_sql = IF(
+  EXISTS(
+    SELECT 1 FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'operator_macro_goals'
+      AND COLUMN_NAME = 'secondaryTargetsJson'
+  ),
+  'SELECT 1',
+  'ALTER TABLE `operator_macro_goals` ADD COLUMN `secondaryTargetsJson` JSON NULL'
+);
+PREPARE macro_goals_secondary_stmt FROM @macro_goals_secondary_sql;
+EXECUTE macro_goals_secondary_stmt;
+DEALLOCATE PREPARE macro_goals_secondary_stmt;
+

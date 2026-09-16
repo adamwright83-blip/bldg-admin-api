@@ -56,7 +56,7 @@ export function validateVoiceReadbackConfirmation(transcript: string): boolean {
 }
 
 // In-memory store for unit tests or when DB is not available
-const inMemoryGoals = new Map<string, (OperatorMacroGoal & { secondaryTargets?: SecondaryTarget[] })[]>();
+const inMemoryGoals = new Map<string, OperatorMacroGoal[]>();
 
 export function resetInMemoryGoalsForTesting(): void {
   inMemoryGoals.clear();
@@ -67,8 +67,25 @@ export type MacroGoalPersistence = {
   replaceActive(input: SetActiveMacroGoalInput & { id: string }): Promise<OperatorMacroGoal>;
 };
 
-function normalize(row: (OperatorMacroGoal & { secondaryTargets?: SecondaryTarget[] }) | null): MacroGoal | null {
-  return row ? { ...row, targetValue: Number(row.targetValue) } : null;
+function normalize(row: OperatorMacroGoal | null): MacroGoal | null {
+  if (!row) return null;
+  let secondaryTargets: SecondaryTarget[] | undefined;
+  if (row.secondaryTargetsJson) {
+    if (typeof row.secondaryTargetsJson === "string") {
+      try {
+        secondaryTargets = JSON.parse(row.secondaryTargetsJson);
+      } catch {
+        secondaryTargets = undefined;
+      }
+    } else if (Array.isArray(row.secondaryTargetsJson)) {
+      secondaryTargets = row.secondaryTargetsJson as SecondaryTarget[];
+    }
+  }
+  return {
+    ...row,
+    targetValue: Number(row.targetValue),
+    secondaryTargets,
+  };
 }
 
 const databasePersistence: MacroGoalPersistence = {
@@ -115,7 +132,7 @@ const databasePersistence: MacroGoalPersistence = {
           candidate.supersededById = input.id;
         }
       }
-      const saved: OperatorMacroGoal & { secondaryTargets?: SecondaryTarget[] } = {
+      const saved: OperatorMacroGoal = {
         id: input.id,
         tenantId: input.tenantId,
         operatorUserId: input.operatorUserId,
@@ -127,11 +144,11 @@ const databasePersistence: MacroGoalPersistence = {
         targetDate: input.targetDate ?? null,
         source: input.source,
         sourceNote: input.sourceNote,
+        secondaryTargetsJson: input.secondaryTargets ?? null,
         status: "active",
         supersededById: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-        secondaryTargets: input.secondaryTargets,
       };
       list.push(saved);
       inMemoryGoals.set(input.tenantId, list);
@@ -161,6 +178,7 @@ const databasePersistence: MacroGoalPersistence = {
           targetDate: input.targetDate ?? null,
           source: input.source,
           sourceNote: input.sourceNote,
+          secondaryTargetsJson: input.secondaryTargets ?? null,
           status: "active",
           supersededById: null,
         });
