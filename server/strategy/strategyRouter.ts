@@ -12,6 +12,12 @@ import {
   getMonthToDateSpend,
 } from "./spendClearance";
 import { getActiveMacroGoal } from "../claire/macroGoalService";
+import {
+  buildStrategySnapshot,
+  getLatestStrategySnapshot,
+  getSnapshotProvenance,
+  getStrategySnapshotById,
+} from "./snapshotBuilder";
 
 export const strategyRouter = router({
   activeCustomers: adminProcedure.query(async ({ ctx }) => {
@@ -83,6 +89,28 @@ export const strategyRouter = router({
       )
       .query(async ({ ctx, input }) => {
         return getMonthToDateSpend(ctx.tenantId, input?.businessMonth);
+      }),
+  }),
+
+  snapshot: router({
+    latest: adminProcedure.query(async ({ ctx }) => {
+      let snapshot = await getLatestStrategySnapshot(ctx.tenantId);
+      if (!snapshot) {
+        snapshot = await buildStrategySnapshot(ctx.tenantId);
+      }
+      return snapshot;
+    }),
+
+    byId: adminProcedure
+      .input(z.object({ snapshotId: z.string() }))
+      .query(async ({ ctx, input }) => {
+        return getStrategySnapshotById(ctx.tenantId, input.snapshotId);
+      }),
+
+    provenance: adminProcedure
+      .input(z.object({ snapshotId: z.string(), path: z.string() }))
+      .query(async ({ ctx, input }) => {
+        return getSnapshotProvenance(ctx.tenantId, input.snapshotId, input.path);
       }),
   }),
 });

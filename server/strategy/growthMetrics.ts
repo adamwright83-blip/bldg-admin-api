@@ -155,6 +155,7 @@ export async function getStrategyGrowthMetrics(
   input: {
     tenantId: string;
     period: { startYmd: string; endYmd: string };
+    now?: Date;
     timeZone?: string;
     inactivityDays?: number;
     mockEvents?: PaidOrderEvent[];
@@ -164,7 +165,7 @@ export async function getStrategyGrowthMetrics(
 ): Promise<StrategyGrowthMetricsResult> {
   const timeZone = input.timeZone ?? getDashboardTimeZone();
   const inactivityDaysRule = input.inactivityDays ?? 30;
-  const computedAt = new Date().toISOString();
+  const computedAt = (input.now ?? new Date()).toISOString();
 
   let events: PaidOrderEvent[];
   if (input.mockEvents) {

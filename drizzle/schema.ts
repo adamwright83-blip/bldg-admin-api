@@ -7419,3 +7419,31 @@ export const strategySpendLedger = mysqlTable(
 
 export type StrategySpendLedgerRow = typeof strategySpendLedger.$inferSelect;
 export type InsertStrategySpendLedgerRow = typeof strategySpendLedger.$inferInsert;
+
+/**
+ * StrategyEngine Snapshots (Slice 4).
+ * Immutable, versioned snapshot of the business state for strategic reasoning.
+ */
+export const strategySnapshots = mysqlTable(
+  "strategy_snapshots",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    schemaVersion: int("schemaVersion").notNull().default(1),
+    contentHash: varchar("contentHash", { length: 64 }).notNull(),
+    estimatedTokens: int("estimatedTokens").notNull().default(0),
+    isTruncated: boolean("isTruncated").notNull().default(false),
+    payloadJson: json("payloadJson").notNull(),
+    provenanceJson: json("provenanceJson").notNull(),
+    stalenessJson: json("stalenessJson").notNull(),
+    generatedAt: timestamp("generatedAt").notNull().defaultNow(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    tenantCreatedIdx: index("idx_strategy_snapshots_tenant_created").on(table.tenantId, table.createdAt),
+    tenantHashIdx: index("idx_strategy_snapshots_tenant_hash").on(table.tenantId, table.contentHash),
+  })
+);
+
+export type StrategySnapshotRow = typeof strategySnapshots.$inferSelect;
+export type InsertStrategySnapshot = typeof strategySnapshots.$inferInsert;
