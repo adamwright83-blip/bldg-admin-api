@@ -43,11 +43,12 @@ export const WARMTH_EMISSION_ALLOWLIST = new Set<ClaireRelationshipEventType>([
 ]);
 
 const FORBIDDEN_WARMTH_PATTERNS = [
-  /\bpath[_\s-]choice\b/i,
+  /\bpath[_\s-]choice[s]?\b/i,
   /\bpath[_\s-]chosen\b/i,
-  /\b(?:accept(?:ed|ing|ance)?|agreed?)\b.*\b(?:mission|commitment|proposal|path|recommendation|route)\b/i,
-  /\b(?:mission|commitment|proposal|path|recommendation|route)\b.*\b(?:accept(?:ed|ing|ance)?|agreed?)\b/i,
-  /\bchoice\b/i,
+  /\b(?:accept(?:ed|ing|ance)?|agreed?|select(?:ed|ing)?|picked)\b.*\b(?:mission|commitment|proposal|path|recommendation|route|fork|play)\b/i,
+  /\b(?:mission|commitment|proposal|path|recommendation|route|fork|play)\b.*\b(?:accept(?:ed|ing|ance)?|agreed?|select(?:ed|ing)?|picked)\b/i,
+  /\bchoices?\b/i,
+  /\bfork\b/i,
 ];
 
 export function isWarmthEmissionAllowed(input: {

@@ -19,6 +19,8 @@ import {
   getStrategySnapshotById,
 } from "./snapshotBuilder";
 import { getTodayFeaturedOperation } from "./todayFeaturedService";
+import { getOrCreatePathOffer, getStrategyPlayById } from "./playGenerator";
+import { chooseStrategicPath, getActiveStrategicPath } from "./pathChoiceService";
 
 export const strategyRouter = router({
   activeCustomers: adminProcedure.query(async ({ ctx }) => {
@@ -118,6 +120,36 @@ export const strategyRouter = router({
   today: router({
     featured: adminProcedure.query(async ({ ctx }) => {
       return getTodayFeaturedOperation(ctx.tenantId);
+    }),
+  }),
+
+  plays: router({
+    offer: adminProcedure.query(async ({ ctx }) => {
+      return getOrCreatePathOffer(ctx.tenantId);
+    }),
+
+    choose: adminProcedure
+      .input(
+        z.object({
+          playId: z.string(),
+          surface: z.enum(["map", "voice", "admin"]),
+          offerId: z.string().optional(),
+          readbackConfirmed: z.boolean().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return chooseStrategicPath({
+          tenantId: ctx.tenantId,
+          playId: input.playId,
+          surface: input.surface,
+          offerId: input.offerId,
+          readbackConfirmed: input.readbackConfirmed,
+        });
+      }),
+
+    active: adminProcedure.query(async ({ ctx }) => {
+      const activeId = getActiveStrategicPath(ctx.tenantId);
+      return activeId ? getStrategyPlayById(activeId) : null;
     }),
   }),
 });

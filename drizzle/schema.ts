@@ -7447,3 +7447,95 @@ export const strategySnapshots = mysqlTable(
 
 export type StrategySnapshotRow = typeof strategySnapshots.$inferSelect;
 export type InsertStrategySnapshot = typeof strategySnapshots.$inferInsert;
+
+/**
+ * Strategy Plays (Slice 6).
+ * Generated and ranked growth plays with initiation cost and geographic bundling.
+ */
+export const strategyPlays = mysqlTable(
+  "strategy_plays",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    businessName: varchar("businessName", { length: 191 }).notNull(),
+    worldName: varchar("worldName", { length: 191 }).notNull(),
+    hypothesis: text("hypothesis").notNull(),
+    primaryMetric: varchar("primaryMetric", { length: 64 }).notNull(),
+    geography: varchar("geography", { length: 128 }).notNull(),
+    stopsCount: int("stopsCount").notNull().default(1),
+    isClustered: boolean("isClustered").notNull().default(false),
+    estimatedInitiationCost: int("estimatedInitiationCost").notNull().default(0),
+    estimatedSpendCents: int("estimatedSpendCents").notNull().default(0),
+    spendCategory: varchar("spendCategory", { length: 64 }).notNull().default("other"),
+    confidence: varchar("confidence", { length: 32 }).notNull().default("medium"),
+    evidenceReferencesJson: json("evidenceReferencesJson"),
+    scoreBreakdownJson: json("scoreBreakdownJson").notNull(),
+    totalScore: int("totalScore").notNull().default(0),
+    status: mysqlEnum("status", ["candidate", "offered", "chosen", "active", "paused", "retired"]).notNull().default("candidate"),
+    needsApprovalToRun: boolean("needsApprovalToRun").notNull().default(false),
+    minimumEvidenceThresholdJson: json("minimumEvidenceThresholdJson"),
+    verticalKey: varchar("verticalKey", { length: 64 }).notNull().default("generic"),
+    templateKey: varchar("templateKey", { length: 64 }).notNull(),
+    provenanceJson: json("provenanceJson").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantStatusIdx: index("idx_strategy_plays_tenant_status").on(table.tenantId, table.status),
+  })
+);
+
+export type StrategyPlayRow = typeof strategyPlays.$inferSelect;
+export type InsertStrategyPlay = typeof strategyPlays.$inferInsert;
+
+/**
+ * Strategy Path Offers (Slice 6).
+ * 2-3 route fork presented on Lantern City and voiced by Claire.
+ */
+export const strategyPathOffers = mysqlTable(
+  "strategy_path_offers",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    playIdsJson: json("playIdsJson").notNull(),
+    recommendedPlayId: varchar("recommendedPlayId", { length: 64 }).notNull(),
+    claireRationale: text("claireRationale").notNull(),
+    status: mysqlEnum("status", ["active", "accepted", "expired", "superseded"]).notNull().default("active"),
+    offeredAt: timestamp("offeredAt").notNull().defaultNow(),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    tenantStatusIdx: index("idx_strategy_path_offers_tenant_status").on(table.tenantId, table.status),
+    tenantDateIdx: index("idx_strategy_path_offers_tenant_date").on(table.tenantId, table.businessDate),
+  })
+);
+
+export type StrategyPathOfferRow = typeof strategyPathOffers.$inferSelect;
+export type InsertStrategyPathOffer = typeof strategyPathOffers.$inferInsert;
+
+/**
+ * Strategy Path Choices (Slice 6).
+ * Deliberate choice recorded when operator picks a path from the fork.
+ */
+export const strategyPathChoices = mysqlTable(
+  "strategy_path_choices",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    offerId: varchar("offerId", { length: 64 }),
+    playId: varchar("playId", { length: 64 }).notNull(),
+    chosenOnSurface: mysqlEnum("chosenOnSurface", ["map", "voice", "admin"]).notNull(),
+    previousPlayId: varchar("previousPlayId", { length: 64 }),
+    readbackConfirmed: boolean("readbackConfirmed").notNull().default(false),
+    chosenAt: timestamp("chosenAt").notNull().defaultNow(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    tenantPlayIdx: index("idx_strategy_path_choices_tenant_play").on(table.tenantId, table.playId),
+  })
+);
+
+export type StrategyPathChoiceRow = typeof strategyPathChoices.$inferSelect;
+export type InsertStrategyPathChoice = typeof strategyPathChoices.$inferInsert;
