@@ -175,7 +175,11 @@ async function processOne(name: string) {
 
     const bytes = await readFile(claimed);
     digest = await sha256(bytes);
-    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    try {
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      throw new RemoteError("Artifact is not valid UTF-8 CSV.", 400);
+    }
     const receipt = await tRPCMutation<Record<string, unknown>>("importArtifact", {
       secret,
       tenantId,
