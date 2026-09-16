@@ -48,6 +48,7 @@ export type PathOffer = {
   id: string;
   tenantId: string;
   plays: StrategyPlay[];
+  offeredPlayIds: string[];
   recommendedPlayId: string;
   claireRationale: string;
   status: "active" | "accepted" | "expired" | "superseded";
@@ -181,6 +182,7 @@ export async function getOrCreatePathOffer(
     id: offerId,
     tenantId,
     plays: offeredPlays,
+    offeredPlayIds: offeredPlays.map(p => p.id),
     recommendedPlayId: recommendedId,
     claireRationale,
     status: "active",

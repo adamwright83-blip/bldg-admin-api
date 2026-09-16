@@ -48,6 +48,7 @@ export type StrategySnapshotPayload = {
   goal: {
     metricType: GoalMetricType;
     target: number;
+    targetValue?: number;
     targetDate: string | null;
     currentValue: number;
     gap: number;

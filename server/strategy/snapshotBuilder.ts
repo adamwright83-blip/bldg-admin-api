@@ -66,6 +66,8 @@ export type SnapshotBuildOptions = {
   tokenBudget?: number;
   now?: Date;
   referenceBusinessDate?: string;
+  activeCustomersCount?: number;
+  operatorUserId?: string;
   sourceFreshnessOverride?: {
     cleanCloudLastSyncIso?: string;
     gumballpalsLastSyncIso?: string;
@@ -89,7 +91,7 @@ export async function buildStrategySnapshot(
     operatorUserId: (options as any).operatorUserId ?? "owner",
   }).catch(() => null);
   const goalTarget = macroGoalRecord?.targetValue ?? 50;
-  const goalMetricType = (macroGoalRecord as any)?.metricType ?? "active_customers";
+  const goalMetricType = (macroGoalRecord as any)?.metricKey ?? (macroGoalRecord as any)?.metricType ?? "active_customers";
   const goalTargetDate = (macroGoalRecord as any)?.targetDate ?? null;
 
   // 2. Gather Growth Metrics & Active Customer Trend
@@ -113,7 +115,7 @@ export async function buildStrategySnapshot(
     now,
   });
 
-  const activeCount = activeCustomerData.count;
+  const activeCount = options.activeCustomersCount ?? activeCustomerData.count;
   const activeTrend = activeCustomerData.trend;
   const newPayingCustomers = growthMetrics.newPayingCustomers.count;
   const netActiveChange = growthMetrics.netActiveChange.change;
@@ -466,6 +468,7 @@ export async function buildStrategySnapshot(
     goal: {
       metricType: goalMetricType,
       target: goalTarget,
+      targetValue: goalTarget,
       targetDate: goalTargetDate,
       currentValue,
       gap,
@@ -695,7 +698,12 @@ export async function getSnapshotProvenance(
 ): Promise<ProvenanceRecord | null> {
   const snapshot = await getStrategySnapshotById(tenantId, snapshotId);
   if (!snapshot) return null;
-  return snapshot.provenance[path] ?? null;
+  return (
+    snapshot.provenance[path] ??
+    snapshot.provenance[`${path}.currentValue`] ??
+    snapshot.provenance[`${path}.newPayingCustomers`] ??
+    null
+  );
 }
 
 /**

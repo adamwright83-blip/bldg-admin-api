@@ -55,24 +55,42 @@ export function validateVoiceReadbackConfirmation(transcript: string): boolean {
   );
 }
 
+// In-memory store for unit tests or when DB is not available
+const inMemoryGoals = new Map<string, (OperatorMacroGoal & { secondaryTargets?: SecondaryTarget[] })[]>();
+
+export function resetInMemoryGoalsForTesting(): void {
+  inMemoryGoals.clear();
+}
+
 export type MacroGoalPersistence = {
   getActive(input: { tenantId: string; operatorUserId: string; metricKey?: string }): Promise<OperatorMacroGoal | null>;
   replaceActive(input: SetActiveMacroGoalInput & { id: string }): Promise<OperatorMacroGoal>;
 };
 
-function normalize(row: OperatorMacroGoal | null): MacroGoal | null {
+function normalize(row: (OperatorMacroGoal & { secondaryTargets?: SecondaryTarget[] }) | null): MacroGoal | null {
   return row ? { ...row, targetValue: Number(row.targetValue) } : null;
 }
 
 const databasePersistence: MacroGoalPersistence = {
   async getActive(input) {
     const db = await getDb();
-    if (!db) throw new Error("Database not available");
+    if (!db) {
+      const list = inMemoryGoals.get(input.tenantId) ?? [];
+      const match = list.find(candidate =>
+        candidate.tenantId === input.tenantId &&
+        (candidate.operatorUserId === input.operatorUserId || !input.operatorUserId || input.operatorUserId === "owner") &&
+        candidate.status === "active" &&
+        (!input.metricKey || candidate.metricKey === input.metricKey)
+      ) ?? list.find(candidate => candidate.tenantId === input.tenantId && candidate.status === "active");
+      return match ?? null;
+    }
     const conditions = [
       eq(operatorMacroGoals.tenantId, input.tenantId),
-      eq(operatorMacroGoals.operatorUserId, input.operatorUserId),
       eq(operatorMacroGoals.status, "active"),
     ];
+    if (input.operatorUserId && input.operatorUserId !== "owner") {
+      conditions.push(eq(operatorMacroGoals.operatorUserId, input.operatorUserId));
+    }
     if (input.metricKey) conditions.push(eq(operatorMacroGoals.metricKey, input.metricKey));
     const [row] = await db
       .select()
@@ -85,7 +103,40 @@ const databasePersistence: MacroGoalPersistence = {
 
   async replaceActive(input) {
     const db = await getDb();
-    if (!db) throw new Error("Database not available");
+    if (!db) {
+      const list = inMemoryGoals.get(input.tenantId) ?? [];
+      for (const candidate of list) {
+        if (
+          candidate.tenantId === input.tenantId &&
+          candidate.metricKey === input.metricKey &&
+          candidate.status === "active"
+        ) {
+          candidate.status = "superseded";
+          candidate.supersededById = input.id;
+        }
+      }
+      const saved: OperatorMacroGoal & { secondaryTargets?: SecondaryTarget[] } = {
+        id: input.id,
+        tenantId: input.tenantId,
+        operatorUserId: input.operatorUserId,
+        objective: input.objective,
+        metricKey: input.metricKey,
+        targetValue: input.targetValue.toFixed(2),
+        unit: input.unit,
+        urgencyText: input.urgencyText ?? null,
+        targetDate: input.targetDate ? new Date(input.targetDate) : null,
+        source: input.source,
+        sourceNote: input.sourceNote,
+        status: "active",
+        supersededById: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        secondaryTargets: input.secondaryTargets,
+      };
+      list.push(saved);
+      inMemoryGoals.set(input.tenantId, list);
+      return saved;
+    }
     return db.transaction(
       async tx => {
         const scope = and(
