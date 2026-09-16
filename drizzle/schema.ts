@@ -7639,3 +7639,71 @@ export const propertyActivationTracks = mysqlTable(
 export type PropertyActivationTrackRow = typeof propertyActivationTracks.$inferSelect;
 export type InsertPropertyActivationTrack = typeof propertyActivationTracks.$inferInsert;
 
+/**
+ * Strategy Evidence (Slice 8, G5).
+ * Plain factual funnel evidence over windows, minimum-evidence thresholds, and reversible world signals.
+ */
+export const strategyEvidence = mysqlTable(
+  "strategy_evidence",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    playId: varchar("playId", { length: 64 }).notNull(),
+    windowDays: int("windowDays").notNull(),
+    windowStart: varchar("windowStart", { length: 10 }).notNull(),
+    windowEnd: varchar("windowEnd", { length: 10 }).notNull(),
+    funnelCountsJson: json("funnelCountsJson").notNull(),
+    untrackedFunnelStepsJson: json("untrackedFunnelStepsJson").notNull(),
+    statement: text("statement").notNull(),
+    sampleSize: int("sampleSize").notNull().default(0),
+    thresholdMet: boolean("thresholdMet").notNull().default(false),
+    worldSignal: mysqlEnum("worldSignal", ["brighten", "dim", "none"]).notNull().default("none"),
+    provenanceJson: json("provenanceJson").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantPlayIdx: index("idx_strategy_evidence_play").on(table.tenantId, table.playId),
+    tenantSignalIdx: index("idx_strategy_evidence_signal").on(table.tenantId, table.worldSignal),
+  })
+);
+
+export type StrategyEvidenceRow = typeof strategyEvidence.$inferSelect;
+export type InsertStrategyEvidence = typeof strategyEvidence.$inferInsert;
+
+/**
+ * Opportunity Stall Reasons (Slice 8).
+ * Structured reasons captured from debriefs, mission outcomes, and operator input.
+ */
+export const opportunityStallReasons = mysqlTable(
+  "opportunity_stall_reasons",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    opportunityId: varchar("opportunityId", { length: 64 }),
+    source: varchar("source", { length: 64 }).notNull().default("debrief"),
+    reason: mysqlEnum("reason", [
+      "timing",
+      "price",
+      "trust",
+      "pickup_convenience",
+      "existing_provider",
+      "access_restriction",
+      "service_issue",
+      "unknown",
+    ]).notNull().default("unknown"),
+    detail: text("detail"),
+    recordedAt: timestamp("recordedAt").notNull().defaultNow(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantReasonIdx: index("idx_opp_stall_reason").on(table.tenantId, table.reason),
+    tenantOppIdx: index("idx_opp_stall_opp").on(table.tenantId, table.opportunityId),
+  })
+);
+
+export type OpportunityStallReasonRow = typeof opportunityStallReasons.$inferSelect;
+export type InsertOpportunityStallReason = typeof opportunityStallReasons.$inferInsert;
+
+

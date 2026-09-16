@@ -27,6 +27,13 @@ import {
   recordCommunicationPermission,
   recordOutreachAttempt,
 } from "./communicationPermissionService";
+import {
+  getPlayEvidence,
+  attributeCustomer,
+  recordOpportunityStallReason,
+  proposeBoundedExperiment,
+  getStallReasons,
+} from "./evidenceEngine";
 
 export const strategyRouter = router({
 
@@ -253,5 +260,88 @@ export const strategyRouter = router({
         return { success: true };
       }),
   }),
+
+  evidence: router({
+    forPlay: adminProcedure
+      .input(z.object({ playId: z.string() }))
+      .query(async ({ ctx, input }) => {
+        return getPlayEvidence(ctx.tenantId, input.playId);
+      }),
+
+    attributeCustomer: adminProcedure
+      .input(
+        z.object({
+          customerId: z.string(),
+          linkType: z.enum(["qr_code", "building", "referral_source", "mission_contact"]).optional(),
+          linkRef: z.string().optional(),
+          attributedPlayId: z.string().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return attributeCustomer({
+          tenantId: ctx.tenantId,
+          customerId: input.customerId,
+          linkType: input.linkType,
+          linkRef: input.linkRef,
+          attributedPlayId: input.attributedPlayId,
+        });
+      }),
+
+    recordStall: adminProcedure
+      .input(
+        z.object({
+          opportunityId: z.string().optional(),
+          source: z.string(),
+          reason: z.enum([
+            "timing",
+            "price",
+            "trust",
+            "pickup_convenience",
+            "existing_provider",
+            "access_restriction",
+            "service_issue",
+            "unknown",
+          ]),
+          detail: z.string().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return recordOpportunityStallReason({
+          tenantId: ctx.tenantId,
+          opportunityId: input.opportunityId,
+          source: input.source,
+          reason: input.reason,
+          detail: input.detail,
+        });
+      }),
+
+    stalls: adminProcedure
+      .input(z.object({ opportunityId: z.string().optional() }).optional())
+      .query(async ({ ctx, input }) => {
+        return getStallReasons(ctx.tenantId, input?.opportunityId);
+      }),
+
+    proposeExperiment: adminProcedure
+      .input(
+        z.object({
+          hypothesis: z.string(),
+          targetAudience: z.string(),
+          costLimitCents: z.number().int().nonnegative(),
+          observationWindowDays: z.number().int().positive(),
+          successMeasure: z.string(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return proposeBoundedExperiment({
+          tenantId: ctx.tenantId,
+          hypothesis: input.hypothesis,
+          targetAudience: input.targetAudience,
+          costLimitCents: input.costLimitCents,
+          observationWindowDays: input.observationWindowDays,
+          successMeasure: input.successMeasure,
+        });
+      }),
+  }),
 });
+
 

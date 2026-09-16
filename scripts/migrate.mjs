@@ -1637,8 +1637,50 @@ await runRequired(
   )`,
   "CREATE TABLE property_activation_tracks"
 );
-await assertRequiredColumns("property_activation_tracks", [
-  "tenantId", "propertyId", "propertyName", "stage",
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS strategy_evidence (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    playId VARCHAR(64) NOT NULL,
+    windowDays INT NOT NULL,
+    windowStart VARCHAR(10) NOT NULL,
+    windowEnd VARCHAR(10) NOT NULL,
+    funnelCountsJson JSON NOT NULL,
+    untrackedFunnelStepsJson JSON NOT NULL,
+    statement TEXT NOT NULL,
+    sampleSize INT NOT NULL DEFAULT 0,
+    thresholdMet TINYINT(1) NOT NULL DEFAULT 0,
+    worldSignal ENUM('brighten','dim','none') NOT NULL DEFAULT 'none',
+    provenanceJson JSON NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_strategy_evidence_play (tenantId, playId),
+    KEY idx_strategy_evidence_signal (tenantId, worldSignal)
+  )`,
+  "CREATE TABLE strategy_evidence"
+);
+await assertRequiredColumns("strategy_evidence", [
+  "tenantId", "playId", "statement", "worldSignal", "provenanceJson",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS opportunity_stall_reasons (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    opportunityId VARCHAR(64) NULL,
+    source VARCHAR(64) NOT NULL DEFAULT 'debrief',
+    reason ENUM('timing','price','trust','pickup_convenience','existing_provider','access_restriction','service_issue','unknown') NOT NULL DEFAULT 'unknown',
+    detail TEXT NULL,
+    recordedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_opp_stall_reason (tenantId, reason),
+    KEY idx_opp_stall_opp (tenantId, opportunityId)
+  )`,
+  "CREATE TABLE opportunity_stall_reasons"
+);
+await assertRequiredColumns("opportunity_stall_reasons", [
+  "tenantId", "reason", "source",
 ]);
 
 await conn.end();
