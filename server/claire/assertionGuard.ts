@@ -147,6 +147,10 @@ export class VerifiedFactInventory {
     );
   }
 
+  getClaim(claimId: string): FactInventoryEntry | undefined {
+    return this.entries.find(e => e.claimId === claimId);
+  }
+
   /**
    * Generates prompt instructions representing the inventory.
    * State changes can be asserted as fact ONLY if status is verified.

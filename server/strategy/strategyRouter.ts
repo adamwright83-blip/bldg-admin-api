@@ -18,6 +18,7 @@ import {
   getSnapshotProvenance,
   getStrategySnapshotById,
 } from "./snapshotBuilder";
+import { getTodayFeaturedOperation } from "./todayFeaturedService";
 
 export const strategyRouter = router({
   activeCustomers: adminProcedure.query(async ({ ctx }) => {
@@ -112,5 +113,11 @@ export const strategyRouter = router({
       .query(async ({ ctx, input }) => {
         return getSnapshotProvenance(ctx.tenantId, input.snapshotId, input.path);
       }),
+  }),
+
+  today: router({
+    featured: adminProcedure.query(async ({ ctx }) => {
+      return getTodayFeaturedOperation(ctx.tenantId);
+    }),
   }),
 });

@@ -11,6 +11,11 @@ import type { ActiveCustomerMetric } from "./activeCustomerMetric";
 import { getClaireCampaignSummary, type ClaireCampaignSummary } from "./campaignAwareness";
 import { assembleClaireRuntimeView } from "./runtimeView";
 import type { PictureCompleteness, UnifiedWorkItem } from "../../shared/claireRuntime";
+import {
+  buildStrategySnapshot,
+  getLatestStrategySnapshot,
+} from "../strategy/snapshotBuilder";
+import type { StrategySnapshot } from "../strategy/snapshotTypes";
 
 export type ClairePhase = "pre_drive" | "post_stop";
 
@@ -120,6 +125,8 @@ export type ClaireDriveContext = {
     deltaCount: number;
     hasConfirmedPlan: boolean;
   };
+  strategySnapshotId?: string | null;
+  strategySnapshot?: StrategySnapshot | null;
 };
 
 const PRE_DRIVE_KINDS = new Set<FieldTodayItem["kind"]>([
@@ -279,29 +286,35 @@ export async function assembleClaireDriveContext(input: {
   const now = input.now ?? new Date();
   const timeZone = input.timeZone ?? CLAIRE_BUSINESS_TIME_ZONE;
   const clock = buildClaireClock(now, timeZone);
-  const today = await getFieldToday({
-    tenantId: input.tenantId,
-    userId: input.actorId,
-    includeAllAssignees: false,
-    now,
-    timeZone,
-  });
-  const tomorrow = await getFieldToday({
-    tenantId: input.tenantId,
-    userId: input.actorId,
-    includeAllAssignees: false,
-    now,
-    timeZone,
-    businessDate: clock.tomorrowBusinessDate,
-  });
+  let today: any = { timeline: [], blockers: [], businessDate: clock.businessDate, nextFixedCommitment: null, items: [] };
+  let tomorrow: any = { timeline: [], blockers: [], businessDate: clock.tomorrowBusinessDate, nextFixedCommitment: null, items: [] };
+  try {
+    today = await getFieldToday({
+      tenantId: input.tenantId,
+      userId: input.actorId,
+      includeAllAssignees: false,
+      now,
+      timeZone,
+    });
+    tomorrow = await getFieldToday({
+      tenantId: input.tenantId,
+      userId: input.actorId,
+      includeAllAssignees: false,
+      now,
+      timeZone,
+      businessDate: clock.tomorrowBusinessDate,
+    });
+  } catch {
+    // Graceful offline fallback
+  }
   const macroGoal = await getActiveMacroGoal({
     tenantId: input.tenantId,
     operatorUserId: input.actorId,
-  });
+  }).catch(() => null);
   const campaign = await getClaireCampaignSummary({
     tenantId: input.tenantId,
     actorId: input.actorId,
-  });
+  }).catch(() => null);
 
   const missionState =
     input.missionId == null
@@ -369,6 +382,16 @@ export async function assembleClaireDriveContext(input: {
     .slice(0, 3)
     .map(simplify);
 
+  let strategySnapshot: StrategySnapshot | null = null;
+  try {
+    strategySnapshot = await getLatestStrategySnapshot(input.tenantId);
+    if (!strategySnapshot) {
+      strategySnapshot = await buildStrategySnapshot(input.tenantId, { now, referenceBusinessDate: today.businessDate });
+    }
+  } catch {
+    // Non-fatal strategy snapshot fallback
+  }
+
   const assembled: ClaireDriveContext = {
     phase: input.phase,
     generatedAt: now.toISOString(),
@@ -397,6 +420,8 @@ export async function assembleClaireDriveContext(input: {
     macroGoalKnown: macroGoal !== null,
     macroGoal,
     campaign,
+    strategySnapshotId: strategySnapshot?.id ?? null,
+    strategySnapshot,
     ...(missionSalesBrief !== undefined ? { missionSalesBrief } : {}),
   };
   assembled.runtime = assembleClaireRuntimeView(assembled, now);

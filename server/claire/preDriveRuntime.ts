@@ -9,6 +9,8 @@ import {
 import { writeClairePreDriveBrief } from "./reasoning";
 import { previewWorkdayLoop } from "./workdayPlanService";
 import { detectWorkdaySession } from "../../shared/claireWorkday";
+import { getTodayFeaturedOperation } from "../strategy/todayFeaturedService";
+import { getLatestStrategySnapshot } from "../strategy/snapshotBuilder";
 
 export async function generateClairePreDriveOutput(
   input: {
@@ -123,5 +125,7 @@ export async function previewClairePreDrive(
     needsDetailsActions:
       generated.context.runtime?.workItems.filter(item => item.detailState === "NEEDS_DETAILS") ?? [],
     workday: generated.context.workday ?? null,
+    snapshotId: generated.context.strategySnapshotId ?? (await getLatestStrategySnapshot(input.tenantId))?.id ?? null,
+    featuredOperation: await getTodayFeaturedOperation(input.tenantId),
   };
 }

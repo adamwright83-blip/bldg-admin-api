@@ -30,6 +30,7 @@ import {
 import { getOrMaterializeTodayCampaign } from "./campaignService";
 import { listPresentedTerritories } from "./territoryService";
 import { listRecoveryChronicleSince } from "./worldEventStore";
+import { getTodayFeaturedOperation } from "../strategy/todayFeaturedService";
 
 export const AUTHORED_V6_TERRITORY_IDS = [
   "koreatown",
@@ -704,7 +705,7 @@ export async function getLanternCityOverview(input: {
       since: operation?.startedAt ?? `${atlas.businessDate}T00:00:00.000Z`,
     }),
   ]);
-  return projectLanternCityOverview({
+  const overview = projectLanternCityOverview({
     rekindling: { interventions, events },
     atlas,
     campaign,
@@ -713,4 +714,23 @@ export async function getLanternCityOverview(input: {
     paidRevenueThisWeek: revenue.totalRevenue,
     territoryStates,
   });
+
+  // Guardrail G7: StrategyEngine is the single source of truth for featuredOperation
+  try {
+    const featured = await getTodayFeaturedOperation(input.tenantId);
+    if (featured) {
+      overview.featuredOperation.id = featured.operationId;
+      overview.featuredOperation.title = featured.worldName;
+      (overview.featuredOperation as any).businessName = featured.businessName;
+      (overview.featuredOperation as any).strategySnapshotId = featured.snapshotId;
+      (overview.featuredOperation as any).strategyProvenance = featured.provenance;
+      if (featured.briefing) {
+        overview.featuredOperation.briefing = featured.briefing;
+      }
+    }
+  } catch {
+    // Non-fatal fallback to existing projected featuredOperation
+  }
+
+  return overview;
 }
