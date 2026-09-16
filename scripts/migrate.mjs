@@ -1679,8 +1679,26 @@ await runRequired(
   )`,
   "CREATE TABLE opportunity_stall_reasons"
 );
-await assertRequiredColumns("opportunity_stall_reasons", [
-  "tenantId", "reason", "source",
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS strategy_trigger_runs (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    triggerType ENUM('morning','mission_completion','mission_skip','business_change','weekly_dawn') NOT NULL,
+    businessDate VARCHAR(10) NOT NULL,
+    dedupeKey VARCHAR(191) NOT NULL,
+    snapshotId VARCHAR(64) NULL,
+    outcome VARCHAR(64) NOT NULL DEFAULT 'success',
+    detailJson JSON NOT NULL,
+    errorMessage TEXT NULL,
+    executedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_strategy_trigger_dedupe (tenantId, dedupeKey),
+    KEY idx_strategy_trigger_tenant_type (tenantId, triggerType, executedAt)
+  )`,
+  "CREATE TABLE strategy_trigger_runs"
+);
+await assertRequiredColumns("strategy_trigger_runs", [
+  "tenantId", "triggerType", "businessDate", "dedupeKey", "outcome",
 ]);
 
 await conn.end();

@@ -34,6 +34,14 @@ import {
   proposeBoundedExperiment,
   getStallReasons,
 } from "./evidenceEngine";
+import {
+  triggerMorning,
+  triggerMissionCompletion,
+  triggerMissionSkip,
+  triggerBusinessChange,
+  triggerWeeklyDawn,
+  getTriggerRuns,
+} from "./autonomousTriggersService";
 
 export const strategyRouter = router({
 
@@ -342,6 +350,96 @@ export const strategyRouter = router({
         });
       }),
   }),
+
+  triggers: router({
+    morning: adminProcedure
+      .input(
+        z.object({
+          businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          actorId: z.string().optional(),
+          force: z.boolean().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return triggerMorning({
+          tenantId: ctx.tenantId,
+          businessDate: input.businessDate,
+          actorId: input.actorId ?? (ctx.user?.id ? String(ctx.user.id) : "admin"),
+          force: input.force,
+        });
+      }),
+
+    missionCompletion: adminProcedure
+      .input(
+        z.object({
+          missionId: z.string(),
+          businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          commitmentId: z.string().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return triggerMissionCompletion({
+          tenantId: ctx.tenantId,
+          missionId: input.missionId,
+          businessDate: input.businessDate,
+          commitmentId: input.commitmentId,
+        });
+      }),
+
+    missionSkip: adminProcedure
+      .input(
+        z.object({
+          missionId: z.string(),
+          businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return triggerMissionSkip({
+          tenantId: ctx.tenantId,
+          missionId: input.missionId,
+          businessDate: input.businessDate,
+        });
+      }),
+
+    businessChange: adminProcedure
+      .input(
+        z.object({
+          businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          eventType: z.string(),
+          detail: z.record(z.unknown()).optional(),
+          force: z.boolean().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return triggerBusinessChange({
+          tenantId: ctx.tenantId,
+          businessDate: input.businessDate,
+          eventType: input.eventType,
+          detail: input.detail,
+          force: input.force,
+        });
+      }),
+
+    weeklyDawn: adminProcedure
+      .input(
+        z.object({
+          businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          force: z.boolean().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return triggerWeeklyDawn({
+          tenantId: ctx.tenantId,
+          businessDate: input.businessDate,
+          force: input.force,
+        });
+      }),
+
+    history: adminProcedure.query(async ({ ctx }) => {
+      return getTriggerRuns(ctx.tenantId);
+    }),
+  }),
 });
+
 
 

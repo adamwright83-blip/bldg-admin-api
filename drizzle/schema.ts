@@ -7706,4 +7706,43 @@ export const opportunityStallReasons = mysqlTable(
 export type OpportunityStallReasonRow = typeof opportunityStallReasons.$inferSelect;
 export type InsertOpportunityStallReason = typeof opportunityStallReasons.$inferInsert;
 
+/**
+ * Strategy Trigger Runs (Slice 9).
+ * Idempotent trigger execution history and snapshot bookkeeping.
+ */
+export const strategyTriggerRuns = mysqlTable(
+  "strategy_trigger_runs",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    triggerType: mysqlEnum("triggerType", [
+      "morning",
+      "mission_completion",
+      "mission_skip",
+      "business_change",
+      "weekly_dawn",
+    ]).notNull(),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    dedupeKey: varchar("dedupeKey", { length: 191 }).notNull(),
+    snapshotId: varchar("snapshotId", { length: 64 }),
+    outcome: varchar("outcome", { length: 64 }).notNull().default("success"),
+    detailJson: json("detailJson").notNull(),
+    errorMessage: text("errorMessage"),
+    executedAt: timestamp("executedAt").notNull().defaultNow(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    tenantDedupeUnique: uniqueIndex("uq_strategy_trigger_dedupe").on(table.tenantId, table.dedupeKey),
+    tenantTypeIdx: index("idx_strategy_trigger_tenant_type").on(
+      table.tenantId,
+      table.triggerType,
+      table.executedAt
+    ),
+  })
+);
+
+export type StrategyTriggerRunRow = typeof strategyTriggerRuns.$inferSelect;
+export type InsertStrategyTriggerRun = typeof strategyTriggerRuns.$inferInsert;
+
+
 
