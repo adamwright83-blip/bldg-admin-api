@@ -26,6 +26,8 @@ import {
   type ProactiveObligation,
 } from "../../../shared/claireProactive";
 import { buildWinBackDraft, scoreCustomerChurn } from "../../../shared/customerChurn";
+import { isStrategyFeatureEnabled, STRATEGY_FLAGS } from "../../../shared/strategyFeatureFlags";
+import { requiresSpendClearance } from "../../strategy/spendClearance";
 
 export const claireOperatorDoctrine = mysqlTable(
   "claire_operator_doctrine",
@@ -156,6 +158,9 @@ export async function ensureAdamBoard(input: {
   actorId: string;
   force?: boolean;
 }): Promise<{ brief: string; created: number }> {
+  if (!isStrategyFeatureEnabled(input.tenantId, STRATEGY_FLAGS.LEGACY_AUTONOMY)) {
+    return { brief: "", created: 0 };
+  }
   const now = Date.now();
   if (!input.force && now - lastSweepAt < SWEEP_MS) return { brief: "", created: 0 };
   lastSweepAt = now;
@@ -350,3 +355,16 @@ export async function handleDoctrineTurn(input: {
 }
 
 export { applyDoctrineUtterance };
+
+export async function requiresPr148SpendClearance(input: {
+  tenantId: string;
+  amountCents: number;
+  category?: string;
+}): Promise<{ allowed: boolean; reason: string }> {
+  const clearance = await requiresSpendClearance({
+    tenantId: input.tenantId,
+    category: input.category ?? "paid_growth",
+    amountCents: input.amountCents,
+  });
+  return { allowed: clearance.cleared, reason: clearance.reason };
+}
