@@ -215,6 +215,20 @@ The target set is frozen at run start for the same reason. A target may only
 change through an explicit, truthful `target_replaced` event recording why —
 never by silent edit of the list.
 
+**Sourcing and freezing are separate steps, and only freezing is permanently
+manual.** Goldline may eventually help assemble candidate addresses — that is
+Mara's authorized role, and her limits are already binding: she may suggest a
+real place and present public information, and may never invent an address, a
+person, a role or a business status (`REALITY_BRIDGE.md` §4). What must stay
+human is the confirmation: an operator approves that these targets are
+legitimate and accessible before the run freezes them.
+
+So manual target research is a property of *this experiment*, not a permanent
+product requirement. A future solopreneur must not have to hand-research two
+dozen addresses before Goldline can create a territory mission. That discovery
+system is simply not needed to prove the core loop, and building it first would
+delay the only thing worth learning right now.
+
 ---
 
 ## 6. Tempo grading — ceiling only
@@ -380,17 +394,42 @@ deliberate new kind and its own ranking path** in `rankFieldMoves`.
 Approved sequence. Items 1–5 are the experiment; everything after attaches to the
 two primitives rather than blocking them.
 
-1. Generic **Campaign Run** + target set + target-event persistence.
-2. Source and **freeze** the real target list (rich residential, ungated,
-   front-door accessible; Street View pre-screening is public information;
-   addresses are never model-invented — `REALITY_BRIDGE.md` §4).
-3. `fictionPackId` / `fictionPackVersion` + **one generic mission shell**.
-4. First pack: `bio_containment`.
-5. **Run it for real.** Forty placements, in the field.
-6. Deferral Encounter + recall notifications.
+**The first run is 24 targets.** Forty was fiction, not a finding. Twenty-four
+reads as a real field operation, is large enough to expose whether persistence,
+progress and proof actually work, and is finishable across one or two outings.
+It also gives clean fractional beats: 6 / 12 / 18 / 24. Nothing in a pack may
+care whether a later electrician campaign has 8 targets, a plumber campaign 15,
+or a mature campaign 60 (§4.2).
+
+Two tracks run in parallel. The physical track does not wait for the fiction UI.
+
+| | Build track (Claude) | Physical track (operator) |
+|---|---|---|
+| 1 | Campaign Run + target/evidence persistence | Identify 24 usable doors — one compact affluent area, front doors reasonably accessible. Do not optimize the perfect route. |
+| 2 | Generic mission shell + `fictionPackId`/`Version` | Get the hangers printed. This does not wait on anything above. |
+| 3 | First pack: `bio_containment` | — |
+
+Then, in order:
+
+4. **Freeze** those 24 into the first Campaign Run (§5).
+5. **Run it for real.** Twenty-four placements, in the field.
+Only after the real run do we decide whether any of the following deserve further
+investment. That decision is made on evidence from step 5, not in advance:
+
+6. Deferral Encounter + recall notifications (§9, §10).
 7. QR outcome attribution (§12).
 8. Automated Luma → approval → printer-pickup prep chain (§13).
-9. Tempo aftermath + world-level antagonist state.
+9. Tempo aftermath + world-level antagonist state (§6, §8.1).
+10. Richer visual presentation for the field-operation genre.
+
+### The falsifiable question
+
+> Goldline gives the operator 24 actual doors. Clockhead exists. Claire briefs
+> him. The grid starts at 0/24. Does he go out and make it 24/24?
+
+A yes makes the product thesis substantially more credible. A no is worth more
+than another pass of design canon. Stop designing the wrapper until one of those
+two things has happened.
 
 ### The done condition — the re-skin test
 
