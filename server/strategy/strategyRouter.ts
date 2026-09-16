@@ -42,6 +42,13 @@ import {
   triggerWeeklyDawn,
   getTriggerRuns,
 } from "./autonomousTriggersService";
+import {
+  recordMissedCommitment,
+  resolveRecoveryItem,
+  getRecoveryState,
+  evaluateDropPatterns,
+  formatRecoveryClaireUtterance,
+} from "./recoveryService";
 
 export const strategyRouter = router({
 
@@ -439,7 +446,63 @@ export const strategyRouter = router({
       return getTriggerRuns(ctx.tenantId);
     }),
   }),
+
+  recovery: router({
+    state: adminProcedure.query(async ({ ctx }) => {
+      return getRecoveryState(ctx.tenantId);
+    }),
+
+    recordMissed: adminProcedure
+      .input(
+        z.object({
+          commitmentRef: z.string(),
+          playId: z.string().optional(),
+          title: z.string(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return recordMissedCommitment({
+          tenantId: ctx.tenantId,
+          commitmentRef: input.commitmentRef,
+          playId: input.playId,
+          title: input.title,
+        });
+      }),
+
+    resolve: adminProcedure
+      .input(
+        z.object({
+          itemId: z.string(),
+          action: z.enum(["repair", "reschedule", "drop"]),
+          dropReason: z.string().optional(),
+          rescheduledToDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+          spokenConfirmation: z.boolean().optional(),
+          surface: z.enum(["map", "voice", "admin"]).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return resolveRecoveryItem({
+          tenantId: ctx.tenantId,
+          itemId: input.itemId,
+          action: input.action,
+          dropReason: input.dropReason,
+          rescheduledToDate: input.rescheduledToDate,
+          spokenConfirmation: input.spokenConfirmation,
+          surface: input.surface,
+        });
+      }),
+
+    dropPatterns: adminProcedure.query(async ({ ctx }) => {
+      return evaluateDropPatterns({ tenantId: ctx.tenantId });
+    }),
+
+    clairePrompt: adminProcedure.query(async ({ ctx }) => {
+      const state = getRecoveryState(ctx.tenantId);
+      return formatRecoveryClaireUtterance(state.visibleItem);
+    }),
+  }),
 });
+
 
 
 

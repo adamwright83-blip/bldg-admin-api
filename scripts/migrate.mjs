@@ -1697,8 +1697,51 @@ await runRequired(
   )`,
   "CREATE TABLE strategy_trigger_runs"
 );
-await assertRequiredColumns("strategy_trigger_runs", [
-  "tenantId", "triggerType", "businessDate", "dedupeKey", "outcome",
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS recovery_items (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    commitmentRef VARCHAR(128) NOT NULL,
+    playId VARCHAR(64) NULL,
+    title VARCHAR(255) NOT NULL,
+    state ENUM('visible','queued','repaired','rescheduled','dropped','archived_outstanding') NOT NULL DEFAULT 'queued',
+    dropReason TEXT NULL,
+    rescheduledToDate VARCHAR(10) NULL,
+    missedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolvedAt TIMESTAMP NULL DEFAULT NULL,
+    promotedVisibleAt TIMESTAMP NULL DEFAULT NULL,
+    chronicleRef VARCHAR(128) NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_recovery_items_tenant_state (tenantId, state),
+    KEY idx_recovery_items_tenant_play (tenantId, playId)
+  )`,
+  "CREATE TABLE recovery_items"
+);
+await assertRequiredColumns("recovery_items", [
+  "tenantId", "commitmentRef", "title", "state",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS drop_pattern_flags (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    patternType ENUM('play_cluster_drops','overall_drops_surge','repeated_reschedules','archived_backlog') NOT NULL,
+    playId VARCHAR(64) NULL,
+    windowDays INT NOT NULL DEFAULT 14,
+    occurrenceCount INT NOT NULL DEFAULT 0,
+    firstOccurrenceAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    lastOccurrenceAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    surfacedAtDawn TINYINT(1) NOT NULL DEFAULT 0,
+    dawnSummary TEXT NULL,
+    acknowledgedAt TIMESTAMP NULL DEFAULT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_drop_pattern_tenant_type (tenantId, patternType, surfacedAtDawn)
+  )`,
+  "CREATE TABLE drop_pattern_flags"
+);
+await assertRequiredColumns("drop_pattern_flags", [
+  "tenantId", "patternType", "occurrenceCount", "surfacedAtDawn",
 ]);
 
 await conn.end();

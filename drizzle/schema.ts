@@ -7744,5 +7744,83 @@ export const strategyTriggerRuns = mysqlTable(
 export type StrategyTriggerRunRow = typeof strategyTriggerRuns.$inferSelect;
 export type InsertStrategyTriggerRun = typeof strategyTriggerRuns.$inferInsert;
 
+/**
+ * Strategy Recovery Items (Slice 10, G3).
+ * Broken commitments become repairable gold (kintsugi).
+ * Exactly zero or ONE item is visible per tenant at a time.
+ * All others are queued, counted, and never silently deleted.
+ */
+export const recoveryItems = mysqlTable(
+  "recovery_items",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    commitmentRef: varchar("commitmentRef", { length: 128 }).notNull(),
+    playId: varchar("playId", { length: 64 }),
+    title: varchar("title", { length: 255 }).notNull(),
+    state: mysqlEnum("state", [
+      "visible",
+      "queued",
+      "repaired",
+      "rescheduled",
+      "dropped",
+      "archived_outstanding",
+    ]).notNull().default("queued"),
+    dropReason: text("dropReason"),
+    rescheduledToDate: varchar("rescheduledToDate", { length: 10 }),
+    missedAt: timestamp("missedAt").notNull().defaultNow(),
+    resolvedAt: timestamp("resolvedAt"),
+    promotedVisibleAt: timestamp("promotedVisibleAt"),
+    chronicleRef: varchar("chronicleRef", { length: 128 }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantStateIdx: index("idx_recovery_items_tenant_state").on(table.tenantId, table.state),
+    tenantPlayIdx: index("idx_recovery_items_tenant_play").on(table.tenantId, table.playId),
+  })
+);
+
+export type RecoveryItemRow = typeof recoveryItems.$inferSelect;
+export type InsertRecoveryItem = typeof recoveryItems.$inferInsert;
+
+/**
+ * Strategy Drop Pattern Flags (Slice 10).
+ * Surfaces repeated drop or reschedule patterns strictly at Dawn.
+ */
+export const dropPatternFlags = mysqlTable(
+  "drop_pattern_flags",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    patternType: mysqlEnum("patternType", [
+      "play_cluster_drops",
+      "overall_drops_surge",
+      "repeated_reschedules",
+      "archived_backlog",
+    ]).notNull(),
+    playId: varchar("playId", { length: 64 }),
+    windowDays: int("windowDays").notNull().default(14),
+    occurrenceCount: int("occurrenceCount").notNull().default(0),
+    firstOccurrenceAt: timestamp("firstOccurrenceAt").notNull().defaultNow(),
+    lastOccurrenceAt: timestamp("lastOccurrenceAt").notNull().defaultNow(),
+    surfacedAtDawn: boolean("surfacedAtDawn").notNull().default(false),
+    dawnSummary: text("dawnSummary"),
+    acknowledgedAt: timestamp("acknowledgedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    tenantTypeDawnIdx: index("idx_drop_pattern_tenant_type").on(
+      table.tenantId,
+      table.patternType,
+      table.surfacedAtDawn
+    ),
+  })
+);
+
+export type DropPatternFlagRow = typeof dropPatternFlags.$inferSelect;
+export type InsertDropPatternFlag = typeof dropPatternFlags.$inferInsert;
+
+
 
 
