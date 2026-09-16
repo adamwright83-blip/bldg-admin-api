@@ -46,7 +46,13 @@ function memoryPersistence(initial: OperatorMacroGoal[]): MacroGoalPersistence {
           candidate.supersededById = input.id;
         }
       }
-      const saved = row({ ...input, targetValue: input.targetValue.toFixed(2), status: "active" });
+      const { secondaryTargets, ...goalInput } = input;
+      const saved = row({
+        ...goalInput,
+        targetValue: input.targetValue.toFixed(2),
+        secondaryTargetsJson: secondaryTargets ?? null,
+        status: "active",
+      });
       rows.push(saved);
       return saved;
     },
@@ -92,6 +98,7 @@ describe("operator macro goals", () => {
   });
 
   it("persists and restores secondaryTargets structured metadata", async () => {
+    const persistence = memoryPersistence([]);
     const saved = await setActiveMacroGoal({
       tenantId: "tenant-secondary-1",
       operatorUserId: "operator-1",
@@ -105,7 +112,7 @@ describe("operator macro goals", () => {
       ],
       source: "admin",
       sourceNote: "Secondary metric stretch targets",
-    });
+    }, persistence);
 
     expect(saved.targetValue).toBe(100);
     expect(saved.secondaryTargets).toEqual([
@@ -117,7 +124,7 @@ describe("operator macro goals", () => {
       tenantId: "tenant-secondary-1",
       operatorUserId: "operator-1",
       metricKey: "paid_orders_per_period",
-    });
+    }, persistence);
 
     expect(retrieved).not.toBeNull();
     expect(retrieved?.secondaryTargets).toEqual([
@@ -133,4 +140,3 @@ describe("operator macro goals", () => {
     expect(voiceLoop).not.toContain("setActiveMacroGoal");
   });
 });
-
