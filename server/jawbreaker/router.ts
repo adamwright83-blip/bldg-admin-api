@@ -153,6 +153,12 @@ function receiptTransport(receiptJson: unknown): string | null {
   return typeof transport === "string" ? transport : null;
 }
 
+function priorArtifactId(receiptJson: unknown, fallback: string): string {
+  if (!receiptJson || typeof receiptJson !== "object") return fallback;
+  const value = (receiptJson as Record<string, unknown>).artifactId;
+  return typeof value === "string" && value ? value : fallback;
+}
+
 export const jawbreakerRouter = router({
   importArtifact: publicProcedure.input(importArtifactInput).mutation(async ({ input }) => {
     assertJawbreakerSecret(input.secret);
@@ -177,9 +183,6 @@ export const jawbreakerRouter = router({
         { csv, from: input.from, to: input.to },
         input.tenantId
       );
-      if (validated.artifactSha256 !== digest) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Artifact digest changed during decode." });
-      }
       normalized = validated.normalized;
     } catch (error) {
       await recordAttempt({
@@ -248,7 +251,45 @@ export const jawbreakerRouter = router({
           )
           .limit(1);
         if (sameArtifact && receiptTransport(sameArtifact.receiptJson) === "jawbreaker") {
-          return { receipt: sameArtifact.receiptJson, replayed: true as const };
+          const completedAt = new Date();
+          const receipt = {
+            transport: "jawbreaker" as const,
+            artifactId: input.artifactId,
+            artifactSha256: digest,
+            sourceFileName: input.sourceFileName,
+            tenantId: input.tenantId,
+            storeId: input.storeId,
+            storeLabel: binding.storeLabel,
+            from: input.from,
+            to: input.to,
+            reportType: "orders_sales" as const,
+            completedAt: completedAt.toISOString(),
+            batchId: sameArtifact.importBatchId,
+            inserted: 0,
+            updated: 0,
+            unchanged: normalized.length,
+            skipped: 0,
+            totalRows: normalized.length,
+            ...summarizeOrders(normalized),
+            deduplicatedByDigest: true,
+            duplicateOfArtifactId: priorArtifactId(sameArtifact.receiptJson, sameArtifact.requestId),
+            scope:
+              "Orders created in the source report period; totals use actual payment dates. This exact file was already applied to business state, so Jawbreaker recorded this artifact identity without repeating writes.",
+          };
+          await tx.insert(browserSyncReceipts).values({
+            id: randomUUID(),
+            tenantId: input.tenantId,
+            requestId: input.artifactId,
+            digest,
+            storeId: input.storeId,
+            importBatchId: sameArtifact.importBatchId,
+            receiptJson: receipt,
+          });
+          await tx
+            .update(browserSyncBindings)
+            .set({ lastSuccessAt: completedAt })
+            .where(eq(browserSyncBindings.tenantId, input.tenantId));
+          return { receipt, replayed: true as const };
         }
 
         const [batch] = await tx
