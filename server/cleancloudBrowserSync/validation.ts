@@ -5,12 +5,14 @@ import {
   parseCleanCloudMoneyCents,
 } from "../cleancloudPaidOrders";
 import {
-  parseCsv,
-  validateExportUrl,
-  validateRange,
-} from "../../extensions/gumballpals/core.js";
+  parseOrdersSalesCsv,
+  validateOrdersSalesExportUrl,
+  validateOrdersSalesRange,
+} from "../cleancloudIngestion/ordersSalesCsv";
 import { normalizePropertyTower } from "../../shared/propertyTowers";
 import { fromZonedTime, formatInTimeZone } from "date-fns-tz";
+
+const BUSINESS_TIME_ZONE = "America/Los_Angeles";
 
 export function invalid(message: string): never {
   throw new TRPCError({ code: "BAD_REQUEST", message });
@@ -84,34 +86,16 @@ export function sourceDate(raw: string): Date | null {
   )
     return null;
   const local = `${calendar}T${pad(h)}:${pad(min)}:${pad(s)}`;
-  const result = fromZonedTime(local, "America/Los_Angeles");
+  const result = fromZonedTime(local, BUSINESS_TIME_ZONE);
   return Number.isFinite(result.getTime()) &&
-    formatInTimeZone(result, "America/Los_Angeles", "yyyy-MM-dd'T'HH:mm:ss") ===
+    formatInTimeZone(result, BUSINESS_TIME_ZONE, "yyyy-MM-dd'T'HH:mm:ss") ===
       local
     ? result
     : null;
 }
 
-export function validatePayload(
-  input: {
-    csv: string;
-    exportUrl: string;
-    from: string;
-    to: string;
-    storeId: string;
-  },
-  tenantId: string
-) {
-  let rows: Record<string, string>[];
-  try {
-    const range = validateRange(input.from, input.to);
-    if (validateExportUrl(input.exportUrl, range).storeId !== input.storeId)
-      invalid("Export store does not match the paired store.");
-    rows = parseCsv(input.csv);
-  } catch (error) {
-    invalid(error instanceof Error ? error.message : "Invalid report.");
-  }
-  const normalized = rows!.map((row, index) => {
+function normalizeRows(rows: Record<string, string>[], tenantId: string) {
+  return rows.map((row, index) => {
     const prefix = `Row ${index + 2}: `;
     const paid = row.Paid.trim().toLowerCase();
     if (
@@ -130,7 +114,7 @@ export function validatePayload(
       invalid(prefix + "amount outside supported range.");
     const result = normalizeCleanCloudPaidOrderRow(row, {
       sourceReportType: "orders_sales",
-      sourceFileName: "browser-sync.csv",
+      sourceFileName: "ingestion.csv",
       importBatchId: 0,
       tenantId,
     });
@@ -154,6 +138,44 @@ export function validatePayload(
     // Never manufacture a source timestamp, infer a payment, or map by customer name.
     return order;
   });
+}
+
+function assertPlacedDatesInRange(
+  normalized: ReturnType<typeof normalizeRows>,
+  from: string,
+  to: string
+): void {
+  for (const [index, order] of normalized.entries()) {
+    const placedOn = formatInTimeZone(order.placedAtUtc!, BUSINESS_TIME_ZONE, "yyyy-MM-dd");
+    if (placedOn < from || placedOn > to) {
+      invalid(
+        `Row ${index + 2}: placed date ${placedOn} is outside artifact range ${from} through ${to}.`
+      );
+    }
+  }
+}
+
+export function validatePayload(
+  input: {
+    csv: string;
+    exportUrl: string;
+    from: string;
+    to: string;
+    storeId: string;
+  },
+  tenantId: string
+) {
+  let rows: Record<string, string>[];
+  try {
+    const range = validateOrdersSalesRange(input.from, input.to);
+    if (validateOrdersSalesExportUrl(input.exportUrl, range).storeId !== input.storeId)
+      invalid("Export store does not match the paired store.");
+    rows = parseOrdersSalesCsv(input.csv);
+  } catch (error) {
+    invalid(error instanceof Error ? error.message : "Invalid report.");
+  }
+  const normalized = normalizeRows(rows!, tenantId);
+  assertPlacedDatesInRange(normalized, input.from, input.to);
   return {
     normalized,
     digest: createHash("sha256")
@@ -167,6 +189,28 @@ export function validatePayload(
       )
       .digest("hex"),
   };
+}
+
+/**
+ * Validate a durable Gumball Inbox artifact after the Jawbreaker router has
+ * already authenticated and verified the SHA-256 of the exact uploaded bytes.
+ * Do not re-hash decoded text here: UTF-8 decoding can legitimately remove a
+ * BOM, so the byte-level digest must remain authoritative.
+ */
+export function validateJawbreakerArtifact(
+  input: { csv: string; from: string; to: string },
+  tenantId: string
+) {
+  let rows: Record<string, string>[];
+  try {
+    validateOrdersSalesRange(input.from, input.to);
+    rows = parseOrdersSalesCsv(input.csv);
+  } catch (error) {
+    invalid(error instanceof Error ? error.message : "Invalid report.");
+  }
+  const normalized = normalizeRows(rows!, tenantId);
+  assertPlacedDatesInRange(normalized, input.from, input.to);
+  return { normalized };
 }
 
 export function summarizeOrders(
@@ -187,7 +231,7 @@ export function summarizeOrders(
       continue;
     }
     const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/Los_Angeles",
+      timeZone: BUSINESS_TIME_ZONE,
       year: "numeric",
       month: "2-digit",
       day: "2-digit",

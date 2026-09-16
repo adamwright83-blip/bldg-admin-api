@@ -55,12 +55,19 @@ export type CustomerEvidence = {
   identityKey: string;
   displayName: string;
   paidOrderCount: number;
+  /** Real paid-order spend from the shared ledger, when the caller has loaded it. */
+  lifetimeRevenueCents?: number;
   lastPaidOn: string;
   daysSinceLastPaid: number;
   expectedCadenceDays: number | null;
+  /** Count observed in connected operational/order-status data; never a synthetic zero. */
   openOrderCount: number;
+  /** CleanCloud status coverage is partial unless a complete operational source proves otherwise. */
+  openOrderCoverage?: "complete" | "partial" | "unknown";
   lastOutreachOn: string | null;
   attestedOutreachOn: string | null;
+  /** Null dates with unknown coverage mean unknown, not "no outreach happened." */
+  outreachCoverage?: "known" | "unknown";
 };
 
 export type ObligationStatus =
@@ -233,9 +240,17 @@ export function isDormantEligible(
       return { eligible: false, why: `There was outreach on ${lastTouch.slice(0, 10)}; cooldown runs through ${cooldownUntil}.` };
     }
   }
+  const openOrderCaveat =
+    customer.openOrderCoverage === "partial"
+      ? " Connected CleanCloud status coverage is partial, so that is not proof that no outside job exists."
+      : "";
+  const outreachCaveat =
+    customer.outreachCoverage === "unknown"
+      ? " I don't have a connected recent-outreach date for this customer."
+      : "";
   return {
     eligible: true,
-    why: `${customer.displayName} crossed the recovery threshold yesterday. ${customer.displayName.split(" ")[0]} has ${customer.paidOrderCount} prior orders and there isn't already an unresolved outreach attempt.`,
+    why: `${customer.displayName} is ${customer.daysSinceLastPaid} days since the last paid order; the recovery threshold is ${quietNeeded} days, with ${customer.paidOrderCount} prior paid orders.${openOrderCaveat}${outreachCaveat}`,
   };
 }
 
@@ -244,6 +259,9 @@ export function prioritizeRecoveries(customers: readonly CustomerEvidence[]): Cu
     const cadenceA = a.expectedCadenceDays ?? 99;
     const cadenceB = b.expectedCadenceDays ?? 99;
     if (a.paidOrderCount !== b.paidOrderCount) return b.paidOrderCount - a.paidOrderCount;
+    if ((a.lifetimeRevenueCents ?? 0) !== (b.lifetimeRevenueCents ?? 0)) {
+      return (b.lifetimeRevenueCents ?? 0) - (a.lifetimeRevenueCents ?? 0);
+    }
     return cadenceA - cadenceB;
   });
 }

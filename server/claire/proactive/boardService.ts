@@ -3,16 +3,13 @@ import { and, eq } from "drizzle-orm";
 import { index, json, mysqlEnum, mysqlTable, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 import { commercialFollowUps, dayDirectorCommitments } from "../../../drizzle/schema";
 import { addDaysYmd, businessToday } from "../../analytics/businessPeriods";
-import { groupCustomers } from "../../analytics/businessMetrics";
-import { loadDataFreshness } from "../../analytics/dataFreshness";
-import { loadPaidOrderLedger } from "../../analytics/paidOrderLedger";
-import { getDashboardTimeZone, zonedDayStartUtc } from "../../dashboardZoned";
+import { getDashboardTimeZone } from "../../dashboardZoned";
 import { getDb } from "../../db";
+import { loadJawbreakerPipelineStatus, speakJawbreakerPipelineStatus } from "../../jawbreaker/status";
 import {
   DEFAULT_DOCTRINE,
   applyDoctrineUtterance,
   explainWhyOnToday,
-  gumballWarning,
   isDormantEligible,
   morningChiefOfStaffBrief,
   overloadJudgment,
@@ -21,11 +18,10 @@ import {
   scheduleRecoveryDays,
   supersedeIfReordered,
   whyPushingSales,
-  type CustomerEvidence,
   type DoctrineRules,
   type ProactiveObligation,
 } from "../../../shared/claireProactive";
-import { buildWinBackDraft, scoreCustomerChurn } from "../../../shared/customerChurn";
+import { buildTruthfulRecoveryDraft, loadCustomerEvidence } from "./customerEvidence";
 
 export const claireOperatorDoctrine = mysqlTable(
   "claire_operator_doctrine",
@@ -61,10 +57,6 @@ export const claireProactiveObligations = mysqlTable(
 
 let lastSweepAt = 0;
 const SWEEP_MS = 60_000;
-
-function daysBetween(later: string, earlier: string): number {
-  return Math.round((Date.parse(`${later}T00:00:00Z`) - Date.parse(`${earlier}T00:00:00Z`)) / 86_400_000);
-}
 
 export async function loadDoctrine(tenantId: string, operatorUserId: string): Promise<DoctrineRules> {
   const db = await getDb();
@@ -150,6 +142,17 @@ async function placeOnDayLine(input: {
   await db.insert(dayDirectorCommitments).values(row).onDuplicateKeyUpdate({ set: { title: row.title } });
 }
 
+function pipelineWarning(status: Awaited<ReturnType<typeof loadJawbreakerPipelineStatus>>): string | null {
+  const pending = status.jawbreaker.pendingCount;
+  const successAt = status.jawbreaker.latestSuccess?.at ?? null;
+  const failureAt = status.jawbreaker.latestFailure?.at ?? null;
+  const exportAt = status.gumball.latestExport?.at ?? null;
+  if (pending !== null && pending > 0) return speakJawbreakerPipelineStatus(status);
+  if (failureAt && (!successAt || failureAt > successAt)) return speakJawbreakerPipelineStatus(status);
+  if (exportAt && (!successAt || exportAt > successAt)) return speakJawbreakerPipelineStatus(status);
+  return null;
+}
+
 export async function ensureAdamBoard(input: {
   tenantId: string;
   operatorUserId: string;
@@ -162,88 +165,71 @@ export async function ensureAdamBoard(input: {
   const db = await getDb();
   if (!db) return { brief: "", created: 0 };
   const timeZone = getDashboardTimeZone();
-  const today = businessToday(new Date(), timeZone);
+  const today = businessToday(new Date(now), timeZone);
   const rules = await loadDoctrine(input.tenantId, input.operatorUserId);
   let created = 0;
 
-  let customers: CustomerEvidence[] = [];
+  let customers = [] as Awaited<ReturnType<typeof loadCustomerEvidence>>["customers"];
   try {
-    const ledger = await loadPaidOrderLedger({
-      tenantId: input.tenantId,
-      startUtc: zonedDayStartUtc("2020-01-01", timeZone),
-      endExclusiveUtc: new Date(now + 86_400_000),
-      timeZone,
-    });
-    customers = groupCustomers(ledger.events)
-      .filter(group => group.matched)
-      .map(group => {
-        const sorted = [...group.records].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
-        const last = sorted[sorted.length - 1]!;
-        const intervals = sorted
-          .slice(1)
-          .map((item, index) => daysBetween(item.businessDate, sorted[index]!.businessDate))
-          .filter(days => days > 0 && days <= 120);
-        const cadence = intervals.length ? Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length) : null;
-        const name = [...sorted].reverse().find(record => record.customerName)?.customerName ?? "an unnamed customer";
-        return {
-          identityKey: group.identityId,
-          displayName: name,
-          paidOrderCount: sorted.length,
-          lastPaidOn: last.businessDate,
-          daysSinceLastPaid: Math.max(0, daysBetween(today, last.businessDate)),
-          expectedCadenceDays: cadence,
-          openOrderCount: 0,
-          lastOutreachOn: null,
-          attestedOutreachOn: null,
-        };
-      });
+    customers = (
+      await loadCustomerEvidence({
+        tenantId: input.tenantId,
+        now: new Date(now),
+        timeZone,
+      })
+    ).customers;
   } catch (error) {
-    console.warn("[ClaireProactive] ledger unavailable", error instanceof Error ? error.message : error);
+    console.warn(
+      "[ClaireProactive] customer evidence unavailable",
+      error instanceof Error ? error.message : error
+    );
   }
 
+  const beforeSweep = await loadObligations(input.tenantId, input.operatorUserId);
   for (const customer of customers) {
-    const open = (await loadObligations(input.tenantId, input.operatorUserId)).find(
-      item => item.kind === "dormant_recovery" && item.subjectKey === customer.identityKey && (item.status === "scheduled" || item.status === "draft_prepared")
+    const open = beforeSweep.find(
+      item =>
+        item.kind === "dormant_recovery" &&
+        item.subjectKey === customer.identityKey &&
+        (item.status === "scheduled" || item.status === "draft_prepared" || item.status === "awaiting_result")
     );
-    if (open && customer.daysSinceLastPaid < 7) {
-      await upsertObligation(input.tenantId, input.operatorUserId, supersedeIfReordered(open, customer.lastPaidOn));
+    // Existing V1 obligations do not persist the basis last-order date. A very
+    // recent real paid order is nevertheless sufficient evidence that an old
+    // dormant-recovery obligation is obsolete; preserve its history and mark it
+    // superseded instead of deleting it.
+    if (open && customer.daysSinceLastPaid < rules.dormantQuietDays) {
+      await upsertObligation(
+        input.tenantId,
+        input.operatorUserId,
+        supersedeIfReordered(open, customer.lastPaidOn)
+      );
     }
   }
 
   const live = await loadObligations(input.tenantId, input.operatorUserId);
-  const eligible = customers.filter(customer => isDormantEligible(customer, rules, today, live).eligible);
+  const eligible = customers.filter(
+    customer => isDormantEligible(customer, rules, today, live).eligible
+  );
   const skipSales = rules.skipSalesUntil === today;
   const placed = scheduleRecoveryDays({
     today,
-    customers: eligible.slice(0, 8),
+    customers: eligible,
     rules,
     dayLoads: {},
     overloadedToday: true,
-  });
+  }).slice(0, 8);
 
   for (const { customer, dueDate } of placed) {
     const current = await loadObligations(input.tenantId, input.operatorUserId);
     const check = isDormantEligible(customer, rules, today, current);
     if (!check.eligible) continue;
-    const score = scoreCustomerChurn({
-      customerKey: customer.identityKey,
-      customerName: customer.displayName,
-      history: Array.from({ length: Math.max(2, customer.paidOrderCount) }, (_, index) => ({
-        orderId: index + 1,
-        serviceAt: `${addDaysYmd(customer.lastPaidOn, -14 * (customer.paidOrderCount - index))}T12:00:00.000Z`,
-        valueCents: 5000,
-        weightLbs: null,
-        serviceType: "wash_fold" as const,
-      })),
-      now: new Date(`${today}T16:00:00.000Z`),
-    });
-    const draft = buildWinBackDraft({
-      score,
-      storeName: "Laundry Butler",
-      senderName: "Adam",
-      lastServiceLabel: "laundry",
-    });
-    const obligation = proposeRecoveryObligation(customer, dueDate, check.why, draft.message);
+    const draftMessage = buildTruthfulRecoveryDraft(customer);
+    const obligation = proposeRecoveryObligation(
+      customer,
+      dueDate,
+      check.why,
+      draftMessage
+    );
     await upsertObligation(input.tenantId, input.operatorUserId, obligation);
     await placeOnDayLine({
       tenantId: input.tenantId,
@@ -288,25 +274,25 @@ export async function ensureAdamBoard(input: {
         created += 1;
       }
     } catch (error) {
-      console.warn("[ClaireProactive] sales follow-ups unavailable", error instanceof Error ? error.message : error);
+      console.warn(
+        "[ClaireProactive] sales follow-ups unavailable",
+        error instanceof Error ? error.message : error
+      );
     }
   }
 
   const obligations = await loadObligations(input.tenantId, input.operatorUserId);
   const warnings: string[] = [];
   try {
-    const freshness = await loadDataFreshness({ tenantId: input.tenantId, timeZone });
-    const warning = gumballWarning({
-      gumballImportedToday: freshness.gumball.receipts.some(receipt => receipt.status === "imported" && receipt.at.slice(0, 10) === today),
-      lastSuccessAt: freshness.gumball.lastSuccessAt,
-      cleanCloudThrough: freshness.cleancloud.latestSale?.paidAt?.slice(0, 10) ?? null,
-      today,
-      failedAttemptToday: (freshness.gumball.attempts ?? []).some(attempt => attempt.at.slice(0, 10) === today && attempt.outcome !== "imported"),
-      unknownFailures: freshness.gumball.attempts === null,
+    const pipeline = await loadJawbreakerPipelineStatus({
+      tenantId: input.tenantId,
+      timeZone,
+      now: new Date(now),
     });
+    const warning = pipelineWarning(pipeline);
     if (warning) warnings.push(warning);
   } catch {
-    /* optional */
+    // Pipeline health is useful context, not permission to invent a failure.
   }
 
   return {

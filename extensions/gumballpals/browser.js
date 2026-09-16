@@ -1,4 +1,4 @@
-import { GOLDLINE, CLEANCLOUD, MAX_BYTES } from "./core.js";
+import { GOLDLINE, CLEANCLOUD } from "./core.js";
 
 export async function runInTab(tabId, func, args = []) {
   const results = await chrome.scripting.executeScript({
@@ -191,7 +191,6 @@ export async function prepareSource(range) {
     await pickDate(range.from);
     await pickDate(range.to);
     stage = "checking export availability (build 0.1.6)";
-    // The captured export URL is checked against both requested dates before import.
     if (exportButton.disabled)
       throw new Error("Report export is not available.");
     return {
@@ -223,64 +222,8 @@ export function clickExport(expectedStoreLabel) {
   }
 }
 
-export async function fetchReport(url, expectedStoreLabel, maxBytes) {
-  try {
-    const target = new URL(url);
-    if (
-      location.origin !== "https://cleancloudapp.com" ||
-      target.origin !== location.origin ||
-      target.pathname !== "/include/data-export-endpoint.php"
-    )
-      throw new Error("Unexpected report origin.");
-    if (
-      document.title.replace(/\s*\|\s*CleanCloud\s*$/, "").trim() !==
-      expectedStoreLabel
-    )
-      throw new Error("gumball account changed.");
-    const response = await fetch(target.href, {
-      credentials: "same-origin",
-      cache: "no-store",
-      redirect: "error",
-      signal: AbortSignal.timeout(25000),
-    });
-    if (
-      !response.ok ||
-      /text\/html/i.test(response.headers.get("content-type") || "")
-    )
-      throw new Error("Report unavailable. Check login and export permission.");
-    const reader = response.body.getReader();
-    const chunks = [];
-    let size = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.length;
-      if (size > maxBytes) {
-        await reader.cancel();
-        throw new Error("Report exceeds 4 MB. Use a shorter period.");
-      }
-      chunks.push(value);
-    }
-    const bytes = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.length;
-    }
-    return {
-      ok: true,
-      value: {
-        csv: new TextDecoder("utf-8", { fatal: true }).decode(bytes),
-        contentType: response.headers.get("content-type"),
-      },
-    };
-  } catch (error) {
-    return { ok: false, error: error.message };
-  }
-}
-
-// Only these purpose-built operations can be invoked. No generic URL proxy,
-// page-message listener, shared secret, or cross-origin CORS relaxation.
+// Gumball is export-only. These Goldline calls exist only for pairing/context
+// and export telemetry; CSV acquisition/parsing/import belongs to Jawbreaker.
 export async function goldlineRequest(operation, input) {
   try {
     if (location.origin !== "https://admin.bldg.chat")
@@ -288,9 +231,6 @@ export async function goldlineRequest(operation, input) {
     const methods = {
       context: "GET",
       pair: "POST",
-      import: "POST",
-      receipt: "GET",
-      resolve: "POST",
       reportFailure: "POST",
     };
     if (!Object.hasOwn(methods, operation))
@@ -310,14 +250,14 @@ export async function goldlineRequest(operation, input) {
         headers:
           method === "POST" ? { "Content-Type": "application/json" } : {},
         body: method === "POST" ? JSON.stringify({ json: input }) : undefined,
-        signal: AbortSignal.timeout(operation === "import" ? 120000 : 15000),
+        signal: AbortSignal.timeout(15000),
       }
     );
     if (!response.ok)
       throw new Error(
         response.status === 404
-          ? "Goldline browser-sync backend is not installed yet."
-          : `Goldline rejected the request (${response.status}). Check sign-in, account, and sync permissions.`
+          ? "Goldline Gumball export/pairing backend is not installed yet."
+          : `Goldline rejected the request (${response.status}). Check sign-in, account, and export permissions.`
       );
     const result = await response.json();
     if (result.error || !result.result?.data)
@@ -328,4 +268,4 @@ export async function goldlineRequest(operation, input) {
   }
 }
 
-export const sites = { GOLDLINE, CLEANCLOUD, MAX_BYTES };
+export const sites = { GOLDLINE, CLEANCLOUD };

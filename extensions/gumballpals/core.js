@@ -2,6 +2,7 @@ export const GOLDLINE = "https://admin.bldg.chat";
 export const CLEANCLOUD = "https://cleancloudapp.com";
 export const MAX_BYTES = 4_000_000;
 export const HOSTS = [`${GOLDLINE}/*`, `${CLEANCLOUD}/*`];
+export const GUMBALL_INBOX_DIR = "Gumball Inbox";
 
 export function pacificToday(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -80,6 +81,19 @@ export function validateExportUrl(raw, range) {
   if (date(1) !== range.from || date(2) !== range.to)
     throw new Error("Export dates do not match the requested dates.");
   return { url: u.href, storeId: String(stores[0]), ...range };
+}
+
+export function inboxFilename({ storeId, from, to, requestId }) {
+  if (!/^[1-9]\d*$/.test(String(storeId)))
+    throw new Error("Invalid gumball store id.");
+  validateRange(from, to);
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      requestId
+    )
+  )
+    throw new Error("Invalid export request id.");
+  return `gumball-orders_sales-store-${storeId}-${from}-${to}-${requestId.toLowerCase()}.csv`;
 }
 
 export function parseCsv(text) {

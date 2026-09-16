@@ -44,6 +44,7 @@ import { chapterStateRouter } from "../goldlineWorld/chapterStateRouter";
 import { chapterEventBindingRouter } from "../goldlineWorld/chapterEventBindingRouter";
 import { echoFollowUpRouter } from "../goldlineWorld/echoFollowUpRouter";
 import { cleancloudBrowserSyncRouter } from "../cleancloudBrowserSync/router";
+import { jawbreakerRouter } from "../jawbreaker/router";
 import { campaignLibraryRouter } from "../campaignLibrary/campaignLibraryRouter";
 import { kingdomRouter } from "../goldlineKingdoms/kingdomRouter";
 import { companionRouter } from "../companions/companionRouter";
@@ -55,6 +56,7 @@ export const systemRouter = router({
   goldlineCargo: goldlineCargoRouter,
   goldlineOnboarding: goldlineOnboardingRouter,
   gumball: cleancloudBrowserSyncRouter,
+  jawbreaker: jawbreakerRouter,
   commercialMission: commercialMissionRouter,
   voiceWalkIn: voiceWalkInRouter,
   adaptiveSalesMeter: adaptiveSalesMeterRouter,
