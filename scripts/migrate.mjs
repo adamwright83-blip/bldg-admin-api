@@ -1321,5 +1321,105 @@ await assertRequiredColumns("operator_macro_goals", [
   "unit", "source", "sourceNote", "status", "supersededById",
 ]);
 
+// ── Goldline Campaign Runs: standing operations across days ──────
+// docs/goldline/FICTION_PACKS.md §2. Progress is DERIVED from the event table;
+// there is deliberately no counter column in any of these three tables.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_campaign_runs (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NOT NULL,
+    campaignId VARCHAR(64) NOT NULL,
+    campaignVersion INT NOT NULL DEFAULT 1,
+    fictionPackId VARCHAR(64) NULL,
+    fictionPackVersion INT NULL,
+    targetSetId VARCHAR(64) NOT NULL,
+    startedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status ENUM('active','complete','abandoned') NOT NULL DEFAULT 'active',
+    completedAt TIMESTAMP NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_goldline_campaign_runs_active (tenantId,operatorUserId,status),
+    KEY idx_goldline_campaign_runs_campaign (tenantId,campaignId)
+  )`,
+  "CREATE TABLE goldline_campaign_runs"
+);
+await assertRequiredColumns("goldline_campaign_runs", [
+  "tenantId", "operatorUserId", "campaignId", "campaignVersion",
+  "fictionPackId", "fictionPackVersion", "targetSetId", "status", "completedAt",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_campaign_targets (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    targetSetId VARCHAR(64) NOT NULL,
+    targetId VARCHAR(64) NOT NULL,
+    label VARCHAR(191) NOT NULL,
+    address VARCHAR(512) NOT NULL,
+    lat DECIMAL(10,7) NULL,
+    lng DECIMAL(10,7) NULL,
+    placementPoint VARCHAR(32) NOT NULL,
+    sourceNote VARCHAR(512) NOT NULL,
+    provenance VARCHAR(64) NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_goldline_campaign_target (tenantId,targetSetId,targetId),
+    KEY idx_goldline_campaign_targets_set (tenantId,targetSetId)
+  )`,
+  "CREATE TABLE goldline_campaign_targets"
+);
+await assertRequiredColumns("goldline_campaign_targets", [
+  "tenantId", "targetSetId", "targetId", "label", "address",
+  "placementPoint", "sourceNote", "provenance",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_campaign_run_targets (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    campaignRunId VARCHAR(36) NOT NULL,
+    slotId VARCHAR(64) NOT NULL,
+    originalTargetId VARCHAR(64) NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_goldline_campaign_run_slot (campaignRunId,slotId),
+    KEY idx_goldline_campaign_run_targets_run (tenantId,campaignRunId)
+  )`,
+  "CREATE TABLE goldline_campaign_run_targets"
+);
+await assertRequiredColumns("goldline_campaign_run_targets", [
+  "tenantId", "campaignRunId", "slotId", "originalTargetId",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_campaign_target_events (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    campaignRunId VARCHAR(36) NOT NULL,
+    targetId VARCHAR(64) NULL,
+    kind ENUM('territory_presence','placement_reported','supporting_photo','target_replaced') NOT NULL,
+    occurredAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    operatorUserId VARCHAR(128) NOT NULL,
+    provenance VARCHAR(64) NOT NULL,
+    epistemicState VARCHAR(32) NOT NULL,
+    supportingPresenceEventId VARCHAR(36) NULL,
+    replacementTargetId VARCHAR(64) NULL,
+    lat DECIMAL(10,7) NULL,
+    lng DECIMAL(10,7) NULL,
+    accuracyMeters INT NULL,
+    note VARCHAR(512) NULL,
+    payloadJson JSON NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_goldline_campaign_target_events_run (tenantId,campaignRunId,kind),
+    KEY idx_goldline_campaign_target_events_target (campaignRunId,targetId)
+  )`,
+  "CREATE TABLE goldline_campaign_target_events"
+);
+await assertRequiredColumns("goldline_campaign_target_events", [
+  "tenantId", "campaignRunId", "targetId", "kind", "operatorUserId",
+  "provenance", "epistemicState", "supportingPresenceEventId", "replacementTargetId",
+  "lat", "lng", "accuracyMeters",
+]);
+
 await conn.end();
 console.log("\nMigration complete.");

@@ -7227,3 +7227,133 @@ export const goldlineCapabilityGaps = mysqlTable(
     ),
   })
 );
+
+/**
+ * Campaign Runs — the standing instance of one real operation across days.
+ * See docs/goldline/FICTION_PACKS.md section 2. Progress is DERIVED from the
+ * event table below; there is deliberately no counter column anywhere here.
+ */
+export const goldlineCampaignRuns = mysqlTable(
+  "goldline_campaign_runs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    campaignId: varchar("campaignId", { length: 64 }).notNull(),
+    campaignVersion: int("campaignVersion").notNull().default(1),
+    fictionPackId: varchar("fictionPackId", { length: 64 }),
+    fictionPackVersion: int("fictionPackVersion"),
+    targetSetId: varchar("targetSetId", { length: 64 }).notNull(),
+    startedAt: timestamp("startedAt").notNull().defaultNow(),
+    status: varchar("status", { length: 16 }).notNull().default("active"),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    activeIdx: index("idx_goldline_campaign_runs_active").on(
+      table.tenantId,
+      table.operatorUserId,
+      table.status
+    ),
+    campaignIdx: index("idx_goldline_campaign_runs_campaign").on(
+      table.tenantId,
+      table.campaignId
+    ),
+  })
+);
+
+export const goldlineCampaignTargets = mysqlTable(
+  "goldline_campaign_targets",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    targetSetId: varchar("targetSetId", { length: 64 }).notNull(),
+    targetId: varchar("targetId", { length: 64 }).notNull(),
+    label: varchar("label", { length: 191 }).notNull(),
+    address: varchar("address", { length: 512 }).notNull(),
+    lat: decimal("lat", { precision: 10, scale: 7 }),
+    lng: decimal("lng", { precision: 10, scale: 7 }),
+    placementPoint: varchar("placementPoint", { length: 32 }).notNull(),
+    sourceNote: varchar("sourceNote", { length: 512 }).notNull(),
+    provenance: varchar("provenance", { length: 64 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    targetUnique: uniqueIndex("uq_goldline_campaign_target").on(
+      table.tenantId,
+      table.targetSetId,
+      table.targetId
+    ),
+    setIdx: index("idx_goldline_campaign_targets_set").on(
+      table.tenantId,
+      table.targetSetId
+    ),
+  })
+);
+
+export const goldlineCampaignRunTargets = mysqlTable(
+  "goldline_campaign_run_targets",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    campaignRunId: varchar("campaignRunId", { length: 36 }).notNull(),
+    slotId: varchar("slotId", { length: 64 }).notNull(),
+    originalTargetId: varchar("originalTargetId", { length: 64 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    slotUnique: uniqueIndex("uq_goldline_campaign_run_slot").on(
+      table.campaignRunId,
+      table.slotId
+    ),
+    runIdx: index("idx_goldline_campaign_run_targets_run").on(
+      table.tenantId,
+      table.campaignRunId
+    ),
+  })
+);
+
+export const goldlineCampaignTargetEvents = mysqlTable(
+  "goldline_campaign_target_events",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    campaignRunId: varchar("campaignRunId", { length: 36 }).notNull(),
+    targetId: varchar("targetId", { length: 64 }),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    occurredAt: timestamp("occurredAt").notNull().defaultNow(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    provenance: varchar("provenance", { length: 64 }).notNull(),
+    epistemicState: varchar("epistemicState", { length: 32 }).notNull(),
+    supportingPresenceEventId: varchar("supportingPresenceEventId", { length: 36 }),
+    replacementTargetId: varchar("replacementTargetId", { length: 64 }),
+    lat: decimal("lat", { precision: 10, scale: 7 }),
+    lng: decimal("lng", { precision: 10, scale: 7 }),
+    accuracyMeters: int("accuracyMeters"),
+    note: varchar("note", { length: 512 }),
+    payloadJson: json("payloadJson"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    runIdx: index("idx_goldline_campaign_target_events_run").on(
+      table.tenantId,
+      table.campaignRunId,
+      table.kind
+    ),
+    targetIdx: index("idx_goldline_campaign_target_events_target").on(
+      table.campaignRunId,
+      table.targetId
+    ),
+  })
+);
+
+export type GoldlineCampaignRun = typeof goldlineCampaignRuns.$inferSelect;
+export type InsertGoldlineCampaignRun = typeof goldlineCampaignRuns.$inferInsert;
+export type GoldlineCampaignTarget = typeof goldlineCampaignTargets.$inferSelect;
+export type InsertGoldlineCampaignTarget = typeof goldlineCampaignTargets.$inferInsert;
+export type GoldlineCampaignRunTarget = typeof goldlineCampaignRunTargets.$inferSelect;
+export type InsertGoldlineCampaignRunTarget = typeof goldlineCampaignRunTargets.$inferInsert;
+export type GoldlineCampaignTargetEvent = typeof goldlineCampaignTargetEvents.$inferSelect;
+export type InsertGoldlineCampaignTargetEvent = typeof goldlineCampaignTargetEvents.$inferInsert;
