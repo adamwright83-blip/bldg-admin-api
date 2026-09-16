@@ -378,7 +378,7 @@ export async function assembleClaireDriveContext(input: {
       ? simplify(today.nextFixedCommitment)
       : null;
   const blockers = today.blockers
-    .filter(item => input.phase !== "pre_drive" || relevantToDriveBrief(item))
+    .filter((item: any) => input.phase !== "pre_drive" || relevantToDriveBrief(item))
     .slice(0, 3)
     .map(simplify);
 

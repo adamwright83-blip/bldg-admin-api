@@ -124,7 +124,7 @@ const databasePersistence: MacroGoalPersistence = {
         targetValue: input.targetValue.toFixed(2),
         unit: input.unit,
         urgencyText: input.urgencyText ?? null,
-        targetDate: input.targetDate ? new Date(input.targetDate) : null,
+        targetDate: input.targetDate ?? null,
         source: input.source,
         sourceNote: input.sourceNote,
         status: "active",

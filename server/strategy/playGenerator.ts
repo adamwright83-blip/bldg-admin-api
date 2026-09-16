@@ -228,6 +228,7 @@ export function getStrategyPlayById(playId: string): StrategyPlay | null {
   if (playId.startsWith("play_")) {
     const isDoor = playId.includes("door");
     const isExpensive = playId.includes("expensive");
+    const now = new Date();
     const fallback: StrategyPlay = {
       id: playId,
       tenantId: "default",
@@ -236,31 +237,39 @@ export function getStrategyPlayById(playId: string): StrategyPlay | null {
       hypothesis: isDoor ? "Deploy door tags for local resident acquisition" : "Expand into luxury properties for resident amenity acquisition",
       primaryMetric: "new_paying_customers",
       geography: isDoor ? "Hillside Doors" : "Downtown Core",
+      stopsCount: 3,
+      isClustered: true,
       estimatedInitiationCost: 66,
       estimatedSpendCents: isExpensive ? 7500 : (isDoor ? 2500 : 0),
       spendCategory: isDoor ? "print_order" : "paid_growth",
       confidence: "medium",
-      evidenceReferences: [],
       scoreBreakdown: {
-        verifiedOpportunityAdvance: 20,
-        expectedTimeToFirstSale: 15,
+        policyVersion: "2026.09.1",
+        opportunityAdvancement: 20,
+        urgencyAndSpeed: 15,
         repeatPotential: 20,
-        capacityAlignment: 15,
-        travelEffort: -10,
-        contributionMargin: 0,
-        initiationCostPenalty: -20,
-        clusteringBonus: 25,
-        urgencyPace: 10,
-        priorEvidence: 0,
+        capacityFeasibility: 15,
+        initiationEffortPenalty: -20,
+        geographicClusteringBonus: 25,
+        unknownEconomicsScore: 0,
+        avoidancePenalty: 0,
         totalScore: 75,
       },
+      totalScore: 75,
       status: "active",
+      needsApprovalToRun: isExpensive,
       minimumEvidenceThreshold: {
-        days: 14,
-        minimumExposureUnits: isDoor ? 100 : 6,
+        minDays: 14,
+        minVolume: isDoor ? 100 : 6,
+        volumeUnit: isDoor ? "tags" : "stops",
       },
-      createdBy: "engine",
-      provenance: "fallback:synthesis",
+      verticalKey: "laundry_fluff_fold",
+      templateKey: isDoor ? "door_tags" : "property_expansion",
+      provenance: {
+        source: "fallback:synthesis",
+        generatedAt: now.toISOString(),
+      },
+      createdAt: now.toISOString(),
     };
     playStore.set(playId, fallback);
     return fallback;

@@ -177,8 +177,8 @@ export const strategyRouter = router({
       }),
 
     active: adminProcedure.query(async ({ ctx }) => {
-      const activeState = await getActiveStrategicPath(ctx.tenantId);
-      return activeState.activePlay;
+      const activePlayId = getActiveStrategicPath(ctx.tenantId);
+      return { activePlayId };
     }),
   }),
 
@@ -413,7 +413,7 @@ export const strategyRouter = router({
         z.object({
           businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
           eventType: z.string(),
-          detail: z.record(z.unknown()).optional(),
+          detail: z.record(z.string(), z.unknown()).optional(),
           force: z.boolean().optional(),
         })
       )

@@ -294,7 +294,7 @@ export async function triggerBusinessChange(input: {
     triggerType: "business_change",
     businessDate: input.businessDate,
     dedupeKey,
-    snapshotId: snapshot.snapshotId,
+    snapshotId: snapshot.id,
     outcome: "success",
     detail: {
       eventType: input.eventType,
@@ -306,7 +306,7 @@ export async function triggerBusinessChange(input: {
   return {
     executed: true,
     debounced: false,
-    snapshotId: snapshot.snapshotId,
+    snapshotId: snapshot.id,
   };
 }
 
@@ -375,8 +375,8 @@ export async function triggerWeeklyDawn(input: {
       closed: payload.accounts?.filter((a: any) => a.status === "Closed").length ?? 0,
     },
     customerGrowth: {
-      newCount: payload.growthMetrics?.newPayingCustomers ?? 0,
-      reactivatedCount: payload.growthMetrics?.reactivatedCustomers ?? 0,
+      newCount: payload.growthMetrics?.newPayingCustomers?.count ?? 0,
+      reactivatedCount: payload.growthMetrics?.reactivatedCustomers?.count ?? 0,
     },
     commitmentsKeptCount: 4,
     recoveryVisibleItem: "Grandview Follow-up",

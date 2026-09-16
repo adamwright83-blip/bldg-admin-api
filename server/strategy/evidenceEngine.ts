@@ -3,8 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { opportunityStallReasons, strategyEvidence } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { lintCausalLanguage, lintVerdictLanguage } from "./verdictLint";
-import { getStrategyPlayById } from "./playGenerator";
-import type { StrategyPlay } from "./decisionPolicy";
+import { getStrategyPlayById, type StrategyPlay } from "./playGenerator";
 
 export type WorldSignal = "brighten" | "dim" | "none";
 
@@ -95,8 +94,8 @@ export async function computePlayEvidence(input: {
   linkedCustomers?: number;
 }): Promise<PlayEvidenceRecord> {
   const play = getStrategyPlayById(input.playId);
-  const minThresholdDays = play?.minimumEvidenceThreshold?.days ?? 14;
-  const minExposureUnits = play?.minimumEvidenceThreshold?.minimumExposureUnits ?? 6;
+  const minThresholdDays = play?.minimumEvidenceThreshold?.minDays ?? 14;
+  const minExposureUnits = play?.minimumEvidenceThreshold?.minVolume ?? 6;
 
   const exposureUnits = input.exposureUnits ?? input.funnelCounts["visits"] ?? input.funnelCounts["deployed"] ?? 0;
   const linkedCustomers = input.linkedCustomers ?? input.funnelCounts["newCustomers"] ?? 0;
@@ -302,37 +301,45 @@ export async function proposeBoundedExperiment(
 
   const playId = `exp_${randomUUID().slice(0, 8)}`;
   const experimentPlay: StrategyPlay = {
-    id: playId,
+    id: `exp_${randomUUID().slice(0, 12)}`,
     tenantId: input.tenantId,
     businessName: `Experiment: ${input.hypothesis.slice(0, 40)}`,
     worldName: "The Uncharted Way",
     hypothesis: input.hypothesis,
     primaryMetric: "new_paying_customers",
+    geography: "Flexible",
+    stopsCount: 1,
+    isClustered: false,
     estimatedInitiationCost: 50,
     estimatedSpendCents: input.costLimitCents,
     spendCategory: "paid_growth",
     confidence: "low",
-    evidenceReferences: [],
     scoreBreakdown: {
-      verifiedOpportunityAdvance: 10,
-      expectedTimeToFirstSale: 10,
+      policyVersion: "2026.09.1",
+      opportunityAdvancement: 10,
+      urgencyAndSpeed: 10,
       repeatPotential: 10,
-      capacityAlignment: 15,
-      travelEffort: -10,
-      contributionMargin: 0,
-      initiationCostPenalty: -15,
-      clusteringBonus: 0,
-      urgencyPace: 5,
-      priorEvidence: 0,
-      totalScore: 40,
+      capacityFeasibility: 10,
+      initiationEffortPenalty: -10,
+      geographicClusteringBonus: 0,
+      unknownEconomicsScore: 0,
+      avoidancePenalty: 0,
+      totalScore: 50,
     },
+    totalScore: 50,
     status: "candidate", // NEVER auto-runs
+    needsApprovalToRun: input.costLimitCents > 0,
     minimumEvidenceThreshold: {
+      minDays: input.observationWindowDays,
       days: input.observationWindowDays,
+      minVolume: 10,
       minimumExposureUnits: 10,
-    },
-    createdBy: "engine",
-    provenance: `experiment:audience=${input.targetAudience};success=${input.successMeasure}`,
+      volumeUnit: "responses",
+    } as any,
+    verticalKey: "laundry_fluff_fold",
+    templateKey: "experiment",
+    provenance: `experiment:audience=${input.targetAudience};success=${input.successMeasure}` as any,
+    createdAt: new Date().toISOString(),
   };
 
   return experimentPlay;

@@ -79,6 +79,13 @@ export async function sequenceDailyMissions(
   const config = { ...DEFAULT_SEQUENCER_CONFIG, ...input.config };
   const unresolvedIssues: string[] = [];
   const gapsDetected: string[] = [];
+  const rawSnapshot = input.snapshot as any;
+  const payload = rawSnapshot.payload ?? {};
+  const rawUnresolved = rawSnapshot.unresolved ?? payload.unresolved ?? [];
+  const rawRepeat = rawSnapshot.repeatPipeline ?? payload.repeatPipeline;
+  const rawOpportunities = rawSnapshot.opportunities ?? payload.opportunities ?? [];
+  const capacity = rawSnapshot.capacity ?? payload.capacity;
+  const accounts = rawSnapshot.accounts ?? payload.accounts ?? [];
 
   // 1. Get active strategic path
   const activePlayId = getActiveStrategicPath(input.tenantId);
@@ -97,8 +104,9 @@ export async function sequenceDailyMissions(
   }> = [];
 
   // Check unresolved complaints / service issues first
-  if (input.snapshot.unresolved && input.snapshot.unresolved.length > 0) {
-    for (const issue of input.snapshot.unresolved.slice(0, config.maxSupportAllowancePerDay)) {
+  if (Array.isArray(rawUnresolved) && rawUnresolved.length > 0) {
+    for (const rawIssue of rawUnresolved.slice(0, config.maxSupportAllowancePerDay)) {
+      const issue = typeof rawIssue === "string" ? rawIssue : (rawIssue?.issue ?? "Customer service issue");
       const dedupeKey = `support:issue:${input.businessDate}:${issue.slice(0, 32)}`;
       candidateSupportMissions.push({
         title: `Service Recovery: ${issue.slice(0, 50)}`,
@@ -118,10 +126,22 @@ export async function sequenceDailyMissions(
   }
 
   // Check ready-to-order customers or first-to-second order pipeline
-  if (input.snapshot.repeatPipeline && input.snapshot.repeatPipeline.length > 0) {
-    for (const item of input.snapshot.repeatPipeline) {
+  const repeatItems = rawRepeat?.recentFirstOrderCustomers ?? (Array.isArray(rawRepeat) ? rawRepeat : []);
+  if (repeatItems.length > 0) {
+    for (const item of repeatItems) {
       if (candidateSupportMissions.length >= config.maxSupportAllowancePerDay) break;
       if (!item.secondOrderOccurred && item.fulfillmentStatus === "completed") {
+        // Guardrail G14: Check communication permissions before scheduling outreach
+        const perm = await checkCommunicationPermission({
+          tenantId: input.tenantId,
+          subjectType: "customer",
+          subjectId: item.identityId,
+        });
+        if (!perm.allowed) {
+          unresolvedIssues.push(`Contact ${item.customerName ?? item.identityId} opted out of communication; skipping outreach`);
+          continue;
+        }
+
         const dedupeKey = `support:repeat:${input.businessDate}:${item.identityId}`;
         candidateSupportMissions.push({
           title: `Second-Order Check-in: ${item.customerName} (${item.buildingName ?? "Route"})`,
@@ -145,10 +165,10 @@ export async function sequenceDailyMissions(
   }
 
   // 3. Gap Detection on Opportunities (e.g. "no next action", approved access with no first order)
-  if (input.snapshot.opportunities) {
-    for (const opp of input.snapshot.opportunities) {
+  if (Array.isArray(rawOpportunities) && rawOpportunities.length > 0) {
+    for (const opp of rawOpportunities) {
       if (!opp.nextAction || opp.nextAction.trim() === "") {
-        gapsDetected.push(`Opportunity ${opp.accountName} has no next action`);
+        gapsDetected.push(`${opp.accountName} has no next action`);
       }
       if (opp.stage === "access_granted" && (!opp.lastInteraction || opp.lastInteraction.includes("approved"))) {
         gapsDetected.push(`Property ${opp.accountName} approved access but zero resident orders recorded`);
@@ -172,14 +192,13 @@ export async function sequenceDailyMissions(
 
   if (activePlay) {
     // Check available capacity before generating growth work
-    const capacity = input.snapshot.capacity;
     if (capacity && capacity.maxDailyLoads > 0 && capacity.scheduledDeliveries >= capacity.maxDailyLoads) {
       unresolvedIssues.push(`Service capacity constrained for ${input.businessDate}; growth field outings limited`);
     } else {
       // Generate missions based on active play
       if (activePlay.hypothesis.includes("property") || activePlay.businessName.toLowerCase().includes("property")) {
         // Luxury building field outing
-        const targetAccounts = (input.snapshot.accounts ?? []).filter(a => a.status === "Contested" || a.status === "Wait");
+        const targetAccounts = accounts.filter((a: any) => a.status === "Contested" || a.status === "Wait");
         const cluster = activePlay.geography ?? "Downtown Core";
         const stopCount = Math.min(config.maxStopsPerOuting, targetAccounts.length > 0 ? targetAccounts.length : 3);
         const dedupeKey = `growth:${activePlay.id}:${input.businessDate}:${cluster}`;
