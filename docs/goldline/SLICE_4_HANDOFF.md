@@ -6,7 +6,7 @@
 **Branch:** `cursor/barrier-intervention-fiction-723a`
 **PR:** #157
 **Base:** `main` @ `49f372de` (Slice 3 merged via PR #156)
-**Exact latest commit SHA:** *(updated after push)*
+**Exact latest commit SHA:** `850fa1d1`
 **CI status:** pending after this commit
 
 ---
