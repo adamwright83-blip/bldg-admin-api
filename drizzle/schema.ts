@@ -1191,6 +1191,7 @@ export const opsTaskEvents = mysqlTable(
       "created",
       "viewed",
       "accepted",
+      "started",
       "completed",
       "dismissed",
       "expired",
@@ -1234,6 +1235,128 @@ export const opsTaskEvents = mysqlTable(
 
 export type OpsTaskEvent = typeof opsTaskEvents.$inferSelect;
 export type InsertOpsTaskEvent = typeof opsTaskEvents.$inferInsert;
+
+/**
+ * Behavioral Ledger (Slice 1). See docs/goldline/BEHAVIORAL_SCIENCE_FOUNDATION.md.
+ * Append-only observed behavior. Never write an interpretation here — that
+ * belongs in interventionDefinitions, versioned and referenced by id.
+ */
+export const behavioralLedgerEvents = mysqlTable(
+  "behavioral_ledger_events",
+  {
+    id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    correlationId: varchar("correlationId", { length: 128 }).notNull(),
+    sourceSystem: mysqlEnum("sourceSystem", [
+      "ops_task",
+      "strategy_path_offer",
+      "commercial_mission",
+      "mission_director",
+      "campaign_run",
+      "first_mission",
+    ]).notNull(),
+    sourceEntityType: varchar("sourceEntityType", { length: 96 }).notNull(),
+    sourceEntityId: varchar("sourceEntityId", { length: 128 }).notNull(),
+    eventType: mysqlEnum("eventType", [
+      "DELIVERED",
+      "VIEWABLE",
+      "ENGAGED",
+      "ACCEPTED",
+      "STARTED",
+      "COMPLETED",
+      "VERIFIED",
+      "DEFERRED",
+      "DISMISSED",
+      "EXPIRED",
+      "SUPERSEDED",
+      "NOT_COMPLETED",
+    ]).notNull(),
+    occurredAt: timestamp("occurredAt").notNull(),
+    verificationClass: mysqlEnum("verificationClass", ["VERIFIED", "ATTESTED", "CLAIMED"]),
+    provenance: varchar("provenance", { length: 191 }).notNull(),
+    evidenceSource: varchar("evidenceSource", { length: 191 }),
+    decisionPointId: varchar("decisionPointId", { length: 128 }),
+    availability: boolean("availability"),
+    eligibleOptionsJson: json("eligibleOptionsJson"),
+    assignedOption: varchar("assignedOption", { length: 128 }),
+    assignmentProbability: decimal("assignmentProbability", { precision: 6, scale: 5 }),
+    interventionPolicyVersion: int("interventionPolicyVersion"),
+    interventionDefinitionVersion: int("interventionDefinitionVersion"),
+    proximalOutcomeWindowMinutes: int("proximalOutcomeWindowMinutes"),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    tenantIdempotencyIdx: uniqueIndex("uq_behavioral_ledger_idempotency").on(
+      table.tenantId,
+      table.idempotencyKey
+    ),
+    tenantOperatorIdx: index("idx_behavioral_ledger_tenant_operator").on(
+      table.tenantId,
+      table.operatorUserId
+    ),
+    correlationIdx: index("idx_behavioral_ledger_correlation").on(
+      table.tenantId,
+      table.correlationId
+    ),
+    sourceIdx: index("idx_behavioral_ledger_source").on(
+      table.tenantId,
+      table.sourceSystem,
+      table.sourceEntityId
+    ),
+    decisionPointIdx: index("idx_behavioral_ledger_decision_point").on(
+      table.tenantId,
+      table.decisionPointId
+    ),
+  })
+);
+
+export type BehavioralLedgerEvent = typeof behavioralLedgerEvents.$inferSelect;
+export type InsertBehavioralLedgerEvent = typeof behavioralLedgerEvents.$inferInsert;
+
+/**
+ * Versioned annotation registry (foundation doc §6). COM-B/TDF/BCT mappings are
+ * hypotheses with provenance, not facts — they get revised as v2, v3, etc.
+ * Ledger rows reference a version; they never inline the annotation.
+ */
+export const interventionDefinitions = mysqlTable(
+  "intervention_definitions",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    interventionKey: varchar("interventionKey", { length: 96 }).notNull(),
+    version: int("version").notNull(),
+    framework: varchar("framework", { length: 64 }),
+    frameworkVersion: varchar("frameworkVersion", { length: 32 }),
+    proposedConstructJson: json("proposedConstructJson"),
+    bctAnnotationsJson: json("bctAnnotationsJson"),
+    evidenceReferencesJson: json("evidenceReferencesJson"),
+    annotationStatus: mysqlEnum("annotationStatus", [
+      "proposed",
+      "expert_reviewed",
+      "empirically_supported",
+    ])
+      .notNull()
+      .default("proposed"),
+    reviewedBy: varchar("reviewedBy", { length: 128 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    keyVersionIdx: uniqueIndex("uq_intervention_definitions_key_version").on(
+      table.tenantId,
+      table.interventionKey,
+      table.version
+    ),
+    tenantKeyIdx: index("idx_intervention_definitions_tenant_key").on(
+      table.tenantId,
+      table.interventionKey
+    ),
+  })
+);
+
+export type InterventionDefinition = typeof interventionDefinitions.$inferSelect;
+export type InsertInterventionDefinition = typeof interventionDefinitions.$inferInsert;
 
 export const commercialAccounts = mysqlTable(
   "commercial_accounts",

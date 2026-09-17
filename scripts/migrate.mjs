@@ -52,6 +52,27 @@ const assertRequiredColumns = async (tableName, columns) => {
   console.log("✓", `${tableName} required columns verified`);
 };
 
+// `run()` swallows any non-"already exists" failure into a console.error and
+// continues — correct for legacy/best-effort DDL, but a widened ENUM that
+// silently failed to apply is not a schema mismatch a later ALTER can heal:
+// every write of the missing value throws at request time in production
+// until someone notices. Anything a later slice's writes depend on must go
+// through runRequired + an assertion, never plain run().
+const assertEnumContainsValues = async (tableName, columnName, values) => {
+  const [rows] = await conn.execute(
+    `SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+    [tableName, columnName]
+  );
+  const columnType = rows[0]?.COLUMN_TYPE ?? "";
+  const missing = values.filter(value => !columnType.includes(`'${value}'`));
+  if (missing.length) {
+    throw new Error(
+      `Required migration ${tableName}.${columnName} is missing enum value(s): ${missing.join(", ")} (actual: ${columnType || "<column not found>"})`
+    );
+  }
+  console.log("✓", `${tableName}.${columnName} required enum values verified`);
+};
+
 // ── users table ──────────────────────────────────────────────────
 await run(
   `
@@ -455,6 +476,40 @@ await runRequired(
   )`,
   "CREATE TABLE tower_wars_promises"
 );
+
+// catalog_items is read (never altered) throughout this script — the same
+// old-bootstrap-assumption pattern as ops_tasks/ops_task_events above: every
+// use here assumes the table already exists from drizzle/0006 (+0007's
+// serviceType column, +0008's nullable costCents) having been applied once,
+// historically, outside this script. No-op against production, where the
+// table already exists in this exact shape; required for a clean database,
+// where the very first read below (`SELECT DISTINCT tenantId FROM
+// catalog_items ...`) would otherwise throw ER_NO_SUCH_TABLE.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS catalog_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL DEFAULT 'default',
+    slug VARCHAR(128) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    serviceType VARCHAR(32) NOT NULL DEFAULT 'dry_clean',
+    standardPriceCents INT NOT NULL,
+    expressPriceCents INT NULL,
+    costCents INT NULL,
+    isActive TINYINT(1) NOT NULL DEFAULT 1,
+    isOnline TINYINT(1) NOT NULL DEFAULT 0,
+    archived TINYINT(1) NOT NULL DEFAULT 0,
+    sortOrder INT NOT NULL DEFAULT 0,
+    iconUrl VARCHAR(512) NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_catalog_items_tenant_slug (tenantId, slug)
+  )`,
+  "CREATE TABLE catalog_items"
+);
+await assertRequiredColumns("catalog_items", [
+  "tenantId", "slug", "name", "category", "serviceType", "standardPriceCents",
+]);
 
 /* ===== Dry-cleaning partners (multi-cleaner order lines) =====
  * COAST 1hr CLEANERS is the base partner: its price list is `catalog_items`
@@ -958,6 +1013,71 @@ await assertRequiredColumns("goldline_campaigns", [
   "pocketMinutesMin",
   "opsTaskType",
 ]);
+
+// migrate.mjs has ALTERed ops_tasks/ops_task_events for a long time (see the
+// taskType-widening ALTER immediately below, and the eventType-widening
+// ALTER in the Behavioral Ledger block at the end of this file) without ever
+// creating either table — an old bootstrap assumption that production's
+// tables already existed from a one-time historical setup outside this
+// script. That assumption breaks on a genuinely clean database (a fresh CI
+// MySQL instance, in particular): the ALTERs below would throw
+// ER_NO_SUCH_TABLE. Both CREATE TABLE IF NOT EXISTS blocks are no-ops
+// against the real production database, where these tables already exist.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS ops_tasks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL DEFAULT 'default',
+    lane ENUM('lane_1','lane_2','lane_3','level_4') NOT NULL,
+    level ENUM('1','2','3','4') NOT NULL,
+    taskType ENUM('intake_missing_price','unpaid_order','vague_intake','missed_pickup','stale_customer','revenue_leak','referral_ask','vendor_followup','gm_followup','manual_operator_task','dry_clean_receipt_intake','emergency_task') NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NULL,
+    source ENUM('manual','agent_suggested','system_detected','level_4','voice','quick_input') NOT NULL DEFAULT 'manual',
+    createdBy VARCHAR(128) NULL,
+    assignedTo VARCHAR(128) NULL,
+    status ENUM('open','accepted','in_progress','completed','dismissed','expired') NOT NULL DEFAULT 'open',
+    priority ENUM('low','normal','high','emergency') NOT NULL DEFAULT 'normal',
+    revenueAtRiskCents INT NOT NULL DEFAULT 0,
+    revenueRecoveredCents INT NOT NULL DEFAULT 0,
+    customerId INT NULL,
+    orderId INT NULL,
+    agentEventId INT NULL,
+    metadataJson JSON NULL,
+    outcome TEXT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    completedAt TIMESTAMP NULL,
+    completedBy VARCHAR(128) NULL,
+    KEY idx_ops_tasks_tenant_status (tenantId, status),
+    KEY idx_ops_tasks_tenant_lane (tenantId, lane),
+    KEY idx_ops_tasks_tenant_completed (tenantId, completedAt),
+    KEY idx_ops_tasks_agent_event (agentEventId),
+    KEY idx_ops_tasks_order (orderId)
+  )`,
+  "CREATE TABLE ops_tasks"
+);
+await assertRequiredColumns("ops_tasks", ["tenantId", "lane", "level", "taskType", "title", "status"]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS ops_task_events (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL DEFAULT 'default',
+    taskId INT NOT NULL,
+    eventType ENUM('created','viewed','accepted','completed','dismissed','expired','agent_suggested','human_approved','revenue_recovered','outcome_recorded') NOT NULL,
+    actorType ENUM('human','voice','resident_chat','driver','vendor','ai_agent','system') NOT NULL DEFAULT 'human',
+    actorId VARCHAR(128) NULL,
+    agentEventId INT NULL,
+    beforeJson JSON NULL,
+    afterJson JSON NULL,
+    note TEXT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_ops_task_events_tenant_task (tenantId, taskId),
+    KEY idx_ops_task_events_tenant_event (tenantId, eventType),
+    KEY idx_ops_task_events_agent_event (agentEventId)
+  )`,
+  "CREATE TABLE ops_task_events"
+);
+await assertRequiredColumns("ops_task_events", ["tenantId", "taskId", "eventType"]);
 
 await run(
   `ALTER TABLE ops_tasks MODIFY COLUMN taskType ENUM(
@@ -1742,6 +1862,93 @@ await runRequired(
 );
 await assertRequiredColumns("drop_pattern_flags", [
   "tenantId", "patternType", "occurrenceCount", "surfacedAtDawn",
+]);
+
+// ── Behavioral Ledger (Slice 1) ──────────────────────────────────
+// See docs/goldline/BEHAVIORAL_SCIENCE_FOUNDATION.md. Mirrors
+// drizzle/0087_behavioral_ledger.sql — keep both in sync; this file is
+// what production actually runs (`node scripts/migrate.mjs`), the numbered
+// drizzle/*.sql file alone is not.
+//
+// The eventType widening is `runRequired`, not `run()`: server/opsTasks.ts
+// already writes "started" as of this slice, so a server that starts
+// without this column change is a server that throws on every task-start
+// transition. That must fail the deploy, not log a warning and continue.
+await runRequired(
+  `ALTER TABLE ops_task_events MODIFY COLUMN eventType ENUM(
+    'created','viewed','accepted','started','completed','dismissed',
+    'expired','agent_suggested','human_approved','revenue_recovered',
+    'outcome_recorded'
+  ) NOT NULL`,
+  "ops_task_events: add started to eventType enum"
+);
+await assertEnumContainsValues("ops_task_events", "eventType", ["started"]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS behavioral_ledger_events (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NOT NULL,
+    correlationId VARCHAR(128) NOT NULL,
+    sourceSystem ENUM(
+      'ops_task','strategy_path_offer','commercial_mission',
+      'mission_director','campaign_run','first_mission'
+    ) NOT NULL,
+    sourceEntityType VARCHAR(96) NOT NULL,
+    sourceEntityId VARCHAR(128) NOT NULL,
+    eventType ENUM(
+      'DELIVERED','VIEWABLE','ENGAGED','ACCEPTED','STARTED','COMPLETED',
+      'VERIFIED','DEFERRED','DISMISSED','EXPIRED','SUPERSEDED','NOT_COMPLETED'
+    ) NOT NULL,
+    occurredAt TIMESTAMP NOT NULL,
+    verificationClass ENUM('VERIFIED','ATTESTED','CLAIMED') NULL,
+    provenance VARCHAR(191) NOT NULL,
+    evidenceSource VARCHAR(191) NULL,
+    decisionPointId VARCHAR(128) NULL,
+    availability TINYINT(1) NULL,
+    eligibleOptionsJson JSON NULL,
+    assignedOption VARCHAR(128) NULL,
+    assignmentProbability DECIMAL(6,5) NULL,
+    interventionPolicyVersion INT NULL,
+    interventionDefinitionVersion INT NULL,
+    proximalOutcomeWindowMinutes INT NULL,
+    idempotencyKey VARCHAR(191) NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_behavioral_ledger_idempotency (tenantId, idempotencyKey),
+    KEY idx_behavioral_ledger_tenant_operator (tenantId, operatorUserId),
+    KEY idx_behavioral_ledger_correlation (tenantId, correlationId),
+    KEY idx_behavioral_ledger_source (tenantId, sourceSystem, sourceEntityId),
+    KEY idx_behavioral_ledger_decision_point (tenantId, decisionPointId)
+  )`,
+  "CREATE TABLE behavioral_ledger_events"
+);
+await assertRequiredColumns("behavioral_ledger_events", [
+  "tenantId", "operatorUserId", "correlationId", "sourceSystem",
+  "sourceEntityType", "sourceEntityId", "eventType", "occurredAt",
+  "idempotencyKey",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS intervention_definitions (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    interventionKey VARCHAR(96) NOT NULL,
+    version INT NOT NULL,
+    framework VARCHAR(64) NULL,
+    frameworkVersion VARCHAR(32) NULL,
+    proposedConstructJson JSON NULL,
+    bctAnnotationsJson JSON NULL,
+    evidenceReferencesJson JSON NULL,
+    annotationStatus ENUM('proposed','expert_reviewed','empirically_supported') NOT NULL DEFAULT 'proposed',
+    reviewedBy VARCHAR(128) NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_intervention_definitions_key_version (tenantId, interventionKey, version),
+    KEY idx_intervention_definitions_tenant_key (tenantId, interventionKey)
+  )`,
+  "CREATE TABLE intervention_definitions"
+);
+await assertRequiredColumns("intervention_definitions", [
+  "tenantId", "interventionKey", "version", "annotationStatus",
 ]);
 
 await conn.end();

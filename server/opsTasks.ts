@@ -8,8 +8,10 @@ import {
   type OpsTask,
   type OpsTaskEvent,
 } from "../drizzle/schema";
+import type { LedgerEventType } from "../shared/behavioralLedger";
 import { getDb } from "./db";
 import { getDashboardTimeZone, zonedWeekRangeUtcContaining } from "./dashboardZoned";
+import { recordBehavioralLedgerEvent, type BehavioralLedgerStore } from "./behavioralLedger/behavioralLedger";
 
 export const OPS_TASK_LANES = ["lane_1", "lane_2", "lane_3", "level_4"] as const;
 export const OPS_TASK_LEVELS = ["1", "2", "3", "4"] as const;
@@ -38,6 +40,7 @@ export const OPS_TASK_EVENT_TYPES = [
   "created",
   "viewed",
   "accepted",
+  "started",
   "completed",
   "dismissed",
   "expired",
@@ -103,6 +106,40 @@ export type OpsTaskStore = {
   getTask(tenantId: string, taskId: number): Promise<OpsTask | null>;
   updateTask(tenantId: string, taskId: number, patch: Partial<InsertOpsTask>): Promise<OpsTask | null>;
   createEvent(input: InsertOpsTaskEvent): Promise<OpsTaskEvent>;
+  /**
+   * Atomic compare-and-set + authoritative event insert, in one transaction.
+   * Writes `patch` only if the row's current status is not already
+   * "completed" — `transitioned` is true only for whichever concurrent
+   * caller's UPDATE actually changed the row, the same
+   * affected-rows-decide-the-winner idiom as `attemptOrderPickupCollection`
+   * in server/db.ts. `buildEvent` is called with the post-update row only
+   * when `transitioned` is true, and its returned event is inserted in the
+   * SAME transaction: if that insert fails, the transaction rolls back the
+   * status change too, so a completed task can never end up with no
+   * authoritative `ops_task_events.completed` row behind it. The downstream
+   * behavioral-ledger mirror is allowed to be best-effort/replayable
+   * exactly because this pairing is not.
+   */
+  completeTaskWithEvent(
+    tenantId: string,
+    taskId: number,
+    patch: Partial<InsertOpsTask>,
+    buildEvent: (after: OpsTask) => Omit<InsertOpsTaskEvent, "tenantId" | "taskId">
+  ): Promise<{ transitioned: boolean; task: OpsTask | null; event: OpsTaskEvent | null }>;
+  /**
+   * Non-completion state transition (accepted/started/dismissed/expired) plus
+   * its authoritative event, in one transaction — same reasoning as
+   * completeTaskWithEvent, minus the CAS guard: these statuses don't carry
+   * completion's exactly-once invariant, but a status change with no
+   * corresponding event (because the event insert failed after the UPDATE
+   * committed) would still corrupt the ledger's source history.
+   */
+  updateTaskWithEvent(
+    tenantId: string,
+    taskId: number,
+    patch: Partial<InsertOpsTask>,
+    buildEvent: (after: OpsTask) => Omit<InsertOpsTaskEvent, "tenantId" | "taskId">
+  ): Promise<{ task: OpsTask | null; event: OpsTaskEvent | null }>;
 };
 
 function assertTaskTitle(title: string) {
@@ -114,6 +151,85 @@ function assertTaskTitle(title: string) {
 function laneForLevel(level: OpsTaskLevel): OpsTaskLane {
   if (level === "4") return "level_4";
   return `lane_${level}` as OpsTaskLane;
+}
+
+function lifecycleTransitionForStatus(
+  status: OpsTaskStatus
+): { opsEventType: OpsTaskEventType; ledgerEventType: LedgerEventType } | null {
+  switch (status) {
+    case "accepted":
+      return { opsEventType: "accepted", ledgerEventType: "ACCEPTED" };
+    case "in_progress":
+      return { opsEventType: "started", ledgerEventType: "STARTED" };
+    case "completed":
+      // Unreachable via updateOpsTaskStatus, which rejects "completed"
+      // before calling this function. Kept only so this switch stays
+      // exhaustive over OpsTaskStatus; completion has its own atomic path
+      // (completeOpsTask / completeTaskWithEvent).
+      return { opsEventType: "completed", ledgerEventType: "COMPLETED" };
+    case "dismissed":
+      return { opsEventType: "dismissed", ledgerEventType: "DISMISSED" };
+    case "expired":
+      return { opsEventType: "expired", ledgerEventType: "EXPIRED" };
+    case "open":
+      // There is no truthful existing ops-task event meaning "reopened".
+      // Do not lie by recording ACCEPTED merely because open is the fallback.
+      return null;
+  }
+}
+
+async function mirrorOpsTaskEventToBehavioralLedger(input: {
+  tenantId: string;
+  taskId: number;
+  operatorUserId: string | null | undefined;
+  sourceEvent: OpsTaskEvent;
+  ledgerEventType: LedgerEventType;
+  /**
+   * Injectable for tests that pass a fake OpsTaskStore: without this, a
+   * pure in-memory unit test still reaches the real recordBehavioralLedgerEvent
+   * and its real getDb(), attempting (and, in any environment without a
+   * reachable DATABASE_URL matching the real schema, failing) a genuine
+   * network call on every run — silently, since the catch below is
+   * intentionally non-throwing. That's correct production behavior
+   * (instrumentation must never fail a business transition) but it means a
+   * test using a fake OpsTaskStore was never actually exercising or
+   * verifying the ledger mirror, only appearing to. Omit this to get the
+   * real production store, exactly as before.
+   */
+  ledgerStore?: BehavioralLedgerStore;
+}) {
+  if (!input.operatorUserId) return;
+  try {
+    await recordBehavioralLedgerEvent({
+      tenantId: input.tenantId,
+      operatorUserId: input.operatorUserId,
+      correlationId: `ops_task:${input.taskId}`,
+      sourceSystem: "ops_task",
+      sourceEntityType: "ops_task_event",
+      sourceEntityId: String(input.sourceEvent.id),
+      eventType: input.ledgerEventType,
+      occurredAt: input.sourceEvent.createdAt,
+      verificationClass: input.ledgerEventType === "COMPLETED" ? "CLAIMED" : null,
+      provenance: "ops_task_event",
+      evidenceSource: `ops_task_event:${input.sourceEvent.id}`,
+      idempotencyKey: `ops_task_event:${input.sourceEvent.id}`,
+    }, input.ledgerStore);
+  } catch (error) {
+    // ops_task_events is the authoritative source record and can be replayed.
+    // Behavioral instrumentation must not turn an already-successful business
+    // transition into a caller-visible failure.
+    console.warn("[BehavioralLedger] Failed to mirror ops task event", {
+      tenantId: input.tenantId,
+      taskId: input.taskId,
+      sourceEventId: input.sourceEvent.id,
+      ledgerEventType: input.ledgerEventType,
+      error,
+    });
+  }
+}
+
+function sameJsonValue(a: unknown, b: unknown) {
+  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 }
 
 export function mapLegacyLevelToOps(level: "level_1" | "level_2" | "level_3" | "level_4") {
@@ -174,6 +290,78 @@ const drizzleOpsTaskStore: OpsTaskStore = {
       .limit(1);
     return rows[0] ?? null;
   },
+  async completeTaskWithEvent(tenantId, taskId, patch, buildEvent) {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    return db.transaction(async tx => {
+      const result = await tx
+        .update(opsTasks)
+        .set(patch)
+        .where(
+          and(
+            eq(opsTasks.tenantId, tenantId),
+            eq(opsTasks.id, taskId),
+            sql`${opsTasks.status} != 'completed'`
+          )
+        );
+      const affectedRows = Number(
+        (result as unknown as { [0]?: { affectedRows?: number } })[0]?.affectedRows ?? 0
+      );
+      const rows = await tx
+        .select()
+        .from(opsTasks)
+        .where(and(eq(opsTasks.tenantId, tenantId), eq(opsTasks.id, taskId)))
+        .limit(1);
+      const task = rows[0] ?? null;
+      if (affectedRows === 0 || !task) {
+        return { transitioned: false, task, event: null };
+      }
+
+      const eventInput = { tenantId, taskId, ...buildEvent(task) } as InsertOpsTaskEvent;
+      const insertResult = await tx.insert(opsTaskEvents).values(eventInput);
+      const eventId = Number(insertResult[0].insertId);
+      const eventRows = await tx
+        .select()
+        .from(opsTaskEvents)
+        .where(eq(opsTaskEvents.id, eventId))
+        .limit(1);
+      const event = eventRows[0] ?? null;
+      // Thrown inside db.transaction(): the status UPDATE above rolls back
+      // too. A completed task with no authoritative completion event is
+      // exactly the state this method exists to make impossible.
+      if (!event) throw new Error("Ops task completion event insert did not return a row");
+      return { transitioned: true, task, event };
+    });
+  },
+  async updateTaskWithEvent(tenantId, taskId, patch, buildEvent) {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    return db.transaction(async tx => {
+      await tx
+        .update(opsTasks)
+        .set(patch)
+        .where(and(eq(opsTasks.tenantId, tenantId), eq(opsTasks.id, taskId)));
+      const rows = await tx
+        .select()
+        .from(opsTasks)
+        .where(and(eq(opsTasks.tenantId, tenantId), eq(opsTasks.id, taskId)))
+        .limit(1);
+      const task = rows[0] ?? null;
+      if (!task) return { task: null, event: null };
+
+      const eventInput = { tenantId, taskId, ...buildEvent(task) } as InsertOpsTaskEvent;
+      const insertResult = await tx.insert(opsTaskEvents).values(eventInput);
+      const eventId = Number(insertResult[0].insertId);
+      const eventRows = await tx
+        .select()
+        .from(opsTaskEvents)
+        .where(eq(opsTaskEvents.id, eventId))
+        .limit(1);
+      const event = eventRows[0] ?? null;
+      if (!event) throw new Error("Ops task event insert did not return a row");
+      return { task, event };
+    });
+  },
   async createEvent(input) {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
@@ -219,6 +407,9 @@ export async function createOpsTask(input: CreateOpsTaskInput, store: OpsTaskSto
     afterJson: task,
     note: null,
   });
+
+  // Assignment is not delivery. Do not create a DELIVERED behavioral event
+  // here; that belongs at the real presentation/send boundary when one exists.
   return task;
 }
 
@@ -245,24 +436,69 @@ export async function listOpsTasks(input: ListOpsTasksInput = {}, store: OpsTask
 
 export async function updateOpsTaskStatus(
   input: { tenantId?: string; taskId: number; status: OpsTaskStatus; actorId?: string | null; note?: string | null },
-  store: OpsTaskStore = drizzleOpsTaskStore
+  store: OpsTaskStore = drizzleOpsTaskStore,
+  ledgerStore?: BehavioralLedgerStore
 ): Promise<OpsTask> {
+  // "completed" has its own atomic invariant (completeTaskWithEvent):
+  // exactly one caller may author the canonical completion, and a plain
+  // status-comparison-then-updateTask (below) cannot provide that under
+  // concurrent requests. No production call site currently passes
+  // "completed" here — routers.ts routes completion through
+  // completeOpsTask()/recordOpsTaskReply() exclusively — so this closes the
+  // hole by construction rather than trusting every future caller to
+  // remember which function to use.
+  if (input.status === "completed") {
+    throw new Error(
+      "updateOpsTaskStatus does not support status:\"completed\" — use completeOpsTask() so the completion transition stays atomic."
+    );
+  }
+
   const tenantId = input.tenantId ?? "default";
   const before = await store.getTask(tenantId, input.taskId);
   if (!before) throw new Error("Ops task not found");
+
+  // A same-state retry is not a new behavioral act.
+  if (before.status === input.status) return before;
+
   const patch: Partial<InsertOpsTask> = { status: input.status };
-  const after = await store.updateTask(tenantId, input.taskId, patch);
+  const transition = lifecycleTransitionForStatus(input.status);
+
+  if (!transition) {
+    // "open" (reopen): no truthful event exists for this, so no event to
+    // pair atomically with the state change — a plain update is correct.
+    const after = await store.updateTask(tenantId, input.taskId, patch);
+    if (!after) throw new Error("Ops task update failed");
+    return after;
+  }
+
+  // State change + its authoritative event, in one transaction: a status
+  // change with no corresponding event (because the event insert failed
+  // after the UPDATE committed) would corrupt the ledger's source history
+  // the same way an orphaned completion would.
+  const { task: after, event: sourceEvent } = await store.updateTaskWithEvent(
+    tenantId,
+    input.taskId,
+    patch,
+    afterRow => ({
+      eventType: transition.opsEventType,
+      actorType: "human",
+      actorId: input.actorId ?? null,
+      beforeJson: before,
+      afterJson: afterRow,
+      note: input.note ?? null,
+    })
+  );
   if (!after) throw new Error("Ops task update failed");
-  const eventType = input.status === "dismissed" ? "dismissed" : input.status === "expired" ? "expired" : input.status === "completed" ? "completed" : "accepted";
-  await createOpsTaskEvent({
+  if (!sourceEvent) throw new Error("Ops task lifecycle event missing after transition");
+
+  await mirrorOpsTaskEventToBehavioralLedger({
     tenantId,
     taskId: input.taskId,
-    eventType,
-    actorId: input.actorId ?? null,
-    beforeJson: before,
-    afterJson: after,
-    note: input.note ?? null,
-  }, store);
+    operatorUserId: input.actorId,
+    sourceEvent,
+    ledgerEventType: transition.ledgerEventType,
+    ledgerStore,
+  });
   return after;
 }
 
@@ -274,34 +510,102 @@ export async function completeOpsTask(
     revenueRecoveredCents?: number;
     completedBy?: string | null;
   },
-  store: OpsTaskStore = drizzleOpsTaskStore
+  store: OpsTaskStore = drizzleOpsTaskStore,
+  ledgerStore?: BehavioralLedgerStore
 ): Promise<OpsTask> {
   const tenantId = input.tenantId ?? "default";
   const before = await store.getTask(tenantId, input.taskId);
   if (!before) throw new Error("Ops task not found");
+
   const completedAt = new Date();
-  const patch: Partial<InsertOpsTask> = {
+  const completionPatch: Partial<InsertOpsTask> = {
     status: "completed",
     completedAt,
     completedBy: input.completedBy ?? null,
     outcome: input.outcome ?? before.outcome ?? null,
   };
   if (input.revenueRecoveredCents !== undefined) {
-    patch.revenueRecoveredCents = input.revenueRecoveredCents;
+    completionPatch.revenueRecoveredCents = input.revenueRecoveredCents;
   }
-  const after = await store.updateTask(tenantId, input.taskId, patch);
-  if (!after) throw new Error("Ops task completion failed");
 
-  await createOpsTaskEvent({
+  // Atomic compare-and-set + authoritative event insert, in one transaction.
+  // The database's affected-row count, not an application-level read of
+  // `before`, decides who actually performed the completion transition:
+  // two simultaneous callers can both read the task as "not completed", but
+  // only one UPDATE matches the `status != 'completed'` guard. Because the
+  // "completed" ops_task_events row is inserted in the SAME transaction as
+  // that UPDATE, a failure creating it rolls back the status change too —
+  // this call can never leave a task marked completed with no authoritative
+  // event behind it.
+  const { transitioned, task: afterAttempt, event: completionEventFromWinner } = await store.completeTaskWithEvent(
+    tenantId,
+    input.taskId,
+    completionPatch,
+    after => ({
+      eventType: "completed",
+      actorType: "human",
+      actorId: input.completedBy ?? null,
+      beforeJson: before,
+      afterJson: after,
+      note: input.outcome ?? null,
+      agentEventId: after.agentEventId ?? null,
+    })
+  );
+  if (!afterAttempt) throw new Error("Ops task completion failed");
+
+  if (!transitioned) {
+    // Lost the race (or this is a genuine retry/metadata update against an
+    // already-completed task). A retry may carry new outcome or revenue
+    // data, but it must never manufacture a second COMPLETED event.
+    const outcomeChanged = input.outcome !== undefined && input.outcome !== afterAttempt.outcome;
+    const revenueChanged =
+      input.revenueRecoveredCents !== undefined &&
+      input.revenueRecoveredCents !== afterAttempt.revenueRecoveredCents;
+    if (!outcomeChanged && !revenueChanged) return afterAttempt;
+
+    const metadataPatch: Partial<InsertOpsTask> = {};
+    if (outcomeChanged) metadataPatch.outcome = input.outcome ?? null;
+    if (revenueChanged) metadataPatch.revenueRecoveredCents = input.revenueRecoveredCents;
+    const after = await store.updateTask(tenantId, input.taskId, metadataPatch);
+    if (!after) throw new Error("Ops task completion metadata update failed");
+
+    if (revenueChanged) {
+      await createOpsTaskEvent({
+        tenantId,
+        taskId: input.taskId,
+        eventType: "revenue_recovered",
+        actorId: input.completedBy ?? null,
+        beforeJson: { revenueRecoveredCents: afterAttempt.revenueRecoveredCents },
+        afterJson: { revenueRecoveredCents: after.revenueRecoveredCents },
+        agentEventId: after.agentEventId ?? null,
+      }, store);
+    }
+    if (outcomeChanged) {
+      await createOpsTaskEvent({
+        tenantId,
+        taskId: input.taskId,
+        eventType: "outcome_recorded",
+        actorId: input.completedBy ?? null,
+        beforeJson: { outcome: afterAttempt.outcome },
+        afterJson: { outcome: after.outcome },
+        agentEventId: after.agentEventId ?? null,
+        note: after.outcome ?? null,
+      }, store);
+    }
+    return after;
+  }
+
+  const after = afterAttempt;
+  if (!completionEventFromWinner) throw new Error("Ops task completion event missing after transition");
+  await mirrorOpsTaskEventToBehavioralLedger({
     tenantId,
     taskId: input.taskId,
-    eventType: "completed",
-    actorId: input.completedBy ?? null,
-    beforeJson: before,
-    afterJson: after,
-    note: input.outcome ?? null,
-    agentEventId: after.agentEventId ?? null,
-  }, store);
+    operatorUserId: input.completedBy,
+    sourceEvent: completionEventFromWinner,
+    ledgerEventType: "COMPLETED",
+    ledgerStore,
+  });
+
   if ((input.revenueRecoveredCents ?? 0) > 0) {
     await createOpsTaskEvent({
       tenantId,
@@ -362,7 +666,8 @@ export async function recordOpsTaskReply(
     appliedOrderPatch?: Record<string, unknown> | null;
     repliedBy?: string | null;
   },
-  store: OpsTaskStore = drizzleOpsTaskStore
+  store: OpsTaskStore = drizzleOpsTaskStore,
+  ledgerStore?: BehavioralLedgerStore
 ): Promise<OpsTask> {
   const tenantId = input.tenantId ?? "default";
   const before = await store.getTask(tenantId, input.taskId);
@@ -372,32 +677,113 @@ export async function recordOpsTaskReply(
     before.metadataJson && typeof before.metadataJson === "object" && !Array.isArray(before.metadataJson)
       ? (before.metadataJson as Record<string, unknown>)
       : {};
+  const existingReply =
+    existingMeta.residentReply &&
+    typeof existingMeta.residentReply === "object" &&
+    !Array.isArray(existingMeta.residentReply)
+      ? (existingMeta.residentReply as Record<string, unknown>)
+      : null;
+  const requestedDecision = input.decision ?? null;
+  const requestedPatch = input.appliedOrderPatch ?? null;
+  const requestedRepliedBy = input.repliedBy ?? null;
+  const isSameReply =
+    existingReply !== null &&
+    existingReply.message === input.message &&
+    existingReply.decision === requestedDecision &&
+    existingReply.repliedBy === requestedRepliedBy &&
+    sameJsonValue(existingReply.appliedOrderPatch, requestedPatch);
+
+  // Identical network/API retry against an already-completed task: fast
+  // path, no write at all.
+  if (before.status === "completed" && isSameReply) return before;
+
   const reply = {
     message: input.message,
-    decision: input.decision ?? null,
-    appliedOrderPatch: input.appliedOrderPatch ?? null,
+    decision: requestedDecision,
+    appliedOrderPatch: requestedPatch,
     repliedAt: new Date().toISOString(),
-    repliedBy: input.repliedBy ?? null,
+    repliedBy: requestedRepliedBy,
   };
 
-  const after = await store.updateTask(tenantId, input.taskId, {
+  // Same invariant and same race as completeOpsTask: two concurrent replies
+  // (or a reply racing a plain completeOpsTask call) can both read the task
+  // as "not completed". The atomic UPDATE below applies the completion
+  // fields AND this reply's metadata together in one statement, so the
+  // winner's reply lands with the completion. `transitioned` — not the
+  // earlier `before` read — decides who actually completed the task.
+  const completionPatch: Partial<InsertOpsTask> = {
     status: "completed",
     completedAt: new Date(),
-    completedBy: input.repliedBy ?? null,
+    completedBy: requestedRepliedBy,
     outcome: `Replied to resident: ${input.message.slice(0, 180)}`,
     metadataJson: { ...existingMeta, residentReply: reply },
-  });
-  if (!after) throw new Error("Ops task reply update failed");
+  };
+  const { transitioned, task: afterAttempt, event: completionEventFromWinner } = await store.completeTaskWithEvent(
+    tenantId,
+    input.taskId,
+    completionPatch,
+    after => ({
+      eventType: "completed",
+      actorType: "human",
+      actorId: requestedRepliedBy,
+      beforeJson: before,
+      afterJson: after,
+      note: `Resident reply: ${input.message.slice(0, 180)}`,
+    })
+  );
+  if (!afterAttempt) throw new Error("Ops task reply update failed");
 
-  await createOpsTaskEvent({
+  if (!transitioned) {
+    // Task was already completed — by a prior reply, a concurrent
+    // completeOpsTask call, or a race this call lost. Record this reply as
+    // a new fact, never as a second completion.
+    const currentMeta =
+      afterAttempt.metadataJson &&
+      typeof afterAttempt.metadataJson === "object" &&
+      !Array.isArray(afterAttempt.metadataJson)
+        ? (afterAttempt.metadataJson as Record<string, unknown>)
+        : {};
+    const currentReply =
+      currentMeta.residentReply &&
+      typeof currentMeta.residentReply === "object" &&
+      !Array.isArray(currentMeta.residentReply)
+        ? (currentMeta.residentReply as Record<string, unknown>)
+        : null;
+    const alreadySameReply =
+      currentReply !== null &&
+      currentReply.message === input.message &&
+      currentReply.decision === requestedDecision &&
+      currentReply.repliedBy === requestedRepliedBy &&
+      sameJsonValue(currentReply.appliedOrderPatch, requestedPatch);
+    if (alreadySameReply) return afterAttempt;
+
+    const after = await store.updateTask(tenantId, input.taskId, {
+      outcome: `Replied to resident: ${input.message.slice(0, 180)}`,
+      metadataJson: { ...currentMeta, residentReply: reply },
+    });
+    if (!after) throw new Error("Ops task reply update failed");
+    await createOpsTaskEvent({
+      tenantId,
+      taskId: input.taskId,
+      eventType: "outcome_recorded",
+      actorId: requestedRepliedBy,
+      beforeJson: { residentReply: currentReply },
+      afterJson: { residentReply: reply },
+      note: `Resident reply updated: ${input.message.slice(0, 180)}`,
+    }, store);
+    return after;
+  }
+
+  const after = afterAttempt;
+  if (!completionEventFromWinner) throw new Error("Ops task completion event missing after transition");
+  await mirrorOpsTaskEventToBehavioralLedger({
     tenantId,
     taskId: input.taskId,
-    eventType: "completed",
-    actorId: input.repliedBy ?? null,
-    beforeJson: before,
-    afterJson: after,
-    note: `Resident reply: ${input.message.slice(0, 180)}`,
-  }, store);
+    operatorUserId: requestedRepliedBy,
+    sourceEvent: completionEventFromWinner,
+    ledgerEventType: "COMPLETED",
+    ledgerStore,
+  });
 
   return after;
 }

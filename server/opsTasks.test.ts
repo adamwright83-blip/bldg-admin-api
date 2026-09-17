@@ -13,6 +13,22 @@ import {
   type OpsTaskStore,
 } from "./opsTasks";
 import { parseEmergencyTaskIntake } from "./operatorTaskIntake";
+import type { BehavioralLedgerStore } from "./behavioralLedger/behavioralLedger";
+
+/**
+ * completeOpsTask's ledger mirror is a separately-injectable dependency from
+ * OpsTaskStore — without this, any call here that sets completedBy would
+ * silently attempt (and, absent a reachable real database, fail and swallow
+ * by design) a genuine network call to the real production ledger store.
+ */
+const noopLedgerStore: BehavioralLedgerStore = {
+  async insertIfAbsent() {
+    return null;
+  },
+  async listByCorrelation() {
+    return [];
+  },
+};
 
 class MemoryOpsTaskStore implements OpsTaskStore {
   tasks: OpsTask[] = [];
@@ -77,6 +93,33 @@ class MemoryOpsTaskStore implements OpsTaskStore {
     return task;
   }
 
+  async completeTaskWithEvent(
+    tenantId: string,
+    taskId: number,
+    patch: Partial<InsertOpsTask>,
+    buildEvent: (after: OpsTask) => Omit<InsertOpsTaskEvent, "tenantId" | "taskId">
+  ): Promise<{ transitioned: boolean; task: OpsTask | null; event: OpsTaskEvent | null }> {
+    const task = await this.getTask(tenantId, taskId);
+    if (!task) return { transitioned: false, task: null, event: null };
+    if (task.status === "completed") return { transitioned: false, task, event: null };
+    Object.assign(task, patch, { updatedAt: new Date() });
+    const event = await this.createEvent({ tenantId, taskId, ...buildEvent(task) });
+    return { transitioned: true, task, event };
+  }
+
+  async updateTaskWithEvent(
+    tenantId: string,
+    taskId: number,
+    patch: Partial<InsertOpsTask>,
+    buildEvent: (after: OpsTask) => Omit<InsertOpsTaskEvent, "tenantId" | "taskId">
+  ): Promise<{ task: OpsTask | null; event: OpsTaskEvent | null }> {
+    const task = await this.getTask(tenantId, taskId);
+    if (!task) return { task: null, event: null };
+    Object.assign(task, patch, { updatedAt: new Date() });
+    const event = await this.createEvent({ tenantId, taskId, ...buildEvent(task) });
+    return { task, event };
+  }
+
   async createEvent(input: InsertOpsTaskEvent): Promise<OpsTaskEvent> {
     const event = {
       id: this.eventId++,
@@ -113,7 +156,7 @@ async function completedTask(store: MemoryOpsTaskStore, overrides: Partial<Param
     revenueRecoveredCents: 8600,
     outcome: "Paid in full",
     completedBy: "tester",
-  }, store);
+  }, store, noopLedgerStore);
 }
 
 describe("ops task proof layer", () => {
@@ -134,7 +177,7 @@ describe("ops task proof layer", () => {
   it("completes an ops task", async () => {
     const store = new MemoryOpsTaskStore();
     const task = await createOpsTask({ lane: "lane_2", level: "2", taskType: "vendor_followup", title: "Call vendor" }, store);
-    const completed = await completeOpsTask({ taskId: task.id, outcome: "Vendor confirmed", completedBy: "adam" }, store);
+    const completed = await completeOpsTask({ taskId: task.id, outcome: "Vendor confirmed", completedBy: "adam" }, store, noopLedgerStore);
     expect(completed.status).toBe("completed");
     expect(completed.completedBy).toBe("adam");
     expect(completed.outcome).toBe("Vendor confirmed");
