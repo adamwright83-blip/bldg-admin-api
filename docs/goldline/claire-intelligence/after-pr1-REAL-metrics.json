@@ -1,0 +1,125 @@
+{
+  "generatedAt": "2026-09-17T20:40:55.254Z",
+  "turns": [
+    {
+      "category": "opening_brief",
+      "label": "opening brief",
+      "kind": "opening_brief",
+      "rawResponse": "500 active customers is still the target. The goal is known, but I don't see enough current work to treat this as the whole picture.",
+      "source": "fallback",
+      "failureReason": "authentication_failed",
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 191
+    },
+    {
+      "category": "ordinary",
+      "label": "ordinary conversational check-in",
+      "kind": "follow_up",
+      "rawResponse": "Give me a second—ask me that once more. In the meantime, the brief is: Visit The Wilshire.",
+      "source": "fallback",
+      "failureReason": "authentication_failed",
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 101
+    },
+    {
+      "category": "continuity",
+      "label": "reference 2-4 turns back",
+      "kind": "follow_up",
+      "rawResponse": "Give me a second—ask me that once more. In the meantime, the brief is: Visit The Wilshire.",
+      "source": "fallback",
+      "failureReason": "authentication_failed",
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 110
+    },
+    {
+      "category": "strategic_reasoning",
+      "label": "what would you do / why / what am I missing",
+      "kind": "follow_up",
+      "rawResponse": "Give me a second—ask me that once more. In the meantime, the brief is: Visit The Wilshire.",
+      "source": "fallback",
+      "failureReason": "authentication_failed",
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 91
+    },
+    {
+      "category": "correction",
+      "label": "operator corrects Claire",
+      "kind": "follow_up",
+      "rawResponse": "Give me a second—ask me that once more. In the meantime, the brief is: Visit The Wilshire.",
+      "source": "fallback",
+      "failureReason": "authentication_failed",
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 98
+    },
+    {
+      "category": "general_knowledge",
+      "label": "general business knowledge as advice, not fact",
+      "kind": "follow_up",
+      "rawResponse": "Give me a second—ask me that once more. In the meantime, the brief is: Visit The Wilshire.",
+      "source": "fallback",
+      "failureReason": "authentication_failed",
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 101
+    },
+    {
+      "category": "truth_boundary",
+      "label": "fact absent from verified context",
+      "kind": "follow_up",
+      "rawResponse": "Give me a second—ask me that once more. In the meantime, the brief is: Visit The Wilshire.",
+      "source": "fallback",
+      "failureReason": "authentication_failed",
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 91
+    },
+    {
+      "category": "personal",
+      "label": "question about Claire personally, tier-gating should hold",
+      "kind": "follow_up",
+      "rawResponse": "Give me a second—ask me that once more. In the meantime, the brief is: Visit The Wilshire.",
+      "source": "fallback",
+      "failureReason": "authentication_failed",
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 109
+    },
+    {
+      "category": "background_flavor",
+      "label": "background should subtly shape reasoning style, not be stated outright",
+      "kind": "follow_up",
+      "rawResponse": "Give me a second—ask me that once more. In the meantime, the brief is: Visit The Wilshire.",
+      "source": "fallback",
+      "failureReason": "authentication_failed",
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 116
+    },
+    {
+      "category": "dry_personality",
+      "label": "surface dry/direct personality without theatrics",
+      "kind": "follow_up",
+      "rawResponse": "Give me a second—ask me that once more. In the meantime, the brief is: Visit The Wilshire.",
+      "source": "fallback",
+      "failureReason": "authentication_failed",
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 57
+    },
+    {
+      "category": "complex",
+      "label": "complicated question needing a substantive answer",
+      "kind": "follow_up",
+      "rawResponse": "The current context doesn't confirm their laundry setup. Don't assume. Ask how laundry works today and what, if anything, management has to coordinate.",
+      "source": "fallback",
+      "failureReason": "authentication_failed",
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 56
+    },
+    {
+      "category": "simple",
+      "label": "simple question, short answer",
+      "kind": "follow_up",
+      "rawResponse": "Give me a second—ask me that once more. In the meantime, the brief is: Visit The Wilshire.",
+      "source": "fallback",
+      "failureReason": "authentication_failed",
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 115
+    }
+  ]
+}
