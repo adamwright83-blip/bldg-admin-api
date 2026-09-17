@@ -2,126 +2,146 @@
 
 # SLICE 4 HANDOFF — Barrier → Intervention → Fiction Selection
 
-**Status: started. Branch created off latest main. Implementation not yet complete.**
+**Status: implementation on branch; CI not yet green.**
 **Branch:** `cursor/barrier-intervention-fiction-723a`
+**PR:** #157
 **Base:** `main` @ `49f372de` (Slice 3 merged via PR #156)
-**Exact latest commit SHA:** *updated after each push*
-**CI status:** not started
+**Exact latest commit SHA:** *set after this push*
+**CI status:** pending after this commit
 
 ---
 
 ## ⚠️ Naming collision
 
-This is **behavioral-science roadmap Slice 4** (barrier → intervention → fiction/`preferredTemplateId`).
+This is **behavioral-science roadmap Slice 4** (barrier → intervention → `preferredTemplateId`).
 
-It is **not** BUILD_BRIEF “Slice 4 — Mission Director,” and not the mobile mission-map system in `docs/goldline/DAYPLAY_DRIVER_MISSION_MAP_SYSTEM.md`.
+It is **not** BUILD_BRIEF “Slice 4 — Mission Director,” and not `docs/goldline/DAYPLAY_DRIVER_MISSION_MAP_SYSTEM.md`.
 
 ---
 
 ## Exact objective
 
-Connect **real behavioral evidence** (ledger / resistance signals / operator-declared barriers) to the **existing** fiction-template selector so a legitimate real-world task can be presented differently without changing the business action.
-
-Governing chain (foundation §3):
+Connect real behavioral evidence to the existing fiction-template selector so a legitimate real-world task can be presented differently **without changing the business action**.
 
 ```
 observed evidence
-  → possible barrier (TDF, not diagnosis)
+  → possible barrier (TDF taxonomy, not diagnosis)
   → COM-B
   → BCW intervention function
   → BCT annotation (proposed)
-  → eligible fiction/template (safety/eligibility first)
+  → eligible fiction/template (safety first)
   → preferredTemplateId
 ```
 
-Selection is **not** learning. No causal claims. No n=1 “this works better.” `operator_avoidance` stays disabled.
+Selection is **not** learning. No causal claims. `operator_avoidance` stays disabled.
 
 ---
 
 ## Architecture chosen
 
-*(Filled after inspecting production. Placeholder until first implementation commit.)*
+Pure shared selector plus a thin server reader:
 
-Likely shape, pending inspection:
+1. `assembleBehavioralEvidence` — tenant/operator/task isolation; counts only named ledger events; DEFERRED is never inferred from NOT_COMPLETED.
+2. Barrier hypothesis — `possible opportunity/time friction` from operator-declared `time` **or** ≥2 explicit DEFERRED. Never motivation/avoidance.
+3. Mapping — in-code `ENABLEMENT_TIME_FRICTION` (`annotationStatus: proposed`). Existing `intervention_definitions` table is **not** written this slice (annotations stay out of the ledger).
+4. Selection — `eligibleTemplates()` from `shared/fictionTemplate.ts`. Ineligible templates cannot be assigned. Insufficient evidence → `preferredTemplateId: null` → existing hash fallback in Fiction Director.
+5. When ≥2 eligible fictions and behavior-observed deferrals: equal-probability pick via FNV of decisionPoint/task+counts; `assignmentProbability = 1/n`. Not true RNG (replay-stable). Honest: not an MRT yet.
+6. Provenance on the returned decision object. Selector **does not write** ledger rows.
 
-1. Evidence assembler (tenant/operator/task scoped; four epistemic classes kept separate)
-2. Barrier hypothesis layer (uncertain, sourced, never diagnostic)
-3. Versioned mapping through COM-B/TDF → BCW → BCT (`annotationStatus: proposed`)
-4. Filter existing templates; set `preferredTemplateId`
-5. Provenance at the decision point (MRT-ready fields if the ledger already has them)
-
-Reuse existing StrategyEngine / fiction / behavioral-ledger interfaces. Do not build a parallel intervention system.
+Existing hook: `selectFictionForMission({ preferredTemplateId })` already refuses ineligible preferred ids.
 
 ---
 
 ## Existing systems reused
 
-*To be listed after inspection.* Candidates: `server/behavioralLedger/`, fiction templates, `preferredTemplateId`, StrategyEngine decision policy, `assertFictionSafety` / timer safety.
+- `shared/behavioralLedger.ts` event names
+- `server/behavioralLedger/behavioralLedger.ts` (new list-by-operator-source read)
+- `shared/fictionTemplate.ts` `eligibleTemplates` / `deriveFictionAssignment`
+- `client/src/game/fiction/fictionDirector.ts` preferred-id bind (unchanged)
+- `drizzle` `intervention_definitions` (schema already existed; unused as a write path here)
 
 ---
 
 ## Evidence model
 
-Preserve as **separate classes**, never one user trait:
+Classes kept separate: `operator-declared`, `behavior-observed`, `claire-inference`, `historical-model-inference`.
 
-- `operator-declared`
-- `behavior-observed`
-- `Claire inference`
-- `historical/model inference`
+This slice **produces** declared + observed. It does not auto-generate Claire or model inferences.
 
-Counts of DELIVERED / ENGAGED / DEFERRED / STARTED / COMPLETED. DEFERRED only from an explicit operator act. No `IGNORED`, no `EXPOSED`.
+Counts: DELIVERED, VIEWABLE, ENGAGED, ACCEPTED, STARTED, COMPLETED, VERIFIED, DEFERRED, DISMISSED, EXPIRED.
 
 ---
 
 ## Barrier hypothesis model
 
-Possible TDF domain + COM-B component + evidence strength + source type + supporting observations + explicit uncertainty. Insufficient evidence → no fabricated barrier; conservative/standard presentation.
+- none / insufficient
+- possible opportunity/time friction (COM-B opportunity, TDF environmental_context_and_resources)
+  - `declared` if operator said time
+  - `possible` if deferred ≥ 2
+- uncertainty text states this is not a motivational trait
+- operator declaration outranks inferred deferral (standard/plain presentation)
 
 ---
 
 ## COM-B/TDF → BCW/BCT mapping
 
-Hypotheses with provenance. Registry version recorded. Nothing `expert_reviewed` or `empirically_supported` in this slice.
+`ENABLEMENT_TIME_FRICTION`: enablement; proposed BCT 1.4 action planning, 8.7 graded tasks. `annotationStatus: proposed`. Foundation §2: we do not claim templates deliver these BCTs.
 
 ---
 
 ## Template eligibility rules
 
-Safety and business eligibility **outrank** behavioral preference. Ineligible/unsafe templates cannot be selected. `STANDARD_PRESENTATION` remains in the option set when safe.
+`isTemplateEligible` unchanged. Unsafe driving+timer templates stay out. `STANDARD_PRESENTATION` is always in `eligibleOptions`. `preferredTemplateId` null means Director uses hash assignment.
 
 ---
 
 ## Provenance structure
 
-Must explain: evidence considered, observed vs inferred, barrier hypothesis, intervention function / BCT mapping, eligible templates, why chosen, policy/version. Assignment probability when ≥2 eligible templates (foundation §5).
+`FictionSelectionDecision`: evidence, hypothesis, intervention record, eligibleOptions, assignedOption, assignmentProbability, policy/definition versions, selectionReason, claireSafeExplanation.
+
+Claire may say: “This has come up N times and you deferred it M times…” or “You said time is the constraint…”. May not diagnose.
+
+---
+
+## Files changed
+
+- `shared/behavioralEvidence.ts`
+- `shared/behavioralInterventionMapping.ts`
+- `shared/behavioralFictionSelection.ts`
+- `shared/behavioralFictionSelection.test.ts`
+- `server/behavioralLedger/behavioralLedger.ts`
+- `server/behavioralLedger/behavioralLedger.test.ts`
+- `server/behavioralSelection/selectPreferredFiction.ts`
+- `server/behavioralSelection/selectPreferredFiction.test.ts`
+- `.github/workflows/goldline-fast-smoke.yml`
+- `docs/GOLDLINE-TASKS.md`
+- this file
 
 ---
 
 ## What is complete
 
-- Branch off `49f372de`
-- This handoff file
-- Draft PR (this commit)
+- Selector + 10 required tests
+- Server read path (no history rewrite)
+- Smoke workflow includes the new unit tests
+- Typecheck error on `assignedOption` fixed
 
 ## What remains
 
-- Inspect production selector / ledger / templates
-- Implement assembler, hypothesis, mapping, selection, provenance
-- Focused tests (10 required cases)
-- Typecheck + existing strategy/Claire tests
-- Green Fast Goldline smoke, DayForge, mobile gates
-- Final handoff SHA + CI status
+- Fast Goldline smoke / DayForge / mobile CI on this PR
+- Optional: Driver wiring of `preferredFictionTemplateId` from this selector (out of slice: no Dayplay redesign)
+- Optional: persist decision-point fields onto the next DELIVERED event
+- True randomization for MRT (next learning slice)
 
 ## Unresolved design questions
 
-- Which existing selector owns `preferredTemplateId` in production (not prose)
-- Whether intervention_definition registry already exists
-- How operator-declared barriers are stored today
+- Whether Driver should call the server selector this week or keep campaign `fictionTemplateId` until the mission-map surface exists
+- When to start writing `intervention_definitions` rows vs keeping the in-code proposed registry
 
 ## Tests
 
-Not written yet.
+`shared/behavioralFictionSelection.test.ts` (10), `server/behavioralSelection/selectPreferredFiction.test.ts` (1), ledger list isolation.
 
 ## Next step
 
-Inspect production code for `preferredTemplateId`, fiction templates, behavioral ledger, resistance signals; then implement against those interfaces.
+Push, wait for CI, read failing logs if any. Do not merge without instruction.

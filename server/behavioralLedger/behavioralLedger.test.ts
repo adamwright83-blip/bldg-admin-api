@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { recordBehavioralLedgerEvent, listBehavioralLedgerEventsForCorrelation } from "./behavioralLedger";
+import { recordBehavioralLedgerEvent, listBehavioralLedgerEventsForCorrelation, listBehavioralLedgerEventsForOperatorSource } from "./behavioralLedger";
 import type { BehavioralLedgerStore } from "./behavioralLedger";
 import type { BehavioralLedgerEvent, InsertBehavioralLedgerEvent } from "../../drizzle/schema";
 
@@ -24,6 +24,14 @@ function createFakeStore(): BehavioralLedgerStore & { rows: BehavioralLedgerEven
     },
     async listByCorrelation(tenantId: string, correlationId: string) {
       return rows.filter(r => r.tenantId === tenantId && r.correlationId === correlationId);
+    },
+    async listByOperatorSource(tenantId: string, operatorUserId: string, sourceEntityId: string) {
+      return rows.filter(
+        r =>
+          r.tenantId === tenantId &&
+          r.operatorUserId === operatorUserId &&
+          r.sourceEntityId === sourceEntityId
+      );
     },
   };
 }
@@ -195,5 +203,22 @@ describe("recordBehavioralLedgerEvent", () => {
     expect(row.decisionPointId).toBeNull();
     expect(row.assignedOption).toBeNull();
     expect(row.assignmentProbability).toBeNull();
+  });
+});
+
+describe("listBehavioralLedgerEventsForOperatorSource", () => {
+  it("does not return another tenant or operator's history", async () => {
+    const store = createFakeStore();
+    await recordBehavioralLedgerEvent(
+      { ...baseInput, eventType: "DEFERRED", idempotencyKey: "a" },
+      store
+    );
+    await recordBehavioralLedgerEvent(
+      { ...baseInput, tenantId: "other", eventType: "DEFERRED", idempotencyKey: "b" },
+      store
+    );
+    const rows = await listBehavioralLedgerEventsForOperatorSource("tenant-a", "operator-1", "42", store);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.tenantId).toBe("tenant-a");
   });
 });

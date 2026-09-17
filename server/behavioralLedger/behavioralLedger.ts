@@ -23,6 +23,11 @@ import type { LedgerEventInput } from "../../shared/behavioralLedger";
 export type BehavioralLedgerStore = {
   insertIfAbsent(input: InsertBehavioralLedgerEvent): Promise<BehavioralLedgerEvent | null>;
   listByCorrelation(tenantId: string, correlationId: string): Promise<BehavioralLedgerEvent[]>;
+  listByOperatorSource?(
+    tenantId: string,
+    operatorUserId: string,
+    sourceEntityId: string
+  ): Promise<BehavioralLedgerEvent[]>;
 };
 
 async function findExistingByIdempotencyKey(
@@ -62,7 +67,7 @@ const drizzleBehavioralLedgerStore: BehavioralLedgerStore = {
     return findExistingByIdempotencyKey(input);
   },
 
-  async listByCorrelation(tenantId, correlationId) {
+    async listByCorrelation(tenantId, correlationId) {
     const db = await getDb();
     if (!db) return [];
     return db
@@ -72,6 +77,21 @@ const drizzleBehavioralLedgerStore: BehavioralLedgerStore = {
         and(
           eq(behavioralLedgerEvents.tenantId, tenantId),
           eq(behavioralLedgerEvents.correlationId, correlationId)
+        )
+      )
+      .orderBy(asc(behavioralLedgerEvents.occurredAt), asc(behavioralLedgerEvents.id));
+  },
+  async listByOperatorSource(tenantId, operatorUserId, sourceEntityId) {
+    const db = await getDb();
+    if (!db) return [];
+    return db
+      .select()
+      .from(behavioralLedgerEvents)
+      .where(
+        and(
+          eq(behavioralLedgerEvents.tenantId, tenantId),
+          eq(behavioralLedgerEvents.operatorUserId, operatorUserId),
+          eq(behavioralLedgerEvents.sourceEntityId, sourceEntityId)
         )
       )
       .orderBy(asc(behavioralLedgerEvents.occurredAt), asc(behavioralLedgerEvents.id));
@@ -128,4 +148,19 @@ export async function listBehavioralLedgerEventsForCorrelation(
   store: BehavioralLedgerStore = drizzleBehavioralLedgerStore
 ): Promise<BehavioralLedgerEvent[]> {
   return store.listByCorrelation(tenantId, correlationId);
+}
+
+export async function listBehavioralLedgerEventsForOperatorSource(
+  tenantId: string,
+  operatorUserId: string,
+  sourceEntityId: string,
+  store: BehavioralLedgerStore = drizzleBehavioralLedgerStore
+): Promise<BehavioralLedgerEvent[]> {
+  if (store.listByOperatorSource) {
+    return store.listByOperatorSource(tenantId, operatorUserId, sourceEntityId);
+  }
+  const correlated = await store.listByCorrelation(tenantId, sourceEntityId);
+  return correlated.filter(
+    row => row.operatorUserId === operatorUserId && row.sourceEntityId === sourceEntityId
+  );
 }
