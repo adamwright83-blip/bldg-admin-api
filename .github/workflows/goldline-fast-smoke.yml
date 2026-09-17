@@ -49,8 +49,30 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Type-check
         run: pnpm check
-      - name: Prove production migration path (scripts/migrate.mjs) against disposable MySQL
+      - name: Prove production migration path (scripts/migrate.mjs) against a genuinely clean database
+        # Deliberately a SEPARATE database on the same disposable MySQL
+        # server, not the job's shared goldline_proof — applyDayforgeReleaseMigrations
+        # (the `pnpm db:dayforge:release` step later in this job) replays
+        # numbered drizzle/*.sql files with plain, non-idempotent
+        # CREATE TABLE statements, on the assumption that it is the only
+        # thing that will ever bootstrap goldline_proof. Running
+        # scripts/migrate.mjs against that same database first (proven by
+        # an earlier CI run: ER_TABLE_EXISTS_ERROR on `users`) breaks that
+        # assumption. A dedicated database lets this step prove
+        # migrate.mjs bootstraps a truly empty database on its own, without
+        # disturbing the pristine database the dayforge-release path still
+        # needs.
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3399/goldline_migrate_check
         run: |
+          node -e "
+            const mysql = require('mysql2/promise');
+            (async () => {
+              const conn = await mysql.createConnection('mysql://root:root@127.0.0.1:3399/');
+              await conn.query('CREATE DATABASE IF NOT EXISTS goldline_migrate_check');
+              await conn.end();
+            })().catch(err => { console.error(err); process.exit(1); });
+          "
           node scripts/migrate.mjs
           echo "--- second run: proving idempotency ---"
           node scripts/migrate.mjs
