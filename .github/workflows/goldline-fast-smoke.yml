@@ -83,6 +83,9 @@ jobs:
           shared/goldlineCampaignReviewFixes.test.ts
           server/behavioralLedger/behavioralLedger.test.ts
           server/opsTasks.behavioralLedger.test.ts
+          shared/behavioralFictionSelection.test.ts
+          server/behavioralSelection/selectPreferredFiction.test.ts
+          client/src/game/fiction/fictionDirector.test.ts
       - name: Prove ops task completion concurrency against real MySQL
         # Targets goldline_migrate_check, not the job's shared goldline_proof:
         # this step runs before `pnpm db:dayforge:release` (below), which is

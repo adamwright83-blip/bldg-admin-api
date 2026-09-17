@@ -36,6 +36,7 @@ import {
 import { resetProofWorldFromApi } from "./goldlineProofWorld";
 import { buildFrontierIntelligence } from "./frontierIntelligenceService";
 import { getLanternCityOverview } from "./lanternCityOverviewService";
+import { listBehavioralLedgerEventsForOperatorCorrelation } from "../behavioralLedger/behavioralLedger";
 
 export const goldlineWorldRouter = router({
   lanternCityOverview: dayforgeTenantOperatorProcedure.query(({ ctx }) =>
@@ -258,6 +259,27 @@ export const goldlineWorldRouter = router({
         ...input,
       })
     ),
+  behavioralEventsForSubject: dayforgeTenantMemberProcedure
+    .input(z.object({ correlationId: z.string().min(1).max(191) }))
+    .query(async ({ ctx, input }) => {
+      const rows = await listBehavioralLedgerEventsForOperatorCorrelation(
+        ctx.tenantId,
+        ctx.user.openId,
+        input.correlationId
+      );
+      return {
+        tenantId: ctx.tenantId,
+        operatorUserId: ctx.user.openId,
+        correlationId: input.correlationId,
+        events: rows.map(row => ({
+          tenantId: row.tenantId,
+          operatorUserId: row.operatorUserId,
+          eventType: row.eventType,
+          sourceEntityId: row.sourceEntityId,
+          correlationId: row.correlationId,
+        })),
+      };
+    }),
   resetProofWorld: dayforgeTenantAdminProcedure.mutation(() =>
     resetProofWorldFromApi()
   ),
