@@ -29,6 +29,15 @@ export type ClaireGenerationDiagnostic = {
    * live surface as of PR1.
    */
   surface?: "voice" | "desktop";
+  /**
+   * PR1 Claire Intelligence Repair -- corrective pass: Anthropic's raw
+   * `stop_reason` ("end_turn", "max_tokens", "stop_sequence", ...),
+   * captured via invokeTextLLM's `onStopReason` callback. Lets any future
+   * exam or production monitoring positively detect "hit max_tokens"
+   * instead of inferring truncation from trailing punctuation. Optional
+   * and additive.
+   */
+  stopReason?: string | null;
 };
 
 /**
@@ -54,6 +63,9 @@ export function safeClaireFailureReason(error: unknown): string {
   if (/rate limit/i.test(message)) return "rate_limited";
   if (/overload/i.test(message)) return "provider_overloaded";
   if (/empty|no assistant text/i.test(message)) return "unusable_output";
+  if (error instanceof Error && error.name === "UngroundedPersonalSpecificityError") {
+    return "ungrounded_personal_specificity";
+  }
   if (error && typeof error === "object" && "code" in error) {
     const code = String((error as { code?: unknown }).code);
     if (/^[a-z0-9_-]{1,64}$/i.test(code)) return code;
@@ -80,6 +92,7 @@ export async function recordClaireGeneration(input: {
     failureReason: input.diagnostic.failureReason,
     modelRequested: input.diagnostic.modelRequested ?? null,
     surface: input.diagnostic.surface ?? "voice",
+    stopReason: input.diagnostic.stopReason ?? null,
     fallbackRate: current.attempts ? current.fallbacks / current.attempts : 0,
     ...(input.reviewDetail?.orientationContext
       ? orientationTelemetry(input.reviewDetail.orientationContext, input.diagnostic.source === "fallback")
