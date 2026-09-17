@@ -5,7 +5,10 @@
 **Status as of last update: INCOMPLETE — CONTINUE FROM HERE.**
 **Branch:** `claude/goldline-slice-2-strategy-truth`
 **Base:** `main` at `52f775c88653145686fb2c59d58d9732173e3c7a` (merge commit of PR #154, "Behavioral intervention ledger — Slice 1")
+**Draft PR:** #155
 **Exact latest commit SHA on this branch:** see bottom of this file — updated on every push. If this section says the same SHA as a stale-looking read, `git log -1` the branch directly; this file can lag by one commit at most.
+
+**No production code has been written yet.** This update round was spent on verified research to de-risk the next session's first move on a truth-sensitive file, rather than pushing an untested guess — see "Research findings, this round" below. That is a deliberate choice, not a stall: this file (`snapshotBuilder.ts`) feeds Claire and the strategy layer, this environment has zero database access to verify anything against, and `REALITY_BRIDGE.md` explicitly forbids inventing a plausible-looking mapping under pressure. Confirmed-real building blocks are documented precisely below so the next session can move fast with confidence instead of re-deriving them.
 
 ---
 
@@ -65,12 +68,16 @@ Confirmed already available in the repo (verified by direct inspection, not assu
 - `server/canonicalBuilding.ts` / `shared/canonicalBuilding.ts` — likely the right source for `accounts` (real buildings, not fabricated ones). Not yet inspected in depth this session — start here.
 - No churn/funnel service was found for `funnelStages` specifically. This is the least-scoped section; expect to need a genuinely new query (e.g., counting real customers/orders that fell into each real lifecycle stage over the snapshot window) rather than an existing service.
 
-**Order of attack, easiest → hardest** (do them in this order; each is independently shippable):
+**Order of attack, easiest → hardest, REVISED after verified research this round** (do them in this order; each is independently shippable):
 
-1. `accounts` — if `canonicalBuilding.ts` already has real building records with something resembling a "Contested/held" state concept, this may be closest to a drop-in replacement.
-2. `dormantEligible` — `scoreCustomerChurn` exists; the work is writing the real order-history fetch and feeding it in.
-3. `repeatPipeline` — similar shape to dormant, but "first order → second order" tracking instead of "last order recency." Check whether `customerChurn.ts` or `customerProfile.ts` already tracks this.
-4. `funnelStages` + `limitingStage` — hardest, least scaffolding exists. `limitingStage` should fall out for free once `funnelStages` is real: pick the stage with the worst `observedConversionRate` (or largest drop from the previous stage).
+1. **`dormantEligible` — do this first.** `scoreCustomerChurn` exists in `shared/customerChurn.ts` (pure function, takes `CustomerChurnInput`). `server/customerProfile.ts` has `buildCustomerProfile(phone, rows: Order[])` and `server/adminCustomerAggregate.ts` has `buildAdminCustomerAggregatesInMemory(rows)` — both pure functions that take raw `Order[]` rows and derive last-order-date/aggregate history. **None of these three fetch from the DB themselves.** The real gap is a `getDb()` query against the `orders` table (tenant-scoped) feeding one of those two aggregators, then optionally `scoreCustomerChurn`. This is the most tractable section: the scoring/aggregation logic already exists, only the fetch-and-wire step is missing.
+2. `repeatPipeline` — same shape as dormant (first order → second order tracking instead of recency). Check whether `buildCustomerProfile`/`buildAdminCustomerAggregatesInMemory` already expose a "has second order" concept before writing new logic.
+3. **`accounts` — DO NOT do this next; see "Open design question" below before touching it.** `server/drizzle/schema.ts` has a real `commercialAccounts` table (`server/**` has real consumers: `commercialPipeline/commercialPipelineService.ts`, `field/fieldOpportunityService.ts`, etc.) — the *data* exists. The blocker is the `state` field.
+4. `funnelStages` + `limitingStage` — still hardest, least scaffolding exists. `limitingStage` should fall out for free once `funnelStages` is real: pick the stage with the worst `observedConversionRate` (or largest drop from the previous stage).
+
+**Correction to an earlier version of this doc:** there is no `server/canonicalBuilding.ts`. Only `shared/canonicalBuilding.ts` exists, and it is a **pure logic/types module** (`composeCanonicalBuilding`, `resolveCanonicalBuilding`, siege-depth/phase helpers) — it does not query a database and has no real building *records* in it. Do not start there expecting a data source; it's a shape-composition helper you'd call only after fetching real rows from elsewhere.
+
+**Open design question — do not guess at this, ask Adam or leave it for a session with more room to think:** `snapshotTypes.ts`'s `accounts[].state` is typed as `"Captured" | "Contested" | "Closed" | "Recovery" | "Wait"`. This exact vocabulary was searched for across the entire repo (`grep -rln '"Captured"\|"Contested"\|"Recovery"' server/ shared/`) and **exists nowhere outside `server/strategy/` itself** — not in the territory/Lantern City code, not in `commercialPipelineService.ts`, nowhere. There is currently no real mapping from any business condition (commercial account status, pipeline stage, order recency, anything) to this 5-value enum anywhere in the codebase. Inventing one under time pressure is exactly what `REALITY_BRIDGE.md` prohibits — "Neither [fantasy nor reality] is allowed to impersonate the other." Before writing code for `accounts`, this mapping rule needs a real answer from whoever owns the product decision, not a guess that merely compiles.
 
 ---
 
@@ -123,14 +130,17 @@ From `docs/goldline/BEHAVIORAL_SCIENCE_FOUNDATION.md` (binding) and `docs/goldli
 
 ## Exact next recommended implementation step
 
-1. Read `server/canonicalBuilding.ts` and `shared/canonicalBuilding.ts` in full.
-2. Determine whether a real building/account list with a "state" concept (matching or adaptable to the fixture's `"Contested"` idea) already exists there.
-3. If yes: write a new function in `snapshotBuilder.ts` (or a small new file `server/strategy/snapshotAccounts.ts`, following the existing pattern of `growthMetrics.ts` being a separate module `snapshotBuilder.ts` imports from) that queries real buildings for the tenant and maps them into the `accounts` shape `snapshotTypes.ts` already defines.
-4. Replace the hardcoded `const accounts = [...]` block with a call to that function.
-5. Add a regression test proving `"Wilshire Grand Residences"` (the fixture's literal fabricated name) no longer appears in a built snapshot.
-6. Commit, push, update this file's "Files changed" and "What is complete" sections, update the draft PR description if the scope materially changed.
-7. Move to `dormantEligible` next (step 2 of the attack order above), same pattern.
+**Start with `dormantEligible`, not `accounts`** (revised after this round's research — see above).
+
+1. Find or write a tenant-scoped `getDb()` query against the `orders` table returning each customer's order rows (check `server/routers.ts` and `server/adminCustomerAggregate.ts`'s call sites first — a query shaped correctly for `buildAdminCustomerAggregatesInMemory`'s `CustomerAggregateDbRow` input very likely already exists somewhere and can be reused rather than rewritten).
+2. Feed those rows through `buildAdminCustomerAggregatesInMemory` (or `hydrateCustomerAggregates` in `server/customerProfile.ts` — check which one already produces a last-order-date per customer; pick whichever is the closer match rather than both).
+3. Filter/map the result into the `dormantEligible` shape `snapshotTypes.ts` defines (`id`, `firstName`, `buildingName?`, `lastOrderAt`, `daysSinceLastOrder`) — a customer counts as dormant per whatever threshold the current fixture implies (the fixture uses `daysSinceLastOrder` of 42 and 55 as examples; check if `shared/customerChurn.ts` already defines a real dormancy threshold constant before inventing one).
+4. Consider whether `scoreCustomerChurn` should gate inclusion (only "high" or "medium" churn grade counts as dormant-eligible) — read `shared/customerChurn.ts` in full before deciding; it may already encode the right threshold logic.
+5. Replace the hardcoded `const dormantEligible = [...]` block (server/strategy/snapshotBuilder.ts, ~line 213) with a call to the new function.
+6. Add a regression test proving `"David"` and `"Sarah"` (the fixture's literal fabricated names) no longer appear in a built snapshot, plus a tenant-isolation test (two tenants get different dormant lists).
+7. Commit, push, update this file's "Files changed" and "What is complete" sections, update the draft PR (#155) description if scope materially changed.
+8. Move to `repeatPipeline` next (attack-order step 2), same pattern. Leave `accounts` and `funnelStages` for later — `accounts` is blocked on a product decision (see "Open design question" above), not an implementation gap.
 
 ---
 
-**Exact latest commit SHA on this branch:** `52f775c88653145686fb2c59d58d9732173e3c7a` (base — no Slice 2 commits yet as of this doc's creation. The next commit on this branch will be the first real one; re-check `git log -1` for the true current HEAD, this line is not live-updated by tooling.)
+**Exact latest commit SHA on this branch:** re-check `git log -1` for the true current HEAD — this line is not live-updated by tooling. As of this update, the branch has two commits past base `52f775c`: the initial handoff doc, and this research-correction update. Both are docs-only; zero production code has changed on this branch so far.
