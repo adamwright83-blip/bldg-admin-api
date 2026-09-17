@@ -24,16 +24,10 @@ test.describe("canonical driver entry", () => {
       page.getByRole("region", { name: "Goldline global overworld" })
     ).toHaveCount(0);
 
-    // Exercise the actual Day Plan menu control. The role-based locator became
-    // brittle when the mobile day shell changed its accessibility tree even
-    // though the visible control remained the same physical button.
-    const menuButton = page.locator("button.gdp-menu-button");
-    await expect(menuButton).toBeVisible({ timeout: 10_000 });
-    await menuButton.click();
-
-    const exploreOverland = page
-      .locator(".gdp-menu button")
-      .filter({ hasText: "EXPLORE OVERLAND" });
+    // Exercise the canonical diegetic Overland control that the driver actually
+    // sees. The legacy Day Plan menu is intentionally hidden by world-tool CSS;
+    // forcing it visible creates an overlapping, unreachable duplicate control.
+    const exploreOverland = page.getByRole("button", { name: "Enter Overland" });
     await expect(exploreOverland).toBeVisible({ timeout: 10_000 });
     await exploreOverland.click();
 
