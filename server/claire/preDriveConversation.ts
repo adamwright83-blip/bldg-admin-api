@@ -324,7 +324,7 @@ export async function answerClairePreDriveFollowUp(
 
     const diagnostic: ClaireGenerationDiagnostic = {
       kind: "follow_up",
-      source: recoveredVia === "canon_scoped_deflection" ? "fallback" : "model",
+      source: recoveredVia === null ? "model" : "fallback",
       answerOrigin:
         recoveredVia === "canon_render"
           ? "canon_render"
