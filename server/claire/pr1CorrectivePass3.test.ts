@@ -5,8 +5,9 @@ import { answerClairePreDriveFollowUp } from "./preDriveConversation";
 import { writeClairePreDriveBrief } from "./reasoning";
 import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
 import {
-  buildPersonalRetryConstraint,
   recoverPersonalAnswer,
+  renderCanonScopedPersonalAnswer,
+  renderCanonFactFirstPerson,
   CANON_SCOPED_PERSONAL_DEFLECTION,
 } from "./character/personalAnswerRecovery";
 import { VOICE_NATIVE_ANSWER_GUIDANCE } from "./conversationVoiceGuidance";
@@ -46,104 +47,90 @@ const baseContext: ClaireDriveContext = {
 const CANON_AT_TIER_0 = ["Claire is British.", "Claire studied archaeology, historical networks, and languages."];
 
 describe("Corrective pass 3 -- item 1: personal-answer recovery", () => {
-  it("BOTH HALVES, half 1: an invented specific is still blocked and never reaches the operator", async () => {
-    // First generation invents a city; retry also overreaches (invents a
-    // different one), so recovery must land on the canon-scoped deflection.
-    const invokeText = vi
-      .fn()
-      .mockResolvedValueOnce("Marseille, originally.")
-      .mockResolvedValueOnce("Fine — Lyon, then.");
+  it("blocks an invented city and deterministically returns eligible canon without a second model call", async () => {
+    const invokeText = vi.fn().mockResolvedValueOnce("London, originally.");
     const recordGeneration = vi.fn().mockResolvedValue(undefined);
     const result = await answerClairePreDriveFollowUp(
       { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: baseContext },
       { invokeText, recordGeneration }
     );
-    expect(result).not.toContain("Marseille");
-    expect(result).not.toContain("Lyon");
-    expect(result).toBe(CANON_SCOPED_PERSONAL_DEFLECTION);
-    // And critically: NOT the generic conversation stall.
-    expect(result).not.toContain("ask me that once more");
-    expect(result).not.toContain("the brief is");
-  });
 
-  it("BOTH HALVES, half 2: available safe canon still produces a useful personal answer -- safety did not cost us the answer", async () => {
-    // First generation invents a city (guard trips); the constrained retry
-    // answers from eligible canon without naming one.
-    const invokeText = vi
-      .fn()
-      .mockResolvedValueOnce("London, originally.")
-      .mockResolvedValueOnce("British. Moved around a lot as a kid, so no one place really claims me.");
-    const recordGeneration = vi.fn().mockResolvedValue(undefined);
-    const result = await answerClairePreDriveFollowUp(
-      { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: baseContext },
-      { invokeText, recordGeneration }
-    );
-    // The real answer survived -- this is the whole point of the item.
-    expect(result).toBe("British. Moved around a lot as a kid, so no one place really claims me.");
+    expect(result).toBe("I'm British.");
     expect(result).not.toContain("London");
     expect(result).not.toContain("ask me that once more");
-    expect(invokeText).toHaveBeenCalledTimes(2);
-    // Recorded honestly as a model answer that needed recovery.
+    expect(invokeText).toHaveBeenCalledTimes(1);
     expect(recordGeneration).toHaveBeenCalledWith(
       expect.objectContaining({
         diagnostic: expect.objectContaining({
           source: "model",
-          failureReason: "ungrounded_personal_specificity_recovered",
+          answerOrigin: "canon_render",
+          failureReason: "ungrounded_personal_specificity_canon_rendered",
         }),
       })
     );
   });
 
-  it("the retry is constrained to the exact eligible canon and forbids new specifics", () => {
-    const constraint = buildPersonalRetryConstraint(CANON_AT_TIER_0);
-    expect(constraint).toContain("Claire is British.");
-    expect(constraint).toContain("nothing more specific than what they literally state");
-    expect(constraint).toContain("Do not name a city");
+  it("routes the requested topic to eligible canon rather than picking an unrelated personal fact", () => {
+    expect(
+      renderCanonScopedPersonalAnswer({
+        eligibleCanonFacts: CANON_AT_TIER_0,
+        requestedTopic: "background",
+      })
+    ).toBe("I studied archaeology, historical networks, and languages.");
+
+    expect(
+      renderCanonScopedPersonalAnswer({
+        eligibleCanonFacts: CANON_AT_TIER_0,
+        requestedTopic: "childhood",
+      })
+    ).toBe("I'm British.");
   });
 
-  it("with no eligible canon at all, the retry is told to decline rather than invent", () => {
-    const constraint = buildPersonalRetryConstraint([]);
-    expect(constraint).toContain("NO eligible personal canon");
-    expect(constraint).toContain("Do not answer the personal question with any specific at all");
-  });
-
-  it("recovery never widens disclosure: it only ever passes canon already deemed eligible", async () => {
-    const seen: string[] = [];
-    const recovery = await recoverPersonalAnswer({
+  it("does not widen disclosure when the requested topic has no eligible canon", () => {
+    const recovery = recoverPersonalAnswer({
       eligibleCanonFacts: CANON_AT_TIER_0,
-      retry: async constraint => {
-        seen.push(constraint);
-        return "British.";
-      },
+      requestedTopic: "father",
     });
-    expect(recovery.via).toBe("canon_retry");
-    // Gated canon (father's disappearance, the six-year relationship) must
-    // not appear anywhere in what the retry was given.
-    expect(seen.join(" ")).not.toContain("disappeared");
-    expect(seen.join(" ")).not.toContain("six-year");
+    expect(recovery).toEqual({
+      text: CANON_SCOPED_PERSONAL_DEFLECTION,
+      via: "canon_scoped_deflection",
+    });
+    expect(recovery.text).not.toContain("disappeared");
   });
 
-  it("the guard does not false-positive on ordinary sentence-initial words, which would silently cost good answers", async () => {
+  it("with no eligible canon at all, returns the canon-scoped deflection", () => {
+    expect(
+      recoverPersonalAnswer({
+        eligibleCanonFacts: [],
+        requestedTopic: "childhood",
+      })
+    ).toEqual({
+      text: CANON_SCOPED_PERSONAL_DEFLECTION,
+      via: "canon_scoped_deflection",
+    });
+  });
+
+  it("the deterministic renderer converts stored third-person canon without adding facts", () => {
+    expect(renderCanonFactFirstPerson("Claire is British.")).toBe("I'm British.");
+    expect(
+      renderCanonFactFirstPerson("Claire studied archaeology, historical networks, and languages.")
+    ).toBe("I studied archaeology, historical networks, and languages.");
+  });
+
+  it("the hard guard still rejects invented specifics", async () => {
     const { assertNoUngroundedPersonalSpecificity } = await import("./character/personalSpecificityGuard");
-    // Regression: "Moved" (a common verb capitalized because it starts a
-    // sentence) was being treated as a proper noun, downgrading a correct,
-    // canon-grounded answer to the deflection.
     expect(() =>
-      assertNoUngroundedPersonalSpecificity(
-        "British. Moved around a lot as a kid, so no one place really claims me.",
-        CANON_AT_TIER_0
-      )
-    ).not.toThrow();
+      assertNoUngroundedPersonalSpecificity("New York, originally.", CANON_AT_TIER_0)
+    ).toThrow();
     expect(() =>
-      assertNoUngroundedPersonalSpecificity("Honestly? Nowhere in particular. Fine question though.", CANON_AT_TIER_0)
+      assertNoUngroundedPersonalSpecificity("A place called Ashworth.", CANON_AT_TIER_0)
+    ).toThrow();
+    expect(() =>
+      assertNoUngroundedPersonalSpecificity("I'm British.", CANON_AT_TIER_0)
     ).not.toThrow();
-    // ...while still catching real invented specifics, including
-    // multi-word ones and surnames it has never seen.
-    expect(() => assertNoUngroundedPersonalSpecificity("New York, originally.", CANON_AT_TIER_0)).toThrow();
-    expect(() => assertNoUngroundedPersonalSpecificity("A place called Ashworth.", CANON_AT_TIER_0)).toThrow();
   });
 
-  it("a genuine generation failure still goes to the generic fallback, not the canon deflection (step 5)", async () => {
+  it("a genuine generation failure still goes to the generic fallback", async () => {
     const invokeText = vi.fn().mockRejectedValue(new Error("provider down"));
     const result = await answerClairePreDriveFollowUp(
       { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: baseContext },
