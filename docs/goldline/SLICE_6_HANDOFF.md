@@ -2,12 +2,13 @@
 
 # SLICE 6 HANDOFF — Claire relationship / safe longitudinal history
 
-**Status: implementation on PR; CI pending on latest push.**
+**Status: implementation on PR; CI pending after mobile-browser timeout bump.**
 **Branch:** `cursor/behavioral-slice-6-claire-history-723a`
 **PR:** https://github.com/adamwright83-blip/bldg-admin-api/pull/159
 **Base:** `main` @ `28a02e00` (Slice 5 merged via PR #158 / `6251551c`, plus post-merge handoff)
-**Exact latest commit SHA:** *(updated after push)*
-**CI status:** pending
+**Implementation head:** `835aff1309b06521580728ef1ab431e03dd18d99`
+**Exact latest commit SHA:** *(updated after timeout-bump push)*
+**CI status:** 21/22 green on `835aff13`; `mobile-authoritative-business` cancelled after 5/5 Playwright tests passed because the shared `mobile-browser` job `timeout-minutes: 8` elapsed during post-steps (Chromium cache miss + 5.4m slow spec). Timeout raised to 12. No product test was failed.
 
 ---
 
