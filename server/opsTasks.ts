@@ -8,6 +8,7 @@ import {
   type OpsTask,
   type OpsTaskEvent,
 } from "../drizzle/schema";
+import type { LedgerEventType } from "../shared/behavioralLedger";
 import { getDb } from "./db";
 import { getDashboardTimeZone, zonedWeekRangeUtcContaining } from "./dashboardZoned";
 import { recordBehavioralLedgerEvent } from "./behavioralLedger/behavioralLedger";
@@ -118,6 +119,64 @@ function laneForLevel(level: OpsTaskLevel): OpsTaskLane {
   return `lane_${level}` as OpsTaskLane;
 }
 
+function lifecycleTransitionForStatus(
+  status: OpsTaskStatus
+): { opsEventType: OpsTaskEventType; ledgerEventType: LedgerEventType } | null {
+  switch (status) {
+    case "accepted":
+      return { opsEventType: "accepted", ledgerEventType: "ACCEPTED" };
+    case "in_progress":
+      return { opsEventType: "started", ledgerEventType: "STARTED" };
+    case "completed":
+      return { opsEventType: "completed", ledgerEventType: "COMPLETED" };
+    case "dismissed":
+      return { opsEventType: "dismissed", ledgerEventType: "DISMISSED" };
+    case "expired":
+      return { opsEventType: "expired", ledgerEventType: "EXPIRED" };
+    case "open":
+      // There is no truthful existing ops-task event meaning "reopened".
+      // Do not lie by recording ACCEPTED merely because open is the fallback.
+      return null;
+  }
+}
+
+async function mirrorOpsTaskEventToBehavioralLedger(input: {
+  tenantId: string;
+  taskId: number;
+  operatorUserId: string | null | undefined;
+  sourceEvent: OpsTaskEvent;
+  ledgerEventType: LedgerEventType;
+}) {
+  if (!input.operatorUserId) return;
+  try {
+    await recordBehavioralLedgerEvent({
+      tenantId: input.tenantId,
+      operatorUserId: input.operatorUserId,
+      correlationId: `ops_task:${input.taskId}`,
+      sourceSystem: "ops_task",
+      sourceEntityType: "ops_task_event",
+      sourceEntityId: String(input.sourceEvent.id),
+      eventType: input.ledgerEventType,
+      occurredAt: new Date(input.sourceEvent.createdAt),
+      verificationClass: input.ledgerEventType === "COMPLETED" ? "CLAIMED" : null,
+      provenance: "ops_task_event",
+      evidenceSource: `ops_task_event:${input.sourceEvent.id}`,
+      idempotencyKey: `ops_task_event:${input.sourceEvent.id}`,
+    });
+  } catch (error) {
+    // ops_task_events is the authoritative source record and can be replayed.
+    // Behavioral instrumentation must not turn an already-successful business
+    // transition into a caller-visible failure.
+    console.warn("[BehavioralLedger] Failed to mirror ops task event", {
+      tenantId: input.tenantId,
+      taskId: input.taskId,
+      sourceEventId: input.sourceEvent.id,
+      ledgerEventType: input.ledgerEventType,
+      error,
+    });
+  }
+}
+
 export function mapLegacyLevelToOps(level: "level_1" | "level_2" | "level_3" | "level_4") {
   const nextLevel = level === "level_4" ? "4" : level.replace("level_", "") as OpsTaskLevel;
   return { lane: laneForLevel(nextLevel), level: nextLevel };
@@ -222,21 +281,8 @@ export async function createOpsTask(input: CreateOpsTaskInput, store: OpsTaskSto
     note: null,
   });
 
-  if (input.assignedTo) {
-    await recordBehavioralLedgerEvent({
-      tenantId,
-      operatorUserId: input.assignedTo,
-      correlationId: `ops_task:${task.id}`,
-      sourceSystem: "ops_task",
-      sourceEntityType: "ops_task",
-      sourceEntityId: String(task.id),
-      eventType: "DELIVERED",
-      occurredAt: new Date(),
-      verificationClass: null,
-      provenance: "ops_task_created",
-      idempotencyKey: `ops_task:${task.id}:DELIVERED`,
-    });
-  }
+  // Assignment is not delivery. Do not create a DELIVERED behavioral event
+  // here; that belongs at the real presentation/send boundary when one exists.
   return task;
 }
 
@@ -268,55 +314,34 @@ export async function updateOpsTaskStatus(
   const tenantId = input.tenantId ?? "default";
   const before = await store.getTask(tenantId, input.taskId);
   if (!before) throw new Error("Ops task not found");
+
+  // A same-state retry is not a new behavioral act.
+  if (before.status === input.status) return before;
+
   const patch: Partial<InsertOpsTask> = { status: input.status };
   const after = await store.updateTask(tenantId, input.taskId, patch);
   if (!after) throw new Error("Ops task update failed");
-  const eventType: OpsTaskEventType =
-    input.status === "dismissed"
-      ? "dismissed"
-      : input.status === "expired"
-        ? "expired"
-        : input.status === "completed"
-          ? "completed"
-          : input.status === "in_progress"
-            ? "started"
-            : "accepted";
-  await createOpsTaskEvent({
+
+  const transition = lifecycleTransitionForStatus(input.status);
+  if (!transition) return after;
+
+  const sourceEvent = await createOpsTaskEvent({
     tenantId,
     taskId: input.taskId,
-    eventType,
+    eventType: transition.opsEventType,
     actorId: input.actorId ?? null,
     beforeJson: before,
     afterJson: after,
     note: input.note ?? null,
   }, store);
 
-  const occurredAt = new Date();
-  const ledgerEventType =
-    eventType === "dismissed"
-      ? "DISMISSED"
-      : eventType === "expired"
-        ? "EXPIRED"
-        : eventType === "completed"
-          ? "COMPLETED"
-          : eventType === "started"
-            ? "STARTED"
-            : "ACCEPTED";
-  if (input.actorId) {
-    await recordBehavioralLedgerEvent({
-      tenantId,
-      operatorUserId: input.actorId,
-      correlationId: `ops_task:${input.taskId}`,
-      sourceSystem: "ops_task",
-      sourceEntityType: "ops_task",
-      sourceEntityId: String(input.taskId),
-      eventType: ledgerEventType,
-      occurredAt,
-      verificationClass: ledgerEventType === "COMPLETED" ? "CLAIMED" : null,
-      provenance: "ops_task_status_update",
-      idempotencyKey: `ops_task:${input.taskId}:${ledgerEventType}`,
-    });
-  }
+  await mirrorOpsTaskEventToBehavioralLedger({
+    tenantId,
+    taskId: input.taskId,
+    operatorUserId: input.actorId,
+    sourceEvent,
+    ledgerEventType: transition.ledgerEventType,
+  });
   return after;
 }
 
@@ -346,7 +371,7 @@ export async function completeOpsTask(
   const after = await store.updateTask(tenantId, input.taskId, patch);
   if (!after) throw new Error("Ops task completion failed");
 
-  await createOpsTaskEvent({
+  const completionEvent = await createOpsTaskEvent({
     tenantId,
     taskId: input.taskId,
     eventType: "completed",
@@ -356,25 +381,14 @@ export async function completeOpsTask(
     note: input.outcome ?? null,
     agentEventId: after.agentEventId ?? null,
   }, store);
-  if (input.completedBy) {
-    // Same idempotency key as updateOpsTaskStatus's COMPLETED emission —
-    // whichever path completes the task first wins; the other is a dedupe no-op.
-    await recordBehavioralLedgerEvent({
-      tenantId,
-      operatorUserId: input.completedBy,
-      correlationId: `ops_task:${input.taskId}`,
-      sourceSystem: "ops_task",
-      sourceEntityType: "ops_task",
-      sourceEntityId: String(input.taskId),
-      eventType: "COMPLETED",
-      occurredAt: completedAt,
-      // Operator-reported completion is claimed, not verified, until
-      // independent evidence corroborates it (foundation doc §4).
-      verificationClass: "CLAIMED",
-      provenance: "ops_task_complete",
-      idempotencyKey: `ops_task:${input.taskId}:COMPLETED`,
-    });
-  }
+  await mirrorOpsTaskEventToBehavioralLedger({
+    tenantId,
+    taskId: input.taskId,
+    operatorUserId: input.completedBy,
+    sourceEvent: completionEvent,
+    ledgerEventType: "COMPLETED",
+  });
+
   if ((input.revenueRecoveredCents ?? 0) > 0) {
     await createOpsTaskEvent({
       tenantId,
@@ -462,7 +476,7 @@ export async function recordOpsTaskReply(
   });
   if (!after) throw new Error("Ops task reply update failed");
 
-  await createOpsTaskEvent({
+  const completionEvent = await createOpsTaskEvent({
     tenantId,
     taskId: input.taskId,
     eventType: "completed",
@@ -471,6 +485,13 @@ export async function recordOpsTaskReply(
     afterJson: after,
     note: `Resident reply: ${input.message.slice(0, 180)}`,
   }, store);
+  await mirrorOpsTaskEventToBehavioralLedger({
+    tenantId,
+    taskId: input.taskId,
+    operatorUserId: input.repliedBy,
+    sourceEvent: completionEvent,
+    ledgerEventType: "COMPLETED",
+  });
 
   return after;
 }
