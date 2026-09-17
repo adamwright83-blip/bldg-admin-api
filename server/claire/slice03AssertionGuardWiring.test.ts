@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ClaireDriveContext } from "./contextAssembler";
-import { writeClairePreDriveBrief } from "./reasoning";
+import {
+  writeClaireOutcomeConfirmation,
+  writeClairePostStopOpening,
+  writeClairePreDriveBrief,
+} from "./reasoning";
 import { answerClairePreDriveFollowUp } from "./preDriveConversation";
 import {
   G4_UNVERIFIED_STATE_VERB_FALLBACK,
@@ -8,6 +12,7 @@ import {
 } from "./verifiedFactInventoryFromContext";
 import { answerClaireBusinessTurn } from "./businessConversation";
 import { runClaireTurn } from "./turn/claireTurn";
+import { defaultBusinessQuery } from "../analytics/businessQuery";
 
 const context: ClaireDriveContext = {
   phase: "pre_drive",
@@ -32,6 +37,13 @@ const context: ClaireDriveContext = {
   mission: null,
 };
 
+const VERIFIED_SCHEDULED = "The Wilshire visit has been scheduled.";
+const UNVERIFIED_SENT = "I have sent the win-back text to Sophie already.";
+
+function silentRecord() {
+  return vi.fn().mockResolvedValue(undefined);
+}
+
 describe("Slice 3: assertion-guard production wiring", () => {
   it("assembles scheduled claims from Field Today and keeps outreach sent as pending", () => {
     const inventory = buildClaireVerifiedFactInventory(context);
@@ -40,11 +52,12 @@ describe("Slice 3: assertion-guard production wiring", () => {
     expect(inventory.getClaim("outreach-sent:default")?.status).toBe("pending");
     expect(inventory.toPromptSection()).toContain("VERIFIED FACT INVENTORY");
     expect(inventory.toPromptSection()).toContain("[PENDING]");
+    expect(buildClaireVerifiedFactInventory(null).hasVerifiedClaim("scheduled")).toBe(false);
   });
 
   it("writeClairePreDriveBrief injects G4 inventory and falls back on unverified 'sent'", async () => {
-    const invokeText = vi.fn().mockResolvedValue("I have sent the win-back text to Sophie already.");
-    const recordGeneration = vi.fn().mockResolvedValue(undefined);
+    const invokeText = vi.fn().mockResolvedValue(UNVERIFIED_SENT);
+    const recordGeneration = silentRecord();
     const result = await writeClairePreDriveBrief(
       { tenantId: "tenant-1", context },
       { invokeText, recordGeneration }
@@ -61,13 +74,12 @@ describe("Slice 3: assertion-guard production wiring", () => {
     );
   });
 
-  it("writeClairePreDriveBrief keeps compliant speech when no unverified state verbs", async () => {
-    const invokeText = vi.fn().mockResolvedValue("The Wilshire visit is on the calendar this afternoon.");
+  it("writeClairePreDriveBrief keeps a verified scheduled assertion", async () => {
     const result = await writeClairePreDriveBrief(
       { tenantId: "tenant-1", context },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText: vi.fn().mockResolvedValue(VERIFIED_SCHEDULED), recordGeneration: silentRecord() }
     );
-    expect(result).toBe("The Wilshire visit is on the calendar this afternoon.");
+    expect(result).toBe(VERIFIED_SCHEDULED);
   });
 
   it("pre-drive follow-up falls back when the model claims a queued send", async () => {
@@ -80,10 +92,83 @@ describe("Slice 3: assertion-guard production wiring", () => {
       },
       {
         invokeText: vi.fn().mockResolvedValue("I queued the reminder and it is already out."),
-        recordGeneration: vi.fn().mockResolvedValue(undefined),
+        recordGeneration: silentRecord(),
       }
     );
     expect(result).toContain("I can only clarify today's field brief");
+  });
+
+  it("pre-drive follow-up keeps a verified scheduled assertion", async () => {
+    const result = await answerClairePreDriveFollowUp(
+      {
+        tenantId: "tenant-1",
+        utterance: "Is the Wilshire visit on the calendar?",
+        brief: "Visit The Wilshire.",
+        context,
+      },
+      {
+        invokeText: vi.fn().mockResolvedValue(VERIFIED_SCHEDULED),
+        recordGeneration: silentRecord(),
+      }
+    );
+    expect(result).toBe(VERIFIED_SCHEDULED);
+  });
+
+  it("post-stop opening without context fail-closes unverified scheduled claims", async () => {
+    const result = await writeClairePostStopOpening(
+      { tenantId: "tenant-1", operatorUserId: null, accountName: "The Wilshire" },
+      {
+        invokeText: vi.fn().mockResolvedValue("The Wilshire visit has been scheduled."),
+        recordGeneration: silentRecord(),
+      }
+    );
+    expect(result).toBe(
+      "You're clear of The Wilshire. Tell me what actually happened. I won't mark anything won, lost, or followed up unless you say it."
+    );
+  });
+
+  it("post-stop opening with drive context keeps a verified scheduled assertion", async () => {
+    const result = await writeClairePostStopOpening(
+      {
+        tenantId: "tenant-1",
+        operatorUserId: "op-1",
+        accountName: "The Wilshire",
+        context,
+      },
+      {
+        invokeText: vi.fn().mockResolvedValue(VERIFIED_SCHEDULED),
+        recordGeneration: silentRecord(),
+      }
+    );
+    expect(result).toBe(VERIFIED_SCHEDULED);
+  });
+
+  it("outcome confirmation without context fail-closes unverified scheduled claims", async () => {
+    const result = await writeClaireOutcomeConfirmation(
+      { tenantId: "tenant-1", operatorUserId: null, outcome: "won", outcomeLabel: "won" },
+      {
+        invokeText: vi.fn().mockResolvedValue(VERIFIED_SCHEDULED),
+        recordGeneration: silentRecord(),
+      }
+    );
+    expect(result).toBe("Confirmed. I saved won and left anything you didn't report unresolved.");
+  });
+
+  it("outcome confirmation with drive context keeps a verified scheduled assertion", async () => {
+    const result = await writeClaireOutcomeConfirmation(
+      {
+        tenantId: "tenant-1",
+        operatorUserId: "op-1",
+        outcome: "won",
+        outcomeLabel: "won",
+        context,
+      },
+      {
+        invokeText: vi.fn().mockResolvedValue(VERIFIED_SCHEDULED),
+        recordGeneration: silentRecord(),
+      }
+    );
+    expect(result).toBe(VERIFIED_SCHEDULED);
   });
 
   it("business conversation replaces unverified sent claims", async () => {
@@ -101,6 +186,47 @@ describe("Slice 3: assertion-guard production wiring", () => {
     }
   });
 
+  it("business conversation keeps a verified scheduled assertion when context is passed", async () => {
+    const query = defaultBusinessQuery("revenue");
+    const turn = await answerClaireBusinessTurn(
+      {
+        tenantId: "tenant-1",
+        utterance: "What was revenue in the last 30 days?",
+        state: {},
+        surface: "voice",
+        context,
+      },
+      {
+        plan: async () => query,
+        runQuery: async () => ({
+          status: "ok",
+          query,
+          period: {
+            kind: "trailing_days",
+            days: 30,
+            start: "2026-08-15",
+            end: "2026-09-14",
+            label: "the last 30 days",
+          },
+          comparisonPeriod: null,
+          data: {
+            kind: "totals",
+            current: { revenueCents: 19000, orderCount: 5, aovCents: 3800 },
+            previous: null,
+          },
+          completeness: { coverage: "complete", notes: [] },
+        } as never),
+        speakResult: () => ({
+          text: VERIFIED_SCHEDULED,
+          facts: [],
+          disclosures: [],
+        }),
+      }
+    );
+    expect(turn.handled).toBe(true);
+    if (turn.handled) expect(turn.speak).toBe(VERIFIED_SCHEDULED);
+  });
+
   it("claireTurn finish sanitizes unverified sent speech from doctrine", async () => {
     const result = await runClaireTurn(
       {
@@ -114,11 +240,32 @@ describe("Slice 3: assertion-guard production wiring", () => {
         conversationKey: "test-thread",
       },
       {
-        doctrineTurn: async () => "I have sent the message to Sophie already.",
+        doctrineTurn: async () => UNVERIFIED_SENT,
         now: () => new Date("2026-09-14T15:00:00.000Z"),
         timeZone: () => "America/Los_Angeles",
       }
     );
     expect(result.speak).toBe(G4_UNVERIFIED_STATE_VERB_FALLBACK);
+  });
+
+  it("claireTurn finish keeps a verified scheduled assertion", async () => {
+    const result = await runClaireTurn(
+      {
+        tenantId: "tenant-1",
+        operatorUserId: "op-1",
+        dayDirectorActorId: "actor-1",
+        utterance: "good morning",
+        surface: "voice",
+        state: {},
+        context,
+        conversationKey: "test-thread",
+      },
+      {
+        doctrineTurn: async () => VERIFIED_SCHEDULED,
+        now: () => new Date("2026-09-14T15:00:00.000Z"),
+        timeZone: () => "America/Los_Angeles",
+      }
+    );
+    expect(result.speak).toBe(VERIFIED_SCHEDULED);
   });
 });

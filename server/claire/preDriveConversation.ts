@@ -178,6 +178,7 @@ export async function answerClairePreDriveFollowUp(
     recentSharedHistory,
     explicitlyRequestedTopic: detectRequestedClaireTopic(input.utterance),
   });
+  const inventory = buildClaireVerifiedFactInventory(input.context);
   try {
     const text = (
       await invokeText({
@@ -204,7 +205,7 @@ export async function answerClairePreDriveFollowUp(
               "If currentContext includes missionSalesBrief, stay anchored to it: its unknowns are not facts, its questionsToAsk/recommendations are suggestions, and its thingsToAvoid should not be repeated. Do not compute a new strategy — only interpret the one already given.",
               "If asked whether something is known (e.g. an objection, a price concern), check missionSalesBrief.keyKnownFacts and say plainly if it is not recorded rather than guessing.",
               compiled.promptSection,
-              buildClaireVerifiedFactInventory(input.context).toPromptSection(),
+              inventory.toPromptSection(),
             ].join(" "),
           },
           {
@@ -224,7 +225,7 @@ export async function answerClairePreDriveFollowUp(
       .trim()
       .slice(0, MAX_SPOKEN_ANSWER_CHARS);
     if (!text) throw new Error("Claire follow-up produced empty output");
-    assertPostGenerationStateVerbs(text, buildClaireVerifiedFactInventory(input.context));
+    assertPostGenerationStateVerbs(text, inventory);
     const diagnostic: ClaireGenerationDiagnostic = {
       kind: "follow_up",
       source: "model",

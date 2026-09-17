@@ -22,7 +22,9 @@ This is behavioral-science roadmap Slice 3 (finish assertion-guard production wi
 3. `lintPostGenerationStateVerbs` after LLM text in `reasoning.ts` / `preDriveConversation.ts` — violation falls back like G2.
 4. Speak sanitization in `answerClaireBusinessTurn` and `runClaireTurn` `finish()`.
 
-Unverified “I sent / I queued / I scheduled” claims do not reach the operator.
+Empty inventory is **fail-closed**, used only when the caller has no drive context (or assembling it failed). Callers that already hold or can assemble `ClaireDriveContext` pass it through: Twilio post-stop opening, Twilio outcome confirmation, `runClaireTurn` → business + encyclopedia.
+
+Unverified “I sent / I queued / I scheduled” claims do not reach the operator. Verified scheduled claims from Field Today are allowed to survive.
 
 ---
 

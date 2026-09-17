@@ -566,6 +566,7 @@ export async function startClairePostStopCall(input: {
     tenantId: input.tenantId,
     operatorUserId: input.actorId,
     accountName: context.mission.accountName,
+    context,
   });
   const response = new twilio.twiml.VoiceResponse();
   const gather = response.gather({
@@ -1005,12 +1006,19 @@ export function registerClaireRoutes(app: Express): void {
                 .map(fact => fact.text),
             }
           : null;
+      const confirmationContext = await assembleClaireDriveContext({
+        tenantId: claims.tenantId,
+        actorId: claims.userId,
+        phase: "post_stop",
+        missionId: claims.missionId,
+      }).catch(() => null);
       const confirmationLine = await writeClaireOutcomeConfirmation({
         tenantId: claims.tenantId,
         operatorUserId: claims.userId,
         outcome: claims.proposal.proposedOutcome,
         outcomeLabel: outcomeLabel(claims.proposal.proposedOutcome),
         strategyChange,
+        context: confirmationContext,
       });
       await endClaireCallLedger({
         callSid: ledgerCallSid,

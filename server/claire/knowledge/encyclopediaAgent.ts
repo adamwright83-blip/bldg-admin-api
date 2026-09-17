@@ -3,6 +3,7 @@ import { invokeLLM, invokeTextLLM } from "../../_core/llm";
 import { defaultBusinessQuery, runBusinessQuery } from "../../analytics/businessQuery";
 import { businessToday } from "../../analytics/businessPeriods";
 import { answerClaireBusinessTurn, type ClaireAnalyticsState } from "../businessConversation";
+import type { ClaireDriveContext } from "../contextAssembler";
 import { speakBusinessResult } from "../business/businessSpeech";
 import { accountAspect, listAccountRefs, loadAccountHistory, matchAccounts, speakAccountHistory } from "./accountKnowledge";
 import { searchOperatorConversation, substantiveTurns } from "./conversationMemory";
@@ -26,6 +27,7 @@ export type EncyclopediaInput = {
   history: Array<{ speaker: "operator" | "claire"; text: string }>;
   now: Date;
   timeZone: string;
+  context?: ClaireDriveContext | null;
 };
 
 const TOOL_NAMES = [
@@ -93,7 +95,7 @@ async function runTool(call: z.infer<typeof planSchema>["calls"][number], input:
     case "business_question": {
       const state: ClaireAnalyticsState = {};
       const turn = await answerClaireBusinessTurn(
-        { tenantId: input.tenantId, utterance: call.question || input.utterance, state, surface: input.surface },
+        { tenantId: input.tenantId, utterance: call.question || input.utterance, state, surface: input.surface, context: input.context },
         { now: () => input.now, timeZone: () => input.timeZone }
       );
       return turn.handled ? { tool: call.tool, text: turn.speak } : null;

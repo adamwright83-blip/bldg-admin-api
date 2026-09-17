@@ -260,6 +260,7 @@ export async function writeClairePreDriveBrief(
     fieldSalesDayState: input.context.clock?.fieldSalesDayState,
     daypart: input.context.clock?.daypart,
   });
+  const inventory = buildClaireVerifiedFactInventory(input.context);
   const compiled = await compileContextFor({
     tenantId: input.tenantId,
     operatorUserId: input.context.actorId ?? null,
@@ -304,7 +305,7 @@ export async function writeClairePreDriveBrief(
               "If the context includes missionSalesBrief, that is the one authoritative sales strategy for this mission — prioritize its primaryObjective and keyUnknown over generic pitching, and do not repeat anything listed in its thingsToAvoid.",
               "Never state a missionSalesBrief unknown, questionsToAsk item, or recommendation as if it were already a known fact. If the operator asks what an unknown answer is, say plainly that it is not known and that finding out is the point of this visit.",
               compiled.promptSection,
-              buildClaireVerifiedFactInventory(input.context).toPromptSection(),
+              inventory.toPromptSection(),
             ].join(" "),
           },
           { role: "user", content: compactContext(input.context) },
@@ -315,7 +316,7 @@ export async function writeClairePreDriveBrief(
       .slice(0, 900);
     if (!text) throw new Error("Claire opening brief produced empty output");
 
-    assertPostGenerationStateVerbs(text, buildClaireVerifiedFactInventory(input.context));
+    assertPostGenerationStateVerbs(text, inventory);
 
     // Guardrail G2 post-generation lint
     const disappointmentCheck = lintDisappointmentFraming(text);
@@ -438,6 +439,7 @@ export async function writeClairePostStopOpening(
     tenantId: string;
     operatorUserId: string | null;
     accountName: string;
+    context?: ClaireDriveContext | null;
   },
   dependencies: {
     invokeText?: typeof invokeTextLLM;
@@ -448,6 +450,7 @@ export async function writeClairePostStopOpening(
   const invokeText = dependencies.invokeText ?? invokeTextLLM;
   const recordGeneration = dependencies.recordGeneration ?? recordClaireGeneration;
   const startedAt = Date.now();
+  const inventory = buildClaireVerifiedFactInventory(input.context);
   const compiled = await compileContextFor({
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
@@ -469,6 +472,7 @@ export async function writeClairePostStopOpening(
               "State that the operator is clear of that account and ask what actually happened. Make clear you will not record won, lost, or a follow-up unless the operator says so.",
               "One or two short spoken sentences, under 40 words.",
               compiled.promptSection,
+              inventory.toPromptSection(),
             ].join(" "),
           },
           { role: "user", content: JSON.stringify({ accountName: input.accountName }) },
@@ -476,7 +480,7 @@ export async function writeClairePostStopOpening(
       })
     ).trim();
     if (text) {
-      assertPostGenerationStateVerbs(text, buildClaireVerifiedFactInventory(null));
+      assertPostGenerationStateVerbs(text, inventory);
     }
     const result = text || fallback;
     await recordGeneration({
@@ -532,6 +536,7 @@ export async function writeClaireOutcomeConfirmation(
       newObjective: string | null;
       newlyKnown: string[];
     } | null;
+    context?: ClaireDriveContext | null;
   },
   dependencies: {
     invokeText?: typeof invokeTextLLM;
@@ -548,6 +553,7 @@ export async function writeClaireOutcomeConfirmation(
   const invokeText = dependencies.invokeText ?? invokeTextLLM;
   const recordGeneration = dependencies.recordGeneration ?? recordClaireGeneration;
   const startedAt = Date.now();
+  const inventory = buildClaireVerifiedFactInventory(input.context);
   const compiled = await compileContextFor({
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
@@ -575,6 +581,7 @@ export async function writeClaireOutcomeConfirmation(
                 ? "If strategyChange is present, you may briefly note that the plan changed and why, using ONLY newlyKnown — never invent a different reason. If strategyChange is absent, say nothing about strategy."
                 : "",
               compiled.promptSection,
+              inventory.toPromptSection(),
             ].join(" "),
           },
           {
@@ -589,7 +596,7 @@ export async function writeClaireOutcomeConfirmation(
       })
     ).trim();
     if (text) {
-      assertPostGenerationStateVerbs(text, buildClaireVerifiedFactInventory(null));
+      assertPostGenerationStateVerbs(text, inventory);
     }
     const result = text || fallback;
     await recordGeneration({

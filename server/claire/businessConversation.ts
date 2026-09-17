@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { invokeLLM } from "../_core/llm";
+import type { ClaireDriveContext } from "./contextAssembler";
 import { sanitizeSpeakAgainstInventory, buildClaireVerifiedFactInventory } from "./verifiedFactInventoryFromContext";
 import { getDashboardTimeZone } from "../dashboardZoned";
 import type { LedgerFilters } from "../analytics/businessLineage";
@@ -960,6 +961,7 @@ export type ClaireBusinessTurnDeps = {
   plan: typeof planBusinessQuestionWithLLM;
   now: () => Date;
   timeZone: () => string;
+  speakResult?: typeof speakBusinessResult;
 };
 
 function focusCustomerOf(detail: CustomerDetail): FocusCustomer {
@@ -977,6 +979,7 @@ export async function answerClaireBusinessTurn(
     utterance: string;
     state: ClaireAnalyticsState;
     surface: ClaireSurface;
+    context?: ClaireDriveContext | null;
   },
   deps: Partial<ClaireBusinessTurnDeps> = {}
 ): Promise<ClaireBusinessTurn> {
@@ -1146,7 +1149,7 @@ export async function answerClaireBusinessTurn(
     if (!turn.handled || !("speak" in turn) || !turn.speak) return turn;
     return {
       ...turn,
-      speak: sanitizeSpeakAgainstInventory(turn.speak, buildClaireVerifiedFactInventory(null)),
+      speak: sanitizeSpeakAgainstInventory(turn.speak, buildClaireVerifiedFactInventory(input.context)),
     };
   }
 
@@ -1162,7 +1165,7 @@ export async function answerClaireBusinessTurn(
       return guardedTurn({ handled: true, speak: "I couldn't get that number reliably just now, so I won't guess.", facts: [] });
     }
 
-    const spoken = speakBusinessResult(result, {
+    const spoken = (deps.speakResult ?? speakBusinessResult)(result, {
       surface: input.surface,
       previous: session?.query ?? null,
       refinement: turn.refinement,

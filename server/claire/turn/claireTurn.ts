@@ -129,7 +129,7 @@ export type ClaireTurnDeps = {
   unpaid: typeof loadUnpaidOrders;
   searchMemory: typeof searchOperatorConversation;
   memoryBetween: typeof operatorTurnsBetween;
-  encyclopedia: ((input: { tenantId: string; operatorUserId: string; utterance: string; surface: "voice" | "text"; history: ClaireTurnHistoryEntry[] }) => Promise<string | null>) | null;
+  encyclopedia: ((input: { tenantId: string; operatorUserId: string; utterance: string; surface: "voice" | "text"; history: ClaireTurnHistoryEntry[]; context?: ClaireDriveContext | null }) => Promise<string | null>) | null;
   watchBoard?: (input: { tenantId: string; operatorUserId: string; actorId: string }) => Promise<{ brief: string }>;
   doctrineTurn?: (input: { tenantId: string; operatorUserId: string; utterance: string; today: string }) => Promise<string | null>;
 };
@@ -541,7 +541,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     const questionLower = normalizeUtterance(question);
     try {
       const business = await answerClaireBusinessTurn(
-        { tenantId: input.tenantId, utterance: question, state, surface: input.surface },
+        { tenantId: input.tenantId, utterance: question, state, surface: input.surface, context: input.context },
         { now: deps.now, timeZone: deps.timeZone, ...deps.business }
       );
       if (business.handled) return business.speak;
@@ -637,6 +637,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
           utterance: question,
           surface: input.surface,
           history: state.history ?? [],
+          context: input.context,
         });
         if (answer) return answer;
       } catch (error) {
