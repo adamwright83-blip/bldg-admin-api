@@ -53,15 +53,52 @@ import { writeFileSync } from "node:fs";
 import { answerClairePreDriveFollowUp } from "../../../server/claire/preDriveConversation";
 import { writeClairePreDriveBrief } from "../../../server/claire/reasoning";
 import { ENV } from "../../../server/_core/env";
-import type { ClaireDriveContext } from "../../../server/claire/contextAssembler";
+import {
+  buildClaireClock,
+  CLAIRE_BUSINESS_TIME_ZONE,
+  type ClaireDriveContext,
+} from "../../../server/claire/contextAssembler";
 import type { ClaireGenerationDiagnostic } from "../../../server/claire/generationTelemetry";
+
+// PR1 Claire Intelligence Repair -- corrective pass (real-exam finding,
+// root-cause fix per Adam's explicit instruction): the first real exam run
+// built `scheduledAt` as `new Date(Date.now() + 3 * 3600_000)` with no
+// timezone context anywhere in the fixture (`context.clock` was omitted
+// entirely), so the model had nothing but a bare UTC instant to reason
+// from and misread it as "just before midnight." Root cause was
+// determined to be IN THE FIXTURE, not in production: production's real
+// assembleClaireDriveContext (server/claire/contextAssembler.ts) always
+// calls buildClaireClock() and attaches the result as `context.clock`
+// before nextFixedCommitment is even assembled -- so a real call always
+// carries a resolved business timezone. This fixture now mirrors that
+// real shape exactly (buildClaireClock(now, CLAIRE_BUSINESS_TIME_ZONE)),
+// instead of inventing a differently-shaped ad hoc clock object, so it
+// cannot silently drift from what production actually sends again. See
+// docs/goldline/CLAIRE_INTELLIGENCE_PR1_HANDOFF.md for the full
+// root-cause writeup.
+function zonedWallTimeToUtc(y: number, m: number, d: number, h: number, min: number, timeZone: string): Date {
+  const utcGuess = Date.UTC(y, m - 1, d, h, min);
+  const asZoned = new Date(new Date(utcGuess).toLocaleString("en-US", { timeZone }));
+  const driftMs = utcGuess - asZoned.getTime();
+  return new Date(utcGuess + driftMs);
+}
+
+const now = new Date();
+const clock = buildClaireClock(now, CLAIRE_BUSINESS_TIME_ZONE);
+// A concrete business-local time (5pm business timezone, today) --
+// matches how a real scheduled commercial visit would actually be stored,
+// rather than an arbitrary UTC offset from "now" that could roll across a
+// day boundary in an unintuitive way.
+const [year, month, day] = clock.businessDate.split("-").map(Number);
+const scheduledAtLocal5pm = zonedWallTimeToUtc(year, month, day, 17, 0, CLAIRE_BUSINESS_TIME_ZONE);
 
 const context: ClaireDriveContext = {
   phase: "pre_drive",
-  generatedAt: new Date().toISOString(),
-  businessDate: new Date().toISOString().slice(0, 10),
+  generatedAt: now.toISOString(),
+  businessDate: clock.businessDate,
   actorId: "exam-operator",
   truthLaw: "game_projection_never_creates_business_truth",
+  clock,
   macroGoalKnown: true,
   macroGoal: { id: "goal-1", metricKey: "active_customers", targetValue: 500, unit: "active customers" },
   nextFixedCommitment: {
@@ -70,7 +107,7 @@ const context: ClaireDriveContext = {
     title: "The Wilshire",
     subtitle: "Commercial visit",
     urgency: "today",
-    scheduledAt: new Date(Date.now() + 3 * 3600_000).toISOString(),
+    scheduledAt: scheduledAtLocal5pm.toISOString(),
     destination: "100 Wilshire Boulevard",
     sourceReference: "commercial_missions:42",
     whySurfaced: "scheduled",
