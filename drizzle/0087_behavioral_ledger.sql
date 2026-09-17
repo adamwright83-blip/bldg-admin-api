@@ -1,3 +1,8 @@
+-- Applied by scripts/migrate.mjs (this file is not executed directly; see
+-- SLICE_4_MISSION_DIRECTOR.md section 8 — migrate.mjs does not run
+-- drizzle/*.sql). Keep this file and migrate.mjs's "Behavioral Ledger
+-- (Slice 1)" block in sync; migrate.mjs is what production actually runs.
+--
 -- Fix: ops_task_events could not previously distinguish a task being started
 -- from a task being accepted (updateOpsTaskStatus's fallback mapped
 -- status "in_progress" to eventType "accepted"). Start latency was
