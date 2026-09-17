@@ -67,4 +67,13 @@ export const ENV = {
     process.env.DAYFORGE_DEMO_TENANT_SLUG?.trim() || "sunset-laundry-demo",
   /** World capability: Night Shift authors tomorrow's presentation after LA date roll. Off by default. */
   goldlineNightShiftEnabled: process.env.GOLDLINE_NIGHT_SHIFT === "true",
+  /**
+   * xAI realtime foundation (connectivity + ZDR verification only -- no
+   * Claire/voice integration wired to this yet). Intentionally NOT required
+   * at server boot: production must keep operating with the xAI path
+   * disabled. Only validated at the point the xAI provider is actually
+   * invoked (see server/_core/xaiRealtime.ts).
+   */
+  xaiApiKey: process.env.XAI_API_KEY?.trim() ?? "",
+  xaiVoiceModel: process.env.XAI_VOICE_MODEL?.trim() || "grok-voice-latest",
 };

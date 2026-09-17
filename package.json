@@ -31,6 +31,7 @@
     "dayforge:demo:reset": "tsx scripts/dayforge-demo-reset.ts",
     "dayforge:demo:verify": "tsx scripts/dayforge-demo-verify.ts",
     "dayforge:migrations:verify": "tsx scripts/dayforge-migrations-verify.ts",
+    "xai:realtime:smoke-test": "tsx scripts/xai-realtime-smoke-test.ts",
     "goldline:bundle:budget": "node scripts/checkGoldlineBundleBudget.mjs",
     "goldline:import:customer-orders": "tsx scripts/import-goldline-customer-order-history.ts",
     "goldline:import:customer-ledger": "tsx scripts/goldline-customer-order-ledger.ts",
@@ -50,6 +51,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
     "@aws-sdk/client-s3": "^3.693.0",
+    "ws": "^8.21.3",
     "@aws-sdk/s3-request-presigner": "^3.693.0",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
@@ -128,6 +130,7 @@
   },
   "devDependencies": {
     "@builder.io/vite-plugin-jsx-loc": "^0.1.1",
+    "@types/ws": "^8.5.13",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/typography": "^0.5.15",
     "@tailwindcss/vite": "^4.1.3",
