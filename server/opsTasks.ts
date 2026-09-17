@@ -11,7 +11,7 @@ import {
 import type { LedgerEventType } from "../shared/behavioralLedger";
 import { getDb } from "./db";
 import { getDashboardTimeZone, zonedWeekRangeUtcContaining } from "./dashboardZoned";
-import { recordBehavioralLedgerEvent } from "./behavioralLedger/behavioralLedger";
+import { recordBehavioralLedgerEvent, type BehavioralLedgerStore } from "./behavioralLedger/behavioralLedger";
 
 export const OPS_TASK_LANES = ["lane_1", "lane_2", "lane_3", "level_4"] as const;
 export const OPS_TASK_LEVELS = ["1", "2", "3", "4"] as const;
@@ -184,6 +184,19 @@ async function mirrorOpsTaskEventToBehavioralLedger(input: {
   operatorUserId: string | null | undefined;
   sourceEvent: OpsTaskEvent;
   ledgerEventType: LedgerEventType;
+  /**
+   * Injectable for tests that pass a fake OpsTaskStore: without this, a
+   * pure in-memory unit test still reaches the real recordBehavioralLedgerEvent
+   * and its real getDb(), attempting (and, in any environment without a
+   * reachable DATABASE_URL matching the real schema, failing) a genuine
+   * network call on every run — silently, since the catch below is
+   * intentionally non-throwing. That's correct production behavior
+   * (instrumentation must never fail a business transition) but it means a
+   * test using a fake OpsTaskStore was never actually exercising or
+   * verifying the ledger mirror, only appearing to. Omit this to get the
+   * real production store, exactly as before.
+   */
+  ledgerStore?: BehavioralLedgerStore;
 }) {
   if (!input.operatorUserId) return;
   try {
@@ -200,7 +213,7 @@ async function mirrorOpsTaskEventToBehavioralLedger(input: {
       provenance: "ops_task_event",
       evidenceSource: `ops_task_event:${input.sourceEvent.id}`,
       idempotencyKey: `ops_task_event:${input.sourceEvent.id}`,
-    });
+    }, input.ledgerStore);
   } catch (error) {
     // ops_task_events is the authoritative source record and can be replayed.
     // Behavioral instrumentation must not turn an already-successful business
@@ -423,7 +436,8 @@ export async function listOpsTasks(input: ListOpsTasksInput = {}, store: OpsTask
 
 export async function updateOpsTaskStatus(
   input: { tenantId?: string; taskId: number; status: OpsTaskStatus; actorId?: string | null; note?: string | null },
-  store: OpsTaskStore = drizzleOpsTaskStore
+  store: OpsTaskStore = drizzleOpsTaskStore,
+  ledgerStore?: BehavioralLedgerStore
 ): Promise<OpsTask> {
   // "completed" has its own atomic invariant (completeTaskWithEvent):
   // exactly one caller may author the canonical completion, and a plain
@@ -483,6 +497,7 @@ export async function updateOpsTaskStatus(
     operatorUserId: input.actorId,
     sourceEvent,
     ledgerEventType: transition.ledgerEventType,
+    ledgerStore,
   });
   return after;
 }
@@ -495,7 +510,8 @@ export async function completeOpsTask(
     revenueRecoveredCents?: number;
     completedBy?: string | null;
   },
-  store: OpsTaskStore = drizzleOpsTaskStore
+  store: OpsTaskStore = drizzleOpsTaskStore,
+  ledgerStore?: BehavioralLedgerStore
 ): Promise<OpsTask> {
   const tenantId = input.tenantId ?? "default";
   const before = await store.getTask(tenantId, input.taskId);
@@ -587,6 +603,7 @@ export async function completeOpsTask(
     operatorUserId: input.completedBy,
     sourceEvent: completionEventFromWinner,
     ledgerEventType: "COMPLETED",
+    ledgerStore,
   });
 
   if ((input.revenueRecoveredCents ?? 0) > 0) {
@@ -649,7 +666,8 @@ export async function recordOpsTaskReply(
     appliedOrderPatch?: Record<string, unknown> | null;
     repliedBy?: string | null;
   },
-  store: OpsTaskStore = drizzleOpsTaskStore
+  store: OpsTaskStore = drizzleOpsTaskStore,
+  ledgerStore?: BehavioralLedgerStore
 ): Promise<OpsTask> {
   const tenantId = input.tenantId ?? "default";
   const before = await store.getTask(tenantId, input.taskId);
@@ -764,6 +782,7 @@ export async function recordOpsTaskReply(
     operatorUserId: requestedRepliedBy,
     sourceEvent: completionEventFromWinner,
     ledgerEventType: "COMPLETED",
+    ledgerStore,
   });
 
   return after;

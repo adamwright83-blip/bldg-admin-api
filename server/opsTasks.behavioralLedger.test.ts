@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type {
+  BehavioralLedgerEvent,
+  InsertBehavioralLedgerEvent,
   InsertOpsTask,
   InsertOpsTaskEvent,
   OpsTask,
@@ -13,6 +15,41 @@ import {
   type ListOpsTasksInput,
   type OpsTaskStore,
 } from "./opsTasks";
+import type { BehavioralLedgerStore } from "./behavioralLedger/behavioralLedger";
+
+/**
+ * Without this fake, updateOpsTaskStatus/completeOpsTask/recordOpsTaskReply
+ * still call the real production recordBehavioralLedgerEvent — even when
+ * given a fake OpsTaskStore — because the ledger mirror is a second,
+ * separately-injectable dependency. Omitting it here would mean this whole
+ * file silently attempts (and, absent a reachable real database, fails and
+ * swallows) a genuine network call on every run that touches the ledger,
+ * while still passing, because that failure is caught by design
+ * (server/opsTasks.ts's own comment: "Behavioral instrumentation must not
+ * turn an already-successful business transition into a caller-visible
+ * failure"). This was caught by inspecting a real CI log, not by local
+ * reasoning: the tests were passing while quietly not verifying the ledger
+ * mirror content they appeared to.
+ */
+function createFakeLedgerStore(): BehavioralLedgerStore & { rows: BehavioralLedgerEvent[] } {
+  const rows: BehavioralLedgerEvent[] = [];
+  let nextId = 1;
+  return {
+    rows,
+    async insertIfAbsent(input: InsertBehavioralLedgerEvent) {
+      const existing = rows.find(
+        r => r.tenantId === input.tenantId && r.idempotencyKey === input.idempotencyKey
+      );
+      if (existing) return existing;
+      const row = { ...input, id: nextId++, createdAt: new Date() } as BehavioralLedgerEvent;
+      rows.push(row);
+      return row;
+    },
+    async listByCorrelation(tenantId: string, correlationId: string) {
+      return rows.filter(r => r.tenantId === tenantId && r.correlationId === correlationId);
+    },
+  };
+}
 
 function makeTask(overrides: Partial<OpsTask> = {}): OpsTask {
   const now = new Date("2026-09-17T16:00:00Z");
@@ -255,9 +292,10 @@ describe("ops-task behavioral truth", () => {
 
   it("concurrent completeOpsTask calls produce exactly one behavioral COMPLETED row", async () => {
     const store = createFakeOpsStore();
+    const ledgerStore = createFakeLedgerStore();
     await Promise.all([
-      completeOpsTask({ tenantId: TENANT, taskId: 42, completedBy: "operator-1", outcome: "Done" }, store),
-      completeOpsTask({ tenantId: TENANT, taskId: 42, completedBy: "operator-1", outcome: "Done" }, store),
+      completeOpsTask({ tenantId: TENANT, taskId: 42, completedBy: "operator-1", outcome: "Done" }, store, ledgerStore),
+      completeOpsTask({ tenantId: TENANT, taskId: 42, completedBy: "operator-1", outcome: "Done" }, store, ledgerStore),
     ]);
 
     const completedOpsEvents = store.events.filter(e => e.eventType === "completed");
@@ -266,28 +304,36 @@ describe("ops-task behavioral truth", () => {
     // id, so even if this test's harness could somehow produce two
     // "completed" ops events, they would still map to two DISTINCT ledger
     // idempotency keys rather than colliding silently — the ops-event count
-    // above is what proves there is only one canonical completion.
+    // above is what proves there is only one canonical completion. Asserted
+    // directly against the ledger store, not just inferred from it.
+    const completedLedgerRows = ledgerStore.rows.filter(r => r.eventType === "COMPLETED");
+    expect(completedLedgerRows).toHaveLength(1);
+    expect(completedLedgerRows[0]?.sourceEntityId).toBe(String(completedOpsEvents[0]!.id));
   });
 
   it("concurrent resident-reply completion attempts produce exactly one canonical completion", async () => {
     const store = createFakeOpsStore();
+    const ledgerStore = createFakeLedgerStore();
     await Promise.all([
-      recordOpsTaskReply({ tenantId: TENANT, taskId: 42, message: "Yes, approved.", repliedBy: "operator-1" }, store),
-      recordOpsTaskReply({ tenantId: TENANT, taskId: 42, message: "Yes, approved.", repliedBy: "operator-1" }, store),
+      recordOpsTaskReply({ tenantId: TENANT, taskId: 42, message: "Yes, approved.", repliedBy: "operator-1" }, store, ledgerStore),
+      recordOpsTaskReply({ tenantId: TENANT, taskId: 42, message: "Yes, approved.", repliedBy: "operator-1" }, store, ledgerStore),
     ]);
 
     expect(eventTypes(store).filter(type => type === "completed")).toHaveLength(1);
     expect(store.task.status).toBe("completed");
+    expect(ledgerStore.rows.filter(r => r.eventType === "COMPLETED")).toHaveLength(1);
   });
 
   it("a resident reply racing a plain completeOpsTask call still yields one completion", async () => {
     const store = createFakeOpsStore();
+    const ledgerStore = createFakeLedgerStore();
     await Promise.all([
-      completeOpsTask({ tenantId: TENANT, taskId: 42, completedBy: "operator-1", outcome: "Handled manually" }, store),
-      recordOpsTaskReply({ tenantId: TENANT, taskId: 42, message: "On our way.", repliedBy: "operator-1" }, store),
+      completeOpsTask({ tenantId: TENANT, taskId: 42, completedBy: "operator-1", outcome: "Handled manually" }, store, ledgerStore),
+      recordOpsTaskReply({ tenantId: TENANT, taskId: 42, message: "On our way.", repliedBy: "operator-1" }, store, ledgerStore),
     ]);
 
     expect(eventTypes(store).filter(type => type === "completed")).toHaveLength(1);
+    expect(ledgerStore.rows.filter(r => r.eventType === "COMPLETED")).toHaveLength(1);
   });
 
   it("unresolved operator identity fails the ledger mirror closed without breaking the business transition", async () => {
@@ -302,7 +348,8 @@ describe("ops-task behavioral truth", () => {
 
   it("ledger rows carry provenance back to the immutable ops_task_events source row, not a synthetic key", async () => {
     const store = createFakeOpsStore();
-    await updateOpsTaskStatus({ tenantId: TENANT, taskId: 42, status: "in_progress", actorId: "operator-1" }, store);
+    const ledgerStore = createFakeLedgerStore();
+    await updateOpsTaskStatus({ tenantId: TENANT, taskId: 42, status: "in_progress", actorId: "operator-1" }, store, ledgerStore);
     const startedOpsEvent = store.events.find(e => e.eventType === "started");
     expect(startedOpsEvent).toBeDefined();
     // The ledger's idempotency/evidence key is derived from this exact
@@ -310,6 +357,10 @@ describe("ops-task behavioral truth", () => {
     // later replay of the same ops_task_events row can never produce a
     // second ledger row even if the caller's own retry logic changes.
     expect(startedOpsEvent!.id).toBeGreaterThan(0);
+    const startedLedgerRow = ledgerStore.rows.find(r => r.eventType === "STARTED");
+    expect(startedLedgerRow).toBeDefined();
+    expect(startedLedgerRow!.sourceEntityId).toBe(String(startedOpsEvent!.id));
+    expect(startedLedgerRow!.idempotencyKey).toBe(`ops_task_event:${startedOpsEvent!.id}`);
   });
 
   it("updateOpsTaskStatus rejects status:\"completed\" rather than bypassing the atomic completion invariant", async () => {

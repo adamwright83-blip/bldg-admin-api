@@ -13,6 +13,22 @@ import {
   type OpsTaskStore,
 } from "./opsTasks";
 import { parseEmergencyTaskIntake } from "./operatorTaskIntake";
+import type { BehavioralLedgerStore } from "./behavioralLedger/behavioralLedger";
+
+/**
+ * completeOpsTask's ledger mirror is a separately-injectable dependency from
+ * OpsTaskStore — without this, any call here that sets completedBy would
+ * silently attempt (and, absent a reachable real database, fail and swallow
+ * by design) a genuine network call to the real production ledger store.
+ */
+const noopLedgerStore: BehavioralLedgerStore = {
+  async insertIfAbsent() {
+    return null;
+  },
+  async listByCorrelation() {
+    return [];
+  },
+};
 
 class MemoryOpsTaskStore implements OpsTaskStore {
   tasks: OpsTask[] = [];
@@ -140,7 +156,7 @@ async function completedTask(store: MemoryOpsTaskStore, overrides: Partial<Param
     revenueRecoveredCents: 8600,
     outcome: "Paid in full",
     completedBy: "tester",
-  }, store);
+  }, store, noopLedgerStore);
 }
 
 describe("ops task proof layer", () => {
@@ -161,7 +177,7 @@ describe("ops task proof layer", () => {
   it("completes an ops task", async () => {
     const store = new MemoryOpsTaskStore();
     const task = await createOpsTask({ lane: "lane_2", level: "2", taskType: "vendor_followup", title: "Call vendor" }, store);
-    const completed = await completeOpsTask({ taskId: task.id, outcome: "Vendor confirmed", completedBy: "adam" }, store);
+    const completed = await completeOpsTask({ taskId: task.id, outcome: "Vendor confirmed", completedBy: "adam" }, store, noopLedgerStore);
     expect(completed.status).toBe("completed");
     expect(completed.completedBy).toBe("adam");
     expect(completed.outcome).toBe("Vendor confirmed");

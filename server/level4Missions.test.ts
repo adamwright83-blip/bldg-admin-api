@@ -1,6 +1,24 @@
 import { describe, expect, it } from "vitest";
 import type { InsertLevel4Mission, InsertOpsTask, InsertOpsTaskEvent, Level4Mission, OpsTask, OpsTaskEvent } from "../drizzle/schema";
 import { completeOpsTask, createOpsTask, type ListOpsTasksInput, type OpsTaskStore } from "./opsTasks";
+import type { BehavioralLedgerStore } from "./behavioralLedger/behavioralLedger";
+
+/**
+ * completeOpsTask's ledger mirror is a separately-injectable dependency from
+ * OpsTaskStore — without this, laneTask()'s default completedBy="op1" would
+ * make every call here silently attempt (and, absent a reachable real
+ * database, fail and swallow by design) a genuine network call to the real
+ * production ledger store. See server/opsTasks.behavioralLedger.test.ts for
+ * the CI log that first caught this.
+ */
+const noopLedgerStore: BehavioralLedgerStore = {
+  async insertIfAbsent() {
+    return null;
+  },
+  async listByCorrelation() {
+    return [];
+  },
+};
 import {
   LEVEL4_COMPLETION_XP,
   buildLevel4MissionProgress,
@@ -199,7 +217,7 @@ async function laneTask(store: MemoryOpsTaskStore, lane: "lane_1" | "lane_2" | "
     taskType: lane === "lane_3" ? "unpaid_order" : "manual_operator_task",
     title: `${lane} task`,
   }, store);
-  const completed = await completeOpsTask({ tenantId: "default", taskId: task.id, completedBy, revenueRecoveredCents: lane === "lane_3" ? 1000 : undefined }, store);
+  const completed = await completeOpsTask({ tenantId: "default", taskId: task.id, completedBy, revenueRecoveredCents: lane === "lane_3" ? 1000 : undefined }, store, noopLedgerStore);
   completed.completedAt = completedAt;
   task.completedAt = completedAt;
   return completed;
