@@ -1,0 +1,15 @@
+/*
+ * The final mobile polish intentionally hides legacy dashboard chrome, but the
+ * Day Plan menu is still the canonical direct route from Today's Day into
+ * Overland and Field Operations. Keep only this control reachable; the rest of
+ * the polished composition remains unchanged.
+ */
+.driver-day-home .gdp-menu-button {
+  display: grid !important;
+  pointer-events: auto !important;
+}
+
+.driver-day-home .gdp-menu {
+  display: block !important;
+  pointer-events: auto !important;
+}
