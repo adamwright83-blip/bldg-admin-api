@@ -19,6 +19,8 @@ import {
   buildClaireVerifiedFactInventory,
 } from "./verifiedFactInventoryFromContext";
 import { ENV } from "../_core/env";
+import { formatClaireLocalTime, CLAIRE_BUSINESS_TIME_ZONE } from "./contextAssembler";
+import { VOICE_NATIVE_ANSWER_GUIDANCE, BLOCKER_REPETITION_DISCIPLINE } from "./conversationVoiceGuidance";
 
 /**
  * PR1 Claire Intelligence Repair: cut generously at a sentence boundary
@@ -125,6 +127,7 @@ function resultText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
 function compactContext(context: ClaireDriveContext): string {
   const runtime = context.runtime ?? assembleClaireRuntimeView(context);
   const factInventory = buildClaireVerifiedFactInventory(context);
+  const timeZone = context.clock?.timeZone ?? CLAIRE_BUSINESS_TIME_ZONE;
   return JSON.stringify({
     businessDate: context.businessDate,
     clock: context.clock,
@@ -134,6 +137,13 @@ function compactContext(context: ClaireDriveContext): string {
     verifiedMetrics: context.verifiedMetrics,
     campaign: context.campaign,
     nextFixedCommitment: context.nextFixedCommitment,
+    // PR1 Claire Intelligence Repair -- corrective pass (real-exam
+    // finding): same deterministic local-time rendering as
+    // preDriveConversation.ts, so Claire never has to convert a raw ISO
+    // scheduledAt into local time herself.
+    nextFixedCommitmentLocalWhen: context.nextFixedCommitment
+      ? formatClaireLocalTime(context.nextFixedCommitment.scheduledAt, timeZone)
+      : null,
     blockers: context.blockers,
     relevantTimeline: context.relevantTimeline,
     mission: context.mission,
@@ -282,6 +292,7 @@ export async function writeClairePreDriveBrief(
           ? "morning_reconciliation"
           : "pre_drive",
   });
+  let stopReason: string | null = null;
   try {
     const text = (
       await invokeText({
@@ -289,6 +300,7 @@ export async function writeClairePreDriveBrief(
         model: ENV.anthropicModelClaire || ENV.anthropicModel,
         maxTokens: 500,
         temperature: 0.6,
+        onStopReason: reason => { stopReason = reason; },
         messages: [
           {
             role: "system",
@@ -320,7 +332,10 @@ export async function writeClairePreDriveBrief(
               // (6)/(7) recent conversation and the operator's ask arrive via the user turn below
               "Speak naturally, sized to what actually matters today — usually a few concise sentences, more if there is a genuine strategic point worth making. Do not pad for length or artificially cut a real point short.",
               "Use conversational spoken English. Avoid slash-separated phrases, dense abbreviations, or wording that is hard to understand over a phone line.",
+              VOICE_NATIVE_ANSWER_GUIDANCE,
+              BLOCKER_REPETITION_DISCIPLINE,
               "Do not narrate the game.",
+              "nextFixedCommitmentLocalWhen, when present, is the authoritative, already-resolved local date/time for the next fixed commitment. State or reference its time using that field directly. Do not attempt to convert nextFixedCommitment.scheduledAt's raw ISO timestamp into local time yourself.",
               "If the context includes missionSalesBrief, that is the one authoritative sales strategy for this mission — prioritize its primaryObjective and keyUnknown over generic pitching, and do not repeat anything listed in its thingsToAvoid. You may add general sales judgment on top of it, clearly framed as your own take.",
               "Never state a missionSalesBrief unknown, questionsToAsk item, or recommendation as if it were already a known fact. If the operator asks what an unknown answer is, say plainly that it is not known and that finding out is the point of this visit.",
             ].join(" "),
@@ -358,6 +373,7 @@ export async function writeClairePreDriveBrief(
       failureReason: null,
       modelRequested: ENV.anthropicModelClaire || ENV.anthropicModel,
       surface: "voice",
+      stopReason,
     };
     await recordGeneration({
       tenantId: input.tenantId,
@@ -385,6 +401,7 @@ export async function writeClairePreDriveBrief(
       failureReason,
       modelRequested: ENV.anthropicModelClaire || ENV.anthropicModel,
       surface: "voice",
+      stopReason,
     };
     await recordGeneration({
       tenantId: input.tenantId,
