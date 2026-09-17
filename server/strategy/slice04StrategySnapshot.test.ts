@@ -68,6 +68,9 @@ describe("Slice 4: Strategy Snapshot (Bounded, Versioned, with Provenance)", () 
 
     expect(provenance["playgroundRules.monthlySpendCeilingCents"]).toBeDefined();
     expect(provenance["capacity.availablePounds"]).toBeDefined();
+    expect(provenance["customers.dormantEligible"]).toBeDefined();
+    expect(provenance["repeatPipeline"]).toBeDefined();
+    expect(provenance["accounts"]?.source).toBe("omitted");
 
     // Test endpoint helper
     const prov = await getSnapshotProvenance(tenantA, snapshot.id, "goal.newPayingCustomers");

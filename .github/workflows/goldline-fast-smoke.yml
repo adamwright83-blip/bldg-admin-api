@@ -96,6 +96,14 @@ jobs:
         run: >-
           pnpm vitest run --config vitest.integration.config.ts
           server/opsTasks.mysql.integration.test.ts
+          server/strategy/snapshotLiveDerived.integration.test.ts
+      - name: Prove StrategyEngine live snapshot sections (no fabricated fixtures)
+        run: >-
+          pnpm vitest run
+          server/strategy/snapshotDormantCustomers.test.ts
+          server/strategy/snapshotRepeatPipeline.test.ts
+          server/strategy/slice2LiveSnapshot.test.ts
+          server/strategy/slice04StrategySnapshot.test.ts
       - name: Prove Real Workday truth invariants
         run: >-
           pnpm vitest run
