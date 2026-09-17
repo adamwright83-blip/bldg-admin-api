@@ -50,6 +50,7 @@ import {
   type GoldlineLocationSnapshot,
 } from "./goldlineDriverModel";
 import { deriveCampaignChapterActionGrammar } from "@shared/goldlineCampaignBindings";
+import { resolveFictionPackVisuals } from "@shared/fictionPackVisuals";
 import { behavioralSubjectFromGrammar } from "@shared/behavioralSubject";
 import {
   surfaceForCampaignHost,
@@ -212,6 +213,7 @@ function LiveGoldlineDriverController({
     useState<"overworld">("overworld");
   /** The day briefing, opened over Overland without leaving it. */
   const [dayBriefingOpen, setDayBriefingOpen] = useState(!launchOperationId);
+  const [campaignRunMissionOpen, setCampaignRunMissionOpen] = useState(false);
   const [waywardProgress, setWaywardProgress] = useState<WaywardProgress>(() =>
     loadWaywardProgress(null)
   );
@@ -377,6 +379,23 @@ function LiveGoldlineDriverController({
     { businessDate: tomorrowBusinessDate },
     { refetchInterval: 60_000, retry: false }
   );
+  const campaignRuns = trpc.system.campaignRuns.listMine.useQuery(undefined, {
+    staleTime: 15_000,
+    retry: false,
+  });
+  const bioContainmentRun = useMemo(() => {
+    const runs = campaignRuns.data ?? [];
+    return (
+      runs.find(
+        run => run.fictionPackId === "bio_containment" && run.status === "active"
+      ) ??
+      runs.find(run => run.fictionPackId === "bio_containment") ??
+      null
+    );
+  }, [campaignRuns.data]);
+  const bioContainmentIcon =
+    resolveFictionPackVisuals(bioContainmentRun?.fictionPackId)?.missionIcon ??
+    null;
   // Slice 5 §5.4: Kingdom 2 unlocks after Kingdom 1 (the Greystar hunt) is
   // complete, and leads to /goldline-chapter access, per Adam's decision.
   const goldlineKingdoms = trpc.system.goldlineKingdoms.list.useQuery(
@@ -1388,6 +1407,19 @@ function LiveGoldlineDriverController({
               }
             : undefined
         }
+        campaignRunCard={
+          bioContainmentRun && bioContainmentIcon
+            ? {
+                title: "BIO CONTAINMENT",
+                iconSrc: bioContainmentIcon,
+                onOpen: () => {
+                  setDayBriefingOpen(false);
+                  setCampaignRunMissionOpen(true);
+                  setDriverScene("game");
+                },
+              }
+            : null
+        }
         processingLocation={dayDirectorState.data?.processingLocation}
         commitments={dayDirectorState.data?.commitments}
         intelligenceAvailable={dayDirectorState.data?.intelligenceAvailable}
@@ -1716,6 +1748,9 @@ function LiveGoldlineDriverController({
           isStartingVisitRoute={startVisitRoute.isPending}
           onStartVisitRoute={handleStartVisitRoute}
           onEmitEvent={emitGoldlineEvent}
+          campaignRunId={bioContainmentRun?.campaignRunId ?? null}
+          campaignRunMissionOpen={campaignRunMissionOpen}
+          onCampaignRunMissionOpenChange={setCampaignRunMissionOpen}
         />
       </Suspense>
       <LogSignalSheet

@@ -15,7 +15,7 @@
  *
  * Survives `getDb()` returning null like every neighbouring service does.
  */
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
   goldlineCampaignRuns,
@@ -276,6 +276,26 @@ export async function getCampaignRun(input: {
     )
     .limit(1);
   return rows[0] ? toRun(rows[0]) : null;
+}
+
+/** Operator's own runs, newest first. Empty when the database is unavailable. */
+export async function listOperatorRuns(input: {
+  tenantId: string;
+  operatorUserId: string;
+}): Promise<CampaignRun[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select()
+    .from(goldlineCampaignRuns)
+    .where(
+      and(
+        eq(goldlineCampaignRuns.tenantId, input.tenantId),
+        eq(goldlineCampaignRuns.operatorUserId, input.operatorUserId)
+      )
+    )
+    .orderBy(desc(goldlineCampaignRuns.startedAt));
+  return rows.map(toRun);
 }
 
 /**

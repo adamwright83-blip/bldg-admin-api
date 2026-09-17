@@ -1201,6 +1201,11 @@
 .game-utility-bar svg {
   width: 18px;
 }
+.game-utility-bar button img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
 /* Five items at 393px leaves ~74px per cell; keep the label inside it. */
 .game-utility-bar a,
 .game-utility-bar button {
