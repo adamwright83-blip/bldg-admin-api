@@ -117,7 +117,18 @@ export type InvokeResult = {
 export type InvokeTextParams = Pick<
   InvokeParams,
   "messages" | "tenantId" | "model" | "maxTokens" | "max_tokens" | "temperature"
->;
+> & {
+  /**
+   * PR1 Claire Intelligence Repair -- corrective pass: durable stop-reason
+   * visibility, not a one-off for a single exam. Anthropic's own
+   * `stop_reason` ("end_turn", "max_tokens", "stop_sequence", ...) is
+   * captured and handed back here before the text is returned, so a
+   * caller can positively detect "the model hit its token ceiling" instead
+   * of inferring truncation from trailing punctuation. Optional and
+   * additive -- existing callers that don't pass it are unaffected.
+   */
+  onStopReason?: (stopReason: string | null) => void;
+};
 
 export class TextLLMInvocationError extends Error {
   readonly code: "invalid_request" | "provider_failure";
@@ -468,7 +479,11 @@ export async function invokeTextLLM(params: InvokeTextParams): Promise<string> {
     const systemParts: string[] = [];
     const anthropicMessages: Anthropic.MessageParam[] = [];
     for (const message of params.messages) {
-      if (message.role !== "system" && message.role !== "user") {
+      if (
+        message.role !== "system" &&
+        message.role !== "user" &&
+        message.role !== "assistant"
+      ) {
         throw new TextLLMInvocationError(
           "invalid_request",
           `Unsupported message role for Anthropic text invoke: ${message.role}`
@@ -483,7 +498,11 @@ export async function invokeTextLLM(params: InvokeTextParams): Promise<string> {
       }
       const text = parts.map(part => (part as TextContent).text).join("\n");
       if (message.role === "system") systemParts.push(text);
-      else anthropicMessages.push({ role: "user", content: text });
+      // Real alternating history: user/assistant messages are pushed in the
+      // order given, preserving role. Callers are responsible for bounding
+      // history length and for treating verified business context (not
+      // prior assistant text) as the source of truth for facts.
+      else anthropicMessages.push({ role: message.role, content: text });
     }
     if (anthropicMessages.length === 0) {
       throw new TextLLMInvocationError(
@@ -500,6 +519,7 @@ export async function invokeTextLLM(params: InvokeTextParams): Promise<string> {
       ...(systemParts.length ? { system: systemParts.join("\n\n") } : {}),
       messages: anthropicMessages,
     });
+    params.onStopReason?.(response.stop_reason ?? null);
     const text = response.content
       .filter((block): block is Anthropic.TextBlock => block.type === "text")
       .map(block => block.text)

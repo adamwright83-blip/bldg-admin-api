@@ -1,0 +1,125 @@
+{
+  "generatedAt": "2026-09-17T22:19:22.656Z",
+  "turns": [
+    {
+      "category": "opening_brief",
+      "label": "opening brief",
+      "kind": "opening_brief",
+      "rawResponse": "The Wilshire is on at five today, and the gate code is still outstanding. That's the one thing that could actually stop you at the door — do you have a contact there you can call right now to get it, or do we need to find another way in?",
+      "source": "model",
+      "failureReason": null,
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 3392
+    },
+    {
+      "category": "ordinary",
+      "label": "ordinary conversational check-in",
+      "kind": "follow_up",
+      "rawResponse": "The Wilshire is at 5 PM — 100 Wilshire Boulevard. That's your one fixed thing today.\n\nGate code is still outstanding. Do you have it yet, or do we need to chase that down before you leave?",
+      "source": "model",
+      "failureReason": null,
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 2513
+    },
+    {
+      "category": "continuity",
+      "label": "reference 2-4 turns back",
+      "kind": "follow_up",
+      "rawResponse": "I don't know. Do you have any confirmation from them, or are you going in cold again?",
+      "source": "model",
+      "failureReason": null,
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 1645
+    },
+    {
+      "category": "strategic_reasoning",
+      "label": "what would you do / why / what am I missing",
+      "kind": "follow_up",
+      "rawResponse": "The main thing I'd want you clear on before you walk in is what you're actually trying to learn, not just what you're trying to sell. You don't know yet how residents there currently handle laundry — whether they're doing it themselves, using a service, ignoring it entirely. That's the real discovery. So the first question out of your mouth shouldn't be a pitch, it should be something that gets the manager talking about their residents and how laundry actually works in that building day-to-day.\n\nThe other thing worth naming: we're still waiting on the gate code. If that's not resolved before you leave, you may not get past the front.\n\nWhat do you know about this property going in — size, resident profile, anything?",
+      "source": "model",
+      "failureReason": null,
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 5393
+    },
+    {
+      "category": "correction",
+      "label": "operator corrects Claire",
+      "kind": "follow_up",
+      "rawResponse": "The Wilshire is at 5 PM — you've got about an hour and forty minutes. What's your plan walking in?",
+      "source": "model",
+      "failureReason": null,
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 2647
+    },
+    {
+      "category": "general_knowledge",
+      "label": "general business knowledge as advice, not fact",
+      "kind": "follow_up",
+      "rawResponse": "The honest answer is I don't know what price point you're going in with, so I can't tell you where you have room to move. That matters before we talk tactics.\n\nThat said, general principle: if they push back on price before they've actually seen a resident use the service, the objection is usually premature and you can say so. Something like — \"Fair, let's come back to that. The number only makes sense once you've seen what residents are actually paying for.\" Redirect to the resident experience first, then price has context.\n\nIf they've genuinely heard the number and it's a real objection, the question to ask them is what specifically feels off — is it that residents won't pay it, or that the building's arrangement feels wrong to them? Those are two different problems.\n\nWhat are you going in at?",
+      "source": "model",
+      "failureReason": null,
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 5797
+    },
+    {
+      "category": "truth_boundary",
+      "label": "fact absent from verified context",
+      "kind": "follow_up",
+      "rawResponse": "That's not recorded anywhere I can see. We don't have intel on what residents there are doing for laundry today.\n\nWhich is actually the right question to walk in with — not to answer in advance, but to find out. Ask the manager how residents currently handle laundry, and let them tell you. That's cleaner than assuming and more useful than guessing.",
+      "source": "model",
+      "failureReason": null,
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 3043
+    },
+    {
+      "category": "personal",
+      "label": "question about Claire personally, tier-gating should hold",
+      "kind": "follow_up",
+      "rawResponse": "I'll leave that one vague. I don't hand out specifics I can't stand behind.",
+      "source": "fallback",
+      "failureReason": "ungrounded_personal_specificity",
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 2439
+    },
+    {
+      "category": "background_flavor",
+      "label": "background should subtly shape reasoning style, not be stated outright",
+      "kind": "follow_up",
+      "rawResponse": "The honest starting point is that we don't have much on record about The Wilshire — no prior visit outcome, no known contact, no sense of whether residents there have ever used us. So you're going in mostly cold.\n\nThat means your first job isn't to pitch anything. It's to find out how laundry actually works for residents in that building today. Not what equipment they have — what residents actually do. Do they haul it out? Use the building's machines? Is there already some informal arrangement? That's what tells you whether there's a real opening.\n\nWho are you planning to talk to when you get there?",
+      "source": "model",
+      "failureReason": null,
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 5959
+    },
+    {
+      "category": "dry_personality",
+      "label": "surface dry/direct personality without theatrics",
+      "kind": "follow_up",
+      "rawResponse": "Not even close to knowing that. You haven't walked in yet.\n\nWhat's your read on the contact there — have you actually spoken to them before, or is this cold?",
+      "source": "model",
+      "failureReason": null,
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 2049
+    },
+    {
+      "category": "complex",
+      "label": "complicated question needing a substantive answer",
+      "kind": "follow_up",
+      "rawResponse": "The gate code is still outstanding — that's the first thing, because if it's not resolved before you pull up, you're starting the visit on the back foot.\n\nOn the visit itself: the goal isn't to pitch the building, it's to understand how residents actually handle laundry right now. Not what machines they have — what residents actually do. Do they haul it out? Use the building room? Have something already? That's what tells you whether there's a real opening. So lead with curiosity, not a deck.\n\nIf the PM stalls — and stalling usually looks like \"let me think about it\" or \"send me something\" — the move is to narrow it to one specific question before you leave: what would need to be true for this to make sense for your residents? That keeps it alive without letting them disappear into email.\n\nThere's more on the fallback play if you want it, but what's the status on that gate code first?",
+      "source": "model",
+      "failureReason": null,
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 6582
+    },
+    {
+      "category": "simple",
+      "label": "simple question, short answer",
+      "kind": "follow_up",
+      "rawResponse": "Five o'clock.",
+      "source": "model",
+      "failureReason": null,
+      "modelRequested": "claude-sonnet-4-6",
+      "latencyMs": 1251
+    }
+  ]
+}

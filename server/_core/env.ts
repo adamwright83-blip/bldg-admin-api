@@ -37,6 +37,14 @@ export const ENV = {
   anthropicModelVendorOnboarding: anthropicModelEnv(
     "ANTHROPIC_MODEL_VENDOR_ONBOARDING"
   ),
+  /**
+   * PR1 Claire Intelligence Repair: dedicated model override for Claire
+   * conversation generation only (opening brief / follow-up / post-stop /
+   * outcome confirmation). Falls back to `anthropicModel` (ANTHROPIC_MODEL)
+   * when unset, so behavior is unchanged until this var is explicitly set.
+   * Do NOT route unrelated extraction/classification through this.
+   */
+  anthropicModelClaire: anthropicModelEnv("ANTHROPIC_MODEL_CLAIRE"),
   /** Slice 77b: Mission Composer query-plan parser. Cheap/fast model preferred -- falls back to anthropicModel if unset. */
   anthropicModelMissionPlanner: anthropicModelEnv(
     "ANTHROPIC_MODEL_MISSION_PLANNER"

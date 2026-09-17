@@ -177,6 +177,39 @@ function nextCalendarDate(businessDate: string): string {
   return new Date(Date.UTC(year, month - 1, day + 1, 12)).toISOString().slice(0, 10);
 }
 
+/**
+ * PR1 Claire Intelligence Repair -- corrective pass (real-exam finding):
+ * the real exam had Claire answer "scheduled just before midnight" for an
+ * appointment that was actually mid-evening business-local time. Root
+ * cause: `nextFixedCommitment.scheduledAt` (and other timeline items) are
+ * raw ISO timestamps -- production's real ClaireClock already resolves
+ * "now" to a business timezone/local time, but a specific commitment's
+ * scheduledAt was never pre-rendered the same way, leaving the model to
+ * mentally convert a raw ISO timestamp itself, which is exactly the kind
+ * of temporal task a model can get wrong. This renders a deterministic,
+ * unambiguous local date/time string once, server-side, so Claire never
+ * has to characterize or convert an appointment time herself -- she is
+ * told to use this string directly. Returns null for a null/invalid input
+ * so callers can omit the field rather than emit a bogus string.
+ */
+export function formatClaireLocalTime(
+  iso: string | null | undefined,
+  timeZone: string = CLAIRE_BUSINESS_TIME_ZONE
+): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
+}
+
 export function buildClaireClock(
   now: Date,
   timeZone = CLAIRE_BUSINESS_TIME_ZONE

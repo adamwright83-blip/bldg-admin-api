@@ -46,7 +46,11 @@ describe("Claire natural-language generation", () => {
     expect(request.messages[0].content).toContain(
       "Do not introduce yourself"
     );
-    expect(request.messages[0].content).toContain("never exceed 70 words");
+    // PR1 Claire Intelligence Repair: the old blanket 70-word cap is gone.
+    expect(request.messages[0].content).not.toContain("never exceed 70 words");
+    expect(request.messages[0].content).toContain(
+      "General professional/strategic knowledge"
+    );
     expect(JSON.parse(request.messages[1].content)).toMatchObject({
       businessDate: context.businessDate,
       nextFixedCommitment: context.nextFixedCommitment,
@@ -57,11 +61,15 @@ describe("Claire natural-language generation", () => {
     });
     expect(recordGeneration).toHaveBeenCalledWith(
       expect.objectContaining({
-        diagnostic: {
+        diagnostic: expect.objectContaining({
           kind: "opening_brief",
           source: "model",
           failureReason: null,
-        },
+          // Test-matrix items 20/21: source/reason and the requested model
+          // name are both present on the telemetry record.
+          modelRequested: expect.any(String),
+          surface: "voice",
+        }),
       })
     );
   });
@@ -83,11 +91,13 @@ describe("Claire natural-language generation", () => {
     );
     expect(recordGeneration).toHaveBeenCalledWith(
       expect.objectContaining({
-        diagnostic: {
+        diagnostic: expect.objectContaining({
           kind: "opening_brief",
           source: "fallback",
           failureReason: "generation_failed",
-        },
+          modelRequested: expect.any(String),
+          surface: "voice",
+        }),
       })
     );
     expect(log).toHaveBeenCalledWith(
@@ -119,7 +129,13 @@ describe("Claire natural-language generation", () => {
     });
     expect(recordGeneration).toHaveBeenCalledWith(
       expect.objectContaining({
-        diagnostic: { kind: "follow_up", source: "model", failureReason: null },
+        diagnostic: expect.objectContaining({
+          kind: "follow_up",
+          source: "model",
+          failureReason: null,
+          modelRequested: expect.any(String),
+          surface: "voice",
+        }),
       })
     );
   });
@@ -142,11 +158,13 @@ describe("Claire natural-language generation", () => {
     expect(result).toContain("does not name a specific person");
     expect(recordGeneration).toHaveBeenCalledWith(
       expect.objectContaining({
-        diagnostic: {
+        diagnostic: expect.objectContaining({
           kind: "follow_up",
           source: "fallback",
           failureReason: "generation_failed",
-        },
+          modelRequested: expect.any(String),
+          surface: "voice",
+        }),
       })
     );
     expect(log).toHaveBeenCalledWith(

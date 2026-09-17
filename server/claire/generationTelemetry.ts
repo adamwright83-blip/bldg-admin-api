@@ -13,6 +13,43 @@ export type ClaireGenerationDiagnostic = {
   kind: ClaireGenerationKind;
   source: ClaireGenerationSource;
   failureReason: string | null;
+  /**
+   * PR1 Claire Intelligence Repair (test-matrix items 20/21): the model
+   * requested for this generation (e.g. ENV.anthropicModelClaire ||
+   * ENV.anthropicModel), so a fallback-rate/model-mix report can be built
+   * from these records. Optional and additive -- existing callers that
+   * don't pass it are unaffected.
+   */
+  modelRequested?: string;
+  /**
+   * Surface this generation served -- "voice" for the Twilio phone call
+   * path (the only surface wired to real generation calls today), left
+   * optional so a future desktop/text surface can populate it without a
+   * shape break. Defaults to "voice" if omitted, since that is the only
+   * live surface as of PR1.
+   */
+  surface?: "voice" | "desktop";
+  /**
+   * PR1 Claire Intelligence Repair -- corrective pass: Anthropic's raw
+   * `stop_reason` ("end_turn", "max_tokens", "stop_sequence", ...),
+   * captured via invokeTextLLM's `onStopReason` callback. Lets any future
+   * exam or production monitoring positively detect "hit max_tokens"
+   * instead of inferring truncation from trailing punctuation. Optional
+   * and additive.
+   */
+  stopReason?: string | null;
+  /**
+   * Provenance of the final text returned to the operator. Usually "model";
+   * "canon_render" means an unsafe personal-model answer was discarded and
+   * replaced deterministically from already-eligible canon; "fallback" is
+   * the ordinary conservative fallback path.
+   */
+  answerOrigin?: "model" | "canon_render" | "fallback";
+  /**
+   * Whether the generous sentence-boundary safety trim actually changed the
+   * model output. Null/undefined means no model text was available to assess.
+   */
+  trimmedToSentenceBoundary?: boolean | null;
 };
 
 /**
@@ -38,6 +75,9 @@ export function safeClaireFailureReason(error: unknown): string {
   if (/rate limit/i.test(message)) return "rate_limited";
   if (/overload/i.test(message)) return "provider_overloaded";
   if (/empty|no assistant text/i.test(message)) return "unusable_output";
+  if (error instanceof Error && error.name === "UngroundedPersonalSpecificityError") {
+    return "ungrounded_personal_specificity";
+  }
   if (error && typeof error === "object" && "code" in error) {
     const code = String((error as { code?: unknown }).code);
     if (/^[a-z0-9_-]{1,64}$/i.test(code)) return code;
@@ -62,6 +102,11 @@ export async function recordClaireGeneration(input: {
     kind: input.diagnostic.kind,
     source: input.diagnostic.source,
     failureReason: input.diagnostic.failureReason,
+    modelRequested: input.diagnostic.modelRequested ?? null,
+    surface: input.diagnostic.surface ?? "voice",
+    stopReason: input.diagnostic.stopReason ?? null,
+    answerOrigin: input.diagnostic.answerOrigin ?? input.diagnostic.source,
+    trimmedToSentenceBoundary: input.diagnostic.trimmedToSentenceBoundary ?? null,
     fallbackRate: current.attempts ? current.fallbacks / current.attempts : 0,
     ...(input.reviewDetail?.orientationContext
       ? orientationTelemetry(input.reviewDetail.orientationContext, input.diagnostic.source === "fallback")
