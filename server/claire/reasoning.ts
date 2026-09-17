@@ -357,6 +357,7 @@ export async function writeClairePreDriveBrief(
       .trim();
     if (!text) throw new Error("Claire opening brief produced empty output");
     const trimmed = trimToSentenceBoundary(text, 1600);
+    const trimmedToSentenceBoundary = trimmed !== text;
 
     assertPostGenerationStateVerbs(trimmed, inventory);
 
@@ -384,6 +385,8 @@ export async function writeClairePreDriveBrief(
       modelRequested: ENV.anthropicModelClaire || ENV.anthropicModel,
       surface: "voice",
       stopReason,
+      answerOrigin: "model",
+      trimmedToSentenceBoundary,
     };
     await recordGeneration({
       tenantId: input.tenantId,
@@ -412,6 +415,8 @@ export async function writeClairePreDriveBrief(
       modelRequested: ENV.anthropicModelClaire || ENV.anthropicModel,
       surface: "voice",
       stopReason,
+      answerOrigin: "fallback",
+      trimmedToSentenceBoundary: null,
     };
     await recordGeneration({
       tenantId: input.tenantId,
