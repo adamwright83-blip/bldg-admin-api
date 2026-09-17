@@ -1421,5 +1421,328 @@ await assertRequiredColumns("goldline_campaign_target_events", [
   "lat", "lng", "accuracyMeters",
 ]);
 
+// ── StrategyEngine Playground Rules & Spend Ledger (Slice 3) ───────
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS playground_rules (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    version INT NOT NULL DEFAULT 1,
+    monthlySpendCeilingCents INT NOT NULL DEFAULT 0,
+    currency VARCHAR(8) NOT NULL DEFAULT 'USD',
+    approvalCategoriesJson JSON NOT NULL,
+    effectiveFrom TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    effectiveTo TIMESTAMP NULL,
+    source ENUM('operator_attested', 'admin') NOT NULL DEFAULT 'admin',
+    macroGoalId VARCHAR(36) NULL,
+    status ENUM('active', 'superseded') NOT NULL DEFAULT 'active',
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_playground_rules_tenant_status (tenantId, status),
+    KEY idx_playground_rules_tenant_version (tenantId, version)
+  )`,
+  "CREATE TABLE playground_rules"
+);
+await assertRequiredColumns("playground_rules", [
+  "tenantId", "version", "monthlySpendCeilingCents", "approvalCategoriesJson", "status",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS strategy_spend_ledger (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    businessMonth VARCHAR(7) NOT NULL,
+    category VARCHAR(64) NOT NULL,
+    amountCents INT NOT NULL,
+    currency VARCHAR(8) NOT NULL DEFAULT 'USD',
+    status ENUM('planned', 'committed', 'released') NOT NULL,
+    sourcePlayId VARCHAR(64) NULL,
+    sourceMissionId VARCHAR(64) NULL,
+    sourceRef VARCHAR(191) NULL,
+    dedupeKey VARCHAR(191) NOT NULL,
+    approvedByUserId VARCHAR(128) NULL,
+    metadataJson JSON NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_strategy_spend_tenant_dedupe (tenantId, dedupeKey),
+    KEY idx_strategy_spend_tenant_month_status (tenantId, businessMonth, status)
+  )`,
+  "CREATE TABLE strategy_spend_ledger"
+);
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS strategy_snapshots (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    schemaVersion INT NOT NULL DEFAULT 1,
+    contentHash VARCHAR(64) NOT NULL,
+    estimatedTokens INT NOT NULL DEFAULT 0,
+    isTruncated BOOLEAN NOT NULL DEFAULT FALSE,
+    payloadJson JSON NOT NULL,
+    provenanceJson JSON NOT NULL,
+    stalenessJson JSON NOT NULL,
+    generatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_strategy_snapshots_tenant_created (tenantId, createdAt),
+    KEY idx_strategy_snapshots_tenant_hash (tenantId, contentHash)
+  )`,
+  "CREATE TABLE strategy_snapshots"
+);
+await assertRequiredColumns("strategy_snapshots", [
+  "tenantId", "schemaVersion", "contentHash", "payloadJson", "provenanceJson",
+]);
+
+// ── StrategyEngine Plays, Offers & Choices (Slice 6) ───────────────
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS strategy_plays (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    businessName VARCHAR(191) NOT NULL,
+    worldName VARCHAR(191) NOT NULL,
+    hypothesis TEXT NOT NULL,
+    primaryMetric VARCHAR(64) NOT NULL,
+    geography VARCHAR(128) NOT NULL,
+    stopsCount INT NOT NULL DEFAULT 1,
+    isClustered BOOLEAN NOT NULL DEFAULT FALSE,
+    estimatedInitiationCost INT NOT NULL DEFAULT 0,
+    estimatedSpendCents INT NOT NULL DEFAULT 0,
+    spendCategory VARCHAR(64) NOT NULL DEFAULT 'other',
+    confidence VARCHAR(32) NOT NULL DEFAULT 'medium',
+    evidenceReferencesJson JSON NULL,
+    scoreBreakdownJson JSON NOT NULL,
+    totalScore INT NOT NULL DEFAULT 0,
+    status ENUM('candidate', 'offered', 'chosen', 'active', 'paused', 'retired') NOT NULL DEFAULT 'candidate',
+    needsApprovalToRun BOOLEAN NOT NULL DEFAULT FALSE,
+    minimumEvidenceThresholdJson JSON NULL,
+    verticalKey VARCHAR(64) NOT NULL DEFAULT 'generic',
+    templateKey VARCHAR(64) NOT NULL,
+    provenanceJson JSON NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_strategy_plays_tenant_status (tenantId, status)
+  )`,
+  "CREATE TABLE strategy_plays"
+);
+await assertRequiredColumns("strategy_plays", [
+  "tenantId", "businessName", "worldName", "primaryMetric", "totalScore", "status",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS strategy_path_offers (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    playIdsJson JSON NOT NULL,
+    recommendedPlayId VARCHAR(64) NOT NULL,
+    claireRationale TEXT NOT NULL,
+    status ENUM('active', 'accepted', 'expired', 'superseded') NOT NULL DEFAULT 'active',
+    offeredAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    businessDate VARCHAR(10) NOT NULL,
+    expiresAt TIMESTAMP NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_strategy_path_offers_tenant_status (tenantId, status),
+    KEY idx_strategy_path_offers_tenant_date (tenantId, businessDate)
+  )`,
+  "CREATE TABLE strategy_path_offers"
+);
+await assertRequiredColumns("strategy_path_offers", [
+  "tenantId", "playIdsJson", "recommendedPlayId", "status", "businessDate",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS strategy_path_choices (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    offerId VARCHAR(64) NULL,
+    playId VARCHAR(64) NOT NULL,
+    chosenOnSurface ENUM('map', 'voice', 'admin') NOT NULL,
+    previousPlayId VARCHAR(64) NULL,
+    readbackConfirmed BOOLEAN NOT NULL DEFAULT FALSE,
+    chosenAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_strategy_path_choices_tenant_play (tenantId, playId)
+  )`,
+  "CREATE TABLE strategy_path_choices"
+);
+await assertRequiredColumns("strategy_path_choices", [
+  "tenantId", "playId", "chosenOnSurface",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS strategy_mission_plan (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    playId VARCHAR(64) NOT NULL,
+    dayDirectorCommitmentId VARCHAR(36) NULL,
+    commercialMissionId INT NULL,
+    businessDate VARCHAR(10) NOT NULL,
+    missionType ENUM('growth','support') NOT NULL DEFAULT 'growth',
+    status ENUM('planned','wait_approval','active','completed','cancelled') NOT NULL DEFAULT 'planned',
+    title VARCHAR(255) NOT NULL,
+    geographyCluster VARCHAR(128) NULL,
+    stopCount INT NOT NULL DEFAULT 1,
+    spendReservationId VARCHAR(64) NULL,
+    spendCategory VARCHAR(64) NULL,
+    spendCents INT NOT NULL DEFAULT 0,
+    preparedSalesPrepJson JSON NOT NULL,
+    dedupeKey VARCHAR(191) NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_strategy_mission_plan_dedupe (tenantId, dedupeKey),
+    KEY idx_strategy_mission_plan_date (tenantId, businessDate),
+    KEY idx_strategy_mission_plan_play (tenantId, playId),
+    KEY idx_strategy_mission_plan_status (tenantId, status)
+  )`,
+  "CREATE TABLE strategy_mission_plan"
+);
+await assertRequiredColumns("strategy_mission_plan", [
+  "tenantId", "playId", "businessDate", "status", "preparedSalesPrepJson", "dedupeKey",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS communication_permissions (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    subjectType ENUM('lead','contact','customer','property') NOT NULL,
+    subjectId VARCHAR(128) NOT NULL,
+    channel ENUM('sms','email','call','visit','any') NOT NULL DEFAULT 'any',
+    status ENUM('opted_in','opted_out','refused','unspecified') NOT NULL DEFAULT 'unspecified',
+    reason TEXT NULL,
+    lastOutreachAt TIMESTAMP NULL DEFAULT NULL,
+    frequencyCapDays INT NOT NULL DEFAULT 7,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_comm_perm_subject_channel (tenantId, subjectType, subjectId, channel),
+    KEY idx_comm_perm_tenant_status (tenantId, status)
+  )`,
+  "CREATE TABLE communication_permissions"
+);
+await assertRequiredColumns("communication_permissions", [
+  "tenantId", "subjectType", "subjectId", "status",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS property_activation_tracks (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    propertyId VARCHAR(128) NOT NULL,
+    propertyName VARCHAR(255) NOT NULL,
+    agreedServiceDetailsJson JSON NOT NULL,
+    residentCommunicationPermitted TINYINT(1) NOT NULL DEFAULT 0,
+    bookingInstructions TEXT NULL,
+    pickupArrangements TEXT NULL,
+    stage ENUM('access_granted','flyer_distribution','resident_announcement','first_order','repeat_orders') NOT NULL DEFAULT 'access_granted',
+    blockedReason TEXT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_property_activation_property (tenantId, propertyId),
+    KEY idx_property_activation_stage (tenantId, stage)
+  )`,
+  "CREATE TABLE property_activation_tracks"
+);
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS strategy_evidence (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    playId VARCHAR(64) NOT NULL,
+    windowDays INT NOT NULL,
+    windowStart VARCHAR(10) NOT NULL,
+    windowEnd VARCHAR(10) NOT NULL,
+    funnelCountsJson JSON NOT NULL,
+    untrackedFunnelStepsJson JSON NOT NULL,
+    statement TEXT NOT NULL,
+    sampleSize INT NOT NULL DEFAULT 0,
+    thresholdMet TINYINT(1) NOT NULL DEFAULT 0,
+    worldSignal ENUM('brighten','dim','none') NOT NULL DEFAULT 'none',
+    provenanceJson JSON NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_strategy_evidence_play (tenantId, playId),
+    KEY idx_strategy_evidence_signal (tenantId, worldSignal)
+  )`,
+  "CREATE TABLE strategy_evidence"
+);
+await assertRequiredColumns("strategy_evidence", [
+  "tenantId", "playId", "statement", "worldSignal", "provenanceJson",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS opportunity_stall_reasons (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    opportunityId VARCHAR(64) NULL,
+    source VARCHAR(64) NOT NULL DEFAULT 'debrief',
+    reason ENUM('timing','price','trust','pickup_convenience','existing_provider','access_restriction','service_issue','unknown') NOT NULL DEFAULT 'unknown',
+    detail TEXT NULL,
+    recordedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_opp_stall_reason (tenantId, reason),
+    KEY idx_opp_stall_opp (tenantId, opportunityId)
+  )`,
+  "CREATE TABLE opportunity_stall_reasons"
+);
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS strategy_trigger_runs (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    triggerType ENUM('morning','mission_completion','mission_skip','business_change','weekly_dawn') NOT NULL,
+    businessDate VARCHAR(10) NOT NULL,
+    dedupeKey VARCHAR(191) NOT NULL,
+    snapshotId VARCHAR(64) NULL,
+    outcome VARCHAR(64) NOT NULL DEFAULT 'success',
+    detailJson JSON NOT NULL,
+    errorMessage TEXT NULL,
+    executedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_strategy_trigger_dedupe (tenantId, dedupeKey),
+    KEY idx_strategy_trigger_tenant_type (tenantId, triggerType, executedAt)
+  )`,
+  "CREATE TABLE strategy_trigger_runs"
+);
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS recovery_items (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    commitmentRef VARCHAR(128) NOT NULL,
+    playId VARCHAR(64) NULL,
+    title VARCHAR(255) NOT NULL,
+    state ENUM('visible','queued','repaired','rescheduled','dropped','archived_outstanding') NOT NULL DEFAULT 'queued',
+    dropReason TEXT NULL,
+    rescheduledToDate VARCHAR(10) NULL,
+    missedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolvedAt TIMESTAMP NULL DEFAULT NULL,
+    promotedVisibleAt TIMESTAMP NULL DEFAULT NULL,
+    chronicleRef VARCHAR(128) NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_recovery_items_tenant_state (tenantId, state),
+    KEY idx_recovery_items_tenant_play (tenantId, playId)
+  )`,
+  "CREATE TABLE recovery_items"
+);
+await assertRequiredColumns("recovery_items", [
+  "tenantId", "commitmentRef", "title", "state",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS drop_pattern_flags (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    patternType ENUM('play_cluster_drops','overall_drops_surge','repeated_reschedules','archived_backlog') NOT NULL,
+    playId VARCHAR(64) NULL,
+    windowDays INT NOT NULL DEFAULT 14,
+    occurrenceCount INT NOT NULL DEFAULT 0,
+    firstOccurrenceAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    lastOccurrenceAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    surfacedAtDawn TINYINT(1) NOT NULL DEFAULT 0,
+    dawnSummary TEXT NULL,
+    acknowledgedAt TIMESTAMP NULL DEFAULT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_drop_pattern_tenant_type (tenantId, patternType, surfacedAtDawn)
+  )`,
+  "CREATE TABLE drop_pattern_flags"
+);
+await assertRequiredColumns("drop_pattern_flags", [
+  "tenantId", "patternType", "occurrenceCount", "surfacedAtDawn",
+]);
+
 await conn.end();
 console.log("\nMigration complete.");

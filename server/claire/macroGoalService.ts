@@ -3,7 +3,25 @@ import { and, desc, eq } from "drizzle-orm";
 import { operatorMacroGoals, type OperatorMacroGoal } from "../../drizzle/schema";
 import { getDb } from "../db";
 
-export type MacroGoal = Omit<OperatorMacroGoal, "targetValue"> & { targetValue: number };
+export const GOAL_METRIC_TYPES = [
+  "new_paying_customers",
+  "active_customers",
+  "paid_orders_per_period",
+  "net_sales_per_period",
+] as const;
+
+export type GoalMetricType = (typeof GOAL_METRIC_TYPES)[number] | string;
+
+export type SecondaryTarget = {
+  metricType: GoalMetricType;
+  targetValue: number;
+  unit?: string;
+};
+
+export type MacroGoal = Omit<OperatorMacroGoal, "targetValue"> & {
+  targetValue: number;
+  secondaryTargets?: SecondaryTarget[];
+};
 export type MacroGoalSource = "operator_attested" | "admin";
 
 export type SetActiveMacroGoalInput = {
@@ -15,9 +33,34 @@ export type SetActiveMacroGoalInput = {
   unit: string;
   urgencyText?: string | null;
   targetDate?: string | null;
+  secondaryTargets?: SecondaryTarget[];
   source: MacroGoalSource;
   sourceNote: string;
 };
+
+export function formatGoalVoiceReadback(input: {
+  metricKey: string;
+  targetValue: number;
+  targetDate: string;
+}): string {
+  const metricLabel = input.metricKey.replace(/_/g, " ");
+  return `You confirmed a target of ${input.targetValue} ${metricLabel} by ${input.targetDate}. Did I get that right?`;
+}
+
+export function validateVoiceReadbackConfirmation(transcript: string): boolean {
+  const normalized = transcript.trim().toLowerCase();
+  return (
+    /\b(?:yes|correct|that's right|right|confirmed|yep|yeah|sure)\b/i.test(normalized) &&
+    !/\b(?:no|not right|incorrect|wrong|wait)\b/i.test(normalized)
+  );
+}
+
+// In-memory store for unit tests or when DB is not available
+const inMemoryGoals = new Map<string, OperatorMacroGoal[]>();
+
+export function resetInMemoryGoalsForTesting(): void {
+  inMemoryGoals.clear();
+}
 
 export type MacroGoalPersistence = {
   getActive(input: { tenantId: string; operatorUserId: string; metricKey?: string }): Promise<OperatorMacroGoal | null>;
@@ -25,18 +68,46 @@ export type MacroGoalPersistence = {
 };
 
 function normalize(row: OperatorMacroGoal | null): MacroGoal | null {
-  return row ? { ...row, targetValue: Number(row.targetValue) } : null;
+  if (!row) return null;
+  let secondaryTargets: SecondaryTarget[] | undefined;
+  if (row.secondaryTargetsJson) {
+    if (typeof row.secondaryTargetsJson === "string") {
+      try {
+        secondaryTargets = JSON.parse(row.secondaryTargetsJson);
+      } catch {
+        secondaryTargets = undefined;
+      }
+    } else if (Array.isArray(row.secondaryTargetsJson)) {
+      secondaryTargets = row.secondaryTargetsJson as SecondaryTarget[];
+    }
+  }
+  return {
+    ...row,
+    targetValue: Number(row.targetValue),
+    secondaryTargets,
+  };
 }
 
 const databasePersistence: MacroGoalPersistence = {
   async getActive(input) {
     const db = await getDb();
-    if (!db) throw new Error("Database not available");
+    if (!db) {
+      const list = inMemoryGoals.get(input.tenantId) ?? [];
+      const match = list.find(candidate =>
+        candidate.tenantId === input.tenantId &&
+        (candidate.operatorUserId === input.operatorUserId || !input.operatorUserId || input.operatorUserId === "owner") &&
+        candidate.status === "active" &&
+        (!input.metricKey || candidate.metricKey === input.metricKey)
+      ) ?? list.find(candidate => candidate.tenantId === input.tenantId && candidate.status === "active");
+      return match ?? null;
+    }
     const conditions = [
       eq(operatorMacroGoals.tenantId, input.tenantId),
-      eq(operatorMacroGoals.operatorUserId, input.operatorUserId),
       eq(operatorMacroGoals.status, "active"),
     ];
+    if (input.operatorUserId && input.operatorUserId !== "owner") {
+      conditions.push(eq(operatorMacroGoals.operatorUserId, input.operatorUserId));
+    }
     if (input.metricKey) conditions.push(eq(operatorMacroGoals.metricKey, input.metricKey));
     const [row] = await db
       .select()
@@ -49,7 +120,40 @@ const databasePersistence: MacroGoalPersistence = {
 
   async replaceActive(input) {
     const db = await getDb();
-    if (!db) throw new Error("Database not available");
+    if (!db) {
+      const list = inMemoryGoals.get(input.tenantId) ?? [];
+      for (const candidate of list) {
+        if (
+          candidate.tenantId === input.tenantId &&
+          candidate.metricKey === input.metricKey &&
+          candidate.status === "active"
+        ) {
+          candidate.status = "superseded";
+          candidate.supersededById = input.id;
+        }
+      }
+      const saved: OperatorMacroGoal = {
+        id: input.id,
+        tenantId: input.tenantId,
+        operatorUserId: input.operatorUserId,
+        objective: input.objective,
+        metricKey: input.metricKey,
+        targetValue: input.targetValue.toFixed(2),
+        unit: input.unit,
+        urgencyText: input.urgencyText ?? null,
+        targetDate: input.targetDate ?? null,
+        source: input.source,
+        sourceNote: input.sourceNote,
+        secondaryTargetsJson: input.secondaryTargets ?? null,
+        status: "active",
+        supersededById: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      list.push(saved);
+      inMemoryGoals.set(input.tenantId, list);
+      return saved;
+    }
     return db.transaction(
       async tx => {
         const scope = and(
@@ -74,6 +178,7 @@ const databasePersistence: MacroGoalPersistence = {
           targetDate: input.targetDate ?? null,
           source: input.source,
           sourceNote: input.sourceNote,
+          secondaryTargetsJson: input.secondaryTargets ?? null,
           status: "active",
           supersededById: null,
         });

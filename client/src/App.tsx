@@ -57,6 +57,7 @@ const DayforgeLoginPage = lazy(() => import("./pages/DayforgeLoginPage"));
 const DayforgeTodayPage = lazy(() => import("./pages/DayforgeTodayPage"));
 const DayforgeProofPage = lazy(() => import("./pages/DayforgeProofPage"));
 const DayforgeSettingsPage = lazy(() => import("./pages/DayforgeSettingsPage"));
+const StrategyPlaygroundSettingsPage = lazy(() => import("./pages/StrategyPlaygroundSettingsPage"));
 const DayforgeInvitePage = lazy(() => import("./pages/DayforgeInvitePage"));
 const RallyDemo = lazy(() => import("./components/boreslay-rally/RallyDemo"));
 const DayforgeDemoControlPage = lazy(
@@ -302,6 +303,16 @@ function AdminHostRouter() {
       <Route path="/billing">
         <Suspense fallback={<PublicLandingFallback />}>
           <DayforgeSettingsPage />
+        </Suspense>
+      </Route>
+      <Route path="/playground-settings">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <StrategyPlaygroundSettingsPage />
+        </Suspense>
+      </Route>
+      <Route path="/admin/playground">
+        <Suspense fallback={<PublicLandingFallback />}>
+          <StrategyPlaygroundSettingsPage />
         </Suspense>
       </Route>
       <Route path="/commercial-missions">

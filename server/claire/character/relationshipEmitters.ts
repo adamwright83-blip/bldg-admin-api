@@ -22,6 +22,53 @@ import type {
  * caller mid-call.
  */
 
+/**
+ * Guardrail G1: Warmth only for kept word.
+ * Central allowlist of events that may emit warmth or relationship progress.
+ * Only verified completion of operator-committed work qualifies.
+ * No warmth emitter may fire on path choice, mission acceptance, or agreement with Claire.
+ */
+export const WARMTH_EMISSION_ALLOWLIST = new Set<ClaireRelationshipEventType>([
+  "operator_follow_through",
+  "shared_hard_win",
+  "shared_failure",
+  "call_completed",
+  "operator_owned_mistake",
+  "operator_respected_boundary",
+  "operator_ignored_boundary",
+  "claire_admitted_error",
+  "claire_disclosure",
+  "operator_handled_disclosure_well",
+  "operator_handled_disclosure_poorly",
+]);
+
+const FORBIDDEN_WARMTH_PATTERNS = [
+  /\bpath[_\s-]choice[s]?\b/i,
+  /\bpath[_\s-]chosen\b/i,
+  /\b(?:accept(?:ed|ing|ance)?|agreed?|select(?:ed|ing)?|picked)\b.*\b(?:mission|commitment|proposal|path|recommendation|route|fork|play)\b/i,
+  /\b(?:mission|commitment|proposal|path|recommendation|route|fork|play)\b.*\b(?:accept(?:ed|ing|ance)?|agreed?|select(?:ed|ing)?|picked)\b/i,
+  /\bchoices?\b/i,
+  /\bfork\b/i,
+];
+
+export function isWarmthEmissionAllowed(input: {
+  eventType: string;
+  summary?: string;
+  provenance?: string;
+  evidenceSource?: string | null;
+}): boolean {
+  if (!WARMTH_EMISSION_ALLOWLIST.has(input.eventType as ClaireRelationshipEventType)) {
+    return false;
+  }
+  const text = `${input.eventType} ${input.summary ?? ""} ${input.provenance ?? ""} ${input.evidenceSource ?? ""}`.toLowerCase();
+  for (const pattern of FORBIDDEN_WARMTH_PATTERNS) {
+    if (pattern.test(text)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 async function appendAndRecompute(input: {
   tenantId: string;
   operatorUserId: string | null | undefined;
@@ -35,6 +82,16 @@ async function appendAndRecompute(input: {
   occurredAt?: Date;
 }): Promise<ClaireRelationshipState | null> {
   if (!input.operatorUserId) return null; // fail closed: unresolved identity, no durable write
+
+  if (!isWarmthEmissionAllowed(input)) {
+    console.warn("[G1 Guardrail] Warmth emission rejected for non-allowlisted or forbidden event", {
+      eventType: input.eventType,
+      summary: input.summary,
+      provenance: input.provenance,
+    });
+    return null;
+  }
+
   const event = await appendClaireRelationshipEvent({
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,

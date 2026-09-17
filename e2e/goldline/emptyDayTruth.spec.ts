@@ -52,8 +52,12 @@ test.describe("empty-day ignition", () => {
       "true"
     );
     await expect(briefing).toContainText("BRIEF ME");
-    await expect(page.locator(".open-channel-dialogue")).toContainText(/today and tomorrow/i);
-    await expect(briefing).toContainText(/tell Goldline what is actually happening/i);
+    await expect(page.locator(".open-channel-dialogue")).toContainText(
+      /I already know what Goldline knows about tomorrow/i
+    );
+    await expect(page.locator(".open-channel-dialogue")).toContainText(
+      /Tell me only what I'm missing/i
+    );
 
     for (const label of ["JUMP", "CLIMB", "VAULT"]) {
       await expect(

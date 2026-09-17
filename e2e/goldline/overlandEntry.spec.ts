@@ -10,11 +10,26 @@ async function login(page: Page) {
 }
 
 test.describe("canonical driver entry", () => {
-  test("a fresh driver session begins on Overland, not inside Clockhead", async ({
+  test("a fresh driver session begins on the real day, then can enter Overland and Field Operations", async ({
     page,
   }) => {
     await login(page);
     await page.goto("/driver");
+
+    await expect(page.getByTestId("driver-day-home")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByTestId("goldline-shell")).toHaveCount(0);
+    await expect(
+      page.getByRole("region", { name: "Goldline global overworld" })
+    ).toHaveCount(0);
+
+    // Exercise the canonical diegetic Overland control that the driver actually
+    // sees. The legacy Day Plan menu is intentionally hidden by world-tool CSS;
+    // forcing it visible creates an overlapping, unreachable duplicate control.
+    const exploreOverland = page.getByRole("button", { name: "Enter Overland" });
+    await expect(exploreOverland).toBeVisible({ timeout: 10_000 });
+    await exploreOverland.click();
 
     await expect(
       page.getByRole("region", { name: "Goldline global overworld" })

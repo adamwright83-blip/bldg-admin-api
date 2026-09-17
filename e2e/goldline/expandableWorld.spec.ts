@@ -37,7 +37,7 @@ async function login(page: Page, fixture?: "CALL") {
   await page.goto(
     fixture
       ? `/driver?goldlineFixture=${fixture}`
-      : "/driver?goldlineSceneFixture=game"
+      : "/driver?goldlineSceneFixture=game&lanternOperation=ci-game-fixture"
   );
   await expect(page.getByTestId("goldline-shell")).toBeVisible({
     timeout: 30_000,
@@ -63,39 +63,6 @@ async function assertWorldFills(
       document.documentElement.clientWidth
   );
   expect(overflow).toBeLessThanOrEqual(2);
-}
-
-async function moveForwardUntil(page: Page, action: string) {
-  const actionButton = page
-    .locator(".context-actions button")
-    .filter({ hasText: action });
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    if (await actionButton.isVisible().catch(() => false)) return;
-    const box = await page.getByTestId("goldline-joystick").boundingBox();
-    if (!box) throw new Error("Goldline joystick is unavailable");
-    await page.mouse.move(box.x + box.width / 2, box.y + 4);
-    await page.mouse.down();
-    await page.waitForTimeout(600);
-    await page.mouse.up();
-  }
-  await expect(actionButton).toBeVisible();
-}
-
-async function reachCorridorExit(page: Page) {
-  // JUMP/CLIMB/VAULT were removed as unsupported traversal gates (no
-  // visible world geometry backed them). Free movement to the corridor
-  // exit replaces the old obstacle-clicking sequence.
-  const world = page.getByTestId("goldline-world");
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    if ((await world.getAttribute("data-corridor-id")) === "corridor_02")
-      return;
-    const box = await page.getByTestId("goldline-joystick").boundingBox();
-    if (!box) throw new Error("Goldline joystick is unavailable");
-    await page.mouse.move(box.x + box.width / 2, box.y + 4);
-    await page.mouse.down();
-    await page.waitForTimeout(600);
-    await page.mouse.up();
-  }
 }
 
 test.describe("manifest-driven corridor runtime", () => {
@@ -144,7 +111,7 @@ test.describe("manifest-driven corridor runtime", () => {
     await page.waitForTimeout(2000);
 
     // corridor_02 is playable, but the runtime still loads exactly one world
-    // at boot and waits for physical exit proximity before fetching the next.
+    // at boot and waits for an authoritative route before fetching the next.
     expect(corridorRequests.some(url => url.includes("corridor_02"))).toBe(
       false
     );
@@ -168,88 +135,43 @@ test.describe("manifest-driven corridor runtime", () => {
     }
   });
 
-  test("transitions from C01 to C02 through the real runtime without replacing the canvas", async ({
+  test("does not invent a next corridor without an authoritative approach route", async ({
     page,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(60_000);
     const corridorTwoRequests: string[] = [];
     page.on("request", request => {
       if (request.url().includes("/assets/goldline/corridor_02/")) {
         corridorTwoRequests.push(request.url());
       }
     });
+
     await login(page, "CALL");
     const world = page.getByTestId("goldline-world");
     await expect(world).toHaveAttribute("data-corridor-id", "corridor_01");
+    await expect(world).toHaveAttribute("data-next-corridor-id", "NONE");
+
     const canvas = page.locator("canvas.goldline-game-canvas");
     await canvas.evaluate(node =>
       node.setAttribute("data-transition-sentinel", "same-canvas")
     );
 
-    await reachCorridorExit(page);
+    const box = await page.getByTestId("goldline-joystick").boundingBox();
+    if (!box) throw new Error("Goldline joystick is unavailable");
+    await page.mouse.move(box.x + box.width / 2, box.y + 4);
+    await page.mouse.down();
+    await page.waitForTimeout(2500);
+    await page.mouse.up();
+    await page.waitForTimeout(500);
 
-    await expect(world).toHaveAttribute("data-corridor-id", "corridor_02", {
-      timeout: 30_000,
-    });
-    await expect(page.getByText("Loading world", { exact: false })).toHaveCount(
-      0
-    );
-    await expect(page.getByText("Select level", { exact: false })).toHaveCount(
-      0
-    );
-    await expect(world).toHaveAttribute(
-      "data-corridor-transition-phase",
-      "ready"
-    );
-    await expect(world).toHaveAttribute(
-      "data-population-asset-stage",
-      "production"
-    );
-    await expect(world).toHaveAttribute("data-ambient-population-count", "6");
-    await expect(world).toHaveAttribute("data-mission-embodiment-id", /\d+/);
+    await expect(world).toHaveAttribute("data-corridor-id", "corridor_01");
+    await expect(world).toHaveAttribute("data-next-corridor-id", "NONE");
     await expect(canvas).toHaveCount(1);
     await expect(canvas).toHaveAttribute(
       "data-transition-sentinel",
       "same-canvas"
     );
-    expect(corridorTwoRequests.some(url => url.endsWith("manifest.json"))).toBe(
-      true
-    );
-    expect(corridorTwoRequests.some(url => url.endsWith("mid.webp"))).toBe(
-      true
-    );
-
-    const checkpoint = await page.evaluate(() => {
-      const checkpointKey = Object.keys(window.localStorage).find(key =>
-        key.startsWith("goldline:checkpoint:v2:")
-      );
-      const raw = checkpointKey
-        ? window.localStorage.getItem(checkpointKey)
-        : null;
-      return raw ? JSON.parse(raw) : null;
-    });
-    expect(checkpoint).toMatchObject({
-      corridorId: "corridor_02",
-      progress: expect.any(Number),
-      lateral: expect.any(Number),
-      branch: expect.any(String),
-      savedAt: expect.any(String),
-    });
-    expect(Object.keys(checkpoint).sort()).toEqual(
-      ["branch", "corridorId", "lateral", "progress", "savedAt"].sort()
-    );
-
-    const box = await page.getByTestId("goldline-joystick").boundingBox();
-    if (!box) throw new Error("Goldline joystick is unavailable after reveal");
-    await page.mouse.move(box.x + box.width / 2, box.y + 4);
-    await page.mouse.down();
-    await page.waitForTimeout(350);
-    await page.mouse.up();
-    await expect
-      .poll(async () =>
-        Number(await world.getAttribute("data-player-progress"))
-      )
-      .toBeGreaterThan(0.06);
+    expect(corridorTwoRequests).toEqual([]);
   });
 });
 
@@ -308,9 +230,13 @@ test.describe("Pixi lifecycle stays clean across repeated mounts", () => {
     for (let iteration = 0; iteration < 5; iteration += 1) {
       // Leave the Goldline route entirely, then return — the same teardown
       // path a real player triggers by navigating.
-      await page.goto("/driver?view=away&goldlineSceneFixture=game");
+      await page.goto(
+        "/driver?view=away&goldlineSceneFixture=game&lanternOperation=ci-game-fixture"
+      );
       await page.waitForTimeout(250);
-      await page.goto("/driver?goldlineSceneFixture=game");
+      await page.goto(
+        "/driver?goldlineSceneFixture=game&lanternOperation=ci-game-fixture"
+      );
       await expect(page.getByTestId("goldline-shell")).toBeVisible({
         timeout: 30_000,
       });
@@ -330,9 +256,13 @@ test.describe("Pixi lifecycle stays clean across repeated mounts", () => {
 
     await login(page);
     for (let iteration = 0; iteration < 3; iteration += 1) {
-      await page.goto("/driver?view=away&goldlineSceneFixture=game");
+      await page.goto(
+        "/driver?view=away&goldlineSceneFixture=game&lanternOperation=ci-game-fixture"
+      );
       await page.waitForTimeout(200);
-      await page.goto("/driver?goldlineSceneFixture=game");
+      await page.goto(
+        "/driver?goldlineSceneFixture=game&lanternOperation=ci-game-fixture"
+      );
       await expect(page.getByTestId("goldline-shell")).toBeVisible({
         timeout: 30_000,
       });

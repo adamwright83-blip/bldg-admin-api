@@ -29,7 +29,9 @@ test.describe("real-day ignition on the live driver controller", () => {
       data: { password: DRIVER_PASSWORD, role: "driver" },
     });
     expect(response.ok()).toBeTruthy();
-    await page.goto("/driver?goldlineSceneFixture=game");
+    await page.goto(
+      "/driver?goldlineSceneFixture=game&lanternOperation=ci-real-day"
+    );
     await expect(page.getByTestId("goldline-shell")).toBeVisible({
       timeout: 30_000,
     });
@@ -54,10 +56,16 @@ test.describe("real-day ignition on the live driver controller", () => {
 
     const suppliedBriefing =
       "Today I need to visit Sunset Towers leasing office and ask about the laundry amenity. Tomorrow I must call Russell with the real result.";
-    // Scope directly to the already-visible briefing. The old global-label
-    // locator could wait the entire test timeout before its catch fallback ran,
-    // turning a healthy product path into a 20-minute CI false negative.
-    const briefingInput = briefing.locator("textarea").first();
+
+    // The current product intentionally makes typed briefing a fallback behind
+    // an explicit <details> disclosure. Exercise that real UI instead of
+    // reaching for the hidden textarea and treating its collapsed state as a
+    // product failure.
+    const typedFallback = briefing.locator("details.open-channel-fallback");
+    await expect(typedFallback).toBeVisible({ timeout: 10_000 });
+    await typedFallback.locator("summary").click();
+
+    const briefingInput = briefing.getByTestId("briefing-transcript-review");
     await expect(briefingInput).toBeVisible({ timeout: 10_000 });
     await briefingInput.fill(suppliedBriefing);
 

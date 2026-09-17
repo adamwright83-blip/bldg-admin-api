@@ -46,7 +46,13 @@ function memoryPersistence(initial: OperatorMacroGoal[]): MacroGoalPersistence {
           candidate.supersededById = input.id;
         }
       }
-      const saved = row({ ...input, targetValue: input.targetValue.toFixed(2), status: "active" });
+      const { secondaryTargets, ...goalInput } = input;
+      const saved = row({
+        ...goalInput,
+        targetValue: input.targetValue.toFixed(2),
+        secondaryTargetsJson: secondaryTargets ?? null,
+        status: "active",
+      });
       rows.push(saved);
       return saved;
     },
@@ -89,6 +95,42 @@ describe("operator macro goals", () => {
     }, persistence);
     expect(saved.targetValue).toBe(60);
     expect(await getActiveMacroGoal({ tenantId: "tenant-1", operatorUserId: "operator-1" }, persistence)).toMatchObject({ id: saved.id, objective: "Get to 60 active customers" });
+  });
+
+  it("persists and restores secondaryTargets structured metadata", async () => {
+    const persistence = memoryPersistence([]);
+    const saved = await setActiveMacroGoal({
+      tenantId: "tenant-secondary-1",
+      operatorUserId: "operator-1",
+      objective: "Expand route revenue",
+      metricKey: "paid_orders_per_period",
+      targetValue: 100,
+      unit: "orders",
+      secondaryTargets: [
+        { metricType: "active_customers", targetValue: 35, unit: "accounts" },
+        { metricType: "net_sales_per_period", targetValue: 5000, unit: "USD" },
+      ],
+      source: "admin",
+      sourceNote: "Secondary metric stretch targets",
+    }, persistence);
+
+    expect(saved.targetValue).toBe(100);
+    expect(saved.secondaryTargets).toEqual([
+      { metricType: "active_customers", targetValue: 35, unit: "accounts" },
+      { metricType: "net_sales_per_period", targetValue: 5000, unit: "USD" },
+    ]);
+
+    const retrieved = await getActiveMacroGoal({
+      tenantId: "tenant-secondary-1",
+      operatorUserId: "operator-1",
+      metricKey: "paid_orders_per_period",
+    }, persistence);
+
+    expect(retrieved).not.toBeNull();
+    expect(retrieved?.secondaryTargets).toEqual([
+      { metricType: "active_customers", targetValue: 35, unit: "accounts" },
+      { metricType: "net_sales_per_period", targetValue: 5000, unit: "USD" },
+    ]);
   });
 
   it("exposes goal writes only through the structured admin mutation, not the voice loop", () => {

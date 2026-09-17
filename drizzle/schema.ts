@@ -6993,6 +6993,7 @@ export const operatorMacroGoals = mysqlTable(
     targetDate: varchar("targetDate", { length: 10 }),
     source: mysqlEnum("source", ["operator_attested", "admin"]).notNull(),
     sourceNote: varchar("sourceNote", { length: 512 }).notNull(),
+    secondaryTargetsJson: json("secondaryTargetsJson"),
     status: mysqlEnum("status", ["active", "superseded", "closed"])
       .notNull()
       .default("active"),
@@ -7357,3 +7358,470 @@ export type GoldlineCampaignRunTarget = typeof goldlineCampaignRunTargets.$infer
 export type InsertGoldlineCampaignRunTarget = typeof goldlineCampaignRunTargets.$inferInsert;
 export type GoldlineCampaignTargetEvent = typeof goldlineCampaignTargetEvents.$inferSelect;
 export type InsertGoldlineCampaignTargetEvent = typeof goldlineCampaignTargetEvents.$inferInsert;
+
+/**
+ * StrategyEngine Playground Rules (Slice 3).
+ * Append-only versioned rules for autonomous spending boundary and approval categories.
+ */
+export const playgroundRules = mysqlTable(
+  "playground_rules",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    version: int("version").notNull().default(1),
+    monthlySpendCeilingCents: int("monthlySpendCeilingCents").notNull().default(0),
+    currency: varchar("currency", { length: 8 }).notNull().default("USD"),
+    approvalCategoriesJson: json("approvalCategoriesJson").notNull(),
+    effectiveFrom: timestamp("effectiveFrom").notNull().defaultNow(),
+    effectiveTo: timestamp("effectiveTo"),
+    source: mysqlEnum("source", ["operator_attested", "admin"]).notNull().default("admin"),
+    macroGoalId: varchar("macroGoalId", { length: 36 }),
+    status: mysqlEnum("status", ["active", "superseded"]).notNull().default("active"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantStatusIdx: index("idx_playground_rules_tenant_status").on(table.tenantId, table.status),
+    tenantVersionIdx: index("idx_playground_rules_tenant_version").on(table.tenantId, table.version),
+  })
+);
+
+export type PlaygroundRule = typeof playgroundRules.$inferSelect;
+export type InsertPlaygroundRule = typeof playgroundRules.$inferInsert;
+
+/**
+ * StrategyEngine Spend Ledger (Slice 3).
+ * Records planned, committed, and released autonomous spend per tenant per business-local month.
+ */
+export const strategySpendLedger = mysqlTable(
+  "strategy_spend_ledger",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    businessMonth: varchar("businessMonth", { length: 7 }).notNull(),
+    category: varchar("category", { length: 64 }).notNull(),
+    amountCents: int("amountCents").notNull(),
+    currency: varchar("currency", { length: 8 }).notNull().default("USD"),
+    status: mysqlEnum("status", ["planned", "committed", "released"]).notNull(),
+    sourcePlayId: varchar("sourcePlayId", { length: 64 }),
+    sourceMissionId: varchar("sourceMissionId", { length: 64 }),
+    sourceRef: varchar("sourceRef", { length: 191 }),
+    dedupeKey: varchar("dedupeKey", { length: 191 }).notNull(),
+    approvedByUserId: varchar("approvedByUserId", { length: 128 }),
+    metadataJson: json("metadataJson"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantDedupeUnique: uniqueIndex("uq_strategy_spend_tenant_dedupe").on(table.tenantId, table.dedupeKey),
+    tenantMonthStatusIdx: index("idx_strategy_spend_tenant_month_status").on(table.tenantId, table.businessMonth, table.status),
+  })
+);
+
+export type StrategySpendLedgerRow = typeof strategySpendLedger.$inferSelect;
+export type InsertStrategySpendLedgerRow = typeof strategySpendLedger.$inferInsert;
+
+/**
+ * StrategyEngine Snapshots (Slice 4).
+ * Immutable, versioned snapshot of the business state for strategic reasoning.
+ */
+export const strategySnapshots = mysqlTable(
+  "strategy_snapshots",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    schemaVersion: int("schemaVersion").notNull().default(1),
+    contentHash: varchar("contentHash", { length: 64 }).notNull(),
+    estimatedTokens: int("estimatedTokens").notNull().default(0),
+    isTruncated: boolean("isTruncated").notNull().default(false),
+    payloadJson: json("payloadJson").notNull(),
+    provenanceJson: json("provenanceJson").notNull(),
+    stalenessJson: json("stalenessJson").notNull(),
+    generatedAt: timestamp("generatedAt").notNull().defaultNow(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    tenantCreatedIdx: index("idx_strategy_snapshots_tenant_created").on(table.tenantId, table.createdAt),
+    tenantHashIdx: index("idx_strategy_snapshots_tenant_hash").on(table.tenantId, table.contentHash),
+  })
+);
+
+export type StrategySnapshotRow = typeof strategySnapshots.$inferSelect;
+export type InsertStrategySnapshot = typeof strategySnapshots.$inferInsert;
+
+/**
+ * Strategy Plays (Slice 6).
+ * Generated and ranked growth plays with initiation cost and geographic bundling.
+ */
+export const strategyPlays = mysqlTable(
+  "strategy_plays",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    businessName: varchar("businessName", { length: 191 }).notNull(),
+    worldName: varchar("worldName", { length: 191 }).notNull(),
+    hypothesis: text("hypothesis").notNull(),
+    primaryMetric: varchar("primaryMetric", { length: 64 }).notNull(),
+    geography: varchar("geography", { length: 128 }).notNull(),
+    stopsCount: int("stopsCount").notNull().default(1),
+    isClustered: boolean("isClustered").notNull().default(false),
+    estimatedInitiationCost: int("estimatedInitiationCost").notNull().default(0),
+    estimatedSpendCents: int("estimatedSpendCents").notNull().default(0),
+    spendCategory: varchar("spendCategory", { length: 64 }).notNull().default("other"),
+    confidence: varchar("confidence", { length: 32 }).notNull().default("medium"),
+    evidenceReferencesJson: json("evidenceReferencesJson"),
+    scoreBreakdownJson: json("scoreBreakdownJson").notNull(),
+    totalScore: int("totalScore").notNull().default(0),
+    status: mysqlEnum("status", ["candidate", "offered", "chosen", "active", "paused", "retired"]).notNull().default("candidate"),
+    needsApprovalToRun: boolean("needsApprovalToRun").notNull().default(false),
+    minimumEvidenceThresholdJson: json("minimumEvidenceThresholdJson"),
+    verticalKey: varchar("verticalKey", { length: 64 }).notNull().default("generic"),
+    templateKey: varchar("templateKey", { length: 64 }).notNull(),
+    provenanceJson: json("provenanceJson").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantStatusIdx: index("idx_strategy_plays_tenant_status").on(table.tenantId, table.status),
+  })
+);
+
+export type StrategyPlayRow = typeof strategyPlays.$inferSelect;
+export type InsertStrategyPlay = typeof strategyPlays.$inferInsert;
+
+/**
+ * Strategy Path Offers (Slice 6).
+ * 2-3 route fork presented on Lantern City and voiced by Claire.
+ */
+export const strategyPathOffers = mysqlTable(
+  "strategy_path_offers",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    playIdsJson: json("playIdsJson").notNull(),
+    recommendedPlayId: varchar("recommendedPlayId", { length: 64 }).notNull(),
+    claireRationale: text("claireRationale").notNull(),
+    status: mysqlEnum("status", ["active", "accepted", "expired", "superseded"]).notNull().default("active"),
+    offeredAt: timestamp("offeredAt").notNull().defaultNow(),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    tenantStatusIdx: index("idx_strategy_path_offers_tenant_status").on(table.tenantId, table.status),
+    tenantDateIdx: index("idx_strategy_path_offers_tenant_date").on(table.tenantId, table.businessDate),
+  })
+);
+
+export type StrategyPathOfferRow = typeof strategyPathOffers.$inferSelect;
+export type InsertStrategyPathOffer = typeof strategyPathOffers.$inferInsert;
+
+/**
+ * Strategy Path Choices (Slice 6).
+ * Deliberate choice recorded when operator picks a path from the fork.
+ */
+export const strategyPathChoices = mysqlTable(
+  "strategy_path_choices",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    offerId: varchar("offerId", { length: 64 }),
+    playId: varchar("playId", { length: 64 }).notNull(),
+    chosenOnSurface: mysqlEnum("chosenOnSurface", ["map", "voice", "admin"]).notNull(),
+    previousPlayId: varchar("previousPlayId", { length: 64 }),
+    readbackConfirmed: boolean("readbackConfirmed").notNull().default(false),
+    chosenAt: timestamp("chosenAt").notNull().defaultNow(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    tenantPlayIdx: index("idx_strategy_path_choices_tenant_play").on(table.tenantId, table.playId),
+  })
+);
+
+export type StrategyPathChoiceRow = typeof strategyPathChoices.$inferSelect;
+export type InsertStrategyPathChoice = typeof strategyPathChoices.$inferInsert;
+
+/**
+ * Strategy Mission Plan (Slice 7).
+ * Missions sequenced under the active play, linked to Day Director commitments.
+ */
+export const strategyMissionPlan = mysqlTable(
+  "strategy_mission_plan",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    playId: varchar("playId", { length: 64 }).notNull(),
+    dayDirectorCommitmentId: varchar("dayDirectorCommitmentId", { length: 36 }),
+    commercialMissionId: int("commercialMissionId"),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    missionType: mysqlEnum("missionType", ["growth", "support"]).notNull().default("growth"),
+    status: mysqlEnum("status", ["planned", "wait_approval", "active", "completed", "cancelled"]).notNull().default("planned"),
+    title: varchar("title", { length: 255 }).notNull(),
+    geographyCluster: varchar("geographyCluster", { length: 128 }),
+    stopCount: int("stopCount").notNull().default(1),
+    spendReservationId: varchar("spendReservationId", { length: 64 }),
+    spendCategory: varchar("spendCategory", { length: 64 }),
+    spendCents: int("spendCents").notNull().default(0),
+    preparedSalesPrepJson: json("preparedSalesPrepJson").notNull(),
+    dedupeKey: varchar("dedupeKey", { length: 191 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantDedupeUnique: uniqueIndex("uq_strategy_mission_plan_dedupe").on(table.tenantId, table.dedupeKey),
+    tenantDateIdx: index("idx_strategy_mission_plan_date").on(table.tenantId, table.businessDate),
+    tenantPlayIdx: index("idx_strategy_mission_plan_play").on(table.tenantId, table.playId),
+    tenantStatusIdx: index("idx_strategy_mission_plan_status").on(table.tenantId, table.status),
+  })
+);
+
+export type StrategyMissionPlanRow = typeof strategyMissionPlan.$inferSelect;
+export type InsertStrategyMissionPlan = typeof strategyMissionPlan.$inferInsert;
+
+/**
+ * Communication Permissions (Slice 7, G14).
+ * Binding refusals, opt-outs, and frequency limits.
+ */
+export const communicationPermissions = mysqlTable(
+  "communication_permissions",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    subjectType: mysqlEnum("subjectType", ["lead", "contact", "customer", "property"]).notNull(),
+    subjectId: varchar("subjectId", { length: 128 }).notNull(),
+    channel: mysqlEnum("channel", ["sms", "email", "call", "visit", "any"]).notNull().default("any"),
+    status: mysqlEnum("status", ["opted_in", "opted_out", "refused", "unspecified"]).notNull().default("unspecified"),
+    reason: text("reason"),
+    lastOutreachAt: timestamp("lastOutreachAt"),
+    frequencyCapDays: int("frequencyCapDays").notNull().default(7),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantSubjectChannelUnique: uniqueIndex("uq_comm_perm_subject_channel").on(
+      table.tenantId,
+      table.subjectType,
+      table.subjectId,
+      table.channel
+    ),
+    tenantStatusIdx: index("idx_comm_perm_tenant_status").on(table.tenantId, table.status),
+  })
+);
+
+export type CommunicationPermissionRow = typeof communicationPermissions.$inferSelect;
+export type InsertCommunicationPermission = typeof communicationPermissions.$inferInsert;
+
+/**
+ * Property Activation Tracks (Slice 7, laundry template).
+ * Per-approved property activation tracking: flyers, announcements, booking, repeat orders.
+ */
+export const propertyActivationTracks = mysqlTable(
+  "property_activation_tracks",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    propertyId: varchar("propertyId", { length: 128 }).notNull(),
+    propertyName: varchar("propertyName", { length: 255 }).notNull(),
+    agreedServiceDetailsJson: json("agreedServiceDetailsJson").notNull(),
+    residentCommunicationPermitted: boolean("residentCommunicationPermitted").notNull().default(false),
+    bookingInstructions: text("bookingInstructions"),
+    pickupArrangements: text("pickupArrangements"),
+    stage: mysqlEnum("stage", ["access_granted", "flyer_distribution", "resident_announcement", "first_order", "repeat_orders"]).notNull().default("access_granted"),
+    blockedReason: text("blockedReason"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantPropertyUnique: uniqueIndex("uq_property_activation_property").on(table.tenantId, table.propertyId),
+    tenantStageIdx: index("idx_property_activation_stage").on(table.tenantId, table.stage),
+  })
+);
+
+export type PropertyActivationTrackRow = typeof propertyActivationTracks.$inferSelect;
+export type InsertPropertyActivationTrack = typeof propertyActivationTracks.$inferInsert;
+
+/**
+ * Strategy Evidence (Slice 8, G5).
+ * Plain factual funnel evidence over windows, minimum-evidence thresholds, and reversible world signals.
+ */
+export const strategyEvidence = mysqlTable(
+  "strategy_evidence",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    playId: varchar("playId", { length: 64 }).notNull(),
+    windowDays: int("windowDays").notNull(),
+    windowStart: varchar("windowStart", { length: 10 }).notNull(),
+    windowEnd: varchar("windowEnd", { length: 10 }).notNull(),
+    funnelCountsJson: json("funnelCountsJson").notNull(),
+    untrackedFunnelStepsJson: json("untrackedFunnelStepsJson").notNull(),
+    statement: text("statement").notNull(),
+    sampleSize: int("sampleSize").notNull().default(0),
+    thresholdMet: boolean("thresholdMet").notNull().default(false),
+    worldSignal: mysqlEnum("worldSignal", ["brighten", "dim", "none"]).notNull().default("none"),
+    provenanceJson: json("provenanceJson").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantPlayIdx: index("idx_strategy_evidence_play").on(table.tenantId, table.playId),
+    tenantSignalIdx: index("idx_strategy_evidence_signal").on(table.tenantId, table.worldSignal),
+  })
+);
+
+export type StrategyEvidenceRow = typeof strategyEvidence.$inferSelect;
+export type InsertStrategyEvidence = typeof strategyEvidence.$inferInsert;
+
+/**
+ * Opportunity Stall Reasons (Slice 8).
+ * Structured reasons captured from debriefs, mission outcomes, and operator input.
+ */
+export const opportunityStallReasons = mysqlTable(
+  "opportunity_stall_reasons",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    opportunityId: varchar("opportunityId", { length: 64 }),
+    source: varchar("source", { length: 64 }).notNull().default("debrief"),
+    reason: mysqlEnum("reason", [
+      "timing",
+      "price",
+      "trust",
+      "pickup_convenience",
+      "existing_provider",
+      "access_restriction",
+      "service_issue",
+      "unknown",
+    ]).notNull().default("unknown"),
+    detail: text("detail"),
+    recordedAt: timestamp("recordedAt").notNull().defaultNow(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantReasonIdx: index("idx_opp_stall_reason").on(table.tenantId, table.reason),
+    tenantOppIdx: index("idx_opp_stall_opp").on(table.tenantId, table.opportunityId),
+  })
+);
+
+export type OpportunityStallReasonRow = typeof opportunityStallReasons.$inferSelect;
+export type InsertOpportunityStallReason = typeof opportunityStallReasons.$inferInsert;
+
+/**
+ * Strategy Trigger Runs (Slice 9).
+ * Idempotent trigger execution history and snapshot bookkeeping.
+ */
+export const strategyTriggerRuns = mysqlTable(
+  "strategy_trigger_runs",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    triggerType: mysqlEnum("triggerType", [
+      "morning",
+      "mission_completion",
+      "mission_skip",
+      "business_change",
+      "weekly_dawn",
+    ]).notNull(),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    dedupeKey: varchar("dedupeKey", { length: 191 }).notNull(),
+    snapshotId: varchar("snapshotId", { length: 64 }),
+    outcome: varchar("outcome", { length: 64 }).notNull().default("success"),
+    detailJson: json("detailJson").notNull(),
+    errorMessage: text("errorMessage"),
+    executedAt: timestamp("executedAt").notNull().defaultNow(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    tenantDedupeUnique: uniqueIndex("uq_strategy_trigger_dedupe").on(table.tenantId, table.dedupeKey),
+    tenantTypeIdx: index("idx_strategy_trigger_tenant_type").on(
+      table.tenantId,
+      table.triggerType,
+      table.executedAt
+    ),
+  })
+);
+
+export type StrategyTriggerRunRow = typeof strategyTriggerRuns.$inferSelect;
+export type InsertStrategyTriggerRun = typeof strategyTriggerRuns.$inferInsert;
+
+/**
+ * Strategy Recovery Items (Slice 10, G3).
+ * Broken commitments become repairable gold (kintsugi).
+ * Exactly zero or ONE item is visible per tenant at a time.
+ * All others are queued, counted, and never silently deleted.
+ */
+export const recoveryItems = mysqlTable(
+  "recovery_items",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    commitmentRef: varchar("commitmentRef", { length: 128 }).notNull(),
+    playId: varchar("playId", { length: 64 }),
+    title: varchar("title", { length: 255 }).notNull(),
+    state: mysqlEnum("state", [
+      "visible",
+      "queued",
+      "repaired",
+      "rescheduled",
+      "dropped",
+      "archived_outstanding",
+    ]).notNull().default("queued"),
+    dropReason: text("dropReason"),
+    rescheduledToDate: varchar("rescheduledToDate", { length: 10 }),
+    missedAt: timestamp("missedAt").notNull().defaultNow(),
+    resolvedAt: timestamp("resolvedAt"),
+    promotedVisibleAt: timestamp("promotedVisibleAt"),
+    chronicleRef: varchar("chronicleRef", { length: 128 }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantStateIdx: index("idx_recovery_items_tenant_state").on(table.tenantId, table.state),
+    tenantPlayIdx: index("idx_recovery_items_tenant_play").on(table.tenantId, table.playId),
+  })
+);
+
+export type RecoveryItemRow = typeof recoveryItems.$inferSelect;
+export type InsertRecoveryItem = typeof recoveryItems.$inferInsert;
+
+/**
+ * Strategy Drop Pattern Flags (Slice 10).
+ * Surfaces repeated drop or reschedule patterns strictly at Dawn.
+ */
+export const dropPatternFlags = mysqlTable(
+  "drop_pattern_flags",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    patternType: mysqlEnum("patternType", [
+      "play_cluster_drops",
+      "overall_drops_surge",
+      "repeated_reschedules",
+      "archived_backlog",
+    ]).notNull(),
+    playId: varchar("playId", { length: 64 }),
+    windowDays: int("windowDays").notNull().default(14),
+    occurrenceCount: int("occurrenceCount").notNull().default(0),
+    firstOccurrenceAt: timestamp("firstOccurrenceAt").notNull().defaultNow(),
+    lastOccurrenceAt: timestamp("lastOccurrenceAt").notNull().defaultNow(),
+    surfacedAtDawn: boolean("surfacedAtDawn").notNull().default(false),
+    dawnSummary: text("dawnSummary"),
+    acknowledgedAt: timestamp("acknowledgedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    tenantTypeDawnIdx: index("idx_drop_pattern_tenant_type").on(
+      table.tenantId,
+      table.patternType,
+      table.surfacedAtDawn
+    ),
+  })
+);
+
+export type DropPatternFlagRow = typeof dropPatternFlags.$inferSelect;
+export type InsertDropPatternFlag = typeof dropPatternFlags.$inferInsert;
+
+
+
+

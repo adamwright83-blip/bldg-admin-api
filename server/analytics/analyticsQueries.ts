@@ -289,6 +289,7 @@ export async function getRepeatCustomerStats(
   deps: AnalyticsQueryDeps = defaultDeps
 ): Promise<RepeatCustomerStats> {
   const ledger = await ledgerFor(tenantId, [params.range], deps);
+  // Canonical active customer computation is defined in server/claire/activeCustomerMetric.ts
   const population = activeCustomerPopulation(ledger.events, boundedRange(params.range), 1);
   const totalCustomers = population.count;
   const repeatCustomers = population.members.filter(member => member.orderCount >= 2).length;

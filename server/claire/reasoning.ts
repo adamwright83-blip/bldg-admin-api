@@ -15,6 +15,7 @@ import { CLAIRE_V1_REASONING_POLICY } from "../../shared/claireRuntime";
 import { formatCapabilityBriefing } from "../../shared/goldlineCapabilities";
 import { detectWorkdaySession, speakEveningPlan } from "../../shared/claireWorkday";
 import { assembleTomorrowCandidates } from "./workdayPlanService";
+import { lintCeoLanguage, lintDisappointmentFraming } from "./disappointmentLint";
 
 /**
  * Assembles the compact character context for a given phase/operator.
@@ -135,6 +136,10 @@ function compactContext(context: ClaireDriveContext): string {
       relationToMacroGoal: item.relationToMacroGoal,
     })),
     workday: context.workday ?? null,
+    strategySnapshotId: context.strategySnapshotId ?? null,
+    strategyGoal: context.strategySnapshot?.payload.goal ?? null,
+    strategyGrowthPlan: context.strategySnapshot?.payload.growthPlan ?? null,
+    strategyPlayground: context.strategySnapshot?.payload.playgroundRules ?? null,
   });
 }
 
@@ -269,7 +274,12 @@ export async function writeClairePreDriveBrief(
           {
             role: "system",
             content: [
-              "You are Claire, Goldline's concise operations partner calling before a drive.",
+              "You are Claire, Goldline's concise operations partner and strategist calling before a drive.",
+              "Notice the gap between where the business is and where the operator wants it, and select the one or two commercial points that matter most today.",
+              "The operator is a player, not a CEO. Never use 'CEO', 'executive', 'board approval', or similar framing.",
+              "Missed or outstanding work is never framed as disappointment, shame, or letdown (Guardrail G2). State what remains plainly with options (repair, reschedule, or drop).",
+              "Assert only verified state from the inventory (Guardrail G4). Never invent actions or outcomes.",
+              "Forecasts and planning scenarios are estimates, not facts (Guardrail G12).",
               "Use only the supplied business context. Never invent a customer, outcome, deadline, address, revenue, commitment, or completed action.",
               "The game cannot create business truth. Derived suggestions are suggestions, never facts.",
               "This is an orientation brief from a strategic operating partner. Use the supplied clock, macro goal, verified metric, work picture, campaign, and runtime picture only.",
@@ -297,6 +307,24 @@ export async function writeClairePreDriveBrief(
       .trim()
       .slice(0, 900);
     if (!text) throw new Error("Claire opening brief produced empty output");
+
+    // Guardrail G2 post-generation lint
+    const disappointmentCheck = lintDisappointmentFraming(text);
+    if (!disappointmentCheck.passes) {
+      console.warn("[Claire] Pre-drive brief failed G2 disappointment lint, falling back", {
+        pattern: disappointmentCheck.matchedPattern,
+      });
+      throw new Error(`G2 disappointment framing detected: ${disappointmentCheck.matchedPattern}`);
+    }
+
+    // Global CEO/executive framing prohibition lint
+    const ceoCheck = lintCeoLanguage(text);
+    if (!ceoCheck.passes) {
+      console.warn("[Claire] Pre-drive brief failed CEO language lint, falling back", {
+        pattern: ceoCheck.matchedPattern,
+      });
+      throw new Error(`Prohibited CEO framing detected: ${ceoCheck.matchedPattern}`);
+    }
     const diagnostic: ClaireGenerationDiagnostic = {
       kind: "opening_brief",
       source: "model",
