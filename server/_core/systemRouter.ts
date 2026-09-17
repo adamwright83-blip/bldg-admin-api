@@ -50,6 +50,7 @@ import { kingdomRouter } from "../goldlineKingdoms/kingdomRouter";
 import { companionRouter } from "../companions/companionRouter";
 import { missionDirectorRouter } from "../missionDirector/missionDirectorRouter";
 import { claireRouter } from "../claire/claireRouter";
+import { claireRelationshipOffboardingRouter } from "../claire/relationshipOffboardingRouter";
 import { missionSalesBriefRouter } from "../missionSalesBrief/missionSalesBriefRouter";
 import { strategyRouter } from "../strategy/strategyRouter";
 
@@ -104,6 +105,7 @@ export const systemRouter = router({
   goldlineCompanions: companionRouter,
   missionDirector: missionDirectorRouter,
   claire: claireRouter,
+  claireRelationshipOffboarding: claireRelationshipOffboardingRouter,
   missionSalesBrief: missionSalesBriefRouter,
   health: publicProcedure
     .input(
