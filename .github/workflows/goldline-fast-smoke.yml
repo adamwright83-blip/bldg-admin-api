@@ -84,6 +84,15 @@ jobs:
           server/behavioralLedger/behavioralLedger.test.ts
           server/opsTasks.behavioralLedger.test.ts
       - name: Prove ops task completion concurrency against real MySQL
+        # Targets goldline_migrate_check, not the job's shared goldline_proof:
+        # this step runs before `pnpm db:dayforge:release` (below), which is
+        # the only thing that ever creates ops_tasks/ops_task_events in
+        # goldline_proof. goldline_migrate_check already has a complete,
+        # valid schema from the migration-proof step above — a real MySQL
+        # database is a real MySQL database; this test needs one with the
+        # right tables, not specifically the browser-fixture database.
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3399/goldline_migrate_check
         run: >-
           pnpm vitest run --config vitest.integration.config.ts
           server/opsTasks.mysql.integration.test.ts
