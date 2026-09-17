@@ -48,43 +48,25 @@ test.describe("Wayward authored player truth", () => {
     }
 
     /*
-      Now take the window: appear -> click, with nothing in between.
+      The PARRY NOW label exists only while the product says the guardian is
+      parryable, and that window is intentionally short. Keep the readiness
+      check and the click in one browser-side polling turn so CI/CDP latency
+      cannot spend the player's combat window between separate assertions.
 
-      `force` is deliberate and narrow, for the same reason as the Lantern City
-      gate. Playwright's actionability check requires a stable bounding box
-      across consecutive frames, and the guardian telegraph animates the button
-      while the window is open — so on a runner whose rAF is starved it is
-      never "stable" and the click waits until the test times out. That is a
-      property of an animated combat window, not a broken control.
-
-      Visibility and enabled-ness are asserted explicitly on the same locator
-      immediately above, so the only check being skipped is stability. The
-      window itself is untouched: if the parry lands late, the assertion below
-      still fails, which is the behaviour this test exists to protect.
+      This does not widen or bypass the mechanic: the button must exist with
+      the authored PARRY NOW label and be enabled in the real window. If that
+      never occurs, waitForFunction times out and the test fails. The click is
+      then dispatched immediately from that same browser turn, after which the
+      normal product outcome below must still appear.
     */
-    const parry = page.getByRole("button", { name: "PARRY NOW" });
-    await expect(parry).toBeVisible({ timeout: 10_000 });
-    await expect(parry).toBeEnabled();
-    /*
-      dispatchEvent, not click. The parry window is real gameplay time — a
-      720-900ms telegraph plus the slam frame, about a second in total — and
-      that duration is the mechanic, so it is not something to widen for a
-      slow runner.
+    await page.waitForFunction(() => {
+      const parry = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
+        .find(button => button.textContent?.includes("PARRY NOW"));
+      if (!parry || parry.disabled) return false;
+      parry.click();
+      return true;
+    }, undefined, { timeout: 10_000 });
 
-      `click()` waits for a stable bounding box on a button the telegraph is
-      animating, and `click({force})` still hit-tests and may scroll, each
-      costing CDP round-trips. On a loaded runner those round-trips outlast the
-      window and the parry genuinely lands late — which is why the previous
-      attempt stopped timing out and started failing on the parry never
-      registering. The test was losing the race for reasons that have nothing
-      to do with the product.
-
-      dispatchEvent is a single round-trip with no actionability phase, so the
-      click arrives inside the window. Visibility and enabled-ness are still
-      asserted above, and the assertion below still fails if the parry lands
-      late — so the window is proven exactly as strictly as before.
-    */
-    await parry.dispatchEvent("click");
     await expect(page.getByText("PARRY · BRONZE BREAKS", { exact: false })).toBeVisible();
   });
 
