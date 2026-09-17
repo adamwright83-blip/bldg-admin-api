@@ -10,7 +10,7 @@ import type { ClaireTurnDeps } from "./claireTurn";
  */
 export function claireEncyclopediaFor(input: { dayDirectorActorId: string }): ClaireTurnDeps["encyclopedia"] {
   if (!ENV.anthropicApiKey?.trim()) return null;
-  return ({ tenantId, operatorUserId, utterance, surface, history }) =>
+  return ({ tenantId, operatorUserId, utterance, surface, history, context }) =>
     answerWithEncyclopedia({
       tenantId,
       operatorUserId,
@@ -20,5 +20,6 @@ export function claireEncyclopediaFor(input: { dayDirectorActorId: string }): Cl
       history: history.map(entry => ({ speaker: entry.speaker, text: entry.text })),
       now: new Date(),
       timeZone: getDashboardTimeZone(),
+      context,
     });
 }

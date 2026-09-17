@@ -105,6 +105,8 @@ jobs:
           server/strategy/slice2LiveSnapshot.test.ts
           server/strategy/slice04StrategySnapshot.test.ts
           server/strategy/snapshotCustomerAggregateLoad.test.ts
+          server/claire/slice03AssertionGuardWiring.test.ts
+          server/claire/slice01SafetyBaseline.test.ts
       - name: Prove Real Workday truth invariants
         run: >-
           pnpm vitest run

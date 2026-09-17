@@ -9,6 +9,7 @@ import { answerClaireBusinessTurn, looksLikeWorkRequest, type ClaireAnalyticsSta
 import { isCombineRequest, normalizeUtterance } from "../business/businessLanguage";
 import { getClaireCampaignSummary } from "../campaignAwareness";
 import type { ClaireDriveContext } from "../contextAssembler";
+import { buildClaireVerifiedFactInventory, sanitizeSpeakAgainstInventory } from "../verifiedFactInventoryFromContext";
 import { answerClairePreDriveFollowUp } from "../preDriveConversation";
 import { detectConfirmation, handleVoiceCommitmentTurn, type PendingProposalState, type VoiceCommitmentTurnResult } from "../voiceCommitmentLoop";
 import { commitBriefing, loadExistingWork, matchExistingWork, reconcileBriefing, speakBriefingCommit } from "../briefing/briefingCommit";
@@ -128,7 +129,7 @@ export type ClaireTurnDeps = {
   unpaid: typeof loadUnpaidOrders;
   searchMemory: typeof searchOperatorConversation;
   memoryBetween: typeof operatorTurnsBetween;
-  encyclopedia: ((input: { tenantId: string; operatorUserId: string; utterance: string; surface: "voice" | "text"; history: ClaireTurnHistoryEntry[] }) => Promise<string | null>) | null;
+  encyclopedia: ((input: { tenantId: string; operatorUserId: string; utterance: string; surface: "voice" | "text"; history: ClaireTurnHistoryEntry[]; context?: ClaireDriveContext | null }) => Promise<string | null>) | null;
   watchBoard?: (input: { tenantId: string; operatorUserId: string; actorId: string }) => Promise<{ brief: string }>;
   doctrineTurn?: (input: { tenantId: string; operatorUserId: string; utterance: string; today: string }) => Promise<string | null>;
 };
@@ -266,8 +267,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   }
   remember(state, "operator", utterance, nowMs);
   const finish = (result: ClaireTurnResult): ClaireTurnResult => {
-    remember(state, "claire", result.speak, nowMs);
-    return result;
+    const inventory = buildClaireVerifiedFactInventory(input.context);
+    const speak = sanitizeSpeakAgainstInventory(result.speak, inventory);
+    const guarded = speak === result.speak ? result : { ...result, speak };
+    remember(state, "claire", guarded.speak, nowMs);
+    return guarded;
   };
   const history = () => (state.history ?? []).map(entry => ({ speaker: entry.speaker, text: entry.text }));
   const lower = normalizeUtterance(utterance);
@@ -537,7 +541,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     const questionLower = normalizeUtterance(question);
     try {
       const business = await answerClaireBusinessTurn(
-        { tenantId: input.tenantId, utterance: question, state, surface: input.surface },
+        { tenantId: input.tenantId, utterance: question, state, surface: input.surface, context: input.context },
         { now: deps.now, timeZone: deps.timeZone, ...deps.business }
       );
       if (business.handled) return business.speak;
@@ -633,6 +637,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
           utterance: question,
           surface: input.surface,
           history: state.history ?? [],
+          context: input.context,
         });
         if (answer) return answer;
       } catch (error) {
