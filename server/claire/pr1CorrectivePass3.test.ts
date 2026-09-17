@@ -62,7 +62,7 @@ describe("Corrective pass 3 -- item 1: personal-answer recovery", () => {
     expect(recordGeneration).toHaveBeenCalledWith(
       expect.objectContaining({
         diagnostic: expect.objectContaining({
-          source: "model",
+          source: "fallback",
           answerOrigin: "canon_render",
           failureReason: "ungrounded_personal_specificity_canon_rendered",
         }),
