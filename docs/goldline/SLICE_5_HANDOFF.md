@@ -2,12 +2,14 @@
 
 # SLICE 5 HANDOFF — Randomized learning / MRT decision points
 
-**Status: implementation on PR; CI pending on latest push.**
+**Status: MERGED into `main` via PR #158.**
 **Branch:** `cursor/behavioral-slice-5-mrt-learning-723a`
 **PR:** https://github.com/adamwright83-blip/bldg-admin-api/pull/158
-**Base:** `main` @ `287e7dd53fa20ac6cd3da1a5c4accc07b12fc73e`
-**Exact latest commit SHA:** `2d96b93935cab5f0f03fcb0caf1d3d4b95d55cce`
-**CI status:** pending
+**Implementation head:** `2d96b93935cab5f0f03fcb0caf1d3d4b95d55cce`
+**Final PR head:** `8a3204f5796889df5f7ba969f0f317d4851a6e1f`
+**Merge commit:** `6251551c4bf6ec82d1d11294c5e2af990cf1b569`
+**Merged at:** 2026-09-17T11:31:41Z
+**CI on final PR head:** 22/22 green
 
 ---
 
@@ -172,10 +174,10 @@ When enabled, eligibility still requires ≥2 safe options including STANDARD, n
 
 ## Exact next roadmap slice
 
-Foundation §9: **Slice 6 — relationship layer.** Not started.
+Foundation §9: **Slice 6 — relationship layer.** Started after this merge.
 
 ---
 
 ## Next step
 
-Push, wait for Fast Goldline / DayForge / mobile CI on this head. Do not merge without instruction.
+Slice 5 is merged. Behavioral-science Slice 6 (Claire relationship / safe longitudinal history) starts from this `main`.
