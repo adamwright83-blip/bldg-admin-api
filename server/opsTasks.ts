@@ -106,6 +106,22 @@ export type OpsTaskStore = {
   getTask(tenantId: string, taskId: number): Promise<OpsTask | null>;
   updateTask(tenantId: string, taskId: number, patch: Partial<InsertOpsTask>): Promise<OpsTask | null>;
   createEvent(input: InsertOpsTaskEvent): Promise<OpsTaskEvent>;
+  /**
+   * Atomic compare-and-set: writes `patch` only if the row's current status
+   * is not already "completed". `transitioned` is true only for whichever
+   * concurrent caller's UPDATE actually changed the row — every other
+   * caller (a genuine race, or the same request retried) sees
+   * `transitioned: false` against the resulting row. This is the same
+   * pattern as `attemptOrderPickupCollection` in server/db.ts: a
+   * SELECT-then-branch-then-UPDATE is not safe under concurrent requests
+   * or multiple server instances, so the database's affected-row count,
+   * not an application-level read, is the arbiter of who completed the task.
+   */
+  completeTaskIfNotCompleted(
+    tenantId: string,
+    taskId: number,
+    patch: Partial<InsertOpsTask>
+  ): Promise<{ transitioned: boolean; task: OpsTask | null }>;
 };
 
 function assertTaskTitle(title: string) {
@@ -239,6 +255,29 @@ const drizzleOpsTaskStore: OpsTaskStore = {
       .limit(1);
     return rows[0] ?? null;
   },
+  async completeTaskIfNotCompleted(tenantId, taskId, patch) {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    const result = await db
+      .update(opsTasks)
+      .set(patch)
+      .where(
+        and(
+          eq(opsTasks.tenantId, tenantId),
+          eq(opsTasks.id, taskId),
+          sql`${opsTasks.status} != 'completed'`
+        )
+      );
+    const affectedRows = Number(
+      (result as unknown as { [0]?: { affectedRows?: number } })[0]?.affectedRows ?? 0
+    );
+    const rows = await db
+      .select()
+      .from(opsTasks)
+      .where(and(eq(opsTasks.tenantId, tenantId), eq(opsTasks.id, taskId)))
+      .limit(1);
+    return { transitioned: affectedRows > 0, task: rows[0] ?? null };
+  },
   async createEvent(input) {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
@@ -363,19 +402,45 @@ export async function completeOpsTask(
   const before = await store.getTask(tenantId, input.taskId);
   if (!before) throw new Error("Ops task not found");
 
-  // Completion is a one-time transition. A retry may carry new outcome or
-  // revenue data, but it must never manufacture a second COMPLETED event.
-  if (before.status === "completed") {
-    const outcomeChanged = input.outcome !== undefined && input.outcome !== before.outcome;
+  const completedAt = new Date();
+  const completionPatch: Partial<InsertOpsTask> = {
+    status: "completed",
+    completedAt,
+    completedBy: input.completedBy ?? null,
+    outcome: input.outcome ?? before.outcome ?? null,
+  };
+  if (input.revenueRecoveredCents !== undefined) {
+    completionPatch.revenueRecoveredCents = input.revenueRecoveredCents;
+  }
+
+  // Atomic compare-and-set: the database's affected-row count, not an
+  // application-level read of `before`, decides who actually performed the
+  // completion transition. Two simultaneous callers can both read the task
+  // as "not completed" — only one of their UPDATEs will match the
+  // `status != 'completed'` guard and report transitioned=true. This is
+  // the invariant the behavioral ledger's COMPLETED event depends on: at
+  // most one caller may author the canonical completion.
+  const { transitioned, task: afterAttempt } = await store.completeTaskIfNotCompleted(
+    tenantId,
+    input.taskId,
+    completionPatch
+  );
+  if (!afterAttempt) throw new Error("Ops task completion failed");
+
+  if (!transitioned) {
+    // Lost the race (or this is a genuine retry/metadata update against an
+    // already-completed task). A retry may carry new outcome or revenue
+    // data, but it must never manufacture a second COMPLETED event.
+    const outcomeChanged = input.outcome !== undefined && input.outcome !== afterAttempt.outcome;
     const revenueChanged =
       input.revenueRecoveredCents !== undefined &&
-      input.revenueRecoveredCents !== before.revenueRecoveredCents;
-    if (!outcomeChanged && !revenueChanged) return before;
+      input.revenueRecoveredCents !== afterAttempt.revenueRecoveredCents;
+    if (!outcomeChanged && !revenueChanged) return afterAttempt;
 
-    const patch: Partial<InsertOpsTask> = {};
-    if (outcomeChanged) patch.outcome = input.outcome ?? null;
-    if (revenueChanged) patch.revenueRecoveredCents = input.revenueRecoveredCents;
-    const after = await store.updateTask(tenantId, input.taskId, patch);
+    const metadataPatch: Partial<InsertOpsTask> = {};
+    if (outcomeChanged) metadataPatch.outcome = input.outcome ?? null;
+    if (revenueChanged) metadataPatch.revenueRecoveredCents = input.revenueRecoveredCents;
+    const after = await store.updateTask(tenantId, input.taskId, metadataPatch);
     if (!after) throw new Error("Ops task completion metadata update failed");
 
     if (revenueChanged) {
@@ -384,7 +449,7 @@ export async function completeOpsTask(
         taskId: input.taskId,
         eventType: "revenue_recovered",
         actorId: input.completedBy ?? null,
-        beforeJson: { revenueRecoveredCents: before.revenueRecoveredCents },
+        beforeJson: { revenueRecoveredCents: afterAttempt.revenueRecoveredCents },
         afterJson: { revenueRecoveredCents: after.revenueRecoveredCents },
         agentEventId: after.agentEventId ?? null,
       }, store);
@@ -395,7 +460,7 @@ export async function completeOpsTask(
         taskId: input.taskId,
         eventType: "outcome_recorded",
         actorId: input.completedBy ?? null,
-        beforeJson: { outcome: before.outcome },
+        beforeJson: { outcome: afterAttempt.outcome },
         afterJson: { outcome: after.outcome },
         agentEventId: after.agentEventId ?? null,
         note: after.outcome ?? null,
@@ -404,19 +469,7 @@ export async function completeOpsTask(
     return after;
   }
 
-  const completedAt = new Date();
-  const patch: Partial<InsertOpsTask> = {
-    status: "completed",
-    completedAt,
-    completedBy: input.completedBy ?? null,
-    outcome: input.outcome ?? before.outcome ?? null,
-  };
-  if (input.revenueRecoveredCents !== undefined) {
-    patch.revenueRecoveredCents = input.revenueRecoveredCents;
-  }
-  const after = await store.updateTask(tenantId, input.taskId, patch);
-  if (!after) throw new Error("Ops task completion failed");
-
+  const after = afterAttempt;
   const completionEvent = await createOpsTaskEvent({
     tenantId,
     taskId: input.taskId,
@@ -521,8 +574,8 @@ export async function recordOpsTaskReply(
     existingReply.repliedBy === requestedRepliedBy &&
     sameJsonValue(existingReply.appliedOrderPatch, requestedPatch);
 
-  // Identical network/API retry: preserve the original completion timestamp and
-  // do not manufacture another completion or reply event.
+  // Identical network/API retry against an already-completed task: fast
+  // path, no write at all.
   if (before.status === "completed" && isSameReply) return before;
 
   const reply = {
@@ -532,33 +585,69 @@ export async function recordOpsTaskReply(
     repliedAt: new Date().toISOString(),
     repliedBy: requestedRepliedBy,
   };
-  const wasCompleted = before.status === "completed";
-  const after = await store.updateTask(tenantId, input.taskId, {
-    ...(wasCompleted ? {} : {
-      status: "completed",
-      completedAt: new Date(),
-      completedBy: requestedRepliedBy,
-    }),
+
+  // Same invariant and same race as completeOpsTask: two concurrent replies
+  // (or a reply racing a plain completeOpsTask call) can both read the task
+  // as "not completed". The atomic UPDATE below applies the completion
+  // fields AND this reply's metadata together in one statement, so the
+  // winner's reply lands with the completion. `transitioned` — not the
+  // earlier `before` read — decides who actually completed the task.
+  const completionPatch: Partial<InsertOpsTask> = {
+    status: "completed",
+    completedAt: new Date(),
+    completedBy: requestedRepliedBy,
     outcome: `Replied to resident: ${input.message.slice(0, 180)}`,
     metadataJson: { ...existingMeta, residentReply: reply },
-  });
-  if (!after) throw new Error("Ops task reply update failed");
+  };
+  const { transitioned, task: afterAttempt } = await store.completeTaskIfNotCompleted(
+    tenantId,
+    input.taskId,
+    completionPatch
+  );
+  if (!afterAttempt) throw new Error("Ops task reply update failed");
 
-  if (wasCompleted) {
-    // A changed reply after completion is a new outcome/reply fact, not a
-    // second completion of the same task.
+  if (!transitioned) {
+    // Task was already completed — by a prior reply, a concurrent
+    // completeOpsTask call, or a race this call lost. Record this reply as
+    // a new fact, never as a second completion.
+    const currentMeta =
+      afterAttempt.metadataJson &&
+      typeof afterAttempt.metadataJson === "object" &&
+      !Array.isArray(afterAttempt.metadataJson)
+        ? (afterAttempt.metadataJson as Record<string, unknown>)
+        : {};
+    const currentReply =
+      currentMeta.residentReply &&
+      typeof currentMeta.residentReply === "object" &&
+      !Array.isArray(currentMeta.residentReply)
+        ? (currentMeta.residentReply as Record<string, unknown>)
+        : null;
+    const alreadySameReply =
+      currentReply !== null &&
+      currentReply.message === input.message &&
+      currentReply.decision === requestedDecision &&
+      currentReply.repliedBy === requestedRepliedBy &&
+      sameJsonValue(currentReply.appliedOrderPatch, requestedPatch);
+    if (alreadySameReply) return afterAttempt;
+
+    const after = await store.updateTask(tenantId, input.taskId, {
+      outcome: `Replied to resident: ${input.message.slice(0, 180)}`,
+      metadataJson: { ...currentMeta, residentReply: reply },
+    });
+    if (!after) throw new Error("Ops task reply update failed");
     await createOpsTaskEvent({
       tenantId,
       taskId: input.taskId,
       eventType: "outcome_recorded",
       actorId: requestedRepliedBy,
-      beforeJson: { residentReply: existingReply },
+      beforeJson: { residentReply: currentReply },
       afterJson: { residentReply: reply },
       note: `Resident reply updated: ${input.message.slice(0, 180)}`,
     }, store);
     return after;
   }
 
+  const after = afterAttempt;
   const completionEvent = await createOpsTaskEvent({
     tenantId,
     taskId: input.taskId,

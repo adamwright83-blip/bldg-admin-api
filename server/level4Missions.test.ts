@@ -76,6 +76,18 @@ class MemoryOpsTaskStore implements OpsTaskStore {
     return task;
   }
 
+  async completeTaskIfNotCompleted(
+    tenantId: string,
+    taskId: number,
+    patch: Partial<InsertOpsTask>
+  ): Promise<{ transitioned: boolean; task: OpsTask | null }> {
+    const task = await this.getTask(tenantId, taskId);
+    if (!task) return { transitioned: false, task: null };
+    if (task.status === "completed") return { transitioned: false, task };
+    Object.assign(task, patch, { updatedAt: new Date() });
+    return { transitioned: true, task };
+  }
+
   async createEvent(input: InsertOpsTaskEvent): Promise<OpsTaskEvent> {
     const event = {
       id: this.eventId++,
