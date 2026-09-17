@@ -6,6 +6,62 @@ Head SHA as of this update: see `git rev-parse HEAD` at time of push (recorded i
 
 ---
 
+## FINAL NARROW COMPLETION AFTER PASS 3 — deterministic canon recovery + exam instrumentation
+
+Claude's last real pass demonstrated that voice delivery, time grounding, business-offer grounding,
+truth boundaries, correction handling, and truncation were in good shape. One personal-answer defect
+and one exam-reporting gap remained.
+
+### Personal-answer recovery no longer asks the model to try again
+
+The pass-3 recovery path still made a second free-form model call after the guard rejected an
+invented personal specific. The real API demonstrated why that was not strong enough: the retry
+could invent another unsupported specific and fall through to a deflection even when eligible canon
+could answer safely.
+
+`server/claire/character/personalAnswerRecovery.ts` now uses deterministic topic-to-canon routing.
+It only considers canon facts that the compiler already deemed eligible for this operator's
+disclosure tier, chooses a fact relevant to the requested personal topic, renders that stored fact
+into first-person form without adding factual content, and re-runs the same hard personal-specificity
+guard over the result. There is no second LLM generation.
+
+For the Tier-0 exam question "Where are you from, Claire?", an invented city is discarded and the
+safe recovery can return the eligible nationality fact (`I'm British.`). Higher-tier facts remain
+unavailable unless the compiler already exposed them. If the requested topic has no eligible canon,
+the existing canon-scoped deflection remains the fail-closed outcome.
+
+Telemetry keeps the legacy model/fallback source field honest while adding `answerOrigin` so a
+deterministic canon-rendered answer is distinguishable from both the model and an ordinary fallback.
+
+### Real-exam instrumentation now reports what the production path already knows
+
+`ClaireGenerationDiagnostic` now also carries:
+- `answerOrigin`
+- `trimmedToSentenceBoundary`
+
+The real exam harness now writes, per turn:
+- final answer origin (`model`, `canon_render`, or `fallback`)
+- Anthropic `stop_reason`
+- whether sentence-boundary trimming actually changed the generated text
+- the legacy generation source separately in metrics
+
+This closes the gap where production captured `stop_reason` but the exam artifact silently omitted it.
+
+### Verification status
+
+The final code is covered by focused regression tests proving:
+- invented personal cities remain blocked
+- personal recovery uses one model call only
+- eligible canon still yields a useful deterministic answer
+- unrelated/gated canon is not widened into the answer
+- no eligible canon yields only the canon-scoped deflection
+- both opening and follow-up diagnostics expose stop reason and trim state
+
+The prior real pass-3 transcript remains the latest preserved real Anthropic run. No new real
+Anthropic run was fabricated by this completion step.
+
+---
+
 ## THIRD CORRECTIVE PASS (Adam's review of the post-corrective real exam) — read this first
 
 Adam's verdict on the 21:40 run vs the 20:51 baseline: the corrective pass materially worked —
