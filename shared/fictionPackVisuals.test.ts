@@ -11,6 +11,7 @@ import {
   BIO_CONTAINMENT_PACK_ID,
   FICTION_PACK_VISUALS,
   presentCampaignRunArt,
+  resolveCampaignRunHostSurface,
   resolveCurrentTargetId,
   resolveDetectorVisualState,
   resolveFictionPackVisuals,
@@ -338,5 +339,98 @@ describe("BIO CONTAINMENT visual mapping", () => {
       "offline"
     );
     expect(tapped.qualified).toBe(false);
+  });
+});
+
+describe("Campaign Run host surface — Clockhead acknowledgement and field re-entry", () => {
+  it("a) overlay opens after a beat is already reached -> comms appears", () => {
+    expect(
+      resolveCampaignRunHostSurface({
+        progressComplete: false,
+        latestMidBeatId: "bc_first_sector",
+        acknowledgedBeatId: null,
+        fieldEntered: true,
+        qualifiedCount: 6,
+      })
+    ).toBe("antagonist_comms");
+  });
+
+  it("b) dismiss -> field appears", () => {
+    expect(
+      resolveCampaignRunHostSurface({
+        progressComplete: false,
+        latestMidBeatId: "bc_first_sector",
+        acknowledgedBeatId: "bc_first_sector",
+        fieldEntered: true,
+        qualifiedCount: 6,
+      })
+    ).toBe("field");
+  });
+
+  it("c) refetch of the same beat stays dismissed", () => {
+    const afterRefetch = resolveCampaignRunHostSurface({
+      progressComplete: false,
+      latestMidBeatId: "bc_first_sector",
+      acknowledgedBeatId: "bc_first_sector",
+      fieldEntered: true,
+      qualifiedCount: 6,
+    });
+    expect(afterRefetch).toBe("field");
+  });
+
+  it("d) a newer beat shows comms again", () => {
+    expect(
+      resolveCampaignRunHostSurface({
+        progressComplete: false,
+        latestMidBeatId: "bc_half",
+        acknowledgedBeatId: "bc_first_sector",
+        fieldEntered: true,
+        qualifiedCount: 12,
+      })
+    ).toBe("antagonist_comms");
+  });
+
+  it("e) completion outranks comms", () => {
+    expect(
+      resolveCampaignRunHostSurface({
+        progressComplete: true,
+        latestMidBeatId: "bc_three_quarter",
+        acknowledgedBeatId: null,
+        fieldEntered: true,
+        qualifiedCount: 24,
+      })
+    ).toBe("complete");
+  });
+
+  it("preserves field presentation at 0 qualified after ENTER FIELD, without inventing progress", () => {
+    expect(
+      resolveCampaignRunHostSurface({
+        progressComplete: false,
+        latestMidBeatId: null,
+        acknowledgedBeatId: null,
+        fieldEntered: false,
+        qualifiedCount: 0,
+      })
+    ).toBe("briefing");
+    expect(
+      resolveCampaignRunHostSurface({
+        progressComplete: false,
+        latestMidBeatId: null,
+        acknowledgedBeatId: null,
+        fieldEntered: true,
+        qualifiedCount: 0,
+      })
+    ).toBe("field");
+  });
+
+  it("mounting is not acknowledgement — null acknowledged id still shows comms", () => {
+    const firstMount = resolveCampaignRunHostSurface({
+      progressComplete: false,
+      latestMidBeatId: "bc_first_sector",
+      acknowledgedBeatId: null,
+      fieldEntered: false,
+      qualifiedCount: 0,
+    });
+    expect(firstMount).toBe("antagonist_comms");
   });
 });

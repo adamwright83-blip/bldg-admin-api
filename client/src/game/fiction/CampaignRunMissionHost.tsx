@@ -2,14 +2,23 @@
  * Loads the authoritative Campaign Run projection and renders BIO CONTAINMENT
  * art from that projection. Visual transitions follow query updates — never
  * a local counter, timer, or tap-to-complete shortcut.
+ *
+ * Field-entry and Clockhead-beat dismissal are presentation metadata in
+ * localStorage (same pattern as fiction assignments). They do not create
+ * campaign-run progress. Mounting is not acknowledgement.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import {
   presentCampaignRunArt,
+  resolveCampaignRunHostSurface,
   resolveFictionPackVisuals,
-  type CampaignRunVisualSurface,
 } from "../../../../shared/fictionPackVisuals";
+import {
+  acknowledgeCampaignRunBeat,
+  loadCampaignRunPresentation,
+  markCampaignRunFieldEntered,
+} from "./campaignRunPresentationStorage";
 import CampaignRunMission from "./CampaignRunMission";
 import "./CampaignRunMission.css";
 
@@ -21,11 +30,18 @@ export default function CampaignRunMissionHost(props: {
     { campaignRunId: props.campaignRunId },
     { refetchOnWindowFocus: true }
   );
-  const [fieldEntered, setFieldEntered] = useState(false);
-  const [acknowledgedBeatId, setAcknowledgedBeatId] = useState<string | null>(
-    null
+  const [fieldEntered, setFieldEntered] = useState(
+    () => loadCampaignRunPresentation(props.campaignRunId).fieldEntered
   );
-  const seenBeatsRef = useRef<string | null>(null);
+  const [acknowledgedBeatId, setAcknowledgedBeatId] = useState<string | null>(
+    () => loadCampaignRunPresentation(props.campaignRunId).acknowledgedBeatId
+  );
+
+  useEffect(() => {
+    const stored = loadCampaignRunPresentation(props.campaignRunId);
+    setFieldEntered(stored.fieldEntered);
+    setAcknowledgedBeatId(stored.acknowledgedBeatId);
+  }, [props.campaignRunId]);
 
   const run = projection.data?.run ?? null;
   const progress = projection.data?.progress ?? null;
@@ -36,19 +52,6 @@ export default function CampaignRunMissionHost(props: {
     [progress?.complete, fiction?.reachedBeats]
   );
   const latestMidBeat = midMissionBeats[midMissionBeats.length - 1] ?? null;
-
-  useEffect(() => {
-    if (!latestMidBeat) return;
-    if (seenBeatsRef.current == null) {
-      seenBeatsRef.current = latestMidBeat.id;
-      setAcknowledgedBeatId(latestMidBeat.id);
-      return;
-    }
-    if (seenBeatsRef.current !== latestMidBeat.id) {
-      seenBeatsRef.current = latestMidBeat.id;
-      setAcknowledgedBeatId(null);
-    }
-  }, [latestMidBeat]);
 
   if (projection.isLoading || projection.data === undefined) {
     const visuals = resolveFictionPackVisuals("bio_containment");
@@ -66,18 +69,13 @@ export default function CampaignRunMissionHost(props: {
   if (!run || !progress) return null;
   if (run.fictionPackId !== "bio_containment") return null;
 
-  const antagonistCommsActive =
-    !progress.complete &&
-    latestMidBeat != null &&
-    acknowledgedBeatId !== latestMidBeat.id;
-
-  const surface: CampaignRunVisualSurface = progress.complete
-    ? "complete"
-    : antagonistCommsActive
-      ? "antagonist_comms"
-      : fieldEntered || progress.qualified > 0
-        ? "field"
-        : "briefing";
+  const surface = resolveCampaignRunHostSurface({
+    progressComplete: progress.complete,
+    latestMidBeatId: latestMidBeat?.id ?? null,
+    acknowledgedBeatId,
+    fieldEntered,
+    qualifiedCount: progress.qualified,
+  });
 
   const art = presentCampaignRunArt({
     fictionPackId: run.fictionPackId,
@@ -85,7 +83,7 @@ export default function CampaignRunMissionHost(props: {
     progressComplete: progress.complete,
     slots: progress.slots,
     midMissionBeatIds: midMissionBeats.map(beat => beat.id),
-    antagonistCommsActive,
+    antagonistCommsActive: surface === "antagonist_comms",
     fieldEntered: fieldEntered || progress.qualified > 0,
     surface,
   });
@@ -105,9 +103,14 @@ export default function CampaignRunMissionHost(props: {
         total: progress.total,
       }}
       onClose={props.onClose}
-      onEnterField={() => setFieldEntered(true)}
+      onEnterField={() => {
+        setFieldEntered(true);
+        markCampaignRunFieldEntered(props.campaignRunId);
+      }}
       onDismissComms={() => {
-        if (latestMidBeat) setAcknowledgedBeatId(latestMidBeat.id);
+        if (!latestMidBeat) return;
+        setAcknowledgedBeatId(latestMidBeat.id);
+        acknowledgeCampaignRunBeat(props.campaignRunId, latestMidBeat.id);
       }}
     />
   );

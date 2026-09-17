@@ -24,6 +24,15 @@ describe("CampaignRunMissionHost wiring", () => {
     expect(source).toContain("slots: progress.slots");
   });
 
+  it("does not treat first mount as Clockhead-beat acknowledgement", () => {
+    expect(source).toContain("loadCampaignRunPresentation");
+    expect(source).toContain("acknowledgeCampaignRunBeat");
+    expect(source).toContain("markCampaignRunFieldEntered");
+    expect(source).toContain("resolveCampaignRunHostSurface");
+    expect(source).not.toContain("seenBeatsRef");
+    expect(source).not.toContain("setAcknowledgedBeatId(latestMidBeat.id);\n      return;");
+  });
+
   it("renders scene and node images from presented art, so prop updates change assets without a reload", () => {
     expect(mission).toContain("src={art.sceneSrc}");
     expect(mission).toContain("src={node.src}");

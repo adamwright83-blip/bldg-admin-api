@@ -264,3 +264,26 @@ export function allFictionPackVisualUrls(): string[] {
     visuals.detectorStates.online,
   ]);
 }
+
+/**
+ * Host-surface resolver. Clockhead comms is active when a mid-mission beat
+ * exists that the operator has not dismissed. Mounting is not dismissal.
+ * Completion always outranks comms. `fieldEntered` is presentation-only.
+ */
+export function resolveCampaignRunHostSurface(input: {
+  progressComplete: boolean;
+  latestMidBeatId: string | null;
+  acknowledgedBeatId: string | null;
+  fieldEntered: boolean;
+  qualifiedCount: number;
+}): Exclude<CampaignRunVisualSurface, "selector"> {
+  if (input.progressComplete) return "complete";
+  if (
+    input.latestMidBeatId != null &&
+    input.acknowledgedBeatId !== input.latestMidBeatId
+  ) {
+    return "antagonist_comms";
+  }
+  if (input.fieldEntered || input.qualifiedCount > 0) return "field";
+  return "briefing";
+}
