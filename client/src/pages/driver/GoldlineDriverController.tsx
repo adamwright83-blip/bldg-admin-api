@@ -1500,6 +1500,21 @@ function LiveGoldlineDriverController({
     { correlationId: behavioralSubject ?? "" },
     { enabled: Boolean(behavioralSubject), staleTime: 15_000, retry: false }
   );
+  const experimentalPresentation =
+    trpc.system.goldlineWorld.experimentalPresentationAssignment.useQuery(
+      {
+        correlationId: behavioralSubject ?? "",
+        occasionId: currentCampaignChapter?.stableChapterId ?? "",
+        grammar: campaignChapterGrammar!,
+      },
+      {
+        enabled: Boolean(
+          behavioralSubject && currentCampaignChapter?.stableChapterId && campaignChapterGrammar
+        ),
+        staleTime: 15_000,
+        retry: false,
+      }
+    );
 
   const enterCampaignHost = (hosted: CampaignHostInvocation) => {
     const focus = hosted.objectiveIds[0];
@@ -1640,6 +1655,12 @@ function LiveGoldlineDriverController({
           behavioralTenantId={behavioralEvents.data?.tenantId ?? null}
           behavioralOperatorUserId={behavioralEvents.data?.operatorUserId ?? identity.data?.openId ?? null}
           behavioralLedgerEvents={behavioralEvents.data?.events ?? []}
+          experimentalPreferredTemplateId={
+            experimentalPresentation.data?.usedExperiment
+              ? experimentalPresentation.data.preferredTemplateId
+              : undefined
+          }
+          experimentalAssignmentActive={Boolean(experimentalPresentation.data?.usedExperiment)}
           campaignChapterGrammar={campaignChapterGrammar}
           requestedGameplayHost={requestedGameplayHost}
           focusedCampaignObjectiveId={activeAdventureObjectiveId}

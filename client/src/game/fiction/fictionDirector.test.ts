@@ -356,6 +356,18 @@ describe("production behavioral preferredTemplateId bind", () => {
     expect(heavy?.template.id).toBe(heavyPref.preferredTemplateId);
     expect(light?.template.id).not.toBe(heavy?.template.id);
   });
+
+  it("Slice 5: Director eligibility still vetoes an ineligible experimental preferred id", () => {
+    const grammar = visitGrammar();
+    const instance = selectFictionForMission(grammar, {
+      now: new Date(),
+      registry,
+      preferredTemplateId: "world-holds-breath-v1",
+    });
+    expect(instance?.template.id).not.toBe("world-holds-breath-v1");
+    expect(["beacon-walk-v1", "sealed-doors-v1"]).toContain(instance?.template.id);
+    expect(JSON.stringify(grammar)).toBe(JSON.stringify(visitGrammar()));
+  });
 });
 
 describe("eligibleFictionTemplates", () => {

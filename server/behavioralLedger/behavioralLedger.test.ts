@@ -41,6 +41,9 @@ function createFakeStore(): BehavioralLedgerStore & { rows: BehavioralLedgerEven
           r.correlationId === correlationId
       );
     },
+    async listByDecisionPoint(tenantId: string, decisionPointId: string) {
+      return rows.filter(r => r.tenantId === tenantId && r.decisionPointId === decisionPointId);
+    },
   };
 }
 

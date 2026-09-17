@@ -33,6 +33,10 @@ export type BehavioralLedgerStore = {
     operatorUserId: string,
     correlationId: string
   ): Promise<BehavioralLedgerEvent[]>;
+  listByDecisionPoint?(
+    tenantId: string,
+    decisionPointId: string
+  ): Promise<BehavioralLedgerEvent[]>;
 };
 
 async function findExistingByIdempotencyKey(
@@ -112,6 +116,20 @@ const drizzleBehavioralLedgerStore: BehavioralLedgerStore = {
           eq(behavioralLedgerEvents.tenantId, tenantId),
           eq(behavioralLedgerEvents.operatorUserId, operatorUserId),
           eq(behavioralLedgerEvents.correlationId, correlationId)
+        )
+      )
+      .orderBy(asc(behavioralLedgerEvents.occurredAt), asc(behavioralLedgerEvents.id));
+  },
+  async listByDecisionPoint(tenantId, decisionPointId) {
+    const db = await getDb();
+    if (!db) return [];
+    return db
+      .select()
+      .from(behavioralLedgerEvents)
+      .where(
+        and(
+          eq(behavioralLedgerEvents.tenantId, tenantId),
+          eq(behavioralLedgerEvents.decisionPointId, decisionPointId)
         )
       )
       .orderBy(asc(behavioralLedgerEvents.occurredAt), asc(behavioralLedgerEvents.id));
@@ -197,4 +215,15 @@ export async function listBehavioralLedgerEventsForOperatorCorrelation(
   }
   const correlated = await store.listByCorrelation(tenantId, correlationId);
   return correlated.filter(row => row.operatorUserId === operatorUserId);
+}
+
+export async function listBehavioralLedgerEventsForDecisionPoint(
+  tenantId: string,
+  decisionPointId: string,
+  store: BehavioralLedgerStore = drizzleBehavioralLedgerStore
+): Promise<BehavioralLedgerEvent[]> {
+  if (store.listByDecisionPoint) {
+    return store.listByDecisionPoint(tenantId, decisionPointId);
+  }
+  return [];
 }
