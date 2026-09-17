@@ -15,14 +15,28 @@ import {
 import { ACTIVE_CUSTOMER_DEFINITION } from "../claire/activeCustomerMetric";
 import { getActivePlaygroundRules } from "./playgroundRulesService";
 import { getMonthToDateSpend } from "./spendClearance";
+import type { AdminCustomerAggregateDbRow } from "../adminCustomerAggregate";
+import { loadDormantEligibleCustomers } from "./snapshotDormantCustomers";
+import { loadRepeatPipeline } from "./snapshotRepeatPipeline";
+import {
+  deriveFunnelFromCustomerAggregates,
+  FUNNEL_LIMITING_INSUFFICIENT_DATA,
+  FUNNEL_LIMITING_SOURCE_UNAVAILABLE,
+} from "./snapshotFunnel";
+import {
+  loadStrategyCustomerAggregates,
+  type CustomerAggregateLoad,
+} from "./snapshotCustomerAggregateLoad";
 import type {
-  FunnelStageItem,
   OpportunityGap,
   ProvenanceRecord,
   StalenessRecord,
   StrategySnapshot,
   StrategySnapshotPayload,
 } from "./snapshotTypes";
+
+export const ACCOUNTS_STATE_UNMAPPED_ISSUE =
+  "accounts[].state (Captured|Contested|Closed|Recovery|Wait) has no mapping from commercial_accounts or pipeline stage anywhere in the repo; the accounts list is empty rather than guessed.";
 
 export const SNAPSHOT_SCHEMA_VERSION = 1;
 export const DEFAULT_TOKEN_BUDGET = 6000;
@@ -72,6 +86,9 @@ export type SnapshotBuildOptions = {
     cleanCloudLastSyncIso?: string;
     gumballpalsLastSyncIso?: string;
   };
+  /** Injected in tests. Production uses loadStrategyCustomerAggregates. */
+  customerAggregateLoad?: CustomerAggregateLoad;
+  customerAggregates?: AdminCustomerAggregateDbRow[];
 };
 
 /**
@@ -143,114 +160,52 @@ export async function buildStrategySnapshot(
   }
   const unitsNeededPerWeek = Math.ceil(unitsRemaining / weeksRemaining);
 
-  const funnelStages: FunnelStageItem[] = [
-    {
-      name: "Property Discovery",
-      count: 14,
-      observedConversionRate: 0.28,
-      isScenario: false,
-      sampleSize: 14,
-    },
-    {
-      name: "Property Approval",
-      count: 4,
-      observedConversionRate: 0.50,
-      isScenario: false,
-      sampleSize: 4,
-    },
-    {
-      name: "Resident First Order",
-      count: 12,
-      scenarioConversionRate: 0.15,
-      isScenario: true,
-    },
-    {
-      name: "Resident Repeat Order",
-      count: 5,
-      observedConversionRate: 0.42,
-      isScenario: false,
-      sampleSize: 12,
-    },
-  ];
+  const customerLoad: CustomerAggregateLoad =
+    options.customerAggregateLoad ??
+    (options.customerAggregates
+      ? { status: "available", rows: options.customerAggregates }
+      : await loadStrategyCustomerAggregates(tenantId));
+  const aggregatesObserved = customerLoad.status === "available";
+  const customerAggregates = aggregatesObserved ? customerLoad.rows : [];
 
-  // Detected Limiting Stage (stage with highest fallout)
-  const limitingStage = "Resident First Order";
+  const funnelDerived = aggregatesObserved
+    ? deriveFunnelFromCustomerAggregates(customerAggregates)
+    : { stages: [], limitingStage: FUNNEL_LIMITING_SOURCE_UNAVAILABLE };
+  const funnelStages = funnelDerived.stages;
+  const limitingStage = funnelDerived.limitingStage;
 
-  // 5. Repeat Pipeline (first order to second order)
-  const repeatPipeline = {
-    recentFirstOrderCustomers: [
-      {
-        id: "cust_rec_1",
-        displayName: "Marcus K.",
-        firstOrderAt: new Date(now.getTime() - 8 * 86400000).toISOString(),
-        fulfillmentStatus: "delivered",
-        feedbackStatus: "positive",
-        hasSecondOrder: false,
-        cohortAgeDays: 8,
-        isDueToReorder: true,
-        reorderBasis: "observed_cadence_7_days",
-      },
-      {
-        id: "cust_rec_2",
-        displayName: "Elena R.",
-        firstOrderAt: new Date(now.getTime() - 3 * 86400000).toISOString(),
-        fulfillmentStatus: "delivered",
-        feedbackStatus: "positive",
-        hasSecondOrder: false,
-        cohortAgeDays: 3,
-        isDueToReorder: false,
-        reorderBasis: "cohort_under_reorder_window",
-      },
-    ],
+  const emptyRepeat: StrategySnapshotPayload["repeatPipeline"] = {
+    recentFirstOrderCustomers: [],
     summary: {
-      totalRecent: 2,
-      secondOrdersPlaced: 0,
-      openFeedbackIssues: 0,
+      totalRecent: null,
+      secondOrdersPlaced: null,
+      openFeedbackIssues: null,
     },
   };
+  const repeatPipeline: StrategySnapshotPayload["repeatPipeline"] = aggregatesObserved
+    ? await loadRepeatPipeline({
+        tenantId,
+        now,
+        aggregates: customerAggregates,
+      })
+    : emptyRepeat;
 
-  // 6. Customers Dormant
-  const dormantEligible = [
-    {
-      id: "dorm_1",
-      firstName: "David",
-      buildingName: "Wilshire Vista",
-      lastOrderAt: new Date(now.getTime() - 42 * 86400000).toISOString(),
-      daysSinceLastOrder: 42,
-    },
-    {
-      id: "dorm_2",
-      firstName: "Sarah",
-      buildingName: "Sunset Towers",
-      lastOrderAt: new Date(now.getTime() - 55 * 86400000).toISOString(),
-      daysSinceLastOrder: 55,
-    },
-  ];
+  const dormantDerived = aggregatesObserved
+    ? await loadDormantEligibleCustomers({
+        tenantId,
+        now,
+        aggregates: customerAggregates,
+      })
+    : {
+        customers: [],
+        consideredPaidCustomerCount: 0,
+        totalEligibleCount: 0,
+      };
+  const dormantEligible = dormantDerived.customers;
 
-  // 7. Accounts & Geography
-  const accounts = [
-    {
-      id: "bldg_wilshire_grand",
-      name: "Wilshire Grand Residences",
-      address: "900 Wilshire Blvd",
-      state: "Contested" as const,
-      territoryId: "downtown",
-    },
-    {
-      id: "bldg_century_plaza",
-      name: "The Century Plaza",
-      address: "2055 Ave of the Stars",
-      state: "Captured" as const,
-      territoryId: "century-city",
-    },
-    {
-      id: "bldg_broadway_lofts",
-      name: "Broadway Palace Lofts",
-      address: "1029 S Broadway",
-      state: "Wait" as const,
-      territoryId: "downtown",
-    },
-  ];
+  // Accounts: real commercial_accounts exist, but snapshot `state` vocabulary
+  // is unique to strategy types and has no live mapping. Empty, not guessed.
+  const accounts: StrategySnapshotPayload["accounts"] = [];
 
   // 8. Opportunities & Detected Gaps
   const opportunities = [
@@ -282,12 +237,17 @@ export async function buildStrategySnapshot(
       opportunityId: "opp_102",
       description: "Broadway Lofts Resident Access Followup has no next action scheduled.",
     },
-    {
-      type: "first_order_no_second",
-      opportunityId: "cust_rec_1",
-      description: "Marcus K. reached observed reorder window (8 days) with no second order placed.",
-    },
   ];
+  const firstOrderNoSecond = repeatPipeline.recentFirstOrderCustomers.find(
+    c => !c.hasSecondOrder
+  );
+  if (firstOrderNoSecond) {
+    detectedGaps.push({
+      type: "first_order_no_second",
+      opportunityId: firstOrderNoSecond.id,
+      description: `Customer ${firstOrderNoSecond.id} has a first paid order and no second paid order in observed history.`,
+    });
+  }
 
   // 9. Activation (laundry template)
   const activation = [
@@ -400,6 +360,35 @@ export async function buildStrategySnapshot(
     });
   }
 
+  unresolved.push({
+    source: "strategySnapshot.accounts",
+    issue: ACCOUNTS_STATE_UNMAPPED_ISSUE,
+    severity: "warning",
+  });
+  unresolved.push({
+    source: "strategySnapshot.repeatPipeline.feedback",
+    issue: "No customer-feedback store is queried; fulfillmentStatus/feedbackStatus are unavailable and openFeedbackIssues is null (unobserved, not zero).",
+    severity: "warning",
+  });
+  unresolved.push({
+    source: "strategySnapshot.funnelStages.property",
+    issue: "Property Discovery and Property Approval are omitted; those snapshot labels have no live mapping from commercial pipeline stages.",
+    severity: "warning",
+  });
+  if (!aggregatesObserved) {
+    unresolved.push({
+      source: "strategySnapshot.customerAggregates",
+      issue: `Customer aggregate source unavailable (${customerLoad.status === "unavailable" ? customerLoad.reason : "unknown"}). dormantEligible/repeatPipeline/funnel are unobserved, not zero.`,
+      severity: "warning",
+    });
+  } else if (funnelStages.length === 0) {
+    unresolved.push({
+      source: "strategySnapshot.funnelStages",
+      issue: "No paid-order customers in tenant aggregates; funnel stages are empty rather than filled with fixture counts.",
+      severity: "warning",
+    });
+  }
+
   // Incomplete purchase history check
   if (growthMetrics.newPayingCustomers.uncertainCount > 0) {
     unresolved.push({
@@ -461,6 +450,55 @@ export async function buildStrategySnapshot(
       queryOrDefinition: "weeklyCapacityPounds - reservedPounds",
       computedAt,
     },
+    "customers.dormantEligible": {
+      source: aggregatesObserved ? "loadStrategyCustomerAggregates" : "unavailable",
+      queryOrDefinition: aggregatesObserved
+        ? "Paid customers whose last order is >= 30 days before snapshot now; snapshot id is sha256 of tenant+admin group key (phone not copied)"
+        : customerLoad.status === "unavailable"
+          ? customerLoad.reason
+          : "unavailable",
+      window: "inactivity_days_30",
+      computedAt,
+      sampleSize: aggregatesObserved ? dormantEligible.length : undefined,
+      isEstimated: false,
+      notes: aggregatesObserved
+        ? `observedEmpty=${dormantDerived.totalEligibleCount === 0}; consideredPaidCustomerCount=${dormantDerived.consideredPaidCustomerCount}`
+        : "source unavailable — dormantCount is null, not 0",
+    },
+    "repeatPipeline": {
+      source: aggregatesObserved ? "loadStrategyCustomerAggregates" : "unavailable",
+      queryOrDefinition: aggregatesObserved
+        ? "Paid customers whose first paid order is within the last 30 days; second order = paidOrderCount >= 2"
+        : customerLoad.status === "unavailable"
+          ? customerLoad.reason
+          : "unavailable",
+      window: "last_30_days",
+      computedAt,
+      sampleSize: aggregatesObserved ? (repeatPipeline.summary.totalRecent ?? 0) : undefined,
+      notes: "fulfillment/feedback unavailable; openFeedbackIssues is null when unobserved",
+    },
+    "growthPlan.stages": {
+      source: aggregatesObserved ? "loadStrategyCustomerAggregates" : "unavailable",
+      queryOrDefinition: aggregatesObserved
+        ? "Resident First Order = paidOrderCount>=1; Resident Repeat Order = paidOrderCount>=2. Property Discovery/Approval omitted (no live mapping)."
+        : "Funnel omitted because customer aggregate source is unavailable",
+      computedAt,
+      sampleSize: funnelStages.reduce((sum, s) => sum + s.count, 0),
+    },
+    "growthPlan.limitingStage": {
+      source: aggregatesObserved ? "deriveFunnelFromCustomerAggregates" : "unavailable",
+      queryOrDefinition: aggregatesObserved
+        ? "Worst observed first→repeat conversion, or insufficient_data"
+        : FUNNEL_LIMITING_SOURCE_UNAVAILABLE,
+      computedAt,
+    },
+    "accounts": {
+      source: "omitted",
+      queryOrDefinition: ACCOUNTS_STATE_UNMAPPED_ISSUE,
+      computedAt,
+      sampleSize: 0,
+      isEstimated: false,
+    },
   };
 
   // Initial Payload
@@ -480,10 +518,11 @@ export async function buildStrategySnapshot(
       unitsNeededPerWeek,
       limitingStage,
       stages: funnelStages,
-      nextActions: [
-        "Follow up with Broadway Lofts management to establish access terms",
-        "Deploy welcome cards for Century Plaza resident portal",
-      ],
+      nextActions:
+        limitingStage === FUNNEL_LIMITING_INSUFFICIENT_DATA ||
+        limitingStage === FUNNEL_LIMITING_SOURCE_UNAVAILABLE
+          ? []
+          : [`Investigate conversion at ${limitingStage}`],
     },
     growthMetrics,
     repeatPipeline,
@@ -502,7 +541,8 @@ export async function buildStrategySnapshot(
         activeCount: t.count,
       })),
       dormantEligible,
-      dormantCount: dormantEligible.length,
+      dormantCount: aggregatesObserved ? dormantDerived.totalEligibleCount : null,
+      aggregateSource: aggregatesObserved ? "observed" : "unavailable",
     },
     accounts,
     opportunities,
@@ -538,9 +578,13 @@ export async function buildStrategySnapshot(
       payload.accounts = payload.accounts.slice(0, 2);
       truncationDetails.push("accounts truncated to top 2");
     }
-    if (payload.customers.dormantEligible.length > 1) {
-      payload.customers.dormantEligible = payload.customers.dormantEligible.slice(0, 1);
-      truncationDetails.push("dormant eligible truncated to top 1");
+    if (payload.customers.dormantEligible.length > 5) {
+      payload.customers.dormantEligible = payload.customers.dormantEligible.slice(0, 5);
+      truncationDetails.push("dormant eligible truncated to top 5 by daysSinceLastOrder");
+    }
+    if (payload.opportunities.length > 1) {
+      payload.opportunities = payload.opportunities.slice(0, 1);
+      truncationDetails.push("opportunities truncated to 1");
     }
     if (payload.recentOutcomes.length > 1) {
       payload.recentOutcomes = payload.recentOutcomes.slice(0, 1);

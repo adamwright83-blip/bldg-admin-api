@@ -77,9 +77,9 @@ export type StrategySnapshotPayload = {
       reorderBasis?: string;
     }>;
     summary: {
-      totalRecent: number;
-      secondOrdersPlaced: number;
-      openFeedbackIssues: number;
+      totalRecent: number | null;
+      secondOrdersPlaced: number | null;
+      openFeedbackIssues: number | null;
     };
   };
   playgroundRules: {
@@ -99,7 +99,8 @@ export type StrategySnapshotPayload = {
       lastOrderAt: string;
       daysSinceLastOrder: number;
     }>;
-    dormantCount: number;
+    dormantCount: number | null;
+    aggregateSource: "observed" | "unavailable";
   };
   accounts: Array<{
     id: string;
