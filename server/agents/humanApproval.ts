@@ -1,5 +1,9 @@
 import type { AgentContext } from "./permissions";
 
+/**
+ * Slice 6: relationship familiarity is not an authorization input.
+ * "Claire knows me" cannot become permission to send, charge, cancel, or confirm.
+ */
 export const approvalRequiredToolNames = new Set([
   "sendCustomerReminderTool",
   "requestVendorConfirmationTool",
