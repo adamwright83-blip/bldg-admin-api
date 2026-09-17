@@ -477,6 +477,40 @@ await runRequired(
   "CREATE TABLE tower_wars_promises"
 );
 
+// catalog_items is read (never altered) throughout this script — the same
+// old-bootstrap-assumption pattern as ops_tasks/ops_task_events above: every
+// use here assumes the table already exists from drizzle/0006 (+0007's
+// serviceType column, +0008's nullable costCents) having been applied once,
+// historically, outside this script. No-op against production, where the
+// table already exists in this exact shape; required for a clean database,
+// where the very first read below (`SELECT DISTINCT tenantId FROM
+// catalog_items ...`) would otherwise throw ER_NO_SUCH_TABLE.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS catalog_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL DEFAULT 'default',
+    slug VARCHAR(128) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    serviceType VARCHAR(32) NOT NULL DEFAULT 'dry_clean',
+    standardPriceCents INT NOT NULL,
+    expressPriceCents INT NULL,
+    costCents INT NULL,
+    isActive TINYINT(1) NOT NULL DEFAULT 1,
+    isOnline TINYINT(1) NOT NULL DEFAULT 0,
+    archived TINYINT(1) NOT NULL DEFAULT 0,
+    sortOrder INT NOT NULL DEFAULT 0,
+    iconUrl VARCHAR(512) NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_catalog_items_tenant_slug (tenantId, slug)
+  )`,
+  "CREATE TABLE catalog_items"
+);
+await assertRequiredColumns("catalog_items", [
+  "tenantId", "slug", "name", "category", "serviceType", "standardPriceCents",
+]);
+
 /* ===== Dry-cleaning partners (multi-cleaner order lines) =====
  * COAST 1hr CLEANERS is the base partner: its price list is `catalog_items`
  * itself, so no existing Coast pricing is copied, moved, or duplicated here.

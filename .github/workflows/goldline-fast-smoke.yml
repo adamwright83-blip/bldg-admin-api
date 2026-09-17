@@ -47,6 +47,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Type-check
+        run: pnpm check
       - name: Prove production migration path (scripts/migrate.mjs) against disposable MySQL
         run: |
           node scripts/migrate.mjs
