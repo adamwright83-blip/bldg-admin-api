@@ -17,6 +17,7 @@ import { listFictionPacks } from "../fictionPacks/fictionPackRegistry";
 import {
   freezeTargetSet,
   getRunProjection,
+  listOperatorRuns,
   listRunSlots,
   listTargets,
   recordPlacement,
@@ -46,6 +47,15 @@ export const campaignRunRouter = router({
         role: pack.role,
         premise: pack.premise,
       }))
+    ),
+
+  listMine: dayforgeTenantMemberProcedure
+    .input(z.object({}).optional())
+    .query(({ ctx }) =>
+      listOperatorRuns({
+        tenantId: ctx.tenantId ?? "default",
+        operatorUserId: ctx.user.openId,
+      })
     ),
 
   listRunSlots: dayforgeTenantMemberProcedure

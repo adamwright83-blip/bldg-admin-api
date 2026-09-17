@@ -187,6 +187,7 @@ import {
   resolveApproachRoute,
 } from "../../../shared/claireApproach";
 import { selectFictionForMission } from "./fiction/fictionDirector";
+import { resolveFictionPackVisuals } from "../../../shared/fictionPackVisuals";
 import { FICTION_TEMPLATE_REGISTRY } from "./fiction/templateRegistry";
 import { preferredTemplateIdForDirector } from "../../../shared/behavioralFictionSelection";
 import type { BehavioralLedgerLikeEvent } from "../../../shared/behavioralEvidence";
@@ -210,6 +211,9 @@ const GoldlineActionSurface = lazy(
 );
 const GoldlineFictionMissionPanel = lazy(
   () => import("./fiction/FictionMissionPanel")
+);
+const GoldlineCampaignRunMission = lazy(
+  () => import("./fiction/CampaignRunMissionHost")
 );
 
 /**
@@ -332,6 +336,14 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
   onStartVisitRoute?: (missionIds: number[]) => Promise<void>;
   /** Opens the authoritative route/day plan from anywhere in the game shell. */
   onOpenTodayRoute?: () => void;
+  /**
+   * Active Campaign Run for the operator, when one exists. Used only to
+   * open the mobile BIO CONTAINMENT overlay; unknown packs are ignored
+   * inside the overlay host.
+   */
+  campaignRunId?: string | null;
+  campaignRunMissionOpen?: boolean;
+  onCampaignRunMissionOpenChange?: (open: boolean) => void;
 };
 
 type UtilityPanel =
@@ -1197,6 +1209,13 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     props.onPersistFictionAssignment,
   ]);
   const [fictionMissionOpen, setFictionMissionOpen] = useState(false);
+  const [internalCampaignRunOpen, setInternalCampaignRunOpen] = useState(false);
+  const campaignRunOpen =
+    props.campaignRunMissionOpen ?? internalCampaignRunOpen;
+  const setCampaignRunOpen =
+    props.onCampaignRunMissionOpenChange ?? setInternalCampaignRunOpen;
+  const bioContainmentIcon =
+    resolveFictionPackVisuals("bio_containment")?.missionIcon ?? null;
   const seenFictionKeysRef = useRef(new Set<string>());
   useEffect(() => {
     if (!fictionMission) return;
@@ -3727,6 +3746,21 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           </Suspense>
         ) : null}
 
+        {campaignRunOpen && props.campaignRunId ? (
+          <Suspense
+            fallback={
+              <div className="game-loading">
+                <Loader2 /> LOADING MISSION…
+              </div>
+            }
+          >
+            <GoldlineCampaignRunMission
+              campaignRunId={props.campaignRunId}
+              onClose={() => setCampaignRunOpen(false)}
+            />
+          </Suspense>
+        ) : null}
+
         {coldCallOpen && props.coldCallBatch ? (
           <ColdCallBurst
             batch={props.coldCallBatch}
@@ -3900,6 +3934,25 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                     >
                       STRONGHOLD
                     </button>
+                    {props.campaignRunId ? (
+                      <button
+                        data-testid="enter-bio-containment-mission"
+                        onClick={() => {
+                          setUtilityPanel(null);
+                          setCampaignRunOpen(true);
+                        }}
+                      >
+                        {bioContainmentIcon ? (
+                          <img
+                            src={bioContainmentIcon}
+                            alt=""
+                            width={28}
+                            height={28}
+                          />
+                        ) : null}
+                        BIO CONTAINMENT
+                      </button>
+                    ) : null}
                     {fictionMission ? (
                       <button
                         data-testid="enter-fiction-mission"

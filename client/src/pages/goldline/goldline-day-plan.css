@@ -116,6 +116,41 @@
   cursor: pointer;
   width: 100%;
 }
+.gdp-campaign-run-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0 0 9px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #d7c28a;
+  background: #fffaf0;
+  color: #3b2d1b;
+  text-align: left;
+  cursor: pointer;
+}
+.gdp-campaign-run-card img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  flex: 0 0 44px;
+}
+.gdp-campaign-run-card span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.gdp-campaign-run-card small {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #795a26;
+}
+.gdp-campaign-run-card b {
+  font-size: 13px;
+  letter-spacing: 0.03em;
+}
 .gdp-menu-button {
   position: absolute;
   right: 16px;

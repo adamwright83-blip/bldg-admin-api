@@ -1,0 +1,148 @@
+/* BIO CONTAINMENT mobile mission overlay.
+   Light-mode HUD over approved portrait scenes. The artwork is the
+   environment; this file must not add a dark-mode treatment or a dimming
+   wash over the plates. */
+
+.bc-mission {
+  position: fixed;
+  inset: 0;
+  z-index: 540;
+  display: flex;
+  flex-direction: column;
+  color: #3b2d1b;
+  color-scheme: light;
+  background: #fffaf0;
+  overflow: hidden;
+  font-family: Inter, sans-serif;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+.bc-mission-scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 18%;
+  pointer-events: none;
+}
+
+.bc-mission-hud,
+.bc-mission-panel,
+.bc-mission-field {
+  position: relative;
+  z-index: 1;
+}
+
+.bc-mission-hud {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  grid-template-areas: "kicker progress close" "role progress close";
+  gap: 2px 10px;
+  margin: 10px 12px 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #fffaf0e8;
+  border: 1px solid #d7c28a;
+  box-shadow: 0 8px 24px rgba(80, 55, 13, 0.12);
+}
+
+.bc-mission-hud small {
+  grid-area: kicker;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #795a26;
+}
+
+.bc-mission-hud b {
+  grid-area: role;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+}
+
+.bc-mission-hud span {
+  grid-area: progress;
+  align-self: center;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #5b4524;
+}
+
+.bc-mission-close {
+  grid-area: close;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid #c9a45a;
+  background: #fff8e0;
+  color: #3b2d1b;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.bc-mission-panel,
+.bc-mission-field {
+  margin-top: auto;
+  margin-left: 12px;
+  margin-right: 12px;
+  margin-bottom: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  background: #fffaf0f0;
+  border: 1px solid #d7c28a;
+  box-shadow: 0 12px 32px rgba(80, 55, 13, 0.14);
+}
+
+.bc-mission-panel p,
+.bc-mission-echo {
+  margin: 0 0 12px;
+  font-size: 15px;
+  line-height: 1.45;
+  color: #3b2d1b;
+}
+
+.bc-mission-panel button {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-radius: 12px;
+  background: #e8b84a;
+  color: #3b2d1b;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.bc-mission-nodes {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 4px 0 0;
+  overflow-x: auto;
+  list-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.bc-mission-nodes li {
+  flex: 0 0 72px;
+  width: 72px;
+  height: 72px;
+}
+
+.bc-mission-nodes img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
+.bc-mission-nodes li[data-node-state="active"] {
+  flex-basis: 92px;
+  width: 92px;
+  height: 92px;
+}

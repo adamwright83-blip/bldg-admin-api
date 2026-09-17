@@ -76,6 +76,12 @@ export type GoldlineDayPlanProps = {
   missionPlan?: MissionPlanOutcome | null;
   /** Slice 5 §5.4: shown when Kingdom 2 has unlocked (Kingdom 1 complete). */
   onEnterChapter?: () => void;
+  /** Compact Campaign Run identity on the Day Line, when a run exists. */
+  campaignRunCard?: {
+    title: string;
+    iconSrc: string;
+    onOpen: () => void;
+  } | null;
 };
 
 const KIND_LABEL = {
@@ -350,6 +356,20 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
             data-testid="enter-chapter-button"
           >
             A new Kingdom has opened — enter The Last Valet
+          </button>
+        ) : null}
+        {props.campaignRunCard ? (
+          <button
+            type="button"
+            className="gdp-campaign-run-card"
+            onClick={props.campaignRunCard.onOpen}
+            data-testid="bio-containment-day-line-card"
+          >
+            <img src={props.campaignRunCard.iconSrc} alt="" />
+            <span>
+              <small>CAMPAIGN RUN</small>
+              <b>{props.campaignRunCard.title}</b>
+            </span>
           </button>
         ) : null}
         <button
