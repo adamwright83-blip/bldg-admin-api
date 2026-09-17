@@ -46,6 +46,7 @@ import { echoFollowUpRouter } from "../goldlineWorld/echoFollowUpRouter";
 import { cleancloudBrowserSyncRouter } from "../cleancloudBrowserSync/router";
 import { campaignLibraryRouter } from "../campaignLibrary/campaignLibraryRouter";
 import { campaignRunRouter } from "../campaignRuns/campaignRunRouter";
+import { spiritHumanRescueRouter } from "../spiritHumanRescue/rescueRouter";
 import { kingdomRouter } from "../goldlineKingdoms/kingdomRouter";
 import { companionRouter } from "../companions/companionRouter";
 import { missionDirectorRouter } from "../missionDirector/missionDirectorRouter";
@@ -101,6 +102,7 @@ export const systemRouter = router({
   goldlineEchoFollowUp: echoFollowUpRouter,
   campaignLibrary: campaignLibraryRouter,
   campaignRuns: campaignRunRouter,
+  spiritHumanRescue: spiritHumanRescueRouter,
   goldlineKingdoms: kingdomRouter,
   goldlineCompanions: companionRouter,
   missionDirector: missionDirectorRouter,

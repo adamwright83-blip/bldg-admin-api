@@ -11,38 +11,73 @@ if (!accountSid || !authToken || !fromPhone) {
 
 const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
 
+export type SmsSendReceipt = {
+  accepted: boolean;
+  providerMessageId: string | null;
+  providerStatus: string | null;
+  evidenceName: "provider_accepted" | "provider_rejected" | "provider_unconfigured";
+};
+
+export function normalizeSmsPhone(to: string): string {
+  const digits = to.replace(/\D/g, "");
+  return digits.startsWith("1") ? `+${digits}` : `+1${digits}`;
+}
+
 /**
- * Send SMS notification to customer
- * @param to Customer phone number (any format, will be normalized)
- * @param message SMS body text
- * @returns true if sent successfully, false otherwise
+ * Authoritative outbound SMS. Proves Twilio accepted the create request
+ * (Message SID returned). Does not prove delivery or read.
  */
-export async function sendSMS(to: string, message: string): Promise<boolean> {
+export async function sendSMSWithReceipt(
+  to: string,
+  message: string
+): Promise<SmsSendReceipt> {
   if (!client || !fromPhone) {
     console.warn("[SMS] Twilio not configured, skipping SMS");
-    return false;
+    return {
+      accepted: false,
+      providerMessageId: null,
+      providerStatus: null,
+      evidenceName: "provider_unconfigured",
+    };
   }
 
   try {
-    // Normalize phone: remove all non-digits, then add +1 if not present
-    const digits = to.replace(/\D/g, "");
-    const normalizedPhone = digits.startsWith("1") ? `+${digits}` : `+1${digits}`;
-
-    await client.messages.create({
+    const created = await client.messages.create({
       body: message,
       from: fromPhone,
-      to: normalizedPhone,
+      to: normalizeSmsPhone(to),
     });
-
+    const sid = typeof created.sid === "string" && created.sid.length > 0 ? created.sid : null;
     console.info("[SMS] Twilio accepted a message");
-    return true;
+    return {
+      accepted: Boolean(sid),
+      providerMessageId: sid,
+      providerStatus: typeof created.status === "string" ? created.status : null,
+      evidenceName: sid ? "provider_accepted" : "provider_rejected",
+    };
   } catch (err) {
     console.error(
       "[SMS] Twilio rejected a message",
       err instanceof Error ? { errorName: err.name } : { errorName: "unknown" },
     );
-    return false;
+    return {
+      accepted: false,
+      providerMessageId: null,
+      providerStatus: null,
+      evidenceName: "provider_rejected",
+    };
   }
+}
+
+/**
+ * Send SMS notification to customer
+ * @param to Customer phone number (any format, will be normalized)
+ * @param message SMS body text
+ * @returns true if Twilio accepted the create request, false otherwise
+ */
+export async function sendSMS(to: string, message: string): Promise<boolean> {
+  const receipt = await sendSMSWithReceipt(to, message);
+  return receipt.accepted;
 }
 
 /**

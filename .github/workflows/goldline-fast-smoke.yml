@@ -86,6 +86,10 @@ jobs:
           shared/behavioralFictionSelection.test.ts
           server/behavioralSelection/selectPreferredFiction.test.ts
           client/src/game/fiction/fictionDirector.test.ts
+          shared/spiritHumanRescue.test.ts
+          shared/spiritHumanPressure.test.ts
+          server/spiritHumanRescue/rescueMissionService.test.ts
+          client/src/game/fiction/SpiritHumanRescueMission.test.ts
           shared/behavioralExperimentPolicy.test.ts
           server/behavioralExperiment/assignPresentation.test.ts
       - name: Prove ops task completion concurrency against real MySQL

@@ -215,6 +215,9 @@ const GoldlineFictionMissionPanel = lazy(
 const GoldlineCampaignRunMission = lazy(
   () => import("./fiction/CampaignRunMissionHost")
 );
+const GoldlineSpiritHumanRescue = lazy(
+  () => import("./fiction/SpiritHumanRescueMission")
+);
 
 /**
  * Lets the existing CI-only harness render an authoring pack for screenshot
@@ -344,6 +347,9 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
   campaignRunId?: string | null;
   campaignRunMissionOpen?: boolean;
   onCampaignRunMissionOpenChange?: (open: boolean) => void;
+  spiritHumanRescueMissionId?: string | null;
+  spiritHumanRescueOpen?: boolean;
+  onSpiritHumanRescueOpenChange?: (open: boolean) => void;
 };
 
 type UtilityPanel =
@@ -1214,6 +1220,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     props.campaignRunMissionOpen ?? internalCampaignRunOpen;
   const setCampaignRunOpen =
     props.onCampaignRunMissionOpenChange ?? setInternalCampaignRunOpen;
+  const [internalSpiritHumanOpen, setInternalSpiritHumanOpen] = useState(false);
+  const spiritHumanOpen =
+    props.spiritHumanRescueOpen ?? internalSpiritHumanOpen;
+  const setSpiritHumanOpen =
+    props.onSpiritHumanRescueOpenChange ?? setInternalSpiritHumanOpen;
   const bioContainmentIcon =
     resolveFictionPackVisuals("bio_containment")?.missionIcon ?? null;
   const seenFictionKeysRef = useRef(new Set<string>());
@@ -3761,6 +3772,22 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           </Suspense>
         ) : null}
 
+        {spiritHumanOpen ? (
+          <Suspense
+            fallback={
+              <div className="game-loading">
+                <Loader2 /> LOADING MISSION…
+              </div>
+            }
+          >
+            <GoldlineSpiritHumanRescue
+              missionId={props.spiritHumanRescueMissionId ?? null}
+              isDriving={drivingLikely}
+              onClose={() => setSpiritHumanOpen(false)}
+            />
+          </Suspense>
+        ) : null}
+
         {coldCallOpen && props.coldCallBatch ? (
           <ColdCallBurst
             batch={props.coldCallBatch}
@@ -3953,6 +3980,15 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                         BIO CONTAINMENT
                       </button>
                     ) : null}
+                    <button
+                      data-testid="enter-spirit-human-rescue"
+                      onClick={() => {
+                        setUtilityPanel(null);
+                        setSpiritHumanOpen(true);
+                      }}
+                    >
+                      SPIRIT HUMAN RESCUE
+                    </button>
                     {fictionMission ? (
                       <button
                         data-testid="enter-fiction-mission"
