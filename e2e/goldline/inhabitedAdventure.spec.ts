@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const DRIVER_PASSWORD = process.env.DRIVER_PASSWORD ?? "pixel-driver-pass";
 
-// Four complete traversal/mount cycles plus lazy archetype chunks can exceed
+// Complete traversal/mount cycles plus lazy archetype chunks can exceed
 // Playwright's 30s default on a cold single-worker release server.
 test.describe.configure({ timeout: 90_000 });
 
@@ -71,6 +71,17 @@ async function reachHumanScene(page: Page) {
   await interactButton.click();
 }
 
+async function proveHumanStaging(
+  page: Page,
+  fixture: "CALL" | "VISIT" | "FOLLOW_UP" | "STALLER",
+  selector: string
+) {
+  await login(page, fixture);
+  await reachHumanScene(page);
+  await expect(page.locator(selector)).toBeVisible();
+  await expect(page.locator("canvas.goldline-game-canvas")).toHaveCount(1);
+}
+
 test.describe("inhabited world truth boundary", () => {
   test("six ambient figures coexist with exactly one authoritative mission embodiment", async ({
     page,
@@ -84,7 +95,9 @@ test.describe("inhabited world truth boundary", () => {
     );
     await expect(world).toHaveAttribute("data-mission-embodiment-id", "7801");
     await expect(world).toHaveAttribute("data-corridor-id", "corridor_01");
-    await expect(world).toHaveAttribute("data-next-corridor-id", "corridor_02");
+    // This fixture has a mission embodiment but no authoritative approach
+    // route. Optional walking must not manufacture a destination corridor.
+    await expect(world).toHaveAttribute("data-next-corridor-id", "NONE");
   });
 
   test("CI preview seam can still boot C02 directly for deterministic review", async ({
@@ -114,23 +127,20 @@ test.describe("inhabited world truth boundary", () => {
     await expect(page.locator("canvas.goldline-game-canvas")).toHaveCount(1);
   });
 
-  test("Anchor, Gatekeeper, Ghost, and Staller use human behavioral staging", async ({
-    page,
-  }) => {
-    test.setTimeout(180_000);
-    const fixtures = [
-      ["CALL", ".anchor-encounter"],
-      ["VISIT", ".gatekeeper-encounter"],
-      ["FOLLOW_UP", ".ghost-encounter"],
-      ["STALLER", ".staller-encounter"],
-    ] as const;
+  test("Anchor uses human behavioral staging", async ({ page }) => {
+    await proveHumanStaging(page, "CALL", ".anchor-encounter");
+  });
 
-    for (const [fixture, selector] of fixtures) {
-      await login(page, fixture);
-      await reachHumanScene(page);
-      await expect(page.locator(selector)).toBeVisible();
-      await expect(page.locator("canvas.goldline-game-canvas")).toHaveCount(1);
-    }
+  test("Gatekeeper uses human behavioral staging", async ({ page }) => {
+    await proveHumanStaging(page, "VISIT", ".gatekeeper-encounter");
+  });
+
+  test("Ghost uses human behavioral staging", async ({ page }) => {
+    await proveHumanStaging(page, "FOLLOW_UP", ".ghost-encounter");
+  });
+
+  test("Staller uses human behavioral staging", async ({ page }) => {
+    await proveHumanStaging(page, "STALLER", ".staller-encounter");
   });
 
   test("reduced motion preserves the mission signal and physical action", async ({
