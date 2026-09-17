@@ -121,7 +121,7 @@ jobs:
           name: goldline-mobile-dist-${{ github.sha }}
           path: dist
           retention-days: 1
-          compression-level: 0
+          compression-level: 6
           if-no-files-found: error
 
   mobile-unit:
@@ -312,10 +312,22 @@ jobs:
         run: ${{ matrix.command }}
 
   mobile-real-touch-field:
-    name: mobile-real-touch-field
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     needs: mobile-build-and-schema
-    timeout-minutes: 12
+    timeout-minutes: 7
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: mobile-real-touch-objectives
+            command: >-
+              node scripts/verifyGoldlineObjectiveHierarchyGate.mjs &&
+              node scripts/verifyGoldlineExternalOrder.mjs
+          - name: mobile-real-touch-local-target
+            command: node scripts/verifyGoldlineLocalTargetRunGate.mjs
+          - name: mobile-real-touch-field-intel
+            command: node scripts/verifyGoldlineFieldIntel.mjs
     services:
       mysql:
         image: mysql:8.0
@@ -371,18 +383,11 @@ jobs:
           echo "server never became ready"
           cat /tmp/goldline-gate-server.log
           exit 1
-      - name: Prove permanent real-touch field gates
+      - name: Prove permanent real-touch field gate
+        timeout-minutes: 4
         env:
           GOLDLINE_VERIFY_URL: http://127.0.0.1:4176
-        run: |
-          set -e
-          # Keep the same permanent gates as the former serial workflow.
-          # FirstPlayGate, TrueTouch, and OpenChannelExpedition remain excluded
-          # until their documented CI timing races are repaired.
-          node scripts/verifyGoldlineObjectiveHierarchyGate.mjs
-          node scripts/verifyGoldlineLocalTargetRunGate.mjs
-          node scripts/verifyGoldlineFieldIntel.mjs
-          node scripts/verifyGoldlineExternalOrder.mjs
+        run: ${{ matrix.command }}
       - name: Stop production server
         if: always()
         run: |
