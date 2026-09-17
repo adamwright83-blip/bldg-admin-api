@@ -72,9 +72,20 @@ found by way of the resident repo. Check here before concluding something is mis
   is gated — i.e. "draft freely, never send without approval" is already implemented.
 - `costTracking.ts`, `agentEvents.ts`, `s2sEndpoint.ts`, and **47 tools** in `tools/`.
 
-**Known gap:** allowlisting controls *actions*, not *assertions*. Nothing yet stops a
-drafting tool from producing text that claims a customer already replied. That output-claim
-check is genuinely unbuilt.
+**Known gap — corrected 2026-09-17:** allowlisting controls *actions*, not *assertions*. An
+earlier version of this file said that output-claim check was "genuinely unbuilt." **That was
+wrong.** It is built and unwired: `server/claire/assertionGuard.ts` (235 lines) defines
+epistemic status (`verified | pending | unknown`), write receipts, a `VerifiedFactInventory`
+fed into generation, and a post-generation state-verb lint. It is imported by **tests only**.
+Claire's two main generation paths (`businessConversation.ts`, `turn/claireTurn.ts`)
+reference none of it, and `verdictLint.ts` / `disappointmentLint.ts` are used only inside
+`server/strategy/`. Do not rebuild it — wire it.
+
+Related: `operator_avoidance` is a defined `ClaireRelationshipEventType` scored in
+`tierEngine.ts`, but it is the only one of the twelve absent from both
+`WARMTH_EMISSION_ALLOWLIST` and `CLAIRE_ATTESTABLE_EVENT_TYPES` in
+`relationshipEmitters.ts` — so it can never be written. That looks like an oversight, but
+enabling it changes how Claire treats an operator on a bad day. Adam's call, not an agent's.
 
 ---
 
@@ -83,11 +94,22 @@ check is genuinely unbuilt.
 Read `docs/GOLDLINE-TASKS.md` first, then `docs/goldline/BUILD_BRIEF_SLICES_1_5.md`.
 
 Docs whose headers say "This document constrains future Goldline work" are binding —
-`docs/goldline/REALITY_BRIDGE.md` and
+`docs/goldline/REALITY_BRIDGE.md`,
+`docs/goldline/BEHAVIORAL_SCIENCE_FOUNDATION.md` and
 `docs/goldline/campaigns/GREYSTAR_COLOSSEUM_SNAPSHOT.md` in particular. The seven
 companions (Mara, Sable, Rook, Bront, Ilex, Luma, Orren) and their protected may/may-not
 lists are transcribed into `server/companions/seedCompanions.ts`; change the doc first,
 then resync the code.
+
+### Behavioral-science claims — read before any intervention/ledger work
+
+`docs/goldline/BEHAVIORAL_SCIENCE_FOUNDATION.md` is binding for anything touching resistance
+signals, intervention selection, the behavioral ledger, or outcome learning. Its §2 ("WHAT WE
+DO NOT CLAIM") exists specifically to stop a later session quietly upgrading a hypothesis into
+a fact. Do not soften, summarize away, or delete a line from §2 because a result looks
+encouraging. Do not write COM-B/TDF/BCT annotations onto raw ledger events — they belong in a
+versioned registry with an `annotationStatus`. Say "JITAI design principles," never "is a
+JITAI"; say "initiation system," never "gamification."
 
 ### Verification reality
 
