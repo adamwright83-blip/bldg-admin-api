@@ -86,6 +86,8 @@ jobs:
           shared/behavioralFictionSelection.test.ts
           server/behavioralSelection/selectPreferredFiction.test.ts
           client/src/game/fiction/fictionDirector.test.ts
+          shared/behavioralExperimentPolicy.test.ts
+          server/behavioralExperiment/assignPresentation.test.ts
       - name: Prove ops task completion concurrency against real MySQL
         # Targets goldline_migrate_check, not the job's shared goldline_proof:
         # this step runs before `pnpm db:dayforge:release` (below), which is
@@ -100,6 +102,7 @@ jobs:
           pnpm vitest run --config vitest.integration.config.ts
           server/opsTasks.mysql.integration.test.ts
           server/strategy/snapshotLiveDerived.integration.test.ts
+          server/behavioralExperiment/assignPresentation.mysql.integration.test.ts
       - name: Prove StrategyEngine live snapshot sections (no fabricated fixtures)
         run: >-
           pnpm vitest run

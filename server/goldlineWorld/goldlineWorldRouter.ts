@@ -37,6 +37,10 @@ import { resetProofWorldFromApi } from "./goldlineProofWorld";
 import { buildFrontierIntelligence } from "./frontierIntelligenceService";
 import { getLanternCityOverview } from "./lanternCityOverviewService";
 import { listBehavioralLedgerEventsForOperatorCorrelation } from "../behavioralLedger/behavioralLedger";
+import { ACTION_GRAMMAR_KINDS } from "../../shared/actionGrammar";
+import { FICTION_ELIGIBILITY_CATALOG } from "../../shared/fictionEligibilityCatalog";
+import { resolveProductionExperimentPolicy } from "../../shared/behavioralExperimentPolicy";
+import { assignExperimentalPresentation } from "../behavioralExperiment/assignPresentation";
 
 export const goldlineWorldRouter = router({
   lanternCityOverview: dayforgeTenantOperatorProcedure.query(({ ctx }) =>
@@ -278,6 +282,61 @@ export const goldlineWorldRouter = router({
           sourceEntityId: row.sourceEntityId,
           correlationId: row.correlationId,
         })),
+      };
+    }),
+  experimentalPresentationAssignment: dayforgeTenantMemberProcedure
+    .input(
+      z.object({
+        correlationId: z.string().min(1).max(128),
+        occasionId: z.string().min(1).max(96),
+        emergency: z.boolean().optional(),
+        grammar: z.object({
+          kind: z.enum(ACTION_GRAMMAR_KINDS),
+          businessActionId: z.string().nullable(),
+          occurrenceId: z.number().nullable(),
+          sourceType: z.enum(["mission", "field_move", "follow_up", "recovery", "scout"]),
+          count: z.number(),
+          locations: z.array(z.string()),
+          channel: z.enum(["phone", "in_person", "none"]),
+          requiresTravel: z.boolean(),
+          requiresDriving: z.boolean(),
+          timerSafe: z.boolean(),
+          sensitiveConversation: z.boolean(),
+        }),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const result = await assignExperimentalPresentation({
+        tenantId: ctx.tenantId,
+        operatorUserId: ctx.user.openId,
+        correlationId: input.correlationId,
+        occasionId: input.occasionId,
+        grammar: input.grammar,
+        registry: FICTION_ELIGIBILITY_CATALOG,
+        policy: resolveProductionExperimentPolicy(),
+        emergency: input.emergency,
+      });
+      if (!result.usedExperiment) {
+        return {
+          usedExperiment: false as const,
+          skipReason: result.skipReason,
+          preferredTemplateId: null,
+          assignedOption: null,
+          assignmentProbability: null,
+          assignmentMechanism: "deterministic_policy" as const,
+          decisionPointId: null,
+        };
+      }
+      return {
+        usedExperiment: true as const,
+        skipReason: null,
+        preferredTemplateId: result.assignment.preferredTemplateId,
+        assignedOption: result.assignment.assignedOption,
+        assignmentProbability: result.assignment.assignmentProbability,
+        assignmentMechanism: result.assignment.assignmentMechanism,
+        decisionPointId: result.assignment.decisionPointId,
+        eligibleOptions: result.assignment.eligibleOptions,
+        proximalOutcomeWindowMinutes: result.assignment.proximalOutcomeWindowMinutes,
       };
     }),
   resetProofWorld: dayforgeTenantAdminProcedure.mutation(() =>

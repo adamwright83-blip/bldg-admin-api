@@ -239,6 +239,8 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
   behavioralTenantId?: string | null;
   behavioralOperatorUserId?: string | null;
   behavioralLedgerEvents?: BehavioralLedgerLikeEvent[];
+  experimentalPreferredTemplateId?: string | null;
+  experimentalAssignmentActive?: boolean;
   /** Current chapter grammar when one exists — visit-route PLACE_ITEM is the fallback. */
   campaignChapterGrammar?: ActionGrammar | null;
   requestedGameplayHost?: ExistingGameplayHost | null;
@@ -1165,7 +1167,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const fictionMission = useMemo<FictionMissionInstance | null>(() => {
     const grammar = props.campaignChapterGrammar ?? routeGrammar;
     if (!grammar) return null;
-    const preferred = preferredTemplateIdForDirector({
+    const slice4 = preferredTemplateIdForDirector({
       tenantId: props.behavioralTenantId,
       operatorUserId: props.behavioralOperatorUserId,
       grammar,
@@ -1173,10 +1175,13 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
       events: props.behavioralLedgerEvents,
       campaignPreferredTemplateId: props.preferredFictionTemplateId ?? null,
     });
+    const preferredTemplateId = props.experimentalAssignmentActive
+      ? (props.experimentalPreferredTemplateId ?? null)
+      : slice4.preferredTemplateId;
     return selectFictionForMission(grammar, {
       now: new Date(),
       identity: props.playerIdentity ?? null,
-      preferredTemplateId: preferred.preferredTemplateId,
+      preferredTemplateId,
       persistAssignment: props.onPersistFictionAssignment,
     });
   }, [
@@ -1187,6 +1192,8 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     props.behavioralTenantId,
     props.behavioralOperatorUserId,
     props.behavioralLedgerEvents,
+    props.experimentalPreferredTemplateId,
+    props.experimentalAssignmentActive,
     props.onPersistFictionAssignment,
   ]);
   const [fictionMissionOpen, setFictionMissionOpen] = useState(false);
