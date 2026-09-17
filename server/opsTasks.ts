@@ -157,7 +157,7 @@ async function mirrorOpsTaskEventToBehavioralLedger(input: {
       sourceEntityType: "ops_task_event",
       sourceEntityId: String(input.sourceEvent.id),
       eventType: input.ledgerEventType,
-      occurredAt: new Date(input.sourceEvent.createdAt),
+      occurredAt: input.sourceEvent.createdAt,
       verificationClass: input.ledgerEventType === "COMPLETED" ? "CLAIMED" : null,
       provenance: "ops_task_event",
       evidenceSource: `ops_task_event:${input.sourceEvent.id}`,
