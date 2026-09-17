@@ -9,6 +9,7 @@ import { answerClaireBusinessTurn, looksLikeWorkRequest, type ClaireAnalyticsSta
 import { isCombineRequest, normalizeUtterance } from "../business/businessLanguage";
 import { getClaireCampaignSummary } from "../campaignAwareness";
 import type { ClaireDriveContext } from "../contextAssembler";
+import { buildClaireVerifiedFactInventory, sanitizeSpeakAgainstInventory } from "../verifiedFactInventoryFromContext";
 import { answerClairePreDriveFollowUp } from "../preDriveConversation";
 import { detectConfirmation, handleVoiceCommitmentTurn, type PendingProposalState, type VoiceCommitmentTurnResult } from "../voiceCommitmentLoop";
 import { commitBriefing, loadExistingWork, matchExistingWork, reconcileBriefing, speakBriefingCommit } from "../briefing/briefingCommit";
@@ -266,8 +267,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   }
   remember(state, "operator", utterance, nowMs);
   const finish = (result: ClaireTurnResult): ClaireTurnResult => {
-    remember(state, "claire", result.speak, nowMs);
-    return result;
+    const inventory = buildClaireVerifiedFactInventory(input.context);
+    const speak = sanitizeSpeakAgainstInventory(result.speak, inventory);
+    const guarded = speak === result.speak ? result : { ...result, speak };
+    remember(state, "claire", guarded.speak, nowMs);
+    return guarded;
   };
   const history = () => (state.history ?? []).map(entry => ({ speaker: entry.speaker, text: entry.text }));
   const lower = normalizeUtterance(utterance);

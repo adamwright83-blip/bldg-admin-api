@@ -72,14 +72,13 @@ found by way of the resident repo. Check here before concluding something is mis
   is gated — i.e. "draft freely, never send without approval" is already implemented.
 - `costTracking.ts`, `agentEvents.ts`, `s2sEndpoint.ts`, and **47 tools** in `tools/`.
 
-**Known gap — corrected 2026-09-17:** allowlisting controls *actions*, not *assertions*. An
-earlier version of this file said that output-claim check was "genuinely unbuilt." **That was
-wrong.** It is built and unwired: `server/claire/assertionGuard.ts` (235 lines) defines
-epistemic status (`verified | pending | unknown`), write receipts, a `VerifiedFactInventory`
-fed into generation, and a post-generation state-verb lint. It is imported by **tests only**.
-Claire's two main generation paths (`businessConversation.ts`, `turn/claireTurn.ts`)
-reference none of it, and `verdictLint.ts` / `disappointmentLint.ts` are used only inside
-`server/strategy/`. Do not rebuild it — wire it.
+**Known gap — corrected 2026-09-17, wired 2026-09-17:** allowlisting controls *actions*,
+not *assertions*. The output-claim check is `server/claire/assertionGuard.ts`. Do not rebuild
+it. Behavioral-science Slice 3 wires it into production Claire generation:
+`verifiedFactInventoryFromContext.ts` builds the inventory from live context; `reasoning.ts`,
+`preDriveConversation.ts`, `businessConversation.ts`, and `turn/claireTurn.ts` inject
+`toPromptSection` and run `lintPostGenerationStateVerbs` after generation. Unverified
+sent/queued/scheduled claims fall back. Do not enable `operator_avoidance` without Adam.
 
 Related: `operator_avoidance` is a defined `ClaireRelationshipEventType` scored in
 `tierEngine.ts`, but it is the only one of the twelve absent from both

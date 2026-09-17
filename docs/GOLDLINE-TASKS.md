@@ -100,6 +100,7 @@ Full spec: `docs/goldline/FICTION_PACKS.md` (binding). Campaign truth stays belo
 - [claude] Field Moves needs a deliberate new candidate kind for a standing residential grid — `FieldTodayItemKind` has no such kind today and `rankFieldMoves` has no ranking path for one. Not a free integration.
 
 ## In Progress
+- [cursor] Behavioral-science Slice 3 — assertion-guard production wiring (not BUILD_BRIEF companion Slice 3). Wire existing `assertionGuard.ts` into Claire LLM/speak paths. Handoff: `docs/goldline/SLICE_3_HANDOFF.md`. Do not enable `operator_avoidance`.
 - [cursor] Claire owns the workday (shared-brain operating loop + Driver surface retirement + play runtime reconciliation) — starts from current main after Claire V1. Program: `docs/goldline/CLAIRE_OWNS_WORKDAY_LEDGER.md`. No second Claire, no Sage, no second task DB, no new migration unless later slices force a stop.
 
 ## Blocked

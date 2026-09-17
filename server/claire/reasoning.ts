@@ -16,6 +16,10 @@ import { formatCapabilityBriefing } from "../../shared/goldlineCapabilities";
 import { detectWorkdaySession, speakEveningPlan } from "../../shared/claireWorkday";
 import { assembleTomorrowCandidates } from "./workdayPlanService";
 import { lintCeoLanguage, lintDisappointmentFraming } from "./disappointmentLint";
+import {
+  assertPostGenerationStateVerbs,
+  buildClaireVerifiedFactInventory,
+} from "./verifiedFactInventoryFromContext";
 
 /**
  * Assembles the compact character context for a given phase/operator.
@@ -110,6 +114,7 @@ function resultText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
 
 function compactContext(context: ClaireDriveContext): string {
   const runtime = context.runtime ?? assembleClaireRuntimeView(context);
+  const factInventory = buildClaireVerifiedFactInventory(context);
   return JSON.stringify({
     businessDate: context.businessDate,
     clock: context.clock,
@@ -140,6 +145,7 @@ function compactContext(context: ClaireDriveContext): string {
     strategyGoal: context.strategySnapshot?.payload.goal ?? null,
     strategyGrowthPlan: context.strategySnapshot?.payload.growthPlan ?? null,
     strategyPlayground: context.strategySnapshot?.payload.playgroundRules ?? null,
+    factInventory: factInventory.toPromptSection(),
   });
 }
 
@@ -298,6 +304,7 @@ export async function writeClairePreDriveBrief(
               "If the context includes missionSalesBrief, that is the one authoritative sales strategy for this mission — prioritize its primaryObjective and keyUnknown over generic pitching, and do not repeat anything listed in its thingsToAvoid.",
               "Never state a missionSalesBrief unknown, questionsToAsk item, or recommendation as if it were already a known fact. If the operator asks what an unknown answer is, say plainly that it is not known and that finding out is the point of this visit.",
               compiled.promptSection,
+              buildClaireVerifiedFactInventory(input.context).toPromptSection(),
             ].join(" "),
           },
           { role: "user", content: compactContext(input.context) },
@@ -307,6 +314,8 @@ export async function writeClairePreDriveBrief(
       .trim()
       .slice(0, 900);
     if (!text) throw new Error("Claire opening brief produced empty output");
+
+    assertPostGenerationStateVerbs(text, buildClaireVerifiedFactInventory(input.context));
 
     // Guardrail G2 post-generation lint
     const disappointmentCheck = lintDisappointmentFraming(text);
@@ -466,6 +475,9 @@ export async function writeClairePostStopOpening(
         ],
       })
     ).trim();
+    if (text) {
+      assertPostGenerationStateVerbs(text, buildClaireVerifiedFactInventory(null));
+    }
     const result = text || fallback;
     await recordGeneration({
       tenantId: input.tenantId,
@@ -576,6 +588,9 @@ export async function writeClaireOutcomeConfirmation(
         ],
       })
     ).trim();
+    if (text) {
+      assertPostGenerationStateVerbs(text, buildClaireVerifiedFactInventory(null));
+    }
     const result = text || fallback;
     await recordGeneration({
       tenantId: input.tenantId,

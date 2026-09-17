@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { invokeLLM } from "../_core/llm";
+import { sanitizeSpeakAgainstInventory, buildClaireVerifiedFactInventory } from "./verifiedFactInventoryFromContext";
 import { getDashboardTimeZone } from "../dashboardZoned";
 import type { LedgerFilters } from "../analytics/businessLineage";
 import type { CustomerDetail, OrderBrief } from "../analytics/businessMetrics";
@@ -1005,11 +1006,11 @@ export async function answerClaireBusinessTurn(
       touchedAt: nowMs,
       focus: session?.focus,
     };
-    return { handled: true, speak: parsed.speak, facts: [] };
+    return guardedTurn({ handled: true, speak: parsed.speak, facts: [] });
   }
   if (parsed.kind === "unsupported") {
     if (session) session.touchedAt = nowMs;
-    return { handled: true, speak: parsed.speak, facts: [] };
+    return guardedTurn({ handled: true, speak: parsed.speak, facts: [] });
   }
   if (parsed.kind === "needs_planner") {
     const planned = await (deps.plan ?? planBusinessQuestionWithLLM)({
@@ -1020,7 +1021,7 @@ export async function answerClaireBusinessTurn(
     });
     if (!planned) {
       return session && parsed.reason === "unnamed_spend"
-        ? { handled: true, speak: "I didn't catch which number you want. Revenue, orders, or customers?", facts: [] }
+        ? guardedTurn({ handled: true, speak: "I didn't catch which number you want. Revenue, orders, or customers?", facts: [] })
         : { handled: false };
     }
     parsed = { kind: "query", query: planned, refinement: Boolean(session), hint: planned.metric === "data_freshness" ? { kind: "freshness", aspect: "gumball_working" } : null };
@@ -1039,10 +1040,10 @@ export async function answerClaireBusinessTurn(
       try {
         result = await run({ ...baseQuery, limit: index + 1 });
       } catch {
-        return { handled: true, speak: unavailableSentence("latest_sales"), facts: [] };
+        return guardedTurn({ handled: true, speak: unavailableSentence("latest_sales"), facts: [] });
       }
       if (result.status !== "ok" || result.data.kind !== "orders") {
-        return { handled: true, speak: unavailableSentence("latest_sales"), facts: [] };
+        return guardedTurn({ handled: true, speak: unavailableSentence("latest_sales"), facts: [] });
       }
       const next = result.data.orders[index];
       if (!next) {
@@ -1059,7 +1060,7 @@ export async function answerClaireBusinessTurn(
       speakOrderAspect({ order, aspect: parsed.aspect, asked: lineageScope(lower, true), speech });
     }
     session!.touchedAt = nowMs;
-    return { handled: true, speak: speech.text(), facts: speech.facts };
+    return guardedTurn({ handled: true, speak: speech.text(), facts: speech.facts });
   }
 
   if (parsed.kind === "combine") {
@@ -1088,14 +1089,14 @@ export async function answerClaireBusinessTurn(
       try {
         result = await run({ ...defaultBusinessQuery("customer_history"), customerName: target.name, period: { kind: "all_time" } });
       } catch {
-        return { handled: true, speak: unavailableSentence("customer_history"), facts: [] };
+        return guardedTurn({ handled: true, speak: unavailableSentence("customer_history"), facts: [] });
       }
       if (result.status !== "ok" || result.data.kind !== "customer_history") {
-        return { handled: true, speak: unavailableSentence("customer_history"), facts: [] };
+        return guardedTurn({ handled: true, speak: unavailableSentence("customer_history"), facts: [] });
       }
       const details = result.data.details;
       if (!details.length) {
-        return { handled: true, speak: `I don't see a customer named ${target.name} in paid orders.`, facts: [] };
+        return guardedTurn({ handled: true, speak: `I don't see a customer named ${target.name} in paid orders.`, facts: [] });
       }
       if (details.length > 1) {
         speech.say(
@@ -1112,7 +1113,7 @@ export async function answerClaireBusinessTurn(
           },
           touchedAt: nowMs,
         };
-        return { handled: true, speak: speech.text(), facts: speech.facts };
+        return guardedTurn({ handled: true, speak: speech.text(), facts: speech.facts });
       }
       resolved.push(focusCustomerOf(details[0]!));
     }
@@ -1125,7 +1126,7 @@ export async function answerClaireBusinessTurn(
     const details = results.map(result =>
       result && result.status === "ok" && result.data.kind === "customer_history" ? result.data.details[0] ?? null : null
     );
-    if (!details[0] || !details[1]) return { handled: true, speak: unavailableSentence("customer_history"), facts: [] };
+    if (!details[0] || !details[1]) return guardedTurn({ handled: true, speak: unavailableSentence("customer_history"), facts: [] });
     const period = results[0]!.period;
     speakCustomerComparison(details[0], details[1], parsed.aspect, period.label, speech);
     input.state.analytics = {
@@ -1136,10 +1137,18 @@ export async function answerClaireBusinessTurn(
       touchedAt: nowMs,
       focus: { ...(session?.focus ?? {}), customers: resolved, customerAspect: parsed.aspect },
     };
-    return { handled: true, speak: speech.text(), facts: speech.facts };
+    return guardedTurn({ handled: true, speak: speech.text(), facts: speech.facts });
   }
 
   return finishQuery(parsed, false);
+
+  function guardedTurn(turn: ClaireBusinessTurn): ClaireBusinessTurn {
+    if (!turn.handled || !("speak" in turn) || !turn.speak) return turn;
+    return {
+      ...turn,
+      speak: sanitizeSpeakAgainstInventory(turn.speak, buildClaireVerifiedFactInventory(null)),
+    };
+  }
 
   async function finishQuery(
     turn: Extract<ParsedBusinessTurn, { kind: "query" }>,
@@ -1150,7 +1159,7 @@ export async function answerClaireBusinessTurn(
       result = await run(turn.query);
     } catch (error) {
       console.warn("[Claire] business query failed", error instanceof Error ? error.message : error);
-      return { handled: true, speak: "I couldn't get that number reliably just now, so I won't guess.", facts: [] };
+      return guardedTurn({ handled: true, speak: "I couldn't get that number reliably just now, so I won't guess.", facts: [] });
     }
 
     const spoken = speakBusinessResult(result, {
@@ -1223,7 +1232,7 @@ export async function answerClaireBusinessTurn(
       touchedAt: nowMs,
       focus,
     };
-    return { handled: true, speak: spoken.text, facts: spoken.facts, result };
+    return guardedTurn({ handled: true, speak: spoken.text, facts: spoken.facts, result });
   }
 }
 
