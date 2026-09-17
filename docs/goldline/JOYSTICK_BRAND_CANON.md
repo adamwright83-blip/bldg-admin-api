@@ -23,12 +23,10 @@ This distinction is binding:
 - company identity
 - marketing site
 - investor materials
-- App Store / Play Store identity
-- app icon
-- signup / account creation
-- first-run onboarding before a game genre is selected
-- the mobile launch / splash screen where the platform logo is conventionally shown
+- signup / account creation at the platform level
+- first-run platform onboarding before a game genre is selected, where such a shared onboarding surface exists
 - any future neutral surface whose purpose is specifically to choose, switch, purchase, or manage game experiences before entering one
+- App Store / Play Store identity, app icon, and launch splash **only when the installed app is the shared Joystick multi-game platform app**
 
 ### Joystick does **not** own the persistent product chrome after game selection
 
@@ -37,22 +35,53 @@ Once the user chooses a preferred playable experience / game genre — for examp
 From that point forward:
 
 - **Desktop:** do not show the Joystick logo in normal product use. After signup / game selection, the chosen game's logo and visual identity own the desktop experience.
-- **Mobile:** do not show the Joystick logo inside normal product screens. The sole standing exception is the operating-system/app launch splash screen. Once the app enters the selected game, that game's logo and identity take over.
+- **Mobile inside a shared Joystick app:** do not show the Joystick logo inside normal product screens. The standing exception is the operating-system/app launch splash screen for the shared Joystick app. Once the app enters the selected game, that game's logo and identity take over.
+- **Mobile in a standalone game app:** the game itself owns the app icon, store listing, launch/splash treatment, and in-app identity. Do not force a Joystick splash screen in front of it merely to expose the parent company.
 - Do not place a small Joystick mark in headers, sidebars, footers, settings screens, mission screens, maps, or dashboards merely for corporate-brand consistency.
 - Do not co-brand normal gameplay as `Joystick + Goldline` or `Joystick presents Goldline` unless Adam explicitly requests such a campaign treatment.
 - Do not watermark game surfaces with Joystick.
 
-**The desired feeling is closer to a game platform/publisher relationship than a SaaS suite.** The player signs up for Joystick, chooses what they want to play, and then experiences the chosen game as its own world.
+**The desired feeling is closer to a game platform/publisher relationship than a SaaS suite.** The player may sign up through Joystick, but once they enter a game they experience that game as its own world.
 
 A user playing Goldline should feel like they are **inside Goldline**, not inside a Joystick SaaS dashboard containing a Goldline module.
 
 Likewise, a future basketball-draft experience should look and feel like that game, not like Goldline reskinned and not like a generic Joystick shell.
 
+## Distribution architecture — intentionally unresolved
+
+Do **not** lock the product into one mobile distribution model yet. Both of these architectures are valid:
+
+### Model A — one Joystick app containing multiple games
+
+- App Store / Play Store listing: Joystick
+- installed app icon: Joystick
+- OS launch splash: Joystick
+- first-run onboarding / game selection: Joystick
+- after game selection: chosen game's branding owns the actual mobile experience
+- desktop still uses the chosen game's identity, not persistent Joystick chrome
+
+### Model B — separate installable mobile app for each game
+
+Examples: a Goldline app, a basketball-draft app, and other future games.
+
+In that model:
+
+- App Store / Play Store listing uses the **game's name and logo**
+- installed app icon uses the **game's logo**
+- launch/splash screen uses the **game's identity**
+- Joystick may appear as publisher/developer/company attribution where appropriate, but it does not need to appear as the visible app brand
+- each standalone game may still share the same Joystick account system, backend, behavioral engine, billing layer, Claire infrastructure, or other platform services under the hood
+- a separate Joystick launcher app is optional, not required
+
+**Branding must not force the architecture.** Choose one-app-vs-many later based on product and distribution reality: app-store positioning, audience separation, permissions, notification semantics, deep linking, update cadence, cross-game switching demand, installation friction, and technical economics.
+
+If games eventually need separate apps, that is fully compatible with this canon and may actually strengthen the game-first experience.
+
 ### Persistence of game choice
 
-The user's selected game identity should persist across sessions until they deliberately switch experiences.
+Where a shared Joystick app exists, the user's selected game identity should persist across sessions until they deliberately switch experiences.
 
-On launch:
+On launch of the shared Joystick app:
 
 1. OS/app splash may show the Joystick app logo.
 2. Resolve the user's selected/default game.
@@ -60,6 +89,8 @@ On launch:
 4. Do not insert a redundant Joystick interstitial between splash and game.
 
 If no game has been selected yet, Joystick-branded onboarding may present the available game choices.
+
+A standalone game app does not need this Joystick bootstrap flow; it may enter its own game identity directly.
 
 ## Approved logo direction
 
@@ -112,8 +143,8 @@ The production identity kit must preserve the same locked mark and include:
 2. monochrome black
 3. monochrome white
 4. standalone symbol
-5. app icon
-6. mobile launch/splash treatment
+5. Joystick app icon for the shared-platform distribution model
+6. Joystick mobile launch/splash treatment for the shared-platform distribution model
 7. favicon at 16×16 and 32×32
 8. transparent PNG exports
 9. clean SVG master files
@@ -121,6 +152,8 @@ The production identity kit must preserve the same locked mark and include:
 11. horizontal wordmark + symbol lockup
 
 The monochrome versions must remain recognizable at small size.
+
+Each standalone game, if distributed separately, needs its own equivalent app icon / splash / store asset package rather than inheriting the Joystick icon.
 
 ## Explicitly rejected directions
 
@@ -149,11 +182,11 @@ Appropriate Joystick-logo surfaces include:
 - investor deck cover
 - marketing website
 - signup / login / first-run platform onboarding
-- game-selection surface before entering a game
-- App Store / Play Store listing
-- mobile app icon
-- mobile launch/splash screen
-- favicon
+- game-selection surface before entering a game, if a shared platform surface exists
+- App Store / Play Store listing **for a shared Joystick app only**
+- mobile app icon **for a shared Joystick app only**
+- mobile launch/splash screen **for a shared Joystick app only**
+- favicon / corporate web properties
 - invoice or contract header
 - corporate merchandise / equipment case / event material
 
@@ -185,11 +218,12 @@ At minimum each game needs:
 - game name / wordmark
 - game logo or identifying symbol
 - game-specific app-internal visual identity
-- loading/transition treatment if needed after the Joystick splash
+- loading/transition treatment if needed
 - desktop identity treatment
 - mobile identity treatment
+- its own app icon / splash / store graphics if distributed as a standalone mobile app
 
-The game does not need a separate installable app. Joystick remains the installed app/platform; the selected game supplies the in-app identity.
+A game **may** live inside a shared Joystick app or **may** ship as its own installable app. This decision remains open and should be made per game or platform strategy rather than assumed globally.
 
 ## Copy hierarchy
 
@@ -205,19 +239,21 @@ Inside a chosen game, use that game's own narrative vocabulary instead of repeat
 
 ## Product architecture implication
 
-Future implementation work should treat Joystick branding and game branding as separate layers:
+Future implementation work should treat Joystick branding and game branding as separate layers even if the codebase shares infrastructure:
 
 ```text
-JOYSTICK PLATFORM
-  signup / onboarding / game selection / app shell bootstrap
-              ↓ user chooses game
-SELECTED GAME IDENTITY
+JOYSTICK COMPANY / PLATFORM
+  account / shared services / discovery / optional launcher
+              ↓
+GAME IDENTITY
   Goldline | Basketball Draft | future game
               ↓
   mobile + desktop gameplay owned visually by that game
 ```
 
 Do not solve this by building one permanently visible Joystick navigation shell around every game. The platform layer should largely disappear once the game boots.
+
+The code architecture should also avoid assuming that all games must share one installable mobile shell. Shared business logic and infrastructure should remain reusable even if distribution later splits into multiple native/web app entry points.
 
 ## Asset-production task still required
 
@@ -230,6 +266,6 @@ When creating that package:
 - do not add/remove facial/character details unless they are present in the approved master asset Adam selects for export
 - do not alter the charcoal/amber/white relationship
 - compare the finished SVG directly against the approved board before sign-off
-- produce an app-icon and splash-screen-safe version because these are the primary recurring in-product places where the Joystick mark is intentionally visible
+- produce Joystick app-icon and splash-screen assets for the shared-platform option, without assuming those assets must be used by standalone game apps
 
 Until the final vector asset is checked in, this document is the canonical written specification for the locked direction.
