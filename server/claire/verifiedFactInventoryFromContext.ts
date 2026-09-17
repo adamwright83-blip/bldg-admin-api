@@ -39,7 +39,7 @@ export function buildClaireVerifiedFactInventory(
   if (context.nextFixedCommitment) {
     addScheduled(context.nextFixedCommitment, "field_today.nextFixedCommitment");
   }
-  for (const item of context.relevantTimeline) {
+  for (const item of context.relevantTimeline ?? []) {
     addScheduled(item, "field_today.relevantTimeline");
   }
   for (const item of context.workPicture?.today.items ?? []) {

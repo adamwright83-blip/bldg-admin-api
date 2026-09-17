@@ -55,6 +55,12 @@ describe("Slice 3: assertion-guard production wiring", () => {
     expect(buildClaireVerifiedFactInventory(null).hasVerifiedClaim("scheduled")).toBe(false);
   });
 
+  it("fail-closes on partial drive context without inventing scheduled claims", () => {
+    const inventory = buildClaireVerifiedFactInventory({ businessDate: "2026-09-15" } as never);
+    expect(inventory.hasVerifiedClaim("scheduled")).toBe(false);
+    expect(inventory.hasVerifiedClaim("sent")).toBe(false);
+  });
+
   it("writeClairePreDriveBrief injects G4 inventory and falls back on unverified 'sent'", async () => {
     const invokeText = vi.fn().mockResolvedValue(UNVERIFIED_SENT);
     const recordGeneration = silentRecord();
