@@ -29,7 +29,9 @@ test.describe("real-day ignition on the live driver controller", () => {
       data: { password: DRIVER_PASSWORD, role: "driver" },
     });
     expect(response.ok()).toBeTruthy();
-    await page.goto("/driver?goldlineSceneFixture=game");
+    await page.goto(
+      "/driver?goldlineSceneFixture=game&lanternOperation=ci-real-day"
+    );
     await expect(page.getByTestId("goldline-shell")).toBeVisible({
       timeout: 30_000,
     });
