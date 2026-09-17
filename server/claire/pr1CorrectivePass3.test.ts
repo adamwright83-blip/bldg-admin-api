@@ -209,6 +209,52 @@ describe("Corrective pass 3 -- item 2: voice guidance must be authoritative", ()
   });
 });
 
+describe("Corrective pass 4 -- real-exam instrumentation", () => {
+  it("follow-up diagnostics expose provider stop_reason and whether sentence-boundary trimming occurred", async () => {
+    let diagnostic: any;
+    const invokeText = vi.fn().mockImplementation(async (request: any) => {
+      request.onStopReason?.("end_turn");
+      return "Five o'clock.";
+    });
+
+    await answerClairePreDriveFollowUp(
+      {
+        tenantId: "tenant-1",
+        utterance: "What time's the stop?",
+        brief: "Visit The Wilshire.",
+        context: baseContext,
+        onGeneration: value => { diagnostic = value; },
+      },
+      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+    );
+
+    expect(diagnostic?.stopReason).toBe("end_turn");
+    expect(diagnostic?.trimmedToSentenceBoundary).toBe(false);
+    expect(diagnostic?.answerOrigin).toBe("model");
+  });
+
+  it("opening diagnostics expose provider stop_reason and trim state too", async () => {
+    let diagnostic: any;
+    const invokeText = vi.fn().mockImplementation(async (request: any) => {
+      request.onStopReason?.("end_turn");
+      return "The Wilshire is at five.";
+    });
+
+    await writeClairePreDriveBrief(
+      {
+        tenantId: "tenant-1",
+        context: baseContext,
+        onGeneration: value => { diagnostic = value; },
+      },
+      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+    );
+
+    expect(diagnostic?.stopReason).toBe("end_turn");
+    expect(diagnostic?.trimmedToSentenceBoundary).toBe(false);
+    expect(diagnostic?.answerOrigin).toBe("model");
+  });
+});
+
 describe("Corrective pass 3 -- item 3: business grounding for what we actually sell", () => {
   it("the offer context states the real model and refuses to invent commercial terms", () => {
     expect(GOLDLINE_OFFER_CONTEXT).toContain("per-resident wash-and-fold laundry service");
