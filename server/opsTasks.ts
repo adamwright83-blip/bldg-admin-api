@@ -10,6 +10,7 @@ import {
 } from "../drizzle/schema";
 import { getDb } from "./db";
 import { getDashboardTimeZone, zonedWeekRangeUtcContaining } from "./dashboardZoned";
+import { recordBehavioralLedgerEvent } from "./behavioralLedger/behavioralLedger";
 
 export const OPS_TASK_LANES = ["lane_1", "lane_2", "lane_3", "level_4"] as const;
 export const OPS_TASK_LEVELS = ["1", "2", "3", "4"] as const;
@@ -38,6 +39,7 @@ export const OPS_TASK_EVENT_TYPES = [
   "created",
   "viewed",
   "accepted",
+  "started",
   "completed",
   "dismissed",
   "expired",
@@ -219,6 +221,22 @@ export async function createOpsTask(input: CreateOpsTaskInput, store: OpsTaskSto
     afterJson: task,
     note: null,
   });
+
+  if (input.assignedTo) {
+    await recordBehavioralLedgerEvent({
+      tenantId,
+      operatorUserId: input.assignedTo,
+      correlationId: `ops_task:${task.id}`,
+      sourceSystem: "ops_task",
+      sourceEntityType: "ops_task",
+      sourceEntityId: String(task.id),
+      eventType: "DELIVERED",
+      occurredAt: new Date(),
+      verificationClass: null,
+      provenance: "ops_task_created",
+      idempotencyKey: `ops_task:${task.id}:DELIVERED`,
+    });
+  }
   return task;
 }
 
@@ -253,7 +271,16 @@ export async function updateOpsTaskStatus(
   const patch: Partial<InsertOpsTask> = { status: input.status };
   const after = await store.updateTask(tenantId, input.taskId, patch);
   if (!after) throw new Error("Ops task update failed");
-  const eventType = input.status === "dismissed" ? "dismissed" : input.status === "expired" ? "expired" : input.status === "completed" ? "completed" : "accepted";
+  const eventType: OpsTaskEventType =
+    input.status === "dismissed"
+      ? "dismissed"
+      : input.status === "expired"
+        ? "expired"
+        : input.status === "completed"
+          ? "completed"
+          : input.status === "in_progress"
+            ? "started"
+            : "accepted";
   await createOpsTaskEvent({
     tenantId,
     taskId: input.taskId,
@@ -263,6 +290,33 @@ export async function updateOpsTaskStatus(
     afterJson: after,
     note: input.note ?? null,
   }, store);
+
+  const occurredAt = new Date();
+  const ledgerEventType =
+    eventType === "dismissed"
+      ? "DISMISSED"
+      : eventType === "expired"
+        ? "EXPIRED"
+        : eventType === "completed"
+          ? "COMPLETED"
+          : eventType === "started"
+            ? "STARTED"
+            : "ACCEPTED";
+  if (input.actorId) {
+    await recordBehavioralLedgerEvent({
+      tenantId,
+      operatorUserId: input.actorId,
+      correlationId: `ops_task:${input.taskId}`,
+      sourceSystem: "ops_task",
+      sourceEntityType: "ops_task",
+      sourceEntityId: String(input.taskId),
+      eventType: ledgerEventType,
+      occurredAt,
+      verificationClass: ledgerEventType === "COMPLETED" ? "CLAIMED" : null,
+      provenance: "ops_task_status_update",
+      idempotencyKey: `ops_task:${input.taskId}:${ledgerEventType}`,
+    });
+  }
   return after;
 }
 
@@ -302,6 +356,25 @@ export async function completeOpsTask(
     note: input.outcome ?? null,
     agentEventId: after.agentEventId ?? null,
   }, store);
+  if (input.completedBy) {
+    // Same idempotency key as updateOpsTaskStatus's COMPLETED emission —
+    // whichever path completes the task first wins; the other is a dedupe no-op.
+    await recordBehavioralLedgerEvent({
+      tenantId,
+      operatorUserId: input.completedBy,
+      correlationId: `ops_task:${input.taskId}`,
+      sourceSystem: "ops_task",
+      sourceEntityType: "ops_task",
+      sourceEntityId: String(input.taskId),
+      eventType: "COMPLETED",
+      occurredAt: completedAt,
+      // Operator-reported completion is claimed, not verified, until
+      // independent evidence corroborates it (foundation doc §4).
+      verificationClass: "CLAIMED",
+      provenance: "ops_task_complete",
+      idempotencyKey: `ops_task:${input.taskId}:COMPLETED`,
+    });
+  }
   if ((input.revenueRecoveredCents ?? 0) > 0) {
     await createOpsTaskEvent({
       tenantId,
