@@ -177,6 +177,10 @@ async function mirrorOpsTaskEventToBehavioralLedger(input: {
   }
 }
 
+function sameJsonValue(a: unknown, b: unknown) {
+  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+}
+
 export function mapLegacyLevelToOps(level: "level_1" | "level_2" | "level_3" | "level_4") {
   const nextLevel = level === "level_4" ? "4" : level.replace("level_", "") as OpsTaskLevel;
   return { lane: laneForLevel(nextLevel), level: nextLevel };
@@ -358,6 +362,48 @@ export async function completeOpsTask(
   const tenantId = input.tenantId ?? "default";
   const before = await store.getTask(tenantId, input.taskId);
   if (!before) throw new Error("Ops task not found");
+
+  // Completion is a one-time transition. A retry may carry new outcome or
+  // revenue data, but it must never manufacture a second COMPLETED event.
+  if (before.status === "completed") {
+    const outcomeChanged = input.outcome !== undefined && input.outcome !== before.outcome;
+    const revenueChanged =
+      input.revenueRecoveredCents !== undefined &&
+      input.revenueRecoveredCents !== before.revenueRecoveredCents;
+    if (!outcomeChanged && !revenueChanged) return before;
+
+    const patch: Partial<InsertOpsTask> = {};
+    if (outcomeChanged) patch.outcome = input.outcome ?? null;
+    if (revenueChanged) patch.revenueRecoveredCents = input.revenueRecoveredCents;
+    const after = await store.updateTask(tenantId, input.taskId, patch);
+    if (!after) throw new Error("Ops task completion metadata update failed");
+
+    if (revenueChanged) {
+      await createOpsTaskEvent({
+        tenantId,
+        taskId: input.taskId,
+        eventType: "revenue_recovered",
+        actorId: input.completedBy ?? null,
+        beforeJson: { revenueRecoveredCents: before.revenueRecoveredCents },
+        afterJson: { revenueRecoveredCents: after.revenueRecoveredCents },
+        agentEventId: after.agentEventId ?? null,
+      }, store);
+    }
+    if (outcomeChanged) {
+      await createOpsTaskEvent({
+        tenantId,
+        taskId: input.taskId,
+        eventType: "outcome_recorded",
+        actorId: input.completedBy ?? null,
+        beforeJson: { outcome: before.outcome },
+        afterJson: { outcome: after.outcome },
+        agentEventId: after.agentEventId ?? null,
+        note: after.outcome ?? null,
+      }, store);
+    }
+    return after;
+  }
+
   const completedAt = new Date();
   const patch: Partial<InsertOpsTask> = {
     status: "completed",
@@ -459,28 +505,65 @@ export async function recordOpsTaskReply(
     before.metadataJson && typeof before.metadataJson === "object" && !Array.isArray(before.metadataJson)
       ? (before.metadataJson as Record<string, unknown>)
       : {};
+  const existingReply =
+    existingMeta.residentReply &&
+    typeof existingMeta.residentReply === "object" &&
+    !Array.isArray(existingMeta.residentReply)
+      ? (existingMeta.residentReply as Record<string, unknown>)
+      : null;
+  const requestedDecision = input.decision ?? null;
+  const requestedPatch = input.appliedOrderPatch ?? null;
+  const requestedRepliedBy = input.repliedBy ?? null;
+  const isSameReply =
+    existingReply !== null &&
+    existingReply.message === input.message &&
+    existingReply.decision === requestedDecision &&
+    existingReply.repliedBy === requestedRepliedBy &&
+    sameJsonValue(existingReply.appliedOrderPatch, requestedPatch);
+
+  // Identical network/API retry: preserve the original completion timestamp and
+  // do not manufacture another completion or reply event.
+  if (before.status === "completed" && isSameReply) return before;
+
   const reply = {
     message: input.message,
-    decision: input.decision ?? null,
-    appliedOrderPatch: input.appliedOrderPatch ?? null,
+    decision: requestedDecision,
+    appliedOrderPatch: requestedPatch,
     repliedAt: new Date().toISOString(),
-    repliedBy: input.repliedBy ?? null,
+    repliedBy: requestedRepliedBy,
   };
-
+  const wasCompleted = before.status === "completed";
   const after = await store.updateTask(tenantId, input.taskId, {
-    status: "completed",
-    completedAt: new Date(),
-    completedBy: input.repliedBy ?? null,
+    ...(wasCompleted ? {} : {
+      status: "completed",
+      completedAt: new Date(),
+      completedBy: requestedRepliedBy,
+    }),
     outcome: `Replied to resident: ${input.message.slice(0, 180)}`,
     metadataJson: { ...existingMeta, residentReply: reply },
   });
   if (!after) throw new Error("Ops task reply update failed");
 
+  if (wasCompleted) {
+    // A changed reply after completion is a new outcome/reply fact, not a
+    // second completion of the same task.
+    await createOpsTaskEvent({
+      tenantId,
+      taskId: input.taskId,
+      eventType: "outcome_recorded",
+      actorId: requestedRepliedBy,
+      beforeJson: { residentReply: existingReply },
+      afterJson: { residentReply: reply },
+      note: `Resident reply updated: ${input.message.slice(0, 180)}`,
+    }, store);
+    return after;
+  }
+
   const completionEvent = await createOpsTaskEvent({
     tenantId,
     taskId: input.taskId,
     eventType: "completed",
-    actorId: input.repliedBy ?? null,
+    actorId: requestedRepliedBy,
     beforeJson: before,
     afterJson: after,
     note: `Resident reply: ${input.message.slice(0, 180)}`,
@@ -488,7 +571,7 @@ export async function recordOpsTaskReply(
   await mirrorOpsTaskEventToBehavioralLedger({
     tenantId,
     taskId: input.taskId,
-    operatorUserId: input.repliedBy,
+    operatorUserId: requestedRepliedBy,
     sourceEvent: completionEvent,
     ledgerEventType: "COMPLETED",
   });
