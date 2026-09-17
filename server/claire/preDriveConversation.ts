@@ -201,12 +201,13 @@ export async function answerClairePreDriveFollowUp(
     dependencies.recordGeneration ?? recordClaireGeneration;
   const surface: ClaireGenerationSurface = input.surface ?? "voice";
   const conversationalMode = detectClaireConversationalMode(input.utterance);
+  const requestedTopic = detectRequestedClaireTopic(input.utterance);
   const inventory = buildClaireVerifiedFactInventory(input.context);
   const compiled = await compileClaireContextForOperator({
     tenantId: input.tenantId,
     operatorUserId: input.context.actorId ?? null,
     inventory,
-    topic: detectRequestedClaireTopic(input.utterance) ?? undefined,
+    topic: requestedTopic ?? undefined,
     mode:
       conversationalMode === "personal"
         ? "personal"
@@ -299,43 +300,28 @@ export async function answerClairePreDriveFollowUp(
     ).trim();
     if (!text) throw new Error("Claire follow-up produced empty output");
     const trimmed = trimToSentenceBoundary(text, FOLLOW_UP_TRIM_CHARS);
+    const trimmedToSentenceBoundary = trimmed !== text;
     assertPostGenerationStateVerbs(trimmed, inventory);
 
-    // Personal-specificity guard stays hard and fail-closed -- but a trip
-    // on an otherwise-answerable personal question must NOT dead-end in
-    // the generic conversation fallback (corrective pass 3, item 1).
-    // Recovery order (see character/personalAnswerRecovery.ts): answer
-    // from eligible canon via one constrained retry, re-checked by the
-    // same guard; canon-scoped deflection if that also overreaches or if
-    // there is no eligible canon; the generic fallback below is reserved
-    // for genuine generation/system failure.
+    // Personal-specificity guard stays hard and fail-closed. If the model
+    // invents a personal specific, recover deterministically from canon that
+    // was already eligible for this operator/topic. Do not ask the model to
+    // try again: a second free-form generation can hallucinate again.
     let answer = trimmed;
-    let recoveredVia: "canon_retry" | "canon_scoped_deflection" | null = null;
+    let recoveredVia: "canon_render" | "canon_scoped_deflection" | null = null;
     if (conversationalMode === "personal") {
       try {
         assertNoUngroundedPersonalSpecificity(trimmed, compiled.eligibleCanonFacts);
       } catch (guardError) {
         if (!(guardError instanceof UngroundedPersonalSpecificityError)) throw guardError;
-        console.warn("[Claire] personal answer asserted ungrounded specificity; recovering from eligible canon", {
+        console.warn("[Claire] personal answer asserted ungrounded specificity; recovering deterministically from eligible canon", {
           candidate: guardError.candidate,
           eligibleCanonFactCount: compiled.eligibleCanonFacts.length,
+          requestedTopic: requestedTopic ?? null,
         });
-        const recovery = await recoverPersonalAnswer({
+        const recovery = recoverPersonalAnswer({
           eligibleCanonFacts: compiled.eligibleCanonFacts,
-          retry: async constraint => {
-            const retried = await invokeText({
-              tenantId: input.tenantId,
-              model: ENV.anthropicModelClaire || ENV.anthropicModel,
-              maxTokens: FOLLOW_UP_MAX_TOKENS,
-              temperature: 0.3,
-              onStopReason: reason => { stopReason = reason; },
-              messages: [
-                { role: "system", content: buildFollowUpSystemPrompt(constraint) },
-                ...conversationMessages,
-              ],
-            });
-            return trimToSentenceBoundary(retried.trim(), FOLLOW_UP_TRIM_CHARS);
-          },
+          requestedTopic: requestedTopic ?? undefined,
         });
         answer = recovery.text;
         recoveredVia = recovery.via;
@@ -344,19 +330,23 @@ export async function answerClairePreDriveFollowUp(
 
     const diagnostic: ClaireGenerationDiagnostic = {
       kind: "follow_up",
-      // A canon-grounded retry is still a real model answer; a
-      // deterministic deflection is not, and is recorded honestly as a
-      // fallback with its specific reason.
       source: recoveredVia === "canon_scoped_deflection" ? "fallback" : "model",
+      answerOrigin:
+        recoveredVia === "canon_render"
+          ? "canon_render"
+          : recoveredVia === "canon_scoped_deflection"
+            ? "fallback"
+            : "model",
       failureReason:
         recoveredVia === null
           ? null
-          : recoveredVia === "canon_retry"
-            ? "ungrounded_personal_specificity_recovered"
+          : recoveredVia === "canon_render"
+            ? "ungrounded_personal_specificity_canon_rendered"
             : "ungrounded_personal_specificity",
       modelRequested: ENV.anthropicModelClaire || ENV.anthropicModel,
       surface,
       stopReason,
+      trimmedToSentenceBoundary,
     };
     await recordGeneration({
       tenantId: input.tenantId,
@@ -384,6 +374,8 @@ export async function answerClairePreDriveFollowUp(
       modelRequested: ENV.anthropicModelClaire || ENV.anthropicModel,
       surface,
       stopReason,
+      answerOrigin: "fallback",
+      trimmedToSentenceBoundary: null,
     };
     await recordGeneration({
       tenantId: input.tenantId,
