@@ -10,13 +10,14 @@
  * React render, a poll, or an incidental read. A UI opening or a mission
  * animation must never produce a STARTED or COMPLETED row.
  */
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import {
   behavioralLedgerEvents,
   type BehavioralLedgerEvent,
   type InsertBehavioralLedgerEvent,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { isMysqlDuplicateKeyError } from "../mysqlErrors";
 import type { LedgerEventInput } from "../../shared/behavioralLedger";
 
 export type BehavioralLedgerStore = {
@@ -24,35 +25,41 @@ export type BehavioralLedgerStore = {
   listByCorrelation(tenantId: string, correlationId: string): Promise<BehavioralLedgerEvent[]>;
 };
 
+async function findExistingByIdempotencyKey(
+  input: Pick<InsertBehavioralLedgerEvent, "tenantId" | "idempotencyKey">
+): Promise<BehavioralLedgerEvent | null> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [row] = await db
+    .select()
+    .from(behavioralLedgerEvents)
+    .where(
+      and(
+        eq(behavioralLedgerEvents.tenantId, input.tenantId),
+        eq(behavioralLedgerEvents.idempotencyKey, input.idempotencyKey)
+      )
+    )
+    .limit(1);
+  return row ?? null;
+}
+
 const drizzleBehavioralLedgerStore: BehavioralLedgerStore = {
   async insertIfAbsent(input) {
+    const existing = await findExistingByIdempotencyKey(input);
+    if (existing) return existing;
+
     const db = await getDb();
     if (!db) throw new Error("Database not available");
+    try {
+      await db.insert(behavioralLedgerEvents).values(input);
+    } catch (error) {
+      // SELECT-then-INSERT alone is not concurrency-safe. The database unique
+      // key is the arbiter: if another retry won the race, return that row
+      // instead of turning an idempotent replay into a caller-visible failure.
+      if (!isMysqlDuplicateKeyError(error)) throw error;
+    }
 
-    const existing = await db
-      .select()
-      .from(behavioralLedgerEvents)
-      .where(
-        and(
-          eq(behavioralLedgerEvents.tenantId, input.tenantId),
-          eq(behavioralLedgerEvents.idempotencyKey, input.idempotencyKey)
-        )
-      )
-      .limit(1);
-    if (existing[0]) return existing[0];
-
-    await db.insert(behavioralLedgerEvents).values(input);
-    const [row] = await db
-      .select()
-      .from(behavioralLedgerEvents)
-      .where(
-        and(
-          eq(behavioralLedgerEvents.tenantId, input.tenantId),
-          eq(behavioralLedgerEvents.idempotencyKey, input.idempotencyKey)
-        )
-      )
-      .limit(1);
-    return row ?? null;
+    return findExistingByIdempotencyKey(input);
   },
 
   async listByCorrelation(tenantId, correlationId) {
@@ -66,19 +73,23 @@ const drizzleBehavioralLedgerStore: BehavioralLedgerStore = {
           eq(behavioralLedgerEvents.tenantId, tenantId),
           eq(behavioralLedgerEvents.correlationId, correlationId)
         )
-      );
+      )
+      .orderBy(asc(behavioralLedgerEvents.occurredAt), asc(behavioralLedgerEvents.id));
   },
 };
 
 /**
- * Records one observed behavioral event. Fails closed: unresolved identity or
- * an unavailable database results in a no-op (null), never a thrown error
- * surfaced mid-caller — the same contract as recordClaireAttestedEvent.
+ * Records one observed behavioral event.
  *
- * Idempotent by (tenantId, idempotencyKey): callers must derive a stable key
- * from the source transition (e.g. `ops_task:${taskId}:started`), not from a
- * timestamp, so retries/replays of the same authoritative write never
- * duplicate a row.
+ * Unresolved identity is a no-op rather than fabricated truth. Database errors
+ * are not swallowed here: callers that mirror an already-authoritative source
+ * event may catch/report infrastructure failure so telemetry cannot make the
+ * underlying business transition appear to fail.
+ *
+ * Idempotent by (tenantId, idempotencyKey): callers should derive the key from
+ * the immutable source event/transition identity, not merely from event type.
+ * That preserves legitimate repeated behavior while deduplicating a replay of
+ * the same source event.
  */
 export async function recordBehavioralLedgerEvent(
   input: LedgerEventInput,
