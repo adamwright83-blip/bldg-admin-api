@@ -1,93 +1,109 @@
 /**
- * PR1 Claire Intelligence Repair -- corrective pass 3 (real-exam finding).
+ * Claire personal-answer recovery.
  *
- * The personal-specificity guard correctly caught an invented city in the
- * post-corrective real exam ("Where are you from, Claire?"), but the
- * recovery was a dead end: the generic conversation fallback, "Give me a
- * second-ask me that once more. In the meantime, the brief is: Visit The
- * Wilshire." That answer throws away canon Claire actually had available
- * (she is British; at a high enough tier, an internationally mobile
- * childhood), and it stalls a question she could have answered safely.
+ * The post-generation specificity guard remains the hard safety boundary:
+ * if the model invents a personal place/name/org, that output never reaches
+ * the operator. Recovery must also not depend on asking the model to "try
+ * again" and hoping it hallucinates less the second time.
  *
- * Safety must not cost us the answer. This module implements the recovery
- * order Adam specified, in order:
+ * Instead, this module deterministically renders only canon fragments that:
+ *  - were already eligible for this operator's disclosure tier, and
+ *  - are relevant to the requested personal topic.
  *
- *   1. Answer from eligible canon, if eligible canon supports any
- *      meaningful answer (one constrained retry, grounded strictly in the
- *      canon facts actually supplied for this turn, re-checked by the same
- *      hard guard).
- *   2. No unsupported specificity -- the retry output goes through
- *      assertNoUngroundedPersonalSpecificity again, unchanged and still
- *      fail-closed.
- *   3. No gated/higher-tier disclosure -- the retry is only ever given the
- *      canon already deemed eligible for this operator's tier; this module
- *      never widens retrieval.
- *   4. Canon-scoped deflection if answering would actually require gated
- *      canon (or if the retry also overreaches) -- an in-voice refusal
- *      about THIS topic, not a generic stall.
- *   5. The generic conversation fallback is reserved for genuine
- *      generation/system failure (API error, empty output), which is
- *      handled by the caller's existing outer catch, not here.
+ * If no eligible canon can answer the topic, Claire gives a short in-voice
+ * deflection. No higher-tier canon is retrieved here and no new fact is
+ * synthesized.
  */
-import {
-  assertNoUngroundedPersonalSpecificity,
-  UngroundedPersonalSpecificityError,
-} from "./personalSpecificityGuard";
+import { CLAIRE_CANON } from "./characterDefinition";
+import { assertNoUngroundedPersonalSpecificity } from "./personalSpecificityGuard";
 
-/**
- * Step 4's canon-scoped deflection. Deliberately in Claire's register --
- * she declines the specific, she does not stall the conversation or change
- * the subject to the field brief.
- */
 export const CANON_SCOPED_PERSONAL_DEFLECTION =
   "I'll leave that one vague. I don't hand out specifics I can't stand behind.";
 
-export type PersonalAnswerRetry = (constraint: string) => Promise<string>;
+export type PersonalAnswerRecoveryVia =
+  | "canon_render"
+  | "canon_scoped_deflection";
 
 /**
- * Builds the extra constraint appended to the retry's system prompt. Kept
- * as a pure function so a test can assert exactly what the retry is told,
- * and so the caller never has to hand-roll this string.
+ * Ordered canon fragments that can directly answer each supported personal
+ * topic. Ordering is deliberate: use the most direct fact first. The
+ * childhood topic may safely fall back to nationality at Tier 0 when the
+ * childhood fragment itself is still gated.
+ *
+ * This is topic-to-canon routing, not phrase-specific copy: the existing
+ * topic detector decides which topic the operator asked about.
  */
-export function buildPersonalRetryConstraint(eligibleCanonFacts: string[]): string {
-  if (!eligibleCanonFacts.length) {
-    return [
-      "RETRY -- your previous answer asserted a personal specific that is not in your canon.",
-      "You have NO eligible personal canon for this operator at this tier and topic.",
-      "Do not answer the personal question with any specific at all. Decline the specific briefly, in your own voice, and move on.",
-    ].join(" ");
-  }
-  return [
-    "RETRY -- your previous answer asserted a personal specific (a place, name, or other detail) that is not present in your canon, so it was rejected.",
-    "Answer again using ONLY these exact eligible canon facts, and nothing more specific than what they literally state:",
-    eligibleCanonFacts.map(fact => `- ${fact}`).join(" "),
-    "Do not name a city, a person, an organization, a date, or any other specific that does not literally appear in the facts above.",
-    "A shorter, vaguer, true answer is correct here. If the facts above genuinely cannot support any answer, decline the specific briefly in your own voice instead of inventing one.",
-  ].join(" ");
+const TOPIC_FRAGMENT_PRIORITY: Record<string, readonly string[]> = {
+  age: ["core_age"],
+  childhood: ["core_childhood", "core_nationality"],
+  background: ["core_study", "core_field_work", "core_nationality"],
+  father: ["core_father_career", "core_father_disappearance"],
+  professional_failure: ["core_field_failure"],
+  past_relationship: ["core_relationship"],
+  central_wound: ["core_central_wound"],
+  is_she_real: ["core_ontology"],
+};
+
+/**
+ * Convert a canon fact from its stored third-person form into a compact
+ * first-person answer without introducing any new factual tokens.
+ */
+export function renderCanonFactFirstPerson(fact: string): string {
+  return fact
+    .replace(/^Claire knows she is /, "I know I'm ")
+    .replace(/^Claire's /, "My ")
+    .replace(/^Claire is /, "I'm ")
+    .replace(/^Claire had /, "I had ")
+    .replace(/^Claire studied /, "I studied ")
+    .replace(/^Claire /, "I ")
+    .replace(/\bClaire's\b/g, "my")
+    .replace(/\bClaire\b/g, "I")
+    .replace(/\bShe\b/g, "I")
+    .replace(/\bshe\b/g, "I")
+    .replace(/\bher\b/g, "my");
 }
 
 /**
- * Runs recovery steps 1-4. Returns the recovered answer plus which step
- * produced it, so the caller can record honest telemetry. Never throws for
- * a guard violation -- a second violation resolves to the canon-scoped
- * deflection. A genuine provider/system failure inside `retry` is allowed
- * to propagate, so the caller's existing outer catch can route it to the
- * generic fallback (step 5).
+ * Deterministically render the best eligible canon fact for the requested
+ * topic. Returns null when this tier simply does not contain a meaningful
+ * answer for that topic.
  */
-export async function recoverPersonalAnswer(input: {
+export function renderCanonScopedPersonalAnswer(input: {
   eligibleCanonFacts: string[];
-  retry: PersonalAnswerRetry;
-}): Promise<{ text: string; via: "canon_retry" | "canon_scoped_deflection" }> {
-  const constraint = buildPersonalRetryConstraint(input.eligibleCanonFacts);
-  const retried = (await input.retry(constraint)).trim();
-  if (!retried) {
-    return { text: CANON_SCOPED_PERSONAL_DEFLECTION, via: "canon_scoped_deflection" };
-  }
-  try {
-    assertNoUngroundedPersonalSpecificity(retried, input.eligibleCanonFacts);
-    return { text: retried, via: "canon_retry" };
-  } catch (error) {
-    if (!(error instanceof UngroundedPersonalSpecificityError)) throw error;
-    return { text: CANON_SCOPED_PERSONAL_DEFLECTION, via: "canon_scoped_deflection" };
-  }
+  requestedTopic?: string;
+}): string | null {
+  if (!input.requestedTopic || !input.eligibleCanonFacts.length) return null;
+
+  const eligible = new Set(input.eligibleCanonFacts);
+  const priority = TOPIC_FRAGMENT_PRIORITY[input.requestedTopic] ?? [];
+  const fragment = priority
+    .map(id => CLAIRE_CANON.find(candidate => candidate.id === id))
+    .find(candidate => candidate?.fact && eligible.has(candidate.fact));
+
+  if (!fragment?.fact) return null;
+
+  const rendered = renderCanonFactFirstPerson(fragment.fact).trim();
+  if (!rendered) return null;
+
+  // The deterministic renderer is still re-checked by the same hard guard.
+  // If a future canon/edit makes this unsafe, fail closed rather than
+  // quietly weakening the personal-specificity invariant.
+  assertNoUngroundedPersonalSpecificity(rendered, input.eligibleCanonFacts);
+  return rendered;
+}
+
+/**
+ * Recovery after a model answer trips the personal-specificity guard.
+ * There is deliberately no second free-form model generation here.
+ */
+export function recoverPersonalAnswer(input: {
+  eligibleCanonFacts: string[];
+  requestedTopic?: string;
+}): { text: string; via: PersonalAnswerRecoveryVia } {
+  const rendered = renderCanonScopedPersonalAnswer(input);
+  if (rendered) return { text: rendered, via: "canon_render" };
+  return {
+    text: CANON_SCOPED_PERSONAL_DEFLECTION,
+    via: "canon_scoped_deflection",
+  };
 }
