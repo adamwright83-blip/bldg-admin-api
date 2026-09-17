@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { recordBehavioralLedgerEvent, listBehavioralLedgerEventsForCorrelation, listBehavioralLedgerEventsForOperatorSource } from "./behavioralLedger";
+import { recordBehavioralLedgerEvent, listBehavioralLedgerEventsForCorrelation, listBehavioralLedgerEventsForOperatorSource, listBehavioralLedgerEventsForOperatorCorrelation } from "./behavioralLedger";
 import type { BehavioralLedgerStore } from "./behavioralLedger";
 import type { BehavioralLedgerEvent, InsertBehavioralLedgerEvent } from "../../drizzle/schema";
 
@@ -31,6 +31,14 @@ function createFakeStore(): BehavioralLedgerStore & { rows: BehavioralLedgerEven
           r.tenantId === tenantId &&
           r.operatorUserId === operatorUserId &&
           r.sourceEntityId === sourceEntityId
+      );
+    },
+    async listByOperatorCorrelation(tenantId: string, operatorUserId: string, correlationId: string) {
+      return rows.filter(
+        r =>
+          r.tenantId === tenantId &&
+          r.operatorUserId === operatorUserId &&
+          r.correlationId === correlationId
       );
     },
   };
@@ -220,5 +228,50 @@ describe("listBehavioralLedgerEventsForOperatorSource", () => {
     const rows = await listBehavioralLedgerEventsForOperatorSource("tenant-a", "operator-1", "42", store);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.tenantId).toBe("tenant-a");
+  });
+});
+
+describe("listBehavioralLedgerEventsForOperatorCorrelation", () => {
+  it("aggregates distinct sourceEntityIds that share ops_task correlation", async () => {
+    const store = createFakeStore();
+    await recordBehavioralLedgerEvent(
+      {
+        ...baseInput,
+        sourceEntityType: "ops_task_event",
+        sourceEntityId: "101",
+        eventType: "DELIVERED",
+        idempotencyKey: "ops_task_event:101",
+      },
+      store
+    );
+    await recordBehavioralLedgerEvent(
+      {
+        ...baseInput,
+        sourceEntityType: "ops_task_event",
+        sourceEntityId: "102",
+        eventType: "ACCEPTED",
+        idempotencyKey: "ops_task_event:102",
+      },
+      store
+    );
+    await recordBehavioralLedgerEvent(
+      {
+        ...baseInput,
+        correlationId: "ops_task:99",
+        sourceEntityType: "ops_task_event",
+        sourceEntityId: "201",
+        eventType: "DEFERRED",
+        idempotencyKey: "ops_task_event:201",
+      },
+      store
+    );
+    const rows = await listBehavioralLedgerEventsForOperatorCorrelation(
+      "tenant-a",
+      "operator-1",
+      "ops_task:42",
+      store
+    );
+    expect(rows.map(row => row.eventType).sort()).toEqual(["ACCEPTED", "DELIVERED"]);
+    expect(new Set(rows.map(row => row.sourceEntityId))).toEqual(new Set(["101", "102"]));
   });
 });

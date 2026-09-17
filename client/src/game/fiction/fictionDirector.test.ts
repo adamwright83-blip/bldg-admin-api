@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { eligibleFictionTemplates, selectFictionForMission } from "./fictionDirector";
+import { preferredTemplateIdForDirector } from "../../../../shared/behavioralFictionSelection";
 import type { ActionGrammar } from "../../../../shared/actionGrammar";
 import type { FictionTemplate } from "../../../../shared/fictionTemplate";
 import { NEUTRALIZE_TEMPLATE } from "./templates/neutralizeTemplate";
@@ -191,6 +192,169 @@ describe("campaign-preferred templates", () => {
       preferredTemplateId: "ghost-echo-v1",
     });
     expect(instance?.template.id).toBe("ghost-echo-v1");
+  });
+});
+
+describe("production behavioral preferredTemplateId bind", () => {
+  const store = new Map<string, string>();
+  const fakeStorage: Storage = {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (key: string) => store.get(key) ?? null,
+    key: (index: number) => Array.from(store.keys())[index] ?? null,
+    removeItem: (key: string) => void store.delete(key),
+    setItem: (key: string, value: string) => void store.set(key, value),
+  };
+
+  function visitGrammar(): ActionGrammar {
+    return {
+      kind: "VISIT_LOCATION",
+      businessActionId: "42",
+      occurrenceId: 42,
+      sourceType: "recovery",
+      count: 1,
+      locations: ["100 Wilshire"],
+      channel: "in_person",
+      requiresTravel: true,
+      requiresDriving: false,
+      timerSafe: true,
+      sensitiveConversation: false,
+    };
+  }
+
+  const walk: FictionTemplate = {
+    ...NEUTRALIZE_TEMPLATE,
+    id: "beacon-walk-v1",
+    compatibleGrammarKinds: ["VISIT_LOCATION"],
+    timerEligible: false,
+    drivingCompatible: false,
+    attentionSafetyClass: "safe_walking",
+    humanInteractionCompatible: false,
+  };
+  const sealed: FictionTemplate = { ...walk, id: "sealed-doors-v1" };
+  const registry = [walk, sealed];
+
+  beforeEach(() => {
+    store.clear();
+    (globalThis as { window?: unknown }).window = { localStorage: fakeStorage };
+  });
+
+  afterEach(() => {
+    delete (globalThis as { window?: unknown }).window;
+  });
+
+  it("no evidence preserves the existing deterministic fallback", () => {
+    const grammar = visitGrammar();
+    const before = JSON.stringify(grammar);
+    const preferred = preferredTemplateIdForDirector({
+      tenantId: "tenant-a",
+      operatorUserId: "op-a",
+      grammar,
+      registry,
+      events: [],
+    });
+    expect(preferred.fromBehavioralSelector).toBe(false);
+    expect(preferred.preferredTemplateId).toBeNull();
+    const instance = selectFictionForMission(grammar, {
+      now: new Date(),
+      registry,
+      preferredTemplateId: preferred.preferredTemplateId,
+    });
+    expect(JSON.stringify(grammar)).toBe(before);
+    expect(instance?.grammar).toBe(grammar);
+    expect(["beacon-walk-v1", "sealed-doors-v1"]).toContain(instance?.template.id);
+  });
+
+  it("different behavioral evidence can send the same grammar to the Director with a different eligible preferred id", () => {
+    const grammar = visitGrammar();
+    const lightEvents = [
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        sourceEntityId: "101",
+        correlationId: "ops_task:42",
+        eventType: "DEFERRED" as const,
+      },
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        sourceEntityId: "102",
+        correlationId: "ops_task:42",
+        eventType: "DEFERRED" as const,
+      },
+    ];
+    const heavyEvents = [
+      ...lightEvents,
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        sourceEntityId: "103",
+        correlationId: "ops_task:42",
+        eventType: "DELIVERED" as const,
+      },
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        sourceEntityId: "104",
+        correlationId: "ops_task:42",
+        eventType: "DELIVERED" as const,
+      },
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        sourceEntityId: "105",
+        correlationId: "ops_task:42",
+        eventType: "DELIVERED" as const,
+      },
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        sourceEntityId: "106",
+        correlationId: "ops_task:42",
+        eventType: "DELIVERED" as const,
+      },
+    ];
+    const lightPref = preferredTemplateIdForDirector({
+      grammar,
+      registry,
+      tenantId: "tenant-a",
+      operatorUserId: "op-a",
+      events: lightEvents,
+      decisionPointId: "dp-light",
+    });
+    const heavyPref = preferredTemplateIdForDirector({
+      grammar,
+      registry,
+      tenantId: "tenant-a",
+      operatorUserId: "op-a",
+      events: heavyEvents,
+      decisionPointId: "dp-heavy",
+    });
+    expect(lightPref.fromBehavioralSelector).toBe(true);
+    expect(heavyPref.fromBehavioralSelector).toBe(true);
+    expect(lightPref.preferredTemplateId).toBeTruthy();
+    expect(heavyPref.preferredTemplateId).toBeTruthy();
+    expect(lightPref.preferredTemplateId).not.toBe(heavyPref.preferredTemplateId);
+
+    const light = selectFictionForMission(grammar, {
+      now: new Date(),
+      registry,
+      preferredTemplateId: lightPref.preferredTemplateId,
+    });
+    store.clear();
+    const heavy = selectFictionForMission(grammar, {
+      now: new Date(),
+      registry,
+      preferredTemplateId: heavyPref.preferredTemplateId,
+    });
+    expect(light?.grammar).toBe(grammar);
+    expect(heavy?.grammar).toBe(grammar);
+    expect(JSON.stringify(light?.grammar)).toBe(JSON.stringify(heavy?.grammar));
+    expect(light?.template.id).toBe(lightPref.preferredTemplateId);
+    expect(heavy?.template.id).toBe(heavyPref.preferredTemplateId);
+    expect(light?.template.id).not.toBe(heavy?.template.id);
   });
 });
 

@@ -1,40 +1,42 @@
 import type { ActionGrammar } from "../../shared/actionGrammar";
 import type { OperatorDeclaredBarrier } from "../../shared/behavioralEvidence";
+import { behavioralSubjectFromGrammar } from "../../shared/behavioralSubject";
 import {
   selectPreferredFictionPresentation,
   type FictionSelectionDecision,
 } from "../../shared/behavioralFictionSelection";
 import type { FictionTemplate } from "../../shared/fictionTemplate";
 import {
-  listBehavioralLedgerEventsForOperatorSource,
+  listBehavioralLedgerEventsForOperatorCorrelation,
   type BehavioralLedgerStore,
 } from "../behavioralLedger/behavioralLedger";
 
 /**
- * Server entry: load tenant-scoped ledger rows, then run the shared selector.
+ * Server entry: load tenant+operator+correlation history, then run the shared selector.
  * Does not write ledger rows (completed history stays immutable).
  * Registry is passed in so this module never imports the client fiction pack.
  */
 export async function selectPreferredFictionForTask(input: {
   tenantId: string;
   operatorUserId: string;
-  sourceEntityId: string;
   grammar: ActionGrammar;
   registry: readonly FictionTemplate[];
   declaredBarriers?: readonly OperatorDeclaredBarrier[];
   decisionPointId?: string;
+  correlationId?: string;
   store?: BehavioralLedgerStore;
 }): Promise<FictionSelectionDecision> {
-  const rows = await listBehavioralLedgerEventsForOperatorSource(
+  const correlationId = input.correlationId ?? behavioralSubjectFromGrammar(input.grammar);
+  const rows = await listBehavioralLedgerEventsForOperatorCorrelation(
     input.tenantId,
     input.operatorUserId,
-    input.sourceEntityId,
+    correlationId,
     input.store
   );
   return selectPreferredFictionPresentation({
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
-    sourceEntityId: input.sourceEntityId,
+    correlationId,
     grammar: input.grammar,
     registry: input.registry,
     declaredBarriers: input.declaredBarriers,

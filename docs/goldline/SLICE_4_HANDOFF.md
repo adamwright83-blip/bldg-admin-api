@@ -2,11 +2,11 @@
 
 # SLICE 4 HANDOFF — Barrier → Intervention → Fiction Selection
 
-**Status: implementation on branch; CI not yet green.**
+**Status: production-truth pass on PR; not merge-ready until CI is green.**
 **Branch:** `cursor/barrier-intervention-fiction-723a`
 **PR:** #157
 **Base:** `main` @ `49f372de` (Slice 3 merged via PR #156)
-**Exact latest commit SHA:** *set after this push*
+**Exact latest commit SHA:** *(updated after push)*
 **CI status:** pending after this commit
 
 ---
@@ -31,116 +31,122 @@ observed evidence
   → BCT annotation (proposed)
   → eligible fiction/template (safety first)
   → preferredTemplateId
+  → existing Fiction Director (`selectFictionForMission`)
 ```
 
 Selection is **not** learning. No causal claims. `operator_avoidance` stays disabled.
 
----
-
-## Architecture chosen
-
-Pure shared selector plus a thin server reader:
-
-1. `assembleBehavioralEvidence` — tenant/operator/task isolation; counts only named ledger events; DEFERRED is never inferred from NOT_COMPLETED.
-2. Barrier hypothesis — `possible opportunity/time friction` from operator-declared `time` **or** ≥2 explicit DEFERRED. Never motivation/avoidance.
-3. Mapping — in-code `ENABLEMENT_TIME_FRICTION` (`annotationStatus: proposed`). Existing `intervention_definitions` table is **not** written this slice (annotations stay out of the ledger).
-4. Selection — `eligibleTemplates()` from `shared/fictionTemplate.ts`. Ineligible templates cannot be assigned. Insufficient evidence → `preferredTemplateId: null` → existing hash fallback in Fiction Director.
-5. When ≥2 eligible fictions and behavior-observed deferrals: equal-probability pick via FNV of decisionPoint/task+counts; `assignmentProbability = 1/n`. Not true RNG (replay-stable). Honest: not an MRT yet.
-6. Provenance on the returned decision object. Selector **does not write** ledger rows.
-
-Existing hook: `selectFictionForMission({ preferredTemplateId })` already refuses ineligible preferred ids.
+Production wiring is **required** for this slice (not optional).
 
 ---
 
-## Existing systems reused
+## Stable history identity
 
-- `shared/behavioralLedger.ts` event names
-- `server/behavioralLedger/behavioralLedger.ts` (new list-by-operator-source read)
-- `shared/fictionTemplate.ts` `eligibleTemplates` / `deriveFictionAssignment`
-- `client/src/game/fiction/fictionDirector.ts` preferred-id bind (unchanged)
-- `drizzle` `intervention_definitions` (schema already existed; unused as a write path here)
+Slice 1 ops-task mirror is unchanged:
+
+* `correlationId = ops_task:<taskId>` — **stable behavioral subject / history key**
+* `sourceEntityId = <ops_task_event.id>` — **immutable source-event identity** (unique per lifecycle event)
+
+History is assembled with `listBehavioralLedgerEventsForOperatorCorrelation(tenantId, operatorUserId, correlationId)`.
+
+Do not assemble by `sourceEntityId`. That cannot accumulate multiple events for one task.
+
+Other producers (`strategy_path_offer`, `commercial_mission`, etc.) are typed in `LEDGER_SOURCE_SYSTEMS` but have **no production writers yet**. Correlation is sufficient for the only live producer (ops tasks). A typed subject helper exists in `shared/behavioralSubject.ts` (`opsTaskBehavioralSubject` / `behavioralSubjectFromGrammar`) so non-ops grammars do not collide with ops-task rows.
+
+Tenant + operator isolation remains on every read.
 
 ---
 
-## Evidence model
+## Authoritative DEFERRED production
 
-Classes kept separate: `operator-declared`, `behavior-observed`, `claire-inference`, `historical-model-inference`.
+**There is currently no production DEFERRED producer.**
 
-This slice **produces** declared + observed. It does not auto-generate Claire or model inferences.
+`server/opsTasks.ts` `mirrorOpsTaskEventToBehavioralLedger` maps:
 
-Counts: DELIVERED, VIEWABLE, ENGAGED, ACCEPTED, STARTED, COMPLETED, VERIFIED, DEFERRED, DISMISSED, EXPIRED.
+* accepted → ACCEPTED
+* started → STARTED
+* completed → COMPLETED
+* dismissed → DISMISSED
+* expired → EXPIRED
+
+Ops task statuses are `open | accepted | in_progress | completed | dismissed | expired`. There is **no explicit defer action** and no `deferred` status.
+
+The selector **counts DEFERRED only when a ledger row with `eventType: "DEFERRED"` is present**. It does **not** infer DEFERRED from silence, NOT_COMPLETED, DISMISSED, EXPIRED, or lack of click.
+
+Until an explicit operator defer action exists, the deferral-driven path stays dormant in production. Tests may inject realistic DEFERRED rows (distinct `sourceEntityId`, shared `ops_task:<id>` correlation) to prove the selector and Director bind.
+
+---
+
+## Production wiring path
+
+1. `GoldlineDriverController` derives campaign chapter `ActionGrammar` (existing; no Driver UI redesign).
+2. Subject = `behavioralSubjectFromGrammar(grammar)` (ops numeric ids → `ops_task:<id>`).
+3. `trpc.system.goldlineWorld.behavioralEventsForSubject` loads tenant/operator-scoped ledger rows for that correlation.
+4. `GoldlineGameHome` passes those events + campaign `fictionTemplateId` into `selectFictionForMission`.
+5. `preferredTemplateIdForDirector` runs `selectPreferredFictionPresentation`.
+   * behavior-supported eligible preferred id → that id
+   * no evidence / insufficient → campaign preferred or `null`
+6. Existing Director eligibility check still outranks preference, then `deriveFictionAssignment` hash fallback.
+
+No second fiction system. `ActionGrammar` is read-only.
+
+---
+
+## Assignment mechanism
+
+Replay-stable FNV among already-eligible templates is **`assignmentMechanism: "deterministic_policy"`**.
+
+`assignmentProbability` is **`null`**. A hash pick is not an MRT and must not be recorded as `1/N`.
+
+True randomization / exploration belongs in a later learning/experimentation slice.
 
 ---
 
 ## Barrier hypothesis model
 
 - none / insufficient
-- possible opportunity/time friction (COM-B opportunity, TDF environmental_context_and_resources)
-  - `declared` if operator said time
-  - `possible` if deferred ≥ 2
+- **possible scheduling/opportunity friction** (COM-B opportunity, TDF environmental_context_and_resources) when ≥2 **explicit DEFERRED** rows. Behavior-only evidence does **not** name “time”.
+- **declared time constraint** when the operator declared `time`. Declaration outranks inferred deferral (standard/plain presentation).
 - uncertainty text states this is not a motivational trait
-- operator declaration outranks inferred deferral (standard/plain presentation)
+- no diagnosis; no “works better”
 
 ---
 
 ## COM-B/TDF → BCW/BCT mapping
 
-`ENABLEMENT_TIME_FRICTION`: enablement; proposed BCT 1.4 action planning, 8.7 graded tasks. `annotationStatus: proposed`. Foundation §2: we do not claim templates deliver these BCTs.
+`ENABLEMENT_TIME_FRICTION` (in-code key; proposed BCT 1.4 / 8.7). `annotationStatus: proposed`. Foundation §2: we do not claim templates deliver these BCTs.
 
 ---
 
-## Template eligibility rules
+## Files changed (this pass)
 
-`isTemplateEligible` unchanged. Unsafe driving+timer templates stay out. `STANDARD_PRESENTATION` is always in `eligibleOptions`. `preferredTemplateId` null means Director uses hash assignment.
-
----
-
-## Provenance structure
-
-`FictionSelectionDecision`: evidence, hypothesis, intervention record, eligibleOptions, assignedOption, assignmentProbability, policy/definition versions, selectionReason, claireSafeExplanation.
-
-Claire may say: “This has come up N times and you deferred it M times…” or “You said time is the constraint…”. May not diagnose.
-
----
-
-## Files changed
-
-- `shared/behavioralEvidence.ts`
+- `shared/behavioralSubject.ts`
+- `shared/behavioralEvidence.ts` (assemble by correlationId)
+- `shared/behavioralFictionSelection.ts` (+ tests)
 - `shared/behavioralInterventionMapping.ts`
-- `shared/behavioralFictionSelection.ts`
-- `shared/behavioralFictionSelection.test.ts`
-- `server/behavioralLedger/behavioralLedger.ts`
-- `server/behavioralLedger/behavioralLedger.test.ts`
-- `server/behavioralSelection/selectPreferredFiction.ts`
-- `server/behavioralSelection/selectPreferredFiction.test.ts`
+- `server/behavioralLedger/behavioralLedger.ts` (+ tests)
+- `server/behavioralSelection/selectPreferredFiction.ts` (+ tests)
+- `client/src/game/fiction/fictionDirector.ts` (+ tests)
+- `client/src/game/GoldlineGameHome.tsx`
+- `client/src/pages/driver/GoldlineDriverController.tsx`
+- `server/goldlineWorld/goldlineWorldRouter.ts`
 - `.github/workflows/goldline-fast-smoke.yml`
-- `docs/GOLDLINE-TASKS.md`
 - this file
 
 ---
 
-## What is complete
-
-- Selector + 10 required tests
-- Server read path (no history rewrite)
-- Smoke workflow includes the new unit tests
-- Typecheck error on `assignedOption` fixed
-
 ## What remains
 
 - Fast Goldline smoke / DayForge / mobile CI on this PR
-- Optional: Driver wiring of `preferredFictionTemplateId` from this selector (out of slice: no Dayplay redesign)
-- Optional: persist decision-point fields onto the next DELIVERED event
+- Persist decision-point fields onto a future DELIVERED event (out of slice)
 - True randomization for MRT (next learning slice)
+- Explicit operator defer action (not invented here)
 
-## Unresolved design questions
-
-- Whether Driver should call the server selector this week or keep campaign `fictionTemplateId` until the mission-map surface exists
-- When to start writing `intervention_definitions` rows vs keeping the in-code proposed registry
+Do not mark ready or merge until CI is green and the ten proofs pass.
 
 ## Tests
 
-`shared/behavioralFictionSelection.test.ts` (10), `server/behavioralSelection/selectPreferredFiction.test.ts` (1), ledger list isolation.
+See `shared/behavioralFictionSelection.test.ts`, `server/behavioralSelection/selectPreferredFiction.test.ts`, `client/src/game/fiction/fictionDirector.test.ts`, ledger correlation aggregation.
 
 ## Next step
 

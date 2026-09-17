@@ -28,6 +28,11 @@ export type BehavioralLedgerStore = {
     operatorUserId: string,
     sourceEntityId: string
   ): Promise<BehavioralLedgerEvent[]>;
+  listByOperatorCorrelation?(
+    tenantId: string,
+    operatorUserId: string,
+    correlationId: string
+  ): Promise<BehavioralLedgerEvent[]>;
 };
 
 async function findExistingByIdempotencyKey(
@@ -92,6 +97,21 @@ const drizzleBehavioralLedgerStore: BehavioralLedgerStore = {
           eq(behavioralLedgerEvents.tenantId, tenantId),
           eq(behavioralLedgerEvents.operatorUserId, operatorUserId),
           eq(behavioralLedgerEvents.sourceEntityId, sourceEntityId)
+        )
+      )
+      .orderBy(asc(behavioralLedgerEvents.occurredAt), asc(behavioralLedgerEvents.id));
+  },
+  async listByOperatorCorrelation(tenantId, operatorUserId, correlationId) {
+    const db = await getDb();
+    if (!db) return [];
+    return db
+      .select()
+      .from(behavioralLedgerEvents)
+      .where(
+        and(
+          eq(behavioralLedgerEvents.tenantId, tenantId),
+          eq(behavioralLedgerEvents.operatorUserId, operatorUserId),
+          eq(behavioralLedgerEvents.correlationId, correlationId)
         )
       )
       .orderBy(asc(behavioralLedgerEvents.occurredAt), asc(behavioralLedgerEvents.id));
@@ -163,4 +183,18 @@ export async function listBehavioralLedgerEventsForOperatorSource(
   return correlated.filter(
     row => row.operatorUserId === operatorUserId && row.sourceEntityId === sourceEntityId
   );
+}
+
+/** History for one behavioral subject. For ops tasks: correlationId `ops_task:<taskId>`. */
+export async function listBehavioralLedgerEventsForOperatorCorrelation(
+  tenantId: string,
+  operatorUserId: string,
+  correlationId: string,
+  store: BehavioralLedgerStore = drizzleBehavioralLedgerStore
+): Promise<BehavioralLedgerEvent[]> {
+  if (store.listByOperatorCorrelation) {
+    return store.listByOperatorCorrelation(tenantId, operatorUserId, correlationId);
+  }
+  const correlated = await store.listByCorrelation(tenantId, correlationId);
+  return correlated.filter(row => row.operatorUserId === operatorUserId);
 }

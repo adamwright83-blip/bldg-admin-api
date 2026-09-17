@@ -6,6 +6,7 @@ import {
   type BehavioralLedgerLikeEvent,
   type OperatorDeclaredBarrier,
 } from "./behavioralEvidence";
+import { behavioralSubjectFromGrammar } from "./behavioralSubject";
 import {
   DIAGNOSIS_FORBIDDEN_PATTERNS,
   ENABLEMENT_TIME_FRICTION,
@@ -18,6 +19,8 @@ import {
   type TdfDomain,
 } from "./behavioralInterventionMapping";
 import { eligibleTemplates, type FictionTemplate } from "./fictionTemplate";
+
+export type AssignmentMechanism = "deterministic_policy" | "randomized_assignment";
 
 export type BarrierHypothesis = {
   present: boolean;
@@ -33,11 +36,14 @@ export type BarrierHypothesis = {
 export type FictionSelectionDecision = {
   businessActionId: string | null;
   grammarKind: ActionGrammar["kind"];
+  correlationId: string;
   preferredTemplateId: string | null;
   assignedOption: string;
   eligibleOptions: string[];
   eligibleFictionTemplateIds: string[];
-  assignmentProbability: number;
+  assignmentMechanism: AssignmentMechanism;
+  /** Populated only when assignment was actually randomized. Always null for deterministic_policy. */
+  assignmentProbability: number | null;
   interventionPolicyVersion: typeof INTERVENTION_POLICY_VERSION;
   interventionDefinitionVersion: typeof INTERVENTION_DEFINITION_VERSION;
   intervention: InterventionDefinitionRecord | null;
@@ -55,7 +61,7 @@ function hypothesisFromEvidence(evidence: BehavioralEvidence): BarrierHypothesis
       present: true,
       comb: "opportunity",
       tdfDomain: "environmental_context_and_resources",
-      label: "possible opportunity/time friction",
+      label: "declared time constraint",
       evidenceStrength: "declared",
       source: "operator-declared",
       supportingObservations: [statement, `observed deferred count=${evidence.counts.deferred}`],
@@ -68,7 +74,7 @@ function hypothesisFromEvidence(evidence: BehavioralEvidence): BarrierHypothesis
       present: true,
       comb: "opportunity",
       tdfDomain: "environmental_context_and_resources",
-      label: "possible opportunity/time friction",
+      label: "possible scheduling/opportunity friction",
       evidenceStrength: "possible",
       source: "behavior-observed",
       supportingObservations: [
@@ -78,7 +84,7 @@ function hypothesisFromEvidence(evidence: BehavioralEvidence): BarrierHypothesis
         `completed=${evidence.counts.completed}`,
       ],
       uncertainty:
-        "Repeated explicit deferral can indicate time or scheduling friction. It does not establish a motivational trait.",
+        "Repeated explicit deferral can indicate scheduling or opportunity friction. It does not classify time unless the operator declared time, and it does not establish a motivational trait.",
     };
   }
   return {
@@ -127,21 +133,23 @@ function explain(decision: {
 /**
  * Choose a presentation for an already-valid ActionGrammar.
  * Never mutates the grammar or ledger events. Eligibility outranks preference.
+ * History is assembled by correlationId (ops_task:<taskId>), not sourceEntityId.
  */
 export function selectPreferredFictionPresentation(input: {
   tenantId: string;
   operatorUserId: string;
-  sourceEntityId: string;
   grammar: ActionGrammar;
   registry: readonly FictionTemplate[];
   events: readonly BehavioralLedgerLikeEvent[];
   declaredBarriers?: readonly OperatorDeclaredBarrier[];
   decisionPointId?: string;
+  correlationId?: string;
 }): FictionSelectionDecision {
+  const correlationId = input.correlationId ?? behavioralSubjectFromGrammar(input.grammar);
   const evidence = assembleBehavioralEvidence({
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
-    sourceEntityId: input.sourceEntityId,
+    correlationId,
     events: input.events,
     declaredBarriers: input.declaredBarriers,
   });
@@ -154,7 +162,8 @@ export function selectPreferredFictionPresentation(input: {
 
   let assignedOption: string = STANDARD_PRESENTATION;
   let preferredTemplateId: string | null = null;
-  let assignmentProbability = 1;
+  const assignmentMechanism: AssignmentMechanism = "deterministic_policy";
+  const assignmentProbability: number | null = null;
   let selectionReason =
     "Insufficient evidence; STANDARD_PRESENTATION (existing hash fallback when preferredTemplateId is null).";
   let intervention: InterventionDefinitionRecord | null = null;
@@ -167,22 +176,23 @@ export function selectPreferredFictionPresentation(input: {
       "Operator-declared time barrier outranks inferred history; plain/standard presentation.";
   } else if (hypothesis.present && eligibleFictionIds.length > 0) {
     intervention = ENABLEMENT_TIME_FRICTION;
-    const seed = `${input.decisionPointId ?? input.sourceEntityId}:${evidence.counts.deferred}:${evidence.counts.delivered}`;
+    const seed = `${input.decisionPointId ?? correlationId}:${evidence.counts.deferred}:${evidence.counts.delivered}`;
     const index = fnvIndex(seed, eligibleFictionIds.length);
     assignedOption = eligibleFictionIds[index]!;
     preferredTemplateId = assignedOption;
-    assignmentProbability = 1 / eligibleFictionIds.length;
     selectionReason =
-      "Behavior-observed explicit deferrals; equal-probability pick among already-eligible templates. Not a causal ranking.";
+      "Behavior-observed explicit deferrals; deterministic_policy pick among already-eligible templates. Not randomized assignment and not a causal ranking.";
   }
 
   const decision: FictionSelectionDecision = {
     businessActionId: grammar.businessActionId,
     grammarKind: grammar.kind,
+    correlationId,
     preferredTemplateId,
     assignedOption,
     eligibleOptions,
     eligibleFictionTemplateIds: eligibleFictionIds,
+    assignmentMechanism,
     assignmentProbability,
     interventionPolicyVersion: INTERVENTION_POLICY_VERSION,
     interventionDefinitionVersion: INTERVENTION_DEFINITION_VERSION,
@@ -202,6 +212,39 @@ export function selectPreferredFictionPresentation(input: {
 
 export function selectionTextIsEpistemicallySafe(text: string): boolean {
   return !DIAGNOSIS_FORBIDDEN_PATTERNS.some(pattern => pattern.test(text));
+}
+
+/** Value the existing Fiction Director should receive as `preferredTemplateId`. */
+export function preferredTemplateIdForDirector(input: {
+  tenantId?: string | null;
+  operatorUserId?: string | null;
+  grammar: ActionGrammar;
+  registry: readonly FictionTemplate[];
+  events?: readonly BehavioralLedgerLikeEvent[];
+  declaredBarriers?: readonly OperatorDeclaredBarrier[];
+  campaignPreferredTemplateId?: string | null;
+  decisionPointId?: string;
+}): { preferredTemplateId: string | null; fromBehavioralSelector: boolean } {
+  const tenantId = input.tenantId?.trim() || null;
+  const operatorUserId = input.operatorUserId?.trim() || null;
+  if (tenantId && operatorUserId) {
+    const decision = selectPreferredFictionPresentation({
+      tenantId,
+      operatorUserId,
+      grammar: input.grammar,
+      registry: input.registry,
+      events: input.events ?? [],
+      declaredBarriers: input.declaredBarriers,
+      decisionPointId: input.decisionPointId,
+    });
+    if (decision.preferredTemplateId) {
+      return { preferredTemplateId: decision.preferredTemplateId, fromBehavioralSelector: true };
+    }
+  }
+  return {
+    preferredTemplateId: input.campaignPreferredTemplateId ?? null,
+    fromBehavioralSelector: false,
+  };
 }
 
 export type { LedgerEventType };

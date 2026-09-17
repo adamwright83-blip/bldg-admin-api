@@ -30,6 +30,14 @@ function createFakeStore(): BehavioralLedgerStore & { rows: BehavioralLedgerEven
           r.sourceEntityId === sourceEntityId
       );
     },
+    async listByOperatorCorrelation(tenantId, operatorUserId, correlationId) {
+      return rows.filter(
+        r =>
+          r.tenantId === tenantId &&
+          r.operatorUserId === operatorUserId &&
+          r.correlationId === correlationId
+      );
+    },
   };
 }
 
@@ -65,32 +73,55 @@ const template: FictionTemplate = {
 };
 
 describe("selectPreferredFictionForTask", () => {
-  it("reads ledger history without rewriting it", async () => {
+  it("assembles realistic mirrored ops rows by correlation, not sourceEntityId", async () => {
     const store = createFakeStore();
     const base = {
       tenantId: "tenant-a",
       operatorUserId: "op-a",
-      correlationId: "task:42",
+      correlationId: "ops_task:42",
       sourceSystem: "ops_task" as const,
-      sourceEntityType: "ops_task",
-      sourceEntityId: "42",
+      sourceEntityType: "ops_task_event",
       occurredAt: new Date("2026-09-17T12:00:00Z"),
       verificationClass: null,
-      provenance: "test",
+      provenance: "ops_task_event",
     };
-    await recordBehavioralLedgerEvent({ ...base, eventType: "DEFERRED", idempotencyKey: "d1" }, store);
-    await recordBehavioralLedgerEvent({ ...base, eventType: "DEFERRED", idempotencyKey: "d2" }, store);
+    await recordBehavioralLedgerEvent(
+      { ...base, sourceEntityId: "101", eventType: "DELIVERED", idempotencyKey: "ops_task_event:101" },
+      store
+    );
+    await recordBehavioralLedgerEvent(
+      { ...base, sourceEntityId: "102", eventType: "DEFERRED", idempotencyKey: "ops_task_event:102" },
+      store
+    );
+    await recordBehavioralLedgerEvent(
+      { ...base, sourceEntityId: "103", eventType: "DEFERRED", idempotencyKey: "ops_task_event:103" },
+      store
+    );
+    await recordBehavioralLedgerEvent(
+      {
+        ...base,
+        correlationId: "ops_task:99",
+        sourceEntityId: "201",
+        eventType: "DEFERRED",
+        idempotencyKey: "ops_task_event:201",
+      },
+      store
+    );
     const before = store.rows.length;
     const decision = await selectPreferredFictionForTask({
       tenantId: "tenant-a",
       operatorUserId: "op-a",
-      sourceEntityId: "42",
       grammar,
       registry: [template],
       store,
     });
     expect(store.rows).toHaveLength(before);
+    expect(new Set(store.rows.map(row => row.sourceEntityId)).size).toBe(4);
     expect(decision.preferredTemplateId).toBe("beacon-walk-v1");
+    expect(decision.evidence.counts.deferred).toBe(2);
+    expect(decision.assignmentProbability).toBeNull();
+    expect(decision.assignmentMechanism).toBe("deterministic_policy");
     expect(decision.businessActionId).toBe("42");
+    expect(decision.correlationId).toBe("ops_task:42");
   });
 });

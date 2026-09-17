@@ -187,6 +187,9 @@ import {
   resolveApproachRoute,
 } from "../../../shared/claireApproach";
 import { selectFictionForMission } from "./fiction/fictionDirector";
+import { FICTION_TEMPLATE_REGISTRY } from "./fiction/templateRegistry";
+import { preferredTemplateIdForDirector } from "../../../shared/behavioralFictionSelection";
+import type { BehavioralLedgerLikeEvent } from "../../../shared/behavioralEvidence";
 import { reconcileFictionOnResume } from "./fiction/longHorizonResume";
 import type { FictionMissionInstance } from "./fiction/fictionDirector";
 import { SurveyPulse } from "./expedition/surveyPulse";
@@ -233,6 +236,9 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
    */
   playerIdentity?: string | null;
   preferredFictionTemplateId?: string | null;
+  behavioralTenantId?: string | null;
+  behavioralOperatorUserId?: string | null;
+  behavioralLedgerEvents?: BehavioralLedgerLikeEvent[];
   /** Current chapter grammar when one exists — visit-route PLACE_ITEM is the fallback. */
   campaignChapterGrammar?: ActionGrammar | null;
   requestedGameplayHost?: ExistingGameplayHost | null;
@@ -1159,10 +1165,18 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
   const fictionMission = useMemo<FictionMissionInstance | null>(() => {
     const grammar = props.campaignChapterGrammar ?? routeGrammar;
     if (!grammar) return null;
+    const preferred = preferredTemplateIdForDirector({
+      tenantId: props.behavioralTenantId,
+      operatorUserId: props.behavioralOperatorUserId,
+      grammar,
+      registry: FICTION_TEMPLATE_REGISTRY,
+      events: props.behavioralLedgerEvents,
+      campaignPreferredTemplateId: props.preferredFictionTemplateId ?? null,
+    });
     return selectFictionForMission(grammar, {
       now: new Date(),
       identity: props.playerIdentity ?? null,
-      preferredTemplateId: props.preferredFictionTemplateId ?? null,
+      preferredTemplateId: preferred.preferredTemplateId,
       persistAssignment: props.onPersistFictionAssignment,
     });
   }, [
@@ -1170,6 +1184,9 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     routeGrammar,
     props.playerIdentity,
     props.preferredFictionTemplateId,
+    props.behavioralTenantId,
+    props.behavioralOperatorUserId,
+    props.behavioralLedgerEvents,
     props.onPersistFictionAssignment,
   ]);
   const [fictionMissionOpen, setFictionMissionOpen] = useState(false);

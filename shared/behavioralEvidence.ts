@@ -5,8 +5,10 @@ export type BehavioralLedgerLikeEvent = {
   tenantId: string;
   operatorUserId: string;
   eventType: LedgerEventType;
+  /** Immutable source-event identity (ops_task_event.id). Not the history key. */
   sourceEntityId: string;
-  correlationId?: string;
+  /** Stable subject. For ops tasks: `ops_task:<taskId>`. */
+  correlationId: string;
 };
 
 export type OperatorDeclaredBarrier = {
@@ -25,14 +27,14 @@ export type BehavioralEvidenceCounts = {
   deferred: number;
   dismissed: number;
   expired: number;
+  notCompleted: number;
 };
 
 export type BehavioralEvidence = {
   tenantId: string;
   operatorUserId: string;
-  sourceEntityId: string;
+  correlationId: string;
   counts: BehavioralEvidenceCounts;
-  /** Events that survived tenant/operator/task isolation. */
   consideredEventTypes: LedgerEventType[];
   declaredBarriers: OperatorDeclaredBarrier[];
   epistemicNotes: Array<{ class: EpistemicClass; detail: string }>;
@@ -49,6 +51,7 @@ const EMPTY_COUNTS: BehavioralEvidenceCounts = {
   deferred: 0,
   dismissed: 0,
   expired: 0,
+  notCompleted: 0,
 };
 
 function bump(counts: BehavioralEvidenceCounts, type: LedgerEventType): void {
@@ -83,19 +86,22 @@ function bump(counts: BehavioralEvidenceCounts, type: LedgerEventType): void {
     case "EXPIRED":
       counts.expired += 1;
       break;
+    case "NOT_COMPLETED":
+      counts.notCompleted += 1;
+      break;
     default:
       break;
   }
 }
 
 /**
- * Assemble observed counts. Does not infer DEFERRED from NOT_COMPLETED.
- * Foreign tenant/operator/task rows are dropped, never mixed in.
+ * Assemble observed counts by tenant + operator + correlationId.
+ * Does not infer DEFERRED from NOT_COMPLETED, DISMISSED, EXPIRED, or silence.
  */
 export function assembleBehavioralEvidence(input: {
   tenantId: string;
   operatorUserId: string;
-  sourceEntityId: string;
+  correlationId: string;
   events: readonly BehavioralLedgerLikeEvent[];
   declaredBarriers?: readonly OperatorDeclaredBarrier[];
 }): BehavioralEvidence {
@@ -104,7 +110,7 @@ export function assembleBehavioralEvidence(input: {
   for (const event of input.events) {
     if (event.tenantId !== input.tenantId) continue;
     if (event.operatorUserId !== input.operatorUserId) continue;
-    if (event.sourceEntityId !== input.sourceEntityId) continue;
+    if (event.correlationId !== input.correlationId) continue;
     bump(counts, event.eventType);
     considered.push(event.eventType);
   }
@@ -112,7 +118,7 @@ export function assembleBehavioralEvidence(input: {
   const epistemicNotes: BehavioralEvidence["epistemicNotes"] = [
     {
       class: "behavior-observed",
-      detail: `Counted ${considered.length} ledger event(s) for this tenant/operator/task.`,
+      detail: `Counted ${considered.length} ledger event(s) for ${input.correlationId}.`,
     },
   ];
   if (declaredBarriers.length) {
@@ -124,7 +130,7 @@ export function assembleBehavioralEvidence(input: {
   return {
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
-    sourceEntityId: input.sourceEntityId,
+    correlationId: input.correlationId,
     counts,
     consideredEventTypes: considered,
     declaredBarriers,

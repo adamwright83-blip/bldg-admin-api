@@ -50,6 +50,7 @@ import {
   type GoldlineLocationSnapshot,
 } from "./goldlineDriverModel";
 import { deriveCampaignChapterActionGrammar } from "@shared/goldlineCampaignBindings";
+import { behavioralSubjectFromGrammar } from "@shared/behavioralSubject";
 import {
   surfaceForCampaignHost,
   type CampaignHostInvocation,
@@ -1485,6 +1486,20 @@ function LiveGoldlineDriverController({
     campaign.data?.campaign.chapters.find(
       item => item.stableChapterId === campaign.data?.campaign.currentChapterId
     ) ?? null;
+  const campaignChapterGrammar = useMemo(
+    () =>
+      currentCampaignChapter
+        ? deriveCampaignChapterActionGrammar(currentCampaignChapter)
+        : null,
+    [currentCampaignChapter]
+  );
+  const behavioralSubject = campaignChapterGrammar
+    ? behavioralSubjectFromGrammar(campaignChapterGrammar)
+    : null;
+  const behavioralEvents = trpc.system.goldlineWorld.behavioralEventsForSubject.useQuery(
+    { correlationId: behavioralSubject ?? "" },
+    { enabled: Boolean(behavioralSubject), staleTime: 15_000, retry: false }
+  );
 
   const enterCampaignHost = (hosted: CampaignHostInvocation) => {
     const focus = hosted.objectiveIds[0];
@@ -1622,11 +1637,10 @@ function LiveGoldlineDriverController({
           preferredFictionTemplateId={
             currentCampaignChapter?.fictionTemplateId ?? null
           }
-          campaignChapterGrammar={
-            currentCampaignChapter
-              ? deriveCampaignChapterActionGrammar(currentCampaignChapter)
-              : null
-          }
+          behavioralTenantId={behavioralEvents.data?.tenantId ?? null}
+          behavioralOperatorUserId={behavioralEvents.data?.operatorUserId ?? identity.data?.openId ?? null}
+          behavioralLedgerEvents={behavioralEvents.data?.events ?? []}
+          campaignChapterGrammar={campaignChapterGrammar}
           requestedGameplayHost={requestedGameplayHost}
           focusedCampaignObjectiveId={activeAdventureObjectiveId}
           onPersistFictionAssignment={record =>
