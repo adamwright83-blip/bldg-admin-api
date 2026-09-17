@@ -980,6 +980,71 @@ await assertRequiredColumns("goldline_campaigns", [
   "opsTaskType",
 ]);
 
+// migrate.mjs has ALTERed ops_tasks/ops_task_events for a long time (see the
+// taskType-widening ALTER immediately below, and the eventType-widening
+// ALTER in the Behavioral Ledger block at the end of this file) without ever
+// creating either table — an old bootstrap assumption that production's
+// tables already existed from a one-time historical setup outside this
+// script. That assumption breaks on a genuinely clean database (a fresh CI
+// MySQL instance, in particular): the ALTERs below would throw
+// ER_NO_SUCH_TABLE. Both CREATE TABLE IF NOT EXISTS blocks are no-ops
+// against the real production database, where these tables already exist.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS ops_tasks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL DEFAULT 'default',
+    lane ENUM('lane_1','lane_2','lane_3','level_4') NOT NULL,
+    level ENUM('1','2','3','4') NOT NULL,
+    taskType ENUM('intake_missing_price','unpaid_order','vague_intake','missed_pickup','stale_customer','revenue_leak','referral_ask','vendor_followup','gm_followup','manual_operator_task','dry_clean_receipt_intake','emergency_task') NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NULL,
+    source ENUM('manual','agent_suggested','system_detected','level_4','voice','quick_input') NOT NULL DEFAULT 'manual',
+    createdBy VARCHAR(128) NULL,
+    assignedTo VARCHAR(128) NULL,
+    status ENUM('open','accepted','in_progress','completed','dismissed','expired') NOT NULL DEFAULT 'open',
+    priority ENUM('low','normal','high','emergency') NOT NULL DEFAULT 'normal',
+    revenueAtRiskCents INT NOT NULL DEFAULT 0,
+    revenueRecoveredCents INT NOT NULL DEFAULT 0,
+    customerId INT NULL,
+    orderId INT NULL,
+    agentEventId INT NULL,
+    metadataJson JSON NULL,
+    outcome TEXT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    completedAt TIMESTAMP NULL,
+    completedBy VARCHAR(128) NULL,
+    KEY idx_ops_tasks_tenant_status (tenantId, status),
+    KEY idx_ops_tasks_tenant_lane (tenantId, lane),
+    KEY idx_ops_tasks_tenant_completed (tenantId, completedAt),
+    KEY idx_ops_tasks_agent_event (agentEventId),
+    KEY idx_ops_tasks_order (orderId)
+  )`,
+  "CREATE TABLE ops_tasks"
+);
+await assertRequiredColumns("ops_tasks", ["tenantId", "lane", "level", "taskType", "title", "status"]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS ops_task_events (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL DEFAULT 'default',
+    taskId INT NOT NULL,
+    eventType ENUM('created','viewed','accepted','completed','dismissed','expired','agent_suggested','human_approved','revenue_recovered','outcome_recorded') NOT NULL,
+    actorType ENUM('human','voice','resident_chat','driver','vendor','ai_agent','system') NOT NULL DEFAULT 'human',
+    actorId VARCHAR(128) NULL,
+    agentEventId INT NULL,
+    beforeJson JSON NULL,
+    afterJson JSON NULL,
+    note TEXT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_ops_task_events_tenant_task (tenantId, taskId),
+    KEY idx_ops_task_events_tenant_event (tenantId, eventType),
+    KEY idx_ops_task_events_agent_event (agentEventId)
+  )`,
+  "CREATE TABLE ops_task_events"
+);
+await assertRequiredColumns("ops_task_events", ["tenantId", "taskId", "eventType"]);
+
 await run(
   `ALTER TABLE ops_tasks MODIFY COLUMN taskType ENUM(
     'intake_missing_price','unpaid_order','vague_intake','missed_pickup',

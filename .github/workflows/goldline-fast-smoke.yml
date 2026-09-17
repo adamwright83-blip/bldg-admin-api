@@ -47,6 +47,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Prove production migration path (scripts/migrate.mjs) against disposable MySQL
+        run: |
+          node scripts/migrate.mjs
+          echo "--- second run: proving idempotency ---"
+          node scripts/migrate.mjs
       - name: Prove campaign and behavioral truth invariants
         run: >-
           pnpm vitest run
@@ -54,6 +59,10 @@ jobs:
           shared/goldlineCampaignReviewFixes.test.ts
           server/behavioralLedger/behavioralLedger.test.ts
           server/opsTasks.behavioralLedger.test.ts
+      - name: Prove ops task completion concurrency against real MySQL
+        run: >-
+          pnpm vitest run --config vitest.integration.config.ts
+          server/opsTasks.mysqlIntegration.test.ts
       - name: Prove Real Workday truth invariants
         run: >-
           pnpm vitest run

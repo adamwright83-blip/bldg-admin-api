@@ -76,16 +76,31 @@ class MemoryOpsTaskStore implements OpsTaskStore {
     return task;
   }
 
-  async completeTaskIfNotCompleted(
+  async completeTaskWithEvent(
     tenantId: string,
     taskId: number,
-    patch: Partial<InsertOpsTask>
-  ): Promise<{ transitioned: boolean; task: OpsTask | null }> {
+    patch: Partial<InsertOpsTask>,
+    buildEvent: (after: OpsTask) => Omit<InsertOpsTaskEvent, "tenantId" | "taskId">
+  ): Promise<{ transitioned: boolean; task: OpsTask | null; event: OpsTaskEvent | null }> {
     const task = await this.getTask(tenantId, taskId);
-    if (!task) return { transitioned: false, task: null };
-    if (task.status === "completed") return { transitioned: false, task };
+    if (!task) return { transitioned: false, task: null, event: null };
+    if (task.status === "completed") return { transitioned: false, task, event: null };
     Object.assign(task, patch, { updatedAt: new Date() });
-    return { transitioned: true, task };
+    const event = await this.createEvent({ tenantId, taskId, ...buildEvent(task) });
+    return { transitioned: true, task, event };
+  }
+
+  async updateTaskWithEvent(
+    tenantId: string,
+    taskId: number,
+    patch: Partial<InsertOpsTask>,
+    buildEvent: (after: OpsTask) => Omit<InsertOpsTaskEvent, "tenantId" | "taskId">
+  ): Promise<{ task: OpsTask | null; event: OpsTaskEvent | null }> {
+    const task = await this.getTask(tenantId, taskId);
+    if (!task) return { task: null, event: null };
+    Object.assign(task, patch, { updatedAt: new Date() });
+    const event = await this.createEvent({ tenantId, taskId, ...buildEvent(task) });
+    return { task, event };
   }
 
   async createEvent(input: InsertOpsTaskEvent): Promise<OpsTaskEvent> {
