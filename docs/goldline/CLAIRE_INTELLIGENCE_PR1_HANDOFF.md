@@ -6,6 +6,87 @@ Head SHA as of this update: see `git rev-parse HEAD` at time of push (recorded i
 
 ---
 
+## THIRD CORRECTIVE PASS (Adam's review of the post-corrective real exam) — read this first
+
+Adam's verdict on the 21:40 run vs the 20:51 baseline: the corrective pass materially worked —
+truncation gone, local time correct, truth boundary and correction handling good, blocker
+repetition improved. Three acceptance issues remained. All three are fixed at head `b4591e61`.
+
+### Item 1 — personal-answer recovery (fixed)
+
+The guard correctly caught an invented city, but recovery dead-ended in the generic stall
+("Give me a second—ask me that once more. In the meantime, the brief is: Visit The Wilshire."),
+throwing away canon Claire actually had. `server/claire/character/personalAnswerRecovery.ts` now
+implements the specified order: answer from eligible canon via one constrained retry → re-checked
+by the same unchanged hard guard → never widening past the operator's tier → canon-scoped in-voice
+deflection only if answering would truly need gated canon → generic fallback only for real
+generation/system failure. Telemetry distinguishes a recovered model answer
+(`ungrounded_personal_specificity_recovered`) from a deflection.
+
+While testing this I found and fixed a **real false positive**: the guard treated any
+sentence-initial capitalized word as a proper noun, so a correct canon-grounded answer
+("British. Moved around a lot as a kid…") was being downgraded to the deflection. The guard now
+recognizes ordinary common English words (with inflection matching) while still catching invented
+cities, multi-word places and unseen surnames. Still general, still not a denylist.
+
+### Item 2 — why the voice guidance wasn't winning (root cause found by dumping the real prompt)
+
+The guidance **was** present. Three things defeated it:
+
+1. **Position** — it sat at char 8,923 of a 10,475-char prompt, with ~1,550 chars of further
+   instruction after it. Neither first nor last.
+2. **Three competing instructions actively licensed length**: the mode policy's *"let a genuinely
+   strategic question run as long as it actually needs"*, the follow-up path's own *"a real
+   strategic question can run several sentences. Do not pad or artificially shorten"*, and —
+   strongest — `CLAIRE_V1_REASONING_POLICY`'s *"Reason in this order: goal, reality, plan, gap,
+   bottleneck, blocker, action"*, which reads as a mandated seven-part **output** structure. The
+   real exam's strategic answer follows that shape almost literally.
+3. **Scope** — it only ever banned *formatting*. It said nothing about conversational turn-taking,
+   which was the actual problem. (Consistent with the evidence: markdown headings *did* disappear
+   in the 21:40 run; length and the "Good question" opener did not.)
+
+Fixed: delivery rules are now explicitly authoritative over anything above them, placed **last**
+in both prompts, clarify that the reasoning order is how to *think* not a template to narrate, ban
+warm-up openers by name, and state the turn-taking principle. The three competing lines are gone.
+**No word or sentence cap was added** — the rules explicitly say she is "not being asked to be
+terse" and can go as deep as the operator pulls, across turns. Re-dumped the real prompt to
+confirm: competitors gone, rules last with nothing after them.
+
+### Item 3 — ROOT CAUSE: production was genuinely under-grounded (not the harness)
+
+**Evidence**: the assembled production prompt contained **zero** occurrences of "wash", "fold",
+"pickup", "delivery", "resident", "amenity" or "offer" in 10,475 characters.
+`formatCapabilityBriefing()` describes Goldline's *software* actions, not the commercial offer.
+`MissionSalesBrief` carries an approach (objective/questions/avoid) but never states the offer, and
+only exists when a `missionId` is in play — the exam ran the cold-visit case with `mission: null`,
+which is a real production case. With nothing telling her otherwise, the model filled the gap from
+pretraining with a laundry-**equipment**/route-vendor sales model: "in-unit machines", "coin-op they
+own outright", contract renewal dates.
+
+`server/claire/offerContext.ts` adds unconditional offer grounding to both paths, asserting only
+what is verifiable from repo artifacts: `serviceType: "wash_fold"`; same-day 7–9 PM delivery; the
+order carries the individual resident's own name, unit, address and Stripe payment method (so the
+**resident** is the paying customer, not the building); `buildingSlug`; the macro goal counted in
+active customers. Pricing, contract terms, exclusivity and revenue share are explicitly marked
+**not established** so Claire asks rather than invents.
+
+**ADAM — one thing needs your confirmation**: that offer summary is derived from code, not from
+you. It is now load-bearing for what Claire says on a real commercial visit. If any of it is wrong
+or incomplete, correct it in `server/claire/offerContext.ts`.
+
+### Tests / status
+
+New `server/claire/pr1CorrectivePass3.test.ts` (17 tests), including **both halves** of item 1 — an
+invented specific is still blocked, AND available safe canon still produces a useful answer. Full
+repo suite: **638 files, 5952 passed, 7 skipped, 0 failed**; typecheck 0 errors. Preserved and
+re-verified: truncation fix, timezone fix, truth boundary, correction handling, dry personality,
+assertion guard, G2 lint, CEO lint, tier/disclosure gating, `operator_avoidance` off, resident-app
+tool surface zero-diff.
+
+The real exam rerun is Adam's to run (he has the working key). Not merged. PR2 not started.
+
+---
+
 ## SECOND CORRECTIVE PASS (real-exam findings) — read this section first
 
 The first real (non-mocked) Anthropic exam through this branch's actual code path
