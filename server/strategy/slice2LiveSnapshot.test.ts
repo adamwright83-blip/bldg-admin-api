@@ -54,6 +54,10 @@ describe("Slice 2: Strategy snapshot live-derived sections", () => {
     expect(payload.growthPlan.stages.some(s => s.count === 14)).toBe(false);
     expect(payload.accounts).toEqual([]);
     expect(payload.customers.dormantEligible).toEqual([]);
+    expect(payload.customers.dormantCount).toBe(0);
+    expect(payload.customers.aggregateSource).toBe("observed");
+    expect(payload.repeatPipeline.summary.totalRecent).toBe(0);
+    expect(payload.repeatPipeline.summary.openFeedbackIssues).toBeNull();
     expect(payload.repeatPipeline.recentFirstOrderCustomers).toEqual([]);
     expect(payload.growthPlan.limitingStage).toBe("insufficient_data");
     expect(
@@ -125,6 +129,32 @@ describe("Slice 2: Strategy snapshot live-derived sections", () => {
     expect(b.payload.customers.dormantEligible[0]?.firstName).toBe("TenantBOnly");
     expect(a.payload.customers.dormantEligible[0]?.id).not.toBe(
       b.payload.customers.dormantEligible[0]?.id
+    );
+  });
+
+  it("treats an unavailable aggregate source as unobserved, not zero", async () => {
+    const snapshot = await buildStrategySnapshot("tenant_unavailable", {
+      now: NOW,
+      customerAggregateLoad: {
+        status: "unavailable",
+        reason: "orders table is not present in this database",
+      },
+    });
+    expect(snapshot.payload.customers.aggregateSource).toBe("unavailable");
+    expect(snapshot.payload.customers.dormantCount).toBeNull();
+    expect(snapshot.payload.customers.dormantEligible).toEqual([]);
+    expect(snapshot.payload.repeatPipeline.summary.totalRecent).toBeNull();
+    expect(snapshot.payload.repeatPipeline.summary.secondOrdersPlaced).toBeNull();
+    expect(snapshot.payload.repeatPipeline.summary.openFeedbackIssues).toBeNull();
+    expect(snapshot.payload.growthPlan.limitingStage).toBe("source_unavailable");
+    expect(snapshot.payload.growthPlan.stages).toEqual([]);
+    expect(
+      snapshot.payload.unresolved.some(u =>
+        u.source === "strategySnapshot.customerAggregates"
+      )
+    ).toBe(true);
+    expect(snapshot.provenance["customers.dormantEligible"]?.source).toBe(
+      "unavailable"
     );
   });
 });

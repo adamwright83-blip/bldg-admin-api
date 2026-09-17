@@ -5,7 +5,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
-import { getDb, listAdminCustomerAggregates } from "../db";
+import { getDb } from "../db";
 import { strategySnapshots } from "../../drizzle/schema";
 import { getActiveMacroGoal } from "../claire/macroGoalService";
 import {
@@ -18,7 +18,15 @@ import { getMonthToDateSpend } from "./spendClearance";
 import type { AdminCustomerAggregateDbRow } from "../adminCustomerAggregate";
 import { loadDormantEligibleCustomers } from "./snapshotDormantCustomers";
 import { loadRepeatPipeline } from "./snapshotRepeatPipeline";
-import { deriveFunnelFromCustomerAggregates } from "./snapshotFunnel";
+import {
+  deriveFunnelFromCustomerAggregates,
+  FUNNEL_LIMITING_INSUFFICIENT_DATA,
+  FUNNEL_LIMITING_SOURCE_UNAVAILABLE,
+} from "./snapshotFunnel";
+import {
+  loadStrategyCustomerAggregates,
+  type CustomerAggregateLoad,
+} from "./snapshotCustomerAggregateLoad";
 import type {
   OpportunityGap,
   ProvenanceRecord,
@@ -78,7 +86,8 @@ export type SnapshotBuildOptions = {
     cleanCloudLastSyncIso?: string;
     gumballpalsLastSyncIso?: string;
   };
-  /** Injected in tests; production loads tenant-scoped admin aggregates. */
+  /** Injected in tests. Production uses loadStrategyCustomerAggregates. */
+  customerAggregateLoad?: CustomerAggregateLoad;
   customerAggregates?: AdminCustomerAggregateDbRow[];
 };
 
@@ -151,25 +160,47 @@ export async function buildStrategySnapshot(
   }
   const unitsNeededPerWeek = Math.ceil(unitsRemaining / weeksRemaining);
 
-  const customerAggregates: AdminCustomerAggregateDbRow[] =
-    options.customerAggregates ??
-    (await listAdminCustomerAggregates(tenantId));
+  const customerLoad: CustomerAggregateLoad =
+    options.customerAggregateLoad ??
+    (options.customerAggregates
+      ? { status: "available", rows: options.customerAggregates }
+      : await loadStrategyCustomerAggregates(tenantId));
+  const aggregatesObserved = customerLoad.status === "available";
+  const customerAggregates = aggregatesObserved ? customerLoad.rows : [];
 
-  const funnelDerived = deriveFunnelFromCustomerAggregates(customerAggregates);
+  const funnelDerived = aggregatesObserved
+    ? deriveFunnelFromCustomerAggregates(customerAggregates)
+    : { stages: [], limitingStage: FUNNEL_LIMITING_SOURCE_UNAVAILABLE };
   const funnelStages = funnelDerived.stages;
   const limitingStage = funnelDerived.limitingStage;
 
-  const repeatPipeline = await loadRepeatPipeline({
-    tenantId,
-    now,
-    aggregates: customerAggregates,
-  });
+  const emptyRepeat: StrategySnapshotPayload["repeatPipeline"] = {
+    recentFirstOrderCustomers: [],
+    summary: {
+      totalRecent: null,
+      secondOrdersPlaced: null,
+      openFeedbackIssues: null,
+    },
+  };
+  const repeatPipeline: StrategySnapshotPayload["repeatPipeline"] = aggregatesObserved
+    ? await loadRepeatPipeline({
+        tenantId,
+        now,
+        aggregates: customerAggregates,
+      })
+    : emptyRepeat;
 
-  const dormantDerived = await loadDormantEligibleCustomers({
-    tenantId,
-    now,
-    aggregates: customerAggregates,
-  });
+  const dormantDerived = aggregatesObserved
+    ? await loadDormantEligibleCustomers({
+        tenantId,
+        now,
+        aggregates: customerAggregates,
+      })
+    : {
+        customers: [],
+        consideredPaidCustomerCount: 0,
+        totalEligibleCount: 0,
+      };
   const dormantEligible = dormantDerived.customers;
 
   // Accounts: real commercial_accounts exist, but snapshot `state` vocabulary
@@ -336,7 +367,7 @@ export async function buildStrategySnapshot(
   });
   unresolved.push({
     source: "strategySnapshot.repeatPipeline.feedback",
-    issue: "No customer-feedback store is queried; fulfillmentStatus/feedbackStatus are unavailable and openFeedbackIssues is unobserved (reported 0).",
+    issue: "No customer-feedback store is queried; fulfillmentStatus/feedbackStatus are unavailable and openFeedbackIssues is null (unobserved, not zero).",
     severity: "warning",
   });
   unresolved.push({
@@ -344,7 +375,13 @@ export async function buildStrategySnapshot(
     issue: "Property Discovery and Property Approval are omitted; those snapshot labels have no live mapping from commercial pipeline stages.",
     severity: "warning",
   });
-  if (funnelStages.length === 0) {
+  if (!aggregatesObserved) {
+    unresolved.push({
+      source: "strategySnapshot.customerAggregates",
+      issue: `Customer aggregate source unavailable (${customerLoad.status === "unavailable" ? customerLoad.reason : "unknown"}). dormantEligible/repeatPipeline/funnel are unobserved, not zero.`,
+      severity: "warning",
+    });
+  } else if (funnelStages.length === 0) {
     unresolved.push({
       source: "strategySnapshot.funnelStages",
       issue: "No paid-order customers in tenant aggregates; funnel stages are empty rather than filled with fixture counts.",
@@ -414,33 +451,45 @@ export async function buildStrategySnapshot(
       computedAt,
     },
     "customers.dormantEligible": {
-      source: "listAdminCustomerAggregates",
-      queryOrDefinition:
-        "Paid customers whose last order is >= 30 days before snapshot now; snapshot id is sha256 of tenant+admin group key (phone not copied)",
+      source: aggregatesObserved ? "loadStrategyCustomerAggregates" : "unavailable",
+      queryOrDefinition: aggregatesObserved
+        ? "Paid customers whose last order is >= 30 days before snapshot now; snapshot id is sha256 of tenant+admin group key (phone not copied)"
+        : customerLoad.status === "unavailable"
+          ? customerLoad.reason
+          : "unavailable",
       window: "inactivity_days_30",
       computedAt,
-      sampleSize: dormantEligible.length,
-      notes: `consideredPaidCustomerCount=${dormantDerived.consideredPaidCustomerCount}`,
+      sampleSize: aggregatesObserved ? dormantEligible.length : undefined,
+      isEstimated: false,
+      notes: aggregatesObserved
+        ? `observedEmpty=${dormantDerived.totalEligibleCount === 0}; consideredPaidCustomerCount=${dormantDerived.consideredPaidCustomerCount}`
+        : "source unavailable — dormantCount is null, not 0",
     },
     "repeatPipeline": {
-      source: "listAdminCustomerAggregates",
-      queryOrDefinition:
-        "Paid customers whose first paid order is within the last 30 days; second order = paidOrderCount >= 2",
+      source: aggregatesObserved ? "loadStrategyCustomerAggregates" : "unavailable",
+      queryOrDefinition: aggregatesObserved
+        ? "Paid customers whose first paid order is within the last 30 days; second order = paidOrderCount >= 2"
+        : customerLoad.status === "unavailable"
+          ? customerLoad.reason
+          : "unavailable",
       window: "last_30_days",
       computedAt,
-      sampleSize: repeatPipeline.summary.totalRecent,
-      notes: "fulfillment/feedback unavailable; openFeedbackIssues unobserved",
+      sampleSize: aggregatesObserved ? (repeatPipeline.summary.totalRecent ?? 0) : undefined,
+      notes: "fulfillment/feedback unavailable; openFeedbackIssues is null when unobserved",
     },
     "growthPlan.stages": {
-      source: "listAdminCustomerAggregates",
-      queryOrDefinition:
-        "Resident First Order = paidOrderCount>=1; Resident Repeat Order = paidOrderCount>=2. Property Discovery/Approval omitted (no live mapping).",
+      source: aggregatesObserved ? "loadStrategyCustomerAggregates" : "unavailable",
+      queryOrDefinition: aggregatesObserved
+        ? "Resident First Order = paidOrderCount>=1; Resident Repeat Order = paidOrderCount>=2. Property Discovery/Approval omitted (no live mapping)."
+        : "Funnel omitted because customer aggregate source is unavailable",
       computedAt,
       sampleSize: funnelStages.reduce((sum, s) => sum + s.count, 0),
     },
     "growthPlan.limitingStage": {
-      source: "deriveFunnelFromCustomerAggregates",
-      queryOrDefinition: "Worst observed first→repeat conversion, or insufficient_data",
+      source: aggregatesObserved ? "deriveFunnelFromCustomerAggregates" : "unavailable",
+      queryOrDefinition: aggregatesObserved
+        ? "Worst observed first→repeat conversion, or insufficient_data"
+        : FUNNEL_LIMITING_SOURCE_UNAVAILABLE,
       computedAt,
     },
     "accounts": {
@@ -470,7 +519,8 @@ export async function buildStrategySnapshot(
       limitingStage,
       stages: funnelStages,
       nextActions:
-        limitingStage === "insufficient_data"
+        limitingStage === FUNNEL_LIMITING_INSUFFICIENT_DATA ||
+        limitingStage === FUNNEL_LIMITING_SOURCE_UNAVAILABLE
           ? []
           : [`Investigate conversion at ${limitingStage}`],
     },
@@ -491,7 +541,8 @@ export async function buildStrategySnapshot(
         activeCount: t.count,
       })),
       dormantEligible,
-      dormantCount: dormantDerived.totalEligibleCount,
+      dormantCount: aggregatesObserved ? dormantDerived.totalEligibleCount : null,
+      aggregateSource: aggregatesObserved ? "observed" : "unavailable",
     },
     accounts,
     opportunities,

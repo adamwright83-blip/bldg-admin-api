@@ -111,13 +111,16 @@ describe("Slice 5: Claire & Lantern City Read the Snapshot", () => {
     expect(openingStats?.fallbacks).toBeGreaterThan(0);
   });
 
-  it("guardrail.G12.forecast_labeled_as_estimate", async () => {
-    const snapshot = await buildStrategySnapshot(tenantId);
-    const scenarioStage = snapshot.payload.growthPlan.stages.find(s => s.isScenario);
-
-    expect(scenarioStage).toBeDefined();
-    expect(scenarioStage?.isScenario).toBe(true);
-    expect(scenarioStage?.scenarioConversionRate).toBeDefined();
+  it("does not invent a scenario conversion for unobserved property stages", async () => {
+    const snapshot = await buildStrategySnapshot(tenantId, {
+      customerAggregates: [],
+    });
+    expect(snapshot.payload.growthPlan.stages.every(s => s.isScenario === false)).toBe(
+      true
+    );
+    expect(
+      snapshot.payload.growthPlan.stages.find(s => s.scenarioConversionRate != null)
+    ).toBeUndefined();
   });
 
   it("brief is not an identical fixed checklist across different contexts", async () => {

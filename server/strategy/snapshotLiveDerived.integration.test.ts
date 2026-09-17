@@ -1,11 +1,12 @@
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { orders } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { _clearSnapshotStore, buildStrategySnapshot } from "./snapshotBuilder";
 
 /**
  * Real-MySQL coverage for Slice 2 StrategyEngine sections.
- * Requires DATABASE_URL. Excluded from default `pnpm test`.
+ * Requires DATABASE_URL. Inserts only columns present on scripts/migrate.mjs
+ * `orders` (goldline_migrate_check), not the full drizzle schema.
  */
 
 async function insertPaidOrder(input: {
@@ -13,27 +14,29 @@ async function insertPaidOrder(input: {
   phone: string;
   firstName: string;
   createdAt: Date;
-  paid?: boolean;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.insert(orders).values({
-    tenantId: input.tenantId,
-    serviceType: "wash_fold",
-    pickupDate: "2026-01-16",
-    pickupTimeWindow: "9am-11am",
-    address: "3545 Wilshire Blvd, Los Angeles, CA 90010",
-    firstName: input.firstName,
-    lastName: "Live",
-    phone: input.phone,
-    status: "delivered",
-    subtotal: "40.00",
-    total: "40.00",
-    paid: input.paid ?? true,
-    paidAt: input.createdAt,
-    createdAt: input.createdAt,
-    buildingSlug: "opusla",
-  });
+  const created = input.createdAt.toISOString().slice(0, 19).replace("T", " ");
+  await db.execute(sql`
+    INSERT INTO orders (
+      tenantId, serviceType, pickupDate, pickupTimeWindow, address,
+      firstName, lastName, phone, status, paid, total, createdAt
+    ) VALUES (
+      ${input.tenantId},
+      'wash_fold',
+      '2026-01-16',
+      '9am-11am',
+      '3545 Wilshire Blvd, Los Angeles, CA 90010',
+      ${input.firstName},
+      'Live',
+      ${input.phone},
+      'delivered',
+      1,
+      '40.00',
+      ${created}
+    )
+  `);
 }
 
 describe("Slice 2 strategy snapshot — real MySQL aggregates", () => {
@@ -61,6 +64,7 @@ describe("Slice 2 strategy snapshot — real MySQL aggregates", () => {
     const snapA = await buildStrategySnapshot(tenantA, { now });
     const snapB = await buildStrategySnapshot(tenantB, { now });
 
+    expect(snapA.payload.customers.aggregateSource).toBe("observed");
     expect(snapA.payload.customers.dormantEligible.map(c => c.firstName)).toContain(
       "LiveAmina"
     );
@@ -74,7 +78,7 @@ describe("Slice 2 strategy snapshot — real MySQL aggregates", () => {
       /David|Sarah|3105554101/
     );
     expect(snapA.payload.accounts).toEqual([]);
-    expect(snapA.payload.repeatPipeline.recentFirstOrderCustomers).toEqual([]);
+    expect(snapA.payload.repeatPipeline.summary.openFeedbackIssues).toBeNull();
     expect(snapA.payload.growthPlan.stages[0]?.name).toBe("Resident First Order");
     expect(snapA.payload.growthPlan.stages[0]?.count).toBeGreaterThanOrEqual(1);
   }, 20000);

@@ -56,6 +56,7 @@ describe("deriveRepeatPipeline", () => {
     });
 
     expect(result.summary.totalRecent).toBe(2);
+    expect(result.summary.openFeedbackIssues).toBeNull();
     expect(result.summary.secondOrdersPlaced).toBe(1);
     expect(result.recentFirstOrderCustomers.map(c => c.displayName).sort()).toEqual(
       ["Amina", "Bo"]

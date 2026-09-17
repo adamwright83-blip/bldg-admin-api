@@ -10,6 +10,9 @@
 import type { AdminCustomerAggregateDbRow } from "../adminCustomerAggregate";
 import type { FunnelStageItem } from "./snapshotTypes";
 
+export const FUNNEL_LIMITING_INSUFFICIENT_DATA = "insufficient_data";
+export const FUNNEL_LIMITING_SOURCE_UNAVAILABLE = "source_unavailable";
+
 export function deriveFunnelFromCustomerAggregates(
   rows: AdminCustomerAggregateDbRow[]
 ): {
@@ -41,7 +44,7 @@ export function deriveFunnelFromCustomerAggregates(
     });
   }
 
-  let limitingStage = "insufficient_data";
+  let limitingStage = FUNNEL_LIMITING_INSUFFICIENT_DATA;
   if (firstCount > 0 && firstToRepeat !== undefined) {
     limitingStage = "Resident First Order";
   }

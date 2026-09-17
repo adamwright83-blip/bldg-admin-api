@@ -32,7 +32,7 @@ export type RepeatPipelineResult = {
   summary: {
     totalRecent: number;
     secondOrdersPlaced: number;
-    openFeedbackIssues: number;
+    openFeedbackIssues: number | null;
   };
 };
 
@@ -78,8 +78,7 @@ export function deriveRepeatPipeline(
     summary: {
       totalRecent: recent.length,
       secondOrdersPlaced: recent.filter(c => c.hasSecondOrder).length,
-      // No feedback store is queried. 0 means unobserved, recorded in provenance.
-      openFeedbackIssues: 0,
+      openFeedbackIssues: null,
     },
   };
 }

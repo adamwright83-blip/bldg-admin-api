@@ -104,6 +104,7 @@ jobs:
           server/strategy/snapshotRepeatPipeline.test.ts
           server/strategy/slice2LiveSnapshot.test.ts
           server/strategy/slice04StrategySnapshot.test.ts
+          server/strategy/snapshotCustomerAggregateLoad.test.ts
       - name: Prove Real Workday truth invariants
         run: >-
           pnpm vitest run

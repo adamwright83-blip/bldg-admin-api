@@ -53,9 +53,17 @@ export function scoreStrategyPlay(
     opportunityAdvancement = 45; // High priority: turn approved access into residents
   } else if (play.templateKey === "property_expansion" && payload.accounts.some(a => a.state === "Contested")) {
     opportunityAdvancement = 35;
-  } else if (play.templateKey === "dormant_recovery" && payload.customers.dormantCount > 0) {
+  } else if (
+    play.templateKey === "dormant_recovery" &&
+    typeof payload.customers.dormantCount === "number" &&
+    payload.customers.dormantCount > 0
+  ) {
     opportunityAdvancement = 30;
-  } else if (play.templateKey === "first_to_second_order" && payload.repeatPipeline.summary.totalRecent > 0) {
+  } else if (
+    play.templateKey === "first_to_second_order" &&
+    typeof payload.repeatPipeline.summary.totalRecent === "number" &&
+    payload.repeatPipeline.summary.totalRecent > 0
+  ) {
     opportunityAdvancement = 40;
   }
 
