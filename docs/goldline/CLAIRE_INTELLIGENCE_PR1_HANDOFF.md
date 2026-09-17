@@ -97,6 +97,33 @@ needs to run in an environment with a real, working `ANTHROPIC_API_KEY` (or
 `ANTHROPIC_MODEL_CLAIRE`-scoped key) before Adam's review** — e.g. Adam's own machine, a CI
 runner with the real secret, or a deployed Railway instance.
 
+### Second, deeper investigation (live-acceptance-only pass) — still blocked, no code touched
+
+A follow-up pass, explicitly scoped to "live acceptance only, do not improvise, do not fabricate"
+(no changes to `server/claire/character/*` or `server/claire/{preDriveConversation,reasoning}.ts`
+in this pass), investigated two further paths before concluding the same:
+
+1. **A PR-preview/branch-deploy pattern for this Railway project.** None exists: no
+   `railway.json`/`railway.toml`, no workflow or script that deploys a non-`main` branch, and
+   Railway `describe-service` confirms `bldg-admin-api`'s production service source is
+   hardcoded to `branch: "main"`. `list-services` (from the earlier pass) already established
+   this project has exactly one environment, `production`.
+2. **Pulling a real `ANTHROPIC_API_KEY` value via Railway MCP tools to run the actual
+   generation functions in-process (no deployment, no Twilio), a path the coordinator
+   explicitly offered.** `list-variables`' own tool description states *"Connected OAuth apps
+   receive variable names only"* — this session's Railway MCP connection is exactly that, and
+   every call returns `valuesRedacted: true`. **There is no way for this session to read an
+   actual secret value from Railway**, structurally, regardless of retries or parameters.
+
+Both paths are genuinely blocked, not skipped. A ready-to-run harness,
+`docs/goldline/claire-intelligence/run-real-exam.ts`, was built and committed so that anyone
+with a real key (Adam's own machine, or Railway CLI access via `railway run`) can execute a
+single command against this exact branch/SHA and get the first genuine non-mocked exam — see
+`docs/goldline/claire-intelligence/after-pr1-REAL-transcript.md` for the full writeup and exact
+commands. **No exam has been run and no output exists yet in `after-pr1-REAL-transcript.md` or
+`after-pr1-REAL-metrics.json` beyond this blocked-status writeup — nothing in either file is
+fabricated model output.**
+
 ### The phone call is the real acceptance test, not the text exam — explicitly flagged
 
 Even once a live Anthropic text exam exists, **that only proves the PROMPT carries Claire's
