@@ -2,12 +2,14 @@
 
 # SLICE 4 HANDOFF — Barrier → Intervention → Fiction Selection
 
-**Status: merge-ready on PR #157. Not merged.**
-**Branch:** `cursor/barrier-intervention-fiction-723a`
+**Status: MERGED into `main` via PR #157. Slice 4 is closed.**
+**Historical branch:** `cursor/barrier-intervention-fiction-723a`
 **PR:** https://github.com/adamwright83-blip/bldg-admin-api/pull/157
-**Base:** `main` @ `49f372de` (Slice 3 merged via PR #156)
-**Exact verified head SHA:** `a6b06ff6`
-**CI on `a6b06ff6`:** 22/22 green (not the superseded `40aebd65` run)
+**Implementation head:** `a6b06ff6`
+**Final PR head:** `ed3b9644640426f9f3761a220df91c1e25146a50`
+**Merge commit:** `6a160056bf11e7f9b16522d6da01d2b3d9dc04fd`
+**Merged at:** 2026-09-17T11:05:30Z
+**CI on final PR head:** 22/22 green
 
 ---
 
@@ -36,7 +38,7 @@ observed evidence
 
 Selection is **not** learning. No causal claims. `operator_avoidance` stays disabled.
 
-Production wiring is **required** and is in this PR.
+Production wiring is **required** and shipped in PR #157.
 
 ---
 
@@ -85,7 +87,7 @@ Replay-stable FNV among already-eligible templates is:
 
 A hash pick is not an MRT and must not be recorded as `1/N`.
 
-True randomization / exploration is **Slice 5 (learning/experimentation)**. Not this PR.
+True randomization / exploration is **Slice 5 (learning/experimentation)**. Not this slice.
 
 ---
 
@@ -125,7 +127,7 @@ Until an explicit operator defer action exists, the deferral-driven path stays *
 
 ---
 
-## Local tests on `a6b06ff6`
+## Local tests on implementation head `a6b06ff6`
 
 `pnpm vitest run` — 54 passed / 5 files:
 
@@ -141,14 +143,14 @@ Proofs covered: distinct source event IDs under shared `ops_task` correlation; n
 
 ---
 
-## CI on `a6b06ff6` (22/22)
+## CI on final PR head `ed3b9644` (22/22)
 
-- Fast Goldline smoke: **pass** (`fast-goldline-smoke`, 6m41s)
-- DayForge release gates: **pass** (`mobile-dayforge-release`, 1m31s)
-- Goldline mobile regression: **pass** (all `mobile-*` jobs on the Goldline mobile workflow, including inhabited adventure, real-touch, visit-route, armory, driver shell)
-- Also green: `release-journey`, Vercel preview
+- Fast Goldline smoke: **pass**
+- DayForge release gates: **pass**
+- Goldline mobile regression: **pass**
+- Remaining PR checks: **pass**
 
-Superseded `40aebd65` 22-green does **not** count.
+`ed3b9644` is the final handoff/CI-record commit on top of implementation head `a6b06ff6`. Superseded green runs from older heads do not count as final verification.
 
 ---
 
@@ -164,7 +166,7 @@ Also not this slice: persist decision-point fields onto a future DELIVERED event
 
 **Behavioral-science Slice 5 — learning / experimentation (MRT).** Randomized assignment with a real `assignmentProbability`, not deterministic 1/N theater.
 
-Do not start Slice 5 from this PR. Do not build Dayplay mission-map, Spirit Human crusher, or a Driver UI redesign.
+Do not start Slice 5 automatically. Do not build Dayplay mission-map, Spirit Human crusher, or a Driver UI redesign as part of Slice 5.
 
 Optional adjacent work (not Slice 5): an explicit operator defer action that writes `DEFERRED` with a new `ops_task_event.id` and the existing `ops_task:<taskId>` correlation.
 
@@ -172,4 +174,4 @@ Optional adjacent work (not Slice 5): an explicit operator defer action that wri
 
 ## Next step
 
-Merge PR #157 when instructed. Do not merge from this agent unless asked.
+Slice 4 is merged and closed. Start Behavioral-science Slice 5 only on explicit instruction, using this merged implementation as the production baseline.
