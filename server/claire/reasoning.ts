@@ -353,6 +353,8 @@ export async function writeClairePreDriveBrief(
       kind: "opening_brief",
       source: "model",
       failureReason: null,
+      modelRequested: ENV.anthropicModelClaire || ENV.anthropicModel,
+      surface: "voice",
     };
     await recordGeneration({
       tenantId: input.tenantId,
@@ -378,6 +380,8 @@ export async function writeClairePreDriveBrief(
       kind: "opening_brief",
       source: "fallback",
       failureReason,
+      modelRequested: ENV.anthropicModelClaire || ENV.anthropicModel,
+      surface: "voice",
     };
     await recordGeneration({
       tenantId: input.tenantId,

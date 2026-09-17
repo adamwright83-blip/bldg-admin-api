@@ -13,6 +13,22 @@ export type ClaireGenerationDiagnostic = {
   kind: ClaireGenerationKind;
   source: ClaireGenerationSource;
   failureReason: string | null;
+  /**
+   * PR1 Claire Intelligence Repair (test-matrix items 20/21): the model
+   * requested for this generation (e.g. ENV.anthropicModelClaire ||
+   * ENV.anthropicModel), so a fallback-rate/model-mix report can be built
+   * from these records. Optional and additive -- existing callers that
+   * don't pass it are unaffected.
+   */
+  modelRequested?: string;
+  /**
+   * Surface this generation served -- "voice" for the Twilio phone call
+   * path (the only surface wired to real generation calls today), left
+   * optional so a future desktop/text surface can populate it without a
+   * shape break. Defaults to "voice" if omitted, since that is the only
+   * live surface as of PR1.
+   */
+  surface?: "voice" | "desktop";
 };
 
 /**
@@ -62,6 +78,8 @@ export async function recordClaireGeneration(input: {
     kind: input.diagnostic.kind,
     source: input.diagnostic.source,
     failureReason: input.diagnostic.failureReason,
+    modelRequested: input.diagnostic.modelRequested ?? null,
+    surface: input.diagnostic.surface ?? "voice",
     fallbackRate: current.attempts ? current.fallbacks / current.attempts : 0,
     ...(input.reviewDetail?.orientationContext
       ? orientationTelemetry(input.reviewDetail.orientationContext, input.diagnostic.source === "fallback")

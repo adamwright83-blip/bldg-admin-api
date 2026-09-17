@@ -231,6 +231,8 @@ export async function answerClairePreDriveFollowUp(
       kind: "follow_up",
       source: "model",
       failureReason: null,
+      modelRequested: ENV.anthropicModelClaire || ENV.anthropicModel,
+      surface: "voice",
     };
     await recordGeneration({
       tenantId: input.tenantId,
@@ -255,6 +257,8 @@ export async function answerClairePreDriveFollowUp(
       kind: "follow_up",
       source: "fallback",
       failureReason,
+      modelRequested: ENV.anthropicModelClaire || ENV.anthropicModel,
+      surface: "voice",
     };
     await recordGeneration({
       tenantId: input.tenantId,
