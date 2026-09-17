@@ -258,8 +258,10 @@ async function run() {
       transcriptLines.push(`- Recent turns supplied: ${JSON.stringify(turn.recentTurns)}`);
     }
     transcriptLines.push(`- RAW Claire response: "${result}"`);
-    transcriptLines.push(`- Source: ${diagnostic?.source ?? "unknown"}${diagnostic?.failureReason ? ` (reason: ${diagnostic.failureReason})` : ""}`);
+    transcriptLines.push(`- Source: ${diagnostic?.answerOrigin ?? diagnostic?.source ?? "unknown"}${diagnostic?.failureReason ? ` (reason: ${diagnostic.failureReason})` : ""}`);
     transcriptLines.push(`- Model requested: ${diagnostic?.modelRequested ?? "(unknown)"}`);
+    transcriptLines.push(`- stop_reason: ${diagnostic?.stopReason ?? "(not captured)"}`);
+    transcriptLines.push(`- Sentence-boundary trim applied: ${diagnostic?.trimmedToSentenceBoundary == null ? "n/a" : diagnostic.trimmedToSentenceBoundary ? "yes" : "no"}`);
     transcriptLines.push(`- Character mode: ${turn.kind === "opening_brief" ? "pre_drive (opening)" : "pre_drive (follow_up)"}`);
     transcriptLines.push(`- Generation latency: ${latencyMs}ms`);
     transcriptLines.push("");
@@ -269,9 +271,12 @@ async function run() {
       label: turn.label,
       kind: turn.kind,
       rawResponse: result,
-      source: diagnostic?.source ?? null,
+      source: diagnostic?.answerOrigin ?? diagnostic?.source ?? null,
+      legacyGenerationSource: diagnostic?.source ?? null,
       failureReason: diagnostic?.failureReason ?? null,
       modelRequested: diagnostic?.modelRequested ?? null,
+      stopReason: diagnostic?.stopReason ?? null,
+      trimmedToSentenceBoundary: diagnostic?.trimmedToSentenceBoundary ?? null,
       latencyMs,
     });
   }
