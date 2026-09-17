@@ -6,19 +6,7 @@ on:
       - "client/src/game/**"
       - "client/src/pages/driver/GoldlineDriverController.tsx"
       - "client/src/pages/Driver.tsx"
-      # The Goldline page surfaces are part of the playable path, not
-      # adjacent to it. OpenChannel.tsx owns the empty-day ignition and the
-      # resume banner that realDayIgnition/emptyDayTruth/firstThirtySeconds
-      # all exercise — and it was NOT covered here, so a change that broke
-      # the front door of the app could merge without this gate ever
-      # running. That is exactly how it broke.
       - "client/src/pages/goldline/**"
-      # The whole directory, not one file. These are the driver's mobile
-      # surfaces: LogSignalSheet owns field intel capture and
-      # AddExternalWorkSheet owns CleanCloud intake, both reachable from the
-      # live game screen. Neither was covered, so a change to either alone
-      # could merge without this gate running — the same gap that let the
-      # front door break, one directory over.
       - "client/src/components/driver/**"
       - "client/src/components/admin/control-room/**"
       - "server/commercialMissions/driverSalesMotivationService.ts"
@@ -32,10 +20,6 @@ on:
       - "server/field/**"
       - "server/goldlineWorld/**"
       - "server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts"
-      # LOCAL_TARGET_RUN (§PR77 Part 8-20): recognition, real sourcing (with
-      # the labeled-simulation fallback), and the Field Intel linkage that
-      # advances a run's progress. None of this was covered here, and it is
-      # exactly the kind of truth-sensitive surface this workflow exists for.
       - "server/openChannel/**"
       - "server/impactSignals/**"
       - "shared/localTargetRun.ts"
@@ -81,15 +65,21 @@ concurrency:
   group: goldline-mobile-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-jobs:
-  pixel-class-layout:
-    runs-on: ubuntu-latest
-    # The full browser matrix currently takes ~21 minutes on a shared runner,
-    # followed by ~7 minutes of real-CDP touch proofs. Keep enough headroom for
-    # runner variance and the final bundle/whitespace checks without weakening
-    # either regression surface.
-    timeout-minutes: 45
+env:
+  CI: "true"
+  DATABASE_URL: mysql://root:root@127.0.0.1:3306/goldline_mobile_gate
+  DAYFORGE_RELEASE_DB: "1"
+  APP_SHARED_API_SECRET: goldline-mobile-app-secret-000000000000000000
+  JWT_SECRET: goldline-mobile-jwt-secret-000000000000000000
+  STRIPE_SECRET_KEY: goldline-mobile-placeholder-not-used
+  DRIVER_PASSWORD: goldline-mobile-driver-pass
+  DRIVER_OPEN_ID: goldline-mobile-driver
 
+jobs:
+  mobile-build-and-schema:
+    name: mobile-build-and-schema
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
     services:
       mysql:
         image: mysql:8.0
@@ -103,77 +93,271 @@ jobs:
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
-
-    env:
-      CI: "true"
-      DATABASE_URL: mysql://root:root@127.0.0.1:3306/goldline_mobile_gate
-      DAYFORGE_RELEASE_DB: "1"
-      APP_SHARED_API_SECRET: goldline-mobile-app-secret-000000000000000000
-      JWT_SECRET: goldline-mobile-jwt-secret-000000000000000000
-      STRIPE_SECRET_KEY: goldline-mobile-placeholder-not-used
-      DRIVER_PASSWORD: goldline-mobile-driver-pass
-      DRIVER_OPEN_ID: goldline-mobile-driver
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
           version: 10.4.1
-
       - name: Install Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
       - name: Apply repository migrations to disposable MySQL
         run: pnpm db:dayforge:release
-
-      - name: Prove authoritative business-loop contracts
-        run: >-
-          pnpm vitest run
-          client/src/game/actions
-          client/src/game/encounters
-          client/src/game/state/WorldProjection.test.ts
-          client/src/game/state/MissionDirector.test.ts
-          client/src/game/state/worldMemory.test.ts
-          client/src/game/session/checkpointStorage.test.ts
-          shared/goldlineProgression.test.ts
-
-      - name: Prove Android journal audio resilience
-        run: >-
-          pnpm vitest run
-          server/commercialMissions/driverSalesJournalResilience.test.ts
-          client/src/components/driver/SalesMomentum.test.ts
-
-      - name: Prove DayForge release journey
-        run: pnpm vitest run --config vitest.integration.config.ts server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts
-
-      - name: Prove Armory evolution
-        run: pnpm vitest run --config vitest.integration.config.ts server/armory/armoryEvolution.integration.test.ts
-
-      - name: Prove driver-safe sales intelligence
-        run: pnpm vitest run --config vitest.integration.config.ts server/salesIntel/driverSafeSalesIntel.integration.test.ts
-
-      - name: Prove authoritative visit route
-        run: pnpm vitest run --config vitest.integration.config.ts server/field/authoritativeVisitRoute.integration.test.ts
-
-      - name: Build production application
+      - name: Build production application once
         run: VITE_GOLDLINE_TEST_HARNESS=1 pnpm build
+      - name: Enforce Goldline bundle budget
+        run: node scripts/checkGoldlineBundleBudget.mjs
+      - name: Check whitespace errors
+        run: git diff --check
+      - name: Publish immutable production build
+        uses: actions/upload-artifact@v4
+        with:
+          name: goldline-mobile-dist-${{ github.sha }}
+          path: dist
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
 
-      - name: Install Chromium
+  mobile-unit:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: mobile-business-loop-contracts
+            command: >-
+              pnpm vitest run
+              client/src/game/actions
+              client/src/game/encounters
+              client/src/game/state/WorldProjection.test.ts
+              client/src/game/state/MissionDirector.test.ts
+              client/src/game/state/worldMemory.test.ts
+              client/src/game/session/checkpointStorage.test.ts
+              shared/goldlineProgression.test.ts
+          - name: mobile-android-journal
+            command: >-
+              pnpm vitest run
+              server/commercialMissions/driverSalesJournalResilience.test.ts
+              client/src/components/driver/SalesMomentum.test.ts
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run lane
+        run: ${{ matrix.command }}
+
+  mobile-integration:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: mobile-dayforge-release
+            command: pnpm vitest run --config vitest.integration.config.ts server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts
+          - name: mobile-armory
+            command: pnpm vitest run --config vitest.integration.config.ts server/armory/armoryEvolution.integration.test.ts
+          - name: mobile-sales-intel
+            command: pnpm vitest run --config vitest.integration.config.ts server/salesIntel/driverSafeSalesIntel.integration.test.ts
+          - name: mobile-visit-route
+            command: pnpm vitest run --config vitest.integration.config.ts server/field/authoritativeVisitRoute.integration.test.ts
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: goldline_mobile_gate
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply repository migrations to isolated MySQL
+        run: pnpm db:dayforge:release
+      - name: Run lane
+        run: ${{ matrix.command }}
+
+  mobile-browser:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    needs: mobile-build-and-schema
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: mobile-authoritative-business
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
+              e2e/goldline/authoritativeBusinessChains.spec.ts
+          - name: mobile-driver-shell-and-pixel
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
+              e2e/goldline/businessActionResume.spec.ts
+              e2e/goldline/driverHomeComposition.spec.ts
+              e2e/goldline/driverHomeP1Safety.spec.ts
+              e2e/goldline/driverHomeWorldComposition.spec.ts
+              e2e/goldline/mobileTypographyFloor.spec.ts
+              e2e/goldline/pixel9Layout.spec.ts
+          - name: mobile-day-entry-overland
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
+              e2e/goldline/dynamic-reroute.spec.ts
+              e2e/goldline/emptyDayTruth.spec.ts
+              e2e/goldline/firstThirtySeconds.spec.ts
+              e2e/goldline/overlandEntry.spec.ts
+              e2e/goldline/realDayIgnition.spec.ts
+          - name: mobile-expandable-world
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
+              e2e/goldline/expandableWorld.spec.ts
+          - name: mobile-immersion
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
+              e2e/goldline/immersion-gate.spec.ts
+          - name: mobile-inhabited-adventure-a
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
+              e2e/goldline/inhabitedAdventure.spec.ts
+              --grep 'six ambient|CI preview|Anchor|Gatekeeper'
+          - name: mobile-inhabited-adventure-b
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
+              e2e/goldline/inhabitedAdventure.spec.ts
+              --grep 'Ghost|Staller|reduced motion'
+          - name: mobile-reality-route
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
+              e2e/goldline/pickupDeliveryWorldObjective.spec.ts
+              e2e/goldline/realityProgression.spec.ts
+              e2e/goldline/today-route-persistence.spec.ts
+              e2e/goldline/waywardStage.spec.ts
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: goldline_mobile_gate
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply repository migrations to isolated MySQL
+        run: pnpm db:dayforge:release
+      - name: Restore shared production build
+        uses: actions/download-artifact@v4
+        with:
+          name: goldline-mobile-dist-${{ github.sha }}
+          path: dist
+      - name: Cache Playwright Chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-goldline-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install Chromium runtime
         run: pnpm exec playwright install --with-deps chromium
+      - name: Run browser lane
+        run: ${{ matrix.command }}
 
-      - name: Prove Pixel-class portrait / landscape / keyboard recovery
-        run: pnpm exec playwright test --config playwright.goldline.config.ts
-
-      - name: Start production server for real-touch permanent regression gates
+  mobile-real-touch-field:
+    name: mobile-real-touch-field
+    runs-on: ubuntu-latest
+    needs: mobile-build-and-schema
+    timeout-minutes: 8
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: goldline_mobile_gate
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply repository migrations to isolated MySQL
+        run: pnpm db:dayforge:release
+      - name: Restore shared production build
+        uses: actions/download-artifact@v4
+        with:
+          name: goldline-mobile-dist-${{ github.sha }}
+          path: dist
+      - name: Cache Playwright Chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-goldline-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install Chromium runtime
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Start production server
         run: |
           NODE_ENV=ci PORT=4176 node dist/index.js > /tmp/goldline-gate-server.log 2>&1 &
           echo $! > /tmp/goldline-gate-server.pid
@@ -187,65 +371,21 @@ jobs:
           echo "server never became ready"
           cat /tmp/goldline-gate-server.log
           exit 1
-
-      - name: Prove Goldline permanent regression gates (real CDP touch, not synthetic events)
+      - name: Prove permanent real-touch field gates
         env:
           GOLDLINE_VERIFY_URL: http://127.0.0.1:4176
         run: |
           set -e
-          # §PR77 Part 21A. verifyGoldlineFirstPlayGate.mjs is deliberately NOT
-          # run here yet: to sidestep a genuine Chrome/CDP multi-touch quirk,
-          # it releases the joystick before dispatching the deliberate STRIKE
-          # tap (see the script's own comment, lines 296-303), which leaves the
-          # player briefly stationary. On this runner that window was long
-          # enough for the game's ambient passive-lash tick (fires only while
-          # stationary) to defeat the low-HP tutorial hostile before the
-          # deliberate tap landed, cascading every teaching-state check that
-          # follows. verifyGoldlineTrueTouch.mjs solved this identical race by
-          # holding the joystick down via real multi-touch through the whole
-          # strike so the player is never stationary; FirstPlayGate needs the
-          # same fix before it can gate merges without risking spurious
-          # failures on a loaded runner. Passed reliably every local run.
-          #
-          # §PR77 Part 21E. One objective owner, tappable, controls unobstructed.
+          # Keep the same permanent gates as the former serial workflow.
+          # FirstPlayGate, TrueTouch, and OpenChannelExpedition remain excluded
+          # until their documented CI timing races are repaired.
           node scripts/verifyGoldlineObjectiveHierarchyGate.mjs
-          # §PR77 Part 7. verifyGoldlineTrueTouch.mjs is ALSO deliberately NOT
-          # run here yet, for the same class of reason as FirstPlayGate above:
-          # on this actual CI runner it failed with a real touch STRIKE
-          # registering zero damage, a real flick never beginning an evade,
-          # and a locked Line not firing on release — all passing reliably
-          # locally. These scripts assume CDP round-trip latency and real
-          # elapsed time between dispatched touch events stay well under the
-          # game's own thresholds (HOLD_THRESHOLD_MS, the ambient-lash
-          # cadence); that assumption does not hold on this runner, whether
-          # from CDP latency itself or the page's rAF-driven game loop being
-          # starved of CPU on a shared runner. Needs real investigation
-          # against an actual CI run, not a local-only fix.
-          # §PR77 Parts 8-20, 21F-J. LOCAL_TARGET_RUN recognition, truthful
-          # partial sourcing, Field Intel linkage, resume, route progression,
-          # and the labeled-simulation fallback badge.
           node scripts/verifyGoldlineLocalTargetRunGate.mjs
-          # Pre-existing Field Intel and external-order proofs — covered by
-          # this same touch harness, never previously gated in CI.
-          #
-          # verifyGoldlineOpenChannelExpedition.mjs is deliberately NOT run
-          # here yet: its "ACT still dodges on a non-order objective" check
-          # has a real, pre-existing (predates this change) CDP-timing race
-          # under load — confirmed reproducing on main independent of any
-          # LOCAL_TARGET_RUN work — and needs its own fix before it can gate
-          # merges without risking spurious failures.
           node scripts/verifyGoldlineFieldIntel.mjs
           node scripts/verifyGoldlineExternalOrder.mjs
-
       - name: Stop production server
         if: always()
         run: |
           if [ -f /tmp/goldline-gate-server.pid ]; then
             kill "$(cat /tmp/goldline-gate-server.pid)" 2>/dev/null || true
           fi
-
-      - name: Enforce Goldline bundle budget
-        run: node scripts/checkGoldlineBundleBudget.mjs
-
-      - name: Check whitespace errors
-        run: git diff --check
