@@ -47,8 +47,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Prove campaign truth invariants
-        run: pnpm vitest run shared/goldlineCampaign.test.ts shared/goldlineCampaignReviewFixes.test.ts
+      - name: Prove campaign and behavioral truth invariants
+        run: >-
+          pnpm vitest run
+          shared/goldlineCampaign.test.ts
+          shared/goldlineCampaignReviewFixes.test.ts
+          server/behavioralLedger/behavioralLedger.test.ts
+          server/opsTasks.behavioralLedger.test.ts
       - name: Prove Real Workday truth invariants
         run: >-
           pnpm vitest run
