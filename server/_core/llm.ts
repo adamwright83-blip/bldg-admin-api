@@ -468,7 +468,11 @@ export async function invokeTextLLM(params: InvokeTextParams): Promise<string> {
     const systemParts: string[] = [];
     const anthropicMessages: Anthropic.MessageParam[] = [];
     for (const message of params.messages) {
-      if (message.role !== "system" && message.role !== "user") {
+      if (
+        message.role !== "system" &&
+        message.role !== "user" &&
+        message.role !== "assistant"
+      ) {
         throw new TextLLMInvocationError(
           "invalid_request",
           `Unsupported message role for Anthropic text invoke: ${message.role}`
@@ -483,7 +487,11 @@ export async function invokeTextLLM(params: InvokeTextParams): Promise<string> {
       }
       const text = parts.map(part => (part as TextContent).text).join("\n");
       if (message.role === "system") systemParts.push(text);
-      else anthropicMessages.push({ role: "user", content: text });
+      // Real alternating history: user/assistant messages are pushed in the
+      // order given, preserving role. Callers are responsible for bounding
+      // history length and for treating verified business context (not
+      // prior assistant text) as the source of truth for facts.
+      else anthropicMessages.push({ role: message.role, content: text });
     }
     if (anthropicMessages.length === 0) {
       throw new TextLLMInvocationError(

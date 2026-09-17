@@ -46,7 +46,11 @@ describe("Claire natural-language generation", () => {
     expect(request.messages[0].content).toContain(
       "Do not introduce yourself"
     );
-    expect(request.messages[0].content).toContain("never exceed 70 words");
+    // PR1 Claire Intelligence Repair: the old blanket 70-word cap is gone.
+    expect(request.messages[0].content).not.toContain("never exceed 70 words");
+    expect(request.messages[0].content).toContain(
+      "General professional/strategic knowledge"
+    );
     expect(JSON.parse(request.messages[1].content)).toMatchObject({
       businessDate: context.businessDate,
       nextFixedCommitment: context.nextFixedCommitment,

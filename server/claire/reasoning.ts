@@ -18,6 +18,25 @@ import {
   assertPostGenerationStateVerbs,
   buildClaireVerifiedFactInventory,
 } from "./verifiedFactInventoryFromContext";
+import { ENV } from "../_core/env";
+
+/**
+ * PR1 Claire Intelligence Repair: cut generously at a sentence boundary
+ * instead of a hard mid-sentence character truncation, so a long useful
+ * answer isn't chopped off mid-word. Only trims if genuinely over budget.
+ */
+function trimToSentenceBoundary(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const slice = text.slice(0, maxChars);
+  const lastBoundary = Math.max(
+    slice.lastIndexOf(". "),
+    slice.lastIndexOf("! "),
+    slice.lastIndexOf("? ")
+  );
+  return lastBoundary > maxChars * 0.4
+    ? slice.slice(0, lastBoundary + 1)
+    : slice;
+}
 
 /**
  * Assembles the compact character context for a given phase/operator.
@@ -267,51 +286,54 @@ export async function writeClairePreDriveBrief(
     const text = (
       await invokeText({
         tenantId: input.tenantId,
-        maxTokens: 320,
-        temperature: 0.15,
+        model: ENV.anthropicModelClaire || ENV.anthropicModel,
+        maxTokens: 500,
+        temperature: 0.6,
         messages: [
           {
             role: "system",
             content: [
-              "You are Claire, Goldline's concise operations partner and strategist calling before a drive.",
-              "Notice the gap between where the business is and where the operator wants it, and select the one or two commercial points that matter most today.",
-              "The operator is a player, not a CEO. Never use 'CEO', 'executive', 'board approval', or similar framing.",
-              "Missed or outstanding work is never framed as disappointment, shame, or letdown (Guardrail G2). State what remains plainly with options (repair, reschedule, or drop).",
-              "Assert only verified state from the inventory (Guardrail G4). Never invent actions or outcomes.",
-              "Forecasts and planning scenarios are estimates, not facts (Guardrail G12).",
-              "Use only the supplied business context. Never invent a customer, outcome, deadline, address, revenue, commitment, or completed action.",
-              "The game cannot create business truth. Derived suggestions are suggestions, never facts.",
-              "This is an orientation brief from a strategic operating partner. Use the supplied clock, macro goal, verified metric, work picture, campaign, and runtime picture only.",
+              // (1) Who Claire is
+              "You are Claire, Goldline's operations partner and strategist, calling before a drive.",
+              // (2) Eligible relationship/canon context
+              compiled.promptSection,
+              // (3) Verified business context (supplied in the user turn) + fact inventory
+              inventory.toPromptSection(),
+              // (4) What she's helping with
+              "This is an orientation brief. Notice the gap between where the business is and where the operator wants it, and select the one or two commercial points that matter most today, using the supplied clock, macro goal, verified metric, work picture, campaign, and runtime picture.",
               CLAIRE_V1_REASONING_POLICY,
               formatCapabilityBriefing(),
-              "Every factual clause must map directly to a supplied field. Omit missing facts. Never calculate a metric or infer a total.",
+              // (5) Truth/action boundaries
+              "Every business-specific factual clause must map directly to a supplied field or the fact inventory, or say plainly it is unknown. Omit missing facts. Never calculate a metric or infer a total. Never invent a customer, outcome, deadline, address, revenue, commitment, or completed action. The game cannot create business truth.",
+              "General professional/strategic knowledge (sales approach, pricing logic, PM dynamics, ops reasoning) may be used to frame your recommendation or reasoning, clearly as your own judgment or suggestion — never asserted as a fact about this business. Forecasts and planning scenarios are estimates, not facts (Guardrail G12).",
+              "The operator is a player, not a CEO. Never use 'CEO', 'executive', 'board approval', or similar framing.",
+              "Missed or outstanding work is never framed as disappointment, shame, or letdown (Guardrail G2). State what remains plainly with options (repair, reschedule, or drop).",
               "If fieldSalesDayState is winding_down or over, distinguish property-visit viability from remote calls, follow-ups, research, or tomorrow's field opportunity when those items exist.",
               "For a partial active-customer metric, state only the verified subset and explicitly say it is not the full total. For unavailable, omit the count.",
-              "Name at most one strategic operational fact. Use real-work language such as Greystar visits, never fantasy or NPC language.",
+              "Use real-work language such as Greystar visits, never fantasy or NPC language.",
               "Never mention software development, code, repositories, GitHub, Codex, commits, pull requests, deployments, archiving, internal engineering chores, JSON, databases, confidence systems, or internal architecture.",
-            "If the macro goal is unknown, ask what the macro goal is rather than inventing it.",
-            "The phone wrapper already introduces Claire. Do not introduce yourself, say your name, greet the operator, or mention Goldline.",
-            "Speak naturally in no more than 3 concise sentences and never exceed 70 words.",
+              "If the macro goal is unknown, ask what the macro goal is rather than inventing it.",
+              "The phone wrapper already introduces Claire. Do not introduce yourself, say your name, greet the operator, or mention Goldline.",
+              // (6)/(7) recent conversation and the operator's ask arrive via the user turn below
+              "Speak naturally, sized to what actually matters today — usually a few concise sentences, more if there is a genuine strategic point worth making. Do not pad for length or artificially cut a real point short.",
               "Use conversational spoken English. Avoid slash-separated phrases, dense abbreviations, or wording that is hard to understand over a phone line.",
               "Do not narrate the game.",
-              "If the context includes missionSalesBrief, that is the one authoritative sales strategy for this mission — prioritize its primaryObjective and keyUnknown over generic pitching, and do not repeat anything listed in its thingsToAvoid.",
+              "If the context includes missionSalesBrief, that is the one authoritative sales strategy for this mission — prioritize its primaryObjective and keyUnknown over generic pitching, and do not repeat anything listed in its thingsToAvoid. You may add general sales judgment on top of it, clearly framed as your own take.",
               "Never state a missionSalesBrief unknown, questionsToAsk item, or recommendation as if it were already a known fact. If the operator asks what an unknown answer is, say plainly that it is not known and that finding out is the point of this visit.",
-              compiled.promptSection,
-              inventory.toPromptSection(),
             ].join(" "),
           },
           { role: "user", content: compactContext(input.context) },
         ],
       })
     )
-      .trim()
-      .slice(0, 900);
+      .trim();
     if (!text) throw new Error("Claire opening brief produced empty output");
+    const trimmed = trimToSentenceBoundary(text, 1600);
 
-    assertPostGenerationStateVerbs(text, inventory);
+    assertPostGenerationStateVerbs(trimmed, inventory);
 
     // Guardrail G2 post-generation lint
-    const disappointmentCheck = lintDisappointmentFraming(text);
+    const disappointmentCheck = lintDisappointmentFraming(trimmed);
     if (!disappointmentCheck.passes) {
       console.warn("[Claire] Pre-drive brief failed G2 disappointment lint, falling back", {
         pattern: disappointmentCheck.matchedPattern,
@@ -320,7 +342,7 @@ export async function writeClairePreDriveBrief(
     }
 
     // Global CEO/executive framing prohibition lint
-    const ceoCheck = lintCeoLanguage(text);
+    const ceoCheck = lintCeoLanguage(trimmed);
     if (!ceoCheck.passes) {
       console.warn("[Claire] Pre-drive brief failed CEO language lint, falling back", {
         pattern: ceoCheck.matchedPattern,
@@ -338,14 +360,14 @@ export async function writeClairePreDriveBrief(
       latencyMs: Date.now() - startedAt,
       reviewDetail: {
         operatorUserId: input.context.actorId ?? null,
-        generatedText: text,
+        generatedText: trimmed,
         compiled,
         businessContextSummary: input.context.businessDate,
         orientationContext: input.context,
       },
     });
     input.onGeneration?.(diagnostic);
-    return text;
+    return trimmed;
   } catch (error) {
     const failureReason = safeClaireFailureReason(error);
     console.error("[Claire] opening brief generation failed", {

@@ -101,7 +101,13 @@ describe("Slice 3: assertion-guard production wiring", () => {
         recordGeneration: silentRecord(),
       }
     );
-    expect(result).toContain("I can only clarify today's field brief");
+    // PR1 Claire Intelligence Repair: the fallback line changed from the
+    // old canned "I can only clarify..." text to a brief, human, non-
+    // deceptive line — the important behavior is that assertion-guard
+    // rejection still routes to the deterministic fallback, not the model
+    // text that made the unverified claim.
+    expect(result).not.toContain("queued");
+    expect(result).toContain("Give me a second");
   });
 
   it("pre-drive follow-up keeps a verified scheduled assertion", async () => {
