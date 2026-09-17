@@ -100,7 +100,7 @@ Full spec: `docs/goldline/FICTION_PACKS.md` (binding). Campaign truth stays belo
 - [claude] Field Moves needs a deliberate new candidate kind for a standing residential grid — `FieldTodayItemKind` has no such kind today and `rankFieldMoves` has no ranking path for one. Not a free integration.
 
 ## In Progress
-- [cursor] Behavioral-science Slice 4 — barrier → intervention → fiction selection (not BUILD_BRIEF Mission Director). Handoff: `docs/goldline/SLICE_4_HANDOFF.md`. Binding: `docs/goldline/BEHAVIORAL_SCIENCE_FOUNDATION.md`. No causal learning; `operator_avoidance` stays off.
+- [cursor] Behavioral-science Slice 4 — barrier → intervention → fiction selection. PR #157 merge-ready on `a6b06ff6` (22/22 CI). Not merged. Handoff: `docs/goldline/SLICE_4_HANDOFF.md`.
 - [cursor] Claire owns the workday (shared-brain operating loop + Driver surface retirement + play runtime reconciliation) — starts from current main after Claire V1. Program: `docs/goldline/CLAIRE_OWNS_WORKDAY_LEDGER.md`. No second Claire, no Sage, no second task DB, no new migration unless later slices force a stop.
 
 ## Blocked

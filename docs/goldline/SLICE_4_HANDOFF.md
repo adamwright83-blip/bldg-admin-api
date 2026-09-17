@@ -2,12 +2,12 @@
 
 # SLICE 4 HANDOFF — Barrier → Intervention → Fiction Selection
 
-**Status: production-truth pass on PR; not merge-ready until CI is green.**
+**Status: merge-ready on PR #157. Not merged.**
 **Branch:** `cursor/barrier-intervention-fiction-723a`
-**PR:** #157
+**PR:** https://github.com/adamwright83-blip/bldg-admin-api/pull/157
 **Base:** `main` @ `49f372de` (Slice 3 merged via PR #156)
-**Exact latest commit SHA:** `850fa1d1`
-**CI status:** pending after this commit
+**Exact verified head SHA:** `a6b06ff6`
+**CI on `a6b06ff6`:** 22/22 green (not the superseded `40aebd65` run)
 
 ---
 
@@ -36,7 +36,26 @@ observed evidence
 
 Selection is **not** learning. No causal claims. `operator_avoidance` stays disabled.
 
-Production wiring is **required** for this slice (not optional).
+Production wiring is **required** and is in this PR.
+
+---
+
+## Production wiring path
+
+```
+GoldlineDriverController
+  → behavioralSubjectFromGrammar(campaign chapter grammar)
+  → trpc.system.goldlineWorld.behavioralEventsForSubject({ correlationId })
+  → GoldlineGameHome
+  → preferredTemplateIdForDirector({ events, campaignPreferredTemplateId, registry })
+  → selectFictionForMission({ preferredTemplateId })
+```
+
+- No Driver UI redesign.
+- No second fiction system.
+- `ActionGrammar` is read-only; presentation can change while the grammar stays the same.
+- No useful history → `preferredTemplateId` is campaign preferred or `null` → existing Director hash fallback.
+- Eligibility still outranks preference inside `selectFictionForMission`.
 
 ---
 
@@ -51,15 +70,38 @@ History is assembled with `listBehavioralLedgerEventsForOperatorCorrelation(tena
 
 Do not assemble by `sourceEntityId`. That cannot accumulate multiple events for one task.
 
-Other producers (`strategy_path_offer`, `commercial_mission`, etc.) are typed in `LEDGER_SOURCE_SYSTEMS` but have **no production writers yet**. Correlation is sufficient for the only live producer (ops tasks). A typed subject helper exists in `shared/behavioralSubject.ts` (`opsTaskBehavioralSubject` / `behavioralSubjectFromGrammar`) so non-ops grammars do not collide with ops-task rows.
+Other producers (`strategy_path_offer`, `commercial_mission`, etc.) are typed in `LEDGER_SOURCE_SYSTEMS` but have **no production writers yet**. Correlation is sufficient for the only live producer (ops tasks). `shared/behavioralSubject.ts` maps numeric/ops grammar ids to `ops_task:<id>` so non-ops grammars do not collide with ops-task rows.
 
 Tenant + operator isolation remains on every read.
 
 ---
 
+## Assignment mechanism
+
+Replay-stable FNV among already-eligible templates is:
+
+* `assignmentMechanism: "deterministic_policy"`
+* `assignmentProbability: null`
+
+A hash pick is not an MRT and must not be recorded as `1/N`.
+
+True randomization / exploration is **Slice 5 (learning/experimentation)**. Not this PR.
+
+---
+
+## Barrier hypothesis model
+
+- none / insufficient
+- **possible scheduling/opportunity friction** (COM-B opportunity, TDF environmental_context_and_resources) when ≥2 **explicit DEFERRED** rows. Behavior-only evidence does **not** name “time”.
+- **declared time constraint** when the operator declared `time`. Declaration outranks inferred deferral (standard/plain presentation).
+- Not avoidance, motivation deficit, fear, laziness, ADHD, or personality.
+- no diagnosis; no “works better”
+
+---
+
 ## Authoritative DEFERRED production
 
-**There is currently no production DEFERRED producer.**
+**There is currently no production DEFERRED producer.** That is acceptable for Slice 4.
 
 `server/opsTasks.ts` `mirrorOpsTaskEventToBehavioralLedger` maps:
 
@@ -71,44 +113,9 @@ Tenant + operator isolation remains on every read.
 
 Ops task statuses are `open | accepted | in_progress | completed | dismissed | expired`. There is **no explicit defer action** and no `deferred` status.
 
-The selector **counts DEFERRED only when a ledger row with `eventType: "DEFERRED"` is present**. It does **not** infer DEFERRED from silence, NOT_COMPLETED, DISMISSED, EXPIRED, or lack of click.
+The selector **counts DEFERRED only when a ledger row with `eventType: "DEFERRED"` is present**. It does **not** infer DEFERRED from silence, NOT_COMPLETED, DISMISSED, EXPIRED, lack of click, no start, or repeated delivery.
 
-Until an explicit operator defer action exists, the deferral-driven path stays dormant in production. Tests may inject realistic DEFERRED rows (distinct `sourceEntityId`, shared `ops_task:<id>` correlation) to prove the selector and Director bind.
-
----
-
-## Production wiring path
-
-1. `GoldlineDriverController` derives campaign chapter `ActionGrammar` (existing; no Driver UI redesign).
-2. Subject = `behavioralSubjectFromGrammar(grammar)` (ops numeric ids → `ops_task:<id>`).
-3. `trpc.system.goldlineWorld.behavioralEventsForSubject` loads tenant/operator-scoped ledger rows for that correlation.
-4. `GoldlineGameHome` passes those events + campaign `fictionTemplateId` into `selectFictionForMission`.
-5. `preferredTemplateIdForDirector` runs `selectPreferredFictionPresentation`.
-   * behavior-supported eligible preferred id → that id
-   * no evidence / insufficient → campaign preferred or `null`
-6. Existing Director eligibility check still outranks preference, then `deriveFictionAssignment` hash fallback.
-
-No second fiction system. `ActionGrammar` is read-only.
-
----
-
-## Assignment mechanism
-
-Replay-stable FNV among already-eligible templates is **`assignmentMechanism: "deterministic_policy"`**.
-
-`assignmentProbability` is **`null`**. A hash pick is not an MRT and must not be recorded as `1/N`.
-
-True randomization / exploration belongs in a later learning/experimentation slice.
-
----
-
-## Barrier hypothesis model
-
-- none / insufficient
-- **possible scheduling/opportunity friction** (COM-B opportunity, TDF environmental_context_and_resources) when ≥2 **explicit DEFERRED** rows. Behavior-only evidence does **not** name “time”.
-- **declared time constraint** when the operator declared `time`. Declaration outranks inferred deferral (standard/plain presentation).
-- uncertainty text states this is not a motivational trait
-- no diagnosis; no “works better”
+Until an explicit operator defer action exists, the deferral-driven path stays **dormant in production**. Tests inject realistic DEFERRED rows (distinct `sourceEntityId`, shared `ops_task:<id>` correlation) to prove the selector and Director bind. No fake producer was added.
 
 ---
 
@@ -118,36 +125,51 @@ True randomization / exploration belongs in a later learning/experimentation sli
 
 ---
 
-## Files changed (this pass)
+## Local tests on `a6b06ff6`
 
-- `shared/behavioralSubject.ts`
-- `shared/behavioralEvidence.ts` (assemble by correlationId)
-- `shared/behavioralFictionSelection.ts` (+ tests)
-- `shared/behavioralInterventionMapping.ts`
-- `server/behavioralLedger/behavioralLedger.ts` (+ tests)
-- `server/behavioralSelection/selectPreferredFiction.ts` (+ tests)
-- `client/src/game/fiction/fictionDirector.ts` (+ tests)
-- `client/src/game/GoldlineGameHome.tsx`
-- `client/src/pages/driver/GoldlineDriverController.tsx`
-- `server/goldlineWorld/goldlineWorldRouter.ts`
-- `.github/workflows/goldline-fast-smoke.yml`
-- this file
+`pnpm vitest run` — 54 passed / 5 files:
+
+- `shared/behavioralFictionSelection.test.ts` (11)
+- `client/src/game/fiction/fictionDirector.test.ts` (15)
+- `server/behavioralLedger/behavioralLedger.test.ts` (11)
+- `server/behavioralSelection/selectPreferredFiction.test.ts` (1)
+- `server/opsTasks.behavioralLedger.test.ts` (16)
+
+`pnpm check` (`tsc --noEmit`) clean on this head.
+
+Proofs covered: distinct source event IDs under shared `ops_task` correlation; no cross-task bleed; no cross-tenant/operator bleed; grammar unchanged while presentation can change; empty history preserves fallback; ineligible templates cannot win; `assignmentProbability` null; operator-declared time outranks inferred deferral; NOT_COMPLETED/DISMISSED/EXPIRED do not manufacture DEFERRED; no causal “works better” claim.
 
 ---
 
-## What remains
+## CI on `a6b06ff6` (22/22)
 
-- Fast Goldline smoke / DayForge / mobile CI on this PR
-- Persist decision-point fields onto a future DELIVERED event (out of slice)
-- True randomization for MRT (next learning slice)
-- Explicit operator defer action (not invented here)
+- Fast Goldline smoke: **pass** (`fast-goldline-smoke`, 6m41s)
+- DayForge release gates: **pass** (`mobile-dayforge-release`, 1m31s)
+- Goldline mobile regression: **pass** (all `mobile-*` jobs on the Goldline mobile workflow, including inhabited adventure, real-touch, visit-route, armory, driver shell)
+- Also green: `release-journey`, Vercel preview
 
-Do not mark ready or merge until CI is green and the ten proofs pass.
+Superseded `40aebd65` 22-green does **not** count.
 
-## Tests
+---
 
-See `shared/behavioralFictionSelection.test.ts`, `server/behavioralSelection/selectPreferredFiction.test.ts`, `client/src/game/fiction/fictionDirector.test.ts`, ledger correlation aggregation.
+## Known non-blocking limitation
+
+No production DEFERRED producer yet, so the deferral-driven preferred-template path will not activate on live ops tasks until an explicit operator defer action exists. Delivery/accept/start/complete/dismiss/expire mirroring still works.
+
+Also not this slice: persist decision-point fields onto a future DELIVERED event; MRT randomization.
+
+---
+
+## Exact next roadmap slice
+
+**Behavioral-science Slice 5 — learning / experimentation (MRT).** Randomized assignment with a real `assignmentProbability`, not deterministic 1/N theater.
+
+Do not start Slice 5 from this PR. Do not build Dayplay mission-map, Spirit Human crusher, or a Driver UI redesign.
+
+Optional adjacent work (not Slice 5): an explicit operator defer action that writes `DEFERRED` with a new `ops_task_event.id` and the existing `ops_task:<taskId>` correlation.
+
+---
 
 ## Next step
 
-Push, wait for CI, read failing logs if any. Do not merge without instruction.
+Merge PR #157 when instructed. Do not merge from this agent unless asked.
