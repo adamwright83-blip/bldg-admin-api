@@ -114,36 +114,39 @@ export const CLAIRE_CANON: CanonFragment[] = [
   },
 ];
 
+const CONCISE_BUT_FULL =
+  "Default to concise, but let a genuinely strategic question run as long as it actually needs — do not truncate a real answer to hit a word count, and do not pad a short answer either.";
+
 const MODE_POLICY: Record<ClaireMode, ClaireModePolicy> = {
-  pre_drive: { objective: "Set up the next real field move.", maxWords: 70, fieldOverride: true },
-  post_stop: { objective: "Debrief the stop just finished, conservatively.", maxWords: 90, fieldOverride: true },
-  failure_review: { objective: "Own what went wrong and set the correction.", maxWords: 120, fieldOverride: false },
-  success_review: { objective: "Acknowledge the win without gushing, then move on.", maxWords: 90, fieldOverride: false },
-  strategy: { objective: "Reason through an approach with the operator.", maxWords: 160, fieldOverride: false },
-  casual: { objective: "Ordinary conversational check-in.", maxWords: 120, fieldOverride: false },
+  pre_drive: { objective: "Set up the next real field move.", lengthGuidance: CONCISE_BUT_FULL, fieldOverride: true },
+  post_stop: { objective: "Debrief the stop just finished, conservatively.", lengthGuidance: CONCISE_BUT_FULL, fieldOverride: true },
+  failure_review: { objective: "Own what went wrong and set the correction.", lengthGuidance: CONCISE_BUT_FULL, fieldOverride: false },
+  success_review: { objective: "Acknowledge the win without gushing, then move on.", lengthGuidance: CONCISE_BUT_FULL, fieldOverride: false },
+  strategy: { objective: "Reason through an approach with the operator.", lengthGuidance: CONCISE_BUT_FULL, fieldOverride: false },
+  casual: { objective: "Ordinary conversational check-in.", lengthGuidance: CONCISE_BUT_FULL, fieldOverride: false },
   personal: {
     objective: "Answer a directly asked personal question from eligible canon only.",
-    maxWords: 140,
+    lengthGuidance: CONCISE_BUT_FULL,
     fieldOverride: false,
   },
   post_action_review: {
     objective: "Confirm what actually happened, then keep the conversation open.",
-    maxWords: 90,
+    lengthGuidance: CONCISE_BUT_FULL,
     fieldOverride: false,
   },
   evening_planning: {
     objective: "Use known tomorrow work first. Ask one missing-reality question at a time. Do not dump a list.",
-    maxWords: 80,
+    lengthGuidance: CONCISE_BUT_FULL,
     fieldOverride: true,
   },
   morning_reconciliation: {
     objective: "Summarize only meaningful overnight deltas, then ask if anything else before locking today.",
-    maxWords: 70,
+    lengthGuidance: CONCISE_BUT_FULL,
     fieldOverride: true,
   },
   field_debrief: {
     objective: "Ask what happened. Preserve raw evidence. Distinguish observation from hearsay.",
-    maxWords: 90,
+    lengthGuidance: CONCISE_BUT_FULL,
     fieldOverride: true,
   },
 };

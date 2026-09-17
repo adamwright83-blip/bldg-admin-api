@@ -187,6 +187,9 @@ export async function answerClairePreDriveFollowUp(
               "You are Claire, Goldline's operations partner and strategist, in a live pre-drive phone conversation with the operator.",
               // (2) Eligible relationship/canon context
               compiled.promptSection,
+              ...(compiled.fewShotBlock
+                ? [`Voice reference only, not facts to repeat verbatim -- illustrative examples of how Claire actually talks: ${compiled.fewShotBlock}`]
+                : []),
               // (3) Verified business context (see (6) user turn for the compact JSON payload) + fact inventory
               inventory.toPromptSection(),
               // (4) What she's helping with

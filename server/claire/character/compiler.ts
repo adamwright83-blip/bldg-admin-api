@@ -76,7 +76,7 @@ export function compileClaireCharacterContext(input: {
 
   const lines: string[] = [CLAIRE_PERSONALITY_LOCK];
   if (modePolicy.fieldOverride) lines.push(CLAIRE_FIELD_MODE_OVERRIDE);
-  lines.push(`Mode objective: ${modePolicy.objective} Keep it under ${modePolicy.maxWords} spoken words.`);
+  lines.push(`Mode objective: ${modePolicy.objective} ${modePolicy.lengthGuidance}`);
   if (sharedHistorySummaries.length) {
     lines.push(
       `Durable shared history with this operator (epistemic class labeled, use only if relevant, never contradict it, never collapse classes into generic memory): ${sharedHistorySummaries.join(" | ")}`

@@ -297,6 +297,9 @@ export async function writeClairePreDriveBrief(
               "You are Claire, Goldline's operations partner and strategist, calling before a drive.",
               // (2) Eligible relationship/canon context
               compiled.promptSection,
+              ...(compiled.fewShotBlock
+                ? [`Voice reference only, not facts to repeat verbatim -- illustrative examples of how Claire actually talks: ${compiled.fewShotBlock}`]
+                : []),
               // (3) Verified business context (supplied in the user turn) + fact inventory
               inventory.toPromptSection(),
               // (4) What she's helping with
@@ -491,6 +494,9 @@ export async function writeClairePostStopOpening(
               "State that the operator is clear of that account and ask what actually happened. Make clear you will not record won, lost, or a follow-up unless the operator says so.",
               "One or two short spoken sentences, under 40 words.",
               compiled.promptSection,
+              ...(compiled.fewShotBlock
+                ? [`Voice reference only, not facts to repeat verbatim -- illustrative examples of how Claire actually talks: ${compiled.fewShotBlock}`]
+                : []),
               inventory.toPromptSection(),
             ].join(" "),
           },
@@ -601,6 +607,9 @@ export async function writeClaireOutcomeConfirmation(
                 ? "If strategyChange is present, you may briefly note that the plan changed and why, using ONLY newlyKnown — never invent a different reason. If strategyChange is absent, say nothing about strategy."
                 : "",
               compiled.promptSection,
+              ...(compiled.fewShotBlock
+                ? [`Voice reference only, not facts to repeat verbatim -- illustrative examples of how Claire actually talks: ${compiled.fewShotBlock}`]
+                : []),
               inventory.toPromptSection(),
             ].join(" "),
           },

@@ -4,6 +4,148 @@ Branch: `codex/claire-intelligence-pr1-conversation`.
 PR: [#161](https://github.com/adamwright83-blip/bldg-admin-api/pull/161) (draft, targeting `main`).
 Head SHA as of this update: see `git rev-parse HEAD` at time of push (recorded in the PR/commit history — this doc is not re-stamped per micro-commit to avoid drift; trust the PR's actual HEAD over any SHA copied here).
 
+---
+
+## CORRECTIVE PASS (character voice fix) — read this section first
+
+Adam had ChatGPT independently review PR1. It found real gaps in
+`server/claire/character/` that the original PR1 pass did not touch (that
+pass only edited `preDriveConversation.ts` and `reasoning.ts` — the
+per-turn generation call sites — not the shared character-compiler
+substrate both of them pull from). All three of ChatGPT's specific claims
+were verified directly against the code before any fix was made:
+
+| Claim | Verified? | Where |
+|---|---|---|
+| (a) `pre_drive` mode had a hidden `maxWords: 70` compiled into the prompt as "Keep it under 70 spoken words," separate from the word cap already removed from `reasoning.ts` | **Confirmed** | `characterDefinition.ts:118` (`MODE_POLICY.pre_drive.maxWords: 70`), compiled at `compiler.ts:79` (old: `` `Mode objective: ${modePolicy.objective} Keep it under ${modePolicy.maxWords} spoken words.` ``) |
+| (b) A field-mode override told the model not to use "personal storytelling, emotional processing, teasing, or expressive flourishes," and eligible canon is only inserted on an explicit ask | **Confirmed** | `personalityLock.ts` `CLAIRE_FIELD_MODE_OVERRIDE` (old text matched exactly); canon-insertion gate at `compiler.ts:86` (`if (eligibleCanonFacts.length && (!modePolicy.fieldOverride \|\| input.explicitlyRequestedTopic))`) |
+| (c) `compiler.ts` computes a `fewShotBlock` (Claire's example lines) as a field separate from `promptSection`, and neither `preDriveConversation.ts` nor `reasoning.ts` included it in what's sent to the model | **Confirmed** | `compiler.ts:113-116` computes `fewShotBlock`; grep of both files before this fix showed only `compiled.promptSection` referenced, never `compiled.fewShotBlock` |
+
+### Fixes made (per the "know who she is vs. what she may volunteer" principle)
+
+1. **Removed the hidden numeric cap.** `ClaireModePolicy.maxWords: number` → `lengthGuidance: string`
+   (`types.ts`). Every mode in `MODE_POLICY` (`characterDefinition.ts`) now carries
+   `CONCISE_BUT_FULL`: *"Default to concise, but let a genuinely strategic question run as long
+   as it actually needs — do not truncate a real answer to hit a word count, and do not pad a
+   short answer either."* `compiler.ts` now composes `` `Mode objective: ${objective} ${lengthGuidance}` ``
+   instead of a numeric word count. No hard ceiling was reintroduced anywhere in the compiled
+   prompt — confirmed by `pr1CharacterVoiceFix.test.ts` #1 (regex-asserts no `"keep it under N
+   spoken words"` or bare `"N words"` pattern survives, and every mode's policy object lacks a
+   `maxWords` property entirely).
+
+2. **Rewrote `CLAIRE_FIELD_MODE_OVERRIDE`.** Kept the operational-focus limit ("don't start a
+   personal story or dwell on feelings mid-task, don't let eligible canon derail the work") and
+   removed the blanket ban on teasing/expressive flourishes. New text explicitly separates the
+   two concerns: *"That is a limit on WHAT to volunteer, not on HOW you sound: stay exactly
+   yourself — direct, dry, occasionally teasing, observant. Personality is not the same as
+   personal disclosure."* The actual eligibility gating in `canonStore.ts`/`compiler.ts` (which
+   facts are even retrievable/insertable by tier and topic) was **not touched** — confirmed by
+   `pr1CharacterVoiceFix.test.ts` #4, which re-proves Tier 0/Tier 3-no-ask/Tier-1-with-ask/
+   permanently-private behavior is bit-for-bit the same as before this change.
+
+3. **Audited every few-shot in `fewShots.ts` before wiring `fewShotBlock` into any live
+   prompt** (done in this order per the coordinator's explicit instruction — audit first,
+   wire second). Rule applied: a few-shot may teach Claire's *voice*, never an unsupported
+   claim about memory, learning, or operator-trait diagnosis.
+   - `ordinary_pre_drive` — **kept as-is.** No memory/learning/diagnosis claim.
+   - `avoidance` — **kept as-is.** "Were you avoiding walking through the door?" is a direct
+     question about *today's specific observed fact* (drove to four buildings, entered zero) —
+     it doesn't assert a stored avoidance trait, doesn't log or imply a relationship event, and
+     doesn't touch the `operator_avoidance`-stays-off rule (no event type is emitted by this
+     line; it's just a question).
+   - `rationalization` — **kept as-is.** No memory/learning/diagnosis claim.
+   - `claire_was_wrong` — **rewritten.** Before: `"...We keep the miss. Next time an account has
+     already seen multiple approaches, I weight pitch fatigue much higher. You shouldn't have to
+     remind me. I'll remember."` That's a durable-learning/memory claim with no real backing
+     mechanism — the architecture doesn't persist a per-account weighting adjustment across
+     calls anywhere. After: `"...We keep the miss, plainly, and move on — no excuses, no
+     dressing it up."` Same dry, self-critical, no-excuses voice; the unsupported future-memory
+     claim is gone. Confirmed by `pr1CharacterVoiceFix.test.ts` #5 (new copy present, old
+     "I weight pitch fatigue"/"I'll remember" phrasing absent from the actual composed prompt)
+     and #6 (structural regex sweep of all four few-shots for memory/learning/trait-diagnosis
+     phrasing).
+
+   `fewShotBlock` is now spliced into the system prompt in `preDriveConversation.ts` and all
+   three `reasoning.ts` generation calls, immediately after `compiled.promptSection`, clearly
+   labeled `"Voice reference only, not facts to repeat verbatim — illustrative examples of how
+   Claire actually talks: ..."`, and only when the compiler actually produces one (i.e. never in
+   non-field modes, unchanged from before).
+
+### New regression tests: `server/claire/character/pr1CharacterVoiceFix.test.ts` (7 tests)
+
+1. No hidden numeric word/char cap remains reachable in the `pre_drive` compiled prompt (regex + structural).
+2. `CLAIRE_FIELD_MODE_OVERRIDE` no longer bans teasing/flourishes; still keeps the operational-focus limit.
+3. Safe character grounding (`promptSection` containing the personality lock) is present in every one of the 11 modes.
+4. Tier/disclosure gating is unchanged: Tier 0 and Tier 3 both get nothing inserted into the prompt without an explicit ask; Tier 1 + explicit ask surfaces the tier-1 fact; permanently-private never surfaces at any tier.
+5. Both `answerClairePreDriveFollowUp` and `writeClairePreDriveBrief`'s actual model requests now contain the audited few-shot content, and no longer contain the old unsupported-memory line.
+6. Structural sweep: none of the four routine few-shots contain memory/learning ("I'll remember", "next time I weight/adjust") or operator-trait-diagnosis ("you are avoiding", "your pattern is") phrasing.
+7. **Identity test** (structural, not a quality score): a plain generic prompt built from the same business-fact context is compared against Claire's actual production prompt — Claire's version contains the personality lock and voice-example markers the generic version categorically cannot, since it was never built with a character system.
+
+Full suite re-run after this pass: `npx vitest run server/claire` → 41 files, 374 passed.
+`npx vitest run` (full repo) → **636 files, 5917 passed, 7 skipped, 0 failed.**
+
+### Live (non-mocked) Anthropic exam — attempted, blocked
+
+Per the coordinator's instruction, a real (non-mocked) Anthropic call was attempted using the
+actual `@anthropic-ai/sdk` client against `claude-sonnet-4-6` with whatever credentials this
+sandboxed environment exposes. Result: **HTTP 401 `authentication_error`, "API key is invalid."**
+`ANTHROPIC_API_KEY` is not set in this environment's shell (confirmed via `env | grep -i
+anthropic`, which shows only an `ANTHROPIC_BASE_URL` used internally by the Claude Code
+harness itself, not a usable direct-API key for arbitrary SDK calls). No live model output was
+produced, and none is fabricated. **This remains an open item: a live Anthropic exam still
+needs to run in an environment with a real, working `ANTHROPIC_API_KEY` (or
+`ANTHROPIC_MODEL_CLAIRE`-scoped key) before Adam's review** — e.g. Adam's own machine, a CI
+runner with the real secret, or a deployed Railway instance.
+
+### The phone call is the real acceptance test, not the text exam — explicitly flagged
+
+Even once a live Anthropic text exam exists, **that only proves the PROMPT carries Claire's
+voice — it does not prove the PHONE CALL feels like Claire.** A real call additionally depends
+on conversational history/turn-taking, Twilio's `<Gather>`/`<Say>` pacing and the ~11-second
+turn budget documented earlier in this doc, and the actual TTS voice (`CLAIRE_VOICE`)
+rendering the text out loud. These two facts are kept explicitly separate and neither
+substitutes for the other:
+
+- **Text exam (live or mocked)**: proves prompt composition and guardrail behavior. Necessary,
+  not sufficient.
+- **Real end-to-end phone call**: the actual human quality gate for a voice product. Not yet
+  done, and not something this pass could do safely or accurately from this environment —
+  reasons below.
+
+**Why it wasn't done here**: `mcp__Railway__list-services` (used earlier this pass to confirm
+the production model) shows this project has exactly **one** Railway environment, `production`
+— there is no staging/preview environment to deploy this branch to in isolation. Twilio
+credentials (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `CLAIRE_TWILIO_FROM_NUMBER`) and the
+only configured destination (`CLAIRE_OPERATOR_PHONE`, a specific real phone number — almost
+certainly Adam's or a field operator's) live only in that production service's redacted
+variables. Placing a real outbound call to that number from this session would mean (a) using
+credentials that are Adam's, for the first time, from an automated context, to (b) ring an
+actual person's phone, based on an instruction that didn't explicitly authorize that specific
+action. That combination was judged unsafe to do unprompted, so no call was placed.
+
+**Exact steps for Adam (or someone with Railway/Twilio access) to trigger a real test call
+against this branch**:
+
+1. Deploy `codex/claire-intelligence-pr1-conversation` (or merge it to a short-lived test
+   branch/environment) to the `bldg-admin-api` Railway service — either by pointing a new
+   Railway environment at this branch, or temporarily deploying it to `production` if a
+   maintenance window is acceptable.
+2. Ensure `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `CLAIRE_TWILIO_FROM_NUMBER`, and
+   `CLAIRE_OPERATOR_PHONE` (or `CLAIRE_OPERATOR_PHONES`) are set for that deployment (they
+   already are in `production`).
+3. Trigger a pre-drive Claire call the same way it's triggered today in the app (the existing
+   "start pre-drive call" action that calls into `server/claire/claireTwilio.ts`'s call-creation
+   path — this PR does not add or change how a call is initiated).
+4. Answer the call and have a real conversation, including at least one question from each of
+   exam categories A–G (see `docs/goldline/claire-intelligence/run-exam.ts` for the exact
+   wording used in the mocked harness, as a starting script) to hear how the repaired prompt +
+   real Twilio pacing + real TTS actually sound together.
+5. That listen — not this PR's text artifacts — is the actual acceptance gate. **This step has
+   not been performed by anyone as of this handoff.**
+
+---
+
+
 Verified ancestor: PR #151 (`8e6c7003dfd19c6cda5585120c1fee5bfcd54ce7`) is confirmed via
 `git merge-base --is-ancestor` to be in `main`'s history; this branch was cut from latest `main`.
 
