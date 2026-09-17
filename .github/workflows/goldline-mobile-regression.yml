@@ -315,7 +315,7 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     needs: mobile-build-and-schema
-    timeout-minutes: 4
+    timeout-minutes: 7
     strategy:
       fail-fast: false
       matrix:
@@ -384,6 +384,7 @@ jobs:
           cat /tmp/goldline-gate-server.log
           exit 1
       - name: Prove permanent real-touch field gate
+        timeout-minutes: 4
         env:
           GOLDLINE_VERIFY_URL: http://127.0.0.1:4176
         run: ${{ matrix.command }}
