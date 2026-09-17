@@ -241,7 +241,7 @@ describe("ops-task behavioral truth", () => {
     // resolves transitioned:true, mirroring what the database's atomic
     // UPDATE guarantees under real concurrent connections. A separate,
     // real-MySQL version of this same test lives in
-    // server/opsTasks.mysqlIntegration.test.ts.
+    // server/opsTasks.mysql.integration.test.ts.
     const store = createFakeOpsStore();
     const [a, b] = await Promise.all([
       completeOpsTask({ tenantId: TENANT, taskId: 42, outcome: "Reached them by phone" }, store),

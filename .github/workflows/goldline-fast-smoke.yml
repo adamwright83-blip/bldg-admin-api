@@ -64,7 +64,7 @@ jobs:
       - name: Prove ops task completion concurrency against real MySQL
         run: >-
           pnpm vitest run --config vitest.integration.config.ts
-          server/opsTasks.mysqlIntegration.test.ts
+          server/opsTasks.mysql.integration.test.ts
       - name: Prove Real Workday truth invariants
         run: >-
           pnpm vitest run
