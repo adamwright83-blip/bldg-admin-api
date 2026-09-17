@@ -220,18 +220,13 @@ export async function answerClairePreDriveFollowUp(
   let stopReason: string | null = null;
 
   /**
-   * Built as a function so the personal-answer recovery retry (see
-   * recoverPersonalAnswer) can reuse the exact same prompt with one extra
-   * constraint appended, rather than hand-rolling a second, divergent
-   * prompt that would drift from this one.
-   *
    * ORDERING NOTE (corrective pass 3): the delivery rules
    * (VOICE_NATIVE_ANSWER_GUIDANCE) are deliberately LAST -- nearest the
    * generation and after every instruction that could otherwise compete
    * with them on length or structure. A prompt dump showed the previous
    * ordering left ~1,550 characters of further instruction after them.
    */
-  function buildFollowUpSystemPrompt(extraConstraint?: string): string {
+  function buildFollowUpSystemPrompt(): string {
     return [
       // (1) Who Claire is
       "You are Claire, Goldline's operations partner and strategist, in a live pre-drive phone conversation with the operator.",
@@ -265,7 +260,6 @@ export async function answerClairePreDriveFollowUp(
       // (7) Delivery rules LAST, nearest the generation, explicitly
       // authoritative over anything above that implies length/structure.
       ...(surface === "voice" ? [VOICE_NATIVE_ANSWER_GUIDANCE] : []),
-      ...(extraConstraint ? [extraConstraint] : []),
     ].join(" ");
   }
 
