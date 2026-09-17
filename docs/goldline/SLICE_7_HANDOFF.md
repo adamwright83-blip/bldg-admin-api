@@ -2,54 +2,110 @@
 
 # SLICE 7 HANDOFF — Claire relationship offboarding surface
 
-**Status: IN PROGRESS.**
+**Status: MERGED into `main` via PR #160.**
 **Branch:** `chatgpt/behavioral-slice-7-claire-offboarding`
+**PR:** https://github.com/adamwright83-blip/bldg-admin-api/pull/160
 **Base:** `main` @ `fd3fc3913cb4687fcf82f4259f596fa269feb408`
+**Final PR head:** `683d33f86af578130119c276711c55708d9f8589`
+**Merge commit:** `7285bbf9e7a2b6d39190350a3b3cd56d76876ffb`
+**CI on final PR head:** Fast Goldline smoke green; DayForge release gates green; Goldline mobile regression green.
 
 ## Why this is Slice 7
 
-Behavioral-science Slices 1–6 are merged. Slice 6 explicitly left one relationship-layer task in `docs/GOLDLINE-TASKS.md`: Driver/Admin UI for the existing `composeClaireRelationshipClosing` server/domain contract. Adam explicitly asked to execute “Slice 7” on 2026-09-17, so this narrow leftover is the scope. This is not BUILD_BRIEF Slice 7 and does not create a new behavioral-science architecture.
+Behavioral-science Slices 1–6 were already merged. Slice 6 deliberately left one relationship-layer task: expose the existing `composeClaireRelationshipClosing` server/domain contract through a user-facing surface. Adam explicitly asked to execute “Slice 7” on 2026-09-17, so this narrow leftover became Slice 7. This is not BUILD_BRIEF Slice 7 and does not create a new behavioral-science architecture.
 
-## Objective
+## Objective — complete
 
-Expose the existing safe relationship-closing artifact through authenticated Claire API/UI surfaces without deleting or mutating authoritative business records, weakening approval gates, inventing emotional claims, or creating another memory system.
+Expose the existing safe relationship-closing artifact through an authenticated Claire API/UI surface without deleting or mutating authoritative business records, weakening approval gates, inventing emotional claims, or creating another memory system.
 
-## Existing infrastructure to reuse
+## Infrastructure reused
 
 - `server/claire/character/relationshipOffboarding.ts`
 - `server/claire/character/relationshipHistory.ts`
-- `server/claire/claireRouter.ts`
-- `client/src/pages/DayforgeSettingsPage.tsx`
 - existing relationship event/state/tier/compiler infrastructure from Slice 6
+- existing DayForge field-auth procedure
+- shared desktop/driver-accessible Claire surface at `client/src/pages/goldline/ClaireDesk.tsx`
 
-## Non-goals
+## Implementation
 
-- no Joystick branding work
-- no Driver game redesign
-- no new memory table
-- no relationship-score redesign
-- no business-record deletion
-- no diagnosis
-- no adaptive behavioral optimization
-- no fake `DEFERRED`
+### Self-scoped API
 
-## Truth requirements
+New `server/claire/relationshipOffboardingRouter.ts` exposes:
 
-- Closing copy may use only the existing eligible `verified-shared` and `operator-declared` history classes.
+`system.claireRelationshipOffboarding.preview`
+
+The query:
+
+- uses authenticated `ctx.tenantId`
+- uses authenticated `ctx.user.openId`
+- loads bounded relationship history through the Slice 6 assembler
+- calls `composeClaireRelationshipClosing(...)`
+- writes nothing
+- deletes nothing
+- does not alter relationship state, business state, approval state, or operational truth
+
+The router is registered in `server/_core/systemRouter.ts`.
+
+### User-facing surface
+
+`client/src/pages/goldline/ClaireDesk.tsx` now contains a collapsed **Relationship closing** section. The operator must explicitly request the preview; it is not generated on page load.
+
+The UI states plainly that:
+
+- the artifact is built only from eligible relationship history
+- business records are preserved
+- generating the preview does not delete stored history
+- generating the preview does not disable future relationship context
+
+The resulting message comes from the existing Slice 6 domain contract; this slice does not add a second prose generator.
+
+Because `/claire` is already reachable from the relevant authenticated product hosts, one Claire surface serves the relationship-closing preview instead of creating separate Driver/Admin implementations.
+
+## Truth / safety rules preserved
+
+- Closing copy remains limited by Slice 6 to eligible `verified-shared` and `operator-declared` history.
 - Business records remain unchanged.
-- The UI must not imply account deletion.
-- The UI must not claim Claire has feelings or consciousness.
-- Any API endpoint is self-scoped by tenant + authenticated operator.
-- Existing assertion/approval boundaries remain unchanged.
+- No account-deletion implication.
+- No Claire consciousness/feelings claim.
+- No cross-tenant/operator input surface.
+- Existing assertion guard and human-approval boundaries are unchanged.
+- No new relationship score.
+- No diagnosis.
+- No adaptive behavioral optimization.
+- No fake `DEFERRED` producer.
+- `operator_avoidance` remains off.
 
-## Planned implementation
+## Files changed in PR #160
 
-1. Add a self-scoped Claire router query that loads bounded relationship history and returns `composeClaireRelationshipClosing(...)`.
-2. Add a small Claire relationship-closing section to the existing settings surface.
-3. Add focused tests around endpoint/self-scope and UI contract where practical.
-4. Update `docs/GOLDLINE-TASKS.md` when complete.
-5. Run relevant focused tests/typecheck and rely on PR CI for Fast Goldline, DayForge, and mobile regression.
+- `server/claire/relationshipOffboardingRouter.ts`
+- `server/_core/systemRouter.ts`
+- `client/src/pages/goldline/ClaireDesk.tsx`
+- this handoff
 
-## Open point
+## Verification
 
-The Slice 6 domain contract produces a closing artifact but does not itself persist a separate “continuity disabled” flag. This slice will not invent a second persistence model merely to make the UI appear more complete. If product later requires a durable opt-out toggle that suppresses future relationship-context retrieval, that should be implemented explicitly as its own truthful preference/state contract rather than inferred from generating the closing artifact.
+On final PR head `683d33f86af578130119c276711c55708d9f8589`:
+
+- Fast Goldline smoke: **success**
+  - typecheck passed
+  - migration proof passed
+  - behavioral/campaign truth invariants passed
+  - StrategyEngine live-state proof passed
+  - Real Workday proof passed
+  - deterministic production-browser gate passed
+- DayForge release gates: **success**
+- Goldline mobile regression: **success** across the full workflow, including production build/schema, business-loop contracts, DayForge, real-touch lanes, Driver shell/pixel, immersion, reality route, inhabited-adventure, and authoritative-business lanes.
+
+No migration was added.
+
+## Known intentional limitation
+
+The existing Slice 6 domain contract produces a relationship-closing artifact but does **not** persist a separate “relationship continuity disabled” flag.
+
+This slice intentionally does not pretend that previewing a closing artifact disables future memory/context. The UI says so explicitly.
+
+If product later needs a durable opt-out that suppresses future relationship-context retrieval, build that as an explicit, self-scoped preference/state contract with clear semantics. Do not infer an opt-out from generating this preview and do not delete authoritative business records as a side effect.
+
+## Roadmap state
+
+Behavioral-science Slices 1–7 are now merged. There is no automatically implied Slice 8 from this handoff. Future behavioral work should be driven by a newly defined product/research objective rather than continuing slice numbers by inertia.
