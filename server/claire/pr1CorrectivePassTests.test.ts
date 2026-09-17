@@ -176,7 +176,7 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
       ).not.toThrow();
     });
 
-    it("end-to-end: a personal-mode follow-up that invents an unsupported specific falls back instead of returning the invented fact", async () => {
+    it("end-to-end: a personal-mode follow-up that invents an unsupported specific is replaced by eligible canon", async () => {
       const invokeText = vi.fn().mockResolvedValue("Marseille, actually.");
       const recordGeneration = vi.fn().mockResolvedValue(undefined);
       const result = await answerClairePreDriveFollowUp(
@@ -184,11 +184,13 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
         { invokeText, recordGeneration }
       );
       expect(result).not.toContain("Marseille");
+      expect(result).toBe("I'm British.");
       expect(recordGeneration).toHaveBeenCalledWith(
         expect.objectContaining({
           diagnostic: expect.objectContaining({
             source: "fallback",
-            failureReason: "ungrounded_personal_specificity",
+            answerOrigin: "canon_render",
+            failureReason: "ungrounded_personal_specificity_canon_rendered",
           }),
         })
       );
