@@ -38,6 +38,18 @@ export type ClaireGenerationDiagnostic = {
    * and additive.
    */
   stopReason?: string | null;
+  /**
+   * Provenance of the final text returned to the operator. Usually "model";
+   * "canon_render" means an unsafe personal-model answer was discarded and
+   * replaced deterministically from already-eligible canon; "fallback" is
+   * the ordinary conservative fallback path.
+   */
+  answerOrigin?: "model" | "canon_render" | "fallback";
+  /**
+   * Whether the generous sentence-boundary safety trim actually changed the
+   * model output. Null/undefined means no model text was available to assess.
+   */
+  trimmedToSentenceBoundary?: boolean | null;
 };
 
 /**
@@ -93,6 +105,8 @@ export async function recordClaireGeneration(input: {
     modelRequested: input.diagnostic.modelRequested ?? null,
     surface: input.diagnostic.surface ?? "voice",
     stopReason: input.diagnostic.stopReason ?? null,
+    answerOrigin: input.diagnostic.answerOrigin ?? input.diagnostic.source,
+    trimmedToSentenceBoundary: input.diagnostic.trimmedToSentenceBoundary ?? null,
     fallbackRate: current.attempts ? current.fallbacks / current.attempts : 0,
     ...(input.reviewDetail?.orientationContext
       ? orientationTelemetry(input.reviewDetail.orientationContext, input.diagnostic.source === "fallback")
