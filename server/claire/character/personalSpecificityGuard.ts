@@ -26,39 +26,103 @@
  * guard and G2/CEO lints already do.
  */
 
-/** Common words that are capitalized in ordinary English and should never
- * trip this guard: sentence starters, days, months, pronouns as "I"/"I'm",
- * and business/operational proper nouns Claire is expected to use freely
- * (her own name, the product name) that are not personal-biography claims.
+/**
+ * Proper nouns Claire is expected to use freely: her own name and the
+ * product name. These are never personal-biography claims.
  */
-const ALWAYS_ALLOWED = new Set([
-  "Claire",
-  "Goldline",
-  "I",
-  "I'm",
-  "I'll",
-  "I've",
-  "I'd",
-  "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
-  "January", "February", "March", "April", "May", "June", "July", "August",
-  "September", "October", "November", "December",
-  "Not", "That", "The", "This", "There", "Here", "What", "When", "Where",
-  "Who", "Why", "How", "Do", "Don't", "Does", "Doesn't", "You", "Your",
-  "Yes", "No", "Right", "Good", "Well", "So", "But", "And", "If", "Once",
-  "Before", "After", "Ask", "Tell", "Let", "Never", "Always", "Nothing",
-  "Something", "Everything", "First", "Second", "Third", "One", "Two",
+const ALWAYS_ALLOWED = new Set(["Claire", "Goldline"]);
+
+/**
+ * Common English words that are routinely capitalized at the start of a
+ * sentence. Without this, any ordinary sentence-initial verb or adverb
+ * ("Moved around a lot as a kid...", "Fine, then.") looks exactly like a
+ * proper noun to a capitalization-based detector and trips the guard --
+ * a false positive that costs a perfectly good, canon-grounded answer.
+ *
+ * Matching is done on the lowercased word with common inflectional
+ * suffixes stripped, so one entry covers "move/moved/moves/moving".
+ * Deliberately a common-word list, NOT a place/name denylist: the guard
+ * stays general (anything not recognizably a common word and not in canon
+ * is treated as an unsupported specific), which is what makes it catch an
+ * invented city or surname it has never seen.
+ */
+const COMMON_WORD_STEMS = new Set([
+  // pronouns / determiners / conjunctions / prepositions
+  "i", "im", "ill", "ive", "id", "you", "your", "yours", "he", "she", "they",
+  "them", "their", "we", "our", "us", "it", "its", "this", "that", "these",
+  "those", "the", "a", "an", "and", "but", "or", "so", "if", "then", "than",
+  "because", "while", "when", "where", "what", "who", "whose", "why", "how",
+  "there", "here", "not", "no", "yes", "all", "any", "some", "none", "both",
+  "either", "neither", "each", "every", "for", "from", "with", "without",
+  "about", "into", "onto", "over", "under", "after", "before", "once",
+  "again", "still", "just", "only", "even", "also", "too", "very", "at",
+  "on", "in", "of", "to", "by", "up", "down", "out", "off", "as", "per",
+  // very common verbs
+  "be", "am", "is", "are", "was", "were", "been", "being", "do", "does",
+  "did", "done", "doing", "have", "has", "had", "having", "can", "could",
+  "will", "would", "shall", "should", "may", "might", "must", "get", "got",
+  "go", "went", "gone", "come", "came", "make", "made", "take", "took",
+  "taken", "give", "gave", "given", "say", "said", "tell", "told", "ask",
+  "asked", "know", "knew", "known", "think", "thought", "want", "wanted",
+  "need", "needed", "try", "tried", "keep", "kept", "let", "leave", "left",
+  "move", "moved", "moves", "moving", "work", "worked", "call", "called",
+  "find", "found", "look", "looked", "see", "saw", "seen", "put", "start",
+  "started", "stop", "stopped", "run", "ran", "grow", "grew", "grown",
+  "spend", "spent", "live", "lived", "stay", "stayed", "turn", "turned",
+  "use", "used", "help", "helped", "answer", "answered", "talk", "talked",
+  "show", "showed", "shown", "bring", "brought", "hand", "handed", "pick",
+  "picked", "check", "checked", "sort", "sorted", "figure", "figured",
+  // common adjectives / adverbs / nouns that open sentences
+  "good", "great", "fine", "right", "wrong", "well", "better", "best",
+  "bad", "worse", "worst", "sure", "maybe", "honestly", "frankly", "really",
+  "probably", "possibly", "mostly", "usually", "always", "never", "often",
+  "sometimes", "first", "second", "third", "last", "next", "new", "old",
+  "long", "short", "hard", "easy", "true", "false", "same", "different",
+  "nothing", "something", "everything", "anything", "someone", "anyone",
+  "everyone", "nobody", "somewhere", "anywhere", "everywhere", "nowhere",
+  "particular", "general", "specific", "exactly", "originally", "one", "two",
+  "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+  "day", "days", "week", "weeks", "month", "months", "year", "years",
+  "time", "times", "place", "places", "thing", "things", "people", "kid",
+  "kids", "family", "home", "point", "part", "way", "ways", "back", "kind",
+  "lot", "bit", "little", "much", "more", "most", "less", "least", "enough",
+  "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
+  "sunday", "january", "february", "march", "april", "may", "june", "july",
+  "august", "september", "october", "november", "december", "today",
+  "tomorrow", "yesterday", "morning", "afternoon", "evening", "night",
 ]);
+
+/** Strips common inflectional suffixes so one stem covers its forms. */
+function normalizeWord(word: string): string {
+  const base = word.toLowerCase().replace(/['’]/g, "");
+  for (const suffix of ["'s", "ing", "ed", "es", "s", "ly"]) {
+    if (base.length > suffix.length + 2 && base.endsWith(suffix)) {
+      return base.slice(0, base.length - suffix.length);
+    }
+  }
+  return base;
+}
+
+function isCommonWord(word: string): boolean {
+  const lower = word.toLowerCase().replace(/['’]/g, "");
+  return COMMON_WORD_STEMS.has(lower) || COMMON_WORD_STEMS.has(normalizeWord(word));
+}
 
 /**
  * Extracts capitalized word / multi-word proper-noun-shaped candidates
- * from text (e.g. "London", "New York", "MI6") that aren't sentence-start
- * artifacts already covered by ALWAYS_ALLOWED.
+ * from text (e.g. "London", "New York", "MI6"), skipping Claire's own
+ * allowed names and ordinary English words that merely happen to be
+ * capitalized because they start a sentence.
  */
 function extractProperNounCandidates(text: string): string[] {
   const matches = text.match(/\b[A-Z][a-zA-Z]*(?:\s[A-Z][a-zA-Z]*)*\b/g) ?? [];
   return matches.filter(candidate => {
-    const firstWord = candidate.split(/\s/)[0];
-    return !ALWAYS_ALLOWED.has(firstWord) && !ALWAYS_ALLOWED.has(candidate);
+    if (ALWAYS_ALLOWED.has(candidate)) return false;
+    const words = candidate.split(/\s+/);
+    // A candidate is only a real proper-noun candidate if at least one of
+    // its words is not an ordinary common English word. "Moved" alone is
+    // not; "New York" is; "London" is.
+    return words.some(word => !ALWAYS_ALLOWED.has(word) && !isCommonWord(word));
   });
 }
 

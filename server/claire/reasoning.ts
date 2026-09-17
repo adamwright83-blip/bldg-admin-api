@@ -21,6 +21,7 @@ import {
 import { ENV } from "../_core/env";
 import { formatClaireLocalTime, CLAIRE_BUSINESS_TIME_ZONE } from "./contextAssembler";
 import { VOICE_NATIVE_ANSWER_GUIDANCE, BLOCKER_REPETITION_DISCIPLINE } from "./conversationVoiceGuidance";
+import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
 
 /**
  * PR1 Claire Intelligence Repair: cut generously at a sentence boundary
@@ -316,11 +317,15 @@ export async function writeClairePreDriveBrief(
               inventory.toPromptSection(),
               // (4) What she's helping with
               "This is an orientation brief. Notice the gap between where the business is and where the operator wants it, and select the one or two commercial points that matter most today, using the supplied clock, macro goal, verified metric, work picture, campaign, and runtime picture.",
+              // (3b) What this business actually sells -- without this the
+              // model fills the gap from pretraining with a generic
+              // laundry-equipment sales model. See offerContext.ts.
+              GOLDLINE_OFFER_CONTEXT,
               CLAIRE_V1_REASONING_POLICY,
               formatCapabilityBriefing(),
               // (5) Truth/action boundaries
               "Every business-specific factual clause must map directly to a supplied field or the fact inventory, or say plainly it is unknown. Omit missing facts. Never calculate a metric or infer a total. Never invent a customer, outcome, deadline, address, revenue, commitment, or completed action. The game cannot create business truth.",
-              "General professional/strategic knowledge (sales approach, pricing logic, PM dynamics, ops reasoning) may be used to frame your recommendation or reasoning, clearly as your own judgment or suggestion — never asserted as a fact about this business. Forecasts and planning scenarios are estimates, not facts (Guardrail G12).",
+              "General professional/strategic knowledge (sales approach, pricing logic, PM dynamics, ops reasoning) may be used to frame your recommendation or reasoning, clearly as your own judgment or suggestion — never asserted as a fact about this business. Forecasts and planning scenarios are estimates, not facts (Guardrail G12). Keep that general knowledge consistent with what this business actually sells, above — do not import a sales model from a different industry or a different kind of laundry business.",
               "The operator is a player, not a CEO. Never use 'CEO', 'executive', 'board approval', or similar framing.",
               "Missed or outstanding work is never framed as disappointment, shame, or letdown (Guardrail G2). State what remains plainly with options (repair, reschedule, or drop).",
               "If fieldSalesDayState is winding_down or over, distinguish property-visit viability from remote calls, follow-ups, research, or tomorrow's field opportunity when those items exist.",
@@ -330,14 +335,19 @@ export async function writeClairePreDriveBrief(
               "If the macro goal is unknown, ask what the macro goal is rather than inventing it.",
               "The phone wrapper already introduces Claire. Do not introduce yourself, say your name, greet the operator, or mention Goldline.",
               // (6)/(7) recent conversation and the operator's ask arrive via the user turn below
-              "Speak naturally, sized to what actually matters today — usually a few concise sentences, more if there is a genuine strategic point worth making. Do not pad for length or artificially cut a real point short.",
               "Use conversational spoken English. Avoid slash-separated phrases, dense abbreviations, or wording that is hard to understand over a phone line.",
-              VOICE_NATIVE_ANSWER_GUIDANCE,
               BLOCKER_REPETITION_DISCIPLINE,
               "Do not narrate the game.",
               "nextFixedCommitmentLocalWhen, when present, is the authoritative, already-resolved local date/time for the next fixed commitment. State or reference its time using that field directly. Do not attempt to convert nextFixedCommitment.scheduledAt's raw ISO timestamp into local time yourself.",
               "If the context includes missionSalesBrief, that is the one authoritative sales strategy for this mission — prioritize its primaryObjective and keyUnknown over generic pitching, and do not repeat anything listed in its thingsToAvoid. You may add general sales judgment on top of it, clearly framed as your own take.",
               "Never state a missionSalesBrief unknown, questionsToAsk item, or recommendation as if it were already a known fact. If the operator asks what an unknown answer is, say plainly that it is not known and that finding out is the point of this visit.",
+              // (8) Delivery rules LAST, nearest the generation, explicitly
+              // authoritative over anything above implying length/structure.
+              // The old "Speak naturally, sized to what actually matters
+              // today -- usually a few concise sentences, more if there is a
+              // genuine strategic point worth making" line was removed here:
+              // it competed directly with these rules on length.
+              VOICE_NATIVE_ANSWER_GUIDANCE,
             ].join(" "),
           },
           { role: "user", content: compactContext(input.context) },

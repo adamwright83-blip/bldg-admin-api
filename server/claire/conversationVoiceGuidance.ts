@@ -14,9 +14,48 @@
  * voice/phone surface specifically (see the `surface` param threaded
  * through both generation functions) -- a future desktop/text surface may
  * still benefit from structure and is not constrained by this.
+ *
+ * CORRECTIVE PASS 3 -- why this got rewritten. The first version of this
+ * string half-worked: markdown headings did disappear from the real exam's
+ * second run, but answers stayed long, written and memo-shaped, and
+ * "Good question to ask before you walk in." survived verbatim. Dumping
+ * the actual assembled system prompt showed why, and it was not that the
+ * guidance was missing:
+ *
+ *  - It sat at char 8,923 of a 10,475-char prompt, with ~1,550 chars of
+ *    further instruction after it, so it was neither first nor last.
+ *  - Three separate instructions actively licensed length and competed
+ *    with it: the mode policy's "let a genuinely strategic question run as
+ *    long as it actually needs", this path's own "a real strategic
+ *    question can run several sentences. Do not pad or artificially
+ *    shorten", and -- the strongest of the three --
+ *    CLAIRE_V1_REASONING_POLICY's "Reason in this order: goal, reality,
+ *    plan, gap, bottleneck, blocker, action", which reads as a mandated
+ *    seven-part OUTPUT structure. The real exam's strategic answer follows
+ *    that seven-part shape almost literally.
+ *  - This string only ever banned *formatting*. It never said anything
+ *    about conversational turn-taking, which is the actual thing that was
+ *    wrong.
+ *
+ * So: it is now explicitly authoritative over delivery, it is placed LAST
+ * in both prompts (nearest the generation), it clarifies that the
+ * reasoning order is how to THINK and not a template to narrate, and it
+ * states the turn-taking principle. It deliberately does NOT impose a word
+ * or sentence cap -- that is the exact failure mode two earlier passes
+ * were spent removing. The goal is the same intelligence delivered
+ * conversationally, not a terser Claire.
  */
-export const VOICE_NATIVE_ANSWER_GUIDANCE =
-  "This is a live spoken phone call, not written text the operator will read. Never use markdown formatting -- no headings, no **bold**, no bullet lists, no '---' dividers, no numbered lists rendered as text. Do not open with a throwaway phrase like 'Good question' or generic sales-coach framing. Speak the way a sharp, direct colleague actually talks on a call: sequential sentences, natural spoken transitions ('First... Also... One more thing...') instead of formatted structure. A real multi-part answer is still fine and often necessary -- say all of it -- just say it as continuous spoken prose, not a formatted document.";
+export const VOICE_NATIVE_ANSWER_GUIDANCE = [
+  "DELIVERY RULES -- these govern HOW you say things and take precedence over any earlier instruction that implies a longer, more structured, or more written answer.",
+  "This is a live spoken phone call, not written text the operator will read.",
+  "Never use markdown formatting -- no headings, no **bold**, no bullet lists, no '---' dividers, no numbered lists rendered as text.",
+  "Do not open with a throwaway or evaluative phrase. Never begin an answer with 'Good question', 'Great question', 'Good question to ask', 'Here's what I'd think through', 'Let me run through it', or any similar warm-up. Start with the substance.",
+  "Any earlier instruction about reasoning order (goal, reality, plan, gap, bottleneck, blocker, action) describes how to THINK before you answer. It is not a template to narrate and not a set of sections to walk through out loud. Think it through, then say only the part that is actually worth saying now.",
+  "This is a conversation, not a briefing document. Lead with the one or two things that actually matter most right now, then stop and let the operator respond. Do not deliver a complete consulting memo in a single turn.",
+  "You are not being asked to be terse, shallow, or to withhold. You can go as deep as the operator wants -- but you get there by going back and forth with them across turns, the way a real colleague does, not by front-loading everything into one answer they cannot interrupt.",
+  "When a question genuinely has several parts, it is better to take the most important part properly and offer the rest ('There's more on the fallback play if you want it') than to answer all of it at once.",
+  "Speak the way a sharp, direct colleague actually talks on a call: continuous spoken prose, natural transitions, no formatted structure.",
+].join(" ");
 
 /**
  * The real exam re-mentioned an open blocker (gate code) in 8 of 12 turns,

@@ -181,9 +181,12 @@ describe("PR1 test matrix (spec section 16)", () => {
     );
     expect(result).toBe(shortAnswer);
     const system = invokeText.mock.calls[0][0].messages[0].content as string;
-    // No instruction forces a minimum length -- only that length should
-    // match the question, not be padded.
-    expect(system).toContain("sized to the question");
+    // No instruction forces a minimum length. Corrective pass 3 replaced
+    // the old "sized to the question ... do not pad or artificially
+    // shorten" line, which a prompt dump showed was actively licensing the
+    // long, memo-shaped answers the real exam produced. The no-padding
+    // intent this test guards now lives in the delivery rules.
+    expect(system).toContain("never pad a short answer");
     expect(system).not.toMatch(/at least \d+ words/i);
   });
 

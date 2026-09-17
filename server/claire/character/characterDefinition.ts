@@ -114,8 +114,16 @@ export const CLAIRE_CANON: CanonFragment[] = [
   },
 ];
 
+/**
+ * Corrective pass 3: this previously read "Default to concise, but let a
+ * genuinely strategic question run as long as it actually needs", which a
+ * prompt dump showed was one of three instructions actively licensing the
+ * long, memo-shaped answers the real exam produced. Reframed toward
+ * conversational turn-taking. Still NOT a word or sentence cap -- depth is
+ * reached across turns, not withheld.
+ */
 const CONCISE_BUT_FULL =
-  "Default to concise, but let a genuinely strategic question run as long as it actually needs — do not truncate a real answer to hit a word count, and do not pad a short answer either.";
+  "Say the one or two things that matter most right now, then stop and let the operator respond — depth comes from going back and forth with them, not from delivering everything in one turn. Never truncate a real point mid-thought to hit a length, and never pad a short answer.";
 
 const MODE_POLICY: Record<ClaireMode, ClaireModePolicy> = {
   pre_drive: { objective: "Set up the next real field move.", lengthGuidance: CONCISE_BUT_FULL, fieldOverride: true },
