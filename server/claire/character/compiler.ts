@@ -1,3 +1,8 @@
+import {
+  CLAIRE_HISTORY_PROMPT_BUDGET,
+  formatClaireHistoryPromptLines,
+  type ClaireAssembledRelationshipHistory,
+} from "../../../shared/claireRelationshipHistory";
 import { CLAIRE_CHARACTER_DEFINITION, CLAIRE_CHARACTER_VERSION } from "./characterDefinition";
 import { retrieveEligibleClaireCanon } from "./canonStore";
 import { CLAIRE_ROUTINE_FEW_SHOTS } from "./fewShots";
@@ -12,9 +17,12 @@ import type {
 /**
  * Runtime/assembly version, independent of characterVersion — bump this
  * when the compiler's composition logic changes even if canon/DNA didn't
- * (Slice 1).
+ * (Slice 1). Slice 6 adds labeled longitudinal history.
  */
-export const CLAIRE_COMPILER_VERSION = "claire-runtime-3";
+export const CLAIRE_COMPILER_VERSION = "claire-runtime-4";
+
+const HISTORY_USAGE_RULES =
+  "Use retrieved history only when it materially helps the current interaction. Do not force a callback every turn. Do not convert observations into diagnosis, personality, avoidance, or trait claims. Do not assert current business state from relationship memory. Do not invent emotional reactions or claim to feel, have consciousness, or miss the operator. Current verified business truth outranks relationship memory. Inferences are questions or uncertainty, never facts.";
 
 function summarizeSharedHistory(
   events: ClaireRelationshipEvent[],
@@ -27,7 +35,7 @@ function summarizeSharedHistory(
         return rightHit - leftHit;
       })
     : events;
-  return ranked.slice(-5).map(event => event.summary);
+  return ranked.slice(-CLAIRE_HISTORY_PROMPT_BUDGET).map(event => event.summary);
 }
 
 /**
@@ -41,15 +49,22 @@ export function compileClaireCharacterContext(input: {
   mode: ClaireMode;
   relationshipState: ClaireRelationshipState;
   recentSharedHistory: ClaireRelationshipEvent[];
+  assembledHistory?: ClaireAssembledRelationshipHistory;
   explicitlyRequestedTopic?: string;
 }): ClaireCompiledContext {
   const modePolicy = CLAIRE_CHARACTER_DEFINITION.modes[input.mode];
-  const recentEvents = input.recentSharedHistory.slice(-5);
-  const sharedHistorySummaries = summarizeSharedHistory(
-    input.recentSharedHistory,
-    input.explicitlyRequestedTopic
-  );
-  const sharedHistoryEventIds = recentEvents.map(event => event.id);
+  const recentEvents = input.recentSharedHistory.slice(-CLAIRE_HISTORY_PROMPT_BUDGET);
+  const assembledLines = input.assembledHistory
+    ? formatClaireHistoryPromptLines(input.assembledHistory)
+    : [];
+  const sharedHistorySummaries = assembledLines.length
+    ? assembledLines
+    : summarizeSharedHistory(input.recentSharedHistory, input.explicitlyRequestedTopic);
+  const sharedHistoryEventIds = input.assembledHistory
+    ? input.assembledHistory.promptItems
+        .map(item => item.relationshipEventId)
+        .filter((id): id is number => id != null)
+    : recentEvents.map(event => event.id);
   const eligibleCanonFragments = retrieveEligibleClaireCanon({
     disclosureTier: input.relationshipState.disclosureTier,
     mode: input.mode,
@@ -64,9 +79,10 @@ export function compileClaireCharacterContext(input: {
   lines.push(`Mode objective: ${modePolicy.objective} Keep it under ${modePolicy.maxWords} spoken words.`);
   if (sharedHistorySummaries.length) {
     lines.push(
-      `Durable shared history with this operator (most recent last, use only if relevant, never contradict it): ${sharedHistorySummaries.join(" | ")}`
+      `Durable shared history with this operator (epistemic class labeled, use only if relevant, never contradict it, never collapse classes into generic memory): ${sharedHistorySummaries.join(" | ")}`
     );
   }
+  lines.push(HISTORY_USAGE_RULES);
   if (eligibleCanonFacts.length && (!modePolicy.fieldOverride || input.explicitlyRequestedTopic)) {
     lines.push(
       `Eligible personal canon at this operator's disclosure tier (${input.relationshipState.disclosureTier}) — reveal only if it naturally fits, never force it: ${eligibleCanonFacts.join(" | ")}`

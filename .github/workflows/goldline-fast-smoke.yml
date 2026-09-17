@@ -113,6 +113,8 @@ jobs:
           server/strategy/snapshotCustomerAggregateLoad.test.ts
           server/claire/slice03AssertionGuardWiring.test.ts
           server/claire/slice01SafetyBaseline.test.ts
+          shared/claireRelationshipHistory.test.ts
+          server/claire/slice06RelationshipHistory.test.ts
       - name: Prove Real Workday truth invariants
         run: >-
           pnpm vitest run

@@ -1,7 +1,5 @@
 import { invokeTextLLM } from "../_core/llm";
-import { compileClaireCharacterContext } from "./character/compiler";
-import { listClaireRelationshipEvents } from "./character/relationshipEvents";
-import { getClaireRelationshipState } from "./character/relationshipState";
+import { compileClaireContextForOperator } from "./character/relationshipHistory";
 import type { ClaireDriveContext } from "./contextAssembler";
 import {
   recordClaireGeneration,
@@ -153,19 +151,13 @@ export async function answerClairePreDriveFollowUp(
   const invokeText = dependencies.invokeText ?? invokeTextLLM;
   const recordGeneration =
     dependencies.recordGeneration ?? recordClaireGeneration;
-  const relationshipState = await getClaireRelationshipState({
+  const conversationalMode = detectClaireConversationalMode(input.utterance);
+  const inventory = buildClaireVerifiedFactInventory(input.context);
+  const compiled = await compileClaireContextForOperator({
     tenantId: input.tenantId,
     operatorUserId: input.context.actorId ?? null,
-  });
-  const recentSharedHistory = input.context.actorId
-    ? await listClaireRelationshipEvents({
-        tenantId: input.tenantId,
-        operatorUserId: input.context.actorId,
-        limit: 5,
-      })
-    : [];
-  const conversationalMode = detectClaireConversationalMode(input.utterance);
-  const compiled = compileClaireCharacterContext({
+    inventory,
+    topic: detectRequestedClaireTopic(input.utterance) ?? undefined,
     mode:
       conversationalMode === "personal"
         ? "personal"
@@ -174,11 +166,7 @@ export async function answerClairePreDriveFollowUp(
           : conversationalMode === "post_action_review"
             ? "post_action_review"
             : "pre_drive",
-    relationshipState,
-    recentSharedHistory,
-    explicitlyRequestedTopic: detectRequestedClaireTopic(input.utterance),
   });
-  const inventory = buildClaireVerifiedFactInventory(input.context);
   try {
     const text = (
       await invokeText({

@@ -1,8 +1,6 @@
 import { z } from "zod";
 import { invokeLLM, invokeTextLLM } from "../_core/llm";
-import { compileClaireCharacterContext } from "./character/compiler";
-import { listClaireRelationshipEvents } from "./character/relationshipEvents";
-import { getClaireRelationshipState } from "./character/relationshipState";
+import { compileClaireContextForOperator } from "./character/relationshipHistory";
 import type { ClaireMode } from "./character/types";
 import type { ClaireDriveContext } from "./contextAssembler";
 import {
@@ -32,22 +30,15 @@ async function compileContextFor(input: {
   tenantId: string;
   operatorUserId: string | null;
   mode: ClaireMode;
+  topic?: string;
+  inventory?: ReturnType<typeof buildClaireVerifiedFactInventory>;
 }) {
-  const relationshipState = await getClaireRelationshipState({
+  return compileClaireContextForOperator({
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
-  });
-  const recentSharedHistory = input.operatorUserId
-    ? await listClaireRelationshipEvents({
-        tenantId: input.tenantId,
-        operatorUserId: input.operatorUserId,
-        limit: 5,
-      })
-    : [];
-  return compileClaireCharacterContext({
     mode: input.mode,
-    relationshipState,
-    recentSharedHistory,
+    topic: input.topic,
+    inventory: input.inventory,
   });
 }
 
@@ -264,6 +255,7 @@ export async function writeClairePreDriveBrief(
   const compiled = await compileContextFor({
     tenantId: input.tenantId,
     operatorUserId: input.context.actorId ?? null,
+    inventory,
     mode:
       session === "evening_planning"
         ? "evening_planning"
@@ -454,6 +446,7 @@ export async function writeClairePostStopOpening(
   const compiled = await compileContextFor({
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
+    inventory,
     mode: "post_stop",
   });
   try {
@@ -557,6 +550,7 @@ export async function writeClaireOutcomeConfirmation(
   const compiled = await compileContextFor({
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
+    inventory,
     mode,
   });
   try {
