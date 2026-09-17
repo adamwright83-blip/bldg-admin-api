@@ -2,13 +2,15 @@
 
 # SLICE 6 HANDOFF — Claire relationship / safe longitudinal history
 
-**Status: implementation on PR; CI pending after mobile-browser timeout bump.**
+**Status: MERGED into `main` via PR #159.**
 **Branch:** `cursor/behavioral-slice-6-claire-history-723a`
 **PR:** https://github.com/adamwright83-blip/bldg-admin-api/pull/159
 **Base:** `main` @ `28a02e00` (Slice 5 merged via PR #158 / `6251551c`, plus post-merge handoff)
 **Implementation head:** `835aff1309b06521580728ef1ab431e03dd18d99`
-**Exact latest commit SHA:** *(updated after timeout-bump push)*
-**CI status:** 21/22 green on `835aff13`; `mobile-authoritative-business` cancelled after 5/5 Playwright tests passed because the shared `mobile-browser` job `timeout-minutes: 8` elapsed during post-steps (Chromium cache miss + 5.4m slow spec). Timeout raised to 12. No product test was failed.
+**Final PR head:** `701ef41de8aea54953e09ad5e662da7ebb8b21be`
+**Merge commit:** `ba294db78e346649affb471272c559938f2d8a11`
+**Merged at:** 2026-09-17T12:11:35Z
+**CI on final PR head:** 22/22 green
 
 ---
 
@@ -186,7 +188,7 @@ No production MySQL in this environment. Relationship-loop proofs use the existi
 
 ## CI status
 
-pending on this head
+22/22 green on final PR head `701ef41d` (Fast Goldline smoke, DayForge `release-journey`, Goldline mobile regression including `mobile-authoritative-business` in 7m32s after the 12-minute browser timeout, Vercel).
 
 ---
 
@@ -200,4 +202,4 @@ pending on this head
 
 ## Next roadmap work
 
-Do not start Slice 7 in this run. Offboarding UI is backlog-only.
+Slice 6 is merged. Offboarding UI remains backlog-only. Do not start Slice 7 from this handoff.

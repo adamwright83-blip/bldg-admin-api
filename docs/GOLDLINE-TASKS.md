@@ -115,13 +115,13 @@ Full spec: `docs/goldline/FICTION_PACKS.md` (binding). Campaign truth stays belo
 - [claude] Field Moves needs a deliberate new candidate kind for a standing residential grid — `FieldTodayItemKind` has no such kind today and `rankFieldMoves` has no ranking path for one. Not a free integration.
 
 ## In Progress
-- [cursor] Behavioral-science Slice 6 — Claire relationship / safe longitudinal history (not BUILD_BRIEF / Echo / StrategyEngine Slice 6). Handoff: `docs/goldline/SLICE_6_HANDOFF.md`. Binding: `docs/goldline/BEHAVIORAL_SCIENCE_FOUNDATION.md` §9. Reuse existing Claire relationship infrastructure; no new memory table; no diagnosis; `operator_avoidance` stays off; no weakened approval gates.
 - [cursor] Claire owns the workday (shared-brain operating loop + Driver surface retirement + play runtime reconciliation) — starts from current main after Claire V1. Program: `docs/goldline/CLAIRE_OWNS_WORKDAY_LEDGER.md`. No second Claire, no Sage, no second task DB, no new migration unless later slices force a stop.
 
 ## Blocked
 - [chatgpt] Design Companion 2's agentic power — blocked on Kingdom 3 definition, power must make K3 genuinely require it
 
 ## Done
+- [cursor] Behavioral-science Slice 6 — Claire relationship / safe longitudinal history. Merged PR #159 / `ba294db7`. Handoff: `docs/goldline/SLICE_6_HANDOFF.md`.
 - [cursor] Behavioral-science Slice 5 — randomized learning / MRT decision points. Merged PR #158 / `6251551c`. Handoff: `docs/goldline/SLICE_5_HANDOFF.md`. Policy disabled unless `GOLDLINE_BEHAVIORAL_MRT=1`.
 - [cursor] Behavioral-science Slice 4 — barrier → intervention → fiction selection. Merged PR #157 / `6a160056`. Handoff: `docs/goldline/SLICE_4_HANDOFF.md`.
 - [cursor] Behavioral-science Slice 3 — assertion-guard production wiring (not BUILD_BRIEF companion Slice 3). Merged PR #156 / `49f372de`.
