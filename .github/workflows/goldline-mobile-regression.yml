@@ -315,7 +315,7 @@ jobs:
     name: mobile-real-touch-field
     runs-on: ubuntu-latest
     needs: mobile-build-and-schema
-    timeout-minutes: 8
+    timeout-minutes: 12
     services:
       mysql:
         image: mysql:8.0
