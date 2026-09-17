@@ -2,9 +2,12 @@
 
 # SLICE 2 HANDOFF — StrategyEngine live-derived snapshot
 
-**Status: CODE COMPLETE — WAIT FOR CI (Fast Goldline smoke + DayForge release) BEFORE MERGE.**
+**Status: CI GREEN — Slice 2 is merge-ready on PR #155.**
 **Branch:** `claude/goldline-slice-2-strategy-truth`
-**Draft PR:** #155
+**Head:** `f8a70e392b2a77f61204ca55bc4ff5e497288d50`
+**PR:** #155
+
+Verified on that commit (`gh pr checks 155`): **fast-goldline-smoke** pass, **release-journey** (DayForge) pass, Goldline mobile regression jobs pass, Vercel pass. Do not treat an older red run on `67bc19a7` as current.
 
 ---
 
@@ -64,6 +67,6 @@ Integration insert uses columns from `scripts/migrate.mjs` `orders`, not the ful
 
 ---
 
-## Next if CI is green
+## Next after merge
 
-Roadmap item 3: assertion-guard production wiring. Not BUILD_BRIEF Slice 3.
+Behavioral-science roadmap item 3: finish assertion-guard production wiring. Not BUILD_BRIEF Slice 3.
