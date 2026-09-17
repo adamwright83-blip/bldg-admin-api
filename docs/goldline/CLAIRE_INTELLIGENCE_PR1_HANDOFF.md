@@ -6,6 +6,156 @@ Head SHA as of this update: see `git rev-parse HEAD` at time of push (recorded i
 
 ---
 
+## SECOND CORRECTIVE PASS (real-exam findings) — read this section first
+
+The first real (non-mocked) Anthropic exam through this branch's actual code path
+(`after-pr1-REAL-transcript.md`, run by someone with real Anthropic credentials — not this
+agent) surfaced three real bugs the 5,917-test mocked suite had not caught. Adam independently
+verified two of the three before this pass began. All three are fixed here, plus one durable
+telemetry addition Adam asked for regardless of this specific exam.
+
+### 1. Hard mid-sentence truncation — FIXED
+
+`answerClairePreDriveFollowUp` (`preDriveConversation.ts`) had a 600-token generation ceiling
+*and* a hard `.slice(0, 1200)` character cut applied to the model's output. The real exam hit
+that exact 1200-char cap on 2 of 12 answers (`strategic_reasoning`, `complex`), both cut off
+mid-sentence. Fixed: raised `maxTokens` to 1400, and replaced the hard slice with the same
+`trimToSentenceBoundary` helper `reasoning.ts` already used, now shared via
+`server/claire/textTrim.ts`, with a generous 6000-char safety net that should almost never
+actually trim anything. No new behavioral length rule was added — she stays concise because the
+character/mode instructions already say so, not because generation gets chopped.
+
+**Durable stop-reason telemetry** (requested regardless of this specific bug): `invokeTextLLM`
+(`server/_core/llm.ts`) now exposes an optional `onStopReason` callback that captures
+Anthropic's real `stop_reason` ("end_turn", "max_tokens", ...). Both edited generation paths
+wire it into `ClaireGenerationDiagnostic.stopReason` (`generationTelemetry.ts`), so any future
+exam or production monitoring can positively detect "the model hit its token ceiling" instead
+of inferring it from trailing punctuation.
+
+### 2. Personal-canon hallucination ("London, originally.") — FIXED, generally
+
+Verified: `characterDefinition.ts`'s canon for Claire's origin is exactly `"Claire is British."`
+(core, Tier 0) and `"Claire had an internationally mobile childhood."` (tier-gated, Tier 1) —
+no city anywhere. "Where are you from, Claire?" got the model an invented specific fact.
+
+Fix is structural and general, per Adam's explicit instruction not to build a denylist for one
+word: `server/claire/character/personalSpecificityGuard.ts`'s
+`assertNoUngroundedPersonalSpecificity(text, eligibleCanonFacts)` extracts any proper-noun-shaped
+specific (a place, a person's name, an organization — not just "London") from a personal-mode
+answer and throws if it doesn't appear in the exact canon facts supplied for that turn. Wired
+into `answerClairePreDriveFollowUp` immediately after a successful personal-mode generation,
+routing a violation into the existing deterministic fallback path — exactly like the assertion
+guard and G2/CEO lints already do. The prompt instruction was also strengthened: "go NO more
+specific than what canon actually states... do not invent the more specific detail to sound
+complete." Regression tests prove this rejects an invented *city* and, separately, an invented
+*name* (proving it generalizes, not "blocks the word London"), while still allowing an answer
+that stays at canon's real specificity and allowing ordinary business answers that legitimately
+reference account/property proper nouns (the guard is scoped to personal mode only).
+
+### 3. Timezone / business-time truth ("scheduled just before midnight") — ROOT CAUSE: THE EXAM FIXTURE, NOT PRODUCTION
+
+Investigated before writing any fix, per Adam's explicit instruction:
+
+- **Production's real context-builder** (`assembleClaireDriveContext` in `contextAssembler.ts`)
+  always calls `buildClaireClock(now, timeZone)` and attaches the result as `context.clock`
+  *unconditionally*, before Field Today is even queried and regardless of whether that query
+  succeeds — this is proven by an existing test,
+  `contextAssembler.test.ts`'s "assembles tomorrow from tomorrow's explicit business date",
+  which already asserts `context.clock?.fieldSalesDayState` on a real assembled context. So a
+  real call always carries a resolved business timezone (`America/Los_Angeles`) and a resolved
+  "now" (`clock.localTime`).
+- **`docs/goldline/claire-intelligence/run-real-exam.ts`'s fixture**, by contrast, built
+  `scheduledAt: new Date(Date.now() + 3 * 3600_000).toISOString()` and set **no `clock` field at
+  all**. The model had nothing but a bare, timezone-less UTC instant to reason from — that is
+  the actual, sufficient explanation for "just before midnight."
+
+**Conclusion: production was not broken in the way the symptom suggested — the exam fixture
+was.** Per Adam's instruction for this case ("fix ONLY the fixture, add a test that mirrors
+production's actual real serialization format"), the fixture now calls the exact same
+`buildClaireClock(now, CLAIRE_BUSINESS_TIME_ZONE)` production uses (imported, not
+reimplemented) and derives `scheduledAt` from a concrete 5pm-business-timezone instant via a
+small, tested UTC↔zoned conversion helper — so it cannot silently drift from production's real
+shape again.
+
+That said, one real, if smaller, latent gap **was** found and fixed in production itself:
+production resolves "now" to a business-local time, but never pre-rendered a *specific
+commitment's* `scheduledAt` into local time the same way — it still relied on the model to
+mentally convert a raw ISO timestamp, which is exactly the class of task a model can get wrong,
+even with a timezone anchor available. Added `formatClaireLocalTime(iso, timeZone)` to
+`contextAssembler.ts` (deterministic, tested, returns `null` for missing/invalid input) and
+wired a new `nextFixedCommitmentLocalWhen` field into both generation paths' compact context
+payloads, with an explicit instruction not to convert the raw timestamp directly. This is a
+genuine, if narrower, production hardening — not a claim that production's timezone handling
+was as broken as the fixture's.
+
+### 4. Repetitive blocker nagging (8 of 12 turns re-mentioned the gate code) — addressed with prompt-level salience guidance
+
+Added `BLOCKER_REPETITION_DISCIPLINE` (`server/claire/conversationVoiceGuidance.ts`), wired into
+both generation paths: don't mechanically re-mention an already-surfaced blocker on an unrelated
+answer unless the question is specifically about it, its status changed, or it's materially
+relevant right now. This reads from the actual recent-turn history already passed as real
+message-history turns (not a keyword/one-off suppression hack) — the model can see what was
+already said and is instructed to reason about salience from that, the same way a human
+colleague would.
+
+### 5. Consultant-formatted, written-style answers ("Good question...", markdown headings) — scoped to voice surface
+
+Verified `answerClairePreDriveFollowUp` is genuinely shared between the Twilio voice call and a
+desktop/text surface (`server/claire/turn/claireTurn.ts`'s `surface: "voice" | "text"`, though
+that caller does not yet pass `surface` through to this function). Added an optional `surface`
+param (`ClaireGenerationSurface`, defaulting to `"voice"` to preserve exact existing behavior for
+today's only real caller) and `VOICE_NATIVE_ANSWER_GUIDANCE` — no markdown/headings/bullet lists,
+no "Good question" openers, natural spoken transitions instead of formatted structure — applied
+only when `surface !== "desktop"`. `writeClairePreDriveBrief` (`reasoning.ts`) is voice-only in
+production today, so the same guidance was added there unconditionally, no `surface` param
+needed.
+
+### 6. Rerunning the real exam — BLOCKED AGAIN, same root cause as before, not by choice
+
+Per Adam's instruction, the identical 12-turn real exam should be rerun against this fixed code
+on the same model for an apples-to-apples comparison. **This agent still has no working
+`ANTHROPIC_API_KEY` in its sandboxed environment** — re-confirmed: `env | grep -i anthropic`
+shows only `ANTHROPIC_BASE_URL` (the Claude Code harness's own, not a usable direct key). The
+first real transcript (`after-pr1-REAL-transcript.md`) was produced by someone else (Adam or
+another session) with real credentials, not by this agent — and that has not changed. No
+fabricated "rerun" transcript is provided.
+
+**Exact command to rerun, on this branch's new head, from a machine/environment with a real
+key** (identical procedure as documented for the first run, in
+`docs/goldline/claire-intelligence/after-pr1-REAL-transcript.md`):
+
+```
+git fetch origin
+git checkout codex/claire-intelligence-pr1-conversation
+npm install --legacy-peer-deps   # or pnpm install, matching this repo's lockfile
+ANTHROPIC_API_KEY=<real key> npx tsx docs/goldline/claire-intelligence/run-real-exam.ts
+```
+
+This will overwrite `after-pr1-REAL-transcript.md` / `after-pr1-REAL-metrics.json` in place with
+the new run's raw output (same filenames as the first run, since the harness always writes
+those two files) — **save a copy of the current `after-pr1-REAL-transcript.md` /
+`after-pr1-REAL-metrics.json` before rerunning if a true side-by-side diff against the first run
+is wanted**, since the harness does not itself version its output. (This agent could not do that
+copy-then-rerun itself, since it cannot run the harness with a real key at all.)
+
+### Everything preserved (re-verified this pass)
+
+`operator_avoidance` still absent from both event allowlists (untouched). G2 disappointment
+lint and CEO-language lint still wired into `writeClairePreDriveBrief`, unchanged. Assertion
+guard (`assertPostGenerationStateVerbs`) still called in both edited functions, now on the
+sentence-trimmed text as before. Tier/disclosure eligibility gating in `canonStore.ts`/
+`compiler.ts` untouched — only the personal-specificity *answer* is now checked post-generation,
+the *retrieval* gating logic is unchanged. Resident-app tool surface and both shared secrets:
+zero diff (reverified via `git diff --stat main`). Full suite: `npx vitest run server/claire
+server/_core` → 46 files, 407 passed; `npx vitest run` (full repo) → 637 files, 5935 passed, 7
+skipped, 0 failed.
+
+**No merge was performed. PR2 was not started.**
+
+---
+
+---
+
 ## CORRECTIVE PASS (character voice fix) — read this section first
 
 Adam had ChatGPT independently review PR1. It found real gaps in
