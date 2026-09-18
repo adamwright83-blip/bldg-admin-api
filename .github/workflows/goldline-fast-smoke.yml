@@ -86,6 +86,11 @@ jobs:
           shared/behavioralFictionSelection.test.ts
           server/behavioralSelection/selectPreferredFiction.test.ts
           client/src/game/fiction/fictionDirector.test.ts
+          shared/spiritHumanRescue.test.ts
+          shared/spiritHumanPressure.test.ts
+          server/spiritHumanRescue/rescueMissionService.test.ts
+          server/_core/sms.test.ts
+          client/src/game/fiction/SpiritHumanRescueMission.test.ts
           shared/behavioralExperimentPolicy.test.ts
           server/behavioralExperiment/assignPresentation.test.ts
       - name: Prove ops task completion concurrency against real MySQL
@@ -103,6 +108,7 @@ jobs:
           server/opsTasks.mysql.integration.test.ts
           server/strategy/snapshotLiveDerived.integration.test.ts
           server/behavioralExperiment/assignPresentation.mysql.integration.test.ts
+          server/spiritHumanRescue/rescueMissionStore.mysql.integration.test.ts
       - name: Prove StrategyEngine live snapshot sections (no fabricated fixtures)
         run: >-
           pnpm vitest run

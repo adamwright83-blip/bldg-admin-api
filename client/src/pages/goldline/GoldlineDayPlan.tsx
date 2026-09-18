@@ -82,6 +82,11 @@ export type GoldlineDayPlanProps = {
     iconSrc: string;
     onOpen: () => void;
   } | null;
+  rescueMissionCard?: {
+    title: string;
+    status: string;
+    onOpen: () => void;
+  } | null;
 };
 
 const KIND_LABEL = {
@@ -369,6 +374,19 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
             <span>
               <small>CAMPAIGN RUN</small>
               <b>{props.campaignRunCard.title}</b>
+            </span>
+          </button>
+        ) : null}
+        {props.rescueMissionCard ? (
+          <button
+            type="button"
+            className="gdp-campaign-run-card"
+            onClick={props.rescueMissionCard.onOpen}
+            data-testid="spirit-human-day-line-card"
+          >
+            <span>
+              <small>RESCUE · {props.rescueMissionCard.status.toUpperCase()}</small>
+              <b>{props.rescueMissionCard.title}</b>
             </span>
           </button>
         ) : null}

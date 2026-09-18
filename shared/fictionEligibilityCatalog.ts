@@ -99,5 +99,13 @@ export const FICTION_ELIGIBILITY_CATALOG: readonly FictionTemplate[] = [
     attentionSafetyClass: "safe_stationary",
     humanInteractionCompatible: true,
   }),
+  stub({
+    id: "spirit-human-rescue-v1",
+    compatibleGrammarKinds: ["FOLLOW_UP_PERSON"],
+    timerEligible: false,
+    drivingCompatible: false,
+    attentionSafetyClass: "safe_stationary",
+    humanInteractionCompatible: true,
+  }),
 ];
 

@@ -1,0 +1,169 @@
+.shr-mission {
+  position: fixed;
+  inset: 0;
+  z-index: 541;
+  display: flex;
+  flex-direction: column;
+  color: #3b2d1b;
+  color-scheme: light;
+  background: #fffaf0;
+  overflow: hidden;
+  font-family: Inter, sans-serif;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.shr-environment,
+.shr-crusher,
+.shr-captive,
+.shr-player {
+  position: absolute;
+  pointer-events: none;
+}
+
+.shr-environment {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 20%;
+}
+
+.shr-crusher {
+  top: -6%;
+  left: 50%;
+  width: min(78%, 420px);
+  transform: translateX(-50%);
+  transform-origin: top center;
+  transition: transform 120ms linear;
+  z-index: 2;
+}
+
+.shr-captive {
+  left: 50%;
+  bottom: 28%;
+  width: min(34%, 180px);
+  transform: translateX(-50%);
+  z-index: 1;
+}
+
+.shr-player {
+  left: 12%;
+  bottom: 22%;
+  width: 72px;
+  z-index: 3;
+}
+
+.shr-hud,
+.shr-panel,
+.shr-provisional {
+  position: relative;
+  z-index: 4;
+}
+
+.shr-hud {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  margin: 10px 12px 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #fffaf0e8;
+  border: 1px solid #d7c28a;
+}
+
+.shr-hud small {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #795a26;
+}
+
+.shr-hud b {
+  grid-column: 1;
+  font-size: 16px;
+}
+
+.shr-hud span {
+  grid-column: 1;
+  font-size: 13px;
+}
+
+.shr-close {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid #c9ae72;
+  background: #fff;
+}
+
+.shr-provisional {
+  margin: 6px 14px 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #7a5a28;
+}
+
+.shr-panel {
+  margin: auto 12px 16px;
+  padding: 12px;
+  border-radius: 16px;
+  background: #fffaf0f2;
+  border: 1px solid #d7c28a;
+}
+
+.shr-panel p {
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.shr-error {
+  color: #8a2f16;
+  font-weight: 700;
+}
+
+.shr-later {
+  color: #4d5b2a;
+}
+
+.shr-panel textarea {
+  width: 100%;
+  min-height: 88px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #d7c28a;
+  background: #fff;
+  color: #3b2d1b;
+  font: inherit;
+}
+
+.shr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.shr-actions button {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid #c9ae72;
+  background: #fff3d6;
+  color: #3b2d1b;
+  font-weight: 800;
+}
+
+.shr-actions button[data-testid="spirit-human-send"] {
+  background: #d8ec9c;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shr-crusher {
+    transition: none;
+  }
+}

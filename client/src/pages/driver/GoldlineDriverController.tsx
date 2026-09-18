@@ -214,6 +214,7 @@ function LiveGoldlineDriverController({
   /** The day briefing, opened over Overland without leaving it. */
   const [dayBriefingOpen, setDayBriefingOpen] = useState(!launchOperationId);
   const [campaignRunMissionOpen, setCampaignRunMissionOpen] = useState(false);
+  const [spiritHumanRescueOpen, setSpiritHumanRescueOpen] = useState(false);
   const [waywardProgress, setWaywardProgress] = useState<WaywardProgress>(() =>
     loadWaywardProgress(null)
   );
@@ -383,6 +384,14 @@ function LiveGoldlineDriverController({
     staleTime: 15_000,
     retry: false,
   });
+  const rescueMissions = trpc.system.spiritHumanRescue.listMine.useQuery(
+    undefined,
+    { staleTime: 15_000, retry: false }
+  );
+  const rescueCandidates = trpc.system.spiritHumanRescue.listCandidates.useQuery(
+    undefined,
+    { staleTime: 30_000, retry: false }
+  );
   const bioContainmentRun = useMemo(() => {
     const runs = campaignRuns.data ?? [];
     return (
@@ -396,6 +405,15 @@ function LiveGoldlineDriverController({
   const bioContainmentIcon =
     resolveFictionPackVisuals(bioContainmentRun?.fictionPackId)?.missionIcon ??
     null;
+  const activeRescueMission =
+    rescueMissions.data?.find(
+      row => row.lifecycle === "active" || row.lifecycle === "problem"
+    ) ??
+    rescueMissions.data?.find(row => row.lifecycle === "available") ??
+    rescueMissions.data?.find(row => row.lifecycle === "completed") ??
+    null;
+  const rescueOfferAvailable =
+    Boolean(activeRescueMission) || (rescueCandidates.data?.length ?? 0) > 0;
   // Slice 5 §5.4: Kingdom 2 unlocks after Kingdom 1 (the Greystar hunt) is
   // complete, and leads to /goldline-chapter access, per Adam's decision.
   const goldlineKingdoms = trpc.system.goldlineKingdoms.list.useQuery(
@@ -1420,6 +1438,21 @@ function LiveGoldlineDriverController({
               }
             : null
         }
+        rescueMissionCard={
+          rescueOfferAvailable
+            ? {
+                title: activeRescueMission
+                  ? `Rescue ${activeRescueMission.villager.displayName}`
+                  : "Spirit Human rescue",
+                status: activeRescueMission?.lifecycle ?? "available",
+                onOpen: () => {
+                  setDayBriefingOpen(false);
+                  setSpiritHumanRescueOpen(true);
+                  setDriverScene("game");
+                },
+              }
+            : null
+        }
         processingLocation={dayDirectorState.data?.processingLocation}
         commitments={dayDirectorState.data?.commitments}
         intelligenceAvailable={dayDirectorState.data?.intelligenceAvailable}
@@ -1751,6 +1784,9 @@ function LiveGoldlineDriverController({
           campaignRunId={bioContainmentRun?.campaignRunId ?? null}
           campaignRunMissionOpen={campaignRunMissionOpen}
           onCampaignRunMissionOpenChange={setCampaignRunMissionOpen}
+          spiritHumanRescueMissionId={activeRescueMission?.missionId ?? null}
+          spiritHumanRescueOpen={spiritHumanRescueOpen}
+          onSpiritHumanRescueOpenChange={setSpiritHumanRescueOpen}
         />
       </Suspense>
       <LogSignalSheet
