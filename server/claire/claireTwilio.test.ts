@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../_core/env", () => ({
@@ -9,6 +10,7 @@ import {
   CLAIRE_CALL_STATUS_PATH,
   CLAIRE_RECORDING_STATUS_PATH,
   preDriveConversationTwiML,
+  registerClaireRoutes,
   spokenClaireText,
 } from "./claireTwilio";
 import { isClaireVoiceRecordingEnabled } from "./conversation/consent";
@@ -73,5 +75,26 @@ describe("Claire voice recording gate", () => {
     expect(enabled.recordingStatusCallbackEvent).toEqual(["completed", "absent"]);
     if (previous === undefined) delete process.env.CLAIRE_VOICE_RECORDING_ENABLED;
     else process.env.CLAIRE_VOICE_RECORDING_ENABLED = previous;
+  });
+});
+
+describe("Claire production Twilio callback registration", () => {
+  it("mounts pre-drive, continuation, debrief, confirmation, recording status, and call status", () => {
+    const paths: string[] = [];
+    registerClaireRoutes({ post: (path: string) => paths.push(path) } as never);
+    expect(paths).toEqual([
+      "/api/claire/twilio/pre-drive",
+      "/api/claire/twilio/pre-drive/continue",
+      "/api/claire/twilio/debrief",
+      "/api/claire/twilio/confirm",
+      CLAIRE_RECORDING_STATUS_PATH,
+      CLAIRE_CALL_STATUS_PATH,
+    ]);
+  });
+
+  it("the production Express entrypoint registers those Claire routes", () => {
+    const src = readFileSync("server/_core/index.ts", "utf8");
+    expect(src).toContain('import { registerClaireRoutes } from "../claire/claireTwilio"');
+    expect(src).toContain("registerClaireRoutes(app)");
   });
 });
