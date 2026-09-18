@@ -315,6 +315,7 @@ export async function answerClairePreDriveFollowUp(
         });
         const recovery = recoverPersonalAnswer({
           eligibleCanonFacts: compiled.eligibleCanonFacts,
+          eligibleCanonFragmentIds: compiled.eligibleCanonFragmentIds,
           requestedTopic: requestedTopic ?? undefined,
         });
         answer = recovery.text;
