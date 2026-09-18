@@ -89,6 +89,8 @@ jobs:
           shared/spiritHumanRescue.test.ts
           shared/spiritHumanPressure.test.ts
           server/spiritHumanRescue/rescueMissionService.test.ts
+          server/spiritHumanRescue/consequenceReconciliation.test.ts
+          server/spiritHumanRescue/inboundSmsRoute.test.ts
           server/_core/sms.test.ts
           client/src/game/fiction/SpiritHumanRescueMission.test.ts
           shared/behavioralExperimentPolicy.test.ts

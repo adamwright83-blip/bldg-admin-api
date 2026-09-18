@@ -34,6 +34,7 @@ describe("Spirit Human rescue overlay wiring", () => {
     expect(source).not.toContain("sendCustomerReminderTool");
     expect(source).toContain("spiritHumanRescue.defer");
     expect(source).toContain("spiritHumanRescue.cancel");
+    expect(source).not.toContain("no_response");
   });
 
   it("is wired into the Driver Day Line and game overlay", () => {

@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { dayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import { listDormantRescueCandidates } from "./listCandidates";
+import { reconcilePaidOrderConsequencesForOperator } from "./consequenceReconciliation";
 import {
   approveAndSendRescue,
   cancelRescueMission,
@@ -61,6 +62,17 @@ export const spiritHumanRescueRouter = router({
       operatorUserId: ctx.user.openId,
     })
   ),
+
+  reconcileConsequences: dayforgeTenantMemberProcedure.mutation(async ({ ctx }) => {
+    try {
+      return await reconcilePaidOrderConsequencesForOperator({
+        tenantId: tenantOf(ctx),
+        operatorUserId: ctx.user.openId,
+      });
+    } catch (error) {
+      asTrpc(error);
+    }
+  }),
 
   instantiate: dayforgeTenantMemberProcedure
     .input(z.object({ snapshotCustomerId: z.string().min(1).max(64) }))

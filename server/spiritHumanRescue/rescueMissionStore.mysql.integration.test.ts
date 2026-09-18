@@ -4,7 +4,9 @@ import { getDb } from "../db";
 import { emptySendRecord, SPIRIT_HUMAN_VILLAGERS, type SpiritHumanRescueMission } from "../../shared/spiritHumanRescue";
 import { CLAIMABLE_SEND_STATES, SEND_CLAIMABLE_LIFECYCLES } from "../../shared/spiritHumanRescue";
 import { DrizzleRescueMissionStore } from "./rescueMissionStore";
-import { instantiateRescueMission } from "./rescueMissionService";
+import { instantiateRescueMission, recordRescueConsequence } from "./rescueMissionService";
+import { reconcilePaidOrderConsequencesForOperator } from "./consequenceReconciliation";
+import { strategyCustomerSnapshotId } from "../strategy/snapshotDormantCustomers";
 
 /**
  * Real-MySQL coverage for Spirit Human rescue durability. Excluded from
@@ -315,3 +317,126 @@ describe("Spirit Human rescue MySQL durability", () => {
     expect(kept?.send.providerMessageId).toBe("SM_lock");
   }, 20_000);
 });
+
+describe("Spirit Human consequence durability on real MySQL", () => {
+  it("keeps duplicate MessageSid and paid-order evidence idempotent across a fresh store and concurrent writers", async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    const aggregates = [
+      {
+        phone: "3105550101",
+        firstName: "Priya",
+        lastName: "Rao",
+        email: null,
+        unit: "2A",
+        address: "100 Main St",
+        buildingSlug: null,
+        totalOrders: 4,
+        lifetimeSpend: 160,
+        paidOrderCount: 4,
+        firstOrderAt: new Date("2026-01-01T00:00:00.000Z"),
+        lastOrderAt: new Date("2026-09-18T15:00:00.000Z"),
+        lastOrderId: 4,
+        ordersLast30Days: 1,
+        ordersLast90Days: 1,
+      },
+    ];
+    const tenantId = "default";
+    const snapshotCustomerId = strategyCustomerSnapshotId(tenantId, aggregates[0]!);
+    const storeA = new DrizzleRescueMissionStore(db);
+    const created = mission({
+      tenantId,
+      operatorUserId: `op-cons-${randomUUID().slice(0, 8)}`,
+      spiritHuman: {
+        snapshotCustomerId,
+        firstName: "Priya",
+        lastOrderAt: "2026-07-01T12:00:00.000Z",
+        daysSinceLastOrder: 78,
+      },
+      send: {
+        ...emptySendRecord("pending"),
+        status: "sent",
+        approvedByUserId: "op-mysql",
+        attemptedAt: "2026-09-17T01:00:00.000Z",
+        acceptedAt: "2026-09-17T01:00:01.000Z",
+        providerMessageId: "SM_out_cons",
+        providerStatus: "queued",
+        evidenceName: "provider_accepted",
+        failureReason: null,
+      },
+      lifecycle: "completed",
+    });
+    created.send.idempotencyKey = `spirit-human-send:${created.missionId}`;
+    await storeA.save(created);
+
+    const [first, second] = await Promise.all([
+      recordRescueConsequence(
+        {
+          tenantId,
+          missionId: created.missionId,
+          kind: "customer_replied",
+          evidenceId: "twilio:SMdup1",
+          observedAt: new Date("2026-09-18T12:00:00.000Z"),
+        },
+        { store: storeA }
+      ),
+      recordRescueConsequence(
+        {
+          tenantId,
+          missionId: created.missionId,
+          kind: "customer_replied",
+          evidenceId: "twilio:SMdup1",
+          observedAt: new Date("2026-09-18T12:00:00.000Z"),
+        },
+        { store: new DrizzleRescueMissionStore(db) }
+      ),
+    ]);
+    expect(first?.consequences.filter(item => item.evidenceId === "twilio:SMdup1")).toHaveLength(1);
+    expect(second?.consequences.filter(item => item.evidenceId === "twilio:SMdup1")).toHaveLength(1);
+
+    const afterRestart = await recordRescueConsequence(
+      {
+        tenantId,
+        missionId: created.missionId,
+        kind: "customer_replied",
+        evidenceId: "twilio:SMdup1",
+        observedAt: new Date("2026-09-18T12:01:00.000Z"),
+      },
+      { store: new DrizzleRescueMissionStore(db) }
+    );
+    expect(afterRestart?.consequences.filter(item => item.kind === "customer_replied")).toHaveLength(1);
+
+    const paid = {
+      source: "laundry_butler" as const,
+      eventKey: `order:${created.missionId}`,
+      occurredAt: new Date("2026-09-18T15:00:00.000Z"),
+      businessDate: "2026-09-18",
+      cents: 2400,
+      serviceType: "wash_fold" as const,
+      customerName: "Priya Rao",
+      identity: { phone: "3105550101", email: null, bldgUserId: null },
+    };
+    const loadLedger = async () => ({ events: [paid] } as never);
+    const loadAggregates = async () => aggregates;
+    await Promise.all([
+      reconcilePaidOrderConsequencesForOperator(
+        { tenantId, operatorUserId: created.operatorUserId },
+        { store: new DrizzleRescueMissionStore(db), loadAggregates, loadLedger }
+      ),
+      reconcilePaidOrderConsequencesForOperator(
+        { tenantId, operatorUserId: created.operatorUserId },
+        { store: new DrizzleRescueMissionStore(db), loadAggregates, loadLedger }
+      ),
+    ]);
+    const storeC = new DrizzleRescueMissionStore(db);
+    await reconcilePaidOrderConsequencesForOperator(
+      { tenantId, operatorUserId: created.operatorUserId },
+      { store: storeC, loadAggregates, loadLedger }
+    );
+    const final = await storeC.get(tenantId, created.missionId);
+    expect(final?.consequences.filter(item => item.kind === "customer_ordered")).toHaveLength(1);
+    expect(JSON.stringify(final)).not.toContain("no_response");
+  }, 20_000);
+});
+
+

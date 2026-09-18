@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyLaterConsequence,
+  CONSEQUENCE_KINDS,
   canCompleteRescue,
   composeReactivationDraft,
   emptySendRecord,
@@ -120,6 +121,17 @@ describe("Spirit Human rescue contract", () => {
       "customer_replied",
       "customer_ordered",
     ]);
+    const duplicate = applyLaterConsequence(withReply, {
+      kind: "customer_replied",
+      observedAt: "2026-09-18T00:00:01.000Z",
+      evidenceId: "sms-in-1",
+    });
+    expect(duplicate.consequences).toHaveLength(1);
+  });
+
+  it("does not treat absence of a reply as verified truth", () => {
+    expect(CONSEQUENCE_KINDS).toEqual(["customer_replied", "customer_ordered"]);
+    expect(CONSEQUENCE_KINDS).not.toContain("no_response");
   });
 
   it("selects villagers independently of customer identity", () => {

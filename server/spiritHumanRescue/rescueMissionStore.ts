@@ -13,6 +13,7 @@ import type { MissionLifecycleState, RescueSendState, SpiritHumanRescueMission }
 export type RescueMissionStore = {
   get(tenantId: string, missionId: string): Promise<SpiritHumanRescueMission | null>;
   listForOperator(tenantId: string, operatorUserId: string): Promise<SpiritHumanRescueMission[]>;
+  listForTenant(tenantId: string): Promise<SpiritHumanRescueMission[]>;
   createForDormancyEpisode(mission: SpiritHumanRescueMission): Promise<{ created: boolean; mission: SpiritHumanRescueMission }>;
   save(mission: SpiritHumanRescueMission): Promise<SpiritHumanRescueMission>;
   compareAndSet(input: {
@@ -92,6 +93,10 @@ export class MemoryRescueMissionStore implements RescueMissionStore {
       .map(cloneMission);
   }
 
+  async listForTenant(tenantId: string): Promise<SpiritHumanRescueMission[]> {
+    return [...this.rows.values()].filter(row => row.tenantId === tenantId).map(cloneMission);
+  }
+
   async createForDormancyEpisode(
     mission: SpiritHumanRescueMission
   ): Promise<{ created: boolean; mission: SpiritHumanRescueMission }> {
@@ -154,6 +159,14 @@ export class DrizzleRescueMissionStore implements RescueMissionStore {
           eq(spiritHumanRescueMissions.operatorUserId, operatorUserId)
         )
       );
+    return rows.map(row => parseMissionJson(row.missionJson));
+  }
+
+  async listForTenant(tenantId: string): Promise<SpiritHumanRescueMission[]> {
+    const rows = await this.db
+      .select()
+      .from(spiritHumanRescueMissions)
+      .where(eq(spiritHumanRescueMissions.tenantId, tenantId));
     return rows.map(row => parseMissionJson(row.missionJson));
   }
 

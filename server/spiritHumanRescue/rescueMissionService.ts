@@ -649,9 +649,9 @@ async function emitOperatorLedger(
 }
 
 /**
- * Scaffold only. Inbound SMS / paid-order writers are not connected.
- * Calling this does not prove a customer replied or reordered.
- * Provider-accepted send remains a separate fact.
+ * Records a later verified consequence. The caller must already have
+ * provider-accepted send plus the matching inbound/paid-order evidence.
+ * Absence of a reply is not a consequence.
  */
 export async function recordRescueConsequence(
   input: {
