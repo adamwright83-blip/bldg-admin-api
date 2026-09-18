@@ -317,3 +317,39 @@ describe("Corrective pass 3 -- item 3: business grounding for what we actually s
     expect(system).toContain("do not import a sales model from a different industry");
   });
 });
+
+
+describe("Claire temporal authority regression", () => {
+  it("tells follow-up generation to ignore ambient provider/server time in favor of the verified context clock", async () => {
+    let captured = "";
+    const context = makeContext();
+    context.clock = {
+      isoTimestamp: "2026-09-17T22:18:00.000Z",
+      timeZone: "America/Los_Angeles",
+      businessDate: "2026-09-17",
+      weekday: "Thursday",
+      localTime: "3:18 PM",
+      daypart: "afternoon",
+      fieldSalesDayState: "open",
+      tomorrowBusinessDate: "2026-09-18",
+    };
+    await answerClairePreDriveFollowUp(
+      {
+        tenantId: "tenant-a",
+        utterance: "What time is it and when is the stop?",
+        brief: "Visit The Wilshire.",
+        context,
+      },
+      {
+        invokeText: async input => {
+          captured = input.messages.map(message => message.content).join("\n");
+          return { text: "It's 3:18 PM. The stop is at five.", provider: "anthropic", model: "test" } as never;
+        },
+        recordGeneration: async () => {},
+      }
+    );
+    expect(captured).toContain("TEMPORAL AUTHORITY");
+    expect(captured).toContain("sole authority");
+    expect(captured).toContain("Ignore any ambient model/provider/server notion of the current time");
+  });
+});
