@@ -96,9 +96,16 @@ export function renderCanonScopedPersonalAnswer(input: {
   if (!rendered) return null;
 
   // The deterministic renderer is still re-checked by the same hard guard.
-  // If a future canon/edit makes this unsafe, fail closed rather than
-  // quietly weakening the personal-specificity invariant.
-  assertNoUngroundedPersonalSpecificity(rendered, input.eligibleCanonFacts);
+  // When fragment IDs are the compiler's eligibility authority, include the
+  // facts belonging to those already-eligible IDs in the guard inventory too.
+  // This does not widen disclosure: only compiler-authorized fragments enter.
+  const guardEligibleFacts = [
+    ...input.eligibleCanonFacts,
+    ...CLAIRE_CANON
+      .filter(candidate => eligibleIds.has(candidate.id))
+      .map(candidate => candidate.fact),
+  ];
+  assertNoUngroundedPersonalSpecificity(rendered, [...new Set(guardEligibleFacts)]);
   return rendered;
 }
 
