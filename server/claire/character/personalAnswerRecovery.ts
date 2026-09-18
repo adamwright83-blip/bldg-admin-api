@@ -70,15 +70,25 @@ export function renderCanonFactFirstPerson(fact: string): string {
  */
 export function renderCanonScopedPersonalAnswer(input: {
   eligibleCanonFacts: string[];
+  eligibleCanonFragmentIds?: string[];
   requestedTopic?: string;
 }): string | null {
-  if (!input.requestedTopic || !input.eligibleCanonFacts.length) return null;
+  if (!input.requestedTopic) return null;
 
-  const eligible = new Set(input.eligibleCanonFacts);
+  // Prefer the compiler's fragment IDs as the eligibility authority. Facts
+  // remain accepted for backward-compatible callers/tests, but IDs avoid a
+  // brittle text-equality dependency between retrieval and recovery.
+  const eligibleFacts = new Set(input.eligibleCanonFacts);
+  const eligibleIds = new Set(input.eligibleCanonFragmentIds ?? []);
+  if (eligibleFacts.size === 0 && eligibleIds.size === 0) return null;
+
   const priority = TOPIC_FRAGMENT_PRIORITY[input.requestedTopic] ?? [];
   const fragment = priority
     .map(id => CLAIRE_CANON.find(candidate => candidate.id === id))
-    .find(candidate => candidate?.fact && eligible.has(candidate.fact));
+    .find(candidate =>
+      candidate?.fact &&
+      (eligibleIds.has(candidate.id) || eligibleFacts.has(candidate.fact))
+    );
 
   if (!fragment?.fact) return null;
 
@@ -86,9 +96,16 @@ export function renderCanonScopedPersonalAnswer(input: {
   if (!rendered) return null;
 
   // The deterministic renderer is still re-checked by the same hard guard.
-  // If a future canon/edit makes this unsafe, fail closed rather than
-  // quietly weakening the personal-specificity invariant.
-  assertNoUngroundedPersonalSpecificity(rendered, input.eligibleCanonFacts);
+  // When fragment IDs are the compiler's eligibility authority, include the
+  // facts belonging to those already-eligible IDs in the guard inventory too.
+  // This does not widen disclosure: only compiler-authorized fragments enter.
+  const guardEligibleFacts = [
+    ...input.eligibleCanonFacts,
+    ...CLAIRE_CANON
+      .filter(candidate => eligibleIds.has(candidate.id))
+      .map(candidate => candidate.fact),
+  ];
+  assertNoUngroundedPersonalSpecificity(rendered, [...new Set(guardEligibleFacts)]);
   return rendered;
 }
 
@@ -98,6 +115,7 @@ export function renderCanonScopedPersonalAnswer(input: {
  */
 export function recoverPersonalAnswer(input: {
   eligibleCanonFacts: string[];
+  eligibleCanonFragmentIds?: string[];
   requestedTopic?: string;
 }): { text: string; via: PersonalAnswerRecoveryVia } {
   const rendered = renderCanonScopedPersonalAnswer(input);
