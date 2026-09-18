@@ -65,7 +65,6 @@ export type RescueSendEvidenceName =
 export const CONSEQUENCE_KINDS = [
   "customer_replied",
   "customer_ordered",
-  "no_response",
 ] as const;
 
 export type RescueConsequenceKind = (typeof CONSEQUENCE_KINDS)[number];

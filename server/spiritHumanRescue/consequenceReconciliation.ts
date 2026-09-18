@@ -9,7 +9,8 @@ import type { AdminCustomerAggregateDbRow } from "../adminCustomerAggregate";
 const LOOKBACK_FLOOR = new Date("2020-01-01T00:00:00.000Z");
 
 function phoneDigits(value: string | null | undefined): string | null {
-  const digits = String(value ?? "").replace(/\D/g, "");
+  let digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) digits = digits.slice(1);
   return digits.length >= 7 ? digits : null;
 }
 
