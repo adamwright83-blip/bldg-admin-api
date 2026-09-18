@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { strategyCustomerSnapshotId } from "../strategy/snapshotDormantCustomers";
 import type { AdminCustomerAggregateDbRow } from "../adminCustomerAggregate";
-import { resolveDormantContactFromAggregates } from "./resolveDormantContact";
+import {
+  resolveDormantContactFromAggregates,
+  resolveSendContactFromAggregates,
+} from "./resolveDormantContact";
 import { createFakeOutboundSendAdapter } from "./outboundSendAdapter";
 import {
   approveAndSendRescue,
   cancelRescueMission,
   defaultTestRescueDeps,
+  deferRescueMission,
   enterRescueMission,
   instantiateRescueMission,
   MemoryRescueMissionStore,
@@ -14,10 +18,11 @@ import {
   recordRescueConsequence,
 } from "./rescueMissionService";
 import { canCompleteRescue, publicMissionHasNoPhone } from "../../shared/spiritHumanRescue";
+import { assertAuthoritativeRescueSendEnabled } from "./rescueRouter";
 
 const NOW = new Date("2026-09-17T15:00:00.000Z");
 
-function dormantRow(phone = "3105550101"): AdminCustomerAggregateDbRow {
+function dormantRow(phone = "3105550101", lastOrderAt = new Date("2026-07-01T12:00:00.000Z")): AdminCustomerAggregateDbRow {
   return {
     phone,
     firstName: "Priya",
@@ -30,7 +35,7 @@ function dormantRow(phone = "3105550101"): AdminCustomerAggregateDbRow {
     lifetimeSpend: 240,
     paidOrderCount: 4,
     firstOrderAt: new Date("2025-01-01T12:00:00.000Z"),
-    lastOrderAt: new Date("2026-07-01T12:00:00.000Z"),
+    lastOrderAt,
     lastOrderId: 88,
     ordersLast30Days: 0,
     ordersLast90Days: 1,
@@ -39,6 +44,16 @@ function dormantRow(phone = "3105550101"): AdminCustomerAggregateDbRow {
 
 function snapshotId(tenantId = "tenant-a", phone = "3105550101"): string {
   return strategyCustomerSnapshotId(tenantId, dormantRow(phone));
+}
+
+function candidateFor(tenantId = "tenant-a", phone = "3105550101") {
+  return {
+    id: snapshotId(tenantId, phone),
+    firstName: "Priya",
+    buildingName: "Opus LA",
+    lastOrderAt: "2026-07-01T12:00:00.000Z",
+    daysSinceLastOrder: 78,
+  };
 }
 
 function contactFor(tenantId = "tenant-a", phone = "3105550101") {
@@ -53,6 +68,19 @@ function contactFor(tenantId = "tenant-a", phone = "3105550101") {
     historicalSpendCents: 24000,
     phone,
   };
+}
+
+function depsFor(
+  overrides: Parameters<typeof defaultTestRescueDeps>[0] = {},
+  tenantId = "tenant-a",
+  phone = "3105550101"
+) {
+  return defaultTestRescueDeps({
+    now: () => NOW,
+    loadCandidates: async () => [candidateFor(tenantId, phone)],
+    resolveSendContact: async () => ({ kind: "ready", contact: contactFor(tenantId, phone) }),
+    ...overrides,
+  });
 }
 
 describe("Spirit Human rescue send boundary", () => {
@@ -70,11 +98,20 @@ describe("Spirit Human rescue send boundary", () => {
     expect(resolved?.snapshotCustomerId).toBe(id);
   });
 
-  it("freezes the same customer across re-instantiate and never swaps on send retry", async () => {
-    const deps = defaultTestRescueDeps({
-      now: () => NOW,
-      resolveContact: async () => contactFor(),
+  it("treats a paid customer who is no longer dormant as ineligible at send", () => {
+    const row = dormantRow("3105550101", new Date("2026-09-16T12:00:00.000Z"));
+    const id = snapshotId();
+    const resolved = resolveSendContactFromAggregates({
+      tenantId: "tenant-a",
+      snapshotCustomerId: id,
+      rows: [row],
+      now: NOW,
     });
+    expect(resolved).toEqual({ kind: "no_longer_dormant" });
+  });
+
+  it("freezes the same customer across re-instantiate and never swaps on send retry", async () => {
+    const deps = depsFor();
     const first = await instantiateRescueMission(
       { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
       deps
@@ -101,6 +138,7 @@ describe("Spirit Human rescue send boundary", () => {
       failDeps
     );
     expect(failed.lifecycle).toBe("problem");
+    expect(failed.send.evidenceName).toBe("provider_rejected");
     expect(failed.spiritHuman.snapshotCustomerId).toBe(first.spiritHuman.snapshotCustomerId);
     const retried = await approveAndSendRescue(
       {
@@ -117,10 +155,7 @@ describe("Spirit Human rescue send boundary", () => {
   });
 
   it("does not complete from draft, enter, or approval-without-send", async () => {
-    const deps = defaultTestRescueDeps({
-      now: () => NOW,
-      resolveContact: async () => contactFor(),
-    });
+    const deps = depsFor();
     const created = await instantiateRescueMission(
       { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
       deps
@@ -164,11 +199,8 @@ describe("Spirit Human rescue send boundary", () => {
     expect(deps.sendAdapter.attempts).toHaveLength(0);
   });
 
-  it("sends once on double-tap and does not send after cancel", async () => {
-    const deps = defaultTestRescueDeps({
-      now: () => NOW,
-      resolveContact: async () => contactFor(),
-    });
+  it("sends once on double-tap and concurrent requests, and does not send after cancel", async () => {
+    const deps = depsFor();
     const created = await instantiateRescueMission(
       { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
       deps
@@ -193,10 +225,7 @@ describe("Spirit Human rescue send boundary", () => {
     expect(deps.sendAdapter.attempts).toHaveLength(1);
     expect(a.send.providerMessageId).toBe(b.send.providerMessageId);
 
-    const other = defaultTestRescueDeps({
-      now: () => NOW,
-      resolveContact: async () => contactFor("tenant-a", "3105550199"),
-    });
+    const other = depsFor({}, "tenant-a", "3105550199");
     const second = await instantiateRescueMission(
       {
         tenantId: "tenant-a",
@@ -227,12 +256,7 @@ describe("Spirit Human rescue send boundary", () => {
   it("failed send does not rescue, and later reply/order do not rewrite send", async () => {
     const store = new MemoryRescueMissionStore();
     const reject = createFakeOutboundSendAdapter({ mode: "reject" });
-    const deps = defaultTestRescueDeps({
-      store,
-      sendAdapter: reject,
-      now: () => NOW,
-      resolveContact: async () => contactFor(),
-    });
+    const deps = depsFor({ store, sendAdapter: reject });
     const created = await instantiateRescueMission(
       { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
       deps
@@ -291,11 +315,7 @@ describe("Spirit Human rescue send boundary", () => {
 
   it("isolates tenants and operators, and never puts a phone on the public mission", async () => {
     const store = new MemoryRescueMissionStore();
-    const depsA = defaultTestRescueDeps({
-      store,
-      now: () => NOW,
-      resolveContact: async () => contactFor("tenant-a"),
-    });
+    const depsA = depsFor({ store });
     const created = await instantiateRescueMission(
       { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
       depsA
@@ -316,26 +336,29 @@ describe("Spirit Human rescue send boundary", () => {
   });
 
   it("does not invoke the adapter from tests that never send, and fake adapter never uses Twilio", async () => {
-    const deps = defaultTestRescueDeps({
-      now: () => NOW,
-      resolveContact: async () => contactFor(),
+    let resolveCalls = 0;
+    const deps = depsFor({
+      resolveSendContact: async () => {
+        resolveCalls += 1;
+        return { kind: "ready" as const, contact: contactFor() };
+      },
     });
     const created = await instantiateRescueMission(
       { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
       deps
     );
+    expect(resolveCalls).toBe(0);
     await prepareRescueDraft(
       { tenantId: "tenant-a", operatorUserId: "op-a", missionId: created.missionId },
       deps
     );
     expect(JSON.stringify(created)).not.toMatch(/twilio/i);
+    expect(JSON.stringify(created)).not.toMatch(/310555/);
     expect(deps.sendAdapter.attempts).toHaveLength(0);
   });
 
-  it("does not send when communication permission is refused", async () => {
-    const deps = defaultTestRescueDeps({
-      now: () => NOW,
-      resolveContact: async () => contactFor(),
+  it("does not send when communication permission is refused and does not call it a provider rejection", async () => {
+    const deps = depsFor({
       permissionCheck: async () => ({
         allowed: false,
         permissionStatus: "opted_out",
@@ -357,7 +380,248 @@ describe("Spirit Human rescue send boundary", () => {
       deps
     );
     expect(failed.lifecycle).toBe("problem");
+    expect(failed.send.evidenceName).toBe("permission_denied");
     expect(canCompleteRescue(failed.send)).toBe(false);
     expect(deps.sendAdapter.attempts).toHaveLength(0);
+  });
+
+  it("does not mislabel provider_unconfigured as provider_rejected", async () => {
+    const deps = depsFor({
+      sendAdapter: createFakeOutboundSendAdapter({ mode: "unconfigured" }),
+    });
+    const created = await instantiateRescueMission(
+      { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
+      deps
+    );
+    const failed = await approveAndSendRescue(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        missionId: created.missionId,
+        approvedByUserId: "op-a",
+        operatorAuthorizedSend: true,
+      },
+      deps
+    );
+    expect(failed.send.evidenceName).toBe("provider_unconfigured");
+    expect(canCompleteRescue(failed.send)).toBe(false);
+  });
+
+  it("does not send when contact cannot be resolved", async () => {
+    const deps = depsFor({
+      resolveSendContact: async () => ({ kind: "not_found" }),
+    });
+    const created = await instantiateRescueMission(
+      { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
+      deps
+    );
+    const failed = await approveAndSendRescue(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        missionId: created.missionId,
+        approvedByUserId: "op-a",
+        operatorAuthorizedSend: true,
+      },
+      deps
+    );
+    expect(failed.send.evidenceName).toBe("contact_unresolved");
+    expect(deps.sendAdapter.attempts).toHaveLength(0);
+  });
+
+  it("supersedes without sending when the frozen target is no longer dormant", async () => {
+    const deps = depsFor({
+      resolveSendContact: async () => ({ kind: "no_longer_dormant" }),
+    });
+    const created = await instantiateRescueMission(
+      { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
+      deps
+    );
+    const result = await approveAndSendRescue(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        missionId: created.missionId,
+        approvedByUserId: "op-a",
+        operatorAuthorizedSend: true,
+      },
+      deps
+    );
+    expect(result.lifecycle).toBe("superseded");
+    expect(result.send.evidenceName).toBe("no_longer_dormant");
+    expect(canCompleteRescue(result.send)).toBe(false);
+    expect(deps.sendAdapter.attempts).toHaveLength(0);
+    expect(result.spiritHuman.snapshotCustomerId).toBe(created.spiritHuman.snapshotCustomerId);
+  });
+
+  it("survives store reconstruction with frozen target, villager, draft, and sent receipt", async () => {
+    const storeA = new MemoryRescueMissionStore();
+    const depsA = depsFor({ store: storeA });
+    const created = await instantiateRescueMission(
+      { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
+      depsA
+    );
+    await prepareRescueDraft(
+      { tenantId: "tenant-a", operatorUserId: "op-a", missionId: created.missionId },
+      depsA
+    );
+    const sent = await approveAndSendRescue(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        missionId: created.missionId,
+        approvedByUserId: "op-a",
+        operatorAuthorizedSend: true,
+      },
+      depsA
+    );
+    const later = await recordRescueConsequence(
+      {
+        tenantId: "tenant-a",
+        missionId: created.missionId,
+        kind: "customer_replied",
+        evidenceId: "inbound-later",
+      },
+      depsA
+    );
+    const storeB = MemoryRescueMissionStore.fromSnapshot(storeA.dump());
+    const reloaded = await storeB.get("tenant-a", created.missionId);
+    expect(reloaded?.missionId).toBe(created.missionId);
+    expect(reloaded?.spiritHuman.snapshotCustomerId).toBe(created.spiritHuman.snapshotCustomerId);
+    expect(reloaded?.villager.id).toBe(created.villager.id);
+    expect(reloaded?.draft).toBeTruthy();
+    expect(reloaded?.send.providerMessageId).toBe(sent.send.providerMessageId);
+    expect(canCompleteRescue(reloaded!.send)).toBe(true);
+    expect(reloaded?.consequences).toEqual(later?.consequences);
+    const retryAdapter = createFakeOutboundSendAdapter();
+    const retried = await approveAndSendRescue(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        missionId: created.missionId,
+        approvedByUserId: "op-a",
+        operatorAuthorizedSend: true,
+      },
+      { ...depsA, store: storeB, sendAdapter: retryAdapter }
+    );
+    expect(retried.send.providerMessageId).toBe(sent.send.providerMessageId);
+    expect(retryAdapter.attempts).toHaveLength(0);
+  });
+
+  it("treats persisted sending after restart as unknown and does not call the provider", async () => {
+    const storeA = new MemoryRescueMissionStore();
+    const depsA = depsFor({ store: storeA });
+    const created = await instantiateRescueMission(
+      { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
+      depsA
+    );
+    const sending = {
+      ...created,
+      send: { ...created.send, status: "sending" as const, attemptedAt: NOW.toISOString() },
+      lifecycle: "active" as const,
+    };
+    await storeA.save(sending);
+    const storeB = MemoryRescueMissionStore.fromSnapshot(storeA.dump());
+    const adapter = createFakeOutboundSendAdapter();
+    const result = await approveAndSendRescue(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        missionId: created.missionId,
+        approvedByUserId: "op-a",
+        operatorAuthorizedSend: true,
+      },
+      { ...depsA, store: storeB, sendAdapter: adapter }
+    );
+    expect(result.send.status).toBe("send_outcome_unknown");
+    expect(result.send.evidenceName).toBe("send_outcome_unknown");
+    expect(canCompleteRescue(result.send)).toBe(false);
+    expect(adapter.attempts).toHaveLength(0);
+    const again = await approveAndSendRescue(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        missionId: created.missionId,
+        approvedByUserId: "op-a",
+        operatorAuthorizedSend: true,
+      },
+      { ...depsA, store: storeB, sendAdapter: adapter }
+    );
+    expect(again.send.status).toBe("send_outcome_unknown");
+    expect(adapter.attempts).toHaveLength(0);
+  });
+
+  it("returns authoritative success even if outreach bookkeeping throws", async () => {
+    const deps = depsFor({
+      recordOutreach: async () => {
+        throw new Error("ledger down");
+      },
+    });
+    const created = await instantiateRescueMission(
+      { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
+      deps
+    );
+    const sent = await approveAndSendRescue(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        missionId: created.missionId,
+        approvedByUserId: "op-a",
+        operatorAuthorizedSend: true,
+      },
+      deps
+    );
+    expect(sent.lifecycle).toBe("completed");
+    expect(canCompleteRescue(sent.send)).toBe(true);
+  });
+
+  it("keeps NOT NOW distinct from CANCEL", async () => {
+    const deps = depsFor();
+    const created = await instantiateRescueMission(
+      { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
+      deps
+    );
+    const deferred = await deferRescueMission(
+      { tenantId: "tenant-a", operatorUserId: "op-a", missionId: created.missionId },
+      deps
+    );
+    expect(deferred.deferredAt).toBeTruthy();
+    expect(deferred.lifecycle).toBe("available");
+    expect(deferred.send.status).not.toBe("cancelled");
+    const reused = await instantiateRescueMission(
+      { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
+      deps
+    );
+    expect(reused.missionId).toBe(created.missionId);
+
+    const other = depsFor({}, "tenant-a", "3105550199");
+    const second = await instantiateRescueMission(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        snapshotCustomerId: snapshotId("tenant-a", "3105550199"),
+      },
+      other
+    );
+    const cancelled = await cancelRescueMission(
+      { tenantId: "tenant-a", operatorUserId: "op-a", missionId: second.missionId },
+      other
+    );
+    expect(cancelled.lifecycle).toBe("skipped");
+    expect(cancelled.send.status).toBe("cancelled");
+    expect(cancelled.deferredAt).toBeNull();
+  });
+});
+
+describe("Spirit Human rescue proof-mode send guard", () => {
+  it("refuses the production send path when GOLDLINE_PROOF_MODE is set", () => {
+    const previous = process.env.GOLDLINE_PROOF_MODE;
+    process.env.GOLDLINE_PROOF_MODE = "1";
+    try {
+      expect(() => assertAuthoritativeRescueSendEnabled()).toThrow(/proof mode/i);
+    } finally {
+      if (previous === undefined) delete process.env.GOLDLINE_PROOF_MODE;
+      else process.env.GOLDLINE_PROOF_MODE = previous;
+    }
   });
 });

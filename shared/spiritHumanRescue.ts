@@ -30,10 +30,35 @@ export const SEND_STATES = [
   "sending",
   "sent",
   "send_failed",
+  "send_outcome_unknown",
   "cancelled",
 ] as const;
 
 export type RescueSendState = (typeof SEND_STATES)[number];
+
+export const CLAIMABLE_SEND_STATES = [
+  "draft_ready",
+  "awaiting_approval",
+  "send_failed",
+] as const satisfies readonly RescueSendState[];
+
+export const AMBIGUOUS_SEND_STATES = ["sending", "send_outcome_unknown"] as const satisfies readonly RescueSendState[];
+
+/** What a successful Twilio create actually proves. Not delivered. Not read. */
+export const SEND_EVIDENCE_NAME = "provider_accepted" as const;
+
+export const SEND_FAILURE_EVIDENCE = [
+  "permission_denied",
+  "contact_unresolved",
+  "provider_unconfigured",
+  "provider_rejected",
+  "send_outcome_unknown",
+  "no_longer_dormant",
+] as const;
+
+export type RescueSendEvidenceName =
+  | typeof SEND_EVIDENCE_NAME
+  | (typeof SEND_FAILURE_EVIDENCE)[number];
 
 export const CONSEQUENCE_KINDS = [
   "customer_replied",
@@ -42,9 +67,6 @@ export const CONSEQUENCE_KINDS = [
 ] as const;
 
 export type RescueConsequenceKind = (typeof CONSEQUENCE_KINDS)[number];
-
-/** What a successful Twilio create actually proves. Not delivered. Not read. */
-export const SEND_EVIDENCE_NAME = "provider_accepted" as const;
 
 export type SpiritHumanVillager = {
   id: string;
@@ -85,7 +107,7 @@ export type RescueSendRecord = {
   failedAt: string | null;
   providerMessageId: string | null;
   providerStatus: string | null;
-  evidenceName: typeof SEND_EVIDENCE_NAME | "provider_rejected" | "provider_unconfigured" | null;
+  evidenceName: RescueSendEvidenceName | null;
   failureReason: string | null;
 };
 
@@ -107,6 +129,7 @@ export type SpiritHumanRescueMission = {
   send: RescueSendRecord;
   consequences: RescueConsequenceRecord[];
   opsTaskId: number | null;
+  deferredAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -151,8 +174,8 @@ export function missionLifecycleFromSend(input: {
 }): MissionLifecycleState {
   if (input.superseded) return "superseded";
   if (input.sendStatus === "sent") return "completed";
-  if (input.deferred || input.sendStatus === "cancelled") return "skipped";
-  if (input.sendStatus === "send_failed") return "problem";
+  if (input.sendStatus === "cancelled") return "skipped";
+  if (input.sendStatus === "send_failed" || input.sendStatus === "send_outcome_unknown") return "problem";
   if (input.sendStatus === "sending") return "active";
   if (input.entered) return "active";
   return "available";
@@ -172,11 +195,15 @@ export function canCompleteRescue(send: Pick<RescueSendRecord, "status" | "provi
 }
 
 export function canRetrySend(send: Pick<RescueSendRecord, "status">): boolean {
-  return send.status === "send_failed" || send.status === "awaiting_approval" || send.status === "draft_ready";
+  return (CLAIMABLE_SEND_STATES as readonly RescueSendState[]).includes(send.status);
 }
 
 export function isDuplicateSendBlocked(send: Pick<RescueSendRecord, "status">): boolean {
-  return send.status === "sent" || send.status === "sending";
+  return send.status === "sent" || send.status === "sending" || send.status === "send_outcome_unknown";
+}
+
+export function isAmbiguousSend(send: Pick<RescueSendRecord, "status">): boolean {
+  return send.status === "sending" || send.status === "send_outcome_unknown";
 }
 
 export function applyLaterConsequence(
@@ -218,7 +245,7 @@ export function composeReactivationDraft(facts: FrozenRescueFacts): string {
   const building = facts.buildingName ? ` at ${facts.buildingName}` : "";
   const last = formatLastOrderDay(facts.lastOrderAt);
   const lastBit = last ? ` We last helped on ${last}.` : "";
-  return `${facts.firstName}, it's Laundry Butler.${lastBit} Want me to set up a pickup${building}? Reply YES and I will take it from there.`;
+  return `${facts.firstName}, it's Laundry Butler.${lastBit} If you'd like us to set up a pickup${building}, just let us know.`;
 }
 
 function formatLastOrderDay(iso: string): string | null {

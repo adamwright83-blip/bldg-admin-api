@@ -16,7 +16,7 @@ export type OutboundSendAdapter = {
  */
 export const twilioOutboundSendAdapter: OutboundSendAdapter = {
   async send(input) {
-    return sendSMSWithReceipt(input.to, input.body);
+    return sendSMSWithReceipt(input.to, input.body, { idempotencyKey: input.idempotencyKey });
   },
 };
 

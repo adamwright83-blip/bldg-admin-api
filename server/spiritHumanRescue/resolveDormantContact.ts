@@ -9,7 +9,9 @@ import { listAdminCustomerAggregates } from "../db";
 import {
   deriveDormantEligibleCustomers,
   strategyCustomerSnapshotId,
+  type DormantEligibleCustomer,
 } from "../strategy/snapshotDormantCustomers";
+import type { FrozenRescueFacts } from "../../shared/spiritHumanRescue";
 
 export type ResolvedDormantContact = {
   snapshotCustomerId: string;
@@ -22,6 +24,11 @@ export type ResolvedDormantContact = {
   phone: string;
 };
 
+export type SendContactResolution =
+  | { kind: "ready"; contact: ResolvedDormantContact }
+  | { kind: "no_longer_dormant" }
+  | { kind: "not_found" };
+
 export async function loadTenantCustomerAggregates(
   tenantId: string,
   aggregates?: AdminCustomerAggregateDbRow[]
@@ -29,12 +36,24 @@ export async function loadTenantCustomerAggregates(
   return aggregates ?? listAdminCustomerAggregates(tenantId);
 }
 
-export function resolveDormantContactFromAggregates(input: {
+export function freezeFactsFromCandidate(
+  candidate: DormantEligibleCustomer
+): FrozenRescueFacts {
+  return {
+    snapshotCustomerId: candidate.id,
+    firstName: candidate.firstName,
+    ...(candidate.buildingName ? { buildingName: candidate.buildingName } : {}),
+    lastOrderAt: candidate.lastOrderAt,
+    daysSinceLastOrder: candidate.daysSinceLastOrder,
+  };
+}
+
+export function resolveSendContactFromAggregates(input: {
   tenantId: string;
   snapshotCustomerId: string;
   rows: AdminCustomerAggregateDbRow[];
   now?: Date;
-}): ResolvedDormantContact | null {
+}): SendContactResolution {
   const now = input.now ?? new Date();
   const eligibleIds = new Set(
     deriveDormantEligibleCustomers(input.rows, {
@@ -46,19 +65,51 @@ export function resolveDormantContactFromAggregates(input: {
   for (const row of input.rows) {
     const snapshotCustomerId = strategyCustomerSnapshotId(input.tenantId, row);
     if (snapshotCustomerId !== input.snapshotCustomerId) continue;
-    if (!eligibleIds.has(snapshotCustomerId) && row.paidOrderCount < 1) return null;
+    if (!eligibleIds.has(snapshotCustomerId)) {
+      return { kind: "no_longer_dormant" };
+    }
+    const phone = row.phone?.trim() ?? "";
+    if (!phone) return { kind: "not_found" };
     return {
-      snapshotCustomerId,
-      firstName: row.firstName.trim(),
-      lastName: row.lastName.trim(),
-      buildingSlug: row.buildingSlug,
-      lastOrderAt: row.lastOrderAt,
-      paidOrderCount: row.paidOrderCount,
-      historicalSpendCents: Math.round(row.lifetimeSpend * 100),
-      phone: row.phone,
+      kind: "ready",
+      contact: {
+        snapshotCustomerId,
+        firstName: row.firstName.trim(),
+        lastName: row.lastName.trim(),
+        buildingSlug: row.buildingSlug,
+        lastOrderAt: row.lastOrderAt,
+        paidOrderCount: row.paidOrderCount,
+        historicalSpendCents: Math.round(row.lifetimeSpend * 100),
+        phone,
+      },
     };
   }
-  return null;
+  return { kind: "not_found" };
+}
+
+export function resolveDormantContactFromAggregates(input: {
+  tenantId: string;
+  snapshotCustomerId: string;
+  rows: AdminCustomerAggregateDbRow[];
+  now?: Date;
+}): ResolvedDormantContact | null {
+  const result = resolveSendContactFromAggregates(input);
+  return result.kind === "ready" ? result.contact : null;
+}
+
+export async function resolveSendContact(input: {
+  tenantId: string;
+  snapshotCustomerId: string;
+  now?: Date;
+  aggregates?: AdminCustomerAggregateDbRow[];
+}): Promise<SendContactResolution> {
+  const rows = await loadTenantCustomerAggregates(input.tenantId, input.aggregates);
+  return resolveSendContactFromAggregates({
+    tenantId: input.tenantId,
+    snapshotCustomerId: input.snapshotCustomerId,
+    rows,
+    now: input.now,
+  });
 }
 
 export async function resolveDormantContact(input: {
@@ -67,13 +118,8 @@ export async function resolveDormantContact(input: {
   now?: Date;
   aggregates?: AdminCustomerAggregateDbRow[];
 }): Promise<ResolvedDormantContact | null> {
-  const rows = await loadTenantCustomerAggregates(input.tenantId, input.aggregates);
-  return resolveDormantContactFromAggregates({
-    tenantId: input.tenantId,
-    snapshotCustomerId: input.snapshotCustomerId,
-    rows,
-    now: input.now,
-  });
+  const result = await resolveSendContact(input);
+  return result.kind === "ready" ? result.contact : null;
 }
 
 export function freezeFactsFromContact(

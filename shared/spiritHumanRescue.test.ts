@@ -5,6 +5,7 @@ import {
   composeReactivationDraft,
   emptySendRecord,
   isDuplicateSendBlocked,
+  canRetrySend,
   missionLifecycleFromSend,
   publicMissionHasNoPhone,
   selectVillagerIndependentOfCustomer,
@@ -32,6 +33,7 @@ function mission(overrides: Partial<SpiritHumanRescueMission> = {}): SpiritHuman
     send,
     consequences: [],
     opsTaskId: 41,
+    deferredAt: null,
     createdAt: "2026-09-17T00:00:00.000Z",
     updatedAt: "2026-09-17T00:00:00.000Z",
     ...overrides,
@@ -156,5 +158,40 @@ describe("Spirit Human rescue contract", () => {
     });
     expect(draft).toContain("Alex");
     expect(draft.toLowerCase()).not.toMatch(/free|discount|sorry|disappointed/);
+    expect(draft).not.toMatch(/Reply YES/i);
+    expect(draft.toLowerCase()).not.toContain("claire");
+  });
+
+  it("keeps NOT NOW (deferred) distinct from CANCEL (skipped)", () => {
+    expect(
+      missionLifecycleFromSend({
+        entered: false,
+        sendStatus: "draft_ready",
+        deferred: true,
+        superseded: false,
+      })
+    ).toBe("available");
+    expect(
+      missionLifecycleFromSend({
+        entered: false,
+        sendStatus: "cancelled",
+        deferred: false,
+        superseded: false,
+      })
+    ).toBe("skipped");
+    expect(isDuplicateSendBlocked({ ...emptySendRecord("m"), status: "send_outcome_unknown" })).toBe(
+      true
+    );
+    expect(canRetrySend({ status: "send_failed" })).toBe(true);
+    expect(canRetrySend({ status: "send_outcome_unknown" })).toBe(false);
+    expect(canRetrySend({ status: "sending" })).toBe(false);
+    expect(
+      missionLifecycleFromSend({
+        entered: true,
+        sendStatus: "send_outcome_unknown",
+        deferred: false,
+        superseded: false,
+      })
+    ).toBe("problem");
   });
 });

@@ -35,6 +35,7 @@ export type PressureFrozenReason =
   | "reduced_motion_hold";
 
 export type PressureState = {
+  missionId: string | null;
   phase: PressurePhase;
   roundAnchorMs: number;
   holdStartedAtMs: number | null;
@@ -44,6 +45,8 @@ export type PressureState = {
 };
 
 export type PressureEvent =
+  | { type: "restore"; state: PressureState }
+  | { type: "mission_changed"; missionId: string; state: PressureState }
   | { type: "tick"; nowMs: number }
   | { type: "player_prepare"; nowMs: number }
   | { type: "draft_ready"; nowMs: number }
@@ -56,8 +59,9 @@ export type PressureEvent =
   | { type: "background"; nowMs: number }
   | { type: "foreground"; nowMs: number; elapsedBackgroundMs: number };
 
-export function initialPressureState(nowMs: number): PressureState {
+export function initialPressureState(nowMs: number, missionId: string | null = null): PressureState {
   return {
+    missionId,
     phase: "calm",
     roundAnchorMs: nowMs,
     holdStartedAtMs: null,
@@ -89,6 +93,8 @@ function freeze(state: PressureState, reason: PressureFrozenReason): PressureSta
 }
 
 export function reducePressure(state: PressureState, event: PressureEvent): PressureState {
+  if (event.type === "restore") return event.state;
+  if (event.type === "mission_changed") return event.state;
   if (state.phase === "rescue") return state;
 
   switch (event.type) {
@@ -134,7 +140,7 @@ export function reducePressure(state: PressureState, event: PressureEvent): Pres
       };
     case "impact_ack":
       return {
-        ...initialPressureState(event.nowMs),
+        ...initialPressureState(event.nowMs, state.missionId),
         draftVisible: state.draftVisible,
       };
     case "driving_changed":
@@ -203,21 +209,33 @@ export function restorePressureAcrossRefresh(input: {
   storedAnchorMs: number | null;
   nowMs: number;
   missionCompleted: boolean;
+  missionId: string;
 }): PressureState {
   if (input.missionCompleted) {
-    return { ...initialPressureState(input.nowMs), phase: "rescue" };
+    return { ...initialPressureState(input.nowMs, input.missionId), phase: "rescue" };
   }
   if (
     input.storedAnchorMs != null &&
     input.nowMs - input.storedAnchorMs >= 0 &&
     input.nowMs - input.storedAnchorMs < PRESSURE_SESSION_GRACE_MS
   ) {
-    return tickPressure(
-      { ...initialPressureState(input.storedAnchorMs), roundAnchorMs: input.storedAnchorMs },
-      input.nowMs
-    );
+    return {
+      ...tickPressure(
+        { ...initialPressureState(input.storedAnchorMs, input.missionId), roundAnchorMs: input.storedAnchorMs },
+        input.nowMs
+      ),
+      missionId: input.missionId,
+    };
   }
-  return initialPressureState(input.nowMs);
+  return initialPressureState(input.nowMs, input.missionId);
+}
+
+export function shouldPersistPressureAnchor(input: {
+  missionId: string;
+  pressureMissionId: string | null;
+  completed: boolean;
+}): boolean {
+  return input.pressureMissionId === input.missionId && !input.completed;
 }
 
 export function punishmentWouldAdvance(state: PressureState): boolean {

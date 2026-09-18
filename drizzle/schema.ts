@@ -7945,6 +7945,38 @@ export const dropPatternFlags = mysqlTable(
 export type DropPatternFlagRow = typeof dropPatternFlags.$inferSelect;
 export type InsertDropPatternFlag = typeof dropPatternFlags.$inferInsert;
 
+/**
+ * JOYSTICK Spirit Human rescue missions. Authoritative outbound-send state
+ * must survive process restart, deploy, and multi-instance routing.
+ * sendStatus is a first-class column so send-attempt claims can compare-and-set.
+ */
+export const spiritHumanRescueMissions = mysqlTable(
+  "spirit_human_rescue_missions",
+  {
+    missionId: varchar("missionId", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    snapshotCustomerId: varchar("snapshotCustomerId", { length: 64 }).notNull(),
+    villagerId: varchar("villagerId", { length: 32 }).notNull(),
+    lifecycle: varchar("lifecycle", { length: 32 }).notNull(),
+    sendStatus: varchar("sendStatus", { length: 32 }).notNull(),
+    missionJson: json("missionJson").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantOperatorIdx: index("idx_shr_missions_tenant_operator").on(
+      table.tenantId,
+      table.operatorUserId
+    ),
+    tenantCustomerIdx: index("idx_shr_missions_tenant_customer").on(
+      table.tenantId,
+      table.snapshotCustomerId
+    ),
+  })
+);
 
+export type SpiritHumanRescueMissionRow = typeof spiritHumanRescueMissions.$inferSelect;
+export type InsertSpiritHumanRescueMissionRow = typeof spiritHumanRescueMissions.$inferInsert;
 
 

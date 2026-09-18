@@ -6,6 +6,7 @@ import {
   punishmentWouldAdvance,
   reducePressure,
   restorePressureAcrossRefresh,
+  shouldPersistPressureAnchor,
 } from "./spiritHumanPressure";
 
 describe("Spirit Human pressure machine", () => {
@@ -58,15 +59,41 @@ describe("Spirit Human pressure machine", () => {
       storedAnchorMs: 1_000,
       nowMs: 8_000,
       missionCompleted: false,
+      missionId: "shr_1",
     });
     expect(restored.phase).toBe("descent");
+    expect(restored.missionId).toBe("shr_1");
+    const rescued = restorePressureAcrossRefresh({
+      storedAnchorMs: 1_000,
+      nowMs: 8_000,
+      missionCompleted: true,
+      missionId: "shr_1",
+    });
+    expect(rescued.phase).toBe("rescue");
+    const installed = reducePressure(initialPressureState(0, "shr_old"), { type: "restore", state: restored });
+    expect(installed.roundAnchorMs).toBe(restored.roundAnchorMs);
+    expect(installed.missionId).toBe("shr_1");
+    const switched = reducePressure(installed, {
+      type: "mission_changed",
+      missionId: "shr_2",
+      state: initialPressureState(50_000, "shr_2"),
+    });
+    expect(switched.missionId).toBe("shr_2");
+    expect(switched.roundAnchorMs).toBe(50_000);
     expect(
-      restorePressureAcrossRefresh({
-        storedAnchorMs: 1_000,
-        nowMs: 8_000,
-        missionCompleted: true,
-      }).phase
-    ).toBe("rescue");
+      shouldPersistPressureAnchor({
+        missionId: "shr_2",
+        pressureMissionId: installed.missionId,
+        completed: false,
+      })
+    ).toBe(false);
+    expect(
+      shouldPersistPressureAnchor({
+        missionId: "shr_2",
+        pressureMissionId: "shr_2",
+        completed: false,
+      })
+    ).toBe(true);
   });
 
   it("can still reach impact when the player idles with a visible draft and no freeze", () => {

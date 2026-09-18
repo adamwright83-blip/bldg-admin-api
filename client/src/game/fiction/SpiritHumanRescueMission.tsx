@@ -10,6 +10,7 @@ import {
   initialPressureState,
   reducePressure,
   restorePressureAcrossRefresh,
+  shouldPersistPressureAnchor,
   type PressureEvent,
   type PressureState,
 } from "../../../../shared/spiritHumanPressure";
@@ -86,29 +87,28 @@ export default function SpiritHumanRescueMissionHost(props: {
   useEffect(() => {
     if (!mission) return;
     setDraftText(mission.draft ?? "");
-    const completed = canCompleteRescue(mission.send);
-    dispatchPressure({
-      type: "tick",
-      nowMs: Date.now(),
-    });
     const restored = restorePressureAcrossRefresh({
       storedAnchorMs: loadAnchor(mission.missionId),
       nowMs: Date.now(),
-      missionCompleted: completed,
+      missionCompleted: canCompleteRescue(mission.send),
+      missionId: mission.missionId,
     });
-    dispatchPressure(
-      completed
-        ? { type: "send_succeeded", nowMs: Date.now() }
-        : { type: "tick", nowMs: Date.now() }
-    );
-    if (completed) return;
-    if (restored.roundAnchorMs) saveAnchor(mission.missionId, restored.roundAnchorMs);
+    dispatchPressure({ type: "restore", state: restored });
   }, [mission?.missionId, mission?.send.status]);
 
   useEffect(() => {
-    if (!mission || canCompleteRescue(mission.send)) return;
+    if (!mission) return;
+    if (
+      !shouldPersistPressureAnchor({
+        missionId: mission.missionId,
+        pressureMissionId: pressure.missionId,
+        completed: canCompleteRescue(mission.send),
+      })
+    ) {
+      return;
+    }
     saveAnchor(mission.missionId, pressure.roundAnchorMs);
-  }, [mission, pressure.roundAnchorMs]);
+  }, [mission, pressure.missionId, pressure.roundAnchorMs]);
 
   useEffect(() => {
     dispatchPressure({ type: "driving_changed", nowMs: Date.now(), driving: props.isDriving });
@@ -205,6 +205,13 @@ export default function SpiritHumanRescueMissionHost(props: {
       });
       if (canCompleteRescue(sent.send)) {
         dispatchPressure({ type: "send_succeeded", nowMs: Date.now() });
+      } else if (sent.lifecycle === "superseded") {
+        setError(sent.send.failureReason ?? "This rescue is no longer needed. They are active again.");
+      } else if (sent.send.status === "send_outcome_unknown") {
+        setError(
+          sent.send.failureReason ??
+            "Send outcome is unknown. Do not retry automatically — this needs reconciliation."
+        );
       } else {
         dispatchPressure({ type: "send_failed", nowMs: Date.now() });
         setError(sent.send.failureReason ?? "Send failed. The villager is still caged.");
@@ -301,7 +308,7 @@ export default function SpiritHumanRescueMissionHost(props: {
             <textarea
               value={draftText}
               onChange={event => setDraftText(event.target.value)}
-              placeholder="Claire draft appears here. You can edit."
+              placeholder="Draft outreach. You can edit."
               rows={4}
               disabled={busy === "send"}
             />

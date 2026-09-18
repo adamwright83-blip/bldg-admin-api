@@ -11,20 +11,17 @@ import {
   listRescueMissions,
   prepareRescueDraft,
 } from "./rescueMissionService";
-import { createFakeOutboundSendAdapter } from "./outboundSendAdapter";
-
-const proofSendAdapter = createFakeOutboundSendAdapter();
 
 function asTrpc(error: unknown): never {
   const code = typeof error === "object" && error && "code" in error ? String((error as { code: string }).code) : "";
-  if (code === "APPROVAL_REQUIRED") {
-    throw new TRPCError({ code: "FORBIDDEN", message: (error as Error).message });
-  }
-  if (code === "FORBIDDEN") {
+  if (code === "APPROVAL_REQUIRED" || code === "FORBIDDEN" || code === "PROOF_SEND_DISABLED") {
     throw new TRPCError({ code: "FORBIDDEN", message: (error as Error).message });
   }
   if (code === "NOT_FOUND" || code === "UNKNOWN_CUSTOMER") {
     throw new TRPCError({ code: "NOT_FOUND", message: (error as Error).message });
+  }
+  if (code === "STORE_UNAVAILABLE") {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: (error as Error).message });
   }
   throw new TRPCError({
     code: "BAD_REQUEST",
@@ -37,14 +34,16 @@ function tenantOf(ctx: { tenantId?: string | null }): string {
 }
 
 /**
- * Production send uses the Twilio receipt adapter unless GOLDLINE_PROOF_MODE
- * is set, in which case the fake adapter is used so proof/CI never texts a customer.
+ * Proof/demo environments must refuse the authoritative send, not mint a fake
+ * provider_accepted receipt. Tests inject fake adapters into the service.
  */
-function sendDeps() {
+export function assertAuthoritativeRescueSendEnabled(): void {
   if (process.env.GOLDLINE_PROOF_MODE === "1") {
-    return { sendAdapter: proofSendAdapter };
+    throw Object.assign(
+      new Error("Authoritative rescue send is disabled in proof mode. Fake receipts cannot complete a rescue."),
+      { code: "PROOF_SEND_DISABLED" }
+    );
   }
-  return {};
 }
 
 export const spiritHumanRescueRouter = router({
@@ -117,6 +116,7 @@ export const spiritHumanRescueRouter = router({
   /**
    * Explicit operator send. Preview/draft/enter never call this.
    * `operatorAuthorizedSend` must be true; approvedByUserId is the signed-in operator.
+   * Proof mode refuses this mutation instead of faking provider_accepted truth.
    */
   approveAndSend: dayforgeTenantMemberProcedure
     .input(
@@ -128,17 +128,15 @@ export const spiritHumanRescueRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       try {
-        return await approveAndSendRescue(
-          {
-            tenantId: tenantOf(ctx),
-            operatorUserId: ctx.user.openId,
-            missionId: input.missionId,
-            approvedByUserId: ctx.user.openId,
-            operatorAuthorizedSend: input.operatorAuthorizedSend,
-            editedDraft: input.editedDraft,
-          },
-          sendDeps()
-        );
+        assertAuthoritativeRescueSendEnabled();
+        return await approveAndSendRescue({
+          tenantId: tenantOf(ctx),
+          operatorUserId: ctx.user.openId,
+          missionId: input.missionId,
+          approvedByUserId: ctx.user.openId,
+          operatorAuthorizedSend: input.operatorAuthorizedSend,
+          editedDraft: input.editedDraft,
+        });
       } catch (error) {
         asTrpc(error);
       }

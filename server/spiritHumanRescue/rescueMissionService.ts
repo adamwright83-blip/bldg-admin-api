@@ -2,71 +2,56 @@ import { nanoid } from "nanoid";
 import {
   applyLaterConsequence,
   canCompleteRescue,
+  canRetrySend,
+  CLAIMABLE_SEND_STATES,
   composeReactivationDraft,
   emptySendRecord,
-  isDuplicateSendBlocked,
+  isAmbiguousSend,
   missionLifecycleFromSend,
   publicMissionHasNoPhone,
   selectVillagerIndependentOfCustomer,
   SEND_EVIDENCE_NAME,
   SPIRIT_HUMAN_RESCUE_KIND,
-  type FrozenRescueFacts,
   type RescueConsequenceKind,
+  type RescueSendEvidenceName,
   type RescueSendRecord,
   type SpiritHumanRescueMission,
 } from "../../shared/spiritHumanRescue";
-import { buildingFromSlug } from "../../shared/buildings";
+import type { LedgerEventInput } from "../../shared/behavioralLedger";
+import type { DormantEligibleCustomer } from "../strategy/snapshotDormantCustomers";
 import { checkCommunicationPermission, recordOutreachAttempt } from "../strategy/communicationPermissionService";
+import { recordBehavioralLedgerEvent } from "../behavioralLedger/behavioralLedger";
 import { createOpsTask, updateOpsTaskStatus, type OpsTaskStore } from "../opsTasks";
+import { listDormantRescueCandidates } from "./listCandidates";
 import {
-  freezeFactsFromContact,
-  resolveDormantContact,
-  type ResolvedDormantContact,
+  freezeFactsFromCandidate,
+  resolveSendContact as resolveSendContactFromDb,
+  type SendContactResolution,
 } from "./resolveDormantContact";
 import {
   createFakeOutboundSendAdapter,
   twilioOutboundSendAdapter,
   type OutboundSendAdapter,
 } from "./outboundSendAdapter";
-
-export type RescueMissionStore = {
-  get(tenantId: string, missionId: string): Promise<SpiritHumanRescueMission | null>;
-  listForOperator(tenantId: string, operatorUserId: string): Promise<SpiritHumanRescueMission[]>;
-  save(mission: SpiritHumanRescueMission): Promise<SpiritHumanRescueMission>;
-};
-
-export class MemoryRescueMissionStore implements RescueMissionStore {
-  private readonly rows = new Map<string, SpiritHumanRescueMission>();
-
-  private key(tenantId: string, missionId: string): string {
-    return `${tenantId}:${missionId}`;
-  }
-
-  async get(tenantId: string, missionId: string): Promise<SpiritHumanRescueMission | null> {
-    return this.rows.get(this.key(tenantId, missionId)) ?? null;
-  }
-
-  async listForOperator(tenantId: string, operatorUserId: string): Promise<SpiritHumanRescueMission[]> {
-    return [...this.rows.values()].filter(
-      row => row.tenantId === tenantId && row.operatorUserId === operatorUserId
-    );
-  }
-
-  async save(mission: SpiritHumanRescueMission): Promise<SpiritHumanRescueMission> {
-    this.rows.set(this.key(mission.tenantId, mission.missionId), mission);
-    return mission;
-  }
-}
-
-const defaultMemoryStore = new MemoryRescueMissionStore();
+import {
+  MemoryRescueMissionStore,
+  requireDurableRescueStore,
+  type RescueMissionStore,
+} from "./rescueMissionStore";
 
 export type RescueServiceDeps = {
   store?: RescueMissionStore;
   sendAdapter?: OutboundSendAdapter;
   now?: () => Date;
-  resolveContact?: typeof resolveDormantContact;
+  loadCandidates?: (input: { tenantId: string; now?: Date }) => Promise<DormantEligibleCustomer[]>;
+  resolveSendContact?: (input: {
+    tenantId: string;
+    snapshotCustomerId: string;
+    now?: Date;
+  }) => Promise<SendContactResolution>;
   permissionCheck?: typeof checkCommunicationPermission;
   recordOutreach?: typeof recordOutreachAttempt;
+  recordLedger?: (input: LedgerEventInput) => Promise<unknown>;
   opsTaskStore?: OpsTaskStore;
   persistOpsTask?: boolean;
 };
@@ -89,10 +74,15 @@ function refreshLifecycle(mission: SpiritHumanRescueMission): SpiritHumanRescueM
     lifecycle: missionLifecycleFromSend({
       entered: mission.lifecycle === "active" || mission.lifecycle === "problem" || mission.lifecycle === "completed",
       sendStatus: mission.send.status,
-      deferred: mission.lifecycle === "skipped",
+      deferred: mission.deferredAt != null && mission.send.status !== "cancelled",
       superseded: mission.lifecycle === "superseded",
     }),
   };
+}
+
+async function resolveStore(deps: RescueServiceDeps): Promise<RescueMissionStore> {
+  if (deps.store) return deps.store;
+  return requireDurableRescueStore();
 }
 
 export async function instantiateRescueMission(
@@ -103,7 +93,7 @@ export async function instantiateRescueMission(
   },
   deps: RescueServiceDeps = {}
 ): Promise<SpiritHumanRescueMission> {
-  const store = deps.store ?? defaultMemoryStore;
+  const store = await resolveStore(deps);
   const now = (deps.now ?? (() => new Date()))();
   const existing = (await store.listForOperator(input.tenantId, input.operatorUserId)).find(
     row =>
@@ -113,16 +103,15 @@ export async function instantiateRescueMission(
   );
   if (existing) return publicize(existing);
 
-  const resolve = deps.resolveContact ?? resolveDormantContact;
-  const contact = await resolve({
-    tenantId: input.tenantId,
-    snapshotCustomerId: input.snapshotCustomerId,
-    now,
-  });
-  if (!contact) {
-    throw Object.assign(new Error("Dormant customer could not be resolved."), { code: "UNKNOWN_CUSTOMER" });
+  const loadCandidates = deps.loadCandidates ?? listDormantRescueCandidates;
+  const candidates = await loadCandidates({ tenantId: input.tenantId, now });
+  const candidate = candidates.find(row => row.id === input.snapshotCustomerId);
+  if (!candidate) {
+    throw Object.assign(new Error("Dormant customer could not be resolved from the Strategy snapshot."), {
+      code: "UNKNOWN_CUSTOMER",
+    });
   }
-  const frozen = freezeSafeFacts(contact, now);
+  const frozen = freezeFactsFromCandidate(candidate);
   const missionId = `shr_${nanoid(12)}`;
   let opsTaskId: number | null = null;
   if (deps.persistOpsTask) {
@@ -162,6 +151,7 @@ export async function instantiateRescueMission(
     send: emptySendRecord(missionId),
     consequences: [],
     opsTaskId,
+    deferredAt: null,
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
   };
@@ -169,20 +159,11 @@ export async function instantiateRescueMission(
   return publicize(mission);
 }
 
-function freezeSafeFacts(contact: Omit<ResolvedDormantContact, "phone">, now: Date): FrozenRescueFacts {
-  const facts = freezeFactsFromContact(contact, now);
-  const building = contact.buildingSlug ? buildingFromSlug(contact.buildingSlug) : null;
-  return {
-    ...facts,
-    ...(building?.name ? { buildingName: building.name } : {}),
-  };
-}
-
 export async function enterRescueMission(
   input: { tenantId: string; operatorUserId: string; missionId: string },
   deps: RescueServiceDeps = {}
 ): Promise<SpiritHumanRescueMission> {
-  const store = deps.store ?? defaultMemoryStore;
+  const store = await resolveStore(deps);
   const mission = await requireOwnedMission(store, input);
   if (mission.lifecycle === "completed") return publicize(mission);
   const next = {
@@ -198,7 +179,7 @@ export async function prepareRescueDraft(
   input: { tenantId: string; operatorUserId: string; missionId: string; editedDraft?: string },
   deps: RescueServiceDeps = {}
 ): Promise<SpiritHumanRescueMission> {
-  const store = deps.store ?? defaultMemoryStore;
+  const store = await resolveStore(deps);
   const mission = await requireOwnedMission(store, input);
   if (canCompleteRescue(mission.send)) return publicize(mission);
   const draft = (input.editedDraft ?? composeReactivationDraft(mission.spiritHuman)).trim();
@@ -221,7 +202,7 @@ export async function cancelRescueMission(
   input: { tenantId: string; operatorUserId: string; missionId: string },
   deps: RescueServiceDeps = {}
 ): Promise<SpiritHumanRescueMission> {
-  const store = deps.store ?? defaultMemoryStore;
+  const store = await resolveStore(deps);
   const mission = await requireOwnedMission(store, input);
   if (canCompleteRescue(mission.send)) return publicize(mission);
   const next: SpiritHumanRescueMission = {
@@ -238,7 +219,19 @@ export async function deferRescueMission(
   input: { tenantId: string; operatorUserId: string; missionId: string },
   deps: RescueServiceDeps = {}
 ): Promise<SpiritHumanRescueMission> {
-  return cancelRescueMission(input, deps);
+  const store = await resolveStore(deps);
+  const mission = await requireOwnedMission(store, input);
+  if (canCompleteRescue(mission.send)) return publicize(mission);
+  const now = (deps.now ?? (() => new Date()))();
+  const next: SpiritHumanRescueMission = {
+    ...mission,
+    deferredAt: now.toISOString(),
+    lifecycle: "available",
+    updatedAt: now.toISOString(),
+  };
+  await store.save(next);
+  await emitOperatorLedger(next, "DEFERRED", now, deps);
+  return publicize(next);
 }
 
 const inFlight = new Map<string, Promise<SpiritHumanRescueMission>>();
@@ -293,16 +286,51 @@ async function sendOnce(
   },
   deps: RescueServiceDeps
 ): Promise<SpiritHumanRescueMission> {
-  const store = deps.store ?? defaultMemoryStore;
-  const now = (deps.now ?? (() => new Date()))();
+  const store = await resolveStore(deps);
+  const startedAt = (deps.now ?? (() => new Date()))();
   const mission = await requireOwnedMission(store, input);
-  if (isDuplicateSendBlocked(mission.send) && canCompleteRescue(mission.send)) {
+  if (canCompleteRescue(mission.send)) {
     return publicize(mission);
   }
-  if (mission.send.status === "cancelled") {
+  if (mission.send.status === "cancelled" || mission.lifecycle === "skipped") {
     throw Object.assign(new Error("Cancelled missions cannot send."), { code: "CANCELLED" });
   }
+  if (mission.lifecycle === "superseded") {
+    return publicize(mission);
+  }
+  if (isAmbiguousSend(mission.send)) {
+    return markSendOutcomeUnknown(store, mission, startedAt);
+  }
+  if (!canRetrySend(mission.send)) {
+    throw Object.assign(new Error("This send attempt cannot be retried."), { code: "NOT_RETRYABLE" });
+  }
+
   const draft = (input.editedDraft ?? mission.draft ?? composeReactivationDraft(mission.spiritHuman)).trim();
+  const permissionCheck = deps.permissionCheck ?? checkCommunicationPermission;
+  const permission = await permissionCheck({
+    tenantId: input.tenantId,
+    subjectType: "customer",
+    subjectId: mission.spiritHuman.snapshotCustomerId,
+    channel: "sms",
+    now: startedAt,
+  });
+  if (!permission.allowed) {
+    return persistFailure(store, mission, startedAt, "permission_denied", permission.reason ?? "Communication is not permitted.");
+  }
+
+  const resolve = deps.resolveSendContact ?? resolveSendContactFromDb;
+  const contact = await resolve({
+    tenantId: input.tenantId,
+    snapshotCustomerId: mission.spiritHuman.snapshotCustomerId,
+    now: startedAt,
+  });
+  if (contact.kind === "no_longer_dormant") {
+    return supersedeMission(store, mission, startedAt, deps);
+  }
+  if (contact.kind !== "ready" || !contact.contact.phone) {
+    return persistFailure(store, mission, startedAt, "contact_unresolved", "Customer contact could not be resolved.");
+  }
+
   const sending: SpiritHumanRescueMission = {
     ...mission,
     draft,
@@ -310,86 +338,102 @@ async function sendOnce(
       ...mission.send,
       status: "sending",
       approvedByUserId: input.approvedByUserId,
-      attemptedAt: now.toISOString(),
+      attemptedAt: startedAt.toISOString(),
     },
     lifecycle: "active",
-    updatedAt: now.toISOString(),
+    updatedAt: startedAt.toISOString(),
   };
-  await store.save(sending);
-
-  const permissionCheck = deps.permissionCheck ?? checkCommunicationPermission;
-  const permission = await permissionCheck({
+  const claimed = await store.compareAndSet({
     tenantId: input.tenantId,
-    subjectType: "customer",
-    subjectId: mission.spiritHuman.snapshotCustomerId,
-    channel: "sms",
-    now,
+    missionId: input.missionId,
+    fromStatuses: CLAIMABLE_SEND_STATES,
+    next: sending,
   });
-  if (!permission.allowed) {
-    return persistFailure(store, sending, now, permission.reason ?? "Communication is not permitted.");
-  }
-
-  const resolve = deps.resolveContact ?? resolveDormantContact;
-  const contact = await resolve({
-    tenantId: input.tenantId,
-    snapshotCustomerId: mission.spiritHuman.snapshotCustomerId,
-    now,
-  });
-  if (!contact?.phone) {
-    return persistFailure(store, sending, now, "Customer contact could not be resolved.");
+  if (claimed !== "claimed") {
+    const latest = await store.get(input.tenantId, input.missionId);
+    if (latest && canCompleteRescue(latest.send)) return publicize(latest);
+    if (latest && isAmbiguousSend(latest.send) && latest.send.status === "send_outcome_unknown") {
+      return publicize(latest);
+    }
+    if (latest?.send.status === "sending") {
+      return publicize(latest);
+    }
+    return publicize(latest ?? sending);
   }
 
   const adapter = deps.sendAdapter ?? twilioOutboundSendAdapter;
   const receipt = await adapter.send({
-    to: contact.phone,
+    to: contact.contact.phone,
     body: draft,
     idempotencyKey: mission.send.idempotencyKey,
   });
+  const acceptedAt = (deps.now ?? (() => new Date()))();
 
   if (!receipt.accepted || !receipt.providerMessageId) {
-    return persistFailure(
-      store,
-      sending,
-      now,
-      receipt.evidenceName === "provider_unconfigured"
+    const evidence: RescueSendEvidenceName =
+      receipt.evidenceName === "provider_unconfigured" ? "provider_unconfigured" : "provider_rejected";
+    const reason =
+      evidence === "provider_unconfigured"
         ? "Outbound SMS is not configured."
-        : "Provider rejected the outbound request."
-    );
+        : "Provider rejected the outbound request.";
+    return persistFailure(store, sending, acceptedAt, evidence, reason, ["sending"]);
   }
 
   const sentRecord: RescueSendRecord = {
     ...sending.send,
     status: "sent",
-    acceptedAt: now.toISOString(),
+    acceptedAt: acceptedAt.toISOString(),
     providerMessageId: receipt.providerMessageId,
     providerStatus: receipt.providerStatus,
     evidenceName: SEND_EVIDENCE_NAME,
     failureReason: null,
   };
   if (!canCompleteRescue(sentRecord)) {
-    return persistFailure(store, sending, now, "Send receipt was not authoritative.");
+    return persistFailure(store, sending, acceptedAt, "provider_rejected", "Send receipt was not authoritative.", [
+      "sending",
+    ]);
   }
   const completed: SpiritHumanRescueMission = {
     ...sending,
     send: sentRecord,
     lifecycle: "completed",
-    updatedAt: now.toISOString(),
+    updatedAt: acceptedAt.toISOString(),
   };
-  await store.save(completed);
-  const recordOutreach = deps.recordOutreach ?? recordOutreachAttempt;
-  await recordOutreach({
+  const completedClaim = await store.compareAndSet({
     tenantId: input.tenantId,
-    subjectType: "customer",
-    subjectId: mission.spiritHuman.snapshotCustomerId,
-    channel: "sms",
-    at: now,
+    missionId: input.missionId,
+    fromStatuses: ["sending", "send_outcome_unknown"],
+    next: completed,
   });
-  if (completed.opsTaskId != null) {
+  let authoritative: SpiritHumanRescueMission = completed;
+  if (completedClaim !== "claimed") {
+    const latest = await store.get(input.tenantId, input.missionId);
+    if (latest && canCompleteRescue(latest.send)) {
+      authoritative = latest;
+    } else {
+      await store.save(completed);
+      authoritative = completed;
+    }
+  }
+
+  const recordOutreach = deps.recordOutreach ?? recordOutreachAttempt;
+  try {
+    await recordOutreach({
+      tenantId: input.tenantId,
+      subjectType: "customer",
+      subjectId: mission.spiritHuman.snapshotCustomerId,
+      channel: "sms",
+      at: acceptedAt,
+    });
+  } catch (error) {
+    console.warn("[SpiritHumanRescue] outreach bookkeeping failed after provider-accepted send", error);
+  }
+  if (authoritative.opsTaskId != null) {
     try {
       await updateOpsTaskStatus(
         {
           tenantId: input.tenantId,
-          taskId: completed.opsTaskId,
+          taskId: authoritative.opsTaskId,
           status: "completed",
           actorId: input.approvedByUserId,
           note: "provider_accepted outbound send",
@@ -400,31 +444,131 @@ async function sendOnce(
       // Mission send truth is already persisted; ops-task mirror is best-effort.
     }
   }
-  return publicize(completed);
+  return publicize(authoritative);
+}
+
+async function markSendOutcomeUnknown(
+  store: RescueMissionStore,
+  mission: SpiritHumanRescueMission,
+  now: Date
+): Promise<SpiritHumanRescueMission> {
+  if (mission.send.status === "send_outcome_unknown") return publicize(mission);
+  const next: SpiritHumanRescueMission = {
+    ...mission,
+    send: {
+      ...mission.send,
+      status: "send_outcome_unknown",
+      failedAt: now.toISOString(),
+      evidenceName: "send_outcome_unknown",
+      failureReason:
+        "Send outcome is unknown. A prior attempt may still be in flight. Do not retry automatically.",
+    },
+    lifecycle: "problem",
+    updatedAt: now.toISOString(),
+  };
+  const claimed = await store.compareAndSet({
+    tenantId: mission.tenantId,
+    missionId: mission.missionId,
+    fromStatuses: ["sending"],
+    next,
+  });
+  if (claimed !== "claimed") {
+    const latest = await store.get(mission.tenantId, mission.missionId);
+    return publicize(latest ?? next);
+  }
+  return publicize(next);
 }
 
 async function persistFailure(
   store: RescueMissionStore,
-  sending: SpiritHumanRescueMission,
+  mission: SpiritHumanRescueMission,
   now: Date,
-  reason: string
+  evidenceName: RescueSendEvidenceName,
+  reason: string,
+  fromStatuses: readonly ("sending" | "draft_ready" | "awaiting_approval" | "send_failed")[] = [
+    ...CLAIMABLE_SEND_STATES,
+  ]
 ): Promise<SpiritHumanRescueMission> {
   const failed: SpiritHumanRescueMission = {
-    ...sending,
+    ...mission,
     send: {
-      ...sending.send,
+      ...mission.send,
       status: "send_failed",
       failedAt: now.toISOString(),
-      evidenceName: "provider_rejected",
+      evidenceName,
       failureReason: reason,
     },
     lifecycle: "problem",
     updatedAt: now.toISOString(),
   };
-  await store.save(failed);
+  const claimed = await store.compareAndSet({
+    tenantId: mission.tenantId,
+    missionId: mission.missionId,
+    fromStatuses,
+    next: failed,
+  });
+  if (claimed !== "claimed") {
+    const latest = await store.get(mission.tenantId, mission.missionId);
+    if (latest && canCompleteRescue(latest.send)) return publicize(latest);
+    return publicize(latest ?? failed);
+  }
   return publicize(failed);
 }
 
+async function supersedeMission(
+  store: RescueMissionStore,
+  mission: SpiritHumanRescueMission,
+  now: Date,
+  deps: RescueServiceDeps
+): Promise<SpiritHumanRescueMission> {
+  const next: SpiritHumanRescueMission = {
+    ...mission,
+    lifecycle: "superseded",
+    send: {
+      ...mission.send,
+      evidenceName: "no_longer_dormant",
+      failureReason: "Customer is no longer dormant. Rescue outreach is unnecessary.",
+    },
+    updatedAt: now.toISOString(),
+  };
+  await store.save(next);
+  await emitOperatorLedger(next, "SUPERSEDED", now, deps);
+  return publicize(next);
+}
+
+async function emitOperatorLedger(
+  mission: SpiritHumanRescueMission,
+  eventType: "DEFERRED" | "SUPERSEDED",
+  now: Date,
+  deps: RescueServiceDeps
+): Promise<void> {
+  if (!mission.opsTaskId) return;
+  const recordLedger = deps.recordLedger ?? recordBehavioralLedgerEvent;
+  try {
+    await recordLedger({
+      tenantId: mission.tenantId,
+      operatorUserId: mission.operatorUserId,
+      correlationId: `ops_task:${mission.opsTaskId}`,
+      sourceSystem: "ops_task",
+      sourceEntityType: "ops_task",
+      sourceEntityId: String(mission.opsTaskId),
+      eventType,
+      occurredAt: now,
+      verificationClass: "ATTESTED",
+      provenance: `spirit_human_rescue.${eventType.toLowerCase()}`,
+      evidenceSource: `spirit_human_rescue:${mission.missionId}:${eventType.toLowerCase()}`,
+      idempotencyKey: `spirit-human:${mission.missionId}:${eventType}`,
+    });
+  } catch (error) {
+    console.warn("[SpiritHumanRescue] ledger bookkeeping failed after durable mission write", error);
+  }
+}
+
+/**
+ * Scaffold only. Inbound SMS / paid-order writers are not connected.
+ * Calling this does not prove a customer replied or reordered.
+ * Provider-accepted send remains a separate fact.
+ */
 export async function recordRescueConsequence(
   input: {
     tenantId: string;
@@ -435,7 +579,7 @@ export async function recordRescueConsequence(
   },
   deps: RescueServiceDeps = {}
 ): Promise<SpiritHumanRescueMission | null> {
-  const store = deps.store ?? defaultMemoryStore;
+  const store = await resolveStore(deps);
   const mission = await store.get(input.tenantId, input.missionId);
   if (!mission) return null;
   const next = applyLaterConsequence(mission, {
@@ -451,7 +595,7 @@ export async function listRescueMissions(
   input: { tenantId: string; operatorUserId: string },
   deps: RescueServiceDeps = {}
 ): Promise<SpiritHumanRescueMission[]> {
-  const store = deps.store ?? defaultMemoryStore;
+  const store = await resolveStore(deps);
   const rows = await store.listForOperator(input.tenantId, input.operatorUserId);
   return rows.map(publicize);
 }
@@ -489,4 +633,5 @@ export function defaultTestRescueDeps(overrides: RescueServiceDeps = {}): Rescue
   };
 }
 
-export { defaultMemoryStore };
+export { MemoryRescueMissionStore };
+export type { RescueMissionStore };

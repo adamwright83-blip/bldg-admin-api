@@ -29,7 +29,8 @@ export function normalizeSmsPhone(to: string): string {
  */
 export async function sendSMSWithReceipt(
   to: string,
-  message: string
+  message: string,
+  options?: { idempotencyKey?: string }
 ): Promise<SmsSendReceipt> {
   if (!client || !fromPhone) {
     console.warn("[SMS] Twilio not configured, skipping SMS");
@@ -42,11 +43,17 @@ export async function sendSMSWithReceipt(
   }
 
   try {
-    const created = await client.messages.create({
-      body: message,
-      from: fromPhone,
-      to: normalizeSmsPhone(to),
-    });
+    const created = options?.idempotencyKey
+      ? await createTwilioMessageWithIdempotency({
+          to: normalizeSmsPhone(to),
+          body: message,
+          idempotencyKey: options.idempotencyKey,
+        })
+      : await client.messages.create({
+          body: message,
+          from: fromPhone,
+          to: normalizeSmsPhone(to),
+        });
     const sid = typeof created.sid === "string" && created.sid.length > 0 ? created.sid : null;
     console.info("[SMS] Twilio accepted a message");
     return {
@@ -67,6 +74,31 @@ export async function sendSMSWithReceipt(
       evidenceName: "provider_rejected",
     };
   }
+}
+
+async function createTwilioMessageWithIdempotency(input: {
+  to: string;
+  body: string;
+  idempotencyKey: string;
+}): Promise<{ sid?: string; status?: string }> {
+  if (!client || !fromPhone || !accountSid) {
+    throw new Error("Twilio is not configured.");
+  }
+  const response = await client.request({
+    method: "post",
+    uri: `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+    headers: { "Idempotency-Key": input.idempotencyKey },
+    data: {
+      To: input.to,
+      From: fromPhone,
+      Body: input.body,
+    },
+  });
+  const body = (response as { body?: { sid?: string; status?: string } }).body ?? {};
+  return {
+    sid: typeof body.sid === "string" ? body.sid : undefined,
+    status: typeof body.status === "string" ? body.status : undefined,
+  };
 }
 
 /**
