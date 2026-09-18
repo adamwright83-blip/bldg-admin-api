@@ -22,7 +22,7 @@ import {
   writeClairePostStopOpening,
 } from "./reasoning";
 import { generateClairePreDriveOutput } from "./preDriveRuntime";
-import { isClaireCallComplete } from "./preDriveConversation";
+import { shouldEndClaireCallOnUtterance } from "./preDriveConversation";
 import {
   issueClaireToken,
   verifyClaireToken,
@@ -692,9 +692,8 @@ export function registerClaireRoutes(app: Express): void {
         trackNonEmptyTranscript(conversation);
       }
 
-      const words = utterance.split(/\s+/).filter(Boolean).length;
       const holding = Boolean(conversation.pendingBriefing || conversation.pendingProposal || conversation.pendingAccountFollowUp);
-      if (words <= 6 && !holding && isClaireCallComplete(utterance)) {
+      if (shouldEndClaireCallOnUtterance(utterance, { holding })) {
         await dropCall(claims.conversationId);
         await safeRecordRelationshipEvent(() =>
           recordQualifyingClaireInteraction({
