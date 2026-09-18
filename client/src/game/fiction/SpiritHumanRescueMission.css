@@ -14,7 +14,7 @@
 }
 
 .shr-environment,
-.shr-crusher,
+.shr-threat,
 .shr-captive,
 .shr-player {
   position: absolute;
@@ -29,7 +29,7 @@
   object-position: 50% 20%;
 }
 
-.shr-crusher {
+.shr-threat {
   top: -6%;
   left: 50%;
   width: min(78%, 420px);
@@ -55,8 +55,7 @@
 }
 
 .shr-hud,
-.shr-panel,
-.shr-provisional {
+.shr-panel {
   position: relative;
   z-index: 4;
 }
@@ -97,14 +96,6 @@
   border-radius: 10px;
   border: 1px solid #c9ae72;
   background: #fff;
-}
-
-.shr-provisional {
-  margin: 6px 14px 0;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: #7a5a28;
 }
 
 .shr-panel {
@@ -163,7 +154,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .shr-crusher {
+  .shr-threat {
     transition: none;
   }
 }

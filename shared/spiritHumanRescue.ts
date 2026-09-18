@@ -299,4 +299,4 @@ export function rescueActionGrammar(mission: Pick<SpiritHumanRescueMission, "mis
 }
 
 export const SPIRIT_HUMAN_RESCUE_TEMPLATE_ID = "spirit-human-rescue-v1";
-export const SPIRIT_HUMAN_ART_STATUS = "provisional" as const;
+export const SPIRIT_HUMAN_ART_STATUS = "final" as const;
