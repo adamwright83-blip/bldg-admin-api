@@ -26,6 +26,7 @@ import { registerVendorOnboardingSessionRoutes } from "../vendorOnboardingSessio
 import { registerVendorBookingPublicRoutes } from "../vendorBookingPublicApi";
 import { registerLevel4TwilioRoutes } from "../level4Twilio";
 import { registerClaireRoutes } from "../claire/claireTwilio";
+import { registerSpiritHumanInboundSmsRoutes } from "../spiritHumanRescue/inboundSmsRoute";
 import { registerSalesCallRoutes } from "../salesCalls";
 import { registerGoogleProxyRoutes } from "../google/googleProxyRoutes";
 import { registerCleanCloudImportRoutes } from "../cleancloudImportRoute";
@@ -328,6 +329,9 @@ async function startServer() {
   // recording status, and call status callbacks. Calls must never be placed
   // unless these provider callback routes are mounted on the production app.
   registerClaireRoutes(app);
+  // Verified inbound SMS is the only path that may claim customer_replied
+  // for Spirit Human rescue. It fails closed without an explicit tenant binding.
+  registerSpiritHumanInboundSmsRoutes(app);
   // Bold Pitch — Saleslay "call" weapon. Bridge-through-cellphone dial +
   // status callbacks; armed but only functional once the Twilio account is
   // verified for real outbound voice traffic.
