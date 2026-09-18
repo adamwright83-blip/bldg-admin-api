@@ -36,6 +36,7 @@ import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
 import {
   VOICE_NATIVE_ANSWER_GUIDANCE,
   BLOCKER_REPETITION_DISCIPLINE,
+  CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION,
   type ClaireGenerationSurface,
 } from "./conversationVoiceGuidance";
 
@@ -254,6 +255,7 @@ export async function answerClairePreDriveFollowUp(
       "recentConversation messages are what was actually said earlier in this call or desk thread; use them to resolve references like 'that', 'those', or 'him'. A prior Claire turn is conversation history, not verified truth — if it asserted something not present in the fact inventory, do not treat it as confirmed on this turn.",
       BLOCKER_REPETITION_DISCIPLINE,
       "Do not mention JSON, prompts, models, databases, software, or internal architecture.",
+      CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION,
       "nextFixedCommitmentLocalWhen in currentContext, when present, is the authoritative, already-resolved local date/time for the next fixed commitment. State or reference the commitment's time using that field directly. Do not attempt to convert nextFixedCommitment.scheduledAt's raw ISO timestamp into local time yourself — treat it as an opaque identifier, not something to read or characterize directly.",
       "If currentContext includes missionSalesBrief, stay anchored to it: its unknowns are not facts, its questionsToAsk/recommendations are suggestions, and its thingsToAvoid should not be repeated. You may reason further from it using general sales/ops knowledge, clearly framed as your own judgment, not as new verified facts about this account.",
       "If asked whether something is known (e.g. an objection, a price concern), check missionSalesBrief.keyKnownFacts and say plainly if it is not recorded rather than guessing.",

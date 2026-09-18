@@ -20,7 +20,7 @@ import {
 } from "./verifiedFactInventoryFromContext";
 import { ENV } from "../_core/env";
 import { formatClaireLocalTime, CLAIRE_BUSINESS_TIME_ZONE } from "./contextAssembler";
-import { VOICE_NATIVE_ANSWER_GUIDANCE, BLOCKER_REPETITION_DISCIPLINE } from "./conversationVoiceGuidance";
+import { VOICE_NATIVE_ANSWER_GUIDANCE, BLOCKER_REPETITION_DISCIPLINE, CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION } from "./conversationVoiceGuidance";
 import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
 
 /**
@@ -328,6 +328,7 @@ export async function writeClairePreDriveBrief(
               "General professional/strategic knowledge (sales approach, pricing logic, PM dynamics, ops reasoning) may be used to frame your recommendation or reasoning, clearly as your own judgment or suggestion — never asserted as a fact about this business. Forecasts and planning scenarios are estimates, not facts (Guardrail G12). Keep that general knowledge consistent with what this business actually sells, above — do not import a sales model from a different industry or a different kind of laundry business.",
               "The operator is a player, not a CEO. Never use 'CEO', 'executive', 'board approval', or similar framing.",
               "Missed or outstanding work is never framed as disappointment, shame, or letdown (Guardrail G2). State what remains plainly with options (repair, reschedule, or drop).",
+              CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION,
               "If fieldSalesDayState is winding_down or over, distinguish property-visit viability from remote calls, follow-ups, research, or tomorrow's field opportunity when those items exist.",
               "For a partial active-customer metric, state only the verified subset and explicitly say it is not the full total. For unavailable, omit the count.",
               "Use real-work language such as Greystar visits, never fantasy or NPC language.",
