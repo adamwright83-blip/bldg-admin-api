@@ -86,6 +86,16 @@ describe("Corrective pass 3 -- item 1: personal-answer recovery", () => {
     ).toBe("I'm British.");
   });
 
+  it("can recover from compiler fragment IDs without relying on fact-string equality", () => {
+    expect(
+      renderCanonScopedPersonalAnswer({
+        eligibleCanonFacts: [],
+        eligibleCanonFragmentIds: ["core_nationality"],
+        requestedTopic: "childhood",
+      })
+    ).toBe("I'm British.");
+  });
+
   it("does not widen disclosure when the requested topic has no eligible canon", () => {
     const recovery = recoverPersonalAnswer({
       eligibleCanonFacts: CANON_AT_TIER_0,
