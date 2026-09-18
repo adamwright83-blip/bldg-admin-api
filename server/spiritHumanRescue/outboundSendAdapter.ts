@@ -21,7 +21,7 @@ export const twilioOutboundSendAdapter: OutboundSendAdapter = {
 };
 
 export function createFakeOutboundSendAdapter(options?: {
-  mode?: "accept" | "reject" | "unconfigured";
+  mode?: "accept" | "reject" | "unconfigured" | "ambiguous";
   onAttempt?: (input: OutboundSendInput) => void;
 }): OutboundSendAdapter & { attempts: OutboundSendInput[] } {
   const attempts: OutboundSendInput[] = [];
@@ -48,6 +48,14 @@ export function createFakeOutboundSendAdapter(options?: {
           providerMessageId: null,
           providerStatus: null,
           evidenceName: "provider_unconfigured",
+        };
+      }
+      if (mode === "ambiguous") {
+        return {
+          accepted: false,
+          providerMessageId: null,
+          providerStatus: null,
+          evidenceName: "send_outcome_unknown",
         };
       }
       const receipt: SmsSendReceipt = {

@@ -48,10 +48,12 @@ Survives restart / second store instance / second process:
 ## How duplicate send is prevented
 
 1. Same-process in-flight coalescing (one Promise per mission).
-2. Durable CAS: only `awaiting_approval | draft_ready | send_failed` can become `sending`.
+2. Durable CAS: only `awaiting_approval | draft_ready | send_failed` **and** lifecycle `available | active | problem` can become `sending`. `superseded` / `skipped` / `completed` cannot win a send claim even if `sendStatus` is still claimable.
 3. `sent` + `provider_accepted` + SID is immutable success; later sends return that record and make **zero** provider calls.
 4. Persisted `sending` loaded with no live in-flight request becomes `send_outcome_unknown`. Zero provider calls. Manual reconciliation, not automatic retry.
-5. Twilio `Idempotency-Key` is passed on the provider request as belt-and-suspenders. Exactly-once delivery still cannot be proven if the provider accepted and the process died before receipt persistence.
+5. After the durable `sending` claim, an ambiguous Twilio transport/result (timeout, disconnect, 5xx, 429, 408, missing SID) becomes `send_outcome_unknown`, never `send_failed` / `provider_rejected`.
+6. Draft / NOT NOW / CANCEL / enter / supersede mutations CAS against the observed send+lifecycle snapshot. A stale pre-send write loses rather than restoring a claimable state over `sending` / unknown / sent.
+7. Twilio `Idempotency-Key` is passed on the provider request as belt-and-suspenders. Exactly-once delivery still cannot be proven if the provider accepted and the process died before receipt persistence.
 
 ## How stale dormancy is handled
 
@@ -65,7 +67,7 @@ At the authorized send boundary the system re-checks current aggregates. If the 
 
 ## Failure evidence
 
-`provider_rejected` means a provider request was actually made and rejected.
+`provider_rejected` means a provider request was actually made and **authoritatively refused** (HTTP 4xx except 408/429). Timeouts, dropped connections, 5xx, and other transport ambiguity are `send_outcome_unknown`.
 
 Other honest names: `permission_denied`, `contact_unresolved`, `provider_unconfigured`, `send_outcome_unknown`, `no_longer_dormant`.
 

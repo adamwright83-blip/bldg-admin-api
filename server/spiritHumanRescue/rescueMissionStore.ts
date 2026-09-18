@@ -8,7 +8,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { spiritHumanRescueMissions } from "../../drizzle/schema";
 import { getDb } from "../db";
-import type { RescueSendState, SpiritHumanRescueMission } from "../../shared/spiritHumanRescue";
+import type { MissionLifecycleState, RescueSendState, SpiritHumanRescueMission } from "../../shared/spiritHumanRescue";
 
 export type RescueMissionStore = {
   get(tenantId: string, missionId: string): Promise<SpiritHumanRescueMission | null>;
@@ -18,6 +18,7 @@ export type RescueMissionStore = {
     tenantId: string;
     missionId: string;
     fromStatuses: readonly RescueSendState[];
+    fromLifecycles?: readonly MissionLifecycleState[];
     next: SpiritHumanRescueMission;
   }): Promise<"claimed" | "lost">;
 };
@@ -98,10 +99,12 @@ export class MemoryRescueMissionStore implements RescueMissionStore {
     tenantId: string;
     missionId: string;
     fromStatuses: readonly RescueSendState[];
+    fromLifecycles?: readonly MissionLifecycleState[];
     next: SpiritHumanRescueMission;
   }): Promise<"claimed" | "lost"> {
     const current = this.rows.get(this.key(input.tenantId, input.missionId));
     if (!current || !input.fromStatuses.includes(current.send.status)) return "lost";
+    if (input.fromLifecycles && !input.fromLifecycles.includes(current.lifecycle)) return "lost";
     this.rows.set(this.key(input.tenantId, input.missionId), cloneMission(input.next));
     return "claimed";
   }
@@ -164,9 +167,18 @@ export class DrizzleRescueMissionStore implements RescueMissionStore {
     tenantId: string;
     missionId: string;
     fromStatuses: readonly RescueSendState[];
+    fromLifecycles?: readonly MissionLifecycleState[];
     next: SpiritHumanRescueMission;
   }): Promise<"claimed" | "lost"> {
     const values = rowValues(input.next);
+    const conditions = [
+      eq(spiritHumanRescueMissions.tenantId, input.tenantId),
+      eq(spiritHumanRescueMissions.missionId, input.missionId),
+      inArray(spiritHumanRescueMissions.sendStatus, [...input.fromStatuses]),
+    ];
+    if (input.fromLifecycles && input.fromLifecycles.length > 0) {
+      conditions.push(inArray(spiritHumanRescueMissions.lifecycle, [...input.fromLifecycles]));
+    }
     const result = await this.db
       .update(spiritHumanRescueMissions)
       .set({
@@ -178,13 +190,7 @@ export class DrizzleRescueMissionStore implements RescueMissionStore {
         missionJson: values.missionJson,
         updatedAt: values.updatedAt,
       })
-      .where(
-        and(
-          eq(spiritHumanRescueMissions.tenantId, input.tenantId),
-          eq(spiritHumanRescueMissions.missionId, input.missionId),
-          inArray(spiritHumanRescueMissions.sendStatus, [...input.fromStatuses])
-        )
-      );
+      .where(and(...conditions));
     return affectedRows(result) === 1 ? "claimed" : "lost";
   }
 }

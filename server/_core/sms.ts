@@ -15,8 +15,40 @@ export type SmsSendReceipt = {
   accepted: boolean;
   providerMessageId: string | null;
   providerStatus: string | null;
-  evidenceName: "provider_accepted" | "provider_rejected" | "provider_unconfigured";
+  evidenceName:
+    | "provider_accepted"
+    | "provider_rejected"
+    | "provider_unconfigured"
+    | "send_outcome_unknown";
 };
+
+function readHttpStatus(error: unknown): number | null {
+  let candidate: unknown = error;
+  for (let depth = 0; depth < 5; depth += 1) {
+    if (!candidate || typeof candidate !== "object") return null;
+    const record = candidate as { status?: unknown; statusCode?: unknown; cause?: unknown };
+    for (const value of [record.status, record.statusCode]) {
+      const status = typeof value === "string" ? Number(value) : value;
+      if (typeof status === "number" && Number.isInteger(status) && status >= 100) return status;
+    }
+    candidate = record.cause;
+  }
+  return null;
+}
+
+/**
+ * `provider_rejected` only when the provider authoritatively refused the request.
+ * Timeouts, disconnects, 5xx, 429, 408, and missing HTTP status are unknown.
+ */
+export function classifyTwilioSendFailure(
+  error: unknown
+): "provider_rejected" | "send_outcome_unknown" {
+  const status = readHttpStatus(error);
+  if (status != null && status >= 400 && status < 500 && status !== 408 && status !== 429) {
+    return "provider_rejected";
+  }
+  return "send_outcome_unknown";
+}
 
 export function normalizeSmsPhone(to: string): string {
   const digits = to.replace(/\D/g, "");
@@ -55,23 +87,33 @@ export async function sendSMSWithReceipt(
           to: normalizeSmsPhone(to),
         });
     const sid = typeof created.sid === "string" && created.sid.length > 0 ? created.sid : null;
+    if (!sid) {
+      console.warn("[SMS] Twilio returned no Message SID; treating as unknown outcome");
+      return {
+        accepted: false,
+        providerMessageId: null,
+        providerStatus: typeof created.status === "string" ? created.status : null,
+        evidenceName: "send_outcome_unknown",
+      };
+    }
     console.info("[SMS] Twilio accepted a message");
     return {
-      accepted: Boolean(sid),
+      accepted: true,
       providerMessageId: sid,
       providerStatus: typeof created.status === "string" ? created.status : null,
-      evidenceName: sid ? "provider_accepted" : "provider_rejected",
+      evidenceName: "provider_accepted",
     };
   } catch (err) {
+    const evidenceName = classifyTwilioSendFailure(err);
     console.error(
-      "[SMS] Twilio rejected a message",
+      evidenceName === "provider_rejected" ? "[SMS] Twilio rejected a message" : "[SMS] Twilio send outcome is unknown",
       err instanceof Error ? { errorName: err.name } : { errorName: "unknown" },
     );
     return {
       accepted: false,
       providerMessageId: null,
       providerStatus: null,
-      evidenceName: "provider_rejected",
+      evidenceName,
     };
   }
 }

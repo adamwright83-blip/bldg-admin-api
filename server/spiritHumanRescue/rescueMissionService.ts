@@ -1,15 +1,17 @@
 import { nanoid } from "nanoid";
 import {
   applyLaterConsequence,
+  canClaimOutboundSend,
   canCompleteRescue,
-  canRetrySend,
   CLAIMABLE_SEND_STATES,
   composeReactivationDraft,
   emptySendRecord,
   isAmbiguousSend,
+  isSendClaimLocked,
   missionLifecycleFromSend,
   publicMissionHasNoPhone,
   selectVillagerIndependentOfCustomer,
+  SEND_CLAIMABLE_LIFECYCLES,
   SEND_EVIDENCE_NAME,
   SPIRIT_HUMAN_RESCUE_KIND,
   type RescueConsequenceKind,
@@ -78,6 +80,29 @@ function refreshLifecycle(mission: SpiritHumanRescueMission): SpiritHumanRescueM
       superseded: mission.lifecycle === "superseded",
     }),
   };
+}
+
+async function persistIfCurrent(
+  store: RescueMissionStore,
+  expected: SpiritHumanRescueMission,
+  next: SpiritHumanRescueMission
+): Promise<{ claimed: boolean; mission: SpiritHumanRescueMission }> {
+  const claimed = await store.compareAndSet({
+    tenantId: expected.tenantId,
+    missionId: expected.missionId,
+    fromStatuses: [expected.send.status],
+    fromLifecycles: [expected.lifecycle],
+    next,
+  });
+  if (claimed === "claimed") return { claimed: true, mission: next };
+  const latest = await store.get(expected.tenantId, expected.missionId);
+  return { claimed: false, mission: latest ?? expected };
+}
+
+function refuseIfSendLocked(mission: SpiritHumanRescueMission): SpiritHumanRescueMission | null {
+  if (canCompleteRescue(mission.send) || isSendClaimLocked(mission.send)) return publicize(mission);
+  if (mission.lifecycle === "superseded" || mission.lifecycle === "skipped") return publicize(mission);
+  return null;
 }
 
 async function resolveStore(deps: RescueServiceDeps): Promise<RescueMissionStore> {
@@ -165,14 +190,15 @@ export async function enterRescueMission(
 ): Promise<SpiritHumanRescueMission> {
   const store = await resolveStore(deps);
   const mission = await requireOwnedMission(store, input);
-  if (mission.lifecycle === "completed") return publicize(mission);
+  const locked = refuseIfSendLocked(mission);
+  if (locked) return locked;
   const next = {
     ...mission,
     lifecycle: "active" as const,
     updatedAt: (deps.now ?? (() => new Date()))().toISOString(),
   };
-  await store.save(next);
-  return publicize(next);
+  const persisted = await persistIfCurrent(store, mission, next);
+  return publicize(persisted.mission);
 }
 
 export async function prepareRescueDraft(
@@ -181,7 +207,8 @@ export async function prepareRescueDraft(
 ): Promise<SpiritHumanRescueMission> {
   const store = await resolveStore(deps);
   const mission = await requireOwnedMission(store, input);
-  if (canCompleteRescue(mission.send)) return publicize(mission);
+  const locked = refuseIfSendLocked(mission);
+  if (locked) return locked;
   const draft = (input.editedDraft ?? composeReactivationDraft(mission.spiritHuman)).trim();
   if (!draft) throw Object.assign(new Error("Draft is empty."), { code: "EMPTY_DRAFT" });
   const next: SpiritHumanRescueMission = {
@@ -189,13 +216,13 @@ export async function prepareRescueDraft(
     draft,
     send: {
       ...mission.send,
-      status: mission.send.status === "sent" ? mission.send.status : "draft_ready",
+      status: "draft_ready",
     },
     lifecycle: mission.lifecycle === "available" ? "active" : mission.lifecycle,
     updatedAt: (deps.now ?? (() => new Date()))().toISOString(),
   };
-  await store.save(refreshLifecycle(next));
-  return publicize((await store.get(input.tenantId, input.missionId)) ?? next);
+  const persisted = await persistIfCurrent(store, mission, refreshLifecycle(next));
+  return publicize(persisted.mission);
 }
 
 export async function cancelRescueMission(
@@ -204,15 +231,16 @@ export async function cancelRescueMission(
 ): Promise<SpiritHumanRescueMission> {
   const store = await resolveStore(deps);
   const mission = await requireOwnedMission(store, input);
-  if (canCompleteRescue(mission.send)) return publicize(mission);
+  const locked = refuseIfSendLocked(mission);
+  if (locked) return locked;
   const next: SpiritHumanRescueMission = {
     ...mission,
     send: { ...mission.send, status: "cancelled" },
     lifecycle: "skipped",
     updatedAt: (deps.now ?? (() => new Date()))().toISOString(),
   };
-  await store.save(next);
-  return publicize(next);
+  const persisted = await persistIfCurrent(store, mission, next);
+  return publicize(persisted.mission);
 }
 
 export async function deferRescueMission(
@@ -221,7 +249,8 @@ export async function deferRescueMission(
 ): Promise<SpiritHumanRescueMission> {
   const store = await resolveStore(deps);
   const mission = await requireOwnedMission(store, input);
-  if (canCompleteRescue(mission.send)) return publicize(mission);
+  const locked = refuseIfSendLocked(mission);
+  if (locked) return locked;
   const now = (deps.now ?? (() => new Date()))();
   const next: SpiritHumanRescueMission = {
     ...mission,
@@ -229,9 +258,11 @@ export async function deferRescueMission(
     lifecycle: "available",
     updatedAt: now.toISOString(),
   };
-  await store.save(next);
-  await emitOperatorLedger(next, "DEFERRED", now, deps);
-  return publicize(next);
+  const persisted = await persistIfCurrent(store, mission, next);
+  if (persisted.claimed) {
+    await emitOperatorLedger(persisted.mission, "DEFERRED", now, deps);
+  }
+  return publicize(persisted.mission);
 }
 
 const inFlight = new Map<string, Promise<SpiritHumanRescueMission>>();
@@ -301,7 +332,7 @@ async function sendOnce(
   if (isAmbiguousSend(mission.send)) {
     return markSendOutcomeUnknown(store, mission, startedAt);
   }
-  if (!canRetrySend(mission.send)) {
+  if (!canClaimOutboundSend(mission)) {
     throw Object.assign(new Error("This send attempt cannot be retried."), { code: "NOT_RETRYABLE" });
   }
 
@@ -347,6 +378,7 @@ async function sendOnce(
     tenantId: input.tenantId,
     missionId: input.missionId,
     fromStatuses: CLAIMABLE_SEND_STATES,
+    fromLifecycles: SEND_CLAIMABLE_LIFECYCLES,
     next: sending,
   });
   if (claimed !== "claimed") {
@@ -362,12 +394,21 @@ async function sendOnce(
   }
 
   const adapter = deps.sendAdapter ?? twilioOutboundSendAdapter;
-  const receipt = await adapter.send({
-    to: contact.contact.phone,
-    body: draft,
-    idempotencyKey: mission.send.idempotencyKey,
-  });
+  let receipt;
+  try {
+    receipt = await adapter.send({
+      to: contact.contact.phone,
+      body: draft,
+      idempotencyKey: mission.send.idempotencyKey,
+    });
+  } catch {
+    return markSendOutcomeUnknown(store, sending, deps.now?.() ?? new Date());
+  }
   const acceptedAt = (deps.now ?? (() => new Date()))();
+
+  if (receipt.evidenceName === "send_outcome_unknown") {
+    return markSendOutcomeUnknown(store, sending, acceptedAt);
+  }
 
   if (!receipt.accepted || !receipt.providerMessageId) {
     const evidence: RescueSendEvidenceName =
@@ -403,6 +444,7 @@ async function sendOnce(
     tenantId: input.tenantId,
     missionId: input.missionId,
     fromStatuses: ["sending", "send_outcome_unknown"],
+    fromLifecycles: ["active", "problem"],
     next: completed,
   });
   let authoritative: SpiritHumanRescueMission = completed;
@@ -411,8 +453,26 @@ async function sendOnce(
     if (latest && canCompleteRescue(latest.send)) {
       authoritative = latest;
     } else {
-      await store.save(completed);
-      authoritative = completed;
+      const retried = await store.compareAndSet({
+        tenantId: input.tenantId,
+        missionId: input.missionId,
+        fromStatuses: ["sending", "send_outcome_unknown"],
+        fromLifecycles: ["active", "problem"],
+        next: completed,
+      });
+      if (retried === "claimed") {
+        authoritative = completed;
+      } else {
+        const again = await store.get(input.tenantId, input.missionId);
+        if (again && canCompleteRescue(again.send)) {
+          authoritative = again;
+        } else {
+          console.warn(
+            "[SpiritHumanRescue] provider accepted a send but the receipt could not be claimed onto the expected sending/unknown row"
+          );
+          authoritative = again ?? completed;
+        }
+      }
     }
   }
 
@@ -531,9 +591,11 @@ async function supersedeMission(
     },
     updatedAt: now.toISOString(),
   };
-  await store.save(next);
-  await emitOperatorLedger(next, "SUPERSEDED", now, deps);
-  return publicize(next);
+  const persisted = await persistIfCurrent(store, mission, next);
+  if (persisted.claimed) {
+    await emitOperatorLedger(persisted.mission, "SUPERSEDED", now, deps);
+  }
+  return publicize(persisted.mission);
 }
 
 async function emitOperatorLedger(
@@ -587,8 +649,16 @@ export async function recordRescueConsequence(
     evidenceId: input.evidenceId,
     observedAt: (input.observedAt ?? (deps.now ?? (() => new Date()))()).toISOString(),
   });
-  await store.save(next);
-  return publicize(next);
+  const first = await persistIfCurrent(store, mission, next);
+  if (first.claimed) return publicize(first.mission);
+  const latest = first.mission;
+  const retried = applyLaterConsequence(latest, {
+    kind: input.kind,
+    evidenceId: input.evidenceId,
+    observedAt: (input.observedAt ?? (deps.now ?? (() => new Date()))()).toISOString(),
+  });
+  const second = await persistIfCurrent(store, latest, retried);
+  return publicize(second.mission);
 }
 
 export async function listRescueMissions(

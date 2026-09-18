@@ -6,6 +6,8 @@ import {
   emptySendRecord,
   isDuplicateSendBlocked,
   canRetrySend,
+  canClaimOutboundSend,
+  isSendClaimLocked,
   missionLifecycleFromSend,
   publicMissionHasNoPhone,
   selectVillagerIndependentOfCustomer,
@@ -185,6 +187,22 @@ describe("Spirit Human rescue contract", () => {
     expect(canRetrySend({ status: "send_failed" })).toBe(true);
     expect(canRetrySend({ status: "send_outcome_unknown" })).toBe(false);
     expect(canRetrySend({ status: "sending" })).toBe(false);
+    expect(isSendClaimLocked({ status: "sending" })).toBe(true);
+    expect(isSendClaimLocked({ status: "send_outcome_unknown" })).toBe(true);
+    expect(isSendClaimLocked({ status: "sent" })).toBe(true);
+    expect(isSendClaimLocked({ status: "draft_ready" })).toBe(false);
+    expect(
+      canClaimOutboundSend({
+        lifecycle: "superseded",
+        send: emptySendRecord("m"),
+      })
+    ).toBe(false);
+    expect(
+      canClaimOutboundSend({
+        lifecycle: "active",
+        send: emptySendRecord("m"),
+      })
+    ).toBe(true);
     expect(
       missionLifecycleFromSend({
         entered: true,

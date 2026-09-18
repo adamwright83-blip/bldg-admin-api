@@ -611,6 +611,169 @@ describe("Spirit Human rescue send boundary", () => {
     expect(cancelled.send.status).toBe("cancelled");
     expect(cancelled.deferredAt).toBeNull();
   });
+
+  it("treats an ambiguous adapter failure after the sending claim as unknown and never retries", async () => {
+    const deps = depsFor({
+      sendAdapter: createFakeOutboundSendAdapter({ mode: "ambiguous" }),
+    });
+    const created = await instantiateRescueMission(
+      { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
+      deps
+    );
+    const unknown = await approveAndSendRescue(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        missionId: created.missionId,
+        approvedByUserId: "op-a",
+        operatorAuthorizedSend: true,
+      },
+      deps
+    );
+    expect(unknown.send.status).toBe("send_outcome_unknown");
+    expect(unknown.send.evidenceName).toBe("send_outcome_unknown");
+    expect(canCompleteRescue(unknown.send)).toBe(false);
+    expect(deps.sendAdapter.attempts).toHaveLength(1);
+    const retried = await approveAndSendRescue(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        missionId: created.missionId,
+        approvedByUserId: "op-a",
+        operatorAuthorizedSend: true,
+      },
+      deps
+    );
+    expect(retried.send.status).toBe("send_outcome_unknown");
+    expect(canCompleteRescue(retried.send)).toBe(false);
+    expect(deps.sendAdapter.attempts).toHaveLength(1);
+  });
+});
+
+describe("Spirit Human rescue mutation CAS", () => {
+  async function seedThenStaleRead(
+    liveStatus: "sending" | "send_outcome_unknown" | "sent",
+    liveLifecycle: "active" | "problem" | "completed"
+  ) {
+    const store = new MemoryRescueMissionStore();
+    const deps = depsFor({ store });
+    const created = await instantiateRescueMission(
+      { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
+      deps
+    );
+    const preSend = (await store.get("tenant-a", created.missionId))!;
+    const live = {
+      ...preSend,
+      send: {
+        ...preSend.send,
+        status: liveStatus,
+        ...(liveStatus === "sent"
+          ? {
+              providerMessageId: "SM_locked",
+              evidenceName: "provider_accepted" as const,
+              acceptedAt: NOW.toISOString(),
+            }
+          : {}),
+      },
+      lifecycle: liveLifecycle,
+    };
+    await store.save(live);
+    const origGet = store.get.bind(store);
+    let reads = 0;
+    store.get = async (tenantId, missionId) => {
+      reads += 1;
+      if (reads === 1) return preSend;
+      return origGet(tenantId, missionId);
+    };
+    return { deps, created, origGet };
+  }
+
+  it("does not let stale prepare/defer/cancel overwrite a sending claim", async () => {
+    const prepared = await seedThenStaleRead("sending", "active");
+    const draft = await prepareRescueDraft(
+      { tenantId: "tenant-a", operatorUserId: "op-a", missionId: prepared.created.missionId },
+      prepared.deps
+    );
+    expect((await prepared.origGet("tenant-a", prepared.created.missionId))?.send.status).toBe("sending");
+    expect(draft.send.status).toBe("sending");
+
+    const deferredRun = await seedThenStaleRead("sending", "active");
+    const deferred = await deferRescueMission(
+      { tenantId: "tenant-a", operatorUserId: "op-a", missionId: deferredRun.created.missionId },
+      deferredRun.deps
+    );
+    expect((await deferredRun.origGet("tenant-a", deferredRun.created.missionId))?.send.status).toBe(
+      "sending"
+    );
+    expect(deferred.send.status).toBe("sending");
+
+    const cancelledRun = await seedThenStaleRead("sending", "active");
+    const cancelled = await cancelRescueMission(
+      { tenantId: "tenant-a", operatorUserId: "op-a", missionId: cancelledRun.created.missionId },
+      cancelledRun.deps
+    );
+    expect((await cancelledRun.origGet("tenant-a", cancelledRun.created.missionId))?.send.status).toBe(
+      "sending"
+    );
+    expect(cancelled.send.status).toBe("sending");
+  });
+
+  it("does not let unknown or sent become claimable through another mutation", async () => {
+    const unknownRun = await seedThenStaleRead("send_outcome_unknown", "problem");
+    const drafted = await prepareRescueDraft(
+      { tenantId: "tenant-a", operatorUserId: "op-a", missionId: unknownRun.created.missionId },
+      unknownRun.deps
+    );
+    expect(drafted.send.status).toBe("send_outcome_unknown");
+    expect(
+      (await unknownRun.origGet("tenant-a", unknownRun.created.missionId))?.send.status
+    ).toBe("send_outcome_unknown");
+
+    const sentRun = await seedThenStaleRead("sent", "completed");
+    const cancelled = await cancelRescueMission(
+      { tenantId: "tenant-a", operatorUserId: "op-a", missionId: sentRun.created.missionId },
+      sentRun.deps
+    );
+    expect(canCompleteRescue(cancelled.send)).toBe(true);
+    expect((await sentRun.origGet("tenant-a", sentRun.created.missionId))?.send.providerMessageId).toBe(
+      "SM_locked"
+    );
+  });
+
+  it("does not let a superseded mission win a later send claim", async () => {
+    const deps = depsFor({
+      resolveSendContact: async () => ({ kind: "no_longer_dormant" }),
+    });
+    const created = await instantiateRescueMission(
+      { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
+      deps
+    );
+    const superseded = await approveAndSendRescue(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        missionId: created.missionId,
+        approvedByUserId: "op-a",
+        operatorAuthorizedSend: true,
+      },
+      deps
+    );
+    expect(superseded.lifecycle).toBe("superseded");
+    const retryAdapter = createFakeOutboundSendAdapter();
+    const retried = await approveAndSendRescue(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        missionId: created.missionId,
+        approvedByUserId: "op-a",
+        operatorAuthorizedSend: true,
+      },
+      { ...deps, sendAdapter: retryAdapter, resolveSendContact: async () => ({ kind: "ready", contact: contactFor() }) }
+    );
+    expect(retried.lifecycle).toBe("superseded");
+    expect(retryAdapter.attempts).toHaveLength(0);
+    expect(canCompleteRescue(retried.send)).toBe(false);
+  });
 });
 
 describe("Spirit Human rescue proof-mode send guard", () => {

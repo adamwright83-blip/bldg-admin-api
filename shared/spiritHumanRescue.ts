@@ -44,6 +44,8 @@ export const CLAIMABLE_SEND_STATES = [
 
 export const AMBIGUOUS_SEND_STATES = ["sending", "send_outcome_unknown"] as const satisfies readonly RescueSendState[];
 
+export const SEND_CLAIMABLE_LIFECYCLES = ["available", "active", "problem"] as const satisfies readonly MissionLifecycleState[];
+
 /** What a successful Twilio create actually proves. Not delivered. Not read. */
 export const SEND_EVIDENCE_NAME = "provider_accepted" as const;
 
@@ -204,6 +206,18 @@ export function isDuplicateSendBlocked(send: Pick<RescueSendRecord, "status">): 
 
 export function isAmbiguousSend(send: Pick<RescueSendRecord, "status">): boolean {
   return send.status === "sending" || send.status === "send_outcome_unknown";
+}
+
+/** Once claimed, draft/defer/cancel/enter must not restore a retryable send. */
+export function isSendClaimLocked(send: Pick<RescueSendRecord, "status">): boolean {
+  return send.status === "sent" || send.status === "sending" || send.status === "send_outcome_unknown";
+}
+
+export function canClaimOutboundSend(mission: Pick<SpiritHumanRescueMission, "lifecycle" | "send">): boolean {
+  return (
+    canRetrySend(mission.send) &&
+    (SEND_CLAIMABLE_LIFECYCLES as readonly MissionLifecycleState[]).includes(mission.lifecycle)
+  );
 }
 
 export function applyLaterConsequence(
