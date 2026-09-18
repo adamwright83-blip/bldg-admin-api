@@ -25,6 +25,7 @@ import { runAgentTool } from "../agents/agentRuntime";
 import { registerVendorOnboardingSessionRoutes } from "../vendorOnboardingSessionApi";
 import { registerVendorBookingPublicRoutes } from "../vendorBookingPublicApi";
 import { registerLevel4TwilioRoutes } from "../level4Twilio";
+import { registerClaireRoutes } from "../claire/claireTwilio";
 import { registerSalesCallRoutes } from "../salesCalls";
 import { registerGoogleProxyRoutes } from "../google/googleProxyRoutes";
 import { registerCleanCloudImportRoutes } from "../cleancloudImportRoute";
@@ -323,6 +324,10 @@ async function startServer() {
   // Level 4 War — Twilio call-strike status callbacks (armed; quiet until
   // the Twilio account is activated for real traffic).
   registerLevel4TwilioRoutes(app);
+  // Claire — pre-drive conversation, continuation, debrief confirmation,
+  // recording status, and call status callbacks. Calls must never be placed
+  // unless these provider callback routes are mounted on the production app.
+  registerClaireRoutes(app);
   // Bold Pitch — Saleslay "call" weapon. Bridge-through-cellphone dial +
   // status callbacks; armed but only functional once the Twilio account is
   // verified for real outbound voice traffic.
