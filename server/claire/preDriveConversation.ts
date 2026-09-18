@@ -57,11 +57,36 @@ const MAX_SPOKEN_ANSWER_CHARS = 1200;
 const FOLLOW_UP_TRIM_CHARS = 6000;
 const FOLLOW_UP_MAX_TOKENS = 1400;
 
+const AMBIGUOUS_CLOSE_PHRASE =
+  /\b(got it|i(?: am|'m) (?:all )?good|that(?: is|'s) enough|bye)\b/;
+const EXPLICIT_END_CALL_PHRASE =
+  /\b(end (?:the )?call|hang up|goodbye|we(?: are|'re) done|i(?: am|'m) done|have a good (?:day|night|one))\b/;
+
 export function isClaireCallComplete(utterance: string): boolean {
   const normalized = utterance.trim().toLowerCase();
-  return /\b(got it|i(?: am|'m) (?:all )?good|that(?: is|'s) enough|end (?:the )?call|hang up|goodbye|bye|we(?: are|'re) done|i(?: am|'m) done)\b/.test(
-    normalized
-  );
+  return EXPLICIT_END_CALL_PHRASE.test(normalized) || AMBIGUOUS_CLOSE_PHRASE.test(normalized);
+}
+
+export function isExplicitClaireCallEnd(utterance: string): boolean {
+  return EXPLICIT_END_CALL_PHRASE.test(utterance.trim().toLowerCase());
+}
+
+/**
+ * Hang up on a close phrase. Ambiguous short closers ("got it", "I'm good")
+ * stay gated so they cannot abort a pending Day Line confirmation. Explicit
+ * end-call speech must terminate even when a briefing is held or the
+ * utterance is longer than six words — the live operator acceptance call
+ * said "Have a good day. I'm done talking." and was ignored.
+ */
+export function shouldEndClaireCallOnUtterance(
+  utterance: string,
+  options: { holding?: boolean } = {}
+): boolean {
+  if (!isClaireCallComplete(utterance)) return false;
+  if (isExplicitClaireCallEnd(utterance)) return true;
+  if (options.holding) return false;
+  const words = utterance.split(/\s+/).filter(Boolean).length;
+  return words <= 6;
 }
 
 function currentStop(context: ClaireDriveContext) {

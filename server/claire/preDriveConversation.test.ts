@@ -3,6 +3,8 @@ import type { ClaireDriveContext } from "./contextAssembler";
 import {
   conservativeClaireFollowUp,
   isClaireCallComplete,
+  isExplicitClaireCallEnd,
+  shouldEndClaireCallOnUtterance,
 } from "./preDriveConversation";
 
 const context: ClaireDriveContext = {
@@ -33,6 +35,32 @@ describe("Claire pre-drive conversation", () => {
     "recognizes a natural close: %s",
     utterance => expect(isClaireCallComplete(utterance)).toBe(true)
   );
+
+  it.each([
+    "Have a good day. I'm done talking.",
+    "I'm done talking.",
+    "Have a good day.",
+    "End the call please.",
+  ])("treats explicit end-call speech as a close: %s", utterance => {
+    expect(isClaireCallComplete(utterance)).toBe(true);
+    expect(isExplicitClaireCallEnd(utterance)).toBe(true);
+    expect(shouldEndClaireCallOnUtterance(utterance, { holding: true })).toBe(true);
+    expect(shouldEndClaireCallOnUtterance(utterance, { holding: false })).toBe(true);
+  });
+
+  it("does not hang up on a short ambiguous closer while a briefing is held", () => {
+    expect(shouldEndClaireCallOnUtterance("Got it", { holding: true })).toBe(false);
+    expect(shouldEndClaireCallOnUtterance("Got it", { holding: false })).toBe(true);
+  });
+
+  it("does not hang up on a long utterance that only contains an ambiguous closer", () => {
+    expect(
+      shouldEndClaireCallOnUtterance(
+        "Got it, and after that I still need to charge Ryan.",
+        { holding: false }
+      )
+    ).toBe(false);
+  });
 
   it("does not mistake a follow-up question for a close", () => {
     expect(
