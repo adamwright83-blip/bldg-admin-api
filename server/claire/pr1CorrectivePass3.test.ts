@@ -10,7 +10,7 @@ import {
   renderCanonFactFirstPerson,
   CANON_SCOPED_PERSONAL_DEFLECTION,
 } from "./character/personalAnswerRecovery";
-import { VOICE_NATIVE_ANSWER_GUIDANCE } from "./conversationVoiceGuidance";
+import { VOICE_NATIVE_ANSWER_GUIDANCE, CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION } from "./conversationVoiceGuidance";
 
 /**
  * PR1 Claire Intelligence Repair -- corrective pass 3, driven by Adam's
@@ -320,10 +320,11 @@ describe("Corrective pass 3 -- item 3: business grounding for what we actually s
 
 
 describe("Claire temporal authority regression", () => {
-  it("tells follow-up generation to ignore ambient provider/server time in favor of the verified context clock", async () => {
-    let captured = "";
-    const context = makeContext();
-    context.clock = {
+  const frozenClockContext: ClaireDriveContext = {
+    ...baseContext,
+    generatedAt: "2026-09-17T22:18:00.000Z",
+    businessDate: "2026-09-17",
+    clock: {
       isoTimestamp: "2026-09-17T22:18:00.000Z",
       timeZone: "America/Los_Angeles",
       businessDate: "2026-09-17",
@@ -332,24 +333,41 @@ describe("Claire temporal authority regression", () => {
       daypart: "afternoon",
       fieldSalesDayState: "open",
       tomorrowBusinessDate: "2026-09-18",
-    };
+    },
+  };
+
+  it("tells follow-up generation to ignore ambient provider/server time in favor of the verified context clock", async () => {
+    const invokeText = vi.fn().mockResolvedValue("It's 3:18 PM. The stop is at five.");
     await answerClairePreDriveFollowUp(
       {
         tenantId: "tenant-a",
         utterance: "What time is it and when is the stop?",
         brief: "Visit The Wilshire.",
-        context,
+        context: frozenClockContext,
       },
-      {
-        invokeText: async input => {
-          captured = input.messages.map(message => message.content).join("\n");
-          return { text: "It's 3:18 PM. The stop is at five.", provider: "anthropic", model: "test" } as never;
-        },
-        recordGeneration: async () => {},
-      }
+      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
-    expect(captured).toContain("TEMPORAL AUTHORITY");
-    expect(captured).toContain("sole authority");
+    const captured = invokeText.mock.calls[0][0].messages.map((message: { content: string }) => message.content).join("\n");
+    expect(captured).toContain(CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION);
+    expect(captured).toContain("sole temporal authority");
     expect(captured).toContain("Ignore any ambient model/provider/server notion of the current time");
+    expect(captured).toContain("3:18 PM");
+    expect(captured).toContain("afternoon");
+    expect(captured).toContain("nextFixedCommitmentLocalWhen");
+  });
+
+  it("tells opening generation to treat the supplied verified clock as the sole temporal authority", async () => {
+    const invokeText = vi.fn().mockResolvedValue("The Wilshire is at five.");
+    await writeClairePreDriveBrief(
+      { tenantId: "tenant-a", context: frozenClockContext },
+      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+    );
+    const captured = invokeText.mock.calls[0][0].messages.map((message: { content: string }) => message.content).join("\n");
+    expect(captured).toContain(CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION);
+    expect(captured).toContain("sole temporal authority");
+    expect(captured).toContain("Ignore any ambient model/provider/server notion of the current time");
+    expect(captured).toContain("3:18 PM");
+    expect(captured).toContain("afternoon");
+    expect(captured).toContain("nextFixedCommitmentLocalWhen");
   });
 });

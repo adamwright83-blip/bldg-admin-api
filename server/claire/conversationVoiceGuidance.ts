@@ -71,4 +71,13 @@ export const VOICE_NATIVE_ANSWER_GUIDANCE = [
 export const BLOCKER_REPETITION_DISCIPLINE =
   "You already have any open blockers in the supplied context -- you do not need to re-verify them from scratch. If a blocker has already been surfaced anywhere in the visible recent conversation history (a prior Claire or operator turn already mentioned it), do not mechanically re-mention it again in this answer unless: the operator's current question is specifically about that blocker, its status has plausibly changed, or resolving it is materially relevant to what they just asked right now. Do not append a blocker status check as a non-sequitur onto an answer about something unrelated (pricing, strategy, personal, general advice, etc.) just because it exists in context.";
 
+/**
+ * Real-exam finding: the model used ambient provider/server current-time
+ * awareness and contradicted the frozen JOYSTICK business clock (afternoon
+ * fixture vs evening speech; today vs tomorrow vs already-passed). The
+ * supplied verified context clock is the only allowed temporal source.
+ */
+export const CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION =
+  "TEMPORAL AUTHORITY: the supplied verified business-context clock is the sole temporal authority for current date, local time, weekday, daypart, and today/tomorrow/future/past status. Ignore any ambient model/provider/server notion of the current time, even if it seems more recent. Never override the supplied clock with outside time awareness.";
+
 export type ClaireGenerationSurface = "voice" | "desktop";

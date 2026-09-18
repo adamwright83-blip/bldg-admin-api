@@ -49,6 +49,7 @@
  * do not hand-edit those files afterward; if a turn looks bad or
  * off-character, that is exactly the finding this exam exists to surface.
  */
+import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { answerClairePreDriveFollowUp } from "../../../server/claire/preDriveConversation";
 import { writeClairePreDriveBrief } from "../../../server/claire/reasoning";
@@ -83,7 +84,15 @@ function zonedWallTimeToUtc(y: number, m: number, d: number, h: number, min: num
   return new Date(utcGuess + driftMs);
 }
 
-const now = new Date();
+// Frozen JOYSTICK pre-visit specimen. Recovered from the original real
+// exam transcript (`after-pr1-REAL-transcript.md` Generated:
+// 2026-09-17T22:18:39.945Z) and the already-intended Railway freeze
+// 2026-09-17T22:18:00.000Z. Local clock: Thursday 2026-09-17 3:18 PM
+// America/Los_Angeles, daypart afternoon, field day open. Next commitment
+// remains The Wilshire at 5:00 PM the same local day. Wall-clock
+// execution time must not mutate this specimen.
+const FROZEN_EXAM_NOW_ISO = "2026-09-17T22:18:00.000Z";
+const now = new Date(FROZEN_EXAM_NOW_ISO);
 const clock = buildClaireClock(now, CLAIRE_BUSINESS_TIME_ZONE);
 // A concrete business-local time (5pm business timezone, today) --
 // matches how a real scheduled commercial visit would actually be stored,
@@ -204,18 +213,50 @@ const TURNS: ExamTurn[] = [
   },
 ];
 
+function frozenSpecimenFingerprint() {
+  const payload = {
+    frozenNowIso: FROZEN_EXAM_NOW_ISO,
+    timeZone: CLAIRE_BUSINESS_TIME_ZONE,
+    clock,
+    generatedAt: context.generatedAt,
+    businessDate: context.businessDate,
+    actorId: context.actorId,
+    tenantId: "exam-tenant",
+    brief: "Visit The Wilshire.",
+    nextFixedCommitment: context.nextFixedCommitment,
+    blockers: context.blockers,
+    macroGoal: context.macroGoal,
+    relevantTimeline: context.relevantTimeline,
+    mission: context.mission,
+    turns: TURNS,
+  };
+  const canonical = JSON.stringify(payload);
+  return {
+    sha256: createHash("sha256").update(canonical).digest("hex"),
+    payload,
+  };
+}
+
 async function run() {
+  const specimen = frozenSpecimenFingerprint();
+  console.log(`FROZEN_SPECIMEN_SHA256=${specimen.sha256}`);
+  console.log(`FROZEN_SPECIMEN_NOW=${FROZEN_EXAM_NOW_ISO}`);
+  console.log(`FROZEN_SPECIMEN_CLOCK=${JSON.stringify(clock)}`);
+  console.log(`FROZEN_SPECIMEN_COMMITMENT=${JSON.stringify(context.nextFixedCommitment)}`);
   const transcriptLines: string[] = [
     "# Claire PR1 -- REAL (non-mocked) Anthropic exam transcript",
     "",
     `Generated: ${new Date().toISOString()}`,
+    `Frozen specimen now: ${FROZEN_EXAM_NOW_ISO}`,
+    `Frozen specimen sha256: ${specimen.sha256}`,
+    `Frozen clock: ${JSON.stringify(clock)}`,
     `Model requested: ${ENV.anthropicModelClaire || ENV.anthropicModel} (ENV.anthropicModelClaire || ENV.anthropicModel -- unchanged production config, no override).`,
     "",
     "**This transcript is RAW model output from the actual production code path",
     "(answerClairePreDriveFollowUp / writeClairePreDriveBrief -> invokeTextLLM ->",
     "real Anthropic API). Nothing below is rewritten, curated, or cherry-picked.**",
     "No database write occurred (recordGeneration is a no-op for this run). No",
-    "Twilio call was placed.",
+    "Twilio call was placed. Wall-clock execution time did not mutate the frozen specimen.",
     "",
   ];
   const metrics: Array<Record<string, unknown>> = [];
@@ -284,7 +325,22 @@ async function run() {
   writeFileSync("docs/goldline/claire-intelligence/after-pr1-REAL-transcript.md", transcriptLines.join("\n"));
   writeFileSync(
     "docs/goldline/claire-intelligence/after-pr1-REAL-metrics.json",
-    JSON.stringify({ generatedAt: new Date().toISOString(), turns: metrics }, null, 2)
+    JSON.stringify(
+      {
+        generatedAt: new Date().toISOString(),
+        frozenNowIso: FROZEN_EXAM_NOW_ISO,
+        frozenSpecimenSha256: specimen.sha256,
+        frozenClock: clock,
+        modelRequested: ENV.anthropicModelClaire || ENV.anthropicModel,
+        turns: metrics,
+      },
+      null,
+      2
+    )
+  );
+  writeFileSync(
+    "docs/goldline/claire-intelligence/frozen-exam-specimen.json",
+    JSON.stringify({ sha256: specimen.sha256, ...specimen.payload }, null, 2)
   );
   console.log(`Wrote REAL transcript + metrics for ${metrics.length} turns.`);
 }
