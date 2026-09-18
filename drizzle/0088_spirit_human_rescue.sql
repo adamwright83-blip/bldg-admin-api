@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS `spirit_human_rescue_missions` (
   `tenantId` VARCHAR(64) NOT NULL,
   `operatorUserId` VARCHAR(128) NOT NULL,
   `snapshotCustomerId` VARCHAR(64) NOT NULL,
+  `dormancyEpisodeKey` VARCHAR(40) NOT NULL,
   `villagerId` VARCHAR(32) NOT NULL,
   `lifecycle` VARCHAR(32) NOT NULL,
   `sendStatus` VARCHAR(32) NOT NULL,
@@ -19,5 +20,6 @@ CREATE TABLE IF NOT EXISTS `spirit_human_rescue_missions` (
   `updatedAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`missionId`),
   KEY `idx_shr_missions_tenant_operator` (`tenantId`, `operatorUserId`),
-  KEY `idx_shr_missions_tenant_customer` (`tenantId`, `snapshotCustomerId`)
+  KEY `idx_shr_missions_tenant_customer` (`tenantId`, `snapshotCustomerId`),
+  UNIQUE KEY `uq_shr_missions_tenant_customer_episode` (`tenantId`, `snapshotCustomerId`, `dormancyEpisodeKey`)
 );

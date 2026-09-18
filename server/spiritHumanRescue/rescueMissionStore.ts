@@ -5,7 +5,7 @@
  * There is no silent fallback from a configured/unavailable database to memory.
  */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { spiritHumanRescueMissions } from "../../drizzle/schema";
 import { getDb } from "../db";
 import type { MissionLifecycleState, RescueSendState, SpiritHumanRescueMission } from "../../shared/spiritHumanRescue";
@@ -13,6 +13,7 @@ import type { MissionLifecycleState, RescueSendState, SpiritHumanRescueMission }
 export type RescueMissionStore = {
   get(tenantId: string, missionId: string): Promise<SpiritHumanRescueMission | null>;
   listForOperator(tenantId: string, operatorUserId: string): Promise<SpiritHumanRescueMission[]>;
+  createForDormancyEpisode(mission: SpiritHumanRescueMission): Promise<{ created: boolean; mission: SpiritHumanRescueMission }>;
   save(mission: SpiritHumanRescueMission): Promise<SpiritHumanRescueMission>;
   compareAndSet(input: {
     tenantId: string;
@@ -43,6 +44,7 @@ function rowValues(mission: SpiritHumanRescueMission) {
     tenantId: mission.tenantId,
     operatorUserId: mission.operatorUserId,
     snapshotCustomerId: mission.spiritHuman.snapshotCustomerId,
+    dormancyEpisodeKey: mission.spiritHuman.lastOrderAt,
     villagerId: mission.villager.id,
     lifecycle: mission.lifecycle,
     sendStatus: mission.send.status,
@@ -88,6 +90,20 @@ export class MemoryRescueMissionStore implements RescueMissionStore {
     return [...this.rows.values()]
       .filter(row => row.tenantId === tenantId && row.operatorUserId === operatorUserId)
       .map(cloneMission);
+  }
+
+  async createForDormancyEpisode(
+    mission: SpiritHumanRescueMission
+  ): Promise<{ created: boolean; mission: SpiritHumanRescueMission }> {
+    const existing = [...this.rows.values()].find(
+      row =>
+        row.tenantId === mission.tenantId &&
+        row.spiritHuman.snapshotCustomerId === mission.spiritHuman.snapshotCustomerId &&
+        row.spiritHuman.lastOrderAt === mission.spiritHuman.lastOrderAt
+    );
+    if (existing) return { created: false, mission: cloneMission(existing) };
+    this.rows.set(this.key(mission.tenantId, mission.missionId), cloneMission(mission));
+    return { created: true, mission: cloneMission(mission) };
   }
 
   async save(mission: SpiritHumanRescueMission): Promise<SpiritHumanRescueMission> {
@@ -141,7 +157,9 @@ export class DrizzleRescueMissionStore implements RescueMissionStore {
     return rows.map(row => parseMissionJson(row.missionJson));
   }
 
-  async save(mission: SpiritHumanRescueMission): Promise<SpiritHumanRescueMission> {
+  async createForDormancyEpisode(
+    mission: SpiritHumanRescueMission
+  ): Promise<{ created: boolean; mission: SpiritHumanRescueMission }> {
     const values = rowValues(mission);
     await this.db
       .insert(spiritHumanRescueMissions)
@@ -150,16 +168,55 @@ export class DrizzleRescueMissionStore implements RescueMissionStore {
         createdAt: new Date(mission.createdAt),
       })
       .onDuplicateKeyUpdate({
-        set: {
-          operatorUserId: values.operatorUserId,
-          snapshotCustomerId: values.snapshotCustomerId,
-          villagerId: values.villagerId,
-          lifecycle: values.lifecycle,
-          sendStatus: values.sendStatus,
-          missionJson: values.missionJson,
-          updatedAt: values.updatedAt,
-        },
+        // The unique tenant/customer/episode claim already belongs to another
+        // mission. Do not mutate that row; read and return it below.
+        set: { missionId: sql`${spiritHumanRescueMissions.missionId}` },
       });
+    const rows = await this.db
+      .select()
+      .from(spiritHumanRescueMissions)
+      .where(
+        and(
+          eq(spiritHumanRescueMissions.tenantId, mission.tenantId),
+          eq(spiritHumanRescueMissions.snapshotCustomerId, mission.spiritHuman.snapshotCustomerId),
+          eq(spiritHumanRescueMissions.dormancyEpisodeKey, mission.spiritHuman.lastOrderAt)
+        )
+      )
+      .limit(1);
+    const row = rows[0];
+    if (!row) throw new Error("Dormancy-episode mission claim could not be read after create.");
+    const authoritative = parseMissionJson(row.missionJson);
+    return { created: authoritative.missionId === mission.missionId, mission: authoritative };
+  }
+
+  async save(mission: SpiritHumanRescueMission): Promise<SpiritHumanRescueMission> {
+    const values = rowValues(mission);
+    const existing = await this.get(mission.tenantId, mission.missionId);
+    if (!existing) {
+      await this.db.insert(spiritHumanRescueMissions).values({
+        ...values,
+        createdAt: new Date(mission.createdAt),
+      });
+      return mission;
+    }
+    await this.db
+      .update(spiritHumanRescueMissions)
+      .set({
+        operatorUserId: values.operatorUserId,
+        snapshotCustomerId: values.snapshotCustomerId,
+        dormancyEpisodeKey: values.dormancyEpisodeKey,
+        villagerId: values.villagerId,
+        lifecycle: values.lifecycle,
+        sendStatus: values.sendStatus,
+        missionJson: values.missionJson,
+        updatedAt: values.updatedAt,
+      })
+      .where(
+        and(
+          eq(spiritHumanRescueMissions.tenantId, mission.tenantId),
+          eq(spiritHumanRescueMissions.missionId, mission.missionId)
+        )
+      );
     return mission;
   }
 
@@ -184,6 +241,7 @@ export class DrizzleRescueMissionStore implements RescueMissionStore {
       .set({
         operatorUserId: values.operatorUserId,
         snapshotCustomerId: values.snapshotCustomerId,
+        dormancyEpisodeKey: values.dormancyEpisodeKey,
         villagerId: values.villagerId,
         lifecycle: values.lifecycle,
         sendStatus: values.sendStatus,

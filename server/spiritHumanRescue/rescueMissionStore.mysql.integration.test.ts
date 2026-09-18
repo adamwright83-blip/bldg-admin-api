@@ -4,6 +4,7 @@ import { getDb } from "../db";
 import { emptySendRecord, SPIRIT_HUMAN_VILLAGERS, type SpiritHumanRescueMission } from "../../shared/spiritHumanRescue";
 import { CLAIMABLE_SEND_STATES, SEND_CLAIMABLE_LIFECYCLES } from "../../shared/spiritHumanRescue";
 import { DrizzleRescueMissionStore } from "./rescueMissionStore";
+import { instantiateRescueMission } from "./rescueMissionService";
 
 /**
  * Real-MySQL coverage for Spirit Human rescue durability. Excluded from
@@ -70,6 +71,68 @@ describe("Spirit Human rescue MySQL durability", () => {
     expect(reloaded?.send.providerMessageId).toBe("SM_mysql_1");
     expect(reloaded?.send.status).toBe("sent");
     expect(reloaded?.consequences).toHaveLength(1);
+  }, 20_000);
+
+  it("converges concurrent instantiation onto one durable dormancy episode", async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    const store = new DrizzleRescueMissionStore(db);
+    const snapshotCustomerId = `cust_${randomUUID().replaceAll("-", "").slice(0, 20)}`;
+    const candidate = {
+      id: snapshotCustomerId,
+      firstName: "Priya",
+      lastOrderAt: "2026-07-01T12:00:00.000Z",
+      daysSinceLastOrder: 78,
+    };
+    const input = {
+      tenantId: "default",
+      operatorUserId: `op-race-${randomUUID().slice(0, 8)}`,
+      snapshotCustomerId,
+    };
+    const deps = {
+      store,
+      now: () => new Date("2026-09-17T15:00:00.000Z"),
+      loadCandidates: async () => [candidate],
+    };
+
+    const [first, second] = await Promise.all([
+      instantiateRescueMission(input, deps),
+      instantiateRescueMission(input, deps),
+    ]);
+
+    expect(first.missionId).toBe(second.missionId);
+    const rows = (await store.listForOperator(input.tenantId, input.operatorUserId)).filter(
+      row =>
+        row.spiritHuman.snapshotCustomerId === snapshotCustomerId &&
+        row.spiritHuman.lastOrderAt === candidate.lastOrderAt
+    );
+    expect(rows).toHaveLength(1);
+
+    const completed = {
+      ...rows[0]!,
+      lifecycle: "completed" as const,
+      send: {
+        ...rows[0]!.send,
+        status: "sent" as const,
+        providerMessageId: "SM_episode_complete",
+        evidenceName: "provider_accepted" as const,
+        acceptedAt: "2026-09-17T15:01:00.000Z",
+      },
+    };
+    await store.save(completed);
+
+    const laterCandidate = {
+      ...candidate,
+      lastOrderAt: "2026-10-01T12:00:00.000Z",
+      daysSinceLastOrder: 40,
+    };
+    const later = await instantiateRescueMission(input, {
+      ...deps,
+      now: () => new Date("2026-11-10T15:00:00.000Z"),
+      loadCandidates: async () => [laterCandidate],
+    });
+    expect(later.missionId).not.toBe(first.missionId);
+    expect(later.spiritHuman.lastOrderAt).toBe(laterCandidate.lastOrderAt);
   }, 20_000);
 
   it("compare-and-set allows only one send claim against real MySQL", async () => {

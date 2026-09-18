@@ -7957,6 +7957,7 @@ export const spiritHumanRescueMissions = mysqlTable(
     tenantId: varchar("tenantId", { length: 64 }).notNull(),
     operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
     snapshotCustomerId: varchar("snapshotCustomerId", { length: 64 }).notNull(),
+    dormancyEpisodeKey: varchar("dormancyEpisodeKey", { length: 40 }).notNull(),
     villagerId: varchar("villagerId", { length: 32 }).notNull(),
     lifecycle: varchar("lifecycle", { length: 32 }).notNull(),
     sendStatus: varchar("sendStatus", { length: 32 }).notNull(),
@@ -7972,6 +7973,11 @@ export const spiritHumanRescueMissions = mysqlTable(
     tenantCustomerIdx: index("idx_shr_missions_tenant_customer").on(
       table.tenantId,
       table.snapshotCustomerId
+    ),
+    tenantCustomerEpisodeUnique: uniqueIndex("uq_shr_missions_tenant_customer_episode").on(
+      table.tenantId,
+      table.snapshotCustomerId,
+      table.dormancyEpisodeKey
     ),
   })
 );

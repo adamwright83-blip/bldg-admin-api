@@ -120,25 +120,59 @@ export async function instantiateRescueMission(
 ): Promise<SpiritHumanRescueMission> {
   const store = await resolveStore(deps);
   const now = (deps.now ?? (() => new Date()))();
-  const existing = (await store.listForOperator(input.tenantId, input.operatorUserId)).find(
-    row =>
-      row.spiritHuman.snapshotCustomerId === input.snapshotCustomerId &&
-      row.lifecycle !== "skipped" &&
-      row.lifecycle !== "superseded"
-  );
-  if (existing) return publicize(existing);
-
+  const existingRows = await store.listForOperator(input.tenantId, input.operatorUserId);
   const loadCandidates = deps.loadCandidates ?? listDormantRescueCandidates;
   const candidates = await loadCandidates({ tenantId: input.tenantId, now });
   const candidate = candidates.find(row => row.id === input.snapshotCustomerId);
+
   if (!candidate) {
+    const existing = existingRows.find(
+      row =>
+        row.spiritHuman.snapshotCustomerId === input.snapshotCustomerId &&
+        row.lifecycle !== "skipped" &&
+        row.lifecycle !== "superseded"
+    );
+    if (existing) return publicize(existing);
     throw Object.assign(new Error("Dormant customer could not be resolved from the Strategy snapshot."), {
       code: "UNKNOWN_CUSTOMER",
     });
   }
+
+  const existingEpisode = existingRows.find(
+    row =>
+      row.spiritHuman.snapshotCustomerId === input.snapshotCustomerId &&
+      row.spiritHuman.lastOrderAt === candidate.lastOrderAt
+  );
+  if (existingEpisode) return publicize(existingEpisode);
+
   const frozen = freezeFactsFromCandidate(candidate);
   const missionId = `shr_${nanoid(12)}`;
-  let opsTaskId: number | null = null;
+  const mission: SpiritHumanRescueMission = {
+    missionId,
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    kind: SPIRIT_HUMAN_RESCUE_KIND,
+    lifecycle: "available",
+    villager: selectVillagerIndependentOfCustomer(missionId),
+    spiritHuman: frozen,
+    draft: null,
+    send: emptySendRecord(missionId),
+    consequences: [],
+    opsTaskId: null,
+    deferredAt: null,
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  };
+
+  const episodeClaim = await store.createForDormancyEpisode(mission);
+  if (episodeClaim.mission.operatorUserId !== input.operatorUserId) {
+    throw Object.assign(new Error("This dormant customer episode is already assigned to another operator."), {
+      code: "TARGET_ALREADY_CLAIMED",
+    });
+  }
+  if (!episodeClaim.created) return publicize(episodeClaim.mission);
+
+  let authoritative = episodeClaim.mission;
   if (deps.persistOpsTask) {
     try {
       const task = await createOpsTask(
@@ -153,35 +187,23 @@ export async function instantiateRescueMission(
           createdBy: input.operatorUserId,
           metadataJson: {
             kind: SPIRIT_HUMAN_RESCUE_KIND,
-            missionId,
+            missionId: authoritative.missionId,
             snapshotCustomerId: frozen.snapshotCustomerId,
           },
         },
         deps.opsTaskStore
       );
-      opsTaskId = task.id;
+      const withTask: SpiritHumanRescueMission = {
+        ...authoritative,
+        opsTaskId: task.id,
+        updatedAt: (deps.now ?? (() => new Date()))().toISOString(),
+      };
+      authoritative = (await persistIfCurrent(store, authoritative, withTask)).mission;
     } catch {
-      opsTaskId = null;
+      // Mission creation is authoritative. Ops-task projection is secondary.
     }
   }
-  const mission: SpiritHumanRescueMission = {
-    missionId,
-    tenantId: input.tenantId,
-    operatorUserId: input.operatorUserId,
-    kind: SPIRIT_HUMAN_RESCUE_KIND,
-    lifecycle: "available",
-    villager: selectVillagerIndependentOfCustomer(missionId),
-    spiritHuman: frozen,
-    draft: null,
-    send: emptySendRecord(missionId),
-    consequences: [],
-    opsTaskId,
-    deferredAt: null,
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString(),
-  };
-  await store.save(mission);
-  return publicize(mission);
+  return publicize(authoritative);
 }
 
 export async function enterRescueMission(
