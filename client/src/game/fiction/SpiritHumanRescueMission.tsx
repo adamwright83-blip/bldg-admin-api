@@ -270,10 +270,21 @@ export default function SpiritHumanRescueMissionHost(props: {
         className="shr-threat"
         src={threatPng}
         alt=""
+        data-testid="spirit-human-threat"
         style={{ transform: `translate(-50%, ${phase === "rescue" ? -12 : threatY}%)` }}
       />
-      <img className="shr-captive" src={captivePng} alt="" />
-      <img className="shr-player" src={playerMarkPng} alt="" />
+      <img
+        className="shr-captive"
+        src={captivePng}
+        alt=""
+        data-testid="spirit-human-captive"
+      />
+      <img
+        className="shr-player"
+        src={playerMarkPng}
+        alt=""
+        data-testid="spirit-human-player-marker"
+      />
 
       <header className="shr-hud">
         <small>JOYSTICK MISSION</small>
