@@ -60,6 +60,7 @@ export default function SpiritHumanRescueMissionHost(props: {
   const approveAndSend = trpc.system.spiritHumanRescue.approveAndSend.useMutation();
   const defer = trpc.system.spiritHumanRescue.defer.useMutation();
   const cancel = trpc.system.spiritHumanRescue.cancel.useMutation();
+  const reconcileConsequences = trpc.system.spiritHumanRescue.reconcileConsequences.useMutation();
 
   const mission: SpiritHumanRescueMission | null = useMemo(() => {
     const rows = mine.data ?? [];
@@ -95,6 +96,15 @@ export default function SpiritHumanRescueMissionHost(props: {
     });
     dispatchPressure({ type: "restore", state: restored });
   }, [mission?.missionId, mission?.send.status]);
+
+  useEffect(() => {
+    if (!mission || !canCompleteRescue(mission.send)) return;
+    if (mission.consequences.some(item => item.kind === "customer_ordered")) return;
+    if (reconcileConsequences.isPending) return;
+    void reconcileConsequences.mutateAsync().then(() => refresh()).catch(() => undefined);
+    // Reconcile only from authoritative paid-order evidence; this never claims a reply.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mission?.missionId, mission?.send.status, mission?.consequences.length]);
 
   useEffect(() => {
     if (!mission) return;
