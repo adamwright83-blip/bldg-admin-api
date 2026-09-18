@@ -18,6 +18,28 @@ import {
   assertPostGenerationStateVerbs,
   buildClaireVerifiedFactInventory,
 } from "./verifiedFactInventoryFromContext";
+import { ENV } from "../_core/env";
+import { formatClaireLocalTime, CLAIRE_BUSINESS_TIME_ZONE } from "./contextAssembler";
+import { VOICE_NATIVE_ANSWER_GUIDANCE, BLOCKER_REPETITION_DISCIPLINE } from "./conversationVoiceGuidance";
+import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
+
+/**
+ * PR1 Claire Intelligence Repair: cut generously at a sentence boundary
+ * instead of a hard mid-sentence character truncation, so a long useful
+ * answer isn't chopped off mid-word. Only trims if genuinely over budget.
+ */
+function trimToSentenceBoundary(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const slice = text.slice(0, maxChars);
+  const lastBoundary = Math.max(
+    slice.lastIndexOf(". "),
+    slice.lastIndexOf("! "),
+    slice.lastIndexOf("? ")
+  );
+  return lastBoundary > maxChars * 0.4
+    ? slice.slice(0, lastBoundary + 1)
+    : slice;
+}
 
 /**
  * Assembles the compact character context for a given phase/operator.
@@ -106,6 +128,7 @@ function resultText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
 function compactContext(context: ClaireDriveContext): string {
   const runtime = context.runtime ?? assembleClaireRuntimeView(context);
   const factInventory = buildClaireVerifiedFactInventory(context);
+  const timeZone = context.clock?.timeZone ?? CLAIRE_BUSINESS_TIME_ZONE;
   return JSON.stringify({
     businessDate: context.businessDate,
     clock: context.clock,
@@ -115,6 +138,13 @@ function compactContext(context: ClaireDriveContext): string {
     verifiedMetrics: context.verifiedMetrics,
     campaign: context.campaign,
     nextFixedCommitment: context.nextFixedCommitment,
+    // PR1 Claire Intelligence Repair -- corrective pass (real-exam
+    // finding): same deterministic local-time rendering as
+    // preDriveConversation.ts, so Claire never has to convert a raw ISO
+    // scheduledAt into local time herself.
+    nextFixedCommitmentLocalWhen: context.nextFixedCommitment
+      ? formatClaireLocalTime(context.nextFixedCommitment.scheduledAt, timeZone)
+      : null,
     blockers: context.blockers,
     relevantTimeline: context.relevantTimeline,
     mission: context.mission,
@@ -263,55 +293,76 @@ export async function writeClairePreDriveBrief(
           ? "morning_reconciliation"
           : "pre_drive",
   });
+  let stopReason: string | null = null;
   try {
     const text = (
       await invokeText({
         tenantId: input.tenantId,
-        maxTokens: 320,
-        temperature: 0.15,
+        model: ENV.anthropicModelClaire || ENV.anthropicModel,
+        maxTokens: 500,
+        temperature: 0.6,
+        onStopReason: reason => { stopReason = reason; },
         messages: [
           {
             role: "system",
             content: [
-              "You are Claire, Goldline's concise operations partner and strategist calling before a drive.",
-              "Notice the gap between where the business is and where the operator wants it, and select the one or two commercial points that matter most today.",
-              "The operator is a player, not a CEO. Never use 'CEO', 'executive', 'board approval', or similar framing.",
-              "Missed or outstanding work is never framed as disappointment, shame, or letdown (Guardrail G2). State what remains plainly with options (repair, reschedule, or drop).",
-              "Assert only verified state from the inventory (Guardrail G4). Never invent actions or outcomes.",
-              "Forecasts and planning scenarios are estimates, not facts (Guardrail G12).",
-              "Use only the supplied business context. Never invent a customer, outcome, deadline, address, revenue, commitment, or completed action.",
-              "The game cannot create business truth. Derived suggestions are suggestions, never facts.",
-              "This is an orientation brief from a strategic operating partner. Use the supplied clock, macro goal, verified metric, work picture, campaign, and runtime picture only.",
+              // (1) Who Claire is
+              "You are Claire, Goldline's operations partner and strategist, calling before a drive.",
+              // (2) Eligible relationship/canon context
+              compiled.promptSection,
+              ...(compiled.fewShotBlock
+                ? [`Voice reference only, not facts to repeat verbatim -- illustrative examples of how Claire actually talks: ${compiled.fewShotBlock}`]
+                : []),
+              // (3) Verified business context (supplied in the user turn) + fact inventory
+              inventory.toPromptSection(),
+              // (4) What she's helping with
+              "This is an orientation brief. Notice the gap between where the business is and where the operator wants it, and select the one or two commercial points that matter most today, using the supplied clock, macro goal, verified metric, work picture, campaign, and runtime picture.",
+              // (3b) What this business actually sells -- without this the
+              // model fills the gap from pretraining with a generic
+              // laundry-equipment sales model. See offerContext.ts.
+              GOLDLINE_OFFER_CONTEXT,
               CLAIRE_V1_REASONING_POLICY,
               formatCapabilityBriefing(),
-              "Every factual clause must map directly to a supplied field. Omit missing facts. Never calculate a metric or infer a total.",
+              // (5) Truth/action boundaries
+              "Every business-specific factual clause must map directly to a supplied field or the fact inventory, or say plainly it is unknown. Omit missing facts. Never calculate a metric or infer a total. Never invent a customer, outcome, deadline, address, revenue, commitment, or completed action. The game cannot create business truth.",
+              "General professional/strategic knowledge (sales approach, pricing logic, PM dynamics, ops reasoning) may be used to frame your recommendation or reasoning, clearly as your own judgment or suggestion — never asserted as a fact about this business. Forecasts and planning scenarios are estimates, not facts (Guardrail G12). Keep that general knowledge consistent with what this business actually sells, above — do not import a sales model from a different industry or a different kind of laundry business.",
+              "The operator is a player, not a CEO. Never use 'CEO', 'executive', 'board approval', or similar framing.",
+              "Missed or outstanding work is never framed as disappointment, shame, or letdown (Guardrail G2). State what remains plainly with options (repair, reschedule, or drop).",
               "If fieldSalesDayState is winding_down or over, distinguish property-visit viability from remote calls, follow-ups, research, or tomorrow's field opportunity when those items exist.",
               "For a partial active-customer metric, state only the verified subset and explicitly say it is not the full total. For unavailable, omit the count.",
-              "Name at most one strategic operational fact. Use real-work language such as Greystar visits, never fantasy or NPC language.",
+              "Use real-work language such as Greystar visits, never fantasy or NPC language.",
               "Never mention software development, code, repositories, GitHub, Codex, commits, pull requests, deployments, archiving, internal engineering chores, JSON, databases, confidence systems, or internal architecture.",
-            "If the macro goal is unknown, ask what the macro goal is rather than inventing it.",
-            "The phone wrapper already introduces Claire. Do not introduce yourself, say your name, greet the operator, or mention Goldline.",
-            "Speak naturally in no more than 3 concise sentences and never exceed 70 words.",
+              "If the macro goal is unknown, ask what the macro goal is rather than inventing it.",
+              "The phone wrapper already introduces Claire. Do not introduce yourself, say your name, greet the operator, or mention Goldline.",
+              // (6)/(7) recent conversation and the operator's ask arrive via the user turn below
               "Use conversational spoken English. Avoid slash-separated phrases, dense abbreviations, or wording that is hard to understand over a phone line.",
+              BLOCKER_REPETITION_DISCIPLINE,
               "Do not narrate the game.",
-              "If the context includes missionSalesBrief, that is the one authoritative sales strategy for this mission — prioritize its primaryObjective and keyUnknown over generic pitching, and do not repeat anything listed in its thingsToAvoid.",
+              "nextFixedCommitmentLocalWhen, when present, is the authoritative, already-resolved local date/time for the next fixed commitment. State or reference its time using that field directly. Do not attempt to convert nextFixedCommitment.scheduledAt's raw ISO timestamp into local time yourself.",
+              "If the context includes missionSalesBrief, that is the one authoritative sales strategy for this mission — prioritize its primaryObjective and keyUnknown over generic pitching, and do not repeat anything listed in its thingsToAvoid. You may add general sales judgment on top of it, clearly framed as your own take.",
               "Never state a missionSalesBrief unknown, questionsToAsk item, or recommendation as if it were already a known fact. If the operator asks what an unknown answer is, say plainly that it is not known and that finding out is the point of this visit.",
-              compiled.promptSection,
-              inventory.toPromptSection(),
+              // (8) Delivery rules LAST, nearest the generation, explicitly
+              // authoritative over anything above implying length/structure.
+              // The old "Speak naturally, sized to what actually matters
+              // today -- usually a few concise sentences, more if there is a
+              // genuine strategic point worth making" line was removed here:
+              // it competed directly with these rules on length.
+              VOICE_NATIVE_ANSWER_GUIDANCE,
             ].join(" "),
           },
           { role: "user", content: compactContext(input.context) },
         ],
       })
     )
-      .trim()
-      .slice(0, 900);
+      .trim();
     if (!text) throw new Error("Claire opening brief produced empty output");
+    const trimmed = trimToSentenceBoundary(text, 1600);
+    const trimmedToSentenceBoundary = trimmed !== text;
 
-    assertPostGenerationStateVerbs(text, inventory);
+    assertPostGenerationStateVerbs(trimmed, inventory);
 
     // Guardrail G2 post-generation lint
-    const disappointmentCheck = lintDisappointmentFraming(text);
+    const disappointmentCheck = lintDisappointmentFraming(trimmed);
     if (!disappointmentCheck.passes) {
       console.warn("[Claire] Pre-drive brief failed G2 disappointment lint, falling back", {
         pattern: disappointmentCheck.matchedPattern,
@@ -320,7 +371,7 @@ export async function writeClairePreDriveBrief(
     }
 
     // Global CEO/executive framing prohibition lint
-    const ceoCheck = lintCeoLanguage(text);
+    const ceoCheck = lintCeoLanguage(trimmed);
     if (!ceoCheck.passes) {
       console.warn("[Claire] Pre-drive brief failed CEO language lint, falling back", {
         pattern: ceoCheck.matchedPattern,
@@ -331,6 +382,11 @@ export async function writeClairePreDriveBrief(
       kind: "opening_brief",
       source: "model",
       failureReason: null,
+      modelRequested: ENV.anthropicModelClaire || ENV.anthropicModel,
+      surface: "voice",
+      stopReason,
+      answerOrigin: "model",
+      trimmedToSentenceBoundary,
     };
     await recordGeneration({
       tenantId: input.tenantId,
@@ -338,14 +394,14 @@ export async function writeClairePreDriveBrief(
       latencyMs: Date.now() - startedAt,
       reviewDetail: {
         operatorUserId: input.context.actorId ?? null,
-        generatedText: text,
+        generatedText: trimmed,
         compiled,
         businessContextSummary: input.context.businessDate,
         orientationContext: input.context,
       },
     });
     input.onGeneration?.(diagnostic);
-    return text;
+    return trimmed;
   } catch (error) {
     const failureReason = safeClaireFailureReason(error);
     console.error("[Claire] opening brief generation failed", {
@@ -356,6 +412,11 @@ export async function writeClairePreDriveBrief(
       kind: "opening_brief",
       source: "fallback",
       failureReason,
+      modelRequested: ENV.anthropicModelClaire || ENV.anthropicModel,
+      surface: "voice",
+      stopReason,
+      answerOrigin: "fallback",
+      trimmedToSentenceBoundary: null,
     };
     await recordGeneration({
       tenantId: input.tenantId,
@@ -465,6 +526,9 @@ export async function writeClairePostStopOpening(
               "State that the operator is clear of that account and ask what actually happened. Make clear you will not record won, lost, or a follow-up unless the operator says so.",
               "One or two short spoken sentences, under 40 words.",
               compiled.promptSection,
+              ...(compiled.fewShotBlock
+                ? [`Voice reference only, not facts to repeat verbatim -- illustrative examples of how Claire actually talks: ${compiled.fewShotBlock}`]
+                : []),
               inventory.toPromptSection(),
             ].join(" "),
           },
@@ -575,6 +639,9 @@ export async function writeClaireOutcomeConfirmation(
                 ? "If strategyChange is present, you may briefly note that the plan changed and why, using ONLY newlyKnown — never invent a different reason. If strategyChange is absent, say nothing about strategy."
                 : "",
               compiled.promptSection,
+              ...(compiled.fewShotBlock
+                ? [`Voice reference only, not facts to repeat verbatim -- illustrative examples of how Claire actually talks: ${compiled.fewShotBlock}`]
+                : []),
               inventory.toPromptSection(),
             ].join(" "),
           },

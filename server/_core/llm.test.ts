@@ -90,7 +90,7 @@ describe("E — shared Anthropic LLM behavior", () => {
 
   it("fails closed with a typed error for unsupported roles and spend denial", async () => {
     await expect(
-      invokeTextLLM({ messages: [{ role: "assistant", content: "no" }] })
+      invokeTextLLM({ messages: [{ role: "tool", content: "no" }] })
     ).rejects.toMatchObject({
       name: "TextLLMInvocationError",
       code: "invalid_request",
@@ -100,5 +100,60 @@ describe("E — shared Anthropic LLM behavior", () => {
       invokeTextLLM({ messages: [{ role: "user", content: "hello" }] })
     ).rejects.toBeInstanceOf(TextLLMInvocationError);
     expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  // PR1 Claire Intelligence Repair: invokeTextLLM must support real
+  // alternating system/user/assistant history, not just a single user turn.
+  it("accepts assistant messages and preserves user/assistant order to the Anthropic adapter", async () => {
+    mocks.create.mockResolvedValue({
+      id: "msg-hist",
+      model: "claude-test",
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: "Continuing the thread." }],
+      usage: { input_tokens: 10, output_tokens: 4 },
+    });
+    await invokeTextLLM({
+      tenantId: "tenant-1",
+      messages: [
+        { role: "system", content: "System prompt" },
+        { role: "user", content: "turn 1 user" },
+        { role: "assistant", content: "turn 1 assistant" },
+        { role: "user", content: "turn 2 user" },
+      ],
+    });
+    const call = mocks.create.mock.calls[0][0];
+    expect(call.messages).toEqual([
+      { role: "user", content: "turn 1 user" },
+      { role: "assistant", content: "turn 1 assistant" },
+      { role: "user", content: "turn 2 user" },
+    ]);
+    expect(call.system).toBe("System prompt");
+  });
+
+  // A prior assistant hallucination is conversation history to the model,
+  // never re-injected as verified truth — this is enforced by the caller
+  // (Claire's fact inventory outranks prior text), but the transport layer
+  // must not silently collapse assistant turns into "user" or drop them.
+  it("does not merge or drop assistant turns when relaying multi-turn history", async () => {
+    mocks.create.mockResolvedValue({
+      id: "msg-hist-2",
+      model: "claude-test",
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: "ok" }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+    await invokeTextLLM({
+      messages: [
+        { role: "user", content: "u1" },
+        { role: "assistant", content: "a1 (unverified claim)" },
+        { role: "user", content: "u2" },
+        { role: "assistant", content: "a2" },
+        { role: "user", content: "u3" },
+      ],
+    });
+    const roles = mocks.create.mock.calls[0][0].messages.map(
+      (m: { role: string }) => m.role
+    );
+    expect(roles).toEqual(["user", "assistant", "user", "assistant", "user"]);
   });
 });

@@ -147,7 +147,14 @@ export type ClaireMode =
 
 export type ClaireModePolicy = {
   objective: string;
-  maxWords: number;
+  /**
+   * PR1 Claire Intelligence Repair follow-up: replaced the old hidden
+   * numeric `maxWords` cap (which was compiled straight into the prompt as
+   * "Keep it under N spoken words" regardless of what the question needed)
+   * with qualitative length guidance. Adaptive by design — concise by
+   * default, room to answer fully when the moment calls for it.
+   */
+  lengthGuidance: string;
   fieldOverride: boolean;
 };
 

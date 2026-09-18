@@ -1,0 +1,68 @@
+{
+  "note": "Static/config baseline pulled directly from git main (commit 188795d8's parent, i.e. main before this branch), not a live production log query and not a live conversational run. See README.md in this directory for exactly why, per corrective note B.",
+  "sourcedFrom": "git show main:server/claire/preDriveConversation.ts and git show main:server/claire/reasoning.ts, read at PR1 time",
+  "productionLogQuery": {
+    "attempted": true,
+    "result": "not available",
+    "reason": "No existing read-only production-log-query tooling was found in this repo/environment for claire_generation_logs. Per corrective note B, no fallback-rate or log-derived numbers are fabricated here."
+  },
+  "beforeConfig": {
+    "answerClairePreDriveFollowUp_follow_up": {
+      "maxTokens": 180,
+      "temperature": 0.1,
+      "hardCharCap": 520,
+      "wordCapInPrompt": 55,
+      "cannedAlwaysFallback": "I can only clarify today's field brief, so I won't guess beyond it. The brief is: {brief}",
+      "promptRestrictions": [
+        "The opening brief is advice derived before this turn; explain, simplify, restate, or apply only that advice.",
+        "Do not search, select, cite, or introduce sales doctrine, creators, frameworks, or any other outside knowledge.",
+        "Do not compute a new strategy — only interpret the one already given."
+      ],
+      "conversationHistoryTransport": "recentConversation serialized as JSON array inside a single user-role message; no assistant-role messages sent to Anthropic"
+    },
+    "writeClairePreDriveBrief_opening_brief": {
+      "maxTokens": 320,
+      "temperature": 0.15,
+      "hardCharCap": 900,
+      "sentenceCapInPrompt": 3,
+      "wordCapInPrompt": 70,
+      "promptRestrictions": [
+        "Speak naturally in no more than 3 concise sentences and never exceed 70 words."
+      ]
+    }
+  },
+  "afterConfig": {
+    "answerClairePreDriveFollowUp_follow_up": {
+      "maxTokens": 600,
+      "temperature": 0.6,
+      "hardCharCap": 1200,
+      "wordCapInPrompt": null,
+      "cannedAlwaysFallback": null,
+      "variedFallbackOnFailure": "Give me a second—ask me that once more. In the meantime, the brief is: {brief}",
+      "promptRestrictions": [
+        "Business-specific claims must be grounded in verified context or fact inventory, or say plainly unknown.",
+        "General professional knowledge is allowed and encouraged as clearly-framed advice, never asserted as fact."
+      ],
+      "conversationHistoryTransport": "recentTurns sent as real alternating user/assistant messages via invokeTextLLM, plus the compact JSON context payload as the final user turn"
+    },
+    "writeClairePreDriveBrief_opening_brief": {
+      "maxTokens": 500,
+      "temperature": 0.6,
+      "hardCharCap": null,
+      "sentenceBoundaryTrimAt": 1600,
+      "sentenceCapInPrompt": null,
+      "wordCapInPrompt": null,
+      "promptRestrictions": [
+        "Every business-specific factual clause must map to a supplied field or fact inventory, or say plainly unknown.",
+        "General professional/strategic knowledge may frame recommendation/reasoning, never asserted as fact."
+      ]
+    }
+  },
+  "mockedHarnessResult": {
+    "file": "after-pr1-metrics.json",
+    "totalTurns": 12,
+    "fellBackToDeterministicPath": 1,
+    "usedScriptedModelPath": 11,
+    "note": "The single fallback (category E, an unverified 'already sent' claim) is EXPECTED and CORRECT -- it proves assertPostGenerationStateVerbs still rejects an unsupported state-verb claim even with the widened token/temp budget."
+  }
+}
