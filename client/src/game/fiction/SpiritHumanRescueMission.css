@@ -14,7 +14,7 @@
 }
 
 .shr-environment,
-.shr-crusher,
+.shr-threat,
 .shr-captive,
 .shr-player {
   position: absolute;
@@ -29,34 +29,40 @@
   object-position: 50% 20%;
 }
 
-.shr-crusher {
-  top: -6%;
+.shr-threat {
+  top: 4%;
   left: 50%;
-  width: min(78%, 420px);
+  width: min(64%, 320px);
+  max-height: 45%;
+  object-fit: contain;
+  object-position: center top;
   transform: translateX(-50%);
   transform-origin: top center;
   transition: transform 120ms linear;
   z-index: 2;
+  filter: drop-shadow(0 12px 12px rgba(49, 24, 57, 0.32));
 }
 
 .shr-captive {
   left: 50%;
-  bottom: 28%;
-  width: min(34%, 180px);
-  transform: translateX(-50%);
-  z-index: 1;
+  top: 52%;
+  width: min(46%, 210px);
+  max-height: 31%;
+  object-fit: contain;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  filter: drop-shadow(0 10px 10px rgba(55, 38, 21, 0.28));
 }
 
 .shr-player {
-  left: 12%;
-  bottom: 22%;
-  width: 72px;
+  left: 8%;
+  bottom: 32%;
+  width: clamp(54px, 16vw, 72px);
   z-index: 3;
 }
 
 .shr-hud,
-.shr-panel,
-.shr-provisional {
+.shr-panel {
   position: relative;
   z-index: 4;
 }
@@ -97,14 +103,6 @@
   border-radius: 10px;
   border: 1px solid #c9ae72;
   background: #fff;
-}
-
-.shr-provisional {
-  margin: 6px 14px 0;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: #7a5a28;
 }
 
 .shr-panel {
@@ -163,7 +161,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .shr-crusher {
+  .shr-threat {
     transition: none;
   }
 }
