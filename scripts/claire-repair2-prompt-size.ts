@@ -17,6 +17,10 @@ import {
   CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION,
   VOICE_NATIVE_ANSWER_GUIDANCE,
 } from "../server/claire/conversationVoiceGuidance";
+import {
+  CLAIRE_STATIC_INSTRUCTION_BUDGET,
+  claireStaticInstructionChars,
+} from "../server/claire/promptDiet";
 
 const shared = {
   CLAIRE_V1_REASONING_POLICY,
@@ -69,6 +73,7 @@ async function measureAssembledFollowUp(): Promise<void> {
           console.log(`${String(section.chars).padStart(6)}  ${section.label}`);
         }
         console.log(`${String(size.totalChars).padStart(6)}  TOTAL`);
+        console.log(`${String(claireStaticInstructionChars(size.sections)).padStart(6)}  STATIC (budget ${CLAIRE_STATIC_INSTRUCTION_BUDGET})`);
       }) as never,
     }
   );
@@ -106,6 +111,7 @@ async function measureOpeningBrief(): Promise<void> {
           console.log(`${String(section.chars).padStart(6)}  ${section.label}`);
         }
         console.log(`${String(size.totalChars).padStart(6)}  TOTAL`);
+        console.log(`${String(claireStaticInstructionChars(size.sections)).padStart(6)}  STATIC (budget ${CLAIRE_STATIC_INSTRUCTION_BUDGET})`);
       }) as never,
     }
   );

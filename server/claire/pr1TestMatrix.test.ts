@@ -63,9 +63,8 @@ describe("PR1 test matrix (spec section 16)", () => {
       { invokeText: followInvoke, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     const followSystem = followInvoke.mock.calls[0][0].messages[0].content as string;
-    expect(followSystem).toContain(
-      "General professional knowledge — sales tactics, objection handling, property-manager dynamics, pricing concepts, negotiation, ops reasoning — is allowed and encouraged"
-    );
+    expect(followSystem).toContain("never asserted as a fact about this business");
+    expect(followSystem).toContain("do not import a sales model from a different industry");
   });
 
   it("6 — the prompt still requires business-specific claims to be grounded or admitted unknown", async () => {

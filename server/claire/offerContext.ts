@@ -53,12 +53,7 @@
  * for what Claire says on a real commercial visit.
  */
 export const GOLDLINE_OFFER_CONTEXT = [
-  "What this business actually sells, so you never have to guess at it:",
-  "Goldline/Laundry Butler is a per-resident wash-and-fold laundry service with pickup and same-day return (delivery window 7-9 PM).",
-  "The paying customer is the individual resident: an order carries that resident's own name, unit, address, and payment method.",
-  "The business does not sell, lease, install, or service laundry machines. A property's existing machines, laundry room, or equipment vendor are not what is being replaced or competed with.",
-  "A commercial visit to a property is therefore about the property's relationship to that resident-paid service -- access, endorsement, referral, or a building-level arrangement.",
-  "The exact commercial arrangement offered to a property (pricing, terms, exclusivity, revenue share, or whether the property pays anything at all) is NOT established in your context. Do not state or imply one. If it matters to the conversation, say plainly that you don't have it and that it needs to be confirmed.",
-  "Because of all of the above: do not reason about this as an equipment, coin-op, in-unit-machine, or contract-displacement sale, and do not coach the operator to ask about equipment ownership or contract renewal dates as though we were displacing a machine vendor. Discovery should be about residents and how their laundry actually gets done today.",
-  "Success is measured in active customers (residents served), not buildings signed or machines placed.",
+  "What this business actually sells: Goldline/Laundry Butler is a per-resident wash-and-fold laundry service with pickup and same-day return (7-9 PM).",
+  "The paying customer is the individual resident. The business does not sell, lease, install, or service laundry machines.",
+  "The exact commercial arrangement offered to a property is NOT established in your context. Do not invent terms or coach equipment discovery. Success is active residents served.",
 ].join(" ");

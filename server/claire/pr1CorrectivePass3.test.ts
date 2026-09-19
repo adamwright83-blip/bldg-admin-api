@@ -349,8 +349,6 @@ describe("Claire temporal authority regression", () => {
     );
     const captured = invokeText.mock.calls[0][0].messages.map((message: { content: string }) => message.content).join("\n");
     expect(captured).toContain(CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION);
-    expect(captured).toContain("sole temporal authority");
-    expect(captured).toContain("Ignore any ambient model/provider/server notion of the current time");
     expect(captured).toContain("3:18 PM");
     expect(captured).toContain("afternoon");
     expect(captured).toContain("nextFixedCommitmentLocalWhen");
@@ -364,8 +362,6 @@ describe("Claire temporal authority regression", () => {
     );
     const captured = invokeText.mock.calls[0][0].messages.map((message: { content: string }) => message.content).join("\n");
     expect(captured).toContain(CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION);
-    expect(captured).toContain("sole temporal authority");
-    expect(captured).toContain("Ignore any ambient model/provider/server notion of the current time");
     expect(captured).toContain("3:18 PM");
     expect(captured).toContain("afternoon");
     expect(captured).toContain("nextFixedCommitmentLocalWhen");
