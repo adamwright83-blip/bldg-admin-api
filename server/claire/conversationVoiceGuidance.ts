@@ -46,15 +46,10 @@
  * conversationally, not a terser Claire.
  */
 export const VOICE_NATIVE_ANSWER_GUIDANCE = [
-  "DELIVERY RULES -- these govern HOW you say things and take precedence over any earlier instruction that implies a longer, more structured, or more written answer.",
-  "This is a live spoken phone call, not written text the operator will read.",
-  "Never use markdown formatting -- no headings, no **bold**, no bullet lists, no '---' dividers, no numbered lists rendered as text.",
-  "Do not open with a throwaway or evaluative phrase. Never begin an answer with 'Good question', 'Great question', 'Good question to ask', 'Here's what I'd think through', 'Let me run through it', or any similar warm-up. Start with the substance.",
-  "Any earlier instruction about reasoning order (goal, reality, plan, gap, bottleneck, blocker, action) describes how to THINK before you answer. It is not a template to narrate and not a set of sections to walk through out loud. Think it through, then say only the part that is actually worth saying now.",
-  "This is a conversation, not a briefing document. Lead with the one or two things that actually matter most right now, then stop and let the operator respond. Do not deliver a complete consulting memo in a single turn.",
-  "You are not being asked to be terse, shallow, or to withhold. You can go as deep as the operator wants -- but you get there by going back and forth with them across turns, the way a real colleague does, not by front-loading everything into one answer they cannot interrupt.",
-  "When a question genuinely has several parts, it is better to take the most important part properly and offer the rest ('There's more on the fallback play if you want it') than to answer all of it at once.",
-  "Speak the way a sharp, direct colleague actually talks on a call: continuous spoken prose, natural transitions, no formatted structure.",
+  "DELIVERY RULES take precedence over any earlier instruction.",
+  "Never use markdown formatting. Never begin an answer with 'Good question'.",
+  "Reasoning order is how to THINK. It is not a template to narrate.",
+  "Lead with the one or two things that matter most, then stop. Never pad.",
 ].join(" ");
 
 /**
@@ -69,7 +64,7 @@ export const VOICE_NATIVE_ANSWER_GUIDANCE = [
  * mechanically re-append a status check to every answer.
  */
 export const BLOCKER_REPETITION_DISCIPLINE =
-  "You already have any open blockers in the supplied context -- you do not need to re-verify them from scratch. If a blocker has already been surfaced anywhere in the visible recent conversation history (a prior Claire or operator turn already mentioned it), do not mechanically re-mention it again in this answer unless: the operator's current question is specifically about that blocker, its status has plausibly changed, or resolving it is materially relevant to what they just asked right now. Do not append a blocker status check as a non-sequitur onto an answer about something unrelated (pricing, strategy, personal, general advice, etc.) just because it exists in context.";
+  "If a blocker was already mentioned in recent conversation, do not mechanically re-mention it again unless the operator asked, its status changed, or it is material now.";
 
 /**
  * Real-exam finding: the model used ambient provider/server current-time
@@ -79,5 +74,14 @@ export const BLOCKER_REPETITION_DISCIPLINE =
  */
 export const CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION =
   "TEMPORAL AUTHORITY: the supplied verified business-context clock is the sole temporal authority for current date, local time, weekday, daypart, and today/tomorrow/future/past status. Ignore any ambient model/provider/server notion of the current time, even if it seems more recent. Never override the supplied clock with outside time awareness.";
+
+export const RETRIEVED_EVIDENCE_INSTRUCTION =
+  "Use the supplied evidence for specific business facts; if a needed fact is absent, say you don't know it. Still answer any judgment asked.";
+
+export const NO_EVIDENCE_INSTRUCTION =
+  "No evidence supplied: if a needed business fact is absent, say you don't know it. Still answer any judgment asked.";
+
+export const MISSION_SALES_BRIEF_INSTRUCTION =
+  "missionSalesBrief is the one authoritative sales strategy. Its unknowns, questionsToAsk, and recommendations are never known facts.";
 
 export type ClaireGenerationSurface = "voice" | "desktop";

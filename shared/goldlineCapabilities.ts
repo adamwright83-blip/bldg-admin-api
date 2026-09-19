@@ -109,11 +109,11 @@ export function formatCapabilityBriefing(
     .filter(item => item.status === "UNSUPPORTED" || item.status === "PENDING_IMPLEMENTATION")
     .map(item => item.id);
   return [
-    `Supported Goldline capabilities: ${supported.join(", ") || "none"}.`,
+    `Supported: ${supported.join(", ") || "none"}.`,
     unsupported.length
-      ? `Not yet supported: ${unsupported.join(", ")}. If the operator asks for one of these, say so plainly and offer to send it to engineering. Do not pretend it happened.`
+      ? `Not yet supported: ${unsupported.join(", ")}. If asked, say so and offer engineering; never pretend.`
       : "",
-    "The registry is authoritative. Do not invent an action Goldline cannot perform.",
+    "The registry is authoritative.",
   ]
     .filter(Boolean)
     .join(" ");
