@@ -37,6 +37,7 @@ import { ENV } from "../_core/env";
 import { claireModelAcceptsSampling, claireModelDefaultsToThinking, claireModelId } from "./claireModel";
 import { previewClairePreDrive } from "./preDriveRuntime";
 import { listClaireAnswerPathDetail, summarizeClaireAnswerPaths } from "./character/generationLog";
+import { arbitrateClaireRepair2 } from "./repair2SliceG";
 import { claireRepair2FlagName, isClaireRepair2Enabled } from "./repair2Flags";
 import { setActiveMacroGoal } from "./macroGoalService";
 import {
@@ -654,6 +655,9 @@ export const claireRouter = router({
         const turns = distribution.filter(predicate).reduce((sum, row) => sum + row.turns, 0);
         return { turns, share: totalTurns ? turns / totalTurns : 0 };
       };
+      const reachedFollowUpModel = share(row => row.answerPath === "follow_up_model");
+      const rendererProse = share(row => row.rendererProse === true);
+      const fallbacks = share(row => row.answerPath === "fallback");
       return {
         telemetryEnabled: isClaireRepair2Enabled("a_routing_telemetry", ctx.tenantId),
         flag: claireRepair2FlagName("a_routing_telemetry"),
@@ -661,10 +665,17 @@ export const claireRouter = router({
         totalTurns,
         distribution,
         recent,
-        rendererProse: share(row => row.rendererProse === true),
-        reachedFollowUpModel: share(row => row.answerPath === "follow_up_model"),
+        rendererProse,
+        reachedFollowUpModel,
         neverReachedFollowUpModel: share(row => row.answerPath !== "follow_up_model"),
-        fallbacks: share(row => row.answerPath === "fallback"),
+        fallbacks,
+        sliceG: arbitrateClaireRepair2({
+          windowDays: input.days,
+          totalTurns,
+          reachedFollowUpModelShare: reachedFollowUpModel.share,
+          rendererProseShare: rendererProse.share,
+          fallbackShare: fallbacks.share,
+        }),
         model: {
           // Read from the running process, so this reports production's own
           // configuration rather than what a config file says it should be.

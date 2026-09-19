@@ -115,9 +115,9 @@ Full spec: `docs/goldline/FICTION_PACKS.md` (binding). Campaign truth stays belo
 - [claude] Field Moves needs a deliberate new candidate kind for a standing residential grid — `FieldTodayItemKind` has no such kind today and `rankFieldMoves` has no ranking path for one. Not a free integration.
 
 ## In Progress
-- [cursor] Claire Intelligence Repair Part 2, Slice C+D corrective pass — PR #174, branch `claude/claire-repair2-slice-cd`. Regex (`JUDGMENT_CLAUSE` / `classifyClaireAnswerClass`) is telemetry-only. Live routing is `decideClaireAnswerRoute` plus encyclopedia `fullyAnswers`. Do not merge until reviewed. Do not begin Slice E.
-- [claude] Jawbreaker / Gumball → Goldline customer truth repair — dedicated branch `claude/jawbreaker-customer-truth` off `8bab561`. PR #175. Imported CleanCloud paid orders feed unified canonical history for Geographic Truth **and** StrategyEngine / admin customer aggregates. Identity cascade (persistence-compatibility order, not strength) is phone → bldgUserId → email → CleanCloud customer ID → unit-qualified verified address; union-find joins all aliases. Economic revisions ignore identity metadata. Churn Radar / recovery / lantern-city churn snapshots remain native-`orders`-only by design this PR — next sidebench item, do not describe those surfaces as unified. Do not merge until reviewed.
-
+- [cursor] Claire Intelligence Repair Part 2, Slice G — live arbiter. Branch `cursor/claire-repair2-slice-g`. Reports follow-up/renderer/fallback shares only after 7 days and 50 attributed turns. Refuses to declare the program a success without that data. Do not merge until reviewed.
+- [cursor] Claire Intelligence Repair Part 2, Slice F — voice dead air. PR #178. Do not merge until reviewed.
+- [cursor] Claire Intelligence Repair Part 2, Slice E — prompt diet. PR #176. Do not merge until reviewed.
 - [cursor] JOYSTICK Spirit Human rescue vertical — dormant customer → frozen mission → playable pressure encounter → explicit approve/send → Twilio `provider_accepted` receipt rescues the villager. Branch `cursor/joystick-spirit-human-rescue` off `9ce811c`. Handoff: `docs/goldline/JOYSTICK_SPIRIT_HUMAN_RESCUE_HANDOFF.md`. Do not merge until reviewed. Do not send a real customer message without Adam's exact authorization. Independent of Claire #161 and the xAI branch.
 - [cursor] Claire owns the workday (shared-brain operating loop + Driver surface retirement + play runtime reconciliation) — starts from current main after Claire V1. Program: `docs/goldline/CLAIRE_OWNS_WORKDAY_LEDGER.md`. No second Claire, no Sage, no second task DB, no new migration unless later slices force a stop.
 
@@ -125,6 +125,8 @@ Full spec: `docs/goldline/FICTION_PACKS.md` (binding). Campaign truth stays belo
 - [chatgpt] Design Companion 2's agentic power — blocked on Kingdom 3 definition, power must make K3 genuinely require it
 
 ## Done
+- [cursor] Claire Intelligence Repair Part 2, Slice C+D — retrieval ≠ answer. Merged PR #174 / `c96e99e`.
+- [claude] Jawbreaker / Gumball → Goldline customer truth repair. Merged PR #175 / `fec0627`.
 - [cursor] Wire the 8 approved BIO CONTAINMENT mission images into the mobile Campaign Run / Fiction Pack experience. Merged PR #162 / `9ce811ce65bc92c26e228fa79c6f6e854c418f2d`. Assets remain byte-identical; Clockhead comms and ENTER FIELD persistence are presentation-only.
 - [cursor] Behavioral-science Slice 6 — Claire relationship / safe longitudinal history. Merged PR #159 / `ba294db7`. Handoff: `docs/goldline/SLICE_6_HANDOFF.md`.
 - [cursor] Behavioral-science Slice 5 — randomized learning / MRT decision points. Merged PR #158 / `6251551c`. Handoff: `docs/goldline/SLICE_5_HANDOFF.md`. Policy disabled unless `GOLDLINE_BEHAVIORAL_MRT=1`.
