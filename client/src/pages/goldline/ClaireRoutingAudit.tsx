@@ -124,6 +124,23 @@ export default function ClaireRoutingAudit() {
           </section>
 
           <section style={{ marginBottom: 24 }}>
+            <h2>Slice G arbiter</h2>
+            {audit.data.sliceG.status === "insufficient_data" ? (
+              <p style={{ padding: 12, border: "1px solid currentColor", borderRadius: 6 }}>
+                Not ready to compare. {audit.data.sliceG.reason} Slice A said this
+                gate needs a week of production rows with the routing-telemetry
+                flag on. The page will not invent a verdict.
+              </p>
+            ) : (
+              <ul>
+                {audit.data.sliceG.observations.map(line => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section style={{ marginBottom: 24 }}>
             <h2>Headline ({total} turns)</h2>
             <ul>
               <li>
