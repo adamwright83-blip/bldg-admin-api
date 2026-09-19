@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildAdminCustomerAggregatesFromTruth,
   buildAdminCustomerAggregatesInMemory,
   normalizeOrderRowFromDb,
 } from "./adminCustomerAggregate";
+import { mergeCustomerOrderTruth } from "./geography/customerOrderTruth";
 
 const base = {
   email: null as string | null,
@@ -130,5 +132,80 @@ describe("buildAdminCustomerAggregatesInMemory", () => {
     const [agg] = buildAdminCustomerAggregatesInMemory(rows);
     expect(agg.lastOrderId).toBe(11);
     expect(agg.firstName).toBe("");
+  });
+});
+
+describe("buildAdminCustomerAggregatesFromTruth", () => {
+  it("includes CleanCloud-only customers without dumping their cents into Stripe spend", () => {
+    const records = mergeCustomerOrderTruth({
+      cleancloud: [
+        {
+          cleancloudOrderId: "1",
+          cleancloudCustomerId: "7",
+          sourceReportType: "orders_sales",
+          customerName: "Farm Guest",
+          customerPhone: "3105550199",
+          address: "2170 Century Park East",
+          placedAtUtc: new Date("2026-08-20T07:00:00.000Z"),
+          paymentDateUtc: new Date("2026-09-02T07:00:00.000Z"),
+          buildingResolutionStatus: "resolved",
+          buildingSlug: "centuryparkeast",
+          paid: true,
+          totalCents: 5100,
+        },
+      ],
+    });
+    const [agg] = buildAdminCustomerAggregatesFromTruth("tenant-a", records);
+    expect(agg.totalOrders).toBe(1);
+    expect(agg.paidOrderCount).toBe(1);
+    expect(agg.lifetimeSpend).toBe(0);
+    expect(agg.lastOrderId).toBe(0);
+    expect(agg.sources).toEqual(["cleancloud"]);
+    expect(agg.lastSourceOrderId).toBe("cleancloud:1");
+    expect(agg.lastOrderAt.toISOString()).toBe("2026-08-20T07:00:00.000Z");
+  });
+
+  it("keeps native Stripe spend and adds CleanCloud history on the same phone", () => {
+    const records = mergeCustomerOrderTruth({
+      native: [
+        {
+          id: 44,
+          status: "delivered",
+          createdAt: new Date("2026-07-01T12:00:00.000Z"),
+          firstName: "Ada",
+          lastName: "L",
+          phone: "3105550199",
+          email: null,
+          address: "2170 Century Park East",
+          unit: "8",
+          buildingSlug: "centuryparkeast",
+          bldgUserId: null,
+          paid: true,
+          total: "40.00",
+        },
+      ],
+      cleancloud: [
+        {
+          cleancloudOrderId: "1",
+          cleancloudCustomerId: "7",
+          sourceReportType: "orders_sales",
+          customerName: "Ada L",
+          customerPhone: "3105550199",
+          address: "2170 Century Park East",
+          placedAtUtc: new Date("2026-08-20T07:00:00.000Z"),
+          paymentDateUtc: new Date("2026-09-02T07:00:00.000Z"),
+          buildingResolutionStatus: "resolved",
+          buildingSlug: "centuryparkeast",
+          paid: true,
+          totalCents: 5100,
+        },
+      ],
+    });
+    const [agg] = buildAdminCustomerAggregatesFromTruth("tenant-a", records);
+    expect(agg.totalOrders).toBe(2);
+    expect(agg.paidOrderCount).toBe(2);
+    expect(agg.lifetimeSpend).toBe(40);
+    expect(agg.lastOrderId).toBe(44);
+    expect(agg.sources?.sort()).toEqual(["cleancloud", "laundry_butler"]);
   });
 });

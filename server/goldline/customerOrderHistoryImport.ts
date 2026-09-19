@@ -463,10 +463,9 @@ export async function importCustomerOrderHistory(input: {
     for (const order of refreshedOrders) {
       const meta = readImportMetadata(order.heldMetadataJson);
       if (!meta) continue;
-      customerIdToIdentity.set(
-        meta.cleancloudCustomerId,
-        customerIdentityHash(input.tenantId, order)
-      );
+      const hash = customerIdentityHash(input.tenantId, order);
+      if (!hash) continue;
+      customerIdToIdentity.set(meta.cleancloudCustomerId, hash);
     }
 
     type Cluster = {

@@ -3,6 +3,7 @@ import {
   customerIdentityHash,
   customerIdentityHashes,
   groupCustomerRecords,
+  identityCandidateKeys,
   legacyCustomerIdentityHash,
   rawCustomerIdentityKey,
 } from "./customerIdentity";
@@ -54,9 +55,42 @@ describe("customer asset identity", () => {
     expect(customerIdentityHash("tenant-a", input)).not.toBe(
       legacyCustomerIdentityHash("tenant-a", input)
     );
-    expect(customerIdentityHashes("tenant-a", input)).toEqual([
-      customerIdentityHash("tenant-a", input),
-      legacyCustomerIdentityHash("tenant-a", input),
+    const hashes = customerIdentityHashes("tenant-a", input);
+    expect(hashes[0]).toBe(customerIdentityHash("tenant-a", input));
+    expect(hashes).toContain(legacyCustomerIdentityHash("tenant-a", input));
+    expect(identityCandidateKeys(input)).toEqual([
+      "bldg-user:42",
+      "email:ada@example.com",
+    ]);
+  });
+
+  it("does not hash an empty identity and share it across unidentified rows", () => {
+    const missing = {
+      firstName: "Anonymous",
+      allowNameComposite: false as const,
+    };
+    const other = {
+      firstName: "Someone Else",
+      allowNameComposite: false as const,
+    };
+    expect(rawCustomerIdentityKey(missing)).toBe("");
+    expect(customerIdentityHash("tenant-a", missing)).toBeNull();
+    expect(customerIdentityHash("tenant-a", other)).toBeNull();
+    expect(customerIdentityHashes("tenant-a", missing)).toEqual([]);
+
+    const groups = groupCustomerRecords(
+      "tenant-a",
+      [
+        { id: "a", ...missing },
+        { id: "b", ...other },
+      ],
+      row => row,
+      row => `unidentified:cleancloud:${row.id}`
+    );
+    expect(groups).toHaveLength(2);
+    expect(groups.map(group => group.key).sort()).toEqual([
+      "unidentified:cleancloud:a",
+      "unidentified:cleancloud:b",
     ]);
   });
 
@@ -89,5 +123,43 @@ describe("customer asset identity", () => {
     expect(groups).toHaveLength(1);
     expect(groups[0]?.records.map(row => row.id)).toEqual([1, 2]);
     expect(groups[0]?.key).toBe(customerIdentityHash("tenant-a", records[0]!));
+  });
+
+  it("joins CleanCloud history by customer id, never by display name alone", () => {
+    const records = [
+      {
+        cleancloudCustomerId: "7",
+        firstName: "Example",
+        lastName: "",
+        phone: "",
+        email: "",
+        allowNameComposite: false as const,
+      },
+      {
+        cleancloudCustomerId: "7",
+        firstName: "Renamed",
+        lastName: "Person",
+        phone: "",
+        email: "",
+        allowNameComposite: false as const,
+      },
+      {
+        cleancloudCustomerId: "8",
+        firstName: "Example",
+        lastName: "",
+        phone: "",
+        email: "",
+        allowNameComposite: false as const,
+      },
+    ];
+    const groups = groupCustomerRecords("tenant-a", records, row => row);
+    expect(groups).toHaveLength(2);
+    expect(groups.map(group => group.records.length).sort()).toEqual([1, 2]);
+    expect(
+      identityCandidateKeys({
+        firstName: "Example",
+        allowNameComposite: false,
+      })
+    ).toEqual([]);
   });
 });

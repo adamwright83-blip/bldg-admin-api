@@ -1,32 +1,23 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { formatInTimeZone } from "date-fns-tz";
 import {
   commercialAccountLocations,
   commercialAccounts,
   commercialPipelineRecords,
   entityLocations,
-  orders,
 } from "../../drizzle/schema";
 import { BUILDINGS, matchBuilding } from "../../shared/buildings";
-import { computeRecencyStatus } from "../../shared/customerStatus";
-import {
-  inferCustomerCadence,
-  projectLatLngToLanternAtlas,
-  type LanternState,
-} from "../../shared/lanternCity";
-import {
-  customerIdentityHash,
-  groupCustomerRecords,
-} from "../customerAssets/customerIdentity";
+import { projectLatLngToLanternAtlas } from "../../shared/lanternCity";
 import { getDashboardTimeZone, zonedYmd } from "../dashboardZoned";
 import { getDb } from "../db";
 import { GoogleGeocoder } from "./googleGeocoder";
-import {
-  GoogleAddressValidationService,
-  type AddressValidationResult,
-} from "../google/googleAddressValidationService";
+import { GoogleAddressValidationService } from "../google/googleAddressValidationService";
 import { ENV } from "../_core/env";
+import { queryOptionalMysqlTable } from "../mysqlErrors";
+import {
+  loadCustomerGroups,
+  projectGeographicCustomers,
+} from "./customerOrderTruth";
 
 export type GeographicEntityType =
   | "customer"
@@ -255,26 +246,6 @@ export function selectAuthoritativeCustomerOrder<
   )[0]!;
 }
 
-async function loadCustomerGroups(tenantId: string) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const rows = await db
-    .select()
-    .from(orders)
-    .where(eq(orders.tenantId, tenantId));
-  const qualifying = rows.filter(row => row.status !== "cancelled");
-  qualifying.sort(
-    (left, right) =>
-      left.createdAt.getTime() - right.createdAt.getTime() || left.id - right.id
-  );
-  return new Map(
-    groupCustomerRecords(tenantId, qualifying, order => order).map(group => [
-      group.key,
-      group.records,
-    ])
-  );
-}
-
 async function discoverEntities(tenantId: string): Promise<DiscoveredEntity[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -294,40 +265,42 @@ async function discoverEntities(tenantId: string): Promise<DiscoveredEntity[]> {
       sourceAddress: building.defaultAddress!,
     })
   );
-  const prospects = await db
-    .select({
-      accountId: commercialAccounts.id,
-      locationId: commercialAccountLocations.id,
-      address: commercialAccountLocations.address,
-      latitude: commercialAccountLocations.latitude,
-      longitude: commercialAccountLocations.longitude,
-      isPrimary: commercialAccountLocations.isPrimary,
-      locationUpdatedAt: commercialAccountLocations.updatedAt,
-    })
-    .from(commercialPipelineRecords)
-    .innerJoin(
-      commercialAccounts,
-      and(
-        eq(commercialAccounts.tenantId, tenantId),
-        eq(commercialAccounts.id, commercialPipelineRecords.accountId)
-      )
-    )
-    .innerJoin(
-      commercialAccountLocations,
-      and(
-        eq(commercialAccountLocations.tenantId, tenantId),
-        eq(commercialAccountLocations.accountId, commercialAccounts.id)
-      )
-    )
-    .where(
-      and(
-        eq(commercialPipelineRecords.tenantId, tenantId),
-        inArray(
-          commercialPipelineRecords.stage,
-          ACTIVE_COMMERCIAL_PIPELINE_STAGES
+  const prospects = await queryOptionalMysqlTable(() =>
+    db
+      .select({
+        accountId: commercialAccounts.id,
+        locationId: commercialAccountLocations.id,
+        address: commercialAccountLocations.address,
+        latitude: commercialAccountLocations.latitude,
+        longitude: commercialAccountLocations.longitude,
+        isPrimary: commercialAccountLocations.isPrimary,
+        locationUpdatedAt: commercialAccountLocations.updatedAt,
+      })
+      .from(commercialPipelineRecords)
+      .innerJoin(
+        commercialAccounts,
+        and(
+          eq(commercialAccounts.tenantId, tenantId),
+          eq(commercialAccounts.id, commercialPipelineRecords.accountId)
         )
       )
-    );
+      .innerJoin(
+        commercialAccountLocations,
+        and(
+          eq(commercialAccountLocations.tenantId, tenantId),
+          eq(commercialAccountLocations.accountId, commercialAccounts.id)
+        )
+      )
+      .where(
+        and(
+          eq(commercialPipelineRecords.tenantId, tenantId),
+          inArray(
+            commercialPipelineRecords.stage,
+            ACTIVE_COMMERCIAL_PIPELINE_STAGES
+          )
+        )
+      )
+  );
   return [
     ...customers,
     ...buildings,
@@ -587,14 +560,6 @@ export async function geocodePendingLocations(input: {
   };
 }
 
-function sparseFallback(
-  status: ReturnType<typeof computeRecencyStatus>
-): LanternState {
-  if (status === "lapsed") return "dark";
-  if (status === "cooling") return "dimming";
-  return "active";
-}
-
 export async function getGeographicTruth(input: {
   tenantId: string;
   now?: Date;
@@ -611,86 +576,46 @@ export async function getGeographicTruth(input: {
       .from(entityLocations)
       .where(eq(entityLocations.tenantId, input.tenantId)),
     loadCustomerGroups(input.tenantId),
-    db
-      .select({
-        id: commercialPipelineRecords.id,
-        stage: commercialPipelineRecords.stage,
-        updatedAt: commercialPipelineRecords.updatedAt,
-        accountId: commercialAccounts.id,
-        name: commercialAccounts.name,
-      })
-      .from(commercialPipelineRecords)
-      .innerJoin(
-        commercialAccounts,
-        and(
-          eq(commercialAccounts.tenantId, input.tenantId),
-          eq(commercialAccounts.id, commercialPipelineRecords.accountId)
-        )
-      )
-      .where(
-        and(
-          eq(commercialPipelineRecords.tenantId, input.tenantId),
-          inArray(
-            commercialPipelineRecords.stage,
-            ACTIVE_COMMERCIAL_PIPELINE_STAGES
+    queryOptionalMysqlTable(() =>
+      db
+        .select({
+          id: commercialPipelineRecords.id,
+          stage: commercialPipelineRecords.stage,
+          updatedAt: commercialPipelineRecords.updatedAt,
+          accountId: commercialAccounts.id,
+          name: commercialAccounts.name,
+        })
+        .from(commercialPipelineRecords)
+        .innerJoin(
+          commercialAccounts,
+          and(
+            eq(commercialAccounts.tenantId, input.tenantId),
+            eq(commercialAccounts.id, commercialPipelineRecords.accountId)
           )
         )
-      )
-      .orderBy(
-        desc(commercialPipelineRecords.updatedAt),
-        desc(commercialPipelineRecords.id)
-      ),
+        .where(
+          and(
+            eq(commercialPipelineRecords.tenantId, input.tenantId),
+            inArray(
+              commercialPipelineRecords.stage,
+              ACTIVE_COMMERCIAL_PIPELINE_STAGES
+            )
+          )
+        )
+        .orderBy(
+          desc(commercialPipelineRecords.updatedAt),
+          desc(commercialPipelineRecords.id)
+        )
+    ),
   ]);
   const locationMap = new Map(
     locations.map(row => [`${row.entityType}:${row.entityKey}`, row])
   );
-  const customers = Array.from(groups.entries()).map(([identityKey, group]) => {
-    const sorted = [...group].sort(
-      (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id - b.id
-    );
-    const latest = sorted.at(-1)!;
-    const recency = computeRecencyStatus({
-      totalOrders: sorted.length,
-      firstOrderAt: sorted[0]!.createdAt,
-      lastOrderAt: latest.createdAt,
-    });
-    const cadence = inferCustomerCadence({
-      qualifyingOrderDates: sorted.map(order =>
-        formatInTimeZone(order.createdAt, timeZone, "yyyy-MM-dd")
-      ),
-      today,
-      sparseFallback: sparseFallback(recency),
-    });
-    const location = locationMap.get(`customer:${identityKey}`);
-    const latitude =
-      location?.latitude == null ? null : Number(location.latitude);
-    const longitude =
-      location?.longitude == null ? null : Number(location.longitude);
-    return {
-      identityKey,
-      phone: latest.phone,
-      displayName:
-        `${latest.firstName} ${latest.lastName}`.trim() ||
-        "Customer name unavailable",
-      address: location?.sourceAddress ?? latest.address,
-      unit: latest.unit,
-      cadence,
-      totalOrders: sorted.length,
-      firstOrderAt: sorted[0]!.createdAt.toISOString(),
-      lastOrderAt: latest.createdAt.toISOString(),
-      location:
-        latitude != null &&
-        longitude != null &&
-        location?.geocodeStatus === "success"
-          ? {
-              latitude,
-              longitude,
-              canonicalAddress: location.canonicalAddress,
-              ...projectLatLngToLanternAtlas({ latitude, longitude }),
-            }
-          : null,
-      geocodeStatus: location?.geocodeStatus ?? "pending",
-    };
+  const customers = projectGeographicCustomers({
+    groups,
+    locationMap,
+    timeZone,
+    today,
   });
   const pursued = deduplicatePursuedPipelineRows(pipeline)
     .slice(0, 250)
