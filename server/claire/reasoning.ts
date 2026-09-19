@@ -27,6 +27,8 @@ import {
   VOICE_NATIVE_ANSWER_GUIDANCE,
 } from "./conversationVoiceGuidance";
 import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
+import { assertNoUnauthorizedClaireBiography, makeBiographyVerifier, type BiographyVerifier } from "./progression/generalBiographyBoundary";
+import { isClaireProgressionEnabled } from "./progression/progressionFlag";
 import { measureClairePromptSections } from "./answerPathTelemetry";
 
 /**
@@ -251,6 +253,25 @@ export function conservativeDebriefFallback(
   };
 }
 
+/**
+ * Progression ON: no generated Claire speech on ANY path may establish new Claire biography. Throws into
+ * each site's existing deterministic-fallback handling, so a rejection never regenerates and never speaks.
+ */
+async function enforceClaireBiographyBoundary(input: {
+  tenantId: string;
+  text: string;
+  allowedFacts: readonly string[];
+  invokeText: typeof invokeTextLLM;
+  verifier?: BiographyVerifier;
+}): Promise<void> {
+  if (!isClaireProgressionEnabled(input.tenantId)) return;
+  await assertNoUnauthorizedClaireBiography({
+    text: input.text,
+    allowedFacts: input.allowedFacts,
+    verify: input.verifier ?? makeBiographyVerifier(input.invokeText, input.tenantId),
+  });
+}
+
 export async function writeClairePreDriveBrief(
   input: {
     tenantId: string;
@@ -260,6 +281,8 @@ export async function writeClairePreDriveBrief(
   dependencies: {
     invokeText?: typeof invokeTextLLM;
     recordGeneration?: typeof recordClaireGeneration;
+    /** Test seam for the general-answer biography verifier. */
+    biographyVerifier?: BiographyVerifier;
   } = {}
 ): Promise<string> {
   const fallback = (() => {
@@ -362,6 +385,7 @@ export async function writeClairePreDriveBrief(
     const trimmedToSentenceBoundary = trimmed !== text;
 
     assertPostGenerationStateVerbs(trimmed, inventory);
+    await enforceClaireBiographyBoundary({ tenantId: input.tenantId, text: trimmed, allowedFacts: compiled.eligibleCanonFacts, invokeText, verifier: dependencies.biographyVerifier });
 
     // Guardrail G2 post-generation lint
     const disappointmentCheck = lintDisappointmentFraming(trimmed);
@@ -503,6 +527,8 @@ export async function writeClairePostStopOpening(
   dependencies: {
     invokeText?: typeof invokeTextLLM;
     recordGeneration?: typeof recordClaireGeneration;
+    /** Test seam for the general-answer biography verifier. */
+    biographyVerifier?: BiographyVerifier;
   } = {}
 ): Promise<string> {
   const fallback = `You're clear of ${input.accountName}. Tell me what actually happened. I won't mark anything won, lost, or followed up unless you say it.`;
@@ -544,6 +570,7 @@ export async function writeClairePostStopOpening(
     ).trim();
     if (text) {
       assertPostGenerationStateVerbs(text, inventory);
+      await enforceClaireBiographyBoundary({ tenantId: input.tenantId, text, allowedFacts: compiled.eligibleCanonFacts, invokeText, verifier: dependencies.biographyVerifier });
     }
     const result = text || fallback;
     await recordGeneration({
@@ -604,6 +631,8 @@ export async function writeClaireOutcomeConfirmation(
   dependencies: {
     invokeText?: typeof invokeTextLLM;
     recordGeneration?: typeof recordClaireGeneration;
+    /** Test seam for the general-answer biography verifier. */
+    biographyVerifier?: BiographyVerifier;
   } = {}
 ): Promise<string> {
   const fallback = `Confirmed. I saved ${input.outcomeLabel} and left anything you didn't report unresolved.`;
@@ -664,6 +693,7 @@ export async function writeClaireOutcomeConfirmation(
     ).trim();
     if (text) {
       assertPostGenerationStateVerbs(text, inventory);
+      await enforceClaireBiographyBoundary({ tenantId: input.tenantId, text, allowedFacts: compiled.eligibleCanonFacts, invokeText, verifier: dependencies.biographyVerifier });
     }
     const result = text || fallback;
     await recordGeneration({

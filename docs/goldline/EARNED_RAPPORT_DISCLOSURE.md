@@ -71,8 +71,14 @@ the in-memory store, and the database upsert (`GREATEST`). Stricter thresholds n
 
 - With the flag ON, any Claire-directed personal or life-history question (`isPersonalQuestionAboutClaire`, incl. "have you ever", "what happened to you", "your first job") routes to the guarded controller. A known topic
   maps to canon fragments; an unknown personal topic is an approved decline. It never falls through to unrestricted generation.
-- Defense in depth: on every non-personal answer, first-person biography that is not an authorized core fact is replaced
-  by an approved decline.
+- **General-answer biography boundary (semantic, fail-closed).** Outside the guarded controller the model may never establish
+  Claire biography. Structural detection (`generalBiographyBoundary.ts`; closed-class grammar only, no biography vocabulary)
+  finds sentences that could assert Claire-self/history: first person (I / my / mine / myself, or first-person plural with a
+  past/aspect marker), except forward-looking modal lines ("I'd start with the pilot") and opinion frames ("My recommendation
+  is…") with no past/aspect marker. No candidate => no model call. Candidates only are sent to a one-word verifier given the
+  authorized facts; anything but `CLEAN` (BIOGRAPHY, garbage, error, or a 2.5s timeout) rejects. A rejection is replaced by
+  the existing conservative fallback and never regenerated. Applied at every speech-producing site: follow-up, opening brief,
+  post-stop opening, outcome confirmation, encyclopedia rewrite. Flag OFF: none of it runs.
 - **Entailment.** Every biographical proposition in a reveal must be supported by the authorized fragment or facts already
   disclosed to this operator. Layer 1 (deterministic) rejects claim-family words (family, emotion, personality, chronology,
   causality, frequency, events) absent from the authorized facts and any single distinctive word borrowed from another
@@ -91,9 +97,12 @@ the in-memory store, and the database upsert (`GREATEST`). Stricter thresholds n
 `CLAIRE_PROGRESSION="tenantA,tenantB"` (or `*`) turns the mechanic on per tenant. In production it ALSO requires
 `CLAIRE_PROGRESSION_CONTINUITY_REVIEWED=1`. Outside production it defaults ON so tests/local exercise it. While OFF,
 Claire behaves exactly as before: tier-based canon, the previous personal-answer recovery, no progression hooks in the
-turn path. (Evidence recording is passive and additive; it is always on and changes no behavior.)
+turn path. Evidence recording is additive and always on, and it is NOT inert: a confirmed visit also syncs canonical order truth and refreshes the
+grant, so rapport band, rung, cursor, entitlements and ledger rows accumulate DORMANT while the flag is OFF. They cannot change
+Claire's behavior until enabled, but the new tables are not empty at activation. `scripts/claire-progression-continuity-report.ts`
+reports them.
 
-**Continuity decision table** — the new tables start empty while legacy relationship state already exists:
+**Continuity decision table** — legacy relationship state exists AND the new tables may already hold dormant progression:
 
 | Legacy state | On enable | Notes |
 |---|---|---|
@@ -102,8 +111,9 @@ turn path. (Evidence recording is passive and additive; it is always on and chan
 | `claire_relationship_events` (incl. attested disclosures) | untouched, still feed disclosure safety | |
 | rapport | recomputed from verified field-visit evidence going forward | |
 
-Default is an **intentional reset**. Do not backfill by guessing; if a human wants specific operators carried over,
-that is a deliberate production data write with its own review (none is performed by this PR).
+The report (read-only) shows both, per operator, and whether dormant progression would become active on enable. It chooses none of
+the three options: **preserve** the accumulated new progression, **reset** it, or **migrate/reconcile** deliberately. Any reset or
+carry-over is a deliberate production data write with its own review; nothing here performs one.
 
 ## What is deliberately NOT built (human-only)
 

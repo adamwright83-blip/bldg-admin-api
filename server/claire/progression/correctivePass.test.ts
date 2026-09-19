@@ -87,7 +87,7 @@ describe("1. personal routing fails closed", () => {
         { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined), progressionStore: createInMemoryProgressionStore() }
       );
       expect(reply).not.toMatch(/Lyon|brother|kid/);
-      expect(AUTHORED_DIALOGUE.map(l => l.text)).toContain(reply);
+      expect(reply).toMatch(/Give me a second|brief/i); // conservative business fallback
     }
   });
 

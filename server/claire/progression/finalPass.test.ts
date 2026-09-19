@@ -123,7 +123,7 @@ describe("3. Claire's general model can never create Claire history", () => {
         { invokeText: vi.fn().mockResolvedValue(`Lead with the pilot. ${invented}`), recordGeneration: vi.fn().mockResolvedValue(undefined), progressionStore: createInMemoryProgressionStore() }
       );
       expect(reply).not.toMatch(/broke|museum|bakery|died/);
-      expect(AUTHORED_DIALOGUE.map(l => l.text)).toContain(reply);
+      expect(reply).toMatch(/Give me a second|brief/i); // conservative business fallback
     }
   );
 
