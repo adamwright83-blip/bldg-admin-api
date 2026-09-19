@@ -31,6 +31,7 @@
     "dayforge:demo:reset": "tsx scripts/dayforge-demo-reset.ts",
     "dayforge:demo:verify": "tsx scripts/dayforge-demo-verify.ts",
     "dayforge:migrations:verify": "tsx scripts/dayforge-migrations-verify.ts",
+    "xai:realtime:smoke-test": "tsx scripts/xai-realtime-smoke-test.ts",
     "goldline:bundle:budget": "node scripts/checkGoldlineBundleBudget.mjs",
     "goldline:import:customer-orders": "tsx scripts/import-goldline-customer-order-history.ts",
     "goldline:import:customer-ledger": "tsx scripts/goldline-customer-order-ledger.ts",
@@ -123,6 +124,7 @@
     "twilio": "^5.12.1",
     "vaul": "^1.1.2",
     "wouter": "^3.3.5",
+    "ws": "^8.21.0",
     "xlsx": "^0.18.5",
     "zod": "^4.1.12"
   },
@@ -138,6 +140,7 @@
     "@types/node": "^24.7.0",
     "@types/react": "^19.2.1",
     "@types/react-dom": "^19.2.1",
+    "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^5.0.4",
     "add": "^2.0.6",
     "autoprefixer": "^10.4.20",
