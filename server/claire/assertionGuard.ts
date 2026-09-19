@@ -237,6 +237,11 @@ const FREE_FORM_MUTATION_SUCCESS_PATTERNS: Array<{ label: string; pattern: RegEx
   { label: "adding to the Day Line", pattern: /\badding to the day ?line\b/i },
   { label: "sent to", pattern: /^sent to\b/i },
   { label: "commit-renderer Done", pattern: /\bdone\.\s[^\n]*\bline\b/i },
+  { label: "Added prefix", pattern: /^Added:\s/i },
+  { label: "Updated prefix", pattern: /^Updated:\s/i },
+  { label: "Changed prefix", pattern: /^Changed it to\b/i },
+  { label: "Removed prefix", pattern: /^Removed\b[^\n]*\bDay Line\b/i },
+  { label: "Saved prefix", pattern: /^Saved(?:\.|\s+as\b|\s+on\b)/i },
 ];
 
 export function lintPostGenerationStateVerbs(
@@ -337,9 +342,31 @@ export function lintReceiptBackedCommitSpeech(
   const violations: string[] = [];
   const created = receipts.filter(receipt => receipt.claimedState === "created");
   const completed = receipts.filter(receipt => receipt.claimedState === "completed");
+  const updated = receipts.filter(receipt => receipt.claimedState === "updated");
+  const removed = receipts.filter(receipt => receipt.claimedState === "removed");
+  const sent = receipts.filter(receipt => receipt.claimedState === "sent");
 
   if (/\bI(?:'ve|\s+have)\s+added\b/i.test(text) || /\badding to the day ?line\b/i.test(text) || /\bI(?:'ve|\s+have)\s+completed\b/i.test(text)) {
     violations.push("Commit renderer must not use free-form added/completed phrasing");
+  }
+
+  if (/^Added:\s/i.test(text) && created.length < 1) {
+    violations.push("Added confirmation without a created receipt");
+  }
+  if ((/^Updated:\s/i.test(text) || /^Changed it to\b/i.test(text)) && updated.length < 1) {
+    violations.push("Update confirmation without an updated receipt");
+  }
+  if (/^Removed\b[^\n]*\bDay Line\b/i.test(text) && removed.length < 1) {
+    violations.push("Removal confirmation without a removed receipt");
+  }
+  if (/^Sent to engineering\b/i.test(text) && sent.length < 1) {
+    violations.push("Engineering send confirmation without a sent receipt");
+  }
+  if (/^I saved the request\b/i.test(text) && created.length < 1) {
+    violations.push("Engineering save confirmation without a created receipt");
+  }
+  if (/^Saved as operator-attested\b/i.test(text) && created.length + updated.length < 1) {
+    violations.push("Field-save confirmation without a created/updated receipt");
   }
 
   if (/\bmarked done\b/i.test(text)) {
