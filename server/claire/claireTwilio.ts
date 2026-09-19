@@ -50,6 +50,12 @@ import { runClaireTurn, type ClaireTurnState } from "./turn/claireTurn";
 import { claireConversationStateStore } from "./turn/conversationStateStore";
 import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
 import { loadBusinessVocabulary, speechHints } from "./knowledge/businessVocabulary";
+import {
+  CLAIRE_XAI_TTS_PATH,
+  claireXaiSpeechUrl,
+  handleClaireXaiTtsRequest,
+  isClaireXaiTtsEnabled,
+} from "./xaiTts";
 
 const DEBRIEF_PATH = "/api/claire/twilio/debrief";
 const CONFIRM_PATH = "/api/claire/twilio/confirm";
@@ -57,6 +63,7 @@ const PRE_DRIVE_PATH = "/api/claire/twilio/pre-drive";
 const CONTINUE_PATH = "/api/claire/twilio/pre-drive/continue";
 export const CLAIRE_RECORDING_STATUS_PATH = "/api/claire/twilio/recording-status";
 export const CLAIRE_CALL_STATUS_PATH = "/api/claire/twilio/call-status";
+/** Polly stays as the fail-open fallback when xAI TTS is disabled or unconfigured. */
 const CLAIRE_VOICE = "Polly.Ruth-Generative";
 const PRE_DRIVE_CONVERSATION_TTL_MS = 45 * 60 * 1_000;
 const MAX_PRE_DRIVE_TURNS = 80;
@@ -199,6 +206,31 @@ export function spokenClaireText(text: string, opening = false): string {
   return opening ? `Adam. Claire here. ${text}` : text;
 }
 
+/**
+ * Speech-output boundary only. Claire's reasoning/routing remains untouched.
+ * xAI receives the already-approved sentence and returns telephony audio.
+ */
+function appendClaireSpeech(
+  parent: any,
+  text: string,
+  opening = false
+): void {
+  const spoken = spokenClaireText(text, opening);
+  if (isClaireXaiTtsEnabled()) {
+    try {
+      parent.play(claireXaiSpeechUrl(spoken, publicBaseUrl()));
+      return;
+    } catch (error) {
+      console.warn("[Claire] xAI TTS URL creation failed; using Twilio voice", {
+        reason: error instanceof Error ? error.message : "CLAIRE_XAI_TTS_URL_FAILED",
+      });
+    }
+  }
+
+  const say = parent.say({ voice: CLAIRE_VOICE, language: "en-US" }, "");
+  say.prosody({ rate: "90%", volume: "+6dB" }, spoken);
+}
+
 export function claireVoiceCallCreateOptions(): {
   record: boolean;
   recordingChannels?: "dual";
@@ -245,8 +277,7 @@ function assertMissionAccess(input: {
 
 function speakAndHangUp(text: string): string {
   const response = new twilio.twiml.VoiceResponse();
-  const say = response.say({ voice: CLAIRE_VOICE, language: "en-US" }, "");
-  say.prosody({ rate: "90%", volume: "+6dB" }, text);
+  appendClaireSpeech(response, text);
   response.hangup();
   return response.toString();
 }
@@ -282,11 +313,7 @@ export function preDriveConversationTwiML(input: {
     hints: boundedHints(input.hints),
   });
   if (!input.listenOnly && input.text.trim()) {
-    const say = gather.say({ voice: CLAIRE_VOICE, language: "en-US" }, "");
-    say.prosody(
-      { rate: "90%", volume: "+6dB" },
-      spokenClaireText(input.text, input.opening)
-    );
+    appendClaireSpeech(gather, input.text, input.opening);
   }
   response.hangup();
   return response.toString();
@@ -295,8 +322,7 @@ export function preDriveConversationTwiML(input: {
 function stillWorkingTwiML(token: string, attempt: number): string {
   const response = new twilio.twiml.VoiceResponse();
   if (attempt === 0) {
-    const say = response.say({ voice: CLAIRE_VOICE, language: "en-US" }, "");
-    say.prosody({ rate: "90%", volume: "+6dB" }, "One second.");
+    appendClaireSpeech(response, "One second.");
   } else {
     response.pause({ length: 1 });
   }
@@ -610,9 +636,9 @@ export async function startClairePostStopCall(input: {
     action: `${publicBaseUrl()}${DEBRIEF_PATH}?token=${encodeURIComponent(token)}`,
     method: "POST",
   });
-  gather.say({ voice: CLAIRE_VOICE, language: "en-US" }, opening);
-  response.say(
-    { voice: CLAIRE_VOICE, language: "en-US" },
+  appendClaireSpeech(gather, opening);
+  appendClaireSpeech(
+    response,
     "I didn't catch a debrief. Nothing was changed."
   );
   response.hangup();
@@ -651,6 +677,8 @@ export async function startClairePostStopCall(input: {
 }
 
 export function registerClaireRoutes(app: Express): void {
+  app.get(CLAIRE_XAI_TTS_PATH, handleClaireXaiTtsRequest);
+
   app.post(PRE_DRIVE_PATH, async (req: Request, res: Response) => {
     res.type("text/xml");
     // Slice A (routing audit): the closest observable proxy for end-of-speech.
@@ -936,12 +964,12 @@ export function registerClaireRoutes(app: Express): void {
         action: `${publicBaseUrl()}${CONFIRM_PATH}?token=${encodeURIComponent(approvalToken)}`,
         method: "POST",
       });
-      gather.say(
-        { voice: CLAIRE_VOICE, language: "en-US" },
+      appendClaireSpeech(
+        gather,
         `I heard: ${proposal.summary}. I would record this as ${outcomeLabel(proposal.proposedOutcome)}. Say confirm to save that outcome, or cancel to leave only your raw debrief.`
       );
-      response.say(
-        { voice: CLAIRE_VOICE, language: "en-US" },
+      appendClaireSpeech(
+        response,
         "No confirmation received. I kept your raw debrief, but did not record an outcome."
       );
       response.hangup();

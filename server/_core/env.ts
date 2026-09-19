@@ -33,6 +33,11 @@ export const ENV = {
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   /** Anthropic (catalog AI). Forge is unused for invokeLLM. */
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+  /** xAI is speech transport only for Claire; Anthropic remains Claire's reasoning model. */
+  xaiApiKey: process.env.XAI_API_KEY?.trim() ?? "",
+  claireXaiTtsEnabled: process.env.CLAIRE_XAI_TTS_ENABLED === "true",
+  /** Built-in Eve is the default; set a custom voice ID to pin Claire to a specific cloned British female voice. */
+  claireXaiTtsVoiceId: process.env.CLAIRE_XAI_TTS_VOICE_ID?.trim() || "eve",
   anthropicModel: anthropicModelEnv("ANTHROPIC_MODEL", DEFAULT_ANTHROPIC_MODEL),
   anthropicModelVendorOnboarding: anthropicModelEnv(
     "ANTHROPIC_MODEL_VENDOR_ONBOARDING"
