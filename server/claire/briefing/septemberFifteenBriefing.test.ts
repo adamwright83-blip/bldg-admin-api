@@ -441,6 +441,17 @@ describe("the September 15 call, replayed through Claire", () => {
     expect(state.clarifyingUtterance).toBeNull();
   });
 
+  it("a same-day explicit Day Line command commits immediately instead of asking again", async () => {
+    const deps = turnDeps();
+    const state: ClaireTurnState = {};
+    const result = await turn(state, "Create the Instagram ad and put that on the Day Line.", deps, "text");
+    expect(result.kind).toBe("briefing_saved");
+    expect(deps.commit).toHaveBeenCalledTimes(1);
+    expect(deps.commitment).not.toHaveBeenCalled();
+    expect(result.speak).toMatch(/Done\\./);
+    expect(result.speak).not.toMatch(/Should I add|Want me to put/i);
+  });
+
   it("mixed intent: answers John's spend from the ledger and holds Friday's pickup for confirmation", async () => {
     const deps = turnDeps();
     const state: ClaireTurnState = {};
