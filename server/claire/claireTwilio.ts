@@ -206,20 +206,12 @@ export function spokenClaireText(text: string, opening = false): string {
   return opening ? `Adam. Claire here. ${text}` : text;
 }
 
-type ClaireSpeechParent = {
-  play(url: string): unknown;
-  say(
-    attributes: { voice: string; language: string },
-    text?: string
-  ): { prosody(attributes: { rate: string; volume: string }, text: string): unknown };
-};
-
 /**
  * Speech-output boundary only. Claire's reasoning/routing remains untouched.
  * xAI receives the already-approved sentence and returns telephony audio.
  */
 function appendClaireSpeech(
-  parent: ClaireSpeechParent,
+  parent: any,
   text: string,
   opening = false
 ): void {
