@@ -38,6 +38,7 @@ import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
 import {
   CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION,
   MISSION_SALES_BRIEF_INSTRUCTION,
+  NO_EVIDENCE_INSTRUCTION,
   RETRIEVED_EVIDENCE_INSTRUCTION,
   VOICE_NATIVE_ANSWER_GUIDANCE,
   type ClaireGenerationSurface,
@@ -298,7 +299,7 @@ export async function answerClairePreDriveFollowUp(
       { label: "reasoning_policy", text: CLAIRE_V1_REASONING_POLICY },
       {
         label: "job_and_clock",
-        text: `${CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION} No retrievedEvidence: say so; still answer any judgment asked.`,
+        text: CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION,
       },
       { label: "truth_business_claims", text: "Business-specific claims (account, customer, property, number, completed action) must be grounded in verified context or the fact inventory, or stated unknown." },
       {
@@ -307,7 +308,7 @@ export async function answerClairePreDriveFollowUp(
       },
       {
         label: "retrieved_evidence_rule",
-        text: input.retrievedEvidence?.length ? RETRIEVED_EVIDENCE_INSTRUCTION : null,
+        text: input.retrievedEvidence?.length ? RETRIEVED_EVIDENCE_INSTRUCTION : NO_EVIDENCE_INSTRUCTION,
       },
       {
         label: "mission_sales_brief",

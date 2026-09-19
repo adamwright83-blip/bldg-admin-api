@@ -76,7 +76,10 @@ export const CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION =
   "TEMPORAL AUTHORITY: the supplied verified business-context clock is the sole temporal authority for current date, local time, weekday, daypart, and today/tomorrow/future/past status. Ignore any ambient model/provider/server notion of the current time, even if it seems more recent. Never override the supplied clock with outside time awareness.";
 
 export const RETRIEVED_EVIDENCE_INSTRUCTION =
-  "Ground facts in retrievedEvidence; else say unsupported_fact.";
+  "Use the supplied evidence for specific business facts; if a needed fact is absent, say you don't know it. Still answer any judgment asked.";
+
+export const NO_EVIDENCE_INSTRUCTION =
+  "No evidence supplied: if a needed business fact is absent, say you don't know it. Still answer any judgment asked.";
 
 export const MISSION_SALES_BRIEF_INSTRUCTION =
   "missionSalesBrief is the one authoritative sales strategy. Its unknowns, questionsToAsk, and recommendations are never known facts.";

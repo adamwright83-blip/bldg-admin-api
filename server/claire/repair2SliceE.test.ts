@@ -150,8 +150,8 @@ describe("Slice E — static instruction diet", () => {
     expect(system).toMatch(/business-specific claims[^.]*must be grounded[^.]*fact inventory[^.]*unknown/i);
     expect(system).toContain("never asserted as a fact about this business");
     expect(system).toContain("A prior Claire turn is conversation history, not verified truth");
-    expect(system).toContain("still answer any judgment asked");
-    expect(system).toContain("unsupported_fact");
+    expect(system).toMatch(/still answer any judgment asked/i);
+    expect(system).toMatch(/say you don't know it/i);
   });
 
   it("MissionSalesBrief authority survives when a brief is present", async () => {
@@ -172,6 +172,28 @@ describe("Slice E — static instruction diet", () => {
     for (const run of [await followUpSize({}), await openingSize({})]) {
       expect(run.size.sections.some(section => section.label === "capability_briefing")).toBe(true);
       expect(run.system).toContain("Supported:");
+    }
+  });
+
+  it("evidence-present prompt never claims that no evidence exists", async () => {
+    const { system } = await followUpSize({ retrievedEvidence: RETRIEVED_EVIDENCE });
+    expect(system).not.toMatch(/no evidence/i);
+    expect(system).toMatch(/use the supplied evidence for specific business facts/i);
+    expect(system).toMatch(/still answer any judgment asked/i);
+  });
+
+  it("evidence-absent prompt requires truthful unknown handling and keeps the judgment half", async () => {
+    const { system } = await followUpSize({});
+    expect(system).toMatch(/no evidence supplied/i);
+    expect(system).toMatch(/say you don't know it/i);
+    expect(system).toMatch(/still answer any judgment asked/i);
+  });
+
+  it("does not instruct Claire in internal vocabulary", async () => {
+    for (const evidence of [undefined, RETRIEVED_EVIDENCE]) {
+      const { system } = await followUpSize(evidence ? { retrievedEvidence: evidence } : {});
+      expect(system).not.toContain("unsupported_fact");
+      expect(system).not.toContain("retrievedEvidence");
     }
   });
 });
