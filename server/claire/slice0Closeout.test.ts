@@ -61,6 +61,36 @@ describe("mutation claims require the matching receipt", () => {
     ).not.toMatch(/task B/i);
   });
 
+  it("static verified state for task A cannot authorize a fresh free-form mutation claim about task B", () => {
+    const staticCreatedA = new VerifiedFactInventory([
+      {
+        claimId: "created:task-a",
+        statement: "Task A already exists on the work picture",
+        entityRef: "task-a",
+        status: "verified",
+        claimedState: "created",
+        provenance: "test.static_inventory",
+      },
+    ]);
+    expect(lintPostGenerationStateVerbs("I added task B to the Day Line.", staticCreatedA).pass).toBe(false);
+    expect(lintPostGenerationStateVerbs("Done. 1 on today's line.", staticCreatedA).pass).toBe(false);
+  });
+
+  it("verified historical state can still be described passively without becoming a fresh mutation claim", () => {
+    const staticScheduled = new VerifiedFactInventory([
+      {
+        claimId: "scheduled:task-a",
+        statement: "Task A is scheduled",
+        entityRef: "task-a",
+        status: "verified",
+        claimedState: "scheduled",
+        provenance: "test.static_inventory",
+      },
+    ]);
+    expect(lintPostGenerationStateVerbs("Task A has been scheduled.", staticScheduled).pass).toBe(true);
+    expect(lintPostGenerationStateVerbs("I scheduled task B.", staticScheduled).pass).toBe(false);
+  });
+
   it("2 — created receipt does not authorize I completed/marked it done in free-form speech", () => {
     expect(lintPostGenerationStateVerbs("I marked it done.", empty).pass).toBe(false);
     expect(lintPostGenerationStateVerbs("I completed that for you.", empty).pass).toBe(false);
