@@ -1555,6 +1555,18 @@ await assertRequiredColumns("operator_macro_goals", [
   "unit", "source", "sourceNote", "status", "supersededById",
 ]);
 
+// Production runs this file (`npm start` → node scripts/migrate.mjs), not drizzle/0080.
+// The CREATE TABLE above historically omitted secondaryTargetsJson; drizzle's 0080 ALTER
+// never executed on Railway. Additive, nullable, no data rewrite.
+await run(
+  `ALTER TABLE operator_macro_goals ADD COLUMN secondaryTargetsJson JSON NULL`,
+  "operator_macro_goals.secondaryTargetsJson"
+);
+await assertRequiredColumns("operator_macro_goals", [
+  "tenantId", "operatorUserId", "objective", "metricKey", "targetValue",
+  "unit", "source", "sourceNote", "status", "supersededById", "secondaryTargetsJson",
+]);
+
 // ── Goldline Campaign Runs: standing operations across days ──────
 // docs/goldline/FICTION_PACKS.md §2. Progress is DERIVED from the event table;
 // there is deliberately no counter column in any of these three tables.

@@ -1,3 +1,4 @@
+import { enforceTitleContract } from "./titleContract";
 import { parseSpokenNumber } from "../../analytics/businessPeriods";
 import { isCombineRequest } from "../business/businessLanguage";
 import { dayMention, parseTiming, TIME_TOKEN } from "./briefingTiming";
@@ -368,7 +369,7 @@ export function parseBriefingDeterministically(utterance: string, clock: Briefin
       }
       items.push({
         kind: completed ? "completed" : "new_work",
-        title,
+        title: enforceTitleContract(title),
         quote: bare,
         businessDate,
         timing,

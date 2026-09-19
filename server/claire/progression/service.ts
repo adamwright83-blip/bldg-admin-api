@@ -219,9 +219,10 @@ export async function reserveDisclosureEntitlement(
 }
 
 /**
- * Phase 2, at the delivery boundary: commit every reveal reserved for this conversation. Atomic per
- * reveal (consume + `disclosed` ledger row in one transaction). Idempotent, stateless in-process, and
- * safe to call from any replica or after a restart. Never throws mid-call.
+ * Phase 2, at the next-turn boundary: commit every reveal reserved for this conversation.
+ * This is entitlement accounting, NOT proof the operator heard the TTS. Heard confirmation
+ * lives on claire_conversation_turns.providerMetadataJson.heardConfirmed and stays false
+ * unless a delivery signal exists.
  */
 export async function commitPendingDisclosuresForConversation(
   store: ProgressionStore,

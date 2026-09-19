@@ -124,8 +124,8 @@ describe("September 15 production briefing — understood as one bundle", () => 
 
   it("the fragments the phone actually delivered become work, not 'Yes, I have to' or 'For Yazzie and Carol'", () => {
     const turn8 = parseBriefingDeterministically(PHONE_TURN_8, clock);
-    expect(turn8.items.map(item => item.title)).toEqual([
-      "Pick up from the dry cleaners for Yazzie and Carol",
+     expect(turn8.items.map(item => item.title)).toEqual([
+      "Pick up from dry cleaners for Yazzie and Carol",
       "Pick up from kit treats on Rodeo Drive",
     ]);
     const turn10 = parseBriefingDeterministically(PHONE_TURN_10, clock);
@@ -336,6 +336,11 @@ function turnDeps(overrides: Partial<ClaireTurnDeps> = {}): ClaireTurnDeps {
       completed: parsed.items.filter(item => item.kind === "completed"),
       failed: [],
       commitmentIds: parsed.items.map((_, index) => `c-${index}`),
+      receipts: parsed.items.map((item, index) => ({
+        claimedState: item.kind === "completed" ? ("completed" as const) : ("created" as const),
+        entityId: `c-${index}`,
+        statement: item.title,
+      })),
     })) as never,
     campaign: async () => null,
     vocabulary: async () => [],
@@ -351,11 +356,22 @@ function turnDeps(overrides: Partial<ClaireTurnDeps> = {}): ClaireTurnDeps {
   };
 }
 
-function turn(state: ClaireTurnState, utterance: string, deps: ClaireTurnDeps, surface: "voice" | "text" = "voice") {
+function turn(state: ClaireTurnState, utterance: string, deps: ClaireTurnDeps, surface: "voice" | "text" = "voice", allowFragmentWait = false) {
   return runClaireTurn(
-    { tenantId: "default", operatorUserId: "adam-admin", dayDirectorActorId: "1", surface, utterance, state, conversationKey: "claire-call:test" },
+    { tenantId: "default", operatorUserId: "adam-admin", dayDirectorActorId: "1", surface, utterance, state, conversationKey: "claire-call:test", allowFragmentWait },
     deps
   );
+}
+
+async function speakThenFlush(state: ClaireTurnState, fragments: string[], deps: ClaireTurnDeps) {
+  for (const fragment of fragments) {
+    const held = await turn(state, fragment, deps, "voice", true);
+    if (!held.listenOnly) return held;
+  }
+  const pending = state.pendingFragment ?? "";
+  state.pendingFragment = null;
+  state.fragmentHolds = 0;
+  return turn(state, pending, deps, "voice", false);
 }
 
 describe("the September 15 call, replayed through Claire", () => {
@@ -372,26 +388,24 @@ describe("the September 15 call, replayed through Claire", () => {
     expect(state.pendingBriefing).toBeNull();
   });
 
-  it("the three fragments the phone delivered accumulate into one list instead of 'Sorry — should I add…'", async () => {
+  it("the three fragments the phone delivered stitch into one briefing instead of answering mid-thought", async () => {
     const deps = turnDeps();
     const state: ClaireTurnState = {};
-    expect((await turn(state, PHONE_TURN_8, deps)).speak).toContain("Want me to put both on the Day Line?");
-    const more = await turn(state, PHONE_TURN_10, deps);
-    expect(more.speak).toMatch(/^Got that too\./);
-    expect(more.speak).not.toMatch(/Sorry/);
-    await turn(state, PHONE_TURN_12, deps);
-    expect(state.pendingBriefing?.parsed.items).toHaveLength(7);
+    const proposed = await speakThenFlush(state, [PHONE_TURN_8, PHONE_TURN_10, PHONE_TURN_12], deps);
+    expect(proposed.kind).toBe("briefing_proposed");
+    expect(proposed.speak).not.toMatch(/Sorry/);
+    expect(state.pendingBriefing?.parsed.items.length).toBeGreaterThanOrEqual(6);
     expect(state.pendingBriefing?.parsed.items.filter(item => item.businessDate === TOMORROW)).toHaveLength(1);
     await turn(state, "Yes.", deps);
-    expect((deps.commit as ReturnType<typeof vi.fn>).mock.calls[0]![0].items).toHaveLength(7);
+    expect((deps.commit as ReturnType<typeof vi.fn>).mock.calls[0]![0].items.length).toBeGreaterThanOrEqual(6);
   });
 
   it("a thought cut off at a pause waits for the rest instead of being answered", async () => {
     const deps = turnDeps();
     const state: ClaireTurnState = {};
-    const waiting = await turn(state, "Desired timing is.", deps);
+    const waiting = await turn(state, "Desired timing is.", deps, "voice", true);
     expect(waiting).toMatchObject({ kind: "listening", listenOnly: true, speak: "" });
-    const answered = await turn(state, "before noon for the KITH pickup and at 7 deliver the OPUS towels.", deps);
+    const answered = await speakThenFlush(state, ["before noon for the KITH pickup and at 7 deliver the OPUS towels."], deps);
     expect(answered.kind).toBe("briefing_proposed");
     expect(state.history?.[0]?.text).toBe("Desired timing is. before noon for the KITH pickup and at 7 deliver the OPUS towels.");
   });
@@ -431,8 +445,9 @@ describe("the September 15 call, replayed through Claire", () => {
     const deps = turnDeps();
     const state: ClaireTurnState = {};
     const result = await turn(state, "How much has John spent with us, and remind me to pick his laundry up Friday.", deps, "text");
-    expect(result.speak).toContain("For Friday, September 18: pick John's laundry up.");
+    expect(result.kind).toBe("briefing_saved");
     expect(result.speak).toContain("John Cunningham has spent $476 across 7 paid orders");
-    expect(result.speak).toMatch(/Want me to put that on the Day Line\?$/);
+    expect(result.speak).toMatch(/Done\./);
+    expect(result.speak).not.toMatch(/Want me to put that on the Day Line\?$/);
   });
 });

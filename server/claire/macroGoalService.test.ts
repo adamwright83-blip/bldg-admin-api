@@ -139,4 +139,11 @@ describe("operator macro goals", () => {
     expect(router).toMatch(/setMacroGoal:\s*adminProcedure/);
     expect(voiceLoop).not.toContain("setActiveMacroGoal");
   });
+
+  it("production migrate.mjs adds secondaryTargetsJson and asserts it — drizzle 0080 is not the runner", () => {
+    const migrate = readFileSync(new URL("../../scripts/migrate.mjs", import.meta.url), "utf8");
+    expect(migrate).toContain("ALTER TABLE operator_macro_goals ADD COLUMN secondaryTargetsJson JSON NULL");
+    expect(migrate).toContain('"secondaryTargetsJson"');
+    expect(migrate).toContain("node scripts/migrate.mjs");
+  });
 });

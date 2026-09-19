@@ -1,8 +1,11 @@
 import type { ClaireDriveContext, ClaireTimelineItem } from "./contextAssembler";
 import {
+  inventoryPlusReceipts,
+  lintPostGenerationStateVerbs,
+  lintSpokenClock,
+  type MutationReceipt,
   VerifiedFactInventory,
   VerifiedFactInventoryBuilder,
-  lintPostGenerationStateVerbs,
 } from "./assertionGuard";
 
 export const G4_UNVERIFIED_STATE_VERB_FALLBACK =
@@ -117,11 +120,14 @@ export function assertPostGenerationStateVerbs(
 
 export function sanitizeSpeakAgainstInventory(
   speak: string,
-  inventory: VerifiedFactInventory
+  inventory: VerifiedFactInventory,
+  options: { receipts?: readonly MutationReceipt[]; localTime?: string | null } = {}
 ): string {
   if (!speak.trim()) return speak;
-  const lint = lintPostGenerationStateVerbs(speak, inventory);
-  if (lint.pass) return speak;
-  console.warn("[Claire] G4 post-generation lint failed", { violations: lint.violations });
+  const withReceipts = inventoryPlusReceipts(inventory, options.receipts);
+  const lint = lintPostGenerationStateVerbs(speak, withReceipts);
+  const clock = lintSpokenClock(speak, options.localTime);
+  if (lint.pass && clock.pass) return speak;
+  console.warn("[Claire] G4 post-generation lint failed", { violations: [...lint.violations, ...clock.violations] });
   return G4_UNVERIFIED_STATE_VERB_FALLBACK;
 }

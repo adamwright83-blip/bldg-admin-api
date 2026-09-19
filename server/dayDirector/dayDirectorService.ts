@@ -1,3 +1,4 @@
+import { enforceTitleContract } from "../claire/briefing/titleContract";
 import { and, eq, isNull } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -142,7 +143,7 @@ export async function proposeCommitment(input: {
   if (!ENV.anthropicApiKey?.trim()) {
     return {
       promptKey,
-      title: sourceText.slice(0, 255),
+      title: enforceTitleContract(sourceText).slice(0, 255),
       kind: "growth",
       quantity: null,
       sourceText,
@@ -192,7 +193,7 @@ export async function proposeCommitment(input: {
     );
     return {
       promptKey,
-      title: sourceText.slice(0, 255),
+      title: enforceTitleContract(sourceText).slice(0, 255),
       kind: "growth",
       quantity: null,
       sourceText,

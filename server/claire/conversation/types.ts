@@ -3,6 +3,7 @@ export const LIVE_TURN_SOURCE = {
   OPERATOR: "twilio_speech_result",
   CLAIRE: "goldline_generated_speech",
 } as const;
+/** CLAIRE source is generated speech queued for TTS, not confirmed-heard audio. See speechDelivery.ts. */
 export const POST_CALL_TRANSCRIPT_SOURCE = "post_call_audio";
 export const ANALYSIS_NOTIFICATION_KIND = "claire_call_analysis_ready";
 

@@ -13,7 +13,7 @@
  * Post-generation lint is defense-in-depth only.
  */
 
-export type ClaimedState = "queued" | "scheduled" | "sent" | "created" | "counted";
+export type ClaimedState = "queued" | "scheduled" | "sent" | "created" | "counted" | "updated" | "removed" | "completed";
 export type EpistemicStatus = "verified" | "pending" | "unknown";
 
 export type WriteReceipt = {
@@ -176,60 +176,148 @@ export class VerifiedFactInventory {
   }
 }
 
+export type MutationReceipt = {
+  claimedState: ClaimedState;
+  entityId: string;
+  statement: string;
+};
+
+export function inventoryPlusReceipts(
+  inventory: VerifiedFactInventory,
+  receipts: readonly MutationReceipt[] | undefined
+): VerifiedFactInventory {
+  if (!receipts?.length) return inventory;
+  const builder = new VerifiedFactInventoryBuilder();
+  for (const entry of inventory.entries) {
+    if (entry.claimedState) {
+      builder.addClaim({
+        claimId: entry.claimId,
+        statement: entry.statement,
+        entityRef: entry.entityRef,
+        claimedState: entry.claimedState,
+        provenance: entry.provenance,
+        writtenTruthStatus: entry.status === "verified" ? entry.claimedState : entry.status === "pending" ? "pending" : "not_found",
+      });
+    } else {
+      builder.addGeneralFact(entry);
+    }
+  }
+  for (const receipt of receipts) {
+    builder.addClaim({
+      claimId: `receipt:${receipt.claimedState}:${receipt.entityId}`,
+      statement: receipt.statement,
+      entityRef: receipt.entityId,
+      claimedState: receipt.claimedState,
+      provenance: "mutation_receipt",
+      writeReceipt: {
+        writtenAt: new Date().toISOString(),
+        entityId: receipt.entityId,
+        confirmedState: receipt.claimedState,
+      },
+      writtenTruthStatus: receipt.claimedState,
+    });
+  }
+  return builder.build();
+}
+
 /**
- * Narrow defense-in-depth post-generation lint for obvious state-change verbs
- * (sent / queued / scheduled / created / counted) not backed by a verified claim id.
+ * Defense-in-depth: mutation verbs in speech require a verified claim for that same class of write.
+ * Free-form model prose may discuss an action but may not originate added/saved/sent/scheduled/updated/removed/done.
  */
 export function lintPostGenerationStateVerbs(
   generatedText: string,
   inventory: VerifiedFactInventory
 ): { pass: boolean; violations: string[] } {
   const violations: string[] = [];
-
-  // Patterns for claiming actions occurred
-  const sentPatterns = [
-    /\bI(?:'ve|\s+have)\s+sent\b/i,
-    /\bI\s+sent\b/i,
-    /\balready\s+sent\b/i,
-    /\bwas\s+sent\b/i,
+  const checks: Array<{ state: ClaimedState; label: string; patterns: RegExp[] }> = [
+    {
+      state: "sent",
+      label: "sent",
+      patterns: [
+        /\bI(?:'ve|\s+have)\s+sent\b/i,
+        /\bI\s+sent\b/i,
+        /\balready\s+sent\b/i,
+        /\bwas\s+sent\b/i,
+        /^sent to\b/i,
+        /\bsent to engineering\b/i,
+      ],
+    },
+    {
+      state: "queued",
+      label: "queued",
+      patterns: [/\bI(?:'ve|\s+have)\s+queued\b/i, /\bI\s+queued\b/i, /\bare\s+queued\b/i, /\bhave\s+been\s+queued\b/i],
+    },
+    {
+      state: "scheduled",
+      label: "scheduled",
+      patterns: [/\bI(?:'ve|\s+have)\s+scheduled\b/i, /\bI\s+scheduled\b/i, /\bhas\s+been\s+scheduled\b/i],
+    },
+    {
+      state: "created",
+      label: "added/saved",
+      patterns: [
+        /\badding to the day ?line\b/i,
+        /\badded (?:it|that|them|those|this)\b/i,
+        /\bI(?:'ve|\s+have)\s+added\b/i,
+        /\bI(?:'ve|\s+have)?\s+saved\b/i,
+        /\bI saved\b/i,
+      ],
+    },
+    {
+      state: "updated",
+      label: "updated",
+      patterns: [/\bI(?:'ve|\s+have)\s+updated\b/i, /\bI\s+updated\b/i],
+    },
+    {
+      state: "removed",
+      label: "removed",
+      patterns: [/\bI(?:'ve|\s+have)\s+removed\b/i, /\bI\s+removed\b/i, /\bI(?:'ve|\s+have)\s+deleted\b/i],
+    },
+    {
+      state: "completed",
+      label: "completed",
+      patterns: [/\bI(?:'ve|\s+have)\s+completed\b/i, /\bmarked (?:it|that|them) done\b/i],
+    },
   ];
 
-  const queuedPatterns = [
-    /\bI(?:'ve|\s+have)\s+queued\b/i,
-    /\bI\s+queued\b/i,
-    /\bare\s+queued\b/i,
-    /\bhave\s+been\s+queued\b/i,
-  ];
-
-  const scheduledPatterns = [
-    /\bI(?:'ve|\s+have)\s+scheduled\b/i,
-    /\bI\s+scheduled\b/i,
-    /\bhas\s+been\s+scheduled\b/i,
-  ];
-
-  for (const p of sentPatterns) {
-    if (p.test(generatedText) && !inventory.hasVerifiedClaim("sent")) {
-      violations.push("State verb 'sent' claimed without verified write receipt");
-      break;
+  for (const check of checks) {
+    if (check.patterns.some(pattern => pattern.test(generatedText)) && !inventory.hasVerifiedClaim(check.state) && !(check.state === "completed" && inventory.hasVerifiedClaim("created")) && !(check.state === "created" && inventory.hasVerifiedClaim("completed"))) {
+      violations.push(`State verb '${check.label}' claimed without verified write receipt`);
     }
   }
 
-  for (const p of queuedPatterns) {
-    if (p.test(generatedText) && !inventory.hasVerifiedClaim("queued")) {
-      violations.push("State verb 'queued' claimed without verified write receipt");
-      break;
-    }
-  }
-
-  for (const p of scheduledPatterns) {
-    if (p.test(generatedText) && !inventory.hasVerifiedClaim("scheduled")) {
-      violations.push("State verb 'scheduled' claimed without verified write receipt");
-      break;
-    }
+  // Deterministic commit renderer may say "Done." only when a created/completed receipt exists.
+  if (/\bdone\.\s/i.test(generatedText) && !inventory.hasVerifiedClaim("created") && !inventory.hasVerifiedClaim("completed") && /\b(?:line|saved|marked)\b/i.test(generatedText)) {
+    violations.push("State verb 'done' claimed without verified write receipt");
   }
 
   return {
     pass: violations.length === 0,
     violations,
   };
+}
+
+const CLOCK_CLAIM = /\b(?:it's|it is)\s+(\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)|noon|midnight)\b/i;
+
+export function lintSpokenClock(
+  generatedText: string,
+  localTime: string | null | undefined
+): { pass: boolean; violations: string[] } {
+  const match = CLOCK_CLAIM.exec(generatedText);
+  if (!match || !localTime?.trim()) return { pass: true, violations: [] };
+  const claimed = match[1]!.replace(/\./g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  const canonical = localTime.replace(/\./g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  const hour12 = canonical.replace(/^0/, "");
+  if (canonical.includes(claimed) || claimed.includes(hour12) || hour12.includes(claimed.split(" ")[0]!)) {
+    return { pass: true, violations: [] };
+  }
+  // Compare hour loosely: "10:02 AM" vs "10 AM"
+  const claimedHour = /^(\d{1,2})/.exec(claimed)?.[1];
+  const localHour = /(\d{1,2})/.exec(canonical)?.[1];
+  const claimedMeridiem = /am|pm/.exec(claimed)?.[0];
+  const localMeridiem = /am|pm/.exec(canonical)?.[0];
+  if (claimedHour && localHour && claimedHour === localHour && (!claimedMeridiem || claimedMeridiem === localMeridiem)) {
+    return { pass: true, violations: [] };
+  }
+  return { pass: false, violations: [`Spoken clock '${match[1]}' contradicts operator-local time '${localTime}'`] };
 }

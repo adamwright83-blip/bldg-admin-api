@@ -45,6 +45,7 @@ import {
   persistOperatorAndClaire,
   safeClaireLedger,
 } from "./conversation/liveCall";
+import { canonicalOperatorMetadata, claireQueuedSpeechMetadata } from "./conversation/speechDelivery";
 import {
   handleCallCompleted,
   handleRecordingStatus,
@@ -81,6 +82,9 @@ const operatorNumber = process.env.CLAIRE_OPERATOR_PHONE?.trim() ?? "";
 const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
 
 const DEFAULT_HINTS = "got it, I'm good, that's enough, end call, hang up, goodbye";
+
+/** Seconds of silence after a held fragment before we treat the thought as finished. */
+export const CONTINUATION_GRACE_SECONDS = 3;
 
 /**
  * A live call's working state. It is persisted (claire_conversation_states),
@@ -312,7 +316,7 @@ export function preDriveConversationTwiML(input: {
     // briefings are still lists spoken with pauses, so they keep the
     // three-second close.
     speechTimeout: input.opening ? "3" : "auto",
-    timeout: input.listenOnly ? 4 : 6,
+    timeout: input.listenOnly ? CONTINUATION_GRACE_SECONDS : 6,
     maxSpeechTime: 60,
     actionOnEmptyResult: true,
     bargeIn: true,
@@ -434,7 +438,6 @@ function startVoiceTurn(input: {
   webhookReceivedAtMs: number;
 }): Promise<string> {
   const { conversationId, conversation, token } = input;
-  const turnKey = conversation.turns;
   const job = (async () => {
     try {
       const result = await runClaireTurn(
@@ -464,20 +467,27 @@ function startVoiceTurn(input: {
       );
       conversation.touchedAt = Date.now();
       await saveCall(conversationId, conversation);
+      if (result.listenOnly) {
+        return preDriveConversationTwiML({ text: "", token, hints: conversation.hints, listenOnly: true });
+      }
+      conversation.turns += 1;
+      await saveCall(conversationId, conversation);
+      const fragments = [...(conversation.providerFragments ?? [])];
+      const canonicalOperator = (conversation.history ?? []).filter(entry => entry.speaker === "operator").at(-1)?.text ?? input.utterance;
+      conversation.providerFragments = [];
       await persistOperatorAndClaire({
         callSid: input.callSid,
         claireConversationId: conversationId,
-        operatorText: input.rawTranscript,
+        operatorText: canonicalOperator,
         claireText: result.speak,
-        turnKey,
+        turnKey: conversation.turns,
+        operatorMetadata: canonicalOperatorMetadata(fragments.length ? fragments : [canonicalOperator]),
+        claireMetadata: claireQueuedSpeechMetadata(),
       });
       if (result.commitmentTurn) {
         await linkClaireCallAction({ callSid: input.callSid, claireConversationId: conversationId, turn: result.commitmentTurn });
       } else if (result.actionIds?.length) {
         await linkClaireActionIds({ callSid: input.callSid, claireConversationId: conversationId, actionIds: result.actionIds });
-      }
-      if (result.listenOnly) {
-        return preDriveConversationTwiML({ text: "", token, hints: conversation.hints, listenOnly: true });
       }
       if (result.endCall) {
         // A guarded personal turn closed the thread with business complete and an authored exit line.
@@ -501,7 +511,8 @@ function startVoiceTurn(input: {
         claireConversationId: conversationId,
         operatorText: input.rawTranscript,
         claireText: retry,
-        turnKey,
+        turnKey: conversation.turns,
+        claireMetadata: claireQueuedSpeechMetadata(),
       });
       return preDriveConversationTwiML({ text: retry, token, hints: conversation.hints });
     }
@@ -731,9 +742,9 @@ export function registerClaireRoutes(app: Express): void {
 
       const token = String(req.query.token);
       const callSid = callSidFrom(req);
-      // A verified webhook for this call means the previous line was actually spoken. Commit any reveal
-      // reserved for it FIRST — before empty-transcript, closing-phrase, or ordinary routing — so a
-      // "goodbye" right after a reveal still records that the operator heard it.
+      // A verified webhook for this call is the next operator ASR event. It is NOT proof the previous
+      // Claire TTS was heard (barge-in can cancel playback). Disclosure commit is reservation
+      // accounting; heard confirmation is providerMetadata.heardConfirmed on Claire turns.
       if (isClaireProgressionEnabled(claims.tenantId)) {
         await commitPendingDisclosuresForConversation(getProgressionStore(), {
           tenantId: claims.tenantId,
@@ -825,7 +836,6 @@ export function registerClaireRoutes(app: Express): void {
         return res.send(speakAndHangUp(hangup));
       }
 
-      conversation.turns += 1;
       conversation.touchedAt = Date.now();
       const job = startVoiceTurn({
         conversationId: claims.conversationId,
