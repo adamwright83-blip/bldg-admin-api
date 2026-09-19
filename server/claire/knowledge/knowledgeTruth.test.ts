@@ -109,6 +109,7 @@ describe("the record-lookup answer path cannot add numbers", () => {
               ],
               answerable: "records",
               missing: "",
+              fullyAnswers: true,
             }),
           },
         },
@@ -138,6 +139,11 @@ describe("the record-lookup answer path cannot add numbers", () => {
     expect(answer).toEqual({
       kind: "answered",
       text: "Paid revenue at OPUS LA this month so far is $140 across 3 orders. 1 Goldline order is waiting on payment: Carol Wexler, $19.00, ready.",
+      fullyAnswers: false,
+      evidence: [
+        { source: "business_question", text: "Paid revenue at OPUS LA this month so far is $140 across 3 orders." },
+        { source: "unpaid_orders", text: "1 Goldline order is waiting on payment: Carol Wexler, $19.00, ready." },
+      ],
     });
   });
 });

@@ -85,7 +85,9 @@ export type ClaireEncyclopediaTrace = {
 /**
  * Heuristic classification of a turn that asks for both a record and a
  * judgment ("what happened at The Louise last time, and what should I do?").
- * It is a heuristic, not a parser: Slice A reports it as an estimate.
+ * Slice A census / telemetry only — never routing authority. The live
+ * router is `decideClaireAnswerRoute` in answerRouter.ts, which requires a
+ * typed `fullyAnswers` bit rather than these phrase lists.
  */
 export type ClaireBlendTrace = {
   factClause: boolean;
@@ -148,15 +150,23 @@ export type ClaireTurnTrace = {
    */
   paused: boolean;
   /**
-   * Claire Intelligence Repair Part 2, Slice C+D: true when the turn's
-   * classification (judgment or blended fact+judgment) required Claire's own
-   * synthesis rather than letting a deterministic reader or the encyclopedia
-   * terminate the turn with partial or refusal prose. This is the number
-   * that answers "did retrieval steal a reasoning-required turn?" — it
-   * should be true for every turn Slice A's route probe found landing on a
-   * template instead of the repaired conversational path.
+   * True when Claire's own synthesis produced (or was required to produce)
+   * the spoken answer. Set by the router, not by JUDGMENT_CLAUSE.
    */
   synthesisRequired: boolean;
+  /**
+   * Telemetry label for the router's outcome. `needs_synthesis` is recorded
+   * when synthesis ran even though the old regex class said `fact_only` —
+   * the census that proves regex is no longer routing authority.
+   */
+  needs_synthesis: boolean;
+  routeOutcome:
+    | "deterministic_final"
+    | "retrieval_plus_synthesis"
+    | "judgment_synthesis_no_retrieval"
+    | "unsupported_fact"
+    | "briefing_plus_synthesis"
+    | null;
   /**
    * Which deterministic sources supplied evidence for a synthesized answer
    * (e.g. "business_reader:query", "account_history"). Empty for a pure
@@ -201,6 +211,8 @@ export function beginClaireTurnTrace(input: {
     spokenChars: 0,
     paused: false,
     synthesisRequired: false,
+    needs_synthesis: false,
+    routeOutcome: null,
     evidenceSources: [],
   };
 }
@@ -245,24 +257,16 @@ export function isBlendedClaireQuestion(utterance: string): boolean {
 }
 
 /**
- * Claire Intelligence Repair Part 2, Slice C+D: the explicit answer classes
- * the router distinguishes, built on the same two clause detectors as the
- * Slice A blend census rather than a second, competing classifier.
- *
- * `unsupported_fact` and `deterministic_fact` are not decided here — they
- * describe an *outcome* (whether a record actually answered or came back
- * empty), not something knowable from the utterance alone. This function
- * answers the one question the utterance itself can answer: does this turn
- * need Claire's own synthesis, or can a deterministic reader still be the
- * final word?
+ * Telemetry-only answer classes, built on the Slice A clause detectors.
+ * MUST NOT be used to decide whether a reader may terminate a turn.
+ * Live routing is `decideClaireAnswerRoute`.
  */
 export type ClaireAnswerClass =
-  /** No judgment clause: a deterministic reader may terminate the turn directly. */
   | "fact_only"
-  /** A judgment clause with no factual anchor: general professional judgment. Never gated on a DB tool. */
   | "judgment"
-  /** Both clauses present: retrieve the fact half, then Claire synthesizes one answer to the whole utterance. */
-  | "blended";
+  | "blended"
+  /** Synthesis ran even though the old regex class said fact_only. */
+  | "needs_synthesis";
 
 export function classifyClaireAnswerClass(utterance: string): ClaireAnswerClass {
   const blend = classifyClaireBlend(utterance);
@@ -270,9 +274,15 @@ export function classifyClaireAnswerClass(utterance: string): ClaireAnswerClass 
   return blend.factClause ? "blended" : "judgment";
 }
 
-/** True for any class that requires Claire's own synthesis rather than a deterministic renderer. */
+/** Telemetry helper. Not routing authority. */
 export function claireAnswerClassNeedsSynthesis(answerClass: ClaireAnswerClass): boolean {
   return answerClass !== "fact_only";
+}
+
+export function telemetryClaireAnswerClass(utterance: string, didSynthesize: boolean): ClaireAnswerClass {
+  const classified = classifyClaireAnswerClass(utterance);
+  if (didSynthesize && classified === "fact_only") return "needs_synthesis";
+  return classified;
 }
 
 /** Character counts for an assembled prompt, per section. Counts only. */

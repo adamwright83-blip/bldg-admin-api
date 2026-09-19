@@ -1,144 +1,224 @@
 /**
- * Claire Intelligence Repair Part 2 — static route probe.
+ * Claire Intelligence Repair Part 2 — C+D route probe.
  *
- * Slice A: which matcher in the old first-match-wins ladder claims each
- * question, and therefore whether the repaired conversational path could
- * ever be reached.
- *
- * Slice C+D: the same seventeen questions, routed by the actual, unchanged
- * `classifyClaireAnswerClass` from `answerPathTelemetry.ts` and the same
- * evidence-gathering order `gatherDeterministicEvidence` uses in
- * `claireTurn.ts` (business_reader → day_work → unpaid_orders →
- * account_history). Every function used here is the real one imported from
- * the code that routes live turns — not a re-implementation. Nothing here
- * needs a database; both columns can be reproduced with:
+ * Exercises the live router (`decideClaireAnswerRoute` via `runClaireTurn`),
+ * not JUDGMENT_CLAUSE / classifyClaireAnswerClass. Those remain telemetry.
  *
  *   npx tsx scripts/claire-repair2-route-probe.ts
  */
-import { parseBusinessTurn } from "../server/claire/businessConversation";
-import { normalizeUtterance } from "../server/claire/business/businessLanguage";
-import { operationsQuestion } from "../server/claire/knowledge/operationsKnowledge";
-import { isUnpaidQuestion } from "../server/claire/knowledge/openOrdersKnowledge";
-import { isAccountQuestion, matchAccounts, type AccountRef } from "../server/claire/knowledge/accountKnowledge";
-import { MEMORY_QUESTION } from "../server/claire/turn/claireTurn";
-import { classifyClaireAnswerClass, isBlendedClaireQuestion } from "../server/claire/answerPathTelemetry";
+import { runBusinessQuery } from "../server/analytics/businessQuery";
+import { loadPaidOrderLedger } from "../server/analytics/paidOrderLedger";
+import { classifyClaireAnswerClass } from "../server/claire/answerPathTelemetry";
+import type { EncyclopediaAnswer } from "../server/claire/knowledge/encyclopediaAgent";
+import {
+  BUSINESS_NOW,
+  BUSINESS_TZ,
+  businessCompleteness,
+  businessFreshness,
+  businessLoaders,
+} from "../server/claire/testSupport/claireBusinessFixture";
+import { runClaireTurn, type ClaireTurnDeps, type ClaireTurnTraceForTest } from "../server/claire/turn/claireTurn";
 
-const NOW = new Date("2026-09-15T16:00:00Z");
-const TZ = "America/Los_Angeles";
+const NOW = BUSINESS_NOW;
 
-// A small fixture stand-in for the tenant's real commercial accounts.
-const ACCOUNTS: AccountRef[] = [
-  { id: 1, name: "The Louise", kind: "account" },
-  { id: 2, name: "Century Park East", kind: "account" },
-] as never;
+const MINIMAL_BRIEF = "Two commercial stops today; The Louise is the one that matters.";
+const MINIMAL_CONTEXT = {
+  businessDate: "2026-09-15",
+  actorId: "adam-admin",
+  macroGoalKnown: false,
+  blockers: [],
+  relevantTimeline: [],
+} as never;
 
-/** Questions an operator actually asks on a drive, spanning fact and judgment. */
-const QUESTIONS = [
-  "What was revenue last month?",
-  "How many orders did we do last week?",
-  "Who are my top customers this quarter?",
-  "What's left on the day line today?",
-  "What did I finish yesterday?",
-  "How many unpaid orders are there?",
-  "What happened at The Louise last time?",
-  "What did I tell you about The Louise?",
-  "What should I say to them about pricing?",
-  "What happened at The Louise last time, and what should I do?",
-  "How many orders did they place, and is it worth another visit?",
-  "Should I push for the full building or start with a pilot floor?",
-  "Why do property managers keep stalling on this?",
-  "What's a good way to handle the 'we already have a vendor' objection?",
-  "Is it worth going back to Century Park East this week?",
-  "Remind me what we decided about the Greystar campaign.",
-  "What do you think I'm avoiding today?",
+const LOUISE_HISTORY = {
+  account: { id: 1, name: "The Louise", kind: "account" } as never,
+  missions: [],
+  events: [],
+  fieldVisits: [
+    {
+      missionId: 1,
+      arrivedAt: "2026-09-08T18:00:00Z",
+      departedAt: "2026-09-08T18:30:00Z",
+      notes: "Toured the basement laundry room.",
+    },
+  ],
+  outcomes: [],
+  followUps: [],
+  pipelineStage: null,
+  pipelineId: null,
+  contacts: [],
+  dayLineMentions: [],
+  conversationMentions: [
+    {
+      sessionId: "probe-1",
+      at: "2026-09-15T16:00:00.000Z",
+      speaker: "OPERATOR",
+      text: "The Louise wants a quote before month end.",
+    },
+  ],
+};
+
+function turnDeps(overrides: Partial<ClaireTurnDeps> = {}): ClaireTurnDeps {
+  return {
+    now: () => NOW,
+    timeZone: () => BUSINESS_TZ,
+    business: {
+      now: () => NOW,
+      timeZone: () => BUSINESS_TZ,
+      plan: async () => null,
+      runQuery: (tenantId, query) =>
+        runBusinessQuery(tenantId, query, {
+          loadLedger: input => loadPaidOrderLedger(input, businessLoaders()),
+          loadOpenOrders: async () => ({ openTotal: 2, byStatus: {}, awaitingPayment: 1 }),
+          loadCompleteness: async () => businessCompleteness,
+          loadFreshness: async () => businessFreshness(),
+          now: () => NOW,
+          timeZone: () => BUSINESS_TZ,
+        }),
+    },
+    commitment: (async () => ({ kind: "not_applicable" as const })) as never,
+    followUp: (async (input: { utterance: string; retrievedEvidence?: Array<{ source: string; text: string }> }) =>
+      `SYNTH:${input.retrievedEvidence?.length ?? 0}`) as never,
+    extractModel: null,
+    loadExisting: async () => [],
+    commit: (async () => ({ commitmentIds: [] })) as never,
+    campaign: async () => null,
+    vocabulary: async () => [],
+    accounts: async () => [
+      { id: 1, name: "The Louise", kind: "account" } as never,
+      { id: 2, name: "OPUS LA", kind: "account" } as never,
+    ],
+    accountHistory: (async () => LOUISE_HISTORY) as never,
+    commitFollowUp: (async () => ({ ok: true })) as never,
+    dayWork: (async () => ({ open: [], completed: [], businessDate: "2026-09-15" })) as never,
+    unpaid: (async () => []) as never,
+    searchMemory: (async () => [
+      { speaker: "OPERATOR", text: "We decided the Greystar campaign stays at ten doors.", occurredAt: NOW },
+    ]) as never,
+    memoryBetween: (async () => []) as never,
+    encyclopedia: null,
+    watchBoard: undefined,
+    doctrineTurn: undefined,
+    ...overrides,
+  };
+}
+
+const REQUIRED: Array<{
+  question: string;
+  encyclopedia?: EncyclopediaAnswer;
+}> = [
+  { question: "What was revenue last month?" },
+  { question: "Why do property managers keep stalling on this?" },
+  { question: "What did I tell you about The Louise?" },
+  { question: "What did I tell you about The Louise, and what should I do?" },
+  { question: "Remind me what we decided about the Greystar campaign." },
+  {
+    question: "What do we know about their pricing objection, and how should I handle it?",
+    encyclopedia: {
+      kind: "answered",
+      text: "No pricing objection is recorded.",
+      fullyAnswers: false,
+      evidence: [{ source: "account", text: "No pricing objection is recorded." }],
+    },
+  },
+  { question: "What happened at The Louise last time, and what should I do?" },
+  { question: "How many orders did they place, and is it worth another visit?" },
+  { question: "Deliver towels to OPUS LA. Should I go back to The Louise?" },
+  {
+    question: "Tomorrow return John's laundry. What happened with The Louise last time, and should I stop there too?",
+  },
 ];
 
-/** BEFORE (Slice A): the old first-match-wins ladder, unconditional. */
-function claimedByBefore(question: string): string {
-  const lower = normalizeUtterance(question);
-  try {
-    const parsed = parseBusinessTurn(question, null, NOW, TZ);
-    if (parsed.kind !== "not_analytics") return `business_reader (${parsed.kind})`;
-  } catch {
-    // parse failure degrades to the next matcher, as it does live.
-  }
-  if (operationsQuestion(lower)) return "day_work";
-  if (isUnpaidQuestion(lower) && !/\bfollow[- ]?up\b/.test(lower)) return "unpaid_orders";
-  const matched = matchAccounts(lower, ACCOUNTS);
-  if (matched.length > 1) return "account_disambiguation";
-  if (matched.length === 1 && (isAccountQuestion(lower) || MEMORY_QUESTION.test(lower))) return "account_history";
-  if (MEMORY_QUESTION.test(lower)) return "memory_quote";
-  return "encyclopedia, else follow_up_model (often a refusal — old zero-tool bug)";
-}
-
-/** The same evidence order `gatherDeterministicEvidence` in claireTurn.ts uses. */
-function firstEvidenceSource(question: string): string | null {
-  const lower = normalizeUtterance(question);
-  try {
-    const parsed = parseBusinessTurn(question, null, NOW, TZ);
-    if (parsed.kind !== "not_analytics") return `business_reader (${parsed.kind})`;
-  } catch {
-    // Same degrade as live: no evidence from this source.
-  }
-  if (operationsQuestion(lower)) return "day_work";
-  if (isUnpaidQuestion(lower) && !/\bfollow[- ]?up\b/.test(lower)) return "unpaid_orders";
-  const matched = matchAccounts(lower, ACCOUNTS);
-  const target = matched.length === 1 ? matched[0] : null;
-  if (target && isAccountQuestion(lower)) return "account_history";
-  return null;
-}
-
-/** AFTER (Slice C+D): the router's actual answer-class gate. */
-function claimedByAfter(question: string): string {
-  const answerClass = classifyClaireAnswerClass(question);
-  if (answerClass === "judgment") {
-    // Item D5: never gated on a DB tool. No evidence attempted at all.
-    return "follow_up_model (synthesis, no retrieval attempted)";
-  }
-  if (answerClass === "blended") {
-    const evidence = firstEvidenceSource(question);
-    return evidence
-      ? `follow_up_model (synthesis, evidence: ${evidence})`
-      : "follow_up_model (synthesis, no evidence found)";
-  }
-  // fact_only: unchanged from the old ladder.
-  return claimedByBefore(question);
-}
-
-const rows = QUESTIONS.map(question => ({
-  question,
-  blended: isBlendedClaireQuestion(question),
-  before: claimedByBefore(question),
-  after: claimedByAfter(question),
-}));
-
-const width = Math.max(...rows.map(row => row.question.length));
-console.log(`${"QUESTION".padEnd(width)}  ${"".padEnd(6)}BEFORE (Slice A)                                          AFTER (Slice C+D)`);
-for (const row of rows) {
-  console.log(
-    `${row.question.padEnd(width)}  ${row.blended ? "BLEND " : "      "}${row.before.padEnd(58)} ${row.after}`
+async function probe(question: string, encyclopedia?: EncyclopediaAnswer) {
+  let trace: ClaireTurnTraceForTest | null = null;
+  let followUpCalled = false;
+  let retrievedEvidence: Array<{ source: string; text: string }> | undefined;
+  const result = await runClaireTurn(
+    {
+      tenantId: "default",
+      operatorUserId: "adam-admin",
+      dayDirectorActorId: "1",
+      surface: "voice",
+      utterance: question,
+      state: {},
+      conversationKey: "claire-repair2-route-probe",
+      brief: MINIMAL_BRIEF,
+      context: MINIMAL_CONTEXT,
+    },
+    turnDeps({
+      encyclopedia: encyclopedia
+        ? (async () => encyclopedia)
+        : null,
+      followUp: (async (input: { utterance: string; retrievedEvidence?: Array<{ source: string; text: string }> }) => {
+        followUpCalled = true;
+        retrievedEvidence = input.retrievedEvidence;
+        return `SYNTH:${input.retrievedEvidence?.length ?? 0}`;
+      }) as never,
+      onTurnTrace: value => {
+        trace = value;
+      },
+    })
   );
+  return { result, trace, followUpCalled, retrievedEvidence };
 }
 
-const deterministicBefore = rows.filter(row => !row.before.startsWith("encyclopedia"));
-console.log(
-  `\nBEFORE: ${deterministicBefore.length}/${rows.length} claimed by a deterministic matcher before the conversational path was reachable.`
-);
-const changed = rows.filter(row => row.before !== row.after);
-console.log(`AFTER:  ${changed.length}/${rows.length} questions route differently under the architecture fix.`);
-const stillDeterministicAfter = rows.filter(row => !row.after.includes("follow_up_model"));
-console.log(`AFTER:  ${stillDeterministicAfter.length}/${rows.length} still terminate deterministically (item F — fast path preserved for fact-only questions).`);
-
-const blendedRows = rows.filter(row => row.blended);
-const blendedPreservedAfter = blendedRows.filter(row => row.after.includes("follow_up_model"));
-console.log(
-  `\nBefore: ${blendedRows.filter(row => !row.before.startsWith("encyclopedia")).length}/${blendedRows.length} blended fact+judgment questions were claimed by a fact-only matcher (judgment half lost).`
-);
-console.log(`After:  ${blendedPreservedAfter.length}/${blendedRows.length} blended questions now reach Claire's synthesis with the full utterance and gathered evidence.`);
-
-console.log("\nThe two previously-broken blended probes, verbatim:");
-for (const row of blendedRows) {
-  console.log(`  "${row.question}"`);
-  console.log(`    before: ${row.before}`);
-  console.log(`    after:  ${row.after}`);
+function label(outcome: string | null | undefined, path: string | null | undefined): string {
+  switch (outcome) {
+    case "deterministic_final":
+      return `deterministic final (${path ?? "reader"})`;
+    case "retrieval_plus_synthesis":
+      return "retrieval + synthesis";
+    case "judgment_synthesis_no_retrieval":
+      return "judgment synthesis with no retrieval";
+    case "unsupported_fact":
+      return "unsupported fact";
+    case "briefing_plus_synthesis":
+      return "briefing + synthesis";
+    default:
+      return `unlabelled (path=${path ?? "none"})`;
+  }
 }
+
+async function main() {
+  const width = Math.max(...REQUIRED.map(row => row.question.length));
+  console.log("Claire repair 2 C+D route probe — live router, not regex\n");
+  console.log(
+    `${"QUESTION".padEnd(width)}  ${"REGEX CLASS (telemetry only)".padEnd(28)}  ROUTER OUTCOME`
+  );
+  const rows: Array<{ question: string; outcome: string; regex: string; synthesis: boolean }> = [];
+  for (const row of REQUIRED) {
+    const { result, trace, followUpCalled, retrievedEvidence } = await probe(row.question, row.encyclopedia);
+    const regex = classifyClaireAnswerClass(row.question);
+    const outcome = label(trace?.routeOutcome, trace?.path);
+    rows.push({
+      question: row.question,
+      outcome,
+      regex,
+      synthesis: Boolean(trace?.synthesisRequired || followUpCalled),
+    });
+    const sources = retrievedEvidence?.map(item => item.source).join(",") || trace?.evidenceSources.join(",") || "—";
+    console.log(
+      `${row.question.padEnd(width)}  ${regex.padEnd(28)}  ${outcome}  [path=${trace?.path ?? "none"} kind=${result.kind} evidence=${sources}]`
+    );
+  }
+
+  console.log("\nRegex is telemetry only. The following rows synthesize even though the old class said fact_only:");
+  for (const row of rows.filter(item => item.regex === "fact_only" && item.synthesis)) {
+    console.log(`  • ${row.question}`);
+  }
+
+  const counts = rows.reduce<Record<string, number>>((acc, row) => {
+    const key = row.outcome.replace(/ \(.+\)$/, "");
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+  console.log("\nOutcome counts:");
+  for (const [key, value] of Object.entries(counts)) {
+    console.log(`  ${key}: ${value}`);
+  }
+}
+
+main().catch(error => {
+  console.error(error);
+  process.exit(1);
+});

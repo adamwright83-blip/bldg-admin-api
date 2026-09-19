@@ -21,9 +21,10 @@ export function claireTurnTraceDetail(trace: ClaireTurnTrace) {
     encyclopedia: trace.encyclopedia,
     memorySearched: trace.memorySearched,
     blend: trace.blend,
-    // Slice C+D: whether this turn's classification required Claire's own
-    // synthesis, and which deterministic sources fed it as evidence.
+    // Slice C+D: router outcome, not the old regex class.
     synthesisRequired: trace.synthesisRequired,
+    needs_synthesis: trace.needs_synthesis,
+    routeOutcome: trace.routeOutcome,
     evidenceSources: trace.evidenceSources,
     promptSizes: trace.promptSizes,
     latency: trace.latency,

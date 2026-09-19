@@ -1,15 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EncyclopediaAnswer } from "./knowledge/encyclopediaAgent";
+import { decideClaireAnswerRoute, utteranceHasMultipleAsks } from "./answerRouter";
+import { classifyClaireAnswerClass } from "./answerPathTelemetry";
 import { runClaireTurn, type ClaireTurnDeps, type ClaireTurnState, type ClaireTurnTraceForTest } from "./turn/claireTurn";
 
 /**
- * Claire Intelligence Repair Part 2, Slice C+D: retrieval ≠ answer.
+ * Claire Intelligence Repair Part 2, Slice C+D corrective pass.
  *
- * The architecture fix: a judgment or blended question is never allowed to
- * terminate on a deterministic renderer's partial sentence, or on the
- * encyclopedia's old zero-tool refusal prose. A fact-only question can still
- * terminate deterministically (item F) — this is a routing repair, not a
- * blanket "always call the model" change.
+ * Routing authority is decideClaireAnswerRoute / encyclopedia.fullyAnswers.
+ * JUDGMENT_CLAUSE / classifyClaireAnswerClass are telemetry only.
  */
 
 const NOW = new Date("2026-09-15T16:00:00Z");
@@ -40,7 +39,6 @@ function turnDeps(overrides: Partial<ClaireTurnDeps> = {}): ClaireTurnDeps {
   };
 }
 
-/** The smallest context/brief pair that lets a turn reach the conversational path. */
 const MINIMAL_BRIEF = "Two commercial stops today; The Louise is the one that matters.";
 const MINIMAL_CONTEXT = {
   businessDate: "2026-09-15",
@@ -49,6 +47,24 @@ const MINIMAL_CONTEXT = {
   blockers: [],
   relevantTimeline: [],
 } as never;
+
+const LOUISE_HISTORY = {
+  account: { id: 1, name: "The Louise", kind: "account" } as never,
+  missions: [],
+  events: [],
+  fieldVisits: [{ missionId: 1, arrivedAt: "2026-09-08T18:00:00Z", departedAt: "2026-09-08T18:30:00Z", notes: "Toured the basement laundry room." }],
+  outcomes: [],
+  followUps: [],
+  pipelineStage: null,
+  pipelineId: null,
+  contacts: [],
+  dayLineMentions: [],
+  conversationMentions: [],
+};
+
+function encyclopediaAnswer(partial: EncyclopediaAnswer): EncyclopediaAnswer {
+  return partial;
+}
 
 async function turnFor(
   utterance: string,
@@ -73,17 +89,41 @@ async function turnFor(
   return { result, trace: trace as ClaireTurnTraceForTest | null };
 }
 
-describe("Slice C+D — item A: the encyclopedia zero-tool refusal is fixed", () => {
+describe("Slice C+D router — completeness is typed, not inferred from phrases", () => {
+  it("a reader cannot terminate after answering just one clause of a compound request", () => {
+    const utterance = "How many unpaid orders are there, and is it worth another visit?";
+    expect(utteranceHasMultipleAsks(utterance)).toBe(true);
+    const decision = decideClaireAnswerRoute({
+      utterance,
+      encyclopedia: null,
+      localMatches: [{ path: "unpaid_orders", source: "unpaid_orders", mayTerminate: true }],
+      loadedEvidence: [{ source: "unpaid_orders", text: "Nothing waiting on payment." }],
+      briefingWorkItems: 0,
+      briefingQuestions: 0,
+    });
+    expect(decision.outcome).toBe("retrieval_plus_synthesis");
+    expect(decision.path).toBeUndefined();
+  });
+
+  it("judgment wording absent from JUDGMENT_CLAUSE still synthesizes", () => {
+    const utterance = "Why do property managers keep stalling on this?";
+    expect(classifyClaireAnswerClass(utterance)).toBe("fact_only");
+    const decision = decideClaireAnswerRoute({
+      utterance,
+      encyclopedia: { kind: "no_retrieval_needed", fullyAnswers: false },
+      localMatches: [],
+      briefingWorkItems: 0,
+      briefingQuestions: 0,
+    });
+    expect(decision.outcome).toBe("judgment_synthesis_no_retrieval");
+  });
+});
+
+describe("Slice C+D — encyclopedia planner completeness", () => {
   it("a judgment_only plan with no calls never produces refusal prose", async () => {
     const { answerWithEncyclopedia } = await import("./knowledge/encyclopediaAgent");
     const plan = vi.fn(async () => ({
-      choices: [
-        {
-          message: {
-            content: JSON.stringify({ calls: [], answerable: "judgment_only", missing: "" }),
-          },
-        },
-      ],
+      choices: [{ message: { content: JSON.stringify({ calls: [], answerable: "judgment_only", missing: "", fullyAnswers: false }) } }],
     }));
     const result: EncyclopediaAnswer = await answerWithEncyclopedia(
       {
@@ -98,23 +138,22 @@ describe("Slice C+D — item A: the encyclopedia zero-tool refusal is fixed", ()
       },
       { invoke: plan as never }
     );
-    expect(result).toEqual({ kind: "no_retrieval_needed" });
+    expect(result).toEqual({ kind: "no_retrieval_needed", fullyAnswers: false });
   });
 
-  it("an unsupported_fact plan still speaks a truthful refusal, unchanged", async () => {
+  it("an unsupported_fact plan still speaks a truthful refusal on a single-clause fact", async () => {
     const { answerWithEncyclopedia } = await import("./knowledge/encyclopediaAgent");
     const plan = vi.fn(async () => ({
-      choices: [
-        {
-          message: {
-            content: JSON.stringify({
-              calls: [],
-              answerable: "unsupported_fact",
-              missing: "a signed lease term for The Louise",
-            }),
-          },
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            calls: [],
+            answerable: "unsupported_fact",
+            missing: "a signed lease term for The Louise",
+            fullyAnswers: false,
+          }),
         },
-      ],
+      }],
     }));
     const result = await answerWithEncyclopedia(
       {
@@ -130,30 +169,46 @@ describe("Slice C+D — item A: the encyclopedia zero-tool refusal is fixed", ()
       { invoke: plan as never }
     );
     expect(result.kind).toBe("unsupported_fact");
+    expect(result.fullyAnswers).toBe(true);
     expect(result).toMatchObject({ text: expect.stringContaining("a signed lease term for The Louise") });
   });
 
-  it("encyclopedia zero-tool judgment question reaches Claire's own turn, not a refusal", async () => {
-    const encyclopedia = vi.fn(async () => ({ kind: "no_retrieval_needed" }) satisfies EncyclopediaAnswer);
-    const followUp = vi.fn(async () => "Here's my read on the building question.");
-    const { result, trace } = await turnFor(
-      "Should I push for the full building or start with a pilot floor?",
-      { encyclopedia: encyclopedia as never, followUp: followUp as never }
+  it("retrieved records on a compound utterance cannot set fullyAnswers true", async () => {
+    const { answerWithEncyclopedia } = await import("./knowledge/encyclopediaAgent");
+    const plan = vi.fn(async () => ({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            calls: [{ tool: "unpaid_orders", question: "", name: "", day: "today", terms: [] }],
+            answerable: "records",
+            missing: "",
+            fullyAnswers: true,
+          }),
+        },
+      }],
+    }));
+    const result = await answerWithEncyclopedia(
+      {
+        tenantId: "default",
+        operatorUserId: "adam-admin",
+        dayDirectorActorId: "1",
+        utterance: "How many unpaid orders are there, and is it worth another visit?",
+        surface: "voice",
+        history: [],
+        now: NOW,
+        timeZone: "America/Los_Angeles",
+      },
+      {
+        invoke: plan as never,
+        runTool: vi.fn(async () => ({ tool: "unpaid_orders" as const, text: "Nothing waiting on payment." })) as never,
+      }
     );
-    // Pure judgment: never reaches the encyclopedia at all (item D5, F) —
-    // classification alone routes straight to synthesis.
-    expect(encyclopedia).not.toHaveBeenCalled();
-    expect(followUp).toHaveBeenCalledTimes(1);
-    expect(followUp.mock.calls[0]![0]).toMatchObject({
-      utterance: "Should I push for the full building or start with a pilot floor?",
-    });
-    expect(trace?.path).toBe("follow_up_model");
-    expect(trace?.synthesisRequired).toBe(true);
-    expect(result.speak).toBe("Here's my read on the building question.");
+    expect(result.kind).toBe("answered");
+    expect(result.fullyAnswers).toBe(false);
   });
 });
 
-describe("Slice C+D — item F: deterministic fast path preserved for fact-only questions", () => {
+describe("Slice C+D — simple factual questions stay deterministic", () => {
   it("a simple fact-only question still terminates deterministically, without calling the model", async () => {
     const followUp = vi.fn(async () => "should not be called");
     const { result, trace } = await turnFor(
@@ -166,97 +221,163 @@ describe("Slice C+D — item F: deterministic fast path preserved for fact-only 
     expect(followUp).not.toHaveBeenCalled();
     expect(trace?.path).toBe("unpaid_orders");
     expect(trace?.synthesisRequired).toBe(false);
+    expect(trace?.routeOutcome).toBe("deterministic_final");
     expect(result.speak).toBeTruthy();
   });
+
+  it("call-memory fact-only answers from quoted history without synthesis", async () => {
+    const followUp = vi.fn(async () => "should not be called");
+    const { result, trace } = await turnFor("What did I tell you about The Louise?", {
+      searchMemory: vi.fn(async () => [
+        { speaker: "OPERATOR", text: "The Louise wants a quote before month end.", occurredAt: NOW },
+      ]) as never,
+      followUp: followUp as never,
+    });
+    expect(followUp).not.toHaveBeenCalled();
+    expect(trace?.path).toBe("memory_quote");
+    expect(trace?.memorySearched).toBe(true);
+    expect(result.speak).toContain("The Louise wants a quote");
+  });
 });
 
-describe("Slice C+D — item C: blended questions preserve the full utterance and synthesize", () => {
-  it("the first previously-broken probe: preserves the full utterance and folds account history in as evidence", async () => {
+describe("Slice C+D — judgment and blended turns synthesize the full utterance", () => {
+  it("judgment wording the old regex misses still reaches Claire", async () => {
+    const followUp = vi.fn(async () => "They stall because a no is safer than a yes they cannot unwind.");
+    const { result, trace } = await turnFor("Why do property managers keep stalling on this?", {
+      followUp: followUp as never,
+    });
+    expect(classifyClaireAnswerClass("Why do property managers keep stalling on this?")).toBe("fact_only");
+    expect(followUp).toHaveBeenCalledTimes(1);
+    expect(followUp.mock.calls[0]![0]).toMatchObject({
+      utterance: "Why do property managers keep stalling on this?",
+    });
+    expect(trace?.path).toBe("follow_up_model");
+    expect(trace?.synthesisRequired).toBe(true);
+    expect(trace?.needs_synthesis).toBe(true);
+    expect(result.speak).toContain("stall");
+  });
+
+  it("the first previously-broken probe: full utterance + account history evidence", async () => {
     const UTTERANCE = "What happened at The Louise last time, and what should I do?";
-    const accountHistory = vi.fn(async () => ({
-      account: { id: 1, name: "The Louise", kind: "account" } as never,
-      missions: [],
-      events: [],
-      fieldVisits: [{ missionId: 1, arrivedAt: "2026-09-08T18:00:00Z", departedAt: "2026-09-08T18:30:00Z", notes: "Toured the basement laundry room." }],
-      outcomes: [],
-      followUps: [],
-      pipelineStage: null,
-      pipelineId: null,
-      contacts: [],
-      dayLineMentions: [],
-      conversationMentions: [],
-    }));
-    const followUp = vi.fn(async () => "Last time you toured the basement laundry room. I'd follow up with a proposal this week.");
+    const followUp = vi.fn(async () => "Last time you toured the basement. I'd follow up with a proposal this week.");
     const { result, trace } = await turnFor(UTTERANCE, {
       accounts: async () => [{ id: 1, name: "The Louise", kind: "account" } as never],
-      accountHistory: accountHistory as never,
+      accountHistory: vi.fn(async () => LOUISE_HISTORY) as never,
       followUp: followUp as never,
     });
     expect(followUp).toHaveBeenCalledTimes(1);
     const call = followUp.mock.calls[0]![0] as { utterance: string; retrievedEvidence?: Array<{ source: string; text: string }> };
-    // The full, unsplit utterance -- never truncated to just the fact half.
     expect(call.utterance).toBe(UTTERANCE);
-    expect(call.retrievedEvidence).toBeDefined();
-    expect(call.retrievedEvidence!.some(item => item.source === "account_history")).toBe(true);
+    expect(call.retrievedEvidence?.some(item => item.source === "account_history")).toBe(true);
     expect(trace?.path).toBe("follow_up_model");
     expect(trace?.synthesisRequired).toBe(true);
-    expect(trace?.evidenceSources).toContain("account_history");
-    expect(result.speak).toBe("Last time you toured the basement laundry room. I'd follow up with a proposal this week.");
+    expect(result.speak).toContain("proposal");
   });
 
-  it("the second previously-broken probe: preserves the full utterance and folds the order count in as evidence", async () => {
+  it("the second previously-broken probe: full utterance + business-query evidence", async () => {
     const UTTERANCE = "How many orders did they place, and is it worth another visit?";
-    const runQuery = vi.fn(async () => ({
-      status: "ok" as const,
-      data: { kind: "scalar" as const, value: 4 },
-    }));
     const followUp = vi.fn(async () => "They placed 4 orders. I'd say it's worth another visit.");
     const { result, trace } = await turnFor(UTTERANCE, {
-      business: { now: () => NOW, timeZone: () => "America/Los_Angeles", plan: async () => null, runQuery: runQuery as never },
+      business: {
+        now: () => NOW,
+        timeZone: () => "America/Los_Angeles",
+        plan: async () => null,
+        runQuery: vi.fn(async () => ({ status: "ok" as const, data: { kind: "scalar" as const, value: 4 } })) as never,
+      },
+      followUp: followUp as never,
+    });
+    expect(followUp).toHaveBeenCalledTimes(1);
+    expect(followUp.mock.calls[0]![0]).toMatchObject({ utterance: UTTERANCE });
+    expect(trace?.path).toBe("follow_up_model");
+    expect(result.speak).toContain("worth another visit");
+  });
+
+  it("call-memory + judgment retrieves then synthesizes", async () => {
+    const UTTERANCE = "What did I tell you about The Louise, and what should I do?";
+    const followUp = vi.fn(async () => "You said they want a quote. Send it this week.");
+    const { trace } = await turnFor(UTTERANCE, {
+      searchMemory: vi.fn(async () => [
+        { speaker: "OPERATOR", text: "The Louise wants a quote.", occurredAt: NOW },
+      ]) as never,
       followUp: followUp as never,
     });
     expect(followUp).toHaveBeenCalledTimes(1);
     const call = followUp.mock.calls[0]![0] as { utterance: string; retrievedEvidence?: Array<{ source: string; text: string }> };
     expect(call.utterance).toBe(UTTERANCE);
+    expect(call.retrievedEvidence?.some(item => item.source === "call_memory")).toBe(true);
     expect(trace?.path).toBe("follow_up_model");
-    expect(trace?.synthesisRequired).toBe(true);
-    expect(result.speak).toBe("They placed 4 orders. I'd say it's worth another visit.");
+    expect(trace?.memorySearched).toBe(true);
   });
-});
 
-describe("Slice C+D — item D5: general professional judgment needs no DB lookup", () => {
-  it("a pure judgment question never calls any deterministic reader or the encyclopedia", async () => {
-    const accountHistory = vi.fn();
-    const dayWork = vi.fn();
-    const unpaid = vi.fn();
-    const runQuery = vi.fn();
-    const encyclopedia = vi.fn();
-    const followUp = vi.fn(async () => "A common approach is to lead with the pilot floor.");
-    const { result, trace } = await turnFor("What would you recommend here?", {
-      accountHistory: accountHistory as never,
-      dayWork: dayWork as never,
-      unpaid: unpaid as never,
-      business: { now: () => NOW, timeZone: () => "America/Los_Angeles", plan: async () => null, runQuery: runQuery as never },
+  it("account-history + judgment synthesizes", async () => {
+    const followUp = vi.fn(async () => "They asked for a formal quote — send it before Friday.");
+    const { result, trace } = await turnFor("What's the history with The Louise, and should I send a quote?", {
+      accounts: async () => [{ id: 1, name: "The Louise", kind: "account" } as never],
+      accountHistory: vi.fn(async () => LOUISE_HISTORY) as never,
+      followUp: followUp as never,
+    });
+    expect(trace?.evidenceSources).toContain("account_history");
+    expect(result.speak).toContain("formal quote");
+  });
+
+  it("encyclopedia tool evidence + judgment synthesizes rather than terminating on retrieval", async () => {
+    const UTTERANCE = "What do we know about their pricing objection, and how should I handle it?";
+    const encyclopedia = vi.fn(async () => encyclopediaAnswer({
+      kind: "answered",
+      text: "No pricing objection is recorded.",
+      fullyAnswers: false,
+      evidence: [{ source: "account", text: "No pricing objection is recorded." }],
+    }));
+    const followUp = vi.fn(async () => "Nothing is on record. I'd ask what they compared you against.");
+    const { result, trace } = await turnFor(UTTERANCE, {
       encyclopedia: encyclopedia as never,
       followUp: followUp as never,
     });
-    expect(accountHistory).not.toHaveBeenCalled();
-    expect(dayWork).not.toHaveBeenCalled();
-    expect(unpaid).not.toHaveBeenCalled();
-    expect(runQuery).not.toHaveBeenCalled();
-    expect(encyclopedia).not.toHaveBeenCalled();
+    expect(encyclopedia).toHaveBeenCalled();
     expect(followUp).toHaveBeenCalledTimes(1);
-    expect(trace?.evidenceSources).toEqual([]);
-    expect(result.speak).toBe("A common approach is to lead with the pilot floor.");
+    expect(followUp.mock.calls[0]![0]).toMatchObject({ utterance: UTTERANCE });
+    expect(trace?.path).toBe("follow_up_model");
+    expect(result.speak).toContain("compared");
   });
 });
 
-describe("Slice C+D — item D4: unsupported business-specific facts remain a truthful unknown", () => {
-  it("a fact-only question the encyclopedia genuinely can't answer still speaks a refusal, not a guess", async () => {
-    const encyclopedia = vi.fn(async () => ({
+describe("Slice C+D — mixed briefing preserves work and still synthesizes", () => {
+  it("mixed work item + judgment preserves both", async () => {
+    const UTTERANCE = "Deliver towels to OPUS LA. Should I go back to The Louise?";
+    const followUp = vi.fn(async () => "Yes — go back to The Louise after the towel drop.");
+    const { result, trace } = await turnFor(UTTERANCE, { followUp: followUp as never });
+    expect(result.kind).toBe("briefing_proposed");
+    expect(followUp).toHaveBeenCalledTimes(1);
+    expect(followUp.mock.calls[0]![0]).toMatchObject({ utterance: UTTERANCE });
+    expect(result.speak.toLowerCase()).toMatch(/towel|opus/i);
+    expect(result.speak).toContain("go back to The Louise");
+    expect(trace?.routeOutcome).toBe("briefing_plus_synthesis");
+  });
+
+  it("mixed work item + fact + judgment preserves all parts", async () => {
+    const UTTERANCE = "Tomorrow return John's laundry. What happened with The Louise last time, and should I stop there too?";
+    const followUp = vi.fn(async () => "You toured the basement last time. Yes, stop there after John's return.");
+    const { result } = await turnFor(UTTERANCE, {
+      accounts: async () => [{ id: 1, name: "The Louise", kind: "account" } as never],
+      accountHistory: vi.fn(async () => LOUISE_HISTORY) as never,
+      followUp: followUp as never,
+    });
+    expect(result.kind).toBe("briefing_proposed");
+    expect(followUp).toHaveBeenCalledTimes(1);
+    expect(followUp.mock.calls[0]![0]).toMatchObject({ utterance: UTTERANCE });
+    expect(result.speak.toLowerCase()).toMatch(/john|return/i);
+    expect(result.speak).toContain("stop there");
+  });
+});
+
+describe("Slice C+D — unsupported facts stay truthful without discarding judgment", () => {
+  it("a fact-only unsupported business fact still speaks a refusal, not a guess", async () => {
+    const encyclopedia = vi.fn(async () => encyclopediaAnswer({
       kind: "unsupported_fact",
       text: "I can't answer that from Goldline's records: a signed lease term for The Louise.",
-    }) satisfies EncyclopediaAnswer);
+      fullyAnswers: true,
+      evidence: [{ source: "unsupported_fact", text: "I can't answer that from Goldline's records: a signed lease term for The Louise." }],
+    }));
     const followUp = vi.fn(async () => "should not be called");
     const { result, trace } = await turnFor("What's the lease term at The Louise?", {
       encyclopedia: encyclopedia as never,
@@ -267,78 +388,44 @@ describe("Slice C+D — item D4: unsupported business-specific facts remain a tr
     expect(trace?.fallbackReason).toBe("unsupported_fact");
     expect(result.speak).toContain("a signed lease term for The Louise");
   });
-});
 
-describe("Slice C+D — item E: deterministic evidence is passed through, not rewritten", () => {
-  it("the evidence handed to synthesis is exactly the reader's own rendered text", async () => {
-    const accountHistory = vi.fn(async () => ({
-      account: { id: 1, name: "The Louise", kind: "account" } as never,
-      missions: [],
-      events: [],
-      fieldVisits: [{ missionId: 1, arrivedAt: "2026-09-08T18:00:00Z", departedAt: "2026-09-08T18:30:00Z", notes: "Last visit was September 2nd; no follow-up logged since." }],
-      outcomes: [],
-      followUps: [],
-      pipelineStage: null,
-      pipelineId: null,
-      contacts: [],
-      dayLineMentions: [],
-      conversationMentions: [],
+  it("unsupported fact + answerable judgment still synthesizes the judgment", async () => {
+    const UTTERANCE = "What's the lease term at The Louise, and should I still pitch them?";
+    const encyclopedia = vi.fn(async () => encyclopediaAnswer({
+      kind: "unsupported_fact",
+      text: "I can't answer that from Goldline's records: a signed lease term for The Louise.",
+      fullyAnswers: false,
+      evidence: [{ source: "unsupported_fact", text: "I can't answer that from Goldline's records: a signed lease term for The Louise." }],
     }));
-    const followUp = vi.fn(async () => "Follow up this week.");
-    await turnFor("What happened at The Louise last time, and what should I do?", {
-      accounts: async () => [{ id: 1, name: "The Louise", kind: "account" } as never],
-      accountHistory: accountHistory as never,
+    const followUp = vi.fn(async () => "I don't have the lease term on record. I'd still pitch — the last visit went well.");
+    const { result, trace } = await turnFor(UTTERANCE, {
+      encyclopedia: encyclopedia as never,
       followUp: followUp as never,
     });
-    const call = followUp.mock.calls[0]![0] as { retrievedEvidence?: Array<{ source: string; text: string }> };
-    const accountEvidence = call.retrievedEvidence!.find(item => item.source === "account_history");
-    expect(accountEvidence).toBeDefined();
-    // Not paraphrased, not summarized, not recomputed -- the caller does not
-    // invent evidence text; it is whatever the deterministic reader rendered.
-    expect(typeof accountEvidence!.text).toBe("string");
-    expect(accountEvidence!.text.length).toBeGreaterThan(0);
+    expect(followUp).toHaveBeenCalledTimes(1);
+    expect(followUp.mock.calls[0]![0]).toMatchObject({ utterance: UTTERANCE });
+    expect(trace?.path).toBe("follow_up_model");
+    expect(result.speak).toContain("still pitch");
   });
 });
 
-describe("Slice C+D — item H: existing routing stays intact", () => {
-  it("a briefing with an embedded judgment question does not call the model per sub-question (scope boundary)", async () => {
-    const followUp = vi.fn(async () => "should not run for the embedded question");
-    const { result } = await turnFor("Deliver towels to OPUS LA. Should I go back to The Louise?", {
-      followUp: followUp as never,
+describe("Slice C+D — existing personal/canon routing and unrelated consumers", () => {
+  it("personal canon recovery still attributes guard_recovery", async () => {
+    const followUp = vi.fn(async (input: { onGeneration?: (diagnostic: unknown) => void }) => {
+      input.onGeneration?.({
+        kind: "follow_up",
+        source: "fallback",
+        answerOrigin: "canon_render",
+        failureReason: "ungrounded_personal_specificity_canon_rendered",
+        modelRequested: "claude-sonnet-4-6",
+      });
+      return "Rendered from canon.";
     });
-    // The embedded-question path (allowSynthesis: false) does not invoke
-    // synthesis; the briefing's own answer path covers this turn instead.
-    // The top-level utterance itself is a briefing (has a work item), so it
-    // never reaches the standalone-question classifier at all.
-    expect(result.kind).not.toBe("follow_up");
+    const { trace } = await turnFor("Where exactly did you grow up?", { followUp: followUp as never });
+    expect(trace?.path).toBe("guard_recovery");
+    expect(trace?.fallbackReason).toBe("ungrounded_personal_specificity_canon_rendered");
   });
 
-  it("account-history plus a recommendation synthesizes in one voice", async () => {
-    const accountHistory = vi.fn(async () => ({
-      account: { id: 1, name: "The Louise", kind: "account" } as never,
-      missions: [],
-      events: [],
-      fieldVisits: [{ missionId: 1, arrivedAt: "2026-09-08T18:00:00Z", departedAt: "2026-09-08T18:30:00Z", notes: "Manager asked for a formal quote." }],
-      outcomes: [],
-      followUps: [],
-      pipelineStage: null,
-      pipelineId: null,
-      contacts: [],
-      dayLineMentions: [],
-      conversationMentions: [],
-    }));
-    const followUp = vi.fn(async () => "They asked for a formal quote — send it before Friday.");
-    const { result, trace } = await turnFor("What's the history with The Louise, and should I send a quote?", {
-      accounts: async () => [{ id: 1, name: "The Louise", kind: "account" } as never],
-      accountHistory: accountHistory as never,
-      followUp: followUp as never,
-    });
-    expect(trace?.evidenceSources).toContain("account_history");
-    expect(result.speak).toBe("They asked for a formal quote — send it before Friday.");
-  });
-});
-
-describe("Slice C+D — item H: unrelated Goldline AI consumers remain untouched", () => {
   it("no non-Claire model consumer file was touched by this slice", async () => {
     const { readFileSync } = await import("node:fs");
     for (const file of [

@@ -314,7 +314,7 @@ export async function answerClairePreDriveFollowUp(
       {
         label: "retrieved_evidence_rule",
         text: input.retrievedEvidence?.length
-          ? "retrievedEvidence in currentContext is verified evidence retrieved specifically for this question, each entry labelled with its source. Ground any factual part of your answer in it, never contradict it, and do not invent further specifics beyond it. The operator's question may also ask for your judgment or recommendation — answer that part too, as your own professional opinion, in the same response; do not answer only the factual half."
+          ? "retrievedEvidence in currentContext is verified evidence retrieved specifically for this question, each entry labelled with its source. Ground any factual part of your answer in it, never contradict it, and do not invent further specifics beyond it. If an entry's source is unsupported_fact, that specific business fact is unavailable — say so plainly. The operator's question may also ask for your judgment or recommendation — answer that part too, as your own professional opinion, in the same response; do not answer only the factual half, and do not throw away a judgment because a neighbouring fact is missing."
           : "If part of the operator's question needs a specific business fact and retrievedEvidence in currentContext is empty, say plainly that you don't have that fact on record, then still give your professional judgment on whatever else was asked — never silently drop the rest of the question.",
       },
       // (7) Delivery rules LAST, nearest the generation, explicitly
