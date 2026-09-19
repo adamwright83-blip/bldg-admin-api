@@ -129,6 +129,53 @@ describe("mutation claims require the matching receipt", () => {
     expect(guarded).not.toMatch(/I added the Zeely/i);
   });
 
+  it("receipt-backed single-item renderers require the matching mutation class", () => {
+    const updatedA = [{ claimedState: "updated" as const, entityId: "task-a", statement: "Updated task A" }];
+    const removedA = [{ claimedState: "removed" as const, entityId: "task-a", statement: "Removed task A" }];
+    const sentA = [{ claimedState: "sent" as const, entityId: "gap-a", statement: "Sent capability request" }];
+
+    expect(lintReceiptBackedCommitSpeech("Added: Instagram ad. What else?", createdA).pass).toBe(true);
+    expect(lintReceiptBackedCommitSpeech("Added: Instagram ad. What else?", []).pass).toBe(false);
+
+    expect(lintReceiptBackedCommitSpeech("Updated: Instagram ad. Same item, no duplicate. What else?", updatedA).pass).toBe(true);
+    expect(lintReceiptBackedCommitSpeech("Updated: Instagram ad. Same item, no duplicate. What else?", createdA).pass).toBe(false);
+
+    expect(lintReceiptBackedCommitSpeech("Removed Instagram ad from the Day Line.", removedA).pass).toBe(true);
+    expect(lintReceiptBackedCommitSpeech("Removed Instagram ad from the Day Line.", createdA).pass).toBe(false);
+
+    expect(lintReceiptBackedCommitSpeech("Sent to engineering. I'll let you know what they find.", sentA).pass).toBe(true);
+    expect(lintReceiptBackedCommitSpeech("Sent to engineering. I'll let you know what they find.", []).pass).toBe(false);
+  });
+
+  it("bare deterministic mutation confirmations are blocked when they arrive as conversational prose", () => {
+    const staticCreatedA = new VerifiedFactInventory([
+      {
+        claimId: "created:task-a",
+        statement: "Task A already exists",
+        entityRef: "task-a",
+        status: "verified",
+        claimedState: "created",
+        provenance: "test.static_inventory",
+      },
+    ]);
+    expect(lintPostGenerationStateVerbs("Added: task B. What else?", staticCreatedA).pass).toBe(false);
+    expect(lintPostGenerationStateVerbs("Updated: task B. What else?", staticCreatedA).pass).toBe(false);
+    expect(lintPostGenerationStateVerbs("Removed task B from the Day Line.", staticCreatedA).pass).toBe(false);
+  });
+
+  it("receipt-backed account follow-up readbacks require both writes they claim", () => {
+    const scheduledA = [{ claimedState: "scheduled" as const, entityId: "follow-a", statement: "Scheduled follow-up" }];
+    expect(
+      lintReceiptBackedCommitSpeech(
+        "Saved. The Louise follow-up is on Sunday.",
+        [...createdA, ...scheduledA]
+      ).pass
+    ).toBe(true);
+    expect(lintReceiptBackedCommitSpeech("Saved. The Louise follow-up is on Sunday.", createdA).pass).toBe(false);
+    expect(lintReceiptBackedCommitSpeech("Saved on Sunday's line.", createdA).pass).toBe(true);
+    expect(lintReceiptBackedCommitSpeech("I moved the Louise follow-up to Sunday in the pipeline, but I couldn't add it to the Day Line.", scheduledA).pass).toBe(true);
+  });
+
   it("rejects engineering Sent to… without a sent receipt (shared invariant, not a workflow redesign)", () => {
     expect(lintPostGenerationStateVerbs("Sent to engineering. I'll let you know what they find.", empty).pass).toBe(false);
   });
