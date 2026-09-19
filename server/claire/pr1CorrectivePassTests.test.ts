@@ -75,7 +75,7 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
       expect(formatClaireLocalTime("not-a-date", "America/Los_Angeles")).toBe(null);
     });
 
-    it("the follow-up prompt includes a deterministic rendered local time and instructs the model not to convert the raw timestamp itself", async () => {
+    it("the follow-up prompt carries the resolved local time and never exposes the raw timestamp", async () => {
       const invokeText = vi.fn().mockResolvedValue("It's at 5pm.");
       await answerClairePreDriveFollowUp(
         { tenantId: "tenant-1", utterance: "What time's the stop?", brief: "Visit The Wilshire.", context: baseContext },
@@ -83,9 +83,8 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
       );
       const userPayload = JSON.parse(invokeText.mock.calls[0][0].messages.at(-1).content);
       expect(userPayload.currentContext.nextFixedCommitmentLocalWhen).toContain("5:00 PM");
-      const system = invokeText.mock.calls[0][0].messages[0].content as string;
-      expect(system).toContain("nextFixedCommitmentLocalWhen");
-      expect(system).toContain("Do not attempt to convert nextFixedCommitment.scheduledAt's raw ISO timestamp into local time yourself");
+      // Invariant: the model cannot mis-convert a timestamp it is never given.
+      expect(userPayload.currentContext.nextFixedCommitment.scheduledAt).toBeUndefined();
     });
 
     it("the opening-brief prompt includes the same deterministic rendered local time", async () => {

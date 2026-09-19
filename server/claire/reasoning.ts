@@ -21,7 +21,11 @@ import {
 import { ENV } from "../_core/env";
 import { claireModelId, claireModelRequest } from "./claireModel";
 import { formatClaireLocalTime, CLAIRE_BUSINESS_TIME_ZONE } from "./contextAssembler";
-import { VOICE_NATIVE_ANSWER_GUIDANCE, BLOCKER_REPETITION_DISCIPLINE, CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION } from "./conversationVoiceGuidance";
+import {
+  CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION,
+  MISSION_SALES_BRIEF_INSTRUCTION,
+  VOICE_NATIVE_ANSWER_GUIDANCE,
+} from "./conversationVoiceGuidance";
 import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
 import { measureClairePromptSections } from "./answerPathTelemetry";
 
@@ -139,7 +143,11 @@ function compactContext(context: ClaireDriveContext): string {
     macroGoal: context.macroGoal,
     verifiedMetrics: context.verifiedMetrics,
     campaign: context.campaign,
-    nextFixedCommitment: context.nextFixedCommitment,
+    // The raw UTC instant is withheld: the model gets only the resolved local
+    // time below, so it cannot mis-convert a timestamp it never sees.
+    nextFixedCommitment: context.nextFixedCommitment
+      ? { ...context.nextFixedCommitment, scheduledAt: undefined }
+      : context.nextFixedCommitment,
     // PR1 Claire Intelligence Repair -- corrective pass (real-exam
     // finding): same deterministic local-time rendering as
     // preDriveConversation.ts, so Claire never has to convert a raw ISO
@@ -303,9 +311,6 @@ export async function writeClairePreDriveBrief(
    * are telemetry only — only the text is sent, joined exactly as before.
    */
   const openingBriefSections = (): Array<{ label: string; text: string | null }> => [
-    // (1) Who Claire is
-    { label: "identity", text: "You are Claire, Goldline's operations partner and strategist, calling before a drive." },
-    // (2) Eligible relationship/canon context
     { label: "compiled_canon", text: compiled.promptSection },
     {
       label: "few_shot_voice",
@@ -313,41 +318,21 @@ export async function writeClairePreDriveBrief(
         ? `Voice reference only, not facts to repeat verbatim -- illustrative examples of how Claire actually talks: ${compiled.fewShotBlock}`
         : null,
     },
-    // (3) Verified business context (supplied in the user turn) + fact inventory
     { label: "fact_inventory", text: inventory.toPromptSection() },
-    // (4) What she's helping with
-    { label: "task_framing", text: "This is an orientation brief. Notice the gap between where the business is and where the operator wants it, and select the one or two commercial points that matter most today, using the supplied clock, macro goal, verified metric, work picture, campaign, and runtime picture." },
-    // (3b) What this business actually sells -- without this the
-    // model fills the gap from pretraining with a generic
-    // laundry-equipment sales model. See offerContext.ts.
     { label: "offer_context", text: GOLDLINE_OFFER_CONTEXT },
-    { label: "reasoning_policy", text: CLAIRE_V1_REASONING_POLICY },
     { label: "capability_briefing", text: formatCapabilityBriefing() },
-    // (5) Truth/action boundaries
-    { label: "truth_business_claims", text: "Every business-specific factual clause must map directly to a supplied field or the fact inventory, or say plainly it is unknown. Omit missing facts. Never calculate a metric or infer a total. Never invent a customer, outcome, deadline, address, revenue, commitment, or completed action. The game cannot create business truth." },
-    { label: "general_knowledge_allowance", text: "General professional/strategic knowledge (sales approach, pricing logic, PM dynamics, ops reasoning) may be used to frame your recommendation or reasoning, clearly as your own judgment or suggestion — never asserted as a fact about this business. Forecasts and planning scenarios are estimates, not facts (Guardrail G12). Keep that general knowledge consistent with what this business actually sells, above — do not import a sales model from a different industry or a different kind of laundry business." },
-    { label: "no_ceo_language", text: "The operator is a player, not a CEO. Never use 'CEO', 'executive', 'board approval', or similar framing." },
-    { label: "no_disappointment", text: "Missed or outstanding work is never framed as disappointment, shame, or letdown (Guardrail G2). State what remains plainly with options (repair, reschedule, or drop)." },
-    { label: "temporal_authority", text: CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION },
-    { label: "day_state_viability", text: "If fieldSalesDayState is winding_down or over, distinguish property-visit viability from remote calls, follow-ups, research, or tomorrow's field opportunity when those items exist." },
-    { label: "partial_metric_rule", text: "For a partial active-customer metric, state only the verified subset and explicitly say it is not the full total. For unavailable, omit the count." },
-    { label: "real_work_language", text: "Use real-work language such as Greystar visits, never fantasy or NPC language." },
-    { label: "no_engineering_talk", text: "Never mention software development, code, repositories, GitHub, Codex, commits, pull requests, deployments, archiving, internal engineering chores, JSON, databases, confidence systems, or internal architecture." },
-    { label: "unknown_macro_goal", text: "If the macro goal is unknown, ask what the macro goal is rather than inventing it." },
-    { label: "no_self_introduction", text: "The phone wrapper already introduces Claire. Do not introduce yourself, say your name, greet the operator, or mention Goldline." },
-    // (6)/(7) recent conversation and the operator's ask arrive via the user turn below
-    { label: "spoken_english", text: "Use conversational spoken English. Avoid slash-separated phrases, dense abbreviations, or wording that is hard to understand over a phone line." },
-    { label: "blocker_repetition", text: BLOCKER_REPETITION_DISCIPLINE },
-    { label: "no_game_narration", text: "Do not narrate the game." },
-    { label: "commitment_local_time", text: "nextFixedCommitmentLocalWhen, when present, is the authoritative, already-resolved local date/time for the next fixed commitment. State or reference its time using that field directly. Do not attempt to convert nextFixedCommitment.scheduledAt's raw ISO timestamp into local time yourself." },
-    { label: "mission_sales_brief", text: "If the context includes missionSalesBrief, that is the one authoritative sales strategy for this mission — prioritize its primaryObjective and keyUnknown over generic pitching, and do not repeat anything listed in its thingsToAvoid. You may add general sales judgment on top of it, clearly framed as your own take." },
-    { label: "mission_sales_brief_unknowns", text: "Never state a missionSalesBrief unknown, questionsToAsk item, or recommendation as if it were already a known fact. If the operator asks what an unknown answer is, say plainly that it is not known and that finding out is the point of this visit." },
-    // (8) Delivery rules LAST, nearest the generation, explicitly
-    // authoritative over anything above implying length/structure.
-    // The old "Speak naturally, sized to what actually matters
-    // today -- usually a few concise sentences, more if there is a
-    // genuine strategic point worth making" line was removed here:
-    // it competed directly with these rules on length.
+    { label: "reasoning_policy", text: CLAIRE_V1_REASONING_POLICY },
+    {
+      label: "job_and_clock",
+      text: `You are Claire, calling before a drive. Name the one or two points that matter most today. ${CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION}`,
+    },
+    { label: "truth_business_claims", text: "Every business-specific factual clause must map directly to a supplied field or the fact inventory, or say plainly it is unknown." },
+    { label: "judgment_and_history", text: "General professional/strategic knowledge (sales approach, pricing logic, PM dynamics, ops reasoning) may be used to frame your recommendation, never asserted as a fact about this business; do not import a sales model from a different industry." },
+    { label: "opening_guardrails", text: "Never CEO/executive/board approval. No disappointment framing. Spoken English. Do not narrate the game. Do not introduce yourself." },
+    {
+      label: "mission_sales_brief",
+      text: input.context.missionSalesBrief ? MISSION_SALES_BRIEF_INSTRUCTION : null,
+    },
     { label: "delivery_voice", text: VOICE_NATIVE_ANSWER_GUIDANCE },
   ];
   const promptSize = measureClairePromptSections("opening_brief", openingBriefSections());
