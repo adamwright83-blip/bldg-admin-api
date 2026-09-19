@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { MutationReceipt } from "./assertionGuard";
 import { invokeLLM } from "../_core/llm";
 import { claireModelRequest } from "./claireModel";
 import type { DayDirectorProposal } from "../../shared/dayDirector";
@@ -255,18 +256,18 @@ export type PendingProposalState = {
 
 export type VoiceCommitmentTurnResult =
   | { kind: "proposed"; speak: string }
-  | { kind: "accepted"; speak: string; proposal: DayDirectorProposal; commitmentId?: string }
-  | { kind: "updated"; speak: string; commitmentId: string }
+  | { kind: "accepted"; speak: string; proposal: DayDirectorProposal; commitmentId?: string; mutationReceipt?: MutationReceipt }
+  | { kind: "updated"; speak: string; commitmentId: string; mutationReceipt?: MutationReceipt }
   | { kind: "declined"; speak: string }
   | { kind: "reask"; speak: string }
   | { kind: "acknowledged_existing"; speak: string }
   | { kind: "clarifying"; speak: string }
   | { kind: "coaching"; speak: string }
-  | { kind: "field_captured"; speak: string }
+  | { kind: "field_captured"; speak: string; sourceId?: string; mutationReceipt?: MutationReceipt }
   | { kind: "plan_confirmed"; speak: string }
-  | { kind: "edited"; speak: string; sourceId: string }
-  | { kind: "cancelled"; speak: string; sourceId: string }
-  | { kind: "capability_gap"; speak: string }
+  | { kind: "edited"; speak: string; sourceId: string; mutationReceipt?: MutationReceipt }
+  | { kind: "cancelled"; speak: string; sourceId: string; mutationReceipt?: MutationReceipt }
+  | { kind: "capability_gap"; speak: string; sourceId?: string; mutationReceipt?: MutationReceipt }
   | { kind: "not_applicable" };
 
 export async function handleVoiceCommitmentTurn(
@@ -367,7 +368,16 @@ export async function handleVoiceCommitmentTurn(
         item,
         actionTitle,
       });
-      return { kind: "edited", speak: speakEditResult(result.displayTitle), sourceId: result.sourceId };
+      return {
+        kind: "edited",
+        speak: speakEditResult(result.displayTitle),
+        sourceId: result.sourceId,
+        mutationReceipt: {
+          claimedState: "updated",
+          entityId: result.sourceId,
+          statement: `Updated Day Line item to ${result.displayTitle}`,
+        },
+      };
     }
     try {
       const result = await cancelItem({
@@ -376,7 +386,16 @@ export async function handleVoiceCommitmentTurn(
         item,
         reason: preset.reason ?? extractCancellationReason(utterance),
       });
-      return { kind: "cancelled", speak: speakCancelResult(result), sourceId: result.sourceId };
+      return {
+        kind: "cancelled",
+        speak: speakCancelResult(result),
+        sourceId: result.sourceId,
+        mutationReceipt: {
+          claimedState: "removed",
+          entityId: result.sourceId,
+          statement: `Removed ${result.displayTitle} from the Day Line`,
+        },
+      };
     } catch (error) {
       if (error instanceof Error && error.message === "completed_history") {
         return { kind: "acknowledged_existing", speak: speakCompletedHistory(item.displayTitle) };
@@ -400,7 +419,13 @@ export async function handleVoiceCommitmentTurn(
         stored && typeof stored === "object" && "id" in stored
           ? String((stored as { id?: unknown }).id ?? "")
           : "";
-      if (storedId) input.state.lastAcceptedCommitmentId = storedId;
+      if (!storedId) {
+        return {
+          kind: "clarifying",
+          speak: "I understood it, but I couldn't verify that it saved. Nothing changed.",
+        };
+      }
+      input.state.lastAcceptedCommitmentId = storedId;
       recordClaireConversionJoin({
         tenantId: input.tenantId,
         operatorUserId: input.actorId,
@@ -417,7 +442,12 @@ export async function handleVoiceCommitmentTurn(
             ? `Added: ${proposal.title}. I flagged it because we still need ${(proposal.missingDetails ?? []).join(" and ") || "a couple of details"}. What else?`
             : `Added: ${proposal.title}. What else?`,
         proposal,
-        commitmentId: storedId || undefined,
+        commitmentId: storedId,
+        mutationReceipt: {
+          claimedState: "created",
+          entityId: storedId,
+          statement: `Added ${proposal.title} to the Day Line`,
+        },
       };
     }
     if (decision === "no") {
@@ -454,6 +484,11 @@ export async function handleVoiceCommitmentTurn(
         kind: "updated",
         speak: `Updated: ${pending.title}. Same item, no duplicate. What else?`,
         commitmentId: pending.commitmentId,
+        mutationReceipt: {
+          claimedState: "updated",
+          entityId: pending.commitmentId,
+          statement: `Updated ${pending.title}`,
+        },
       };
     }
     if (decision === "no") {
@@ -531,6 +566,14 @@ export async function handleVoiceCommitmentTurn(
       return {
         kind: "field_captured",
         speak: "Saved as operator-attested. Hearsay stayed hearsay. What else?",
+        sourceId: saved.id,
+        mutationReceipt: saved.id
+          ? {
+              claimedState: input.state.lastAcceptedCommitmentId ? "updated" : "created",
+              entityId: saved.id,
+              statement: "Saved operator-attested field outcome",
+            }
+          : undefined,
       };
     }
     if (decision === "no") {
@@ -555,7 +598,22 @@ export async function handleVoiceCommitmentTurn(
         operatorRequest: pending.operatorRequest,
         conversationSessionId: input.conversationId ?? null,
       });
-      return { kind: "capability_gap", speak: sent.speak };
+      const sourceId = sent.gap?.id;
+      const mutationReceipt =
+        sourceId && /^Sent to engineering\b/i.test(sent.speak)
+          ? {
+              claimedState: "sent" as const,
+              entityId: sourceId,
+              statement: "Sent capability request to engineering",
+            }
+          : sourceId && /^I saved the request\b/i.test(sent.speak)
+            ? {
+                claimedState: "created" as const,
+                entityId: sourceId,
+                statement: "Saved capability request for engineering",
+              }
+            : undefined;
+      return { kind: "capability_gap", speak: sent.speak, sourceId, mutationReceipt };
     }
     if (decision === "no") {
       input.state.pendingEngineeringOffer = null;

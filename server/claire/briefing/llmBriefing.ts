@@ -4,6 +4,7 @@ import { claireModelRequest } from "../claireModel";
 import { isValidYmd } from "../../analytics/businessPeriods";
 import { dayMention, parseTiming, spokenDay } from "./briefingTiming";
 import type { BriefingClock, BriefingItem, BriefingTiming, ParsedBriefing } from "./briefingTypes";
+import { enforceTitleContract, explicitTrackingRequest } from "./titleContract";
 
 /**
  * Model-assisted understanding for messy speech ("pick up from kit treats…
@@ -25,6 +26,8 @@ const itemSchema = z.object({
   people: z.array(z.string()),
   place: z.string(),
   needs: z.string(),
+  /** commitment = a stated obligation/assignment or an explicit ask to track; fyi_plan = casual plans/answers about their day. */
+  intent: z.enum(["commitment", "fyi_plan"]).optional(),
 });
 
 const outputSchema = z.object({
@@ -58,6 +61,7 @@ const JSON_SCHEMA = {
             people: { type: "array", items: { type: "string" } },
             place: { type: "string" },
             needs: { type: "string" },
+            intent: { type: "string", enum: ["commitment", "fyi_plan"] },
           },
         },
       },
@@ -148,7 +152,15 @@ export function validateModelBriefing(raw: z.infer<typeof outputSchema>, input: 
       candidate.quantity > 0 && new RegExp(`\\b(?:${candidate.quantity}|${["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"][candidate.quantity] ?? "__"})\\b`, "i").test(quote)
         ? candidate.quantity
         : null;
-    const title = candidate.title.trim() && titleIsFaithful(candidate.title, quote, vocabulary) ? candidate.title.trim() : cleanQuoteTitle(quote);
+    // An operator answering a question about their day (church, resting, chores) is not asking for tasks: only an
+    // obligation the model marks as a commitment, or an explicit ask to track, becomes a Day Line item.
+    if (candidate.kind === "new_work" && candidate.intent === "fyi_plan" && !explicitTrackingRequest(utterance)) {
+      if (!context.includes(quote)) context.push(quote);
+      continue;
+    }
+    // The raw quote stays as provenance; the title is the action only, within the title contract.
+    const modelTitle = candidate.title.trim() && titleIsFaithful(candidate.title, quote, vocabulary) ? candidate.title.trim() : cleanQuoteTitle(quote);
+    const title = enforceTitleContract(modelTitle);
     items.push({
       kind: candidate.kind,
       title: title.charAt(0).toUpperCase() + title.slice(1),
@@ -178,7 +190,8 @@ export async function extractBriefingWithModel(
     "kind 'completed' = work the operator says is already done (\"delivered John's order\", \"John is already delivered\"). kind 'new_work' = work still to do.",
     "Statements of the current time or date (\"It's 9:30am on Tuesday\") are context, never a task time. Hearsay, feelings, and background are context.",
     "day: 'tomorrow' only for work the operator places tomorrow; a 'Tomorrow…' section applies to the work listed under it. 'date' with date=YYYY-MM-DD for a named future date or weekday. Otherwise 'today'.",
-    "quote: copy the exact words of the utterance that describe this item (verbatim, including any timing words). title: a short task in the operator's own words; you may correct an obviously misheard business name using the vocabulary list, but never add facts.",
+    "quote: copy the exact words of the utterance that describe this item (verbatim, including any timing words). title: THE ACTION ONLY, 3 to 8 words, verb + object, in the operator's own words (e.g. 'Make Zeely Instagram static ad'). Never put reasons, feelings, who asked, worries, or background in a title; those stay in the quote/context. You may correct an obviously misheard business name using the vocabulary list, but never add facts.",
+    "intent: 'commitment' when the operator states an obligation, assignment, deadline, or asks you to add/track/remind. 'fyi_plan' for casual statements of personal plans, routines, or answers to a question about their day (church, resting, chores, 'no sales stops'). An answer to your question is NOT a request to create tasks.",
     "timingWords: the exact words giving this task's time (\"before noon\", \"at seven\", \"9 - 10am window\"), or ''.",
     "quantity: an integer only when the operator said a number for this item, else 0. people/place: only names the operator said (or the vocabulary spelling of a misheard one), else [] / ''.",
     "needs: a single short question ONLY if a detail is missing that makes the task impossible to act on. Missing times are fine. Usually ''.",

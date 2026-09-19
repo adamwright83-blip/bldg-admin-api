@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, lt, or, sql } from "drizzle-orm";
 import { claireConversationSessions, claireConversationTurns } from "../../../drizzle/schema";
 import { getDb } from "../../db";
+import { isAuthoritativeOperatorTurn } from "../conversation/speechDelivery";
 
 /**
  * What Adam and Claire actually said on past calls, from the conversation
@@ -32,6 +33,7 @@ export async function searchOperatorConversation(input: {
       at: claireConversationTurns.occurredAt,
       speaker: claireConversationTurns.speaker,
       text: claireConversationTurns.text,
+      providerMetadata: claireConversationTurns.providerMetadataJson,
     })
     .from(claireConversationTurns)
     .innerJoin(claireConversationSessions, eq(claireConversationSessions.id, claireConversationTurns.sessionId))
@@ -47,6 +49,7 @@ export async function searchOperatorConversation(input: {
     .limit(Math.min(input.limit ?? 6, 20));
   return rows
     .filter(row => row.sessionId !== input.excludeSessionId)
+    .filter(row => row.speaker !== "OPERATOR" || isAuthoritativeOperatorTurn(row.providerMetadata as Record<string, unknown> | null))
     .map(row => ({
       sessionId: row.sessionId,
       at: row.at.toISOString(),
@@ -70,6 +73,7 @@ export async function operatorTurnsBetween(input: {
       at: claireConversationTurns.occurredAt,
       speaker: claireConversationTurns.speaker,
       text: claireConversationTurns.text,
+      providerMetadata: claireConversationTurns.providerMetadataJson,
     })
     .from(claireConversationTurns)
     .innerJoin(claireConversationSessions, eq(claireConversationSessions.id, claireConversationTurns.sessionId))
@@ -84,7 +88,9 @@ export async function operatorTurnsBetween(input: {
     )
     .orderBy(desc(claireConversationTurns.occurredAt))
     .limit(Math.min(input.limit ?? 20, 60));
-  return rows.map(row => ({ sessionId: row.sessionId, at: row.at.toISOString(), speaker: "OPERATOR", text: row.text }));
+  return rows
+    .filter(row => isAuthoritativeOperatorTurn(row.providerMetadata as Record<string, unknown> | null))
+    .map(row => ({ sessionId: row.sessionId, at: row.at.toISOString(), speaker: "OPERATOR" as const, text: row.text }));
 }
 
 /** Operator turns long enough to carry meaning (not "yes", "hello"). */

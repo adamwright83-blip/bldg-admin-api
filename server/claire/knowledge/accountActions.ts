@@ -87,7 +87,12 @@ function uuidFrom(hex: string): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
-export type AccountFollowUpCommit = { pipelineSaved: boolean; dayLineSaved: boolean; errors: string[] };
+export type AccountFollowUpCommit = {
+  pipelineSaved: boolean;
+  dayLineSaved: boolean;
+  dayLineCommitmentId: string | null;
+  errors: string[];
+};
 
 export async function commitAccountFollowUp(
   pending: PendingAccountFollowUp,
@@ -102,7 +107,12 @@ export async function commitAccountFollowUp(
   const schedule = deps.schedule ?? scheduleCommercialFollowUp;
   const accept = deps.accept ?? acceptProposal;
   const dueAt = fromZonedTime(`${pending.dueDate}T10:00:00`, input.timeZone);
-  const result: AccountFollowUpCommit = { pipelineSaved: false, dayLineSaved: false, errors: [] };
+  const result: AccountFollowUpCommit = {
+    pipelineSaved: false,
+    dayLineSaved: false,
+    dayLineCommitmentId: null,
+    errors: [],
+  };
   if (pending.pipelineId) {
     try {
       if (pending.followUpId) {
@@ -148,7 +158,13 @@ export async function commitAccountFollowUp(
         detailNote: pending.note ? `Operator report, hearsay kept as hearsay: ${pending.note}` : null,
       },
     });
-    result.dayLineSaved = Boolean(stored);
+    const storedId =
+      stored && typeof stored === "object" && "id" in stored
+        ? String((stored as { id?: unknown }).id ?? "")
+        : "";
+    result.dayLineCommitmentId = storedId || null;
+    result.dayLineSaved = Boolean(storedId);
+    if (!storedId) result.errors.push("Day Line follow-up write returned no commitment id");
   } catch (error) {
     result.errors.push(error instanceof Error ? error.message : String(error));
   }

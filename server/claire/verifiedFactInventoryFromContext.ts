@@ -1,8 +1,11 @@
 import type { ClaireDriveContext, ClaireTimelineItem } from "./contextAssembler";
 import {
+  lintPostGenerationStateVerbs,
+  lintReceiptBackedCommitSpeech,
+  lintSpokenClock,
+  type MutationReceipt,
   VerifiedFactInventory,
   VerifiedFactInventoryBuilder,
-  lintPostGenerationStateVerbs,
 } from "./assertionGuard";
 
 export const G4_UNVERIFIED_STATE_VERB_FALLBACK =
@@ -115,13 +118,43 @@ export function assertPostGenerationStateVerbs(
   }
 }
 
-export function sanitizeSpeakAgainstInventory(
+/** Free-form / model-generated speech — never merge turn mutation receipts into this lint. */
+export function sanitizeConversationalSpeak(
   speak: string,
-  inventory: VerifiedFactInventory
+  inventory: VerifiedFactInventory,
+  localTime?: string | null
 ): string {
   if (!speak.trim()) return speak;
   const lint = lintPostGenerationStateVerbs(speak, inventory);
-  if (lint.pass) return speak;
-  console.warn("[Claire] G4 post-generation lint failed", { violations: lint.violations });
+  const clock = lintSpokenClock(speak, localTime);
+  if (lint.pass && clock.pass) return speak;
+  console.warn("[Claire] G4 post-generation lint failed", { violations: [...lint.violations, ...clock.violations] });
   return G4_UNVERIFIED_STATE_VERB_FALLBACK;
+}
+
+export function assembleGuardedClaireSpeak(input: {
+  conversational: string;
+  inventory: VerifiedFactInventory;
+  localTime?: string | null;
+  receiptBackedCommit?: string;
+  mutationReceipts?: readonly MutationReceipt[];
+}): string {
+  const conversational = sanitizeConversationalSpeak(input.conversational, input.inventory, input.localTime);
+  const commit = input.receiptBackedCommit?.trim();
+  if (!commit) return conversational;
+  const commitLint = lintReceiptBackedCommitSpeech(commit, input.mutationReceipts ?? []);
+  if (!commitLint.pass) {
+    console.warn("[Claire] G4 commit renderer lint failed", { violations: commitLint.violations });
+    return conversational || G4_UNVERIFIED_STATE_VERB_FALLBACK;
+  }
+  return [conversational, commit].filter(Boolean).join(" ");
+}
+
+/** Desktop / non-voice paths with no separate commit renderer. */
+export function sanitizeSpeakAgainstInventory(
+  speak: string,
+  inventory: VerifiedFactInventory,
+  options: { localTime?: string | null } = {}
+): string {
+  return sanitizeConversationalSpeak(speak, inventory, options.localTime);
 }

@@ -1,6 +1,7 @@
 import { invokeLLM } from "../../_core/llm";
 import { ENV } from "../../_core/env";
 import type { ConversationTurn } from "../conversation/types";
+import { claireDeliveryTranscriptSuffix, isAuthoritativeOperatorTurn } from "../conversation/speechDelivery";
 import {
   EVALUATION_JSON_SCHEMA,
   qualitativeEvaluationSchema,
@@ -14,10 +15,11 @@ function resultText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
 
 export function formatLiveTranscript(turns: ConversationTurn[]): string {
   return turns
-    .map(
-      turn =>
-        `${turn.ordinal}. ${turn.speaker === "OPERATOR" ? "ADAM" : "CLAIRE"}: ${turn.text}`
-    )
+    .filter(turn => turn.speaker !== "OPERATOR" || isAuthoritativeOperatorTurn(turn.providerMetadata))
+    .map(turn => {
+      const delivery = turn.speaker === "CLAIRE" ? claireDeliveryTranscriptSuffix(turn.providerMetadata) : "";
+      return `${turn.ordinal}. ${turn.speaker === "OPERATOR" ? "ADAM" : "CLAIRE"}: ${turn.text}${delivery}`;
+    })
     .join("\n");
 }
 

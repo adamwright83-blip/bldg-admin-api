@@ -198,7 +198,17 @@ describe("live Claire call answers business questions in the call (U)", () => {
 
     hoisted.commitment.mockImplementationOnce(async input => {
       input.state.pendingProposal = null;
-      return { kind: "accepted", speak: "Added: Review revenue. What else?" };
+      return {
+        kind: "accepted",
+        speak: "Added: Review revenue. What else?",
+        proposal: input.state.pendingProposal ?? { title: "Review revenue", sourceText: "Add reviewing last month's revenue." },
+        commitmentId: "review-revenue-1",
+        mutationReceipt: {
+          claimedState: "created",
+          entityId: "review-revenue-1",
+          statement: "Added Review revenue to the Day Line",
+        },
+      };
     });
     expect(await say(handlers, token, "Yes.")).toContain("Added: Review revenue.");
     expect(hoisted.commitment).toHaveBeenCalledTimes(2);

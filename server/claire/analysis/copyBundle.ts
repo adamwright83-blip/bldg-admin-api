@@ -1,5 +1,6 @@
 import type { ConversationSession, ConversationTurn } from "../conversation/types";
 import { CLAIRE_EVALUATOR_VERSION } from "../conversation/types";
+import { claireDeliveryTranscriptSuffix, isAuthoritativeOperatorTurn } from "../conversation/speechDelivery";
 import type { QualitativeEvaluation } from "./conversationAnalysisSchema";
 
 export function formatDuration(startedAt: string, endedAt: string | null): string {
@@ -153,10 +154,11 @@ export function renderCopyAnalysisBundle(input: {
 
 export function renderFullTranscript(turns: ConversationTurn[]): string {
   return turns
-    .map(
-      turn =>
-        `${turn.speaker === "OPERATOR" ? "ADAM" : "CLAIRE"}: ${turn.text}`
-    )
+    .filter(turn => turn.speaker !== "OPERATOR" || isAuthoritativeOperatorTurn(turn.providerMetadata))
+    .map(turn => {
+      const suffix = turn.speaker === "CLAIRE" ? claireDeliveryTranscriptSuffix(turn.providerMetadata) : "";
+      return `${turn.speaker === "OPERATOR" ? "ADAM" : "CLAIRE"}: ${turn.text}${suffix}`;
+    })
     .join("\n\n");
 }
 

@@ -70,12 +70,22 @@ const TOMORROW_WORK: DayWork = {
 };
 
 function exam(options: { loaders?: LedgerLoaders; importedToday?: boolean } = {}) {
-  const commitFollowUp = vi.fn(async () => ({ pipelineSaved: true, dayLineSaved: true, errors: [] as string[] }));
-  const commit = vi.fn(async (parsed: { items: Array<{ kind: string; existing: unknown }> }) => ({
+  const commitFollowUp = vi.fn(async () => ({
+    pipelineSaved: true,
+    dayLineSaved: true,
+    dayLineCommitmentId: "followup-dayline-1",
+    errors: [] as string[],
+  }));
+  const commit = vi.fn(async (parsed: { items: Array<{ kind: string; existing: unknown; title?: string }> }) => ({
     added: parsed.items.filter(item => item.kind === "new_work" && !item.existing),
     completed: parsed.items.filter(item => item.kind === "completed"),
     failed: [],
     commitmentIds: parsed.items.map((_, index) => `c-${index}`),
+    receipts: parsed.items.map((item, index) => ({
+      claimedState: item.kind === "completed" ? ("completed" as const) : ("created" as const),
+      entityId: `c-${index}`,
+      statement: item.title ?? "item",
+    })),
   }));
   const deps: ClaireTurnDeps = {
     now: () => BUSINESS_NOW,
@@ -124,7 +134,7 @@ function exam(options: { loaders?: LedgerLoaders; importedToday?: boolean } = {}
         surface,
         utterance,
         state,
-        conversationKey: "claire-call:oral-exam",
+        allowFragmentWait: false,
         brief: "Two stops today.",
         context: { businessDate: "2026-09-15" } as never,
       },

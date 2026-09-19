@@ -7,8 +7,10 @@ import {
 } from "../../dayDirector/dayDirectorService";
 import type { ClaireCampaignSummary } from "../campaignAwareness";
 import { joinList, plural } from "../business/businessSpeech";
+import type { MutationReceipt } from "../assertionGuard";
 import { spokenDay } from "./briefingTiming";
 import type { BriefingItem, ParsedBriefing } from "./briefingTypes";
+import { enforceTitleContract } from "./titleContract";
 
 /**
  * Turning a confirmed briefing into Day Line truth, without duplicates:
@@ -123,6 +125,7 @@ export type BriefingCommitResult = {
   completed: BriefingItem[];
   failed: Array<{ item: BriefingItem; error: string }>;
   commitmentIds: string[];
+  receipts: MutationReceipt[];
 };
 
 export async function commitBriefing(
@@ -137,7 +140,7 @@ export async function commitBriefing(
   const accept = deps.accept ?? acceptProposal;
   const complete = deps.complete ?? completeDayDirectorCommitment;
   const update = deps.update ?? updateDayDirectorCommitment;
-  const result: BriefingCommitResult = { added: [], completed: [], failed: [], commitmentIds: [] };
+  const result: BriefingCommitResult = { added: [], completed: [], failed: [], commitmentIds: [], receipts: [] };
   for (const item of parsed.items) {
     try {
       if (item.kind === "new_work") {
@@ -148,7 +151,7 @@ export async function commitBriefing(
           businessDate: item.businessDate,
           proposal: {
             promptKey: `briefing:${keyFor(input.conversationKey, item)}`,
-            title: item.title.slice(0, 255),
+            title: enforceTitleContract(item.title).slice(0, 255),
             kind: "operations",
             quantity: item.quantity,
             sourceText: item.quote,
@@ -175,6 +178,7 @@ export async function commitBriefing(
         }
         result.added.push(item);
         result.commitmentIds.push(id);
+        result.receipts.push({ claimedState: "created", entityId: id, statement: `Added ${item.title} to the Day Line` });
         continue;
       }
       // Completed work: complete the existing Day Line item, or log Adam's report as done.
@@ -182,6 +186,7 @@ export async function commitBriefing(
         await complete({ tenantId: input.tenantId, actorId: input.dayDirectorActorId, commitmentId: item.existing.id });
         result.completed.push(item);
         result.commitmentIds.push(item.existing.id);
+        result.receipts.push({ claimedState: "completed", entityId: item.existing.id, statement: `Marked ${item.title} done` });
         continue;
       }
       const stored = await accept({
@@ -190,7 +195,7 @@ export async function commitBriefing(
         businessDate: item.businessDate,
         proposal: {
           promptKey: `briefing-done:${keyFor(input.conversationKey, item)}`,
-          title: item.title.slice(0, 255),
+          title: enforceTitleContract(item.title).slice(0, 255),
           kind: "operations",
           quantity: null,
           sourceText: item.quote,
@@ -207,6 +212,7 @@ export async function commitBriefing(
       await complete({ tenantId: input.tenantId, actorId: input.dayDirectorActorId, commitmentId: id });
       result.completed.push(item);
       result.commitmentIds.push(id);
+      result.receipts.push({ claimedState: "completed", entityId: id, statement: `Marked ${item.title} done` });
     } catch (error) {
       result.failed.push({ item, error: error instanceof Error ? error.message : String(error) });
     }

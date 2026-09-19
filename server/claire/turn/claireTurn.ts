@@ -9,7 +9,7 @@ import { answerClaireBusinessTurn, looksLikeWorkRequest, type ClaireAnalyticsSta
 import { isCombineRequest, normalizeUtterance } from "../business/businessLanguage";
 import { getClaireCampaignSummary } from "../campaignAwareness";
 import type { ClaireDriveContext } from "../contextAssembler";
-import { buildClaireVerifiedFactInventory, sanitizeSpeakAgainstInventory } from "../verifiedFactInventoryFromContext";
+import { assembleGuardedClaireSpeak, buildClaireVerifiedFactInventory } from "../verifiedFactInventoryFromContext";
 import { getProgressionStore } from "../progression/drizzleStore";
 import { isClaireProgressionEnabled } from "../progression/progressionFlag";
 import { commitPendingDisclosuresForConversation } from "../progression/service";
@@ -56,6 +56,9 @@ import {
   type ClaireTurnTrace,
 } from "../answerPathTelemetry";
 import { persistClaireTurnTrace } from "../answerPathRecorder";
+import { explicitDayLineRefusal, explicitTrackingRequest } from "../briefing/titleContract";
+import { classifyOpenDialogueAct } from "./dialogueAct";
+import type { MutationReceipt } from "../assertionGuard";
 import type { EncyclopediaAnswer } from "../knowledge/encyclopediaAgent";
 import {
   MEMORY_QUESTION,
@@ -97,6 +100,10 @@ export type ClaireTurnState = PendingProposalState &
     pendingAccountFollowUp?: PendingAccountFollowUp | null;
     /** A spoken thought the phone cut off at a pause ("Desired timing is."). */
     pendingFragment?: string | null;
+    /** How many silent continuation gathers have been used for the current thought. */
+    fragmentHolds?: number;
+    /** Raw Twilio SpeechResult pieces for the in-progress thought (evidence; not ledger turns). */
+    providerFragments?: string[];
     focusAccount?: AccountRef | null;
     consecutiveEmptyTranscripts?: number;
     proactiveMorning?: boolean;
@@ -142,6 +149,9 @@ export type ClaireTurnResult = {
   endCall?: boolean;
   commitmentTurn?: VoiceCommitmentTurnResult;
   actionIds?: string[];
+  mutationReceipts?: MutationReceipt[];
+  /** Deterministic `speakBriefingCommit` (or equivalent) — linted against receipts, not conversational inventory. */
+  receiptBackedCommit?: string;
 };
 
 export type ClaireTurnDeps = {
@@ -207,6 +217,43 @@ function remember(state: ClaireTurnState, speaker: "operator" | "claire", text: 
   state.history = [...(state.history ?? []), { speaker, text: text.slice(0, 1_200), at }].slice(-HISTORY_LIMIT);
 }
 
+/**
+ * Continuation grace. Twilio's `speechTimeout:"auto"` closes a recognition on any natural pause of about a
+ * second, so a long thought arrives in pieces ("…won't be in." / "So perhaps…"). Answering the first piece
+ * talks over the speaker (barge-in then cancels the reply and swallows his next words). The old check
+ * (`looksUnfinished`) only caught a transcript ending on a dangling function word, so complete-sounding
+ * fragments ("…won't be in", "…When you hear me say", "…bedroom floor") were answered mid-thought.
+ *
+ * Rule: a SHORT answer or a QUESTION ends the turn at once (no added delay). Any longer statement is held
+ * silently for a short grace period; each continuation is re-evaluated, so a multi-pause explanation is
+ * answered once, after the thought is actually finished.
+ */
+export const CONTINUATION_HOLD_MIN_WORDS = 7;
+/** Safety valves so a rambling speaker is never held forever. */
+export const CONTINUATION_MAX_HOLDS = 5;
+export const CONTINUATION_MAX_WORDS = 150;
+
+const INTERROGATIVE_OPENER =
+  /^(?:and |so |okay |ok |well |then )?(?:what|what's|whats|who|who's|which|when|where|why|how|do|does|did|is|are|was|were|can|could|would|will|should|have|has|tell me|remind me)\b/i;
+
+const wordCount = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
+
+export function shouldHoldForContinuation(
+  utterance: string,
+  context: { awaitingReply?: boolean } = {}
+): boolean {
+  const text = utterance.trim();
+  const words = wordCount(text);
+  if (words < 2) return false;
+  if (looksUnfinished(text)) return true;
+  if (words > CONTINUATION_MAX_WORDS) return false;
+  if (/[?]\s*$/.test(text)) return false;
+  if (INTERROGATIVE_OPENER.test(text)) return false;
+  if (words < CONTINUATION_HOLD_MIN_WORDS) return false;
+  if (context.awaitingReply && words <= 12 && replyDecision(text).decision !== "other") return false;
+  return true;
+}
+
 /** A phone transcript that stops mid-thought ("Desired timing is.", "and then I"). */
 export function looksUnfinished(utterance: string): boolean {
   const text = utterance.trim();
@@ -224,7 +271,9 @@ export type ReplyDecision = { decision: "yes" | "no" | "other"; remainder: strin
  */
 export function replyDecision(utterance: string): ReplyDecision {
   const text = utterance.trim();
-  const words = text.split(/\s+/).filter(Boolean).length;
+  if (/^(no longer|no contact|no decision|no one|nobody)\b/i.test(text)) {
+    return { decision: "other", remainder: text };
+  }
   const lead = /^(yes|yeah|yep|yup|sure|correct|do it|go ahead|please do|sounds good|perfect|that's right|that works|add (?:it|them|those|all of (?:it|them))|put (?:it|them) on|save it|confirm(?:ed)?)\b[,.!]*\s*/i.exec(text);
   if (lead) {
     let remainder = text.slice(lead[0].length);
@@ -239,9 +288,13 @@ export function replyDecision(utterance: string): ReplyDecision {
     }
     return { decision: "yes", remainder: remainder.trim() };
   }
-  const no = /^(no|nope|nah|don't|do not|cancel|never ?mind|forget it|scratch that|not now)\b[,.!]*\s*/i.exec(text);
-  if (no && words <= 6) return { decision: "no", remainder: "" };
-  if (words <= 4) {
+  const no = /^(no|nope|nah|don't|do not|cancel|never ?mind|forget it|scratch that|not now|not yet|no thanks)\b[,.!]*\s*/i.exec(text);
+  if (no) {
+    let remainder = text.slice(no[0].length).trim();
+    if (/^(?:not now|thanks(?: claire)?|thank you)[.!]*$/i.test(remainder)) remainder = "";
+    return { decision: "no", remainder };
+  }
+  if (wordCount(text) <= 4) {
     const decision = detectConfirmation(text);
     if (decision !== "ambiguous") return { decision, remainder: "" };
   }
@@ -306,13 +359,27 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const { state } = input;
 
   let utterance = input.utterance.trim();
-  if (state.pendingFragment) {
+  if (input.surface === "voice" && input.allowFragmentWait !== false) {
+    const incoming = utterance;
+    if (incoming) {
+      state.providerFragments = [...(state.providerFragments ?? []), incoming];
+    }
+    const combined = state.pendingFragment ? `${state.pendingFragment} ${utterance}`.trim() : utterance;
+    const holds = state.fragmentHolds ?? 0;
+    const awaitingReply = Boolean(state.pendingBriefing || state.pendingProposal || state.pendingAccountFollowUp);
+    if (holds < CONTINUATION_MAX_HOLDS && shouldHoldForContinuation(combined, { awaitingReply })) {
+      state.pendingFragment = combined;
+      state.fragmentHolds = holds + 1;
+      return { speak: "", kind: "listening", listenOnly: true };
+    }
+    utterance = combined;
+    state.pendingFragment = null;
+    state.fragmentHolds = 0;
+  } else if (state.pendingFragment) {
+    if (utterance) state.providerFragments = [...(state.providerFragments ?? []), utterance];
     utterance = `${state.pendingFragment} ${utterance}`.trim();
     state.pendingFragment = null;
-  } else if (input.surface === "voice" && input.allowFragmentWait !== false && looksUnfinished(utterance)) {
-    state.pendingFragment = utterance;
-    // No trace: nothing was spoken, so there is no answer path to attribute.
-    return { speak: "", kind: "listening", listenOnly: true };
+    state.fragmentHolds = 0;
   }
   remember(state, "operator", utterance, nowMs);
   /**
@@ -342,7 +409,13 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   let personalEndCall = false;
   const finish = (result: ClaireTurnResult): ClaireTurnResult => {
     const inventory = buildClaireVerifiedFactInventory(input.context);
-    const speak = sanitizeSpeakAgainstInventory(result.speak, inventory);
+    const speak = assembleGuardedClaireSpeak({
+      conversational: result.speak,
+      inventory,
+      localTime: input.context?.clock?.localTime ?? null,
+      receiptBackedCommit: result.receiptBackedCommit,
+      mutationReceipts: result.mutationReceipts,
+    });
     const guarded = speak === result.speak ? result : { ...result, speak };
     if (trace.synthesisRequired) {
       trace.needs_synthesis = telemetryClaireAnswerClass(utterance, true) === "needs_synthesis";
@@ -352,6 +425,26 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     deps.onTurnTrace?.(trace);
     return personalEndCall ? { ...guarded, endCall: true } : guarded;
   };
+  const finishCommitmentTurn = (
+    turn: Exclude<VoiceCommitmentTurnResult, { kind: "not_applicable" }>
+  ): ClaireTurnResult => {
+    const receipt = "mutationReceipt" in turn ? turn.mutationReceipt : undefined;
+    const actionId =
+      "commitmentId" in turn && turn.commitmentId
+        ? turn.commitmentId
+        : "sourceId" in turn && turn.sourceId
+          ? turn.sourceId
+          : null;
+    return finish({
+      speak: receipt ? "" : turn.speak,
+      receiptBackedCommit: receipt ? turn.speak : undefined,
+      mutationReceipts: receipt ? [receipt] : undefined,
+      kind: "commitment",
+      commitmentTurn: turn,
+      actionIds: actionId ? [actionId] : [],
+    });
+  };
+
   const history = () => (state.history ?? []).map(entry => ({ speaker: entry.speaker, text: entry.text }));
   const lower = normalizeUtterance(utterance);
 
@@ -404,7 +497,28 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         timeZone,
       });
       mark("account_follow_up");
-      return finish({ speak: speakAccountFollowUpCommit(pending, commit, today), kind: "follow_up_saved" });
+      const receipts: MutationReceipt[] = [];
+      if (commit.pipelineSaved) {
+        receipts.push({
+          claimedState: "scheduled",
+          entityId: pending.followUpId ?? `pipeline-follow-up:${pending.pipelineId ?? "none"}:${pending.requestId}`,
+          statement: `Scheduled ${pending.accountName} follow-up for ${pending.dueDate}`,
+        });
+      }
+      if (commit.dayLineSaved && commit.dayLineCommitmentId) {
+        receipts.push({
+          claimedState: "created",
+          entityId: commit.dayLineCommitmentId,
+          statement: `Added ${pending.accountName} follow-up to the Day Line`,
+        });
+      }
+      return finish({
+        speak: "",
+        receiptBackedCommit: speakAccountFollowUpCommit(pending, commit, today),
+        mutationReceipts: receipts,
+        actionIds: commit.dayLineCommitmentId ? [commit.dayLineCommitmentId] : [],
+        kind: "follow_up_saved",
+      });
     }
     if (reply.decision === "no") {
       state.pendingAccountFollowUp = null;
@@ -444,17 +558,39 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         conversationKey: input.conversationKey,
       });
       mark("briefing");
-      let speak = speakBriefingCommit(result, today);
+      const commitSpeak = speakBriefingCommit(result, today);
+      const receipts = result.receipts ?? [];
       if (reply.remainder) {
-        const more = await runClaireTurn({ ...input, utterance: reply.remainder, state }, overrides);
-        speak = `${speak} ${more.speak}`.trim();
-        return { speak, kind: "briefing_saved", actionIds: result.commitmentIds };
+        const more = await runClaireTurn({ ...input, utterance: reply.remainder, state, allowFragmentWait: false }, overrides);
+        return finish({
+          speak: more.speak,
+          receiptBackedCommit: commitSpeak,
+          kind: "briefing_saved",
+          actionIds: [...result.commitmentIds, ...(more.actionIds ?? [])],
+          mutationReceipts: [...receipts, ...(more.mutationReceipts ?? [])],
+        });
       }
-      return finish({ speak, kind: "briefing_saved", actionIds: result.commitmentIds });
+      return finish({
+        speak: "",
+        receiptBackedCommit: commitSpeak,
+        kind: "briefing_saved",
+        actionIds: result.commitmentIds,
+        mutationReceipts: receipts,
+      });
     }
-    if (reply.decision === "no") {
+    if (reply.decision === "no" || explicitDayLineRefusal(utterance)) {
       state.pendingBriefing = null;
       mark("briefing");
+      const remainder = reply.decision === "no" ? reply.remainder : "";
+      if (remainder) {
+        const more = await runClaireTurn({ ...input, utterance: remainder, state, allowFragmentWait: false }, overrides);
+        return finish({
+          speak: `Okay, I won't add any of that. ${more.speak}`.trim(),
+          kind: more.kind === "listening" ? "briefing_declined" : more.kind,
+          actionIds: more.actionIds,
+          mutationReceipts: more.mutationReceipts,
+        });
+      }
       return finish({ speak: "Okay, I won't add any of that.", kind: "briefing_declined" });
     }
   }
@@ -480,7 +616,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       );
       if (turn.kind !== "not_applicable") {
         mark("commitment");
-        return finish({ speak: turn.speak, kind: "commitment", commitmentTurn: turn, actionIds: "commitmentId" in turn && turn.commitmentId ? [turn.commitmentId] : [] });
+        return finishCommitmentTurn(turn);
       }
     } else {
       // New content while Claire waits: never read it as a yes/no. A stale
@@ -516,6 +652,17 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
 
   // ── 4. The whole utterance as a briefing ──────────────────────────────────
   let parsed = parseBriefingDeterministically(utterance, clock);
+  const openAct = classifyOpenDialogueAct(utterance);
+  const skipBriefing =
+    explicitDayLineRefusal(utterance) ||
+    ((openAct.kind === "confide" || openAct.kind === "question") && parsed.items.length === 0);
+  if (skipBriefing && parsed.items.length) {
+    parsed = {
+      ...parsed,
+      context: [...parsed.context, ...parsed.items.map(item => item.quote)],
+      items: [],
+    };
+  }
   if (state.pendingProposal && parsed.items.length > 0 && heldProposalTitle) {
     // More work arrived while a single proposal was waiting: fold it into the bundle instead of dropping either.
     carried.push(proposalAsItem(state.pendingProposal, today, clock.minutesNow));
@@ -604,6 +751,26 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       continuing: Boolean(state.pendingBriefing),
     });
     const addable = briefingAdditions(reconciled).length;
+    if (addable && (explicitTrackingRequest(utterance) || openAct.kind === "explicit_track")) {
+      const result = await deps.commit(reconciled, {
+        tenantId: input.tenantId,
+        dayDirectorActorId: input.dayDirectorActorId,
+        conversationKey: input.conversationKey,
+      });
+      if (!result?.commitmentIds) {
+        mark("briefing");
+        return finish({ speak: "I understood it, but nothing saved. Want me to try again?", kind: "briefing_proposed" });
+      }
+      state.pendingBriefing = null;
+      mark("briefing");
+      return finish({
+        speak: answers.join(" ").trim(),
+        receiptBackedCommit: speakBriefingCommit(result, today),
+        kind: "briefing_saved",
+        actionIds: result.commitmentIds,
+        mutationReceipts: result.receipts ?? [],
+      });
+    }
     state.pendingBriefing = addable ? { parsed: reconciled, createdAt: nowMs } : null;
     let speak = summary.text;
     if (state.pendingBriefing && !summary.asksConfirmation) speak = `${speak} Want me to put all of it on the Day Line?`;
@@ -629,7 +796,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     );
     if (turn.kind !== "not_applicable") {
       mark("commitment");
-      return finish({ speak: turn.speak, kind: "commitment", commitmentTurn: turn, actionIds: "commitmentId" in turn && turn.commitmentId ? [turn.commitmentId] : [] });
+      return finishCommitmentTurn(turn);
     }
   }
 
@@ -652,7 +819,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     );
     if (turn.kind !== "not_applicable") {
       mark("commitment");
-      return finish({ speak: turn.speak, kind: "commitment", commitmentTurn: turn, actionIds: "commitmentId" in turn && turn.commitmentId ? [turn.commitmentId] : [] });
+      return finishCommitmentTurn(turn);
     }
   }
 

@@ -22,6 +22,8 @@ export async function persistOperatorAndClaire(input: {
   claireText?: string | null;
   /** The live conversation's turn number, so identical replies on different turns are all kept. */
   turnKey?: string | number | null;
+  operatorMetadata?: Record<string, unknown> | null;
+  claireMetadata?: Record<string, unknown> | null;
 }): Promise<void> {
   await safeClaireLedger(async () => {
     if (input.operatorText?.trim()) {
@@ -31,6 +33,7 @@ export async function persistOperatorAndClaire(input: {
         speaker: "OPERATOR",
         text: input.operatorText,
         turnKey: input.turnKey,
+        providerMetadata: input.operatorMetadata ?? null,
       });
     }
     if (input.claireText?.trim()) {
@@ -40,6 +43,7 @@ export async function persistOperatorAndClaire(input: {
         speaker: "CLAIRE",
         text: input.claireText,
         turnKey: input.turnKey,
+        providerMetadata: input.claireMetadata ?? null,
       });
     }
   });

@@ -1,3 +1,9 @@
+/**
+ * Live conversation query. CLAIRE rows are generated/queued speech unless
+ * providerMetadata marks confirmed_heard (heardConfirmed true) or confirmed_not_heard.
+ * heardConfirmed false alone means heard-unconfirmed, not confirmed-not-heard.
+ * OPERATOR rows with representation provider_fragment are evidence only.
+ */
 import { and, desc, eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import {
