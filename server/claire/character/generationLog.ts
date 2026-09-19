@@ -181,6 +181,43 @@ export async function summarizeClaireAnswerPaths(input: {
   return rows as ClaireAnswerPathRow[];
 }
 
+/**
+ * Observed telemetry coverage: what attributable rows actually exist in the
+ * window, independent of how wide a window the caller asked to look at.
+ */
+export async function getClaireAnswerPathCoverage(input: {
+  tenantId: string;
+  days?: number;
+}): Promise<{ observedDays: number; firstAt: Date | null; lastAt: Date | null; turns: number }> {
+  const empty = { observedDays: 0, firstAt: null, lastAt: null, turns: 0 };
+  const db = await getDb();
+  if (!db) return empty;
+  const { and, count, eq, gte, isNotNull, min, max, sql } = await import("drizzle-orm");
+  const since = new Date(Date.now() - (input.days ?? 30) * 24 * 60 * 60 * 1000);
+  const [row] = await db
+    .select({
+      observedDays: sql<number>`count(distinct date(${claireGenerationLogs.createdAt}))`,
+      firstAt: min(claireGenerationLogs.createdAt),
+      lastAt: max(claireGenerationLogs.createdAt),
+      turns: count(),
+    })
+    .from(claireGenerationLogs)
+    .where(
+      and(
+        eq(claireGenerationLogs.tenantId, input.tenantId),
+        isNotNull(claireGenerationLogs.answerPath),
+        gte(claireGenerationLogs.createdAt, since)
+      )
+    );
+  if (!row) return empty;
+  return {
+    observedDays: Number(row.observedDays ?? 0),
+    firstAt: row.firstAt ? new Date(row.firstAt) : null,
+    lastAt: row.lastAt ? new Date(row.lastAt) : null,
+    turns: Number(row.turns ?? 0),
+  };
+}
+
 /** Recent routing rows with their full detail, for the admin telemetry page. */
 export async function listClaireAnswerPathDetail(input: {
   tenantId: string;
