@@ -13,7 +13,7 @@ import {
   type CustomerIdentityInput,
 } from "../customerAssets/customerIdentity";
 import { getDb } from "../db";
-import { isMysqlMissingTableError } from "../mysqlErrors";
+import { queryOptionalMysqlTable } from "../mysqlErrors";
 
 export type CustomerOrderSource = "laundry_butler" | "cleancloud";
 
@@ -389,17 +389,14 @@ async function loadCleanCloudOrderTruthRows(
   db: TruthDb,
   tenantId?: string
 ): Promise<CleanCloudOrderLike[]> {
-  try {
+  return queryOptionalMysqlTable(async () => {
     const query = db
       .select(CLEANCLOUD_ORDER_TRUTH_COLUMNS)
       .from(cleancloudPaidOrders);
-    return await (tenantId
+    return tenantId
       ? query.where(eq(cleancloudPaidOrders.tenantId, tenantId))
-      : query);
-  } catch (error) {
-    if (isMysqlMissingTableError(error)) return [];
-    throw error;
-  }
+      : query;
+  });
 }
 
 export async function loadCustomerOrderTruth(

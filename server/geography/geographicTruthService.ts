@@ -13,6 +13,7 @@ import { getDb } from "../db";
 import { GoogleGeocoder } from "./googleGeocoder";
 import { GoogleAddressValidationService } from "../google/googleAddressValidationService";
 import { ENV } from "../_core/env";
+import { queryOptionalMysqlTable } from "../mysqlErrors";
 import {
   loadCustomerGroups,
   projectGeographicCustomers,
@@ -264,40 +265,42 @@ async function discoverEntities(tenantId: string): Promise<DiscoveredEntity[]> {
       sourceAddress: building.defaultAddress!,
     })
   );
-  const prospects = await db
-    .select({
-      accountId: commercialAccounts.id,
-      locationId: commercialAccountLocations.id,
-      address: commercialAccountLocations.address,
-      latitude: commercialAccountLocations.latitude,
-      longitude: commercialAccountLocations.longitude,
-      isPrimary: commercialAccountLocations.isPrimary,
-      locationUpdatedAt: commercialAccountLocations.updatedAt,
-    })
-    .from(commercialPipelineRecords)
-    .innerJoin(
-      commercialAccounts,
-      and(
-        eq(commercialAccounts.tenantId, tenantId),
-        eq(commercialAccounts.id, commercialPipelineRecords.accountId)
-      )
-    )
-    .innerJoin(
-      commercialAccountLocations,
-      and(
-        eq(commercialAccountLocations.tenantId, tenantId),
-        eq(commercialAccountLocations.accountId, commercialAccounts.id)
-      )
-    )
-    .where(
-      and(
-        eq(commercialPipelineRecords.tenantId, tenantId),
-        inArray(
-          commercialPipelineRecords.stage,
-          ACTIVE_COMMERCIAL_PIPELINE_STAGES
+  const prospects = await queryOptionalMysqlTable(() =>
+    db
+      .select({
+        accountId: commercialAccounts.id,
+        locationId: commercialAccountLocations.id,
+        address: commercialAccountLocations.address,
+        latitude: commercialAccountLocations.latitude,
+        longitude: commercialAccountLocations.longitude,
+        isPrimary: commercialAccountLocations.isPrimary,
+        locationUpdatedAt: commercialAccountLocations.updatedAt,
+      })
+      .from(commercialPipelineRecords)
+      .innerJoin(
+        commercialAccounts,
+        and(
+          eq(commercialAccounts.tenantId, tenantId),
+          eq(commercialAccounts.id, commercialPipelineRecords.accountId)
         )
       )
-    );
+      .innerJoin(
+        commercialAccountLocations,
+        and(
+          eq(commercialAccountLocations.tenantId, tenantId),
+          eq(commercialAccountLocations.accountId, commercialAccounts.id)
+        )
+      )
+      .where(
+        and(
+          eq(commercialPipelineRecords.tenantId, tenantId),
+          inArray(
+            commercialPipelineRecords.stage,
+            ACTIVE_COMMERCIAL_PIPELINE_STAGES
+          )
+        )
+      )
+  );
   return [
     ...customers,
     ...buildings,
@@ -573,35 +576,37 @@ export async function getGeographicTruth(input: {
       .from(entityLocations)
       .where(eq(entityLocations.tenantId, input.tenantId)),
     loadCustomerGroups(input.tenantId),
-    db
-      .select({
-        id: commercialPipelineRecords.id,
-        stage: commercialPipelineRecords.stage,
-        updatedAt: commercialPipelineRecords.updatedAt,
-        accountId: commercialAccounts.id,
-        name: commercialAccounts.name,
-      })
-      .from(commercialPipelineRecords)
-      .innerJoin(
-        commercialAccounts,
-        and(
-          eq(commercialAccounts.tenantId, input.tenantId),
-          eq(commercialAccounts.id, commercialPipelineRecords.accountId)
-        )
-      )
-      .where(
-        and(
-          eq(commercialPipelineRecords.tenantId, input.tenantId),
-          inArray(
-            commercialPipelineRecords.stage,
-            ACTIVE_COMMERCIAL_PIPELINE_STAGES
+    queryOptionalMysqlTable(() =>
+      db
+        .select({
+          id: commercialPipelineRecords.id,
+          stage: commercialPipelineRecords.stage,
+          updatedAt: commercialPipelineRecords.updatedAt,
+          accountId: commercialAccounts.id,
+          name: commercialAccounts.name,
+        })
+        .from(commercialPipelineRecords)
+        .innerJoin(
+          commercialAccounts,
+          and(
+            eq(commercialAccounts.tenantId, input.tenantId),
+            eq(commercialAccounts.id, commercialPipelineRecords.accountId)
           )
         )
-      )
-      .orderBy(
-        desc(commercialPipelineRecords.updatedAt),
-        desc(commercialPipelineRecords.id)
-      ),
+        .where(
+          and(
+            eq(commercialPipelineRecords.tenantId, input.tenantId),
+            inArray(
+              commercialPipelineRecords.stage,
+              ACTIVE_COMMERCIAL_PIPELINE_STAGES
+            )
+          )
+        )
+        .orderBy(
+          desc(commercialPipelineRecords.updatedAt),
+          desc(commercialPipelineRecords.id)
+        )
+    ),
   ]);
   const locationMap = new Map(
     locations.map(row => [`${row.entityType}:${row.entityKey}`, row])

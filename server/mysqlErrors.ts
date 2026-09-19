@@ -38,3 +38,15 @@ export function isMysqlMissingTableError(error: unknown): boolean {
       )
   );
 }
+
+/** Missing table → empty rows. Arbitrary SQL/query errors are rethrown. */
+export async function queryOptionalMysqlTable<T>(
+  load: () => Promise<T[]>
+): Promise<T[]> {
+  try {
+    return await load();
+  } catch (error) {
+    if (isMysqlMissingTableError(error)) return [];
+    throw error;
+  }
+}

@@ -101,6 +101,21 @@ const FALLBACK_DDL = [
     createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS commercial_account_locations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    accountId INT NOT NULL,
+    locationKey VARCHAR(64),
+    label VARCHAR(128),
+    address VARCHAR(512) NOT NULL,
+    latitude DECIMAL(10,7),
+    longitude DECIMAL(10,7),
+    isPrimary TINYINT(1) NOT NULL DEFAULT 0,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_commercial_locations_tenant_account (tenantId, accountId),
+    UNIQUE KEY uq_commercial_locations_tenant_account_key (tenantId, accountId, locationKey)
+  )`,
 ];
 
 async function tableExists(connection: Connection, table: string) {
@@ -111,22 +126,37 @@ async function tableExists(connection: Connection, table: string) {
   return (rows as Array<{ ok: number }>).length > 0;
 }
 
-async function schemaExists(connection: Connection, schema: string) {
+async function schemaTableExists(
+  connection: Connection,
+  schema: string,
+  table: string
+) {
   const [rows] = await connection.query(
-    "SELECT 1 AS ok FROM information_schema.schemata WHERE schema_name = ? LIMIT 1",
-    [schema]
+    "SELECT 1 AS ok FROM information_schema.tables WHERE table_schema = ? AND table_name = ? LIMIT 1",
+    [schema, table]
   );
   return (rows as Array<{ ok: number }>).length > 0;
+}
+
+async function resolveCloneSource(connection: Connection) {
+  const override = process.env.GUMBALL_PROOF_CLONE_SCHEMA;
+  if (override === "") return null;
+  const candidates = override
+    ? [override]
+    : ["goldline_proof", "goldline_daylight"];
+  for (const schema of candidates) {
+    // Fast Goldline smoke creates an empty goldline_proof database before
+    // dayforge-release. That schema exists but has no tables yet — LIKE
+    // clone from it is not a usable source.
+    if (await schemaTableExists(connection, schema, "orders")) return schema;
+  }
+  return null;
 }
 
 export async function provisionGumballCustomerTruthSchema(
   connection: Connection
 ) {
-  const cloneSource = (await schemaExists(connection, "goldline_proof"))
-    ? "goldline_proof"
-    : (await schemaExists(connection, "goldline_daylight"))
-      ? "goldline_daylight"
-      : null;
+  const cloneSource = await resolveCloneSource(connection);
   for (const table of NEEDED_PROOF_TABLES) {
     if (await tableExists(connection, table)) continue;
     if (cloneSource) {
@@ -224,7 +254,11 @@ export async function proveGumballImportCustomerTruth(input: {
   const first = await input.caller.import(importInput);
   assert.equal(first.inserted, 1);
   assert.equal(first.importCommitted, true);
-  assert.equal(first.customerTruth, "refreshed");
+  assert.equal(
+    first.customerTruth,
+    "refreshed",
+    `expected customer truth refreshed, got ${String(first.customerTruth)} assimilationError=${String(first.assimilationError ?? first.error ?? "")}`
+  );
   assert.ok(
     first.map === "pending" || first.map === "refreshed" || first.map === "failed",
     `map status should be pending/refreshed/failed after a committed import, got ${String(first.map)}`
