@@ -76,10 +76,10 @@ the in-memory store, and the database upsert (`GREATEST`). Stricter thresholds n
   subjects, present-tense settings), so there is NO candidate-detection heuristic deciding whether to check: with the flag ON,
   EVERY model-generated general answer about to be spoken goes to a bounded one-word verifier (`generalBiographyBoundary.ts`).
   The verifier receives the authorized facts and the answer as UNTRUSTED QUOTED DATA (a JSON string in the user message, never
-  in the instructions) and must reply exactly `CLEAN`; BIOGRAPHY, garbage, error, or a 2.5s timeout all reject. Zero-latency
+  in the instructions) and must reply exactly `CLEAN`; BIOGRAPHY, garbage, error, or a 4s timeout all reject. Zero-latency
   deterministic rejects run first: obvious legacy patterns, and any answer that addresses the verifier (prompt injection). A
   rejection is replaced by the existing conservative fallback and never regenerated. Cost: one bounded call (8 tokens, temp 0)
-  per generated answer while ON; `CLAIRE_BIOGRAPHY_VERIFIER_MODEL` can point it at a faster model without a code change.
+  per generated answer while ON. `CLAIRE_BIOGRAPHY_VERIFIER_MODEL` selects the verifier model; production uses `claude-haiku-4-5-20251001` (see live results below).
   Applied at every speech-producing site: follow-up, opening brief, post-stop opening, outcome confirmation, encyclopedia
   rewrite. Flag OFF: none of it runs.
 - **Entailment.** Every biographical proposition in a reveal must be supported by the authorized fragment or facts already
@@ -118,14 +118,39 @@ The report (read-only) enumerates every operator found in ANY legacy source (rel
 the three options: **preserve** the accumulated new progression, **reset** it, or **migrate/reconcile** deliberately. Any reset or
 carry-over is a deliberate production data write with its own review; nothing here performs one.
 
+## Live verification (2026-09-19, real models + real production MySQL, isolated tenant)
+
+- **MySQL:** `scripts/claire-progression-mysql-verify.ts` — 20/20 (evidence idempotency, monotonic grant, no-backlog cursor,
+  reserve/commit atomicity, InnoDB rollback, release, continuity read); rows removed.
+- **Continuity:** `scripts/claire-progression-continuity-report.ts` against production: tenant `default`, operators `adam-admin`
+  and `driver-primary`, both legacy tier 0 / no personal generations / no attested disclosures, new state pristine.
+- **Live exam:** `scripts/claire-progression-live-exam.ts` (no phone call): business, first-person business language, no-access
+  decline, authorized reveal (reserved then committed), unknown personal topic, adversarial verifier suite (12 invented / 6
+  business), verifier error and timeout, band-2 register, failure day, brief / post-stop / outcome paths.
+- **Defects the live models exposed (all fixed, all regression-tested):** ordinary idiom ("I'll leave it there", "something",
+  "missing") mistaken for biography by the deterministic layer; a sentence-initial ordinary word ("Complicated") mistaken for a
+  place; a reveal-side verifier that accepted embellishment ("gave lectures", "respectable"); a general verifier prompt too weak
+  for a small model and too strict about task narration; a 2.5s timeout inside the default model's latency tail.
+- **Verifier latency:** small model ~0.96s median (max ~1.9s); Claire's default model ~1.3–1.5s median with a tail up to ~8s
+  before the prompt/timeout changes. Both pass the adversarial suite (0/12 invented passed, 0/6 business blocked). Production
+  uses the small model. This adds roughly one second to a generated answer while the mechanic is ON.
+- **Not exercised live:** the encyclopedia rewrite (needs production business data; unit-tested), and how Claire SOUNDS on a
+  phone call (Slice 0 is a human listening gate).
+
+## Enabling (all mechanical gates green; human Slice 0 pending)
+
+Railway variables on `bldg-admin-api`: `CLAIRE_BIOGRAPHY_VERIFIER_MODEL=claude-haiku-4-5-20251001`,
+`CLAIRE_PROGRESSION_CONTINUITY_REVIEWED=1`, `CLAIRE_PROGRESSION=default` (tenant scope only, never `*`). Rollback: unset
+`CLAIRE_PROGRESSION` (behavior returns to exactly the legacy path; accumulated rows are inert).
+
 ## What is deliberately NOT built (human-only)
 
 - **Slice 0 phone acceptance.** Automated tests cannot pass it; the pass criterion is Adam saying Claire feels like
   someone he wants to keep talking to. No outbound call has been placed.
-- **Authored dialogue.** `authoredDialogue.ts` seeds only the five approved generic declines. Thread closers,
-  business pivots, call exits, boundary reinforcement and recovery lines are empty categories. Consequences:
-  closers/recovery fall back to the approved decline floor; business pivots and **actual call hangup stay dormant**
-  until lines are authored (fail closed by design).
+- **Authored dialogue: done (2026-09-19).** Rapport-tiered declines, thread closers, business pivots and call exits are authored in
+  the locked Claire voice (British, dry, no biography, no counters). `recovery_after_failed_generation` intentionally has no lines, so a
+  lost reveal is indistinguishable from a refusal; `boundary_reinforcement` is unused. Call hangup is live once the mechanic is
+  enabled, and only after the personal thread closes AND business is complete.
 - Live-model voice review of reveals. `scripts/claire-progression-exam.ts` uses a deterministic stand-in for the
   model, so it verifies server behavior, not language quality.
 

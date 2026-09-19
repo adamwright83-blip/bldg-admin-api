@@ -1,5 +1,6 @@
 import { CLAIRE_CANON } from "../character/characterDefinition";
 import { checkClaimEntailment, type EntailmentVerifier } from "./personalEntailment";
+import { containsVerifierInjection } from "./generalBiographyBoundary";
 import { assertNoUngroundedPersonalSpecificity, UngroundedPersonalSpecificityError } from "../character/personalSpecificityGuard";
 import type { CanonFragment } from "../character/types";
 import { AUTHORED_DIALOGUE, type DialogueLine } from "./authoredDialogue";
@@ -45,8 +46,8 @@ const RAPPORT_PRESENTATION = RAPPORT_SHORT;
 export function buildPersonalDisclosureGuidance(request: PersonalGenerationRequest): string {
   return [
     `The operator asked a personal question. The ONLY personal fact you may draw on: "${request.fragment.fact}"`,
-    "Answer in your own voice, briefly. You may hesitate, qualify, answer only part of it, be dry, or close the topic. Do not recite the fact as a sentence read from a file.",
-    "Add no other biography: no names, places, dates, numbers, causes, or people beyond that fact. If pressed for more, decline in character.",
+    "Answer in your own voice, in one or two short sentences. You may hesitate, qualify, answer only part of it, be dry, or close the topic. Do not recite the fact as a sentence read from a file.",
+    "Restate ONLY what the fact says. Tone is free; content is not. Add no detail, activity, habit, trait, reputation, feeling, judgment or opinion about the person: no 'complicated', no 'respectable', no 'gave lectures', no 'travelled'. No names, places, dates, numbers, causes, or other people. If pressed for more, decline in character.",
     "Do not mention rapport, trust, levels, unlocking, or why you are answering now. Do not offer more.",
     RAPPORT_PRESENTATION[request.rapportBand],
     request.previouslyRefusedTopic
@@ -55,6 +56,11 @@ export function buildPersonalDisclosureGuidance(request: PersonalGenerationReque
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+/** Lower-case the first letter of each sentence so only mid-sentence capitals look like proper nouns. */
+export function decapitalizeSentenceStarts(text: string): string {
+  return text.replace(/(^|[.!?]\s+|\n+)([A-Z])/g, (_m, lead: string, letter: string) => lead + letter.toLowerCase());
 }
 
 export type PersonalValidationFailure =
@@ -75,7 +81,7 @@ export type PersonalValidationFailure =
 export function validatePersonalAnswer(
   text: string,
   fragment: CanonFragment,
-  options?: { allowedFacts?: readonly string[] }
+  options?: { allowedFacts?: readonly string[]; skipBorrowedWords?: boolean }
 ): PersonalValidationFailure | null {
   if (!text.trim()) return "empty_answer";
   const allowedFacts = [...new Set([fragment.fact, ...(options?.allowedFacts ?? [])])];
@@ -89,7 +95,7 @@ export function validatePersonalAnswer(
   for (const digits of text.match(/\d+/g) ?? []) {
     if (!factDigits.has(digits)) return "ungrounded_number";
   }
-  const entailment = checkClaimEntailment(text, allowedFacts);
+  const entailment = checkClaimEntailment(text, allowedFacts, { skipBorrowedWords: options?.skipBorrowedWords });
   if (!entailment.ok) return entailment.reason === "borrowed_from_other_canon" ? "ineligible_canon_leak" : "unsupported_claim";
   return null;
 }
@@ -249,11 +255,18 @@ export async function executePersonalTurn(input: {
       .map(id => CLAIRE_CANON.find(fragment => fragment.id === id)?.fact)
       .filter((fact): fact is string => Boolean(fact)),
   ];
-  const failure = validatePersonalAnswer(text, plan.fragment, { allowedFacts });
+  // With the mandatory semantic verifier present (the live path), the legacy proper-noun guard must not treat an
+  // ordinary sentence-initial word ("Complicated…") as a place name; the verifier judges places and people. Without a
+  // verifier (unit paths) the strict guard runs on the raw text.
+  const failure = validatePersonalAnswer(input.verify ? decapitalizeSentenceStarts(text) : text, plan.fragment, { allowedFacts, skipBorrowedWords: Boolean(input.verify) });
   if (failure) {
     return decline(failure, { closeThread: false, fragmentId: plan.fragment.id, phase: "post_validation" });
   }
   if (input.verify) {
+    // An answer that addresses the verifier is hostile or corrupted: reject without asking.
+    if (containsVerifierInjection(text)) {
+      return decline("entailment_unverified", { closeThread: false, fragmentId: plan.fragment.id, phase: "post_validation" });
+    }
     // The verifier can only reject further. Error, timeout, or anything but a clear yes is a rejection.
     let entailed = false;
     try {

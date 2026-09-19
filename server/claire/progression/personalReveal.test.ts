@@ -139,16 +139,27 @@ describe("personal budget and closing", () => {
     expect(third.text).not.toMatch(/question|limit|remaining|budget/i);
   });
 
-  it("does not hang up while business remains, and never without an authored exit line", async () => {
+  it("never hangs up while business remains; with an EMPTY registry it can never hang up at all", async () => {
     const store = await earnedStore(1);
     await run(store); await run(store);
-    const noBusiness = await run(store, { businessOpen: false });
-    expect(noBusiness.endCall).toBe(false); // production registry has no authored call_exit yet
+    expect((await run(store, { businessOpen: true })).endCall).toBe(false);
+    const dormant = await earnedStore(1);
+    const declineOnly = AUTHORED_DIALOGUE.filter(l => l.category === "decline");
+    await run(dormant, { registry: declineOnly }); await run(dormant, { registry: declineOnly });
+    expect((await run(dormant, { registry: declineOnly, businessOpen: false })).endCall).toBe(false);
+  });
+
+  it("with the production registry, hangs up only after the thread closed AND business is complete", async () => {
+    const store = await earnedStore(1);
+    await run(store); await run(store);
+    const done = await run(store, { businessOpen: false });
+    expect(done.endCall).toBe(true);
+    expect(AUTHORED_DIALOGUE.filter(l => l.category === "call_exit").map(l => l.text)).toContain(done.text);
   });
 
   it("actually hangs up only when business is complete AND an authored exit exists", async () => {
     const exit: DialogueLine = { id: "test_exit", category: "call_exit", text: "Test exit line.", minRapport: 0, maxRapport: 3, approvedBy: "test fixture" };
-    const registry = [...AUTHORED_DIALOGUE, exit];
+    const registry = [...AUTHORED_DIALOGUE.filter(l => l.category !== "call_exit"), exit];
     const store = await earnedStore(1);
     await run(store, { registry }); await run(store, { registry });
     const openBusiness = await run(store, { registry, businessOpen: true });
@@ -192,11 +203,11 @@ describe("dialogue registry", () => {
       expect(line.approvedBy).toBeTruthy();
       expect(line.text).not.toMatch(/todo|tbd|placeholder|lorem|xxx|filler/i);
     }
-    expect(AUTHORED_DIALOGUE.filter(l => l.category === "decline")).toHaveLength(5);
+    expect(AUTHORED_DIALOGUE.filter(l => l.approvedBy.includes("generic decline floor"))).toHaveLength(5); // the five originals are intact
   });
 
   it("avoids repeats until the pool is exhausted, then reuses the least recent", () => {
-    const pool = AUTHORED_DIALOGUE.filter(l => l.category === "decline");
+    const pool = AUTHORED_DIALOGUE.filter(l => l.category === "decline" && l.minRapport === 0 && l.maxRapport === 0);
     const used: string[] = [];
     for (let i = 0; i < pool.length; i += 1) {
       const line = selectDialogueLine({ category: "decline", rapportBand: 0, recentlyUsedIds: used, random: () => 0 })!;
@@ -207,9 +218,10 @@ describe("dialogue registry", () => {
     expect(next.id).toBe(used[0]);
   });
 
-  it("dormant categories return null instead of inventing a line", () => {
-    expect(selectDialogueLine({ category: "call_exit", rapportBand: 3, fallbackToDeclineFloor: false })).toBeNull();
-    expect(selectDialogueLine({ category: "business_pivot", rapportBand: 3, fallbackToDeclineFloor: false })).toBeNull();
+  it("an empty category returns null instead of inventing a line", () => {
+    const declinesOnly = AUTHORED_DIALOGUE.filter(l => l.category === "decline");
+    expect(selectDialogueLine({ category: "call_exit", rapportBand: 3, registry: declinesOnly, fallbackToDeclineFloor: false })).toBeNull();
+    expect(selectDialogueLine({ category: "business_pivot", rapportBand: 3, registry: declinesOnly, fallbackToDeclineFloor: false })).toBeNull();
   });
 });
 

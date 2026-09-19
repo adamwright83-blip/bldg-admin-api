@@ -106,7 +106,10 @@ async function main() {
   console.log(asJson ? JSON.stringify({ generatedAt: new Date().toISOString(), records }, null, 2) : formatContinuityReport(records, new Date()));
 }
 
-main().catch(error => {
-  console.error(error);
-  process.exit(1);
-});
+// Exit explicitly: the database pool would otherwise keep the process alive after the report prints.
+main()
+  .then(() => process.exit(0))
+  .catch(error => {
+    console.error(error);
+    process.exit(1);
+  });
