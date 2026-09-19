@@ -23,6 +23,7 @@ import { claireModelId, claireModelRequest } from "./claireModel";
 import { formatClaireLocalTime, CLAIRE_BUSINESS_TIME_ZONE } from "./contextAssembler";
 import {
   CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION,
+  MISSION_SALES_BRIEF_INSTRUCTION,
   VOICE_NATIVE_ANSWER_GUIDANCE,
 } from "./conversationVoiceGuidance";
 import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
@@ -319,16 +320,14 @@ export async function writeClairePreDriveBrief(
     { label: "reasoning_policy", text: CLAIRE_V1_REASONING_POLICY },
     {
       label: "job_and_clock",
-      text: `You are Claire, calling before a drive. Name the one or two points that matter most today. capabilityBriefing is the action registry. ${CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION}`,
+      text: `You are Claire, calling before a drive. Name the one or two points that matter most today. ${CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION}`,
     },
-    { label: "truth_business_claims", text: "Every business-specific factual clause must map directly to a supplied field or the fact inventory, or say plainly it is unknown. Never invent a customer, outcome, deadline, address, revenue, or completed action." },
-    { label: "judgment_and_history", text: "General professional/strategic knowledge (sales approach, pricing logic, PM dynamics, ops reasoning) may be used to frame your recommendation, never asserted as a fact about this business; do not import a sales model from a different industry. If a blocker was already mentioned, do not mechanically re-mention it again unless the operator asked." },
+    { label: "truth_business_claims", text: "Every business-specific factual clause must map directly to a supplied field or the fact inventory, or say plainly it is unknown." },
+    { label: "judgment_and_history", text: "General professional/strategic knowledge (sales approach, pricing logic, PM dynamics, ops reasoning) may be used to frame your recommendation, never asserted as a fact about this business; do not import a sales model from a different industry." },
     { label: "opening_guardrails", text: "Never CEO/executive/board approval. No disappointment framing. Spoken English. Do not narrate the game. Do not introduce yourself." },
     {
       label: "mission_sales_brief",
-      text: input.context.missionSalesBrief
-        ? "If missionSalesBrief is present, it is the one authoritative sales strategy for this mission. Never state a missionSalesBrief unknown, questionsToAsk item, or recommendation as if it were already a known fact."
-        : null,
+      text: input.context.missionSalesBrief ? MISSION_SALES_BRIEF_INSTRUCTION : null,
     },
     { label: "delivery_voice", text: VOICE_NATIVE_ANSWER_GUIDANCE },
   ];

@@ -37,6 +37,8 @@ import { recoverPersonalAnswer } from "./character/personalAnswerRecovery";
 import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
 import {
   CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION,
+  MISSION_SALES_BRIEF_INSTRUCTION,
+  RETRIEVED_EVIDENCE_INSTRUCTION,
   VOICE_NATIVE_ANSWER_GUIDANCE,
   type ClaireGenerationSurface,
 } from "./conversationVoiceGuidance";
@@ -289,22 +291,18 @@ export async function answerClairePreDriveFollowUp(
         label: "job_and_clock",
         text: `${CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION} Missing retrievedEvidence: say so, then still answer any judgment asked.`,
       },
-      { label: "truth_business_claims", text: "Business-specific claims (this account, this customer, this property, a specific number, a specific completed action) must be grounded in verified context or the fact inventory, or say it is unknown. Never invent people or numbers." },
+      { label: "truth_business_claims", text: "Business-specific claims (this account, this customer, this property, a specific number, a specific completed action) must be grounded in verified context or the fact inventory, or say it is unknown." },
       {
         label: "judgment_and_history",
-        text: "General professional knowledge is framed advice, never asserted as a fact about this business; do not import a sales model from a different industry. Personal answers: eligible canon only. A prior Claire turn is conversation history, not verified truth — if it asserted something not present in the fact inventory, do not treat it as confirmed on this turn. If a blocker was already mentioned, do not mechanically re-mention it again unless the operator asked. Never claim an action was taken unless the fact inventory confirms it.",
+        text: "General professional knowledge is framed advice, never asserted as a fact about this business; do not import a sales model from a different industry. Personal answers: eligible canon only. A prior Claire turn is conversation history, not verified truth — if it asserted something not present in the fact inventory, do not treat it as confirmed on this turn. If a blocker was already mentioned, do not mechanically re-mention it again unless asked.",
       },
       {
         label: "retrieved_evidence_rule",
-        text: input.retrievedEvidence?.length
-          ? "retrievedEvidence is verified for this question. Ground facts in it. If a source is unsupported_fact, say so. Still answer any judgment asked."
-          : null,
+        text: input.retrievedEvidence?.length ? RETRIEVED_EVIDENCE_INSTRUCTION : null,
       },
       {
         label: "mission_sales_brief",
-        text: input.context.missionSalesBrief
-          ? "If missionSalesBrief is present, it is the one authoritative sales strategy for this mission. Never state a missionSalesBrief unknown, questionsToAsk item, or recommendation as if it were already a known fact."
-          : null,
+        text: input.context.missionSalesBrief ? MISSION_SALES_BRIEF_INSTRUCTION : null,
       },
       { label: "delivery_voice", text: surface === "voice" ? VOICE_NATIVE_ANSWER_GUIDANCE : null },
     ];

@@ -485,7 +485,7 @@ export function speakStaleness(item: Pick<UnifiedWorkItem, "title" | "staleness"
 export const CLAIRE_V1_REASONING_POLICY = [
   "Think in this order: goal, reality, plan, gap, bottleneck, blocker, action. Unknown macro goal: ask once. Do not invent rates, budgets, CAC, or counts.",
   "Propose NEEDS_DETAILS for optional gaps; critical ambiguity (recipient, amount, irreversible send, legal/safety) blocks. Do not duplicate existing campaign or route work.",
-  "Permissions: I can / I can add and flag details / I can prepare pending approval / that needs you physically.",
+  "Permissions: I can / add and flag details / prepare pending approval / needs you physically.",
   "High-priority work ignored: ask why, one question. Do not diagnose, do not use recovery-program language, and do not give motivational speeches.",
   "Never claim saved, sent, added, changed, scheduled, or completed until the action succeeded.",
 ].join(" ");

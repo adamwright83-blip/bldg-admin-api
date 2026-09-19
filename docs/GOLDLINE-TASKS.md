@@ -114,7 +114,7 @@ Full spec: `docs/goldline/FICTION_PACKS.md` (binding). Campaign truth stays belo
 - [claude] Field Moves needs a deliberate new candidate kind for a standing residential grid — `FieldTodayItemKind` has no such kind today and `rankFieldMoves` has no ranking path for one. Not a free integration.
 
 ## In Progress
-- [cursor] Claire Intelligence Repair Part 2, Slice E — prompt diet. PR #176, branch `cursor/claire-repair2-slice-e` off merged main (`c96e99e` / PR #174). Empty-context static: follow-up 2,498 / opening 2,485 (budget 2,500). Do not merge until reviewed. Do not begin Slice F.
+- [cursor] Claire Intelligence Repair Part 2, Slice E — prompt diet. PR #176, branch `cursor/claire-repair2-slice-e` off merged main (`c96e99e` / PR #174). Worst-case static (follow-up with retrieved evidence + MissionSalesBrief): 2,481 / 2,500. Do not merge until reviewed. Do not begin Slice F.
 - [cursor] JOYSTICK Spirit Human rescue vertical — dormant customer → frozen mission → playable pressure encounter → explicit approve/send → Twilio `provider_accepted` receipt rescues the villager. Branch `cursor/joystick-spirit-human-rescue` off `9ce811c`. Handoff: `docs/goldline/JOYSTICK_SPIRIT_HUMAN_RESCUE_HANDOFF.md`. Do not merge until reviewed. Do not send a real customer message without Adam's exact authorization. Independent of Claire #161 and the xAI branch.
 - [cursor] Claire owns the workday (shared-brain operating loop + Driver surface retirement + play runtime reconciliation) — starts from current main after Claire V1. Program: `docs/goldline/CLAIRE_OWNS_WORKDAY_LEDGER.md`. No second Claire, no Sage, no second task DB, no new migration unless later slices force a stop.
 
