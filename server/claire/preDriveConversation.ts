@@ -1,5 +1,6 @@
 import { invokeTextLLM } from "../_core/llm";
 import { ENV } from "../_core/env";
+import { claireModelId, claireModelRequest } from "./claireModel";
 import { compileClaireContextForOperator } from "./character/relationshipHistory";
 import type { ClaireDriveContext } from "./contextAssembler";
 import { formatClaireLocalTime, CLAIRE_BUSINESS_TIME_ZONE } from "./contextAssembler";
@@ -330,9 +331,8 @@ export async function answerClairePreDriveFollowUp(
     const text = (
       await invokeText({
         tenantId: input.tenantId,
-        model: ENV.anthropicModelClaire || ENV.anthropicModel,
+        ...claireModelRequest(0.6),
         maxTokens: FOLLOW_UP_MAX_TOKENS,
-        temperature: 0.6,
         onStopReason: reason => { stopReason = reason; },
         onModelServed: model => { modelServed = model; },
         messages: [
@@ -387,7 +387,7 @@ export async function answerClairePreDriveFollowUp(
           : recoveredVia === "canon_render"
             ? "ungrounded_personal_specificity_canon_rendered"
             : "ungrounded_personal_specificity",
-      modelRequested: ENV.anthropicModelClaire || ENV.anthropicModel,
+      modelRequested: claireModelId(),
       modelServed,
       promptSize: promptSize ?? undefined,
       surface,
@@ -417,7 +417,7 @@ export async function answerClairePreDriveFollowUp(
       kind: "follow_up",
       source: "fallback",
       failureReason,
-      modelRequested: ENV.anthropicModelClaire || ENV.anthropicModel,
+      modelRequested: claireModelId(),
       modelServed,
       promptSize: promptSize ?? undefined,
       surface,

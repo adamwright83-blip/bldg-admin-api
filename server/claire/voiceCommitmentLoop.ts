@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { invokeLLM } from "../_core/llm";
+import { claireModelRequest } from "./claireModel";
 import type { DayDirectorProposal } from "../../shared/dayDirector";
 import {
   acceptProposal,
@@ -165,8 +166,8 @@ export async function classifyVoiceWorkStatement(
   try {
     const result = await invoke({
       tenantId: input.tenantId,
+      ...claireModelRequest(0),
       maxTokens: 150,
-      temperature: 0,
       outputSchema: CLASSIFY_JSON_SCHEMA,
       messages: [
         {
