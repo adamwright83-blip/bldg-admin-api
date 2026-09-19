@@ -137,16 +137,24 @@ carry-over is a deliberate production data write with its own review; nothing he
 - **Not exercised live:** the encyclopedia rewrite (needs production business data; unit-tested), and how Claire SOUNDS on a
   phone call (Slice 0 is a human listening gate).
 
-## Enabling (all mechanical gates green; human Slice 0 pending)
+## Enabling (mechanical gates green; final repaired-call verification pending)
 
-Railway variables on `bldg-admin-api`: `CLAIRE_BIOGRAPHY_VERIFIER_MODEL=claude-haiku-4-5-20251001`,
-`CLAIRE_PROGRESSION_CONTINUITY_REVIEWED=1`, `CLAIRE_PROGRESSION=default` (tenant scope only, never `*`). Rollback: unset
-`CLAIRE_PROGRESSION` (behavior returns to exactly the legacy path; accumulated rows are inert).
+Activation is operational state, not static documentation. Do **not** infer the current production tenant list from this file.
+Production enablement requires both `CLAIRE_PROGRESSION_CONTINUITY_REVIEWED=1` and an explicit tenant in
+`CLAIRE_PROGRESSION` (never `*`). `CLAIRE_BIOGRAPHY_VERIFIER_MODEL` selects the verifier model. Rollback is to unset
+`CLAIRE_PROGRESSION`; accumulated progression rows remain inert.
 
-## What is deliberately NOT built (human-only)
+## Human acceptance / Slice 0 status
 
-- **Slice 0 phone acceptance.** Automated tests cannot pass it; the pass criterion is Adam saying Claire feels like
-  someone he wants to keep talking to. No outbound call has been placed.
+- **Initial phone acceptance completed 2026-09-19.** Claire's character/voice passed the human listening gate, but the call
+  exposed orchestration defects: provider endpointing split long thoughts, conversational/FYI speech leaked into Day Line
+  extraction, mutation success could be spoken without a matching write, generated speech was conflated with heard speech,
+  and a model turn invented the local clock.
+- **Forensic closeout merged in PR #183.** The repair adds semantic-turn continuation, dialogue-act routing, concise task
+  titles with raw-source provenance, receipt-backed mutation confirmation, generated-vs-heard delivery semantics, clock
+  enforcement, and the production macro-goal migration repair.
+- **Still pending before enabling the default tenant:** one isolated post-fix phone call that verifies audio, live ASR,
+  canonical operator turns, Claire delivery metadata, Day Line persistence/date semantics, and Driver rendering agree.
 - **Authored dialogue: done (2026-09-19).** Rapport-tiered declines, thread closers, business pivots and call exits are authored in
   the locked Claire voice (British, dry, no biography, no counters). `recovery_after_failed_generation` intentionally has no lines, so a
   lost reveal is indistinguishable from a refusal; `boundary_reinforcement` is unused. Call hangup is live once the mechanic is
