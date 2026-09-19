@@ -180,6 +180,7 @@ describe("5. only truthful effort/progress sources are live", () => {
 describe("6. the flag cannot turn itself on in a deployed process", () => {
   it("an unset or unknown NODE_ENV behaves like production; only test/development default on", async () => {
     const { isClaireProgressionEnabled } = await import("./progressionFlag");
+    vi.stubEnv("VITEST", ""); // simulate a deployed process: no test runner
     for (const env of ["", "staging", "production"]) {
       vi.stubEnv("NODE_ENV", env);
       expect(isClaireProgressionEnabled("goldline")).toBe(false);
