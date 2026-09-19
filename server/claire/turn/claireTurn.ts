@@ -425,6 +425,26 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     deps.onTurnTrace?.(trace);
     return personalEndCall ? { ...guarded, endCall: true } : guarded;
   };
+  const finishCommitmentTurn = (
+    turn: Exclude<VoiceCommitmentTurnResult, { kind: "not_applicable" }>
+  ): ClaireTurnResult => {
+    const receipt = "mutationReceipt" in turn ? turn.mutationReceipt : undefined;
+    const actionId =
+      "commitmentId" in turn && turn.commitmentId
+        ? turn.commitmentId
+        : "sourceId" in turn && turn.sourceId
+          ? turn.sourceId
+          : null;
+    return finish({
+      speak: receipt ? "" : turn.speak,
+      receiptBackedCommit: receipt ? turn.speak : undefined,
+      mutationReceipts: receipt ? [receipt] : undefined,
+      kind: "commitment",
+      commitmentTurn: turn,
+      actionIds: actionId ? [actionId] : [],
+    });
+  };
+
   const history = () => (state.history ?? []).map(entry => ({ speaker: entry.speaker, text: entry.text }));
   const lower = normalizeUtterance(utterance);
 
@@ -575,7 +595,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       );
       if (turn.kind !== "not_applicable") {
         mark("commitment");
-        return finish({ speak: turn.speak, kind: "commitment", commitmentTurn: turn, actionIds: "commitmentId" in turn && turn.commitmentId ? [turn.commitmentId] : [] });
+        return finishCommitmentTurn(turn);
       }
     } else {
       // New content while Claire waits: never read it as a yes/no. A stale
@@ -755,7 +775,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     );
     if (turn.kind !== "not_applicable") {
       mark("commitment");
-      return finish({ speak: turn.speak, kind: "commitment", commitmentTurn: turn, actionIds: "commitmentId" in turn && turn.commitmentId ? [turn.commitmentId] : [] });
+      return finishCommitmentTurn(turn);
     }
   }
 
@@ -778,7 +798,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     );
     if (turn.kind !== "not_applicable") {
       mark("commitment");
-      return finish({ speak: turn.speak, kind: "commitment", commitmentTurn: turn, actionIds: "commitmentId" in turn && turn.commitmentId ? [turn.commitmentId] : [] });
+      return finishCommitmentTurn(turn);
     }
   }
 
