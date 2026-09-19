@@ -160,6 +160,12 @@ export type InvokeTextParams = Pick<
    * transcript. Optional and additive.
    */
   onModelServed?: (model: string | null) => void;
+  /**
+   * Claire Intelligence Repair Part 2, Slice F: first-token callback for
+   * streaming text generation. Callers that omit it keep the existing
+   * non-streaming `messages.create` path byte-for-byte.
+   */
+  onFirstToken?: () => void;
 };
 
 export class TextLLMInvocationError extends Error {
@@ -502,6 +508,35 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   }
 }
 
+type TextMessageRequest = {
+  model: string;
+  max_tokens: number;
+  temperature?: number;
+  thinking?: { type: "disabled" };
+  system?: string;
+  messages: Anthropic.MessageParam[];
+};
+
+/**
+ * Slice F: stream only when the caller asked for a first-token mark.
+ * TTS still waits for the full text — this measures time-to-first-token,
+ * it does not pipe tokens into Twilio audio.
+ */
+async function completeTextMessageStream(
+  client: Anthropic,
+  request: TextMessageRequest,
+  onFirstToken: () => void
+): Promise<Anthropic.Message> {
+  let sawFirst = false;
+  const stream = client.messages.stream(request);
+  stream.on("text", () => {
+    if (sawFirst) return;
+    sawFirst = true;
+    onFirstToken();
+  });
+  return stream.finalMessage();
+}
+
 /** Plain-text Anthropic generation. Structured callers must continue to use invokeLLM. */
 export async function invokeTextLLM(params: InvokeTextParams): Promise<string> {
   try {
@@ -545,14 +580,17 @@ export async function invokeTextLLM(params: InvokeTextParams): Promise<string> {
     }
 
     const client = new Anthropic({ apiKey: ENV.anthropicApiKey });
-    const response = await client.messages.create({
+    const request = {
       model: params.model ?? ENV.anthropicModel,
       max_tokens: Math.min(params.maxTokens ?? params.max_tokens ?? 8192, 8192),
       ...(params.omitTemperature ? {} : { temperature: params.temperature ?? 0 }),
-      ...(params.disableThinking ? { thinking: { type: "disabled" } } : {}),
+      ...(params.disableThinking ? { thinking: { type: "disabled" } as const } : {}),
       ...(systemParts.length ? { system: systemParts.join("\n\n") } : {}),
       messages: anthropicMessages,
-    });
+    };
+    const response = params.onFirstToken
+      ? await completeTextMessageStream(client, request, params.onFirstToken)
+      : await client.messages.create(request);
     params.onStopReason?.(response.stop_reason ?? null);
     params.onModelServed?.(response.model ?? null);
     const text = response.content

@@ -39,11 +39,17 @@ describe("Claire dials the authenticated operator's own phone", () => {
 });
 
 describe("Claire's ears for a spoken briefing", () => {
-  it("allows a full minute of speech, waits through list pauses, and hints business names", () => {
-    const xml = preDriveConversationTwiML({ text: "Go ahead.", token: "t", hints: "KITH TREATS, OPUS LA, Century Park East" });
+  it("allows a full minute of speech, waits through opening-briefing list pauses, and hints business names", async () => {
+    const xml = preDriveConversationTwiML({ text: "Go ahead.", token: "t", opening: true, hints: "KITH TREATS, OPUS LA, Century Park East" });
     expect(xml).toContain('maxSpeechTime="60"');
     expect(xml).toContain('speechTimeout="3"');
     expect(xml).toContain('hints="KITH TREATS, OPUS LA, Century Park East"');
+  });
+
+  it("Slice F — ordinary follow-up gathers close on auto, not a fixed 3-second silence wait", () => {
+    const xml = preDriveConversationTwiML({ text: "Go ahead.", token: "t" });
+    expect(xml).toContain('speechTimeout="auto"');
+    expect(xml).not.toContain('speechTimeout="3"');
   });
 
   it("listens silently when Adam paused mid-thought", () => {
