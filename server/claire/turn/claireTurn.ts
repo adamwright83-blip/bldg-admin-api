@@ -10,6 +10,7 @@ import { isCombineRequest, normalizeUtterance } from "../business/businessLangua
 import { getClaireCampaignSummary } from "../campaignAwareness";
 import type { ClaireDriveContext } from "../contextAssembler";
 import { buildClaireVerifiedFactInventory, sanitizeSpeakAgainstInventory } from "../verifiedFactInventoryFromContext";
+import { commitPendingDisclosures } from "../progression/pendingReceipts";
 import { answerClairePreDriveFollowUp } from "../preDriveConversation";
 import { detectConfirmation, handleVoiceCommitmentTurn, type PendingProposalState, type VoiceCommitmentTurnResult } from "../voiceCommitmentLoop";
 import { commitBriefing, loadExistingWork, matchExistingWork, reconcileBriefing, speakBriefingCommit } from "../briefing/briefingCommit";
@@ -287,6 +288,9 @@ function singleIntentFlow(utterance: string): boolean {
 export { MEMORY_QUESTION } from "../answerRouter";
 
 export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<ClaireTurnDeps> = {}): Promise<ClaireTurnResult> {
+  // A new turn on this call means the previous line was actually spoken: that is the delivery
+  // boundary at which a pending personal reveal is committed (fragment disclosed, entitlement consumed).
+  await commitPendingDisclosures(input.conversationKey);
   const deps: ClaireTurnDeps = { ...defaultClaireTurnDeps(), ...overrides };
   const now = deps.now();
   const nowMs = now.getTime();
@@ -653,6 +657,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       brief: input.brief,
       context: input.context,
       recentTurns: history().slice(0, -1),
+      conversationId: input.conversationKey,
       onFirstToken: markFirstToken,
       // Slice A: the follow-up path already reports how it ended (model,
       // canon recovery, or conservative fallback). Read it rather than
@@ -815,6 +820,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       context: input.context,
       recentTurns: history().slice(0, -1),
       retrievedEvidence: evidence.length ? evidence : undefined,
+      conversationId: input.conversationKey,
       onFirstToken: markFirstToken,
       onGeneration: diagnostic => {
         trace.modelRequested = diagnostic.modelRequested ?? null;

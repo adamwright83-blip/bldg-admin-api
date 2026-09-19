@@ -1305,6 +1305,79 @@ await assertRequiredColumns("claire_relationship_state", [
   "qualifyingInteractionCount",
   "distinctInteractionDays",
 ]);
+// ── Earned Rapport + Guarded Disclosure: additive tables only ───────────
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS claire_progression_evidence (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NOT NULL,
+    category VARCHAR(24) NOT NULL,
+    kind VARCHAR(64) NOT NULL,
+    strength VARCHAR(16) NULL,
+    sourceType VARCHAR(64) NOT NULL,
+    sourceId VARCHAR(96) NOT NULL,
+    provenance VARCHAR(128) NOT NULL,
+    occurredAt TIMESTAMP NOT NULL,
+    recognizedAt TIMESTAMP NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_claire_progression_evidence (tenantId,operatorUserId,category,kind,sourceType,sourceId)
+  )`,
+  "CREATE TABLE claire_progression_evidence"
+);
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS claire_progression_grants (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NOT NULL,
+    rapportBand INT NOT NULL DEFAULT 0,
+    rapportPolicyVersion VARCHAR(64) NULL,
+    personalRung INT NOT NULL DEFAULT 0,
+    rungPolicyVersion VARCHAR(64) NULL,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_claire_progression_grants (tenantId,operatorUserId)
+  )`,
+  "CREATE TABLE claire_progression_grants"
+);
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS claire_disclosure_entitlements (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NOT NULL,
+    evidenceId INT NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'unused',
+    mintedAt TIMESTAMP NOT NULL,
+    reservedAt TIMESTAMP NULL,
+    reservationToken VARCHAR(64) NULL,
+    consumedAt TIMESTAMP NULL,
+    consumedFragmentId VARCHAR(64) NULL,
+    consumedConversationId VARCHAR(128) NULL,
+    UNIQUE KEY uq_claire_disclosure_entitlement_evidence (tenantId,operatorUserId,evidenceId)
+  )`,
+  "CREATE TABLE claire_disclosure_entitlements"
+);
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS claire_personal_ledger (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NOT NULL,
+    conversationId VARCHAR(128) NOT NULL,
+    kind VARCHAR(32) NOT NULL,
+    topic VARCHAR(64) NULL,
+    fragmentId VARCHAR(64) NULL,
+    entitlementId INT NULL,
+    rungAtTime INT NOT NULL DEFAULT 0,
+    rapportBandAtTime INT NOT NULL DEFAULT 0,
+    declineId VARCHAR(64) NULL,
+    failureReason VARCHAR(96) NULL,
+    hadUnusedEntitlement INT NULL,
+    failurePhase VARCHAR(24) NULL,
+    occurredAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_claire_personal_ledger_operator (tenantId,operatorUserId,occurredAt),
+    KEY idx_claire_personal_ledger_kind (tenantId,kind,occurredAt)
+  )`,
+  "CREATE TABLE claire_personal_ledger"
+);
+
 await assertRequiredColumns("claire_tier_transitions", [
   "tenantId",
   "operatorUserId",

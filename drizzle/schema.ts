@@ -8012,3 +8012,92 @@ export type SpiritHumanRescueMissionRow = typeof spiritHumanRescueMissions.$infe
 export type InsertSpiritHumanRescueMissionRow = typeof spiritHumanRescueMissions.$inferInsert;
 
 
+
+
+// ── Earned Rapport + Guarded Disclosure (additive; see server/claire/progression) ──
+export const claireProgressionEvidence = mysqlTable(
+  "claire_progression_evidence",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    category: varchar("category", { length: 24 }).notNull(),
+    kind: varchar("kind", { length: 64 }).notNull(),
+    strength: varchar("strength", { length: 16 }),
+    sourceType: varchar("sourceType", { length: 64 }).notNull(),
+    sourceId: varchar("sourceId", { length: 96 }).notNull(),
+    provenance: varchar("provenance", { length: 128 }).notNull(),
+    occurredAt: timestamp("occurredAt").notNull(),
+    recognizedAt: timestamp("recognizedAt").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    uniqueEvidence: uniqueIndex("uq_claire_progression_evidence").on(
+      table.tenantId, table.operatorUserId, table.category, table.kind, table.sourceType, table.sourceId
+    ),
+  })
+);
+
+export const claireProgressionGrants = mysqlTable(
+  "claire_progression_grants",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    rapportBand: int("rapportBand").notNull().default(0),
+    rapportPolicyVersion: varchar("rapportPolicyVersion", { length: 64 }),
+    personalRung: int("personalRung").notNull().default(0),
+    rungPolicyVersion: varchar("rungPolicyVersion", { length: 64 }),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    uniqueOperator: uniqueIndex("uq_claire_progression_grants").on(table.tenantId, table.operatorUserId),
+  })
+);
+
+export const claireDisclosureEntitlements = mysqlTable(
+  "claire_disclosure_entitlements",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    evidenceId: int("evidenceId").notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("unused"),
+    mintedAt: timestamp("mintedAt").notNull(),
+    reservedAt: timestamp("reservedAt"),
+    reservationToken: varchar("reservationToken", { length: 64 }),
+    consumedAt: timestamp("consumedAt"),
+    consumedFragmentId: varchar("consumedFragmentId", { length: 64 }),
+    consumedConversationId: varchar("consumedConversationId", { length: 128 }),
+  },
+  table => ({
+    uniqueEvidence: uniqueIndex("uq_claire_disclosure_entitlement_evidence").on(
+      table.tenantId, table.operatorUserId, table.evidenceId
+    ),
+  })
+);
+
+export const clairePersonalLedger = mysqlTable(
+  "claire_personal_ledger",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    conversationId: varchar("conversationId", { length: 128 }).notNull(),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    topic: varchar("topic", { length: 64 }),
+    fragmentId: varchar("fragmentId", { length: 64 }),
+    entitlementId: int("entitlementId"),
+    rungAtTime: int("rungAtTime").notNull().default(0),
+    rapportBandAtTime: int("rapportBandAtTime").notNull().default(0),
+    declineId: varchar("declineId", { length: 64 }),
+    failureReason: varchar("failureReason", { length: 96 }),
+    hadUnusedEntitlement: int("hadUnusedEntitlement"),
+    failurePhase: varchar("failurePhase", { length: 24 }),
+    occurredAt: timestamp("occurredAt").notNull().defaultNow(),
+  },
+  table => ({
+    operatorLookup: index("idx_claire_personal_ledger_operator").on(table.tenantId, table.operatorUserId, table.occurredAt),
+    kindLookup: index("idx_claire_personal_ledger_kind").on(table.tenantId, table.kind, table.occurredAt),
+  })
+);

@@ -1,3 +1,5 @@
+import { getProgressionStore } from "../progression/drizzleStore";
+import type { ProgressionStore } from "../progression/store";
 import {
   assembleClaireRelationshipHistory,
   type ClaireAssembledRelationshipHistory,
@@ -110,6 +112,10 @@ export async function compileClaireContextForOperator(input: {
   experimentObservations?: readonly ClaireExperimentObservation[];
   inferences?: readonly ClaireInferenceRecord[];
   inventory?: VerifiedFactInventory | null;
+  /** Test seam; production reads the shared progression store. */
+  progressionStore?: ProgressionStore;
+  /** Set by the personal-turn controller: the only canon this turn may draw on. */
+  boundedCanonFragmentIds?: readonly string[];
 }): Promise<ClaireCompiledContext> {
   const relationshipState = await getClaireRelationshipState({
     tenantId: input.tenantId,
@@ -125,8 +131,23 @@ export async function compileClaireContextForOperator(input: {
     ...input,
     relationshipEvents,
   });
+  // Hidden, progress-backed state. Any failure fails closed to rapport 0 / rung 0.
+  let progression: { rapportBand: 0 | 1 | 2 | 3; personalRung: 0 | 1 | 2 | 3 } = { rapportBand: 0, personalRung: 0 };
+  if (input.operatorUserId) {
+    try {
+      const grant = await (input.progressionStore ?? getProgressionStore()).getGrant({
+        tenantId: input.tenantId,
+        operatorUserId: input.operatorUserId,
+      });
+      if (grant) progression = { rapportBand: grant.rapportBand, personalRung: grant.personalRung };
+    } catch {
+      // fail closed
+    }
+  }
   return compileClaireCharacterContext({
     mode: input.mode,
+    progression,
+    boundedCanonFragmentIds: input.boundedCanonFragmentIds,
     relationshipState,
     recentSharedHistory: assembledHistory.failClosed ? [] : relationshipEvents,
     assembledHistory,

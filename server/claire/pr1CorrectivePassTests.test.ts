@@ -1,3 +1,5 @@
+import { AUTHORED_DIALOGUE } from "./progression/authoredDialogue";
+import { createInMemoryProgressionStore } from "./progression/store";
 import { describe, expect, it, vi } from "vitest";
 import type { ClaireDriveContext } from "./contextAssembler";
 import { buildClaireClock, CLAIRE_BUSINESS_TIME_ZONE, formatClaireLocalTime } from "./contextAssembler";
@@ -175,22 +177,18 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
       ).not.toThrow();
     });
 
-    it("end-to-end: a personal-mode follow-up that invents an unsupported specific is replaced by eligible canon", async () => {
+    it("end-to-end: a personal-mode follow-up that invents an unsupported specific never reaches the operator; an approved decline replaces it", async () => {
       const invokeText = vi.fn().mockResolvedValue("Marseille, actually.");
       const recordGeneration = vi.fn().mockResolvedValue(undefined);
       const result = await answerClairePreDriveFollowUp(
-        { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: baseContext },
-        { invokeText, recordGeneration }
+        { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: { ...baseContext, actorId: "op-1" } },
+        { invokeText, recordGeneration, progressionStore: createInMemoryProgressionStore() }
       );
       expect(result).not.toContain("Marseille");
-      expect(result).toBe("I'm British.");
+      expect(AUTHORED_DIALOGUE.map(line => line.text)).toContain(result);
       expect(recordGeneration).toHaveBeenCalledWith(
         expect.objectContaining({
-          diagnostic: expect.objectContaining({
-            source: "fallback",
-            answerOrigin: "canon_render",
-            failureReason: "ungrounded_personal_specificity_canon_rendered",
-          }),
+          diagnostic: expect.objectContaining({ source: "fallback", failureReason: "personal_decline:ungrounded_specificity" }),
         })
       );
     });
@@ -199,8 +197,8 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
       const invokeText = vi.fn().mockResolvedValue("British, though I moved around a lot as a kid.");
       const recordGeneration = vi.fn().mockResolvedValue(undefined);
       const result = await answerClairePreDriveFollowUp(
-        { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: baseContext },
-        { invokeText, recordGeneration }
+        { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: { ...baseContext, actorId: "op-1" } },
+        { invokeText, recordGeneration, progressionStore: createInMemoryProgressionStore() }
       );
       expect(result).toBe("British, though I moved around a lot as a kid.");
       expect(recordGeneration).toHaveBeenCalledWith(

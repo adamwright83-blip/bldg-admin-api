@@ -29,11 +29,10 @@ import {
 } from "./verifiedFactInventoryFromContext";
 import { trimToSentenceBoundary } from "./textTrim";
 import { measureClairePromptSections, type ClairePromptSizeTrace } from "./answerPathTelemetry";
-import {
-  assertNoUngroundedPersonalSpecificity,
-  UngroundedPersonalSpecificityError,
-} from "./character/personalSpecificityGuard";
-import { recoverPersonalAnswer } from "./character/personalAnswerRecovery";
+import { selectDialogueLine } from "./progression/dialogueRegistry";
+import { answerPersonalFollowUp } from "./progression/personalFollowUp";
+import type { ProgressionStore } from "./progression/store";
+import type { PersonalTurnResult } from "./progression/personalReveal";
 import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
 import {
   CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION,
@@ -238,10 +237,16 @@ export async function answerClairePreDriveFollowUp(
      * `firstTokenMs` from webhook receipt. Optional — desktop/tests omit it.
      */
     onFirstToken?: () => void;
+    /** Conversation identity, used for the personal-thread ledger and per-call budget. */
+    conversationId?: string;
+    /** Receive a not-yet-committed new disclosure so the caller commits at its own delivery boundary. */
+    onPersonalReceipt?: (receipt: NonNullable<PersonalTurnResult["receipt"]>) => void;
+    onPersonalTurn?: (result: PersonalTurnResult) => void;
   },
   dependencies: {
     invokeText?: typeof invokeTextLLM;
     recordGeneration?: typeof recordClaireGeneration;
+    progressionStore?: ProgressionStore;
   } = {}
 ): Promise<string> {
   const fallback = conservativeClaireFollowUp(input);
@@ -253,19 +258,49 @@ export async function answerClairePreDriveFollowUp(
   const conversationalMode = detectClaireConversationalMode(input.utterance);
   const requestedTopic = detectRequestedClaireTopic(input.utterance);
   const inventory = buildClaireVerifiedFactInventory(input.context);
+  // Personal questions never reach the general prompt. The server decides what may
+  // be answered (progression controller); the model only phrases one bounded fact;
+  // every failure becomes an approved decline. Ask-only: this runs solely because the
+  // operator explicitly asked a personal question.
+  if (conversationalMode === "personal") {
+    const operatorUserId = input.context.actorId ?? null;
+    if (!operatorUserId) {
+      // Unresolved identity fails closed: no progression state, no disclosure.
+      return selectDialogueLine({ category: "decline", rapportBand: 0 })?.text ?? "Not that one.";
+    }
+    const businessOpen =
+      input.context.blockers.length > 0 ||
+      Boolean(input.context.nextFixedCommitment) ||
+      (input.context.runtime?.workItems?.length ?? 0) > 0;
+    return answerPersonalFollowUp(
+      {
+        tenantId: input.tenantId,
+        operatorUserId,
+        conversationId: input.conversationId ?? `pre_drive:${input.context.businessDate}`,
+        topic: requestedTopic ?? null,
+        utterance: input.utterance,
+        recentTurns: input.recentTurns,
+        businessOpen,
+        surface,
+        onGeneration: input.onGeneration,
+        onPersonalReceipt: input.onPersonalReceipt,
+        onPersonalTurn: input.onPersonalTurn,
+      },
+      { invokeText, recordGeneration, progressionStore: dependencies.progressionStore }
+    );
+  }
   const compiled = await compileClaireContextForOperator({
     tenantId: input.tenantId,
     operatorUserId: input.context.actorId ?? null,
     inventory,
     topic: requestedTopic ?? undefined,
+    // Personal turns returned above; everything below is business or casual conversation.
     mode:
-      conversationalMode === "personal"
-        ? "personal"
-        : conversationalMode === "casual"
-          ? "casual"
-          : conversationalMode === "post_action_review"
-            ? "post_action_review"
-            : "pre_drive",
+      conversationalMode === "casual"
+        ? "casual"
+        : conversationalMode === "post_action_review"
+          ? "post_action_review"
+          : "pre_drive",
   });
   let stopReason: string | null = null;
   let modelServed: string | null = null;
@@ -365,31 +400,8 @@ export async function answerClairePreDriveFollowUp(
     const trimmedToSentenceBoundary = trimmed !== text;
     assertPostGenerationStateVerbs(trimmed, inventory);
 
-    // Personal-specificity guard stays hard and fail-closed. If the model
-    // invents a personal specific, recover deterministically from canon that
-    // was already eligible for this operator/topic. Do not ask the model to
-    // try again: a second free-form generation can hallucinate again.
-    let answer = trimmed;
-    let recoveredVia: "canon_render" | "canon_scoped_deflection" | null = null;
-    if (conversationalMode === "personal") {
-      try {
-        assertNoUngroundedPersonalSpecificity(trimmed, compiled.eligibleCanonFacts);
-      } catch (guardError) {
-        if (!(guardError instanceof UngroundedPersonalSpecificityError)) throw guardError;
-        console.warn("[Claire] personal answer asserted ungrounded specificity; recovering deterministically from eligible canon", {
-          candidate: guardError.candidate,
-          eligibleCanonFactCount: compiled.eligibleCanonFacts.length,
-          requestedTopic: requestedTopic ?? null,
-        });
-        const recovery = recoverPersonalAnswer({
-          eligibleCanonFacts: compiled.eligibleCanonFacts,
-          eligibleCanonFragmentIds: compiled.eligibleCanonFragmentIds,
-          requestedTopic: requestedTopic ?? undefined,
-        });
-        answer = recovery.text;
-        recoveredVia = recovery.via;
-      }
-    }
+    const answer = trimmed;
+    const recoveredVia: null = null;
 
     const diagnostic: ClaireGenerationDiagnostic = {
       kind: "follow_up",

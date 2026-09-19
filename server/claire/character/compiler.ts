@@ -5,6 +5,8 @@ import {
 } from "../../../shared/claireRelationshipHistory";
 import { CLAIRE_CHARACTER_DEFINITION, CLAIRE_CHARACTER_VERSION } from "./characterDefinition";
 import { retrieveEligibleClaireCanon } from "./canonStore";
+import { CLAIRE_CANON } from "./characterDefinition";
+import { rapportPresentationLine } from "../progression/rapportPresentation";
 import { CLAIRE_ROUTINE_FEW_SHOTS } from "./fewShots";
 import { CLAIRE_FIELD_MODE_OVERRIDE, CLAIRE_PERSONALITY_LOCK } from "./personalityLock";
 import type {
@@ -51,6 +53,13 @@ export function compileClaireCharacterContext(input: {
   recentSharedHistory: ClaireRelationshipEvent[];
   assembledHistory?: ClaireAssembledRelationshipHistory;
   explicitlyRequestedTopic?: string;
+  /** Hidden, server-owned progression state. Absent means rapport 0 / rung 0 (fail closed). */
+  progression?: { rapportBand: 0 | 1 | 2 | 3; personalRung: 0 | 1 | 2 | 3 };
+  /**
+   * The exact canon fragments the personal-turn controller authorized for THIS turn.
+   * When absent, only harmless core canon is eligible: Claire never volunteers gated biography.
+   */
+  boundedCanonFragmentIds?: readonly string[];
 }): ClaireCompiledContext {
   const modePolicy = CLAIRE_CHARACTER_DEFINITION.modes[input.mode];
   const recentEvents = input.recentSharedHistory.slice(-CLAIRE_HISTORY_PROMPT_BUDGET);
@@ -65,12 +74,22 @@ export function compileClaireCharacterContext(input: {
         .map(item => item.relationshipEventId)
         .filter((id): id is number => id != null)
     : recentEvents.map(event => event.id);
-  const eligibleCanonFragments = retrieveEligibleClaireCanon({
-    disclosureTier: input.relationshipState.disclosureTier,
-    mode: input.mode,
-    fieldOverride: modePolicy.fieldOverride,
-    explicitlyRequestedTopic: input.explicitlyRequestedTopic,
-  });
+  const rapportBand = input.progression?.rapportBand ?? 0;
+  const personalRung = input.progression?.personalRung ?? 0;
+  const eligibleCanonFragments = input.boundedCanonFragmentIds
+    ? CLAIRE_CANON.filter(
+        fragment =>
+          input.boundedCanonFragmentIds!.includes(fragment.id) &&
+          Boolean(fragment.fact) &&
+          fragment.accessClass !== "permanently_private"
+      )
+    : // Ask-only: tier 0 == core canon. Gated biography enters a prompt solely via a bounded plan.
+      retrieveEligibleClaireCanon({
+        disclosureTier: 0,
+        mode: input.mode,
+        fieldOverride: modePolicy.fieldOverride,
+        explicitlyRequestedTopic: input.explicitlyRequestedTopic,
+      });
   const eligibleCanonFacts = eligibleCanonFragments.map(fragment => fragment.fact);
   const eligibleCanonFragmentIds = eligibleCanonFragments.map(fragment => fragment.id);
 
@@ -83,9 +102,12 @@ export function compileClaireCharacterContext(input: {
     );
   }
   lines.push(HISTORY_USAGE_RULES);
+  lines.push(rapportPresentationLine(rapportBand));
   if (eligibleCanonFacts.length && (!modePolicy.fieldOverride || input.explicitlyRequestedTopic)) {
     lines.push(
-      `Eligible personal canon at this operator's disclosure tier (${input.relationshipState.disclosureTier}) — reveal only if it naturally fits, never force it: ${eligibleCanonFacts.join(" | ")}`
+      input.boundedCanonFragmentIds
+        ? `The only personal fact you may draw on this turn, phrased in your own voice and never read out as a file: ${eligibleCanonFacts.join(" | ")}`
+        : `Harmless background you may use if the operator asks: ${eligibleCanonFacts.join(" | ")}`
     );
   }
   lines.push(
@@ -98,7 +120,8 @@ export function compileClaireCharacterContext(input: {
       compilerVersion: CLAIRE_COMPILER_VERSION,
     },
     mode: input.mode,
-    disclosureTier: input.relationshipState.disclosureTier,
+    disclosureTier: personalRung,
+    rapportBand,
     relationshipDimensions: {
       professionalRespect: input.relationshipState.professionalRespect,
       reliability: input.relationshipState.reliability,
