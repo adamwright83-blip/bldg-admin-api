@@ -148,7 +148,7 @@ describe("Claire Pass 2 — the one true end-to-end loop", () => {
     const invokeTextV1 = vi.fn().mockResolvedValue("Ask what stopped it. Don't re-pitch.");
     await writeClairePreDriveBrief(
       { tenantId: "tenant-1", context: preDriveContext },
-      { invokeText: invokeTextV1, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText: invokeTextV1, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     const v1Payload = JSON.parse(invokeTextV1.mock.calls[0][0].messages[1].content);
     expect(v1Payload.missionSalesBrief.briefId).toBe(v1!.id);
@@ -243,7 +243,7 @@ describe("Claire Pass 2 — the one true end-to-end loop", () => {
         tenantId: "tenant-1",
         context: { ...preDriveContext, missionSalesBrief: claireV2 },
       },
-      { invokeText: invokeTextV2, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText: invokeTextV2, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     const v2Payload = JSON.parse(invokeTextV2.mock.calls[0][0].messages[1].content);
     expect(v2Payload.missionSalesBrief.version).toBe(2);
@@ -266,7 +266,7 @@ describe("Claire Pass 2 — the one true end-to-end loop", () => {
             .map(fact => fact.text),
         },
       },
-      { invokeText: invokeTextConfirmation, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText: invokeTextConfirmation, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     expect(confirmation).toMatch(/corporate approval/i);
     const confirmationSystemPrompt = invokeTextConfirmation.mock.calls[0][0].messages[0].content;
