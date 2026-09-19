@@ -70,7 +70,12 @@ const TOMORROW_WORK: DayWork = {
 };
 
 function exam(options: { loaders?: LedgerLoaders; importedToday?: boolean } = {}) {
-  const commitFollowUp = vi.fn(async () => ({ pipelineSaved: true, dayLineSaved: true, errors: [] as string[] }));
+  const commitFollowUp = vi.fn(async () => ({
+    pipelineSaved: true,
+    dayLineSaved: true,
+    dayLineCommitmentId: "followup-dayline-1",
+    errors: [] as string[],
+  }));
   const commit = vi.fn(async (parsed: { items: Array<{ kind: string; existing: unknown; title?: string }> }) => ({
     added: parsed.items.filter(item => item.kind === "new_work" && !item.existing),
     completed: parsed.items.filter(item => item.kind === "completed"),
