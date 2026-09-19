@@ -177,10 +177,11 @@ export async function projectCustomerAssets(input: {
     ])
   );
 
-  const residential: CustomerAsset[] = Array.from(grouped.values()).map(
+  const residential: CustomerAsset[] = Array.from(grouped.values()).flatMap(
     group => {
       const latest = group[0]!;
       const hash = customerIdentityHash(input.tenantId, latest);
+      if (!hash) return [];
       const compatibleHashes = new Set(
         group.flatMap(order => customerIdentityHashes(input.tenantId, order))
       );
@@ -209,7 +210,7 @@ export async function projectCustomerAssets(input: {
       );
       const name =
         `${latest.firstName} ${latest.lastName}`.trim() || "Customer";
-      return {
+      return [{
         id: customerAssetId(input.tenantId, latest),
         kind: "residential" as const,
         displayName: name,
@@ -313,7 +314,7 @@ export async function projectCustomerAssets(input: {
             ...(churn ? ["customer_churn_snapshots"] : []),
           ],
         },
-      };
+      }];
     }
   );
 

@@ -38,9 +38,14 @@ export type GumballReceipt = {
   inserted: number | null;
   updated: number | null;
   unchanged: number | null;
+  totalRows?: number | null;
+  skipped?: number | null;
   rangeFrom: string | null;
   rangeTo: string | null;
   batchId: number | null;
+  customerTruth?: string | null;
+  map?: string | null;
+  operatorStatusLine?: string | null;
 };
 
 export type GumballAttempt = {
@@ -273,9 +278,15 @@ export async function loadDataFreshness(input: { tenantId: string; now?: Date; t
           inserted: num(receipt.inserted),
           updated: num(receipt.updated),
           unchanged: num(receipt.unchanged),
+          totalRows: num(receipt.totalRows),
+          skipped: num(receipt.skipped),
           rangeFrom: typeof receipt.from === "string" ? receipt.from : null,
           rangeTo: typeof receipt.to === "string" ? receipt.to : null,
           batchId: row.importBatchId || null,
+          customerTruth: typeof receipt.customerTruth === "string" ? receipt.customerTruth : null,
+          map: typeof receipt.map === "string" ? receipt.map : null,
+          operatorStatusLine:
+            typeof receipt.operatorStatusLine === "string" ? receipt.operatorStatusLine : null,
         } satisfies GumballReceipt;
       }),
       attempts: attempts

@@ -1,4 +1,9 @@
 import { matchBuilding } from "@shared/buildings";
+import {
+  groupCustomerOrderTruth,
+  type CustomerOrderSource,
+  type CustomerOrderTruthRecord,
+} from "./geography/customerOrderTruth";
 
 export type AdminCustomerAggregateDbRow = {
   phone: string;
@@ -16,6 +21,9 @@ export type AdminCustomerAggregateDbRow = {
   lastOrderId: number;
   ordersLast30Days: number;
   ordersLast90Days: number;
+  identityKey?: string;
+  sources?: CustomerOrderSource[];
+  lastSourceOrderId?: string;
 };
 
 /** Composite fallback when phone is missing or too short to trust as identity. */
@@ -290,6 +298,100 @@ export function buildAdminCustomerAggregatesInMemory(
       lastOrderId: latest.id,
       ordersLast30Days,
       ordersLast90Days,
+    });
+  }
+
+  return out;
+}
+
+function truthToDisplayRow(record: CustomerOrderTruthRecord): OrderAggRow {
+  return {
+    id: record.source === "laundry_butler" ? record.id : 0,
+    phone: record.phone,
+    firstName: record.firstName,
+    lastName: record.lastName,
+    email: record.email,
+    unit: record.unit,
+    address: record.address,
+    buildingSlug: record.buildingSlug,
+    createdAt: record.createdAt,
+    paid: record.paid,
+    total: (record.totalCents / 100).toFixed(2),
+  };
+}
+
+/**
+ * Admin/Strategy aggregates from unified canonical history.
+ * Native Stripe spend stays in `lifetimeSpend`; CleanCloud paid orders
+ * increase counts/dates without being dumped into Stripe-labelled revenue.
+ */
+export function buildAdminCustomerAggregatesFromTruth(
+  tenantId: string,
+  records: CustomerOrderTruthRecord[]
+): AdminCustomerAggregateDbRow[] {
+  const groups = groupCustomerOrderTruth(tenantId, records);
+  const out: AdminCustomerAggregateDbRow[] = [];
+
+  for (const [identityKey, group] of groups) {
+    if (group.length === 0) continue;
+
+    let totalOrders = 0;
+    let lifetimeSpendCents = 0;
+    let paidOrderCount = 0;
+    let firstOrderAt = group[0]!.createdAt;
+    let lastOrderAt = group[0]!.createdAt;
+    let ordersLast30Days = 0;
+    let ordersLast90Days = 0;
+    const sources = new Set<CustomerOrderSource>();
+
+    for (const record of group) {
+      totalOrders += 1;
+      sources.add(record.source);
+      const created = record.createdAt.getTime();
+      if (firstOrderAt.getTime() > created) firstOrderAt = record.createdAt;
+      if (lastOrderAt.getTime() < created) lastOrderAt = record.createdAt;
+      if (record.paid) {
+        paidOrderCount += 1;
+        if (record.source === "laundry_butler") {
+          lifetimeSpendCents += record.totalCents;
+        }
+      }
+      if (isWithinLastDaysUtc(record.createdAt, 30)) ordersLast30Days += 1;
+      if (isWithinLastDaysUtc(record.createdAt, 90)) ordersLast90Days += 1;
+    }
+
+    const latest = [...group].sort(
+      (a, b) =>
+        b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id
+    )[0]!;
+    const lastNative = [...group]
+      .filter(record => record.source === "laundry_butler")
+      .sort(
+        (a, b) =>
+          b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id
+      )[0];
+    const display = mergeDisplayFields(group.map(truthToDisplayRow));
+
+    out.push({
+      phone: display.phone,
+      firstName: display.firstName,
+      lastName: display.lastName,
+      email: display.email,
+      unit: display.unit,
+      address: display.address,
+      buildingSlug: display.buildingSlug,
+      totalOrders,
+      lifetimeSpend: Math.round(lifetimeSpendCents) / 100,
+      paidOrderCount,
+      firstOrderAt,
+      lastOrderAt,
+      lastOrderId:
+        latest.source === "laundry_butler" ? latest.id : lastNative?.id ?? 0,
+      ordersLast30Days,
+      ordersLast90Days,
+      identityKey,
+      sources: Array.from(sources),
+      lastSourceOrderId: `${latest.source}:${latest.sourceOrderId}`,
     });
   }
 

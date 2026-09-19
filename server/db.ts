@@ -92,8 +92,7 @@ import { ENV } from "./_core/env";
 import { matchBuilding } from "@shared/buildings";
 import { resolveOrderLocationForInsert } from "./orderLocation";
 import {
-  buildAdminCustomerAggregatesInMemory,
-  normalizeOrderRowFromDb,
+  buildAdminCustomerAggregatesFromTruth,
   type AdminCustomerAggregateDbRow,
 } from "./adminCustomerAggregate";
 import {
@@ -656,8 +655,8 @@ export async function getOrdersByPhoneExact(
 }
 
 /**
- * Admin customer aggregates by stable composite customer key.
- * Metrics use full order history per key; display fields use the best row (see adminCustomerAggregate.ts).
+ * Admin customer aggregates from unified canonical customer/order history
+ * (native orders + CleanCloud paid orders). Stripe-labelled spend stays native.
  */
 export async function listAdminCustomerAggregates(
   tenantId?: string
@@ -665,26 +664,11 @@ export async function listAdminCustomerAggregates(
   const db = await getDb();
   if (!db) return [];
 
-  const rows = await db
-    .select({
-      id: orders.id,
-      phone: orders.phone,
-      firstName: orders.firstName,
-      lastName: orders.lastName,
-      email: orders.email,
-      unit: orders.unit,
-      address: orders.address,
-      buildingSlug: orders.buildingSlug,
-      createdAt: orders.createdAt,
-      paid: orders.paid,
-      total: orders.total,
-    })
-    .from(orders)
-    .where(tenantId ? eq(orders.tenantId, tenantId) : undefined);
-
-  return buildAdminCustomerAggregatesInMemory(
-    rows.map(normalizeOrderRowFromDb)
-  );
+  const { loadCustomerOrderTruth } = await import("./geography/customerOrderTruth");
+  const records = await loadCustomerOrderTruth(tenantId, {
+    includeCancelledNative: true,
+  });
+  return buildAdminCustomerAggregatesFromTruth(tenantId ?? "default", records);
 }
 
 export type BuildingRevenueOrderRow = {
