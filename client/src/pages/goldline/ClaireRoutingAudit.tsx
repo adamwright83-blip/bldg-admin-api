@@ -98,6 +98,11 @@ export default function ClaireRoutingAudit() {
                 ? "this model accepts temperature, and Claire sends hers."
                 : "this model rejects temperature, so Claire sends none."}
             </p>
+            <p style={{ margin: 0, opacity: 0.75 }}>
+              Thinking: {audit.data.model.thinkingDisabledToMatchBaseline
+                ? "this model defaults to thinking on — Claire explicitly disables it to hold today's baseline."
+                : "this model already matches today's no-thinking baseline."}
+            </p>
           </section>
 
           <section style={{ marginBottom: 24 }}>

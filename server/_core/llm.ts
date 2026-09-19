@@ -79,6 +79,30 @@ export type InvokeParams = {
   maxTokens?: number;
   max_tokens?: number;
   temperature?: number;
+  /**
+   * Claire Intelligence Repair Part 2, Slice B (corrective pass): some model
+   * families reject `temperature` outright (see
+   * server/claire/claireModel.ts). Omitting `temperature` from the caller's
+   * params alone was not enough -- this function used to default it back to
+   * 0 regardless, so the request sent to Anthropic still carried
+   * `temperature: 0` even when the caller wanted it gone. Set this to
+   * `true` to omit the field entirely; every existing caller that doesn't
+   * pass it keeps sending exactly what it sends today.
+   */
+  omitTemperature?: boolean;
+  /**
+   * Claire Intelligence Repair Part 2, Slice B (corrective pass): some
+   * models (Claude Opus 5, Claude Sonnet 5) run extended thinking on by
+   * default when `thinking` is omitted, unlike the model Claire runs today.
+   * Set this to explicitly send `thinking: { type: "disabled" }` so
+   * switching Claire's configured model does not silently add
+   * reasoning latency as a side effect. Only valid on models that both
+   * default to thinking-on and accept being told to disable it -- see
+   * `claireModelDefaultsToThinking` in claireModel.ts. Sending it to a
+   * model that cannot disable thinking (Claude Fable 5/5.1, Claude Mythos
+   * 5/5.1) returns a 400, so callers must gate this themselves.
+   */
+  disableThinking?: boolean;
   outputSchema?: OutputSchema;
   output_schema?: OutputSchema;
   responseFormat?: ResponseFormat;
@@ -116,7 +140,7 @@ export type InvokeResult = {
 
 export type InvokeTextParams = Pick<
   InvokeParams,
-  "messages" | "tenantId" | "model" | "maxTokens" | "max_tokens" | "temperature"
+  "messages" | "tenantId" | "model" | "maxTokens" | "max_tokens" | "temperature" | "omitTemperature" | "disableThinking"
 > & {
   /**
    * PR1 Claire Intelligence Repair -- corrective pass: durable stop-reason
@@ -402,7 +426,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     const response = await client.messages.create({
       model,
       max_tokens: maxTokens,
-      temperature: params.temperature ?? 0,
+      ...(params.omitTemperature ? {} : { temperature: params.temperature ?? 0 }),
+      ...(params.disableThinking ? { thinking: { type: "disabled" } } : {}),
       ...(systemParts.length ? { system: systemParts.join("\n\n") } : {}),
       messages: anthropicMessages,
       tools: [
@@ -523,7 +548,8 @@ export async function invokeTextLLM(params: InvokeTextParams): Promise<string> {
     const response = await client.messages.create({
       model: params.model ?? ENV.anthropicModel,
       max_tokens: Math.min(params.maxTokens ?? params.max_tokens ?? 8192, 8192),
-      temperature: params.temperature ?? 0,
+      ...(params.omitTemperature ? {} : { temperature: params.temperature ?? 0 }),
+      ...(params.disableThinking ? { thinking: { type: "disabled" } } : {}),
       ...(systemParts.length ? { system: systemParts.join("\n\n") } : {}),
       messages: anthropicMessages,
     });

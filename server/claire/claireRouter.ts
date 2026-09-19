@@ -34,7 +34,7 @@ import {
   startClairePreDriveCall,
 } from "./claireTwilio";
 import { ENV } from "../_core/env";
-import { claireModelAcceptsSampling, claireModelId } from "./claireModel";
+import { claireModelAcceptsSampling, claireModelDefaultsToThinking, claireModelId } from "./claireModel";
 import { previewClairePreDrive } from "./preDriveRuntime";
 import { listClaireAnswerPathDetail, summarizeClaireAnswerPaths } from "./character/generationLog";
 import { claireRepair2FlagName, isClaireRepair2Enabled } from "./repair2Flags";
@@ -674,6 +674,10 @@ export const claireRouter = router({
           // Slice B: current-generation models reject temperature/top_p with
           // a 400. False here means Claire's calls send no temperature.
           acceptsSampling: claireModelAcceptsSampling(claireModelId()),
+          // Slice B (corrective pass): true means this model runs extended
+          // thinking on by default, and Claire is explicitly disabling it to
+          // hold today's no-thinking baseline steady across a model switch.
+          thinkingDisabledToMatchBaseline: claireModelDefaultsToThinking(claireModelId()),
         },
         writesBusinessTruth: false as const,
       };

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { claireModelAcceptsSampling, claireModelId, claireModelRequest } from "./claireModel";
+import { claireModelAcceptsSampling, claireModelDefaultsToThinking, claireModelId, claireModelRequest } from "./claireModel";
 
 /**
  * Claire Intelligence Repair Part 2, Slice B.
@@ -87,9 +87,50 @@ describe("Slice B — the model authority", () => {
     });
   });
 
-  it("drops temperature rather than sending a request the model will reject", async () => {
+  it("omits temperature via an explicit flag rather than a value the wrapper will silently default back to 0", async () => {
     await withModelEnv({ claire: "claude-opus-5" }, mod => {
-      expect(mod.claireModelRequest(0.6)).toEqual({ model: "claude-opus-5" });
+      // Corrective pass: this must be `omitTemperature: true`, not simply
+      // the absence of a `temperature` key -- invokeLLM/invokeTextLLM used
+      // to default a missing temperature back to 0, so a returned object
+      // without the key was indistinguishable from "send temperature 0" at
+      // the provider boundary. See server/_core/llm.test.ts for the proof
+      // that this flag actually changes the request.
+      expect(mod.claireModelRequest(0.6)).toEqual({
+        model: "claude-opus-5",
+        omitTemperature: true,
+        disableThinking: true,
+      });
+    });
+  });
+
+  it("does not disable thinking for a model that keeps today's no-thinking-by-default behavior", async () => {
+    await withModelEnv({ claire: "claude-sonnet-4-6" }, mod => {
+      expect(mod.claireModelRequest(0.6)).toEqual({ model: "claude-sonnet-4-6", temperature: 0.6 });
+    });
+  });
+
+  it("identifies exactly the models that default thinking on and can be told to disable it", () => {
+    for (const model of ["claude-opus-5", "claude-sonnet-5"]) {
+      expect(claireModelDefaultsToThinking(model)).toBe(true);
+    }
+    // These already run with no thinking by default -- no flag needed.
+    for (const model of ["claude-sonnet-4-6", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6"]) {
+      expect(claireModelDefaultsToThinking(model)).toBe(false);
+    }
+    // These run thinking unconditionally and reject { type: "disabled" }
+    // with a 400 -- must never be told to disable it.
+    for (const model of ["claude-fable-5", "claude-fable-5-1", "claude-mythos-5", "claude-mythos-5-1"]) {
+      expect(claireModelDefaultsToThinking(model)).toBe(false);
+    }
+  });
+
+  it("a model that both rejects sampling and defaults thinking on gets both flags together", async () => {
+    await withModelEnv({ claire: "claude-sonnet-5" }, mod => {
+      expect(mod.claireModelRequest(0)).toEqual({
+        model: "claude-sonnet-5",
+        omitTemperature: true,
+        disableThinking: true,
+      });
     });
   });
 });
