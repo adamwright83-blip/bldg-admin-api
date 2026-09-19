@@ -60,7 +60,15 @@ export type ClaireEncyclopediaSpoken =
   | "rewrite"
   | "raw_concatenation"
   | "missing_explanation"
-  | "declined";
+  | "declined"
+  /**
+   * Claire Intelligence Repair Part 2, Slice C+D: the planner decided no
+   * Goldline record would materially help (a judgment/strategy question, or
+   * a fact clause a record already covered another way) and, per the
+   * architecture fix, spoke nothing — Claire's own synthesis answers instead.
+   * Never a refusal.
+   */
+  | "no_retrieval_needed";
 
 export type ClaireEncyclopediaTrace = {
   toolsPlanned: string[];
@@ -139,6 +147,24 @@ export type ClaireTurnTrace = {
    * sub-answers are not the turn's answer path, so they must not claim it.
    */
   paused: boolean;
+  /**
+   * Claire Intelligence Repair Part 2, Slice C+D: true when the turn's
+   * classification (judgment or blended fact+judgment) required Claire's own
+   * synthesis rather than letting a deterministic reader or the encyclopedia
+   * terminate the turn with partial or refusal prose. This is the number
+   * that answers "did retrieval steal a reasoning-required turn?" — it
+   * should be true for every turn Slice A's route probe found landing on a
+   * template instead of the repaired conversational path.
+   */
+  synthesisRequired: boolean;
+  /**
+   * Which deterministic sources supplied evidence for a synthesized answer
+   * (e.g. "business_reader:query", "account_history"). Empty for a pure
+   * judgment question that needed no record at all — see item D5: general
+   * professional judgment must not be rejected merely because no DB tool
+   * applies, and must not require one to run.
+   */
+  evidenceSources: string[];
 };
 
 export function beginClaireTurnTrace(input: {
@@ -174,6 +200,8 @@ export function beginClaireTurnTrace(input: {
     routeDecidedAtMs: null,
     spokenChars: 0,
     paused: false,
+    synthesisRequired: false,
+    evidenceSources: [],
   };
 }
 
@@ -214,6 +242,37 @@ export function classifyClaireBlend(utterance: string): ClaireBlendTrace {
 export function isBlendedClaireQuestion(utterance: string): boolean {
   const blend = classifyClaireBlend(utterance);
   return blend.factClause && blend.judgmentClause;
+}
+
+/**
+ * Claire Intelligence Repair Part 2, Slice C+D: the explicit answer classes
+ * the router distinguishes, built on the same two clause detectors as the
+ * Slice A blend census rather than a second, competing classifier.
+ *
+ * `unsupported_fact` and `deterministic_fact` are not decided here — they
+ * describe an *outcome* (whether a record actually answered or came back
+ * empty), not something knowable from the utterance alone. This function
+ * answers the one question the utterance itself can answer: does this turn
+ * need Claire's own synthesis, or can a deterministic reader still be the
+ * final word?
+ */
+export type ClaireAnswerClass =
+  /** No judgment clause: a deterministic reader may terminate the turn directly. */
+  | "fact_only"
+  /** A judgment clause with no factual anchor: general professional judgment. Never gated on a DB tool. */
+  | "judgment"
+  /** Both clauses present: retrieve the fact half, then Claire synthesizes one answer to the whole utterance. */
+  | "blended";
+
+export function classifyClaireAnswerClass(utterance: string): ClaireAnswerClass {
+  const blend = classifyClaireBlend(utterance);
+  if (!blend.judgmentClause) return "fact_only";
+  return blend.factClause ? "blended" : "judgment";
+}
+
+/** True for any class that requires Claire's own synthesis rather than a deterministic renderer. */
+export function claireAnswerClassNeedsSynthesis(answerClass: ClaireAnswerClass): boolean {
+  return answerClass !== "fact_only";
 }
 
 /** Character counts for an assembled prompt, per section. Counts only. */

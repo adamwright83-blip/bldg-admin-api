@@ -1,13 +1,17 @@
 /**
- * Claire Intelligence Repair Part 2, Slice A: static route probe.
+ * Claire Intelligence Repair Part 2 — static route probe.
  *
- * The 30-day production distribution needs the database and the telemetry this
- * slice adds. This script measures the thing that does not need either: given
- * a question, which matcher in `answerQuestion`'s ladder claims it first, and
- * therefore whether the repaired conversational path can ever be reached.
+ * Slice A: which matcher in the old first-match-wins ladder claims each
+ * question, and therefore whether the repaired conversational path could
+ * ever be reached.
  *
- * Every matcher used here is the real one, imported from the code that routes
- * live turns — not a re-implementation.
+ * Slice C+D: the same seventeen questions, routed by the actual, unchanged
+ * `classifyClaireAnswerClass` from `answerPathTelemetry.ts` and the same
+ * evidence-gathering order `gatherDeterministicEvidence` uses in
+ * `claireTurn.ts` (business_reader → day_work → unpaid_orders →
+ * account_history). Every function used here is the real one imported from
+ * the code that routes live turns — not a re-implementation. Nothing here
+ * needs a database; both columns can be reproduced with:
  *
  *   npx tsx scripts/claire-repair2-route-probe.ts
  */
@@ -17,7 +21,7 @@ import { operationsQuestion } from "../server/claire/knowledge/operationsKnowled
 import { isUnpaidQuestion } from "../server/claire/knowledge/openOrdersKnowledge";
 import { isAccountQuestion, matchAccounts, type AccountRef } from "../server/claire/knowledge/accountKnowledge";
 import { MEMORY_QUESTION } from "../server/claire/turn/claireTurn";
-import { isBlendedClaireQuestion } from "../server/claire/answerPathTelemetry";
+import { classifyClaireAnswerClass, isBlendedClaireQuestion } from "../server/claire/answerPathTelemetry";
 
 const NOW = new Date("2026-09-15T16:00:00Z");
 const TZ = "America/Los_Angeles";
@@ -49,7 +53,8 @@ const QUESTIONS = [
   "What do you think I'm avoiding today?",
 ];
 
-function claimedBy(question: string): string {
+/** BEFORE (Slice A): the old first-match-wins ladder, unconditional. */
+function claimedByBefore(question: string): string {
   const lower = normalizeUtterance(question);
   try {
     const parsed = parseBusinessTurn(question, null, NOW, TZ);
@@ -63,27 +68,77 @@ function claimedBy(question: string): string {
   if (matched.length > 1) return "account_disambiguation";
   if (matched.length === 1 && (isAccountQuestion(lower) || MEMORY_QUESTION.test(lower))) return "account_history";
   if (MEMORY_QUESTION.test(lower)) return "memory_quote";
-  return "encyclopedia, else follow_up_model";
+  return "encyclopedia, else follow_up_model (often a refusal — old zero-tool bug)";
+}
+
+/** The same evidence order `gatherDeterministicEvidence` in claireTurn.ts uses. */
+function firstEvidenceSource(question: string): string | null {
+  const lower = normalizeUtterance(question);
+  try {
+    const parsed = parseBusinessTurn(question, null, NOW, TZ);
+    if (parsed.kind !== "not_analytics") return `business_reader (${parsed.kind})`;
+  } catch {
+    // Same degrade as live: no evidence from this source.
+  }
+  if (operationsQuestion(lower)) return "day_work";
+  if (isUnpaidQuestion(lower) && !/\bfollow[- ]?up\b/.test(lower)) return "unpaid_orders";
+  const matched = matchAccounts(lower, ACCOUNTS);
+  const target = matched.length === 1 ? matched[0] : null;
+  if (target && isAccountQuestion(lower)) return "account_history";
+  return null;
+}
+
+/** AFTER (Slice C+D): the router's actual answer-class gate. */
+function claimedByAfter(question: string): string {
+  const answerClass = classifyClaireAnswerClass(question);
+  if (answerClass === "judgment") {
+    // Item D5: never gated on a DB tool. No evidence attempted at all.
+    return "follow_up_model (synthesis, no retrieval attempted)";
+  }
+  if (answerClass === "blended") {
+    const evidence = firstEvidenceSource(question);
+    return evidence
+      ? `follow_up_model (synthesis, evidence: ${evidence})`
+      : "follow_up_model (synthesis, no evidence found)";
+  }
+  // fact_only: unchanged from the old ladder.
+  return claimedByBefore(question);
 }
 
 const rows = QUESTIONS.map(question => ({
   question,
-  claimedBy: claimedBy(question),
   blended: isBlendedClaireQuestion(question),
+  before: claimedByBefore(question),
+  after: claimedByAfter(question),
 }));
 
 const width = Math.max(...rows.map(row => row.question.length));
+console.log(`${"QUESTION".padEnd(width)}  ${"".padEnd(6)}BEFORE (Slice A)                                          AFTER (Slice C+D)`);
 for (const row of rows) {
   console.log(
-    `${row.question.padEnd(width)}  ${row.blended ? "BLEND " : "      "}${row.claimedBy}`
+    `${row.question.padEnd(width)}  ${row.blended ? "BLEND " : "      "}${row.before.padEnd(58)} ${row.after}`
   );
 }
 
-const deterministic = rows.filter(row => !row.claimedBy.startsWith("encyclopedia"));
+const deterministicBefore = rows.filter(row => !row.before.startsWith("encyclopedia"));
 console.log(
-  `\n${deterministic.length}/${rows.length} claimed by a deterministic matcher before the conversational path is reachable.`
+  `\nBEFORE: ${deterministicBefore.length}/${rows.length} claimed by a deterministic matcher before the conversational path was reachable.`
 );
-const blendedTaken = rows.filter(row => row.blended && !row.claimedBy.startsWith("encyclopedia"));
+const changed = rows.filter(row => row.before !== row.after);
+console.log(`AFTER:  ${changed.length}/${rows.length} questions route differently under the architecture fix.`);
+const stillDeterministicAfter = rows.filter(row => !row.after.includes("follow_up_model"));
+console.log(`AFTER:  ${stillDeterministicAfter.length}/${rows.length} still terminate deterministically (item F — fast path preserved for fact-only questions).`);
+
+const blendedRows = rows.filter(row => row.blended);
+const blendedPreservedAfter = blendedRows.filter(row => row.after.includes("follow_up_model"));
 console.log(
-  `${blendedTaken.length}/${rows.filter(row => row.blended).length} blended fact+judgment questions are claimed by a fact-only matcher.`
+  `\nBefore: ${blendedRows.filter(row => !row.before.startsWith("encyclopedia")).length}/${blendedRows.length} blended fact+judgment questions were claimed by a fact-only matcher (judgment half lost).`
 );
+console.log(`After:  ${blendedPreservedAfter.length}/${blendedRows.length} blended questions now reach Claire's synthesis with the full utterance and gathered evidence.`);
+
+console.log("\nThe two previously-broken blended probes, verbatim:");
+for (const row of blendedRows) {
+  console.log(`  "${row.question}"`);
+  console.log(`    before: ${row.before}`);
+  console.log(`    after:  ${row.after}`);
+}

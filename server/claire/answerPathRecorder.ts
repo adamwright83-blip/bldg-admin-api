@@ -21,6 +21,10 @@ export function claireTurnTraceDetail(trace: ClaireTurnTrace) {
     encyclopedia: trace.encyclopedia,
     memorySearched: trace.memorySearched,
     blend: trace.blend,
+    // Slice C+D: whether this turn's classification required Claire's own
+    // synthesis, and which deterministic sources fed it as evidence.
+    synthesisRequired: trace.synthesisRequired,
+    evidenceSources: trace.evidenceSources,
     promptSizes: trace.promptSizes,
     latency: trace.latency,
     spokenChars: trace.spokenChars,
@@ -52,6 +56,8 @@ export function persistClaireTurnTrace(
     encyclopediaTools: trace.encyclopedia?.toolsPlanned ?? null,
     encyclopediaSpoke: trace.encyclopedia?.spoke ?? null,
     blendedQuestion: Boolean(trace.blend?.factClause && trace.blend?.judgmentClause),
+    synthesisRequired: trace.synthesisRequired,
+    evidenceSources: trace.evidenceSources,
   });
 
   if (!isClaireRepair2Enabled("a_routing_telemetry", trace.tenantId)) return;

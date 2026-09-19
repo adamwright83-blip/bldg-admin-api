@@ -215,6 +215,7 @@ describe("Slice B — every Claire answer-path call site uses the authority", ()
                   { tool: "unpaid_orders", question: "", name: "", day: "today", terms: [] },
                   { tool: "day_work", question: "", name: "", day: "today", terms: [] },
                 ],
+                answerable: "records",
                 missing: "",
               }),
             },

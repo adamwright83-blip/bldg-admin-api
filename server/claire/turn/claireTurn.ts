@@ -45,13 +45,17 @@ import { addDaysYmd } from "../../analytics/businessPeriods";
 import { ensureAdamBoard, explainProactive, handleDoctrineTurn } from "../proactive/boardService";
 import {
   beginClaireTurnTrace,
+  claireAnswerClassNeedsSynthesis,
+  classifyClaireAnswerClass,
   classifyClaireBlend,
   markClaireAnswerPath,
+  type ClaireAnswerClass,
   type ClaireAnswerPath,
   type ClaireEncyclopediaTrace,
   type ClaireTurnTrace,
 } from "../answerPathTelemetry";
 import { persistClaireTurnTrace } from "../answerPathRecorder";
+import type { EncyclopediaAnswer } from "../knowledge/encyclopediaAgent";
 
 /**
  * One Claire turn, for the phone and the desk alike.
@@ -148,7 +152,7 @@ export type ClaireTurnDeps = {
   unpaid: typeof loadUnpaidOrders;
   searchMemory: typeof searchOperatorConversation;
   memoryBetween: typeof operatorTurnsBetween;
-  encyclopedia: ((input: { tenantId: string; operatorUserId: string; utterance: string; surface: "voice" | "text"; history: ClaireTurnHistoryEntry[]; context?: ClaireDriveContext | null; onTrace?: (trace: ClaireEncyclopediaTrace) => void }) => Promise<string | null>) | null;
+  encyclopedia: ((input: { tenantId: string; operatorUserId: string; utterance: string; surface: "voice" | "text"; history: ClaireTurnHistoryEntry[]; context?: ClaireDriveContext | null; onTrace?: (trace: ClaireEncyclopediaTrace) => void }) => Promise<EncyclopediaAnswer>) | null;
   watchBoard?: (input: { tenantId: string; operatorUserId: string; actorId: string }) => Promise<{ brief: string }>;
   doctrineTurn?: (input: { tenantId: string; operatorUserId: string; utterance: string; today: string }) => Promise<string | null>;
   /**
@@ -531,7 +535,13 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     trace.paused = true;
     try {
       for (const question of parsed.questions) {
-        const answer = await answerQuestion(question);
+        // Synthesis is not attempted for a question embedded inside a
+        // briefing: a compound turn already gets its own answer path
+        // (briefing), and calling the model per embedded question would add
+        // cost and latency to what is usually a routine catch-up. The
+        // architecture fix targets the turn's own question (below), where
+        // Slice A's route probe found the loss.
+        const answer = await answerQuestion(question, { allowSynthesis: false });
         if (answer) answers.push(answer);
       }
     } finally {
@@ -600,6 +610,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   if (input.context && input.brief) {
     const generationStartedAt = Date.now();
     trace.latency.generationStartMs = generationStartedAt - trace.startedAtMs;
+    trace.synthesisRequired = true;
     const reply = await deps.followUp({
       tenantId: input.tenantId,
       utterance,
@@ -636,7 +647,131 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     kind: "answered",
   });
 
-  async function answerQuestion(question: string): Promise<string | null> {
+  /**
+   * Claire Intelligence Repair Part 2, Slice C+D: gathers whatever
+   * deterministic evidence the existing readers can supply for `question`,
+   * without letting any of them speak the final answer or claim the turn's
+   * answer path. Each reader's rendered text is already grounded in
+   * Goldline's verified records — reusing it as evidence, labelled with its
+   * source, is provenance without inventing a parallel fact schema.
+   *
+   * Deliberately narrower than the full deterministic ladder below
+   * (business, day_work, unpaid, account history — not memory or the
+   * encyclopedia): these four cover both of Slice A's broken blended probes,
+   * and a judgment-carrying turn should not pay for a memory search or a
+   * second model round-trip it doesn't need.
+   */
+  async function gatherDeterministicEvidence(question: string): Promise<Array<{ source: string; text: string }>> {
+    const questionLower = normalizeUtterance(question);
+    const evidence: Array<{ source: string; text: string }> = [];
+
+    try {
+      const business = await answerClaireBusinessTurn(
+        { tenantId: input.tenantId, utterance: question, state, surface: input.surface, context: input.context },
+        { now: deps.now, timeZone: deps.timeZone, ...deps.business }
+      );
+      if (business.handled) evidence.push({ source: `business_reader:${business.reader ?? "query"}`, text: business.speak });
+    } catch (error) {
+      console.warn("[Claire] business evidence failed", error instanceof Error ? error.message : error);
+    }
+
+    const operations = operationsQuestion(questionLower);
+    if (operations) {
+      try {
+        const work = await deps.dayWork({
+          tenantId: input.tenantId,
+          operatorUserId: input.operatorUserId,
+          dayDirectorActorId: input.dayDirectorActorId,
+          businessDate: businessDateFor(operations.day, now, timeZone),
+          now,
+          timeZone,
+        });
+        evidence.push({ source: "day_work", text: speakDayWork(work, operations, input.surface) });
+      } catch (error) {
+        console.warn("[Claire] day work evidence unavailable", error instanceof Error ? error.message : error);
+      }
+    }
+
+    if (isUnpaidQuestion(questionLower) && !/\bfollow[- ]?up\b/.test(questionLower)) {
+      try {
+        evidence.push({ source: "unpaid_orders", text: speakUnpaidOrders(await deps.unpaid(input.tenantId), input.surface) });
+      } catch (error) {
+        console.warn("[Claire] unpaid-orders evidence unavailable", error instanceof Error ? error.message : error);
+      }
+    }
+
+    const questionAccounts = matchAccounts(questionLower, accounts);
+    const pronounAccount =
+      /\b(?:them|there|that account|that property|that building|they|it)\b/.test(questionLower) ||
+      (isAccountQuestion(questionLower) && /\b(?:my last|last contact|follow[- ]?up|visit|what happened|what did i)\b/.test(questionLower))
+        ? state.focusAccount ?? null
+        : null;
+    const target = questionAccounts.length === 1 ? questionAccounts[0]! : questionAccounts.length === 0 ? pronounAccount : null;
+    if (target && (isAccountQuestion(questionLower) || questionAccounts.length === 1)) {
+      try {
+        const accountHistory = await deps.accountHistory({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, account: target });
+        state.focusAccount = target;
+        evidence.push({ source: "account_history", text: speakAccountHistory(accountHistory, accountAspect(questionLower), { timeZone, today }) });
+      } catch (error) {
+        console.warn("[Claire] account-history evidence unavailable", error instanceof Error ? error.message : error);
+      }
+    }
+
+    return evidence;
+  }
+
+  /**
+   * Claire Intelligence Repair Part 2, Slice C+D (item C): hands the
+   * operator's FULL original question, plus whatever evidence was gathered,
+   * to Claire's own repaired conversational path — never a split or
+   * truncated question, and never a deterministic renderer's partial
+   * sentence standing in as the whole answer. Returns null (not a guess)
+   * when there is no drive context/brief to synthesize with, so the caller's
+   * existing safety net still applies.
+   */
+  async function synthesizeWithEvidence(
+    question: string,
+    evidence: Array<{ source: string; text: string }>
+  ): Promise<string | null> {
+    if (!(input.context && input.brief)) return null;
+    trace.synthesisRequired = true;
+    trace.evidenceSources = evidence.map(item => item.source);
+    const reply = await deps.followUp({
+      tenantId: input.tenantId,
+      utterance: question,
+      brief: input.brief,
+      context: input.context,
+      recentTurns: history().slice(0, -1),
+      retrievedEvidence: evidence.length ? evidence : undefined,
+      onGeneration: diagnostic => {
+        trace.modelRequested = diagnostic.modelRequested ?? null;
+        trace.modelServed = diagnostic.modelServed ?? null;
+        if (diagnostic.promptSize) trace.promptSizes.push(diagnostic.promptSize);
+      },
+    });
+    mark("follow_up_model");
+    return reply;
+  }
+
+  async function answerQuestion(question: string, options: { allowSynthesis?: boolean } = {}): Promise<string | null> {
+    const allowSynthesis = options.allowSynthesis !== false;
+
+    if (allowSynthesis) {
+      const answerClass: ClaireAnswerClass = classifyClaireAnswerClass(question);
+      if (claireAnswerClassNeedsSynthesis(answerClass)) {
+        // Architecture fix (items B–D): a judgment or blended question is
+        // never allowed to end on a deterministic renderer's partial
+        // sentence, or on the encyclopedia's old zero-tool refusal prose.
+        // "judgment" (item D5, general professional judgment) needs no
+        // record at all and is never gated on one being available.
+        const evidence = answerClass === "blended" ? await gatherDeterministicEvidence(question) : [];
+        const synthesized = await synthesizeWithEvidence(question, evidence);
+        if (synthesized !== null) return synthesized;
+        // No drive context/brief to synthesize with — fall through to the
+        // old ladder below as a safety net rather than answering nothing.
+      }
+    }
+
     const questionLower = normalizeUtterance(question);
     try {
       const business = await answerClaireBusinessTurn(
@@ -748,7 +883,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     if (deps.encyclopedia) {
       try {
         let encyclopediaTrace: ClaireEncyclopediaTrace | null = null;
-        const answer = await deps.encyclopedia({
+        const result: EncyclopediaAnswer = await deps.encyclopedia({
           tenantId: input.tenantId,
           operatorUserId: input.operatorUserId,
           utterance: question,
@@ -765,10 +900,21 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
             trace.memorySearched = true;
           }
         }
-        if (answer) {
+        if (result.kind === "answered") {
           mark("encyclopedia", { encyclopedia: encyclopediaTrace });
-          return answer;
+          return result.text;
         }
+        if (result.kind === "unsupported_fact") {
+          // A genuine truthful unknown (item D4) — never a guess, and never
+          // the old zero-tool refusal misfiring on a judgment question,
+          // because the planner now says explicitly which one this is.
+          mark("fallback", { fallbackReason: "unsupported_fact", encyclopedia: encyclopediaTrace });
+          return result.text;
+        }
+        // "no_retrieval_needed" or "none": no answer from this path. A
+        // fact-only question that reaches here with nothing found falls
+        // through to the caller's existing conservative handling below,
+        // unchanged from before this slice.
       } catch (error) {
         console.warn("[Claire] encyclopedia answer failed", error instanceof Error ? error.message : error);
       }
