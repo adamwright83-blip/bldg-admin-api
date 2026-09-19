@@ -78,7 +78,9 @@ if (!globalThis.chrome?.runtime?.id) {
   function showReceipt(receipt) {
     $("receipt").hidden = false;
     $("receipt-summary").textContent =
-      `${receipt.inserted} new · ${receipt.updated} updated · ${receipt.unchanged} unchanged · ${receipt.unresolved} unresolved building associations. Totals below describe this report, not additional revenue from this sync.`;
+    $("receipt-summary").textContent = receipt.operatorStatusLine
+      ? receipt.operatorStatusLine
+      : `${receipt.inserted} new · ${receipt.updated} updated · ${receipt.unchanged} unchanged · ${receipt.unresolved} unresolved building associations. Totals below describe this report, not additional revenue from this sync.`;
     $("totals").replaceChildren();
     for (const aggregate of receipt.byBuildingAndPaymentDate || []) {
       const row = document.createElement("tr");
@@ -268,7 +270,8 @@ if (!globalThis.chrome?.runtime?.id) {
     } catch (error) {
       status(error.message, true);
       if (scheduled) await scheduleStatus(`blocked: ${error.message}`);
-      await reportFailure("export", error);
+      const parseFailed = /csv|parse|column|header/i.test(String(error.message ?? ""));
+      await reportFailure(parseFailed ? "parse" : "export", error);
       const { run } = await chrome.storage.local.get("run");
       if (!["importing", "outcome_unknown"].includes(run?.phase))
         await save("failed");

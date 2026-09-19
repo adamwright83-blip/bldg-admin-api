@@ -27,6 +27,6 @@ Receipt: source store, actor, bounds, digest, requestId, batchId, inserted/updat
 
 - Existing paid data provenance: the first binding is a user-confirmed claim, not a cryptographic attestation from gumball. Validate the store against existing imported data before enabling additional tenants.
 - The existing paid-order normalizer is reused; browser import writes the same table atomically instead of calling the legacy partial-write importer. No UI, geography resolver, combat, or churn service was modified.
-- Browser sync does not populate `normalizedOrders` / `normalizedCustomers` through `runTenantImport`. Confirm which Lantern City/customer read model should consume these paid rows. Do not claim it does until verified.
+- Browser sync now also rebuilds Goldline geographic / lantern customer truth from `cleancloud_paid_orders` after a successful import (same `getGeographicTruth` / `listCityWorldEntities` read models as the admin map). Receipts expose parsed/inserted/updated counts plus customer-truth and map assimilation status. Do not claim a city refresh unless those steps completed.
 - Validate concurrent legacy import behavior; browser locking cannot serialize a legacy writer that ignores that lock.
 - Complete live import and duplicate tests against an isolated database before merge.

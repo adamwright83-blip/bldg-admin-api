@@ -3,6 +3,7 @@ import {
   customerIdentityHash,
   customerIdentityHashes,
   groupCustomerRecords,
+  identityCandidateKeys,
   legacyCustomerIdentityHash,
   rawCustomerIdentityKey,
 } from "./customerIdentity";
@@ -54,9 +55,12 @@ describe("customer asset identity", () => {
     expect(customerIdentityHash("tenant-a", input)).not.toBe(
       legacyCustomerIdentityHash("tenant-a", input)
     );
-    expect(customerIdentityHashes("tenant-a", input)).toEqual([
-      customerIdentityHash("tenant-a", input),
-      legacyCustomerIdentityHash("tenant-a", input),
+    const hashes = customerIdentityHashes("tenant-a", input);
+    expect(hashes[0]).toBe(customerIdentityHash("tenant-a", input));
+    expect(hashes).toContain(legacyCustomerIdentityHash("tenant-a", input));
+    expect(identityCandidateKeys(input)).toEqual([
+      "bldg-user:42",
+      "email:ada@example.com",
     ]);
   });
 
@@ -89,5 +93,43 @@ describe("customer asset identity", () => {
     expect(groups).toHaveLength(1);
     expect(groups[0]?.records.map(row => row.id)).toEqual([1, 2]);
     expect(groups[0]?.key).toBe(customerIdentityHash("tenant-a", records[0]!));
+  });
+
+  it("joins CleanCloud history by customer id, never by display name alone", () => {
+    const records = [
+      {
+        cleancloudCustomerId: "7",
+        firstName: "Example",
+        lastName: "",
+        phone: "",
+        email: "",
+        allowNameComposite: false as const,
+      },
+      {
+        cleancloudCustomerId: "7",
+        firstName: "Renamed",
+        lastName: "Person",
+        phone: "",
+        email: "",
+        allowNameComposite: false as const,
+      },
+      {
+        cleancloudCustomerId: "8",
+        firstName: "Example",
+        lastName: "",
+        phone: "",
+        email: "",
+        allowNameComposite: false as const,
+      },
+    ];
+    const groups = groupCustomerRecords("tenant-a", records, row => row);
+    expect(groups).toHaveLength(2);
+    expect(groups.map(group => group.records.length).sort()).toEqual([1, 2]);
+    expect(
+      identityCandidateKeys({
+        firstName: "Example",
+        allowNameComposite: false,
+      })
+    ).toEqual([]);
   });
 });

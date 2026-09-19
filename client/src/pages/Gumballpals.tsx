@@ -47,6 +47,42 @@ export default function Gumballpals() {
               <p>
                 Store: {status.data?.binding?.storeLabel || "Not paired yet"}
               </p>
+              <p role="status">
+                {status.data?.observability?.operatorStatusLine ??
+                  (last
+                    ? `Last successful import: ${new Date(last).toLocaleString("en-US", { timeZone: "America/Los_Angeles" })} Pacific`
+                    : "GUMBALL · export never captured")}
+              </p>
+              {status.data?.observability?.storeLabel ? (
+                <p>
+                  Source store: {status.data.observability.storeLabel}
+                  {status.data.observability.rangeFrom
+                    ? ` · ${status.data.observability.rangeFrom}${
+                        status.data.observability.rangeTo &&
+                        status.data.observability.rangeTo !==
+                          status.data.observability.rangeFrom
+                          ? `–${status.data.observability.rangeTo}`
+                          : ""
+                      }`
+                    : ""}
+                </p>
+              ) : null}
+              {status.data?.observability?.lastAttemptAt ? (
+                <p>
+                  Last attempted sync:{" "}
+                  {new Date(
+                    status.data.observability.lastAttemptAt
+                  ).toLocaleString("en-US", {
+                    timeZone: "America/Los_Angeles",
+                  })}{" "}
+                  Pacific
+                  {status.data.observability.lastAttemptOutcome
+                    ? ` · ${status.data.observability.lastAttemptOutcome}`
+                    : ""}
+                </p>
+              ) : (
+                <p>Last attempted sync: none recorded.</p>
+              )}
               <p>
                 {last
                   ? `Last successful import: ${new Date(last).toLocaleString("en-US", { timeZone: "America/Los_Angeles" })} Pacific`

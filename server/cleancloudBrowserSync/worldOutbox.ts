@@ -35,6 +35,8 @@ export function economicSnapshot(row: InsertCleancloudPaidOrder) {
     customerIdentityHash: customerIdentityHash(tenantId, {
       phone: row.customerPhone, email: row.customerEmail,
       firstName: row.customerName, address: row.address,
+      cleancloudCustomerId: row.cleancloudCustomerId,
+      allowNameComposite: false,
     }),
   };
 }

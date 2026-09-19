@@ -35,6 +35,11 @@ async function main() {
       "physical_entities",
       "physical_entity_aliases",
       "goldline_world_events",
+      "orders",
+      "entity_locations",
+      "commercial_accounts",
+      "commercial_account_locations",
+      "commercial_pipeline_records",
     ]) {
       await connection.query(
         `CREATE TABLE \`${table}\` LIKE goldline_daylight.\`${table}\``
@@ -76,6 +81,9 @@ async function main() {
     };
     const first: any = await caller.import(input);
     assert.equal(first.inserted, 1);
+    assert.equal(first.customerTruth, "refreshed");
+    assert.equal(first.map, "refreshed");
+    assert.match(String(first.operatorStatusLine), /customer truth refreshed/);
     const retry: any = await caller.import(input);
     assert.deepEqual(retry, first);
     const repeat: any = await caller.import({
@@ -91,7 +99,12 @@ async function main() {
     assert.equal(counts[0].n, 1);
     assert.equal(Number(counts[0].cents), 5100);
     const { drainEconomicOutbox } = await import("./worldOutbox");
-    assert.equal(await drainEconomicOutbox(), 1);
+    const { getGeographicTruth } = await import("../geography/geographicTruthService");
+    assert.equal(await drainEconomicOutbox(), 0, "import must drain the outbox itself");
+    const atlas = await getGeographicTruth({ tenantId: "default" });
+    assert.equal(atlas.customers.length, 1);
+    assert.equal(atlas.customers[0]?.totalOrders, 1);
+    assert.equal(atlas.customers[0]?.sources?.includes("cleancloud"), true);
     // Simulate publish success followed by a crash before acknowledgement.
     await connection.query("UPDATE goldline_cleancloud_outbox SET publishedAt=NULL");
     assert.equal(await drainEconomicOutbox(), 1);

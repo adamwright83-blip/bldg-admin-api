@@ -9,6 +9,14 @@ export type CustomerIdentityInput = {
   unit?: string | null;
   buildingSlug?: string | null;
   address?: string | null;
+  cleancloudCustomerId?: string | null;
+  /** Only a unit-qualified verified address is identity evidence. */
+  verifiedNormalizedAddress?: string | null;
+  /**
+   * Native Laundry Butler guests still persist a name/unit/address composite.
+   * CleanCloud rows must not — display names are not identity.
+   */
+  allowNameComposite?: boolean;
 };
 
 function normalized(value: string | null | undefined): string {
@@ -40,13 +48,7 @@ export function legacyRawCustomerIdentityKey(
     .join("|");
 }
 
-export function rawCustomerIdentityKey(input: CustomerIdentityInput): string {
-  const phone = normalizedPhone(input.phone);
-  if (phone.length >= 7) return `phone:${phone}`;
-  if (input.bldgUserId != null && input.bldgUserId > 0)
-    return `bldg-user:${input.bldgUserId}`;
-  const email = normalized(input.email);
-  if (email.includes("@")) return `email:${email}`;
+function nameCompositeKey(input: CustomerIdentityInput): string {
   return [
     input.firstName,
     input.lastName,
@@ -56,6 +58,41 @@ export function rawCustomerIdentityKey(input: CustomerIdentityInput): string {
   ]
     .map(normalized)
     .join("|");
+}
+
+function normalizedVerifiedAddress(value: string | null | undefined): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[.,]/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * Trustworthy identity evidence, strongest first. Names are never included.
+ * Verified address is only emitted with a unit so a tower lobby is not one customer.
+ */
+export function identityCandidateKeys(input: CustomerIdentityInput): string[] {
+  const keys: string[] = [];
+  const phone = normalizedPhone(input.phone);
+  if (phone.length >= 7) keys.push(`phone:${phone}`);
+  if (input.bldgUserId != null && input.bldgUserId > 0)
+    keys.push(`bldg-user:${input.bldgUserId}`);
+  const email = normalized(input.email);
+  if (email.includes("@")) keys.push(`email:${email}`);
+  const cleancloud = String(input.cleancloudCustomerId ?? "").trim();
+  if (cleancloud) keys.push(`cleancloud:${cleancloud}`);
+  const verified = normalizedVerifiedAddress(input.verifiedNormalizedAddress);
+  const unit = normalized(input.unit);
+  if (verified && unit) keys.push(`address:${verified}|unit:${unit}`);
+  return keys;
+}
+
+export function rawCustomerIdentityKey(input: CustomerIdentityInput): string {
+  const candidates = identityCandidateKeys(input);
+  if (candidates[0]) return candidates[0];
+  if (input.allowNameComposite === false) return "";
+  return nameCompositeKey(input);
 }
 
 function hashIdentityKey(tenantId: string, key: string): string {
@@ -76,17 +113,23 @@ export function legacyCustomerIdentityHash(
   return hashIdentityKey(tenantId, legacyRawCustomerIdentityKey(input));
 }
 
-/** Canonical identity plus any distinct persisted legacy churn key. */
+/** Canonical identity plus aliases that can join a customer's later evidence. */
 export function customerIdentityHashes(
   tenantId: string,
   input: CustomerIdentityInput
 ): string[] {
-  return Array.from(
-    new Set([
-      customerIdentityHash(tenantId, input),
-      legacyCustomerIdentityHash(tenantId, input),
-    ])
-  );
+  const canonical = rawCustomerIdentityKey(input);
+  if (!canonical) return [];
+  const hashes = [
+    hashIdentityKey(tenantId, canonical),
+    ...identityCandidateKeys(input).map(key =>
+      hashIdentityKey(tenantId, key)
+    ),
+  ];
+  if (input.allowNameComposite !== false) {
+    hashes.push(legacyCustomerIdentityHash(tenantId, input));
+  }
+  return Array.from(new Set(hashes));
 }
 
 /**
@@ -125,6 +168,7 @@ export function groupCustomerRecords<T>(
   const groups = new Map<string, T[]>();
   records.forEach((record, index) => {
     const aliases = aliasesByRecord[index]!;
+    if (!aliases.length) return;
     const root = find(aliases[0]!);
     const group = groups.get(root) ?? [];
     group.push(record);
