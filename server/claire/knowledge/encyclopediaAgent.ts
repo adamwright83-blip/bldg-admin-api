@@ -6,6 +6,9 @@ import { answerClaireBusinessTurn, type ClaireAnalyticsState } from "../business
 import type { ClaireDriveContext } from "../contextAssembler";
 import type { ClaireEncyclopediaTrace } from "../answerPathTelemetry";
 import { claireModelRequest } from "../claireModel";
+import { CLAIRE_CANON } from "../character/characterDefinition";
+import { assertNoUnauthorizedClaireBiography, makeBiographyVerifier } from "../progression/generalBiographyBoundary";
+import { isClaireProgressionEnabled } from "../progression/progressionFlag";
 import { speakBusinessResult } from "../business/businessSpeech";
 import { accountAspect, listAccountRefs, loadAccountHistory, matchAccounts, speakAccountHistory } from "./accountKnowledge";
 import { searchOperatorConversation, substantiveTurns } from "./conversationMemory";
@@ -390,7 +393,18 @@ export async function answerWithEncyclopedia(
       })
     ).trim();
     trace.rewriteMs = Date.now() - rewriteStartedAt;
-    if (rewritten && numbersGrounded(rewritten, evidence)) return answered(rewritten, "rewrite");
+    if (rewritten && numbersGrounded(rewritten, evidence)) {
+      // The rewrite is generated speech too: with progression ON it may not establish Claire history.
+      // A rejection throws into the catch below, which serves the raw record answers instead.
+      if (isClaireProgressionEnabled(input.tenantId)) {
+        await assertNoUnauthorizedClaireBiography({
+          text: rewritten,
+          allowedFacts: CLAIRE_CANON.filter(fragment => fragment.accessClass === "core" && fragment.fact).map(fragment => fragment.fact),
+          verify: makeBiographyVerifier(invokeText, input.tenantId),
+        });
+      }
+      return answered(rewritten, "rewrite");
+    }
     trace.rewriteSkippedReason = rewritten ? "ungrounded_numbers" : "rewrite_failed";
     return answered(evidence, "raw_concatenation");
   } catch {

@@ -66,7 +66,7 @@ describe("Slice 3: assertion-guard production wiring", () => {
     const recordGeneration = silentRecord();
     const result = await writeClairePreDriveBrief(
       { tenantId: "tenant-1", context },
-      { invokeText, recordGeneration }
+      { invokeText, biographyVerifier: async () => true, recordGeneration }
     );
     expect(invokeText.mock.calls[0][0].messages[0].content).toContain("VERIFIED FACT INVENTORY");
     expect(JSON.parse(invokeText.mock.calls[0][0].messages[1].content).factInventory).toContain(
@@ -83,7 +83,7 @@ describe("Slice 3: assertion-guard production wiring", () => {
   it("writeClairePreDriveBrief keeps a verified scheduled assertion", async () => {
     const result = await writeClairePreDriveBrief(
       { tenantId: "tenant-1", context },
-      { invokeText: vi.fn().mockResolvedValue(VERIFIED_SCHEDULED), recordGeneration: silentRecord() }
+      { biographyVerifier: async () => true, invokeText: vi.fn().mockResolvedValue(VERIFIED_SCHEDULED), recordGeneration: silentRecord() }
     );
     expect(result).toBe(VERIFIED_SCHEDULED);
   });
@@ -97,7 +97,7 @@ describe("Slice 3: assertion-guard production wiring", () => {
         context,
       },
       {
-        invokeText: vi.fn().mockResolvedValue("I queued the reminder and it is already out."),
+        biographyVerifier: async () => true, invokeText: vi.fn().mockResolvedValue("I queued the reminder and it is already out."),
         recordGeneration: silentRecord(),
       }
     );
@@ -119,7 +119,7 @@ describe("Slice 3: assertion-guard production wiring", () => {
         context,
       },
       {
-        invokeText: vi.fn().mockResolvedValue(VERIFIED_SCHEDULED),
+        biographyVerifier: async () => true, invokeText: vi.fn().mockResolvedValue(VERIFIED_SCHEDULED),
         recordGeneration: silentRecord(),
       }
     );
@@ -130,7 +130,7 @@ describe("Slice 3: assertion-guard production wiring", () => {
     const result = await writeClairePostStopOpening(
       { tenantId: "tenant-1", operatorUserId: null, accountName: "The Wilshire" },
       {
-        invokeText: vi.fn().mockResolvedValue("The Wilshire visit has been scheduled."),
+        biographyVerifier: async () => true, invokeText: vi.fn().mockResolvedValue("The Wilshire visit has been scheduled."),
         recordGeneration: silentRecord(),
       }
     );
@@ -148,7 +148,7 @@ describe("Slice 3: assertion-guard production wiring", () => {
         context,
       },
       {
-        invokeText: vi.fn().mockResolvedValue(VERIFIED_SCHEDULED),
+        biographyVerifier: async () => true, invokeText: vi.fn().mockResolvedValue(VERIFIED_SCHEDULED),
         recordGeneration: silentRecord(),
       }
     );
@@ -159,7 +159,7 @@ describe("Slice 3: assertion-guard production wiring", () => {
     const result = await writeClaireOutcomeConfirmation(
       { tenantId: "tenant-1", operatorUserId: null, outcome: "won", outcomeLabel: "won" },
       {
-        invokeText: vi.fn().mockResolvedValue(VERIFIED_SCHEDULED),
+        biographyVerifier: async () => true, invokeText: vi.fn().mockResolvedValue(VERIFIED_SCHEDULED),
         recordGeneration: silentRecord(),
       }
     );
@@ -176,7 +176,7 @@ describe("Slice 3: assertion-guard production wiring", () => {
         context,
       },
       {
-        invokeText: vi.fn().mockResolvedValue(VERIFIED_SCHEDULED),
+        biographyVerifier: async () => true, invokeText: vi.fn().mockResolvedValue(VERIFIED_SCHEDULED),
         recordGeneration: silentRecord(),
       }
     );

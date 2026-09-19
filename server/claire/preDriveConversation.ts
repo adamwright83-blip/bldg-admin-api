@@ -32,7 +32,7 @@ import { measureClairePromptSections, type ClairePromptSizeTrace } from "./answe
 import { recoverPersonalAnswer } from "./character/personalAnswerRecovery";
 import { assertNoUngroundedPersonalSpecificity, UngroundedPersonalSpecificityError } from "./character/personalSpecificityGuard";
 import { isClaireProgressionEnabled } from "./progression/progressionFlag";
-import { findUnauthorizedFirstPersonBiography } from "./progression/personalEntailment";
+import { checkBiographyBoundary, makeBiographyVerifier, type BiographyVerifier } from "./progression/generalBiographyBoundary";
 import { lintFailureDayLanguage } from "./progression/toneLint";
 import { selectDialogueLine } from "./progression/dialogueRegistry";
 import { answerPersonalFollowUp } from "./progression/personalFollowUp";
@@ -250,6 +250,8 @@ export async function answerClairePreDriveFollowUp(
     invokeText?: typeof invokeTextLLM;
     recordGeneration?: typeof recordClaireGeneration;
     progressionStore?: ProgressionStore;
+    /** Test seam for the general-answer biography verifier. */
+    biographyVerifier?: BiographyVerifier;
   } = {}
 ): Promise<string> {
   const fallback = conservativeClaireFollowUp(input);
@@ -436,17 +438,24 @@ export async function answerClairePreDriveFollowUp(
     // spoken; the deterministic fallback (or an approved decline) is used instead.
     let guardReason: string | null = null;
     if (progressionOn && recoveredVia === null) {
-      const biography = findUnauthorizedFirstPersonBiography(answer, compiled.eligibleCanonFacts);
-      if (biography) {
-        console.warn("[Claire] general answer asserted unauthorized first-person biography; replaced");
-        answer = selectDialogueLine({ category: "decline", rapportBand: 0 })?.text ?? "Not that one.";
-        guardReason = "personal_biography_guard";
+      // Deterministic and free first: failure-day tone. Then the semantic biography boundary, which only
+      // calls a model when a sentence could assert Claire-self/history (no candidate => no model call).
+      const tone = lintFailureDayLanguage(answer);
+      if (!tone.passes) {
+        console.warn("[Claire] general answer violated failure-day tone contract; replaced", tone.violations.map(v => v.category));
+        answer = fallback;
+        guardReason = `failure_day_tone:${tone.violations[0]!.category}`;
       } else {
-        const tone = lintFailureDayLanguage(answer);
-        if (!tone.passes) {
-          console.warn("[Claire] general answer violated failure-day tone contract; replaced", tone.violations.map(v => v.category));
+        const biography = await checkBiographyBoundary({
+          text: answer,
+          allowedFacts: compiled.eligibleCanonFacts,
+          verify: dependencies.biographyVerifier ?? makeBiographyVerifier(invokeText, input.tenantId),
+        });
+        if (!biography.ok) {
+          console.warn("[Claire] general answer could assert unauthorized Claire history; replaced", biography.reason);
+          // A business turn gets the conservative business fallback, never a personal-decline line.
           answer = fallback;
-          guardReason = `failure_day_tone:${tone.violations[0]!.category}`;
+          guardReason = `personal_biography_guard:${biography.reason}`;
         }
       }
     }

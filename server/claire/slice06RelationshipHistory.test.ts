@@ -285,7 +285,7 @@ describe("Slice 6 production relationship history", () => {
     const invokeText = vi.fn().mockResolvedValue("Keep the Wilshire stop first.");
     await writeClairePreDriveBrief(
       { tenantId, context: driveContext },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     const briefPrompt = invokeText.mock.calls[0][0].messages[0].content as string;
     expect(briefPrompt).toMatch(/verified-shared|Durable shared history|Current verified business truth/);
@@ -298,7 +298,7 @@ describe("Slice 6 production relationship history", () => {
         brief: "Keep the Wilshire stop first.",
         context: driveContext,
       },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     const followPrompt = invokeText.mock.calls[1][0].messages[0].content as string;
     expect(followPrompt).toMatch(/Current verified business truth outranks/);
