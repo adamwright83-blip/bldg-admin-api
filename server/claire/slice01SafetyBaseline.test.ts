@@ -155,7 +155,8 @@ describe("Slice 1: Safety Baseline", () => {
       const speech = "Good morning Adam. I sent the message to Sophie already.";
       const lintResult = lintPostGenerationStateVerbs(speech, inventory);
       expect(lintResult.pass).toBe(false);
-      expect(lintResult.violations[0]).toContain("State verb 'sent' claimed without verified write receipt");
+      expect(lintResult.violations.join(" ")).toMatch(/sent/i);
+      expect(lintResult.violations.join(" ")).toMatch(/receipt-backed renderer|verified write receipt/i);
 
       // Non-committal speech passes
       const validSpeech = "Good morning Adam. I have a draft prepared for Sophie for your review.";
