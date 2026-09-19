@@ -147,10 +147,10 @@ Railway variables on `bldg-admin-api`: `CLAIRE_BIOGRAPHY_VERIFIER_MODEL=claude-h
 
 - **Slice 0 phone acceptance.** Automated tests cannot pass it; the pass criterion is Adam saying Claire feels like
   someone he wants to keep talking to. No outbound call has been placed.
-- **Authored dialogue.** `authoredDialogue.ts` seeds only the five approved generic declines. Thread closers,
-  business pivots, call exits, boundary reinforcement and recovery lines are empty categories. Consequences:
-  closers/recovery fall back to the approved decline floor; business pivots and **actual call hangup stay dormant**
-  until lines are authored (fail closed by design).
+- **Authored dialogue: done (2026-09-19).** Rapport-tiered declines, thread closers, business pivots and call exits are authored in
+  the locked Claire voice (British, dry, no biography, no counters). `recovery_after_failed_generation` intentionally has no lines, so a
+  lost reveal is indistinguishable from a refusal; `boundary_reinforcement` is unused. Call hangup is live once the mechanic is
+  enabled, and only after the personal thread closes AND business is complete.
 - Live-model voice review of reveals. `scripts/claire-progression-exam.ts` uses a deterministic stand-in for the
   model, so it verifies server behavior, not language quality.
 
