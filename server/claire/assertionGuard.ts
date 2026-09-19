@@ -313,9 +313,31 @@ export function lintPostGenerationStateVerbs(
     },
   ];
 
+  // First-person / imperative mutation language is never licensed by static inventory.
+  // Static context can prove that a state is true, but it cannot prove that Claire
+  // performed the mutation being claimed in this turn. Those success sentences
+  // come only from the deterministic receipt-backed commit renderer.
+  const originatedMutationPatterns = [
+    /\bI(?:'ve|\s+have)\s+(?:sent|queued|scheduled|added|saved|updated|removed|deleted|completed)\b/i,
+    /\bI\s+(?:sent|queued|scheduled|added|saved|updated|removed|deleted|completed)\b/i,
+    /\badding to the day ?line\b/i,
+    /^sent to\b/i,
+    /\bsent to engineering\b/i,
+    /\bmarked (?:it|that|them) done\b/i,
+  ];
+
+  const originatedMutation = originatedMutationPatterns.some(pattern => pattern.test(generatedText));
+  if (originatedMutation) {
+    violations.push("Free-form speech may not originate mutation-success claims");
+  }
+
   for (const check of checks) {
-    if (check.patterns.some(pattern => pattern.test(generatedText)) && !inventory.hasVerifiedClaim(check.state)) {
-      violations.push(`State verb '${check.label}' claimed without verified write receipt`);
+    if (
+      check.patterns.some(pattern => pattern.test(generatedText)) &&
+      !originatedMutation &&
+      !inventory.hasVerifiedClaim(check.state)
+    ) {
+      violations.push(`State verb '${check.label}' claimed without verified written state`);
     }
   }
 
