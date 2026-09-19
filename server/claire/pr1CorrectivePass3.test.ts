@@ -50,7 +50,8 @@ const CANON_AT_TIER_0 = ["Claire is British.", "Claire studied archaeology, hist
 
 describe("Corrective pass 3 -- item 1: personal-answer recovery", () => {
   it("blocks an invented city: it never reaches the operator, no canon is read aloud, and an approved decline is used without a second model call", async () => {
-    const invokeText = vi.fn().mockResolvedValueOnce("London, originally.");
+    // Generation, then the mandatory entailment verifier (which rejects the invented place).
+    const invokeText = vi.fn().mockResolvedValueOnce("London, originally.").mockResolvedValue("UNSUPPORTED");
     const recordGeneration = vi.fn().mockResolvedValue(undefined);
     const result = await answerClairePreDriveFollowUp(
       { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: { ...baseContext, actorId: "op-1" } },
@@ -60,12 +61,12 @@ describe("Corrective pass 3 -- item 1: personal-answer recovery", () => {
     expect(result).not.toContain("London");
     expect(result).not.toBe("I'm British."); // no robotic canon read-aloud fallback
     expect(AUTHORED_DIALOGUE.map(line => line.text)).toContain(result);
-    expect(invokeText).toHaveBeenCalledTimes(1);
+    expect(invokeText).toHaveBeenCalledTimes(2); // one generation, one verification, never a regeneration
     expect(recordGeneration).toHaveBeenCalledWith(
       expect.objectContaining({
         diagnostic: expect.objectContaining({
           source: "fallback",
-          failureReason: "personal_decline:ungrounded_specificity",
+          failureReason: "personal_decline:entailment_unverified",
         }),
       })
     );

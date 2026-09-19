@@ -178,7 +178,7 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
     });
 
     it("end-to-end: a personal-mode follow-up that invents an unsupported specific never reaches the operator; an approved decline replaces it", async () => {
-      const invokeText = vi.fn().mockResolvedValue("Marseille, actually.");
+      const invokeText = vi.fn().mockResolvedValueOnce("Marseille, actually.").mockResolvedValue("UNSUPPORTED");
       const recordGeneration = vi.fn().mockResolvedValue(undefined);
       const result = await answerClairePreDriveFollowUp(
         { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: { ...baseContext, actorId: "op-1" } },
@@ -188,7 +188,7 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
       expect(AUTHORED_DIALOGUE.map(line => line.text)).toContain(result);
       expect(recordGeneration).toHaveBeenCalledWith(
         expect.objectContaining({
-          diagnostic: expect.objectContaining({ source: "fallback", failureReason: "personal_decline:ungrounded_specificity" }),
+          diagnostic: expect.objectContaining({ source: "fallback", failureReason: "personal_decline:entailment_unverified" }),
         })
       );
     });

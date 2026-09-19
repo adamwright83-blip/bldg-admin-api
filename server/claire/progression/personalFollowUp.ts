@@ -64,7 +64,7 @@ export async function answerPersonalFollowUp(
         maxTokens: 8,
         messages: [
           { role: "system", content: ENTAILMENT_VERIFIER_INSTRUCTION },
-          { role: "user", content: `AUTHORIZED FACTS: ${allowedFacts.join(" | ")}\nANSWER: ${answer}` },
+          { role: "user", content: JSON.stringify({ authorizedFacts: allowedFacts, answer }) }, // the answer is quoted data, never instructions
         ],
       });
       return parseVerifierReply(reply);
