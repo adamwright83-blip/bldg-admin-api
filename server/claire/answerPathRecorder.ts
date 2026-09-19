@@ -21,6 +21,11 @@ export function claireTurnTraceDetail(trace: ClaireTurnTrace) {
     encyclopedia: trace.encyclopedia,
     memorySearched: trace.memorySearched,
     blend: trace.blend,
+    // Slice C+D: router outcome, not the old regex class.
+    synthesisRequired: trace.synthesisRequired,
+    needs_synthesis: trace.needs_synthesis,
+    routeOutcome: trace.routeOutcome,
+    evidenceSources: trace.evidenceSources,
     promptSizes: trace.promptSizes,
     latency: trace.latency,
     spokenChars: trace.spokenChars,
@@ -52,6 +57,8 @@ export function persistClaireTurnTrace(
     encyclopediaTools: trace.encyclopedia?.toolsPlanned ?? null,
     encyclopediaSpoke: trace.encyclopedia?.spoke ?? null,
     blendedQuestion: Boolean(trace.blend?.factClause && trace.blend?.judgmentClause),
+    synthesisRequired: trace.synthesisRequired,
+    evidenceSources: trace.evidenceSources,
   });
 
   if (!isClaireRepair2Enabled("a_routing_telemetry", trace.tenantId)) return;

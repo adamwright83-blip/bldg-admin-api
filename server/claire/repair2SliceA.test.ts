@@ -120,7 +120,12 @@ describe("Slice A — answer-path attribution", () => {
           rewriteMs: null,
           rewritePromptChars: null,
         });
-        return "Two record answers, concatenated.";
+        return {
+          kind: "answered",
+          text: "Two record answers, concatenated.",
+          fullyAnswers: true,
+          evidence: [{ source: "call_memory", text: "Two record answers, concatenated." }],
+        };
       }) as never,
     });
     expect(trace?.path).toBe("encyclopedia");
