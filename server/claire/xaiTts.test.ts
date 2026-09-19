@@ -87,7 +87,7 @@ describe("Claire xAI TTS", () => {
           sample_rate: 8000,
         },
         speed: 0.95,
-        optimize_streaming_latency: 2,
+        optimize_streaming_latency: 1,
         text_normalization: true,
       });
       expect((init?.headers as Record<string, string>).Authorization).toBe(
