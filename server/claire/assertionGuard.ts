@@ -224,11 +224,36 @@ export function inventoryPlusReceipts(
  * Defense-in-depth: mutation verbs in speech require a verified claim for that same class of write.
  * Free-form model prose may discuss an action but may not originate added/saved/sent/scheduled/updated/removed/done.
  */
+const FREE_FORM_MUTATION_SUCCESS_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
+  { label: "added", pattern: /\bI(?:'ve|\s+have)?\s+added\b/i },
+  { label: "saved", pattern: /\bI(?:'ve|\s+have)?\s+saved\b/i },
+  { label: "sent", pattern: /\bI(?:'ve|\s+have)?\s+sent\b/i },
+  { label: "scheduled", pattern: /\bI(?:'ve|\s+have)?\s+scheduled\b/i },
+  { label: "queued", pattern: /\bI(?:'ve|\s+have)?\s+queued\b/i },
+  { label: "updated", pattern: /\bI(?:'ve|\s+have)?\s+updated\b/i },
+  { label: "removed", pattern: /\bI(?:'ve|\s+have)?\s+(?:removed|deleted)\b/i },
+  { label: "completed", pattern: /\bI(?:'ve|\s+have)?\s+completed\b/i },
+  { label: "marked done", pattern: /\bmarked (?:it|that|them) done\b/i },
+  { label: "adding to the Day Line", pattern: /\badding to the day ?line\b/i },
+  { label: "sent to", pattern: /^sent to\b/i },
+  { label: "commit-renderer Done", pattern: /\bdone\.\s[^\n]*\bline\b/i },
+];
+
 export function lintPostGenerationStateVerbs(
   generatedText: string,
   inventory: VerifiedFactInventory
 ): { pass: boolean; violations: string[] } {
   const violations: string[] = [];
+
+  // Free-form / model-generated speech may describe verified historical state, but it may not
+  // originate a first-person/current mutation-success claim. Those claims belong exclusively to
+  // typed mutation results rendered by a deterministic receipt-backed renderer. A static inventory
+  // entry for task A must never license "I added task B" simply because both are classed "created".
+  for (const check of FREE_FORM_MUTATION_SUCCESS_PATTERNS) {
+    if (check.pattern.test(generatedText)) {
+      violations.push(`Free-form mutation success claim '${check.label}' must come from a receipt-backed renderer`);
+    }
+  }
   const checks: Array<{ state: ClaimedState; label: string; patterns: RegExp[] }> = [
     {
       state: "sent",
