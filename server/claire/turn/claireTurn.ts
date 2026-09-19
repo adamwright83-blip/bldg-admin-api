@@ -47,11 +47,21 @@ import {
   beginClaireTurnTrace,
   classifyClaireBlend,
   markClaireAnswerPath,
+  telemetryClaireAnswerClass,
   type ClaireAnswerPath,
   type ClaireEncyclopediaTrace,
   type ClaireTurnTrace,
 } from "../answerPathTelemetry";
 import { persistClaireTurnTrace } from "../answerPathRecorder";
+import type { EncyclopediaAnswer } from "../knowledge/encyclopediaAgent";
+import {
+  MEMORY_QUESTION,
+  accountHistoryMayFinish,
+  collectClaireLocalFactMatches,
+  decideClaireAnswerRoute,
+  utteranceHasMultipleAsks,
+  type ClaireRouteEvidence,
+} from "../answerRouter";
 
 /**
  * One Claire turn, for the phone and the desk alike.
@@ -148,7 +158,7 @@ export type ClaireTurnDeps = {
   unpaid: typeof loadUnpaidOrders;
   searchMemory: typeof searchOperatorConversation;
   memoryBetween: typeof operatorTurnsBetween;
-  encyclopedia: ((input: { tenantId: string; operatorUserId: string; utterance: string; surface: "voice" | "text"; history: ClaireTurnHistoryEntry[]; context?: ClaireDriveContext | null; onTrace?: (trace: ClaireEncyclopediaTrace) => void }) => Promise<string | null>) | null;
+  encyclopedia: ((input: { tenantId: string; operatorUserId: string; utterance: string; surface: "voice" | "text"; history: ClaireTurnHistoryEntry[]; context?: ClaireDriveContext | null; onTrace?: (trace: ClaireEncyclopediaTrace) => void }) => Promise<EncyclopediaAnswer>) | null;
   watchBoard?: (input: { tenantId: string; operatorUserId: string; actorId: string }) => Promise<{ brief: string }>;
   doctrineTurn?: (input: { tenantId: string; operatorUserId: string; utterance: string; today: string }) => Promise<string | null>;
   /**
@@ -271,11 +281,10 @@ function singleIntentFlow(utterance: string): boolean {
 }
 
 /**
- * Exported for Slice A's route probe (and Slice D's replacement of it): the
- * only phrasings that reach cross-call memory today.
+ * Exported for Slice A's route probe: the phrasings that reach cross-call memory.
+ * Defined in answerRouter.ts so routing and the probe share one matcher.
  */
-export const MEMORY_QUESTION =
-  /\bwhat did (?:i|we) (?:say|tell you|talk about|decide|agree)\b|\bwhat was i (?:worried|concerned|stressed|thinking) about\b|\bwhat did you tell me\b|\bdid i (?:mention|tell you)\b|\bwhat have i told you\b/;
+export { MEMORY_QUESTION } from "../answerRouter";
 
 export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<ClaireTurnDeps> = {}): Promise<ClaireTurnResult> {
   const deps: ClaireTurnDeps = { ...defaultClaireTurnDeps(), ...overrides };
@@ -317,6 +326,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     const inventory = buildClaireVerifiedFactInventory(input.context);
     const speak = sanitizeSpeakAgainstInventory(result.speak, inventory);
     const guarded = speak === result.speak ? result : { ...result, speak };
+    if (trace.synthesisRequired) {
+      trace.needs_synthesis = telemetryClaireAnswerClass(utterance, true) === "needs_synthesis";
+    }
     remember(state, "claire", guarded.speak, nowMs);
     persistClaireTurnTrace(trace, { turnKind: guarded.kind, spokenText: guarded.speak });
     deps.onTurnTrace?.(trace);
@@ -526,16 +538,45 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     ]);
     const reconciled = reconcileBriefing({ ...parsed, items: combinedItems }, existing, campaign);
     const answers: string[] = [];
-    // A question answered inside a briefing is not the turn's answer path —
-    // the briefing is. Suppress attribution for the duration.
-    trace.paused = true;
-    try {
-      for (const question of parsed.questions) {
-        const answer = await answerQuestion(question);
-        if (answer) answers.push(answer);
+    // Mixed work + question: keep retrieved fact wording (ledger amounts stay
+    // exact) and synthesize the full original utterance once when judgment
+    // remains. Never answerQuestion(..., { allowSynthesis: false }).
+    const mixedQuestion = parsed.questions.length > 0 || utteranceHasMultipleAsks(utterance);
+    if (mixedQuestion) {
+      trace.paused = true;
+      try {
+        const questionTexts = parsed.questions.filter(questionText => questionText !== utterance);
+        let needsSynthesis = questionTexts.length === 0;
+        for (const questionText of questionTexts) {
+          const localMatches = collectClaireLocalFactMatches(questionText, {
+            accounts,
+            now,
+            timeZone,
+            session: state.analytics ?? null,
+          });
+          const route = decideClaireAnswerRoute({
+            utterance: questionText,
+            encyclopedia: null,
+            localMatches,
+            briefingWorkItems: 0,
+            briefingQuestions: 0,
+          });
+          if (route.outcome === "deterministic_final" || route.outcome === "unsupported_fact") {
+            const spoken = await answerQuestion(questionText);
+            if (spoken) answers.push(spoken);
+          } else {
+            needsSynthesis = true;
+          }
+        }
+        if (needsSynthesis) {
+          const spoken = await answerQuestion(utterance, { briefingMix: true });
+          if (spoken) answers.push(spoken);
+          trace.routeOutcome = "briefing_plus_synthesis";
+          trace.synthesisRequired = true;
+        }
+      } finally {
+        trace.paused = false;
       }
-    } finally {
-      trace.paused = false;
     }
     const summary = speakBriefingSummary({
       parsed: state.pendingBriefing ? { ...reconciled, items: reconciled.items.filter(item => !state.pendingBriefing!.parsed.items.includes(item)) } : reconciled,
@@ -600,6 +641,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   if (input.context && input.brief) {
     const generationStartedAt = Date.now();
     trace.latency.generationStartMs = generationStartedAt - trace.startedAtMs;
+    trace.synthesisRequired = true;
     const reply = await deps.followUp({
       tenantId: input.tenantId,
       utterance,
@@ -636,50 +678,54 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     kind: "answered",
   });
 
-  async function answerQuestion(question: string): Promise<string | null> {
+  /**
+   * Existing readers as evidence only — they never claim the turn here.
+   * Sources: business query, Day Line, unpaid orders, account history, call memory.
+   * Encyclopedia tools are merged in by answerQuestion after the planner runs.
+   */
+  async function gatherDeterministicEvidence(question: string): Promise<ClaireRouteEvidence[]> {
     const questionLower = normalizeUtterance(question);
-    try {
-      const business = await answerClaireBusinessTurn(
-        { tenantId: input.tenantId, utterance: question, state, surface: input.surface, context: input.context },
-        { now: deps.now, timeZone: deps.timeZone, ...deps.business }
-      );
-      if (business.handled) {
-        mark("business_reader", { businessReader: business.reader ?? null });
-        return business.speak;
+    const evidence: Array<{ source: string; text: string }> = [];
+    const skipGreedyBusiness =
+      (isUnpaidQuestion(questionLower) && !/\bfollow[- ]?up\b/.test(questionLower)) ||
+      Boolean(operationsQuestion(questionLower)) ||
+      MEMORY_QUESTION.test(questionLower) ||
+      (question === utterance && parsed.items.length > 0);
+
+    if (!skipGreedyBusiness) {
+      try {
+        const business = await answerClaireBusinessTurn(
+          { tenantId: input.tenantId, utterance: question, state, surface: input.surface, context: input.context },
+          { now: deps.now, timeZone: deps.timeZone, ...deps.business }
+        );
+        if (business.handled) evidence.push({ source: `business_reader:${business.reader ?? "query"}`, text: business.speak });
+      } catch (error) {
+        console.warn("[Claire] business evidence failed", error instanceof Error ? error.message : error);
       }
-    } catch (error) {
-      console.warn("[Claire] business answer failed", error instanceof Error ? error.message : error);
     }
 
     const operations = operationsQuestion(questionLower);
     if (operations) {
       try {
-        const day = operations.kind === "completed" ? operations.day : operations.day;
         const work = await deps.dayWork({
           tenantId: input.tenantId,
           operatorUserId: input.operatorUserId,
           dayDirectorActorId: input.dayDirectorActorId,
-          businessDate: businessDateFor(day, now, timeZone),
+          businessDate: businessDateFor(operations.day, now, timeZone),
           now,
           timeZone,
         });
-        mark("day_work");
-        return speakDayWork(work, operations, input.surface);
+        evidence.push({ source: "day_work", text: speakDayWork(work, operations, input.surface) });
       } catch (error) {
-        console.warn("[Claire] day work unavailable", error instanceof Error ? error.message : error);
-        mark("fallback", { fallbackReason: "day_work_unavailable" });
-        return "I couldn't load the Day Line just now, so I won't guess what's on it.";
+        console.warn("[Claire] day work evidence unavailable", error instanceof Error ? error.message : error);
       }
     }
 
     if (isUnpaidQuestion(questionLower) && !/\bfollow[- ]?up\b/.test(questionLower)) {
       try {
-        const spoken = speakUnpaidOrders(await deps.unpaid(input.tenantId), input.surface);
-        mark("unpaid_orders");
-        return spoken;
-      } catch {
-        mark("fallback", { fallbackReason: "unpaid_orders_unavailable" });
-        return "I couldn't load unpaid orders just now, so I won't guess.";
+        evidence.push({ source: "unpaid_orders", text: speakUnpaidOrders(await deps.unpaid(input.tenantId), input.surface) });
+      } catch (error) {
+        console.warn("[Claire] unpaid-orders evidence unavailable", error instanceof Error ? error.message : error);
       }
     }
 
@@ -690,21 +736,14 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         ? state.focusAccount ?? null
         : null;
     const target = questionAccounts.length === 1 ? questionAccounts[0]! : questionAccounts.length === 0 ? pronounAccount : null;
-    if (questionAccounts.length > 1) {
-      mark("account_disambiguation");
-      return `I have ${questionAccounts.length} accounts that could be: ${questionAccounts.slice(0, 4).map(item => item.name).join(", ")}. Which one?`;
-    }
-    if (target && (isAccountQuestion(questionLower) || MEMORY_QUESTION.test(questionLower) || questionAccounts.length === 1)) {
+    if (target && (isAccountQuestion(questionLower) || questionAccounts.length === 1)) {
       try {
         const accountHistory = await deps.accountHistory({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, account: target });
         state.focusAccount = target;
         const aspect = MEMORY_QUESTION.test(questionLower) ? "said" : accountAspect(questionLower);
-        mark("account_history");
-        return speakAccountHistory(accountHistory, aspect, { timeZone, today });
+        evidence.push({ source: "account_history", text: speakAccountHistory(accountHistory, aspect, { timeZone, today }) });
       } catch (error) {
-        console.warn("[Claire] account history unavailable", error instanceof Error ? error.message : error);
-        mark("fallback", { fallbackReason: "account_history_unavailable" });
-        return `I couldn't load ${target.name}'s history just now, so I won't guess.`;
+        console.warn("[Claire] account-history evidence unavailable", error instanceof Error ? error.message : error);
       }
     }
 
@@ -732,23 +771,89 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
                 speaker: "OPERATOR",
               })
             );
-        if (!turns.length) {
-          mark("fallback", { fallbackReason: "memory_no_match" });
-          return "I don't have that in our call history, so I won't make it up.";
+        if (turns.length) {
+          const quotes = turns.slice(0, 2).map(turn => `"${turn.text.replace(/\s+/g, " ").slice(0, 160)}"`);
+          evidence.push({
+            source: "call_memory",
+            text: `${yesterday ? "Yesterday" : "On a call"} you said ${quotes.join(", and ")}. That's what you told me, not something I've confirmed.`,
+          });
         }
-        const quotes = turns.slice(0, 2).map(turn => `"${turn.text.replace(/\s+/g, " ").slice(0, 160)}"`);
-        mark("memory_quote");
-        return `${yesterday ? "Yesterday" : "On a call"} you said ${quotes.join(", and ")}. That's what you told me, not something I've confirmed.`;
-      } catch {
-        mark("fallback", { fallbackReason: "memory_search_failed" });
-        return "I couldn't search our call history just now.";
+      } catch (error) {
+        console.warn("[Claire] call-memory evidence unavailable", error instanceof Error ? error.message : error);
       }
     }
 
-    if (deps.encyclopedia) {
+    return evidence;
+  }
+
+  /**
+   * Claire Intelligence Repair Part 2, Slice C+D (item C): hands the
+   * operator's FULL original question, plus whatever evidence was gathered,
+   * to Claire's own repaired conversational path — never a split or
+   * truncated question, and never a deterministic renderer's partial
+   * sentence standing in as the whole answer. Returns null (not a guess)
+   * when there is no drive context/brief to synthesize with, so the caller's
+   * existing safety net still applies.
+   */
+  async function synthesizeWithEvidence(
+    question: string,
+    evidence: Array<{ source: string; text: string }>
+  ): Promise<string | null> {
+    if (!(input.context && input.brief)) return null;
+    trace.synthesisRequired = true;
+    trace.evidenceSources = evidence.map(item => item.source);
+    const reply = await deps.followUp({
+      tenantId: input.tenantId,
+      utterance: question,
+      brief: input.brief,
+      context: input.context,
+      recentTurns: history().slice(0, -1),
+      retrievedEvidence: evidence.length ? evidence : undefined,
+      onGeneration: diagnostic => {
+        trace.modelRequested = diagnostic.modelRequested ?? null;
+        trace.modelServed = diagnostic.modelServed ?? null;
+        if (diagnostic.promptSize) trace.promptSizes.push(diagnostic.promptSize);
+        markClaireAnswerPath(
+          trace,
+          diagnostic.answerOrigin === "canon_render"
+            ? "guard_recovery"
+            : diagnostic.source === "model"
+              ? "follow_up_model"
+              : "fallback",
+          { fallbackReason: diagnostic.failureReason }
+        );
+      },
+    });
+    mark("follow_up_model");
+    return reply;
+  }
+
+  async function answerQuestion(question: string, options: { briefingMix?: boolean } = {}): Promise<string | null> {
+    const questionLower = normalizeUtterance(question);
+    const multipleAsks = utteranceHasMultipleAsks(question);
+    const briefingWorkItems = options.briefingMix ? Math.max(1, parsed.items.length) : 0;
+    const briefingQuestions = options.briefingMix ? Math.max(parsed.questions.length, 1) : 0;
+
+    const questionAccounts = matchAccounts(questionLower, accounts);
+    if (questionAccounts.length > 1 && !multipleAsks && !options.briefingMix) {
+      mark("account_disambiguation");
+      return `I have ${questionAccounts.length} accounts that could be: ${questionAccounts.slice(0, 4).map(item => item.name).join(", ")}. Which one?`;
+    }
+
+    const localMatches = collectClaireLocalFactMatches(question, {
+      accounts,
+      now,
+      timeZone,
+      session: state.analytics ?? null,
+    });
+    const canFastTerminate =
+      !options.briefingMix && !multipleAsks && localMatches.some(match => match.mayTerminate);
+
+    let encyclopediaResult: EncyclopediaAnswer | null = null;
+    let encyclopediaTrace: ClaireEncyclopediaTrace | null = null;
+    if (!canFastTerminate && deps.encyclopedia) {
       try {
-        let encyclopediaTrace: ClaireEncyclopediaTrace | null = null;
-        const answer = await deps.encyclopedia({
+        encyclopediaResult = await deps.encyclopedia({
           tenantId: input.tenantId,
           operatorUserId: input.operatorUserId,
           utterance: question,
@@ -765,14 +870,91 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
             trace.memorySearched = true;
           }
         }
-        if (answer) {
-          mark("encyclopedia", { encyclopedia: encyclopediaTrace });
-          return answer;
-        }
       } catch (error) {
         console.warn("[Claire] encyclopedia answer failed", error instanceof Error ? error.message : error);
       }
     }
+
+    const loadedEvidence: ClaireRouteEvidence[] = [];
+    if (encyclopediaResult?.kind !== "no_retrieval_needed") {
+      loadedEvidence.push(...(await gatherDeterministicEvidence(question)));
+      if (encyclopediaResult && (encyclopediaResult.kind === "answered" || encyclopediaResult.kind === "unsupported_fact")) {
+        for (const item of encyclopediaResult.evidence) {
+          if (!loadedEvidence.some(existing => existing.source === item.source && existing.text === item.text)) {
+            loadedEvidence.push(item);
+          }
+        }
+      }
+    }
+
+    const decision = decideClaireAnswerRoute({
+      utterance: question,
+      encyclopedia: encyclopediaResult,
+      localMatches,
+      loadedEvidence,
+      briefingWorkItems,
+      briefingQuestions,
+      multipleAsks,
+    });
+    if (!trace.paused) trace.routeOutcome = decision.outcome;
+
+    const evidenceForSynthesis = decision.evidence.filter(item => item.text.length > 0);
+
+    if (decision.outcome === "deterministic_final") {
+      if (encyclopediaResult?.kind === "answered" && encyclopediaResult.fullyAnswers === true) {
+        mark("encyclopedia", { encyclopedia: encyclopediaTrace });
+        return encyclopediaResult.text;
+      }
+      const unpaid = loadedEvidence.find(entry => entry.source === "unpaid_orders");
+      if (unpaid) {
+        mark("unpaid_orders");
+        return unpaid.text;
+      }
+      const dayWork = loadedEvidence.find(entry => entry.source === "day_work");
+      if (dayWork) {
+        mark("day_work");
+        return dayWork.text;
+      }
+      const account = loadedEvidence.find(entry => entry.source === "account_history");
+      if (account && accountHistoryMayFinish(question)) {
+        mark("account_history");
+        return account.text;
+      }
+      const memory = loadedEvidence.find(entry => entry.source === "call_memory" || entry.source === "memory_quote");
+      if (memory) {
+        mark("memory_quote");
+        return memory.text;
+      }
+      if (decision.path === "memory_quote") {
+        mark("fallback", { fallbackReason: "memory_no_match" });
+        return "I don't have that in our call history, so I won't make it up.";
+      }
+      const business = loadedEvidence.find(entry => entry.source.startsWith("business_reader"));
+      if (business) {
+        mark("business_reader", { businessReader: business.source.split(":")[1] ?? null });
+        return business.text;
+      }
+    }
+
+    if (decision.outcome === "unsupported_fact") {
+      mark("fallback", { fallbackReason: "unsupported_fact", encyclopedia: encyclopediaTrace });
+      return decision.unsupportedText ?? (encyclopediaResult?.kind === "unsupported_fact" ? encyclopediaResult.text : null);
+    }
+
+    if (
+      decision.outcome === "judgment_synthesis_no_retrieval" ||
+      decision.outcome === "retrieval_plus_synthesis" ||
+      decision.outcome === "briefing_plus_synthesis"
+    ) {
+      const synthesized = await synthesizeWithEvidence(question, evidenceForSynthesis);
+      if (synthesized !== null) return synthesized;
+      if (decision.preserveJudgment && decision.unsupportedText) {
+        mark("fallback", { fallbackReason: "unsupported_fact", encyclopedia: encyclopediaTrace });
+        return decision.unsupportedText;
+      }
+      return null;
+    }
+
     return null;
   }
 }

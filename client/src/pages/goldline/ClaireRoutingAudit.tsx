@@ -32,6 +32,17 @@ function percent(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+/** The shape Slice A/C+D write into `answerPathDetailJson`. Loose on purpose — this is a display concern only. */
+type ClaireTurnDetail = {
+  blend?: { factClause?: boolean; judgmentClause?: boolean } | null;
+  synthesisRequired?: boolean;
+  evidenceSources?: string[];
+};
+
+function asClaireTurnDetail(value: unknown): ClaireTurnDetail {
+  return value && typeof value === "object" ? (value as ClaireTurnDetail) : {};
+}
+
 export default function ClaireRoutingAudit() {
   const [days, setDays] = useState(30);
   const audit = trpc.system.claire.routingAudit.useQuery(
@@ -50,6 +61,13 @@ export default function ClaireRoutingAudit() {
   }, [audit.data]);
 
   const total = audit.data?.totalTurns ?? 0;
+
+  const recentDetail = useMemo(
+    () => (audit.data?.recent ?? []).map(row => ({ row, detail: asClaireTurnDetail(row.detail) })),
+    [audit.data]
+  );
+  const blendedRecent = recentDetail.filter(({ detail }) => detail.blend?.factClause && detail.blend?.judgmentClause);
+  const synthesisRecent = recentDetail.filter(({ detail }) => detail.synthesisRequired);
 
   return (
     <div style={{ padding: "24px", maxWidth: 1100 }}>
@@ -180,6 +198,52 @@ export default function ClaireRoutingAudit() {
             </table>
           </section>
 
+          <section style={{ marginBottom: 24 }}>
+            <h2>Judgment &amp; blended turns (Slice C+D)</h2>
+            <p style={{ marginTop: 0, opacity: 0.75 }}>
+              From the {recentDetail.length} most recent turns fetched above —
+              a sample, not the full window. Answers whether retrieval is
+              still stealing a reasoning-required turn: a blended question
+              with an empty evidence list, or with{" "}
+              <code>synthesisRequired: false</code>, is the architecture
+              regressing.
+            </p>
+            <ul>
+              <li>
+                Classified as fact + judgment (blended):{" "}
+                <strong>{blendedRecent.length}</strong> / {recentDetail.length}
+              </li>
+              <li>
+                Required Claire's own synthesis:{" "}
+                <strong>{synthesisRecent.length}</strong> / {recentDetail.length}
+              </li>
+            </ul>
+            {blendedRecent.length ? (
+              <table cellPadding={6} style={{ borderCollapse: "collapse", width: "100%" }}>
+                <thead>
+                  <tr style={{ textAlign: "left" }}>
+                    <th>When</th>
+                    <th>Path</th>
+                    <th>Synthesis ran</th>
+                    <th>Evidence sources</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {blendedRecent.map(({ row, detail }) => (
+                    <tr key={row.id} style={{ borderTop: "1px solid rgba(128,128,128,0.35)" }}>
+                      <td>{new Date(row.createdAt).toLocaleString()}</td>
+                      <td>{row.answerPath}</td>
+                      <td>{detail.synthesisRequired ? "yes" : "NO — check this"}</td>
+                      <td>{detail.evidenceSources?.length ? detail.evidenceSources.join(", ") : "none"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p style={{ opacity: 0.75 }}>No blended turns in the recent sample.</p>
+            )}
+          </section>
+
           <section>
             <h2>Recent turns</h2>
             <table cellPadding={6} style={{ borderCollapse: "collapse", width: "100%" }}>
@@ -201,6 +265,7 @@ export default function ClaireRoutingAudit() {
                       {row.answerPath}
                       {row.businessReader ? ` · ${row.businessReader}` : ""}
                       {row.rendererProse ? " · renderer prose" : ""}
+                      {asClaireTurnDetail(row.detail).synthesisRequired ? " · synthesized" : ""}
                     </td>
                     <td>{row.surface ?? "—"}</td>
                     <td>{row.promptChars ?? "—"}</td>

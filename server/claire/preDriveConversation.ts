@@ -207,6 +207,17 @@ export async function answerClairePreDriveFollowUp(
     /** The last turns of this conversation, so follow-ups like "is that…" have a referent. */
     recentTurns?: Array<{ speaker: "operator" | "claire"; text: string }>;
     /**
+     * Claire Intelligence Repair Part 2, Slice C+D: authoritative evidence
+     * retrieved for this exact question by a deterministic reader (business
+     * query, day work, unpaid orders, account history), each labelled with
+     * its source. Present only for a judgment or blended turn the router
+     * decided needs Claire's own synthesis rather than a renderer's
+     * sentence — the fact half of the answer must be grounded in this, never
+     * invented or recomputed, and the judgment half remains Claire's general
+     * professional knowledge as already governed by the truth rules below.
+     */
+    retrievedEvidence?: Array<{ source: string; text: string }>;
+    /**
      * PR1 Claire Intelligence Repair -- corrective pass: this generation
      * path is shared between the Twilio voice call and the desktop/text
      * surface (see server/claire/turn/claireTurn.ts). Defaults to "voice"
@@ -297,6 +308,15 @@ export async function answerClairePreDriveFollowUp(
       { label: "commitment_local_time", text: "nextFixedCommitmentLocalWhen in currentContext, when present, is the authoritative, already-resolved local date/time for the next fixed commitment. State or reference the commitment's time using that field directly. Do not attempt to convert nextFixedCommitment.scheduledAt's raw ISO timestamp into local time yourself — treat it as an opaque identifier, not something to read or characterize directly." },
       { label: "mission_sales_brief", text: "If currentContext includes missionSalesBrief, stay anchored to it: its unknowns are not facts, its questionsToAsk/recommendations are suggestions, and its thingsToAvoid should not be repeated. You may reason further from it using general sales/ops knowledge, clearly framed as your own judgment, not as new verified facts about this account." },
       { label: "mission_sales_brief_unknowns", text: "If asked whether something is known (e.g. an objection, a price concern), check missionSalesBrief.keyKnownFacts and say plainly if it is not recorded rather than guessing." },
+      // Slice C+D (item C/E): when the router decided this question needs
+      // Claire's own reasoning, it retrieves the fact half first and hands
+      // it here — never split from the question, never silently dropped.
+      {
+        label: "retrieved_evidence_rule",
+        text: input.retrievedEvidence?.length
+          ? "retrievedEvidence in currentContext is verified evidence retrieved specifically for this question, each entry labelled with its source. Ground any factual part of your answer in it, never contradict it, and do not invent further specifics beyond it. If an entry's source is unsupported_fact, that specific business fact is unavailable — say so plainly. The operator's question may also ask for your judgment or recommendation — answer that part too, as your own professional opinion, in the same response; do not answer only the factual half, and do not throw away a judgment because a neighbouring fact is missing."
+          : "If part of the operator's question needs a specific business fact and retrievedEvidence in currentContext is empty, say plainly that you don't have that fact on record, then still give your professional judgment on whatever else was asked — never silently drop the rest of the question.",
+      },
       // (7) Delivery rules LAST, nearest the generation, explicitly
       // authoritative over anything above that implies length/structure.
       { label: "delivery_voice", text: surface === "voice" ? VOICE_NATIVE_ANSWER_GUIDANCE : null },
@@ -319,7 +339,10 @@ export async function answerClairePreDriveFollowUp(
       role: "user" as const,
       content: JSON.stringify({
         openingBrief: input.brief,
-        currentContext: JSON.parse(compactConversationContext(input.context)),
+        currentContext: {
+          ...JSON.parse(compactConversationContext(input.context)),
+          retrievedEvidence: input.retrievedEvidence ?? [],
+        },
         operatorUtterance: input.utterance.slice(0, 1_000),
       }),
     },
