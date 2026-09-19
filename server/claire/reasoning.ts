@@ -19,6 +19,7 @@ import {
   buildClaireVerifiedFactInventory,
 } from "./verifiedFactInventoryFromContext";
 import { ENV } from "../_core/env";
+import { claireModelId, claireModelRequest } from "./claireModel";
 import { formatClaireLocalTime, CLAIRE_BUSINESS_TIME_ZONE } from "./contextAssembler";
 import { VOICE_NATIVE_ANSWER_GUIDANCE, BLOCKER_REPETITION_DISCIPLINE, CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION } from "./conversationVoiceGuidance";
 import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
@@ -354,9 +355,8 @@ export async function writeClairePreDriveBrief(
     const text = (
       await invokeText({
         tenantId: input.tenantId,
-        model: ENV.anthropicModelClaire || ENV.anthropicModel,
+        ...claireModelRequest(0.6),
         maxTokens: 500,
-        temperature: 0.6,
         onStopReason: reason => { stopReason = reason; },
         onModelServed: model => { modelServed = model; },
         messages: [
@@ -399,7 +399,7 @@ export async function writeClairePreDriveBrief(
       kind: "opening_brief",
       source: "model",
       failureReason: null,
-      modelRequested: ENV.anthropicModelClaire || ENV.anthropicModel,
+      modelRequested: claireModelId(),
       modelServed,
       promptSize,
       surface: "voice",
@@ -431,7 +431,7 @@ export async function writeClairePreDriveBrief(
       kind: "opening_brief",
       source: "fallback",
       failureReason,
-      modelRequested: ENV.anthropicModelClaire || ENV.anthropicModel,
+      modelRequested: claireModelId(),
       modelServed,
       promptSize,
       surface: "voice",
@@ -466,8 +466,8 @@ export async function extractClaireDebrief(input: {
   try {
     const result = await invokeLLM({
       tenantId: input.tenantId,
+      ...claireModelRequest(0),
       maxTokens: 700,
-      temperature: 0,
       outputSchema: DEBRIEF_JSON_SCHEMA,
       messages: [
         {
@@ -535,8 +535,8 @@ export async function writeClairePostStopOpening(
     const text = (
       await invokeText({
         tenantId: input.tenantId,
+        ...claireModelRequest(0.1),
         maxTokens: 120,
-        temperature: 0.1,
         messages: [
           {
             role: "system",
@@ -642,8 +642,8 @@ export async function writeClaireOutcomeConfirmation(
     const text = (
       await invokeText({
         tenantId: input.tenantId,
+        ...claireModelRequest(0.15),
         maxTokens: 120,
-        temperature: 0.15,
         messages: [
           {
             role: "system",

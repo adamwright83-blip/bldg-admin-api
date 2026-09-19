@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { invokeLLM } from "../_core/llm";
+import { claireModelRequest } from "./claireModel";
 import type { ClaireDriveContext } from "./contextAssembler";
 import { sanitizeSpeakAgainstInventory, buildClaireVerifiedFactInventory } from "./verifiedFactInventoryFromContext";
 import { getDashboardTimeZone } from "../dashboardZoned";
@@ -857,8 +858,8 @@ export async function planBusinessQuestionWithLLM(
   try {
     const response = await invoke({
       tenantId: input.tenantId,
+      ...claireModelRequest(0),
       maxTokens: 400,
-      temperature: 0,
       outputSchema: PLANNER_SCHEMA,
       messages: [
         {

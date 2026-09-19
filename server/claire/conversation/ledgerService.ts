@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { claireModelId } from "../claireModel";
 import { CLAIRE_CHARACTER_VERSION } from "../character/characterDefinition";
 import { CLAIRE_COMPILER_VERSION } from "../character/compiler";
 import { ENV } from "../../_core/env";
@@ -87,7 +88,11 @@ export async function createConversationSession(input: {
     analysisRetainUntil: null,
     claireCompilerVersion: CLAIRE_COMPILER_VERSION,
     claireCharacterVersion: CLAIRE_CHARACTER_VERSION,
-    llmModel: ENV.anthropicModel || null,
+    // Slice B: the call ledger labels the call with the model Claire is
+    // configured to request. Before the Claire model authority existed this
+    // read the generic variable, which would have mislabelled every call the
+    // moment ANTHROPIC_MODEL_CLAIRE was set.
+    llmModel: claireModelId() || null,
     voiceProvider: "twilio_polly",
     voiceName: "Polly.Ruth-Generative",
     gitSha: deployedGitSha(),

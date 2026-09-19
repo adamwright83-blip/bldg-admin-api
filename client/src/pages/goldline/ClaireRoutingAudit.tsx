@@ -93,6 +93,11 @@ export default function ClaireRoutingAudit() {
                 ? " — production is running the built-in default."
                 : ""}
             </p>
+            <p style={{ margin: 0, opacity: 0.75 }}>
+              Sampling: {audit.data.model.acceptsSampling
+                ? "this model accepts temperature, and Claire sends hers."
+                : "this model rejects temperature, so Claire sends none."}
+            </p>
           </section>
 
           <section style={{ marginBottom: 24 }}>

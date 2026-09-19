@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { invokeLLM } from "../../_core/llm";
+import { claireModelRequest } from "../claireModel";
 import { isValidYmd } from "../../analytics/businessPeriods";
 import { dayMention, parseTiming, spokenDay } from "./briefingTiming";
 import type { BriefingClock, BriefingItem, BriefingTiming, ParsedBriefing } from "./briefingTypes";
@@ -186,9 +187,10 @@ export async function extractBriefingWithModel(
   ].join(" ");
   const call = invoke({
     tenantId: input.tenantId,
-    model: deps.model,
+    // Claire's own understanding of the operator's speech: one model
+    // authority, with an explicit override kept for tests.
+    ...(deps.model ? { model: deps.model, temperature: 0 } : claireModelRequest(0)),
     maxTokens: 1_800,
-    temperature: 0,
     outputSchema: JSON_SCHEMA,
     messages: [
       { role: "system", content: system },

@@ -5,6 +5,7 @@ import { businessToday } from "../../analytics/businessPeriods";
 import { answerClaireBusinessTurn, type ClaireAnalyticsState } from "../businessConversation";
 import type { ClaireDriveContext } from "../contextAssembler";
 import type { ClaireEncyclopediaTrace } from "../answerPathTelemetry";
+import { claireModelRequest } from "../claireModel";
 import { speakBusinessResult } from "../business/businessSpeech";
 import { accountAspect, listAccountRefs, loadAccountHistory, matchAccounts, speakAccountHistory } from "./accountKnowledge";
 import { searchOperatorConversation, substantiveTurns } from "./conversationMemory";
@@ -218,8 +219,8 @@ export async function answerWithEncyclopedia(
   const planStartedAt = Date.now();
   const plan = await invoke({
     tenantId: input.tenantId,
+    ...claireModelRequest(0),
     maxTokens: 500,
-    temperature: 0,
     outputSchema: PLAN_SCHEMA,
     messages: [
       {
@@ -278,8 +279,8 @@ export async function answerWithEncyclopedia(
     const rewritten = (
       await invokeText({
         tenantId: input.tenantId,
+        ...claireModelRequest(0),
         maxTokens: 220,
-        temperature: 0,
         messages: [
           { role: "system", content: rewriteSystemPrompt },
           { role: "user", content: JSON.stringify({ question: input.utterance, recordAnswers: answers }) },
