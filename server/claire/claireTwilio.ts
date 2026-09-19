@@ -8,6 +8,7 @@ import {
   recordCommercialMissionVisitOutcome,
   saveCommercialMissionFieldNotes,
 } from "../commercialMissions/commercialMissionFieldService";
+import { recordConfirmedVisitEvidence } from "./progression/evidenceSources";
 import { recordClaireMissionOutcomeEvents, recordQualifyingClaireInteraction } from "./character/relationshipEmitters";
 import { assembleClaireDriveContext } from "./contextAssembler";
 import {
@@ -1065,6 +1066,16 @@ export function registerClaireRoutes(app: Express): void {
       });
       await safeRecordRelationshipEvent(() =>
         recordClaireMissionOutcomeEvents({
+          tenantId: claims.tenantId,
+          operatorUserId: claims.userId,
+          missionId: claims.missionId,
+          outcome: claims.proposal.proposedOutcome,
+        })
+      );
+      // Two-currency progression: the visit outcome was just persisted as business truth.
+      // Effort is credited regardless of result; only a won outcome is also business progress.
+      await safeRecordRelationshipEvent(() =>
+        recordConfirmedVisitEvidence({
           tenantId: claims.tenantId,
           operatorUserId: claims.userId,
           missionId: claims.missionId,

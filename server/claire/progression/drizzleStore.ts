@@ -85,6 +85,7 @@ const toLedger = (row: typeof clairePersonalLedger.$inferSelect): PersonalLedger
 
 export function createDrizzleProgressionStore(): ProgressionStore {
   return {
+    kind: "drizzle" as const,
     async insertEvidence(input) {
       const db = await getDb();
       if (!db) throw new Error("database unavailable");
@@ -313,6 +314,19 @@ export function createDrizzleProgressionStore(): ProgressionStore {
           .where(and(eq(clairePersonalLedger.tenantId, tenantId), eq(clairePersonalLedger.kind, "decline_fallback")))
           .orderBy(desc(clairePersonalLedger.id))
           .limit(limit ?? 200);
+        return rows.map(toLedger).reverse();
+      }, []);
+    },
+    async listTenantLedger({ tenantId, limit }) {
+      const db = await getDb();
+      if (!db) return [];
+      return closed(async () => {
+        const rows = await db
+          .select()
+          .from(clairePersonalLedger)
+          .where(eq(clairePersonalLedger.tenantId, tenantId))
+          .orderBy(desc(clairePersonalLedger.id))
+          .limit(limit ?? 2000);
         return rows.map(toLedger).reverse();
       }, []);
     },

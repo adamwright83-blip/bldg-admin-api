@@ -13,6 +13,7 @@ import {
 } from "./service";
 import type { OperatorScope, ProgressionStore } from "./store";
 import { RAPPORT_SHORT } from "./rapportPresentation";
+import { GENERATION_FAILURE_REASONS } from "./declineTelemetry";
 import { PROGRESSION_POLICY, type ProgressionPolicy } from "./policy";
 
 /**
@@ -187,8 +188,11 @@ export async function executePersonalTurn(input: {
     details: { closeThread: boolean; fragmentId: string | null; phase: "pre_generation" | "post_validation" | null }
   ): Promise<PersonalTurnResult> => {
     const closing = details.closeThread;
+    // A lost reveal (validation/provider failure) draws from the recovery category; it falls
+    // back to the approved generic floor when no recovery line has been authored yet.
+    const generationFailure = details.phase !== null && GENERATION_FAILURE_REASONS.has(String(reason));
     const line = selectDialogueLine({
-      category: closing ? "thread_closer" : "decline",
+      category: closing ? "thread_closer" : generationFailure ? "recovery_after_failed_generation" : "decline",
       rapportBand: band,
       recentlyUsedIds: recentDeclineIds,
       registry,

@@ -61,6 +61,8 @@ export type PersonalLedgerEntry = OperatorScope & {
 export type NewPersonalLedgerEntry = Omit<PersonalLedgerEntry, "id" | "occurredAt"> & { occurredAt?: string };
 
 export type ProgressionStore = {
+  /** Distinguishes ephemeral stores from the production database. The simulator accepts only "in_memory". */
+  readonly kind: "in_memory" | "drizzle";
   /** Idempotent on (operator, category, kind, sourceType, sourceId). Returns the stored row either way. */
   insertEvidence(input: StoredEvidence): Promise<{ row: StoredEvidence; created: boolean }>;
   listEvidence(scope: OperatorScope): Promise<StoredEvidence[]>;
@@ -86,6 +88,8 @@ export type ProgressionStore = {
   listLedger(scope: OperatorScope, options?: { conversationId?: string }): Promise<PersonalLedgerEntry[]>;
   /** Admin telemetry across operators for a tenant. */
   listDeclineFallbacks(input: { tenantId: string; limit?: number }): Promise<PersonalLedgerEntry[]>;
+  /** All personal-ledger rows for a tenant (asked/answered/declined), for fallback-rate denominators. */
+  listTenantLedger(input: { tenantId: string; limit?: number }): Promise<PersonalLedgerEntry[]>;
 };
 
 let counter = 0;
@@ -102,6 +106,7 @@ export function createInMemoryProgressionStore(): ProgressionStore {
   const ledger: PersonalLedgerEntry[] = [];
 
   return {
+    kind: "in_memory" as const,
     async insertEvidence(input) {
       const key = evidenceKey(input);
       const existing = evidence.get(key);
@@ -188,6 +193,9 @@ export function createInMemoryProgressionStore(): ProgressionStore {
       return ledger
         .filter(row => row.tenantId === tenantId && row.kind === "decline_fallback")
         .slice(-(limit ?? 200));
+    },
+    async listTenantLedger({ tenantId, limit }) {
+      return ledger.filter(row => row.tenantId === tenantId).slice(-(limit ?? 2000));
     },
   };
 }

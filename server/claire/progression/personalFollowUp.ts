@@ -7,6 +7,7 @@ import type { recordClaireGeneration, ClaireGenerationDiagnostic } from "../gene
 import { trimToSentenceBoundary } from "../textTrim";
 import { getProgressionStore } from "./drizzleStore";
 import { buildPersonalDisclosureGuidance, executePersonalTurn, type PersonalTurnResult } from "./personalReveal";
+import { syncProgressionForOperator } from "./evidenceSources";
 import { stashPendingDisclosure } from "./pendingReceipts";
 import type { ProgressionStore } from "./store";
 
@@ -37,6 +38,8 @@ export async function answerPersonalFollowUp(
     progressionStore?: ProgressionStore;
     random?: () => number;
     now?: () => Date;
+    /** Pull fresh paid-order progress first. Defaults on for production, off for injected test stores. */
+    syncProgression?: boolean;
   }
 ): Promise<string> {
   const startedAt = Date.now();
@@ -45,6 +48,10 @@ export async function answerPersonalFollowUp(
   let stopReason: string | null = null;
   let promptSize: ReturnType<typeof measureClairePromptSections> | null = null;
   let compiledForRecord: Awaited<ReturnType<typeof compileClaireContextForOperator>> | null = null;
+
+  if (dependencies.syncProgression ?? !dependencies.progressionStore) {
+    await syncProgressionForOperator({ tenantId: input.tenantId, operatorUserId: input.operatorUserId });
+  }
 
   const result = await executePersonalTurn({
     store,

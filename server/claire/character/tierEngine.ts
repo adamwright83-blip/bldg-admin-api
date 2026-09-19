@@ -60,7 +60,8 @@ export function deriveClaireRelationshipDimensions(
         reliability += 2;
         break;
       case "operator_avoidance":
-        reliability -= 2;
+        // Observational only (Earned Rapport brief §10). No-action periods stall progression;
+        // they never lower reliability, rapport, or any earned access, and never form a judgment.
         break;
       case "operator_owned_mistake":
         professionalRespect += 4;
@@ -114,7 +115,7 @@ export function deriveClaireRelationshipDimensions(
  * unresolved violation blocks tier advancement (never retreats an already
  * granted tier — Pass 1 does not implement tier demotion).
  */
-function hasUnresolvedIgnoredBoundary(
+export function hasUnresolvedIgnoredBoundary(
   sorted: ClaireRelationshipEvent[]
 ): boolean {
   let lastIgnoredIndex = -1;
@@ -126,7 +127,7 @@ function hasUnresolvedIgnoredBoundary(
   return lastIgnoredIndex > lastRespectedIndex;
 }
 
-function hasUnresolvedDisclosureSafetyViolation(
+export function hasUnresolvedDisclosureSafetyViolation(
   sorted: ClaireRelationshipEvent[]
 ): boolean {
   let lastViolationIndex = -1;
@@ -141,6 +142,21 @@ function hasUnresolvedDisclosureSafetyViolation(
 function hasMeaningfulSharedEvent(sorted: ClaireRelationshipEvent[]): boolean {
   return sorted.some(
     event => event.eventType === "shared_hard_win" || event.eventType === "shared_failure"
+  );
+}
+
+/**
+ * The existing disclosure-safety requirement (used for Rung 3): a positive disclosure-safety
+ * score with no unresolved boundary or disclosure violation. Business results never enter this;
+ * only actual relationship behavior does.
+ */
+export function evaluateDisclosureSafetyOk(events: ClaireRelationshipEvent[]): boolean {
+  const sorted = sortByOccurredAt(events);
+  const dimensions = deriveClaireRelationshipDimensions(sorted);
+  return (
+    dimensions.disclosureSafety > 0 &&
+    !hasUnresolvedIgnoredBoundary(sorted) &&
+    !hasUnresolvedDisclosureSafetyViolation(sorted)
   );
 }
 

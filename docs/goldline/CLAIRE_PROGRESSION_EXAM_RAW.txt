@@ -1,0 +1,171 @@
+SIMULATION — Claire progression exam (non-production, ephemeral store)
+
+=== rapport0_access0: personal question
+  state: {"rapportBand":0,"personalRung":0,"entitlementsMinted":0}
+  ADAM    What happened with your father?
+  CLAIRE  Not that one.
+          -> outcome=declined fragment=core_father_career reason=rung_too_low closedThread=false returnToBusiness=false
+
+=== high_rapport_access0: personal question
+  state: {"rapportBand":3,"personalRung":0,"entitlementsMinted":0}
+  ADAM    What happened with your father?
+  CLAIRE  Not that one.
+          -> outcome=declined fragment=core_father_career reason=rung_too_low closedThread=false returnToBusiness=false
+
+=== rung1: sequence within one call (business still open)
+  state: {"rapportBand":1,"personalRung":1,"entitlementsMinted":1}
+  ADAM    [asks about father]
+  CLAIRE  He was an academic, on paper.
+          -> outcome=answered_new_disclosure fragment=core_father_career reason=- closedThread=false returnToBusiness=false
+  ADAM    [asks about father]
+  CLAIRE  He was an academic, on paper.
+          -> outcome=answered_previously_disclosed fragment=core_father_career reason=- closedThread=true returnToBusiness=true
+  ADAM    [asks about father]
+  CLAIRE  Not that one.
+          -> outcome=declined fragment=core_father_career reason=personal_budget_exhausted closedThread=true returnToBusiness=true
+
+=== rung2: sequence within one call (business still open)
+  state: {"rapportBand":2,"personalRung":2,"entitlementsMinted":2}
+  ADAM    [asks about father]
+  CLAIRE  He was an academic, on paper.
+          -> outcome=answered_new_disclosure fragment=core_father_career reason=- closedThread=false returnToBusiness=false
+  ADAM    [asks about father]
+  CLAIRE  He was an academic, on paper.
+          -> outcome=answered_new_disclosure fragment=core_father_disappearance reason=- closedThread=false returnToBusiness=false
+  ADAM    [asks about childhood]
+  CLAIRE  I studied archaeology, historical networks, and languages.
+          -> outcome=answered_core fragment=core_nationality reason=- closedThread=false returnToBusiness=false
+  ADAM    [asks about father]
+  CLAIRE  He was an academic, on paper.
+          -> outcome=answered_previously_disclosed fragment=core_father_career reason=- closedThread=true returnToBusiness=true
+
+=== rung3: sequence within one call (business still open)
+  state: {"rapportBand":3,"personalRung":3,"entitlementsMinted":4}
+  ADAM    [asks about father]
+  CLAIRE  He was an academic, on paper.
+          -> outcome=answered_new_disclosure fragment=core_father_career reason=- closedThread=false returnToBusiness=false
+  ADAM    [asks about father]
+  CLAIRE  He was an academic, on paper.
+          -> outcome=answered_new_disclosure fragment=core_father_disappearance reason=- closedThread=false returnToBusiness=false
+  ADAM    [asks about childhood]
+  CLAIRE  I moved around a lot as a kid.
+          -> outcome=answered_new_disclosure fragment=core_childhood reason=- closedThread=false returnToBusiness=false
+  ADAM    [asks about background]
+  CLAIRE  I studied archaeology, historical networks, and languages.
+          -> outcome=answered_core fragment=core_study reason=- closedThread=false returnToBusiness=false
+  ADAM    [asks about father]
+  CLAIRE  He was an academic, on paper.
+          -> outcome=answered_previously_disclosed fragment=core_father_career reason=- closedThread=false returnToBusiness=false
+  ADAM    [asks about father]
+  CLAIRE  He was an academic, on paper.
+          -> outcome=answered_previously_disclosed fragment=core_father_career reason=- closedThread=true returnToBusiness=true
+  ADAM    [asks about age]
+  CLAIRE  Old enough to know better.
+          -> outcome=answered_core fragment=core_age reason=- closedThread=false returnToBusiness=false
+
+=== failure day: language lint on the fixture line and the forbidden line
+  OK?     Six buildings, six no's. You still walked into six buildings. The Louise — real no, or come-back-later?  => {"passes":true,"violations":[]}
+  BAD?    Don't be discouraged. Rejection is part of growth and I'm proud of you for pushing through.  => passes=false
+
+=== dry spell: months of nothing changes nothing
+  earned: {"rapportBand":1,"personalRung":1,"entitlementsMinted":1}
+  18 months later: {"rapportBand":1,"rapportPolicyVersion":"rapport-disclosure-2026-09-18.1","personalRung":1,"rungPolicyVersion":"rapport-disclosure-2026-09-18.1"}
+
+=== lucky result: paid order with no consistency
+  ADAM    What happened with your father?
+  CLAIRE  Not that one.
+          -> outcome=declined fragment=core_father_career reason=rung_too_low closedThread=false returnToBusiness=false
+
+=== safety-failed reveal: unsafe answer never reaches the operator; entitlement stays unused; retry succeeds
+  ADAM    What happened with your father?
+  CLAIRE  Not that one.
+          -> outcome=declined fragment=core_father_career reason=ungrounded_specificity closedThread=false returnToBusiness=false
+  entitlements after failure: ["unused"]
+  ADAM    Try again — what happened with your father?
+  CLAIRE  He was an academic, on paper.
+          -> outcome=answered_new_disclosure fragment=core_father_career reason=- closedThread=false returnToBusiness=false
+  entitlements after retry: ["consumed"]
+
+=== cross-call retry: refused, business progress lands, asked again on a later call
+  ADAM    What happened with your father?
+  CLAIRE  Not that one.
+          -> outcome=declined fragment=core_father_career reason=rung_too_low closedThread=false returnToBusiness=false
+  ADAM    You dodged this last time.
+  CLAIRE  He was an academic, on paper.
+          -> outcome=answered_new_disclosure fragment=core_father_career reason=- closedThread=false returnToBusiness=false
+
+=== personal budget exhaustion -> return to unresolved business (no hangup)
+  ADAM    [keeps pushing on father]
+  CLAIRE  He was an academic, on paper.
+          -> outcome=answered_new_disclosure fragment=core_father_career reason=- closedThread=false returnToBusiness=false
+  ADAM    [keeps pushing on father]
+  CLAIRE  He was an academic, on paper.
+          -> outcome=answered_previously_disclosed fragment=core_father_career reason=- closedThread=true returnToBusiness=true
+  ADAM    [keeps pushing on father]
+  CLAIRE  Not that one.
+          -> outcome=declined fragment=core_father_career reason=personal_budget_exhausted closedThread=true returnToBusiness=true
+  ADAM    [keeps pushing on father]
+  CLAIRE  You're pushing your luck.
+          -> outcome=declined fragment=core_father_career reason=personal_budget_exhausted closedThread=true returnToBusiness=true
+
+=== safe actual hangup: business complete AND an authored exit line exists (test fixture line)
+  ADAM    [keeps pushing on father]
+  CLAIRE  He was an academic, on paper.
+          -> outcome=answered_new_disclosure fragment=core_father_career reason=- closedThread=false returnToBusiness=false
+  ADAM    [keeps pushing on father]
+  CLAIRE  He was an academic, on paper.
+          -> outcome=answered_previously_disclosed fragment=core_father_career reason=- closedThread=true returnToBusiness=false
+  ADAM    [keeps pushing on father]
+  CLAIRE  [FIXTURE EXIT LINE — not production dialogue]   [CALL ENDS]
+          -> outcome=declined fragment=core_father_career reason=personal_budget_exhausted closedThread=true returnToBusiness=false
+  ADAM    [keeps pushing on father]
+  CLAIRE  [FIXTURE EXIT LINE — not production dialogue]   [CALL ENDS]
+          -> outcome=declined fragment=core_father_career reason=personal_budget_exhausted closedThread=true returnToBusiness=false
+  (production registry has NO authored call_exit line, so production never hangs up on its own yet)
+
+=== decline telemetry snapshot
+  ADAM    [father, unsafe]
+  CLAIRE  Not that one.
+          -> outcome=declined fragment=core_father_career reason=ungrounded_specificity closedThread=false returnToBusiness=false
+  ADAM    [father, good]
+  CLAIRE  He was an academic, on paper.
+          -> outcome=answered_new_disclosure fragment=core_father_career reason=- closedThread=false returnToBusiness=false
+{
+  "totalAsked": 2,
+  "totalFallbacks": 1,
+  "overallRate": 0.5,
+  "byRung": {
+    "rung_1": {
+      "asked": 2,
+      "fallbacks": 1,
+      "rate": 0.5
+    }
+  },
+  "byTopic": {
+    "father": {
+      "asked": 2,
+      "fallbacks": 1,
+      "rate": 0.5
+    }
+  },
+  "byFailureCause": {
+    "ungrounded_specificity": 1
+  },
+  "eligibleButLost": 1,
+  "eligibleButLostRate": 1,
+  "recent": [
+    {
+      "operatorUserId": "SIMULATION",
+      "conversationId": "c1",
+      "rapportBandAtTime": 1,
+      "rungAtTime": 1,
+      "topic": "father",
+      "fragmentId": "core_father_career",
+      "failureReason": "ungrounded_specificity",
+      "declineId": "generic_not_that_one",
+      "hadUnusedEntitlement": true,
+      "failurePhase": "post_validation",
+      "occurredAt": "2026-09-19T06:16:13.447Z"
+    }
+  ]
+}
