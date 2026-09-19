@@ -120,9 +120,23 @@ export type ClaireAnalyticsState = { analytics?: ClaireAnalyticsSession | null }
 
 export const CLAIRE_ANALYTICS_SESSION_TTL_MS = 20 * 60 * 1000;
 
+/**
+ * Claire Intelligence Repair Part 2, Slice A: which reader inside this module
+ * produced the sentence. Measurement only — it changes no answer, and lets the
+ * routing audit split `business_reader` into its real sub-paths.
+ */
+export type ClaireBusinessReader =
+  | "clarify"
+  | "unsupported"
+  | "order_focus"
+  | "combine"
+  | "compare_customers"
+  | "planned_query"
+  | "query";
+
 export type ClaireBusinessTurn =
   | { handled: false }
-  | { handled: true; speak: string; facts: string[]; result?: BusinessQueryResult };
+  | { handled: true; speak: string; facts: string[]; result?: BusinessQueryResult; reader?: ClaireBusinessReader };
 
 // ── Intent ───────────────────────────────────────────────────────────────────
 
@@ -1000,7 +1014,10 @@ export async function answerClaireBusinessTurn(
   }
   if (parsed.kind === "not_analytics") return { handled: false };
 
+  let reader: ClaireBusinessReader = "query";
+
   if (parsed.kind === "clarify") {
+    reader = "clarify";
     input.state.analytics = {
       query: session?.query ?? defaultBusinessQuery("revenue"),
       periods: session?.periods ?? [],
@@ -1012,10 +1029,12 @@ export async function answerClaireBusinessTurn(
     return guardedTurn({ handled: true, speak: parsed.speak, facts: [] });
   }
   if (parsed.kind === "unsupported") {
+    reader = "unsupported";
     if (session) session.touchedAt = nowMs;
     return guardedTurn({ handled: true, speak: parsed.speak, facts: [] });
   }
   if (parsed.kind === "needs_planner") {
+    reader = "planned_query";
     const planned = await (deps.plan ?? planBusinessQuestionWithLLM)({
       tenantId: input.tenantId,
       utterance: input.utterance,
@@ -1033,6 +1052,7 @@ export async function answerClaireBusinessTurn(
   const lower = normalizeUtterance(input.utterance);
 
   if (parsed.kind === "order_focus") {
+    reader = "order_focus";
     const focus = session!.focus!;
     const order = focus.order!;
     const speech = new Speech(input.surface, timeZone, today);
@@ -1067,6 +1087,7 @@ export async function answerClaireBusinessTurn(
   }
 
   if (parsed.kind === "combine") {
+    reader = "combine";
     const slices = session!.focus!.slices!;
     const base = session!.query;
     const query: BusinessQuery = {
@@ -1081,6 +1102,7 @@ export async function answerClaireBusinessTurn(
   }
 
   if (parsed.kind === "compare_customers") {
+    reader = "compare_customers";
     const resolved: FocusCustomer[] = [];
     const speech = new Speech(input.surface, timeZone, today);
     for (const target of parsed.targets) {
@@ -1149,6 +1171,7 @@ export async function answerClaireBusinessTurn(
     if (!turn.handled || !("speak" in turn) || !turn.speak) return turn;
     return {
       ...turn,
+      reader: turn.reader ?? reader,
       speak: sanitizeSpeakAgainstInventory(turn.speak, buildClaireVerifiedFactInventory(input.context)),
     };
   }

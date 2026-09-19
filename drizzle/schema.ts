@@ -7087,11 +7087,37 @@ export const claireGenerationLogs = mysqlTable(
     fallbackReason: varchar("fallbackReason", { length: 64 }),
     reviewLabel: varchar("reviewLabel", { length: 32 }),
     reviewedByUserId: varchar("reviewedByUserId", { length: 128 }),
+    /**
+     * Claire Intelligence Repair Part 2, Slice A (routing audit). Additive and
+     * nullable: which code path produced the text the operator heard, so the
+     * answer-path distribution can be read from production instead of inferred
+     * from the code. Rows written purely for routing telemetry carry
+     * generationKind 'turn_route' and generationSource 'deterministic'; their
+     * disclosureTier/relationship columns are placeholders, not observations.
+     */
+    answerPath: varchar("answerPath", { length: 32 }),
+    /** For answerPath 'business_reader', the reader inside businessConversation. */
+    businessReader: varchar("businessReader", { length: 48 }),
+    /** True when the spoken text is a deterministic speak* rendering, verbatim. */
+    rendererProse: boolean("rendererProse"),
+    surface: varchar("surface", { length: 16 }),
+    turnKind: varchar("turnKind", { length: 32 }),
+    modelRequested: varchar("modelRequested", { length: 64 }),
+    modelServed: varchar("modelServed", { length: 64 }),
+    /** Assembled system-prompt size for this turn's generation, characters. */
+    promptChars: int("promptChars"),
+    /** Encyclopedia plan, blend classification, latency marks, prompt sections. */
+    answerPathDetailJson: json("answerPathDetailJson"),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
   },
   table => ({
     tenantLookup: index("idx_claire_generation_log_tenant").on(
       table.tenantId,
+      table.createdAt
+    ),
+    answerPathLookup: index("idx_claire_generation_log_answer_path").on(
+      table.tenantId,
+      table.answerPath,
       table.createdAt
     ),
   })

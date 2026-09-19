@@ -33,7 +33,10 @@ import {
   startClairePostStopCall,
   startClairePreDriveCall,
 } from "./claireTwilio";
+import { ENV } from "../_core/env";
 import { previewClairePreDrive } from "./preDriveRuntime";
+import { listClaireAnswerPathDetail, summarizeClaireAnswerPaths } from "./character/generationLog";
+import { claireRepair2FlagName, isClaireRepair2Enabled } from "./repair2Flags";
 import { setActiveMacroGoal } from "./macroGoalService";
 import {
   assembleTomorrowCandidates,
@@ -625,6 +628,52 @@ export const claireRouter = router({
         isAdmin: ctx.user.role === "admin",
       })
     ),
+
+  /**
+   * Claire Intelligence Repair Part 2, Slice A: the routing audit's live
+   * numbers — which answer path produced each turn, what share never reached
+   * the repaired conversational path, and which model production actually
+   * requests. Admin-only, read-only, and empty until the slice's flag is on
+   * for this tenant.
+   */
+  routingAudit: adminProcedure
+    .input(
+      z.object({
+        days: z.number().int().min(1).max(90).default(30),
+        limit: z.number().int().min(1).max(200).default(50),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const [distribution, recent] = await Promise.all([
+        summarizeClaireAnswerPaths({ tenantId: ctx.tenantId, days: input.days }),
+        listClaireAnswerPathDetail({ tenantId: ctx.tenantId, days: input.days, limit: input.limit }),
+      ]);
+      const totalTurns = distribution.reduce((sum, row) => sum + row.turns, 0);
+      const share = (predicate: (row: (typeof distribution)[number]) => boolean) => {
+        const turns = distribution.filter(predicate).reduce((sum, row) => sum + row.turns, 0);
+        return { turns, share: totalTurns ? turns / totalTurns : 0 };
+      };
+      return {
+        telemetryEnabled: isClaireRepair2Enabled("a_routing_telemetry", ctx.tenantId),
+        flag: claireRepair2FlagName("a_routing_telemetry"),
+        windowDays: input.days,
+        totalTurns,
+        distribution,
+        recent,
+        rendererProse: share(row => row.rendererProse === true),
+        reachedFollowUpModel: share(row => row.answerPath === "follow_up_model"),
+        neverReachedFollowUpModel: share(row => row.answerPath !== "follow_up_model"),
+        fallbacks: share(row => row.answerPath === "fallback"),
+        model: {
+          // Read from the running process, so this reports production's own
+          // configuration rather than what a config file says it should be.
+          anthropicModelClaireSet: Boolean(process.env.ANTHROPIC_MODEL_CLAIRE?.trim()),
+          anthropicModelSet: Boolean(process.env.ANTHROPIC_MODEL?.trim()),
+          effectiveModel: ENV.anthropicModelClaire || ENV.anthropicModel,
+        },
+        writesBusinessTruth: false as const,
+      };
+    }),
 
   continueCapabilityEngineering: dayforgeMissionFieldProcedure
     .input(

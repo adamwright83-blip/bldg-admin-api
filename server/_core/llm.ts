@@ -128,6 +128,14 @@ export type InvokeTextParams = Pick<
    * additive -- existing callers that don't pass it are unaffected.
    */
   onStopReason?: (stopReason: string | null) => void;
+  /**
+   * Claire Intelligence Repair Part 2, Slice A/B: the model id the provider
+   * says actually answered (`response.model`), handed back before the text is
+   * returned. Slice A needs requested-vs-served visible side by side, because
+   * a silently substituted model is indistinguishable from a weak prompt in a
+   * transcript. Optional and additive.
+   */
+  onModelServed?: (model: string | null) => void;
 };
 
 export class TextLLMInvocationError extends Error {
@@ -520,6 +528,7 @@ export async function invokeTextLLM(params: InvokeTextParams): Promise<string> {
       messages: anthropicMessages,
     });
     params.onStopReason?.(response.stop_reason ?? null);
+    params.onModelServed?.(response.model ?? null);
     const text = response.content
       .filter((block): block is Anthropic.TextBlock => block.type === "text")
       .map(block => block.text)

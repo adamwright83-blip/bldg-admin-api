@@ -10,7 +10,7 @@ import type { ClaireTurnDeps } from "./claireTurn";
  */
 export function claireEncyclopediaFor(input: { dayDirectorActorId: string }): ClaireTurnDeps["encyclopedia"] {
   if (!ENV.anthropicApiKey?.trim()) return null;
-  return ({ tenantId, operatorUserId, utterance, surface, history, context }) =>
+  return ({ tenantId, operatorUserId, utterance, surface, history, context, onTrace }) =>
     answerWithEncyclopedia({
       tenantId,
       operatorUserId,
@@ -21,5 +21,8 @@ export function claireEncyclopediaFor(input: { dayDirectorActorId: string }): Cl
       now: new Date(),
       timeZone: getDashboardTimeZone(),
       context,
+      // Slice A routing audit: which tools were planned, and whether the
+      // rewrite or the raw concatenation was spoken. Measurement only.
+      onTrace,
     });
 }

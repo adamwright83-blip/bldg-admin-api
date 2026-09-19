@@ -18,6 +18,7 @@ const run = async (sql, label) => {
     if (
       e.code === "ER_DUP_FIELDNAME" ||
       e.code === "ER_TABLE_EXISTS_ERROR" ||
+      e.code === "ER_DUP_KEYNAME" ||
       String(e.message).includes("Duplicate column")
     ) {
       console.log("→ already exists, skipping:", label);
@@ -1322,6 +1323,40 @@ await assertRequiredColumns("claire_generation_logs", [
   "generationSource",
   "disclosureTier",
   "generatedText",
+]);
+
+// Claire Intelligence Repair Part 2, Slice A: answer-path routing telemetry.
+// Additive, nullable columns on the existing log table — no parallel table, so
+// one query covers model generations and deterministic renderings alike.
+// `run()` is correct here: ADD COLUMN is re-run on every boot and the
+// duplicate-column error is the expected steady state.
+for (const [column, definition] of [
+  ["answerPath", "VARCHAR(32) NULL"],
+  ["businessReader", "VARCHAR(48) NULL"],
+  ["rendererProse", "TINYINT(1) NULL"],
+  ["surface", "VARCHAR(16) NULL"],
+  ["turnKind", "VARCHAR(32) NULL"],
+  ["modelRequested", "VARCHAR(64) NULL"],
+  ["modelServed", "VARCHAR(64) NULL"],
+  ["promptChars", "INT NULL"],
+  ["answerPathDetailJson", "JSON NULL"],
+]) {
+  await run(
+    `ALTER TABLE claire_generation_logs ADD COLUMN ${column} ${definition}`,
+    `ALTER claire_generation_logs ADD ${column}`
+  );
+}
+await run(
+  "CREATE INDEX idx_claire_generation_log_answer_path ON claire_generation_logs (tenantId, answerPath, createdAt)",
+  "CREATE INDEX idx_claire_generation_log_answer_path"
+);
+// Slice A's telemetry writes depend on these columns existing.
+await assertRequiredColumns("claire_generation_logs", [
+  "answerPath",
+  "rendererProse",
+  "surface",
+  "turnKind",
+  "answerPathDetailJson",
 ]);
 
 // ── Claire durable conversation state ────────────────────────────
