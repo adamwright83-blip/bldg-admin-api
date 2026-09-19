@@ -12,6 +12,7 @@ import { groupCustomerOrderTruth, mergeCustomerOrderTruth } from "../../geograph
 import { AUTHORED_DIALOGUE } from "./authoredDialogue";
 import { setProgressionStoreForTesting } from "./drizzleStore";
 import { deriveProgressFromOrderTruth } from "./paidOrderProgress";
+import { validateEvidenceInput } from "./evidence";
 import { checkClaimEntailment, findUnauthorizedFirstPersonBiography, parseVerifierReply } from "./personalEntailment";
 import { executePersonalTurn, validatePersonalAnswer } from "./personalReveal";
 import { isClaireProgressionEnabled } from "./progressionFlag";
@@ -62,7 +63,7 @@ describe("1. personal routing fails closed", () => {
     "Have you seen the unpaid orders?", "What did you find out about the account?",
   ];
   it.each(PERSONAL)("routes %s into personal mode", question => {
-    expect(detectClaireConversationalMode(question)).toBe("personal");
+    expect(detectClaireConversationalMode(question, true)).toBe("personal");
   });
   it.each(BUSINESS)("does not misroute business question %s", question => {
     expect(isPersonalQuestionAboutClaire(question)).toBe(false);
@@ -162,16 +163,17 @@ describe("2. the authorized fact must entail the answer", () => {
 });
 
 describe("3. canonical customer/order truth", () => {
-  const NOW = oct(30);
-  const native = (id: number, phone: string, slug: string | null, at: Date, extra = {}) => ({
+    const native = (id: number, phone: string, slug: string | null, at: Date, extra = {}) => ({
     id, status: "completed", createdAt: at, firstName: "A", lastName: "B", phone, email: null, address: `${id} Main St`, unit: String(id),
     buildingSlug: slug, bldgUserId: null, paid: true, total: "30", ...extra,
   });
+  // Imported three days after the order occurred unless a test says otherwise.
   const cc = (orderId: string, report: "orders_sales" | "orders_revenue", at: Date, extra = {}) => ({
-    cleancloudOrderId: orderId, sourceReportType: report, customerName: "Pat Smith", paid: true, placedAtUtc: at, buildingSlug: null, ...extra,
+    cleancloudOrderId: orderId, sourceReportType: report, customerName: "Pat Smith", paid: true, placedAtUtc: at, buildingSlug: null,
+    createdAt: new Date(at.getTime() + 3 * 86_400_000), ...extra,
   });
-  const derive = (opts: Parameters<typeof mergeCustomerOrderTruth>[0], targets: string[] = []) =>
-    deriveProgressFromOrderTruth(groupCustomerOrderTruth("t1", mergeCustomerOrderTruth(opts)), { targetBuildingSlugs: targets, now: NOW });
+  const derive = (opts: Parameters<typeof mergeCustomerOrderTruth>[0]) =>
+    deriveProgressFromOrderTruth(groupCustomerOrderTruth("t1", mergeCustomerOrderTruth(opts)));
 
   it("includes native Laundry Butler orders, not just CleanCloud", () => {
     const out = derive({ native: [native(1, "310-555-0101", null, oct(10))] });
@@ -188,16 +190,40 @@ describe("3. canonical customer/order truth", () => {
     expect(out).toEqual([]);
   });
 
-  it("first_paid_order_target_building is ONE milestone per building; later residents are separate new-customer progress", () => {
-    const out = derive({ native: [native(1, "310-555-0101", "the-louise", oct(10)), native(2, "310-555-0102", "the-louise", oct(11)), native(3, "310-555-0103", "the-louise", oct(12))] }, ["the-louise"]);
-    expect(out.filter(p => p.kind === "first_paid_order_target_building")).toHaveLength(1);
-    expect(out.find(p => p.kind === "first_paid_order_target_building")!.sourceId).toBe("laundry_butler:1");
-    expect(out.filter(p => p.kind === "new_paying_customer").map(p => p.sourceId)).toEqual(["laundry_butler:2", "laundry_butler:3"]);
+  it("first-paid-order-in-target-building is NOT a live kind: no persisted target-building mapping exists", () => {
+    const out = derive({ native: [native(1, "310-555-0101", "the-louise", oct(10)), native(2, "310-555-0102", "the-louise", oct(11))] });
+    expect(out.map(p => p.kind)).toEqual(["new_paying_customer", "new_paying_customer"]);
+    expect(validateEvidenceInput({ category: "business_progress", kind: "first_paid_order_target_building", occurredAt: oct(10).toISOString(), recognizedAt: oct(11).toISOString() }).ok).toBe(false);
   });
 
-  it("one underlying order is at most one evidence identity, whatever it qualifies as", () => {
-    const out = derive({ native: [native(1, "310-555-0101", "the-louise", oct(10))] }, ["the-louise"]);
-    expect(out).toHaveLength(1); // both 'first in building' and 'new customer' apply; only the strongest is emitted
+  it("one underlying order is at most one evidence identity", () => {
+    const out = derive({ native: [native(1, "310-555-0101", "the-louise", oct(10))] });
+    expect(out).toHaveLength(1);
+  });
+
+  it("recognizedAt is the authoritative import time, not the sync time: order Tuesday, imported Friday", () => {
+    const tuesday = new Date(Date.UTC(2026, 9, 6, 15));
+    const friday = new Date(Date.UTC(2026, 9, 9, 15));
+    const out = derive({ cleancloud: [cc("777", "orders_sales", tuesday, { customerPhone: "310-555-0177", createdAt: friday })] });
+    expect(out).toHaveLength(1);
+    expect(new Date(out[0].occurredAt as Date).toISOString()).toBe(tuesday.toISOString());
+    expect(new Date(out[0].recognizedAt as Date).toISOString()).toBe(friday.toISOString());
+  });
+
+  it("with both CleanCloud report rows, recognizedAt is the EARLIEST import; native orders recognize at creation", () => {
+    const out = derive({ cleancloud: [
+      cc("888", "orders_revenue", oct(6), { customerPhone: "310-555-0188", createdAt: oct(12) }),
+      cc("888", "orders_sales", oct(6), { customerPhone: "310-555-0188", createdAt: oct(9) }),
+    ] });
+    expect(out).toHaveLength(1);
+    expect(new Date(out[0].recognizedAt as Date).toISOString()).toBe(oct(9).toISOString());
+    const nativeOut = derive({ native: [native(5, "310-555-0105", null, oct(7))] });
+    expect(new Date(nativeOut[0].recognizedAt as Date).toISOString()).toBe(oct(7).toISOString());
+  });
+
+  it("an order whose observation time is unknown is skipped, never guessed", () => {
+    const out = derive({ cleancloud: [cc("999", "orders_sales", oct(6), { customerPhone: "310-555-0199", createdAt: null })] });
+    expect(out).toEqual([]);
   });
 
   it("pre-epoch history is baseline: canonical orders remain the record, no progress is emitted, and delay never discards a post-epoch event", () => {
@@ -238,7 +264,7 @@ describe("4. one business event = one evidence identity; no entitlement backlog"
     const store = await fundedStore(3);
     expect(await store.listEntitlements(SCOPE)).toHaveLength(1);
     for (const [i, day] of [22, 23].entries()) {
-      await recordProgressionEvidence(store, { ...SCOPE, category: "business_progress", kind: "next_meeting_scheduled", sourceType: "order", sourceId: `new${i}`, provenance: "x", occurredAt: oct(day), recognizedAt: oct(day) });
+      await recordProgressionEvidence(store, { ...SCOPE, category: "business_progress", kind: "dormant_customer_reorder", sourceType: "order", sourceId: `new${i}`, provenance: "x", occurredAt: oct(day), recognizedAt: oct(day) });
     }
     await refreshProgression(store, SCOPE, { disclosureSafetyOk: true, now: () => oct(24) });
     await refreshProgression(store, SCOPE, { disclosureSafetyOk: true, now: () => oct(25) });

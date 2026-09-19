@@ -10,8 +10,8 @@
  *    The second condition is deliberate: enabling replaces the old tier-based disclosure with a
  *    fresh, empty progression state, so a human must first inspect what the existing relationship
  *    state would do (scripts/claire-progression-continuity-report.ts) and consciously accept it.
- *  - Outside production: ON unless the list is set and excludes the tenant, so tests and local
- *    runs exercise the new path.
+ *  - NODE_ENV=test|development: ON unless the list is set and excludes the tenant, so tests and local
+ *    runs exercise the new path. Any other NODE_ENV (including unset) behaves like production.
  *
  * When OFF, Claire behaves exactly as she did before this feature: tier-based canon eligibility,
  * the prior personal-answer recovery, no progression hooks in the turn path.
@@ -29,5 +29,8 @@ export function isClaireProgressionEnabled(tenantId: string): boolean {
   if (process.env.NODE_ENV === "production") {
     return explicitlyOn && process.env.CLAIRE_PROGRESSION_CONTINUITY_REVIEWED === "1";
   }
-  return listed.length === 0 || explicitlyOn;
+  // Default-on ONLY for explicit test/development. An unset or unknown NODE_ENV is treated as
+  // production-like, so the mechanic can never turn itself on in a deployed process.
+  const nonProduction = process.env.NODE_ENV === "test" || process.env.NODE_ENV === "development";
+  return explicitlyOn || (nonProduction && listed.length === 0);
 }

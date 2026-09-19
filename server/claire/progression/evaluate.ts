@@ -24,10 +24,12 @@ export type ProgressionGrant = {
   personalRung: PersonalAccessRung;
   rungPolicyVersion: string | null;
   /**
-   * No-backlog watermark: business progress recognized at or before this instant has already been
-   * considered for entitlement minting. Null until the operator first becomes eligible.
+   * No-backlog cursor, `"<recognizedAt ISO>|<evidenceId>"`: every qualifying event ordered at or before
+   * it has an entitlement or is deliberately behind the initial-funding line. It only ever advances past
+   * an event whose entitlement was created or already exists, and it orders by (recognizedAt, evidenceId)
+   * so equal timestamps can never hide an event. Null until the operator first becomes eligible.
    */
-  entitlementWatermark: string | null;
+  entitlementCursor: string | null;
 };
 
 export const EMPTY_GRANT: ProgressionGrant = {
@@ -35,7 +37,7 @@ export const EMPTY_GRANT: ProgressionGrant = {
   rapportPolicyVersion: null,
   personalRung: 0,
   rungPolicyVersion: null,
-  entitlementWatermark: null,
+  entitlementCursor: null,
 };
 
 export type ProgressionCounts = {
@@ -121,7 +123,7 @@ export function evaluateProgression(input: {
       computedRapportBand > prior.rapportBand ? policy.version : prior.rapportPolicyVersion,
     personalRung: Math.max(prior.personalRung, computedRung) as PersonalAccessRung,
     rungPolicyVersion: computedRung > prior.personalRung ? policy.version : prior.rungPolicyVersion,
-    entitlementWatermark: prior.entitlementWatermark,
+    entitlementCursor: prior.entitlementCursor,
   };
 
   const qualifyingProgress = input.evidence

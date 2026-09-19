@@ -16,7 +16,7 @@ async function earnedStore(rungTarget: 1 | 2 | 3 = 1): Promise<ProgressionStore>
   for (let i = 1; i <= actions; i += 1) {
     await recordProgressionEvidence(store, { ...SCOPE, category: "growth_action", kind: "confirmed_field_visit", sourceType: "m", sourceId: `a${(seq += 1)}`, provenance: "debrief_confirm", occurredAt: at(i), recognizedAt: at(i) });
   }
-  const progress = { 1: ["target_account_won"], 2: ["target_account_won", "new_paying_customer"], 3: ["target_account_won", "new_paying_customer", "next_meeting_scheduled", "deal_stage_advanced"] }[rungTarget];
+  const progress = { 1: ["target_account_won"], 2: ["target_account_won", "new_paying_customer"], 3: ["target_account_won", "new_paying_customer", "dormant_customer_reorder", "target_account_won"] }[rungTarget];
   for (const kind of progress) {
     await recordProgressionEvidence(store, { ...SCOPE, category: "business_progress", kind, sourceType: "o", sourceId: `p${(seq += 1)}`, provenance: "debrief_confirm", occurredAt: at(28), recognizedAt: at(28) });
   }

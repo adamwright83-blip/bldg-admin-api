@@ -8049,7 +8049,7 @@ export const claireProgressionGrants = mysqlTable(
     rapportPolicyVersion: varchar("rapportPolicyVersion", { length: 64 }),
     personalRung: int("personalRung").notNull().default(0),
     rungPolicyVersion: varchar("rungPolicyVersion", { length: 64 }),
-    entitlementWatermark: timestamp("entitlementWatermark"),
+    entitlementCursor: varchar("entitlementCursor", { length: 190 }),
     updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
   },
   table => ({

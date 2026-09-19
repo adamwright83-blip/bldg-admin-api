@@ -6,6 +6,7 @@ import {
   type ProgressionEvidence,
 } from "./evidence";
 import { PROGRESSION_POLICY, type ProgressionPolicy } from "./policy";
+import { compareEntitlementCursor, formatEntitlementCursor } from "./store";
 import type { DisclosureEntitlement, OperatorScope, PersonalLedgerEntry, ProgressionStore, ReservationContext } from "./store";
 
 /**
@@ -94,35 +95,55 @@ export async function refreshProgression(
     policy: options.policy ?? PROGRESSION_POLICY,
   });
 
+  // Deterministic order for cursor semantics: (recognizedAt, evidenceId).
+  const ordered = [...evaluation.qualifyingProgress].sort((a, b) =>
+    compareEntitlementCursor(formatEntitlementCursor(a.recognizedAt, a.id), formatEntitlementCursor(b.recognizedAt, b.id))
+  );
+  const cursorOf = (item: ProgressionEvidence) => formatEntitlementCursor(item.recognizedAt, item.id);
   let toMint: ProgressionEvidence[] = [];
-  let watermark = prior.entitlementWatermark;
+  let cursor = prior.entitlementCursor;
   if (evaluation.grant.personalRung >= 1) {
-    if (!watermark) {
-      const newest = evaluation.qualifyingProgress[evaluation.qualifyingProgress.length - 1];
+    if (!cursor) {
+      // Initial funding: at most ONE prior event (the newest). The cursor is NOT moved until it exists.
+      const newest = ordered[ordered.length - 1];
       toMint = newest ? [newest] : [];
     } else {
-      toMint = evaluation.qualifyingProgress.filter(item => Date.parse(item.recognizedAt) > Date.parse(watermark!));
+      toMint = ordered.filter(item => compareEntitlementCursor(cursorOf(item), cursor!) > 0);
     }
-    watermark = asOf.toISOString();
   }
 
-  const grant = await store.upsertGrantMonotonic(scope, { ...evaluation.grant, entitlementWatermark: watermark });
+  // Mint in order. The cursor advances ONLY past an event whose entitlement was created or already
+  // exists; the first failure stops the run and leaves the cursor before that event so a retry mints it.
   const minted: string[] = [];
+  let mintError: unknown = null;
   for (const item of toMint) {
-    const { row, created } = await store.insertEntitlementIfAbsent({
-      ...scope,
-      evidenceId: item.id,
-      status: "unused",
-      mintedAt: asOf.toISOString(), // recognition-forward: never backdated
-      reservedAt: null,
-      reservationToken: null,
-      reservation: null,
-      consumedAt: null,
-      consumedFragmentId: null,
-      consumedConversationId: null,
-    });
-    if (created) minted.push(row.id);
+    try {
+      const { row, created } = await store.insertEntitlementIfAbsent({
+        ...scope,
+        evidenceId: item.id,
+        status: "unused",
+        mintedAt: asOf.toISOString(), // recognition-forward: never backdated
+        reservedAt: null,
+        reservationToken: null,
+        reservation: null,
+        consumedAt: null,
+        consumedFragmentId: null,
+        consumedConversationId: null,
+      });
+      if (created) minted.push(row.id);
+      cursor = cursorOf(item);
+    } catch (error) {
+      mintError = error;
+      break;
+    }
   }
+  // Initial funding with nothing to fund still needs a cursor so later events are "newly recognized".
+  if (evaluation.grant.personalRung >= 1 && !cursor && toMint.length === 0) {
+    cursor = formatEntitlementCursor(asOf.toISOString(), "");
+  }
+
+  const grant = await store.upsertGrantMonotonic(scope, { ...evaluation.grant, entitlementCursor: cursor });
+  if (mintError) console.warn("[Claire progression] entitlement mint failed; cursor held for retry", mintError instanceof Error ? mintError.message : mintError);
   return { grant, counts: evaluation.counts, mintedEntitlementIds: minted };
 }
 

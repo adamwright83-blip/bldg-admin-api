@@ -49,12 +49,12 @@ export type SimulationState =
   | "rung2"
   | "rung3";
 
-const STATE_SPEC: Record<SimulationState, { actions: number; progress: Array<"strong" | "intermediate"> }> = {
+const STATE_SPEC: Record<SimulationState, { actions: number; progress: Array<"strong"> }> = {
   rapport0_access0: { actions: 0, progress: [] },
   high_rapport_access0: { actions: PROGRESSION_POLICY.rapport[2].minActions + 2, progress: [] },
   rung1: { actions: PROGRESSION_POLICY.rungs[0].minActions, progress: ["strong"] },
-  rung2: { actions: PROGRESSION_POLICY.rungs[1].minActions, progress: ["strong", "intermediate"] },
-  rung3: { actions: PROGRESSION_POLICY.rungs[2].minActions, progress: ["strong", "strong", "intermediate", "intermediate"] },
+  rung2: { actions: PROGRESSION_POLICY.rungs[1].minActions, progress: ["strong", "strong"] },
+  rung3: { actions: PROGRESSION_POLICY.rungs[2].minActions, progress: ["strong", "strong", "strong", "strong"] },
 };
 
 export type SimulationSession = {
@@ -95,8 +95,8 @@ export function createSimulationSession(options: { env?: Record<string, string |
       for (let i = 0; i < spec.actions; i += 1) await addEvidence("growth_action", "confirmed_field_visit", i);
       // Business progress must occur on/after the progress epoch to qualify, like the real thing.
       const epochDay = Math.ceil((Date.parse(PROGRESSION_POLICY.progressEpoch) - base) / 86_400_000);
-      for (const [i, strength] of spec.progress.entries()) {
-        await addEvidence("business_progress", strength === "strong" ? "new_paying_customer" : "next_meeting_scheduled", epochDay + 1 + i);
+      for (const [i] of spec.progress.entries()) {
+        await addEvidence("business_progress", "new_paying_customer", epochDay + 1 + i);
       }
       const snap = await refreshProgression(store, scope, { disclosureSafetyOk: true, now });
       return { rapportBand: snap.grant.rapportBand, personalRung: snap.grant.personalRung, entitlementsMinted: snap.mintedEntitlementIds.length };

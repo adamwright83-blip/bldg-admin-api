@@ -120,12 +120,27 @@ const scopeKey = (scope: OperatorScope) => `${scope.tenantId}::${scope.operatorU
 const evidenceKey = (row: ProgressionEvidence & OperatorScope) =>
   `${scopeKey(row)}::${row.category}::${row.sourceType}::${row.sourceId}`;
 
-const maxIso = (a: string | null, b: string | null): string | null =>
-  a && b ? (Date.parse(a) >= Date.parse(b) ? a : b) : a ?? b;
+/** Total order on entitlement cursors: (recognizedAt, evidenceId), ids compared numerically when both are numeric. */
+export function compareEntitlementCursor(a: string, b: string): number {
+  const split = (cursor: string) => {
+    const at = cursor.lastIndexOf("|");
+    return { time: Date.parse(cursor.slice(0, at)), id: cursor.slice(at + 1) };
+  };
+  const left = split(a);
+  const right = split(b);
+  if (left.time !== right.time) return left.time - right.time;
+  const numeric = /^\d+$/.test(left.id) && /^\d+$/.test(right.id);
+  return numeric ? Number(left.id) - Number(right.id) : left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+}
+export const formatEntitlementCursor = (recognizedAt: string, evidenceId: string) => `${recognizedAt}|${evidenceId}`;
+const maxCursor = (a: string | null, b: string | null): string | null =>
+  a && b ? (compareEntitlementCursor(a, b) >= 0 ? a : b) : a ?? b;
 
 export type InMemoryStoreOptions = {
   /** Test hook: make the ledger half of a commit fail so atomicity can be proven. */
   failLedgerOnCommit?: () => boolean;
+  /** Test hook: make entitlement creation fail for a given evidence id (cursor safety). */
+  failEntitlementInsert?: (evidenceId: string) => boolean;
 };
 
 export function createInMemoryProgressionStore(options: InMemoryStoreOptions = {}): ProgressionStore {
@@ -160,13 +175,14 @@ export function createInMemoryProgressionStore(options: InMemoryStoreOptions = {
             personalRung: Math.max(prior.personalRung, grant.personalRung) as ProgressionGrant["personalRung"],
             rungPolicyVersion:
               grant.personalRung > prior.personalRung ? grant.rungPolicyVersion : prior.rungPolicyVersion,
-            entitlementWatermark: maxIso(prior.entitlementWatermark, grant.entitlementWatermark),
+            entitlementCursor: maxCursor(prior.entitlementCursor, grant.entitlementCursor),
           }
         : grant;
       grants.set(scopeKey(scope), merged);
       return merged;
     },
     async insertEntitlementIfAbsent(input) {
+      if (options.failEntitlementInsert?.(input.evidenceId)) throw new Error("entitlement insert failed");
       const existing = [...entitlements.values()].find(
         row => scopeKey(row) === scopeKey(input) && row.evidenceId === input.evidenceId
       );

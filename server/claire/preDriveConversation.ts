@@ -258,14 +258,15 @@ export async function answerClairePreDriveFollowUp(
   const recordGeneration =
     dependencies.recordGeneration ?? recordClaireGeneration;
   const surface: ClaireGenerationSurface = input.surface ?? "voice";
-  const conversationalMode = detectClaireConversationalMode(input.utterance);
-  const requestedTopic = detectRequestedClaireTopic(input.utterance);
+  const progressionOn = isClaireProgressionEnabled(input.tenantId);
+  // Flag OFF reproduces the pre-feature routing exactly; ON adds the fail-closed personal classifier.
+  const conversationalMode = detectClaireConversationalMode(input.utterance, progressionOn);
+  const requestedTopic = detectRequestedClaireTopic(input.utterance, progressionOn);
   const inventory = buildClaireVerifiedFactInventory(input.context);
   // Personal questions never reach the general prompt. The server decides what may
   // be answered (progression controller); the model only phrases one bounded fact;
   // every failure becomes an approved decline. Ask-only: this runs solely because the
   // operator explicitly asked a personal question.
-  const progressionOn = isClaireProgressionEnabled(input.tenantId);
   if (conversationalMode === "personal" && progressionOn) {
     const operatorUserId = input.context.actorId ?? null;
     if (!operatorUserId) {

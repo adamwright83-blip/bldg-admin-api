@@ -21,7 +21,7 @@ This document constrains future Claire relationship/story work. It records what 
 | | Growth action (effort) | Business progress |
 |---|---|---|
 | Drives | rapport band | rung eligibility + entitlements |
-| Sources | confirmed, persisted field-visit outcome (debrief) | the CANONICAL customer/order truth (`geography/customerOrderTruth` + `customerAssets/customerIdentity`: native Laundry Butler + CleanCloud, report duplicates already merged, canonical identity groups), and a won mission outcome |
+| Live sources (policy `2026-09-19.2`) | debrief-confirmed persisted field-visit outcome; completed `commercial_follow_ups` (status completed + completedAt + completedBy) | canonical customer/order truth (`geography/customerOrderTruth` + `customerIdentity`: native + CleanCloud, duplicates merged, canonical identity groups) → `new_paying_customer`, `dormant_customer_reorder`; debrief-confirmed won mission → `target_account_won` |
 | Counts a loss? | yes (a real visit) | never; no negative evidence exists |
 | Timestamps | `occurredAt` (chronology), `recognizedAt` (may it count yet) | same |
 
@@ -43,9 +43,11 @@ the in-memory store, and the database upsert (`GREATEST`). Stricter thresholds n
   deliberately not part of the key, so re-mapping a classification can never mint a second event or entitlement.
 - **Canonical identity only.** Customers are the canonical identity groups. A customer name is never identity
   evidence: rows the canonical layer could not identify are orphans and cannot assert "new customer" or "dormant return".
-- **One first-building milestone.** `first_paid_order_target_building` is the earliest paid order in a target building
-  (one per building). Later genuinely-new residents there are separate `new_paying_customer` progress. Each order emits
-  at most one evidence row (its strongest kind).
+- **Unsupported kinds are rejected, not implied.** No persisted proof exists for calls, outreach, door hangers, return-after-no,
+  first paid order in a target building (commercial missions/accounts carry no building mapping), attributable revenue, meetings,
+  approvals or deal stages, so validation rejects them in this policy version. Each order emits at most one evidence row.
+- **recognizedAt is the authoritative observation time** carried on the canonical order record (native: its creation;
+  CleanCloud: the EARLIEST import row across both report types). An order with unknown observation time is skipped, never guessed.
 - **Epoch, not a recognition-lag cutoff.** `policy.progressEpoch` marks the operator's pre-existing baseline. Results
   that OCCURRED before it are baseline (canonical orders remain the record) and never count as progress; results that
   occurred after it always count, however late they were imported. Delayed imports never rewrite reality.
@@ -54,7 +56,8 @@ the in-memory store, and the database upsert (`GREATEST`). Stricter thresholds n
 
 - **Mint.** While below Rung 1 nothing mints. The first time an operator is eligible, AT MOST ONE prior qualifying
   progress event funds the initial entitlement (the most recently recognized). After that, each newly recognized
-  qualifying event (recognized after the per-operator watermark) mints at most one. No warehouse of retroactive reveals.
+  qualifying event mints at most one. The cursor is `(recognizedAt, evidenceId)` and only advances past an event whose
+  entitlement was created or already exists, so a failed insert or an equal timestamp can never hide an event. No warehouse of retroactive reveals.
 - **Reserve** after the answer clears validation; the reservation durably stores conversation, fragment, topic, rung and
   rapport band, so any replica or a restarted process can commit it.
 - **Commit** is ONE transaction: conditional reserved->consumed AND the `disclosed` ledger row, all or nothing. It runs at
@@ -66,7 +69,7 @@ the in-memory store, and the database upsert (`GREATEST`). Stricter thresholds n
 
 ## Personal routing and claim validation
 
-- Any Claire-directed personal question (`isPersonalQuestionAboutClaire`) routes to the guarded controller. A known topic
+- With the flag ON, any Claire-directed personal or life-history question (`isPersonalQuestionAboutClaire`, incl. "have you ever", "what happened to you", "your first job") routes to the guarded controller. A known topic
   maps to canon fragments; an unknown personal topic is an approved decline. It never falls through to unrestricted generation.
 - Defense in depth: on every non-personal answer, first-person biography that is not an authorized core fact is replaced
   by an approved decline.

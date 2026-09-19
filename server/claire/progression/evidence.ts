@@ -10,35 +10,29 @@
 
 export type EvidenceCategory = "growth_action" | "business_progress";
 
-/** Effort kinds. Deliberately excludes call_completed, chat, mission acceptance, path choice. */
-export const GROWTH_ACTION_KINDS = [
-  "confirmed_field_visit",
-  "committed_sales_call_done",
-  "follow_up_done",
-  "approved_outreach_sent",
-  "door_hangers_done",
-  "returned_after_no",
-  "other_committed_field_action",
-] as const;
+/**
+ * LIVE evidence kinds for this policy version: only kinds with trustworthy PERSISTED completion truth.
+ * Model/chat text can never create any of these.
+ *
+ * Growth actions (effort):
+ *  - confirmed_field_visit: a debrief-confirmed, persisted commercial-mission visit outcome.
+ *  - follow_up_done: a `commercial_follow_ups` row with status "completed", completedAt and completedBy.
+ * Deliberately NOT live (no persisted completion proof exists yet, so validation rejects them):
+ *  committed sales call, approved outreach sent, door hangers, returned-after-no, other field actions.
+ *
+ * Business progress:
+ *  - target_account_won: a won commercial-mission outcome confirmed at debrief.
+ *  - new_paying_customer / dormant_customer_reorder: canonical order truth (native + CleanCloud, canonical identity).
+ * Deliberately NOT live: first paid order in a target building (no persisted target-building mapping exists),
+ *  attributable revenue, next meeting scheduled, property approval, deal stage advance.
+ */
+export const GROWTH_ACTION_KINDS = ["confirmed_field_visit", "follow_up_done"] as const;
 export type GrowthActionKind = (typeof GROWTH_ACTION_KINDS)[number];
 
-/** Strong commercial results vs intermediate objectively-persisted movement. */
-export const STRONG_PROGRESS_KINDS = [
-  "first_paid_order_target_building",
-  "new_paying_customer",
-  "dormant_customer_reorder",
-  "target_account_won",
-  "attributable_new_revenue",
-] as const;
-export const INTERMEDIATE_PROGRESS_KINDS = [
-  "next_meeting_scheduled",
-  "property_approval_recorded",
-  "deal_stage_advanced",
-  "other_persisted_business_step",
-] as const;
+export const STRONG_PROGRESS_KINDS = ["target_account_won", "new_paying_customer", "dormant_customer_reorder"] as const;
+export const INTERMEDIATE_PROGRESS_KINDS = [] as const;
 export type StrongProgressKind = (typeof STRONG_PROGRESS_KINDS)[number];
-export type IntermediateProgressKind = (typeof INTERMEDIATE_PROGRESS_KINDS)[number];
-export type BusinessProgressKind = StrongProgressKind | IntermediateProgressKind;
+export type BusinessProgressKind = StrongProgressKind;
 
 /** Things that must never be counted, in either currency. Used to fail closed. */
 export const NON_QUALIFYING_KINDS = [
@@ -76,7 +70,6 @@ export function isGrowthActionKind(kind: string): kind is GrowthActionKind {
 
 export function progressStrength(kind: string): "strong" | "intermediate" | null {
   if ((STRONG_PROGRESS_KINDS as readonly string[]).includes(kind)) return "strong";
-  if ((INTERMEDIATE_PROGRESS_KINDS as readonly string[]).includes(kind)) return "intermediate";
   return null;
 }
 

@@ -102,6 +102,11 @@ const FIRST_PERSON_BIOGRAPHY: RegExp[] = [
   /\bmy (?:father|dad|mother|mom|parents?|brother|sister|sibling|family|childhood|ex\b|husband|wife|boyfriend|girlfriend|hometown|upbringing|old school|university)\b/i,
   /\bwhen I was (?:a kid|young|little|\d+|growing|in school|younger)\b/i,
   /\bI(?:'m| am) (?:from|originally from|married|divorced|single|an orphan)\b/i,
+  // Autobiographical events, milestones and superlatives. Claire's history is authored canon only.
+  /\bI (?:broke|fractured|sprained|nearly died|almost died|lost my|got (?:arrested|fired|married|divorced|hurt|sick|shot)|was (?:arrested|fired|born|raised|hospitali[sz]ed|married|divorced|jailed|shot|kidnapped|attacked)|met my|married|spent (?:a |my |the )?(?:years?|summers?|winters?|childhood|youth)|worked (?:at|in|for|as))\b/i,
+  /\bmy (?:first|last|worst|best|hardest|scariest|old|late|former) (?:job|boss|kiss|love|home|apartment|car|pet|heartbreak|crush|memory|day|teacher|friend|injury|fight)\b/i,
+  /\bI\b[^.!?]*\b(?:years? ago|as a (?:kid|child|teen|teenager)|growing up|back when I|in (?:19\d\d|20[01]\d))\b/i,
+  /\b(?:years? ago|as a (?:kid|child|teen|teenager)|growing up|in (?:19\d\d|20[01]\d))\b[^.!?]*\bI\b/i,
 ];
 
 export function findUnauthorizedFirstPersonBiography(text: string, allowedFacts: readonly string[]): string | null {

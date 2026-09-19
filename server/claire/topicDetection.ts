@@ -2,7 +2,7 @@ import { CLAIRE_CANON } from "./character/characterDefinition";
 
 const TOPIC_HINTS: Array<{ topic: string; pattern: RegExp }> = [
   { topic: "father", pattern: /\b(father|dad|your old man)\b/i },
-  { topic: "past_relationship", pattern: /\b(?:are you|were you|have you (?:ever )?been) (?:married|dating|seeing (?:anyone|someone)|in love)\b|\byour (?:ex\b|ex-|husband|wife|boyfriend|girlfriend|marriage|love life|romantic|relationships?\b)|\bever (?:been )?(?:married|in love)\b/i },
+  { topic: "past_relationship", pattern: /\b(married|marriage|husband|wife|boyfriend|girlfriend|ex\b|romantic|relationship)\b/i },
   { topic: "age", pattern: /\b(how old|your age|age are you)\b/i },
   { topic: "is_she_real", pattern: /\b(are you (?:real|human|an? ai|constructed)|are you actually)\b/i },
   { topic: "childhood", pattern: /\b(childhood|grow up|grew up|where (?:are|were) you from)\b/i },
@@ -11,8 +11,18 @@ const TOPIC_HINTS: Array<{ topic: string; pattern: RegExp }> = [
   { topic: "background", pattern: /\b(your background|what did you study|where did you train)\b/i },
 ];
 
-export function detectRequestedClaireTopic(utterance: string): string | undefined {
-  const hit = TOPIC_HINTS.find(entry => entry.pattern.test(utterance));
+/** Claire-directed relationship phrasing; used only when the progression mechanic is ON. */
+const STRICT_PAST_RELATIONSHIP =
+  /\b(?:are you|were you|have you (?:ever )?been) (?:married|dating|seeing (?:anyone|someone)|in love)\b|\byour (?:ex\b|ex-|husband|wife|boyfriend|girlfriend|marriage|love life|romantic|relationships?\b)|\bever (?:been )?(?:married|in love)\b/i;
+
+/**
+ * `strict` (progression ON) narrows the relationship topic to Claire-directed phrasing. Default
+ * (progression OFF) is the exact pre-feature behavior, including its broad relationship regex.
+ */
+export function detectRequestedClaireTopic(utterance: string, strict = false): string | undefined {
+  const hit = TOPIC_HINTS.find(entry =>
+    entry.topic === "past_relationship" && strict ? STRICT_PAST_RELATIONSHIP.test(utterance) : entry.pattern.test(utterance)
+  );
   if (!hit) return undefined;
   return CLAIRE_CANON.some(fragment => fragment.topic === hit.topic) ? hit.topic : undefined;
 }
@@ -32,7 +42,12 @@ const PERSONAL_PATTERNS: RegExp[] = [
   new RegExp(`\\b(?:where|what|who|which|how)\\b[^?.!]*\\b(?:do|did|are|were)\\s+you\\b[^?.!]*\\b(?:live|from|born|grow|grew|study|studied|come from|go to school|do for fun|like to|listen|watch|eat|drink|favou?rite|${PERSONAL_SUBJECTS})\\b`, "i"),
   new RegExp(`\\b(?:what|which|who)\\s+(?:kind of |type of |sort of )?(?:${PERSONAL_SUBJECTS})\\b[^?.!]*\\b(?:do|did|are|were|have)\\s+you\\b`, "i"),
   /\byour (?:favou?rite|family|mother|mom|mum|father|dad|parents|brother|sister|siblings?|childhood|hometown|home|birthday|age|ex|husband|wife|boyfriend|girlfriend|life|past|hobb(?:y|ies)|religion|politics|dreams?|fears?|regrets?|pets?|accent|nationality)\b/i,
-  /\bhave you ever (?:been|lived|loved|cried|had|wanted|dated|seen|tried)\b/i,
+  // Experience/history questions about Claire herself: any "ever" question, "what happened to you",
+  // "when you were", life-milestone "your first job", or a pre-2020 year attached to "you".
+  /\b(?:have|has|had|did|do|were|was|are) you ever\b/i,
+  /\bhappened to you\b|\bwhen you were\b|\bwhat was the (?:worst|best|hardest|scariest|strangest) (?:thing|time|day|job|moment)\b/i,
+  /\byour (?:first|last|worst|best|hardest|scariest|old|late|former) (?:job|boss|kiss|love|home|apartment|car|pet|heartbreak|crush|memory|day|time|fight|injury|teacher|friend|country|language|relationship)\b/i,
+  /\byou\b[^?.!]*\b(?:in|back in|around|during|since) (?:19\d\d|20[01]\d)\b/i,
 ];
 
 export function isPersonalQuestionAboutClaire(utterance: string): boolean {
@@ -40,9 +55,11 @@ export function isPersonalQuestionAboutClaire(utterance: string): boolean {
 }
 
 export function detectClaireConversationalMode(
-  utterance: string
+  utterance: string,
+  /** Progression ON: fail-closed broad personal classification. OFF: exact legacy routing. */
+  progressionOn = false
 ): "operational" | "casual" | "personal" | "post_action_review" {
-  if (detectRequestedClaireTopic(utterance) || isPersonalQuestionAboutClaire(utterance)) return "personal";
+  if (progressionOn ? detectRequestedClaireTopic(utterance, true) || isPersonalQuestionAboutClaire(utterance) : detectRequestedClaireTopic(utterance)) return "personal";
   if (/\b(how (?:did|does) that go|what happened with|after you (?:finish|done)|let me tell you what happened)\b/i.test(utterance)) {
     return "post_action_review";
   }

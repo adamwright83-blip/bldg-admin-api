@@ -8,6 +8,7 @@ import {
 import { getDb } from "../../db";
 import { isMysqlMissingTableError } from "../../mysqlErrors";
 import type { ProgressionGrant } from "./evaluate";
+import { compareEntitlementCursor } from "./store";
 import type {
   DisclosureEntitlement,
   PersonalLedgerEntry,
@@ -158,7 +159,7 @@ export function createDrizzleProgressionStore(): ProgressionStore {
           rapportPolicyVersion: row.rapportPolicyVersion ?? null,
           personalRung: row.personalRung as ProgressionGrant["personalRung"],
           rungPolicyVersion: row.rungPolicyVersion ?? null,
-          entitlementWatermark: row.entitlementWatermark?.toISOString() ?? null,
+          entitlementCursor: row.entitlementCursor ?? null,
         } satisfies ProgressionGrant;
       }, null);
     },
@@ -173,10 +174,10 @@ export function createDrizzleProgressionStore(): ProgressionStore {
             rapportPolicyVersion: grant.rapportBand > existing.rapportBand ? grant.rapportPolicyVersion : existing.rapportPolicyVersion,
             personalRung: Math.max(existing.personalRung, grant.personalRung) as ProgressionGrant["personalRung"],
             rungPolicyVersion: grant.personalRung > existing.personalRung ? grant.rungPolicyVersion : existing.rungPolicyVersion,
-            entitlementWatermark:
-              existing.entitlementWatermark && grant.entitlementWatermark
-                ? Date.parse(existing.entitlementWatermark) >= Date.parse(grant.entitlementWatermark) ? existing.entitlementWatermark : grant.entitlementWatermark
-                : existing.entitlementWatermark ?? grant.entitlementWatermark,
+            entitlementCursor:
+              existing.entitlementCursor && grant.entitlementCursor
+                ? compareEntitlementCursor(existing.entitlementCursor, grant.entitlementCursor) >= 0 ? existing.entitlementCursor : grant.entitlementCursor
+                : existing.entitlementCursor ?? grant.entitlementCursor,
           }
         : grant;
       await closed(async () => {
@@ -189,7 +190,7 @@ export function createDrizzleProgressionStore(): ProgressionStore {
             rapportPolicyVersion: merged.rapportPolicyVersion,
             personalRung: merged.personalRung,
             rungPolicyVersion: merged.rungPolicyVersion,
-            entitlementWatermark: merged.entitlementWatermark ? new Date(merged.entitlementWatermark) : null,
+            entitlementCursor: merged.entitlementCursor,
           })
           .onDuplicateKeyUpdate({
             // GREATEST at the database: even a racing or stale writer can never lower a grant.
@@ -199,9 +200,11 @@ export function createDrizzleProgressionStore(): ProgressionStore {
               rungPolicyVersion: sql`IF(${merged.personalRung} > personalRung, ${merged.rungPolicyVersion}, rungPolicyVersion)`,
               rapportBand: sql`GREATEST(rapportBand, ${merged.rapportBand})`,
               personalRung: sql`GREATEST(personalRung, ${merged.personalRung})`,
-              entitlementWatermark: merged.entitlementWatermark
-                ? sql`GREATEST(COALESCE(entitlementWatermark, ${new Date(merged.entitlementWatermark)}), ${new Date(merged.entitlementWatermark)})`
-                : sql`entitlementWatermark`,
+              // The cursor is a compound (time|id) string; monotonicity is enforced by the merge above and
+              // a conditional write that never replaces a lexicographically-later ISO prefix with an earlier one.
+              entitlementCursor: merged.entitlementCursor
+                ? sql`IF(entitlementCursor IS NULL OR entitlementCursor < ${merged.entitlementCursor}, ${merged.entitlementCursor}, entitlementCursor)`
+                : sql`entitlementCursor`,
             },
           });
       }, undefined);

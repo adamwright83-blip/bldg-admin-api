@@ -7,7 +7,8 @@
  * later never removes a grant an operator already earned.
  */
 
-export const PROGRESSION_POLICY_VERSION = "rapport-disclosure-2026-09-18.1";
+// 2: no-backlog entitlement cursor, canonical order truth, progress epoch, narrowed live evidence kinds.
+export const PROGRESSION_POLICY_VERSION = "rapport-disclosure-2026-09-19.2";
 
 export type RapportBand = 0 | 1 | 2 | 3;
 export type PersonalAccessRung = 0 | 1 | 2 | 3;

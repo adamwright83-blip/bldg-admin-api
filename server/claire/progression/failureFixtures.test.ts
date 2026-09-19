@@ -16,14 +16,14 @@ const NOW = () => new Date(Date.UTC(2026, 9, 30, 15));
 const oct = (n: number, hour = 15) => new Date(Date.UTC(2026, 9, n, hour));
 
 /** Canonical order truth for one native paid order (identified by phone). */
-function truthProgress(orders: Array<{ id: number; phone: string; slug: string | null; at: Date }>, targets: string[] = []) {
+function truthProgress(orders: Array<{ id: number; phone: string; slug: string | null; at: Date }>) {
   const records = mergeCustomerOrderTruth({
     native: orders.map(o => ({
       id: o.id, status: "completed", createdAt: o.at, firstName: "R", lastName: String(o.id), phone: o.phone,
       email: null, address: "1 Main St", unit: "1", buildingSlug: o.slug, bldgUserId: null, paid: true, total: "30",
     })),
   });
-  return deriveProgressFromOrderTruth(groupCustomerOrderTruth("t1", records), { targetBuildingSlugs: targets, now: NOW() });
+  return deriveProgressFromOrderTruth(groupCustomerOrderTruth("t1", records));
 }
 
 describe("failure-day tone (generated language, not just state)", () => {
@@ -124,8 +124,8 @@ describe("fixture: consistency plus genuine progress", () => {
   it("rung advances silently, mints one entitlement, volunteers nothing, and a later ask is answered", async () => {
     const store = createInMemoryProgressionStore();
     for (let i = 1; i <= 6; i += 1) await recordConfirmedVisitEvidence({ ...SCOPE, missionId: i, outcome: "lost", occurredAt: day(i) }, store, NOW);
-    const [louise] = truthProgress([{ id: 7, phone: "310-555-0102", slug: "the-louise", at: oct(24) }], ["the-louise"]);
-    expect(louise.kind).toBe("first_paid_order_target_building");
+    const [louise] = truthProgress([{ id: 7, phone: "310-555-0102", slug: "the-louise", at: oct(24) }]);
+    expect(louise.kind).toBe("new_paying_customer");
     await recordProgressionEvidence(store, { ...SCOPE, ...louise }, NOW);
     const snap = await refreshProgression(store, SCOPE, { disclosureSafetyOk: true, now: NOW });
     expect(snap.grant.personalRung).toBe(1);

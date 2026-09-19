@@ -79,6 +79,12 @@ export type CustomerOrderTruthRecord = {
   paid: boolean;
   totalCents: number;
   cancelled: boolean;
+  /**
+   * When Goldline first held this order (authoritative source-observation time), distinct from
+   * `createdAt`, which is when the order occurred. Native orders: their own creation. CleanCloud:
+   * the earliest import row for the order, across both report representations. Null = unknown.
+   */
+  recognizedAt?: Date | null;
 };
 
 export type GeographicLocationSnapshot = {
@@ -181,6 +187,7 @@ export function nativeOrderToTruth(
     paid: isPaidFlag(row.paid),
     totalCents: dollarsToCents(row.total),
     cancelled,
+    recognizedAt: createdAt,
   };
 }
 
@@ -211,6 +218,7 @@ export function cleanCloudOrderToTruth(
     paid: row.paid == null ? true : isPaidFlag(row.paid),
     totalCents: Number.isFinite(row.totalCents) ? Number(row.totalCents) : 0,
     cancelled: false,
+    recognizedAt: asDate(row.createdAt),
   };
 }
 
@@ -219,13 +227,22 @@ export function mergeCustomerOrderTruth(input: {
   cleancloud?: readonly CleanCloudOrderLike[];
   includeCancelledNative?: boolean;
 }): CustomerOrderTruthRecord[] {
+  // The same order appears once per report type; the earliest import is when Goldline first learned it.
+  const firstSeen = new Map<string, Date>();
+  for (const row of input.cleancloud ?? []) {
+    const seen = asDate(row.createdAt);
+    const current = firstSeen.get(row.cleancloudOrderId);
+    if (seen && (!current || seen.getTime() < current.getTime())) firstSeen.set(row.cleancloudOrderId, seen);
+  }
   const records = [
     ...(input.native ?? []).map(row =>
       nativeOrderToTruth(row, {
         includeCancelled: input.includeCancelledNative,
       })
     ),
-    ...preferCleanCloudOrders(input.cleancloud ?? []).map(cleanCloudOrderToTruth),
+    ...preferCleanCloudOrders(input.cleancloud ?? []).map(cleanCloudOrderToTruth).map(record =>
+      record ? { ...record, recognizedAt: firstSeen.get(record.sourceOrderId) ?? record.recognizedAt ?? null } : record
+    ),
   ].filter((row): row is CustomerOrderTruthRecord => row != null);
   records.sort(
     (left, right) =>

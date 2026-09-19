@@ -1333,7 +1333,7 @@ await runRequired(
     rapportPolicyVersion VARCHAR(64) NULL,
     personalRung INT NOT NULL DEFAULT 0,
     rungPolicyVersion VARCHAR(64) NULL,
-    entitlementWatermark TIMESTAMP NULL,
+    entitlementCursor VARCHAR(190) NULL,
     updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_claire_progression_grants (tenantId,operatorUserId)
   )`,

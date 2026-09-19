@@ -78,7 +78,7 @@ describe("disclosure rung and entitlements", () => {
   it("consistency + progress opens rung 1 and mints exactly one entitlement per progress event", async () => {
     const store = createInMemoryProgressionStore();
     await addActions(store, [1, 2, 3, 4, 5]);
-    await addProgress(store, "first_paid_order_target_building", "o1", 6);
+    await addProgress(store, "new_paying_customer", "o1", 6);
     const snap = await refreshProgression(store, SCOPE, { disclosureSafetyOk: true, now: NOW });
     expect(snap.grant.personalRung).toBe(1);
     expect(snap.mintedEntitlementIds).toHaveLength(1);
@@ -105,7 +105,7 @@ describe("disclosure rung and entitlements", () => {
   it("rung 3 also requires disclosure safety", async () => {
     const store = createInMemoryProgressionStore();
     await addActions(store, Array.from({ length: 26 }, (_, i) => i + 1));
-    for (let i = 0; i < 4; i += 1) await addProgress(store, i < 2 ? "target_account_won" : "next_meeting_scheduled", `o${i}`, 27);
+    for (let i = 0; i < 4; i += 1) await addProgress(store, i < 2 ? "target_account_won" : "dormant_customer_reorder", `o${i}`, 27);
     const unsafe = await refreshProgression(store, SCOPE, { disclosureSafetyOk: false, now: NOW });
     expect(unsafe.grant.personalRung).toBe(2);
     const safe = await refreshProgression(store, SCOPE, { disclosureSafetyOk: true, now: NOW });

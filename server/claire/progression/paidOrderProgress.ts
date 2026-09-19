@@ -18,18 +18,20 @@ import type { RecordEvidenceInput } from "./service";
  * classification that applies.
  *
  *   occurredAt   = when the order occurred (canonical order time)
- *   recognizedAt = native orders: when created; imported orders: when progression first saw them
+ *   recognizedAt = the canonical record's authoritative source-observation time (native: its creation;
+ *                  CleanCloud: the earliest import row across both report types). Never "when progression
+ *                  happened to sync". An order with no known observation time is skipped, not guessed.
+ *
+ * Not live in this policy version: first paid order in a target building. No persisted target-building
+ * mapping exists (commercial missions/accounts carry none), so that milestone is unsupported rather than
+ * driven by configuration pretending to be business truth.
  */
 
 export type PaidOrderProgressOptions = {
   /** A gap this long between paid orders makes the next one a dormant-customer return. */
   dormantAfterDays: number;
-  /** Building slugs the operator is actively targeting. One first-paid-order milestone per building. */
-  targetBuildingSlugs: readonly string[];
   /** Only events occurring on/after this instant are emitted (default: the policy's progress epoch). */
   emitFrom: Date;
-  /** First-seen time stamped on imported orders. */
-  now: Date;
 };
 
 const DAY = 86_400_000;
@@ -43,31 +45,19 @@ const orderRef = (record: CustomerOrderTruthRecord) => `${record.source}:${recor
 
 export function deriveProgressFromOrderTruth(
   groups: ReadonlyMap<string, readonly CustomerOrderTruthRecord[]>,
-  options: Partial<PaidOrderProgressOptions> & { now: Date }
+  options: Partial<PaidOrderProgressOptions> = {}
 ): DerivedProgress[] {
   const opts: PaidOrderProgressOptions = {
     dormantAfterDays: 90,
-    targetBuildingSlugs: [],
     emitFrom: new Date(PROGRESSION_POLICY.progressEpoch),
     ...options,
   };
   const kindByOrder = new Map<string, { kind: string; record: CustomerOrderTruthRecord }>();
   const consider = (record: CustomerOrderTruthRecord, kind: string) => {
-    const strength = ["first_paid_order_target_building", "new_paying_customer", "dormant_customer_reorder"];
+    const strength = ["new_paying_customer", "dormant_customer_reorder"];
     const current = kindByOrder.get(orderRef(record));
     if (!current || strength.indexOf(kind) < strength.indexOf(current.kind)) kindByOrder.set(orderRef(record), { kind, record });
   };
-
-  // One milestone per target building: the earliest paid order there, whoever placed it.
-  const targets = new Set(opts.targetBuildingSlugs);
-  const allPaid = [...groups.values()].flat().filter(isPaid).sort(byTime);
-  const seenBuildings = new Set<string>();
-  for (const record of allPaid) {
-    if (record.buildingSlug && targets.has(record.buildingSlug) && !seenBuildings.has(record.buildingSlug)) {
-      seenBuildings.add(record.buildingSlug);
-      consider(record, "first_paid_order_target_building");
-    }
-  }
 
   // Customer-based progress only for canonically identified customers.
   for (const [key, records] of groups) {
@@ -85,7 +75,8 @@ export function deriveProgressFromOrderTruth(
   const out: DerivedProgress[] = [];
   for (const { kind, record } of kindByOrder.values()) {
     if (record.createdAt.getTime() < opts.emitFrom.getTime()) continue; // pre-epoch baseline: canonical orders remain the record
-    const recognizedAt = record.source === "laundry_butler" ? record.createdAt : opts.now;
+    if (!record.recognizedAt) continue; // unknown observation time: unsupported, never fabricated
+    const recognizedAt = record.recognizedAt;
     out.push({
       category: "business_progress",
       kind,
