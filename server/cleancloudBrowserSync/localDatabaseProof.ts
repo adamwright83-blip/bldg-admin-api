@@ -1,53 +1,71 @@
 /** Explicit local-only integration proof. Never uses an inherited DATABASE_URL. */
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 import mysql from "mysql2/promise";
+import {
+  grantGumballProofMembership,
+  proveGumballImportCustomerTruth,
+  provisionGumballCustomerTruthSchema,
+} from "./gumballCustomerTruthDbProof";
+
+async function openLocalMysql() {
+  const candidates: Array<{
+    host: string;
+    port: number;
+    user: string;
+    password: string;
+  }> = [{ host: "127.0.0.1", port: 3399, user: "root", password: "root" }];
+  try {
+    const password = execFileSync(
+      "docker",
+      ["exec", "goldline-mysql", "printenv", "MYSQL_ROOT_PASSWORD"],
+      { encoding: "utf8" }
+    ).trim();
+    candidates.push({
+      host: "127.0.0.1",
+      port: 3306,
+      user: "root",
+      password,
+    });
+  } catch {
+    // goldline-mysql is optional; CI and this machine use 3399.
+  }
+  for (const candidate of candidates) {
+    try {
+      const connection = await mysql.createConnection({
+        ...candidate,
+        multipleStatements: true,
+      });
+      await connection.query("SELECT 1");
+      return { connection, ...candidate };
+    } catch {
+      // try the next local candidate
+    }
+  }
+  throw new Error(
+    "No local MySQL for Gumball proof. Start mysql:8 on 127.0.0.1:3399 (root/root) or docker goldline-mysql."
+  );
+}
 
 async function main() {
   if (!process.argv.includes("--run-local-db"))
     throw new Error(
       "Pass --run-local-db to create a disposable local MySQL test database."
     );
-  const password = execFileSync(
-    "docker",
-    ["exec", "goldline-mysql", "printenv", "MYSQL_ROOT_PASSWORD"],
-    { encoding: "utf8" }
-  ).trim();
+  const local = await openLocalMysql();
+  const { password, port, user, host } = local;
+  const connection = local.connection;
   const database = `goldline_browser_sync_test_${Date.now()}`;
-  const connection = await mysql.createConnection({
-    host: "127.0.0.1",
-    port: 3306,
-    user: "root",
-    password,
-    multipleStatements: true,
-  });
   await connection.query(`CREATE DATABASE \`${database}\``);
-  process.env.DATABASE_URL = `mysql://root:${encodeURIComponent(password)}@127.0.0.1:3306/${database}`;
-  process.env.DAYFORGE_LEGACY_TENANT_IDS = "default,other";
+  process.env.DATABASE_URL = `mysql://${user}:${encodeURIComponent(password)}@${host}:${port}/${database}`;
+  process.env.DAYFORGE_LEGACY_TENANT_IDS = "default,other,gumball-truth";
   try {
     await connection.query(`USE \`${database}\``);
-    for (const table of [
-      "cleancloud_paid_orders",
-      "cleancloud_import_batches",
-      "dayforge_saas_memberships",
-      "physical_entities",
-      "physical_entity_aliases",
-      "goldline_world_events",
-      "orders",
-      "entity_locations",
-      "commercial_accounts",
-      "commercial_account_locations",
-      "commercial_pipeline_records",
-    ]) {
-      await connection.query(
-        `CREATE TABLE \`${table}\` LIKE goldline_daylight.\`${table}\``
-      );
-    }
-    await connection.query(
-      readFileSync(new URL("./schema.sql", import.meta.url), "utf8")
-    );
+    await provisionGumballCustomerTruthSchema(connection);
+    await grantGumballProofMembership(connection, "default", "sync-proof");
+    await grantGumballProofMembership(connection, "other", "sync-proof");
+    await grantGumballProofMembership(connection, "gumball-truth", "sync-proof-truth");
     const { cleancloudBrowserSyncRouter } = await import("./router");
     const { compileAuthoritativeEvents } = await import(
       "../towerWars/towerWarsService"
@@ -81,11 +99,18 @@ async function main() {
     };
     const first: any = await caller.import(input);
     assert.equal(first.inserted, 1);
+    assert.equal(first.importCommitted, true);
     assert.equal(first.customerTruth, "refreshed");
-    assert.equal(first.map, "refreshed");
+    assert.ok(
+      first.map === "pending" ||
+        first.map === "refreshed" ||
+        first.map === "failed"
+    );
     assert.match(String(first.operatorStatusLine), /customer truth refreshed/);
     const retry: any = await caller.import(input);
-    assert.deepEqual(retry, first);
+    assert.equal(retry.inserted, first.inserted);
+    assert.equal(retry.customerTruth, first.customerTruth);
+    assert.equal(retry.digest, first.digest);
     const repeat: any = await caller.import({
       ...input,
       requestId: randomUUID(),
@@ -163,7 +188,9 @@ async function main() {
       actorId: "sync-proof",
       requestId: input.requestId,
     });
-    assert.deepEqual(recovered.receipt, first);
+    assert.equal(recovered.receipt.inserted, first.inserted);
+    assert.equal(recovered.receipt.customerTruth, "refreshed");
+    assert.equal(recovered.receipt.digest, first.digest);
     await connection.query(
       "CREATE TRIGGER fail_test_order BEFORE INSERT ON cleancloud_paid_orders FOR EACH ROW BEGIN IF NEW.cleancloudOrderId = '2' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'test rollback'; END IF; END"
     );
@@ -215,8 +242,17 @@ async function main() {
     const state = compileTowerWarsState(compiled.events);
     assert.equal(state.buildings.century_park_east.revenueCents, 5100);
     assert.equal(state.attacks[0].weapon, "century_valet_bazooka");
+    const truthCaller = cleancloudBrowserSyncRouter.createCaller(
+      ctx("gumball-truth", "sync-proof-truth")
+    );
+    await proveGumballImportCustomerTruth({
+      tenantId: "gumball-truth",
+      actorId: "sync-proof-truth",
+      caller: truthCaller,
+      connection,
+    });
     console.log(
-      "PASS: local DB atomic import + forced mid-transaction rollback; same-request retry; repeated/concurrent reports no duplicates; conflicting retry rejected; actor/tenant/store isolation; cancellation tombstone blocks delayed imports; receipt recovers committed import; invalid-batch no writes; Tower Wars compiler consumes imported row and earns one bazooka attack."
+      "PASS: local DB atomic import + forced mid-transaction rollback; same-request retry; repeated/concurrent reports no duplicates; conflicting retry rejected; actor/tenant/store isolation; cancellation tombstone blocks delayed imports; receipt recovers committed import; invalid-batch no writes; Tower Wars compiler consumes imported row and earns one bazooka attack; import → Geographic Truth + Strategy aggregates proven from MySQL."
     );
   } finally {
     await connection.query(`DROP DATABASE \`${database}\``);

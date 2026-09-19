@@ -64,6 +64,36 @@ describe("customer asset identity", () => {
     ]);
   });
 
+  it("does not hash an empty identity and share it across unidentified rows", () => {
+    const missing = {
+      firstName: "Anonymous",
+      allowNameComposite: false as const,
+    };
+    const other = {
+      firstName: "Someone Else",
+      allowNameComposite: false as const,
+    };
+    expect(rawCustomerIdentityKey(missing)).toBe("");
+    expect(customerIdentityHash("tenant-a", missing)).toBeNull();
+    expect(customerIdentityHash("tenant-a", other)).toBeNull();
+    expect(customerIdentityHashes("tenant-a", missing)).toEqual([]);
+
+    const groups = groupCustomerRecords(
+      "tenant-a",
+      [
+        { id: "a", ...missing },
+        { id: "b", ...other },
+      ],
+      row => row,
+      row => `unidentified:cleancloud:${row.id}`
+    );
+    expect(groups).toHaveLength(2);
+    expect(groups.map(group => group.key).sort()).toEqual([
+      "unidentified:cleancloud:a",
+      "unidentified:cleancloud:b",
+    ]);
+  });
+
   it("keeps history together when a later order gains a stronger identifier", () => {
     const records = [
       {

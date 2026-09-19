@@ -118,6 +118,19 @@ describe("Gumball operator status", () => {
     ).toBe(
       "GUMBALL 6:08 PM · 14 rows parsed · 3 inserted · 11 updated · customer truth refreshed · map refreshed"
     );
+    expect(
+      formatGumballOperatorStatus({
+        lastAttemptAt: "2026-09-18T01:08:00.000Z",
+        lastAttemptOutcome: "imported",
+        rowsParsed: 14,
+        inserted: 3,
+        updated: 11,
+        customerTruth: "refreshed",
+        map: "pending",
+      })
+    ).toBe(
+      "GUMBALL 6:08 PM · 14 rows parsed · 3 inserted · 11 updated · customer truth refreshed · map pending"
+    );
   });
 });
 
@@ -292,7 +305,7 @@ describe("Gumball import → Goldline customer truth", () => {
     expect(customers[0]?.cadence.state).toBe(measured.state);
   });
 
-  it("does not treat a name-only CleanCloud row as a customer", () => {
+  it("does not assert a shared identity for name-only CleanCloud rows", () => {
     const records = mergeCustomerOrderTruth({
       cleancloud: [
         {
@@ -307,10 +320,27 @@ describe("Gumball import → Goldline customer truth", () => {
           paymentDateUtc: new Date("2026-09-02T07:00:00.000Z"),
           buildingResolutionStatus: "unresolved_needs_mapping",
         },
+        {
+          cleancloudOrderId: "100",
+          cleancloudCustomerId: null,
+          sourceReportType: "orders_sales",
+          customerName: "Anonymous",
+          customerPhone: null,
+          customerEmail: null,
+          address: "Other Mystery Road",
+          placedAtUtc: new Date("2026-09-02T08:00:00.000Z"),
+          paymentDateUtc: new Date("2026-09-02T08:00:00.000Z"),
+          buildingResolutionStatus: "unresolved_needs_mapping",
+        },
       ],
     });
-    expect(records).toHaveLength(1);
-    expect(groupCustomerOrderTruth(TENANT, records).size).toBe(0);
+    expect(records).toHaveLength(2);
+    const groups = groupCustomerOrderTruth(TENANT, records);
+    expect(groups.size).toBe(2);
+    expect([...groups.keys()].sort()).toEqual([
+      "unidentified:cleancloud:100",
+      "unidentified:cleancloud:99",
+    ]);
   });
 });
 
@@ -351,6 +381,31 @@ describe("customer-truth assimilation after import", () => {
       customerCount: 2,
       unresolvedGeographyCount: 1,
       outboxDrained: true,
+      error: null,
+    });
+  });
+
+  it("defers unbounded geocoding so a committed import is not blocked", async () => {
+    let geocoded = false;
+    const result = await assimilateImportedCustomerTruth("tenant", {
+      drainOutbox: async () => 0,
+      refreshCustomerTruth: async () => ({
+        customers: [{ geocodeStatus: "pending" }],
+      }),
+      geocode: async () => {
+        geocoded = true;
+        throw new Error("google stalled");
+      },
+      refreshMap: async () => {
+        throw new Error("should not refresh map on the import path");
+      },
+      deferMapRefresh: true,
+    });
+    expect(geocoded).toBe(false);
+    expect(result).toMatchObject({
+      customerTruth: "refreshed",
+      map: "pending",
+      customerCount: 1,
       error: null,
     });
   });

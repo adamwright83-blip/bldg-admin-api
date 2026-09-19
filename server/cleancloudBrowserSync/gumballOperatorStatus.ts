@@ -3,7 +3,11 @@
  * validation, database write, and downstream customer-truth assimilation.
  */
 
-export type GumballAssimilationStatus = "refreshed" | "failed" | "skipped";
+export type GumballAssimilationStatus =
+  | "refreshed"
+  | "failed"
+  | "skipped"
+  | "pending";
 
 export type GumballOperatorObservability = {
   lastAttemptAt: string | null;
@@ -126,6 +130,9 @@ export function formatGumballOperatorStatus(
     } else if (input.customerTruth === "refreshed" && input.map === "refreshed") {
       parts.push("customer truth refreshed");
       parts.push("map refreshed");
+    } else if (input.customerTruth === "refreshed" && input.map === "pending") {
+      parts.push("customer truth refreshed");
+      parts.push("map pending");
     } else if (input.customerTruth === "refreshed") {
       parts.push("customer truth refreshed");
       parts.push("map not refreshed");
@@ -140,6 +147,20 @@ export function formatGumballOperatorStatus(
   if (stage) return `${prefix} · ${stage}`;
   if (!attemptAt && !successAt) return `${prefix} · export never captured`;
   return `${prefix} · ${outcome || "status unknown"}`;
+}
+
+export function asGumballAssimilationStatus(
+  value: unknown
+): GumballAssimilationStatus | null {
+  if (
+    value === "refreshed" ||
+    value === "failed" ||
+    value === "skipped" ||
+    value === "pending"
+  ) {
+    return value;
+  }
+  return null;
 }
 
 export function gumballObservability(

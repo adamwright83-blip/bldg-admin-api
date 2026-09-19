@@ -69,7 +69,10 @@ function normalizedVerifiedAddress(value: string | null | undefined): string {
 }
 
 /**
- * Trustworthy identity evidence, strongest first. Names are never included.
+ * Candidate aliases in persistence-compatibility order (not a strength ranking):
+ * phone → bldgUserId → email → CleanCloud customer ID → unit-qualified verified address.
+ * Union-find joins every alias; the first present key is the canonical persisted hash
+ * so existing Goldline rows keep the same identity. Names are never included.
  * Verified address is only emitted with a unit so a tower lobby is not one customer.
  */
 export function identityCandidateKeys(input: CustomerIdentityInput): string[] {
@@ -99,11 +102,25 @@ function hashIdentityKey(tenantId: string, key: string): string {
   return createHash("sha256").update(`${tenantId}:${key}`).digest("hex");
 }
 
+export function unidentifiedCustomerKey(
+  source: string,
+  sourceOrderId: string
+): string {
+  return `unidentified:${source}:${sourceOrderId}`;
+}
+
+/**
+ * Canonical identity hash, or null when there is no trustworthy evidence.
+ * Never hashes an empty key: that would assign the same fake identity to
+ * every unidentified CleanCloud row.
+ */
 export function customerIdentityHash(
   tenantId: string,
   input: CustomerIdentityInput
-): string {
-  return hashIdentityKey(tenantId, rawCustomerIdentityKey(input));
+): string | null {
+  const key = rawCustomerIdentityKey(input);
+  if (!key) return null;
+  return hashIdentityKey(tenantId, key);
 }
 
 export function legacyCustomerIdentityHash(
@@ -141,7 +158,8 @@ export function customerIdentityHashes(
 export function groupCustomerRecords<T>(
   tenantId: string,
   records: readonly T[],
-  getIdentity: (record: T) => CustomerIdentityInput
+  getIdentity: (record: T) => CustomerIdentityInput,
+  getUnidentifiedKey?: (record: T) => string
 ): Array<{ key: string; records: T[] }> {
   const parent = new Map<string, string>();
   const find = (value: string): string => {
@@ -168,23 +186,39 @@ export function groupCustomerRecords<T>(
   const groups = new Map<string, T[]>();
   records.forEach((record, index) => {
     const aliases = aliasesByRecord[index]!;
-    if (!aliases.length) return;
+    if (!aliases.length) {
+      const orphanKey =
+        getUnidentifiedKey?.(record) ?? `unidentified:index:${index}`;
+      groups.set(`orphan:${orphanKey}`, [record]);
+      return;
+    }
     const root = find(aliases[0]!);
     const group = groups.get(root) ?? [];
     group.push(record);
     groups.set(root, group);
   });
-  return Array.from(groups.values()).map(group => ({
-    // The caller supplies deterministic order (createdAt/id for orders), so
-    // the first record preserves the established canonical identity key.
-    key: customerIdentityHash(tenantId, getIdentity(group[0]!)),
-    records: group,
-  }));
+  return Array.from(groups.values()).map(group => {
+    const hash = customerIdentityHash(tenantId, getIdentity(group[0]!));
+    return {
+      // The caller supplies deterministic order (createdAt/id for orders), so
+      // the first record preserves the established canonical identity key.
+      // Unidentified rows keep a per-order absence key, never a shared hash.
+      key:
+        hash ??
+        getUnidentifiedKey?.(group[0]!) ??
+        unidentifiedCustomerKey("orphan", "missing"),
+      records: group,
+    };
+  });
 }
 
 export function customerAssetId(
   tenantId: string,
   input: CustomerIdentityInput
 ): string {
-  return `customer:${customerIdentityHash(tenantId, input)}`;
+  const hash = customerIdentityHash(tenantId, input);
+  if (!hash) {
+    throw new Error("customerAssetId requires trustworthy identity evidence");
+  }
+  return `customer:${hash}`;
 }

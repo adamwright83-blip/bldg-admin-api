@@ -333,6 +333,8 @@ export async function runCustomerChurnScan(input: {
   }
 
   try {
+    // Native `orders` only. CleanCloud paid history is intentionally out of
+    // scope here (service/weight/recovery semantics). Next sidebench item.
     const sourceRows = await db
       .select()
       .from(orders)

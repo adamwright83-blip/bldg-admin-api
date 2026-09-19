@@ -1,11 +1,12 @@
 /**
  * Live-derived dormant-eligible customers for the StrategyEngine snapshot.
  *
- * Source of truth: tenant-scoped `listAdminCustomerAggregates` (orders table).
- * Dormancy is recency against the same 30-day inactivity rule used by
- * `getStrategyGrowthMetrics` (`inactivityDays` default). Churn scoring is
- * not used as a gate: `scoreCustomerChurn` requires two completed orders and
- * would silently drop one-order customers who never returned.
+ * Source of truth: tenant-scoped `listAdminCustomerAggregates` (unified
+ * native + CleanCloud canonical history). Dormancy is recency against the same
+ * 30-day inactivity rule used by `getStrategyGrowthMetrics` (`inactivityDays`
+ * default). Churn scoring is not used as a gate: `scoreCustomerChurn` requires
+ * two completed orders and would silently drop one-order customers who never
+ * returned. Churn Radar itself remains native-orders-only.
  *
  * Snapshot `id` is a non-reversible hash of the admin customer group key so
  * raw phone numbers are not copied into Claire/strategy context.
@@ -45,10 +46,20 @@ export function strategyCustomerSnapshotId(
   tenantId: string,
   row: Pick<
     AdminCustomerAggregateDbRow,
-    "phone" | "firstName" | "lastName" | "unit" | "buildingSlug" | "address"
+    | "phone"
+    | "firstName"
+    | "lastName"
+    | "unit"
+    | "buildingSlug"
+    | "address"
+    | "identityKey"
   >
 ): string {
-  const groupKey = computeCustomerGroupKey(row);
+  const digits = row.phone.replace(/\D/g, "");
+  const groupKey =
+    digits.length >= 7
+      ? computeCustomerGroupKey(row)
+      : row.identityKey ?? computeCustomerGroupKey(row);
   const digest = createHash("sha256")
     .update(`strategy-customer:${tenantId}:${groupKey}`)
     .digest("hex")

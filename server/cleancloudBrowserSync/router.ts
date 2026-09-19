@@ -19,9 +19,11 @@ import { findPhysicalEntityIdByAddress } from "../goldlineWorld/entityLookup";
 import {
   assimilateImportedCustomerTruth,
   assimilationReceiptFields,
-  isFullyAssimilated,
+  isCustomerTruthAssimilated,
+  refreshImportedGeographyMap,
 } from "./assimilateCustomerTruth";
 import {
+  asGumballAssimilationStatus,
   formatGumballOperatorStatus,
   gumballObservability,
 } from "./gumballOperatorStatus";
@@ -83,19 +85,80 @@ function operatorLineFromReceipt(receipt: Record<string, unknown>) {
       receipt.unresolvedGeographyCount == null
         ? null
         : Number(receipt.unresolvedGeographyCount),
-    customerTruth:
-      receipt.customerTruth === "refreshed" ||
-      receipt.customerTruth === "failed" ||
-      receipt.customerTruth === "skipped"
-        ? receipt.customerTruth
-        : null,
-    map:
-      receipt.map === "refreshed" ||
-      receipt.map === "failed" ||
-      receipt.map === "skipped"
-        ? receipt.map
-        : null,
+    customerTruth: asGumballAssimilationStatus(receipt.customerTruth),
+    map: asGumballAssimilationStatus(receipt.map),
   });
+}
+
+const geographyRefreshInFlight = new Set<string>();
+
+function scheduleImportedGeographyMapRefresh(
+  tenantId: string,
+  requestId: string
+) {
+  const key = `${tenantId}:${requestId}`;
+  if (geographyRefreshInFlight.has(key)) return;
+  geographyRefreshInFlight.add(key);
+  void (async () => {
+    try {
+      const result = await refreshImportedGeographyMap(tenantId);
+      const db = await getDb();
+      if (!db) return;
+      const [row] = await db
+        .select()
+        .from(browserSyncReceipts)
+        .where(
+          and(
+            eq(browserSyncReceipts.tenantId, tenantId),
+            eq(browserSyncReceipts.requestId, requestId)
+          )
+        );
+      if (!row) return;
+      const current = (row.receiptJson ?? {}) as Record<string, unknown>;
+      if (current.status === "cancelled") return;
+      const next = {
+        ...current,
+        map: result.map,
+        assimilationError: result.error,
+        operatorStatusLine: operatorLineFromReceipt({
+          ...current,
+          map: result.map,
+          assimilationError: result.error,
+        }),
+      };
+      await db
+        .update(browserSyncReceipts)
+        .set({ receiptJson: next })
+        .where(
+          and(
+            eq(browserSyncReceipts.tenantId, tenantId),
+            eq(browserSyncReceipts.requestId, requestId)
+          )
+        );
+    } catch (error) {
+      console.error("[gumball] geography map refresh deferred", error);
+    } finally {
+      geographyRefreshInFlight.delete(key);
+    }
+  })();
+}
+
+async function persistImportReceipt(
+  tenantId: string,
+  requestId: string,
+  receipt: Record<string, unknown>
+) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(browserSyncReceipts)
+    .set({ receiptJson: receipt })
+    .where(
+      and(
+        eq(browserSyncReceipts.tenantId, tenantId),
+        eq(browserSyncReceipts.requestId, requestId)
+      )
+    );
 }
 
 async function completeImportDownstream(
@@ -104,37 +167,50 @@ async function completeImportDownstream(
   requestId: string
 ) {
   if (receipt.status === "cancelled") return receipt;
-  if (isFullyAssimilated(receipt)) {
+  if (isCustomerTruthAssimilated(receipt)) {
+    if (receipt.map === "pending") {
+      scheduleImportedGeographyMapRefresh(tenantId, requestId);
+    }
     return {
       ...receipt,
+      importCommitted: true,
       operatorStatusLine:
         typeof receipt.operatorStatusLine === "string"
           ? receipt.operatorStatusLine
           : operatorLineFromReceipt(receipt),
     };
   }
-  const assimilation = await assimilateImportedCustomerTruth(tenantId);
-  const next = {
-    ...receipt,
-    ...assimilationReceiptFields(assimilation),
-    operatorStatusLine: operatorLineFromReceipt({
+  try {
+    const assimilation = await assimilateImportedCustomerTruth(tenantId);
+    const next = {
       ...receipt,
       ...assimilationReceiptFields(assimilation),
-    }),
-  };
-  const db = await getDb();
-  if (db) {
-    await db
-      .update(browserSyncReceipts)
-      .set({ receiptJson: next })
-      .where(
-        and(
-          eq(browserSyncReceipts.tenantId, tenantId),
-          eq(browserSyncReceipts.requestId, requestId)
-        )
-      );
+      operatorStatusLine: operatorLineFromReceipt({
+        ...receipt,
+        ...assimilationReceiptFields(assimilation),
+      }),
+    };
+    await persistImportReceipt(tenantId, requestId, next);
+    if (next.map === "pending") {
+      scheduleImportedGeographyMapRefresh(tenantId, requestId);
+    }
+    return next;
+  } catch (error) {
+    const next = {
+      ...receipt,
+      importCommitted: true,
+      customerTruth: "failed",
+      map: "pending",
+      assimilationError: error instanceof Error ? error.message : String(error),
+      operatorStatusLine: operatorLineFromReceipt({
+        ...receipt,
+        customerTruth: "failed",
+        map: "pending",
+      }),
+    };
+    await persistImportReceipt(tenantId, requestId, next);
+    return next;
   }
-  return next;
 }
 function businessFields(row: Record<string, unknown>) {
   const {
@@ -283,18 +359,8 @@ export const cleancloudBrowserSyncRouter = router({
         receipt.unresolvedGeographyCount == null
           ? null
           : Number(receipt.unresolvedGeographyCount),
-      customerTruth:
-        receipt.customerTruth === "refreshed" ||
-        receipt.customerTruth === "failed" ||
-        receipt.customerTruth === "skipped"
-          ? receipt.customerTruth
-          : null,
-      map:
-        receipt.map === "refreshed" ||
-        receipt.map === "failed" ||
-        receipt.map === "skipped"
-          ? receipt.map
-          : null,
+      customerTruth: asGumballAssimilationStatus(receipt.customerTruth),
+      map: asGumballAssimilationStatus(receipt.map),
     });
     return {
       tenantId: ctx.tenantId,
@@ -508,6 +574,7 @@ export const cleancloudBrowserSyncRouter = router({
           unchanged,
           skipped: 0,
           totalRows: normalized.length,
+          importCommitted: true,
           ...summarizeOrders(normalized),
           scope:
             "Orders created in the selected report period; totals use actual payment dates. Older orders and later corrections outside this window are not covered.",

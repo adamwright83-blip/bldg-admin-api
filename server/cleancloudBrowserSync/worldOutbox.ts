@@ -21,30 +21,81 @@ type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 
-/** A replacement snapshot, never an additive second payment. Report identity
- * is excluded from the economic key: Sales and Revenue describe one order. */
-export function economicSnapshot(row: InsertCleancloudPaidOrder) {
+export type EconomicRevisionFields = {
+  economicKey: string;
+  paid: boolean;
+  amountCents: number;
+  paymentAt: string | null;
+  buildingSlug: string | null;
+  physicalEntityId: string | null;
+};
+
+/** Descriptive only. Null means no trustworthy identity — never a shared fake hash. */
+export function descriptiveCustomerIdentityHash(
+  tenantId: string,
+  row: Pick<
+    InsertCleancloudPaidOrder,
+    | "customerPhone"
+    | "customerEmail"
+    | "customerName"
+    | "address"
+    | "cleancloudCustomerId"
+  >
+): string | null {
+  return customerIdentityHash(tenantId, {
+    phone: row.customerPhone,
+    email: row.customerEmail,
+    firstName: row.customerName,
+    address: row.address,
+    cleancloudCustomerId: row.cleancloudCustomerId,
+    allowNameComposite: false,
+  });
+}
+
+export function economicRevisionFields(
+  row: InsertCleancloudPaidOrder,
+  physicalEntityId: string | null = null
+): EconomicRevisionFields {
   const tenantId = row.tenantId ?? "default";
   const paymentDate = row.paymentDateUtc ?? row.paidDateUtc;
   return {
     economicKey: hash(JSON.stringify([tenantId, "cleancloud", row.cleancloudOrderId])),
     paid: Boolean(row.paid),
-    amountCents: row.totalCents,
-    paymentAt: paymentDate && Number.isFinite(paymentDate.getTime()) ? paymentDate.toISOString() : null,
-    buildingSlug: row.buildingResolutionStatus === "resolved" ? row.buildingSlug ?? null : null,
-    customerIdentityHash: customerIdentityHash(tenantId, {
-      phone: row.customerPhone, email: row.customerEmail,
-      firstName: row.customerName, address: row.address,
-      cleancloudCustomerId: row.cleancloudCustomerId,
-      allowNameComposite: false,
-    }),
+    amountCents: row.totalCents ?? 0,
+    paymentAt:
+      paymentDate && Number.isFinite(paymentDate.getTime())
+        ? paymentDate.toISOString()
+        : null,
+    buildingSlug:
+      row.buildingResolutionStatus === "resolved" ? row.buildingSlug ?? null : null,
+    physicalEntityId,
+  };
+}
+
+export function economicRevisionFingerprint(
+  row: InsertCleancloudPaidOrder,
+  physicalEntityId: string | null = null
+): string {
+  return hash(JSON.stringify(economicRevisionFields(row, physicalEntityId)));
+}
+
+/** A replacement snapshot, never an additive second payment. Report identity
+ * is excluded from the economic key: Sales and Revenue describe one order.
+ * Customer identity is metadata only and must not gate economic revisions. */
+export function economicSnapshot(row: InsertCleancloudPaidOrder) {
+  const tenantId = row.tenantId ?? "default";
+  const { physicalEntityId: _physicalEntityId, ...revision } =
+    economicRevisionFields(row);
+  return {
+    ...revision,
+    customerIdentityHash: descriptiveCustomerIdentityHash(tenantId, row),
   };
 }
 
 /** Must be awaited inside the SAME transaction as the economic row write. */
 export async function enqueueEconomicSnapshot(tx: Transaction, row: InsertCleancloudPaidOrder, physicalEntityId: string | null = null) {
   const snapshot = economicSnapshot(row);
-  const fingerprint = hash(JSON.stringify({ ...snapshot, physicalEntityId }));
+  const fingerprint = economicRevisionFingerprint(row, physicalEntityId);
   await tx.insert(economicHeads).values({ economicKey: snapshot.economicKey, revision: 0, fingerprint: "" })
     .onDuplicateKeyUpdate({ set: { economicKey: snapshot.economicKey } });
   const [head] = await tx.select().from(economicHeads)

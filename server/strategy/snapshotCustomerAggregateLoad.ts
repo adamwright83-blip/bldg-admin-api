@@ -3,16 +3,17 @@
  *
  * Distinguishes observed-empty from source-unavailable. Missing tables and
  * a missing database are unavailable. Arbitrary SQL errors are rethrown.
+ *
+ * History is the unified canonical customer/order set (native + CleanCloud).
+ * Churn Radar / recovery scans remain native-orders-only; see GOLDLINE-TASKS.
  */
 
-import { eq } from "drizzle-orm";
-import { orders } from "../../drizzle/schema";
 import {
-  buildAdminCustomerAggregatesInMemory,
-  normalizeOrderRowFromDb,
+  buildAdminCustomerAggregatesFromTruth,
   type AdminCustomerAggregateDbRow,
 } from "../adminCustomerAggregate";
 import { getDb } from "../db";
+import { loadCustomerOrderTruth } from "../geography/customerOrderTruth";
 import { isMysqlMissingTableError } from "../mysqlErrors";
 
 export type CustomerAggregateLoad =
@@ -28,28 +29,12 @@ export async function loadStrategyCustomerAggregates(
   }
 
   try {
-    const rows = await db
-      .select({
-        id: orders.id,
-        phone: orders.phone,
-        firstName: orders.firstName,
-        lastName: orders.lastName,
-        email: orders.email,
-        unit: orders.unit,
-        address: orders.address,
-        buildingSlug: orders.buildingSlug,
-        createdAt: orders.createdAt,
-        paid: orders.paid,
-        total: orders.total,
-      })
-      .from(orders)
-      .where(eq(orders.tenantId, tenantId));
-
+    const records = await loadCustomerOrderTruth(tenantId, {
+      includeCancelledNative: true,
+    });
     return {
       status: "available",
-      rows: buildAdminCustomerAggregatesInMemory(
-        rows.map(normalizeOrderRowFromDb)
-      ),
+      rows: buildAdminCustomerAggregatesFromTruth(tenantId, records),
     };
   } catch (error) {
     if (isMysqlMissingTableError(error)) {

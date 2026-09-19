@@ -2013,8 +2013,11 @@ export const appRouter = router({
           listPaidOrdersForBuildingRevenue(ctx.tenantId),
         ]);
         const includeLegacyCleanCloud = input?.includeLegacyCleanCloud ?? true;
-        let rows: any[] = hydrateCustomerAggregates(aggregateRows).map(row => {
+    let rows: any[] = hydrateCustomerAggregates(aggregateRows).map((row, index) => {
           const tower = normalizePropertyTower(row.address);
+          const sources = aggregateRows[index]?.sources ?? [];
+          const hasNative = sources.length === 0 || sources.includes("laundry_butler");
+          const hasCleanCloud = sources.includes("cleancloud");
           return {
             ...row,
             propertyGroup: tower.propertyGroup,
@@ -2026,10 +2029,10 @@ export const appRouter = router({
             legacyCleanCloudRevenue: 0,
             clearentXplorPayRevenue: 0,
             totalOperationalRevenue: row.lifetimeSpend,
-            source: "stripe",
-            paymentProcessor: "stripe",
-            includedInStripe: true,
-            includedInOperationalRevenue: true,
+            source: hasNative ? "stripe" : hasCleanCloud ? "cleancloud" : "stripe",
+            paymentProcessor: hasNative ? "stripe" : hasCleanCloud ? "cleancloud" : "stripe",
+            includedInStripe: hasNative,
+            includedInOperationalRevenue: hasNative,
             stripePaymentIntentId: null,
           };
         });

@@ -22,7 +22,7 @@ describe("loadStrategyCustomerAggregates", () => {
       code: "ER_NO_SUCH_TABLE",
       errno: 1146,
     });
-    vi.mocked(getDb).mockResolvedValueOnce({
+    vi.mocked(getDb).mockResolvedValue({
       select: () => {
         throw error;
       },
@@ -39,7 +39,7 @@ describe("loadStrategyCustomerAggregates", () => {
       code: "ER_LOCK_DEADLOCK",
       errno: 1213,
     });
-    vi.mocked(getDb).mockResolvedValueOnce({
+    vi.mocked(getDb).mockResolvedValue({
       select: () => {
         throw error;
       },

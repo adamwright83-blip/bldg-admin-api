@@ -13,6 +13,7 @@ import {
 } from "../../shared/lanternCity";
 import {
   groupCustomerRecords,
+  unidentifiedCustomerKey,
   type CustomerIdentityInput,
 } from "../customerAssets/customerIdentity";
 import { getDb } from "../db";
@@ -31,6 +32,8 @@ export type NativeOrderLike = {
   unit: string | null;
   buildingSlug: string | null;
   bldgUserId: number | null;
+  paid?: boolean | number | null;
+  total?: string | number | null;
 };
 
 export type CleanCloudOrderLike = {
@@ -52,6 +55,8 @@ export type CleanCloudOrderLike = {
   paymentDateUtc?: Date | null;
   paidDateUtc?: Date | null;
   createdAt?: Date | null;
+  paid?: boolean | number | null;
+  totalCents?: number | null;
 };
 
 export type CustomerOrderTruthRecord = {
@@ -74,6 +79,9 @@ export type CustomerOrderTruthRecord = {
     | "not_applicable"
     | null;
   allowNameComposite: boolean;
+  paid: boolean;
+  totalCents: number;
+  cancelled: boolean;
 };
 
 export type GeographicLocationSnapshot = {
@@ -140,10 +148,21 @@ function cleancloudSortId(orderId: string): number {
   return 1_000_000_000 + (Math.abs(hash) % 1_000_000_000);
 }
 
+function dollarsToCents(total: string | number | null | undefined): number {
+  const amount = parseFloat(String(total ?? "0"));
+  return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+}
+
+function isPaidFlag(value: boolean | number | null | undefined): boolean {
+  return value === true || value === 1;
+}
+
 export function nativeOrderToTruth(
-  row: NativeOrderLike
+  row: NativeOrderLike,
+  options?: { includeCancelled?: boolean }
 ): CustomerOrderTruthRecord | null {
-  if (row.status === "cancelled") return null;
+  const cancelled = row.status === "cancelled";
+  if (cancelled && !options?.includeCancelled) return null;
   const createdAt = asDate(row.createdAt);
   if (!createdAt) return null;
   return {
@@ -162,6 +181,9 @@ export function nativeOrderToTruth(
     cleancloudCustomerId: null,
     buildingResolutionStatus: row.buildingSlug?.trim() ? "resolved" : null,
     allowNameComposite: true,
+    paid: isPaidFlag(row.paid),
+    totalCents: dollarsToCents(row.total),
+    cancelled,
   };
 }
 
@@ -189,15 +211,23 @@ export function cleanCloudOrderToTruth(
       : null,
     buildingResolutionStatus: row.buildingResolutionStatus ?? null,
     allowNameComposite: false,
+    paid: row.paid == null ? true : isPaidFlag(row.paid),
+    totalCents: Number.isFinite(row.totalCents) ? Number(row.totalCents) : 0,
+    cancelled: false,
   };
 }
 
 export function mergeCustomerOrderTruth(input: {
   native?: readonly NativeOrderLike[];
   cleancloud?: readonly CleanCloudOrderLike[];
+  includeCancelledNative?: boolean;
 }): CustomerOrderTruthRecord[] {
   const records = [
-    ...(input.native ?? []).map(nativeOrderToTruth),
+    ...(input.native ?? []).map(row =>
+      nativeOrderToTruth(row, {
+        includeCancelled: input.includeCancelledNative,
+      })
+    ),
     ...preferCleanCloudOrders(input.cleancloud ?? []).map(cleanCloudOrderToTruth),
   ].filter((row): row is CustomerOrderTruthRecord => row != null);
   records.sort(
@@ -236,9 +266,12 @@ export function groupCustomerOrderTruth(
   records: readonly CustomerOrderTruthRecord[]
 ): Map<string, CustomerOrderTruthRecord[]> {
   return new Map(
-    groupCustomerRecords(tenantId, records, identityInputFromOrderTruth).map(
-      group => [group.key, group.records]
-    )
+    groupCustomerRecords(
+      tenantId,
+      records,
+      identityInputFromOrderTruth,
+      record => unidentifiedCustomerKey(record.source, record.sourceOrderId)
+    ).map(group => [group.key, group.records])
   );
 }
 
@@ -309,20 +342,26 @@ export function projectGeographicCustomers(input: {
 }
 
 export async function loadCustomerOrderTruth(
-  tenantId: string
+  tenantId?: string,
+  options?: { includeCancelledNative?: boolean }
 ): Promise<CustomerOrderTruthRecord[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [nativeRows, cleancloudRows] = await Promise.all([
-    db.select().from(orders).where(eq(orders.tenantId, tenantId)),
-    db
-      .select()
-      .from(cleancloudPaidOrders)
-      .where(eq(cleancloudPaidOrders.tenantId, tenantId)),
+    tenantId
+      ? db.select().from(orders).where(eq(orders.tenantId, tenantId))
+      : db.select().from(orders),
+    tenantId
+      ? db
+          .select()
+          .from(cleancloudPaidOrders)
+          .where(eq(cleancloudPaidOrders.tenantId, tenantId))
+      : db.select().from(cleancloudPaidOrders),
   ]);
   return mergeCustomerOrderTruth({
     native: nativeRows,
     cleancloud: cleancloudRows as CleancloudPaidOrder[],
+    includeCancelledNative: options?.includeCancelledNative,
   });
 }
 
