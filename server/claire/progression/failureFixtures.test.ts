@@ -3,7 +3,8 @@ import { hasUnresolvedIgnoredBoundary, deriveClaireRelationshipDimensions } from
 import type { ClaireRelationshipEvent } from "../character/types";
 import { recordConfirmedVisitEvidence } from "./evidenceSources";
 import { evaluateProgression } from "./evaluate";
-import { derivePaidOrderProgress } from "./paidOrderProgress";
+import { groupCustomerOrderTruth, mergeCustomerOrderTruth } from "../../geography/customerOrderTruth";
+import { deriveProgressFromOrderTruth } from "./paidOrderProgress";
 import { executePersonalTurn } from "./personalReveal";
 import { recordProgressionEvidence, refreshProgression } from "./service";
 import { createInMemoryProgressionStore } from "./store";
@@ -11,7 +12,19 @@ import { lintFailureDayLanguage } from "./toneLint";
 
 const SCOPE = { tenantId: "t1", operatorUserId: "op1" };
 const day = (n: number, hour = 15) => new Date(Date.UTC(2026, 8, n, hour));
-const NOW = () => day(30);
+const NOW = () => new Date(Date.UTC(2026, 9, 30, 15));
+const oct = (n: number, hour = 15) => new Date(Date.UTC(2026, 9, n, hour));
+
+/** Canonical order truth for one native paid order (identified by phone). */
+function truthProgress(orders: Array<{ id: number; phone: string; slug: string | null; at: Date }>, targets: string[] = []) {
+  const records = mergeCustomerOrderTruth({
+    native: orders.map(o => ({
+      id: o.id, status: "completed", createdAt: o.at, firstName: "R", lastName: String(o.id), phone: o.phone,
+      email: null, address: "1 Main St", unit: "1", buildingSlug: o.slug, bldgUserId: null, paid: true, total: "30",
+    })),
+  });
+  return deriveProgressFromOrderTruth(groupCustomerOrderTruth("t1", records), { targetBuildingSlugs: targets, now: NOW() });
+}
 
 describe("failure-day tone (generated language, not just state)", () => {
   it("the acceptable Claire line passes every lint", () => {
@@ -98,7 +111,7 @@ describe("fixture: dry spell", () => {
 describe("fixture: lucky result", () => {
   it("a paid order without consistency is real business movement but skips nothing", async () => {
     const store = createInMemoryProgressionStore();
-    const [progress] = derivePaidOrderProgress([{ orderId: "o1", customerKey: "c1", buildingSlug: null, paidAt: day(20), recognizedAt: day(21) }]);
+    const [progress] = truthProgress([{ id: 1, phone: "310-555-0101", slug: null, at: oct(20) }]);
     await recordProgressionEvidence(store, { ...SCOPE, ...progress }, NOW);
     const snap = await refreshProgression(store, SCOPE, { disclosureSafetyOk: true, now: NOW });
     expect(snap.counts.progressEvents).toBe(1); // the business result stays real
@@ -111,10 +124,7 @@ describe("fixture: consistency plus genuine progress", () => {
   it("rung advances silently, mints one entitlement, volunteers nothing, and a later ask is answered", async () => {
     const store = createInMemoryProgressionStore();
     for (let i = 1; i <= 6; i += 1) await recordConfirmedVisitEvidence({ ...SCOPE, missionId: i, outcome: "lost", occurredAt: day(i) }, store, NOW);
-    const [louise] = derivePaidOrderProgress(
-      [{ orderId: "louise-1", customerKey: "resident-1", buildingSlug: "the-louise", paidAt: day(24), recognizedAt: day(25) }],
-      { targetBuildingSlugs: ["the-louise"] }
-    );
+    const [louise] = truthProgress([{ id: 7, phone: "310-555-0102", slug: "the-louise", at: oct(24) }], ["the-louise"]);
     expect(louise.kind).toBe("first_paid_order_target_building");
     await recordProgressionEvidence(store, { ...SCOPE, ...louise }, NOW);
     const snap = await refreshProgression(store, SCOPE, { disclosureSafetyOk: true, now: NOW });
@@ -130,19 +140,7 @@ describe("fixture: consistency plus genuine progress", () => {
   });
 });
 
-describe("paid-order derivation guards", () => {
-  it("historical backfill imports are never fresh business progress", () => {
-    const rows = [{ orderId: "old", customerKey: "c", buildingSlug: null, paidAt: day(1), recognizedAt: new Date(Date.UTC(2026, 11, 1)) }];
-    expect(derivePaidOrderProgress(rows)).toEqual([]);
-  });
-  it("dormant reorder is detected; a routine reorder is not progress", () => {
-    const rows = [
-      { orderId: "a", customerKey: "c", buildingSlug: null, paidAt: new Date(Date.UTC(2026, 0, 5)), recognizedAt: new Date(Date.UTC(2026, 0, 6)) },
-      { orderId: "b", customerKey: "c", buildingSlug: null, paidAt: new Date(Date.UTC(2026, 0, 20)), recognizedAt: new Date(Date.UTC(2026, 0, 21)) },
-      { orderId: "c", customerKey: "c", buildingSlug: null, paidAt: new Date(Date.UTC(2026, 6, 1)), recognizedAt: new Date(Date.UTC(2026, 6, 2)) },
-    ];
-    expect(derivePaidOrderProgress(rows).map(p => [p.sourceId, p.kind])).toEqual([["a", "new_paying_customer"], ["c", "dormant_customer_reorder"]]);
-  });
+describe("evaluation guards", () => {
   it("evaluateProgression never counts unrecognized events", () => {
     const ev = evaluateProgression({ evidence: [], disclosureSafetyOk: true, prior: null, asOf: NOW() });
     expect(ev.grant.personalRung).toBe(0);

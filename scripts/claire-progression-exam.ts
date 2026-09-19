@@ -28,6 +28,7 @@ const CANNED: Record<string, string> = {
   background: "I studied archaeology, historical networks, and languages.",
 };
 const good: PersonalGenerator = async request => CANNED[request.plan.fragment.topic] ?? "I'd rather not say more.";
+const unsupported: PersonalGenerator = async () => "He was an academic who disappeared later.";
 const inventsOxford: PersonalGenerator = async () => "He taught at Oxford for years.";
 
 async function scenario(title: string, run: () => Promise<void>) {
@@ -63,6 +64,10 @@ async function main() {
     await scenario(`${state}: sequence within one call (business still open)`, async () => {
       const s = createSimulationSession();
       line(`  state: ${JSON.stringify(await s.applyState(state))}`);
+      // No-backlog rule: reaching a rung funds ONE initial entitlement. Deeper rungs are auditioned by
+      // adding the further progress events a real operator would have recognized since.
+      const more = state === "rung2" ? 1 : state === "rung3" ? 2 : 0;
+      for (let i = 0; i < more; i += 1) await s.addProgressEvent();
       for (const topic of topics) await ask(s, `[asks about ${topic}]`, topic, "c1");
     });
   }
@@ -96,6 +101,13 @@ async function main() {
     line(`  entitlements after failure: ${JSON.stringify((await s.store.listEntitlements(s.scope)).map(e => e.status))}`);
     await ask(s, "Try again — what happened with your father?", "father", "c1");
     line(`  entitlements after retry: ${JSON.stringify((await s.store.listEntitlements(s.scope)).map(e => e.status))}`);
+  });
+
+  await scenario("entailment: an answer adding history beyond the authorized fact is rejected and the reveal is not burned", async () => {
+    const s = createSimulationSession();
+    await s.applyState("rung1");
+    await ask(s, "What happened with your father?", "father", "c1", unsupported);
+    line(`  entitlements after rejection: ${JSON.stringify((await s.store.listEntitlements(s.scope)).map(e => e.status))}`);
   });
 
   await scenario("cross-call retry: refused, business progress lands, asked again on a later call", async () => {

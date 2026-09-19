@@ -7,6 +7,8 @@ import { validateEvidenceInput, type ProgressionEvidence } from "./evidence";
 
 const SCOPE = { tenantId: "t1", operatorUserId: "op1" };
 const day = (n: number) => new Date(Date.UTC(2026, 8, n, 15)).toISOString();
+/** Business results must occur on/after the progress epoch (2026-09-19) to qualify. */
+const oct = (n: number) => new Date(Date.UTC(2026, 9, n, 15)).toISOString();
 
 let seq = 0;
 async function addActions(store: ReturnType<typeof createInMemoryProgressionStore>, days: number[]) {
@@ -21,7 +23,7 @@ async function addActions(store: ReturnType<typeof createInMemoryProgressionStor
 async function addProgress(store: ReturnType<typeof createInMemoryProgressionStore>, kind: string, id: string, d: number, recognizedDay = d) {
   return recordProgressionEvidence(store, {
     ...SCOPE, category: "business_progress", kind, sourceType: "order", sourceId: id,
-    provenance: "cleancloud_import", occurredAt: day(d), recognizedAt: day(recognizedDay),
+    provenance: "cleancloud_import", occurredAt: oct(d), recognizedAt: oct(recognizedDay),
   });
 }
 const NOW = () => new Date(Date.UTC(2026, 9, 30));
@@ -116,10 +118,10 @@ describe("disclosure rung and entitlements", () => {
       evidence.push({ id: `a${i}`, category: "growth_action", kind: "confirmed_field_visit", strength: null, sourceType: "m", sourceId: `${i}`, provenance: "x", occurredAt: day(i), recognizedAt: day(i) });
     }
     // Paid order happened on the 6th but Goldline only learns of it on the 20th.
-    evidence.push({ id: "p1", category: "business_progress", kind: "new_paying_customer", strength: "strong", sourceType: "o", sourceId: "1", provenance: "cleancloud_import", occurredAt: day(6), recognizedAt: day(20) });
-    const before = evaluateProgression({ evidence, disclosureSafetyOk: true, prior: null, asOf: new Date(day(10)) });
+    evidence.push({ id: "p1", category: "business_progress", kind: "new_paying_customer", strength: "strong", sourceType: "o", sourceId: "1", provenance: "cleancloud_import", occurredAt: oct(6), recognizedAt: oct(20) });
+    const before = evaluateProgression({ evidence, disclosureSafetyOk: true, prior: null, asOf: new Date(oct(10)) });
     expect(before.grant.personalRung).toBe(0); // not yet recognized
-    const after = evaluateProgression({ evidence, disclosureSafetyOk: true, prior: null, asOf: new Date(day(21)) });
+    const after = evaluateProgression({ evidence, disclosureSafetyOk: true, prior: null, asOf: new Date(oct(21)) });
     expect(after.grant.personalRung).toBe(1);
   });
 });
@@ -148,7 +150,7 @@ describe("monotonic grants", () => {
     const first = await refreshProgression(store, SCOPE, { disclosureSafetyOk: true, now: NOW });
     const later = await refreshProgression(store, SCOPE, { disclosureSafetyOk: true, now: () => new Date(Date.UTC(2027, 5, 1)) });
     expect(later.grant).toEqual(first.grant);
-    expect(await recordProgressionEvidence(store, { ...SCOPE, category: "business_progress", kind: "lost_the_louise", sourceType: "m", sourceId: "x", provenance: "x", occurredAt: day(9) })).toMatchObject({ ok: false });
+    expect(await recordProgressionEvidence(store, { ...SCOPE, category: "business_progress", kind: "lost_the_louise", sourceType: "m", sourceId: "x", provenance: "x", occurredAt: oct(9) })).toMatchObject({ ok: false });
   });
 
   it("an easier future policy can advance operators", () => {

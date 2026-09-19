@@ -60,6 +60,16 @@ const toEntitlement = (row: typeof claireDisclosureEntitlements.$inferSelect): D
   mintedAt: row.mintedAt.toISOString(),
   reservedAt: row.reservedAt?.toISOString() ?? null,
   reservationToken: row.reservationToken ?? null,
+  reservation:
+    row.reservedConversationId && row.reservedFragmentId
+      ? {
+          conversationId: row.reservedConversationId,
+          fragmentId: row.reservedFragmentId,
+          topic: row.reservedTopic ?? "unknown",
+          rung: row.reservedRung ?? 0,
+          rapportBand: row.reservedRapportBand ?? 0,
+        }
+      : null,
   consumedAt: row.consumedAt?.toISOString() ?? null,
   consumedFragmentId: row.consumedFragmentId ?? null,
   consumedConversationId: row.consumedConversationId ?? null,
@@ -93,7 +103,6 @@ export function createDrizzleProgressionStore(): ProgressionStore {
         eq(claireProgressionEvidence.tenantId, input.tenantId),
         eq(claireProgressionEvidence.operatorUserId, input.operatorUserId),
         eq(claireProgressionEvidence.category, input.category),
-        eq(claireProgressionEvidence.kind, input.kind),
         eq(claireProgressionEvidence.sourceType, input.sourceType),
         eq(claireProgressionEvidence.sourceId, input.sourceId)
       );
@@ -149,6 +158,7 @@ export function createDrizzleProgressionStore(): ProgressionStore {
           rapportPolicyVersion: row.rapportPolicyVersion ?? null,
           personalRung: row.personalRung as ProgressionGrant["personalRung"],
           rungPolicyVersion: row.rungPolicyVersion ?? null,
+          entitlementWatermark: row.entitlementWatermark?.toISOString() ?? null,
         } satisfies ProgressionGrant;
       }, null);
     },
@@ -163,12 +173,24 @@ export function createDrizzleProgressionStore(): ProgressionStore {
             rapportPolicyVersion: grant.rapportBand > existing.rapportBand ? grant.rapportPolicyVersion : existing.rapportPolicyVersion,
             personalRung: Math.max(existing.personalRung, grant.personalRung) as ProgressionGrant["personalRung"],
             rungPolicyVersion: grant.personalRung > existing.personalRung ? grant.rungPolicyVersion : existing.rungPolicyVersion,
+            entitlementWatermark:
+              existing.entitlementWatermark && grant.entitlementWatermark
+                ? Date.parse(existing.entitlementWatermark) >= Date.parse(grant.entitlementWatermark) ? existing.entitlementWatermark : grant.entitlementWatermark
+                : existing.entitlementWatermark ?? grant.entitlementWatermark,
           }
         : grant;
       await closed(async () => {
         await db
           .insert(claireProgressionGrants)
-          .values({ tenantId: scope.tenantId, operatorUserId: scope.operatorUserId, ...merged })
+          .values({
+            tenantId: scope.tenantId,
+            operatorUserId: scope.operatorUserId,
+            rapportBand: merged.rapportBand,
+            rapportPolicyVersion: merged.rapportPolicyVersion,
+            personalRung: merged.personalRung,
+            rungPolicyVersion: merged.rungPolicyVersion,
+            entitlementWatermark: merged.entitlementWatermark ? new Date(merged.entitlementWatermark) : null,
+          })
           .onDuplicateKeyUpdate({
             // GREATEST at the database: even a racing or stale writer can never lower a grant.
             // The version columns follow the component only when it actually rose.
@@ -177,6 +199,9 @@ export function createDrizzleProgressionStore(): ProgressionStore {
               rungPolicyVersion: sql`IF(${merged.personalRung} > personalRung, ${merged.rungPolicyVersion}, rungPolicyVersion)`,
               rapportBand: sql`GREATEST(rapportBand, ${merged.rapportBand})`,
               personalRung: sql`GREATEST(personalRung, ${merged.personalRung})`,
+              entitlementWatermark: merged.entitlementWatermark
+                ? sql`GREATEST(COALESCE(entitlementWatermark, ${new Date(merged.entitlementWatermark)}), ${new Date(merged.entitlementWatermark)})`
+                : sql`entitlementWatermark`,
             },
           });
       }, undefined);
@@ -223,34 +248,96 @@ export function createDrizzleProgressionStore(): ProgressionStore {
       }, []);
     },
 
-    async reserveEntitlement({ id, token, now }) {
+    async reserveEntitlement({ id, token, now, context }) {
       const db = await getDb();
       if (!db) return false;
       return closed(async () => {
         const result = await db
           .update(claireDisclosureEntitlements)
-          .set({ status: "reserved", reservedAt: new Date(now), reservationToken: token })
+          .set({
+            status: "reserved",
+            reservedAt: new Date(now),
+            reservationToken: token,
+            reservedConversationId: context.conversationId,
+            reservedFragmentId: context.fragmentId,
+            reservedTopic: context.topic,
+            reservedRung: context.rung,
+            reservedRapportBand: context.rapportBand,
+          })
           .where(and(eq(claireDisclosureEntitlements.id, Number(id)), eq(claireDisclosureEntitlements.status, "unused")));
         return affected(result) === 1;
       }, false);
     },
 
-    async consumeReservedEntitlement({ id, token, fragmentId, conversationId, now }) {
+    async listReservedForConversation({ tenantId, conversationId }) {
       const db = await getDb();
-      if (!db) return false;
+      if (!db) return [];
       return closed(async () => {
-        const result = await db
-          .update(claireDisclosureEntitlements)
-          .set({ status: "consumed", consumedAt: new Date(now), consumedFragmentId: fragmentId, consumedConversationId: conversationId })
+        const rows = await db
+          .select()
+          .from(claireDisclosureEntitlements)
           .where(
             and(
-              eq(claireDisclosureEntitlements.id, Number(id)),
+              eq(claireDisclosureEntitlements.tenantId, tenantId),
               eq(claireDisclosureEntitlements.status, "reserved"),
-              eq(claireDisclosureEntitlements.reservationToken, token)
+              eq(claireDisclosureEntitlements.reservedConversationId, conversationId)
             )
           );
-        return affected(result) === 1;
-      }, false);
+        return rows.map(toEntitlement);
+      }, []);
+    },
+
+    async commitReservedDisclosure({ entitlementId, token, now }) {
+      const db = await getDb();
+      if (!db) return false;
+      return closed(async () =>
+        // One transaction: the conditional consume and the durable ledger row succeed or fail together.
+        db.transaction(async tx => {
+          const [row] = await tx
+            .select()
+            .from(claireDisclosureEntitlements)
+            .where(eq(claireDisclosureEntitlements.id, Number(entitlementId)))
+            .for("update")
+            .limit(1);
+          if (
+            !row ||
+            row.status !== "reserved" ||
+            row.reservationToken !== token ||
+            !row.reservedConversationId ||
+            !row.reservedFragmentId
+          ) {
+            return false;
+          }
+          const result = await tx
+            .update(claireDisclosureEntitlements)
+            .set({
+              status: "consumed",
+              consumedAt: new Date(now),
+              consumedFragmentId: row.reservedFragmentId,
+              consumedConversationId: row.reservedConversationId,
+            })
+            .where(
+              and(
+                eq(claireDisclosureEntitlements.id, row.id),
+                eq(claireDisclosureEntitlements.status, "reserved"),
+                eq(claireDisclosureEntitlements.reservationToken, token)
+              )
+            );
+          if (affected(result) !== 1) return false;
+          await tx.insert(clairePersonalLedger).values({
+            tenantId: row.tenantId,
+            operatorUserId: row.operatorUserId,
+            conversationId: row.reservedConversationId,
+            kind: "disclosed",
+            topic: row.reservedTopic,
+            fragmentId: row.reservedFragmentId,
+            entitlementId: row.id,
+            rungAtTime: row.reservedRung ?? 0,
+            rapportBandAtTime: row.reservedRapportBand ?? 0,
+            occurredAt: new Date(now),
+          });
+          return true; // any throw above rolls the whole transaction back
+        }), false);
     },
 
     async releaseReservation({ id, token }) {
@@ -261,7 +348,16 @@ export function createDrizzleProgressionStore(): ProgressionStore {
         if (token) conditions.push(eq(claireDisclosureEntitlements.reservationToken, token));
         const result = await db
           .update(claireDisclosureEntitlements)
-          .set({ status: "unused", reservedAt: null, reservationToken: null })
+          .set({
+            status: "unused",
+            reservedAt: null,
+            reservationToken: null,
+            reservedConversationId: null,
+            reservedFragmentId: null,
+            reservedTopic: null,
+            reservedRung: null,
+            reservedRapportBand: null,
+          })
           .where(and(...conditions));
         return affected(result) === 1;
       }, false);

@@ -10,7 +10,9 @@ import { isCombineRequest, normalizeUtterance } from "../business/businessLangua
 import { getClaireCampaignSummary } from "../campaignAwareness";
 import type { ClaireDriveContext } from "../contextAssembler";
 import { buildClaireVerifiedFactInventory, sanitizeSpeakAgainstInventory } from "../verifiedFactInventoryFromContext";
-import { commitPendingDisclosures } from "../progression/pendingReceipts";
+import { getProgressionStore } from "../progression/drizzleStore";
+import { isClaireProgressionEnabled } from "../progression/progressionFlag";
+import { commitPendingDisclosuresForConversation } from "../progression/service";
 import { answerClairePreDriveFollowUp } from "../preDriveConversation";
 import { detectConfirmation, handleVoiceCommitmentTurn, type PendingProposalState, type VoiceCommitmentTurnResult } from "../voiceCommitmentLoop";
 import { commitBriefing, loadExistingWork, matchExistingWork, reconcileBriefing, speakBriefingCommit } from "../briefing/briefingCommit";
@@ -136,6 +138,8 @@ export type ClaireTurnResult = {
     | "commitment"
     | "follow_up";
   listenOnly?: boolean;
+  /** A personal turn closed the personal thread AND business is complete AND an authored exit exists: hang up after speaking. */
+  endCall?: boolean;
   commitmentTurn?: VoiceCommitmentTurnResult;
   actionIds?: string[];
 };
@@ -290,7 +294,9 @@ export { MEMORY_QUESTION } from "../answerRouter";
 export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<ClaireTurnDeps> = {}): Promise<ClaireTurnResult> {
   // A new turn on this call means the previous line was actually spoken: that is the delivery
   // boundary at which a pending personal reveal is committed (fragment disclosed, entitlement consumed).
-  await commitPendingDisclosures(input.conversationKey);
+  if (isClaireProgressionEnabled(input.tenantId)) {
+    await commitPendingDisclosuresForConversation(getProgressionStore(), { tenantId: input.tenantId, conversationId: input.conversationKey });
+  }
   const deps: ClaireTurnDeps = { ...defaultClaireTurnDeps(), ...overrides };
   const now = deps.now();
   const nowMs = now.getTime();
@@ -331,6 +337,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       trace.latency.firstTokenMs = Date.now() - trace.startedAtMs;
     }
   };
+  // Set when a guarded personal turn decided the call should actually end (business complete + an
+  // authored exit line exists). Dormant in production until such a line is authored.
+  let personalEndCall = false;
   const finish = (result: ClaireTurnResult): ClaireTurnResult => {
     const inventory = buildClaireVerifiedFactInventory(input.context);
     const speak = sanitizeSpeakAgainstInventory(result.speak, inventory);
@@ -341,7 +350,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     remember(state, "claire", guarded.speak, nowMs);
     persistClaireTurnTrace(trace, { turnKind: guarded.kind, spokenText: guarded.speak });
     deps.onTurnTrace?.(trace);
-    return guarded;
+    return personalEndCall ? { ...guarded, endCall: true } : guarded;
   };
   const history = () => (state.history ?? []).map(entry => ({ speaker: entry.speaker, text: entry.text }));
   const lower = normalizeUtterance(utterance);
@@ -658,6 +667,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       context: input.context,
       recentTurns: history().slice(0, -1),
       conversationId: input.conversationKey,
+      onPersonalTurn: personal => {
+        if (personal.endCall) personalEndCall = true;
+      },
       onFirstToken: markFirstToken,
       // Slice A: the follow-up path already reports how it ended (model,
       // canon recovery, or conservative fallback). Read it rather than
@@ -821,6 +833,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       recentTurns: history().slice(0, -1),
       retrievedEvidence: evidence.length ? evidence : undefined,
       conversationId: input.conversationKey,
+      onPersonalTurn: personal => {
+        if (personal.endCall) personalEndCall = true;
+      },
       onFirstToken: markFirstToken,
       onGeneration: diagnostic => {
         trace.modelRequested = diagnostic.modelRequested ?? null;

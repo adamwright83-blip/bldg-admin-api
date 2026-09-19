@@ -3,8 +3,7 @@ import { answerClairePreDriveFollowUp } from "../preDriveConversation";
 import type { ClaireDriveContext } from "../contextAssembler";
 import { buildClaireClock, CLAIRE_BUSINESS_TIME_ZONE } from "../contextAssembler";
 import { AUTHORED_DIALOGUE } from "./authoredDialogue";
-import { commitPendingDisclosures } from "./pendingReceipts";
-import { recordProgressionEvidence, refreshProgression } from "./service";
+import { commitPendingDisclosuresForConversation, recordProgressionEvidence, refreshProgression } from "./service";
 import { createInMemoryProgressionStore } from "./store";
 
 const context = {
@@ -25,15 +24,15 @@ async function earned() {
   for (let i = 1; i <= 6; i += 1) {
     await recordProgressionEvidence(store, { ...SCOPE, category: "growth_action", kind: "confirmed_field_visit", sourceType: "m", sourceId: `a${i}`, provenance: "debrief_confirm", occurredAt: at(i), recognizedAt: at(i) });
   }
-  await recordProgressionEvidence(store, { ...SCOPE, category: "business_progress", kind: "target_account_won", sourceType: "m", sourceId: "w", provenance: "debrief_confirm", occurredAt: at(10), recognizedAt: at(10) });
-  await refreshProgression(store, SCOPE, { disclosureSafetyOk: true, now: () => at(11) });
+  await recordProgressionEvidence(store, { ...SCOPE, category: "business_progress", kind: "target_account_won", sourceType: "m", sourceId: "w", provenance: "debrief_confirm", occurredAt: new Date(Date.UTC(2026, 9, 10, 15)), recognizedAt: new Date(Date.UTC(2026, 9, 10, 15)) });
+  await refreshProgression(store, SCOPE, { disclosureSafetyOk: true, now: () => new Date(Date.UTC(2026, 9, 11, 15)) });
   return store;
 }
 
 describe("live personal path (answerClairePreDriveFollowUp)", () => {
   it("earned + asked: the model sees ONLY the bounded fragment, and the reveal commits only at the delivery boundary", async () => {
     const store = await earned();
-    const invokeText = vi.fn().mockResolvedValue("He was an academic, on paper.");
+    const invokeText = vi.fn().mockResolvedValueOnce("He was an academic, on paper.").mockResolvedValueOnce("ENTAILED");
     const reply = await answerClairePreDriveFollowUp(
       { tenantId: "tenant-1", utterance: "What happened with your father?", brief: "b", context, conversationId: "call-1" },
       { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined), progressionStore: store }
@@ -45,7 +44,7 @@ describe("live personal path (answerClairePreDriveFollowUp)", () => {
     expect(system).not.toMatch(/six-year/i);
     // Reserved, not yet consumed: delivery has not been confirmed.
     expect((await store.listEntitlements(SCOPE))[0].status).toBe("reserved");
-    expect(await commitPendingDisclosures("call-1")).toBe(1);
+    expect(await commitPendingDisclosuresForConversation(store, { tenantId: "tenant-1", conversationId: "call-1" })).toBe(1);
     expect((await store.listEntitlements(SCOPE))[0].status).toBe("consumed");
   });
 

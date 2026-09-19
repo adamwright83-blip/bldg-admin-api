@@ -60,6 +60,11 @@ export function compileClaireCharacterContext(input: {
    * When absent, only harmless core canon is eligible: Claire never volunteers gated biography.
    */
   boundedCanonFragmentIds?: readonly string[];
+  /**
+   * Progression flag OFF: reproduce the pre-feature behavior exactly (tier-based canon eligibility,
+   * no rapport line). Only relationshipHistory.ts sets this, from isClaireProgressionEnabled().
+   */
+  legacyTierDisclosure?: boolean;
 }): ClaireCompiledContext {
   const modePolicy = CLAIRE_CHARACTER_DEFINITION.modes[input.mode];
   const recentEvents = input.recentSharedHistory.slice(-CLAIRE_HISTORY_PROMPT_BUDGET);
@@ -76,7 +81,15 @@ export function compileClaireCharacterContext(input: {
     : recentEvents.map(event => event.id);
   const rapportBand = input.progression?.rapportBand ?? 0;
   const personalRung = input.progression?.personalRung ?? 0;
-  const eligibleCanonFragments = input.boundedCanonFragmentIds
+  const legacy = input.legacyTierDisclosure === true;
+  const eligibleCanonFragments = legacy
+    ? retrieveEligibleClaireCanon({
+        disclosureTier: input.relationshipState.disclosureTier,
+        mode: input.mode,
+        fieldOverride: modePolicy.fieldOverride,
+        explicitlyRequestedTopic: input.explicitlyRequestedTopic,
+      })
+    : input.boundedCanonFragmentIds
     ? CLAIRE_CANON.filter(
         fragment =>
           input.boundedCanonFragmentIds!.includes(fragment.id) &&
@@ -102,10 +115,12 @@ export function compileClaireCharacterContext(input: {
     );
   }
   lines.push(HISTORY_USAGE_RULES);
-  lines.push(rapportPresentationLine(rapportBand));
+  if (!legacy) lines.push(rapportPresentationLine(rapportBand));
   if (eligibleCanonFacts.length && (!modePolicy.fieldOverride || input.explicitlyRequestedTopic)) {
     lines.push(
-      input.boundedCanonFragmentIds
+      legacy
+        ? `Eligible personal canon at this operator's disclosure tier (${input.relationshipState.disclosureTier}) — reveal only if it naturally fits, never force it: ${eligibleCanonFacts.join(" | ")}`
+        : input.boundedCanonFragmentIds
         ? `The only personal fact you may draw on this turn, phrased in your own voice and never read out as a file: ${eligibleCanonFacts.join(" | ")}`
         : `Harmless background you may use if the operator asks: ${eligibleCanonFacts.join(" | ")}`
     );
@@ -120,8 +135,8 @@ export function compileClaireCharacterContext(input: {
       compilerVersion: CLAIRE_COMPILER_VERSION,
     },
     mode: input.mode,
-    disclosureTier: personalRung,
-    rapportBand,
+    disclosureTier: legacy ? input.relationshipState.disclosureTier : personalRung,
+    rapportBand: legacy ? undefined : rapportBand,
     relationshipDimensions: {
       professionalRespect: input.relationshipState.professionalRespect,
       reliability: input.relationshipState.reliability,

@@ -8032,8 +8032,9 @@ export const claireProgressionEvidence = mysqlTable(
     createdAt: timestamp("createdAt").notNull().defaultNow(),
   },
   table => ({
+    // One underlying source event = one evidence identity. `kind` is deliberately NOT part of the key.
     uniqueEvidence: uniqueIndex("uq_claire_progression_evidence").on(
-      table.tenantId, table.operatorUserId, table.category, table.kind, table.sourceType, table.sourceId
+      table.tenantId, table.operatorUserId, table.category, table.sourceType, table.sourceId
     ),
   })
 );
@@ -8048,6 +8049,7 @@ export const claireProgressionGrants = mysqlTable(
     rapportPolicyVersion: varchar("rapportPolicyVersion", { length: 64 }),
     personalRung: int("personalRung").notNull().default(0),
     rungPolicyVersion: varchar("rungPolicyVersion", { length: 64 }),
+    entitlementWatermark: timestamp("entitlementWatermark"),
     updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
   },
   table => ({
@@ -8066,6 +8068,11 @@ export const claireDisclosureEntitlements = mysqlTable(
     mintedAt: timestamp("mintedAt").notNull(),
     reservedAt: timestamp("reservedAt"),
     reservationToken: varchar("reservationToken", { length: 64 }),
+    reservedConversationId: varchar("reservedConversationId", { length: 128 }),
+    reservedFragmentId: varchar("reservedFragmentId", { length: 64 }),
+    reservedTopic: varchar("reservedTopic", { length: 64 }),
+    reservedRung: int("reservedRung"),
+    reservedRapportBand: int("reservedRapportBand"),
     consumedAt: timestamp("consumedAt"),
     consumedFragmentId: varchar("consumedFragmentId", { length: 64 }),
     consumedConversationId: varchar("consumedConversationId", { length: 128 }),

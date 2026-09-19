@@ -23,6 +23,11 @@ export type ProgressionGrant = {
   rapportPolicyVersion: string | null;
   personalRung: PersonalAccessRung;
   rungPolicyVersion: string | null;
+  /**
+   * No-backlog watermark: business progress recognized at or before this instant has already been
+   * considered for entitlement minting. Null until the operator first becomes eligible.
+   */
+  entitlementWatermark: string | null;
 };
 
 export const EMPTY_GRANT: ProgressionGrant = {
@@ -30,6 +35,7 @@ export const EMPTY_GRANT: ProgressionGrant = {
   rapportPolicyVersion: null,
   personalRung: 0,
   rungPolicyVersion: null,
+  entitlementWatermark: null,
 };
 
 export type ProgressionCounts = {
@@ -45,9 +51,18 @@ export type ProgressionEvaluation = {
   computedRung: PersonalAccessRung;
   /** Monotonic: never below the prior grant. */
   grant: ProgressionGrant;
-  /** Ids of business-progress evidence eligible to mint one entitlement each (only when rung >= 1). */
-  entitlementEligibleEvidenceIds: string[];
+  /**
+   * Recognized, qualifying business-progress evidence (occurred on/after the program epoch), oldest
+   * recognition first. Whether any of it MINTS an entitlement is decided by the no-backlog rule in
+   * service.ts, never by mere existence here.
+   */
+  qualifyingProgress: ProgressionEvidence[];
 };
+
+/** Historical pre-epoch business results are preserved as evidence but are baseline, not progress. */
+export function isQualifyingProgress(item: ProgressionEvidence, policy: ProgressionPolicy): boolean {
+  return item.category === "business_progress" && Date.parse(item.occurredAt) >= Date.parse(policy.progressEpoch);
+}
 
 function dayOf(iso: string): string {
   return new Date(iso).toISOString().slice(0, 10);
@@ -55,11 +70,12 @@ function dayOf(iso: string): string {
 
 export function countProgressionEvidence(
   evidence: readonly ProgressionEvidence[],
-  asOf: Date
+  asOf: Date,
+  policy: ProgressionPolicy = PROGRESSION_POLICY
 ): ProgressionCounts {
   const recognized = evidence.filter(item => Date.parse(item.recognizedAt) <= asOf.getTime());
   const growth = recognized.filter(item => item.category === "growth_action");
-  const progress = recognized.filter(item => item.category === "business_progress");
+  const progress = recognized.filter(item => isQualifyingProgress(item, policy));
   return {
     growthActions: growth.length,
     growthActionDays: new Set(growth.map(item => dayOf(item.occurredAt))).size,
@@ -78,7 +94,7 @@ export function evaluateProgression(input: {
 }): ProgressionEvaluation {
   const policy = input.policy ?? PROGRESSION_POLICY;
   const prior = input.prior ?? EMPTY_GRANT;
-  const counts = countProgressionEvidence(input.evidence, input.asOf);
+  const counts = countProgressionEvidence(input.evidence, input.asOf, policy);
 
   let computedRapportBand: RapportBand = 0;
   for (const threshold of policy.rapport) {
@@ -105,17 +121,18 @@ export function evaluateProgression(input: {
       computedRapportBand > prior.rapportBand ? policy.version : prior.rapportPolicyVersion,
     personalRung: Math.max(prior.personalRung, computedRung) as PersonalAccessRung,
     rungPolicyVersion: computedRung > prior.personalRung ? policy.version : prior.rungPolicyVersion,
+    entitlementWatermark: prior.entitlementWatermark,
   };
 
-  const recognizedProgress = input.evidence
-    .filter(item => item.category === "business_progress" && Date.parse(item.recognizedAt) <= input.asOf.getTime())
-    .map(item => item.id);
+  const qualifyingProgress = input.evidence
+    .filter(item => isQualifyingProgress(item, policy) && Date.parse(item.recognizedAt) <= input.asOf.getTime())
+    .sort((a, b) => Date.parse(a.recognizedAt) - Date.parse(b.recognizedAt) || Date.parse(a.occurredAt) - Date.parse(b.occurredAt));
 
   return {
     counts,
     computedRapportBand,
     computedRung,
     grant,
-    entitlementEligibleEvidenceIds: grant.personalRung >= 1 ? recognizedProgress : [],
+    qualifyingProgress,
   };
 }

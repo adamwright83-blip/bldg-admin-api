@@ -75,7 +75,9 @@ export function createSimulationSession(options: { env?: Record<string, string |
   const base = new Date(Date.UTC(2026, 0, 1, 15)).getTime();
   const at = (i: number) => new Date(base + i * 86_400_000);
   let seq = 0;
-  const now = () => new Date(base + 400 * 86_400_000);
+  // A simulated clock that only moves forward: later progress events are recognized AFTER earlier grants.
+  let clock = base + 400 * 86_400_000;
+  const now = () => new Date(clock);
 
   const addEvidence = async (category: "growth_action" | "business_progress", kind: string, i: number) => {
     await recordProgressionEvidence(store, {
@@ -91,14 +93,20 @@ export function createSimulationSession(options: { env?: Record<string, string |
     async applyState(state) {
       const spec = STATE_SPEC[state];
       for (let i = 0; i < spec.actions; i += 1) await addEvidence("growth_action", "confirmed_field_visit", i);
+      // Business progress must occur on/after the progress epoch to qualify, like the real thing.
+      const epochDay = Math.ceil((Date.parse(PROGRESSION_POLICY.progressEpoch) - base) / 86_400_000);
       for (const [i, strength] of spec.progress.entries()) {
-        await addEvidence("business_progress", strength === "strong" ? "new_paying_customer" : "next_meeting_scheduled", spec.actions + i);
+        await addEvidence("business_progress", strength === "strong" ? "new_paying_customer" : "next_meeting_scheduled", epochDay + 1 + i);
       }
       const snap = await refreshProgression(store, scope, { disclosureSafetyOk: true, now });
       return { rapportBand: snap.grant.rapportBand, personalRung: snap.grant.personalRung, entitlementsMinted: snap.mintedEntitlementIds.length };
     },
     async addProgressEvent(kind = "new_paying_customer") {
-      await addEvidence("business_progress", kind, 300 + seq);
+      clock += 86_400_000; // a new day passes; the event is recognized on it
+      await recordProgressionEvidence(store, {
+        ...scope, category: "business_progress", kind, sourceType: "simulation", sourceId: `sim-${(seq += 1)}`,
+        provenance: `${SIMULATION_MARK} synthetic`, occurredAt: now(), recognizedAt: now(),
+      }, now);
       await refreshProgression(store, scope, { disclosureSafetyOk: true, now });
     },
     async ask(input) {

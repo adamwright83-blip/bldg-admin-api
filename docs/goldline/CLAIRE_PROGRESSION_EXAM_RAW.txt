@@ -25,7 +25,7 @@ SIMULATION — Claire progression exam (non-production, ephemeral store)
           -> outcome=declined fragment=core_father_career reason=personal_budget_exhausted closedThread=true returnToBusiness=true
 
 === rung2: sequence within one call (business still open)
-  state: {"rapportBand":2,"personalRung":2,"entitlementsMinted":2}
+  state: {"rapportBand":2,"personalRung":2,"entitlementsMinted":1}
   ADAM    [asks about father]
   CLAIRE  He was an academic, on paper.
           -> outcome=answered_new_disclosure fragment=core_father_career reason=- closedThread=false returnToBusiness=false
@@ -40,7 +40,7 @@ SIMULATION — Claire progression exam (non-production, ephemeral store)
           -> outcome=answered_previously_disclosed fragment=core_father_career reason=- closedThread=true returnToBusiness=true
 
 === rung3: sequence within one call (business still open)
-  state: {"rapportBand":3,"personalRung":3,"entitlementsMinted":4}
+  state: {"rapportBand":3,"personalRung":3,"entitlementsMinted":1}
   ADAM    [asks about father]
   CLAIRE  He was an academic, on paper.
           -> outcome=answered_new_disclosure fragment=core_father_career reason=- closedThread=false returnToBusiness=false
@@ -69,7 +69,7 @@ SIMULATION — Claire progression exam (non-production, ephemeral store)
 
 === dry spell: months of nothing changes nothing
   earned: {"rapportBand":1,"personalRung":1,"entitlementsMinted":1}
-  18 months later: {"rapportBand":1,"rapportPolicyVersion":"rapport-disclosure-2026-09-18.1","personalRung":1,"rungPolicyVersion":"rapport-disclosure-2026-09-18.1"}
+  18 months later: {"rapportBand":1,"rapportPolicyVersion":"rapport-disclosure-2026-09-18.1","personalRung":1,"rungPolicyVersion":"rapport-disclosure-2026-09-18.1","entitlementWatermark":"2028-01-01T00:00:00.000Z"}
 
 === lucky result: paid order with no consistency
   ADAM    What happened with your father?
@@ -85,6 +85,12 @@ SIMULATION — Claire progression exam (non-production, ephemeral store)
   CLAIRE  He was an academic, on paper.
           -> outcome=answered_new_disclosure fragment=core_father_career reason=- closedThread=false returnToBusiness=false
   entitlements after retry: ["consumed"]
+
+=== entailment: an answer adding history beyond the authorized fact is rejected and the reveal is not burned
+  ADAM    What happened with your father?
+  CLAIRE  Not that one.
+          -> outcome=declined fragment=core_father_career reason=unsupported_claim closedThread=false returnToBusiness=false
+  entitlements after rejection: ["unused"]
 
 === cross-call retry: refused, business progress lands, asked again on a later call
   ADAM    What happened with your father?
@@ -165,7 +171,7 @@ SIMULATION — Claire progression exam (non-production, ephemeral store)
       "declineId": "generic_not_that_one",
       "hadUnusedEntitlement": true,
       "failurePhase": "post_validation",
-      "occurredAt": "2026-09-19T06:16:13.447Z"
+      "occurredAt": "2026-09-19T06:52:56.236Z"
     }
   ]
 }

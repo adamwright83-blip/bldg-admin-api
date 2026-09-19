@@ -32,6 +32,13 @@ export type ProgressionPolicy = {
    * a separate control from which facts she may reveal. Never shown to the operator.
    */
   personalExchangeBudget: Record<PersonalAccessRung, number>;
+  /**
+   * Business results that occurred before this instant are the operator's pre-existing baseline: they
+   * are preserved as evidence but never count as progress toward a rung or mint an entitlement.
+   * Without this, years of existing customers would make Rung 1 effort-only. It compares occurredAt
+   * (when reality happened), so a delayed import of a post-epoch event still qualifies.
+   */
+  progressEpoch: string;
   /** A reserved-but-uncommitted entitlement returns to "unused" after this long. */
   entitlementReservationTtlMs: number;
 };
@@ -50,5 +57,6 @@ export const PROGRESSION_POLICY: ProgressionPolicy = {
   ],
   // Rung 1: one substantive answer + one natural follow-up. Rung 2: 2-3. Rung 3: 4-5.
   personalExchangeBudget: { 0: 0, 1: 2, 2: 3, 3: 5 },
+  progressEpoch: "2026-09-19T00:00:00.000Z",
   entitlementReservationTtlMs: 10 * 60 * 1000,
 };

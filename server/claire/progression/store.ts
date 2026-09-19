@@ -5,6 +5,13 @@ import type { ProgressionGrant } from "./evaluate";
  * Persistence seam for the progression layer. Production: drizzleStore.ts.
  * Tests and the simulator: createInMemoryProgressionStore(). The simulator may
  * ONLY ever be given an in-memory store (see simulator.ts).
+ *
+ * Both implementations must honor the same semantic contract:
+ *  - evidence identity is the underlying SOURCE EVENT, never its classification;
+ *  - grants never decrease;
+ *  - reserve/commit are atomic and conditional; commit = consume + durable `disclosed`
+ *    ledger row, all or nothing;
+ *  - a reservation carries everything needed to commit it from any process.
  */
 
 export type OperatorScope = { tenantId: string; operatorUserId: string };
@@ -12,6 +19,15 @@ export type OperatorScope = { tenantId: string; operatorUserId: string };
 export type StoredEvidence = ProgressionEvidence & OperatorScope;
 
 export type EntitlementStatus = "unused" | "reserved" | "consumed";
+
+/** Durable description of a reveal that has cleared validation but not yet crossed the delivery boundary. */
+export type ReservationContext = {
+  conversationId: string;
+  fragmentId: string;
+  topic: string;
+  rung: number;
+  rapportBand: number;
+};
 
 export type DisclosureEntitlement = OperatorScope & {
   id: string;
@@ -21,6 +37,7 @@ export type DisclosureEntitlement = OperatorScope & {
   mintedAt: string;
   reservedAt: string | null;
   reservationToken: string | null;
+  reservation: ReservationContext | null;
   consumedAt: string | null;
   consumedFragmentId: string | null;
   consumedConversationId: string | null;
@@ -63,7 +80,11 @@ export type NewPersonalLedgerEntry = Omit<PersonalLedgerEntry, "id" | "occurredA
 export type ProgressionStore = {
   /** Distinguishes ephemeral stores from the production database. The simulator accepts only "in_memory". */
   readonly kind: "in_memory" | "drizzle";
-  /** Idempotent on (operator, category, kind, sourceType, sourceId). Returns the stored row either way. */
+  /**
+   * Idempotent on (operator, category, sourceType, sourceId): ONE underlying business event is ONE
+   * evidence identity. A later reclassification of the same source event returns the existing row
+   * (created:false) and can never mint a second progression event.
+   */
   insertEvidence(input: StoredEvidence): Promise<{ row: StoredEvidence; created: boolean }>;
   listEvidence(scope: OperatorScope): Promise<StoredEvidence[]>;
   getGrant(scope: OperatorScope): Promise<ProgressionGrant | null>;
@@ -72,16 +93,16 @@ export type ProgressionStore = {
   /** Idempotent on evidenceId. */
   insertEntitlementIfAbsent(input: Omit<DisclosureEntitlement, "id">): Promise<{ row: DisclosureEntitlement; created: boolean }>;
   listEntitlements(scope: OperatorScope): Promise<DisclosureEntitlement[]>;
-  /** Atomic: only succeeds when status is currently "unused". */
-  reserveEntitlement(input: { id: string; token: string; now: string }): Promise<boolean>;
-  /** Atomic: only succeeds when status is "reserved" with this token. */
-  consumeReservedEntitlement(input: {
-    id: string;
-    token: string;
-    fragmentId: string;
-    conversationId: string;
-    now: string;
-  }): Promise<boolean>;
+  /** Atomic: only succeeds when status is currently "unused". Persists the reservation context. */
+  reserveEntitlement(input: { id: string; token: string; now: string; context: ReservationContext }): Promise<boolean>;
+  /** Reservations awaiting delivery confirmation for a conversation (any process may read them). */
+  listReservedForConversation(input: { tenantId: string; conversationId: string }): Promise<DisclosureEntitlement[]>;
+  /**
+   * ATOMIC commit: conditional reserved->consumed transition AND the durable `disclosed` ledger row,
+   * in one transaction. If either half fails, neither happens and the reservation stays intact
+   * (and will lapse safely back to unused). Returns false when the reservation is not committable.
+   */
+  commitReservedDisclosure(input: { entitlementId: string; token: string; now: string }): Promise<boolean>;
   /** Returns a reservation to "unused" (compensation, or TTL expiry). No-op unless "reserved". */
   releaseReservation(input: { id: string; token?: string }): Promise<boolean>;
   appendLedger(entry: NewPersonalLedgerEntry): Promise<PersonalLedgerEntry>;
@@ -97,9 +118,17 @@ const nextId = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${(coun
 
 const scopeKey = (scope: OperatorScope) => `${scope.tenantId}::${scope.operatorUserId}`;
 const evidenceKey = (row: ProgressionEvidence & OperatorScope) =>
-  `${scopeKey(row)}::${row.category}::${row.kind}::${row.sourceType}::${row.sourceId}`;
+  `${scopeKey(row)}::${row.category}::${row.sourceType}::${row.sourceId}`;
 
-export function createInMemoryProgressionStore(): ProgressionStore {
+const maxIso = (a: string | null, b: string | null): string | null =>
+  a && b ? (Date.parse(a) >= Date.parse(b) ? a : b) : a ?? b;
+
+export type InMemoryStoreOptions = {
+  /** Test hook: make the ledger half of a commit fail so atomicity can be proven. */
+  failLedgerOnCommit?: () => boolean;
+};
+
+export function createInMemoryProgressionStore(options: InMemoryStoreOptions = {}): ProgressionStore {
   const evidence = new Map<string, StoredEvidence>();
   const grants = new Map<string, ProgressionGrant>();
   const entitlements = new Map<string, DisclosureEntitlement>();
@@ -131,6 +160,7 @@ export function createInMemoryProgressionStore(): ProgressionStore {
             personalRung: Math.max(prior.personalRung, grant.personalRung) as ProgressionGrant["personalRung"],
             rungPolicyVersion:
               grant.personalRung > prior.personalRung ? grant.rungPolicyVersion : prior.rungPolicyVersion,
+            entitlementWatermark: maxIso(prior.entitlementWatermark, grant.entitlementWatermark),
           }
         : grant;
       grants.set(scopeKey(scope), merged);
@@ -148,29 +178,42 @@ export function createInMemoryProgressionStore(): ProgressionStore {
     async listEntitlements(scope) {
       return [...entitlements.values()].filter(row => scopeKey(row) === scopeKey(scope));
     },
-    async reserveEntitlement({ id, token, now }) {
+    async reserveEntitlement({ id, token, now, context }) {
       const row = entitlements.get(id);
       if (!row || row.status !== "unused") return false;
-      entitlements.set(id, { ...row, status: "reserved", reservedAt: now, reservationToken: token });
+      entitlements.set(id, { ...row, status: "reserved", reservedAt: now, reservationToken: token, reservation: context });
       return true;
     },
-    async consumeReservedEntitlement({ id, token, fragmentId, conversationId, now }) {
-      const row = entitlements.get(id);
-      if (!row || row.status !== "reserved" || row.reservationToken !== token) return false;
-      entitlements.set(id, {
-        ...row,
-        status: "consumed",
-        consumedAt: now,
-        consumedFragmentId: fragmentId,
-        consumedConversationId: conversationId,
+    async listReservedForConversation({ tenantId, conversationId }) {
+      return [...entitlements.values()].filter(
+        row => row.tenantId === tenantId && row.status === "reserved" && row.reservation?.conversationId === conversationId
+      );
+    },
+    async commitReservedDisclosure({ entitlementId, token, now }) {
+      const row = entitlements.get(entitlementId);
+      if (!row || row.status !== "reserved" || row.reservationToken !== token || !row.reservation) return false;
+      // Stage both halves; apply only if both can succeed (transaction semantics).
+      if (options.failLedgerOnCommit?.()) throw new Error("ledger write failed; commit rolled back");
+      const context = row.reservation;
+      const entry: PersonalLedgerEntry = {
+        tenantId: row.tenantId, operatorUserId: row.operatorUserId, id: nextId("led"),
+        conversationId: context.conversationId, kind: "disclosed", topic: context.topic,
+        fragmentId: context.fragmentId, entitlementId: row.id, rungAtTime: context.rung,
+        rapportBandAtTime: context.rapportBand, declineId: null, failureReason: null,
+        hadUnusedEntitlement: null, failurePhase: null, occurredAt: now,
+      };
+      entitlements.set(entitlementId, {
+        ...row, status: "consumed", consumedAt: now, consumedFragmentId: context.fragmentId,
+        consumedConversationId: context.conversationId,
       });
+      ledger.push(entry);
       return true;
     },
     async releaseReservation({ id, token }) {
       const row = entitlements.get(id);
       if (!row || row.status !== "reserved") return false;
       if (token && row.reservationToken !== token) return false;
-      entitlements.set(id, { ...row, status: "unused", reservedAt: null, reservationToken: null });
+      entitlements.set(id, { ...row, status: "unused", reservedAt: null, reservationToken: null, reservation: null });
       return true;
     },
     async appendLedger(entry) {

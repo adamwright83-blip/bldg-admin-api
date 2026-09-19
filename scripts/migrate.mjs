@@ -1320,7 +1320,7 @@ await runRequired(
     occurredAt TIMESTAMP NOT NULL,
     recognizedAt TIMESTAMP NOT NULL,
     createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_claire_progression_evidence (tenantId,operatorUserId,category,kind,sourceType,sourceId)
+    UNIQUE KEY uq_claire_progression_evidence (tenantId,operatorUserId,category,sourceType,sourceId)
   )`,
   "CREATE TABLE claire_progression_evidence"
 );
@@ -1333,6 +1333,7 @@ await runRequired(
     rapportPolicyVersion VARCHAR(64) NULL,
     personalRung INT NOT NULL DEFAULT 0,
     rungPolicyVersion VARCHAR(64) NULL,
+    entitlementWatermark TIMESTAMP NULL,
     updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_claire_progression_grants (tenantId,operatorUserId)
   )`,
@@ -1348,6 +1349,11 @@ await runRequired(
     mintedAt TIMESTAMP NOT NULL,
     reservedAt TIMESTAMP NULL,
     reservationToken VARCHAR(64) NULL,
+    reservedConversationId VARCHAR(128) NULL,
+    reservedFragmentId VARCHAR(64) NULL,
+    reservedTopic VARCHAR(64) NULL,
+    reservedRung INT NULL,
+    reservedRapportBand INT NULL,
     consumedAt TIMESTAMP NULL,
     consumedFragmentId VARCHAR(64) NULL,
     consumedConversationId VARCHAR(128) NULL,

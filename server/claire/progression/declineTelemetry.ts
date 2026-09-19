@@ -10,6 +10,8 @@ export const GENERATION_FAILURE_REASONS: ReadonlySet<string> = new Set([
   "generation_failed",
   "ungrounded_specificity",
   "ineligible_canon_leak",
+  "unsupported_claim",
+  "entailment_unverified",
   "ungrounded_number",
   "empty_answer",
   "reservation_failed",

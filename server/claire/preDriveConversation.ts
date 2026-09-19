@@ -29,6 +29,11 @@ import {
 } from "./verifiedFactInventoryFromContext";
 import { trimToSentenceBoundary } from "./textTrim";
 import { measureClairePromptSections, type ClairePromptSizeTrace } from "./answerPathTelemetry";
+import { recoverPersonalAnswer } from "./character/personalAnswerRecovery";
+import { assertNoUngroundedPersonalSpecificity, UngroundedPersonalSpecificityError } from "./character/personalSpecificityGuard";
+import { isClaireProgressionEnabled } from "./progression/progressionFlag";
+import { findUnauthorizedFirstPersonBiography } from "./progression/personalEntailment";
+import { lintFailureDayLanguage } from "./progression/toneLint";
 import { selectDialogueLine } from "./progression/dialogueRegistry";
 import { answerPersonalFollowUp } from "./progression/personalFollowUp";
 import type { ProgressionStore } from "./progression/store";
@@ -239,8 +244,6 @@ export async function answerClairePreDriveFollowUp(
     onFirstToken?: () => void;
     /** Conversation identity, used for the personal-thread ledger and per-call budget. */
     conversationId?: string;
-    /** Receive a not-yet-committed new disclosure so the caller commits at its own delivery boundary. */
-    onPersonalReceipt?: (receipt: NonNullable<PersonalTurnResult["receipt"]>) => void;
     onPersonalTurn?: (result: PersonalTurnResult) => void;
   },
   dependencies: {
@@ -262,7 +265,8 @@ export async function answerClairePreDriveFollowUp(
   // be answered (progression controller); the model only phrases one bounded fact;
   // every failure becomes an approved decline. Ask-only: this runs solely because the
   // operator explicitly asked a personal question.
-  if (conversationalMode === "personal") {
+  const progressionOn = isClaireProgressionEnabled(input.tenantId);
+  if (conversationalMode === "personal" && progressionOn) {
     const operatorUserId = input.context.actorId ?? null;
     if (!operatorUserId) {
       // Unresolved identity fails closed: no progression state, no disclosure.
@@ -283,7 +287,6 @@ export async function answerClairePreDriveFollowUp(
         businessOpen,
         surface,
         onGeneration: input.onGeneration,
-        onPersonalReceipt: input.onPersonalReceipt,
         onPersonalTurn: input.onPersonalTurn,
       },
       { invokeText, recordGeneration, progressionStore: dependencies.progressionStore }
@@ -294,13 +297,16 @@ export async function answerClairePreDriveFollowUp(
     operatorUserId: input.context.actorId ?? null,
     inventory,
     topic: requestedTopic ?? undefined,
-    // Personal turns returned above; everything below is business or casual conversation.
+    // With the progression flag ON, personal turns returned above. With it OFF the previous behavior
+    // (personal mode through the general path, tier-based canon) is preserved exactly.
     mode:
-      conversationalMode === "casual"
-        ? "casual"
-        : conversationalMode === "post_action_review"
-          ? "post_action_review"
-          : "pre_drive",
+      conversationalMode === "personal"
+        ? "personal"
+        : conversationalMode === "casual"
+          ? "casual"
+          : conversationalMode === "post_action_review"
+            ? "post_action_review"
+            : "pre_drive",
   });
   let stopReason: string | null = null;
   let modelServed: string | null = null;
@@ -400,20 +406,63 @@ export async function answerClairePreDriveFollowUp(
     const trimmedToSentenceBoundary = trimmed !== text;
     assertPostGenerationStateVerbs(trimmed, inventory);
 
-    const answer = trimmed;
-    const recoveredVia: null = null;
+    // Legacy (flag OFF) personal-specificity guard + deterministic canon recovery, exactly as before.
+    let answer = trimmed;
+    let recoveredVia: "canon_render" | "canon_scoped_deflection" | null = null;
+    if (conversationalMode === "personal") {
+      try {
+        assertNoUngroundedPersonalSpecificity(trimmed, compiled.eligibleCanonFacts);
+      } catch (guardError) {
+        if (!(guardError instanceof UngroundedPersonalSpecificityError)) throw guardError;
+        console.warn("[Claire] personal answer asserted ungrounded specificity; recovering deterministically from eligible canon", {
+          candidate: guardError.candidate,
+          eligibleCanonFactCount: compiled.eligibleCanonFacts.length,
+          requestedTopic: requestedTopic ?? null,
+        });
+        const recovery = recoverPersonalAnswer({
+          eligibleCanonFacts: compiled.eligibleCanonFacts,
+          eligibleCanonFragmentIds: compiled.eligibleCanonFragmentIds,
+          requestedTopic: requestedTopic ?? undefined,
+        });
+        answer = recovery.text;
+        recoveredVia = recovery.via;
+      }
+    }
+
+    // Progression ON, defense in depth on EVERY non-personal answer: first-person biography can never
+    // be asserted outside the guarded personal controller, and failure-day language stays free of
+    // shame, consolation, coaching, diagnosis and volunteered biography. A violating line is never
+    // spoken; the deterministic fallback (or an approved decline) is used instead.
+    let guardReason: string | null = null;
+    if (progressionOn && recoveredVia === null) {
+      const biography = findUnauthorizedFirstPersonBiography(answer, compiled.eligibleCanonFacts);
+      if (biography) {
+        console.warn("[Claire] general answer asserted unauthorized first-person biography; replaced");
+        answer = selectDialogueLine({ category: "decline", rapportBand: 0 })?.text ?? "Not that one.";
+        guardReason = "personal_biography_guard";
+      } else {
+        const tone = lintFailureDayLanguage(answer);
+        if (!tone.passes) {
+          console.warn("[Claire] general answer violated failure-day tone contract; replaced", tone.violations.map(v => v.category));
+          answer = fallback;
+          guardReason = `failure_day_tone:${tone.violations[0]!.category}`;
+        }
+      }
+    }
 
     const diagnostic: ClaireGenerationDiagnostic = {
       kind: "follow_up",
-      source: recoveredVia === null ? "model" : "fallback",
+      source: recoveredVia === null && guardReason === null ? "model" : "fallback",
       answerOrigin:
         recoveredVia === "canon_render"
           ? "canon_render"
-          : recoveredVia === "canon_scoped_deflection"
+          : recoveredVia === "canon_scoped_deflection" || guardReason
             ? "fallback"
             : "model",
       failureReason:
-        recoveredVia === null
+        guardReason
+          ? guardReason
+          : recoveredVia === null
           ? null
           : recoveredVia === "canon_render"
             ? "ungrounded_personal_specificity_canon_rendered"

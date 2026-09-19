@@ -6,7 +6,7 @@ import {
   type ProgressionEvidence,
 } from "./evidence";
 import { PROGRESSION_POLICY, type ProgressionPolicy } from "./policy";
-import type { DisclosureEntitlement, OperatorScope, PersonalLedgerEntry, ProgressionStore } from "./store";
+import type { DisclosureEntitlement, OperatorScope, PersonalLedgerEntry, ProgressionStore, ReservationContext } from "./store";
 
 /**
  * Progression service: the only writer of evidence, grants, entitlements.
@@ -64,8 +64,17 @@ export type ProgressionSnapshot = {
 };
 
 /**
- * Recompute from canonical evidence, persist the monotonic grant, and mint at most
- * one entitlement per qualifying business-progress evidence row (unique on evidenceId).
+ * Recompute from canonical evidence, persist the monotonic grant, and mint entitlements under the
+ * NO-BACKLOG rule:
+ *
+ *  - Business results are preserved as evidence regardless; only entitlement MINTING is limited.
+ *  - While the operator is below Rung 1, nothing mints and the watermark stays unset.
+ *  - The first time the operator is eligible (Rung >= 1), AT MOST ONE prior qualifying progress
+ *    event funds the initial entitlement (the most recently recognized). Older events never
+ *    become a warehouse of retroactive reveals.
+ *  - After that, each newly recognized qualifying event (recognizedAt after the watermark) mints
+ *    at most one entitlement. Entitlements are unique per evidence row.
+ *
  * Never reads call/chat volume. Never lowers a grant.
  */
 export async function refreshProgression(
@@ -84,16 +93,30 @@ export async function refreshProgression(
     asOf,
     policy: options.policy ?? PROGRESSION_POLICY,
   });
-  const grant = await store.upsertGrantMonotonic(scope, evaluation.grant);
+
+  let toMint: ProgressionEvidence[] = [];
+  let watermark = prior.entitlementWatermark;
+  if (evaluation.grant.personalRung >= 1) {
+    if (!watermark) {
+      const newest = evaluation.qualifyingProgress[evaluation.qualifyingProgress.length - 1];
+      toMint = newest ? [newest] : [];
+    } else {
+      toMint = evaluation.qualifyingProgress.filter(item => Date.parse(item.recognizedAt) > Date.parse(watermark!));
+    }
+    watermark = asOf.toISOString();
+  }
+
+  const grant = await store.upsertGrantMonotonic(scope, { ...evaluation.grant, entitlementWatermark: watermark });
   const minted: string[] = [];
-  for (const evidenceId of evaluation.entitlementEligibleEvidenceIds) {
+  for (const item of toMint) {
     const { row, created } = await store.insertEntitlementIfAbsent({
       ...scope,
-      evidenceId,
+      evidenceId: item.id,
       status: "unused",
       mintedAt: asOf.toISOString(), // recognition-forward: never backdated
       reservedAt: null,
       reservationToken: null,
+      reservation: null,
       consumedAt: null,
       consumedFragmentId: null,
       consumedConversationId: null,
@@ -162,58 +185,45 @@ export async function loadPersonalProgressionContext(
   };
 }
 
-/** Phase 1 of a reveal: reserve one entitlement. Nothing is disclosed or consumed yet. */
+/** Phase 1 of a reveal: reserve one entitlement, durably recording everything needed to commit it later from any process. */
 export async function reserveDisclosureEntitlement(
   store: ProgressionStore,
   entitlement: DisclosureEntitlement,
+  context: ReservationContext,
   now: () => Date = () => new Date()
 ): Promise<{ token: string } | null> {
   const token = `res_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
-  const ok = await store.reserveEntitlement({ id: entitlement.id, token, now: now().toISOString() });
+  const ok = await store.reserveEntitlement({ id: entitlement.id, token, now: now().toISOString(), context });
   return ok ? { token } : null;
 }
 
 /**
- * Phase 2: only after the validated answer actually cleared the delivery
- * boundary. Marks the fragment disclosed (ledger) and consumes the entitlement.
+ * Phase 2, at the delivery boundary: commit every reveal reserved for this conversation. Atomic per
+ * reveal (consume + `disclosed` ledger row in one transaction). Idempotent, stateless in-process, and
+ * safe to call from any replica or after a restart. Never throws mid-call.
  */
-export async function commitDisclosure(
+export async function commitPendingDisclosuresForConversation(
   store: ProgressionStore,
-  input: {
-    scope: OperatorScope;
-    conversationId: string;
-    entitlementId: string;
-    token: string;
-    fragmentId: string;
-    topic: string;
-    rung: number;
-    rapportBand: number;
-  },
+  input: { tenantId: string; conversationId: string },
   now: () => Date = () => new Date()
-): Promise<boolean> {
-  const consumed = await store.consumeReservedEntitlement({
-    id: input.entitlementId,
-    token: input.token,
-    fragmentId: input.fragmentId,
-    conversationId: input.conversationId,
-    now: now().toISOString(),
-  });
-  if (!consumed) return false;
-  await store.appendLedger({
-    ...input.scope,
-    conversationId: input.conversationId,
-    kind: "disclosed",
-    topic: input.topic,
-    fragmentId: input.fragmentId,
-    entitlementId: input.entitlementId,
-    rungAtTime: input.rung,
-    rapportBandAtTime: input.rapportBand,
-    declineId: null,
-    failureReason: null,
-    hadUnusedEntitlement: null,
-    failurePhase: null,
-  });
-  return true;
+): Promise<number> {
+  let committed = 0;
+  try {
+    for (const entitlement of await store.listReservedForConversation(input)) {
+      if (!entitlement.reservationToken) continue;
+      try {
+        if (await store.commitReservedDisclosure({ entitlementId: entitlement.id, token: entitlement.reservationToken, now: now().toISOString() })) {
+          committed += 1;
+        }
+      } catch (error) {
+        // The reservation is untouched (transaction rolled back); its TTL returns it to unused.
+        console.warn("[Claire progression] disclosure commit failed; reveal not consumed", error instanceof Error ? error.message : error);
+      }
+    }
+  } catch (error) {
+    console.warn("[Claire progression] could not list pending disclosures", error instanceof Error ? error.message : error);
+  }
+  return committed;
 }
 
 /** Compensation: a reveal that never reached the operator returns to unused. */

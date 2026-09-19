@@ -1,3 +1,4 @@
+import { isClaireProgressionEnabled } from "../progression/progressionFlag";
 import { getProgressionStore } from "../progression/drizzleStore";
 import type { ProgressionStore } from "../progression/store";
 import {
@@ -132,8 +133,9 @@ export async function compileClaireContextForOperator(input: {
     relationshipEvents,
   });
   // Hidden, progress-backed state. Any failure fails closed to rapport 0 / rung 0.
+  const progressionEnabled = isClaireProgressionEnabled(input.tenantId);
   let progression: { rapportBand: 0 | 1 | 2 | 3; personalRung: 0 | 1 | 2 | 3 } = { rapportBand: 0, personalRung: 0 };
-  if (input.operatorUserId) {
+  if (progressionEnabled && input.operatorUserId) {
     try {
       const grant = await (input.progressionStore ?? getProgressionStore()).getGrant({
         tenantId: input.tenantId,
@@ -147,6 +149,7 @@ export async function compileClaireContextForOperator(input: {
   return compileClaireCharacterContext({
     mode: input.mode,
     progression,
+    legacyTierDisclosure: !progressionEnabled,
     boundedCanonFragmentIds: input.boundedCanonFragmentIds,
     relationshipState,
     recentSharedHistory: assembledHistory.failClosed ? [] : relationshipEvents,

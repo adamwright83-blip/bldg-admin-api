@@ -1,10 +1,7 @@
-import { and, eq } from "drizzle-orm";
-import { cleancloudPaidOrders } from "../../../drizzle/schema";
-import { getDb } from "../../db";
-import { isMysqlMissingTableError } from "../../mysqlErrors";
+import { groupCustomerOrderTruth, loadCustomerOrderTruth, type CustomerOrderTruthRecord } from "../../geography/customerOrderTruth";
 import { listClaireRelationshipEvents } from "../character/relationshipEvents";
 import { evaluateDisclosureSafetyOk } from "../character/tierEngine";
-import { derivePaidOrderProgress, type PaidOrderRow } from "./paidOrderProgress";
+import { deriveProgressFromOrderTruth } from "./paidOrderProgress";
 import { recordProgressionEvidence, refreshProgression } from "./service";
 import type { OperatorScope, ProgressionStore } from "./store";
 import { getProgressionStore } from "./drizzleStore";
@@ -62,43 +59,6 @@ export async function recordConfirmedVisitEvidence(
   await refreshProgression(store, input, { disclosureSafetyOk: await loadDisclosureSafetyOk(input), now });
 }
 
-/** Loads canonical paid orders for a tenant. Read-only. */
-export async function loadPaidOrderRows(tenantId: string): Promise<PaidOrderRow[]> {
-  const db = await getDb();
-  if (!db) return [];
-  try {
-    const rows = await db
-      .select({
-        orderId: cleancloudPaidOrders.cleancloudOrderId,
-        customerId: cleancloudPaidOrders.cleancloudCustomerId,
-        email: cleancloudPaidOrders.customerEmail,
-        name: cleancloudPaidOrders.customerName,
-        buildingSlug: cleancloudPaidOrders.buildingSlug,
-        paidDate: cleancloudPaidOrders.paidDateUtc,
-        paymentDate: cleancloudPaidOrders.paymentDateUtc,
-        createdAt: cleancloudPaidOrders.createdAt,
-      })
-      .from(cleancloudPaidOrders)
-      .where(and(eq(cleancloudPaidOrders.tenantId, tenantId), eq(cleancloudPaidOrders.paid, true)));
-    const out: PaidOrderRow[] = [];
-    for (const row of rows) {
-      const paidAt = row.paidDate ?? row.paymentDate;
-      if (!paidAt) continue;
-      out.push({
-        orderId: row.orderId,
-        customerKey: row.customerId ?? row.email ?? row.name,
-        buildingSlug: row.buildingSlug ?? null,
-        paidAt,
-        recognizedAt: row.createdAt,
-      });
-    }
-    return out;
-  } catch (error) {
-    if (isMysqlMissingTableError(error)) return [];
-    throw error;
-  }
-}
-
 const lastSync = new Map<string, number>();
 const SYNC_MIN_INTERVAL_MS = 10 * 60 * 1000;
 
@@ -111,7 +71,8 @@ export async function syncProgressionForOperator(
   options: {
     store?: ProgressionStore;
     now?: () => Date;
-    loadRows?: (tenantId: string) => Promise<PaidOrderRow[]>;
+    /** Canonical order truth (native + CleanCloud, deduped). Defaults to the production loader. */
+    loadTruth?: (tenantId: string) => Promise<CustomerOrderTruthRecord[]>;
     force?: boolean;
     targetBuildingSlugs?: readonly string[];
   } = {}
@@ -122,8 +83,15 @@ export async function syncProgressionForOperator(
   lastSync.set(key, now().getTime());
   try {
     const store = options.store ?? getProgressionStore();
-    const rows = await (options.loadRows ?? loadPaidOrderRows)(scope.tenantId);
-    for (const progress of derivePaidOrderProgress(rows, { targetBuildingSlugs: options.targetBuildingSlugs ?? [] })) {
+    const records = await (options.loadTruth ?? ((tenantId: string) => loadCustomerOrderTruth(tenantId)))(scope.tenantId);
+    const derived = deriveProgressFromOrderTruth(groupCustomerOrderTruth(scope.tenantId, records), {
+      targetBuildingSlugs: options.targetBuildingSlugs ?? (process.env.CLAIRE_PROGRESSION_TARGET_BUILDINGS ?? "").split(",").map(entry => entry.trim()).filter(Boolean),
+      now: now(),
+    });
+    // Skip source events we already hold (one order = one evidence identity), so a sync is cheap.
+    const known = new Set((await store.listEvidence(scope)).filter(item => item.category === "business_progress").map(item => `${item.sourceType}:${item.sourceId}`));
+    for (const progress of derived) {
+      if (known.has(`${progress.sourceType}:${progress.sourceId}`)) continue;
       await recordProgressionEvidence(store, { ...scope, ...progress }, now);
     }
     await refreshProgression(store, scope, { disclosureSafetyOk: await loadDisclosureSafetyOk(scope), now });

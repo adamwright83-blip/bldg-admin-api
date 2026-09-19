@@ -194,7 +194,8 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
     });
 
     it("end-to-end: a personal-mode follow-up that stays within canon's actual specificity is accepted", async () => {
-      const invokeText = vi.fn().mockResolvedValue("British, though I moved around a lot as a kid.");
+      // First call: the answer. Second call: the claim verifier, which must say ENTAILED.
+      const invokeText = vi.fn().mockResolvedValueOnce("British, though I moved around a lot as a kid.").mockResolvedValueOnce("ENTAILED");
       const recordGeneration = vi.fn().mockResolvedValue(undefined);
       const result = await answerClairePreDriveFollowUp(
         { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: { ...baseContext, actorId: "op-1" } },

@@ -15,7 +15,6 @@ const PATTERNS: Record<string, RegExp[]> = {
     /\bmaybe you don'?t want\b/i,
     /\bwhat(?:'s| is) wrong with you\b/i,
     /\bbroken streak\b/i,
-    /\bstreak\b/i,
   ],
   consolation: [
     /\bdon'?t be discouraged\b/i,
@@ -35,7 +34,8 @@ const PATTERNS: Record<string, RegExp[]> = {
     /\bevery no gets you closer\b/i,
   ],
   diagnosis_or_coaching: [
-    /\bavoid(?:ing|ance)\b/i,
+    /\byou(?:'re| are) avoiding\b/i,
+    /\bavoidance\b/i,
     /\bfear of (?:rejection|failure|success)\b/i,
     /\bmindset\b/i,
     /\bself[- ]sabotag/i,

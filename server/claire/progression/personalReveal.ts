@@ -1,4 +1,5 @@
 import { CLAIRE_CANON } from "../character/characterDefinition";
+import { checkClaimEntailment, type EntailmentVerifier } from "./personalEntailment";
 import { assertNoUngroundedPersonalSpecificity, UngroundedPersonalSpecificityError } from "../character/personalSpecificityGuard";
 import type { CanonFragment } from "../character/types";
 import { AUTHORED_DIALOGUE, type DialogueLine } from "./authoredDialogue";
@@ -6,7 +7,6 @@ import { selectDialogueLine } from "./dialogueRegistry";
 import { planPersonalTurn, type DeclineReason, type PersonalTurnPlan } from "./personalController";
 import {
   abandonDisclosure,
-  commitDisclosure,
   loadPersonalProgressionContext,
   reserveDisclosureEntitlement,
   type PersonalProgressionContext,
@@ -57,48 +57,40 @@ export function buildPersonalDisclosureGuidance(request: PersonalGenerationReque
     .join(" ");
 }
 
-const NOISE_WORDS = new Set([
-  "claire", "career", "which", "while", "would", "their", "there", "about", "because", "through",
-]);
-
-/** Distinctive content words of a fragment that another answer must not reproduce. */
-function distinctiveWords(fact: string, exclude: string): string[] {
-  const excluded = new Set(exclude.toLowerCase().match(/[a-z]{6,}/g) ?? []);
-  return [...new Set(fact.toLowerCase().match(/[a-z]{6,}/g) ?? [])].filter(
-    word => !excluded.has(word) && !NOISE_WORDS.has(word)
-  );
-}
-
 export type PersonalValidationFailure =
   | "ungrounded_specificity"
   | "ineligible_canon_leak"
+  | "unsupported_claim"
   | "ungrounded_number"
+  | "entailment_unverified"
   | "empty_answer";
 
-/** Returns null when the text is safe to deliver. */
+/**
+ * Returns null when the text is safe to deliver. Deterministic layers only; the optional model
+ * verifier is applied by executePersonalTurn afterwards and can only reject further.
+ *
+ * `allowedFacts` = the authorized fragment's fact plus facts already disclosed to this operator that
+ * the caller supplies for this turn. Nothing else is Claire history.
+ */
 export function validatePersonalAnswer(
   text: string,
   fragment: CanonFragment,
-  options?: { allowedFragmentIds?: readonly string[] }
+  options?: { allowedFacts?: readonly string[] }
 ): PersonalValidationFailure | null {
   if (!text.trim()) return "empty_answer";
+  const allowedFacts = [...new Set([fragment.fact, ...(options?.allowedFacts ?? [])])];
   try {
-    assertNoUngroundedPersonalSpecificity(text, [fragment.fact]);
+    assertNoUngroundedPersonalSpecificity(text, allowedFacts);
   } catch (error) {
     if (error instanceof UngroundedPersonalSpecificityError) return "ungrounded_specificity";
     throw error;
   }
-  const factDigits = new Set(fragment.fact.match(/\d+/g) ?? []);
+  const factDigits = new Set(allowedFacts.join(" ").match(/\d+/g) ?? []);
   for (const digits of text.match(/\d+/g) ?? []) {
     if (!factDigits.has(digits)) return "ungrounded_number";
   }
-  const allowed = new Set([fragment.id, ...(options?.allowedFragmentIds ?? [])]);
-  const lowered = text.toLowerCase();
-  for (const other of CLAIRE_CANON) {
-    if (allowed.has(other.id) || !other.fact || other.accessClass === "core") continue;
-    const distinct = distinctiveWords(other.fact, fragment.fact);
-    if (distinct.filter(word => lowered.includes(word)).length >= 2) return "ineligible_canon_leak";
-  }
+  const entailment = checkClaimEntailment(text, allowedFacts);
+  if (!entailment.ok) return entailment.reason === "borrowed_from_other_canon" ? "ineligible_canon_leak" : "unsupported_claim";
   return null;
 }
 
@@ -137,13 +129,15 @@ export async function executePersonalTurn(input: {
   conversationId: string;
   topic: string | null;
   generate: PersonalGenerator;
+  /** Optional model claim-verifier (fail closed). Always supplied on the live path. */
+  verify?: EntailmentVerifier;
   /** Whether unresolved operational work remains in this conversation. */
   businessOpen: boolean;
   registry?: readonly DialogueLine[];
   policy?: ProgressionPolicy;
   random?: () => number;
   now?: () => Date;
-  /** Commit new disclosures immediately (callers with a real delivery boundary pass false and commit later). */
+  /** Commit immediately (tests/simulator only). Production leaves the durable reservation for the delivery boundary. */
   autoCommit?: boolean;
 }): Promise<PersonalTurnResult> {
   const now = input.now ?? (() => new Date());
@@ -249,28 +243,49 @@ export async function executePersonalTurn(input: {
   } catch {
     return decline("generation_failed", { closeThread: false, fragmentId: plan.fragment.id, phase: "pre_generation" });
   }
-  const failure = validatePersonalAnswer(text, plan.fragment);
+  const allowedFacts = [
+    plan.fragment.fact,
+    ...context.disclosedFragmentIds
+      .map(id => CLAIRE_CANON.find(fragment => fragment.id === id)?.fact)
+      .filter((fact): fact is string => Boolean(fact)),
+  ];
+  const failure = validatePersonalAnswer(text, plan.fragment, { allowedFacts });
   if (failure) {
     return decline(failure, { closeThread: false, fragmentId: plan.fragment.id, phase: "post_validation" });
+  }
+  if (input.verify) {
+    // The verifier can only reject further. Error, timeout, or anything but a clear yes is a rejection.
+    let entailed = false;
+    try {
+      entailed = await input.verify({ allowedFacts, answer: text });
+    } catch {
+      entailed = false;
+    }
+    if (!entailed) {
+      return decline("entailment_unverified", { closeThread: false, fragmentId: plan.fragment.id, phase: "post_validation" });
+    }
   }
 
   let receipt: DisclosureReceipt | null = null;
   if (plan.basis === "new_disclosure") {
     const entitlement = context.unusedEntitlement;
-    const reservation = entitlement ? await reserveDisclosureEntitlement(input.store, entitlement, now) : null;
+    const reservation = entitlement
+      ? await reserveDisclosureEntitlement(input.store, entitlement, {
+          conversationId: input.conversationId, fragmentId: plan.fragment.id,
+          topic: input.topic ?? "unknown", rung, rapportBand: band,
+        }, now)
+      : null;
     if (!entitlement || !reservation) {
       return decline("reservation_failed", { closeThread: false, fragmentId: plan.fragment.id, phase: "post_validation" });
     }
-    const commitInput = {
-      scope: input.scope, conversationId: input.conversationId, entitlementId: entitlement.id,
-      token: reservation.token, fragmentId: plan.fragment.id, topic: input.topic ?? "unknown", rung, rapportBand: band,
-    };
+    // The reservation is durable and self-describing. Delivery confirmation (the next turn of this
+    // call, on any process) commits it via commitPendingDisclosuresForConversation.
     receipt = {
       fragmentId: plan.fragment.id,
-      commit: () => commitDisclosure(input.store, commitInput, now),
+      commit: () => input.store.commitReservedDisclosure({ entitlementId: entitlement.id, token: reservation.token, now: now().toISOString() }),
       abandon: () => abandonDisclosure(input.store, { entitlementId: entitlement.id, token: reservation.token }),
     };
-    if (input.autoCommit !== false) {
+    if (input.autoCommit === true) {
       await receipt.commit();
       receipt = null;
     }

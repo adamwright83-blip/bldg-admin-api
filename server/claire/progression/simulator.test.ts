@@ -4,7 +4,7 @@ import { createInMemoryProgressionStore, type ProgressionStore } from "./store";
 import { assertSimulationAllowed, createSimulationSession, SimulationNotAllowedError, SIMULATION_MARK } from "./simulator";
 import { getProgressionStore, setProgressionStoreForTesting } from "./drizzleStore";
 import { summarizeDeclineTelemetry } from "./declineTelemetry";
-import { commitPendingDisclosures, pendingDisclosureCountForTesting, stashPendingDisclosure, abandonPendingDisclosures } from "./pendingReceipts";
+import { abandonDisclosure, commitPendingDisclosuresForConversation } from "./service";
 
 const ENABLED = { NODE_ENV: "test", CLAIRE_PROGRESSION_SIMULATOR: "1" };
 const father = async () => "He was an academic, on paper.";
@@ -83,23 +83,24 @@ describe("decline telemetry", () => {
   });
 });
 
-describe("delivery boundary", () => {
-  it("a stashed reveal commits only when the next turn arrives; abandon returns it to unused", async () => {
+describe("delivery boundary (durable, no in-process state)", () => {
+  it("a reserved reveal commits from the store alone and abandon returns it to unused", async () => {
     const session = createSimulationSession({ env: ENABLED });
     await session.applyState("rung1");
     const { executePersonalTurn } = await import("./personalReveal");
-    const turn = await executePersonalTurn({ store: session.store, scope: session.scope, conversationId: "call-x", topic: "father", generate: father, businessOpen: true, autoCommit: false });
-    stashPendingDisclosure("call-x", turn.receipt!);
-    expect(pendingDisclosureCountForTesting("call-x")).toBe(1);
+    const turn = await executePersonalTurn({ store: session.store, scope: session.scope, conversationId: "call-x", topic: "father", generate: father, businessOpen: true });
     expect((await session.store.listEntitlements(session.scope))[0].status).toBe("reserved");
-    expect(await commitPendingDisclosures("call-x")).toBe(1);
+    expect((await session.store.listLedger(session.scope)).some(r => r.kind === "disclosed")).toBe(false);
+    expect(await commitPendingDisclosuresForConversation(session.store, { tenantId: session.scope.tenantId, conversationId: "call-x" })).toBe(1);
     expect((await session.store.listEntitlements(session.scope))[0].status).toBe("consumed");
+    expect(turn.receipt).not.toBeNull();
 
     const other = createSimulationSession({ env: ENABLED });
     await other.applyState("rung1");
-    const t2 = await executePersonalTurn({ store: other.store, scope: other.scope, conversationId: "call-y", topic: "father", generate: father, businessOpen: true, autoCommit: false });
-    stashPendingDisclosure("call-y", t2.receipt!);
-    await abandonPendingDisclosures("call-y");
+    const t2 = await executePersonalTurn({ store: other.store, scope: other.scope, conversationId: "call-y", topic: "father", generate: father, businessOpen: true });
+    const [reserved] = await other.store.listEntitlements(other.scope);
+    await abandonDisclosure(other.store, { entitlementId: reserved.id, token: reserved.reservationToken! });
     expect((await other.store.listEntitlements(other.scope))[0].status).toBe("unused");
+    expect(t2.outcome).toBe("answered_new_disclosure");
   });
 });

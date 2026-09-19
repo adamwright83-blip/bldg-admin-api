@@ -6,9 +6,9 @@ import { VOICE_NATIVE_ANSWER_GUIDANCE, type ClaireGenerationSurface } from "../c
 import type { recordClaireGeneration, ClaireGenerationDiagnostic } from "../generationTelemetry";
 import { trimToSentenceBoundary } from "../textTrim";
 import { getProgressionStore } from "./drizzleStore";
+import { ENTAILMENT_VERIFIER_INSTRUCTION, parseVerifierReply } from "./personalEntailment";
 import { buildPersonalDisclosureGuidance, executePersonalTurn, type PersonalTurnResult } from "./personalReveal";
 import { syncProgressionForOperator } from "./evidenceSources";
-import { stashPendingDisclosure } from "./pendingReceipts";
 import type { ProgressionStore } from "./store";
 
 /**
@@ -28,8 +28,6 @@ export async function answerPersonalFollowUp(
     businessOpen: boolean;
     surface: ClaireGenerationSurface;
     onGeneration?: (diagnostic: ClaireGenerationDiagnostic) => void;
-    /** When set, a new disclosure is NOT committed here; the caller commits at its delivery boundary. */
-    onPersonalReceipt?: (receipt: NonNullable<PersonalTurnResult["receipt"]>) => void;
     onPersonalTurn?: (result: PersonalTurnResult) => void;
   },
   dependencies: {
@@ -59,9 +57,22 @@ export async function answerPersonalFollowUp(
     conversationId: input.conversationId,
     topic: input.topic,
     businessOpen: input.businessOpen,
+    verify: async ({ allowedFacts, answer }) => {
+      const reply = await dependencies.invokeText({
+        tenantId: input.tenantId,
+        ...claireModelRequest(0),
+        maxTokens: 8,
+        messages: [
+          { role: "system", content: ENTAILMENT_VERIFIER_INSTRUCTION },
+          { role: "user", content: `AUTHORIZED FACTS: ${allowedFacts.join(" | ")}\nANSWER: ${answer}` },
+        ],
+      });
+      return parseVerifierReply(reply);
+    },
     random: dependencies.random,
     now: dependencies.now,
-    // Never commit inside generation: the disclosure is recorded only once delivery is confirmed.
+    // Never commit inside generation: the reservation is durable and is committed at the delivery
+    // boundary (the next verified turn of this call) by commitPendingDisclosuresForConversation.
     autoCommit: false,
     generate: async request => {
       const compiled = await compileClaireContextForOperator({
@@ -98,10 +109,6 @@ export async function answerPersonalFollowUp(
     },
   });
 
-  if (result.receipt) {
-    if (input.onPersonalReceipt) input.onPersonalReceipt(result.receipt);
-    else stashPendingDisclosure(input.conversationId, result.receipt);
-  }
   input.onPersonalTurn?.(result);
 
   const declined = result.outcome === "declined";
