@@ -1,10 +1,6 @@
 import { eq } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
-import {
-  cleancloudPaidOrders,
-  orders,
-  type CleancloudPaidOrder,
-} from "../../drizzle/schema";
+import { cleancloudPaidOrders, orders } from "../../drizzle/schema";
 import { computeRecencyStatus } from "../../shared/customerStatus";
 import {
   inferCustomerCadence,
@@ -17,6 +13,7 @@ import {
   type CustomerIdentityInput,
 } from "../customerAssets/customerIdentity";
 import { getDb } from "../db";
+import { isMysqlMissingTableError } from "../mysqlErrors";
 
 export type CustomerOrderSource = "laundry_butler" | "cleancloud";
 
@@ -341,26 +338,81 @@ export function projectGeographicCustomers(input: {
   });
 }
 
+/** Narrow read-model projection. Do not select the full `orders` schema. */
+export const NATIVE_ORDER_TRUTH_COLUMNS = {
+  id: orders.id,
+  status: orders.status,
+  createdAt: orders.createdAt,
+  firstName: orders.firstName,
+  lastName: orders.lastName,
+  phone: orders.phone,
+  email: orders.email,
+  address: orders.address,
+  unit: orders.unit,
+  buildingSlug: orders.buildingSlug,
+  bldgUserId: orders.bldgUserId,
+  paid: orders.paid,
+  total: orders.total,
+} as const;
+
+/** Narrow read-model projection. Do not select the full CleanCloud schema. */
+export const CLEANCLOUD_ORDER_TRUTH_COLUMNS = {
+  cleancloudOrderId: cleancloudPaidOrders.cleancloudOrderId,
+  cleancloudCustomerId: cleancloudPaidOrders.cleancloudCustomerId,
+  sourceReportType: cleancloudPaidOrders.sourceReportType,
+  customerName: cleancloudPaidOrders.customerName,
+  customerPhone: cleancloudPaidOrders.customerPhone,
+  customerEmail: cleancloudPaidOrders.customerEmail,
+  address: cleancloudPaidOrders.address,
+  unit: cleancloudPaidOrders.unit,
+  buildingSlug: cleancloudPaidOrders.buildingSlug,
+  buildingResolutionStatus: cleancloudPaidOrders.buildingResolutionStatus,
+  placedAtUtc: cleancloudPaidOrders.placedAtUtc,
+  paymentDateUtc: cleancloudPaidOrders.paymentDateUtc,
+  paidDateUtc: cleancloudPaidOrders.paidDateUtc,
+  createdAt: cleancloudPaidOrders.createdAt,
+  paid: cleancloudPaidOrders.paid,
+  totalCents: cleancloudPaidOrders.totalCents,
+} as const;
+
+type TruthDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+
+async function loadNativeOrderTruthRows(
+  db: TruthDb,
+  tenantId?: string
+): Promise<NativeOrderLike[]> {
+  const query = db.select(NATIVE_ORDER_TRUTH_COLUMNS).from(orders);
+  return tenantId ? query.where(eq(orders.tenantId, tenantId)) : query;
+}
+
+async function loadCleanCloudOrderTruthRows(
+  db: TruthDb,
+  tenantId?: string
+): Promise<CleanCloudOrderLike[]> {
+  try {
+    const query = db
+      .select(CLEANCLOUD_ORDER_TRUTH_COLUMNS)
+      .from(cleancloudPaidOrders);
+    return await (tenantId
+      ? query.where(eq(cleancloudPaidOrders.tenantId, tenantId))
+      : query);
+  } catch (error) {
+    if (isMysqlMissingTableError(error)) return [];
+    throw error;
+  }
+}
+
 export async function loadCustomerOrderTruth(
   tenantId?: string,
   options?: { includeCancelledNative?: boolean }
 ): Promise<CustomerOrderTruthRecord[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const [nativeRows, cleancloudRows] = await Promise.all([
-    tenantId
-      ? db.select().from(orders).where(eq(orders.tenantId, tenantId))
-      : db.select().from(orders),
-    tenantId
-      ? db
-          .select()
-          .from(cleancloudPaidOrders)
-          .where(eq(cleancloudPaidOrders.tenantId, tenantId))
-      : db.select().from(cleancloudPaidOrders),
-  ]);
+  const nativeRows = await loadNativeOrderTruthRows(db, tenantId);
+  const cleancloudRows = await loadCleanCloudOrderTruthRows(db, tenantId);
   return mergeCustomerOrderTruth({
     native: nativeRows,
-    cleancloud: cleancloudRows as CleancloudPaidOrder[],
+    cleancloud: cleancloudRows,
     includeCancelledNative: options?.includeCancelledNative,
   });
 }

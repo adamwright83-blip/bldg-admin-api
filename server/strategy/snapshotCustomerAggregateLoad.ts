@@ -5,7 +5,9 @@
  * a missing database are unavailable. Arbitrary SQL errors are rethrown.
  *
  * History is the unified canonical customer/order set (native + CleanCloud).
- * Churn Radar / recovery scans remain native-orders-only; see GOLDLINE-TASKS.
+ * A missing CleanCloud table degrades to native-only; a missing orders table
+ * remains unavailable. Churn Radar / recovery scans remain native-orders-only;
+ * see GOLDLINE-TASKS.
  */
 
 import {
