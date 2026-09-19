@@ -14,7 +14,7 @@
  * It executes SELECT statements and the progression store's get/list methods only. It writes nothing.
  * (It deliberately avoids loadPersonalProgressionContext, which lazily releases expired reservations.)
  */
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   claireDisclosureEntitlements,
   claireGenerationLogs,
@@ -29,6 +29,7 @@ import { isMysqlMissingTableError } from "../server/mysqlErrors";
 import {
   buildOperatorContinuityRecord,
   collectProgressionSnapshot,
+  enumerateOperatorScopes,
   formatContinuityReport,
   type LegacyOperatorState,
   type OperatorContinuityRecord,
@@ -42,15 +43,6 @@ async function main() {
   const db = await getDb();
   if (!db) throw new Error("Database not available (run via `railway run`)");
 
-  // Every operator that appears in ANY legacy or new table.
-  const scopes = new Map<string, { tenantId: string; operatorUserId: string }>();
-  const remember = (rows: Array<{ tenantId: string; operatorUserId: string | null }>) => {
-    for (const row of rows) {
-      if (!row.operatorUserId) continue;
-      if (tenantFilter && row.tenantId !== tenantFilter) continue;
-      scopes.set(`${row.tenantId}::${row.operatorUserId}`, { tenantId: row.tenantId, operatorUserId: row.operatorUserId });
-    }
-  };
   const safe = async <T>(work: () => Promise<T[]>): Promise<T[]> => {
     try {
       return await work();
@@ -61,39 +53,51 @@ async function main() {
       throw error;
     }
   };
+
+  // Every operator that appears in ANY source this report reads: the three legacy sources (relationship
+  // state, generation logs, relationship events) and every new progression table.
   const legacyStates = await safe(() => db.select().from(claireRelationshipState));
-  remember(legacyStates);
-  remember(await safe(() => db.selectDistinct({ tenantId: claireProgressionGrants.tenantId, operatorUserId: claireProgressionGrants.operatorUserId }).from(claireProgressionGrants)));
-  remember(await safe(() => db.selectDistinct({ tenantId: claireProgressionEvidence.tenantId, operatorUserId: claireProgressionEvidence.operatorUserId }).from(claireProgressionEvidence)));
-  remember(await safe(() => db.selectDistinct({ tenantId: claireDisclosureEntitlements.tenantId, operatorUserId: claireDisclosureEntitlements.operatorUserId }).from(claireDisclosureEntitlements)));
-  remember(await safe(() => db.selectDistinct({ tenantId: clairePersonalLedger.tenantId, operatorUserId: clairePersonalLedger.operatorUserId }).from(clairePersonalLedger)));
+  const scopeList = enumerateOperatorScopes(
+    [
+      legacyStates,
+      await safe(() => db.selectDistinct({ tenantId: claireGenerationLogs.tenantId, operatorUserId: claireGenerationLogs.operatorUserId }).from(claireGenerationLogs)),
+      await safe(() => db.selectDistinct({ tenantId: claireRelationshipEvents.tenantId, operatorUserId: claireRelationshipEvents.operatorUserId }).from(claireRelationshipEvents)),
+      await safe(() => db.selectDistinct({ tenantId: claireProgressionGrants.tenantId, operatorUserId: claireProgressionGrants.operatorUserId }).from(claireProgressionGrants)),
+      await safe(() => db.selectDistinct({ tenantId: claireProgressionEvidence.tenantId, operatorUserId: claireProgressionEvidence.operatorUserId }).from(claireProgressionEvidence)),
+      await safe(() => db.selectDistinct({ tenantId: claireDisclosureEntitlements.tenantId, operatorUserId: claireDisclosureEntitlements.operatorUserId }).from(claireDisclosureEntitlements)),
+      await safe(() => db.selectDistinct({ tenantId: clairePersonalLedger.tenantId, operatorUserId: clairePersonalLedger.operatorUserId }).from(clairePersonalLedger)),
+    ],
+    tenantFilter
+  );
 
   const store = getProgressionStore();
   const records: OperatorContinuityRecord[] = [];
-  for (const scope of [...scopes.values()].sort((a, b) => `${a.tenantId}${a.operatorUserId}`.localeCompare(`${b.tenantId}${b.operatorUserId}`))) {
+  for (const scope of scopeList) {
     const state = legacyStates.find(row => row.tenantId === scope.tenantId && row.operatorUserId === scope.operatorUserId);
+    // Legacy detail is computed from every legacy source, so an operator present only in logs/events still reports.
+    const logScope = and(eq(claireGenerationLogs.tenantId, scope.tenantId), eq(claireGenerationLogs.operatorUserId, scope.operatorUserId));
+    const personal = await safe(() =>
+      db.select({ ids: claireGenerationLogs.canonFragmentIdsJson }).from(claireGenerationLogs).where(and(logScope, eq(claireGenerationLogs.mode, "personal")))
+    );
+    const eligible = new Set<string>();
+    for (const row of personal) for (const id of (row.ids as string[] | null) ?? []) eligible.add(id);
+    const relationshipEvents = await safe(() =>
+      db
+        .select({ eventType: claireRelationshipEvents.eventType })
+        .from(claireRelationshipEvents)
+        .where(and(eq(claireRelationshipEvents.tenantId, scope.tenantId), eq(claireRelationshipEvents.operatorUserId, scope.operatorUserId)))
+    );
+    const allGenerations = await safe(() => db.select({ id: claireGenerationLogs.id }).from(claireGenerationLogs).where(logScope));
     let legacy: LegacyOperatorState = null;
-    if (state) {
-      const logScope = and(eq(claireGenerationLogs.tenantId, scope.tenantId), eq(claireGenerationLogs.operatorUserId, scope.operatorUserId));
-      const personal = await safe(() =>
-        db.select({ ids: claireGenerationLogs.canonFragmentIdsJson }).from(claireGenerationLogs).where(and(logScope, eq(claireGenerationLogs.mode, "personal")))
-      );
-      const eligible = new Set<string>();
-      for (const row of personal) for (const id of (row.ids as string[] | null) ?? []) eligible.add(id);
-      const attestedRows = (await safe(() =>
-        db
-          .select({ attested: sql<number>`count(*)` })
-          .from(claireRelationshipEvents)
-          .where(and(eq(claireRelationshipEvents.tenantId, scope.tenantId), eq(claireRelationshipEvents.operatorUserId, scope.operatorUserId), eq(claireRelationshipEvents.eventType, "claire_disclosure")))
-      )) as Array<{ attested: number }>;
-      const attested = attestedRows[0]?.attested ?? 0;
+    if (state || personal.length > 0 || relationshipEvents.length > 0 || allGenerations.length > 0) {
       legacy = {
-        disclosureTier: state.disclosureTier,
-        qualifyingInteractionCount: state.qualifyingInteractionCount,
-        distinctInteractionDays: state.distinctInteractionDays,
+        hasRelationshipState: Boolean(state),
+        disclosureTier: state?.disclosureTier ?? 0,
+        qualifyingInteractionCount: state?.qualifyingInteractionCount ?? 0,
+        distinctInteractionDays: state?.distinctInteractionDays ?? 0,
         personalModeGenerations: personal.length,
         eligibleCanonFragmentIds: [...eligible].sort(),
-        attestedDisclosureEvents: Number(attested ?? 0),
+        attestedDisclosureEvents: relationshipEvents.filter(row => row.eventType === "claire_disclosure").length,
       };
     }
     records.push(buildOperatorContinuityRecord({ scope, legacy, progression: await collectProgressionSnapshot(store, scope) }));

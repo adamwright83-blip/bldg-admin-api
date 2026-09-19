@@ -81,7 +81,7 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
       const invokeText = vi.fn().mockResolvedValue("It's at 5pm.");
       await answerClairePreDriveFollowUp(
         { tenantId: "tenant-1", utterance: "What time's the stop?", brief: "Visit The Wilshire.", context: baseContext },
-        { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+        { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
       );
       const userPayload = JSON.parse(invokeText.mock.calls[0][0].messages.at(-1).content);
       expect(userPayload.currentContext.nextFixedCommitmentLocalWhen).toContain("5:00 PM");
@@ -93,7 +93,7 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
       const invokeText = vi.fn().mockResolvedValue("Brief.");
       await writeClairePreDriveBrief(
         { tenantId: "tenant-1", context: baseContext },
-        { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+        { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
       );
       const userPayload = JSON.parse(invokeText.mock.calls[0][0].messages[1].content);
       expect(userPayload.nextFixedCommitmentLocalWhen).toContain("5:00 PM");
@@ -116,7 +116,7 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
       const invokeText = vi.fn().mockResolvedValue(longAnswer);
       const result = await answerClairePreDriveFollowUp(
         { tenantId: "tenant-1", utterance: "What am I missing here, strategically?", brief: "Visit The Wilshire.", context: baseContext },
-        { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+        { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
       );
       expect(result).toBe(longAnswer.trim());
       expect(result.length).toBeGreaterThan(1200);
@@ -130,7 +130,7 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
       const recordGeneration = vi.fn().mockResolvedValue(undefined);
       await answerClairePreDriveFollowUp(
         { tenantId: "tenant-1", utterance: "What am I missing here, strategically?", brief: "Visit The Wilshire.", context: baseContext },
-        { invokeText, recordGeneration }
+        { invokeText, biographyVerifier: async () => true, recordGeneration }
       );
       expect(invokeText.mock.calls[0][0].maxTokens).toBeGreaterThanOrEqual(1200);
       expect(recordGeneration).toHaveBeenCalledWith(
@@ -182,7 +182,7 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
       const recordGeneration = vi.fn().mockResolvedValue(undefined);
       const result = await answerClairePreDriveFollowUp(
         { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: { ...baseContext, actorId: "op-1" } },
-        { invokeText, recordGeneration, progressionStore: createInMemoryProgressionStore() }
+        { invokeText, biographyVerifier: async () => true, recordGeneration, progressionStore: createInMemoryProgressionStore() }
       );
       expect(result).not.toContain("Marseille");
       expect(AUTHORED_DIALOGUE.map(line => line.text)).toContain(result);
@@ -199,7 +199,7 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
       const recordGeneration = vi.fn().mockResolvedValue(undefined);
       const result = await answerClairePreDriveFollowUp(
         { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: { ...baseContext, actorId: "op-1" } },
-        { invokeText, recordGeneration, progressionStore: createInMemoryProgressionStore() }
+        { invokeText, biographyVerifier: async () => true, recordGeneration, progressionStore: createInMemoryProgressionStore() }
       );
       expect(result).toBe("British, though I moved around a lot as a kid.");
       expect(recordGeneration).toHaveBeenCalledWith(
@@ -214,7 +214,7 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
       const recordGeneration = vi.fn().mockResolvedValue(undefined);
       const result = await answerClairePreDriveFollowUp(
         { tenantId: "tenant-1", utterance: "Where's the stop again?", brief: "Visit The Wilshire.", context: baseContext },
-        { invokeText, recordGeneration }
+        { invokeText, biographyVerifier: async () => true, recordGeneration }
       );
       expect(result).toContain("Greystar");
       expect(recordGeneration).toHaveBeenCalledWith(
@@ -228,7 +228,7 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
       const invokeText = vi.fn().mockResolvedValue("Answer.");
       await answerClairePreDriveFollowUp(
         { tenantId: "tenant-1", utterance: "Any advice on pricing?", brief: "Visit The Wilshire.", context: baseContext },
-        { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+        { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
       );
       const system = invokeText.mock.calls[0][0].messages[0].content as string;
       expect(system).toContain("do not mechanically re-mention it again");
@@ -238,7 +238,7 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
       const invokeText = vi.fn().mockResolvedValue("Answer.");
       await answerClairePreDriveFollowUp(
         { tenantId: "tenant-1", utterance: "Any advice on pricing?", brief: "Visit The Wilshire.", context: baseContext },
-        { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+        { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
       );
       const system = invokeText.mock.calls[0][0].messages[0].content as string;
       expect(system).toContain("Never use markdown formatting");
@@ -254,7 +254,7 @@ describe("PR1 corrective pass -- real-exam bug fixes", () => {
           context: baseContext,
           surface: "desktop",
         },
-        { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+        { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
       );
       const system = invokeText.mock.calls[0][0].messages[0].content as string;
       expect(system).not.toContain("Never use markdown formatting");

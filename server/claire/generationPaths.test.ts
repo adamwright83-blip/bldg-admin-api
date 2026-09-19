@@ -36,7 +36,7 @@ describe("Claire natural-language generation", () => {
     const recordGeneration = vi.fn().mockResolvedValue(undefined);
     const result = await writeClairePreDriveBrief(
       { tenantId: "tenant-1", context },
-      { invokeText, recordGeneration }
+      { invokeText, biographyVerifier: async () => true, recordGeneration }
     );
 
     expect(result).toBe("Model-written field brief.");
@@ -118,7 +118,7 @@ describe("Claire natural-language generation", () => {
         brief: "Visit The Wilshire.",
         context,
       },
-      { invokeText, recordGeneration }
+      { invokeText, biographyVerifier: async () => true, recordGeneration }
     );
     expect(result).toBe("The model clarified the brief.");
     const payload = JSON.parse(invokeText.mock.calls[0][0].messages[1].content);
@@ -187,7 +187,7 @@ describe("Claire natural-language generation", () => {
     const invokeText = vi.fn().mockResolvedValue("Clear of The Wilshire. What happened?");
     const result = await writeClairePostStopOpening(
       { tenantId: "tenant-1", operatorUserId: null, accountName: "The Wilshire" },
-      { invokeText }
+      { invokeText, biographyVerifier: async () => true }
     );
     expect(result).toBe("Clear of The Wilshire. What happened?");
     expect(invokeText.mock.calls[0][0].messages[0].content).toContain(

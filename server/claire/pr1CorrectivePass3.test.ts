@@ -54,7 +54,7 @@ describe("Corrective pass 3 -- item 1: personal-answer recovery", () => {
     const recordGeneration = vi.fn().mockResolvedValue(undefined);
     const result = await answerClairePreDriveFollowUp(
       { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: { ...baseContext, actorId: "op-1" } },
-      { invokeText, recordGeneration, progressionStore: createInMemoryProgressionStore() }
+      { invokeText, biographyVerifier: async () => true, recordGeneration, progressionStore: createInMemoryProgressionStore() }
     );
 
     expect(result).not.toContain("London");
@@ -145,7 +145,7 @@ describe("Corrective pass 3 -- item 1: personal-answer recovery", () => {
     const invokeText = vi.fn().mockRejectedValue(new Error("provider down"));
     const result = await answerClairePreDriveFollowUp(
       { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: { ...baseContext, actorId: "op-1" } },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined), progressionStore: createInMemoryProgressionStore() }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined), progressionStore: createInMemoryProgressionStore() }
     );
     expect(AUTHORED_DIALOGUE.map(line => line.text)).toContain(result);
   });
@@ -154,7 +154,7 @@ describe("Corrective pass 3 -- item 1: personal-answer recovery", () => {
     const invokeText = vi.fn();
     const result = await answerClairePreDriveFollowUp(
       { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: { ...baseContext, actorId: undefined as never } },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined), progressionStore: createInMemoryProgressionStore() }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined), progressionStore: createInMemoryProgressionStore() }
     );
     expect(invokeText).not.toHaveBeenCalled();
     expect(AUTHORED_DIALOGUE.map(line => line.text)).toContain(result);
@@ -172,7 +172,7 @@ describe("Corrective pass 3 -- item 2: voice guidance must be authoritative", ()
         context: baseContext,
         ...(surface ? { surface } : {}),
       },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     return invokeText.mock.calls[0][0].messages[0].content as string;
   }
@@ -216,7 +216,7 @@ describe("Corrective pass 3 -- item 2: voice guidance must be authoritative", ()
     const invokeText = vi.fn().mockResolvedValue("Brief.");
     await writeClairePreDriveBrief(
       { tenantId: "tenant-1", context: baseContext },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     const system = invokeText.mock.calls[0][0].messages[0].content as string;
     expect(system.endsWith(VOICE_NATIVE_ANSWER_GUIDANCE)).toBe(true);
@@ -245,7 +245,7 @@ describe("Corrective pass 4 -- real-exam instrumentation", () => {
         context: baseContext,
         onGeneration: value => { diagnostic = value; },
       },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
 
     expect(diagnostic?.stopReason).toBe("end_turn");
@@ -266,7 +266,7 @@ describe("Corrective pass 4 -- real-exam instrumentation", () => {
         context: baseContext,
         onGeneration: value => { diagnostic = value; },
       },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
 
     expect(diagnostic?.stopReason).toBe("end_turn");
@@ -291,14 +291,14 @@ describe("Corrective pass 3 -- item 3: business grounding for what we actually s
     const followInvoke = vi.fn().mockResolvedValue("ok");
     await answerClairePreDriveFollowUp(
       { tenantId: "tenant-1", utterance: "If they push back on price, what's a good way to handle that?", brief: "Visit The Wilshire.", context: baseContext },
-      { invokeText: followInvoke, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText: followInvoke, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     expect(followInvoke.mock.calls[0][0].messages[0].content).toContain(GOLDLINE_OFFER_CONTEXT);
 
     const briefInvoke = vi.fn().mockResolvedValue("Brief.");
     await writeClairePreDriveBrief(
       { tenantId: "tenant-1", context: baseContext },
-      { invokeText: briefInvoke, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText: briefInvoke, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     expect(briefInvoke.mock.calls[0][0].messages[0].content).toContain(GOLDLINE_OFFER_CONTEXT);
   });
@@ -312,7 +312,7 @@ describe("Corrective pass 3 -- item 3: business grounding for what we actually s
     const invokeText = vi.fn().mockResolvedValue("ok");
     await answerClairePreDriveFollowUp(
       { tenantId: "tenant-1", utterance: "How should I even start figuring out what's going on with this account?", brief: "Visit The Wilshire.", context: baseContext },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     expect(invokeText.mock.calls[0][0].messages[0].content).toContain("does not sell, lease, install");
   });
@@ -321,7 +321,7 @@ describe("Corrective pass 3 -- item 3: business grounding for what we actually s
     const invokeText = vi.fn().mockResolvedValue("ok");
     await answerClairePreDriveFollowUp(
       { tenantId: "tenant-1", utterance: "Any advice on pricing?", brief: "Visit The Wilshire.", context: baseContext },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     const system = invokeText.mock.calls[0][0].messages[0].content as string;
     expect(system).toContain("do not import a sales model from a different industry");
@@ -355,7 +355,7 @@ describe("Claire temporal authority regression", () => {
         brief: "Visit The Wilshire.",
         context: frozenClockContext,
       },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     const captured = invokeText.mock.calls[0][0].messages.map((message: { content: string }) => message.content).join("\n");
     expect(captured).toContain(CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION);
@@ -370,7 +370,7 @@ describe("Claire temporal authority regression", () => {
     const invokeText = vi.fn().mockResolvedValue("The Wilshire is at five.");
     await writeClairePreDriveBrief(
       { tenantId: "tenant-a", context: frozenClockContext },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     const captured = invokeText.mock.calls[0][0].messages.map((message: { content: string }) => message.content).join("\n");
     expect(captured).toContain(CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION);

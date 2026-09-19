@@ -71,14 +71,17 @@ the in-memory store, and the database upsert (`GREATEST`). Stricter thresholds n
 
 - With the flag ON, any Claire-directed personal or life-history question (`isPersonalQuestionAboutClaire`, incl. "have you ever", "what happened to you", "your first job") routes to the guarded controller. A known topic
   maps to canon fragments; an unknown personal topic is an approved decline. It never falls through to unrestricted generation.
-- **General-answer biography boundary (semantic, fail-closed).** Outside the guarded controller the model may never establish
-  Claire biography. Structural detection (`generalBiographyBoundary.ts`; closed-class grammar only, no biography vocabulary)
-  finds sentences that could assert Claire-self/history: first person (I / my / mine / myself, or first-person plural with a
-  past/aspect marker), except forward-looking modal lines ("I'd start with the pilot") and opinion frames ("My recommendation
-  is…") with no past/aspect marker. No candidate => no model call. Candidates only are sent to a one-word verifier given the
-  authorized facts; anything but `CLEAN` (BIOGRAPHY, garbage, error, or a 2.5s timeout) rejects. A rejection is replaced by
-  the existing conservative fallback and never regenerated. Applied at every speech-producing site: follow-up, opening brief,
-  post-stop opening, outcome confirmation, encyclopedia rewrite. Flag OFF: none of it runs.
+- **General-answer biography boundary (semantic, fail-closed, no gate).** Outside the guarded controller the model may never
+  establish Claire biography. Natural-language autobiography cannot be enumerated structurally (object pronouns, implicit
+  subjects, present-tense settings), so there is NO candidate-detection heuristic deciding whether to check: with the flag ON,
+  EVERY model-generated general answer about to be spoken goes to a bounded one-word verifier (`generalBiographyBoundary.ts`).
+  The verifier receives the authorized facts and the answer as UNTRUSTED QUOTED DATA (a JSON string in the user message, never
+  in the instructions) and must reply exactly `CLEAN`; BIOGRAPHY, garbage, error, or a 2.5s timeout all reject. Zero-latency
+  deterministic rejects run first: obvious legacy patterns, and any answer that addresses the verifier (prompt injection). A
+  rejection is replaced by the existing conservative fallback and never regenerated. Cost: one bounded call (8 tokens, temp 0)
+  per generated answer while ON; `CLAIRE_BIOGRAPHY_VERIFIER_MODEL` can point it at a faster model without a code change.
+  Applied at every speech-producing site: follow-up, opening brief, post-stop opening, outcome confirmation, encyclopedia
+  rewrite. Flag OFF: none of it runs.
 - **Entailment.** Every biographical proposition in a reveal must be supported by the authorized fragment or facts already
   disclosed to this operator. Layer 1 (deterministic) rejects claim-family words (family, emotion, personality, chronology,
   causality, frequency, events) absent from the authorized facts and any single distinctive word borrowed from another
@@ -111,7 +114,7 @@ reports them.
 | `claire_relationship_events` (incl. attested disclosures) | untouched, still feed disclosure safety | |
 | rapport | recomputed from verified field-visit evidence going forward | |
 
-The report (read-only) shows both, per operator, and whether dormant progression would become active on enable. It chooses none of
+The report (read-only) enumerates every operator found in ANY legacy source (relationship state, generation logs, relationship events) or new table, shows both states per operator, and classifies each as `pristine`, `persisted_state_not_behavioral` (e.g. a cursor or grant row: real continuity state that does not change behavior by itself) or `dormant_active_on_enable`. It chooses none of
 the three options: **preserve** the accumulated new progression, **reset** it, or **migrate/reconcile** deliberately. Any reset or
 carry-over is a deliberate production data write with its own review; nothing here performs one.
 

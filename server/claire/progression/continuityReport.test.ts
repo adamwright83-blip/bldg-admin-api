@@ -4,6 +4,7 @@ import {
   buildOperatorContinuityRecord,
   collectProgressionSnapshot,
   CONTINUITY_DECISION_OPTIONS,
+  enumerateOperatorScopes,
   formatContinuityReport,
 } from "./continuityReport";
 import { recordConfirmedVisitEvidence } from "./evidenceSources";
@@ -43,6 +44,7 @@ describe("progression accumulated while the flag is OFF appears in the report", 
     expect(p.latest.evidenceOccurredAt).toBe(oct(7).toISOString());
     expect(p.latest.entitlementMintedAt).toBeTruthy();
     expect(record.dormantProgressionWouldActivate).toBe(true);
+    expect(record.continuityClass).toBe("dormant_active_on_enable");
     expect(record.dormantReasons.join(" ")).toMatch(/rung 1.*unused disclosure entitlement/s);
   });
 
@@ -51,7 +53,7 @@ describe("progression accumulated while the flag is OFF appears in the report", 
     await accumulateWhileOff(store);
     const record = buildOperatorContinuityRecord({
       scope: SCOPE,
-      legacy: { disclosureTier: 2, qualifyingInteractionCount: 9, distinctInteractionDays: 5, personalModeGenerations: 3, eligibleCanonFragmentIds: ["core_father_career"], attestedDisclosureEvents: 1 },
+      legacy: { hasRelationshipState: true, disclosureTier: 2, qualifyingInteractionCount: 9, distinctInteractionDays: 5, personalModeGenerations: 3, eligibleCanonFragmentIds: ["core_father_career"], attestedDisclosureEvents: 1 },
       progression: await collectProgressionSnapshot(store, SCOPE),
     });
     const text = formatContinuityReport([record], oct(21));
@@ -88,7 +90,7 @@ describe("progression accumulated while the flag is OFF appears in the report", 
   it("legacy-only operators are called out as not carried over", async () => {
     const record = buildOperatorContinuityRecord({
       scope: SCOPE,
-      legacy: { disclosureTier: 1, qualifyingInteractionCount: 4, distinctInteractionDays: 3, personalModeGenerations: 0, eligibleCanonFragmentIds: [], attestedDisclosureEvents: 0 },
+      legacy: { hasRelationshipState: true, disclosureTier: 1, qualifyingInteractionCount: 4, distinctInteractionDays: 3, personalModeGenerations: 0, eligibleCanonFragmentIds: [], attestedDisclosureEvents: 0 },
       progression: await collectProgressionSnapshot(createInMemoryProgressionStore(), SCOPE),
     });
     expect(record.legacyStateNotCarriedOver).toBe(true);
@@ -120,5 +122,83 @@ describe("the report is read-only", () => {
       expect(source).not.toMatch(/\.transaction\(|\.execute\(|sql`\s*(insert|update|delete|alter|drop|truncate)/i);
       expect(source).not.toMatch(/loadPersonalProgressionContext|refreshProgression|recordProgressionEvidence|appendLedger|commitReservedDisclosure|reserveEntitlement|releaseReservation/);
     }
+  });
+});
+
+describe("operator enumeration covers every source the report reads", () => {
+  const row = (operatorUserId: string | null, tenantId = "t1") => ({ tenantId, operatorUserId });
+  it("an operator present ONLY in legacy generation logs appears", () => {
+    const scopes = enumerateOperatorScopes([[], /* logs */ [row("only-in-logs")], [], [], [], [], []]);
+    expect(scopes).toEqual([{ tenantId: "t1", operatorUserId: "only-in-logs" }]);
+  });
+  it("an operator present ONLY in legacy relationship events appears", () => {
+    expect(enumerateOperatorScopes([[], [], [row("only-in-events")], [], [], [], []])).toEqual([{ tenantId: "t1", operatorUserId: "only-in-events" }]);
+  });
+  it("an operator present ONLY in a new progression table appears (each of the four)", () => {
+    for (let table = 3; table <= 6; table += 1) {
+      const sources = Array.from({ length: 7 }, (_, i) => (i === table ? [row(`only-in-new-${table}`)] : []));
+      expect(enumerateOperatorScopes(sources)).toEqual([{ tenantId: "t1", operatorUserId: `only-in-new-${table}` }]);
+    }
+  });
+  it("dedupes across sources, skips rows with no operator, and honors the tenant filter", () => {
+    const scopes = enumerateOperatorScopes([[row("a")], [row("a"), row(null), row("b", "t2")], [row("c")]], "t1");
+    expect(scopes.map(s => s.operatorUserId)).toEqual(["a", "c"]);
+  });
+  it("the script feeds the enumerator from all three legacy sources and all four new tables", () => {
+    const source = readFileSync(new URL("../../../scripts/claire-progression-continuity-report.ts", import.meta.url), "utf8");
+    const call = source.slice(source.indexOf("enumerateOperatorScopes("), source.indexOf("tenantFilter\n  );"));
+    for (const table of ["legacyStates", "claireGenerationLogs", "claireRelationshipEvents", "claireProgressionGrants", "claireProgressionEvidence", "claireDisclosureEntitlements", "clairePersonalLedger"]) {
+      expect(call).toContain(table);
+    }
+  });
+});
+
+describe("cursor-only and other persisted state is never reported as pristine", () => {
+  const emptyGrant = { rapportBand: 0 as const, rapportPolicyVersion: null, personalRung: 0 as const, rungPolicyVersion: null, entitlementCursor: null };
+
+  it("a cursor with no band/rung/evidence/entitlements is 'persisted state, not behavioral' and never prints 'starts from zero'", async () => {
+    const store = createInMemoryProgressionStore();
+    await store.upsertGrantMonotonic(SCOPE, { ...emptyGrant, entitlementCursor: "2026-10-20T15:00:00.000Z|" });
+    const record = buildOperatorContinuityRecord({ scope: SCOPE, legacy: null, progression: await collectProgressionSnapshot(store, SCOPE) });
+    expect(record.continuityClass).toBe("persisted_state_not_behavioral");
+    expect(record.dormantProgressionWouldActivate).toBe(false); // it is not behavior-changing on its own
+    expect(record.persistedStateReasons.join(" ")).toMatch(/entitlement cursor 2026-10-20T15:00:00.000Z\|/);
+    const text = formatContinuityReport([record], oct(21));
+    expect(text).toContain("PERSISTED NEW-SYSTEM STATE PRESENT");
+    expect(text).toContain("NOT pristine");
+    const onEnable = text.split("\n").find(line => line.includes("ON ENABLE:"))!;
+    expect(onEnable).not.toMatch(/starts from zero|pristine: nothing/);
+    expect(text).toContain("persisted new-system state that is not behavioral by itself (e.g. cursor): 1");
+  });
+
+  it("an all-zero grant row alone is persisted state, not pristine", async () => {
+    const store = createInMemoryProgressionStore();
+    await store.upsertGrantMonotonic(SCOPE, emptyGrant);
+    const record = buildOperatorContinuityRecord({ scope: SCOPE, legacy: null, progression: await collectProgressionSnapshot(store, SCOPE) });
+    expect(record.continuityClass).toBe("persisted_state_not_behavioral");
+  });
+
+  it("a genuinely pristine operator is the only one reported as starting from zero", async () => {
+    const record = buildOperatorContinuityRecord({ scope: SCOPE, legacy: null, progression: await collectProgressionSnapshot(createInMemoryProgressionStore(), SCOPE) });
+    expect(record.continuityClass).toBe("pristine");
+    expect(formatContinuityReport([record], oct(21))).toContain("pristine: nothing persisted in the new system; starts from zero");
+  });
+
+  it("behavioral dormant state and non-behavioral persisted state are reported as different classes", async () => {
+    const store = createInMemoryProgressionStore();
+    await accumulateWhileOff(store);
+    const dormant = buildOperatorContinuityRecord({ scope: SCOPE, legacy: null, progression: await collectProgressionSnapshot(store, SCOPE) });
+    expect(dormant.continuityClass).toBe("dormant_active_on_enable");
+    expect(dormant.persistedStateReasons.length).toBeGreaterThan(0); // its cursor/policy state is ALSO reported
+  });
+
+  it("legacy-only operators (from logs/events, no relationship-state row) are labelled as such", () => {
+    const record = buildOperatorContinuityRecord({
+      scope: SCOPE,
+      legacy: { hasRelationshipState: false, disclosureTier: 0, qualifyingInteractionCount: 0, distinctInteractionDays: 0, personalModeGenerations: 2, eligibleCanonFragmentIds: ["core_father_career"], attestedDisclosureEvents: 0 },
+      progression: { grantRowExists: false, rapportBand: 0, personalRung: 0, rapportPolicyVersion: null, rungPolicyVersion: null, entitlementCursor: null, evidenceByCategoryKind: {}, evidenceTotal: 0, entitlements: { unused: 0, reserved: 0, consumed: 0 }, disclosedFragmentIds: [], ledgerEntryCount: 0, latest: { evidenceOccurredAt: null, evidenceRecognizedAt: null, entitlementMintedAt: null, entitlementConsumedAt: null, ledgerAt: null } },
+    });
+    expect(record.legacyStateNotCarriedOver).toBe(true);
+    expect(formatContinuityReport([record], oct(21))).toContain("no relationship-state row; from logs/events only");
   });
 });

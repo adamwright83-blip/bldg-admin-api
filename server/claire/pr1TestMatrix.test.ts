@@ -49,7 +49,7 @@ describe("PR1 test matrix (spec section 16)", () => {
     const invokeText = vi.fn().mockResolvedValue("Advice, clearly framed.");
     await writeClairePreDriveBrief(
       { tenantId: "tenant-1", context },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     const system = invokeText.mock.calls[0][0].messages[0].content as string;
     expect(system).toContain(
@@ -60,7 +60,7 @@ describe("PR1 test matrix (spec section 16)", () => {
     const followInvoke = vi.fn().mockResolvedValue("General advice, framed.");
     await answerClairePreDriveFollowUp(
       { tenantId: "tenant-1", utterance: "How would you handle a pricing objection?", brief: "Visit The Wilshire.", context },
-      { invokeText: followInvoke, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText: followInvoke, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     const followSystem = followInvoke.mock.calls[0][0].messages[0].content as string;
     expect(followSystem).toContain("never asserted as a fact about this business");
@@ -71,7 +71,7 @@ describe("PR1 test matrix (spec section 16)", () => {
     const invokeText = vi.fn().mockResolvedValue("Grounded answer.");
     await writeClairePreDriveBrief(
       { tenantId: "tenant-1", context },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     const system = invokeText.mock.calls[0][0].messages[0].content as string;
     expect(system).toContain(
@@ -81,7 +81,7 @@ describe("PR1 test matrix (spec section 16)", () => {
     const followInvoke = vi.fn().mockResolvedValue("Grounded follow-up.");
     await answerClairePreDriveFollowUp(
       { tenantId: "tenant-1", utterance: "What's their laundry setup?", brief: "Visit The Wilshire.", context },
-      { invokeText: followInvoke, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText: followInvoke, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     const followSystem = followInvoke.mock.calls[0][0].messages[0].content as string;
     expect(followSystem).toMatch(/business-specific claims[^.]*must be grounded[^.]*fact inventory[^.]*unknown/i);
@@ -100,7 +100,7 @@ describe("PR1 test matrix (spec section 16)", () => {
           { speaker: "claire", text: "Sure, I sent it just now." },
         ],
       },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     const request = invokeText.mock.calls[0][0];
     const historyMessages = request.messages.slice(1, -1);
@@ -125,7 +125,7 @@ describe("PR1 test matrix (spec section 16)", () => {
     const invokeText = vi.fn().mockResolvedValue("Brief.");
     await writeClairePreDriveBrief(
       { tenantId: "tenant-1", context },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     const call = invokeText.mock.calls[0][0];
     const system = call.messages[0].content as string;
@@ -140,7 +140,7 @@ describe("PR1 test matrix (spec section 16)", () => {
     const invokeText = vi.fn().mockResolvedValue("Answer.");
     await answerClairePreDriveFollowUp(
       { tenantId: "tenant-1", utterance: "What should I ask the PM?", brief: "Visit The Wilshire.", context },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     const call = invokeText.mock.calls[0][0];
     const system = call.messages[0].content as string;
@@ -162,7 +162,7 @@ describe("PR1 test matrix (spec section 16)", () => {
     const invokeText = vi.fn().mockResolvedValue(longAnswer);
     const result = await answerClairePreDriveFollowUp(
       { tenantId: "tenant-1", utterance: "What am I missing here, strategically?", brief: "Visit The Wilshire.", context },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     // Not cut at the old 520-char boundary, and not cut mid-sentence.
     expect(result).toBe(longAnswer);
@@ -174,7 +174,7 @@ describe("PR1 test matrix (spec section 16)", () => {
     const invokeText = vi.fn().mockResolvedValue(shortAnswer);
     const result = await answerClairePreDriveFollowUp(
       { tenantId: "tenant-1", utterance: "What's the stop again?", brief: "Visit The Wilshire.", context },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     expect(result).toBe(shortAnswer);
     const system = invokeText.mock.calls[0][0].messages[0].content as string;
@@ -196,7 +196,7 @@ describe("PR1 test matrix (spec section 16)", () => {
     const recordGeneration = vi.fn().mockResolvedValue(undefined);
     const result = await writeClairePreDriveBrief(
       { tenantId: "tenant-1", context },
-      { invokeText, recordGeneration }
+      { invokeText, biographyVerifier: async () => true, recordGeneration }
     );
     // Lint rejection routes to the deterministic fallback, never the
     // disappointment-framed model text.
@@ -215,7 +215,7 @@ describe("PR1 test matrix (spec section 16)", () => {
     const recordGeneration = vi.fn().mockResolvedValue(undefined);
     const result = await writeClairePreDriveBrief(
       { tenantId: "tenant-1", context },
-      { invokeText, recordGeneration }
+      { invokeText, biographyVerifier: async () => true, recordGeneration }
     );
     expect(result).not.toContain("CEO");
     expect(recordGeneration).toHaveBeenCalledWith(
@@ -227,7 +227,7 @@ describe("PR1 test matrix (spec section 16)", () => {
     const invokeText = vi.fn().mockResolvedValue("Plain, non-clinical response.");
     await writeClairePreDriveBrief(
       { tenantId: "tenant-1", context },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, biographyVerifier: async () => true, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     const system = invokeText.mock.calls[0][0].messages[0].content as string;
     expect(system).toContain(
@@ -262,7 +262,7 @@ describe("PR1 test matrix (spec section 16)", () => {
     const recordGeneration = vi.fn().mockResolvedValue(undefined);
     await writeClairePreDriveBrief(
       { tenantId: "tenant-1", context },
-      { invokeText: vi.fn().mockRejectedValue(new Error("provider down")), recordGeneration }
+      { biographyVerifier: async () => true, invokeText: vi.fn().mockRejectedValue(new Error("provider down")), recordGeneration }
     );
     expect(recordGeneration).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -278,7 +278,7 @@ describe("PR1 test matrix (spec section 16)", () => {
     const recordGenerationModel = vi.fn().mockResolvedValue(undefined);
     await writeClairePreDriveBrief(
       { tenantId: "tenant-1", context },
-      { invokeText: vi.fn().mockResolvedValue("Model text."), recordGeneration: recordGenerationModel }
+      { biographyVerifier: async () => true, invokeText: vi.fn().mockResolvedValue("Model text."), recordGeneration: recordGenerationModel }
     );
     expect(recordGenerationModel).toHaveBeenCalledWith(
       expect.objectContaining({

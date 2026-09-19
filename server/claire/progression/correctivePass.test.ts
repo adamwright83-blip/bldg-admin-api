@@ -431,7 +431,8 @@ describe("7a. live failure-day tone", () => {
     const recordGeneration = vi.fn().mockResolvedValue(undefined);
     const reply = await answerClairePreDriveFollowUp(
       { tenantId: "tenant-1", utterance: "Six buildings, all no's. What now?", brief: "b", context },
-      { invokeText: vi.fn().mockResolvedValue(modelSays), recordGeneration, progressionStore: createInMemoryProgressionStore() }
+      // The tone lint is under test here, not the biography boundary: a clean verifier keeps them independent.
+      { invokeText: vi.fn().mockResolvedValue(modelSays), biographyVerifier: async () => true, recordGeneration, progressionStore: createInMemoryProgressionStore() }
     );
     return { reply, recordGeneration };
   };
