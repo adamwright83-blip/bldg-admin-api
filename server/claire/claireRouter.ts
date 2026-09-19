@@ -672,7 +672,7 @@ export const claireRouter = router({
         neverReachedFollowUpModel: share(row => row.answerPath !== "follow_up_model"),
         fallbacks,
         sliceG: arbitrateClaireRepair2({
-          observedCoverageDays: coverage.observedDays,
+          observedSpanDays: coverage.spanDays,
           telemetryEnabled: isClaireRepair2Enabled("a_routing_telemetry", ctx.tenantId),
           totalTurns,
           reachedFollowUpModelShare: reachedFollowUpModel.share,

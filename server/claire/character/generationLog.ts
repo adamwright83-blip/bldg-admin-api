@@ -188,8 +188,8 @@ export async function summarizeClaireAnswerPaths(input: {
 export async function getClaireAnswerPathCoverage(input: {
   tenantId: string;
   days?: number;
-}): Promise<{ observedDays: number; firstAt: Date | null; lastAt: Date | null; turns: number }> {
-  const empty = { observedDays: 0, firstAt: null, lastAt: null, turns: 0 };
+}): Promise<{ observedDays: number; spanDays: number; firstAt: Date | null; lastAt: Date | null; turns: number }> {
+  const empty = { observedDays: 0, spanDays: 0, firstAt: null, lastAt: null, turns: 0 };
   const db = await getDb();
   if (!db) return empty;
   const { and, count, eq, gte, isNotNull, min, max, sql } = await import("drizzle-orm");
@@ -210,10 +210,13 @@ export async function getClaireAnswerPathCoverage(input: {
       )
     );
   if (!row) return empty;
+  const firstAt = row.firstAt ? new Date(row.firstAt) : null;
+  const lastAt = row.lastAt ? new Date(row.lastAt) : null;
   return {
     observedDays: Number(row.observedDays ?? 0),
-    firstAt: row.firstAt ? new Date(row.firstAt) : null,
-    lastAt: row.lastAt ? new Date(row.lastAt) : null,
+    spanDays: firstAt && lastAt ? Math.max(0, (lastAt.getTime() - firstAt.getTime()) / 86_400_000) : 0,
+    firstAt,
+    lastAt,
     turns: Number(row.turns ?? 0),
   };
 }

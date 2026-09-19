@@ -12,8 +12,8 @@ export const CLAIRE_REPAIR2_G_MIN_WINDOW_DAYS = 7;
 export const CLAIRE_REPAIR2_G_MIN_TURNS = 50;
 
 export type ClaireRepair2ArbiterInput = {
-  /** Distinct calendar days that actually contain attributable telemetry rows. Never the requested window. */
-  observedCoverageDays: number;
+  /** Elapsed days from the first to the last attributable row actually observed. Never the requested window, never a count of calendar dates. */
+  observedSpanDays: number;
   /** Whether the routing-telemetry flag is currently on for this tenant. */
   telemetryEnabled: boolean;
   totalTurns: number;
@@ -49,11 +49,11 @@ export function arbitrateClaireRepair2(
       reason: "Routing telemetry is not enabled, so no new attributable turns are being recorded.",
     };
   }
-  if (input.observedCoverageDays < CLAIRE_REPAIR2_G_MIN_WINDOW_DAYS) {
+  if (input.observedSpanDays < CLAIRE_REPAIR2_G_MIN_WINDOW_DAYS) {
     return {
       status: "insufficient_data",
       readyToArbitrate: false,
-      reason: `Need at least ${CLAIRE_REPAIR2_G_MIN_WINDOW_DAYS} days of attributable telemetry coverage; observed ${input.observedCoverageDays}.`,
+      reason: `Need at least ${CLAIRE_REPAIR2_G_MIN_WINDOW_DAYS} elapsed days of attributable telemetry coverage; observed ${input.observedSpanDays.toFixed(1)}.`,
     };
   }
   if (input.totalTurns < CLAIRE_REPAIR2_G_MIN_TURNS) {
