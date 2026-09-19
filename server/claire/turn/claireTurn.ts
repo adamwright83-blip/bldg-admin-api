@@ -497,7 +497,28 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         timeZone,
       });
       mark("account_follow_up");
-      return finish({ speak: speakAccountFollowUpCommit(pending, commit, today), kind: "follow_up_saved" });
+      const receipts: MutationReceipt[] = [];
+      if (commit.pipelineSaved) {
+        receipts.push({
+          claimedState: "scheduled",
+          entityId: pending.followUpId ?? `pipeline-follow-up:${pending.pipelineId ?? "none"}:${pending.requestId}`,
+          statement: `Scheduled ${pending.accountName} follow-up for ${pending.dueDate}`,
+        });
+      }
+      if (commit.dayLineSaved && commit.dayLineCommitmentId) {
+        receipts.push({
+          claimedState: "created",
+          entityId: commit.dayLineCommitmentId,
+          statement: `Added ${pending.accountName} follow-up to the Day Line`,
+        });
+      }
+      return finish({
+        speak: "",
+        receiptBackedCommit: speakAccountFollowUpCommit(pending, commit, today),
+        mutationReceipts: receipts,
+        actionIds: commit.dayLineCommitmentId ? [commit.dayLineCommitmentId] : [],
+        kind: "follow_up_saved",
+      });
     }
     if (reply.decision === "no") {
       state.pendingAccountFollowUp = null;
