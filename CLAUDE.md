@@ -110,6 +110,13 @@ encouraging. Do not write COM-B/TDF/BCT annotations onto raw ledger events — t
 versioned registry with an `annotationStatus`. Say "JITAI design principles," never "is a
 JITAI"; say "initiation system," never "gamification."
 
+### Earned rapport / guarded disclosure
+
+Read `docs/goldline/EARNED_RAPPORT_DISCLOSURE.md` before touching Claire's relationship, canon, or personal-answer
+code. Rapport (from verified effort) and personal-access rung (effort + verified business progress) are hidden,
+server-owned, monotonic, and versioned in `server/claire/progression/policy.ts`. Never add call/chat volume as
+evidence, never demote, never render canon as dialogue, never fill the authored-dialogue registry with generated lines.
+
 ### Verification reality
 
 There is no database in the local build environment (Railway MySQL is private-network

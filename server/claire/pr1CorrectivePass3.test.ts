@@ -4,6 +4,8 @@ import { buildClaireClock, CLAIRE_BUSINESS_TIME_ZONE } from "./contextAssembler"
 import { answerClairePreDriveFollowUp } from "./preDriveConversation";
 import { writeClairePreDriveBrief } from "./reasoning";
 import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
+import { AUTHORED_DIALOGUE } from "./progression/authoredDialogue";
+import { createInMemoryProgressionStore } from "./progression/store";
 import {
   recoverPersonalAnswer,
   renderCanonScopedPersonalAnswer,
@@ -47,24 +49,23 @@ const baseContext: ClaireDriveContext = {
 const CANON_AT_TIER_0 = ["Claire is British.", "Claire studied archaeology, historical networks, and languages."];
 
 describe("Corrective pass 3 -- item 1: personal-answer recovery", () => {
-  it("blocks an invented city and deterministically returns eligible canon without a second model call", async () => {
+  it("blocks an invented city: it never reaches the operator, no canon is read aloud, and an approved decline is used without a second model call", async () => {
     const invokeText = vi.fn().mockResolvedValueOnce("London, originally.");
     const recordGeneration = vi.fn().mockResolvedValue(undefined);
     const result = await answerClairePreDriveFollowUp(
-      { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: baseContext },
-      { invokeText, recordGeneration }
+      { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: { ...baseContext, actorId: "op-1" } },
+      { invokeText, recordGeneration, progressionStore: createInMemoryProgressionStore() }
     );
 
-    expect(result).toBe("I'm British.");
     expect(result).not.toContain("London");
-    expect(result).not.toContain("ask me that once more");
+    expect(result).not.toBe("I'm British."); // no robotic canon read-aloud fallback
+    expect(AUTHORED_DIALOGUE.map(line => line.text)).toContain(result);
     expect(invokeText).toHaveBeenCalledTimes(1);
     expect(recordGeneration).toHaveBeenCalledWith(
       expect.objectContaining({
         diagnostic: expect.objectContaining({
           source: "fallback",
-          answerOrigin: "canon_render",
-          failureReason: "ungrounded_personal_specificity_canon_rendered",
+          failureReason: "personal_decline:ungrounded_specificity",
         }),
       })
     );
@@ -140,14 +141,23 @@ describe("Corrective pass 3 -- item 1: personal-answer recovery", () => {
     ).not.toThrow();
   });
 
-  it("a genuine generation failure still goes to the generic fallback", async () => {
+  it("a genuine generation failure on a personal question yields an approved decline", async () => {
     const invokeText = vi.fn().mockRejectedValue(new Error("provider down"));
     const result = await answerClairePreDriveFollowUp(
-      { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: baseContext },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: { ...baseContext, actorId: "op-1" } },
+      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined), progressionStore: createInMemoryProgressionStore() }
     );
-    expect(result).not.toBe(CANON_SCOPED_PERSONAL_DEFLECTION);
-    expect(result).toContain("ask me that once more");
+    expect(AUTHORED_DIALOGUE.map(line => line.text)).toContain(result);
+  });
+
+  it("an unresolved operator identity fails closed to an approved decline with no model call", async () => {
+    const invokeText = vi.fn();
+    const result = await answerClairePreDriveFollowUp(
+      { tenantId: "tenant-1", utterance: "Where are you from, Claire?", brief: "Visit The Wilshire.", context: { ...baseContext, actorId: undefined as never } },
+      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined), progressionStore: createInMemoryProgressionStore() }
+    );
+    expect(invokeText).not.toHaveBeenCalled();
+    expect(AUTHORED_DIALOGUE.map(line => line.text)).toContain(result);
   });
 });
 

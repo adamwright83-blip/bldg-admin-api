@@ -38,6 +38,13 @@ import { claireModelAcceptsSampling, claireModelDefaultsToThinking, claireModelI
 import { previewClairePreDrive } from "./preDriveRuntime";
 import { getClaireAnswerPathCoverage, listClaireAnswerPathDetail, summarizeClaireAnswerPaths } from "./character/generationLog";
 import { arbitrateClaireRepair2 } from "./repair2SliceG";
+import { countProgressionEvidence } from "./progression/evaluate";
+import { summarizeDeclineTelemetry } from "./progression/declineTelemetry";
+import { getProgressionStore } from "./progression/drizzleStore";
+import { planPersonalTurn, personalExchangesUsed } from "./progression/personalController";
+import { PROGRESSION_POLICY } from "./progression/policy";
+import { loadPersonalProgressionContext } from "./progression/service";
+import { syncProgressionForOperator } from "./progression/evidenceSources";
 import { claireRepair2FlagName, isClaireRepair2Enabled } from "./repair2Flags";
 import { setActiveMacroGoal } from "./macroGoalService";
 import {
@@ -638,6 +645,65 @@ export const claireRouter = router({
    * requests. Admin-only, read-only, and empty until the slice's flag is on
    * for this tenant.
    */
+  /**
+   * Earned Rapport + Guarded Disclosure: admin/debug ONLY. Never surfaced in the
+   * operator-facing game UI. Read-only; answers "why is this operator at this
+   * rung, what evidence backs it, and would this topic be answered right now".
+   */
+  progressionDebug: adminProcedure
+    .input(
+      z.object({
+        operatorUserId: z.string().min(1),
+        topic: z.string().optional(),
+        conversationId: z.string().optional(),
+        syncPaidOrders: z.boolean().default(false),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const store = getProgressionStore();
+      const scope = { tenantId: ctx.tenantId, operatorUserId: input.operatorUserId };
+      if (input.syncPaidOrders) await syncProgressionForOperator(scope, { force: true });
+      const conversationId = input.conversationId ?? "admin_debug";
+      const [evidence, personal, tenantLedger] = await Promise.all([
+        store.listEvidence(scope),
+        loadPersonalProgressionContext(store, scope, conversationId),
+        store.listTenantLedger({ tenantId: ctx.tenantId }),
+      ]);
+      const entitlements = await store.listEntitlements(scope);
+      const plan = input.topic ? planPersonalTurn({ topic: input.topic, context: personal }) : null;
+      return {
+        simulation: false,
+        policyVersion: PROGRESSION_POLICY.version,
+        grant: personal.grant,
+        counts: countProgressionEvidence(evidence, new Date()),
+        evidence: evidence.map(item => ({
+          id: item.id, category: item.category, kind: item.kind, strength: item.strength,
+          sourceType: item.sourceType, sourceId: item.sourceId, provenance: item.provenance,
+          occurredAt: item.occurredAt, recognizedAt: item.recognizedAt,
+        })),
+        entitlements: {
+          unused: entitlements.filter(row => row.status === "unused"),
+          reserved: entitlements.filter(row => row.status === "reserved"),
+          consumed: entitlements.filter(row => row.status === "consumed"),
+        },
+        disclosedFragmentIds: personal.disclosedFragmentIds,
+        priorRefusedTopics: personal.priorRefusedTopics,
+        currentCall: {
+          conversationId,
+          personalExchangesUsed: personalExchangesUsed(personal),
+          budget: PROGRESSION_POLICY.personalExchangeBudget[personal.grant.personalRung],
+          threadClosed: personal.conversationLedger.some(row => row.kind === "thread_closed"),
+        },
+        topicDecision: plan
+          ? plan.kind === "answer"
+            ? { topic: input.topic, decision: "allowed", basis: plan.basis, fragmentId: plan.fragment.id }
+            : { topic: input.topic, decision: "denied", reason: plan.reason, eligibleFragmentId: plan.eligibleFragmentId }
+          : null,
+        ledgerTail: (await store.listLedger(scope)).slice(-100),
+        declineTelemetry: summarizeDeclineTelemetry(tenantLedger),
+      };
+    }),
+
   routingAudit: adminProcedure
     .input(
       z.object({

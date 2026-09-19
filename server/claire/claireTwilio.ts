@@ -8,6 +8,10 @@ import {
   recordCommercialMissionVisitOutcome,
   saveCommercialMissionFieldNotes,
 } from "../commercialMissions/commercialMissionFieldService";
+import { getProgressionStore } from "./progression/drizzleStore";
+import { isClaireProgressionEnabled } from "./progression/progressionFlag";
+import { commitPendingDisclosuresForConversation } from "./progression/service";
+import { recordConfirmedVisitEvidence } from "./progression/evidenceSources";
 import { recordClaireMissionOutcomeEvents, recordQualifyingClaireInteraction } from "./character/relationshipEmitters";
 import { assembleClaireDriveContext } from "./contextAssembler";
 import {
@@ -475,6 +479,17 @@ function startVoiceTurn(input: {
       if (result.listenOnly) {
         return preDriveConversationTwiML({ text: "", token, hints: conversation.hints, listenOnly: true });
       }
+      if (result.endCall) {
+        // A guarded personal turn closed the thread with business complete and an authored exit line.
+        await dropCall(conversationId);
+        await endClaireCallLedger({
+          callSid: input.callSid,
+          claireConversationId: conversationId,
+          claireText: result.speak,
+          reason: "personal_thread_closed",
+        });
+        return speakAndHangUp(result.speak);
+      }
       return preDriveConversationTwiML({ text: result.speak || "Go ahead.", token, hints: conversation.hints });
     } catch (error) {
       // Hard truth rule: a failure is never spoken as success.
@@ -716,6 +731,15 @@ export function registerClaireRoutes(app: Express): void {
 
       const token = String(req.query.token);
       const callSid = callSidFrom(req);
+      // A verified webhook for this call means the previous line was actually spoken. Commit any reveal
+      // reserved for it FIRST — before empty-transcript, closing-phrase, or ordinary routing — so a
+      // "goodbye" right after a reveal still records that the operator heard it.
+      if (isClaireProgressionEnabled(claims.tenantId)) {
+        await commitPendingDisclosuresForConversation(getProgressionStore(), {
+          tenantId: claims.tenantId,
+          conversationId: callStateKey(claims.conversationId),
+        });
+      }
       const rawTranscript = String(
         ((req.body ?? {}) as Record<string, string>).SpeechResult ?? ""
       ).trim();
@@ -1065,6 +1089,16 @@ export function registerClaireRoutes(app: Express): void {
       });
       await safeRecordRelationshipEvent(() =>
         recordClaireMissionOutcomeEvents({
+          tenantId: claims.tenantId,
+          operatorUserId: claims.userId,
+          missionId: claims.missionId,
+          outcome: claims.proposal.proposedOutcome,
+        })
+      );
+      // Two-currency progression: the visit outcome was just persisted as business truth.
+      // Effort is credited regardless of result; only a won outcome is also business progress.
+      await safeRecordRelationshipEvent(() =>
+        recordConfirmedVisitEvidence({
           tenantId: claims.tenantId,
           operatorUserId: claims.userId,
           missionId: claims.missionId,

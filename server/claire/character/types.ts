@@ -189,7 +189,9 @@ export type ClaireVersionStamp = {
 export type ClaireCompiledContext = {
   version: ClaireVersionStamp;
   mode: ClaireMode;
+  /** The progress-backed personal-access rung (0-3). Never derived from call/chat volume. */
   disclosureTier: ClaireDisclosureTier;
+  rapportBand?: 0 | 1 | 2 | 3;
   relationshipDimensions: {
     professionalRespect: number;
     reliability: number;

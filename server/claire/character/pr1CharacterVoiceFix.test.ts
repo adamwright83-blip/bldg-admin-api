@@ -108,13 +108,23 @@ describe("PR1 corrective pass — character voice fix", () => {
     });
     expect(compiledTier0Ask.eligibleCanonFacts.join(" ")).not.toContain("intelligence work");
 
+    // A legacy tier number no longer opens canon; only a controller-bounded fragment does.
     const compiledTier1Ask = compileClaireCharacterContext({
       mode: "pre_drive",
-      relationshipState: { ...relationshipStateTier0, disclosureTier: 1 },
+      relationshipState: { ...relationshipStateTier0, disclosureTier: 3 },
       recentSharedHistory: [],
       explicitlyRequestedTopic: "father",
     });
-    expect(compiledTier1Ask.eligibleCanonFacts.join(" ")).toContain("intelligence work");
+    expect(compiledTier1Ask.eligibleCanonFacts.join(" ")).not.toContain("intelligence work");
+
+    const compiledBounded = compileClaireCharacterContext({
+      mode: "pre_drive",
+      relationshipState: relationshipStateTier0,
+      recentSharedHistory: [],
+      explicitlyRequestedTopic: "father",
+      boundedCanonFragmentIds: ["core_father_career"],
+    });
+    expect(compiledBounded.eligibleCanonFacts.join(" ")).toContain("intelligence work");
 
     // permanently_private never surfaces regardless of tier or ask.
     const compiledMaxAsk = compileClaireCharacterContext({

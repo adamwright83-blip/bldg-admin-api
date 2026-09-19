@@ -29,11 +29,15 @@ import {
 } from "./verifiedFactInventoryFromContext";
 import { trimToSentenceBoundary } from "./textTrim";
 import { measureClairePromptSections, type ClairePromptSizeTrace } from "./answerPathTelemetry";
-import {
-  assertNoUngroundedPersonalSpecificity,
-  UngroundedPersonalSpecificityError,
-} from "./character/personalSpecificityGuard";
 import { recoverPersonalAnswer } from "./character/personalAnswerRecovery";
+import { assertNoUngroundedPersonalSpecificity, UngroundedPersonalSpecificityError } from "./character/personalSpecificityGuard";
+import { isClaireProgressionEnabled } from "./progression/progressionFlag";
+import { findUnauthorizedFirstPersonBiography } from "./progression/personalEntailment";
+import { lintFailureDayLanguage } from "./progression/toneLint";
+import { selectDialogueLine } from "./progression/dialogueRegistry";
+import { answerPersonalFollowUp } from "./progression/personalFollowUp";
+import type { ProgressionStore } from "./progression/store";
+import type { PersonalTurnResult } from "./progression/personalReveal";
 import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
 import {
   CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION,
@@ -238,10 +242,14 @@ export async function answerClairePreDriveFollowUp(
      * `firstTokenMs` from webhook receipt. Optional — desktop/tests omit it.
      */
     onFirstToken?: () => void;
+    /** Conversation identity, used for the personal-thread ledger and per-call budget. */
+    conversationId?: string;
+    onPersonalTurn?: (result: PersonalTurnResult) => void;
   },
   dependencies: {
     invokeText?: typeof invokeTextLLM;
     recordGeneration?: typeof recordClaireGeneration;
+    progressionStore?: ProgressionStore;
   } = {}
 ): Promise<string> {
   const fallback = conservativeClaireFollowUp(input);
@@ -250,14 +258,48 @@ export async function answerClairePreDriveFollowUp(
   const recordGeneration =
     dependencies.recordGeneration ?? recordClaireGeneration;
   const surface: ClaireGenerationSurface = input.surface ?? "voice";
-  const conversationalMode = detectClaireConversationalMode(input.utterance);
-  const requestedTopic = detectRequestedClaireTopic(input.utterance);
+  const progressionOn = isClaireProgressionEnabled(input.tenantId);
+  // Flag OFF reproduces the pre-feature routing exactly; ON adds the fail-closed personal classifier.
+  const conversationalMode = detectClaireConversationalMode(input.utterance, progressionOn);
+  const requestedTopic = detectRequestedClaireTopic(input.utterance, progressionOn);
   const inventory = buildClaireVerifiedFactInventory(input.context);
+  // Personal questions never reach the general prompt. The server decides what may
+  // be answered (progression controller); the model only phrases one bounded fact;
+  // every failure becomes an approved decline. Ask-only: this runs solely because the
+  // operator explicitly asked a personal question.
+  if (conversationalMode === "personal" && progressionOn) {
+    const operatorUserId = input.context.actorId ?? null;
+    if (!operatorUserId) {
+      // Unresolved identity fails closed: no progression state, no disclosure.
+      return selectDialogueLine({ category: "decline", rapportBand: 0 })?.text ?? "Not that one.";
+    }
+    const businessOpen =
+      input.context.blockers.length > 0 ||
+      Boolean(input.context.nextFixedCommitment) ||
+      (input.context.runtime?.workItems?.length ?? 0) > 0;
+    return answerPersonalFollowUp(
+      {
+        tenantId: input.tenantId,
+        operatorUserId,
+        conversationId: input.conversationId ?? `pre_drive:${input.context.businessDate}`,
+        topic: requestedTopic ?? null,
+        utterance: input.utterance,
+        recentTurns: input.recentTurns,
+        businessOpen,
+        surface,
+        onGeneration: input.onGeneration,
+        onPersonalTurn: input.onPersonalTurn,
+      },
+      { invokeText, recordGeneration, progressionStore: dependencies.progressionStore }
+    );
+  }
   const compiled = await compileClaireContextForOperator({
     tenantId: input.tenantId,
     operatorUserId: input.context.actorId ?? null,
     inventory,
     topic: requestedTopic ?? undefined,
+    // With the progression flag ON, personal turns returned above. With it OFF the previous behavior
+    // (personal mode through the general path, tier-based canon) is preserved exactly.
     mode:
       conversationalMode === "personal"
         ? "personal"
@@ -365,10 +407,7 @@ export async function answerClairePreDriveFollowUp(
     const trimmedToSentenceBoundary = trimmed !== text;
     assertPostGenerationStateVerbs(trimmed, inventory);
 
-    // Personal-specificity guard stays hard and fail-closed. If the model
-    // invents a personal specific, recover deterministically from canon that
-    // was already eligible for this operator/topic. Do not ask the model to
-    // try again: a second free-form generation can hallucinate again.
+    // Legacy (flag OFF) personal-specificity guard + deterministic canon recovery, exactly as before.
     let answer = trimmed;
     let recoveredVia: "canon_render" | "canon_scoped_deflection" | null = null;
     if (conversationalMode === "personal") {
@@ -391,17 +430,40 @@ export async function answerClairePreDriveFollowUp(
       }
     }
 
+    // Progression ON, defense in depth on EVERY non-personal answer: first-person biography can never
+    // be asserted outside the guarded personal controller, and failure-day language stays free of
+    // shame, consolation, coaching, diagnosis and volunteered biography. A violating line is never
+    // spoken; the deterministic fallback (or an approved decline) is used instead.
+    let guardReason: string | null = null;
+    if (progressionOn && recoveredVia === null) {
+      const biography = findUnauthorizedFirstPersonBiography(answer, compiled.eligibleCanonFacts);
+      if (biography) {
+        console.warn("[Claire] general answer asserted unauthorized first-person biography; replaced");
+        answer = selectDialogueLine({ category: "decline", rapportBand: 0 })?.text ?? "Not that one.";
+        guardReason = "personal_biography_guard";
+      } else {
+        const tone = lintFailureDayLanguage(answer);
+        if (!tone.passes) {
+          console.warn("[Claire] general answer violated failure-day tone contract; replaced", tone.violations.map(v => v.category));
+          answer = fallback;
+          guardReason = `failure_day_tone:${tone.violations[0]!.category}`;
+        }
+      }
+    }
+
     const diagnostic: ClaireGenerationDiagnostic = {
       kind: "follow_up",
-      source: recoveredVia === null ? "model" : "fallback",
+      source: recoveredVia === null && guardReason === null ? "model" : "fallback",
       answerOrigin:
         recoveredVia === "canon_render"
           ? "canon_render"
-          : recoveredVia === "canon_scoped_deflection"
+          : recoveredVia === "canon_scoped_deflection" || guardReason
             ? "fallback"
             : "model",
       failureReason:
-        recoveredVia === null
+        guardReason
+          ? guardReason
+          : recoveredVia === null
           ? null
           : recoveredVia === "canon_render"
             ? "ungrounded_personal_specificity_canon_rendered"

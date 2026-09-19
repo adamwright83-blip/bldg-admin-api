@@ -43,20 +43,31 @@ describe("B/M/N/P — runtime character compiler", () => {
     expect(compiled.promptSection).not.toMatch(/childhood/i);
   });
 
-  it("P — casual mode at high tier is eligible for deeper canon; field mode is not", () => {
+  it("P — gated canon is never volunteered by mode or legacy tier; it enters a prompt only when the controller bounds that exact fragment", () => {
     const casual = compileClaireCharacterContext({
       mode: "casual",
-      relationshipState: { ...baseState, disclosureTier: 2 },
+      relationshipState: { ...baseState, disclosureTier: 3 },
       recentSharedHistory: [],
+      progression: { rapportBand: 3, personalRung: 3 },
     });
-    expect(casual.eligibleCanonFacts.join(" ")).toMatch(/six-year/i);
+    expect(casual.eligibleCanonFacts.join(" ")).not.toMatch(/six-year/i);
 
-    const fieldMode = compileClaireCharacterContext({
-      mode: "pre_drive",
-      relationshipState: { ...baseState, disclosureTier: 2 },
+    const bounded = compileClaireCharacterContext({
+      mode: "casual",
+      relationshipState: baseState,
       recentSharedHistory: [],
+      boundedCanonFragmentIds: ["core_relationship"],
     });
-    expect(fieldMode.eligibleCanonFacts.join(" ")).not.toMatch(/six-year/i);
+    expect(bounded.eligibleCanonFacts.join(" ")).toMatch(/six-year/i);
+    expect(bounded.eligibleCanonFragmentIds).toEqual(["core_relationship"]);
+
+    const privateAsked = compileClaireCharacterContext({
+      mode: "casual",
+      relationshipState: baseState,
+      recentSharedHistory: [],
+      boundedCanonFragmentIds: ["private_exes_last_exchange", "private_fathers_last_exchange"],
+    });
+    expect(privateAsked.eligibleCanonFacts).toEqual([]);
   });
 
   it("exposes full observability fields for the review tool (Slice 8): dimensions, shared-history ids, canon fragment ids", () => {
