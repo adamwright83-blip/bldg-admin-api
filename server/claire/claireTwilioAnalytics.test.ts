@@ -13,7 +13,15 @@ const hoisted = vi.hoisted(() => {
   };
 });
 
-vi.mock("../_core/env", () => ({ ENV: { adminBaseUrl: "https://api.example.test" } }));
+vi.mock("../_core/env", () => ({
+  ENV: {
+    adminBaseUrl: "https://api.example.test",
+    cookieSecret: "test-secret",
+    xaiApiKey: "",
+    claireXaiTtsEnabled: false,
+    claireXaiTtsVoiceId: "eve",
+  },
+}));
 vi.mock("twilio", async importOriginal => {
   const actual = (await importOriginal()) as { default?: Record<string, unknown> } & Record<string, unknown>;
   const real = (actual.default ?? actual) as Record<string, unknown>;
@@ -98,7 +106,7 @@ type Handler = (req: unknown, res: unknown) => Promise<unknown>;
 
 function routes(): Map<string, Handler> {
   const map = new Map<string, Handler>();
-  registerClaireRoutes({ post: (path: string, handler: Handler) => map.set(path, handler) } as never);
+  registerClaireRoutes({ post: (path: string, handler: Handler) => map.set(path, handler), get: () => undefined } as never);
   return map;
 }
 
