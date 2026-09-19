@@ -303,9 +303,11 @@ export function preDriveConversationTwiML(input: {
     method: "POST",
     language: "en-US",
     speechModel: "experimental_conversations",
-    // A morning briefing is a list spoken with pauses. Wait for three seconds
-    // of silence before closing a turn, and allow a full minute of speech.
-    speechTimeout: "3",
+    // Slice F: follow-up turns use Twilio's auto endpoint. A fixed 3-second
+    // silence wait was dead air after every ordinary answer. Opening
+    // briefings are still lists spoken with pauses, so they keep the
+    // three-second close.
+    speechTimeout: input.opening ? "3" : "auto",
     timeout: input.listenOnly ? 4 : 6,
     maxSpeechTime: 60,
     actionOnEmptyResult: true,

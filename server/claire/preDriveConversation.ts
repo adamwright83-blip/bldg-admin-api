@@ -227,6 +227,11 @@ export async function answerClairePreDriveFollowUp(
      * voice-native prose.
      */
     surface?: ClaireGenerationSurface;
+    /**
+     * Slice F: first provider token. Used by the voice turn to record
+     * `firstTokenMs` from webhook receipt. Optional — desktop/tests omit it.
+     */
+    onFirstToken?: () => void;
   },
   dependencies: {
     invokeText?: typeof invokeTextLLM;
@@ -358,6 +363,7 @@ export async function answerClairePreDriveFollowUp(
         maxTokens: FOLLOW_UP_MAX_TOKENS,
         onStopReason: reason => { stopReason = reason; },
         onModelServed: model => { modelServed = model; },
+        onFirstToken: input.onFirstToken,
         messages: [
           { role: "system", content: systemPrompt },
           ...conversationMessages,
