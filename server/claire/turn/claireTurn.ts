@@ -677,7 +677,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     (state.pendingBriefing !== null && state.pendingBriefing !== undefined && parsed.items.length >= 1);
   const singleFlow = !multiItem && parsed.items.length <= 1 && singleIntentFlow(utterance);
 
-  if (!businessQuestion && (multiItem || (!singleFlow && parsed.items.length === 1 && looksLikeWorkRequest(utterance) === false && parsed.items[0]!.kind === "new_work" && carried.length > 0))) {
+  if (!businessQuestion && (multiItem || openAct.kind === "explicit_track" || (!singleFlow && parsed.items.length === 1 && looksLikeWorkRequest(utterance) === false && parsed.items[0]!.kind === "new_work" && carried.length > 0))) {
     const vocabulary = await deps.vocabulary(input.tenantId).catch(() => [] as string[]);
     if (deps.extractModel && (input.surface === "voice" || parsed.unparsed.length > 0)) {
       const model = await deps.extractModel({ tenantId: input.tenantId, utterance, clock, vocabulary, recentTurns: history() });
