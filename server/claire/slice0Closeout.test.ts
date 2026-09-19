@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { inventoryPlusReceipts, lintPostGenerationStateVerbs, lintSpokenClock, VerifiedFactInventory } from "./assertionGuard";
-import { sanitizeSpeakAgainstInventory } from "./verifiedFactInventoryFromContext";
+import {
+  lintPostGenerationStateVerbs,
+  lintReceiptBackedCommitSpeech,
+  lintSpokenClock,
+  VerifiedFactInventory,
+} from "./assertionGuard";
+import { speakBriefingCommit } from "./briefing/briefingCommit";
+import { assembleGuardedClaireSpeak, sanitizeSpeakAgainstInventory } from "./verifiedFactInventoryFromContext";
 import { classifyOpenDialogueAct } from "./turn/dialogueAct";
 import { replyDecision } from "./turn/claireTurn";
 import {
@@ -35,18 +41,62 @@ describe("deterministic dialogue acts do not require a new model hop", () => {
 
 describe("mutation claims require the matching receipt", () => {
   const empty = new VerifiedFactInventory([]);
+  const createdA = [{ claimedState: "created" as const, entityId: "task-a", statement: "Added task A" }];
+  const completedOne = [{ claimedState: "completed" as const, entityId: "task-a", statement: "Marked task A done" }];
 
-  it("rejects unconstrained Adding to the Day Line… Done with no receipt", () => {
+  it("6 — original Slice 0 false Adding… Done with zero receipt remains blocked", () => {
     const speech = "Adding to the Day Line: create Instagram ad in Zeli AI. Done. That's your Saturday task.";
     expect(lintPostGenerationStateVerbs(speech, empty).pass).toBe(false);
     expect(sanitizeSpeakAgainstInventory(speech, empty)).not.toMatch(/Adding to the Day Line/i);
   });
 
-  it("allows Done. N on today's line only with a created receipt for that write", () => {
-    const withReceipt = inventoryPlusReceipts(empty, [
-      { claimedState: "created", entityId: "c-1", statement: "Added Instagram ad" },
-    ]);
-    expect(lintPostGenerationStateVerbs("Done. 1 on today's line.", withReceipt).pass).toBe(true);
+  it("1 — created receipt for task A does not authorize model prose claiming task B was added", () => {
+    expect(lintPostGenerationStateVerbs("I added task B to the Day Line.", empty).pass).toBe(false);
+    expect(
+      assembleGuardedClaireSpeak({
+        conversational: "I added task B to the Day Line.",
+        inventory: empty,
+        mutationReceipts: createdA,
+      })
+    ).not.toMatch(/task B/i);
+  });
+
+  it("2 — created receipt does not authorize I completed/marked it done in free-form speech", () => {
+    expect(lintPostGenerationStateVerbs("I marked it done.", empty).pass).toBe(false);
+    expect(lintPostGenerationStateVerbs("I completed that for you.", empty).pass).toBe(false);
+  });
+
+  it("3 — completed receipt does not authorize I added/saved it in free-form speech", () => {
+    expect(lintPostGenerationStateVerbs("I added it to the Day Line.", empty).pass).toBe(false);
+    expect(lintPostGenerationStateVerbs("I saved that for you.", empty).pass).toBe(false);
+  });
+
+  it("4 — speakBriefingCommit may say Done. 1 on today's line after an actual successful create", () => {
+    const commit = speakBriefingCommit(
+      {
+        added: [{ title: "Instagram ad", businessDate: "2026-09-19", kind: "new_work", quote: "", timing: { kind: "none" } } as never],
+        completed: [],
+        failed: [],
+        commitmentIds: ["c-1"],
+        receipts: createdA,
+      },
+      "2026-09-19"
+    );
+    expect(commit).toBe("Done. 1 on today's line.");
+    expect(lintReceiptBackedCommitSpeech(commit, createdA).pass).toBe(true);
+    expect(lintPostGenerationStateVerbs(commit, empty).pass).toBe(false);
+  });
+
+  it("5 — mixed answer + Day Line write cannot borrow the commit receipt for unrelated mutation claims", () => {
+    const commit = "Done. 1 on today's line.";
+    const guarded = assembleGuardedClaireSpeak({
+      conversational: "Yes, stop at The Louise. I added the Zeely spelling to your list.",
+      inventory: empty,
+      receiptBackedCommit: commit,
+      mutationReceipts: createdA,
+    });
+    expect(guarded).toContain("Done. 1 on today's line.");
+    expect(guarded).not.toMatch(/I added the Zeely/i);
   });
 
   it("rejects engineering Sent to… without a sent receipt (shared invariant, not a workflow redesign)", () => {

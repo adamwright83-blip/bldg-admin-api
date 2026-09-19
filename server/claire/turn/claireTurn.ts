@@ -9,7 +9,7 @@ import { answerClaireBusinessTurn, looksLikeWorkRequest, type ClaireAnalyticsSta
 import { isCombineRequest, normalizeUtterance } from "../business/businessLanguage";
 import { getClaireCampaignSummary } from "../campaignAwareness";
 import type { ClaireDriveContext } from "../contextAssembler";
-import { buildClaireVerifiedFactInventory, sanitizeSpeakAgainstInventory } from "../verifiedFactInventoryFromContext";
+import { assembleGuardedClaireSpeak, buildClaireVerifiedFactInventory } from "../verifiedFactInventoryFromContext";
 import { getProgressionStore } from "../progression/drizzleStore";
 import { isClaireProgressionEnabled } from "../progression/progressionFlag";
 import { commitPendingDisclosuresForConversation } from "../progression/service";
@@ -150,6 +150,8 @@ export type ClaireTurnResult = {
   commitmentTurn?: VoiceCommitmentTurnResult;
   actionIds?: string[];
   mutationReceipts?: MutationReceipt[];
+  /** Deterministic `speakBriefingCommit` (or equivalent) — linted against receipts, not conversational inventory. */
+  receiptBackedCommit?: string;
 };
 
 export type ClaireTurnDeps = {
@@ -407,9 +409,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   let personalEndCall = false;
   const finish = (result: ClaireTurnResult): ClaireTurnResult => {
     const inventory = buildClaireVerifiedFactInventory(input.context);
-    const speak = sanitizeSpeakAgainstInventory(result.speak, inventory, {
-      receipts: result.mutationReceipts,
+    const speak = assembleGuardedClaireSpeak({
+      conversational: result.speak,
+      inventory,
       localTime: input.context?.clock?.localTime ?? null,
+      receiptBackedCommit: result.receiptBackedCommit,
+      mutationReceipts: result.mutationReceipts,
     });
     const guarded = speak === result.speak ? result : { ...result, speak };
     if (trace.synthesisRequired) {
@@ -512,19 +517,25 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         conversationKey: input.conversationKey,
       });
       mark("briefing");
-      let speak = speakBriefingCommit(result, today);
+      const commitSpeak = speakBriefingCommit(result, today);
       const receipts = result.receipts ?? [];
       if (reply.remainder) {
         const more = await runClaireTurn({ ...input, utterance: reply.remainder, state, allowFragmentWait: false }, overrides);
-        speak = `${speak} ${more.speak}`.trim();
         return finish({
-          speak,
+          speak: more.speak,
+          receiptBackedCommit: commitSpeak,
           kind: "briefing_saved",
           actionIds: [...result.commitmentIds, ...(more.actionIds ?? [])],
           mutationReceipts: [...receipts, ...(more.mutationReceipts ?? [])],
         });
       }
-      return finish({ speak, kind: "briefing_saved", actionIds: result.commitmentIds, mutationReceipts: receipts });
+      return finish({
+        speak: "",
+        receiptBackedCommit: commitSpeak,
+        kind: "briefing_saved",
+        actionIds: result.commitmentIds,
+        mutationReceipts: receipts,
+      });
     }
     if (reply.decision === "no" || explicitDayLineRefusal(utterance)) {
       state.pendingBriefing = null;
@@ -712,7 +723,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       state.pendingBriefing = null;
       mark("briefing");
       return finish({
-        speak: `${answers.join(" ")} ${speakBriefingCommit(result, today)}`.trim(),
+        speak: answers.join(" ").trim(),
+        receiptBackedCommit: speakBriefingCommit(result, today),
         kind: "briefing_saved",
         actionIds: result.commitmentIds,
         mutationReceipts: result.receipts ?? [],

@@ -259,6 +259,7 @@ export function lintPostGenerationStateVerbs(
         /\badding to the day ?line\b/i,
         /\badded (?:it|that|them|those|this)\b/i,
         /\bI(?:'ve|\s+have)\s+added\b/i,
+        /\bI added\b/i,
         /\bI(?:'ve|\s+have)?\s+saved\b/i,
         /\bI saved\b/i,
       ],
@@ -276,17 +277,17 @@ export function lintPostGenerationStateVerbs(
     {
       state: "completed",
       label: "completed",
-      patterns: [/\bI(?:'ve|\s+have)\s+completed\b/i, /\bmarked (?:it|that|them) done\b/i],
+      patterns: [/\bI(?:'ve|\s+have)\s+completed\b/i, /\bI completed\b/i, /\bmarked (?:it|that|them) done\b/i],
     },
   ];
 
   for (const check of checks) {
-    if (check.patterns.some(pattern => pattern.test(generatedText)) && !inventory.hasVerifiedClaim(check.state) && !(check.state === "completed" && inventory.hasVerifiedClaim("created")) && !(check.state === "created" && inventory.hasVerifiedClaim("completed"))) {
+    if (check.patterns.some(pattern => pattern.test(generatedText)) && !inventory.hasVerifiedClaim(check.state)) {
       violations.push(`State verb '${check.label}' claimed without verified write receipt`);
     }
   }
 
-  // Deterministic commit renderer may say "Done." only when a created/completed receipt exists.
+  // Model/free-form speech must not use commit-renderer "Done. N on … line" phrasing without inventory proof.
   if (/\bdone\.\s/i.test(generatedText) && !inventory.hasVerifiedClaim("created") && !inventory.hasVerifiedClaim("completed") && /\b(?:line|saved|marked)\b/i.test(generatedText)) {
     violations.push("State verb 'done' claimed without verified write receipt");
   }
@@ -295,6 +296,53 @@ export function lintPostGenerationStateVerbs(
     pass: violations.length === 0,
     violations,
   };
+}
+
+/**
+ * Defense-in-depth for deterministic mutation confirmation only (`speakBriefingCommit` output).
+ * Receipts must match the operation class described — no cross-authorization between created/completed.
+ */
+export function lintReceiptBackedCommitSpeech(
+  commitText: string,
+  receipts: readonly MutationReceipt[]
+): { pass: boolean; violations: string[] } {
+  const text = commitText.trim();
+  if (!text) return { pass: true, violations: [] };
+
+  const violations: string[] = [];
+  const created = receipts.filter(receipt => receipt.claimedState === "created");
+  const completed = receipts.filter(receipt => receipt.claimedState === "completed");
+
+  if (/\bI(?:'ve|\s+have)\s+added\b/i.test(text) || /\badding to the day ?line\b/i.test(text) || /\bI(?:'ve|\s+have)\s+completed\b/i.test(text)) {
+    violations.push("Commit renderer must not use free-form added/completed phrasing");
+  }
+
+  if (/\bmarked done\b/i.test(text)) {
+    const countMatch = /(\d+)\s+marked done/i.exec(text);
+    const need = countMatch ? Number(countMatch[1]) : 1;
+    if (completed.length < need) {
+      violations.push("marked done without matching completed receipts");
+    }
+  }
+
+  if (/^Done\./i.test(text)) {
+    if (!created.length && !completed.length) {
+      violations.push("Done summary without mutation receipts");
+    }
+    const lineCounts = [...text.matchAll(/(\d+)\s+on(?:\s+\w+'s)?\s+line/gi)];
+    if (lineCounts.length) {
+      const totalOnLine = lineCounts.reduce((sum, match) => sum + Number(match[1]), 0);
+      if (created.length < totalOnLine) {
+        violations.push("Day Line counts exceed created receipts");
+      }
+    }
+  }
+
+  if (/\bI saved \d+/i.test(text) && created.length + completed.length === 0) {
+    violations.push("partial save summary without receipts");
+  }
+
+  return { pass: violations.length === 0, violations };
 }
 
 const CLOCK_CLAIM = /\b(?:it's|it is)\s+(\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)|noon|midnight)\b/i;
