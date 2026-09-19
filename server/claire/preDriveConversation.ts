@@ -179,7 +179,11 @@ function compactConversationContext(context: ClaireDriveContext): string {
     clock: context.clock,
     macroGoalKnown: context.macroGoalKnown,
     macroGoal: context.macroGoal,
-    nextFixedCommitment: context.nextFixedCommitment,
+    // The raw UTC instant is withheld: the model gets only the resolved local
+    // time below, so it cannot mis-convert a timestamp it never sees.
+    nextFixedCommitment: context.nextFixedCommitment
+      ? { ...context.nextFixedCommitment, scheduledAt: undefined }
+      : context.nextFixedCommitment,
     // PR1 Claire Intelligence Repair -- corrective pass (real-exam
     // finding): nextFixedCommitment.scheduledAt above is a raw ISO
     // timestamp. This field is the same instant, pre-rendered into an
@@ -195,7 +199,6 @@ function compactConversationContext(context: ClaireDriveContext): string {
     picture: runtime.picture,
     workItems: runtime.workItems.slice(0, 8),
     factInventory: buildClaireVerifiedFactInventory(context).toPromptSection(),
-    capabilityBriefing: formatCapabilityBriefing(),
   });
 }
 
@@ -229,6 +232,11 @@ export async function answerClairePreDriveFollowUp(
      * voice-native prose.
      */
     surface?: ClaireGenerationSurface;
+    /**
+     * Slice F: first provider token. Used by the voice turn to record
+     * `firstTokenMs` from webhook receipt. Optional — desktop/tests omit it.
+     */
+    onFirstToken?: () => void;
   },
   dependencies: {
     invokeText?: typeof invokeTextLLM;
@@ -286,15 +294,16 @@ export async function answerClairePreDriveFollowUp(
       },
       { label: "fact_inventory", text: inventory.toPromptSection() },
       { label: "offer_context", text: GOLDLINE_OFFER_CONTEXT },
+      { label: "capability_briefing", text: formatCapabilityBriefing() },
       { label: "reasoning_policy", text: CLAIRE_V1_REASONING_POLICY },
       {
         label: "job_and_clock",
-        text: `${CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION} Missing retrievedEvidence: say so, then still answer any judgment asked.`,
+        text: `${CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION} No retrievedEvidence: say so; still answer any judgment asked.`,
       },
-      { label: "truth_business_claims", text: "Business-specific claims (this account, this customer, this property, a specific number, a specific completed action) must be grounded in verified context or the fact inventory, or say it is unknown." },
+      { label: "truth_business_claims", text: "Business-specific claims (account, customer, property, number, completed action) must be grounded in verified context or the fact inventory, or stated unknown." },
       {
         label: "judgment_and_history",
-        text: "General professional knowledge is framed advice, never asserted as a fact about this business; do not import a sales model from a different industry. Personal answers: eligible canon only. A prior Claire turn is conversation history, not verified truth — if it asserted something not present in the fact inventory, do not treat it as confirmed on this turn. If a blocker was already mentioned, do not mechanically re-mention it again unless asked.",
+        text: "General knowledge is framed advice, never asserted as a fact about this business; do not import a sales model from a different industry. Personal: eligible canon only. A prior Claire turn is conversation history, not verified truth — if it asserted something not present in the fact inventory, do not treat it as confirmed on this turn. If a blocker was already mentioned, do not mechanically re-mention it again unless asked.",
       },
       {
         label: "retrieved_evidence_rule",
@@ -343,6 +352,7 @@ export async function answerClairePreDriveFollowUp(
         maxTokens: FOLLOW_UP_MAX_TOKENS,
         onStopReason: reason => { stopReason = reason; },
         onModelServed: model => { modelServed = model; },
+        onFirstToken: input.onFirstToken,
         messages: [
           { role: "system", content: systemPrompt },
           ...conversationMessages,

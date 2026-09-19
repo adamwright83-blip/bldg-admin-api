@@ -53,7 +53,7 @@
  * for what Claire says on a real commercial visit.
  */
 export const GOLDLINE_OFFER_CONTEXT = [
-  "Goldline/Laundry Butler is a per-resident wash-and-fold laundry service with pickup and same-day return (7-9 PM).",
+  "Goldline/Laundry Butler is a per-resident wash-and-fold laundry service with pickup and return.",
   "The paying customer is the individual resident. The business does not sell, lease, install, or service laundry machines.",
-  "The exact commercial arrangement offered to a property is NOT established in your context. Do not invent terms or coach equipment discovery.",
+  "The arrangement offered to a property is NOT established in your context. Do not invent terms or coach equipment discovery.",
 ].join(" ");

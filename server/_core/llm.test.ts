@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
+  stream: vi.fn(),
   assertSpend: vi.fn(),
   trackUsage: vi.fn(),
 }));
@@ -14,7 +15,7 @@ vi.mock("@anthropic-ai/sdk", () => {
   class RateLimitError extends APIError {}
   return {
     default: class Anthropic {
-      messages = { create: mocks.create };
+      messages = { create: mocks.create, stream: mocks.stream };
     },
     APIError,
     AuthenticationError,
@@ -235,5 +236,34 @@ describe("E — shared Anthropic LLM behavior", () => {
       expect(request).not.toHaveProperty("temperature");
       expect(request.thinking).toEqual({ type: "disabled" });
     });
+  });
+
+  it("Slice F — streams and fires onFirstToken without calling messages.create", async () => {
+    const onFirstToken = vi.fn();
+    mocks.stream.mockReturnValue({
+      on(event: string, handler: () => void) {
+        if (event === "text") handler();
+        return this;
+      },
+      async finalMessage() {
+        return {
+          id: "msg-stream",
+          model: "claude-test",
+          stop_reason: "end_turn",
+          content: [{ type: "text", text: "Streamed answer." }],
+          usage: { input_tokens: 2, output_tokens: 2 },
+        };
+      },
+    });
+    await expect(
+      invokeTextLLM({
+        tenantId: "tenant-1",
+        messages: [{ role: "user", content: "hello" }],
+        onFirstToken,
+      })
+    ).resolves.toBe("Streamed answer.");
+    expect(onFirstToken).toHaveBeenCalledTimes(1);
+    expect(mocks.stream).toHaveBeenCalledTimes(1);
+    expect(mocks.create).not.toHaveBeenCalled();
   });
 });

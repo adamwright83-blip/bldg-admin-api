@@ -53,7 +53,7 @@ describe("Claire natural-language generation", () => {
     );
     expect(JSON.parse(request.messages[1].content)).toMatchObject({
       businessDate: context.businessDate,
-      nextFixedCommitment: context.nextFixedCommitment,
+      nextFixedCommitment: (({ scheduledAt: _omitted, ...rest }) => rest)(context.nextFixedCommitment!),
       blockers: context.blockers,
       relevantTimeline: context.relevantTimeline,
       mission: context.mission,

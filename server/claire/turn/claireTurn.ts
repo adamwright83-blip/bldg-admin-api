@@ -322,6 +322,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   trace.blend = classifyClaireBlend(utterance);
   const mark = (path: ClaireAnswerPath, detail: Parameters<typeof markClaireAnswerPath>[2] = {}) =>
     markClaireAnswerPath(trace, path, detail);
+  const markFirstToken = () => {
+    if (trace.latency.firstTokenMs == null) {
+      trace.latency.firstTokenMs = Date.now() - trace.startedAtMs;
+    }
+  };
   const finish = (result: ClaireTurnResult): ClaireTurnResult => {
     const inventory = buildClaireVerifiedFactInventory(input.context);
     const speak = sanitizeSpeakAgainstInventory(result.speak, inventory);
@@ -648,6 +653,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       brief: input.brief,
       context: input.context,
       recentTurns: history().slice(0, -1),
+      onFirstToken: markFirstToken,
       // Slice A: the follow-up path already reports how it ended (model,
       // canon recovery, or conservative fallback). Read it rather than
       // guessing from the text.
@@ -809,6 +815,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       context: input.context,
       recentTurns: history().slice(0, -1),
       retrievedEvidence: evidence.length ? evidence : undefined,
+      onFirstToken: markFirstToken,
       onGeneration: diagnostic => {
         trace.modelRequested = diagnostic.modelRequested ?? null;
         trace.modelServed = diagnostic.modelServed ?? null;

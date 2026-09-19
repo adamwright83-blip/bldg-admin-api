@@ -110,11 +110,11 @@ export type ClaireLatencyTrace = {
    */
   twimlMs: number | null;
   /**
-   * Not measurable today: `invokeTextLLM` is a non-streaming
-   * `messages.create`, so there is no first-token event to record. Recorded
-   * as null deliberately rather than silently omitted.
+   * Not measurable without a token stream. Slice F records this when
+   * `invokeTextLLM` is called with `onFirstToken`. True first-audio timing
+   * still needs a media stream, which this deployment does not have.
    */
-  firstTokenMs: null;
+  firstTokenMs: number | null;
 };
 
 export type ClairePromptSizeTrace = {

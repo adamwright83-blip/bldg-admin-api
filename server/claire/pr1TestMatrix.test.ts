@@ -84,9 +84,7 @@ describe("PR1 test matrix (spec section 16)", () => {
       { invokeText: followInvoke, recordGeneration: vi.fn().mockResolvedValue(undefined) }
     );
     const followSystem = followInvoke.mock.calls[0][0].messages[0].content as string;
-    expect(followSystem).toContain(
-      "Business-specific claims (this account, this customer, this property, a specific number, a specific completed action) must be grounded"
-    );
+    expect(followSystem).toMatch(/business-specific claims[^.]*must be grounded[^.]*fact inventory[^.]*unknown/i);
   });
 
   it("7 — a prior Claire (assistant) turn is history, not verified truth, on the next turn", async () => {

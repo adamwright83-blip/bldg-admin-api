@@ -2,7 +2,13 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../_core/env", () => ({
-  ENV: { adminBaseUrl: "https://api.example.test" },
+  ENV: {
+    adminBaseUrl: "https://api.example.test",
+    cookieSecret: "test-secret",
+    xaiApiKey: "",
+    claireXaiTtsEnabled: false,
+    claireXaiTtsVoiceId: "eve",
+  },
 }));
 
 import {
@@ -79,10 +85,15 @@ describe("Claire voice recording gate", () => {
 });
 
 describe("Claire production Twilio callback registration", () => {
-  it("mounts pre-drive, continuation, debrief, confirmation, recording status, and call status", () => {
-    const paths: string[] = [];
-    registerClaireRoutes({ post: (path: string) => paths.push(path) } as never);
-    expect(paths).toEqual([
+  it("mounts xAI speech media plus the existing Twilio callbacks", () => {
+    const postPaths: string[] = [];
+    const getPaths: string[] = [];
+    registerClaireRoutes({
+      post: (path: string) => postPaths.push(path),
+      get: (path: string) => getPaths.push(path),
+    } as never);
+    expect(getPaths).toEqual(["/api/claire/voice/xai"]);
+    expect(postPaths).toEqual([
       "/api/claire/twilio/pre-drive",
       "/api/claire/twilio/pre-drive/continue",
       "/api/claire/twilio/debrief",

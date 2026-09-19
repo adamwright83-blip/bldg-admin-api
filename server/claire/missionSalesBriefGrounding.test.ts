@@ -44,7 +44,7 @@ describe("M/N — Claire's pre-drive prompt is grounded to the active MissionSal
     );
     const systemContent = invokeText.mock.calls[0][0].messages[0].content;
     expect(systemContent).toMatch(/one authoritative sales strategy/i);
-    expect(systemContent).toMatch(/never state a missionSalesBrief unknown.*as if it were already a known fact/i);
+    expect(systemContent).toMatch(/its unknowns.*never known facts/i);
   });
 
   it("omits missionSalesBrief entirely from the payload when no mission is in play (no regression)", async () => {

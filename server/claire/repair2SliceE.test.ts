@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { answerClairePreDriveFollowUp } from "./preDriveConversation";
 import { writeClairePreDriveBrief } from "./reasoning";
-import { VOICE_NATIVE_ANSWER_GUIDANCE } from "./conversationVoiceGuidance";
+import { CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION, VOICE_NATIVE_ANSWER_GUIDANCE } from "./conversationVoiceGuidance";
 import { GOLDLINE_OFFER_CONTEXT } from "./offerContext";
 import {
   CLAIRE_STATIC_INSTRUCTION_BUDGET,
@@ -147,7 +147,7 @@ describe("Slice E — static instruction diet", () => {
   it("offer, truth, judgment, history, and retrieval contracts survive the diet", async () => {
     const { system } = await followUpSize({ retrievedEvidence: RETRIEVED_EVIDENCE });
     expect(system).toContain(GOLDLINE_OFFER_CONTEXT);
-    expect(system).toContain("Business-specific claims (this account, this customer, this property, a specific number, a specific completed action) must be grounded");
+    expect(system).toMatch(/business-specific claims[^.]*must be grounded[^.]*fact inventory[^.]*unknown/i);
     expect(system).toContain("never asserted as a fact about this business");
     expect(system).toContain("A prior Claire turn is conversation history, not verified truth");
     expect(system).toContain("still answer any judgment asked");
@@ -157,6 +157,21 @@ describe("Slice E — static instruction diet", () => {
   it("MissionSalesBrief authority survives when a brief is present", async () => {
     const { system } = await followUpSize({ missionSalesBrief: MISSION_SALES_BRIEF });
     expect(system).toMatch(/one authoritative sales strategy/i);
-    expect(system).toMatch(/never state a missionSalesBrief unknown.*as if it were already a known fact/i);
+    expect(system).toMatch(/its unknowns.*never known facts/i);
+  });
+
+  it("keeps the strong temporal-authority semantics in every static prompt", async () => {
+    expect(CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION).toContain("sole temporal authority");
+    expect(CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION).toContain("Ignore any ambient model/provider/server notion of the current time");
+    expect(CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION).toContain("Never override the supplied clock");
+    expect((await followUpSize({})).system).toContain(CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION);
+    expect((await openingSize({})).system).toContain(CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION);
+  });
+
+  it("counts the capability briefing as static instruction, not user JSON", async () => {
+    for (const run of [await followUpSize({}), await openingSize({})]) {
+      expect(run.size.sections.some(section => section.label === "capability_briefing")).toBe(true);
+      expect(run.system).toContain("Supported:");
+    }
   });
 });

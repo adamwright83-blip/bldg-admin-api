@@ -143,7 +143,11 @@ function compactContext(context: ClaireDriveContext): string {
     macroGoal: context.macroGoal,
     verifiedMetrics: context.verifiedMetrics,
     campaign: context.campaign,
-    nextFixedCommitment: context.nextFixedCommitment,
+    // The raw UTC instant is withheld: the model gets only the resolved local
+    // time below, so it cannot mis-convert a timestamp it never sees.
+    nextFixedCommitment: context.nextFixedCommitment
+      ? { ...context.nextFixedCommitment, scheduledAt: undefined }
+      : context.nextFixedCommitment,
     // PR1 Claire Intelligence Repair -- corrective pass (real-exam
     // finding): same deterministic local-time rendering as
     // preDriveConversation.ts, so Claire never has to convert a raw ISO
@@ -173,7 +177,6 @@ function compactContext(context: ClaireDriveContext): string {
     strategyGrowthPlan: context.strategySnapshot?.payload.growthPlan ?? null,
     strategyPlayground: context.strategySnapshot?.payload.playgroundRules ?? null,
     factInventory: factInventory.toPromptSection(),
-    capabilityBriefing: formatCapabilityBriefing(),
   });
 }
 
@@ -317,6 +320,7 @@ export async function writeClairePreDriveBrief(
     },
     { label: "fact_inventory", text: inventory.toPromptSection() },
     { label: "offer_context", text: GOLDLINE_OFFER_CONTEXT },
+    { label: "capability_briefing", text: formatCapabilityBriefing() },
     { label: "reasoning_policy", text: CLAIRE_V1_REASONING_POLICY },
     {
       label: "job_and_clock",

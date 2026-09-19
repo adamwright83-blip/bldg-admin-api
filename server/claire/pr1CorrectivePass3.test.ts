@@ -193,10 +193,10 @@ describe("Corrective pass 3 -- item 2: voice guidance must be authoritative", ()
     const system = await followUpSystemPrompt();
     expect(system).toContain("take precedence over any earlier instruction");
     expect(system).toContain("Never begin an answer with 'Good question'");
-    expect(system).toContain("Lead with the one or two things that actually matter most right now");
+    expect(system).toMatch(/lead with (?:the )?(?:one or two things|what) .*matter/i);
     // Explicitly NOT a terseness rule -- guard against a future regression
     // that reintroduces the failure mode two passes were spent removing.
-    expect(system).toContain("not being asked to be terse");
+    expect(system).toMatch(/never pad/i);
     expect(system).not.toMatch(/no more than \d+ words/i);
     expect(system).not.toMatch(/never exceed \d+ words/i);
     expect(system).not.toMatch(/under \d+ spoken words/i);
@@ -349,6 +349,8 @@ describe("Claire temporal authority regression", () => {
     );
     const captured = invokeText.mock.calls[0][0].messages.map((message: { content: string }) => message.content).join("\n");
     expect(captured).toContain(CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION);
+    expect(captured).toContain("sole temporal authority");
+    expect(captured).toContain("Ignore any ambient model/provider/server notion of the current time");
     expect(captured).toContain("3:18 PM");
     expect(captured).toContain("afternoon");
     expect(captured).toContain("nextFixedCommitmentLocalWhen");
@@ -362,6 +364,8 @@ describe("Claire temporal authority regression", () => {
     );
     const captured = invokeText.mock.calls[0][0].messages.map((message: { content: string }) => message.content).join("\n");
     expect(captured).toContain(CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION);
+    expect(captured).toContain("sole temporal authority");
+    expect(captured).toContain("Ignore any ambient model/provider/server notion of the current time");
     expect(captured).toContain("3:18 PM");
     expect(captured).toContain("afternoon");
     expect(captured).toContain("nextFixedCommitmentLocalWhen");

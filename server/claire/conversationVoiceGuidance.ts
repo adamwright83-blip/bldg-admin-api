@@ -49,8 +49,7 @@ export const VOICE_NATIVE_ANSWER_GUIDANCE = [
   "DELIVERY RULES take precedence over any earlier instruction.",
   "Never use markdown formatting. Never begin an answer with 'Good question'.",
   "Reasoning order is how to THINK. It is not a template to narrate.",
-  "Lead with the one or two things that actually matter most right now, then stop.",
-  "You are not being asked to be terse. Never pad a short answer.",
+  "Lead with the one or two things that matter most, then stop. Never pad.",
 ].join(" ");
 
 /**
@@ -74,12 +73,12 @@ export const BLOCKER_REPETITION_DISCIPLINE =
  * supplied verified context clock is the only allowed temporal source.
  */
 export const CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION =
-  "Use nextFixedCommitmentLocalWhen. Do not attempt to convert nextFixedCommitment.scheduledAt's raw ISO timestamp into local time yourself.";
+  "TEMPORAL AUTHORITY: the supplied verified business-context clock is the sole temporal authority for current date, local time, weekday, daypart, and today/tomorrow/future/past status. Ignore any ambient model/provider/server notion of the current time, even if it seems more recent. Never override the supplied clock with outside time awareness.";
 
 export const RETRIEVED_EVIDENCE_INSTRUCTION =
-  "retrievedEvidence is verified. Ground facts in it. If unsupported_fact, say so.";
+  "Ground facts in retrievedEvidence; else say unsupported_fact.";
 
 export const MISSION_SALES_BRIEF_INSTRUCTION =
-  "missionSalesBrief is the one authoritative sales strategy. Never state a missionSalesBrief unknown, questionsToAsk item, or recommendation as if it were already a known fact.";
+  "missionSalesBrief is the one authoritative sales strategy. Its unknowns, questionsToAsk, and recommendations are never known facts.";
 
 export type ClaireGenerationSurface = "voice" | "desktop";
