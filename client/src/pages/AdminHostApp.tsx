@@ -54,6 +54,7 @@ const ChurnRadarPage = lazy(() => import("./ChurnRadarPage"));
 const SalesIntelAdmin = lazy(() => import("./SalesIntelAdmin"));
 const ClaireDesk = lazy(() => import("./goldline/ClaireDesk"));
 const ClaireCallAnalysis = lazy(() => import("./goldline/ClaireCallAnalysis"));
+const ClaireRoutingAudit = lazy(() => import("./goldline/ClaireRoutingAudit"));
 const CapabilityGapPage = lazy(() => import("./goldline/CapabilityGapPage"));
 const SandboxMode = lazy(() => import("@/components/admin/control-room/SandboxMode"));
 
@@ -203,8 +204,11 @@ export default function AdminHostApp() {
   const isSalesIntel = path === "/sales-intel";
   const isClaireDesk = path === "/claire";
   const isClaireCallAnalysis = path.startsWith("/claire/calls/");
+  // Claire Intelligence Repair Part 2, Slice A: the routing audit's numbers.
+  const isClaireRoutingAudit = path === "/claire/routing-audit";
   const isCapabilityGap = path.startsWith("/goldline/capability-gaps/");
-  const isClaireSurface = isClaireDesk || isClaireCallAnalysis || isCapabilityGap;
+  const isClaireSurface =
+    isClaireDesk || isClaireCallAnalysis || isClaireRoutingAudit || isCapabilityGap;
   const isMoney = path === "/money";
   const isSettings = path === "/settings";
   const isCatalog = path === "/catalog" || path === "/pricing";
@@ -494,6 +498,14 @@ export default function AdminHostApp() {
             }
           >
             <SalesIntelAdmin />
+          </Suspense>
+        ) : isClaireRoutingAudit ? (
+          <Suspense
+            fallback={
+              <div className="cr-route-loading">Loading Claire routing audit…</div>
+            }
+          >
+            <ClaireRoutingAudit />
           </Suspense>
         ) : isClaireCallAnalysis ? (
           <Suspense

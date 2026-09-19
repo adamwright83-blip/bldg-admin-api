@@ -4,6 +4,7 @@ import { defaultBusinessQuery, runBusinessQuery } from "../../analytics/business
 import { businessToday } from "../../analytics/businessPeriods";
 import { answerClaireBusinessTurn, type ClaireAnalyticsState } from "../businessConversation";
 import type { ClaireDriveContext } from "../contextAssembler";
+import type { ClaireEncyclopediaTrace } from "../answerPathTelemetry";
 import { speakBusinessResult } from "../business/businessSpeech";
 import { accountAspect, listAccountRefs, loadAccountHistory, matchAccounts, speakAccountHistory } from "./accountKnowledge";
 import { searchOperatorConversation, substantiveTurns } from "./conversationMemory";
@@ -28,6 +29,12 @@ export type EncyclopediaInput = {
   now: Date;
   timeZone: string;
   context?: ClaireDriveContext | null;
+  /**
+   * Slice A (routing audit), measurement only: receives which tools the
+   * planner selected, whether the capped rewrite or the raw concatenation was
+   * spoken, and why. Never affects the answer.
+   */
+  onTrace?: (trace: ClaireEncyclopediaTrace) => void;
 };
 
 const TOOL_NAMES = [
@@ -188,6 +195,27 @@ export async function answerWithEncyclopedia(
   const invokeText = deps.invokeText ?? invokeTextLLM;
   const execute = deps.runTool ?? runTool;
   const deadline = Date.now() + (deps.timeoutMs ?? 9_000);
+  // Slice A instrumentation. Mutated as the lookup proceeds and emitted on
+  // every exit, including the early ones.
+  const trace: ClaireEncyclopediaTrace = {
+    toolsPlanned: [],
+    spoke: null,
+    rewriteSkippedReason: null,
+    planMs: null,
+    toolMs: null,
+    rewriteMs: null,
+    rewritePromptChars: null,
+  };
+  const emit = <T>(value: T, spoke: ClaireEncyclopediaTrace["spoke"]): T => {
+    trace.spoke = spoke;
+    try {
+      input.onTrace?.(trace);
+    } catch {
+      // Telemetry never changes the answer.
+    }
+    return value;
+  };
+  const planStartedAt = Date.now();
   const plan = await invoke({
     tenantId: input.tenantId,
     maxTokens: 500,
@@ -206,13 +234,17 @@ export async function answerWithEncyclopedia(
       { role: "user", content: JSON.stringify({ recentConversation: input.history.slice(-8), question: input.utterance.slice(0, 600) }) },
     ],
   });
+  trace.planMs = Date.now() - planStartedAt;
   const content = plan.choices[0]?.message?.content;
   const parsed = planSchema.safeParse(JSON.parse(typeof content === "string" ? content : "{}"));
-  if (!parsed.success) return null;
+  if (!parsed.success) return emit(null, "declined");
+  trace.toolsPlanned = parsed.data.calls.map(call => call.tool);
   if (!parsed.data.calls.length) {
     const missing = parsed.data.missing.trim();
-    return missing && !/\d/.test(missing) ? `I can't answer that from Goldline's records: ${missing.replace(/\.$/, "")}.` : null;
+    const spoken = missing && !/\d/.test(missing) ? `I can't answer that from Goldline's records: ${missing.replace(/\.$/, "")}.` : null;
+    return emit(spoken, spoken ? "missing_explanation" : "declined");
   }
+  const toolsStartedAt = Date.now();
   const answers = (
     await Promise.all(
       parsed.data.calls.map(call =>
@@ -223,31 +255,44 @@ export async function answerWithEncyclopedia(
       )
     )
   ).filter((answer): answer is ToolAnswer => Boolean(answer));
-  if (!answers.length) return null;
+  trace.toolMs = Date.now() - toolsStartedAt;
+  if (!answers.length) return emit(null, "declined");
   const evidence = answers.map(answer => answer.text).join(" ");
-  if (answers.length === 1 || Date.now() > deadline) return evidence;
+  if (answers.length === 1) {
+    trace.rewriteSkippedReason = "single_tool";
+    return emit(evidence, "raw_concatenation");
+  }
+  if (Date.now() > deadline) {
+    trace.rewriteSkippedReason = "deadline";
+    return emit(evidence, "raw_concatenation");
+  }
+  const rewriteStartedAt = Date.now();
   try {
+    const rewriteSystemPrompt = [
+      "You are Claire, a concise operations partner. Answer the operator's question using ONLY the record answers provided.",
+      input.surface === "voice" ? "Spoken English, at most 60 words." : "At most 90 words.",
+      "Do not add, round, or compute any number that is not written in the record answers. Keep caveats that matter. If the records don't answer part of it, say so briefly.",
+      "No mention of tools, records, databases, or models.",
+    ].join(" ");
+    trace.rewritePromptChars = rewriteSystemPrompt.length;
     const rewritten = (
       await invokeText({
         tenantId: input.tenantId,
         maxTokens: 220,
         temperature: 0,
         messages: [
-          {
-            role: "system",
-            content: [
-              "You are Claire, a concise operations partner. Answer the operator's question using ONLY the record answers provided.",
-              input.surface === "voice" ? "Spoken English, at most 60 words." : "At most 90 words.",
-              "Do not add, round, or compute any number that is not written in the record answers. Keep caveats that matter. If the records don't answer part of it, say so briefly.",
-              "No mention of tools, records, databases, or models.",
-            ].join(" "),
-          },
+          { role: "system", content: rewriteSystemPrompt },
           { role: "user", content: JSON.stringify({ question: input.utterance, recordAnswers: answers }) },
         ],
       })
     ).trim();
-    return rewritten && numbersGrounded(rewritten, evidence) ? rewritten : evidence;
+    trace.rewriteMs = Date.now() - rewriteStartedAt;
+    if (rewritten && numbersGrounded(rewritten, evidence)) return emit(rewritten, "rewrite");
+    trace.rewriteSkippedReason = rewritten ? "ungrounded_numbers" : "rewrite_failed";
+    return emit(evidence, "raw_concatenation");
   } catch {
-    return evidence;
+    trace.rewriteMs = Date.now() - rewriteStartedAt;
+    trace.rewriteSkippedReason = "rewrite_failed";
+    return emit(evidence, "raw_concatenation");
   }
 }

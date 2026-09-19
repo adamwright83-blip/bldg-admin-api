@@ -43,6 +43,15 @@ import { isUnpaidQuestion, loadUnpaidOrders, speakUnpaidOrders } from "../knowle
 import { zonedDayStartUtc } from "../../dashboardZoned";
 import { addDaysYmd } from "../../analytics/businessPeriods";
 import { ensureAdamBoard, explainProactive, handleDoctrineTurn } from "../proactive/boardService";
+import {
+  beginClaireTurnTrace,
+  classifyClaireBlend,
+  markClaireAnswerPath,
+  type ClaireAnswerPath,
+  type ClaireEncyclopediaTrace,
+  type ClaireTurnTrace,
+} from "../answerPathTelemetry";
+import { persistClaireTurnTrace } from "../answerPathRecorder";
 
 /**
  * One Claire turn, for the phone and the desk alike.
@@ -60,6 +69,9 @@ import { ensureAdamBoard, explainProactive, handleDoctrineTurn } from "../proact
  * Numbers are never written by a model. Writes happen only through the
  * existing Day Director / pipeline services after confirmation.
  */
+
+/** Re-exported so Slice A's tests can read a trace without a second import path. */
+export type ClaireTurnTraceForTest = ClaireTurnTrace;
 
 export type ClaireTurnHistoryEntry = { speaker: "operator" | "claire"; text: string; at: number };
 
@@ -91,6 +103,13 @@ export type ClaireTurnInput = {
   context?: ClaireDriveContext | null;
   /** False flushes a held phone fragment as a complete thought (the caller went quiet). */
   allowFragmentWait?: boolean;
+  /**
+   * Slice A (routing audit): when the turn actually began for the operator —
+   * for voice, the moment Twilio's webhook arrived, which is the closest
+   * observable proxy for end-of-speech. Defaults to turn entry. Telemetry
+   * only; nothing in the turn reads it back.
+   */
+  turnStartedAtMs?: number;
 };
 
 export type ClaireTurnResult = {
@@ -129,9 +148,15 @@ export type ClaireTurnDeps = {
   unpaid: typeof loadUnpaidOrders;
   searchMemory: typeof searchOperatorConversation;
   memoryBetween: typeof operatorTurnsBetween;
-  encyclopedia: ((input: { tenantId: string; operatorUserId: string; utterance: string; surface: "voice" | "text"; history: ClaireTurnHistoryEntry[]; context?: ClaireDriveContext | null }) => Promise<string | null>) | null;
+  encyclopedia: ((input: { tenantId: string; operatorUserId: string; utterance: string; surface: "voice" | "text"; history: ClaireTurnHistoryEntry[]; context?: ClaireDriveContext | null; onTrace?: (trace: ClaireEncyclopediaTrace) => void }) => Promise<string | null>) | null;
   watchBoard?: (input: { tenantId: string; operatorUserId: string; actorId: string }) => Promise<{ brief: string }>;
   doctrineTurn?: (input: { tenantId: string; operatorUserId: string; utterance: string; today: string }) => Promise<string | null>;
+  /**
+   * Slice A (routing audit): the completed per-turn trace, handed back before
+   * it is persisted. Present so the routing audit is testable without a
+   * database; production leaves it unset.
+   */
+  onTurnTrace?: (trace: ClaireTurnTrace) => void;
 };
 
 export function defaultClaireTurnDeps(): ClaireTurnDeps {
@@ -245,7 +270,11 @@ function singleIntentFlow(utterance: string): boolean {
   );
 }
 
-const MEMORY_QUESTION =
+/**
+ * Exported for Slice A's route probe (and Slice D's replacement of it): the
+ * only phrasings that reach cross-call memory today.
+ */
+export const MEMORY_QUESTION =
   /\bwhat did (?:i|we) (?:say|tell you|talk about|decide|agree)\b|\bwhat was i (?:worried|concerned|stressed|thinking) about\b|\bwhat did you tell me\b|\bdid i (?:mention|tell you)\b|\bwhat have i told you\b/;
 
 export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<ClaireTurnDeps> = {}): Promise<ClaireTurnResult> {
@@ -263,14 +292,34 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     state.pendingFragment = null;
   } else if (input.surface === "voice" && input.allowFragmentWait !== false && looksUnfinished(utterance)) {
     state.pendingFragment = utterance;
+    // No trace: nothing was spoken, so there is no answer path to attribute.
     return { speak: "", kind: "listening", listenOnly: true };
   }
   remember(state, "operator", utterance, nowMs);
+  /**
+   * Claire Intelligence Repair Part 2, Slice A: one trace per turn, recording
+   * which of the many answer paths below produced the spoken text. Measurement
+   * only — nothing in this file reads the trace back, and persistence is
+   * fire-and-forget behind a tenant-scoped flag.
+   */
+  const trace = beginClaireTurnTrace({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    surface: input.surface,
+    // Wall clock, deliberately: latency is measured against real time, not
+    // against an injected business clock.
+    startedAtMs: input.turnStartedAtMs ?? Date.now(),
+  });
+  trace.blend = classifyClaireBlend(utterance);
+  const mark = (path: ClaireAnswerPath, detail: Parameters<typeof markClaireAnswerPath>[2] = {}) =>
+    markClaireAnswerPath(trace, path, detail);
   const finish = (result: ClaireTurnResult): ClaireTurnResult => {
     const inventory = buildClaireVerifiedFactInventory(input.context);
     const speak = sanitizeSpeakAgainstInventory(result.speak, inventory);
     const guarded = speak === result.speak ? result : { ...result, speak };
     remember(state, "claire", guarded.speak, nowMs);
+    persistClaireTurnTrace(trace, { turnKind: guarded.kind, spokenText: guarded.speak });
+    deps.onTurnTrace?.(trace);
     return guarded;
   };
   const history = () => (state.history ?? []).map(entry => ({ speaker: entry.speaker, text: entry.text }));
@@ -279,7 +328,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const doctrineSpeak = deps.doctrineTurn
     ? await deps.doctrineTurn({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, utterance, today })
     : null;
-  if (doctrineSpeak) return finish({ speak: doctrineSpeak, kind: "answered" });
+  if (doctrineSpeak) {
+    mark("doctrine");
+    return finish({ speak: doctrineSpeak, kind: "answered" });
+  }
 
   const shortCheckIn = utterance.trim().split(/\s+/).filter(Boolean).length <= 8;
   if (
@@ -294,13 +346,19 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         operatorUserId: input.operatorUserId,
         actorId: input.dayDirectorActorId,
       }).catch(() => ({ brief: "" }));
-      if (board.brief) return finish({ speak: board.brief, kind: "answered" });
+      if (board.brief) {
+        mark("proactive_board");
+        return finish({ speak: board.brief, kind: "answered" });
+      }
     }
   }
 
   if (/\bwhy (?:is|are|did you|are you)\b/.test(lower)) {
     const why = await explainProactive(input.tenantId, input.operatorUserId, utterance).catch(() => null);
-    if (why) return finish({ speak: why, kind: "answered" });
+    if (why) {
+      mark("doctrine");
+      return finish({ speak: why, kind: "answered" });
+    }
   }
 
   // ── 2. What Claire is holding ─────────────────────────────────────────────
@@ -315,10 +373,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         dayDirectorActorId: input.dayDirectorActorId,
         timeZone,
       });
+      mark("account_follow_up");
       return finish({ speak: speakAccountFollowUpCommit(pending, commit, today), kind: "follow_up_saved" });
     }
     if (reply.decision === "no") {
       state.pendingAccountFollowUp = null;
+      mark("account_follow_up");
       return finish({ speak: "Okay, I won't change it.", kind: "answered" });
     }
     state.pendingAccountFollowUp = null;
@@ -338,6 +398,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       if (revision.changes.length) {
         state.pendingBriefing = { parsed: revision.parsed, createdAt: nowMs };
         const remaining = briefingAdditions(revision.parsed).length;
+        mark("briefing");
         return finish({
           speak: `${revision.changes.join(" ")} ${remaining ? "Want me to put the list on the Day Line now?" : "That leaves nothing to add."}`.trim(),
           kind: "briefing_proposed",
@@ -352,6 +413,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         dayDirectorActorId: input.dayDirectorActorId,
         conversationKey: input.conversationKey,
       });
+      mark("briefing");
       let speak = speakBriefingCommit(result, today);
       if (reply.remainder) {
         const more = await runClaireTurn({ ...input, utterance: reply.remainder, state }, overrides);
@@ -362,6 +424,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
     if (reply.decision === "no") {
       state.pendingBriefing = null;
+      mark("briefing");
       return finish({ speak: "Okay, I won't add any of that.", kind: "briefing_declined" });
     }
   }
@@ -386,6 +449,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         { confirmPlan: deps.confirmPlan }
       );
       if (turn.kind !== "not_applicable") {
+        mark("commitment");
         return finish({ speak: turn.speak, kind: "commitment", commitmentTurn: turn, actionIds: "commitmentId" in turn && turn.commitmentId ? [turn.commitmentId] : [] });
       }
     } else {
@@ -413,6 +477,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       const pending = proposeAccountFollowUp({ history: historyForAccount, utterance, dueDate: followUpDay.ymd, conversationKey: input.conversationKey });
       state.pendingAccountFollowUp = pending;
       state.focusAccount = account;
+      mark("account_follow_up");
       return finish({ speak: speakAccountFollowUpProposal(pending, { today, timeZone }), kind: "follow_up_proposed" });
     } catch (error) {
       console.warn("[Claire] account follow-up proposal failed", error instanceof Error ? error.message : error);
@@ -461,9 +526,16 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     ]);
     const reconciled = reconcileBriefing({ ...parsed, items: combinedItems }, existing, campaign);
     const answers: string[] = [];
-    for (const question of parsed.questions) {
-      const answer = await answerQuestion(question);
-      if (answer) answers.push(answer);
+    // A question answered inside a briefing is not the turn's answer path —
+    // the briefing is. Suppress attribution for the duration.
+    trace.paused = true;
+    try {
+      for (const question of parsed.questions) {
+        const answer = await answerQuestion(question);
+        if (answer) answers.push(answer);
+      }
+    } finally {
+      trace.paused = false;
     }
     const summary = speakBriefingSummary({
       parsed: state.pendingBriefing ? { ...reconciled, items: reconciled.items.filter(item => !state.pendingBriefing!.parsed.items.includes(item)) } : reconciled,
@@ -476,6 +548,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     state.pendingBriefing = addable ? { parsed: reconciled, createdAt: nowMs } : null;
     let speak = summary.text;
     if (state.pendingBriefing && !summary.asksConfirmation) speak = `${speak} Want me to put all of it on the Day Line?`;
+    mark("briefing");
     return finish({ speak, kind: "briefing_proposed" });
   }
 
@@ -496,6 +569,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       { confirmPlan: deps.confirmPlan }
     );
     if (turn.kind !== "not_applicable") {
+      mark("commitment");
       return finish({ speak: turn.speak, kind: "commitment", commitmentTurn: turn, actionIds: "commitmentId" in turn && turn.commitmentId ? [turn.commitmentId] : [] });
     }
   }
@@ -518,20 +592,45 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       { confirmPlan: deps.confirmPlan }
     );
     if (turn.kind !== "not_applicable") {
+      mark("commitment");
       return finish({ speak: turn.speak, kind: "commitment", commitmentTurn: turn, actionIds: "commitmentId" in turn && turn.commitmentId ? [turn.commitmentId] : [] });
     }
   }
 
   if (input.context && input.brief) {
+    const generationStartedAt = Date.now();
+    trace.latency.generationStartMs = generationStartedAt - trace.startedAtMs;
     const reply = await deps.followUp({
       tenantId: input.tenantId,
       utterance,
       brief: input.brief,
       context: input.context,
       recentTurns: history().slice(0, -1),
+      // Slice A: the follow-up path already reports how it ended (model,
+      // canon recovery, or conservative fallback). Read it rather than
+      // guessing from the text.
+      onGeneration: diagnostic => {
+        trace.modelRequested = diagnostic.modelRequested ?? null;
+        trace.modelServed = diagnostic.modelServed ?? null;
+        if (diagnostic.promptSize) trace.promptSizes.push(diagnostic.promptSize);
+        markClaireAnswerPath(
+          trace,
+          diagnostic.answerOrigin === "canon_render"
+            ? "guard_recovery"
+            : diagnostic.source === "model"
+              ? "follow_up_model"
+              : "fallback",
+          { fallbackReason: diagnostic.failureReason }
+        );
+      },
     });
+    trace.latency.generationCompleteMs = Date.now() - trace.startedAtMs;
+    // A follow-up that never reported a diagnostic (a stubbed dep in a test)
+    // is still attributed rather than left unlabelled.
+    mark("follow_up_model");
     return finish({ speak: reply, kind: "follow_up" });
   }
+  mark("fallback", { fallbackReason: "no_brief_or_context" });
   return finish({
     speak: "I don't have a record that answers that, so I won't guess. Ask it another way, or tell me which customer, account, or day you mean.",
     kind: "answered",
@@ -544,7 +643,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         { tenantId: input.tenantId, utterance: question, state, surface: input.surface, context: input.context },
         { now: deps.now, timeZone: deps.timeZone, ...deps.business }
       );
-      if (business.handled) return business.speak;
+      if (business.handled) {
+        mark("business_reader", { businessReader: business.reader ?? null });
+        return business.speak;
+      }
     } catch (error) {
       console.warn("[Claire] business answer failed", error instanceof Error ? error.message : error);
     }
@@ -561,17 +663,22 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
           now,
           timeZone,
         });
+        mark("day_work");
         return speakDayWork(work, operations, input.surface);
       } catch (error) {
         console.warn("[Claire] day work unavailable", error instanceof Error ? error.message : error);
+        mark("fallback", { fallbackReason: "day_work_unavailable" });
         return "I couldn't load the Day Line just now, so I won't guess what's on it.";
       }
     }
 
     if (isUnpaidQuestion(questionLower) && !/\bfollow[- ]?up\b/.test(questionLower)) {
       try {
-        return speakUnpaidOrders(await deps.unpaid(input.tenantId), input.surface);
+        const spoken = speakUnpaidOrders(await deps.unpaid(input.tenantId), input.surface);
+        mark("unpaid_orders");
+        return spoken;
       } catch {
+        mark("fallback", { fallbackReason: "unpaid_orders_unavailable" });
         return "I couldn't load unpaid orders just now, so I won't guess.";
       }
     }
@@ -584,6 +691,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         : null;
     const target = questionAccounts.length === 1 ? questionAccounts[0]! : questionAccounts.length === 0 ? pronounAccount : null;
     if (questionAccounts.length > 1) {
+      mark("account_disambiguation");
       return `I have ${questionAccounts.length} accounts that could be: ${questionAccounts.slice(0, 4).map(item => item.name).join(", ")}. Which one?`;
     }
     if (target && (isAccountQuestion(questionLower) || MEMORY_QUESTION.test(questionLower) || questionAccounts.length === 1)) {
@@ -591,14 +699,17 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         const accountHistory = await deps.accountHistory({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, account: target });
         state.focusAccount = target;
         const aspect = MEMORY_QUESTION.test(questionLower) ? "said" : accountAspect(questionLower);
+        mark("account_history");
         return speakAccountHistory(accountHistory, aspect, { timeZone, today });
       } catch (error) {
         console.warn("[Claire] account history unavailable", error instanceof Error ? error.message : error);
+        mark("fallback", { fallbackReason: "account_history_unavailable" });
         return `I couldn't load ${target.name}'s history just now, so I won't guess.`;
       }
     }
 
     if (MEMORY_QUESTION.test(questionLower)) {
+      trace.memorySearched = true;
       try {
         const yesterday = /\byesterday\b/.test(questionLower);
         const turns = yesterday
@@ -621,16 +732,22 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
                 speaker: "OPERATOR",
               })
             );
-        if (!turns.length) return "I don't have that in our call history, so I won't make it up.";
+        if (!turns.length) {
+          mark("fallback", { fallbackReason: "memory_no_match" });
+          return "I don't have that in our call history, so I won't make it up.";
+        }
         const quotes = turns.slice(0, 2).map(turn => `"${turn.text.replace(/\s+/g, " ").slice(0, 160)}"`);
+        mark("memory_quote");
         return `${yesterday ? "Yesterday" : "On a call"} you said ${quotes.join(", and ")}. That's what you told me, not something I've confirmed.`;
       } catch {
+        mark("fallback", { fallbackReason: "memory_search_failed" });
         return "I couldn't search our call history just now.";
       }
     }
 
     if (deps.encyclopedia) {
       try {
+        let encyclopediaTrace: ClaireEncyclopediaTrace | null = null;
         const answer = await deps.encyclopedia({
           tenantId: input.tenantId,
           operatorUserId: input.operatorUserId,
@@ -638,8 +755,20 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
           surface: input.surface,
           history: state.history ?? [],
           context: input.context,
+          onTrace: value => {
+            encyclopediaTrace = value;
+          },
         });
-        if (answer) return answer;
+        if (encyclopediaTrace) {
+          trace.encyclopedia = encyclopediaTrace;
+          if ((encyclopediaTrace as ClaireEncyclopediaTrace).toolsPlanned.includes("call_memory")) {
+            trace.memorySearched = true;
+          }
+        }
+        if (answer) {
+          mark("encyclopedia", { encyclopedia: encyclopediaTrace });
+          return answer;
+        }
       } catch (error) {
         console.warn("[Claire] encyclopedia answer failed", error instanceof Error ? error.message : error);
       }

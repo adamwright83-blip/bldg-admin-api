@@ -345,6 +345,37 @@ function outcomeLabel(outcome: string): string {
 /** In-flight turn computations, so a continuation redirect can collect a slow answer. The state itself is durable. */
 const inflightTurns = new Map<string, Promise<string>>();
 
+/**
+ * Claire Intelligence Repair Part 2, Slice A: voice turn-around timing.
+ *
+ * Counts only, console only — the per-turn answer-path row already carries the
+ * inside-the-turn marks. This records what the operator actually experiences:
+ * how long after their speech ended Twilio got something to say, and whether
+ * the turn overran the budget into a "One second." continuation, which is
+ * where the dead air on the call comes from.
+ */
+function logVoiceTurnTiming(input: {
+  tenantId: string;
+  conversationId: string;
+  turn: number | null;
+  attempt: number;
+  deferred: boolean;
+  webhookReceivedAtMs: number;
+}): void {
+  console.info("[Claire] voice turn timing", {
+    event: "claire_voice_timing",
+    tenantId: input.tenantId,
+    conversationId: input.conversationId,
+    turn: input.turn,
+    continuationAttempt: input.attempt,
+    // True means the budget expired and the operator heard filler plus a
+    // redirect instead of an answer.
+    deferredToContinuation: input.deferred,
+    toTwimlMs: Date.now() - input.webhookReceivedAtMs,
+    turnBudgetMs: TURN_BUDGET_MS,
+  });
+}
+
 async function withinBudget<T>(work: Promise<T>, ms: number): Promise<T | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -367,6 +398,8 @@ function startVoiceTurn(input: {
   allowFragmentWait: boolean;
   callSid?: string;
   token: string;
+  /** Slice A: when Twilio's webhook arrived — the proxy for end-of-speech. */
+  webhookReceivedAtMs: number;
 }): Promise<string> {
   const { conversationId, conversation, token } = input;
   const turnKey = conversation.turns;
@@ -384,6 +417,7 @@ function startVoiceTurn(input: {
           brief: conversation.brief,
           context: conversation.context,
           allowFragmentWait: input.allowFragmentWait,
+          turnStartedAtMs: input.webhookReceivedAtMs,
         },
         {
           confirmPlan: () =>
@@ -619,6 +653,8 @@ export async function startClairePostStopCall(input: {
 export function registerClaireRoutes(app: Express): void {
   app.post(PRE_DRIVE_PATH, async (req: Request, res: Response) => {
     res.type("text/xml");
+    // Slice A (routing audit): the closest observable proxy for end-of-speech.
+    const webhookReceivedAtMs = Date.now();
     if (!validTwilioRequest(req)) {
       return res
         .status(403)
@@ -745,8 +781,17 @@ export function registerClaireRoutes(app: Express): void {
         allowFragmentWait,
         callSid,
         token,
+        webhookReceivedAtMs,
       });
       const twiml = await withinBudget(job, TURN_BUDGET_MS);
+      logVoiceTurnTiming({
+        tenantId: claims.tenantId,
+        conversationId: claims.conversationId,
+        turn: conversation.turns,
+        attempt: 0,
+        deferred: !twiml,
+        webhookReceivedAtMs,
+      });
       return res.send(twiml ?? stillWorkingTwiML(token, 0));
     } catch (error) {
       console.error("[Claire] pre-drive conversation webhook error", error);
@@ -760,6 +805,7 @@ export function registerClaireRoutes(app: Express): void {
 
   app.post(CONTINUE_PATH, async (req: Request, res: Response) => {
     res.type("text/xml");
+    const continuationReceivedAtMs = Date.now();
     if (!validTwilioRequest(req)) {
       return res.status(403).send(speakAndHangUp("This Claire call could not be verified."));
     }
@@ -782,6 +828,14 @@ export function registerClaireRoutes(app: Express): void {
         );
       }
       const twiml = await withinBudget(job, TURN_BUDGET_MS);
+      logVoiceTurnTiming({
+        tenantId: claims.tenantId,
+        conversationId: claims.conversationId,
+        turn: null,
+        attempt,
+        deferred: !twiml,
+        webhookReceivedAtMs: continuationReceivedAtMs,
+      });
       if (twiml) return res.send(twiml);
       if (attempt >= 3) {
         return res.send(

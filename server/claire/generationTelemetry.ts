@@ -2,6 +2,7 @@ import { logAgentEvent } from "../agents/agentEvents";
 import { appendClaireGenerationLog } from "./character/generationLog";
 import type { ClaireCompiledContext } from "./character/types";
 import type { ClaireDriveContext } from "./contextAssembler";
+import type { ClairePromptSizeTrace } from "./answerPathTelemetry";
 
 export type ClaireGenerationKind =
   | "opening_brief"
@@ -50,6 +51,18 @@ export type ClaireGenerationDiagnostic = {
    * model output. Null/undefined means no model text was available to assess.
    */
   trimmedToSentenceBoundary?: boolean | null;
+  /**
+   * Claire Intelligence Repair Part 2, Slice A: the assembled system prompt's
+   * size for this generation, with a per-section breakdown. Counts only — no
+   * prompt text is recorded. Feeds the Slice E prompt diet's before/after.
+   */
+  promptSize?: ClairePromptSizeTrace;
+  /**
+   * The model the provider reported as having answered, next to
+   * `modelRequested`. A silent substitution is otherwise indistinguishable
+   * from a weak prompt when reading a transcript.
+   */
+  modelServed?: string | null;
 };
 
 /**
@@ -107,6 +120,9 @@ export async function recordClaireGeneration(input: {
     stopReason: input.diagnostic.stopReason ?? null,
     answerOrigin: input.diagnostic.answerOrigin ?? input.diagnostic.source,
     trimmedToSentenceBoundary: input.diagnostic.trimmedToSentenceBoundary ?? null,
+    modelServed: input.diagnostic.modelServed ?? null,
+    promptChars: input.diagnostic.promptSize?.totalChars ?? null,
+    promptSections: input.diagnostic.promptSize?.sections ?? null,
     fallbackRate: current.attempts ? current.fallbacks / current.attempts : 0,
     ...(input.reviewDetail?.orientationContext
       ? orientationTelemetry(input.reviewDetail.orientationContext, input.diagnostic.source === "fallback")
