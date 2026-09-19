@@ -242,6 +242,8 @@ const FREE_FORM_MUTATION_SUCCESS_PATTERNS: Array<{ label: string; pattern: RegEx
   { label: "Changed prefix", pattern: /^Changed it to\b/i },
   { label: "Removed prefix", pattern: /^Removed\b[^\n]*\bDay Line\b/i },
   { label: "Saved prefix", pattern: /^Saved(?:\.|\s+as\b|\s+on\b)/i },
+  { label: "Day Line put confirmation", pattern: /^I put\b[^\n]*\bfollow-up\b[^\n]*\bline\b/i },
+  { label: "pipeline move confirmation", pattern: /^I moved\b[^\n]*\bfollow-up\b[^\n]*\bpipeline\b/i },
 ];
 
 export function lintPostGenerationStateVerbs(
@@ -345,6 +347,7 @@ export function lintReceiptBackedCommitSpeech(
   const updated = receipts.filter(receipt => receipt.claimedState === "updated");
   const removed = receipts.filter(receipt => receipt.claimedState === "removed");
   const sent = receipts.filter(receipt => receipt.claimedState === "sent");
+  const scheduled = receipts.filter(receipt => receipt.claimedState === "scheduled");
 
   if (/\bI(?:'ve|\s+have)\s+added\b/i.test(text) || /\badding to the day ?line\b/i.test(text) || /\bI(?:'ve|\s+have)\s+completed\b/i.test(text)) {
     violations.push("Commit renderer must not use free-form added/completed phrasing");
@@ -367,6 +370,19 @@ export function lintReceiptBackedCommitSpeech(
   }
   if (/^Saved as operator-attested\b/i.test(text) && created.length + updated.length < 1) {
     violations.push("Field-save confirmation without a created/updated receipt");
+  }
+  if (/^Saved\.\s+[^\n]*\bfollow-up is on\b/i.test(text)) {
+    if (created.length < 1) violations.push("Account follow-up Day Line save without a created receipt");
+    if (scheduled.length < 1) violations.push("Account follow-up pipeline schedule without a scheduled receipt");
+  }
+  if (/^Saved on\b[^\n]*\bline\b/i.test(text) && created.length < 1) {
+    violations.push("Account follow-up Day Line save without a created receipt");
+  }
+  if (/^I put\b[^\n]*\bfollow-up\b[^\n]*\bline\b/i.test(text) && created.length < 1) {
+    violations.push("Account follow-up Day Line put confirmation without a created receipt");
+  }
+  if (/^I moved\b[^\n]*\bfollow-up\b[^\n]*\bpipeline\b/i.test(text) && scheduled.length < 1) {
+    violations.push("Account follow-up pipeline move confirmation without a scheduled receipt");
   }
 
   if (/\bmarked done\b/i.test(text)) {
