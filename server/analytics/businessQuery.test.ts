@@ -48,6 +48,31 @@ describe("runBusinessQuery", () => {
     expect(new Set(seen)).toEqual(new Set(["tenant-a"]));
   });
 
+  it("ordered sale queries support continuation offsets and anchored exclusions", async () => {
+    const base = { ...defaultBusinessQuery("latest_sales"), limit: 5 };
+    const first = await runBusinessQuery("tenant-1", base, deps(fixtureLoaders()));
+    if (first.status !== "ok" || first.data.kind !== "orders") throw new Error("unexpected first list");
+    expect(first.data.orders.length).toBeGreaterThanOrEqual(4);
+
+    const continued = await runBusinessQuery(
+      "tenant-1",
+      { ...base, limit: 2, offset: 1 },
+      deps(fixtureLoaders())
+    );
+    if (continued.status !== "ok" || continued.data.kind !== "orders") throw new Error("unexpected continuation");
+    expect(continued.data.orders[0]?.eventKey).toBe(first.data.orders[1]?.eventKey);
+    expect(continued.data.orders.map(order => order.eventKey)).not.toContain(first.data.orders[0]?.eventKey);
+
+    const anchored = await runBusinessQuery(
+      "tenant-1",
+      { ...base, limit: 3, anchorCustomerName: "Ben Ortiz", excludeCustomerNames: ["Ben Ortiz"] },
+      deps(fixtureLoaders())
+    );
+    if (anchored.status !== "ok" || anchored.data.kind !== "orders") throw new Error("unexpected anchor result");
+    expect(anchored.data.orders.every(order => order.customerName !== "Ben Ortiz")).toBe(true);
+    expect(anchored.data.orders[0]?.occurredAt < first.data.orders.find(order => order.customerName === "Ben Ortiz")!.occurredAt).toBe(true);
+  });
+
   it("discloses in-scope CleanCloud orders a service filter cannot classify", async () => {
     const result = await runBusinessQuery(
       "tenant-1",
