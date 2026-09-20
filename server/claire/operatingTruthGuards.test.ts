@@ -4,7 +4,7 @@ import { answerClairePreDriveFollowUp } from "./preDriveConversation";
 import { loadPaidOrderLedger } from "../analytics/paidOrderLedger";
 import { runBusinessQuery } from "../analytics/businessQuery";
 import { emptyLoaders, fixtureLoaders } from "../analytics/businessLedgerFixture";
-import { requiredSourcesFor, coverageVerdict, type LedgerSourceBindings } from "../analytics/sourceBindings";
+import { coverageVerdict, deriveCleanCloudEvidence, requiredSourcesFor, sourceHealthFor, type LedgerSourceEvidence, type SourceBindingState } from "../analytics/sourceBindings";
 
 /**
  * The two invariants that broke the 2026-09-20 production call:
@@ -14,11 +14,19 @@ import { requiredSourcesFor, coverageVerdict, type LedgerSourceBindings } from "
 
 const NOW = new Date("2026-09-20T18:00:00Z");
 const TZ = "America/Los_Angeles";
-const bound: LedgerSourceBindings = { laundry_butler: "bound", cleancloud: "bound" };
-const unbound: LedgerSourceBindings = { laundry_butler: "unbound", cleancloud: "unbound" };
-const unknown: LedgerSourceBindings = { laundry_butler: "unknown", cleancloud: "unknown" };
+const ev = (
+  cc: { state: SourceBindingState; lastSuccessAt?: Date | null },
+  native: SourceBindingState = "bound"
+): LedgerSourceEvidence => ({
+  laundry_butler: { state: native, lastSuccessAt: NOW, isSystemOfRecord: true },
+  cleancloud: { state: cc.state, lastSuccessAt: cc.lastSuccessAt === undefined ? NOW : cc.lastSuccessAt, isSystemOfRecord: false },
+});
+const bound = ev({ state: "bound" });
+const unbound = ev({ state: "absent" }, "absent");
+const unknown = ev({ state: "unknown" }, "unknown");
+const STALE_SINCE = new Date("2026-06-01T00:00:00Z");
 
-function turnDeps(bindings: LedgerSourceBindings, loaders = emptyLoaders): Partial<ClaireBusinessTurnDeps> {
+function turnDeps(bindings: LedgerSourceEvidence, loaders = emptyLoaders): Partial<ClaireBusinessTurnDeps> {
   return {
     now: () => NOW,
     timeZone: () => TZ,
@@ -35,7 +43,7 @@ function turnDeps(bindings: LedgerSourceBindings, loaders = emptyLoaders): Parti
   };
 }
 
-const ask = (utterance: string, bindings: LedgerSourceBindings, loaders = emptyLoaders) =>
+const ask = (utterance: string, bindings: LedgerSourceEvidence, loaders = emptyLoaders) =>
   answerClaireBusinessTurn({ tenantId: "t1", utterance, state: {}, surface: "voice" }, turnDeps(bindings, loaders));
 
 const ZERO_CLAIM = /\$0\.00|\b0 orders\b|\bno paid (?:orders|revenue)\b|\bzero (?:orders|revenue|customers)\b/i;
@@ -59,7 +67,7 @@ describe("zero requires positive proof", () => {
 
   it("A REAL BUT PARTIAL TOTAL cannot pass as the whole business", async () => {
     // The $0 bug's quieter twin: a true number from one source, reported as if it were everything.
-    const turn = await ask("What was revenue this year?", { laundry_butler: "bound", cleancloud: "unbound" }, fixtureLoaders());
+    const turn = await ask("What was revenue this year?", ev({ state: "absent" }), fixtureLoaders());
     const speak = turn.handled ? turn.speak : "";
     expect(speak).toMatch(/\$/); // the verified figure is still spoken
     expect(speak).toMatch(/partial|not the whole business/i); // but its scope is stated
@@ -93,15 +101,15 @@ describe("coverage is question-relative", () => {
   });
 
   it("an unbound source only blocks a zero when the question actually needs it", () => {
-    const partiallyBound: LedgerSourceBindings = { laundry_butler: "bound", cleancloud: "unbound" };
+    const partial = ev({ state: "absent" });
     const loaded = ["laundry_butler", "cleancloud"] as const;
-    expect(coverageVerdict({ required: ["laundry_butler"], bindings: partiallyBound, loadedSources: loaded, failedSources: [] })).toEqual({ kind: "provable" });
-    expect(coverageVerdict({ required: requiredSourcesFor(null), bindings: partiallyBound, loadedSources: loaded, failedSources: [] })).toMatchObject({ kind: "unbound" });
+    expect(coverageVerdict({ required: ["laundry_butler"], evidence: partial, loadedSources: loaded, failedSources: [], now: NOW })).toEqual({ kind: "provable" });
+    expect(coverageVerdict({ required: requiredSourcesFor(null), evidence: partial, loadedSources: loaded, failedSources: [], now: NOW })).toMatchObject({ kind: "unbound" });
   });
 
   it("a source that failed to load blocks a zero even when it is bound", () => {
     expect(
-      coverageVerdict({ required: requiredSourcesFor(null), bindings: bound, loadedSources: ["laundry_butler"], failedSources: ["cleancloud"] })
+      coverageVerdict({ required: requiredSourcesFor(null), evidence: bound, loadedSources: ["laundry_butler"], failedSources: ["cleancloud"], now: NOW })
     ).toMatchObject({ kind: "unreadable", sources: ["cleancloud"] });
   });
 });
@@ -177,5 +185,92 @@ describe("a real phone is only dialed for a real operator of that tenant", () =>
     await expect(
       authorizedOperatorPhone({ tenantId: "zz-slice0-accept-2", actorId: "slice0-adam" })
     ).rejects.toThrow(/no such operator|not configured/i);
+  });
+});
+
+// ── Source health: "had data once" is not "sees the whole business now" ──────────────────────
+describe("source health and freshness", () => {
+  const loaded = ["laundry_butler", "cleancloud"] as const;
+  const verdict = (evidence: LedgerSourceEvidence, period?: { endExclusiveUtc: Date }) =>
+    coverageVerdict({ required: requiredSourcesFor(null), evidence, loadedSources: loaded, failedSources: [], period, now: NOW });
+
+  it("connected + fresh + complete → a whole-business total is allowed", () => {
+    expect(verdict(ev({ state: "bound", lastSuccessAt: NOW }))).toEqual({ kind: "provable" });
+  });
+
+  it("connected but STALE → not presented as a current whole-business total", () => {
+    expect(verdict(ev({ state: "bound", lastSuccessAt: STALE_SINCE }))).toMatchObject({ kind: "stale", sources: ["cleancloud"] });
+  });
+
+  it("configured but never connected → not treated as connected", () => {
+    expect(verdict(ev({ state: "configured" }))).toMatchObject({ kind: "unbound", sources: ["cleancloud"] });
+  });
+
+  it("historical rows with no live integration → belongs to the business, currentness NOT assumed", () => {
+    const legacy = ev({ state: "legacy_history", lastSuccessAt: null });
+    // It counts as present (so a real zero stays possible for pre-SaaS tenants)...
+    expect(verdict(legacy)).not.toMatchObject({ kind: "unbound" });
+    // ...but it is never silently treated as current.
+    expect(verdict(legacy)).toMatchObject({ kind: "stale" });
+  });
+
+  it("browser-sync binding + recent success + zero rows in the period → a true zero is allowed", async () => {
+    const turn = await ask("What was revenue in the last 30 days?", ev({ state: "bound", lastSuccessAt: NOW }));
+    expect(turn.handled ? turn.speak : "").toMatch(ZERO_CLAIM);
+  });
+
+  it("one current source + one stale source + a real figure → partial total only", async () => {
+    const turn = await ask("What was revenue this year?", ev({ state: "bound", lastSuccessAt: STALE_SINCE }), fixtureLoaders());
+    const speak = turn.handled ? turn.speak : "";
+    expect(speak).toMatch(/\$/);
+    expect(speak).toMatch(/can't verify CleanCloud is current|isn't a confirmed whole-business total/i);
+  });
+
+  it("a CLOSED past period only needs a sync after that window closed", () => {
+    const august = { endExclusiveUtc: new Date("2026-09-01T00:00:00Z") };
+    const syncedInSeptember = ev({ state: "bound", lastSuccessAt: new Date("2026-09-02T00:00:00Z") });
+    expect(verdict(syncedInSeptember, august)).toEqual({ kind: "provable" });
+    // ...but the same feed is stale for a question that runs up to now.
+    expect(verdict(syncedInSeptember)).toMatchObject({ kind: "stale" });
+  });
+
+  it("native Goldline orders are the system of record and are never 'stale'", () => {
+    expect(sourceHealthFor({ state: "bound", lastSuccessAt: STALE_SINCE, isSystemOfRecord: true }, null, NOW)).toBe("not_applicable");
+  });
+});
+
+describe("CleanCloud evidence hierarchy (precedence, not a database)", () => {
+  const none = { syncBinding: null, saasConnection: null, importSuccessAt: null, historyAt: null };
+
+  it("a browser-sync binding is the strongest signal and carries its lastSuccessAt", () => {
+    expect(deriveCleanCloudEvidence({ ...none, syncBinding: { lastSuccessAt: NOW }, historyAt: STALE_SINCE }))
+      .toMatchObject({ state: "bound", lastSuccessAt: NOW });
+  });
+
+  it("status 'configured' is NOT promoted to connected", () => {
+    expect(deriveCleanCloudEvidence({ ...none, saasConnection: { status: "configured", lastImportedAt: null } }))
+      .toMatchObject({ state: "configured" });
+    expect(deriveCleanCloudEvidence({ ...none, saasConnection: { status: "connected", lastImportedAt: NOW } }))
+      .toMatchObject({ state: "bound" });
+  });
+
+  it("a disabled or erroring integration is disconnected even with history", () => {
+    for (const status of ["disabled", "error"]) {
+      expect(deriveCleanCloudEvidence({ ...none, saasConnection: { status, lastImportedAt: null }, historyAt: NOW }))
+        .toMatchObject({ state: "disconnected" });
+    }
+  });
+
+  it("history alone is legacy_history, never a live feed", () => {
+    expect(deriveCleanCloudEvidence({ ...none, historyAt: STALE_SINCE })).toMatchObject({ state: "legacy_history" });
+  });
+
+  it("no evidence of any kind is absent", () => {
+    expect(deriveCleanCloudEvidence(none)).toMatchObject({ state: "absent" });
+  });
+
+  it("import-batch success supplies freshness when the binding has none", () => {
+    expect(deriveCleanCloudEvidence({ ...none, syncBinding: { lastSuccessAt: null }, importSuccessAt: NOW }))
+      .toMatchObject({ state: "bound", lastSuccessAt: NOW });
   });
 });

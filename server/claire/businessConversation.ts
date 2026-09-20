@@ -2,13 +2,14 @@ import { z } from "zod";
 import { invokeLLM } from "../_core/llm";
 import { claireModelRequest } from "./claireModel";
 import {
+  UNKNOWN_EVIDENCE,
   coverageVerdict,
-  loadLedgerSourceBindings,
+  loadLedgerSourceEvidence,
   requiredSourcesFor,
   speakPartialCoverage,
   speakUnprovableZero,
   type CoverageVerdict,
-  type LedgerSourceBindings,
+  type LedgerSourceEvidence,
 } from "../analytics/sourceBindings";
 import type { ClaireDriveContext } from "./contextAssembler";
 import { sanitizeSpeakAgainstInventory, buildClaireVerifiedFactInventory } from "./verifiedFactInventoryFromContext";
@@ -989,7 +990,7 @@ export type ClaireBusinessTurnDeps = {
   timeZone: () => string;
   speakResult?: typeof speakBusinessResult;
   /** Source-binding probe. Injectable so tests can prove the zero gate without a database. */
-  loadBindings?: (tenantId: string) => Promise<LedgerSourceBindings>;
+  loadBindings?: (tenantId: string) => Promise<LedgerSourceEvidence>;
 };
 
 function focusCustomerOf(detail: CustomerDetail): FocusCustomer {
@@ -1214,14 +1215,15 @@ export async function answerClaireBusinessTurn(
      */
     let coverage: CoverageVerdict = { kind: "provable" };
     if (businessResultUsesLedger(result)) {
-      const bindings = await (deps.loadBindings ?? loadLedgerSourceBindings)(input.tenantId).catch(
-        () => ({ laundry_butler: "unknown", cleancloud: "unknown" }) as LedgerSourceBindings
-      );
+      const evidence = await (deps.loadBindings ?? loadLedgerSourceEvidence)(input.tenantId).catch(() => UNKNOWN_EVIDENCE);
       coverage = coverageVerdict({
         required: requiredSourcesFor(turn.query.filters?.sources),
-        bindings,
+        evidence,
         loadedSources: result.status === "ok" ? result.coverage?.loadedSources ?? [] : [],
         failedSources: result.status === "ok" ? result.coverage?.failedSources ?? [] : [],
+        // Freshness is question-relative: a closed past window only needs a sync after it closed.
+        period: result.period,
+        now,
       });
       if (coverage.kind !== "provable" && businessResultIsEmpty(result)) {
         return guardedTurn({ handled: true, speak: speakUnprovableZero(coverage), facts: [] });
