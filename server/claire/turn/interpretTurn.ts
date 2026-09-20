@@ -1,4 +1,9 @@
-import { containsBriefingAction } from "../briefing/deterministicBriefing";
+import {
+  briefingClauseLeadsWithAction,
+  containsBriefingAction,
+  isCompletedBriefingClause,
+  splitClauses,
+} from "../briefing/deterministicBriefing";
 import { classifyDoctrineUtterance } from "../../../shared/claireProactive";
 
 /**
@@ -134,9 +139,20 @@ const ACTION_DIRECTIVE_SHAPE = new RegExp(
 );
 const ACTION_TRACKING_PHRASE =
   /\byou\s+can\s+put\s+(?:that|it|this)\b|\bremind\s+me\b|\b(?:add|put|save|track)\b[^.!?]{0,60}\b(?:day\s*line|calendar|reminder|to-?do|my\s+list|the\s+list)\b/i;
+const ACTION_DIRECTIVE_CLAUSE = new RegExp(
+  String.raw`(?:^|[?.!,;]\\s*|\\b(?:and|then|also)\\s+)(?:(?:can|could|would|will)\\s+you\\s+|please\\s+)?${ACTION_VERB}\\b`,
+  "i"
+);
+const FIRST_PERSON_MUTATION =
+  /\b(?:i|we)\s+(?:can|should|need\s+to|want\s+to|have\s+to|will|'ll)\s+(?:remove|cancel|delete|edit|change|move|reschedule|push|add|schedule|save|track)\b/i;
 
 function detectExplicitActionRequest(text: string): boolean {
-  return ACTION_DIRECTIVE_SHAPE.test(text.trim()) || ACTION_TRACKING_PHRASE.test(text);
+  return (
+    ACTION_DIRECTIVE_SHAPE.test(text.trim()) ||
+    ACTION_DIRECTIVE_CLAUSE.test(text) ||
+    ACTION_TRACKING_PHRASE.test(text) ||
+    FIRST_PERSON_MUTATION.test(text)
+  );
 }
 
 /**
@@ -291,9 +307,11 @@ function hasWorkClause(text: string): boolean {
   return text
     .split(/(?<=[.!?])\s+|\n+/)
     .some(sentence => {
-      const clause = sentence.trim();
-      if (!clause || /\?\s*$/.test(clause)) return false;
-      return containsBriefingAction(clause);
+      const whole = sentence.trim();
+      if (!whole || /\?\s*$/.test(whole)) return false;
+      return splitClauses(whole).some(({ text: clause }) =>
+        briefingClauseLeadsWithAction(clause) || isCompletedBriefingClause(clause)
+      );
     });
 }
 
