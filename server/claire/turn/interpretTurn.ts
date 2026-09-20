@@ -37,7 +37,10 @@ export type TurnIntentKind =
   | "call_control"
   | "acknowledgement"
   | "operator_work_commitment"
-  | "query_refinement";
+  | "query_refinement"
+  | "broad_briefing"
+  | "correctness_challenge"
+  | "provenance_question";
 
 export type InterpretedTurn = {
   intents: TurnIntentKind[];
@@ -68,6 +71,16 @@ export type InterpretedTurn = {
   queryRefinement: boolean;
   /** Entities the operator asked to leave OUT ("don't tell me about Thomas"). */
   exclusions: string[];
+  /** Weekday/relative-date tokens, kept OUT of entity candidates ("Dana Tuesday" is not a name). */
+  temporal: string[];
+  /** Proper-noun entity candidates with temporal tokens removed. */
+  entities: string[];
+  /** A genuinely BROAD briefing request. A scoped "what should I do about X" is not one. */
+  broadBriefingRequest: boolean;
+  /** An explicit challenge to a prior claim's CORRECTNESS (outranks refinement wording). */
+  correctnessChallenge: boolean;
+  /** A question about where a number came from; provenance may answer it. */
+  provenanceQuestion: boolean;
   /** A named record the query is anchored to ("before Thomas"). */
   anchorEntity: string | null;
 };
@@ -130,6 +143,9 @@ const ACTION_REFUSAL = new RegExp(
     String.raw`\bdid\s*n'?t\s+ask\s+you\s+to\b`,
     // "don't put anything on the Day Line"
     String.raw`\b(?:don'?t|do\s+not)\b[^.!?]{0,30}\banything\b`,
+    // "actually don't do that" / "don't bother" — a refusal aimed at the pending action itself.
+    String.raw`\b(?:don'?t|do\s+not)\s+(?:do|bother\s+with|worry\s+about)\s+(?:that|it|this|any\s+of\s+that)\b`,
+    String.raw`\b(?:never\s*mind|nevermind|forget\s+(?:it|that)|scratch\s+that|cancel\s+that)\b`,
   ].join("|"),
   "i"
 );
@@ -262,6 +278,52 @@ export function detectOperatorWorkCommitment(text: string): boolean {
 const ACKNOWLEDGEMENT =
   /^(?:ok(?:ay)?|got\s+it|gotcha|understood|i(?:'m|\s+am)\s+(?:all\s+)?good|we'?re\s+good|sure|yeah|yep|yup|right|cool|fine|nice|great|perfect|thanks?|thank\s+you|that\s+answers\s+it|makes\s+sense|no\s+worries)[.!]?$/i;
 
+const WEEKDAY_OR_DATE =
+  /\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|tonight|yesterday|this\s+week|next\s+week|last\s+week|morning|afternoon|evening|weekend)\b/gi;
+
+const COMMON_CAPS = new Set(
+  ("The This That These Those There Did How What When Who Where Which Are Is Was Were Have Has Had And But Okay Yes No Not Claire Adam Goldline Day Line Order Orders Sale Sales Customer Customers Tell Give Show Add Put Call Text Email Dont Um Uh Well Actually Wait Sorry " +
+  // sentence-initial furniture: "Good morning" must not read as an entity named Good
+  "Good Morning Afternoon Evening Hey Hi Hello Thanks Thank Please Let Just Can Could Would Should Do Does So Now Then Also Still Anything Something Nothing I'm Im We're Its It's Right Sure Cool Fine Great Perfect Understood Gotcha").split(/\s+/)
+);
+
+/** Entity candidates: capitalised tokens that are neither dates nor sentence furniture. */
+export function extractEntities(text: string): { entities: string[]; temporal: string[] } {
+  const temporal = Array.from(new Set((text.match(WEEKDAY_OR_DATE) ?? []).map(token => token.toLowerCase())));
+  const withoutTemporal = text.replace(WEEKDAY_OR_DATE, " ");
+  const entities = Array.from(
+    new Set(
+      (withoutTemporal.match(/\b[A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)?/g) ?? [])
+        .map(match => {
+          // "Call Marcus" → "Marcus": drop leading furniture rather than discarding the name.
+          const words = match.trim().split(/\s+/);
+          while (words.length && COMMON_CAPS.has(words[0]!)) words.shift();
+          return words.join(" ");
+        })
+        .filter(token => token && !COMMON_CAPS.has(token))
+    )
+  );
+  return { entities, temporal };
+}
+
+/**
+ * A BROAD briefing request has no scoped object. "What should I do?" is broad; "What should I do
+ * about Dana?" is a scoped judgment question and must never reach the global proactive board,
+ * which on 2026-09-20 answered a Dana question with GUMBALL status, Andrew Molina and Mission 6.
+ */
+const BROAD_BRIEFING =
+  /^(?:good\s+)?morning\b|^hey\s+claire\b|^what\s+do\s+i\s+need\s+to\s+know\b|^what(?:'s| is)\s+(?:the\s+)?most\s+important\b|^what\s+should\s+i\s+(?:do|know)\b|^what(?:'s| is)\s+(?:going\s+on|up)\b|^how(?:'s| is)\s+business\b/i;
+/** Any of these makes the request SCOPED rather than broad. */
+const SCOPED_OBJECT = /\b(?:about|with|regarding|concerning)\b/i;
+
+/** Explicit correctness challenge — must outrank refinement wording and force a fresh reread. */
+const CORRECTNESS_CHALLENGE =
+  /\b(?:are\s+you\s+(?:sure|certain|positive)|are\s+(?:those|these|the)\s+(?:numbers?|figures?|totals?)\s+(?:right|correct|accurate)|is\s+that\s+(?:right|correct|accurate)|check\s+(?:that|it|those)\s+again|double[-\s]?check|verify\s+(?:that|it|those)|can\s+you\s+confirm|you\s+sure\b)/i;
+
+/** Provenance question — where a number came from. Receipt may answer this. */
+const PROVENANCE_QUESTION =
+  /\b(?:where\s+(?:did|does)\s+(?:that|those|it|this|the)(?:\s+\w+){0,2}\s+(?:come|came)\s+from|where(?:'s| is)\s+that\s+from|what(?:'s| is)\s+(?:that|this)(?:\s+\w+){0,2}\s+based\s+on|what\s+are\s+you\s+basing|which\s+(?:source|record|order))\b/i;
+
 const QUESTION_MARK = /\?/;
 const BUSINESS_QUESTION_LEAD =
   /\b(?:what|how\s+(?:much|many)|who|when|which|did|does|do|is|are|was|were|has|have)\b/i;
@@ -291,13 +353,22 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
     !acknowledgement && (QUESTION_MARK.test(text) || BUSINESS_QUESTION_LEAD.test(text.split(/\s+/).slice(0, 4).join(" ")));
 
   const cardinality = parseCardinality(text);
-  const queryRefinement = QUERY_REFINEMENT.test(text) && !acknowledgement;
+  // A correctness challenge outranks refinement wording: "I asked you for revenue — are you sure
+  // those numbers are correct?" contains both, and must reread rather than re-list.
+  const queryRefinement = QUERY_REFINEMENT.test(text) && !acknowledgement && !CORRECTNESS_CHALLENGE.test(text);
   const listRequest = Boolean(cardinality && cardinality > 1) || (LIST_NOUN.test(text) && !acknowledgement);
   const anchorMatch = ANCHOR.exec(text);
   const exclusionMatch = EXCLUSION.exec(text);
   const excluded = properNoun(exclusionMatch?.[1]);
   const exclusions = excluded ? [excluded] : [];
   const anchorEntity = properNoun(anchorMatch?.[1]);
+  const { entities, temporal } = extractEntities(text);
+  // Broad only when nothing scopes it: no scoping preposition (ASR may clip it to "about?") and no
+  // named entity. A named subject always makes the question scoped.
+  const broadBriefingRequest =
+    BROAD_BRIEFING.test(text.trim()) && !SCOPED_OBJECT.test(text) && entities.length === 0;
+  const correctnessChallenge = CORRECTNESS_CHALLENGE.test(text) && !acknowledgement;
+  const provenanceQuestion = PROVENANCE_QUESTION.test(text) && !correctnessChallenge;
 
   if (acknowledgement) intents.push("acknowledgement");
   if (actionRefused) intents.push("action_refusal");
@@ -305,6 +376,9 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   if (hasExplicitActionRequest) intents.push("action_request");
   if (operatorWorkCommitment && !hasExplicitActionRequest) intents.push("operator_work_commitment");
   if (queryRefinement) intents.push("query_refinement");
+  if (broadBriefingRequest) intents.push("broad_briefing");
+  if (correctnessChallenge) intents.push("correctness_challenge");
+  if (provenanceQuestion) intents.push("provenance_question");
   if (hasBusinessQuestion) intents.push("business_question");
   if (aboutClaireCapability && !hasExplicitActionRequest) intents.push("context_statement");
 
@@ -341,5 +415,10 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
     queryRefinement,
     exclusions,
     anchorEntity,
+    temporal,
+    entities,
+    broadBriefingRequest,
+    correctnessChallenge,
+    provenanceQuestion,
   };
 }

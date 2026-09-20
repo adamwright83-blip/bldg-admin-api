@@ -208,3 +208,164 @@ describe("cardinality reaches the actual business query", () => {
     expect(query?.limit ?? 0).toBeGreaterThan(1);
   });
 });
+
+// ── Route scope, pending state, and correctness challenges (turns 12-23, 28) ─────────────────
+import { runClaireTurn, type ClaireTurnDeps, type ClaireTurnState } from "./claireTurn";
+
+const T13_BOARD = "GUMBALL did not run today. Text Andrew is on the line. Mission 6. Synthetic verification follow-up.";
+
+function stateful(over: Partial<ClaireTurnDeps> = {}) {
+  const state: ClaireTurnState = {};
+  const board = vi.fn(async () => ({ brief: T13_BOARD }));
+  const deps = (extra: Partial<ClaireTurnDeps> = {}): ClaireTurnDeps => ({
+    now: () => new Date("2026-09-20T18:00:00Z"),
+    timeZone: () => "America/Los_Angeles",
+    business: { now: () => new Date("2026-09-20T18:00:00Z"), timeZone: () => "America/Los_Angeles", plan: async () => null, runQuery: vi.fn() as never },
+    commitment: vi.fn(async () => ({ kind: "not_applicable" as const })) as never,
+    followUp: vi.fn(async () => "Scoped answer.") as never,
+    extractModel: null, loadExisting: async () => [], commit: vi.fn() as never, campaign: async () => null, vocabulary: async () => [],
+    accounts: async () => [], accountHistory: vi.fn() as never, commitFollowUp: vi.fn() as never, dayWork: vi.fn() as never, unpaid: vi.fn() as never,
+    searchMemory: vi.fn(async () => []) as never, memoryBetween: vi.fn(async () => []) as never, encyclopedia: null,
+    watchBoard: board as never, doctrineTurn: undefined,
+    classifyPriorClaim: (async () => false) as never, rerunBusinessQuery: vi.fn() as never, classifierBudgetMs: 30,
+    ...over, ...extra,
+  });
+  const say = (utterance: string, extra: Partial<ClaireTurnDeps> = {}) =>
+    runClaireTurn(
+      { tenantId: "default", operatorUserId: "adam", dayDirectorActorId: "1", surface: "voice", utterance, state,
+        conversationKey: "call:replay", allowFragmentWait: false, brief: "b",
+        context: { businessDate: "2026-09-20", actorId: "adam", macroGoalKnown: false, blockers: [], relevantTimeline: [] } as never },
+      deps(extra)
+    );
+  return { state, say, board };
+}
+
+describe("2026-09-20 replay — route scope (turn 12/13)", () => {
+  it("REPRODUCTION: a scoped 'what should I do about X' never reaches the global board", async () => {
+    const h = stateful();
+    const result = await h.say("What should I do about? Dana Tuesday.");
+    expect(h.board).not.toHaveBeenCalled();
+    expect(result.speak).not.toMatch(/GUMBALL|Andrew|Mission 6|Synthetic/i);
+  });
+
+  it("a genuinely broad request still gets the board", async () => {
+    const h = stateful();
+    await h.say("Good morning.");
+    expect(h.board).toHaveBeenCalled();
+  });
+
+  it.each([
+    "What should I do about The Louise?",
+    "What should I do about Thomas's order?",
+    "What should I do with Dana this week?",
+  ])("stays scoped: %s", async utterance => {
+    const h = stateful();
+    await h.say(utterance);
+    expect(h.board).not.toHaveBeenCalled();
+  });
+});
+
+describe("2026-09-20 replay — pending state (turns 15, 20, 21)", () => {
+  it("REPRODUCTION: a refusal with nothing pending is settled, not reopened", async () => {
+    const h = stateful();
+    const result = await h.say("Um, actually don't do that.");
+    // Live: "Do you want me to add something, change something, or are you just catching me up?"
+    expect(result.speak).not.toMatch(/add something|catching me up|change something/i);
+    expect(result.speak).toMatch(/won't add/i);
+  });
+
+  it("REPRODUCTION: Claire does not staple 'still holding' onto every later answer", async () => {
+    const h = stateful();
+    h.state.pendingProposal = { title: "Review revenue", sourceText: "x" } as never;
+    const first = await h.say("What should I do about The Louise?");
+    const second = await h.say("What should I do about Thomas?");
+    const third = await h.say("What should I do about OPUS?");
+    const mentions = [first, second, third].filter(r => /still holding/i.test(r.speak)).length;
+    expect(mentions).toBeLessThanOrEqual(1); // once, not on every turn
+  });
+});
+
+describe("2026-09-20 replay — entity vs time (turn 12/14)", () => {
+  it("'Dana Tuesday' is an entity plus a weekday, never one literal name", () => {
+    const turn = interpretTurn("What should I do about? Dana Tuesday.");
+    expect(turn.entities).toContain("Dana");
+    expect(turn.entities).not.toContain("Dana Tuesday");
+    expect(turn.temporal).toContain("tuesday");
+  });
+
+  it.each([
+    ["Rebecca Thursday", "Rebecca", "thursday"],
+    ["Call Marcus Monday", "Marcus", "monday"],
+    ["What about Priya tomorrow", "Priya", "tomorrow"],
+  ])("generalises beyond Dana: %s", (utterance, entity, when) => {
+    const turn = interpretTurn(utterance);
+    expect(turn.entities).toContain(entity);
+    expect(turn.temporal).toContain(when);
+  });
+});
+
+describe("correctness challenge outranks refinement wording (review defect)", () => {
+  it("REVIEW CASE: 'I asked you for revenue — are you sure those numbers are correct?'", () => {
+    const turn = interpretTurn("I asked you for revenue — are you sure those numbers are correct?");
+    expect(turn.correctnessChallenge).toBe(true);
+    expect(turn.queryRefinement).toBe(false); // refinement must not swallow the challenge
+  });
+
+  it.each([
+    "Are you sure?",
+    "Are those numbers right?",
+    "Check that again.",
+    "Can you verify that?",
+    "I asked you for the totals — are you certain?",
+  ])("is a correctness challenge: %s", utterance => {
+    expect(interpretTurn(utterance).correctnessChallenge).toBe(true);
+  });
+
+  it.each(["Where did that number come from?", "What are you basing that on?"])(
+    "provenance question is NOT a correctness challenge: %s",
+    utterance => {
+      const turn = interpretTurn(utterance);
+      expect(turn.provenanceQuestion).toBe(true);
+      expect(turn.correctnessChallenge).toBe(false);
+    }
+  );
+
+  it("a pure refinement is still a refinement", () => {
+    const turn = interpretTurn("What were the other four?");
+    expect(turn.queryRefinement).toBe(true);
+    expect(turn.correctnessChallenge).toBe(false);
+  });
+});
+
+describe("pending proposals are superseded, not just un-nagged", () => {
+  const withPending = () => {
+    const h = stateful();
+    h.state.pendingProposal = { title: "Call Dana at The Louise", sourceText: "x" } as never;
+    return h;
+  };
+
+  it.each([
+    ["a refusal", "Actually don't do that."],
+    ["a correction", "No, I meant I want to talk it through."],
+    ["a query refinement", "What were the other four?"],
+  ])("%s clears the pending proposal outright", async (_label, utterance) => {
+    const h = withPending();
+    await h.say(utterance);
+    expect(h.state.pendingProposal).toBeFalsy();
+  });
+
+  it("nothing is left to remind about once superseded", async () => {
+    const h = withPending();
+    await h.say("Actually don't do that.");
+    const next = await h.say("What should I do about The Louise?");
+    expect(next.speak).not.toMatch(/still holding/i);
+  });
+
+  it("a still-valid proposal survives an ordinary question and is mentioned once", async () => {
+    const h = withPending();
+    const first = await h.say("What should I do about The Louise?");
+    const second = await h.say("What should I do about OPUS?");
+    expect(h.state.pendingProposal).toBeTruthy(); // not superseded by an ordinary question
+    expect([first, second].filter(r => /still holding/i.test(r.speak)).length).toBeLessThanOrEqual(1);
+  });
+});
