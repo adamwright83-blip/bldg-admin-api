@@ -8,9 +8,9 @@ This file is for the next coding agent. Do not rely on any Cursor chat. If you c
 
 ## Current head
 
-Prefer `git rev-parse origin/cursor/claire-brain-v2` (or `git rev-parse HEAD` on this branch).
+`bc27e6659a94861894603e1fb6c1fe3d4fb8d1f6`
 
-Last documented tip before this note: `291fe099f1203d95bb3fd2fd7f05f11f1b3676f2`.
+That is the first origin push of architecture + contracts + skeleton + tests. Later commits on this branch, if any, should only be documentation pins or Phase C work. Confirm with `git rev-parse origin/cursor/claire-brain-v2`.
 
 ## Base
 
