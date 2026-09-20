@@ -7,11 +7,12 @@
  * was `"complete"`, and Claire said "Paid revenue in the last 30 days is $0.00 across 0 orders"
  * with total confidence.
  *
- * FOUR DISTINCT QUESTIONS, deliberately not collapsed into one flag:
+ * FIVE DISTINCT QUESTIONS, deliberately not collapsed into one flag:
  *   1. EXPECTED   — does this question need this source at all? (question-relative)
  *   2. CONNECTED  — is the integration actually wired up for this tenant right now?
  *   3. READ       — did it load on this request?
- *   4. FRESH      — how recently did data last arrive through it?
+ *   4. FRESH      — is the source up to the checkpoint its real schedule requires?
+ *   5. COVERED    — does evidence prove the exact requested interval and event basis?
  *
  * Connection is read from `dayforge_saas_import_connections` (tenant + providerKey + status)
  * where a row exists, because an explicitly disabled integration must not look connected just
@@ -96,9 +97,8 @@ export const UNKNOWN_EVIDENCE: LedgerSourceEvidence = {
 
 /**
  * A source counts as present for the business when it is wired up OR has history. `legacy_history`
- * is deliberately NOT collapsed into `bound`: it proves the source belongs to the business (so an
- * empty window is a real zero for tenants that predate the SaaS onboarding flow) without pretending
- * the feed is alive today.
+ * is deliberately NOT collapsed into `bound`: it proves the source belongs to the business without
+ * pretending the feed is alive today or that any requested interval is complete.
  */
 export function isPresent(state: SourceBindingState): boolean {
   return state === "bound" || state === "legacy_history";
@@ -235,7 +235,7 @@ function latest(...dates: Array<Date | null>): Date | null {
  *      `lastSuccessAt`. This is the live integration path for this business.
  *   2. `dayforge_saas_import_connections` — the SaaS onboarding path. `configured` is NOT
  *      `connected`: the schema distinguishes them and so do we.
- *   3. `cleancloud_import_batches` — successful import activity, used for freshness.
+ *   3. successful browser-sync receipts — exact selected ranges and completion times.
  *   4. historical paid-order rows — proves the source BELONGS to the business (needed for tenants
  *      that predate both integration paths) but never proves the feed is alive: `legacy_history`.
  */
@@ -422,7 +422,7 @@ export function coverageVerdict(input: {
 
   const semanticGap = imported.filter(source => {
     const ranges = input.evidence[source].coverageRanges;
-    if (!ranges.length || requiredRange.to < requiredRange.from) return false;
+    if (!ranges.length) return false;
     return !ranges.some(range => range.basis === basis);
   });
   if (semanticGap.length) return { kind: "semantic_gap", sources: semanticGap };
