@@ -71,7 +71,11 @@ export async function listAccountRefs(tenantId: string): Promise<AccountRef[]> {
       .orderBy(asc(commercialAccounts.name))
       .limit(500),
     db
-      .select({ accountId: commercialAccountContacts.accountId, name: commercialAccountContacts.name })
+      .select({
+        accountId: commercialAccountContacts.accountId,
+        name: commercialAccountContacts.name,
+        source: commercialAccountContacts.source,
+      })
       .from(commercialAccountContacts)
       .where(eq(commercialAccountContacts.tenantId, tenantId))
       .limit(1000),
@@ -79,7 +83,11 @@ export async function listAccountRefs(tenantId: string): Promise<AccountRef[]> {
   const aliasesByAccount = new Map<number, string[]>();
   for (const contact of contacts) {
     const name = contact.name?.trim();
-    if (!name || TEST_ACCOUNT.test(name)) continue;
+    if (
+      !name ||
+      TEST_ACCOUNT.test(name) ||
+      !isProductionVisibleBusinessRecord({ accountName: name, createdBy: contact.source })
+    ) continue;
     aliasesByAccount.set(contact.accountId, [...(aliasesByAccount.get(contact.accountId) ?? []), name]);
   }
   return rows
@@ -201,7 +209,12 @@ export async function loadAccountHistory(input: {
           .limit(1)
       : Promise.resolve([]),
     db
-      .select({ name: commercialAccountContacts.name, title: commercialAccountContacts.title, relationshipType: commercialAccountContacts.relationshipType })
+      .select({
+        name: commercialAccountContacts.name,
+        title: commercialAccountContacts.title,
+        relationshipType: commercialAccountContacts.relationshipType,
+        source: commercialAccountContacts.source,
+      })
       .from(commercialAccountContacts)
       .where(and(eq(commercialAccountContacts.tenantId, tenantId), eq(commercialAccountContacts.accountId, account.id)))
       .limit(10),
@@ -211,6 +224,7 @@ export async function loadAccountHistory(input: {
             title: dayDirectorCommitments.title,
             businessDate: dayDirectorCommitments.businessDate,
             status: dayDirectorCommitments.status,
+            sourceText: dayDirectorCommitments.sourceText,
           })
           .from(dayDirectorCommitments)
           .where(
@@ -233,28 +247,45 @@ export async function loadAccountHistory(input: {
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     })),
-    events: events.map(row => ({
-      at: row.createdAt.toISOString(),
-      missionId: row.missionId,
-      eventName: row.eventName,
-      toStatus: row.toStatus,
-      actorType: row.actorType,
-    })),
-    fieldVisits: fields.map(row => ({
-      missionId: row.missionId,
-      arrivedAt: iso(row.arrivedAt),
-      departedAt: iso(row.departedAt),
-      notes: row.notes ?? null,
-    })),
-    outcomes: outcomes.map(row => ({
-      missionId: row.missionId,
-      outcome: row.outcome,
-      notes: row.notes,
-      followUpAt: iso(row.followUpAt),
-      createdAt: row.createdAt.toISOString(),
-      decisionMakerStatus: row.decisionMakerStatus,
-      collateralDelivered: Boolean(row.collateralDelivered),
-    })),
+    events: events
+      .filter(row =>
+        isProductionVisibleBusinessRecord({
+          createdBy: row.actorId,
+          requestId: row.idempotencyKey,
+          note: row.eventName,
+        })
+      )
+      .map(row => ({
+        at: row.createdAt.toISOString(),
+        missionId: row.missionId,
+        eventName: row.eventName,
+        toStatus: row.toStatus,
+        actorType: row.actorType,
+      })),
+    fieldVisits: fields
+      .filter(row => isProductionVisibleBusinessRecord({ note: row.notes }))
+      .map(row => ({
+        missionId: row.missionId,
+        arrivedAt: iso(row.arrivedAt),
+        departedAt: iso(row.departedAt),
+        notes: row.notes ?? null,
+      })),
+    outcomes: outcomes
+      .filter(row =>
+        isProductionVisibleBusinessRecord({
+          createdBy: row.recordedBy,
+          note: row.notes,
+        })
+      )
+      .map(row => ({
+        missionId: row.missionId,
+        outcome: row.outcome,
+        notes: row.notes,
+        followUpAt: iso(row.followUpAt),
+        createdAt: row.createdAt.toISOString(),
+        decisionMakerStatus: row.decisionMakerStatus,
+        collateralDelivered: Boolean(row.collateralDelivered),
+      })),
     followUps: followUps
       .filter(row =>
         isProductionVisibleBusinessRecord({
@@ -275,9 +306,20 @@ export async function loadAccountHistory(input: {
       })),
     pipelineStage: pipelines[0]?.stage ?? null,
     pipelineId: pipelines[0]?.id ?? null,
-    contacts: contacts.map(row => ({ name: row.name, title: row.title, relationshipType: row.relationshipType })),
+    contacts: contacts
+      .filter(row =>
+        isProductionVisibleBusinessRecord({
+          accountName: row.name,
+          createdBy: row.source,
+        })
+      )
+      .map(row => ({ name: row.name, title: row.title, relationshipType: row.relationshipType })),
     dayLineMentions: dayLine
-      .filter(row => isProductionVisibleBusinessRecord({ note: row.title }))
+      .filter(row =>
+        isProductionVisibleBusinessRecord({
+          note: [row.title, row.sourceText].filter(Boolean).join(" "),
+        })
+      )
       .map(row => ({ title: row.title, businessDate: row.businessDate, status: row.status })),
     conversationMentions: mentions,
   };
