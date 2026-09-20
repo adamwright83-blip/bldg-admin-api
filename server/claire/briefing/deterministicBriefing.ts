@@ -13,7 +13,7 @@ import type { BriefingClock, BriefingItem, BriefingTiming, ParsedBriefing } from
  */
 
 const ACTION_WORDS =
-  "pick ?up|pickup|pick|drop ?off|drop|deliver|delivery|drive|go|head|deposit|make|call|text|email|visit|stop by|swing by|grab|buy|get|bring|return|collect|run|meet|finish|print|prep|prepare|send|order|wash|fold|clean|check|take|load|unload|fix|book|pay|follow up|follow-up|remind|put|add|schedule|handle|ship|mail|post|install|set up|clear|restock|count|do|pitch|see|talk to|write|draft|update|file|process|sort|bag|tag|iron|press";
+  "pick ?up|pickup|pick|drop ?off|drop|deliver|delivery|drive|go|head|deposit|make|call|phone|text|email|message|visit|stop by|swing by|grab|buy|get|bring|return|collect|run|meet|finish|print|prep|prepare|send|order|wash|fold|launder|clean|check|take|load|unload|fix|book|pay|follow up|follow-up|remind|put|add|schedule|handle|ship|mail|post|install|set up|clear|restock|count|do|pitch|quote|walk|knock|hit|hitting|see|talk to|write|draft|update|file|process|sort|bag|tag|iron|press|invoice|bill";
 const ACTION = `(?:${ACTION_WORDS})`;
 
 const LEAD_IN = new RegExp(
