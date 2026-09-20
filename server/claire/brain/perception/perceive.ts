@@ -45,11 +45,23 @@ function acts(turn: ReturnType<typeof interpretTurn>, assembled: string): Dialog
   return out;
 }
 
+/**
+ * Classify the SHAPE of a mention, never its identity. A single bare token reads as a
+ * person, a multi-word mention reads as an account. Both are candidates: only
+ * authoritative contact/account evidence may say who or what they actually are, and
+ * Perception does not get to decide that.
+ */
+function candidateKind(raw: string): PerceivedEntity["kind"] {
+  const trimmed = raw.trim();
+  if (!trimmed) return "unresolved";
+  return /\s/.test(trimmed) ? "account_candidate" : "contact_candidate";
+}
+
 export function perceiveTurn(input: PerceiveInput): PerceivedTurn {
   const assembledText = (input.assembledText ?? input.rawText).trim();
   const turn = interpretTurn(assembledText);
   const entities: PerceivedEntity[] = [
-    ...turn.entities.map(raw => ({ raw, kind: "unresolved" as const })),
+    ...turn.entities.map(raw => ({ raw, kind: candidateKind(raw) })),
     ...turn.temporal.map(raw => ({ raw, kind: "temporal" as const })),
   ];
   return {

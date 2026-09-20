@@ -11,3 +11,6 @@ export {
   isPersonalDisclosureGrant,
   isNarrativeRevealGrant,
 } from "./grants";
+export { planRetrieval, buildBusinessQuery, inferBusinessMetric } from "./retrievalPlan";
+export { integrate, type IntegrationContext, type IntegrationOutput } from "./integrate";
+export { noRetrieval, defaultExecutiveDeps, liveReadOnlyRetrieval, type ExecutiveDeps, type RetrievalRunner } from "./decide";

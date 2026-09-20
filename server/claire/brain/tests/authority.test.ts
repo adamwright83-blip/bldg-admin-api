@@ -327,14 +327,14 @@ describe("authority bypasses fail", () => {
 });
 
 describe("perception and attention", () => {
-  it("does not treat Dana Tuesday as a single name", () => {
+  it("does not treat Dana Tuesday as a single name", async () => {
     const perceived = perceiveTurn({ rawText: "What should I do about Dana Tuesday?", completeness: "complete" });
     expect(perceived.temporalReferences).toContain("tuesday");
     expect(perceived.entities.some(entity => /tuesday/i.test(entity.raw) && entity.kind !== "temporal")).toBe(false);
     expect(perceived.entities.some(entity => entity.raw.toLowerCase() === "dana")).toBe(true);
     expect(perceived.businessIntent).toBe("judgment_question");
     expect(perceived.mayProposeWorkHint).toBe(false);
-    const attention = decideTurn(perceived, emptyMemory()).attention;
+    const attention = (await decideTurn(perceived, emptyMemory())).attention;
     expect(attention.boardEligible).toBe(false);
     expect(attention.retrieve).not.toContain("goals");
   });
@@ -368,13 +368,13 @@ describe("perception and attention", () => {
     expect(perceived.ordering).toBe("last");
   });
 
-  it("pending No rejects; Forget that plus a query supersedes", () => {
+  it("pending No rejects; Forget that plus a query supersedes", async () => {
     const memory = snapshotWorkingMemory({ pendingBriefing: { parsed: { items: [1] }, createdAt: 1 } }, CTX);
-    const no = decideTurn(perceiveTurn({ rawText: "No.", completeness: "complete" }), memory);
+    const no = await decideTurn(perceiveTurn({ rawText: "No.", completeness: "complete" }), memory);
     expect(no.attention.pendingDisposition).toBe("reject");
     expect(no.productionAuthority).toBe(false);
 
-    const next = decideTurn(
+    const next = await decideTurn(
       perceiveTurn({ rawText: "Forget that. What were my last five sales?", completeness: "complete" }),
       memory
     );
@@ -382,15 +382,15 @@ describe("perception and attention", () => {
     expect(next.attention.lanes).toContain("business");
   });
 
-  it("No, Wednesday revises pending rather than starting a new interpretation", () => {
+  it("No, Wednesday revises pending rather than starting a new interpretation", async () => {
     const memory = snapshotWorkingMemory({ pendingBriefing: { parsed: { items: [1] }, createdAt: 1 } }, CTX);
-    const decision = decideTurn(perceiveTurn({ rawText: "No, Wednesday.", completeness: "complete" }), memory);
+    const decision = await decideTurn(perceiveTurn({ rawText: "No, Wednesday.", completeness: "complete" }), memory);
     expect(decision.attention.pendingDisposition).toBe("revise");
   });
 
-  it("a hanging pending does not reinterpret an unrelated greeting", () => {
+  it("a hanging pending does not reinterpret an unrelated greeting", async () => {
     const memory = snapshotWorkingMemory({ pendingBriefing: { parsed: { items: [1] }, createdAt: 1 } }, CTX);
-    const decision = decideTurn(perceiveTurn({ rawText: "Good morning.", completeness: "complete" }), memory);
+    const decision = await decideTurn(perceiveTurn({ rawText: "Good morning.", completeness: "complete" }), memory);
     expect(decision.attention.pendingDisposition).not.toBe("confirm");
     expect(["none", "supersede"]).toContain(decision.attention.pendingDisposition);
   });

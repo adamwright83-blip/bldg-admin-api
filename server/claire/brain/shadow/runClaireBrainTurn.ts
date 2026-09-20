@@ -4,7 +4,7 @@
 
 import type { ExecutiveDecision } from "../contracts/executiveDecision";
 import type { ShadowComparisonRecord } from "../telemetry/comparison";
-import { decideTurn } from "../executive/decide";
+import { decideTurn, type ExecutiveDeps } from "../executive/decide";
 import { perceiveTurn } from "../perception/perceive";
 import { renderResponsePlan } from "../response/render";
 import { comparisonRecordFromDecision } from "../telemetry/comparison";
@@ -20,6 +20,8 @@ export type ClaireBrainTurnInput = {
   operatorUserId: string;
   surface: "voice" | "text";
   conversationKey: string;
+  /** Retrieval defaults to retrieving nothing; live reads must be passed in explicitly. */
+  executive?: ExecutiveDeps;
 };
 
 export type ClaireBrainTurnResult = {
@@ -43,7 +45,7 @@ export async function runClaireBrainTurn(input: ClaireBrainTurnInput): Promise<C
     operatorUserId: input.operatorUserId,
     surface: input.surface,
   });
-  const decision = decideTurn(perceived, memory);
+  const decision = await decideTurn(perceived, memory, input.executive);
   const rendered = renderResponsePlan(decision.responsePlan);
 
   for (const grant of decision.actionGrants) {
