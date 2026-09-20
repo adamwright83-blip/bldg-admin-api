@@ -80,6 +80,10 @@ it. Behavioral-science Slice 3 wires it into production Claire generation:
 `toPromptSection` and run `lintPostGenerationStateVerbs` after generation. Unverified
 sent/queued/scheduled claims fall back. Do not enable `operator_avoidance` without Adam.
 
+Claire factual claims carry receipts and a model may not revise their truth status; ordinary ontology leakage is blocked
+while authorised ontology/story paths stay legal — read `docs/goldline/CLAIRE_TRUTH_PROVENANCE.md` before touching
+Claire answer paths, provenance, or personal/ontology guards.
+
 Related: `operator_avoidance` is a defined `ClaireRelationshipEventType` scored in
 `tierEngine.ts`, but it is the only one of the twelve absent from both
 `WARMTH_EMISSION_ALLOWLIST` and `CLAIRE_ATTESTABLE_EVENT_TYPES` in

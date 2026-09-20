@@ -6,6 +6,13 @@ const hoisted = vi.hoisted(() => ({
   followUp: vi.fn(async () => "Follow-up answer."),
 }));
 
+// The challenge classifier is a live model call; without a stub it is "unavailable" here, and Claire (correctly)
+// fails closed. This suite is about routing, so give it a working classifier that says "not a challenge".
+vi.mock("./provenance/priorClaimChallenge", async importOriginal => ({
+  ...(await importOriginal<typeof import("./provenance/priorClaimChallenge")>()),
+  classifyPriorClaimAct: async () => ({ probe: false, receiptId: null, ambiguous: false, assertsFact: null }),
+}));
+
 vi.mock("./preDriveRuntime", () => ({
   previewClairePreDrive: async () => ({
     brief: "Two stops today.",

@@ -9,7 +9,7 @@ import {
   safeClaireFailureReason,
   type ClaireGenerationDiagnostic,
 } from "./generationTelemetry";
-import { detectClaireConversationalMode, detectRequestedClaireTopic } from "./topicDetection";
+import { detectClaireConversationalMode, detectRequestedClaireTopic, isPersonalQuestionAboutClaire } from "./topicDetection";
 import {
   CLAIRE_V1_REASONING_POLICY,
   detectAvoidanceDisclosure,
@@ -32,9 +32,11 @@ import { measureClairePromptSections, type ClairePromptSizeTrace } from "./answe
 import { recoverPersonalAnswer } from "./character/personalAnswerRecovery";
 import { assertNoUngroundedPersonalSpecificity, UngroundedPersonalSpecificityError } from "./character/personalSpecificityGuard";
 import { isClaireProgressionEnabled } from "./progression/progressionFlag";
+import { checkOntologyBoundary, operatorAskedOntology } from "./progression/ontologyGuard";
 import { checkBiographyBoundary, makeBiographyVerifier, type BiographyVerifier } from "./progression/generalBiographyBoundary";
 import { lintFailureDayLanguage } from "./progression/toneLint";
 import { selectDialogueLine } from "./progression/dialogueRegistry";
+import { deriveMomentStance, momentStanceGuidance, type MomentSignals } from "./progression/momentStance";
 import { answerPersonalFollowUp } from "./progression/personalFollowUp";
 import type { ProgressionStore } from "./progression/store";
 import type { PersonalTurnResult } from "./progression/personalReveal";
@@ -250,6 +252,14 @@ export async function answerClairePreDriveFollowUp(
     /** Conversation identity, used for the personal-thread ledger and per-call budget. */
     conversationId?: string;
     onPersonalTurn?: (result: PersonalTurnResult) => void;
+    /** A locked, authored campaign event that legitimately makes constructedness story material is active. */
+    ontologyStoryEventActive?: boolean;
+    /** Subjects already covered this call (server-derived; survives beyond the short history window). */
+    coveredThisCall?: string[];
+    /** Grounded factual claims Claire already made this call, each backed by a server-held receipt. */
+    priorClaimNotes?: string[];
+    /** Verified situational signals the caller already holds; the stance layer only shapes tone from them. */
+    momentSignals?: Partial<MomentSignals>;
   },
   dependencies: {
     invokeText?: typeof invokeTextLLM;
@@ -274,7 +284,9 @@ export async function answerClairePreDriveFollowUp(
   // be answered (progression controller); the model only phrases one bounded fact;
   // every failure becomes an approved decline. Ask-only: this runs solely because the
   // operator explicitly asked a personal question.
-  if (conversationalMode === "personal" && progressionOn) {
+  // A direct "what are you?" is an ontology question, not a request for biography canon: it must not be
+  // swallowed by the personal-disclosure controller's decline (that would make the authorised reveal impossible).
+  if (conversationalMode === "personal" && progressionOn && !operatorAskedOntology(input.utterance)) {
     const operatorUserId = input.context.actorId ?? null;
     if (!operatorUserId) {
       // Unresolved identity fails closed: no progression state, no disclosure.
@@ -354,6 +366,31 @@ export async function answerClairePreDriveFollowUp(
       {
         label: "judgment_and_history",
         text: "General knowledge is framed advice, never asserted as a fact about this business; do not import a sales model from a different industry. Personal: eligible canon only. A prior Claire turn is conversation history, not verified truth — if it asserted something not present in the fact inventory, do not treat it as confirmed on this turn. If a blocker was already mentioned, do not mechanically re-mention it again unless asked.",
+      },
+      {
+        label: "moment_stance",
+        text: momentStanceGuidance(
+          deriveMomentStance({
+            urgentBusinessOpen: input.context.blockers.length > 0,
+            businessAgendaFinished: false,
+            difficultVerifiedDay: false,
+            sharedSetback: false,
+            boundaryPushesThisCall: 0,
+            ...input.momentSignals,
+          })
+        ),
+      },
+      {
+        label: "already_covered_this_call",
+        text: input.coveredThisCall?.length
+          ? `Already covered this call: ${input.coveredThisCall.join("; ")}. Do not ask about these again unless the operator explicitly returns to them or new information appears.`
+          : null,
+      },
+      {
+        label: "grounded_prior_claims",
+        text: input.priorClaimNotes?.length
+          ? `Grounded claims you already made this call, each backed by a server-held receipt: ${input.priorClaimNotes.join(" | ")}. Never describe these as guesses, made up, invented or wrong, and never retract them. If the operator doubts one, do not adjudicate it yourself; the server re-verifies it.`
+          : null,
       },
       {
         label: "retrieved_evidence_rule",
@@ -442,26 +479,48 @@ export async function answerClairePreDriveFollowUp(
     // shame, consolation, coaching, diagnosis and volunteered biography. A violating line is never
     // spoken; the deterministic fallback (or an approved decline) is used instead.
     let guardReason: string | null = null;
-    if (progressionOn && recoveredVia === null) {
-      // Deterministic and free first: failure-day tone. Then the semantic biography boundary, which only
-      // calls a model when a sentence could assert Claire-self/history (no candidate => no model call).
+    // Truth and character safety do NOT depend on the progression feature flag (production runs with it OFF).
+    // Staged so OFF stays cheap: the free deterministic checks run on every answer; the semantic biography
+    // verifier (one bounded model call) runs when progression is ON, or when the operator is addressing
+    // Claire herself ("you"/"your") and the answer speaks in the first person — the only turns where
+    // invented biography or an unsupported emotional/relational claim can occur.
+    if (recoveredVia === null) {
+      const addressesClaire = /\b(?:you|your|yours|yourself|you'?re|you'?ve)\b/i.test(input.utterance);
+      const personalTurn = conversationalMode === "personal" || isPersonalQuestionAboutClaire(input.utterance);
+      // Invented biography need not use first person ("A quiet Sunday, mostly."), so the gate is the operator
+      // addressing Claire herself; a turn grounded in retrieved business evidence skips it (no personal ask there).
+      const runSemantic = progressionOn || personalTurn || (addressesClaire && !input.retrievedEvidence?.length);
       const tone = lintFailureDayLanguage(answer);
       if (!tone.passes) {
         console.warn("[Claire] general answer violated failure-day tone contract; replaced", tone.violations.map(v => v.category));
-        answer = fallback;
+        answer = personalTurn ? (selectDialogueLine({ category: "decline", rapportBand: 0 })?.text ?? fallback) : fallback;
         guardReason = `failure_day_tone:${tone.violations[0]!.category}`;
       } else {
         const biography = await checkBiographyBoundary({
           text: answer,
           allowedFacts: compiled.eligibleCanonFacts,
           verify: dependencies.biographyVerifier ?? makeBiographyVerifier(invokeText, input.tenantId),
+          deterministicOnly: !runSemantic,
         });
         if (!biography.ok) {
           console.warn("[Claire] general answer could assert unauthorized Claire history; replaced", biography.reason);
-          // A business turn gets the conservative business fallback, never a personal-decline line.
-          answer = fallback;
+          // A personal question gets an authored decline; a business turn gets the conservative business fallback.
+          answer = personalTurn ? (selectDialogueLine({ category: "decline", rapportBand: 0 })?.text ?? fallback) : fallback;
           guardReason = `personal_biography_guard:${biography.reason}`;
         }
+      }
+    }
+
+    // Character integrity, independent of the progression flag (production runs with it OFF, which is
+    // exactly where "I'm not a person / I don't have weekends" leaked). Missing biography is privacy,
+    // never a disclaimer of personhood. Authorised only by an explicit operator question or an active
+    // authored story event; otherwise an approved in-character decline is spoken instead.
+    if (guardReason === null) {
+      const ontology = checkOntologyBoundary({ text: answer, utterance: input.utterance, storyEventActive: input.ontologyStoryEventActive });
+      if (!ontology.ok) {
+        console.warn("[Claire] general answer leaked assistant ontology; replaced with authored decline");
+        answer = selectDialogueLine({ category: "decline", rapportBand: 0 })?.text ?? "Not that one.";
+        guardReason = "ontology_guard";
       }
     }
 

@@ -90,15 +90,15 @@ describe("2. flag OFF reproduces the pre-#180 routing and disclosure path", () =
     expect(detectClaireConversationalMode("What's my relationship with Greystar?", true)).toBe("operational");
   });
 
-  it("with the flag OFF an unknown personal question reaches the general model path exactly as before, unguarded", async () => {
+  it("with the flag OFF an unknown personal question still reaches the general model path, but invented biography no longer survives it (truth firewall is independent of the flag)", async () => {
     process.env.CLAIRE_PROGRESSION = "some-other-tenant"; // tenant-1 not listed => OFF
     const invokeText = vi.fn().mockResolvedValue("I have two sisters.");
     const reply = await answerClairePreDriveFollowUp(
       { tenantId: "tenant-1", utterance: "Do you have siblings?", brief: "b", context },
-      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined) }
+      { invokeText, recordGeneration: vi.fn().mockResolvedValue(undefined), biographyVerifier: async () => false }
     );
-    expect(invokeText).toHaveBeenCalledTimes(1);
-    expect(reply).toBe("I have two sisters."); // legacy behavior: no controller, no biography guard, no verifier
+    expect(invokeText).toHaveBeenCalledTimes(1); // still no personal controller when OFF
+    expect(reply).not.toBe("I have two sisters."); // but the biography firewall no longer depends on the flag
   });
 });
 

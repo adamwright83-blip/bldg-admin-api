@@ -169,6 +169,30 @@ export async function releaseExpiredReservations(
   return released;
 }
 
+/**
+ * Continuity of personal asking, derived from the existing durable personal ledger (no new
+ * persistence). PRESENTATION ONLY: it lets Claire acknowledge repeated asking naturally. It is
+ * not a currency — it never earns rapport, never creates an entitlement, never moves the personal
+ * rung, never creates canon, and never counts as business progress.
+ */
+export type TopicAskHistory = { askCount: number; refusalCount: number; lastAskedAt: string | null; lastRefusedAt: string | null };
+
+export function deriveTopicHistory(ledger: PersonalLedgerEntry[]): Record<string, TopicAskHistory> {
+  const history: Record<string, TopicAskHistory> = {};
+  for (const row of ledger) {
+    if (!row.topic) continue;
+    const entry = (history[row.topic] ??= { askCount: 0, refusalCount: 0, lastAskedAt: null, lastRefusedAt: null });
+    if (row.kind === "asked") {
+      entry.askCount += 1;
+      entry.lastAskedAt = row.occurredAt;
+    } else if (row.kind === "refused" || row.kind === "decline_fallback") {
+      entry.refusalCount += 1;
+      entry.lastRefusedAt = row.occurredAt;
+    }
+  }
+  return history;
+}
+
 export type PersonalProgressionContext = {
   scope: OperatorScope;
   grant: ProgressionGrant;
@@ -178,6 +202,8 @@ export type PersonalProgressionContext = {
   disclosedFragmentIds: string[];
   /** Topics the operator previously asked about and was refused (game-state continuity). */
   priorRefusedTopics: string[];
+  /** Per-topic ask/refusal history from the durable ledger. Presentation continuity only — not progression currency. */
+  topicHistory: Record<string, TopicAskHistory>;
   conversationLedger: PersonalLedgerEntry[];
 };
 
@@ -202,6 +228,7 @@ export async function loadPersonalProgressionContext(
     consumedEntitlementCount: entitlements.filter(row => row.status === "consumed").length,
     disclosedFragmentIds: [...new Set(ledger.filter(row => row.kind === "disclosed" && row.fragmentId).map(row => row.fragmentId!))],
     priorRefusedTopics: [...new Set(ledger.filter(row => (row.kind === "refused" || row.kind === "decline_fallback") && row.topic).map(row => row.topic!))],
+    topicHistory: deriveTopicHistory(ledger),
     conversationLedger: ledger.filter(row => row.conversationId === conversationId),
   };
 }

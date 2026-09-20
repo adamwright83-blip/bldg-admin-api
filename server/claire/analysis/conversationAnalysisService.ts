@@ -16,7 +16,8 @@ import {
   renderCopyAnalysisBundle,
   renderNotificationBody,
 } from "./copyBundle";
-import { evaluateConversationQualitative, formatLiveTranscript } from "./conversationEvaluator";
+import { evaluateConversationQualitative, formatLiveTranscript, MalformedConversationEvaluationError } from "./conversationEvaluator";
+import { recordEvaluatorAttempt, recordEvaluatorFailure, recordEvaluatorSuccess } from "./evaluatorStats";
 import { researchFlagFor, type QualitativeEvaluation } from "./conversationAnalysisSchema";
 
 export async function readLinkedActionStats(actionIds: string[]): Promise<{
@@ -108,6 +109,7 @@ export async function runConversationAnalysis(
   const evaluate = dependencies.evaluate ?? evaluateConversationQualitative;
 
   let evaluation: QualitativeEvaluation;
+  recordEvaluatorAttempt();
   try {
     evaluation = await evaluate({
       tenantId: session.tenantId,
@@ -123,10 +125,16 @@ export async function runConversationAnalysis(
       },
     });
   } catch (error) {
-    console.error("[ClaireAnalysis] evaluator failed", error);
+    const malformed = error instanceof MalformedConversationEvaluationError;
+    recordEvaluatorFailure(
+      sessionId,
+      malformed ? error.category : "provider_error",
+      malformed ? error.detail : error instanceof Error ? error.message.slice(0, 200) : "unknown"
+    );
     await store.updateSession(sessionId, { analysisStatus: "failed" });
-    return { ok: false, reason: "evaluator_failed" };
+    return { ok: false, reason: malformed ? `evaluator_failed:${error.category}` : "evaluator_failed" };
   }
+  recordEvaluatorSuccess();
 
   const usefulNextStep =
     stats.acceptedActionCount > 0 ? true : evaluation.usefulNextStepReached;

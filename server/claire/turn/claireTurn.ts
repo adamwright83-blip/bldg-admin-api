@@ -58,6 +58,24 @@ import {
 import { persistClaireTurnTrace } from "../answerPathRecorder";
 import { explicitDayLineRefusal, explicitTrackingRequest } from "../briefing/titleContract";
 import { classifyOpenDialogueAct } from "./dialogueAct";
+import { runBusinessQuery } from "../../analytics/businessQuery";
+import {
+  appendClaimReceipt,
+  modelReplyRewritesPriorClaim,
+  receiptFromBusinessResult,
+  receiptFromReader,
+  resolveReferencedClaim,
+  AMBIGUOUS_REFERENT_SPEECH,
+  UNVERIFIABLE_SPEECH,
+  type ClaimResolution,
+  speakPriorClaimVerification,
+  verifyPriorClaim,
+  type ClaimGrounding,
+  type FactualClaimReceipt,
+} from "../provenance/claimReceipts";
+import { coveredThisCallLines, recordClaireQuestionCoverage, recordOperatorReplyCoverage, suppressRestartedQuestion, type CoveredSubject } from "../provenance/callCoverage";
+import type { AccountRef as CoverageAccountRef } from "../knowledge/accountKnowledge";
+import { classifyPriorClaimAct, isChallengeCandidate, normalizeReading, summarizeReceipts, type ClaimChallengeReading, type ClassifyPriorClaimAct } from "../provenance/priorClaimChallenge";
 import type { MutationReceipt } from "../assertionGuard";
 import type { EncyclopediaAnswer } from "../knowledge/encyclopediaAgent";
 import {
@@ -107,6 +125,12 @@ export type ClaireTurnState = PendingProposalState &
     focusAccount?: AccountRef | null;
     consecutiveEmptyTranscripts?: number;
     proactiveMorning?: boolean;
+    /** Factual-claim receipts for this conversation (durable with the rest of the turn state). */
+    claimReceipts?: FactualClaimReceipt[];
+    /** Count of Claire's spoken turns, so a receipt can name the turn that produced it. */
+    claireTurnCount?: number;
+    /** Subjects this call has already covered; survives beyond the model's short prompt-history window. */
+    coverage?: CoveredSubject[];
   };
 
 export type ClaireTurnInput = {
@@ -182,6 +206,13 @@ export type ClaireTurnDeps = {
    * database; production leaves it unset.
    */
   onTurnTrace?: (trace: ClaireTurnTrace) => void;
+  /** Semantic recognition of "operator probes the prior factual claim". Labels the act only. */
+  classifyPriorClaim: ClassifyPriorClaimAct;
+  /** Authoritative re-read used to re-verify a prior claim. */
+  rerunBusinessQuery: (tenantId: string, query: import("../../analytics/businessQuery").BusinessQuery) => Promise<import("../../analytics/businessQuery").BusinessQueryResult>;
+  /** Live-turn budget for a fresh recheck. */
+  priorClaimBudgetMs?: number;
+  classifierBudgetMs?: number;
 };
 
 export function defaultClaireTurnDeps(): ClaireTurnDeps {
@@ -206,10 +237,15 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     encyclopedia: null,
     watchBoard: ({ tenantId, operatorUserId, actorId }) => ensureAdamBoard({ tenantId, operatorUserId, actorId }),
     doctrineTurn: handleDoctrineTurn,
+    classifyPriorClaim: classifyPriorClaimAct,
+    rerunBusinessQuery: (tenantId, query) => runBusinessQuery(tenantId, query),
   };
 }
 
 const HISTORY_LIMIT = 16;
+/** Hard turn-level ceiling on the challenge classifier, whatever the injected implementation does. */
+const CLASSIFIER_TURN_BUDGET_MS = 2000;
+const SEMANTIC_REFERENT_MAX_WORDS = 80;
 const PENDING_BRIEFING_TTL_MS = 20 * 60 * 1000;
 
 function remember(state: ClaireTurnState, speaker: "operator" | "claire", text: string, at: number): void {
@@ -357,6 +393,23 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const clock = briefingClock(now, timeZone);
   const today = businessToday(now, timeZone);
   const { state } = input;
+  /** Classifier failure of ANY kind (throw, timeout, malformed output) is "unavailable" — never a guess. */
+  const classify = async (args: Parameters<ClassifyPriorClaimAct>[0]): Promise<ClaimChallengeReading | null> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const raced = await Promise.race([
+        deps.classifyPriorClaim(args),
+        new Promise<null>(resolve => {
+          timer = setTimeout(() => resolve(null), deps.classifierBudgetMs ?? CLASSIFIER_TURN_BUDGET_MS);
+        }),
+      ]);
+      return normalizeReading(raced);
+    } catch {
+      return null;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  };
 
   let utterance = input.utterance.trim();
   if (input.surface === "voice" && input.allowFragmentWait !== false) {
@@ -407,6 +460,16 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // Set when a guarded personal turn decided the call should actually end (business complete + an
   // authored exit line exists). Dormant in production until such a line is authored.
   let personalEndCall = false;
+  const claireOrdinal = (state.claireTurnCount ?? 0) + 1;
+  /** Receipt for the factual claim this turn makes, attached to durable state in `finish`. */
+  let pendingReceipt: FactualClaimReceipt | null = null;
+  let knownAccounts: CoverageAccountRef[] = [];
+  let uncertainChallenge: ClaimResolution | null = null;
+  type SemanticSlot = { promise: Promise<ClaimChallengeReading | null>; settled: ClaimChallengeReading | null | undefined; classifierMs?: number };
+  let semantic: SemanticSlot | null = null;
+  const readerReceipt = (answerPath: string, claimType: string, grounding: ClaimGrounding, sources: string[], answerText: string) => {
+    pendingReceipt = receiptFromReader({ conversationKey: input.conversationKey, claireTurnOrdinal: claireOrdinal, nowMs, answerText, answerPath, claimType, grounding, sources });
+  };
   const finish = (result: ClaireTurnResult): ClaireTurnResult => {
     const inventory = buildClaireVerifiedFactInventory(input.context);
     const speak = assembleGuardedClaireSpeak({
@@ -421,6 +484,26 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       trace.needs_synthesis = telemetryClaireAnswerClass(utterance, true) === "needs_synthesis";
     }
     remember(state, "claire", guarded.speak, nowMs);
+    state.claireTurnCount = claireOrdinal;
+    if (knownAccounts.length && guarded.speak) {
+      state.coverage = recordClaireQuestionCoverage(state.coverage, { claireText: guarded.speak, accounts: knownAccounts, turnOrdinal: claireOrdinal });
+    }
+    if (pendingReceipt && guarded.speak) {
+      const receipt: FactualClaimReceipt = { ...(pendingReceipt as FactualClaimReceipt), answerText: guarded.speak };
+      state.claimReceipts = appendClaimReceipt(state.claimReceipts, receipt);
+      trace.claimReceipt = {
+        id: receipt.id,
+        claimType: receipt.claimType,
+        grounding: receipt.grounding,
+        reader: receipt.reader,
+        metric: receipt.metric,
+        periodLabel: receipt.periodLabel,
+        evidence: receipt.evidence,
+        fingerprint: receipt.fingerprint,
+        asOf: receipt.asOf,
+        rechecks: receipt.recheck.kind !== "none",
+      };
+    }
     persistClaireTurnTrace(trace, { turnKind: guarded.kind, spokenText: guarded.speak });
     deps.onTurnTrace?.(trace);
     return personalEndCall ? { ...guarded, endCall: true } : guarded;
@@ -474,6 +557,69 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         return finish({ speak: board.brief, kind: "answered" });
       }
     }
+  }
+
+  // ── 1b. Prior-claim verification ──────────────────────────────────────────
+  // A challenge to something Claire just claimed as fact is adjudicated from the claim's
+  // receipt and authoritative evidence — never by free-form generation. Verification fails
+  // closed: a timeout leaves the claim unresolved instead of conceding it.
+  const holdingSomething = Boolean(state.pendingBriefing || state.pendingProposal || state.pendingAccountFollowUp);
+  const resolution: ClaimResolution = holdingSomething ? { kind: "none" } : resolveReferencedClaim(state.claimReceipts, utterance, claireOrdinal);
+  const isKnownJudgment = (receipt: FactualClaimReceipt) => receipt.grounding === "ungrounded" && receipt.assertsFact === false;
+  const nonFactual = (receipt: FactualClaimReceipt, reading: ClaimChallengeReading | null) => receipt.grounding === "ungrounded" && (reading?.assertsFact === false || receipt.assertsFact === false);
+  const rememberNature = (receipt: FactualClaimReceipt, reading: ClaimChallengeReading | null) => {
+    if (receipt.grounding === "ungrounded" && reading?.assertsFact != null) {
+      receipt.assertsFact = reading.assertsFact;
+      state.claimReceipts = appendClaimReceipt(state.claimReceipts, receipt);
+    }
+  };
+  if (resolution.kind !== "none") {
+    // Deterministic referent (name / number / immediately preceding): the classifier only labels the act.
+    const explicit = resolution.kind === "ambiguous" || resolution.via === "explicit_reference";
+    if (isChallengeCandidate(utterance, explicit)) {
+      const anchor = resolution.kind === "resolved" ? resolution.receipt : resolution.candidates[0]!;
+      const classifierStarted = Date.now();
+      const reading = await classify({ tenantId: input.tenantId, utterance, priorAnswer: anchor.answerText, receipts: summarizeReceipts(state.claimReceipts ?? []) });
+      const classifierMs = Date.now() - classifierStarted;
+      trace.priorClaimClassifier = reading === null ? "unavailable" : reading.probe ? "probe" : "not_probe";
+      // "Immediately preceding" is only a default for a bare reaction. If the classifier read the utterance as
+      // pointing at a specific (older) statement, or could not tell which, that reading outranks recency.
+      let effective: ClaimResolution = resolution;
+      if (reading?.probe && resolution.kind === "resolved" && resolution.via === "immediately_preceding") {
+        const named = reading.receiptId ? (state.claimReceipts ?? []).find(receipt => receipt.id === reading.receiptId) : undefined;
+        if (reading.ambiguous || (reading.receiptId && !named)) effective = { kind: "ambiguous", candidates: [resolution.receipt] };
+        else if (named) effective = { kind: "resolved", receipt: named, via: "explicit_reference" };
+      }
+      if (reading?.probe && effective.kind === "resolved" && nonFactual(effective.receipt, reading)) {
+        // Advice or opinion is not a factual claim: nothing to verify, and no truth to protect.
+        rememberNature(effective.receipt, reading);
+      } else if (reading?.probe) {
+        const spoken = await adjudicateResolution(effective, "deterministic", classifierMs);
+        mark("prior_claim_verification");
+        return finish({ speak: spoken, kind: "answered" });
+      } else if (reading === null) {
+        // Classifier down: fail closed in BOTH directions. Any model reply on this turn is replaced by the
+        // adjudication (see finalizeModelReply), so an outage can neither let a model downgrade a grounded
+        // claim nor let it confidently defend an unsupported one. Only a claim already KNOWN to be advice/opinion
+        // is exempt — there is no truth status to protect.
+        const targets = resolution.kind === "resolved" ? [resolution.receipt] : resolution.candidates;
+        if (targets.some(receipt => !isKnownJudgment(receipt))) uncertainChallenge = resolution;
+      }
+    }
+  } else if ((state.claimReceipts?.length ?? 0) > 0 && utterance.trim().split(/\s+/).length <= SEMANTIC_REFERENT_MAX_WORDS) {
+    // No name/number/adjacent match. An older claim may still be referenced in other words ("that sale thing you
+    // told me earlier…"). Resolve it semantically, IN PARALLEL with normal routing so deterministic answers pay
+    // no wait: a deterministic route only honours the result if it has already landed; any model-generated reply
+    // awaits it. The classifier identifies the receipt; it never judges the claim.
+    semantic = { settled: undefined, promise: Promise.resolve(null) };
+    const started = Date.now();
+    const slot = semantic;
+    slot.promise = classify({ tenantId: input.tenantId, utterance, priorAnswer: "", receipts: summarizeReceipts(state.claimReceipts ?? []) })
+      .then(reading => {
+        slot.settled = reading;
+        slot.classifierMs = Date.now() - started;
+        return reading;
+      });
   }
 
   if (/\bwhy (?:is|are|did you|are you)\b/.test(lower)) {
@@ -629,6 +775,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
 
   // ── 3. A field report with a follow-up instruction for a real account ─────
   const accounts = await deps.accounts(input.tenantId).catch(() => [] as AccountRef[]);
+  knownAccounts = accounts;
+  state.coverage = recordOperatorReplyCoverage(state.coverage, { operatorText: utterance, accounts, turnOrdinal: claireOrdinal });
   const mentioned = matchAccounts(lower, accounts);
   const account =
     mentioned.length === 1
@@ -834,6 +982,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       context: input.context,
       recentTurns: history().slice(0, -1),
       conversationId: input.conversationKey,
+      coveredThisCall: coveredThisCallLines(state.coverage),
+      priorClaimNotes: priorClaimNotes(),
       onPersonalTurn: personal => {
         if (personal.endCall) personalEndCall = true;
       },
@@ -860,7 +1010,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     // A follow-up that never reported a diagnostic (a stubbed dep in a test)
     // is still attributed rather than left unlabelled.
     mark("follow_up_model");
-    return finish({ speak: reply, kind: "follow_up" });
+    return finish({ speak: await finalizeModelReply(reply, []), kind: "follow_up" });
   }
   mark("fallback", { fallbackReason: "no_brief_or_context" });
   return finish({
@@ -875,7 +1025,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    */
   async function gatherDeterministicEvidence(question: string): Promise<ClaireRouteEvidence[]> {
     const questionLower = normalizeUtterance(question);
-    const evidence: Array<{ source: string; text: string }> = [];
+    const evidence: ClaireRouteEvidence[] = [];
     const skipGreedyBusiness =
       (isUnpaidQuestion(questionLower) && !/\bfollow[- ]?up\b/.test(questionLower)) ||
       Boolean(operationsQuestion(questionLower)) ||
@@ -888,7 +1038,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
           { tenantId: input.tenantId, utterance: question, state, surface: input.surface, context: input.context },
           { now: deps.now, timeZone: deps.timeZone, ...deps.business }
         );
-        if (business.handled) evidence.push({ source: `business_reader:${business.reader ?? "query"}`, text: business.speak });
+        if (business.handled) evidence.push({ source: `business_reader:${business.reader ?? "query"}`, text: business.speak, businessResult: business.result, reader: business.reader ?? "query", factual: business.facts.length > 0 });
       } catch (error) {
         console.warn("[Claire] business evidence failed", error instanceof Error ? error.message : error);
       }
@@ -987,7 +1137,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    */
   async function synthesizeWithEvidence(
     question: string,
-    evidence: Array<{ source: string; text: string }>
+    evidence: ClaireRouteEvidence[]
   ): Promise<string | null> {
     if (!(input.context && input.brief)) return null;
     trace.synthesisRequired = true;
@@ -1000,6 +1150,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       recentTurns: history().slice(0, -1),
       retrievedEvidence: evidence.length ? evidence : undefined,
       conversationId: input.conversationKey,
+      coveredThisCall: coveredThisCallLines(state.coverage),
+      priorClaimNotes: priorClaimNotes(),
       onPersonalTurn: personal => {
         if (personal.endCall) personalEndCall = true;
       },
@@ -1020,6 +1172,185 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       },
     });
     mark("follow_up_model");
+    return finalizeModelReply(reply, evidence);
+  }
+
+  /** Grounded claims Claire has already made this call, for the prompt: they may not be re-characterised by the model. */
+  function priorClaimNotes(): string[] {
+    return (state.claimReceipts ?? [])
+      .filter(receipt => receipt.grounding === "deterministic" || receipt.grounding === "retrieved")
+      .slice(-4)
+      .map(receipt => `${receipt.claimType} (${receipt.answerPath}): ${receipt.answerText.slice(0, 160)}`);
+  }
+
+  function recordPriorClaimTrace(
+    verification: Awaited<ReturnType<typeof verifyPriorClaim>>,
+    presentation: "deterministic" | "guard_replacement",
+    classifierMs: number | null
+  ): void {
+    trace.priorClaim = {
+      receiptId: verification.receipt.id,
+      resolvedClaireTurn: verification.receipt.claireTurnOrdinal,
+      originalAnswerPath: verification.receipt.answerPath,
+      originalGrounding: verification.receipt.grounding,
+      claimType: verification.receipt.claimType,
+      outcome: verification.outcome,
+      evidenceChanged: verification.evidenceChanged,
+      freshnessAffected: verification.freshnessAffected,
+      resolution: verification.resolution,
+      presentation,
+      latencyMs: verification.latencyMs,
+      classifierMs,
+      timedOut: verification.timedOut,
+    };
+  }
+
+  /**
+   * Turn a semantic reading (resolved in parallel, see above) into what Claire may say, or null when the turn
+   * is not a probe of a held factual claim. `wait` = true for model replies (they must not outrun it);
+   * deterministic routes only honour a result that has already landed, so they never wait.
+   */
+  async function semanticChallengeSpeech(wait: boolean, presentation: "deterministic" | "guard_replacement"): Promise<string | null> {
+    if (!semantic) return null;
+    const reading = wait ? await semantic.promise : semantic.settled ?? null;
+    if (!reading) {
+      // wait && reading === null: the classifier was unavailable, so we cannot tell whether this turn probes a
+      // held claim. Fail closed: a model reply must not adjudicate, defend, or concede anything. Reduced
+      // usefulness (an "I can't verify" line) is the price; only known advice/opinion receipts are exempt.
+      const held = state.claimReceipts ?? [];
+      // Truth to protect: any GROUNDED claim, or an ungrounded claim of unknown nature that was said on the
+      // immediately preceding turn (the only one a bare reaction can be about). Known advice is exempt.
+      const protects = held.some(receipt => receipt.grounding !== "ungrounded") || held.some(receipt => receipt.claireTurnOrdinal === claireOrdinal - 1 && receipt.grounding === "ungrounded" && receipt.assertsFact == null);
+      if (wait && semantic.settled === null && protects) {
+        trace.priorClaimClassifier = "unavailable";
+        return speakUnresolved("guard_replacement", semantic.classifierMs ?? null);
+      }
+      return null;
+    }
+    trace.priorClaimClassifier = reading.probe ? "probe" : "not_probe";
+    if (!reading.probe) return null;
+    const held = state.claimReceipts ?? [];
+    if (reading.ambiguous || !reading.receiptId) {
+      return adjudicateResolution({ kind: "ambiguous", candidates: held.slice(-1) }, presentation, semantic.classifierMs ?? null);
+    }
+    const target = held.find(receipt => receipt.id === reading.receiptId);
+    if (!target) return adjudicateResolution({ kind: "ambiguous", candidates: held.slice(-1) }, presentation, semantic.classifierMs ?? null);
+    if (nonFactual(target, reading)) {
+      rememberNature(target, reading);
+      return null;
+    }
+    const spoken = await adjudicateResolution({ kind: "resolved", receipt: target, via: "explicit_reference" }, presentation, semantic.classifierMs ?? null);
+    return spoken;
+  }
+
+  /** Status left unresolved: nothing affirmed, retracted, or confessed. */
+  function speakUnresolved(presentation: "deterministic" | "guard_replacement", classifierMs: number | null): string {
+    const last = (state.claimReceipts ?? []).slice(-1)[0];
+    trace.priorClaim = {
+      receiptId: "unresolved",
+      resolvedClaireTurn: last?.claireTurnOrdinal ?? 0,
+      originalAnswerPath: last?.answerPath ?? "unknown",
+      originalGrounding: last?.grounding ?? "unknown",
+      claimType: last?.claimType ?? "unknown",
+      outcome: "unverifiable",
+      evidenceChanged: null,
+      freshnessAffected: false,
+      resolution: "not_attempted",
+      presentation,
+      latencyMs: 0,
+      classifierMs,
+      timedOut: false,
+    };
+    return UNVERIFIABLE_SPEECH;
+  }
+
+  /** Adjudicate a resolved (or ambiguous) referent from evidence and return what Claire may say. */
+  async function adjudicateResolution(
+    resolution: Exclude<ClaimResolution, { kind: "none" }>,
+    presentation: "deterministic" | "guard_replacement",
+    classifierMs: number | null
+  ): Promise<string> {
+    if (resolution.kind === "ambiguous") {
+      const first = resolution.candidates[0]!;
+      trace.priorClaim = {
+        receiptId: resolution.candidates.map(candidate => candidate.id).join(","),
+        resolvedClaireTurn: first.claireTurnOrdinal,
+        originalAnswerPath: first.answerPath,
+        originalGrounding: first.grounding,
+        claimType: first.claimType,
+        outcome: "ambiguous_referent",
+        evidenceChanged: null,
+        freshnessAffected: false,
+        resolution: "not_attempted",
+        presentation,
+        latencyMs: 0,
+        classifierMs,
+        timedOut: false,
+      };
+      return AMBIGUOUS_REFERENT_SPEECH;
+    }
+    if (presentation === "guard_replacement" && resolution.receipt.grounding === "ungrounded" && resolution.receipt.assertsFact == null) {
+      // Nature unknown (was this a fact or advice?) and no classifier to say: do not call it "unsupported".
+      return speakUnresolved(presentation, classifierMs);
+    }
+    const verification = await verifyPriorClaim(resolution.receipt, {
+      rerun: query => deps.rerunBusinessQuery(input.tenantId, query),
+      budgetMs: deps.priorClaimBudgetMs,
+    });
+    recordPriorClaimTrace(verification, presentation, classifierMs);
+    if (trace.priorClaim) trace.priorClaim.resolvedVia = resolution.via;
+    return speakPriorClaimVerification(verification);
+  }
+
+  /**
+   * Structural invariant: a free-form model may not change the epistemic status of a prior claim.
+   *  1. If the challenge classifier was unavailable on a turn that references a held claim, the model's
+   *     reply is discarded outright and the adjudication is spoken — correctness does not depend on the
+   *     reply containing any particular words.
+   *  2. Otherwise, if the reply re-characterises the referenced claim in words the lexical net knows, it
+   *     is replaced too. The lexical net is defence in depth, never the enforcement.
+   * Returns null when the reply is untouched.
+   */
+  async function rewriteAttemptReplacement(reply: string): Promise<string | null> {
+    if (uncertainChallenge) return adjudicateResolution(uncertainChallenge as Exclude<ClaimResolution, { kind: "none" }>, "guard_replacement", null);
+    const semanticSpeech = await semanticChallengeSpeech(true, "guard_replacement");
+    if (semanticSpeech) return semanticSpeech;
+    if (!modelReplyRewritesPriorClaim(reply)) return null;
+    const referenced = resolveReferencedClaim(state.claimReceipts, utterance, claireOrdinal);
+    if (referenced.kind === "none") return null;
+    // Advice/opinion carries no truth status to protect.
+    if (referenced.kind === "resolved" && referenced.receipt.grounding === "ungrounded" && referenced.receipt.assertsFact === false) return null;
+    return adjudicateResolution(referenced, "guard_replacement", null);
+  }
+
+  /**
+   * Runs after a model turn: enforce the invariant, then leave a receipt. Supplying evidence to
+   * synthesis proves the model SAW it, not that its prose is entailed by it, so a synthesized reply is
+   * never `verified`: it points at the authoritative receipt (`supportedBy`) and is entailment-checked
+   * against it when challenged. A reply with no evidence is recorded `ungrounded` — we do not try to
+   * decide, by enumerating words, whether it asserts business reality; if it is challenged it is
+   * answered as "not state-as-fact", which is always safe.
+   */
+  async function finalizeModelReply(reply: string, evidence: ClaireRouteEvidence[]): Promise<string> {
+    const replacement = await rewriteAttemptReplacement(reply);
+    if (replacement) return replacement;
+    const withoutRestart = suppressRestartedQuestion(reply, { coverage: state.coverage, operatorText: utterance, accounts: knownAccounts });
+    if (withoutRestart !== null) {
+      trace.fallbackReason ??= "covered_subject_restart_suppressed";
+      return withoutRestart;
+    }
+    // A canned fallback or canon recovery is not a claim the model made.
+    if (trace.path === "fallback" || trace.path === "guard_recovery") return reply;
+    if (evidence.length) {
+      const business = evidence.find(item => item.businessResult);
+      const backing: FactualClaimReceipt = business?.businessResult
+        ? receiptFromBusinessResult({ conversationKey: input.conversationKey, claireTurnOrdinal: claireOrdinal, nowMs, answerText: evidence.map(item => item.text).join(" "), reader: business.reader ?? null, result: business.businessResult })
+        : receiptFromReader({ conversationKey: input.conversationKey, claireTurnOrdinal: claireOrdinal, nowMs, answerText: evidence.map(item => item.text).join(" "), answerPath: "evidence", claimType: "retrieved_evidence", grounding: "retrieved", sources: evidence.map(item => item.source) });
+      readerReceipt(trace.path ?? "follow_up_model", "synthesized_statement", "synthesized", evidence.map(item => item.source), reply);
+      pendingReceipt = { ...(pendingReceipt as FactualClaimReceipt), supportedBy: backing };
+    } else {
+      readerReceipt(trace.path ?? "follow_up_model", "ungrounded_statement", "ungrounded", [], reply);
+    }
     return reply;
   }
 
@@ -1096,23 +1427,36 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     const evidenceForSynthesis = decision.evidence.filter(item => item.text.length > 0);
 
     if (decision.outcome === "deterministic_final") {
+      // A semantic challenge that has already resolved wins over a deterministic re-answer (no waiting).
+      const early = await semanticChallengeSpeech(false, "deterministic");
+      if (early) {
+        mark("prior_claim_verification");
+        return early;
+      }
+    }
+
+    if (decision.outcome === "deterministic_final") {
       if (encyclopediaResult?.kind === "answered" && encyclopediaResult.fullyAnswers === true) {
         mark("encyclopedia", { encyclopedia: encyclopediaTrace });
+        readerReceipt("encyclopedia", "retrieved_statement", "retrieved", (encyclopediaTrace as ClaireEncyclopediaTrace | null)?.toolsPlanned ?? ["encyclopedia"], encyclopediaResult.text);
         return encyclopediaResult.text;
       }
       const unpaid = loadedEvidence.find(entry => entry.source === "unpaid_orders");
       if (unpaid) {
         mark("unpaid_orders");
+        readerReceipt("unpaid_orders", "unpaid_orders", "deterministic", ["unpaid_orders"], unpaid.text);
         return unpaid.text;
       }
       const dayWork = loadedEvidence.find(entry => entry.source === "day_work");
       if (dayWork) {
         mark("day_work");
+        readerReceipt("day_work", "day_line_state", "deterministic", ["day_work"], dayWork.text);
         return dayWork.text;
       }
       const account = loadedEvidence.find(entry => entry.source === "account_history");
       if (account && accountHistoryMayFinish(question)) {
         mark("account_history");
+        readerReceipt("account_history", "account_history", "deterministic", ["account_history"], account.text);
         return account.text;
       }
       const memory = loadedEvidence.find(entry => entry.source === "call_memory" || entry.source === "memory_quote");
@@ -1127,6 +1471,18 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       const business = loadedEvidence.find(entry => entry.source.startsWith("business_reader"));
       if (business) {
         mark("business_reader", { businessReader: business.source.split(":")[1] ?? null });
+        if (business.businessResult?.status === "ok") {
+          pendingReceipt = receiptFromBusinessResult({
+            conversationKey: input.conversationKey,
+            claireTurnOrdinal: claireOrdinal,
+            nowMs,
+            answerText: business.text,
+            reader: business.reader ?? null,
+            result: business.businessResult,
+          });
+        } else if (business.factual) {
+          readerReceipt("business_reader", "business_statement", "deterministic", [business.source], business.text);
+        }
         return business.text;
       }
     }

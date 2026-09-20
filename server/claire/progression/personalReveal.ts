@@ -32,6 +32,8 @@ export type PersonalGenerationRequest = {
   rung: 0 | 1 | 2 | 3;
   /** The operator asked about this topic before and was declined. Claire may acknowledge it, without explaining why now. */
   previouslyRefusedTopic: boolean;
+  /** How often this topic has been asked/refused before. Lets Claire vary how she holds the line; grants nothing. */
+  topicHistory?: { askCount: number; refusalCount: number };
 };
 
 export type PersonalGenerator = (request: PersonalGenerationRequest) => Promise<string>;
@@ -52,6 +54,9 @@ export function buildPersonalDisclosureGuidance(request: PersonalGenerationReque
     RAPPORT_PRESENTATION[request.rapportBand],
     request.previouslyRefusedTopic
       ? "He has asked about this before and you declined. You may acknowledge that in a word, without explaining what changed."
+      : "",
+    request.topicHistory && request.topicHistory.askCount >= 2
+      ? `He has raised this ${request.topicHistory.askCount} times now; you may show a flicker of dry familiarity about the repetition. Repetition earns nothing and changes nothing about what you may say.`
       : "",
   ]
     .filter(Boolean)
@@ -191,8 +196,11 @@ export async function executePersonalTurn(input: {
     // A lost reveal (validation/provider failure) draws from the recovery category; it falls
     // back to the approved generic floor when no recovery line has been authored yet.
     const generationFailure = details.phase !== null && GENERATION_FAILURE_REASONS.has(String(reason));
+    // A repeat refusal of the same topic draws from the (currently unauthored) boundary category, which falls
+    // back to the approved decline floor; the second refusal need not sound like the first. Presentation only.
+    const repeatRefusal = !closing && !generationFailure && (context.topicHistory[input.topic ?? ""]?.refusalCount ?? 0) >= 1;
     const line = selectDialogueLine({
-      category: closing ? "thread_closer" : generationFailure ? "recovery_after_failed_generation" : "decline",
+      category: closing ? "thread_closer" : generationFailure ? "recovery_after_failed_generation" : repeatRefusal ? "boundary_reinforcement" : "decline",
       rapportBand: band,
       recentlyUsedIds: recentDeclineIds,
       registry,
@@ -242,6 +250,7 @@ export async function executePersonalTurn(input: {
   const request: PersonalGenerationRequest = {
     fragment: plan.fragment, plan, rapportBand: band, rung,
     previouslyRefusedTopic: plan.previouslyRefusedTopic,
+    topicHistory: context.topicHistory[input.topic ?? ""] ?? { askCount: 0, refusalCount: 0 },
   };
   let text: string;
   try {
