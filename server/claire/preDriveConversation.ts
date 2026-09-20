@@ -33,7 +33,6 @@ import { recoverPersonalAnswer } from "./character/personalAnswerRecovery";
 import { assertNoUngroundedPersonalSpecificity, UngroundedPersonalSpecificityError } from "./character/personalSpecificityGuard";
 import { isClaireProgressionEnabled } from "./progression/progressionFlag";
 import { checkOntologyBoundary, operatorAskedOntology } from "./progression/ontologyGuard";
-import { selectDialogueLine } from "./progression/dialogueRegistry";
 import { checkBiographyBoundary, makeBiographyVerifier, type BiographyVerifier } from "./progression/generalBiographyBoundary";
 import { lintFailureDayLanguage } from "./progression/toneLint";
 import { selectDialogueLine } from "./progression/dialogueRegistry";
