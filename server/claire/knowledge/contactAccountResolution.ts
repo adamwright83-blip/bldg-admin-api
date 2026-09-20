@@ -116,27 +116,109 @@ export function resolvedContactNames(resolved: ResolvedEntity[]): Set<string> {
   );
 }
 
+export type ScopedJudgmentFact = {
+  text: string;
+  evidence: { source: string; reader: string };
+};
+
+export type ScopedBusinessJudgment = {
+  facts: ScopedJudgmentFact[];
+  judgment: string;
+  accountId: number | null;
+  contactName: string | null;
+};
+
+function capitalizeDay(value: string): string {
+  return value.replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
+function quoteNote(text: string): string {
+  const trimmed = text.replace(/\s+/g, " ").trim();
+  return trimmed.length > 140 ? `${trimmed.slice(0, 137).replace(/\s+\S*$/, "")}…` : trimmed;
+}
+
 /**
- * A judgment/advice question about a known contact is not a paid-order
- * customer lookup. Temporal tokens stay out of the name.
+ * Advice for a known contact, grounded in account-history evidence.
+ * Recommends a next move. Does not schedule, mutate, or invent global board work.
  */
+export function composeScopedBusinessJudgment(input: {
+  resolved: ResolvedEntity;
+  temporal: string[];
+  lastContact?: { at: string; what: string } | null;
+  openFollowUp?: { dueAt: string; note: string; status: string } | null;
+  today?: string;
+}): ScopedBusinessJudgment {
+  const { resolved, temporal, lastContact, openFollowUp, today } = input;
+  const accountName = resolved.account?.name ?? "that account";
+  const who =
+    resolved.kind === "contact"
+      ? `${resolved.contactName}${resolved.title ? `, ${resolved.title}` : ""} at ${accountName}`
+      : accountName;
+  const namedDay = temporal[0] ? capitalizeDay(temporal[0]!) : null;
+  const facts: ScopedJudgmentFact[] = [
+    {
+      text: `${who} is on file.`,
+      evidence: { source: "commercial_account_contacts", reader: "contact_account_resolution" },
+    },
+  ];
+  if (lastContact) {
+    facts.push({
+      text: `Last recorded contact: ${lastContact.what}.`,
+      evidence: { source: "account_history.last_contact", reader: "account_history" },
+    });
+  }
+  if (openFollowUp) {
+    const dueDay = openFollowUp.dueAt.slice(0, 10);
+    const dueLabel = today && dueDay === today ? "today" : dueDay;
+    facts.push({
+      text: openFollowUp.note
+        ? `An open follow-up is due ${dueLabel}: ${quoteNote(openFollowUp.note)}.`
+        : `An open follow-up is due ${dueLabel}.`,
+      evidence: { source: "commercial_follow_ups", reader: "account_history" },
+    });
+  }
+
+  let judgment: string;
+  if (openFollowUp && namedDay) {
+    const dueDay = openFollowUp.dueAt.slice(0, 10);
+    const sameWindow = today ? dueDay === today : false;
+    const note = openFollowUp.note ? ` Use that window to ${quoteNote(openFollowUp.note).replace(/\.$/, "")}.` : "";
+    judgment = sameWindow
+      ? `I'd spend ${namedDay} finishing the follow-up already on file for ${who}, not opening a new thread.${note} I can recommend that; I will not schedule or move anything unless you ask.`
+      : `I'd treat ${namedDay} as the day to work the existing follow-up for ${who} (due ${dueDay}), rather than starting something new.${note} That's the next move I'd make. I will not put it on the Day Line unless you ask.`;
+  } else if (openFollowUp) {
+    const note = openFollowUp.note ? ` The open item is: ${quoteNote(openFollowUp.note)}.` : "";
+    judgment = `I'd work the open follow-up already on file for ${who} before inventing a new touch.${note} I won't change the Day Line unless you ask.`;
+  } else if (lastContact && namedDay) {
+    judgment = `There's no open follow-up after that last contact, so I'd use ${namedDay} for a check-in with ${who} and decide the next step from what you hear. I will not book or schedule it unless you ask.`;
+  } else if (namedDay) {
+    judgment = `Nothing is queued for ${who}, so if ${namedDay} is the window you have, I'd use it for a first-touch call and then decide from the conversation. I will not change anything unless you ask.`;
+  } else if (lastContact) {
+    judgment = `I'd follow the last recorded contact with ${who} rather than wait for a new prompt — there's no open follow-up behind it. Tell me if you want that on the Day Line.`;
+  } else {
+    judgment = `I don't have a recorded next step for ${who}, so I would not invent one. If you want a call or visit, say so and I'll propose it — I won't create the work myself.`;
+  }
+
+  return {
+    facts,
+    judgment,
+    accountId: resolved.account?.id ?? null,
+    contactName: resolved.kind === "contact" ? resolved.contactName : null,
+  };
+}
+
+/** @deprecated Prefer composeScopedBusinessJudgment — kept as a rendered convenience. */
 export function speakScopedContactJudgment(input: {
   resolved: ResolvedEntity;
   temporal: string[];
   lastContact?: string | null;
   openFollowUp?: string | null;
 }): string {
-  const { resolved, temporal, lastContact, openFollowUp } = input;
-  const accountName = resolved.account?.name ?? "that account";
-  const who =
-    resolved.kind === "contact"
-      ? `${resolved.contactName}${resolved.title ? `, ${resolved.title}` : ""} at ${accountName}`
-      : accountName;
-  const when = temporal[0] ? ` ${temporal[0]!.replace(/\b\w/g, letter => letter.toUpperCase())}` : "";
-  const parts = [`${who} is on file.`];
-  if (lastContact) parts.push(lastContact);
-  if (openFollowUp) parts.push(openFollowUp);
-  if (when) parts.push(`${when.trim()} is the time you named — not a person.`);
-  parts.push("That's the file. I won't change anything unless you ask me to.");
-  return parts.join(" ");
+  const composed = composeScopedBusinessJudgment({
+    resolved: input.resolved,
+    temporal: input.temporal,
+    lastContact: input.lastContact ? { at: "", what: input.lastContact.replace(/^Last recorded contact:\s*/i, "").replace(/\.$/, "") } : null,
+    openFollowUp: input.openFollowUp ? { dueAt: "2099-01-01", note: "", status: "open" } : null,
+  });
+  return [...composed.facts.map(fact => fact.text), composed.judgment].join(" ");
 }

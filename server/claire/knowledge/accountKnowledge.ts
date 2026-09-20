@@ -15,7 +15,7 @@ import { getDb } from "../../db";
 import { addDaysYmd, daysInclusive, formatBusinessDate } from "../../analytics/businessPeriods";
 import { zonedYmd } from "../../dashboardZoned";
 import { searchOperatorConversation, type RememberedTurn } from "./conversationMemory";
-import { isOperatorVisibleAccount, isOperatorVisibleMissionSnapshot } from "./sourceVisibility";
+import { isOperatorVisibleAccount, isOperatorVisibleDerivedWork, isOperatorVisibleMissionSnapshot } from "./sourceVisibility";
 
 /**
  * Everything Goldline recorded about a commercial account (The Louise,
@@ -213,6 +213,7 @@ export async function loadAccountHistory(input: {
             title: dayDirectorCommitments.title,
             businessDate: dayDirectorCommitments.businessDate,
             status: dayDirectorCommitments.status,
+            metadataJson: dayDirectorCommitments.metadataJson,
           })
           .from(dayDirectorCommitments)
           .where(
@@ -269,7 +270,12 @@ export async function loadAccountHistory(input: {
     pipelineId: pipelines[0]?.id ?? null,
     contacts: contacts.map(row => ({ name: row.name, title: row.title, relationshipType: row.relationshipType })),
     dayLineMentions: dayLine
-      .filter(row => isOperatorVisibleAccount({ name: row.title }))
+      .filter(row =>
+        isOperatorVisibleDerivedWork((row.metadataJson ?? {}) as { claireProactive?: boolean; sourceKind?: "sales_follow_up" | "dormant_recovery"; accountProvenance?: { name?: string | null; accountType?: string | null; providerName?: string | null; identityKey?: string | null } }, {
+          tenantId: input.tenantId,
+          operatorUserId: input.operatorUserId,
+        })
+      )
       .map(row => ({ title: row.title, businessDate: row.businessDate, status: row.status })),
     conversationMentions: mentions,
   };

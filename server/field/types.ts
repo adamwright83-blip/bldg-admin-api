@@ -49,6 +49,13 @@ export type FieldTodayItem = {
   missionId?: number | null;
   pipelineId?: number | null;
   destinationPath?: string | null;
+  /** Durable commercial-account provenance when this row was joined from a commercial account. */
+  accountProvenance?: {
+    name?: string | null;
+    accountType?: string | null;
+    providerName?: string | null;
+    identityKey?: string | null;
+  } | null;
 };
 
 export type FieldTodayProjection = {

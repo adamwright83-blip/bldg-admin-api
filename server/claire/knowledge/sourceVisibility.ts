@@ -6,11 +6,9 @@
  * test-origin rows to a real operator (tenant `default`, actor `adam-admin`)
  * as if they were the business.
  *
- * This is NOT a blacklist of fixture display names or follow-up note strings.
- * Classification uses write-path provenance already stamped on the record:
- * provider identity, account type, sandbox identity keys, and the labeling
- * convention the verification writer itself uses (`SAFE TO ARCHIVE` / `E2E` /
- * `CODEX`) so the row can be found and archived.
+ * Classification uses write-path provenance stamped on the record:
+ * provider identity, account type, sandbox identity keys, and fixture flags
+ * in opportunity evidence. Display names and Day Line titles are not provenance.
  */
 
 export type AccountProvenance = {
@@ -22,22 +20,22 @@ export type AccountProvenance = {
 
 export type SourceVisibility = "operator" | "test";
 
+export type DerivedWorkMetadata = {
+  claireProactive?: boolean;
+  sourceKind?: "sales_follow_up" | "dormant_recovery";
+  accountProvenance?: AccountProvenance | null;
+};
+
 /** Providers used only by verification / sandbox writers. */
 const TEST_PROVIDER = /^(?:production-verifier|sandbox|e2e|qa|fixture|test-harness)$/i;
 /** Account types the write path uses for non-real prospects. */
 const TEST_ACCOUNT_TYPE = /(?:^|[_\s-])(?:test|qa|demo|sandbox|fixture|e2e)(?:$|[_\s-])/i;
-/**
- * Label the verification writer stamps so a human can archive the row. This is
- * the write path's own provenance mark, not a list of customer names.
- */
-const WRITE_PATH_TEST_LABEL = /\bSAFE TO ARCHIVE\b|\bE2E\b|\bCODEX\b/i;
 
 export function sourceVisibilityForAccount(account: AccountProvenance | null | undefined): SourceVisibility {
   if (!account) return "operator";
   if (account.identityKey && /^(?:sandbox:|test:|qa:|e2e:|fixture:)/i.test(account.identityKey)) return "test";
   if (account.providerName && TEST_PROVIDER.test(account.providerName.trim())) return "test";
   if (account.accountType && TEST_ACCOUNT_TYPE.test(account.accountType)) return "test";
-  if (account.name && WRITE_PATH_TEST_LABEL.test(account.name)) return "test";
   return "operator";
 }
 
@@ -53,6 +51,7 @@ export function isOperatorVisibleMissionSnapshot(snapshot: {
   name?: string | null;
   accountType?: string | null;
   providerName?: string | null;
+  identityKey?: string | null;
   evidence?: Array<Record<string, unknown>> | null;
 } | null | undefined): boolean {
   if (!snapshot) return true;
@@ -77,4 +76,45 @@ export function isOperatorVisibleFollowUp(input: {
  */
 export function isAuthorizedProductionOperator(input: { tenantId: string; operatorUserId: string }): boolean {
   return input.tenantId === "default" && (input.operatorUserId === "adam-admin" || input.operatorUserId === "adam");
+}
+
+/**
+ * Join-shaped commercial rows (board, Field Today, Dayforge, account history).
+ * Test-origin commercial work is never operator-visible business.
+ */
+export function filterOperatorVisibleCommercial<T extends AccountProvenance>(rows: readonly T[]): T[] {
+  return rows.filter(row => isOperatorVisibleAccount(row));
+}
+
+/**
+ * Day Line / proactive derived work. Provenance lives on metadata stamped at
+ * write time — not on the human-readable title.
+ *
+ * Unstamped claire-proactive sales follow-ups fail closed for the production
+ * operator. Dormant recoveries are not commercial-account derived.
+ */
+export function isOperatorVisibleDerivedWork(
+  meta: DerivedWorkMetadata | null | undefined,
+  operator: { tenantId: string; operatorUserId: string }
+): boolean {
+  if (!meta?.claireProactive) return true;
+  if (meta.sourceKind === "dormant_recovery") return true;
+  if (meta.accountProvenance) return isOperatorVisibleAccount(meta.accountProvenance);
+  if (meta.sourceKind === "sales_follow_up") {
+    return !isAuthorizedProductionOperator(operator);
+  }
+  return !isAuthorizedProductionOperator(operator);
+}
+
+export function isOperatorVisibleFieldCommercial(
+  item: { accountProvenance?: AccountProvenance | null; kind?: string },
+  operator: { tenantId: string; operatorUserId: string }
+): boolean {
+  if (item.accountProvenance) {
+    if (!isOperatorVisibleAccount(item.accountProvenance) && isAuthorizedProductionOperator(operator)) {
+      return false;
+    }
+    return isOperatorVisibleAccount(item.accountProvenance);
+  }
+  return true;
 }

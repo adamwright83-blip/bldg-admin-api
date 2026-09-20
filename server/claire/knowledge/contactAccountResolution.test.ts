@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   accountsFromResolution,
+  composeScopedBusinessJudgment,
   resolveEntitiesToAccounts,
-  speakScopedContactJudgment,
 } from "./contactAccountResolution";
 
 const LOUISE = {
@@ -35,16 +35,21 @@ describe("contact → account resolution", () => {
     expect(resolved[0]?.kind).toBe("unresolved");
   });
 
-  it("keeps Tuesday out of the spoken name", () => {
-    const spoken = speakScopedContactJudgment({
+  it("recommends from account state instead of dumping the file", () => {
+    const composed = composeScopedBusinessJudgment({
       resolved: resolveEntitiesToAccounts(["Dana"], [LOUISE])[0]!,
       temporal: ["tuesday"],
-      lastContact: null,
-      openFollowUp: null,
+      lastContact: { at: "2026-09-10T18:00:00.000Z", what: "you checked in on site" },
+      openFollowUp: {
+        dueAt: "2026-09-22T17:00:00.000Z",
+        note: "Bring the revised rate card and confirm Tuesday access",
+        status: "open",
+      },
+      today: "2026-09-20",
     });
-    expect(spoken).toMatch(/Dana/);
-    expect(spoken).toMatch(/Louise/);
-    expect(spoken).toMatch(/Tuesday is the time you named/i);
-    expect(spoken).not.toMatch(/Dana Tuesday/);
+    expect(composed.facts.some(fact => /Dana/.test(fact.text) && /Louise/.test(fact.text))).toBe(true);
+    expect(composed.judgment).toMatch(/rate card|follow-up|Tuesday/i);
+    expect(composed.judgment).toMatch(/will not|won't/i);
+    expect(composed.judgment).not.toMatch(/Dana Tuesday/);
   });
 });

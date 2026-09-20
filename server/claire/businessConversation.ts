@@ -119,11 +119,23 @@ export type ClaireAnalyticsFocus = {
   slices?: AnalyticsSlice[];
 };
 
+export type OrderedQueryMember = {
+  eventKey: string;
+  customerName: string | null;
+  occurredAt: string;
+  cents: number;
+};
+
 export type OrderedQueryCursor = {
   query: BusinessQuery;
   ordering: "latest" | "earliest" | "largest";
   requestedCardinality: number;
-  delivered: Array<{ eventKey: string; customerName: string | null; occurredAt: string; cents: number }>;
+  /** Authoritative query window (what the reader resolved). */
+  resolved: OrderedQueryMember[];
+  /** Records Claire actually presented in speech. */
+  presented: OrderedQueryMember[];
+  /** Alias of presented — kept so existing session readers keep working. */
+  delivered: OrderedQueryMember[];
   offset: number;
   anchor: string | null;
   exclusions: string[];
@@ -162,7 +174,15 @@ export type ClaireBusinessReader =
 
 export type ClaireBusinessTurn =
   | { handled: false }
-  | { handled: true; speak: string; facts: string[]; result?: BusinessQueryResult; reader?: ClaireBusinessReader };
+  | {
+      handled: true;
+      speak: string;
+      facts: string[];
+      result?: BusinessQueryResult;
+      reader?: ClaireBusinessReader;
+      presentedOrders?: OrderBrief[];
+      resolvedOrders?: OrderBrief[];
+    };
 
 // ── Intent ───────────────────────────────────────────────────────────────────
 
@@ -420,6 +440,8 @@ export type ParsedBusinessTurn =
 export type ParseBusinessTurnOptions = {
   interpretation?: Pick<InterpretedTurn, "queryRefinement" | "priorQueryReference" | "cardinality" | "exclusions" | "anchorEntity" | "listRequest"> | null;
   resolvedContactNames?: Set<string>;
+  /** RoutePlan.continuePriorQuery — when false, this turn is a new query. */
+  continuePriorQuery?: boolean;
 };
 
 function nameMatchesOrder(order: { customerName: string | null }, name: string): boolean {
@@ -448,7 +470,9 @@ export function parseBusinessTurn(
   const interpretation = options.interpretation ?? null;
   const cursor = session?.orderedQuery ?? null;
   const salesListLanguage = /\b(sales?|orders?)\b/.test(lower);
+  const allowContinuation = options.continuePriorQuery !== false;
   const continuationAsked =
+    allowContinuation &&
     Boolean(cursor) &&
     (interpretation?.queryRefinement ||
       interpretation?.priorQueryReference ||
@@ -458,6 +482,7 @@ export function parseBusinessTurn(
         lower
       ));
   const bootstrapOrdered =
+    allowContinuation &&
     !cursor &&
     salesListLanguage &&
     Boolean(interpretation?.anchorEntity || (interpretation?.exclusions.length ?? 0) > 0);
@@ -1101,6 +1126,7 @@ export async function answerClaireBusinessTurn(
     context?: ClaireDriveContext | null;
     interpretation?: ParseBusinessTurnOptions["interpretation"];
     resolvedContactNames?: Set<string>;
+    continuePriorQuery?: boolean;
   },
   deps: Partial<ClaireBusinessTurnDeps> = {}
 ): Promise<ClaireBusinessTurn> {
@@ -1117,6 +1143,7 @@ export async function answerClaireBusinessTurn(
     parsed = parseBusinessTurn(input.utterance, session, now, timeZone, {
       interpretation: input.interpretation,
       resolvedContactNames: input.resolvedContactNames,
+      continuePriorQuery: input.continuePriorQuery,
     });
   } catch (error) {
     console.warn("[Claire] business question parsing failed", error);
@@ -1281,50 +1308,91 @@ export async function answerClaireBusinessTurn(
       query: { ...defaultBusinessQuery("latest_sales"), period: { kind: "all_time" as const }, limit: 15 },
       ordering: "latest" as const,
       requestedCardinality: parsed.cardinality ?? 5,
+      resolved: [],
+      presented: [],
       delivered: [],
       offset: 0,
       anchor: parsed.anchor,
       exclusions: parsed.exclusions,
     };
-    const cursor = seeded;
+    const cursor = {
+      ...seeded,
+      resolved: seeded.resolved ?? seeded.delivered ?? [],
+      presented: seeded.presented ?? seeded.delivered ?? [],
+      delivered: seeded.presented ?? seeded.delivered ?? [],
+    };
     const exclusions = Array.from(new Set([...cursor.exclusions, ...parsed.exclusions]));
-    const remainingInWindow = Math.max(0, cursor.requestedCardinality - cursor.delivered.length);
+    const presentedKeys = new Set(cursor.presented.map(item => item.eventKey));
+    const remainingInWindow = cursor.resolved.filter(order => !presentedKeys.has(order.eventKey) && !exclusions.some(name => nameMatchesOrder(order, name)));
     const take =
       parsed.mode === "exclude"
-        ? Math.max(cursor.delivered.length, parsed.cardinality ?? cursor.requestedCardinality)
-        : parsed.cardinality ?? (remainingInWindow > 0 ? remainingInWindow : 5);
-    const fetchLimit = Math.min(25, Math.max(cursor.requestedCardinality, cursor.offset + take + exclusions.length + 8));
-    let result: BusinessQueryResult;
-    try {
-      result = await run({ ...cursor.query, limit: fetchLimit });
-    } catch {
-      return guardedTurn({ handled: true, speak: unavailableSentence(cursor.query.metric), facts: [] });
-    }
-    if (result.status !== "ok" || result.data.kind !== "orders") {
-      return guardedTurn({ handled: true, speak: unavailableSentence(cursor.query.metric), facts: [] });
-    }
-    const deliveredKeys = new Set(cursor.delivered.map(item => item.eventKey));
-    const excluded = (order: { customerName: string | null }) =>
-      exclusions.some(name => nameMatchesOrder(order, name));
-    let pool = result.data.orders.filter(order => !excluded(order));
-    if (parsed.mode === "before_anchor") {
-      const anchorName = parsed.anchor ?? cursor.anchor;
-      const anchor =
-        result.data.orders.find(order => (anchorName ? nameMatchesOrder(order, anchorName) : false)) ??
-        cursor.delivered.find(order => (anchorName ? nameMatchesOrder(order, anchorName) : false));
-      if (anchor) {
-        const at = Date.parse(anchor.occurredAt);
-        pool = pool.filter(order => Date.parse(order.occurredAt) < at);
+        ? Math.max(cursor.presented.length, parsed.cardinality ?? cursor.requestedCardinality)
+        : parsed.cardinality ?? (remainingInWindow.length > 0 ? remainingInWindow.length : 5);
+
+    const toMember = (order: { eventKey: string; customerName: string | null; occurredAt: string; cents: number }): OrderedQueryMember => ({
+      eventKey: order.eventKey,
+      customerName: order.customerName,
+      occurredAt: order.occurredAt,
+      cents: order.cents,
+    });
+
+    let pool: OrderBrief[] = [];
+    let continuedResult: BusinessQueryResult | null = null;
+
+    if (parsed.mode === "next" && remainingInWindow.length >= take && take > 0) {
+      pool = remainingInWindow.slice(0, take) as unknown as OrderBrief[];
+      // Reconstruct a result shaped like the prior window so speech stays on THAT query.
+      try {
+        const fetchLimit = Math.min(25, Math.max(cursor.requestedCardinality, cursor.resolved.length));
+        continuedResult = await run({ ...cursor.query, limit: Math.max(fetchLimit, cursor.resolved.length) });
+      } catch {
+        continuedResult = null;
       }
-    } else if (parsed.mode !== "exclude" || remainingInWindow === 0) {
-      pool = pool.filter(order => !deliveredKeys.has(order.eventKey));
-    } else {
-      pool = pool.filter(order => !deliveredKeys.has(order.eventKey) || parsed.mode === "exclude");
-      if (parsed.mode === "exclude") {
+      if (!continuedResult || continuedResult.status !== "ok" || continuedResult.data.kind !== "orders") {
+        return guardedTurn({ handled: true, speak: unavailableSentence(cursor.query.metric), facts: [] });
+      }
+      const byKey = new Map(continuedResult.data.orders.map(order => [order.eventKey, order]));
+      pool = remainingInWindow
+        .map(member => byKey.get(member.eventKey))
+        .filter((order): order is OrderBrief => Boolean(order))
+        .slice(0, take);
+      if (!pool.length) {
+        // Fall through to a wider fetch below.
+      }
+    }
+
+    if (!pool.length) {
+      const fetchLimit = Math.min(25, Math.max(cursor.requestedCardinality, cursor.offset + take + exclusions.length + 8, cursor.resolved.length + take + 8));
+      let result: BusinessQueryResult;
+      try {
+        result = await run({ ...cursor.query, limit: fetchLimit });
+      } catch {
+        return guardedTurn({ handled: true, speak: unavailableSentence(cursor.query.metric), facts: [] });
+      }
+      if (result.status !== "ok" || result.data.kind !== "orders") {
+        return guardedTurn({ handled: true, speak: unavailableSentence(cursor.query.metric), facts: [] });
+      }
+      continuedResult = result;
+      const excluded = (order: { customerName: string | null }) => exclusions.some(name => nameMatchesOrder(order, name));
+      pool = result.data.orders.filter(order => !excluded(order));
+      if (parsed.mode === "before_anchor") {
+        const anchorName = parsed.anchor ?? cursor.anchor;
+        const anchor =
+          result.data.orders.find(order => (anchorName ? nameMatchesOrder(order, anchorName) : false)) ??
+          cursor.presented.find(order => (anchorName ? nameMatchesOrder(order, anchorName) : false)) ??
+          cursor.resolved.find(order => (anchorName ? nameMatchesOrder(order, anchorName) : false));
+        if (anchor) {
+          const at = Date.parse(anchor.occurredAt);
+          pool = pool.filter(order => Date.parse(order.occurredAt) < at);
+        }
+      } else if (parsed.mode !== "exclude") {
+        pool = pool.filter(order => !presentedKeys.has(order.eventKey));
+      } else {
         pool = result.data.orders.filter(order => !excluded(order)).slice(0, cursor.requestedCardinality);
       }
+      if (parsed.mode !== "exclude") pool = pool.slice(0, Math.max(1, take));
     }
-    if (parsed.mode !== "exclude") pool = pool.slice(0, Math.max(1, take));
+
     if (!pool.length) {
       input.state.analytics = {
         ...(session as ClaireAnalyticsSession),
@@ -1337,10 +1405,14 @@ export async function answerClaireBusinessTurn(
         facts: [],
       });
     }
+    const source = continuedResult!;
+    if (source.status !== "ok" || source.data.kind !== "orders") {
+      return guardedTurn({ handled: true, speak: unavailableSentence(cursor.query.metric), facts: [] });
+    }
     const continued: Extract<BusinessQueryResult, { status: "ok" }> = {
-      ...result,
+      ...source,
       query: { ...cursor.query, limit: pool.length },
-      data: { ...result.data, orders: pool },
+      data: { ...source.data, orders: pool },
     };
     const spoken = (deps.speakResult ?? speakBusinessResult)(continued, {
       surface: input.surface,
@@ -1352,13 +1424,11 @@ export async function answerClaireBusinessTurn(
       timeZone,
       hint: null,
     });
-    const nextDelivered =
+    const presentedNow = (spoken.presentedOrders ?? pool).map(toMember);
+    const nextPresented =
       parsed.mode === "exclude"
-        ? pool.map(order => ({ eventKey: order.eventKey, customerName: order.customerName, occurredAt: order.occurredAt, cents: order.cents }))
-        : [
-            ...cursor.delivered,
-            ...pool.map(order => ({ eventKey: order.eventKey, customerName: order.customerName, occurredAt: order.occurredAt, cents: order.cents })),
-          ];
+        ? presentedNow
+        : [...cursor.presented, ...presentedNow.filter(item => !presentedKeys.has(item.eventKey))];
     input.state.analytics = {
       ...(session as ClaireAnalyticsSession),
       query: cursor.query,
@@ -1369,17 +1439,26 @@ export async function answerClaireBusinessTurn(
         ...(session?.focus ?? {}),
         order: pool[0] ?? null,
         orderQuery: cursor.query,
-        orderIndex: nextDelivered.length - 1,
+        orderIndex: nextPresented.length - 1,
       },
       orderedQuery: {
         ...cursor,
         exclusions,
         anchor: parsed.anchor ?? cursor.anchor,
-        delivered: nextDelivered,
-        offset: nextDelivered.length,
+        resolved: cursor.resolved.length ? cursor.resolved : source.data.orders.map(toMember),
+        presented: nextPresented,
+        delivered: nextPresented,
+        offset: Math.max(cursor.resolved.length, nextPresented.length),
       },
     };
-    return guardedTurn({ handled: true, speak: spoken.text, facts: spoken.facts, result: continued });
+    return guardedTurn({
+      handled: true,
+      speak: spoken.text,
+      facts: spoken.facts,
+      result: continued,
+      presentedOrders: spoken.presentedOrders ?? pool,
+      resolvedOrders: source.data.kind === "orders" ? source.data.orders : pool,
+    });
   }
 
   return finishQuery(parsed, false);
@@ -1464,19 +1543,27 @@ export async function answerClaireBusinessTurn(
         focus.orderQuery = turn.query;
         focus.orderIndex = 0;
         const ordering = data.ordering;
+        const toMember = (order: { eventKey: string; customerName: string | null; occurredAt: string; cents: number }) => ({
+          eventKey: order.eventKey,
+          customerName: order.customerName,
+          occurredAt: order.occurredAt,
+          cents: order.cents,
+        });
+        const resolved = data.orders.map(toMember);
+        const presented = (spoken.presentedOrders ?? data.orders).map(toMember);
+        const newExclusions = input.interpretation?.exclusions ?? [];
         orderedQuery = {
           query: turn.query,
           ordering,
           requestedCardinality: Math.max(turn.query.limit, data.orders.length),
-          delivered: data.orders.map(order => ({
-            eventKey: order.eventKey,
-            customerName: order.customerName,
-            occurredAt: order.occurredAt,
-            cents: order.cents,
-          })),
-          offset: data.orders.length,
+          resolved,
+          presented,
+          delivered: presented,
+          offset: resolved.length,
           anchor: null,
-          exclusions: session?.orderedQuery?.exclusions ?? [],
+          exclusions: input.continuePriorQuery
+            ? Array.from(new Set([...(session?.orderedQuery?.exclusions ?? []), ...newExclusions]))
+            : newExclusions,
         };
       } else if (data.kind !== "freshness" && data.kind !== "composition") {
         focus.order = null;
@@ -1522,7 +1609,14 @@ export async function answerClaireBusinessTurn(
     };
     const spokenText =
       coverage.kind === "provable" ? spoken.text : `${spoken.text} ${speakPartialCoverage(coverage)}`.trim();
-    return guardedTurn({ handled: true, speak: spokenText, facts: spoken.facts, result });
+    return guardedTurn({
+      handled: true,
+      speak: spokenText,
+      facts: spoken.facts,
+      result,
+      presentedOrders: spoken.presentedOrders,
+      resolvedOrders: result.status === "ok" && result.data.kind === "orders" ? result.data.orders : undefined,
+    });
   }
 }
 

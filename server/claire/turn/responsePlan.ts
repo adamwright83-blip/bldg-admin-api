@@ -1,7 +1,7 @@
 /**
  * Typed response plan. Lane executors produce segments; the renderer concatenates
  * speech. The renderer does NOT decide business truth, mutation authority, or
- * narrative eligibility.
+ * narrative eligibility. The plan is the authority for what is spoken.
  */
 
 import type { MutationReceipt } from "../assertionGuard";
@@ -24,11 +24,19 @@ export type BusinessJudgmentSegment = {
   mutationAuthority: false;
 };
 
+export type ActionProposalAuthority = "current_turn" | "pending_lifecycle";
+
 export type ActionProposalSegment = {
   type: "ActionProposalSegment";
   text: string;
   /** Must be true — proposals are illegal without explicit action authority. */
   authorized: true;
+  /**
+   * Where the authority came from. A correction has mayProposeWork=false, but
+   * revising an already-authorized pending briefing may still propose putting
+   * the list on the Day Line — that authority is inherited, not manufactured.
+   */
+  authoritySource: ActionProposalAuthority;
 };
 
 export type ActionConfirmationSegment = {
@@ -82,8 +90,11 @@ export function businessJudgmentSegment(text: string, accountId: number | null, 
   return { type: "BusinessJudgmentSegment", text, accountId, contactName, mutationAuthority: false };
 }
 
-export function actionProposalSegment(text: string): ActionProposalSegment {
-  return { type: "ActionProposalSegment", text, authorized: true };
+export function actionProposalSegment(
+  text: string,
+  authoritySource: ActionProposalAuthority = "current_turn"
+): ActionProposalSegment {
+  return { type: "ActionProposalSegment", text, authorized: true, authoritySource };
 }
 
 export function actionConfirmationSegment(text: string, mutationReceipts: MutationReceipt[]): ActionConfirmationSegment {
@@ -117,14 +128,29 @@ export function renderResponsePlan(plan: ResponsePlan): { speak: string; endCall
   return { speak: parts.join(" ").replace(/\s+/g, " ").trim(), endCall };
 }
 
+/** Keep the typed plan and the spoken string in agreement after a post-render guard. */
+export function alignPlanSpeak(plan: ResponsePlan, speak: string): ResponsePlan {
+  if (renderResponsePlan(plan).speak === speak) return plan;
+  const control = plan.segments.filter(segment => segment.type === "CallControlSegment");
+  const first = plan.segments.find(segment => segment.type !== "CallControlSegment") ?? conversationalSegment(speak);
+  return { ...plan, segments: [{ ...first, text: speak } as ResponseSegment, ...control] };
+}
+
 export type PlanFromSpeakExtras = {
   endCall?: boolean;
   kind?: string;
   evidence?: BusinessFactSegment["evidence"];
   mutationReceipts?: MutationReceipt[];
   judgment?: { accountId: number | null; contactName: string | null };
+  /** Compatibility only — prefer constructing segments in the lane. */
+  proposalAuthority?: ActionProposalAuthority;
 };
 
+/**
+ * Compatibility seam for genuinely unmigrated conversational prose.
+ * Migrated lanes must construct typed segments from evidence, then render.
+ * Do not use this to label an already-final string and call the architecture done.
+ */
 export function planFromSpeak(
   interpretation: InterpretedTurn,
   route: RoutePlan,
@@ -133,6 +159,8 @@ export function planFromSpeak(
 ): ResponsePlan {
   const segments: ResponseSegment[] = [];
   const proposed = extras.kind === "briefing_proposed" || extras.kind === "follow_up_proposed";
+  const pendingLifecycle = extras.proposalAuthority === "pending_lifecycle" || extras.kind === "briefing_proposed";
+  const proposalAuthority: ActionProposalAuthority = extras.proposalAuthority ?? (pendingLifecycle && !interpretation.mayProposeWork ? "pending_lifecycle" : "current_turn");
   if (!speak.trim() && extras.endCall) {
     segments.push(callControlSegment("", true));
   } else if (extras.mutationReceipts?.length) {
@@ -141,8 +169,8 @@ export function planFromSpeak(
     segments.push(businessFactSegment(speak, extras.evidence));
   } else if (extras.judgment) {
     segments.push(businessJudgmentSegment(speak, extras.judgment.accountId, extras.judgment.contactName));
-  } else if ((route.primary === "action" || proposed) && interpretation.mayProposeWork) {
-    segments.push(actionProposalSegment(speak));
+  } else if ((route.primary === "action" || proposed) && (interpretation.mayProposeWork || proposalAuthority === "pending_lifecycle")) {
+    segments.push(actionProposalSegment(speak, proposalAuthority));
   } else if (route.primary === "personal") {
     segments.push(personalDisclosureSegment(speak));
   } else if (route.primary === "narrative") {

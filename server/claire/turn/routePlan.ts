@@ -101,3 +101,7 @@ export function planRoute(interpreted: InterpretedTurn, ctx: RoutePlanContext): 
 
   return { primary, also: Array.from(new Set(also)), board, priorClaim, pending, callEnd, continuePriorQuery };
 }
+
+export function routeAllows(route: RoutePlan, lane: RouteLane): boolean {
+  return route.primary === lane || route.also.includes(lane);
+}

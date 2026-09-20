@@ -8,7 +8,12 @@ import { loadDataFreshness } from "../../analytics/dataFreshness";
 import { loadPaidOrderLedger } from "../../analytics/paidOrderLedger";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../../dashboardZoned";
 import { getDb } from "../../db";
-import { isOperatorVisibleAccount, isOperatorVisibleFollowUp } from "../knowledge/sourceVisibility";
+import {
+  isOperatorVisibleDerivedWork,
+  isOperatorVisibleFollowUp,
+  type AccountProvenance,
+  type DerivedWorkMetadata,
+} from "../knowledge/sourceVisibility";
 import {
   DEFAULT_DOCTRINE,
   applyDoctrineUtterance,
@@ -134,9 +139,18 @@ async function placeOnDayLine(input: {
   title: string;
   idempotencyKey: string;
   sourceText: string;
+  sourceKind: "sales_follow_up" | "dormant_recovery";
+  accountProvenance?: AccountProvenance | null;
 }): Promise<void> {
   const db = await getDb();
   if (!db) return;
+  const metadataJson: DerivedWorkMetadata & { detailState: string; missingDetails: unknown[] } = {
+    claireProactive: true,
+    detailState: "COMPLETE",
+    missingDetails: [],
+    sourceKind: input.sourceKind,
+    accountProvenance: input.accountProvenance ?? null,
+  };
   const row = {
     id: randomUUID(),
     tenantId: input.tenantId,
@@ -148,9 +162,27 @@ async function placeOnDayLine(input: {
     quantity: null,
     provenance: "manual" as const,
     sourceText: input.sourceText,
-    metadataJson: { claireProactive: true, detailState: "COMPLETE", missingDetails: [] },
+    metadataJson,
   };
-  await db.insert(dayDirectorCommitments).values(row).onDuplicateKeyUpdate({ set: { title: row.title } });
+  await db.insert(dayDirectorCommitments).values(row).onDuplicateKeyUpdate({ set: { title: row.title, metadataJson: row.metadataJson } });
+}
+
+export function operatorVisibleObligations(
+  items: ProactiveObligation[],
+  operator: { tenantId: string; operatorUserId: string }
+): ProactiveObligation[] {
+  return items.filter(item => {
+    if (item.kind === "sales_follow_up") {
+      return (
+        isOperatorVisibleFollowUp({ account: item.accountProvenance ?? null }) &&
+        isOperatorVisibleDerivedWork(
+          { claireProactive: true, sourceKind: "sales_follow_up", accountProvenance: item.accountProvenance ?? null },
+          operator
+        )
+      );
+    }
+    return true;
+  });
 }
 
 export async function ensureAdamBoard(input: {
@@ -258,6 +290,7 @@ export async function ensureAdamBoard(input: {
       title: obligation.title,
       idempotencyKey: `claire-proactive:${obligation.id}`,
       sourceText: `${obligation.why} Rook draft is prepared; sending still needs you.`,
+      sourceKind: "dormant_recovery",
     });
     created += 1;
   }
@@ -300,6 +333,12 @@ export async function ensureAdamBoard(input: {
           nextStep: follow.note,
           lastOutcome: null,
           history: [follow.note],
+          accountProvenance: {
+            name: row.accountName,
+            accountType: row.accountType,
+            providerName: row.providerName,
+            identityKey: row.identityKey,
+          },
         });
         if (already.some(item => item.id === obligation.id)) continue;
         await upsertObligation(input.tenantId, input.operatorUserId, obligation);
@@ -310,6 +349,8 @@ export async function ensureAdamBoard(input: {
           title: obligation.title,
           idempotencyKey: `claire-proactive:${obligation.id}`,
           sourceText: obligation.why,
+          sourceKind: "sales_follow_up",
+          accountProvenance: obligation.accountProvenance,
         });
         created += 1;
       }
@@ -318,10 +359,8 @@ export async function ensureAdamBoard(input: {
     }
   }
 
-  const obligations = (await loadObligations(input.tenantId, input.operatorUserId)).filter(item => {
-    if (item.kind === "sales_follow_up" && /^Mission\s+\d+$/i.test(item.subjectName)) return false;
-    return isOperatorVisibleAccount({ name: item.subjectName });
-  });
+  const operator = { tenantId: input.tenantId, operatorUserId: input.operatorUserId };
+  const obligations = operatorVisibleObligations(await loadObligations(input.tenantId, input.operatorUserId), operator);
   const warnings: string[] = [];
   try {
     const freshness = await loadDataFreshness({ tenantId: input.tenantId, timeZone });

@@ -5,6 +5,9 @@ import { interpretTurn } from "./interpretTurn";
 import { pendingItemIdentity, syncPendingReminderIdentity } from "./pendingIdentity";
 import { runClaireTurn, type ClaireTurnDeps, type ClaireTurnState } from "./claireTurn";
 import type { ParsedBriefing } from "../briefing/briefingTypes";
+import { speakBusinessResult } from "../business/businessSpeech";
+import { renderResponsePlan } from "./responsePlan";
+import { planRoute } from "./routePlan";
 
 /**
  * Stateful kernel corpus. Turns share one ClaireTurnState. These are not isolated
@@ -128,6 +131,8 @@ function kernel(over: Partial<ClaireTurnDeps> = {}) {
       reason: "test",
     };
   });
+  const accountHistory = (over.accountHistory ?? vi.fn(async () => emptyHistory())) as ClaireTurnDeps["accountHistory"];
+  const dayWork = (over.dayWork ?? vi.fn()) as ClaireTurnDeps["dayWork"];
   const deps = (extra: Partial<ClaireTurnDeps> = {}): ClaireTurnDeps => ({
     now: () => NOW,
     timeZone: () => "America/Los_Angeles",
@@ -161,9 +166,9 @@ function kernel(over: Partial<ClaireTurnDeps> = {}) {
     campaign: async () => null,
     vocabulary: async () => [],
     accounts: async () => [LOUISE],
-    accountHistory: vi.fn(async () => emptyHistory()) as never,
+    accountHistory,
     commitFollowUp: vi.fn() as never,
-    dayWork: vi.fn() as never,
+    dayWork,
     unpaid: vi.fn() as never,
     searchMemory: vi.fn(async () => []) as never,
     memoryBetween: vi.fn(async () => []) as never,
@@ -192,7 +197,7 @@ function kernel(over: Partial<ClaireTurnDeps> = {}) {
       },
       deps(extra)
     );
-  return { state, say, board, seen, runQuery };
+  return { state, say, board, seen, runQuery, accountHistory, dayWork };
 }
 
 describe("A. mixed morning utterances are not the board", () => {
@@ -229,6 +234,10 @@ describe("B. pending briefing corrections revise, they do not destroy", () => {
     expect(h.state.pendingBriefing!.parsed.items[0]!.businessDate).toBe("2026-09-23");
     expect(result.kind).toBe("briefing_proposed");
     expect(result.speak).toMatch(/Wednesday|Moved/i);
+    const proposal = result.responsePlan?.segments.find(segment => segment.type === "ActionProposalSegment");
+    expect(proposal?.type === "ActionProposalSegment" ? proposal.authoritySource : null).toBe("pending_lifecycle");
+    expect(interpretTurn("No, I meant call Dana Wednesday.").mayProposeWork).toBe(false);
+    expect(result.speak).toBe(renderResponsePlan(result.responsePlan!).speak);
   });
 
   it("Wait, change Dana to Wednesday revises the held briefing", async () => {
@@ -328,6 +337,37 @@ describe("E. Dana resolves to The Louise, never Dana Tuesday or the board", () =
     expect(result.speak).not.toMatch(/GUMBALL did not run|Andrew Molina|Mission 6|Synthetic verification/i);
     expect(result.speak).toMatch(/Dana|Louise/i);
     expect(result.kind).not.toBe("briefing_proposed");
+  });
+
+  it("runClaireTurn recommends from retrieved Dana/Louise state without mutating", async () => {
+    const history = {
+      ...emptyHistory(),
+      fieldVisits: [{ missionId: 1, arrivedAt: "2026-09-10T18:00:00.000Z", departedAt: null, notes: "Left the sample set" }],
+      followUps: [
+        {
+          id: "fu-louise",
+          pipelineId: 8,
+          status: "open",
+          dueAt: "2026-09-22T17:00:00.000Z",
+          note: "Bring the revised rate card and confirm Tuesday access",
+          completedAt: null,
+        },
+      ],
+    };
+    const h = kernel({ accountHistory: vi.fn(async () => history) as never });
+    const result = await h.say("What should I do about Dana Tuesday?");
+    expect(h.board).not.toHaveBeenCalled();
+    expect(h.dayWork).not.toHaveBeenCalled();
+    expect(result.kind).toBe("answered");
+    expect(result.mutationReceipts ?? []).toEqual([]);
+    expect(result.kind).not.toBe("briefing_proposed");
+    expect(result.speak).toMatch(/Dana/i);
+    expect(result.speak).toMatch(/Louise/i);
+    expect(result.speak).toMatch(/rate card|follow-up|Tuesday/i);
+    expect(result.speak).not.toMatch(/GUMBALL|Andrew Molina|Mission 6/i);
+    expect(result.responsePlan?.segments.some(segment => segment.type === "BusinessJudgmentSegment")).toBe(true);
+    expect(result.responsePlan?.segments.some(segment => segment.type === "ActionConfirmationSegment")).toBe(false);
+    expect(result.speak).toBe(renderResponsePlan(result.responsePlan!).speak);
   });
 
   it("'I need to call Dana Tuesday' may propose work and does not commit", async () => {
@@ -446,5 +486,136 @@ describe("I. mutations bite", () => {
     syncPendingReminderIdentity(state);
     expect(state.pendingReminded).toBe(false);
     expect(state.pendingReminderKey).toBe("proposal:B:b");
+  });
+
+  it("MUTATION: forcing conversation as the top-level route blocks the Dana business path", async () => {
+    const h = kernel();
+    const natural = planRoute(interpretTurn("What should I do about Dana Tuesday?"), {
+      proactiveMorning: false,
+      holdingBriefing: false,
+      holdingProposal: false,
+      holdingFollowUp: false,
+      pendingHints: [],
+    });
+    expect(natural.primary).toBe("business");
+    const blocked = await h.say("What should I do about Dana Tuesday?", {
+      planRoute: () => ({
+        primary: "conversation",
+        also: [],
+        board: false,
+        priorClaim: "none",
+        pending: "none",
+        callEnd: false,
+        continuePriorQuery: false,
+      }),
+    });
+    expect(h.accountHistory).not.toHaveBeenCalled();
+    expect(h.board).not.toHaveBeenCalled();
+    expect(blocked.responsePlan?.route.primary).toBe("conversation");
+    expect(blocked.speak).not.toMatch(/Louise/i);
+  });
+
+  it("MUTATION: forcing continuePriorQuery false blocks ordered-query continuation", async () => {
+    const h = kernel();
+    await h.say("Give me my last five sales.");
+    const second = await h.say("What were the other four?", {
+      planRoute: () => ({
+        primary: "business",
+        also: [],
+        board: false,
+        priorClaim: "none",
+        pending: "none",
+        callEnd: false,
+        continuePriorQuery: false,
+      }),
+    });
+    expect(h.state.analytics?.orderedQuery?.presented.some(item => /Thomas/i.test(item.customerName ?? ""))).toBe(true);
+    expect(second.speak).not.toMatch(/Carol Wexler/i);
+  });
+
+  it("final speak is rendered from the ResponsePlan", async () => {
+    const h = kernel();
+    const result = await h.say("What were my last five sales?");
+    expect(result.responsePlan).toBeTruthy();
+    expect(result.speak).toBe(renderResponsePlan(result.responsePlan!).speak);
+    expect(result.responsePlan!.segments.some(segment => segment.type === "BusinessFactSegment")).toBe(true);
+  });
+});
+
+describe("J. ordered query presented vs resolved", () => {
+  it("query of five, speech of Thomas only, then the other four returns the unspoken four", async () => {
+    const h = kernel({
+      business: {
+        now: () => NOW,
+        timeZone: () => "America/Los_Angeles",
+        plan: async () => null,
+        runQuery: (async (_tenant: string, query: BusinessQuery) => {
+          if (query.metric === "latest_sales" || query.metric === "biggest_orders") {
+            return okOrders(query, SALES.slice(0, Math.max(1, query.limit)));
+          }
+          return {
+            status: "unavailable" as const,
+            query,
+            period: { kind: "all_time", start: "2020-01-01", end: "2026-09-20", label: "all time" } as never,
+            comparisonPeriod: null,
+            reason: "test",
+          };
+        }) as never,
+        speakResult: (result, context) => {
+          if (result.status === "ok" && result.data.kind === "orders" && !context.refinement) {
+            const thomas = result.data.orders.find(order => /Thomas/i.test(order.customerName ?? ""));
+            if (thomas && result.data.orders.length > 1) {
+              return {
+                text: `The newest sale I have is $185.00 for Thomas Hartmann, paid Friday.`,
+                facts: ["185.00"],
+                disclosures: [],
+                presentedOrders: [thomas],
+              };
+            }
+          }
+          return speakBusinessResult(result, context);
+        },
+        loadBindings: async () => ({
+          laundry_butler: {
+            state: "bound" as const,
+            lastSuccessAt: NOW,
+            coverageRanges: [{ from: "2020-01-01", to: "2099-12-31", completedAt: NOW, basis: "economic_event" as const, provenance: "test_fixture" as const }],
+            latestAttempt: null,
+            isSystemOfRecord: true,
+          },
+          cleancloud: {
+            state: "bound" as const,
+            lastSuccessAt: NOW,
+            coverageRanges: [{ from: "2020-01-01", to: "2099-12-31", completedAt: NOW, basis: "economic_event" as const, provenance: "test_fixture" as const }],
+            latestAttempt: null,
+            isSystemOfRecord: false,
+          },
+        }),
+      },
+    });
+    const first = await h.say("Give me my last five sales.");
+    expect(first.speak).toMatch(/Thomas/i);
+    expect(first.speak).not.toMatch(/Carol|Spencer|Rebecca|Todd/i);
+    expect(h.state.analytics?.orderedQuery?.resolved).toHaveLength(5);
+    expect(h.state.analytics?.orderedQuery?.presented).toHaveLength(1);
+    const second = await h.say("What were the other four?");
+    expect(second.speak).not.toMatch(/Thomas/i);
+    expect(second.speak).toMatch(/Carol/i);
+    expect(second.speak).toMatch(/Spencer/i);
+    expect(second.speak).toMatch(/Rebecca/i);
+    expect(second.speak).toMatch(/Todd/i);
+    expect(second.speak).not.toMatch(/Sophie|Sean|Maria/i);
+  });
+
+  it("exclusions survive the same query and reset on a new query", async () => {
+    const h = kernel();
+    await h.say("What were my last five sales?");
+    await h.say("Don't tell me about Thomas.");
+    expect(h.state.analytics?.orderedQuery?.exclusions.join(" ")).toMatch(/Thomas/i);
+    const continued = await h.say("Okay, now the other four.");
+    expect(continued.speak).not.toMatch(/Thomas/i);
+    const fresh = await h.say("What were my last five sales?");
+    expect(h.state.analytics?.orderedQuery?.exclusions).toEqual([]);
+    expect(fresh.speak).toMatch(/Thomas/i);
   });
 });

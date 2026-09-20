@@ -9,6 +9,7 @@ import {
   commercialPipelineRecords,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { isAuthorizedProductionOperator, isOperatorVisibleAccount } from "../claire/knowledge/sourceVisibility";
 import {
   dayLineDisplayTitle,
   isDayLineCancelled,
@@ -33,6 +34,12 @@ export type DayforgeTodayItem = {
   email: string | null;
   destinationPath: string;
   estimatedValueCents: number | null;
+  accountProvenance: {
+    name: string;
+    accountType: string | null;
+    providerName: string | null;
+    identityKey: string | null;
+  };
 };
 
 const TERMINAL_STAGES = ["won", "lost"] as const;
@@ -61,6 +68,29 @@ export function sortDayforgeTodayItems(
   });
 }
 
+export function filterOperatorVisibleDayforgeRows<T extends {
+  accountName?: string | null;
+  accountType?: string | null;
+  providerName?: string | null;
+  identityKey?: string | null;
+}>(
+  rows: readonly T[],
+  operator: { tenantId: string; operatorUserId: string }
+): T[] {
+  // Production operator must never see verification-writer commercial rows.
+  // Other actors on the same tables are filtered the same way: test-origin
+  // accounts are not real Field Today work.
+  void isAuthorizedProductionOperator(operator);
+  return rows.filter(row =>
+    isOperatorVisibleAccount({
+      name: row.accountName,
+      accountType: row.accountType,
+      providerName: row.providerName,
+      identityKey: row.identityKey,
+    })
+  );
+}
+
 export async function listDayforgeToday(input: {
   tenantId: string;
   userId: string;
@@ -80,6 +110,9 @@ export async function listDayforgeToday(input: {
       estimatedValueCents: commercialPipelineRecords.estimatedContractValueCents,
       accountId: commercialAccounts.id,
       accountName: commercialAccounts.name,
+      accountType: commercialAccounts.accountType,
+      providerName: commercialAccounts.providerName,
+      identityKey: commercialAccounts.identityKey,
     })
     .from(commercialPipelineRecords)
     .innerJoin(commercialMissions, and(
@@ -94,12 +127,11 @@ export async function listDayforgeToday(input: {
       eq(commercialPipelineRecords.tenantId, input.tenantId),
       notInArray(commercialPipelineRecords.stage, [...TERMINAL_STAGES])
     ));
-  const visible = pipelines.filter(row => {
-    if (!(input.includeAllAssignees || row.assignedTo === null || row.assignedTo === input.userId)) {
-      return false;
-    }
-    return !isDayLineCancelled(readDayLineOverlay(row.missionBriefJson));
-  });
+  const operator = { tenantId: input.tenantId, operatorUserId: input.userId };
+  const assigned = pipelines.filter(row => input.includeAllAssignees || row.assignedTo === null || row.assignedTo === input.userId);
+  const visible = filterOperatorVisibleDayforgeRows(assigned, operator).filter(
+    row => !isDayLineCancelled(readDayLineOverlay(row.missionBriefJson))
+  );
   if (!visible.length) return [];
   const pipelineIds = visible.map(row => row.pipelineId);
   const missionIds = visible.map(row => row.missionId);
@@ -145,6 +177,12 @@ export async function listDayforgeToday(input: {
       phone: contact?.phone ?? null,
       email: contact?.email ?? null,
       estimatedValueCents: row.estimatedValueCents,
+      accountProvenance: {
+        name: row.accountName,
+        accountType: row.accountType,
+        providerName: row.providerName,
+        identityKey: row.identityKey,
+      },
     };
     const rowFollowUps = followUps.filter(item => item.pipelineId === row.pipelineId);
     for (const followUp of rowFollowUps) {

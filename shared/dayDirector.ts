@@ -10,6 +10,14 @@ export type DayDirectorCommitment = {
   detailState?: "COMPLETE" | "NEEDS_DETAILS";
   missingDetails?: string[];
   detailNote?: string | null;
+  claireProactive?: boolean;
+  proactiveSourceKind?: "sales_follow_up" | "dormant_recovery";
+  accountProvenance?: {
+    name?: string | null;
+    accountType?: string | null;
+    providerName?: string | null;
+    identityKey?: string | null;
+  } | null;
 };
 
 export type DayDirectorProposal = {

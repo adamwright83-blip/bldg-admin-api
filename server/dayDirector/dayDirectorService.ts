@@ -127,6 +127,15 @@ export async function getDayDirectorState(input: {
           ? metadata.missingDetails.map(String)
           : [],
         detailNote: typeof metadata.detailNote === "string" ? metadata.detailNote : null,
+        claireProactive: metadata.claireProactive === true,
+        proactiveSourceKind:
+          metadata.sourceKind === "sales_follow_up" || metadata.sourceKind === "dormant_recovery"
+            ? metadata.sourceKind
+            : undefined,
+        accountProvenance:
+          metadata.accountProvenance && typeof metadata.accountProvenance === "object"
+            ? (metadata.accountProvenance as DayDirectorCommitment["accountProvenance"])
+            : null,
       } satisfies DayDirectorCommitment;
     }).filter((row): row is NonNullable<typeof row> => row != null),
     dismissedPromptKeys: prompts.map(row => row.promptKey),
