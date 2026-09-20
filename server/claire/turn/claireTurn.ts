@@ -607,9 +607,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     return finish({ speak: "All right.", kind: "answered" });
   }
 
-  const doctrineSpeak = deps.doctrineTurn
-    ? await deps.doctrineTurn({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, utterance, today })
-    : null;
+  const doctrineSpeak =
+    interpreted.doctrineInstruction && deps.doctrineTurn
+      ? await deps.doctrineTurn({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, utterance, today })
+      : null;
   if (doctrineSpeak) {
     mark("doctrine");
     return finish({ speak: doctrineSpeak, kind: "answered" });
