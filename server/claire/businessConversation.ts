@@ -8,6 +8,7 @@ import {
   loadLedgerSourceEvidence,
   requiredSourcesFor,
   speakPartialCoverage,
+  speakPartialCoverageVoice,
   speakUnprovableZero,
   type CoverageVerdict,
   type LedgerSourceEvidence,
@@ -1385,7 +1386,9 @@ export async function answerClaireBusinessTurn(
       focus,
     };
     const spokenText =
-      coverage.kind === "provable" ? spoken.text : `${spoken.text} ${speakPartialCoverage(coverage)}`.trim();
+      coverage.kind === "provable"
+        ? spoken.text
+        : `${spoken.text} ${input.surface === "voice" ? speakPartialCoverageVoice(coverage) : speakPartialCoverage(coverage)}`.trim();
     return guardedTurn({ handled: true, speak: spokenText, facts: spoken.facts, result });
   }
 }
