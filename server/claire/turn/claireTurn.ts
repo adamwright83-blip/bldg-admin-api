@@ -58,7 +58,12 @@ import {
 import { persistClaireTurnTrace } from "../answerPathRecorder";
 import { explicitDayLineRefusal, explicitTrackingRequest } from "../briefing/titleContract";
 import { classifyOpenDialogueAct } from "./dialogueAct";
-import { interpretTurn } from "./interpretTurn";
+import { interpretTurn, type InterpretedTurn } from "./interpretTurn";
+import {
+  planClaireResponse,
+  renderClaireResponsePlan,
+  type ClaireResponsePlan,
+} from "./responsePlan";
 import { runBusinessQuery } from "../../analytics/businessQuery";
 import {
   appendClaimReceipt,
@@ -177,6 +182,8 @@ export type ClaireTurnResult = {
   mutationReceipts?: MutationReceipt[];
   /** Deterministic `speakBriefingCommit` (or equivalent) — linted against receipts, not conversational inventory. */
   receiptBackedCommit?: string;
+  /** Typed boundary consumed by the renderer; future Narrative OS adds lanes here, not in business truth. */
+  responsePlan?: ClaireResponsePlan;
 };
 
 export type ClaireTurnDeps = {
@@ -465,6 +472,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   /** Receipt for the factual claim this turn makes, attached to durable state in `finish`. */
   let pendingReceipt: FactualClaimReceipt | null = null;
   let knownAccounts: CoverageAccountRef[] = [];
+  let authoritativeInterpretation: InterpretedTurn | null = null;
   let uncertainChallenge: ClaimResolution | null = null;
   type SemanticSlot = { promise: Promise<ClaimChallengeReading | null>; settled: ClaimChallengeReading | null | undefined; classifierMs?: number };
   let semantic: SemanticSlot | null = null;
@@ -472,15 +480,24 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     pendingReceipt = receiptFromReader({ conversationKey: input.conversationKey, claireTurnOrdinal: claireOrdinal, nowMs, answerText, answerPath, claimType, grounding, sources });
   };
   const finish = (result: ClaireTurnResult): ClaireTurnResult => {
+    const responsePlan =
+      result.responsePlan ??
+      planClaireResponse({
+        text: result.speak,
+        kind: result.kind,
+        interpretation: authoritativeInterpretation,
+        endCall: Boolean(result.endCall || personalEndCall),
+      });
+    const plannedSpeak = renderClaireResponsePlan(responsePlan);
     const inventory = buildClaireVerifiedFactInventory(input.context);
     const speak = assembleGuardedClaireSpeak({
-      conversational: result.speak,
+      conversational: plannedSpeak,
       inventory,
       localTime: input.context?.clock?.localTime ?? null,
       receiptBackedCommit: result.receiptBackedCommit,
       mutationReceipts: result.mutationReceipts,
     });
-    const guarded = speak === result.speak ? result : { ...result, speak };
+    const guarded: ClaireTurnResult = { ...result, speak, responsePlan };
     if (trace.synthesisRequired) {
       trace.needs_synthesis = telemetryClaireAnswerClass(utterance, true) === "needs_synthesis";
     }
@@ -537,7 +554,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    * mutate, terminate, select truth, or consult pending state. Everything downstream consumes it;
    * nothing downstream re-decides what Adam meant.
    */
-  const interpreted = interpretTurn(utterance);
+  const interpreted = (authoritativeInterpretation = interpretTurn(utterance));
   trace.turnKind ??= null;
 
   /**
