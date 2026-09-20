@@ -140,6 +140,8 @@ export type ClairePriorClaimTrace = {
   latencyMs: number;
   classifierMs: number | null;
   timedOut: boolean;
+  /** How the receipt was identified; absent for an ambiguous referent. */
+  resolvedVia?: "explicit_reference" | "immediately_preceding";
 };
 
 /** Receipt summary mirrored into answer-path detail so a claim is reconstructable from telemetry. */

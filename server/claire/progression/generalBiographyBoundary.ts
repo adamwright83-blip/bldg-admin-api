@@ -90,12 +90,15 @@ export async function checkBiographyBoundary(input: {
   allowedFacts: readonly string[];
   verify: BiographyVerifier;
   timeoutMs?: number;
+  /** Staged check: run only the free deterministic rejects (injection, obvious first-person history). */
+  deterministicOnly?: boolean;
 }): Promise<BiographyBoundaryResult> {
   const answer = input.text.trim();
   if (!answer) return { ok: true, verified: false }; // nothing is being spoken
   if (containsVerifierInjection(answer)) return { ok: false, reason: "injection" };
   const obvious = findUnauthorizedFirstPersonBiography(answer, input.allowedFacts);
   if (obvious) return { ok: false, reason: "pattern", sentence: obvious };
+  if (input.deterministicOnly) return { ok: true, verified: false };
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const verdict = await Promise.race([

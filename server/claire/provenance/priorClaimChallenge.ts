@@ -15,15 +15,14 @@
  */
 import { invokeLLM } from "../../_core/llm";
 import { claireModelRequest } from "../claireModel";
-import type { FactualClaimReceipt } from "./claimReceipts";
 
 export const CHALLENGE_MAX_WORDS = 32;
 export const CHALLENGE_CLASSIFIER_BUDGET_MS = 1500;
 
-export function isChallengeCandidate(utterance: string, receipt: FactualClaimReceipt | null): boolean {
-  if (!receipt) return false;
+/** A short reaction, or any utterance that explicitly names something a held claim contains. */
+export function isChallengeCandidate(utterance: string, explicitReference: boolean): boolean {
   const words = utterance.trim().split(/\s+/).filter(Boolean).length;
-  return words > 0 && words <= CHALLENGE_MAX_WORDS;
+  return words > 0 && (explicitReference || words <= CHALLENGE_MAX_WORDS);
 }
 
 const SCHEMA = {

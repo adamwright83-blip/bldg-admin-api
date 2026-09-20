@@ -9,7 +9,7 @@ import {
   safeClaireFailureReason,
   type ClaireGenerationDiagnostic,
 } from "./generationTelemetry";
-import { detectClaireConversationalMode, detectRequestedClaireTopic } from "./topicDetection";
+import { detectClaireConversationalMode, detectRequestedClaireTopic, isPersonalQuestionAboutClaire } from "./topicDetection";
 import {
   CLAIRE_V1_REASONING_POLICY,
   detectAvoidanceDisclosure,
@@ -479,24 +479,32 @@ export async function answerClairePreDriveFollowUp(
     // shame, consolation, coaching, diagnosis and volunteered biography. A violating line is never
     // spoken; the deterministic fallback (or an approved decline) is used instead.
     let guardReason: string | null = null;
-    if (progressionOn && recoveredVia === null) {
-      // Deterministic and free first: failure-day tone. Then the semantic biography boundary, which only
-      // calls a model when a sentence could assert Claire-self/history (no candidate => no model call).
+    // Truth and character safety do NOT depend on the progression feature flag (production runs with it OFF).
+    // Staged so OFF stays cheap: the free deterministic checks run on every answer; the semantic biography
+    // verifier (one bounded model call) runs when progression is ON, or when the operator is addressing
+    // Claire herself ("you"/"your") and the answer speaks in the first person — the only turns where
+    // invented biography or an unsupported emotional/relational claim can occur.
+    if (recoveredVia === null) {
+      const addressesClaire = /\b(?:you|your|yours|yourself|you'?re|you'?ve)\b/i.test(input.utterance);
+      const speaksAsSelf = /\b(?:i|i'm|i've|i'd|i'll|my|me|myself)\b/i.test(answer);
+      const personalTurn = conversationalMode === "personal" || isPersonalQuestionAboutClaire(input.utterance);
+      const runSemantic = progressionOn || personalTurn || (addressesClaire && speaksAsSelf);
       const tone = lintFailureDayLanguage(answer);
       if (!tone.passes) {
         console.warn("[Claire] general answer violated failure-day tone contract; replaced", tone.violations.map(v => v.category));
-        answer = fallback;
+        answer = personalTurn ? (selectDialogueLine({ category: "decline", rapportBand: 0 })?.text ?? fallback) : fallback;
         guardReason = `failure_day_tone:${tone.violations[0]!.category}`;
       } else {
         const biography = await checkBiographyBoundary({
           text: answer,
           allowedFacts: compiled.eligibleCanonFacts,
           verify: dependencies.biographyVerifier ?? makeBiographyVerifier(invokeText, input.tenantId),
+          deterministicOnly: !runSemantic,
         });
         if (!biography.ok) {
           console.warn("[Claire] general answer could assert unauthorized Claire history; replaced", biography.reason);
-          // A business turn gets the conservative business fallback, never a personal-decline line.
-          answer = fallback;
+          // A personal question gets an authored decline; a business turn gets the conservative business fallback.
+          answer = personalTurn ? (selectDialogueLine({ category: "decline", rapportBand: 0 })?.text ?? fallback) : fallback;
           guardReason = `personal_biography_guard:${biography.reason}`;
         }
       }

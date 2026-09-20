@@ -47,14 +47,21 @@ export type FactualClaimReceipt = {
   asOf: string;
   freshness: { completeness: string | null; loadedSources: string[]; failedSources: string[] } | null;
   recheck: ClaimRecheck;
+  /**
+   * For `synthesized` receipts only: the authoritative receipt whose evidence was supplied to the
+   * model. Supplying evidence proves the model SAW it, never that the generated prose is entailed by it.
+   */
+  supportedBy?: FactualClaimReceipt | null;
 };
 
-export const MAX_CLAIM_RECEIPTS = 12;
-/** A receipt is only "the prior claim" while it is recent; older ones need an explicit reference. */
-export const RECENT_CLAIM_TURNS = 4;
+export const MAX_CLAIM_RECEIPTS = 24;
 
 export type PriorClaimOutcome =
   | "verified"
+  /** Original provenance is established, but the value was not re-read, so "still true now" is NOT asserted. */
+  | "grounded_as_stated"
+  /** Figures and names in a model synthesis trace to authoritative evidence; the framing is the model's own. */
+  | "synthesis_grounded"
   | "superseded"
   | "stale_source"
   | "changed"
@@ -71,6 +78,8 @@ export type PriorClaimVerification = {
   freshnessAffected: boolean;
   timedOut: boolean;
   latencyMs: number;
+  /** How the challenged receipt was identified. */
+  resolvedVia?: "explicit_reference" | "immediately_preceding";
 };
 
 export function claimReceiptDigest(parts: unknown): string {
@@ -185,10 +194,78 @@ export function appendClaimReceipt(receipts: FactualClaimReceipt[] | undefined, 
   return [...(receipts ?? []).filter(existing => existing.id !== receipt.id), receipt].slice(-MAX_CLAIM_RECEIPTS);
 }
 
-/** Most recent claim within the recency window; the referent of a bare "are you sure?". */
-export function resolvePriorClaim(receipts: FactualClaimReceipt[] | undefined, currentClaireTurnOrdinal: number): FactualClaimReceipt | null {
-  const recent = (receipts ?? []).filter(receipt => currentClaireTurnOrdinal - receipt.claireTurnOrdinal <= RECENT_CLAIM_TURNS);
-  return recent[recent.length - 1] ?? null;
+// ── Referent resolution ─────────────────────────────────────────────────────
+const COMMON_STARTERS = new Set(["The","This","That","These","Those","There","Their","They","Then","Any","Did","How","What","When","Who","Where","Which","Are","Is","Was","Were","Have","Has","Had","And","But","Okay","Yes","No","Noted","Got","Honestly","Actually","Fair","Right","Sure","Your","You","Our","We","Its","It","Here","Today","Tomorrow","Last","Next","Just","Only","Also","Still","Not","Nothing","Nobody","Someone","Something","Claire","Adam","Goldline","Day","Line","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday","January","February","March","April","May","June","July","August","September","October","November","December","CleanCloud","Stripe","Fluff","Fold","Same","Delivery","Card","Order","Orders","One","Two","Three"]);
+
+/** Distinctive referents of a piece of text: named entities and numbers (normalised). */
+export function referentTokens(text: string): { names: Set<string>; numbers: Set<string> } {
+  const names = new Set<string>();
+  for (const word of text.match(/\b[A-Z][a-z]{2,}\b/g) ?? []) if (!COMMON_STARTERS.has(word)) names.add(word.toLowerCase());
+  const numbers = new Set<string>();
+  for (const raw of text.match(/\d[\d,]*(?:\.\d+)?/g) ?? []) numbers.add(raw.replace(/,/g, ""));
+  return { names, numbers };
+}
+
+function receiptTokens(receipt: FactualClaimReceipt) {
+  const tokens = referentTokens(receipt.answerText);
+  for (const entry of receipt.evidence) {
+    const order = entry.ref?.split(":")[1];
+    if (order && /^\d+$/.test(order)) tokens.numbers.add(order);
+  }
+  return tokens;
+}
+
+/** A number is supported by evidence if it is equal, or is the evidence figure rounded to a whole number. */
+function numberSupported(n: string, evidence: Set<string>): boolean {
+  if (evidence.has(n)) return true;
+  const value = Number(n);
+  return [...evidence].some(e => Number.isFinite(Number(e)) && (Math.round(Number(e)) === value || Math.floor(Number(e)) === value));
+}
+
+export type ClaimResolution =
+  | { kind: "resolved"; receipt: FactualClaimReceipt; via: "explicit_reference" | "immediately_preceding" }
+  | { kind: "ambiguous"; candidates: FactualClaimReceipt[] }
+  | { kind: "none" };
+
+/**
+ * Resolve WHICH prior claim the operator is referring to. Deterministic and evidence-free — it only
+ * identifies a receipt, never judges it.
+ *  - An explicit reference (a name, order number or figure the receipt contains) resolves against ALL
+ *    receipts still held in conversation state, however old.
+ *  - A bare reaction targets only the immediately preceding Claire turn's claim.
+ *  - Two different claims matching equally is ambiguous: fail closed rather than verify an arbitrary one.
+ */
+export function resolveReferencedClaim(receipts: FactualClaimReceipt[] | undefined, utterance: string, currentClaireTurnOrdinal: number): ClaimResolution {
+  const all = receipts ?? [];
+  if (!all.length) return { kind: "none" };
+  const said = referentTokens(utterance.replace(/(^|[.!?]\s+)([A-Z])/g, (_m, lead: string, c: string) => lead + c));
+  const lower = utterance.toLowerCase();
+  const scored = all
+    .map(receipt => {
+      const tokens = receiptTokens(receipt);
+      let score = 0;
+      for (const name of tokens.names) if (new RegExp(`\\b${name}\\b`).test(lower)) score += 1;
+      for (const n of tokens.numbers) if ((n.length >= 3 || n.includes(".")) && said.numbers.has(n)) score += 1;
+      return { receipt, score };
+    })
+    .filter(entry => entry.score > 0);
+  if (scored.length) {
+    const best = Math.max(...scored.map(entry => entry.score));
+    let top = scored.filter(entry => entry.score === best).map(entry => entry.receipt);
+    // The same claim stated twice is one referent: take the latest.
+    const distinct = new Map<string, FactualClaimReceipt>();
+    for (const receipt of top) distinct.set(receipt.fingerprint ?? receipt.id, receipt);
+    top = [...distinct.values()];
+    return top.length === 1 ? { kind: "resolved", receipt: top[0]!, via: "explicit_reference" } : { kind: "ambiguous", candidates: top };
+  }
+  const preceding = all.find(receipt => receipt.claireTurnOrdinal === currentClaireTurnOrdinal - 1);
+  return preceding ? { kind: "resolved", receipt: preceding, via: "immediately_preceding" } : { kind: "none" };
+}
+
+/** Whether the utterance names something a held receipt contains (used to lift the short-utterance gate). */
+export function referencesHeldClaim(receipts: FactualClaimReceipt[] | undefined, utterance: string): boolean {
+  const said = resolveReferencedClaim(receipts, utterance, -100);
+  return said.kind !== "none";
 }
 
 /** Live-turn budget for a fresh authoritative recheck. */
@@ -216,13 +293,33 @@ export async function verifyPriorClaim(receipt: FactualClaimReceipt, deps: Prior
   });
 
   // A claim the reader itself never grounded is unsupported on the receipt alone — no requery can rescue it.
-  if (receipt.grounding === "ungrounded" || receipt.grounding === "synthesized") {
+  if (receipt.grounding === "ungrounded") {
     return done({ outcome: "unsupported", resolution: "receipt_only", evidenceChanged: null, freshnessAffected: false, timedOut: false });
   }
 
+  // A model synthesis is never "verified" merely because evidence was in its prompt. Only its figures and
+  // names can be traced to the authoritative evidence; anything beyond that is an unsupported addition.
+  if (receipt.grounding === "synthesized") {
+    const source = receipt.supportedBy;
+    if (!source) return done({ outcome: "unsupported", resolution: "receipt_only", evidenceChanged: null, freshnessAffected: false, timedOut: false });
+    const claimed = referentTokens(receipt.answerText);
+    const backing = receiptTokens(source);
+    const addition = [...claimed.names].some(name => !backing.names.has(name)) || [...claimed.numbers].some(n => !numberSupported(n, backing.numbers));
+    if (addition) return done({ outcome: "unsupported", resolution: "receipt_only", evidenceChanged: null, freshnessAffected: false, timedOut: false });
+    const underlying = await verifyPriorClaim(source, deps);
+    const grounded = underlying.outcome === "verified" || underlying.outcome === "grounded_as_stated";
+    return done({
+      outcome: grounded ? "synthesis_grounded" : underlying.outcome,
+      resolution: underlying.resolution,
+      evidenceChanged: underlying.evidenceChanged,
+      freshnessAffected: underlying.freshnessAffected,
+      timedOut: underlying.timedOut,
+    });
+  }
+
   if (receipt.recheck.kind === "none") {
-    // The receipt itself proves the authoritative reader supplied it; there is nothing to requery.
-    return done({ outcome: "verified", resolution: "receipt_only", evidenceChanged: null, freshnessAffected: false, timedOut: false });
+    // Original provenance is established; current truth is not re-read, so it is not asserted.
+    return done({ outcome: "grounded_as_stated", resolution: "receipt_only", evidenceChanged: null, freshnessAffected: false, timedOut: false });
   }
 
   let fresh: BusinessQueryResult | typeof TIMEOUT;
@@ -277,12 +374,14 @@ function sourceWords(receipt: FactualClaimReceipt): string {
  * never speculates about intent, and never claims work will finish later.
  */
 export function speakPriorClaimVerification(v: PriorClaimVerification): string {
-  const from = sourceWords(v.receipt);
+  const from = sourceWords(v.receipt.supportedBy ?? v.receipt);
   switch (v.outcome) {
     case "verified":
-      return v.receipt.grounding === "retrieved" || v.receipt.claimType === "newest_paid_sale" || v.receipt.claimType === "business_metric"
-        ? `No. That came from ${from}, and it still checks out.`
-        : "No. That came from your records, and it still checks out.";
+      return `No. That came from ${from}, and it still checks out.`;
+    case "grounded_as_stated":
+      return `That came from ${from} when I said it. I can't re-read it right now, so I won't say it still holds.`;
+    case "synthesis_grounded":
+      return `The figures and names in that came from ${from}. The wording around them was my own read, not a record.`;
     case "superseded":
       return `It was the newest Goldline had when I said it, from ${from}. Something newer has arrived since.`;
     case "stale_source":
@@ -290,7 +389,7 @@ export function speakPriorClaimVerification(v: PriorClaimVerification): string {
     case "changed":
       return "That matched the record when I said it, but the record has changed since. I wouldn't treat the earlier figure as current.";
     case "unsupported":
-      return "I didn't have enough to state that as fact. I shouldn't have put it that way.";
+      return "I didn't have enough to state that as fact.";
     case "unverifiable":
     default:
       return "I can't verify that properly right now.";
@@ -308,3 +407,6 @@ const STATUS_DOWNGRADE =
 export function modelReplyRewritesPriorClaim(reply: string): boolean {
   return STATUS_DOWNGRADE.test(reply);
 }
+
+/** Spoken when the challenge cannot be tied to exactly one prior claim. Leaves every claim's status untouched. */
+export const AMBIGUOUS_REFERENT_SPEECH = "I'm not sure which statement you mean. Name the sale or the number and I'll go from there.";

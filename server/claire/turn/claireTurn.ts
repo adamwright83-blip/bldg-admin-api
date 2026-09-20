@@ -64,7 +64,9 @@ import {
   modelReplyRewritesPriorClaim,
   receiptFromBusinessResult,
   receiptFromReader,
-  resolvePriorClaim,
+  resolveReferencedClaim,
+  AMBIGUOUS_REFERENT_SPEECH,
+  type ClaimResolution,
   speakPriorClaimVerification,
   verifyPriorClaim,
   type ClaimGrounding,
@@ -440,6 +442,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   /** Receipt for the factual claim this turn makes, attached to durable state in `finish`. */
   let pendingReceipt: FactualClaimReceipt | null = null;
   let knownAccounts: CoverageAccountRef[] = [];
+  let uncertainChallenge: ClaimResolution | null = null;
   const readerReceipt = (answerPath: string, claimType: string, grounding: ClaimGrounding, sources: string[], answerText: string) => {
     pendingReceipt = receiptFromReader({ conversationKey: input.conversationKey, claireTurnOrdinal: claireOrdinal, nowMs, answerText, answerPath, claimType, grounding, sources });
   };
@@ -537,20 +540,26 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // receipt and authoritative evidence — never by free-form generation. Verification fails
   // closed: a timeout leaves the claim unresolved instead of conceding it.
   const holdingSomething = Boolean(state.pendingBriefing || state.pendingProposal || state.pendingAccountFollowUp);
-  const priorClaim = holdingSomething ? null : resolvePriorClaim(state.claimReceipts, claireOrdinal);
-  if (priorClaim && isChallengeCandidate(utterance, priorClaim)) {
-    const classifierStarted = Date.now();
-    const probe = await deps.classifyPriorClaim({ tenantId: input.tenantId, utterance, priorAnswer: priorClaim.answerText });
-    const classifierMs = Date.now() - classifierStarted;
-    trace.priorClaimClassifier = probe === null ? "unavailable" : probe ? "probe" : "not_probe";
-    if (probe) {
-      const verification = await verifyPriorClaim(priorClaim, {
-        rerun: query => deps.rerunBusinessQuery(input.tenantId, query),
-        budgetMs: deps.priorClaimBudgetMs,
-      });
-      recordPriorClaimTrace(verification, "deterministic", classifierMs);
-      mark("prior_claim_verification");
-      return finish({ speak: speakPriorClaimVerification(verification), kind: "answered" });
+  const resolution: ClaimResolution = holdingSomething ? { kind: "none" } : resolveReferencedClaim(state.claimReceipts, utterance, claireOrdinal);
+  if (resolution.kind !== "none") {
+    const explicit = resolution.kind === "ambiguous" || resolution.via === "explicit_reference";
+    if (isChallengeCandidate(utterance, explicit)) {
+      const anchor = resolution.kind === "resolved" ? resolution.receipt : resolution.candidates[0]!;
+      const classifierStarted = Date.now();
+      const probe = await deps.classifyPriorClaim({ tenantId: input.tenantId, utterance, priorAnswer: anchor.answerText });
+      const classifierMs = Date.now() - classifierStarted;
+      trace.priorClaimClassifier = probe === null ? "unavailable" : probe ? "probe" : "not_probe";
+      if (probe) {
+        const spoken = await adjudicateResolution(resolution, "deterministic", classifierMs);
+        mark("prior_claim_verification");
+        return finish({ speak: spoken, kind: "answered" });
+      }
+      // Classifier down: we cannot tell whether this is a challenge. Fail closed — any model-generated
+      // reply on this turn is replaced by the server's adjudication (see finalizeModelReply), so a
+      // classifier outage can never hand a model authority over a prior claim's status.
+      // (Only a grounded claim has truth to protect; an ungrounded chatty line has nothing to downgrade.)
+      const protectsGrounded = (resolution.kind === "resolved" ? [resolution.receipt] : resolution.candidates).some(receipt => receipt.grounding !== "ungrounded");
+      if (probe === null && protectsGrounded) uncertainChallenge = resolution;
     }
   }
 
@@ -1069,7 +1078,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    */
   async function synthesizeWithEvidence(
     question: string,
-    evidence: Array<{ source: string; text: string }>
+    evidence: ClaireRouteEvidence[]
   ): Promise<string | null> {
     if (!(input.context && input.brief)) return null;
     trace.synthesisRequired = true;
@@ -1104,7 +1113,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       },
     });
     mark("follow_up_model");
-    return finalizeModelReply(reply, evidence.map(item => item.source));
+    return finalizeModelReply(reply, evidence);
   }
 
   /** Grounded claims Claire has already made this call, for the prompt: they may not be re-characterised by the model. */
@@ -1137,27 +1146,66 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     };
   }
 
-  /**
-   * Structural invariant: a free-form model reply may not change the epistemic status of a
-   * prior grounded claim. If a model-generated reply re-characterises a recent claim (made
-   * up, invented, guessed, lied…), the reply is discarded and replaced by the server's
-   * adjudication of that claim's receipt. The lexical check only *detects* the attempt; the
-   * replacement is what enforces the invariant. Returns null when the reply is untouched.
-   */
-  async function rewriteAttemptReplacement(reply: string): Promise<string | null> {
-    if (!modelReplyRewritesPriorClaim(reply)) return null;
-    const prior = resolvePriorClaim(state.claimReceipts, claireOrdinal);
-    if (!prior) return null;
-    const verification = await verifyPriorClaim(prior, {
+  /** Adjudicate a resolved (or ambiguous) referent from evidence and return what Claire may say. */
+  async function adjudicateResolution(
+    resolution: Exclude<ClaimResolution, { kind: "none" }>,
+    presentation: "deterministic" | "guard_replacement",
+    classifierMs: number | null
+  ): Promise<string> {
+    if (resolution.kind === "ambiguous") {
+      const first = resolution.candidates[0]!;
+      trace.priorClaim = {
+        receiptId: resolution.candidates.map(candidate => candidate.id).join(","),
+        resolvedClaireTurn: first.claireTurnOrdinal,
+        originalAnswerPath: first.answerPath,
+        originalGrounding: first.grounding,
+        claimType: first.claimType,
+        outcome: "ambiguous_referent",
+        evidenceChanged: null,
+        freshnessAffected: false,
+        resolution: "not_attempted",
+        presentation,
+        latencyMs: 0,
+        classifierMs,
+        timedOut: false,
+      };
+      return AMBIGUOUS_REFERENT_SPEECH;
+    }
+    const verification = await verifyPriorClaim(resolution.receipt, {
       rerun: query => deps.rerunBusinessQuery(input.tenantId, query),
       budgetMs: deps.priorClaimBudgetMs,
     });
-    recordPriorClaimTrace(verification, "guard_replacement", null);
+    recordPriorClaimTrace(verification, presentation, classifierMs);
+    if (trace.priorClaim) trace.priorClaim.resolvedVia = resolution.via;
     return speakPriorClaimVerification(verification);
   }
 
-  /** Runs after a model turn: enforce the invariant, then leave a receipt for what the model claimed. */
-  async function finalizeModelReply(reply: string, evidenceSources: string[]): Promise<string> {
+  /**
+   * Structural invariant: a free-form model may not change the epistemic status of a prior claim.
+   *  1. If the challenge classifier was unavailable on a turn that references a held claim, the model's
+   *     reply is discarded outright and the adjudication is spoken — correctness does not depend on the
+   *     reply containing any particular words.
+   *  2. Otherwise, if the reply re-characterises the referenced claim in words the lexical net knows, it
+   *     is replaced too. The lexical net is defence in depth, never the enforcement.
+   * Returns null when the reply is untouched.
+   */
+  async function rewriteAttemptReplacement(reply: string): Promise<string | null> {
+    if (uncertainChallenge) return adjudicateResolution(uncertainChallenge as Exclude<ClaimResolution, { kind: "none" }>, "guard_replacement", null);
+    if (!modelReplyRewritesPriorClaim(reply)) return null;
+    const referenced = resolveReferencedClaim(state.claimReceipts, utterance, claireOrdinal);
+    if (referenced.kind === "none") return null;
+    return adjudicateResolution(referenced, "guard_replacement", null);
+  }
+
+  /**
+   * Runs after a model turn: enforce the invariant, then leave a receipt. Supplying evidence to
+   * synthesis proves the model SAW it, not that its prose is entailed by it, so a synthesized reply is
+   * never `verified`: it points at the authoritative receipt (`supportedBy`) and is entailment-checked
+   * against it when challenged. A reply with no evidence is recorded `ungrounded` — we do not try to
+   * decide, by enumerating words, whether it asserts business reality; if it is challenged it is
+   * answered as "not state-as-fact", which is always safe.
+   */
+  async function finalizeModelReply(reply: string, evidence: ClaireRouteEvidence[]): Promise<string> {
     const replacement = await rewriteAttemptReplacement(reply);
     if (replacement) return replacement;
     const withoutRestart = suppressRestartedQuestion(reply, { coverage: state.coverage, operatorText: utterance, accounts: knownAccounts });
@@ -1165,11 +1213,14 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       trace.fallbackReason ??= "covered_subject_restart_suppressed";
       return withoutRestart;
     }
-    if (evidenceSources.length) {
-      readerReceipt(trace.path ?? "follow_up_model", "retrieved_statement", "retrieved", evidenceSources, reply);
-    } else if (/\d/.test(reply)) {
-      // A figure with no evidence behind it is recorded as ungrounded so a later challenge is
-      // answered as "unsupported" from the receipt, not defended.
+    if (evidence.length) {
+      const business = evidence.find(item => item.businessResult);
+      const backing: FactualClaimReceipt = business?.businessResult
+        ? receiptFromBusinessResult({ conversationKey: input.conversationKey, claireTurnOrdinal: claireOrdinal, nowMs, answerText: evidence.map(item => item.text).join(" "), reader: business.reader ?? null, result: business.businessResult })
+        : receiptFromReader({ conversationKey: input.conversationKey, claireTurnOrdinal: claireOrdinal, nowMs, answerText: evidence.map(item => item.text).join(" "), answerPath: "evidence", claimType: "retrieved_evidence", grounding: "retrieved", sources: evidence.map(item => item.source) });
+      readerReceipt(trace.path ?? "follow_up_model", "synthesized_statement", "synthesized", evidence.map(item => item.source), reply);
+      pendingReceipt = { ...(pendingReceipt as FactualClaimReceipt), supportedBy: backing };
+    } else {
       readerReceipt(trace.path ?? "follow_up_model", "ungrounded_statement", "ungrounded", [], reply);
     }
     return reply;
@@ -1250,6 +1301,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     if (decision.outcome === "deterministic_final") {
       if (encyclopediaResult?.kind === "answered" && encyclopediaResult.fullyAnswers === true) {
         mark("encyclopedia", { encyclopedia: encyclopediaTrace });
+        readerReceipt("encyclopedia", "retrieved_statement", "retrieved", (encyclopediaTrace as ClaireEncyclopediaTrace | null)?.toolsPlanned ?? ["encyclopedia"], encyclopediaResult.text);
         return encyclopediaResult.text;
       }
       const unpaid = loadedEvidence.find(entry => entry.source === "unpaid_orders");

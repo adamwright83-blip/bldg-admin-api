@@ -17,6 +17,15 @@ detail (`claimReceipt`). There is no second truth ledger and no schema change.
 - **Structural invariant:** if a free-form model reply re-characterises a recent claim (made up / invented / lied /
   guessed…), the reply is discarded and replaced by the adjudication of that claim's receipt. The lexical check only
   *detects* the attempt; it is defence in depth and never decides truth.
+- **Referent resolution** (`resolveReferencedClaim`): an explicit reference (name, order number, figure) resolves
+  against every receipt held in state, however old; a bare reaction targets only the immediately preceding Claire
+  turn; equal matches are ambiguous and fail closed. It identifies a receipt, never judges it.
+- **`verified` means re-read now.** A receipt that cannot be re-run is `grounded_as_stated` (provenance only). A
+  model synthesis is never verified because evidence was in its prompt: it is `synthesized`, points at the
+  authoritative receipt (`supportedBy`), and is credited only for figures/names that trace to that evidence
+  (`synthesis_grounded`); anything else is `unsupported`. Evidence-free model replies are always recorded `ungrounded`.
+- **Classifier outage:** if a turn references a held grounded claim and the classifier is unavailable, any model reply
+  on that turn is replaced by the adjudication regardless of its wording.
 - **Fail closed:** timeout, error, or unavailable source ⇒ `unverifiable` ⇒ "I can't verify that properly right now."
   Never an affirmation, retraction, apology, or confession; never "I'm checking". Evidence can be established, intent
   cannot: no outcome ever alleges lying.
@@ -27,7 +36,9 @@ detail (`claimReceipt`). There is no second truth ledger and no schema change.
 
 ## 3. Character integrity (ontology) — separate from biography entailment
 Missing biography is privacy/vagueness/refusal in character — never "I'm not a person", "I don't have weekends",
-"As an AI". `progression/ontologyGuard.ts` runs on the general answer path **regardless of the progression flag**, and the
+"As an AI". The truth/character firewall does **not** depend on the progression flag: free deterministic checks run on
+every answer; the semantic biography verifier runs when progression is ON, or when the operator addresses Claire and the
+answer speaks in first person. `progression/ontologyGuard.ts` runs on the general answer path **regardless of the progression flag**, and the
 prompt (`CLAIRE_PERSONALITY_LOCK`) is the primary constraint. Constructedness is **not** globally banned
 (`GOLDLINE_CANON.md`: the locked constructedness event). Ontology is authorised by exactly two channels: the operator
 directly asks what Claire is, or an authored story event is active (`ontologyStoryEventActive`). Invented biography is

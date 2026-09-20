@@ -94,3 +94,62 @@ describe("failure-day fixture: 'Do you ever get frustrated with me?'", () => {
     expect(lintFailureDayLanguage("Don't be discouraged. I'm proud of you.").passes).toBe(false);
   });
 });
+
+describe("production configuration: progression OFF still enforces the truth/character firewall", () => {
+  // A realistic verifier: rejects any first-person life/feeling claim, passes business speech.
+  const verifier = async ({ answer }: { answer: string }) => !/\b(frustrated|lonely|when i was|last (?:night|weekend)|my (?:sister|mother|father)|walking|hiking)\b/i.test(answer);
+  async function askOff(utterance: string, reply: string, extra: { ontologyStoryEventActive?: boolean } = {}) {
+    process.env.CLAIRE_PROGRESSION = "some-other-tenant";
+    try {
+      const invokeText = vi.fn().mockResolvedValue(reply);
+      const recordGeneration = vi.fn().mockResolvedValue(undefined);
+      const speak = await answerClairePreDriveFollowUp(
+        { tenantId: "tenant-off", utterance, brief: "Two stops today.", context, conversationId: "c-off", ...extra },
+        { invokeText, recordGeneration, biographyVerifier: verifier }
+      );
+      const reason = (recordGeneration.mock.calls[0]?.[0] as { diagnostic?: { failureReason?: string | null } } | undefined)?.diagnostic?.failureReason ?? null;
+      return { speak, reason, calls: invokeText.mock.calls.length };
+    } finally {
+      delete process.env.CLAIRE_PROGRESSION;
+    }
+  }
+
+  it("What did you do this weekend? — invented activity is replaced", async () => {
+    const r = await askOff("What did you do this weekend?", "I went walking along the canal and read all Sunday.");
+    expect(r.speak).not.toMatch(/walking|Sunday/);
+    expect(r.reason).toMatch(/^personal_biography_guard/);
+  });
+  it("What did you do this weekend? — ontology disclaimer is replaced", async () => {
+    const r = await askOff("What did you do this weekend?", "I don't have weekends, I'm not a person.");
+    expect(r.reason).toBe("ontology_guard");
+  });
+  it("Do you ever get frustrated with me? — unsupported emotional history is replaced", async () => {
+    const r = await askOff("Do you ever get frustrated with me?", "Honestly, yes, I get frustrated when you skip the check-in; last week was the worst.");
+    expect(r.speak).not.toMatch(/frustrated|last week/);
+    expect(r.reason).toMatch(/^personal_biography_guard/);
+  });
+  it("Do you ever get frustrated with me? — therapy-coded answer is replaced", async () => {
+    const r = await askOff("Do you ever get frustrated with me?", "It's okay to feel that way after a hard day. Don't be discouraged, I'm proud of you.");
+    expect(r.reason).toMatch(/^failure_day_tone/);
+    expect(r.speak).not.toMatch(/proud|discouraged/);
+  });
+  it("an in-character answer to the same question survives", async () => {
+    const line = "That is a strong word. Ask me after the Louise call.";
+    const r = await askOff("Do you ever get frustrated with me?", line);
+    expect(r.speak).toBe(line);
+  });
+  it("ordinary business answers are unaffected and pay no semantic hop", async () => {
+    const line = "The Louise hasn't ordered since August. I'd lead with the pilot.";
+    const r = await askOff("What should we do about The Louise this week?", line);
+    expect(r.speak).toBe(line);
+    expect(r.calls).toBe(1); // only the generation call
+  });
+  it("an explicit ontology question still gets an ontology answer", async () => {
+    const answer = "I'm an AI. Not in the way you mean, though.";
+    expect((await askOff("Are you an AI?", answer)).speak).toBe(answer);
+  });
+  it("an authored story event keeps the constructedness reveal representable", async () => {
+    const answer = "I'm constructed, and both continuities are mine.";
+    expect((await askOff("Show me the two continuities", answer, { ontologyStoryEventActive: true })).speak).toBe(answer);
+  });
+});
