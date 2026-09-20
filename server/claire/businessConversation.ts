@@ -422,15 +422,20 @@ export function parseBusinessTurn(
   // Continuations of an ordered business list are derived from the PREVIOUS QUERY, never reparsed
   // as a customer lookup merely because the correction names a customer.
   if (interpretation.queryRefinement && focus.orderList && session) {
-    const requested = interpretation.cardinality ?? Math.max(1, focus.orderList.baseQuery.limit - focus.orderList.shownEventKeys.length);
+    const base = focus.orderList.baseQuery;
+    const requested = interpretation.cardinality ?? Math.max(1, base.limit - focus.orderList.shownEventKeys.length);
+    const accumulatedExclusions = Array.from(
+      new Set([...(base.excludeCustomerNames ?? []), ...interpretation.exclusions])
+    );
     return {
       kind: "query",
       query: {
-        ...focus.orderList.baseQuery,
+        ...base,
         limit: Math.max(1, requested),
+        // Offset is relative to the effective ordered window. If the original query was
+        // anchored, runBusinessQuery applies that anchor first and only then applies offset.
         offset: focus.orderList.shownEventKeys.length,
-        anchorCustomerName: null,
-        excludeCustomerNames: interpretation.exclusions.length ? interpretation.exclusions : null,
+        excludeCustomerNames: accumulatedExclusions.length ? accumulatedExclusions : null,
       },
       refinement: true,
     };
@@ -1337,7 +1342,9 @@ export async function answerClaireBusinessTurn(
           previousList.baseQuery.metric === turn.query.metric &&
           (turn.query.offset ?? 0) > 0;
         focus.orderList = {
-          baseQuery: continuingSameList ? previousList.baseQuery : { ...turn.query, offset: 0, anchorCustomerName: null, anchorDirection: null },
+          // Preserve anchor direction and exclusions as part of the cursor. "The other four"
+          // must continue the same effective ordered window, not jump back to the full ledger.
+          baseQuery: continuingSameList ? previousList.baseQuery : { ...turn.query, offset: 0 },
           shownEventKeys: Array.from(
             new Set([
               ...(continuingSameList ? previousList.shownEventKeys : []),
