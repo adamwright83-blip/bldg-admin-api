@@ -99,6 +99,16 @@ function leadsWithAction(value: string): boolean {
   return new RegExp(`^${ACTION}\\b`, "i").test(coreOf(value));
 }
 
+/** Shared structural predicate for the authoritative turn interpreter. */
+export function briefingClauseLeadsWithAction(value: string): boolean {
+  return leadsWithAction(value);
+}
+
+/** Shared completed-work grammar for the authoritative turn interpreter. */
+export function isCompletedBriefingClause(value: string): boolean {
+  return COMPLETED.test(stripLeadIn(value)) || COMPLETED.test(value);
+}
+
 const FRAGMENT_JOIN = /^(?:for|with|from|to|on|east|west|north|south)\b(?!\s+(?:today|tomorrow|tonight))/i;
 const DANGLING_LEAD_IN = /^(?:(?:yes|yeah|ok|okay|so|and|um|uh|then|and then)[,\s]+)*(?:(?:i|we)\s+(?:still\s+)?(?:have|need|got|gotta)\s+to|and|then|and then|also|so)$/i;
 
