@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { interpretTurn } from "./interpretTurn";
-import { planClaireResponse, renderClaireResponsePlan } from "./responsePlan";
+import { planClaireResponse, renderClaireResponseChannels, renderClaireResponsePlan } from "./responsePlan";
 
 describe("typed Claire response plan", () => {
   it("keeps business judgment separate from action authority", () => {
@@ -26,6 +26,26 @@ describe("typed Claire response plan", () => {
     });
     expect(plan.segments[0]?.kind).toBe("action_proposal");
     expect(plan.actionAuthorityDecidedUpstream).toBe(true);
+  });
+
+  it("keeps receipt-backed mutation speech in a separate typed channel", () => {
+    const interpretation = interpretTurn("Add Call Dana to Tuesday.");
+    const plan = planClaireResponse({
+      text: "Tuesday works.",
+      kind: "briefing_saved",
+      interpretation,
+      lane: "conversational",
+      receiptBackedCommit: "Added Call Dana to Tuesday.",
+    });
+    expect(plan.segments).toEqual([
+      { kind: "conversational", text: "Tuesday works." },
+      { kind: "action_confirmation", text: "Added Call Dana to Tuesday.", receiptBacked: true },
+    ]);
+    expect(renderClaireResponseChannels(plan)).toEqual({
+      conversational: "Tuesday works.",
+      receiptBackedCommit: "Added Call Dana to Tuesday.",
+    });
+    expect(renderClaireResponsePlan(plan)).toBe("Tuesday works. Added Call Dana to Tuesday.");
   });
 
   it("represents factual queries and call control independently", () => {
