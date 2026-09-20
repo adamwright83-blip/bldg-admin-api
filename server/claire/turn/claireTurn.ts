@@ -915,12 +915,39 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   knownAccounts = accounts;
   state.coverage = recordOperatorReplyCoverage(state.coverage, { operatorText: utterance, accounts, turnOrdinal: claireOrdinal });
   const mentioned = matchAccounts(lower, accounts);
-  const account =
+  let account =
     mentioned.length === 1
       ? mentioned[0]!
       : /\b(?:them|there|that account|that property|they)\b|\bthe follow[- ]?up\b/.test(lower)
         ? state.focusAccount ?? null
         : null;
+
+  // Contact → account resolution has two authoritative evidence sources:
+  // 1) commercialAccountContacts, already loaded into account.aliases; and
+  // 2) the operator's own prior call memory when they explicitly associated the person with an
+  //    account ("Dana with The Louise"). Conversation memory can resolve a referent; it does NOT
+  //    prove any business event happened.
+  if (!account && interpreted.entities.length && (interpreted.businessJudgment || interpreted.hasBusinessQuestion)) {
+    const candidateIds = new Set<number>();
+    for (const entity of interpreted.entities.slice(0, 2)) {
+      const remembered = await deps
+        .searchMemory({
+          tenantId: input.tenantId,
+          operatorUserId: input.operatorUserId,
+          terms: [entity],
+          speaker: "OPERATOR",
+        })
+        .catch(() => []);
+      for (const turn of remembered) {
+        const hits = matchAccounts(normalizeUtterance(turn.text), accounts);
+        if (hits.length === 1) candidateIds.add(hits[0]!.id);
+      }
+    }
+    if (candidateIds.size === 1) {
+      account = accounts.find(candidate => candidate.id === [...candidateIds][0]) ?? null;
+    }
+  }
+
   const followUpDay = account ? followUpDayIntent(utterance, today) : null;
   if (account && followUpDay && interpreted.mayProposeWork) {
     try {
