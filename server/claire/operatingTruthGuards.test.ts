@@ -4,7 +4,17 @@ import { answerClairePreDriveFollowUp } from "./preDriveConversation";
 import { loadPaidOrderLedger } from "../analytics/paidOrderLedger";
 import { runBusinessQuery } from "../analytics/businessQuery";
 import { emptyLoaders, fixtureLoaders } from "../analytics/businessLedgerFixture";
-import { coverageVerdict, deriveCleanCloudEvidence, requiredSourcesFor, sourceHealthFor, type LedgerSourceEvidence, type SourceBindingState } from "../analytics/sourceBindings";
+import {
+  coverageVerdict,
+  deriveCleanCloudEvidence,
+  expectedCleanCloudCoverageThrough,
+  rangesCover,
+  requiredSourcesFor,
+  type LedgerSourceEvidence,
+  type SourceBindingState,
+  type SourceCoverageBasis,
+  type SourceCoverageRange,
+} from "../analytics/sourceBindings";
 
 /**
  * The two invariants that broke the 2026-09-20 production call:
@@ -12,18 +22,48 @@ import { coverageVerdict, deriveCleanCloudEvidence, requiredSourcesFor, sourceHe
  *   2. the personal/biography (story) lane can never suppress an authoritative business fact.
  */
 
-const NOW = new Date("2026-09-20T18:00:00Z");
+const NOW = new Date("2026-09-20T18:00:00Z"); // 11:00 AM Pacific — before today's 6 PM checkpoint.
+const AFTER_DUE = new Date("2026-09-21T02:15:00Z"); // 7:15 PM Pacific — after the one-hour grace.
 const TZ = "America/Los_Angeles";
+const fullRange = (
+  basis: SourceCoverageBasis = "economic_event",
+  from = "2020-01-01",
+  to = "2099-12-31",
+  completedAt = NOW
+): SourceCoverageRange => ({
+  from,
+  to,
+  completedAt,
+  basis,
+  provenance: "browser_sync_receipt",
+});
 const ev = (
-  cc: { state: SourceBindingState; lastSuccessAt?: Date | null },
+  cc: {
+    state: SourceBindingState;
+    lastSuccessAt?: Date | null;
+    coverageRanges?: SourceCoverageRange[];
+    latestAttempt?: { at: Date; outcome: string; rangeFrom: string | null; rangeTo: string | null } | null;
+  },
   native: SourceBindingState = "bound"
 ): LedgerSourceEvidence => ({
-  laundry_butler: { state: native, lastSuccessAt: NOW, isSystemOfRecord: true },
-  cleancloud: { state: cc.state, lastSuccessAt: cc.lastSuccessAt === undefined ? NOW : cc.lastSuccessAt, isSystemOfRecord: false },
+  laundry_butler: {
+    state: native,
+    lastSuccessAt: NOW,
+    coverageRanges: [],
+    latestAttempt: null,
+    isSystemOfRecord: true,
+  },
+  cleancloud: {
+    state: cc.state,
+    lastSuccessAt: cc.lastSuccessAt === undefined ? NOW : cc.lastSuccessAt,
+    coverageRanges: cc.coverageRanges ?? [fullRange()],
+    latestAttempt: cc.latestAttempt ?? null,
+    isSystemOfRecord: false,
+  },
 });
 const bound = ev({ state: "bound" });
-const unbound = ev({ state: "absent" }, "absent");
-const unknown = ev({ state: "unknown" }, "unknown");
+const unbound = ev({ state: "absent", coverageRanges: [] }, "absent");
+const unknown = ev({ state: "unknown", coverageRanges: [] }, "unknown");
 const STALE_SINCE = new Date("2026-06-01T00:00:00Z");
 
 function turnDeps(bindings: LedgerSourceEvidence, loaders = emptyLoaders): Partial<ClaireBusinessTurnDeps> {
@@ -188,63 +228,152 @@ describe("a real phone is only dialed for a real operator of that tenant", () =>
   });
 });
 
-// ── Source health: "had data once" is not "sees the whole business now" ──────────────────────
-describe("source health and freshness", () => {
+// ── Source health + exact range coverage ──────────────────────────────────────────────────────
+describe("source health and exact range coverage", () => {
   const loaded = ["laundry_butler", "cleancloud"] as const;
-  const verdict = (evidence: LedgerSourceEvidence, period?: { endExclusiveUtc: Date }) =>
-    coverageVerdict({ required: requiredSourcesFor(null), evidence, loadedSources: loaded, failedSources: [], period, now: NOW });
+  const verdict = (
+    evidence: LedgerSourceEvidence,
+    period: { start: string; end: string },
+    now = NOW,
+    basis: SourceCoverageBasis = "economic_event"
+  ) =>
+    coverageVerdict({
+      required: requiredSourcesFor(null),
+      evidence,
+      loadedSources: loaded,
+      failedSources: [],
+      period,
+      now,
+      basis,
+    });
 
-  it("connected + fresh + complete → a whole-business total is allowed", () => {
-    expect(verdict(ev({ state: "bound", lastSuccessAt: NOW }))).toEqual({ kind: "provable" });
+  it("August query + September 2 receipt covering September 2 only does NOT prove August", () => {
+    const evidence = ev({
+      state: "bound",
+      coverageRanges: [fullRange("orders_created", "2026-09-02", "2026-09-02", new Date("2026-09-02T23:00:00Z"))],
+    });
+    expect(verdict(evidence, { start: "2026-08-01", end: "2026-08-31" }, NOW, "orders_created"))
+      .toMatchObject({ kind: "range_gap", sources: ["cleancloud"] });
   });
 
-  it("connected but STALE → not presented as a current whole-business total", () => {
-    expect(verdict(ev({ state: "bound", lastSuccessAt: STALE_SINCE }))).toMatchObject({ kind: "stale", sources: ["cleancloud"] });
+  it("August query + a receipt explicitly covering August 1-31 proves that SELECTED Orders (Sales) range", () => {
+    const evidence = ev({
+      state: "bound",
+      coverageRanges: [fullRange("orders_created", "2026-08-01", "2026-08-31", new Date("2026-09-01T02:00:00Z"))],
+    });
+    expect(verdict(evidence, { start: "2026-08-01", end: "2026-08-31" }, NOW, "orders_created"))
+      .toEqual({ kind: "provable" });
   });
 
-  it("configured but never connected → not treated as connected", () => {
-    expect(verdict(ev({ state: "configured" }))).toMatchObject({ kind: "unbound", sources: ["cleancloud"] });
+  it("contiguous daily receipts span a requested interval without a gap", () => {
+    const ranges = ["01", "02", "03", "04"].map(day =>
+      fullRange("orders_created", `2026-08-${day}`, `2026-08-${day}`)
+    );
+    expect(rangesCover(ranges, { from: "2026-08-01", to: "2026-08-04", basis: "orders_created" })).toBe(true);
+    const evidence = ev({ state: "bound", coverageRanges: ranges });
+    expect(verdict(evidence, { start: "2026-08-01", end: "2026-08-04" }, NOW, "orders_created"))
+      .toEqual({ kind: "provable" });
   });
 
-  it("historical rows with no live integration → belongs to the business, currentness NOT assumed", () => {
-    const legacy = ev({ state: "legacy_history", lastSuccessAt: null });
-    // It counts as present (so a real zero stays possible for pre-SaaS tenants)...
-    expect(verdict(legacy)).not.toMatchObject({ kind: "unbound" });
-    // ...but it is never silently treated as current.
-    expect(verdict(legacy)).toMatchObject({ kind: "stale" });
+  it("a gap inside the requested interval stays partial", () => {
+    const evidence = ev({
+      state: "bound",
+      coverageRanges: [
+        fullRange("orders_created", "2026-08-01", "2026-08-02"),
+        fullRange("orders_created", "2026-08-04", "2026-08-04"),
+      ],
+    });
+    expect(verdict(evidence, { start: "2026-08-01", end: "2026-08-04" }, NOW, "orders_created"))
+      .toMatchObject({ kind: "range_gap", sources: ["cleancloud"] });
   });
 
-  it("browser-sync binding + recent success + zero rows in the period → a true zero is allowed", async () => {
-    const turn = await ask("What was revenue in the last 30 days?", ev({ state: "bound", lastSuccessAt: NOW }));
-    expect(turn.handled ? turn.speak : "").toMatch(ZERO_CLAIM);
+  it("before today's 6 PM run + grace, yesterday is the current expected checkpoint", () => {
+    expect(expectedCleanCloudCoverageThrough(NOW)).toBe("2026-09-19");
+    const evidence = ev({
+      state: "bound",
+      coverageRanges: [fullRange("orders_created", "2026-09-19", "2026-09-19")],
+    });
+    expect(verdict(evidence, { start: "2026-09-19", end: "2026-09-20" }, NOW, "orders_created"))
+      .toEqual({ kind: "provable" });
   });
 
-  it("one current source + one stale source + a real figure → partial total only", async () => {
-    const turn = await ask("What was revenue this year?", ev({ state: "bound", lastSuccessAt: STALE_SINCE }), fixtureLoaders());
+  it("after today's scheduled run plus grace, missing today's receipt is stale", () => {
+    expect(expectedCleanCloudCoverageThrough(AFTER_DUE)).toBe("2026-09-20");
+    const evidence = ev({
+      state: "bound",
+      coverageRanges: [fullRange("orders_created", "2026-09-19", "2026-09-19")],
+    });
+    expect(verdict(evidence, { start: "2026-09-19", end: "2026-09-20" }, AFTER_DUE, "orders_created"))
+      .toMatchObject({ kind: "stale", sources: ["cleancloud"] });
+  });
+
+  it("a recent success timestamp for an unrelated range cannot freshen the requested period", () => {
+    const evidence = ev({
+      state: "bound",
+      lastSuccessAt: NOW,
+      coverageRanges: [fullRange("orders_created", "2026-09-02", "2026-09-02", NOW)],
+    });
+    expect(verdict(evidence, { start: "2026-08-01", end: "2026-08-31" }, NOW, "orders_created"))
+      .toMatchObject({ kind: "range_gap", sources: ["cleancloud"] });
+  });
+
+  it("a failed latest scheduled attempt with no due-range success forbids a current whole-business total", () => {
+    const evidence = ev({
+      state: "bound",
+      coverageRanges: [fullRange("orders_created", "2026-09-19", "2026-09-19")],
+      latestAttempt: {
+        at: new Date("2026-09-21T01:05:00Z"),
+        outcome: "extension_import",
+        rangeFrom: "2026-09-20",
+        rangeTo: "2026-09-20",
+      },
+    });
+    expect(verdict(evidence, { start: "2026-09-19", end: "2026-09-20" }, AFTER_DUE, "orders_created"))
+      .toMatchObject({ kind: "stale", sources: ["cleancloud"] });
+  });
+
+  it("browser Orders (Sales) range coverage does not masquerade as payment-event completeness", () => {
+    const evidence = ev({
+      state: "bound",
+      coverageRanges: [fullRange("orders_created", "2026-08-01", "2026-08-31")],
+    });
+    expect(verdict(evidence, { start: "2026-08-01", end: "2026-08-31" }, NOW, "economic_event"))
+      .toMatchObject({ kind: "semantic_gap", sources: ["cleancloud"] });
+  });
+
+  it("one system-of-record source plus CleanCloud semantic gap yields a partial spoken total", async () => {
+    const evidence = ev({
+      state: "bound",
+      coverageRanges: [fullRange("orders_created", "2026-01-01", "2026-09-19")],
+    });
+    const turn = await ask("What was revenue this year?", evidence, fixtureLoaders());
     const speak = turn.handled ? turn.speak : "";
     expect(speak).toMatch(/\$/);
-    expect(speak).toMatch(/can't verify CleanCloud is current|isn't a confirmed whole-business total/i);
-  });
-
-  it("a CLOSED past period only needs a sync after that window closed", () => {
-    const august = { endExclusiveUtc: new Date("2026-09-01T00:00:00Z") };
-    const syncedInSeptember = ev({ state: "bound", lastSuccessAt: new Date("2026-09-02T00:00:00Z") });
-    expect(verdict(syncedInSeptember, august)).toEqual({ kind: "provable" });
-    // ...but the same feed is stale for a question that runs up to now.
-    expect(verdict(syncedInSeptember)).toMatchObject({ kind: "stale" });
-  });
-
-  it("native Goldline orders are the system of record and are never 'stale'", () => {
-    expect(sourceHealthFor({ state: "bound", lastSuccessAt: STALE_SINCE, isSystemOfRecord: true }, null, NOW)).toBe("not_applicable");
+    expect(speak).toMatch(/order date|payment events|exhaustive whole-business coverage/i);
   });
 });
 
 describe("CleanCloud evidence hierarchy (precedence, not a database)", () => {
-  const none = { syncBinding: null, saasConnection: null, importSuccessAt: null, historyAt: null };
+  const none = {
+    syncBinding: null,
+    saasConnection: null,
+    historyAt: null,
+    coverageRanges: [] as SourceCoverageRange[],
+    latestAttempt: null,
+  };
 
-  it("a browser-sync binding is the strongest signal and carries its lastSuccessAt", () => {
-    expect(deriveCleanCloudEvidence({ ...none, syncBinding: { lastSuccessAt: NOW }, historyAt: STALE_SINCE }))
-      .toMatchObject({ state: "bound", lastSuccessAt: NOW });
+  it("a browser-sync binding is the strongest membership signal and carries receipt success separately", () => {
+    const range = fullRange("orders_created", "2026-09-19", "2026-09-19", NOW);
+    expect(deriveCleanCloudEvidence({
+      ...none,
+      syncBinding: { lastSuccessAt: NOW },
+      historyAt: STALE_SINCE,
+      coverageRanges: [range],
+    })).toMatchObject({
+      state: "bound",
+      lastSuccessAt: NOW,
+      coverageRanges: [range],
+    });
   });
 
   it("status 'configured' is NOT promoted to connected", () => {
@@ -261,16 +390,12 @@ describe("CleanCloud evidence hierarchy (precedence, not a database)", () => {
     }
   });
 
-  it("history alone is legacy_history, never a live feed", () => {
-    expect(deriveCleanCloudEvidence({ ...none, historyAt: STALE_SINCE })).toMatchObject({ state: "legacy_history" });
+  it("history alone is legacy_history, never a live feed and never fabricated range coverage", () => {
+    expect(deriveCleanCloudEvidence({ ...none, historyAt: STALE_SINCE }))
+      .toMatchObject({ state: "legacy_history", coverageRanges: [] });
   });
 
   it("no evidence of any kind is absent", () => {
     expect(deriveCleanCloudEvidence(none)).toMatchObject({ state: "absent" });
-  });
-
-  it("import-batch success supplies freshness when the binding has none", () => {
-    expect(deriveCleanCloudEvidence({ ...none, syncBinding: { lastSuccessAt: null }, importSuccessAt: NOW }))
-      .toMatchObject({ state: "bound", lastSuccessAt: NOW });
   });
 });
