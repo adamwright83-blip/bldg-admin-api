@@ -1,0 +1,54 @@
+/**
+ * Exactly one ExecutiveDecision per completed turn.
+ * This is the only sovereign output of Brain V2.
+ */
+
+import type { AttentionPlan } from "./attention";
+import type { EvidenceItem } from "./evidence";
+import type { CallControlGrant, ExecutiveActionGrant } from "./grants";
+import type { PerceivedTurn } from "./perceivedTurn";
+import type { RetrievalRequest } from "./retrieval";
+import type { ResponsePlan, ResponseSegment } from "./responsePlan";
+
+export type InhibitedCandidate = {
+  kind:
+    | "episodic_as_current_truth"
+    | "parser_text_as_action_authority"
+    | "pending_as_intent"
+    | "rapport_suppresses_business"
+    | "stale_receipt_as_fresh_proof"
+    | "recommendation_as_mutation"
+    | "narrative_withholds_business"
+    | "global_goal_contaminates_scope"
+    | "model_statement_as_evidence"
+    | "synthetic_evidence"
+    | "call_end_without_leave_taking"
+    | "half_turn";
+  detail: string;
+};
+
+export type Conclusion = {
+  kind: string;
+  detail: string;
+  evidenceIds: string[];
+};
+
+export type CallControlDecision =
+  | { endCall: false }
+  | { endCall: true; grant: CallControlGrant };
+
+export type ExecutiveDecision = {
+  perceivedTurn: PerceivedTurn;
+  attention: AttentionPlan;
+  retrievals: RetrievalRequest[];
+  evidence: EvidenceItem[];
+  conclusions: Conclusion[];
+  inhibitedCandidates: InhibitedCandidate[];
+  responsePlan: ResponsePlan;
+  /** Convenience alias of responsePlan.segments (same array). */
+  responseSegments: ResponseSegment[];
+  actionGrants: ExecutiveActionGrant[];
+  callControl: CallControlDecision;
+  /** Always false until an authorized cutover. */
+  productionAuthority: false;
+};
