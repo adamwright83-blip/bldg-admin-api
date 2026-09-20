@@ -1,4 +1,5 @@
 import { containsBriefingAction } from "../briefing/deterministicBriefing";
+import { classifyDoctrineUtterance } from "../../../shared/claireProactive";
 
 /**
  * ONE authoritative interpretation of the operator's utterance, produced before any route acts.
@@ -80,6 +81,8 @@ export type InterpretedTurn = {
   broadOperationalBriefing: boolean;
   /** Weekday/date language resolved separately from entity names. */
   temporalReference: string | null;
+  /** Standing/temporary operator doctrine instruction; the doctrine writer may run only when true. */
+  doctrineInstruction: boolean;
 };
 
 // ── Call control ─────────────────────────────────────────────────────────────────────────────
@@ -317,6 +320,7 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   const businessJudgment = BUSINESS_JUDGMENT.test(text) && !acknowledgement;
   const broadOperationalBriefing = BROAD_OPERATIONAL_BRIEFING.test(text.trim()) && !businessJudgment;
   const temporalReference = TEMPORAL_REFERENCE.exec(text)?.[1]?.toLowerCase() ?? null;
+  const doctrineInstruction = classifyDoctrineUtterance(text) !== "not_doctrine";
   const listRequest = Boolean(cardinality && cardinality > 1) || (LIST_NOUN.test(text) && !acknowledgement);
   const anchorMatch = ANCHOR.exec(text);
   const exclusionMatch = EXCLUSION.exec(text);
@@ -372,5 +376,6 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
     businessJudgment,
     broadOperationalBriefing,
     temporalReference,
+    doctrineInstruction,
   };
 }
