@@ -35,7 +35,7 @@ const fullRange = (
   to,
   completedAt,
   basis,
-  provenance: "browser_sync_receipt",
+  provenance: basis === "orders_created" ? "browser_sync_receipt" : "test_fixture",
 });
 const ev = (
   cc: {
