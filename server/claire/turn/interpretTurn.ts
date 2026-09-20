@@ -106,7 +106,7 @@ export type InterpretedTurn = {
 const DEPARTURE =
   /\b(?:i|we)\s*(?:'ve|'ll|'m)?\s*(?:have\s+to|has\s+to|had\s+to|need\s+to|needs\s+to|got\s+to|got\s+ta|gotta|must|better|gonna)\s+(?:go|run|head\s+out|get\s+going|get\s+off|get\s+back\s+to\s+it|take\s+off|jump\s+off|leave|jet)\b/;
 const PARTING =
-  /\b(?:talk|speak|catch)\s+(?:to\s+|with\s+)?(?:you|ya)?\s*(?:later|tomorrow|soon|then)\b|\b(?:good\s*bye|goodbye|bye(?:\s+claire)?|later\s+claire)\b/;
+  /\b(?:(?:i|we)(?:'ll|\s+will)\s+)?(?:talk|speak|catch)\s+(?:to\s+|with\s+)?(?:you|ya)?\s*(?:later|tomorrow|soon|then)\b|\b(?:good\s*bye|goodbye|bye(?:\s+claire)?|later\s+claire)\b/;
 const EXPLICIT_END =
   /\b(?:end\s+(?:the\s+)?call|hang\s+up|we(?:\s+are|'re)\s+done|i(?:\s+am|'m)\s+done\s+talking|that(?:\s+is|'s)\s+it\s+for\s+now|that(?:\s+is|'s)\s+all\s+for\s+now)\b/;
 
@@ -127,6 +127,22 @@ export function detectCallControl(utterance: string): "end" | "continue" {
   // A departure/parting phrase reported inside a story about someone else is not the operator leaving.
   if (/\b(?:told|said|says|tells)\b[^.!?]*\b(?:goodbye|bye|later)\b/.test(text)) return "continue";
   return DEPARTURE.test(text) || PARTING.test(text) || EXPLICIT_END.test(text) ? "end" : "continue";
+}
+
+/**
+ * True only when the turn is essentially just leave-taking. Mixed turns ("Dana hasn't replied,
+ * but I gotta go") must still reach the kernel so Claire can give the minimal useful response and
+ * then hang up.
+ */
+export function isPureCallControlTurn(utterance: string): boolean {
+  if (detectCallControl(utterance) !== "end") return false;
+  let remainder = utterance.toLowerCase();
+  remainder = remainder.replace(DEPARTURE, " ").replace(PARTING, " ").replace(EXPLICIT_END, " ");
+  remainder = remainder
+    .replace(/\b(?:have\s+a\s+good\s+(?:day|night|one)|drive\s+safe|thanks?|thank\s+you|please|okay|ok|alright|well|so|but|and|then|claire)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return remainder.length === 0;
 }
 
 // ── Action intent ────────────────────────────────────────────────────────────────────────────
