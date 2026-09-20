@@ -48,18 +48,34 @@ describe("Claire pre-drive conversation", () => {
     expect(shouldEndClaireCallOnUtterance(utterance, { holding: false })).toBe(true);
   });
 
-  it("does not hang up on a short ambiguous closer while a briefing is held", () => {
-    expect(shouldEndClaireCallOnUtterance("Got it", { holding: true })).toBe(false);
-    expect(shouldEndClaireCallOnUtterance("Got it", { holding: false })).toBe(true);
-  });
+  it.each(["Got it", "I'm good", "That's enough"])(
+    "never auto-hangs up on an ambiguous acknowledgement: %s",
+    utterance => {
+      expect(shouldEndClaireCallOnUtterance(utterance, { holding: true })).toBe(false);
+      expect(shouldEndClaireCallOnUtterance(utterance, { holding: false })).toBe(false);
+    }
+  );
 
-  it("does not hang up on a long utterance that only contains an ambiguous closer", () => {
+  it("does not hang up on a status-update fragment that contains an ambiguous closer", () => {
     expect(
       shouldEndClaireCallOnUtterance(
         "Got it, and after that I still need to charge Ryan.",
         { holding: false }
       )
     ).toBe(false);
+  });
+
+  it("does not mistake reported goodbye language inside a status update for call-end intent", () => {
+    expect(
+      shouldEndClaireCallOnUtterance(
+        "I told Dana goodbye and then she said to email the proposal.",
+        { holding: false }
+      )
+    ).toBe(false);
+  });
+
+  it("still ends on an explicit standalone goodbye", () => {
+    expect(shouldEndClaireCallOnUtterance("Bye Claire.", { holding: false })).toBe(true);
   });
 
   it("does not mistake a follow-up question for a close", () => {

@@ -66,9 +66,15 @@ const FOLLOW_UP_TRIM_CHARS = 6000;
 const FOLLOW_UP_MAX_TOKENS = 1400;
 
 const AMBIGUOUS_CLOSE_PHRASE =
-  /\b(got it|i(?: am|'m) (?:all )?good|that(?: is|'s) enough|bye)\b/;
+  /\b(got it|i(?: am|'m) (?:all )?good|that(?: is|'s) enough)\b/;
+/**
+ * End-call intent has to be its own utterance/sentence, not merely words that
+ * happen to occur inside a status update ("I told Dana goodbye and then...").
+ * This is deliberately narrower than isClaireCallComplete(): acknowledgements
+ * such as "got it" and "I'm good" are conversational turns, not hangup commands.
+ */
 const EXPLICIT_END_CALL_PHRASE =
-  /\b(end (?:the )?call|hang up|goodbye|we(?: are|'re) done|i(?: am|'m) done|have a good (?:day|night|one))\b/;
+  /(?:^|[.!?]\s*)(?:end (?:the )?call(?: please)?|hang up(?: please)?|goodbye|bye(?: claire)?|we(?: are|'re) done|i(?: am|'m) done(?: talking)?|(?:you\s+)?have a good (?:day|night|one))(?:[.!?]|$)/;
 
 export function isClaireCallComplete(utterance: string): boolean {
   const normalized = utterance.trim().toLowerCase();
@@ -80,21 +86,20 @@ export function isExplicitClaireCallEnd(utterance: string): boolean {
 }
 
 /**
- * Hang up on a close phrase. Ambiguous short closers ("got it", "I'm good")
- * stay gated so they cannot abort a pending Day Line confirmation. Explicit
- * end-call speech must terminate even when a briefing is held or the
- * utterance is longer than six words — the live operator acceptance call
- * said "Have a good day. I'm done talking." and was ignored.
+ * Only explicit end-call intent may hang up automatically.
+ *
+ * Slice 0 continuation handling can stitch long provider fragments, but this
+ * check runs at the webhook boundary before Claire reasons about a semantic
+ * turn. Treating short acknowledgements ("got it", "I'm good") as hangup
+ * commands therefore lets an ordinary pause terminate a live status update.
+ * Keep those phrases recognizable as conversational closes, but never use
+ * them as an automatic hangup signal.
  */
 export function shouldEndClaireCallOnUtterance(
   utterance: string,
-  options: { holding?: boolean } = {}
+  _options: { holding?: boolean } = {}
 ): boolean {
-  if (!isClaireCallComplete(utterance)) return false;
-  if (isExplicitClaireCallEnd(utterance)) return true;
-  if (options.holding) return false;
-  const words = utterance.split(/\s+/).filter(Boolean).length;
-  return words <= 6;
+  return isExplicitClaireCallEnd(utterance);
 }
 
 function currentStop(context: ClaireDriveContext) {
