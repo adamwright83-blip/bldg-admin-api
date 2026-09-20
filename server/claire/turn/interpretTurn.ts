@@ -122,7 +122,7 @@ export function detectCallControl(utterance: string): "end" | "continue" {
 // ── Action intent ────────────────────────────────────────────────────────────────────────────
 /** A directive aimed at Claire's tracking systems: "add…", "put… on the Day Line", "remind me…". */
 const ACTION_DIRECTIVE =
-  /\b(?:add|put|schedule|book|remind\s+me|track|log|note|create|set\s+up|pencil|block\s+out|move|reschedule|push)\b/i;
+  /\b(?:add|put|schedule|book|remind\s+me|track|log|note|create|set\s+up|pencil|block\s+out|move|reschedule|push|cancel|remove|delete|edit|change|mark\s+(?:done|complete|completed))\b/i;
 
 /**
  * Explicit refusal. Any of these makes work proposal impossible for the turn, even alongside a
