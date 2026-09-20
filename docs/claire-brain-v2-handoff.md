@@ -71,9 +71,10 @@ Open design choices (allowed to refine, not reverse):
 - [x] Phase E — Ordered-query continuation (resolved ≠ presented), prior claims, pending lifecycle
 - [x] Governor fix — mixed business/personal firewall now **enforced**, not computed and dropped
 - [x] Phase H — Regression corpus: all 10 todos implemented (100 brain tests, 0 todo)
-- [ ] Phase F — Episodic / Self / Goals adapters still return `[]` (contracts + wiring exist)
-- [ ] Phase G — Character renderer (voice), still plan-upstream-of-prose
-- [ ] Phase I — Shadow mode on real Twilio/desk turns (read-only comparison persistence)
+- [x] Phase F — Episodic / Self / Goals adapters wrapped read-only with injected readers
+- [x] Phase G — Character renderer fed only by ResponsePlan (`assertRenderedFromPlan` lint)
+- [x] Phase I mechanism — `observeShadowTurn`: default off, cannot throw, cannot delay
+- [ ] Phase I wiring — import into `claireTwilio.ts` / `claireRouter.ts` (**Adam's call**)
 - [ ] Guarded operator-only cutover (**authorization required**)
 - [ ] Phase J — Retire old control plane
 
@@ -86,17 +87,29 @@ is correct for this phase.
 
 ## Next task
 
-**Phase G: replace the concatenation renderer with Claire's character renderer.**
+**One decision, then Phase J planning.**
 
-`response/render.ts` concatenates segment text. The character renderer must be fed ONLY
-by `ResponsePlan` — it may phrase, compress and keep her voice, but may not add facts,
-numbers, authority, actions, disclosure permissions or call-control decisions. There is
-still no `planFromSpeak` and there must not be one.
+The shadow MECHANISM is complete: `server/claire/brain/shadow/observeShadowTurn.ts`.
+It is default off (`CLAIRE_BRAIN_V2_SHADOW`), structurally cannot throw, and
+structurally cannot delay (`observeShadowTurnDetached` returns void synchronously).
 
-Then **Phase F remainder** (episodic / self / goals adapters return `[]`; the executive
-already plans and consumes their requests, so only the adapter bodies are missing), and
-then **Phase I** shadow wiring: V2 observes the same completed operator turn as V1 and
-persists comparison telemetry only. No speech, no mutation, no hangup, no V1 state change.
+What is deliberately NOT done: importing it into `claireTwilio.ts` / `claireRouter.ts`.
+That single import is the only line that touches a live production path. This branch has
+held production Claire files at ZERO changes throughout, and the binding section of this
+handoff forbids the import in this phase. **Adam authorizes it, not an agent.**
+
+When authorized, the wiring is one fire-and-forget call after V1 completes its turn:
+
+```ts
+observeShadowTurnDetached({ rawText, state, tenantId, operatorUserId, surface, conversationKey, v1 });
+```
+
+Do not `await` it. Do not branch production behaviour on its result.
+
+Remaining model work: `correctionTarget`, `personalProbe` and `narrativeProbe` are still
+stubbed in Perception, so no turn currently opens a personal lane in practice. The
+mixed-lane firewall that governs such turns is implemented and tested directly against
+the governor, but it has not yet been exercised by a real perceived personal probe.
 
 ### Retrieval safety invariant (do not regress)
 
@@ -191,15 +204,15 @@ None.
 
 ## Known incomplete work
 
-- Episodic / self / goals adapters still return `[]`. The executive already plans and
-  consumes their typed requests, so only the adapter bodies are missing.
+- Episodic / self / goals adapters are wrapped read-only, but their readers must be
+  INJECTED. With no context supplied a compartment stays silent rather than reading
+  more than the caller intended.
 - `correctionTarget` always `null` (PR #192 field not on main `interpretTurn`)
 - `personalProbe` / `narrativeProbe` always `false`, so no turn currently opens a personal
   lane in practice. The firewall that governs mixed turns is implemented and tested
   directly against the governor.
 - Fragment completeness not wired; caller must pass `completeness` (shadow defaults to `"complete"`)
-- Character renderer is concatenation, not Claire's voice (Phase G)
-- Shadow is not hooked to Twilio/desk (correct — Phase I)
+- Shadow is not hooked to Twilio/desk (deliberate — awaiting Adam's authorization)
 - Live Dana → The Louise never verified (no `DATABASE_URL`). Do not hardcode the pair.
   Nothing in the code hardcodes it; resolution goes through `contact_account_resolution`.
 - **No live database verification was performed.** This environment has no `DATABASE_URL`

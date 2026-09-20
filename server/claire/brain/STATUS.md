@@ -2,7 +2,7 @@
 
 Architecture: COMPLETE
 Contracts: COMPLETE
-Adapters: Business Memory LIVE (read-only, injected); episodic / self / goals still stubs
+Adapters: ALL LIVE (read-only, readers injected) — business, episodic, self/social, goals
 Perception: COMPLETE (interpretTurn wrap; entity shape classified; fragment-hold not migrated)
 Working Memory: COMPLETE (ordered query ported — resolved ≠ presented)
 Executive Attention: COMPLETE
@@ -10,17 +10,21 @@ Executive Retrieval: COMPLETE (typed requests; honours doNotRetrieve)
 Executive Integration: COMPLETE (evidenced facts, judgments, continuation, inhibition)
 Executive Governor: COMPLETE (deterministic; mixed-lane firewall ENFORCED)
 Response Plan: COMPLETE (typed segments upstream of prose)
-Character Renderer: IN PROGRESS (concatenation; Claire's voice not wired — Phase G)
+Character Renderer: COMPLETE (fed only by ResponsePlan; assertRenderedFromPlan lints it)
 Action Gateway: COMPLETE (refuses live mutations)
-Shadow Mode: IN PROGRESS (runClaireBrainTurn exists; not wired to production — Phase I)
+Shadow Mode: MECHANISM COMPLETE, NOT WIRED (default off; transport import awaits Adam)
 Production Cutover: PROHIBITED
 
-Tests: 100 passed, 0 todo (brain). Full suite 7012 passed, 0 failed. `tsc --noEmit` green.
+Tests: 130 passed, 0 todo (brain). Full suite 7042 passed, 0 failed. `tsc --noEmit` green.
 
 Current next step:
-Phase G — replace the concatenation renderer with Claire's character renderer, fed
-ONLY by ResponsePlan. Then Phase I shadow wiring (read-only observation of real
-completed turns, comparison telemetry only).
+The ONE remaining Phase I step is a decision, not code: whether to import
+`observeShadowTurnDetached` into `claireTwilio.ts` / `claireRouter.ts`. The mechanism
+is built, default off, cannot throw and cannot delay — but that import is the only
+line that touches a live production path, and the binding handoff forbids it in this
+phase. Adam authorizes it, not an agent.
+
+Shadow mode flag: `CLAIRE_BRAIN_V2_SHADOW=1`. Unset or malformed disables observation.
 
 Retrieval safety note:
 `decideTurn` retrieves NOTHING by default. Live reads require a caller to pass

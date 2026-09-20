@@ -563,10 +563,10 @@ Then Phase I: guarded operator-only cutover. Then Phase J: retire the old contro
 | C | Executive attention + retrieval | done | none |
 | D | Integration / inhibition / authority | done | none |
 | E | ResponsePlan + ordered-query continuation | done | none |
-| F | Action gateway | gateway done; episodic/self/goals adapters stubbed | none |
-| G | Character renderer | **next** | none |
-| H | Regression / adversarial corpus | done (100 brain tests, 0 todo) | none |
-| I | Shadow mode on real turns + guarded cutover | not started | read-only comparison, then **only after authorization** |
+| F | Action gateway + compartment adapters | done | none |
+| G | Character renderer | done | none |
+| H | Regression / adversarial corpus | done (130 brain tests, 0 todo) | none |
+| I | Shadow mode on real turns + guarded cutover | mechanism done; transport import **awaits authorization** | read-only comparison, then **only after authorization** |
 | J | Retire old control plane | not started | after V2 proves itself |
 
 ### Retrieval safety invariant
