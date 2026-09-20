@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { invokeLLM } from "../_core/llm";
 import { claireModelRequest } from "./claireModel";
+import { parseCardinality } from "./turn/interpretTurn";
 import {
   UNKNOWN_EVIDENCE,
   coverageVerdict,
@@ -258,6 +259,25 @@ function parseLimit(lower: string): number | null {
   return value && value > 0 ? Math.min(value, 25) : null;
 }
 
+/**
+ * How many records a latest/biggest-sales question asked for. THE single place cardinality enters
+ * that query.
+ *
+ * `parseLimit` only ever matched "(top|the|my|…) <n>", so "last five sales" matched nothing and
+ * `latest_sales` fell back to its singular default — Claire answered "my last five sales" with one
+ * record three times on the 2026-09-20 call. A plural record noun with no number still means a
+ * list, not the newest single record.
+ */
+export function requestedListSize(lower: string): number | null {
+  const requested = parseCardinality(lower);
+  if (requested) return requested;
+  const pluralList =
+    /\b(?:sales|orders)\b/.test(lower) &&
+    /\b(?:last|latest|recent|newest)\b/.test(lower) &&
+    !/\b(?:the\s+)?(?:last|latest|newest|most\s+recent)\s+(?:sale|order)\b/.test(lower);
+  return pluralList ? 5 : null;
+}
+
 /** "hasn't ordered in 60" — a bare day count in a dormancy question. */
 function bareDays(lower: string): PeriodSpec | null {
   const match = new RegExp(`\\bin (?:the last |the past )?${NUMBER_PATTERN}\\b(?!\\s*(?:days?|weeks?|months?|am|pm|percent|orders?))`).exec(lower);
@@ -469,6 +489,8 @@ export function parseBusinessTurn(
     const kind = ordering ?? "latest";
     const query = defaultBusinessQuery(kind === "largest" ? "biggest_orders" : "latest_sales");
     if (kind === "earliest") query.rank = "earliest";
+    const listSize = requestedListSize(lower);
+    if (listSize) query.limit = listSize;
     query.period = mentionedPeriod ?? { kind: "all_time" };
     const inherited = (there || recentOrderer) && session ? { ...(session.query.filters ?? {}), customerKeys: null, customerLabel: null } : null;
     query.filters = mergeScope(inherited, { lineage, buildings, address });

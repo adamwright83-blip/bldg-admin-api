@@ -325,9 +325,15 @@ export async function verifyPriorClaim(receipt: FactualClaimReceipt, deps: Prior
     const addition = !moneyOk || [...claimed.names].some(name => !backing.names.has(name)) || plainNumbers.some(n => !numberSupported(n, backing.numbers));
     if (addition) return done({ outcome: "unsupported", resolution: "receipt_only", evidenceChanged: null, freshnessAffected: false, timedOut: false });
     const underlying = await verifyPriorClaim(source, deps);
-    const grounded = underlying.outcome === "verified" || underlying.outcome === "grounded_as_stated";
+    /**
+     * A CORRECTNESS challenge ("are you sure about those numbers?") is not answered by provenance.
+     * Only a fresh authoritative read earns `synthesis_grounded`; a receipt that merely proves the
+     * figures were once grounded reports itself as such. Live on 2026-09-20 this path replied
+     * "The figures and names in that came from the ledger", which does not answer the question.
+     */
+    const freshlyVerified = underlying.outcome === "verified" && underlying.resolution === "fresh_query";
     return done({
-      outcome: grounded ? "synthesis_grounded" : underlying.outcome,
+      outcome: freshlyVerified ? "synthesis_grounded" : underlying.outcome,
       resolution: underlying.resolution,
       evidenceChanged: underlying.evidenceChanged,
       freshnessAffected: underlying.freshnessAffected,

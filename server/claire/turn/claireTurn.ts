@@ -532,6 +532,22 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const history = () => (state.history ?? []).map(entry => ({ speaker: entry.speaker, text: entry.text }));
   const lower = normalizeUtterance(utterance);
 
+  /**
+   * THE authoritative interpretation of this turn. Produced once, here, before any route that can
+   * mutate, terminate, select truth, or consult pending state. Everything downstream consumes it;
+   * nothing downstream re-decides what Adam meant.
+   */
+  const interpreted = interpretTurn(utterance);
+  trace.turnKind ??= null;
+
+  // Acknowledgements close a beat. They are not questions, challenges, or work — and must never
+  // reach prior-claim adjudication, which answered "I'm good." with "I can't verify that properly
+  // right now." on the live call.
+  if (interpreted.acknowledgement && !state.pendingBriefing && !state.pendingProposal && !state.pendingAccountFollowUp) {
+    mark("fallback", { fallbackReason: "acknowledgement" });
+    return finish({ speak: "All right.", kind: "answered" });
+  }
+
   const doctrineSpeak = deps.doctrineTurn
     ? await deps.doctrineTurn({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, utterance, today })
     : null;
@@ -574,7 +590,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       state.claimReceipts = appendClaimReceipt(state.claimReceipts, receipt);
     }
   };
-  if (resolution.kind !== "none") {
+  // A refinement of the previous QUERY ("I asked you for the last five... what were the other
+  // four?") is not a challenge to its TRUTH. Prior-claim used to swallow both, plus bare
+  // acknowledgements — three of the worst turns in the 2026-09-20 call.
+  if (resolution.kind !== "none" && !interpreted.acknowledgement && !interpreted.queryRefinement) {
     // Deterministic referent (name / number / immediately preceding): the classifier only labels the act.
     const explicit = resolution.kind === "ambiguous" || resolution.via === "explicit_reference";
     if (isChallengeCandidate(utterance, explicit)) {
@@ -808,7 +827,6 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    * schedulable nouns it contains. Extracted items are demoted to context, which is the existing
    * safe path for "this looked like work but isn't".
    */
-  const interpreted = interpretTurn(utterance, { extractedWorkItems: parsed.items.length });
   const skipBriefing =
     explicitDayLineRefusal(utterance) ||
     !interpreted.mayProposeWork ||

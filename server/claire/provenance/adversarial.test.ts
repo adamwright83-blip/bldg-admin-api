@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { BusinessQueryResult } from "../../analytics/businessQuery";
 import { latest, harness, model, order, reading, THOMAS, type Summary } from "./testHarness";
-import { appendClaimReceipt, MAX_CLAIM_RECEIPTS, receiptFromBusinessResult, receiptFromReader, speakPriorClaimVerification, verifyPriorClaim, UNVERIFIABLE_SPEECH, AMBIGUOUS_REFERENT_SPEECH, type FactualClaimReceipt } from "./claimReceipts";
+import { defaultBusinessQuery } from "../../analytics/businessQuery";
+import { fingerprintBusinessResult, appendClaimReceipt, MAX_CLAIM_RECEIPTS, receiptFromBusinessResult, receiptFromReader, speakPriorClaimVerification, verifyPriorClaim, UNVERIFIABLE_SPEECH, AMBIGUOUS_REFERENT_SPEECH, type FactualClaimReceipt } from "./claimReceipts";
 import { normalizeReading, summarizeReceipts } from "./priorClaimChallenge";
 import { suppressRestartedQuestion, recordClaireQuestionCoverage, recordOperatorReplyCoverage, type CoveredSubject } from "./callCoverage";
 
@@ -161,13 +162,25 @@ describe("D. synthesized prose never gets stronger provenance than the evidence 
     ["correct fact + speculation", "Thomas paid $70.40, probably because of the promo."],
     ["false predicate (not provable here)", "Thomas cancelled his $70.40 order."],
     ["unsupported causal claim with no new figure", "Thomas paid $70.40 because you called him."],
-  ])("%s → credited ONLY for names/figures, never as a verified statement", async (_n, text) => {
+  ])("%s → never a verified statement; provenance alone cannot answer a correctness challenge", async (_n, text) => {
+    // This backing receipt is NOT re-runnable, so a correctness challenge cannot be satisfied from
+    // it. Only a fresh authoritative read earns `synthesis_grounded`.
     const v = await verify(synth(text));
+    expect(v.outcome).toBe("grounded_as_stated");
+    // Must not AFFIRM. "I won't say it still holds" is the correct, non-affirming form.
+    expect(speakPriorClaimVerification(v)).not.toMatch(/and it still (?:checks out|holds)|still checks out|is verified/);
+  });
+
+  it("a synthesis over RE-RUNNABLE evidence that still matches is credited for its figures", async () => {
+    const rerunnable: FactualClaimReceipt = {
+      ...backing,
+      recheck: { kind: "business_query", query: defaultBusinessQuery("latest_sales") },
+      fingerprint: fingerprintBusinessResult(latest([THOMAS])).fingerprint,
+      newestRecordAt: null,
+    };
+    const v = await verifyPriorClaim({ ...synth("Thomas paid $70.40."), supportedBy: rerunnable }, { rerun: async () => latest([THOMAS]) });
     expect(v.outcome).toBe("synthesis_grounded");
-    const said = speakPriorClaimVerification(v);
-    expect(said).toMatch(/figures and names/);
-    expect(said).toMatch(/my own read, not a record/);
-    expect(said).not.toMatch(/checks out|still holds|verified|true/);
+    expect(v.resolution).toBe("fresh_query");
   });
   it("a synthesis with no authoritative backing is unsupported", async () => {
     expect((await verify({ ...synth("Thomas paid $70.40."), supportedBy: null })).outcome).toBe("unsupported");
