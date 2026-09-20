@@ -61,8 +61,9 @@ import { classifyOpenDialogueAct } from "./dialogueAct";
 import { interpretTurn, type InterpretedTurn } from "./interpretTurn";
 import {
   planClaireResponse,
-  renderClaireResponsePlan,
+  renderClaireResponseChannels,
   type ClaireResponsePlan,
+  type ResponseContentLane,
 } from "./responsePlan";
 import { runBusinessQuery } from "../../analytics/businessQuery";
 import {
@@ -184,6 +185,8 @@ export type ClaireTurnResult = {
   receiptBackedCommit?: string;
   /** Typed boundary consumed by the renderer; future Narrative OS adds lanes here, not in business truth. */
   responsePlan?: ClaireResponsePlan;
+  /** Executor-selected content lane. This is never allowed to grant action authority. */
+  responseLane?: ResponseContentLane;
 };
 
 export type ClaireTurnDeps = {
@@ -468,6 +471,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // Set when a guarded personal turn decided the call should actually end (business complete + an
   // authored exit line exists). Dormant in production until such a line is authored.
   let personalEndCall = false;
+  let personalLaneSeen = false;
   const claireOrdinal = (state.claireTurnCount ?? 0) + 1;
   /** Receipt for the factual claim this turn makes, attached to durable state in `finish`. */
   let pendingReceipt: FactualClaimReceipt | null = null;
@@ -480,6 +484,15 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     pendingReceipt = receiptFromReader({ conversationKey: input.conversationKey, claireTurnOrdinal: claireOrdinal, nowMs, answerText, answerPath, claimType, grounding, sources });
   };
   const finish = (result: ClaireTurnResult): ClaireTurnResult => {
+    const responseLane: ResponseContentLane | null =
+      result.responseLane ??
+      (personalLaneSeen
+        ? "personal_disclosure"
+        : pendingReceipt
+          ? authoritativeInterpretation?.businessJudgment
+            ? "business_judgment"
+            : "business_fact"
+          : null);
     const responsePlan =
       result.responsePlan ??
       planClaireResponse({
@@ -487,14 +500,16 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         kind: result.kind,
         interpretation: authoritativeInterpretation,
         endCall: Boolean(result.endCall || personalEndCall),
+        lane: responseLane,
+        receiptBackedCommit: result.receiptBackedCommit,
       });
-    const plannedSpeak = renderClaireResponsePlan(responsePlan);
+    const channels = renderClaireResponseChannels(responsePlan);
     const inventory = buildClaireVerifiedFactInventory(input.context);
     const speak = assembleGuardedClaireSpeak({
-      conversational: plannedSpeak,
+      conversational: channels.conversational,
       inventory,
       localTime: input.context?.clock?.localTime ?? null,
-      receiptBackedCommit: result.receiptBackedCommit,
+      receiptBackedCommit: channels.receiptBackedCommit || undefined,
       mutationReceipts: result.mutationReceipts,
     });
     const guarded: ClaireTurnResult = { ...result, speak, responsePlan };
@@ -1087,6 +1102,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       coveredThisCall: coveredThisCallLines(state.coverage),
       priorClaimNotes: priorClaimNotes(),
       onPersonalTurn: personal => {
+        personalLaneSeen = true;
         if (personal.endCall) personalEndCall = true;
       },
       onFirstToken: markFirstToken,
@@ -1267,6 +1283,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       coveredThisCall: coveredThisCallLines(state.coverage),
       priorClaimNotes: priorClaimNotes(),
       onPersonalTurn: personal => {
+        personalLaneSeen = true;
         if (personal.endCall) personalEndCall = true;
       },
       onFirstToken: markFirstToken,
