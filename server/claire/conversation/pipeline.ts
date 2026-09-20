@@ -6,6 +6,7 @@ import {
   productionConversationStore,
 } from "./ledgerService";
 import { runConversationAnalysis } from "../analysis/conversationAnalysisService";
+import { emitClaireTranscriptLog } from "./transcriptLog";
 
 async function archiveTwilioRecording(input: {
   accountSid: string;
@@ -98,6 +99,11 @@ export async function handleRecordingStatus(input: {
           payload: { recordingSid: input.recordingSid },
         });
         await store.updateSession(session.id, { transcriptionStatus: "complete" });
+        await emitClaireTranscriptLog(session.id, {
+          includeLiveTurns: false,
+          includePostCall: true,
+          reason: "post_call_transcription",
+        });
       } else {
         await store.updateSession(session.id, { transcriptionStatus: "failed" });
       }
@@ -122,6 +128,11 @@ export async function finishConversationAndMaybeAnalyze(input: {
 }): Promise<void> {
   const session = await completeConversationSession(input);
   if (!session) return;
+  await emitClaireTranscriptLog(session.id, {
+    includeLiveTurns: true,
+    includePostCall: false,
+    reason: "call_complete",
+  });
   const waitingOnRecording =
     session.recordingStatus === "pending" &&
     session.recordingConsent === "dogfood_explicit";
