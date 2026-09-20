@@ -129,7 +129,11 @@ export async function runConversationAnalysis(
     recordEvaluatorFailure(
       sessionId,
       malformed ? error.category : "provider_error",
-      malformed ? error.detail : error instanceof Error ? error.message.slice(0, 200) : "unknown"
+      malformed
+        ? `${error.detail} [attempts=${error.diagnostics.attempts} stop=${error.diagnostics.stopReason ?? "n/a"} truncated=${error.diagnostics.truncated}]`
+        : error instanceof Error
+          ? error.message.slice(0, 200)
+          : "unknown"
     );
     await store.updateSession(sessionId, { analysisStatus: "failed" });
     return { ok: false, reason: malformed ? `evaluator_failed:${error.category}` : "evaluator_failed" };

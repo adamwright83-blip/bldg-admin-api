@@ -10,6 +10,7 @@ import {
   type ClaireGenerationDiagnostic,
 } from "./generationTelemetry";
 import { detectClaireConversationalMode, detectRequestedClaireTopic, isPersonalQuestionAboutClaire } from "./topicDetection";
+import { detectCallControl } from "./turn/interpretTurn";
 import {
   CLAIRE_V1_REASONING_POLICY,
   detectAvoidanceDisclosure,
@@ -84,7 +85,9 @@ export function isClaireCallComplete(utterance: string): boolean {
 }
 
 export function isExplicitClaireCallEnd(utterance: string): boolean {
-  return EXPLICIT_END_CALL_PHRASE.test(utterance.trim().toLowerCase());
+  // The legacy sentence forms, PLUS the leave-taking grammar in interpretTurn. "I gotta go" used to
+  // match neither, so it fell through to ordinary conversation and Claire replayed her opener.
+  return EXPLICIT_END_CALL_PHRASE.test(utterance.trim().toLowerCase()) || detectCallControl(utterance) === "end";
 }
 
 /**
