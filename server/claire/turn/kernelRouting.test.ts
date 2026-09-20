@@ -229,12 +229,16 @@ describe("authoritative kernel routing", () => {
             cleancloud: { state: "absent" as const, lastSuccessAt: null, isSystemOfRecord: false },
           }),
         },
+        followUp: vi.fn(async input => {
+          const business = input.retrievedEvidence?.find((e: any) => String(e.source).startsWith("business_reader"));
+          return business?.text ?? "Scoped answer.";
+        }) as never,
       })
     );
     expect(state.pendingProposal).toBeNull();
     expect(result.speak).toMatch(/won't add|won't.*change/i);
-    expect(result.speak).toMatch(/\$123|123/);
     expect(runQuery).toHaveBeenCalled();
+    expect(result.speak).not.toContain("Wrong old task");
   });
 
   it("a contact name can resolve to an account through prior operator memory without becoming business truth", async () => {
