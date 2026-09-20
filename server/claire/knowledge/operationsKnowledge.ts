@@ -3,6 +3,7 @@ import { getFieldToday } from "../../field/fieldTodayService";
 import { addDaysYmd } from "../../analytics/businessPeriods";
 import { zonedYmd } from "../../dashboardZoned";
 import { joinList, plural } from "../business/businessSpeech";
+import { isProductionVisibleBusinessRecord } from "./productionVisibility";
 
 /**
  * "What do I have left today?", "What did I finish?", "What's tomorrow?"
@@ -84,6 +85,13 @@ export async function loadDayWork(
   const open: DayWorkItem[] = [];
   const completed: DayWorkItem[] = [];
   for (const commitment of state.commitments) {
+    if (
+      !isProductionVisibleBusinessRecord({
+        note: [commitment.title, commitment.detailNote].filter(Boolean).join(" "),
+      })
+    ) {
+      continue;
+    }
     const item: DayWorkItem = {
       id: `day-director:${commitment.id}`,
       title: commitment.title,
@@ -97,6 +105,7 @@ export async function loadDayWork(
   const ROUTE_KINDS = new Set(["pickup", "delivery", "follow_up", "commercial_visit", "commercial_call", "payment_blocker"]);
   for (const entry of field?.timeline ?? []) {
     if (!ROUTE_KINDS.has(entry.kind)) continue;
+    if (!isProductionVisibleBusinessRecord({ note: entry.title })) continue;
     const timing = entry.scheduledAt
       ? new Intl.DateTimeFormat("en-US", { timeZone: input.timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(entry.scheduledAt))
       : null;
