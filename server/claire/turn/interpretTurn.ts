@@ -162,7 +162,7 @@ const ACTION_DIRECTIVE_SHAPE = new RegExp(
 const ACTION_TRACKING_PHRASE =
   /\byou\s+can\s+put\s+(?:that|it|this)\b|\bremind\s+me\b|\b(?:add|put|save|track)\b[^.!?]{0,60}\b(?:day\s*line|calendar|reminder|to-?do|my\s+list|the\s+list)\b/i;
 const ACTION_DIRECTIVE_CLAUSE = new RegExp(
-  String.raw`(?:^|[?.!,;]\\s*|\\b(?:and|then|also)\\s+)(?:(?:can|could|would|will)\\s+you\\s+|please\\s+)?${ACTION_VERB}\\b`,
+  String.raw`(?:^|[?.!,;]\s*|\b(?:and|then|also)\s+)(?:(?:can|could|would|will)\s+you\s+|please\s+)?${ACTION_VERB}\b`,
   "i"
 );
 const FIRST_PERSON_MUTATION =
