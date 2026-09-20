@@ -448,6 +448,7 @@ export function parseBusinessTurn(
         limit: interpretation.cardinality ?? (interpretation.listRequest ? Math.max(2, base.limit) : 5),
         offset: 0,
         anchorCustomerName: interpretation.anchorEntity,
+        anchorDirection: interpretation.anchorDirection ?? "before",
         excludeCustomerNames: interpretation.exclusions.length ? interpretation.exclusions : [interpretation.anchorEntity],
       },
       refinement: Boolean(session),
@@ -1336,7 +1337,7 @@ export async function answerClaireBusinessTurn(
           previousList.baseQuery.metric === turn.query.metric &&
           (turn.query.offset ?? 0) > 0;
         focus.orderList = {
-          baseQuery: continuingSameList ? previousList.baseQuery : { ...turn.query, offset: 0, anchorCustomerName: null },
+          baseQuery: continuingSameList ? previousList.baseQuery : { ...turn.query, offset: 0, anchorCustomerName: null, anchorDirection: null },
           shownEventKeys: Array.from(
             new Set([
               ...(continuingSameList ? previousList.shownEventKeys : []),
