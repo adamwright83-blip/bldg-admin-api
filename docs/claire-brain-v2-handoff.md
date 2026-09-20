@@ -8,7 +8,9 @@ This file is for the next coding agent. Do not rely on any Cursor chat. If you c
 
 ## Current head
 
-`22c6d9ffaf2471862b458cbcbda75ef6abd34872`
+Prefer `git rev-parse origin/cursor/claire-brain-v2` (or `git rev-parse HEAD` on this branch).
+
+Last documented tip before this note: `291fe099f1203d95bb3fd2fd7f05f11f1b3676f2`.
 
 ## Base
 
