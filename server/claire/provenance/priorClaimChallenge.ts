@@ -45,8 +45,12 @@ const SCHEMA = {
 /** Compact, controlled view of a held receipt; never raw history. */
 export type ReceiptSummary = { id: string; claireTurn: number; grounding: string; text: string };
 
-export function summarizeReceipts(receipts: FactualClaimReceipt[], max = 8): ReceiptSummary[] {
-  return receipts.slice(-max).map(receipt => ({ id: receipt.id, claireTurn: receipt.claireTurnOrdinal, grounding: receipt.grounding, text: receipt.answerText.slice(0, 140) }));
+/**
+ * EVERY retained receipt is offered to the resolver — an older claim must never become unreachable because a
+ * prompt-size constant hid it. Compactness comes from compressing each summary, not from dropping state.
+ */
+export function summarizeReceipts(receipts: FactualClaimReceipt[]): ReceiptSummary[] {
+  return receipts.map(receipt => ({ id: receipt.id, claireTurn: receipt.claireTurnOrdinal, grounding: receipt.grounding, text: receipt.answerText.replace(/\s+/g, " ").slice(0, 100) }));
 }
 
 /**
@@ -63,10 +67,20 @@ export type ClassifyPriorClaimAct = (input: {
   receipts: ReceiptSummary[];
 }) => Promise<boolean | ClaimChallengeReading | null>;
 
-export function normalizeReading(raw: boolean | ClaimChallengeReading | null): ClaimChallengeReading | null {
-  if (raw === null) return null;
+/** Strict: anything malformed is "unavailable" (null), never a guess. */
+export function normalizeReading(raw: unknown): ClaimChallengeReading | null {
+  if (raw === null || raw === undefined) return null;
   if (typeof raw === "boolean") return { probe: raw, receiptId: null, ambiguous: false, assertsFact: null };
-  return raw;
+  if (typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.probe !== "boolean") return null;
+  if (r.receiptId != null && typeof r.receiptId !== "string") return null;
+  return {
+    probe: r.probe,
+    receiptId: typeof r.receiptId === "string" && r.receiptId ? r.receiptId : null,
+    ambiguous: r.ambiguous === true,
+    assertsFact: typeof r.assertsFact === "boolean" ? r.assertsFact : null,
+  };
 }
 
 /** Production classifier. Returns null (unknown) on any failure or when over budget. */

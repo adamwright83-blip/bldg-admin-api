@@ -60,7 +60,7 @@ export type FactualClaimReceipt = {
   assertsFact?: boolean | null;
 };
 
-export const MAX_CLAIM_RECEIPTS = 24;
+export const MAX_CLAIM_RECEIPTS = 40;
 
 export type PriorClaimOutcome =
   | "verified"
@@ -197,19 +197,27 @@ export function receiptFromReader(input: {
 }
 
 export function appendClaimReceipt(receipts: FactualClaimReceipt[] | undefined, receipt: FactualClaimReceipt): FactualClaimReceipt[] {
-  return [...(receipts ?? []).filter(existing => existing.id !== receipt.id), receipt].slice(-MAX_CLAIM_RECEIPTS);
+  const next = [...(receipts ?? []).filter(existing => existing.id !== receipt.id), receipt];
+  // Over the cap, shed the oldest UNGROUNDED receipt first: grounded claims are the ones with truth to protect.
+  while (next.length > MAX_CLAIM_RECEIPTS) {
+    const victim = next.findIndex(entry => entry.grounding === "ungrounded" && entry.id !== receipt.id);
+    next.splice(victim === -1 ? 0 : victim, 1);
+  }
+  return next;
 }
 
 // ── Referent resolution ─────────────────────────────────────────────────────
 const COMMON_STARTERS = new Set(["The","This","That","These","Those","There","Their","They","Then","Any","Did","How","What","When","Who","Where","Which","Are","Is","Was","Were","Have","Has","Had","And","But","Okay","Yes","No","Noted","Got","Honestly","Actually","Fair","Right","Sure","Your","You","Our","We","Its","It","Here","Today","Tomorrow","Last","Next","Just","Only","Also","Still","Not","Nothing","Nobody","Someone","Something","Claire","Adam","Goldline","Day","Line","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday","January","February","March","April","May","June","July","August","September","October","November","December","CleanCloud","Stripe","Fluff","Fold","Same","Delivery","Card","Order","Orders","One","Two","Three"]);
 
 /** Distinctive referents of a piece of text: named entities and numbers (normalised). */
-export function referentTokens(text: string): { names: Set<string>; numbers: Set<string> } {
+export function referentTokens(text: string): { names: Set<string>; numbers: Set<string>; money: Set<string> } {
   const names = new Set<string>();
   for (const word of text.match(/\b[A-Z][a-z]{2,}\b/g) ?? []) if (!COMMON_STARTERS.has(word)) names.add(word.toLowerCase());
   const numbers = new Set<string>();
   for (const raw of text.match(/\d[\d,]*(?:\.\d+)?/g) ?? []) numbers.add(raw.replace(/,/g, ""));
-  return { names, numbers };
+  const money = new Set<string>();
+  for (const raw of text.match(/\$\s?\d[\d,]*(?:\.\d+)?/g) ?? []) money.add(raw.replace(/[$,\s]/g, ""));
+  return { names, numbers, money };
 }
 
 function receiptTokens(receipt: FactualClaimReceipt) {
@@ -310,7 +318,11 @@ export async function verifyPriorClaim(receipt: FactualClaimReceipt, deps: Prior
     if (!source) return done({ outcome: "unsupported", resolution: "receipt_only", evidenceChanged: null, freshnessAffected: false, timedOut: false });
     const claimed = referentTokens(receipt.answerText);
     const backing = receiptTokens(source);
-    const addition = [...claimed.names].some(name => !backing.names.has(name)) || [...claimed.numbers].some(n => !numberSupported(n, backing.numbers));
+    // A dollar figure must match a DOLLAR figure in the evidence (not a date or a time that happens to share digits).
+    const moneyClaimed = [...claimed.money];
+    const moneyOk = moneyClaimed.every(m => numberSupported(m, backing.money));
+    const plainNumbers = [...claimed.numbers].filter(n => !moneyClaimed.some(m => m === n || m.startsWith(n)));
+    const addition = !moneyOk || [...claimed.names].some(name => !backing.names.has(name)) || plainNumbers.some(n => !numberSupported(n, backing.numbers));
     if (addition) return done({ outcome: "unsupported", resolution: "receipt_only", evidenceChanged: null, freshnessAffected: false, timedOut: false });
     const underlying = await verifyPriorClaim(source, deps);
     const grounded = underlying.outcome === "verified" || underlying.outcome === "grounded_as_stated";
@@ -350,6 +362,11 @@ export async function verifyPriorClaim(receipt: FactualClaimReceipt, deps: Prior
   }
 
   const now = fingerprintBusinessResult(fresh);
+  // A re-read from an incomplete source cannot confirm the claim still holds.
+  const freshIncomplete = fresh.coverage != null && (fresh.coverage.completeness !== "complete" || fresh.coverage.failedSources.length > 0);
+  if (now.fingerprint === receipt.fingerprint && freshIncomplete) {
+    return done({ outcome: "grounded_as_stated", resolution: "fresh_query", evidenceChanged: null, freshnessAffected: true, timedOut: false });
+  }
   if (now.fingerprint === receipt.fingerprint) {
     return done({ outcome: "verified", resolution: "fresh_query", evidenceChanged: false, freshnessAffected: false, timedOut: false });
   }
@@ -383,7 +400,7 @@ export function speakPriorClaimVerification(v: PriorClaimVerification): string {
   const from = sourceWords(v.receipt.supportedBy ?? v.receipt);
   switch (v.outcome) {
     case "verified":
-      return `No. That came from ${from}, and it still checks out.`;
+      return `That came from ${from}, and it still checks out.`;
     case "grounded_as_stated":
       return `That came from ${from} when I said it. I can't re-read it right now, so I won't say it still holds.`;
     case "synthesis_grounded":
@@ -398,7 +415,7 @@ export function speakPriorClaimVerification(v: PriorClaimVerification): string {
       return "I didn't have enough to state that as fact.";
     case "unverifiable":
     default:
-      return "I can't verify that properly right now.";
+      return UNVERIFIABLE_SPEECH;
   }
 }
 
@@ -416,3 +433,6 @@ export function modelReplyRewritesPriorClaim(reply: string): boolean {
 
 /** Spoken when the challenge cannot be tied to exactly one prior claim. Leaves every claim's status untouched. */
 export const AMBIGUOUS_REFERENT_SPEECH = "I'm not sure which statement you mean. Name the sale or the number and I'll go from there.";
+
+/** Spoken when a claim cannot be verified in this turn. Status stays unresolved: nothing affirmed, retracted, or confessed. */
+export const UNVERIFIABLE_SPEECH = "I can't verify that properly right now.";

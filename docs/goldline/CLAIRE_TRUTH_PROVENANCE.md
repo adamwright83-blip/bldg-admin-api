@@ -62,3 +62,19 @@ continuity only: they never earn rapport, entitlement, rung, canon, or business 
 `provenance/callCoverage.ts` keeps compact durable "already covered this call" subjects (account, people, intent) in
 conversation state, feeds them to generation, and suppresses a question that restarts a covered subject unless the
 operator returns to it.
+
+## 6. Failure semantics (adversarial-review pass)
+- **Every** retained receipt (cap 40; ungrounded shed first) is offered to the semantic resolver as a compressed summary. A
+  classifier-named receipt that does not exist is ambiguous, never "the newest".
+- **Classifier failure of any kind** (throw, hard turn-level timeout, malformed output, null) is "unavailable". Then, in
+  both directions, a model reply on a turn that could be probing a held claim is replaced by an unresolved line:
+  a model can neither downgrade a grounded claim nor confidently defend an unsupported one. Only receipts already
+  known to be advice/opinion (`assertsFact === false`) are exempt. Usefulness is the price: during an outage Claire says
+  "I can't verify that properly right now" on short model-path turns that follow a claim.
+- Dollar figures in a synthesis must match dollar figures in the evidence (not a date/time sharing digits).
+- A fresh re-read from an incomplete source cannot confirm a claim still holds (`grounded_as_stated`).
+- Canned fallbacks/canon recoveries and clarifying questions are not claims and get no receipt.
+- Coverage keeps 40 subjects; a question that introduces a topic not yet exchanged is a narrower follow-up, not a restart.
+- Known limits: the operator's utterance is classified by a model, so a *misclassification* (`other`) leaves that turn to
+  ordinary routing (lexical concession guard only); `ontologyStoryEventActive` is an accepted input but no production
+  caller sets it yet; the coverage novelty rule uses a small generic-status word list.

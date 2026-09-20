@@ -486,9 +486,10 @@ export async function answerClairePreDriveFollowUp(
     // invented biography or an unsupported emotional/relational claim can occur.
     if (recoveredVia === null) {
       const addressesClaire = /\b(?:you|your|yours|yourself|you'?re|you'?ve)\b/i.test(input.utterance);
-      const speaksAsSelf = /\b(?:i|i'm|i've|i'd|i'll|my|me|myself)\b/i.test(answer);
       const personalTurn = conversationalMode === "personal" || isPersonalQuestionAboutClaire(input.utterance);
-      const runSemantic = progressionOn || personalTurn || (addressesClaire && speaksAsSelf);
+      // Invented biography need not use first person ("A quiet Sunday, mostly."), so the gate is the operator
+      // addressing Claire herself; a turn grounded in retrieved business evidence skips it (no personal ask there).
+      const runSemantic = progressionOn || personalTurn || (addressesClaire && !input.retrievedEvidence?.length);
       const tone = lintFailureDayLanguage(answer);
       if (!tone.passes) {
         console.warn("[Claire] general answer violated failure-day tone contract; replaced", tone.violations.map(v => v.category));

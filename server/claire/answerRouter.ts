@@ -55,6 +55,8 @@ export type ClaireRouteEvidence = {
   /** Provenance only: the authoritative query result that produced `text`, so the turn can leave a claim receipt. */
   businessResult?: import("../analytics/businessQuery").BusinessQueryResult;
   reader?: string | null;
+  /** The reader stated facts (vs asked a clarifying question / declined); only factual statements get receipts. */
+  factual?: boolean;
 };
 
 export type ClaireRouteDecision = {

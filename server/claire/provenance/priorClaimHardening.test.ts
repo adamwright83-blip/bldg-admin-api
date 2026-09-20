@@ -202,11 +202,12 @@ describe("7. older claims referenced in other words", () => {
     }
   });
 
-  it("with the classifier unavailable it invents no association", async () => {
+  it("with the classifier unavailable it invents no association and fails closed", async () => {
     const h = await longCall();
     const { result, trace } = await h.say(OLDER[1]!, { classifyPriorClaim: (async () => null) as never, ...model("Worth a call.") });
-    expect(trace?.priorClaim).toBeNull();
-    expect(result.speak).toBe("Worth a call.");
+    // Classifier down + a grounded claim held: fail closed rather than let a model reply stand.
+    expect(trace?.priorClaim).toMatchObject({ outcome: "unverifiable" });
+    expect(result.speak).toBe("I can't verify that properly right now.");
   });
 
   it("deterministic name/number resolution is still the cheap first path", async () => {

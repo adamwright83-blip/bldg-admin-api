@@ -16,12 +16,14 @@ export type CoveredSubject = {
   name: string;
   people: string[];
   intent: "status_update";
+  /** Content words already exchanged about this subject (Claire's ask + the operator's answer). */
+  covered?: string[];
   askedByClaire: boolean;
   answeredByOperator: boolean;
   lastCoveredTurn: number;
 };
 
-const MAX_COVERED = 10;
+const MAX_COVERED = 40;
 const NOT_PEOPLE = new Set(["The", "This", "That", "Any", "Did", "How", "What", "When", "Who", "Where", "Which", "Are", "Is", "Was", "Have", "Has", "Any", "And", "But", "Okay", "Yes", "Noted", "Got", "Claire", "Adam", "Goldline", "Day", "Line", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]);
 
 function peopleIn(text: string, account: AccountRef): string[] {
@@ -29,10 +31,18 @@ function peopleIn(text: string, account: AccountRef): string[] {
   return Array.from(new Set(text.match(/\b[A-Z][a-z]{2,}\b/g) ?? [])).filter(word => !NOT_PEOPLE.has(word) && !accountWords.has(word));
 }
 
+const STOP = new Set("about after again also and any are been before but can could did does doing done for from get going gone got had has have her him his how its just like more much not now off one our out over said say she some than that the their them then there these they this those was were what when where which who will with would you your yours".split(" "));
+/** Generic status-check words: asking for "an update" adds no new topic. */
+const GENERIC_STATUS = new Set("update updates status news latest lately happening happened going went goes moving progress stand standing thing things stuff there anything something over looking look looks situation deal currently right days week today how's".split(" "));
+
+export function contentWords(text: string): string[] {
+  return Array.from(new Set((text.toLowerCase().match(/[a-z][a-z']{3,}/g) ?? []).filter(word => !STOP.has(word) && !GENERIC_STATUS.has(word))));
+}
+
 function upsert(coverage: CoveredSubject[], next: CoveredSubject): CoveredSubject[] {
   const previous = coverage.find(entry => entry.subject === next.subject);
   const merged: CoveredSubject = previous
-    ? { ...previous, ...next, people: Array.from(new Set([...previous.people, ...next.people])) }
+    ? { ...previous, ...next, people: Array.from(new Set([...previous.people, ...next.people])), covered: Array.from(new Set([...(previous.covered ?? []), ...(next.covered ?? [])])) }
     : next;
   return [...coverage.filter(entry => entry.subject !== next.subject), merged].slice(-MAX_COVERED);
 }
@@ -53,6 +63,7 @@ export function recordClaireQuestionCoverage(
       name: account.name,
       people: peopleIn(sentence, account),
       intent: "status_update",
+      covered: contentWords(sentence),
       askedByClaire: true,
       answeredByOperator: false,
       lastCoveredTurn: input.turnOrdinal,
@@ -71,7 +82,7 @@ export function recordOperatorReplyCoverage(
   if (!substantive) return next;
   for (const entry of next) {
     if (entry.askedByClaire && !entry.answeredByOperator && input.turnOrdinal > entry.lastCoveredTurn) {
-      next = upsert(next, { ...entry, answeredByOperator: true, people: [...entry.people, ...peopleIn(input.operatorText, { id: 0, name: entry.name, accountType: "" })], lastCoveredTurn: input.turnOrdinal });
+      next = upsert(next, { ...entry, covered: Array.from(new Set([...(entry.covered ?? []), ...contentWords(input.operatorText)])), answeredByOperator: true, people: [...entry.people, ...peopleIn(input.operatorText, { id: 0, name: entry.name, accountType: "" })], lastCoveredTurn: input.turnOrdinal });
     }
   }
   return next;
@@ -105,10 +116,16 @@ export function suppressRestartedQuestion(
   const kept = sentences.filter(sentence => {
     if (!sentence.includes("?")) return true;
     const lower = sentence.toLowerCase();
-    const restarts = covered.some(
+    const matched = covered.filter(
       entry => matchAccounts(lower, [{ id: 0, name: entry.name, accountType: "" }]).length > 0 || entry.people.some(person => lower.includes(person.toLowerCase()))
     );
-    return !restarts;
+    if (!matched.length) return true;
+    // A genuinely narrower follow-up (it introduces a topic not yet exchanged) is not a restart.
+    return matched.some(entry => {
+      const names = new Set([...entry.name.toLowerCase().split(/\s+/), ...entry.people.map(person => person.toLowerCase())]);
+      const known = new Set(entry.covered ?? []);
+      return contentWords(sentence).some(word => !names.has(word) && !known.has(word));
+    });
   });
   if (kept.length === sentences.length) return null;
   const remaining = kept.join(" ").trim();
