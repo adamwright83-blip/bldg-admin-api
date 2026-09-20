@@ -107,7 +107,14 @@ async function loadObligations(tenantId: string, operatorUserId: string): Promis
       .select()
       .from(claireProactiveObligations)
       .where(and(eq(claireProactiveObligations.tenantId, tenantId), eq(claireProactiveObligations.operatorUserId, operatorUserId)));
-    return rows.map(row => row.payloadJson as ProactiveObligation);
+    return rows
+      .map(row => row.payloadJson as ProactiveObligation)
+      .filter(item =>
+        isProductionVisibleBusinessRecord({
+          accountName: item.subjectName,
+          note: [item.title, item.why].filter(Boolean).join(" "),
+        })
+      );
   } catch {
     return [];
   }
