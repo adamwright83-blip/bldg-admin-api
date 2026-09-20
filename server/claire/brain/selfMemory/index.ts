@@ -1,1 +1,7 @@
-export { retrieveSelfEvidence } from "./adapter";
+export {
+  retrieveSelfEvidence,
+  evidenceFromProgression,
+  noSelfMemory,
+  type SelfMemoryContext,
+  type SelfMemoryDeps,
+} from "./adapter";

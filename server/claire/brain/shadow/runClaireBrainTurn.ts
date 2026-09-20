@@ -6,7 +6,7 @@ import type { ExecutiveDecision } from "../contracts/executiveDecision";
 import type { ShadowComparisonRecord } from "../telemetry/comparison";
 import { decideTurn, type ExecutiveDeps } from "../executive/decide";
 import { perceiveTurn } from "../perception/perceive";
-import { renderResponsePlan } from "../response/render";
+import { assertRenderedFromPlan, renderWithCharacter } from "../response/characterRenderer";
 import { comparisonRecordFromDecision } from "../telemetry/comparison";
 import { snapshotWorkingMemory, type WorkingMemorySource } from "../workingMemory/snapshot";
 import { executeGrantedAction } from "../actions/gateway";
@@ -46,7 +46,9 @@ export async function runClaireBrainTurn(input: ClaireBrainTurnInput): Promise<C
     surface: input.surface,
   });
   const decision = await decideTurn(perceived, memory, input.executive);
-  const rendered = renderResponsePlan(decision.responsePlan);
+  const rendered = renderWithCharacter(decision.responsePlan, { surface: input.surface });
+  // The renderer phrases; it may not think. Reject anything it added on its own.
+  assertRenderedFromPlan(decision.responsePlan, rendered.speak);
 
   for (const grant of decision.actionGrants) {
     const result = await executeGrantedAction(grant);

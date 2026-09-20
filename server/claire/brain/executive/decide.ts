@@ -28,6 +28,14 @@ import {
   type BusinessMemoryContext,
   type BusinessMemoryDeps,
 } from "../businessMemory/adapter";
+import {
+  defaultEpisodicMemoryDeps,
+  retrieveEpisodicEvidence,
+  type EpisodicMemoryContext,
+  type EpisodicMemoryDeps,
+} from "../episodicMemory/adapter";
+import { noSelfMemory, retrieveSelfEvidence, type SelfMemoryContext, type SelfMemoryDeps } from "../selfMemory/adapter";
+import { noGoals, retrieveGoalEvidence, type GoalsContext, type GoalsDeps } from "../goals/adapter";
 
 /** One function per compartment. Each returns evidence; none decides anything. */
 export type RetrievalRunner = (request: RetrievalRequest) => Promise<EvidenceItem[]>;
@@ -45,17 +53,50 @@ export const defaultExecutiveDeps: ExecutiveDeps = {
   ctx: { timeZone: "America/Los_Angeles", today: new Date().toISOString().slice(0, 10), surface: "voice" },
 };
 
+export type LiveRetrievalContext = {
+  business: BusinessMemoryContext;
+  episodic?: EpisodicMemoryContext;
+  self?: SelfMemoryContext;
+  goals?: GoalsContext;
+};
+
+export type LiveRetrievalDeps = {
+  business?: BusinessMemoryDeps;
+  episodic?: EpisodicMemoryDeps;
+  self?: SelfMemoryDeps;
+  goals?: GoalsDeps;
+};
+
 /**
  * Live, READ-ONLY retrieval against the existing authoritative readers.
- * Nothing in this phase wires it into a production entrypoint.
+ *
+ * Nothing in this phase wires it into a production entrypoint. A compartment with no
+ * context supplied simply returns nothing: an unconfigured compartment must stay silent
+ * rather than fall back to some default that reads more than the caller intended.
  */
 export function liveReadOnlyRetrieval(
-  ctx: BusinessMemoryContext,
-  deps: BusinessMemoryDeps = defaultBusinessMemoryDeps
+  ctx: LiveRetrievalContext | BusinessMemoryContext,
+  deps: LiveRetrievalDeps | BusinessMemoryDeps = {}
 ): RetrievalRunner {
+  const live: LiveRetrievalContext = "business" in ctx ? ctx : { business: ctx as BusinessMemoryContext };
+  const wired: LiveRetrievalDeps = "runQuery" in deps ? { business: deps as BusinessMemoryDeps } : (deps as LiveRetrievalDeps);
+
   return async request => {
-    if (request.compartment !== "businessMemory") return [];
-    return retrieveBusinessEvidence(request, ctx, deps);
+    switch (request.compartment) {
+      case "businessMemory":
+        return retrieveBusinessEvidence(request, live.business, wired.business ?? defaultBusinessMemoryDeps);
+      case "episodicMemory":
+        if (!live.episodic) return [];
+        return retrieveEpisodicEvidence(request, live.episodic, wired.episodic ?? defaultEpisodicMemoryDeps);
+      case "selfMemory":
+        if (!live.self) return [];
+        return retrieveSelfEvidence(request, live.self, wired.self ?? noSelfMemory);
+      case "goals":
+        if (!live.goals) return [];
+        return retrieveGoalEvidence(request, live.goals, wired.goals ?? noGoals);
+      default:
+        return [];
+    }
   };
 }
 

@@ -1,1 +1,7 @@
-export { retrieveEpisodicEvidence, asHistorical } from "./adapter";
+export {
+  retrieveEpisodicEvidence,
+  evidenceFromRememberedTurn,
+  defaultEpisodicMemoryDeps,
+  type EpisodicMemoryContext,
+  type EpisodicMemoryDeps,
+} from "./adapter";
