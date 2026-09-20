@@ -529,6 +529,9 @@ function startVoiceTurn(input: {
        */
       observeShadowTurnDetached({
         rawText: input.utterance,
+        // A listen-only turn is V1 holding a fragment, not a complete thought. Telling V2
+        // otherwise would make the comparison lie about what it was asked to reason over.
+        completeness: result.listenOnly ? "incomplete" : "complete",
         state: readOnlyWorkingMemorySource(conversation as unknown as Parameters<typeof readOnlyWorkingMemorySource>[0]),
         tenantId: conversation.tenantId,
         operatorUserId: conversation.actorId,

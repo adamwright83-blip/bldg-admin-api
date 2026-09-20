@@ -70,6 +70,23 @@ describe("both surfaces observe, and only observe", () => {
     expect(ROUTER.indexOf("await runClaireTurn(")).toBeLessThan(ROUTER.indexOf("observeShadowTurnDetached("));
   });
 
+  it("a held voice fragment is observed as incomplete, not as a complete thought", async () => {
+    // Telling V2 a fragment was complete would make the comparison lie about what it
+    // was asked to reason over.
+    expect(TWILIO).toMatch(/completeness:\s*result\.listenOnly\s*\?\s*"incomplete"\s*:\s*"complete"/);
+
+    const held = await observeShadowTurn(
+      { rawText: "So for Dana I was thinking", completeness: "incomplete", ...CTX },
+      { env: ON }
+    );
+    expect(held.observed).toBe(true);
+    if (held.observed) {
+      expect(held.comparison.perceived.completeness).toBe("incomplete");
+      // A half-turn reaches no retrieval and asserts nothing.
+      expect(held.comparison.evidenceIds).toEqual([]);
+    }
+  });
+
   it("neither surface passes the live mutable state object to the brain", () => {
     // Every observation must go through the frozen snapshot boundary.
     for (const source of [TWILIO, ROUTER]) {
