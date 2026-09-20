@@ -90,15 +90,33 @@ describe("authoritative kernel routing", () => {
       dayLineMentions: [],
       conversationMentions: [],
     })) as never;
+    const runQuery = vi.fn(async (_tenant: string, query: BusinessQuery) => ({
+      status: "unavailable" as const,
+      query,
+      period: { label: "x", start: "2026-01-01", end: "2026-09-20" },
+      comparisonPeriod: null,
+      reason: "test",
+    })) as never;
+    const state: ClaireTurnState = {
+      analytics: {
+        query: defaultBusinessQuery("revenue"),
+        periods: [],
+        disclosed: [],
+        pendingClarification: null,
+        touchedAt: NOW.getTime(),
+      },
+    };
     const result = await runClaireTurn(
-      { ...base, utterance: "What should I do about Dana Tuesday?", state: {} },
+      { ...base, utterance: "What should I do about Dana Tuesday?", state },
       deps({
         watchBoard,
         accounts: async () => [{ id: 1, name: "The Louise", accountType: "apartment", aliases: ["Dana"] }],
         accountHistory,
+        business: { runQuery },
       })
     );
     expect(watchBoard).not.toHaveBeenCalled();
+    expect(runQuery).not.toHaveBeenCalled();
     expect(accountHistory).toHaveBeenCalled();
     expect(result.speak).toContain("Scoped answer");
     expect(result.speak).not.toMatch(/GUMBALL|Andrew|unrelated mission/);
@@ -142,6 +160,22 @@ describe("authoritative kernel routing", () => {
     expect(state.pendingProposal).toBeNull();
     expect(result.speak).toMatch(/won't add|won't.*change/i);
     expect(result.speak).not.toMatch(/add something|catching me up/i);
+  });
+
+  it("a bare acknowledgement does not bypass non-briefing pending state", async () => {
+    const commitment = vi.fn(async () => ({ kind: "not_applicable" as const })) as never;
+    const state: ClaireTurnState = {
+      pendingUpdate: {
+        commitmentId: "c-1",
+        title: "Call Dana",
+        patch: { detailState: "COMPLETE" },
+      },
+    };
+    await runClaireTurn(
+      { ...base, utterance: "Okay.", state },
+      deps({ commitment })
+    );
+    expect(commitment).toHaveBeenCalled();
   });
 
   it("a truly broad morning request may still invoke the proactive board", async () => {
