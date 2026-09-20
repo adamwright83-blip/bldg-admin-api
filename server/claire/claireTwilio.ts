@@ -53,6 +53,7 @@ import {
 import { isValidTwilioWebhook } from "./conversation/twilioSignature";
 import { runClaireTurn, type ClaireTurnState } from "./turn/claireTurn";
 import { claireConversationStateStore } from "./turn/conversationStateStore";
+import { getUserByOpenId } from "../db";
 import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
 import { loadBusinessVocabulary, speechHints } from "./knowledge/businessVocabulary";
 import {
@@ -180,7 +181,56 @@ export function operatorPhoneFor(actorId: string): string {
     if (!phone) throw new Error("No Claire phone number is configured for this operator");
     return assertPhone(phone);
   }
+  /**
+   * Single-number configuration (`CLAIRE_OPERATOR_PHONE`) is the OWNER's phone, not a general
+   * destination. Without this binding the number is returned for any actorId at all, so any
+   * other persisted user — `driver-primary`, a teammate, a synthetic identity — would ring it.
+   * Multi-operator deployments must use `CLAIRE_OPERATOR_PHONES`.
+   */
+  const owner = ENV.ownerOpenId?.trim();
+  if (!owner) {
+    throw new Error(
+      "CLAIRE_OPERATOR_PHONE is configured without OWNER_OPEN_ID, so Claire cannot prove whose phone it is. Set OWNER_OPEN_ID, or configure CLAIRE_OPERATOR_PHONES."
+    );
+  }
+  if (actorId !== owner) {
+    throw new Error(
+      `Claire will not dial the configured operator phone for "${actorId}": that number belongs to "${owner}". Configure CLAIRE_OPERATOR_PHONES to call anyone else.`
+    );
+  }
   return assertPhone(operatorNumber);
+}
+
+/**
+ * AUTHORIZED CALL DESTINATION.
+ *
+ * `operatorPhoneFor` alone is not authorization. With the single-number configuration that
+ * production runs (`CLAIRE_OPERATOR_PHONE`, no `CLAIRE_OPERATOR_PHONES` map), it returns the
+ * operator's real phone for ANY actorId string a caller passes. On 2026-09-20 a synthetic
+ * acceptance identity (`slice0-adam` on tenant `zz-slice0-accept-2`) used that to ring Adam's
+ * real phone, and Claire then answered his business questions from an empty synthetic tenant —
+ * she said "$0.00 across 0 orders" about a business that had sales.
+ *
+ * The destination is now bound to a real, persisted user of the SAME tenant the call runs as.
+ * A fabricated actor has no user row and cannot dial anyone; a real user cannot be dialed under
+ * another tenant's context. This is identity binding, not a name-prefix heuristic, so it also
+ * covers synthetic tenants nobody thought to blocklist.
+ */
+export async function authorizedOperatorPhone(input: { tenantId: string; actorId: string }): Promise<string> {
+  const phone = operatorPhoneFor(input.actorId);
+  const user = await getUserByOpenId(input.actorId);
+  if (!user) {
+    throw new Error(
+      `Claire will not place a call for "${input.actorId}": no such operator exists. A real phone is never dialed for an unpersisted or synthetic identity.`
+    );
+  }
+  const userTenant = user.tenantId?.trim() || "default";
+  if (userTenant !== input.tenantId) {
+    throw new Error(
+      `Claire will not place a call: operator "${input.actorId}" belongs to tenant "${userTenant}", but the call was started as "${input.tenantId}".`
+    );
+  }
+  return phone;
 }
 
 function stableRequestId(callSid: string, suffix: string): string {
@@ -534,7 +584,7 @@ export async function startClairePreDriveCall(input: {
   /** The identity Day Director commitments (and Driver's dayline) are actually keyed by — see dayDirectorActorId(ctx). */
   dayDirectorActorId?: string;
 }): Promise<{ callSid: string; brief: string }> {
-  const to = operatorPhoneFor(input.actorId);
+  const to = await authorizedOperatorPhone({ tenantId: input.tenantId, actorId: input.actorId });
   const generated = await generateClairePreDriveOutput({
     tenantId: input.tenantId,
     actorId: input.actorId,
@@ -613,7 +663,7 @@ export async function startClairePostStopCall(input: {
   missionAccess: ClaireMissionAccess;
   timeZone?: string;
 }): Promise<{ callSid: string }> {
-  const to = operatorPhoneFor(input.actorId);
+  const to = await authorizedOperatorPhone({ tenantId: input.tenantId, actorId: input.actorId });
   const current = await getCommercialMissionFieldState({
     tenantId: input.tenantId,
     missionId: input.missionId,

@@ -227,7 +227,10 @@ describe("Slice 3: assertion-guard production wiring", () => {
             previous: null,
           },
           completeness: { coverage: "complete", notes: [] },
+          // Real coverage shape: this test is about the assertion guard, not source coverage.
+          coverage: { completeness: "complete", loadedSources: ["laundry_butler", "cleancloud"], failedSources: [] },
         } as never),
+        loadBindings: async () => ({ laundry_butler: { state: "bound" as const, lastSuccessAt: new Date(), coverageRanges: [], latestAttempt: null, isSystemOfRecord: true }, cleancloud: { state: "bound" as const, lastSuccessAt: new Date(), coverageRanges: [{ from: "2020-01-01", to: "2099-12-31", completedAt: new Date(), basis: "economic_event" as const, provenance: "test_fixture" as const }], latestAttempt: null, isSystemOfRecord: false } }),
         speakResult: () => ({
           text: VERIFIED_SCHEDULED,
           facts: [],

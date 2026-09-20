@@ -1,6 +1,16 @@
 import { z } from "zod";
 import { invokeLLM } from "../_core/llm";
 import { claireModelRequest } from "./claireModel";
+import {
+  UNKNOWN_EVIDENCE,
+  coverageVerdict,
+  loadLedgerSourceEvidence,
+  requiredSourcesFor,
+  speakPartialCoverage,
+  speakUnprovableZero,
+  type CoverageVerdict,
+  type LedgerSourceEvidence,
+} from "../analytics/sourceBindings";
 import type { ClaireDriveContext } from "./contextAssembler";
 import { sanitizeSpeakAgainstInventory, buildClaireVerifiedFactInventory } from "./verifiedFactInventoryFromContext";
 import { getDashboardTimeZone } from "../dashboardZoned";
@@ -22,6 +32,8 @@ import {
 } from "../analytics/businessPeriods";
 import {
   BUSINESS_METRICS,
+  businessResultIsEmpty,
+  businessResultUsesLedger,
   defaultBusinessQuery,
   runBusinessQuery,
   type BusinessMetric,
@@ -977,6 +989,8 @@ export type ClaireBusinessTurnDeps = {
   now: () => Date;
   timeZone: () => string;
   speakResult?: typeof speakBusinessResult;
+  /** Source membership/health/range evidence. Injectable so tests can prove coverage without a database. */
+  loadBindings?: (tenantId: string) => Promise<LedgerSourceEvidence>;
 };
 
 function focusCustomerOf(detail: CustomerDetail): FocusCustomer {
@@ -1189,6 +1203,33 @@ export async function answerClaireBusinessTurn(
       return guardedTurn({ handled: true, speak: "I couldn't get that number reliably just now, so I won't guess.", facts: [] });
     }
 
+    /**
+     * WHOLE-BUSINESS ANSWERS REQUIRE PROVEN COVERAGE.
+     *
+     * `coverage.completeness` only reports whether the queries threw, so an untouched business
+     * with no connected sources produced a confident "$0.00 across 0 orders" on a live call.
+     * The same error hides inside NON-zero answers: reporting "$500" as the whole business while
+     * CleanCloud is unread is just less visually alarming. So every ledger aggregate is checked,
+     * not only the empty ones — an empty one cannot be spoken as a zero at all, and a real one
+     * is spoken with its scope stated.
+     */
+    let coverage: CoverageVerdict = { kind: "provable" };
+    if (businessResultUsesLedger(result)) {
+      const evidence = await (deps.loadBindings ?? loadLedgerSourceEvidence)(input.tenantId).catch(() => UNKNOWN_EVIDENCE);
+      coverage = coverageVerdict({
+        required: requiredSourcesFor(turn.query.filters?.sources),
+        evidence,
+        loadedSources: result.status === "ok" ? result.coverage?.loadedSources ?? [] : [],
+        failedSources: result.status === "ok" ? result.coverage?.failedSources ?? [] : [],
+        // Membership, schedule freshness and exact interval coverage are question-relative.
+        period: result.period,
+        now,
+      });
+      if (coverage.kind !== "provable" && businessResultIsEmpty(result)) {
+        return guardedTurn({ handled: true, speak: speakUnprovableZero(coverage), facts: [] });
+      }
+    }
+
     const spoken = (deps.speakResult ?? speakBusinessResult)(result, {
       surface: input.surface,
       previous: session?.query ?? null,
@@ -1259,7 +1300,9 @@ export async function answerClaireBusinessTurn(
       touchedAt: nowMs,
       focus,
     };
-    return guardedTurn({ handled: true, speak: spoken.text, facts: spoken.facts, result });
+    const spokenText =
+      coverage.kind === "provable" ? spoken.text : `${spoken.text} ${speakPartialCoverage(coverage)}`.trim();
+    return guardedTurn({ handled: true, speak: spokenText, facts: spoken.facts, result });
   }
 }
 

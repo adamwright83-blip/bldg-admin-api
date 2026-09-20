@@ -20,8 +20,18 @@ vi.mock("../_core/env", () => ({
     xaiApiKey: "",
     claireXaiTtsEnabled: false,
     claireXaiTtsVoiceId: "eve",
+    // The single configured phone belongs to this operator; nobody else may dial it.
+    ownerOpenId: "operator-1",
   },
 }));
+// The call path now verifies the operator is a real, persisted user of the same tenant before a
+// real phone is ever dialed (see authorizedOperatorPhone). These fixtures dial as "operator-1".
+vi.mock("../db", async importOriginal => ({
+  ...(await importOriginal<typeof import("../db")>()),
+  getUserByOpenId: async (openId: string) =>
+    openId === "operator-1" ? ({ openId, tenantId: "tenant-1", role: "admin" } as never) : undefined,
+}));
+
 vi.mock("twilio", async importOriginal => {
   const actual = (await importOriginal()) as { default?: Record<string, unknown> } & Record<string, unknown>;
   const real = (actual.default ?? actual) as Record<string, unknown>;

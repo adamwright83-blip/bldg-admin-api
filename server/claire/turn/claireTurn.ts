@@ -58,6 +58,7 @@ import {
 import { persistClaireTurnTrace } from "../answerPathRecorder";
 import { explicitDayLineRefusal, explicitTrackingRequest } from "../briefing/titleContract";
 import { classifyOpenDialogueAct } from "./dialogueAct";
+import { interpretTurn } from "./interpretTurn";
 import { runBusinessQuery } from "../../analytics/businessQuery";
 import {
   appendClaimReceipt,
@@ -801,8 +802,16 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // ── 4. The whole utterance as a briefing ──────────────────────────────────
   let parsed = parseBriefingDeterministically(utterance, clock);
   const openAct = classifyOpenDialogueAct(utterance);
+  /**
+   * The InterpretedTurn seam. A parser finding task-like words is not action intent: a correction,
+   * a refusal, or talk about what Claire knows can never become a Day Line proposal, however many
+   * schedulable nouns it contains. Extracted items are demoted to context, which is the existing
+   * safe path for "this looked like work but isn't".
+   */
+  const interpreted = interpretTurn(utterance, { extractedWorkItems: parsed.items.length });
   const skipBriefing =
     explicitDayLineRefusal(utterance) ||
+    !interpreted.mayProposeWork ||
     ((openAct.kind === "confide" || openAct.kind === "question") && parsed.items.length === 0);
   if (skipBriefing && parsed.items.length) {
     parsed = {
