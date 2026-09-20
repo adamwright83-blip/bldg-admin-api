@@ -1029,7 +1029,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   if (isCombineRequest(lower) && parsed.items.length <= 1) {
     parsed = { ...parsed, items: [], questions: parsed.questions.length ? parsed.questions : [utterance] };
   }
-  if (!commitmentTried && !isCombineRequest(lower) && (singleFlow || (parsed.items.length === 1 && parsed.questions.length === 0))) {
+  if (
+    !commitmentTried &&
+    interpreted.mayProposeWork &&
+    !isCombineRequest(lower) &&
+    (singleFlow || (parsed.items.length === 1 && parsed.questions.length === 0))
+  ) {
     commitmentTried = true;
     const turn = await deps.commitment(
       { tenantId: input.tenantId, actorId: input.dayDirectorActorId, businessDate: today, utterance, state, conversationId: input.conversationKey },
@@ -1047,7 +1052,15 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     return finish({ speak: answer, kind: "answered" });
   }
 
-  if (!commitmentTried && !isCombineRequest(lower) && !parsed.questions.length && !singleFlow && parsed.items.length === 0 && !looksLikeQuestion(utterance)) {
+  if (
+    !commitmentTried &&
+    interpreted.mayProposeWork &&
+    !isCombineRequest(lower) &&
+    !parsed.questions.length &&
+    !singleFlow &&
+    parsed.items.length === 0 &&
+    !looksLikeQuestion(utterance)
+  ) {
     commitmentTried = true;
     const turn = await deps.commitment(
       { tenantId: input.tenantId, actorId: input.dayDirectorActorId, businessDate: today, utterance, state, conversationId: input.conversationKey },
