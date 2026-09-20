@@ -602,7 +602,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // Acknowledgements close a beat. They are not questions, challenges, or work — and must never
   // reach prior-claim adjudication, which answered "I'm good." with "I can't verify that properly
   // right now." on the live call.
-  if (interpreted.acknowledgement && !state.pendingBriefing && !state.pendingProposal && !state.pendingAccountFollowUp) {
+  if (interpreted.acknowledgement && !hadPendingAction) {
     mark("fallback", { fallbackReason: "acknowledgement" });
     return finish({ speak: "All right.", kind: "answered" });
   }
