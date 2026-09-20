@@ -15,6 +15,7 @@ import { getDb } from "../../db";
 import { addDaysYmd, daysInclusive, formatBusinessDate } from "../../analytics/businessPeriods";
 import { zonedYmd } from "../../dashboardZoned";
 import { searchOperatorConversation, type RememberedTurn } from "./conversationMemory";
+import { isProductionVisibleBusinessRecord } from "./productionVisibility";
 
 /**
  * Everything Goldline recorded about a commercial account (The Louise,
@@ -246,14 +247,24 @@ export async function loadAccountHistory(input: {
       decisionMakerStatus: row.decisionMakerStatus,
       collateralDelivered: Boolean(row.collateralDelivered),
     })),
-    followUps: followUps.map(row => ({
-      id: row.id,
-      pipelineId: row.pipelineId,
-      status: row.status,
-      dueAt: row.dueAt.toISOString(),
-      note: row.note,
-      completedAt: iso(row.completedAt),
-    })),
+    followUps: followUps
+      .filter(row =>
+        isProductionVisibleBusinessRecord({
+          createdBy: row.createdBy,
+          requestId: row.requestId,
+          missionCode: missions.find(mission => mission.id === row.missionId)?.code ?? null,
+          accountName: account.name,
+          note: row.note,
+        })
+      )
+      .map(row => ({
+        id: row.id,
+        pipelineId: row.pipelineId,
+        status: row.status,
+        dueAt: row.dueAt.toISOString(),
+        note: row.note,
+        completedAt: iso(row.completedAt),
+      })),
     pipelineStage: pipelines[0]?.stage ?? null,
     pipelineId: pipelines[0]?.id ?? null,
     contacts: contacts.map(row => ({ name: row.name, title: row.title, relationshipType: row.relationshipType })),
