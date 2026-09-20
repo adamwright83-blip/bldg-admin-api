@@ -1,0 +1,1 @@
+export { retrieveSelfEvidence } from "./adapter";
