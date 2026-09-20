@@ -32,6 +32,8 @@ import { measureClairePromptSections, type ClairePromptSizeTrace } from "./answe
 import { recoverPersonalAnswer } from "./character/personalAnswerRecovery";
 import { assertNoUngroundedPersonalSpecificity, UngroundedPersonalSpecificityError } from "./character/personalSpecificityGuard";
 import { isClaireProgressionEnabled } from "./progression/progressionFlag";
+import { checkOntologyBoundary, operatorAskedOntology } from "./progression/ontologyGuard";
+import { selectDialogueLine } from "./progression/dialogueRegistry";
 import { checkBiographyBoundary, makeBiographyVerifier, type BiographyVerifier } from "./progression/generalBiographyBoundary";
 import { lintFailureDayLanguage } from "./progression/toneLint";
 import { selectDialogueLine } from "./progression/dialogueRegistry";
@@ -250,6 +252,8 @@ export async function answerClairePreDriveFollowUp(
     /** Conversation identity, used for the personal-thread ledger and per-call budget. */
     conversationId?: string;
     onPersonalTurn?: (result: PersonalTurnResult) => void;
+    /** A locked, authored campaign event that legitimately makes constructedness story material is active. */
+    ontologyStoryEventActive?: boolean;
   },
   dependencies: {
     invokeText?: typeof invokeTextLLM;
@@ -274,7 +278,9 @@ export async function answerClairePreDriveFollowUp(
   // be answered (progression controller); the model only phrases one bounded fact;
   // every failure becomes an approved decline. Ask-only: this runs solely because the
   // operator explicitly asked a personal question.
-  if (conversationalMode === "personal" && progressionOn) {
+  // A direct "what are you?" is an ontology question, not a request for biography canon: it must not be
+  // swallowed by the personal-disclosure controller's decline (that would make the authorised reveal impossible).
+  if (conversationalMode === "personal" && progressionOn && !operatorAskedOntology(input.utterance)) {
     const operatorUserId = input.context.actorId ?? null;
     if (!operatorUserId) {
       // Unresolved identity fails closed: no progression state, no disclosure.
@@ -462,6 +468,19 @@ export async function answerClairePreDriveFollowUp(
           answer = fallback;
           guardReason = `personal_biography_guard:${biography.reason}`;
         }
+      }
+    }
+
+    // Character integrity, independent of the progression flag (production runs with it OFF, which is
+    // exactly where "I'm not a person / I don't have weekends" leaked). Missing biography is privacy,
+    // never a disclaimer of personhood. Authorised only by an explicit operator question or an active
+    // authored story event; otherwise an approved in-character decline is spoken instead.
+    if (guardReason === null) {
+      const ontology = checkOntologyBoundary({ text: answer, utterance: input.utterance, storyEventActive: input.ontologyStoryEventActive });
+      if (!ontology.ok) {
+        console.warn("[Claire] general answer leaked assistant ontology; replaced with authored decline");
+        answer = selectDialogueLine({ category: "decline", rapportBand: 0 })?.text ?? "Not that one.";
+        guardReason = "ontology_guard";
       }
     }
 
