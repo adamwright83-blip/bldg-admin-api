@@ -74,6 +74,9 @@ export function evidenceFromProgression(
       // Self state. Deliberately NOT current_business_truth.
       authoritativeFor: ["self_state"],
       payload: {
+        // Warmth only. Rapport never touches business truth or action authority.
+        rapportBand: progression.grant.rapportBand,
+        personalRung: progression.grant.personalRung,
         unusedEntitlementCount: progression.unusedEntitlementCount,
         consumedEntitlementCount: progression.consumedEntitlementCount,
         priorRefusedTopics: progression.priorRefusedTopics,

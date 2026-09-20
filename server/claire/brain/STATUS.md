@@ -18,7 +18,7 @@ Action Gateway: COMPLETE (refuses live mutations)
 Shadow Mode: WIRED on both surfaces, one-way, DEFAULT OFF, with live read-only retrieval
 Production Cutover: PROHIBITED
 
-Tests: 227 passed, 0 todo (brain). `tsc --noEmit` green.
+Tests: 230 passed, 0 todo (brain). `tsc --noEmit` green.
 
 Read-only enforcement: Self Memory uses `readPersonalProgressionContext`, NOT
 `loadPersonalProgressionContext` (which releases expired reservations — a write).
@@ -42,9 +42,13 @@ and no added DB reads.
 1. **The character renderer is not characterful.** It orders segments, adds punctuation
    and joins. The phrasing seam is governed by `assertRenderedFromPlan`, but no Claire
    voice system is attached to it.
-2. **Personal disclosure text is empty.** The executive authorises the disclosure; the
-   authored line must come from the canon/dialogue registry, which is not wired. Never
-   fill that registry with generated lines.
+2. **A granted personal disclosure still has empty text.** The DECLINE path is now a
+   real authored line chosen from the approved registry for the operator's rapport band
+   — the executive selects, it never writes Claire dialogue. The DISCLOSURE path is
+   deliberately still empty: producing the authored reveal goes through the personal
+   reveal path, which generates and CONSUMES an entitlement. Both are writes, so an
+   observer must not do it. Wiring that is cutover work, not shadow work. Never fill the
+   authored-dialogue registry with generated lines.
 3. **Perception does not own live voice completeness.** `perception/completeness.ts` is
    the V2 destination and is tested, but production voice still gets completeness from
    V1's `listenOnly`. Acceptable for shadow; a blocker for cutover.

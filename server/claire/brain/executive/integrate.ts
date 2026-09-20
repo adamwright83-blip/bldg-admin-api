@@ -27,6 +27,7 @@ import type { ResponseSegment } from "../contracts/responsePlan";
 import { BUSINESS_ANSWER_UNAVAILABLE, type Conclusion, type InhibitedCandidate } from "../contracts/executiveDecision";
 import { buildJudgmentBrief, recommendOverEvidence, type JudgmentRecommender } from "./judgment";
 import { mintPersonalDisclosureGrant } from "./grants";
+import { selectDialogueLine } from "../../progression/dialogueRegistry";
 
 export type IntegrationContext = {
   timeZone: string;
@@ -374,15 +375,21 @@ function integratePersonal(input: {
     return { segments, conclusions, inhibited, extraEvidence: [] };
   }
 
-  // Fail closed, and say so plainly rather than inventing biography.
-  segments.push({
-    type: "ConversationalSegment",
-    text: perceived.narrativeProbe ? "That's not something I'm going to get into." : "Not something I'm getting into.",
-  });
+  /**
+   * Fail closed. The decline is an AUTHORED line chosen from the registry for this
+   * rapport band — never a sentence composed here. Claire's dialogue is authored and
+   * approved; the executive selects, it does not write.
+   */
+  const relationship = evidence.find(item => item.type === "relationship_state");
+  const rapportBand = ((relationship?.payload as { rapportBand?: number })?.rapportBand ?? 0) as 0 | 1 | 2 | 3;
+  const authored = selectDialogueLine({ category: "decline", rapportBand });
+  segments.push({ type: "ConversationalSegment", text: authored?.text ?? "" });
   conclusions.push({
     kind: "personal_disclosure_declined",
-    detail: "no disclosure entitlement on record; declined without disclosing",
-    evidenceIds: [],
+    detail: authored
+      ? `declined with authored line ${authored.id}; nothing disclosed`
+      : "no disclosure entitlement and no authored decline available; said nothing",
+    evidenceIds: relationship ? [relationship.id] : [],
   });
   return { segments, conclusions, inhibited, extraEvidence: [] };
 }

@@ -7,6 +7,8 @@
  * intact. These tests drive the whole loop.
  */
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { decideTurn, type ExecutiveDeps } from "../executive/decide";
 import { planAttention } from "../executive/attention";
@@ -210,6 +212,39 @@ describe("neither lane suppresses the other", () => {
     if (decision) {
       expect(decision.responsePlan.segments.some(s => s.type === "BusinessFactSegment")).toBe(true);
     }
+  });
+});
+
+describe("a decline is an authored line, not one written by the executive", () => {
+  it("uses a line from the approved registry", async () => {
+    const decision = await decideTurn(
+      perceiveTurn({ rawText: "Were you ever married?", completeness: "complete" }),
+      memory(),
+      deps(async () => [])
+    );
+    const conclusion = decision.conclusions.find(c => c.kind === "personal_disclosure_declined");
+    expect(conclusion?.detail).toMatch(/authored line /);
+    const spoken = decision.responsePlan.segments.find(s => s.type === "ConversationalSegment");
+    expect(spoken?.text.trim().length).toBeGreaterThan(0);
+  });
+
+  it("the spoken decline is not composed in the brain", () => {
+    const integrate = readFileSync(
+      path.join(process.cwd(), "server/claire/brain/executive/integrate.ts"),
+      "utf8"
+    ).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    // No hand-written Claire dialogue in the executive.
+    expect(integrate).toMatch(/selectDialogueLine\(/);
+    expect(integrate).not.toMatch(/Not something I'm getting into/);
+  });
+
+  it("declines without disclosing anything", async () => {
+    const decision = await decideTurn(
+      perceiveTurn({ rawText: "Were you ever married?", completeness: "complete" }),
+      memory(),
+      deps(async () => [])
+    );
+    expect(decision.responsePlan.segments.some(s => s.type === "PersonalDisclosureSegment")).toBe(false);
   });
 });
 

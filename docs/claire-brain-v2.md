@@ -620,6 +620,7 @@ Two of those have write-capable siblings, and an observer must reach neither:
 |---|---|---|---|
 | Self | `readPersonalProgressionContext` | `loadPersonalProgressionContext` | it releases expired reservations — a write |
 | Goals | `loadObligations` | `ensureAdamBoard` | it CREATES obligations — it makes work |
+| Personal decline | `selectDialogueLine` | the personal reveal path | it generates and CONSUMES an entitlement |
 
 The read-only progression view may therefore show a reservation that has already
 expired. That is the correct trade: a slightly stale read is harmless; a write from an
