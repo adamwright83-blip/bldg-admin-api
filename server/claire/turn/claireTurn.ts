@@ -947,6 +947,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       account = accounts.find(candidate => candidate.id === [...candidateIds][0]) ?? null;
     }
   }
+  if (account) state.focusAccount = account;
 
   const followUpDay = account ? followUpDayIntent(utterance, today) : null;
   if (account && followUpDay && interpreted.mayProposeWork) {
@@ -1267,7 +1268,14 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       (isAccountQuestion(questionLower) && /\b(?:my last|last contact|follow[- ]?up|visit|what happened|what did i)\b/.test(questionLower))
         ? state.focusAccount ?? null
         : null;
-    const target = questionAccounts.length === 1 ? questionAccounts[0]! : questionAccounts.length === 0 ? pronounAccount : null;
+    const scopedResolvedAccount =
+      question === utterance && interpreted.businessJudgment ? state.focusAccount ?? null : null;
+    const target =
+      questionAccounts.length === 1
+        ? questionAccounts[0]!
+        : questionAccounts.length === 0
+          ? pronounAccount ?? scopedResolvedAccount
+          : null;
     if (target && (isAccountQuestion(questionLower) || questionAccounts.length === 1)) {
       try {
         const accountHistory = await deps.accountHistory({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, account: target });
