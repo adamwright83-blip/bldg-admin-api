@@ -86,6 +86,29 @@ and goals adapters return `[]` although the executive already plans and consumes
 typed requests. Shadow is invocable in tests only and is not wired to Twilio/desk — which
 is correct for this phase.
 
+## Review response (second pass)
+
+An independent review of `f29004aa` found that the previous completion report
+overstated several phases. It was right. What the review identified, and what changed:
+
+| Review finding | Status |
+|---|---|
+| Shadow ran with `noRetrieval` — no live memory at all | **Fixed.** The observer builds a read-only `ExecutiveDeps` and passes it. |
+| No V2-owned multi-turn working memory (`orderedQuery: null`) | **Fixed.** `shadow/shadowMemory.ts`, exercised by real multi-turn tests. |
+| Business judgment produced empty text | **Fixed.** Evidence-bounded recommendation with a governed model seam. |
+| Episodic/Goals not integrated into judgment | **Fixed.** Both inform the recommendation; neither gains authority. |
+| Personal/narrative perception stubbed | **Fixed.** Wraps the existing detectors; mixed lane tested through the real pipeline. |
+| `correctionTarget` always null | **Fixed.** Prior query vs prior claim vs pending item. |
+| Entity word-count heuristic | **Removed.** Resolution is against real account and contact rows. |
+| Renderer not characterful | **Partly.** Boundary and governed phrasing seam done; voice system not attached. |
+| Proposals had empty text | **Fixed.** Titles derived from the operator's own words. |
+| `spoke_vs_silent` never emitted; desk missed `commitmentTurn` | **Fixed.** |
+| Voice completeness owned by V1 | **Documented and implemented in V2** (`perception/completeness.ts`), not yet wired to live voice. |
+
+Two of these found real bugs in my own new code, via the tests the review asked for:
+a revision phrasing V1 never flagged as a correction, and a proposal titler that would
+have turned "Good morning" into a task.
+
 ## Next task
 
 **Turning the flag on is the next decision, and it is Adam's.**

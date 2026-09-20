@@ -397,6 +397,18 @@ is the same read, a different slice, never a fresh claim about now.
 
 ---
 
+## 11a. Identity resolution comes from rows, never from string shape
+
+Perception emits an ENTITY MENTION. It does not decide whether that mention is a person
+or an account.
+
+A one-word mention is not necessarily a contact ("Ravenswood") and a multi-word mention
+is not necessarily an account ("Marcus Bell"). Any whitespace-based rule is wrong in both
+directions, so there is none. `businessMemory/entityResolution.ts` resolves a mention
+against authoritative account rows and contact rows; where rows cannot settle it, the
+resolution is `ambiguous` or `unknown` and carries no current-truth authority — a reason
+to ask, not a reason to assert.
+
 ## 12. Entity / temporal / account resolution
 
 Keep reusable contact → account resolution (PR #192 `contactAccountResolution.ts`).
@@ -597,6 +609,19 @@ Binding rules:
 Both surfaces are wired: `claireTwilio.ts` (voice) and `claireRouter.ts` (desk).
 `server/claire/brain/tests/shadowWiring.test.ts` asserts the absence of a return path.
 
+### B.1 What shadow observation actually does now
+
+The observer injects a read-only `ExecutiveDeps`, so an enabled shadow turn genuinely
+retrieves through Business and Episodic Memory. Self Memory and Goals are not yet in
+that context; an unsupplied compartment returns nothing rather than reading something
+the caller did not intend.
+
+Brain V2 keeps its OWN working memory during shadow (`shadow/shadowMemory.ts`), keyed by
+conversation and separate from V1 state. The executive records what a turn RESOLVED and
+what it actually PRESENTED — a member counts as presented only when Claire named it — so
+a later "the other four" continues that same result instead of re-querying. The store
+holds cognitive state only: no transcript, no operator words, no durable write path.
+
 ### C. Guarded cutover — NOT AUTHORIZED
 
 Brain V2 gains selected authority only after explicit authorization, against the
@@ -644,9 +669,9 @@ Then Phase I: guarded operator-only cutover. Then Phase J: retire the old contro
 | D | Integration / inhibition / authority | done | none |
 | E | ResponsePlan + ordered-query continuation | done | none |
 | F | Action gateway + compartment adapters | done | none |
-| G | Character renderer | done | none |
+| G | Character renderer | boundary + governed phrasing seam done; voice NOT attached | none |
 | H | Regression / adversarial corpus | done (130 brain tests, 0 todo) | none |
-| I | Shadow mode on real turns + guarded cutover | mechanism done; transport import **awaits authorization** | read-only comparison, then **only after authorization** |
+| I | Shadow mode on real turns + guarded cutover | wired on both surfaces, default OFF, with live read-only retrieval | read-only comparison, then **only after authorization** |
 | J | Retire old control plane | not started | after V2 proves itself |
 
 ### Retrieval safety invariant

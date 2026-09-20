@@ -79,6 +79,40 @@ describe("the renderer phrases", () => {
   });
 });
 
+describe("a model phraser is governed by the same boundary", () => {
+  it("accepts phrasing that keeps every authored claim", () => {
+    const { speak } = renderWithCharacter(plan([fact]), { surface: "voice" }, () =>
+      "Dana hasn't replied since Tuesday — nothing since."
+    );
+    expect(speak).toContain("Dana hasn't replied since Tuesday");
+  });
+
+  it("discards phrasing that invents a number", () => {
+    const { speak } = renderWithCharacter(plan([fact]), { surface: "voice" }, () =>
+      "Dana hasn't replied since Tuesday, and there are 3 others waiting."
+    );
+    // Falls back to the deterministic rendering rather than speaking the invention.
+    expect(speak).toBe("Dana hasn't replied since Tuesday.");
+  });
+
+  it("discards phrasing that drops an authored claim", () => {
+    const { speak } = renderWithCharacter(plan([fact]), { surface: "voice" }, () => "All quiet.");
+    expect(speak).toBe("Dana hasn't replied since Tuesday.");
+  });
+
+  it("a throwing phraser falls back rather than failing the turn", () => {
+    const { speak } = renderWithCharacter(plan([fact]), { surface: "voice" }, () => {
+      throw new Error("phraser unavailable");
+    });
+    expect(speak).toBe("Dana hasn't replied since Tuesday.");
+  });
+
+  it("a phraser cannot change the executive's call-control decision", () => {
+    const { endCall } = renderWithCharacter(plan([fact]), { surface: "voice" }, () => "Dana hasn't replied since Tuesday. Bye.");
+    expect(endCall).toBe(false);
+  });
+});
+
 describe("the renderer does not think", () => {
   it("rejects a number the plan never authorised", () => {
     expect(() =>

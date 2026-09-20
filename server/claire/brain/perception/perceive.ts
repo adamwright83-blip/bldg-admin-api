@@ -38,13 +38,26 @@ function acts(turn: ReturnType<typeof interpretTurn>, assembled: string): Dialog
   if (/^(?:good\s+)?(?:morning|afternoon|evening)\b/i.test(assembled.trim())) out.push("greeting");
   if (turn.acknowledgement) out.push("acknowledgement");
   if (turn.actionRefused) out.push("refusal");
-  if (turn.correction) out.push("correction");
+  if (correctionOf(assembled, turn)) out.push("correction");
   if (turn.hasExplicitActionRequest) out.push("directive");
   if (turn.operatorWorkCommitment) out.push("commitment");
   if (turn.hasBusinessQuestion) out.push("question");
   if (turn.callControl === "end") out.push("leave_taking");
   if (out.length === 0) out.push("continue");
   return out;
+}
+
+/**
+ * Revision phrasings V1's interpreter does not flag as corrections.
+ *
+ * Perception may notice more than `interpretTurn` does; it still only DESCRIBES the
+ * turn, and Executive Function decides what to do about it.
+ */
+const REVISION_PHRASING =
+  /\b(?:wait|hold on|actually|scratch that)\b[\s\S]{0,40}\b(?:change|make\s+it|move|switch|instead)\b|\b(?:change|move|switch)\b[\s\S]{0,60}\bto\b/i;
+
+function correctionOf(assembled: string, turn: ReturnType<typeof interpretTurn>): boolean {
+  return turn.correction || REVISION_PHRASING.test(assembled);
 }
 
 /**
@@ -63,7 +76,7 @@ function correctionTargetOf(
   turn: ReturnType<typeof interpretTurn>
 ): PerceivedTurn["correctionTarget"] {
   if (turn.correctnessChallenge || turn.provenanceQuestion) return "prior_claim";
-  if (!turn.correction) return null;
+  if (!correctionOf(assembled, turn)) return null;
   if (turn.queryRefinement || turn.anchorEntity || turn.exclusions.length > 0) return "prior_query";
   if (turn.cardinality != null && /\b(?:i (?:meant|said)|not|rather)\b/i.test(assembled)) return "prior_query";
   if (/\b(?:i (?:meant|said))\b[\s\S]{0,40}\b(?:number|figure|amount|total|revenue|sales)\b/i.test(assembled)) {
@@ -109,7 +122,7 @@ export function perceiveTurn(input: PerceiveInput): PerceivedTurn {
     exclusions: turn.exclusions,
     anchorEntity: turn.anchorEntity,
     priorQueryReference: turn.queryRefinement || Boolean(turn.anchorEntity) || turn.exclusions.length > 0,
-    correction: turn.correction,
+    correction: correctionOf(assembledText, turn),
     correctionTarget: correctionTargetOf(assembledText, turn),
     refusal: turn.actionRefused,
     acknowledgement: turn.acknowledgement,

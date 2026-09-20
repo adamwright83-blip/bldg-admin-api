@@ -25,10 +25,25 @@ export type RenderedResponse = {
   endCall: boolean;
 };
 
+/**
+ * Claire: 34, British, measured, dry, direct, observant, difficult to impress.
+ * Rapport may alter WARMTH. It never alters identity, and it never alters facts.
+ */
 export type CharacterVoice = {
-  /** Claire is measured and dry; she does not pad, apologise, or perform warmth. */
   surface: "voice" | "text";
+  /** Higher rapport permits more warmth. It permits nothing else. */
+  warmth?: "reserved" | "neutral" | "warm";
 };
+
+/**
+ * Optional model-assisted phrasing.
+ *
+ * It receives an already-decided plan and may only rewrite its wording.
+ * `assertRenderedFromPlan` then re-checks the output; anything that added a number or
+ * dropped authored content is discarded in favour of the deterministic rendering.
+ * The renderer phrases. It does not think.
+ */
+export type CharacterPhraser = (plan: ResponsePlan, voice: CharacterVoice) => string | null;
 
 /** Segment order is a presentation concern; authority is not. */
 const SEGMENT_ORDER: Record<ResponseSegment["type"], number> = {
@@ -62,7 +77,11 @@ function ordered(segments: ResponseSegment[]): ResponseSegment[] {
     .map(entry => entry.segment);
 }
 
-export function renderWithCharacter(plan: ResponsePlan, _voice?: CharacterVoice): RenderedResponse {
+export function renderWithCharacter(
+  plan: ResponsePlan,
+  voice: CharacterVoice = { surface: "voice" },
+  phrase?: CharacterPhraser
+): RenderedResponse {
   const parts: string[] = [];
   for (const segment of ordered(plan.segments)) {
     const text = sentence(segment.text);
@@ -70,7 +89,21 @@ export function renderWithCharacter(plan: ResponsePlan, _voice?: CharacterVoice)
   }
   // Call control is a decision the executive already made; the renderer only reports it.
   const endCall = plan.segments.some(segment => segment.type === "CallControlSegment" && segment.endCall);
-  return { speak: parts.join(" ").replace(/\s+/g, " ").trim(), endCall };
+  const deterministic = parts.join(" ").replace(/\s+/g, " ").trim();
+
+  if (phrase) {
+    try {
+      const candidate = phrase(plan, voice);
+      if (candidate && candidate.trim()) {
+        // The same lint that guards the boundary also guards the phraser.
+        assertRenderedFromPlan(plan, candidate);
+        return { speak: candidate.trim(), endCall };
+      }
+    } catch {
+      // A phraser that added or dropped content is not spoken.
+    }
+  }
+  return { speak: deterministic, endCall };
 }
 
 /** Digits the plan authorised. A rendered number outside this set was invented. */

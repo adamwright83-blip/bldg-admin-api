@@ -19,6 +19,10 @@ const COMMITMENT_LEAD_IN =
 const REQUEST_LEAD_IN =
   /^(?:can\s+you|could\s+you|would\s+you|please|put|add|schedule|set\s+up|book)\s+(?:a\s+|an\s+|the\s+)?(?:reminder\s+to\s+|note\s+to\s+)?/i;
 
+/** Verbs that name actual field or follow-up work, for a bare imperative. */
+const WORK_IMPERATIVE =
+  /^(?:call|ring|phone|email|e-mail|text|message|send|follow\s+up|chase|schedule|book|check|visit|drop\s+by|deliver|pick\s+up|confirm|quote|invoice)\b/i;
+
 function tidy(value: string): string {
   return value
     .trim()
@@ -45,8 +49,14 @@ export function proposedWorkTitle(perceived: PerceivedTurn): string | null {
 
   // Take the clause that carries the commitment, not the whole utterance.
   const clauses = text.split(/,(?=\s)|\s+(?:but|and then|then)\s+/i);
-  const candidate =
-    clauses.find(clause => COMMITMENT_LEAD_IN.test(clause.trim()) || REQUEST_LEAD_IN.test(clause.trim())) ?? text;
+  const carrying = clauses.find(
+    clause => COMMITMENT_LEAD_IN.test(clause.trim()) || REQUEST_LEAD_IN.test(clause.trim())
+  );
+
+  // No lead-in anywhere: only a bare imperative naming real work may become a title.
+  // Without this, any utterance at all ("Good morning") would be turned into a task.
+  const candidate = carrying ?? (WORK_IMPERATIVE.test(text) ? text : null);
+  if (!candidate) return null;
 
   let core = candidate.trim();
   core = core.replace(COMMITMENT_LEAD_IN, "").replace(REQUEST_LEAD_IN, "");
@@ -54,7 +64,7 @@ export function proposedWorkTitle(perceived: PerceivedTurn): string | null {
 
   // Nothing survived beyond the lead-in, or it is too thin to confirm against.
   if (core.length < 3) return null;
-  if (core.toLowerCase() === perceived.assembledText.trim().toLowerCase() && !/\s/.test(core)) return null;
+  if (!/\s/.test(core)) return null;
   return sentenceCase(core);
 }
 
