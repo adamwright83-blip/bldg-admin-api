@@ -39,6 +39,7 @@ export const CLAIRE_ANSWER_PATHS = [
   "guard_recovery", // a guard discarded model text; canon rendered instead
   "fallback", // conservativeClaireFollowUp, or the no-record sentence
   "listening", // held fragment; nothing spoken
+  "prior_claim_verification", // server-adjudicated recheck of a prior factual claim (provenance/claimReceipts.ts)
 ] as const;
 
 export type ClaireAnswerPath = (typeof CLAIRE_ANSWER_PATHS)[number];
@@ -124,6 +125,37 @@ export type ClairePromptSizeTrace = {
   sections: Array<{ label: string; chars: number }>;
 };
 
+/** Inspectable record of a prior-claim verification turn. Labels and counts only. */
+export type ClairePriorClaimTrace = {
+  receiptId: string;
+  resolvedClaireTurn: number;
+  originalAnswerPath: string;
+  originalGrounding: string;
+  claimType: string;
+  outcome: string;
+  evidenceChanged: boolean | null;
+  freshnessAffected: boolean;
+  resolution: "receipt_only" | "fresh_query" | "not_attempted";
+  presentation: "deterministic" | "guard_replacement";
+  latencyMs: number;
+  classifierMs: number | null;
+  timedOut: boolean;
+};
+
+/** Receipt summary mirrored into answer-path detail so a claim is reconstructable from telemetry. */
+export type ClaireClaimReceiptTrace = {
+  id: string;
+  claimType: string;
+  grounding: string;
+  reader: string | null;
+  metric: string | null;
+  periodLabel: string | null;
+  evidence: Array<{ source: string; ref: string | null }>;
+  fingerprint: string | null;
+  asOf: string;
+  rechecks: boolean;
+};
+
 export type ClaireTurnTrace = {
   tenantId: string;
   operatorUserId: string | null;
@@ -175,6 +207,10 @@ export type ClaireTurnTrace = {
    * applies, and must not require one to run.
    */
   evidenceSources: string[];
+  claimReceipt: ClaireClaimReceiptTrace | null;
+  priorClaim: ClairePriorClaimTrace | null;
+  /** "unavailable" when the challenge classifier timed out or failed; the structural guard still applies. */
+  priorClaimClassifier: "probe" | "not_probe" | "unavailable" | null;
 };
 
 export function beginClaireTurnTrace(input: {
@@ -214,6 +250,9 @@ export function beginClaireTurnTrace(input: {
     needs_synthesis: false,
     routeOutcome: null,
     evidenceSources: [],
+    claimReceipt: null,
+    priorClaim: null,
+    priorClaimClassifier: null,
   };
 }
 

@@ -58,6 +58,19 @@ import {
 import { persistClaireTurnTrace } from "../answerPathRecorder";
 import { explicitDayLineRefusal, explicitTrackingRequest } from "../briefing/titleContract";
 import { classifyOpenDialogueAct } from "./dialogueAct";
+import { runBusinessQuery } from "../../analytics/businessQuery";
+import {
+  appendClaimReceipt,
+  modelReplyRewritesPriorClaim,
+  receiptFromBusinessResult,
+  receiptFromReader,
+  resolvePriorClaim,
+  speakPriorClaimVerification,
+  verifyPriorClaim,
+  type ClaimGrounding,
+  type FactualClaimReceipt,
+} from "../provenance/claimReceipts";
+import { classifyPriorClaimAct, isChallengeCandidate, type ClassifyPriorClaimAct } from "../provenance/priorClaimChallenge";
 import type { MutationReceipt } from "../assertionGuard";
 import type { EncyclopediaAnswer } from "../knowledge/encyclopediaAgent";
 import {
@@ -107,6 +120,10 @@ export type ClaireTurnState = PendingProposalState &
     focusAccount?: AccountRef | null;
     consecutiveEmptyTranscripts?: number;
     proactiveMorning?: boolean;
+    /** Factual-claim receipts for this conversation (durable with the rest of the turn state). */
+    claimReceipts?: FactualClaimReceipt[];
+    /** Count of Claire's spoken turns, so a receipt can name the turn that produced it. */
+    claireTurnCount?: number;
   };
 
 export type ClaireTurnInput = {
@@ -182,6 +199,12 @@ export type ClaireTurnDeps = {
    * database; production leaves it unset.
    */
   onTurnTrace?: (trace: ClaireTurnTrace) => void;
+  /** Semantic recognition of "operator probes the prior factual claim". Labels the act only. */
+  classifyPriorClaim: ClassifyPriorClaimAct;
+  /** Authoritative re-read used to re-verify a prior claim. */
+  rerunBusinessQuery: (tenantId: string, query: import("../../analytics/businessQuery").BusinessQuery) => Promise<import("../../analytics/businessQuery").BusinessQueryResult>;
+  /** Live-turn budget for a fresh recheck. */
+  priorClaimBudgetMs?: number;
 };
 
 export function defaultClaireTurnDeps(): ClaireTurnDeps {
@@ -206,6 +229,8 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     encyclopedia: null,
     watchBoard: ({ tenantId, operatorUserId, actorId }) => ensureAdamBoard({ tenantId, operatorUserId, actorId }),
     doctrineTurn: handleDoctrineTurn,
+    classifyPriorClaim: classifyPriorClaimAct,
+    rerunBusinessQuery: (tenantId, query) => runBusinessQuery(tenantId, query),
   };
 }
 
@@ -407,6 +432,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // Set when a guarded personal turn decided the call should actually end (business complete + an
   // authored exit line exists). Dormant in production until such a line is authored.
   let personalEndCall = false;
+  const claireOrdinal = (state.claireTurnCount ?? 0) + 1;
+  /** Receipt for the factual claim this turn makes, attached to durable state in `finish`. */
+  let pendingReceipt: FactualClaimReceipt | null = null;
+  const readerReceipt = (answerPath: string, claimType: string, grounding: ClaimGrounding, sources: string[], answerText: string) => {
+    pendingReceipt = receiptFromReader({ conversationKey: input.conversationKey, claireTurnOrdinal: claireOrdinal, nowMs, answerText, answerPath, claimType, grounding, sources });
+  };
   const finish = (result: ClaireTurnResult): ClaireTurnResult => {
     const inventory = buildClaireVerifiedFactInventory(input.context);
     const speak = assembleGuardedClaireSpeak({
@@ -421,6 +452,23 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       trace.needs_synthesis = telemetryClaireAnswerClass(utterance, true) === "needs_synthesis";
     }
     remember(state, "claire", guarded.speak, nowMs);
+    state.claireTurnCount = claireOrdinal;
+    if (pendingReceipt && guarded.speak) {
+      const receipt: FactualClaimReceipt = { ...(pendingReceipt as FactualClaimReceipt), answerText: guarded.speak };
+      state.claimReceipts = appendClaimReceipt(state.claimReceipts, receipt);
+      trace.claimReceipt = {
+        id: receipt.id,
+        claimType: receipt.claimType,
+        grounding: receipt.grounding,
+        reader: receipt.reader,
+        metric: receipt.metric,
+        periodLabel: receipt.periodLabel,
+        evidence: receipt.evidence,
+        fingerprint: receipt.fingerprint,
+        asOf: receipt.asOf,
+        rechecks: receipt.recheck.kind !== "none",
+      };
+    }
     persistClaireTurnTrace(trace, { turnKind: guarded.kind, spokenText: guarded.speak });
     deps.onTurnTrace?.(trace);
     return personalEndCall ? { ...guarded, endCall: true } : guarded;
@@ -473,6 +521,28 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         mark("proactive_board");
         return finish({ speak: board.brief, kind: "answered" });
       }
+    }
+  }
+
+  // ── 1b. Prior-claim verification ──────────────────────────────────────────
+  // A challenge to something Claire just claimed as fact is adjudicated from the claim's
+  // receipt and authoritative evidence — never by free-form generation. Verification fails
+  // closed: a timeout leaves the claim unresolved instead of conceding it.
+  const holdingSomething = Boolean(state.pendingBriefing || state.pendingProposal || state.pendingAccountFollowUp);
+  const priorClaim = holdingSomething ? null : resolvePriorClaim(state.claimReceipts, claireOrdinal);
+  if (priorClaim && isChallengeCandidate(utterance, priorClaim)) {
+    const classifierStarted = Date.now();
+    const probe = await deps.classifyPriorClaim({ tenantId: input.tenantId, utterance, priorAnswer: priorClaim.answerText });
+    const classifierMs = Date.now() - classifierStarted;
+    trace.priorClaimClassifier = probe === null ? "unavailable" : probe ? "probe" : "not_probe";
+    if (probe) {
+      const verification = await verifyPriorClaim(priorClaim, {
+        rerun: query => deps.rerunBusinessQuery(input.tenantId, query),
+        budgetMs: deps.priorClaimBudgetMs,
+      });
+      recordPriorClaimTrace(verification, "deterministic", classifierMs);
+      mark("prior_claim_verification");
+      return finish({ speak: speakPriorClaimVerification(verification), kind: "answered" });
     }
   }
 
@@ -860,7 +930,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     // A follow-up that never reported a diagnostic (a stubbed dep in a test)
     // is still attributed rather than left unlabelled.
     mark("follow_up_model");
-    return finish({ speak: reply, kind: "follow_up" });
+    return finish({ speak: await finalizeModelReply(reply, []), kind: "follow_up" });
   }
   mark("fallback", { fallbackReason: "no_brief_or_context" });
   return finish({
@@ -875,7 +945,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    */
   async function gatherDeterministicEvidence(question: string): Promise<ClaireRouteEvidence[]> {
     const questionLower = normalizeUtterance(question);
-    const evidence: Array<{ source: string; text: string }> = [];
+    const evidence: ClaireRouteEvidence[] = [];
     const skipGreedyBusiness =
       (isUnpaidQuestion(questionLower) && !/\bfollow[- ]?up\b/.test(questionLower)) ||
       Boolean(operationsQuestion(questionLower)) ||
@@ -888,7 +958,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
           { tenantId: input.tenantId, utterance: question, state, surface: input.surface, context: input.context },
           { now: deps.now, timeZone: deps.timeZone, ...deps.business }
         );
-        if (business.handled) evidence.push({ source: `business_reader:${business.reader ?? "query"}`, text: business.speak });
+        if (business.handled) evidence.push({ source: `business_reader:${business.reader ?? "query"}`, text: business.speak, businessResult: business.result, reader: business.reader ?? "query" });
       } catch (error) {
         console.warn("[Claire] business evidence failed", error instanceof Error ? error.message : error);
       }
@@ -1020,6 +1090,61 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       },
     });
     mark("follow_up_model");
+    return finalizeModelReply(reply, evidence.map(item => item.source));
+  }
+
+  function recordPriorClaimTrace(
+    verification: Awaited<ReturnType<typeof verifyPriorClaim>>,
+    presentation: "deterministic" | "guard_replacement",
+    classifierMs: number | null
+  ): void {
+    trace.priorClaim = {
+      receiptId: verification.receipt.id,
+      resolvedClaireTurn: verification.receipt.claireTurnOrdinal,
+      originalAnswerPath: verification.receipt.answerPath,
+      originalGrounding: verification.receipt.grounding,
+      claimType: verification.receipt.claimType,
+      outcome: verification.outcome,
+      evidenceChanged: verification.evidenceChanged,
+      freshnessAffected: verification.freshnessAffected,
+      resolution: verification.resolution,
+      presentation,
+      latencyMs: verification.latencyMs,
+      classifierMs,
+      timedOut: verification.timedOut,
+    };
+  }
+
+  /**
+   * Structural invariant: a free-form model reply may not change the epistemic status of a
+   * prior grounded claim. If a model-generated reply re-characterises a recent claim (made
+   * up, invented, guessed, lied…), the reply is discarded and replaced by the server's
+   * adjudication of that claim's receipt. The lexical check only *detects* the attempt; the
+   * replacement is what enforces the invariant. Returns null when the reply is untouched.
+   */
+  async function rewriteAttemptReplacement(reply: string): Promise<string | null> {
+    if (!modelReplyRewritesPriorClaim(reply)) return null;
+    const prior = resolvePriorClaim(state.claimReceipts, claireOrdinal);
+    if (!prior) return null;
+    const verification = await verifyPriorClaim(prior, {
+      rerun: query => deps.rerunBusinessQuery(input.tenantId, query),
+      budgetMs: deps.priorClaimBudgetMs,
+    });
+    recordPriorClaimTrace(verification, "guard_replacement", null);
+    return speakPriorClaimVerification(verification);
+  }
+
+  /** Runs after a model turn: enforce the invariant, then leave a receipt for what the model claimed. */
+  async function finalizeModelReply(reply: string, evidenceSources: string[]): Promise<string> {
+    const replacement = await rewriteAttemptReplacement(reply);
+    if (replacement) return replacement;
+    if (evidenceSources.length) {
+      readerReceipt(trace.path ?? "follow_up_model", "retrieved_statement", "retrieved", evidenceSources, reply);
+    } else if (/\d/.test(reply)) {
+      // A figure with no evidence behind it is recorded as ungrounded so a later challenge is
+      // answered as "unsupported" from the receipt, not defended.
+      readerReceipt(trace.path ?? "follow_up_model", "ungrounded_statement", "ungrounded", [], reply);
+    }
     return reply;
   }
 
@@ -1103,16 +1228,19 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       const unpaid = loadedEvidence.find(entry => entry.source === "unpaid_orders");
       if (unpaid) {
         mark("unpaid_orders");
+        readerReceipt("unpaid_orders", "unpaid_orders", "deterministic", ["unpaid_orders"], unpaid.text);
         return unpaid.text;
       }
       const dayWork = loadedEvidence.find(entry => entry.source === "day_work");
       if (dayWork) {
         mark("day_work");
+        readerReceipt("day_work", "day_line_state", "deterministic", ["day_work"], dayWork.text);
         return dayWork.text;
       }
       const account = loadedEvidence.find(entry => entry.source === "account_history");
       if (account && accountHistoryMayFinish(question)) {
         mark("account_history");
+        readerReceipt("account_history", "account_history", "deterministic", ["account_history"], account.text);
         return account.text;
       }
       const memory = loadedEvidence.find(entry => entry.source === "call_memory" || entry.source === "memory_quote");
@@ -1127,6 +1255,18 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       const business = loadedEvidence.find(entry => entry.source.startsWith("business_reader"));
       if (business) {
         mark("business_reader", { businessReader: business.source.split(":")[1] ?? null });
+        if (business.businessResult) {
+          pendingReceipt = receiptFromBusinessResult({
+            conversationKey: input.conversationKey,
+            claireTurnOrdinal: claireOrdinal,
+            nowMs,
+            answerText: business.text,
+            reader: business.reader ?? null,
+            result: business.businessResult,
+          });
+        } else {
+          readerReceipt("business_reader", "business_statement", "deterministic", [business.source], business.text);
+        }
         return business.text;
       }
     }

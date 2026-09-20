@@ -8,6 +8,34 @@ import {
   type QualitativeEvaluation,
 } from "./conversationAnalysisSchema";
 
+/**
+ * Why an evaluation could not be used. Recorded, not swallowed: an evaluator that fails
+ * silently reads as "the conversation passed", which is a false signal.
+ */
+export type EvaluatorFailureCategory = "empty_output" | "invalid_json" | "schema_mismatch" | "provider_error";
+
+export class MalformedConversationEvaluationError extends Error {
+  constructor(
+    public readonly category: EvaluatorFailureCategory,
+    public readonly detail: string
+  ) {
+    super(`Malformed conversation evaluation (${category}): ${detail}`);
+    this.name = "MalformedConversationEvaluationError";
+  }
+}
+
+/** Models often wrap strict-JSON output in a code fence; that is recoverable, not malformed. */
+export function extractEvaluationJson(raw: string): unknown {
+  const trimmed = raw.trim();
+  if (!trimmed) throw new MalformedConversationEvaluationError("empty_output", "evaluator returned no content");
+  const unfenced = trimmed.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  try {
+    return JSON.parse(unfenced);
+  } catch (error) {
+    throw new MalformedConversationEvaluationError("invalid_json", error instanceof Error ? error.message : "unparseable");
+  }
+}
+
 function resultText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
   const value = result.choices[0]?.message?.content;
   return typeof value === "string" ? value : "";
@@ -82,9 +110,11 @@ export async function evaluateConversationQualitative(input: {
       },
     ],
   });
-  const parsed = qualitativeEvaluationSchema.safeParse(JSON.parse(resultText(result)));
+  const parsed = qualitativeEvaluationSchema.safeParse(extractEvaluationJson(resultText(result)));
   if (!parsed.success) {
-    throw new Error("Malformed conversation evaluation");
+    // Field paths only — never the evaluated transcript.
+    const paths = Array.from(new Set(parsed.error.issues.map(issue => issue.path.join(".") || "(root)"))).slice(0, 6);
+    throw new MalformedConversationEvaluationError("schema_mismatch", paths.join(", "));
   }
   return parsed.data;
 }

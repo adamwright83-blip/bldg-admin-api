@@ -49,7 +49,13 @@ export type ClaireLocalMatch = {
   mayTerminate: boolean;
 };
 
-export type ClaireRouteEvidence = { source: string; text: string };
+export type ClaireRouteEvidence = {
+  source: string;
+  text: string;
+  /** Provenance only: the authoritative query result that produced `text`, so the turn can leave a claim receipt. */
+  businessResult?: import("../analytics/businessQuery").BusinessQueryResult;
+  reader?: string | null;
+};
 
 export type ClaireRouteDecision = {
   outcome: ClaireRouteOutcome;

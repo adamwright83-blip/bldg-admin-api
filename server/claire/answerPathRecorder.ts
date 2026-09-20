@@ -26,6 +26,9 @@ export function claireTurnTraceDetail(trace: ClaireTurnTrace) {
     needs_synthesis: trace.needs_synthesis,
     routeOutcome: trace.routeOutcome,
     evidenceSources: trace.evidenceSources,
+    claimReceipt: trace.claimReceipt,
+    priorClaim: trace.priorClaim,
+    priorClaimClassifier: trace.priorClaimClassifier,
     promptSizes: trace.promptSizes,
     latency: trace.latency,
     spokenChars: trace.spokenChars,
@@ -59,6 +62,7 @@ export function persistClaireTurnTrace(
     blendedQuestion: Boolean(trace.blend?.factClause && trace.blend?.judgmentClause),
     synthesisRequired: trace.synthesisRequired,
     evidenceSources: trace.evidenceSources,
+    priorClaim: trace.priorClaim,
   });
 
   if (!isClaireRepair2Enabled("a_routing_telemetry", trace.tenantId)) return;
