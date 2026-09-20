@@ -457,6 +457,25 @@ export function describeSources(sources: readonly LedgerSource[]): string {
 }
 
 /** What Claire says instead of a bare zero, when absence cannot be proven. */
+export function speakPartialCoverageVoice(verdict: Exclude<CoverageVerdict, { kind: "provable" }>): string {
+  const sources = describeSources(verdict.sources);
+  switch (verdict.kind) {
+    case "unbound":
+      return `${sources} isn't fully connected here, so that's a partial figure.`;
+    case "stale":
+      return `${sources} is behind its scheduled checkpoint, so the whole-business figure could be higher.`;
+    case "range_gap":
+      return `${sources} doesn't prove the full period, so that's a partial figure.`;
+    case "semantic_gap":
+      return `${sources} is partial for payment-date reporting, so the whole-business figure could differ.`;
+    case "unknown":
+      return `I can't confirm ${sources} coverage, so that may be partial.`;
+    case "unreadable":
+    default:
+      return `I couldn't read ${sources} just now, so that's not a whole-business total.`;
+  }
+}
+
 export function speakUnprovableZero(verdict: Exclude<CoverageVerdict, { kind: "provable" }>): string {
   const sources = describeSources(verdict.sources);
   const isAre = verdict.sources.length === 1 ? "isn't" : "aren't";
