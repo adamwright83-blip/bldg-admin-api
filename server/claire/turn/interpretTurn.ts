@@ -137,7 +137,13 @@ export function detectCallControl(utterance: string): "end" | "continue" {
 export function isPureCallControlTurn(utterance: string): boolean {
   if (detectCallControl(utterance) !== "end") return false;
   let remainder = utterance.toLowerCase();
-  remainder = remainder.replace(DEPARTURE, " ").replace(PARTING, " ").replace(EXPLICIT_END, " ");
+  // A caller may stack closes ("Have a good day. I'm done talking."). Remove every recognized
+  // call-control clause, not just the first regex match.
+  for (let i = 0; i < 4; i += 1) {
+    const next = remainder.replace(DEPARTURE, " ").replace(PARTING, " ").replace(EXPLICIT_END, " ");
+    if (next === remainder) break;
+    remainder = next;
+  }
   remainder = remainder
     .replace(/\b(?:have\s+a\s+good\s+(?:day|night|one)|drive\s+safe|thanks?|thank\s+you|please|okay|ok|alright|well|so|but|and|then|claire)\b/g, " ")
     .replace(/[^a-z0-9]+/g, " ")
