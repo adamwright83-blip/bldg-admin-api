@@ -27,6 +27,13 @@ export type InhibitedCandidate = {
   detail: string;
 };
 
+/**
+ * Recorded when a business lane ran but produced no renderable answer. The governor
+ * accepts this as the honest alternative to a business segment on a mixed turn; it may
+ * never be used to paper over a business answer that personal/narrative suppressed.
+ */
+export const BUSINESS_ANSWER_UNAVAILABLE = "business_answer_unavailable";
+
 export type Conclusion = {
   kind: string;
   detail: string;

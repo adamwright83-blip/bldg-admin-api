@@ -3,7 +3,7 @@
  * Model output is not authority. This module validates an ExecutiveDecision.
  */
 
-import type { ExecutiveDecision } from "../contracts/executiveDecision";
+import { BUSINESS_ANSWER_UNAVAILABLE, type ExecutiveDecision } from "../contracts/executiveDecision";
 import type { EvidenceItem } from "../contracts/evidence";
 import type { ResponseSegment } from "../contracts/responsePlan";
 import { isCallControlGrant, isExecutiveActionGrant, isNarrativeRevealGrant, isPersonalDisclosureGrant } from "./grants";
@@ -118,15 +118,43 @@ export function assertGovernedDecision(decision: ExecutiveDecision): void {
     throw new ExecutiveGovernorError("call end requires a branded CallControlGrant");
   }
 
-  if (decision.attention.lanes.includes("business") && decision.attention.lanes.includes("personal")) {
+  const withheld = decision.inhibitedCandidates.some(candidate => candidate.kind === "narrative_withholds_business");
+  if (withheld) {
+    throw new ExecutiveGovernorError("personal/narrative must not withhold a business answer");
+  }
+
+  /**
+   * Mixed business + personal/narrative firewall — ENFORCED, not merely computed.
+   *
+   * A turn that opened a business lane must not silently lose its business answer because a
+   * personal or narrative lane also ran. The executive has exactly two honest outcomes:
+   * render a business segment, or state on the record that business produced nothing.
+   * Dropping it quietly is the failure this check exists to make impossible.
+   */
+  const personalLane =
+    decision.attention.lanes.includes("personal") || decision.attention.lanes.includes("narrative");
+  if (decision.attention.lanes.includes("business") && personalLane) {
     const hasBusiness = decision.responsePlan.segments.some(
       segment => segment.type === "BusinessFactSegment" || segment.type === "BusinessJudgmentSegment"
     );
-    const withheld = decision.inhibitedCandidates.some(candidate => candidate.kind === "narrative_withholds_business");
-    if (withheld) {
-      throw new ExecutiveGovernorError("personal/narrative must not withhold a business answer");
+    const declaredUnavailable = decision.conclusions.some(
+      conclusion => conclusion.kind === BUSINESS_ANSWER_UNAVAILABLE
+    );
+    if (!hasBusiness && !declaredUnavailable) {
+      throw new ExecutiveGovernorError(
+        "mixed business + personal turn lost its business answer: render a business segment " +
+          `or record a "${BUSINESS_ANSWER_UNAVAILABLE}" conclusion`
+      );
     }
-    void hasBusiness;
+    const personalSegments = decision.responsePlan.segments.filter(
+      segment => segment.type === "PersonalDisclosureSegment" || segment.type === "NarrativeRevealSegment"
+    );
+    if (!hasBusiness && personalSegments.some(segment => segment.text.trim().length > 0)) {
+      throw new ExecutiveGovernorError(
+        "personal/narrative spoke while the business lane produced nothing: business facts " +
+          "may not be traded away for a personal answer"
+      );
+    }
   }
 
   for (const grant of decision.actionGrants) {
