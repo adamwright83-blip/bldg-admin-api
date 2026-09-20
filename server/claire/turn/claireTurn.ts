@@ -130,6 +130,8 @@ export type ClaireTurnState = PendingProposalState &
     claimReceipts?: FactualClaimReceipt[];
     /** Count of Claire's spoken turns, so a receipt can name the turn that produced it. */
     claireTurnCount?: number;
+    /** A pending item is surfaced at most once; Claire does not nag on every later answer. */
+    pendingReminded?: boolean;
     /** Subjects this call has already covered; survives beyond the model's short prompt-history window. */
     coverage?: CoveredSubject[];
   };
@@ -556,12 +558,13 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     return finish({ speak: doctrineSpeak, kind: "answered" });
   }
 
-  const shortCheckIn = utterance.trim().split(/\s+/).filter(Boolean).length <= 8;
-  if (
-    !state.proactiveMorning &&
-    shortCheckIn &&
-    /^(?:good )?morning\b|^hey claire\b|^what should i (?:do|know)\b|^what(?:'s| is) the most important\b|^what do i need to know\b/i.test(utterance)
-  ) {
+  /**
+   * The global board answers only a BROAD briefing request. Its old pattern matched any "what
+   * should I do…", so "What should I do about? Dana Tuesday." returned GUMBALL status, Andrew
+   * Molina and Mission 6 — an answer about nothing the operator asked. Scope is now a property of
+   * the interpretation, not a prefix match.
+   */
+  if (!state.proactiveMorning && interpreted.broadBriefingRequest) {
     state.proactiveMorning = true;
     if (deps.watchBoard) {
       const board = await deps.watchBoard({
@@ -593,7 +596,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // A refinement of the previous QUERY ("I asked you for the last five... what were the other
   // four?") is not a challenge to its TRUTH. Prior-claim used to swallow both, plus bare
   // acknowledgements — three of the worst turns in the 2026-09-20 call.
-  if (resolution.kind !== "none" && !interpreted.acknowledgement && !interpreted.queryRefinement) {
+  if (resolution.kind !== "none" && !interpreted.acknowledgement && (interpreted.correctnessChallenge || !interpreted.queryRefinement)) {
     // Deterministic referent (name / number / immediately preceding): the classifier only labels the act.
     const explicit = resolution.kind === "ambiguous" || resolution.via === "explicit_reference";
     if (isChallengeCandidate(utterance, explicit)) {
@@ -648,6 +651,33 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       mark("doctrine");
       return finish({ speak: why, kind: "answered" });
     }
+  }
+
+  /**
+   * SUPERSESSION. A correction, a refusal, or a refinement invalidates the interpretation that
+   * produced any pending proposal, so the proposal is cleared rather than left to be re-offered or
+   * nagged about. Stale pending state must not survive the turn that contradicts it.
+   */
+  if (interpreted.correction || interpreted.actionRefused || interpreted.queryRefinement) {
+    if (state.pendingProposal || state.pendingBriefing) {
+      state.pendingProposal = null;
+      state.pendingBriefing = null;
+      state.pendingReminded = false;
+    }
+  }
+
+  // A refusal with nothing pending is settled. Live, "Um, actually don't do that." was answered
+  // "Do you want me to add something, change something, or are you just catching me up?" —
+  // reopening a question the operator had already closed.
+  if (
+    interpreted.actionRefused &&
+    !interpreted.hasExplicitActionRequest &&
+    !state.pendingBriefing &&
+    !state.pendingProposal &&
+    !state.pendingAccountFollowUp
+  ) {
+    mark("fallback", { fallbackReason: "action_refusal_settled" });
+    return finish({ speak: "Understood — I won't add anything.", kind: "answered" });
   }
 
   // ── 2. What Claire is holding ─────────────────────────────────────────────
@@ -707,6 +737,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       const revision = reviseBriefing(state.pendingBriefing.parsed, revisionText, clock);
       if (revision.changes.length) {
         state.pendingBriefing = { parsed: revision.parsed, createdAt: nowMs };
+      state.pendingReminded = false;
         const remaining = briefingAdditions(revision.parsed).length;
         mark("briefing");
         return finish({
@@ -978,11 +1009,19 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // ── 6. Questions ──────────────────────────────────────────────────────────
   const answer = await answerQuestion(utterance);
   if (answer) {
-    const reminder = state.pendingBriefing
-      ? " I'm still holding your list; say yes when you want it on the Day Line."
-      : state.pendingProposal
-        ? ` I'm still holding "${state.pendingProposal.title}"; say yes to add it.`
-        : "";
+    /**
+     * A pending item is surfaced ONCE. The operator still needs to know a proposal is alive, but
+     * live it was stapled onto every subsequent answer, including an unrelated Dana question.
+     */
+    const mayRemind = !state.pendingReminded;
+    const reminder = !mayRemind
+      ? ""
+      : state.pendingBriefing
+        ? " I'm still holding your list; say yes when you want it on the Day Line."
+        : state.pendingProposal
+          ? ` I'm still holding "${state.pendingProposal.title}"; say yes to add it.`
+          : "";
+    if (reminder) state.pendingReminded = true;
     return finish({ speak: `${answer}${reminder}`, kind: "answered" });
   }
 
