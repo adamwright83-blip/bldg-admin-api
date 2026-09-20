@@ -61,8 +61,12 @@ function capitalizeFirst(value: string): string {
   return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
 }
 
-function hasAction(value: string): boolean {
+export function containsBriefingAction(value: string): boolean {
   return new RegExp(`\\b${ACTION}\\b`, "i").test(value);
+}
+
+function hasAction(value: string): boolean {
+  return containsBriefingAction(value);
 }
 
 function stripLeadIn(clause: string): string {
