@@ -243,6 +243,16 @@ describe("P1 review regressions", () => {
     expect(after.anchorDirection).toBe("after");
   });
 
+  it("action words inside advice questions do not authorize mutations", () => {
+    const advice = interpretTurn("What should I change about Dana Tuesday?");
+    expect(advice.hasExplicitActionRequest).toBe(false);
+    expect(advice.mayProposeWork).toBe(false);
+
+    const directive = interpretTurn("Can you change the Dana follow-up to Tuesday?");
+    expect(directive.hasExplicitActionRequest).toBe(true);
+    expect(directive.mayProposeWork).toBe(true);
+  });
+
   it.each([
     "Buy detergent",
     "Order hangers",
