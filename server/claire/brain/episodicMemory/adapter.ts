@@ -61,7 +61,8 @@ export async function retrieveEpisodicEvidence(
   ctx: EpisodicMemoryContext,
   deps: EpisodicMemoryDeps = defaultEpisodicMemoryDeps
 ): Promise<EvidenceItem[]> {
-  const terms = (ctx.terms ?? []).filter(term => term.trim().length >= 3);
+  // The executive's cues win; ctx.terms is only a fallback for direct callers.
+  const terms = (request.terms ?? ctx.terms ?? []).filter(term => term.trim().length >= 3);
   // No search terms means we have nothing to recall — not that nothing happened.
   if (!terms.length) return [];
   if (request.kind !== "conversation_history" && request.kind !== "prior_actions") return [];

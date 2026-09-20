@@ -12,10 +12,19 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { decideTurn, type ExecutiveDeps } from "../executive/decide";
 import { planAttention } from "../executive/attention";
+import { activeTaskSets, classifyChange, gateWorkingMemory } from "../executive/workingMemoryGate";
 import { perceiveTurn } from "../perception/perceive";
 import { snapshotWorkingMemory } from "../workingMemory/snapshot";
 import { BUSINESS_ANSWER_UNAVAILABLE } from "../contracts/executiveDecision";
 import type { EvidenceItem } from "../contracts/evidence";
+
+/** The executive gates working memory before attention; tests must do the same. */
+function attentionFor(perceived: Parameters<typeof classifyChange>[0], memory: Parameters<typeof classifyChange>[1]) {
+  const change = classifyChange(perceived, memory);
+  const taskSets = activeTaskSets(perceived, memory, Date.now());
+  const rulings = gateWorkingMemory({ perceived, memory, change, taskSets });
+  return planAttention({ perceived, memory, change, taskSets, rulings });
+}
 
 const CTX = {
   conversationKey: "claire-call:mixed",
@@ -119,7 +128,7 @@ describe("a genuinely mixed utterance opens both lanes", () => {
 
   it("Attention retrieves BOTH business memory and self memory", () => {
     const perceived = perceiveTurn({ rawText: MIXED, completeness: "complete" });
-    const attention = planAttention(perceived, memory());
+    const attention = attentionFor(perceived, memory());
     expect(attention.lanes).toContain("personal");
     expect(attention.lanes).toContain("business");
     expect(attention.retrieve).toContain("businessMemory");

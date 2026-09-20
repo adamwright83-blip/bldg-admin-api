@@ -37,6 +37,12 @@ export type EpisodicRetrievalRequest = {
   kind: "conversation_history" | "visit_outcomes" | "prior_actions";
   conversationKey?: string;
   accountId?: number | null;
+  /**
+   * Recall cues, chosen by Executive Function from RESOLVED identity.
+   * The transport must never supply these — it knows about Twilio, not about what
+   * Claire should try to remember.
+   */
+  terms?: string[];
 };
 
 export type WorkingMemoryRead = {

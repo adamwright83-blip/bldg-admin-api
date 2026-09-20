@@ -1,16 +1,24 @@
 /**
- * Executive retrieval planning.
+ * Executive retrieval planning, in two passes.
  *
- * Attention has already decided WHICH compartments may be consulted. This turns that
- * decision into typed retrieval requests. It is still Executive Function: no compartment
- * asks for itself, and nothing here selects a top-level intent or produces a response.
+ * The old single pass planned scoped reads before knowing what the named thing WAS,
+ * which meant guessing. Now:
  *
- * When the metric cannot be determined the plan omits the query rather than guessing.
- * An unasked question is recoverable; a confidently wrong reading is not.
+ *   PASS A   cheap, unscoped: resolve identity, read the obvious query, fetch the
+ *            challenged claim, check disclosure entitlement
+ *              ↓
+ *   SCOPE    the executive resolves who/what this turn is actually about
+ *              ↓
+ *   PASS B   scoped: that account's state, that relationship's history, open work,
+ *            operations, scoped goals, verification
+ *
+ * Retrieval CUES are an executive product. The transport knows about Twilio and the
+ * desk; it does not get to decide what Claire should try to remember.
  */
 
 import { defaultBusinessQuery, type BusinessMetric, type BusinessQuery } from "../../../analytics/businessQuery";
 import type { AttentionPlan } from "../contracts/attention";
+import type { EvidenceItem } from "../contracts/evidence";
 import type { PerceivedTurn } from "../contracts/perceivedTurn";
 import type { RetrievalRequest } from "../contracts/retrieval";
 import type { WorkingMemorySnapshot } from "../contracts/workingMemory";
@@ -18,7 +26,7 @@ import type { WorkingMemorySnapshot } from "../contracts/workingMemory";
 const METRIC_PATTERNS: Array<{ metric: BusinessMetric; pattern: RegExp }> = [
   { metric: "latest_sales", pattern: /\b(?:last|latest|recent|most\s+recent)\b[\s\S]{0,20}\b(?:sales?|orders?)\b/i },
   { metric: "biggest_orders", pattern: /\b(?:biggest|largest|top)\b[\s\S]{0,12}\border/i },
-  { metric: "open_orders", pattern: /\bopen\s+orders?\b|\boutstanding\b/i },
+  { metric: "open_orders", pattern: /\bopen\s+orders?\b|\boutstanding\b|\bunpaid\b/i },
   { metric: "top_customers", pattern: /\b(?:top|best)\s+customers?\b/i },
   { metric: "frequent_customers", pattern: /\b(?:frequent|repeat|regular)\s+customers?\b/i },
   { metric: "dormant_customers", pattern: /\b(?:dormant|lapsed|lost|stopped)\b[\s\S]{0,16}\bcustomers?\b/i },
@@ -33,7 +41,7 @@ const METRIC_PATTERNS: Array<{ metric: BusinessMetric; pattern: RegExp }> = [
   { metric: "orders", pattern: /\borders?\b/i },
 ];
 
-/** Deterministic, explicit, and willing to return null. */
+/** Deterministic, explicit, and willing to return null rather than guess. */
 export function inferBusinessMetric(text: string): BusinessMetric | null {
   for (const { metric, pattern } of METRIC_PATTERNS) {
     if (pattern.test(text)) return metric;
@@ -41,29 +49,27 @@ export function inferBusinessMetric(text: string): BusinessMetric | null {
   return null;
 }
 
-/**
- * Build the query for this turn. Cardinality and ordering come from Perception
- * ("my last five sales" → limit 5), never from a default that silently disagrees
- * with what the operator actually asked for.
- */
 export function buildBusinessQuery(perceived: PerceivedTurn): BusinessQuery | null {
   const metric = inferBusinessMetric(perceived.assembledText);
   if (!metric) return null;
   const query = defaultBusinessQuery(metric);
   if (perceived.cardinality && perceived.cardinality > 0) query.limit = perceived.cardinality;
   if (perceived.ordering === "first") query.rank = "earliest";
-  // A single named mention scopes the query; identity resolution happens in Business Memory.
   const mentions = perceived.entities.filter(entity => entity.kind === "entity_mention");
   if (mentions.length === 1) query.customerName = mentions[0].raw;
   if (perceived.listRequest) query.listMembers = true;
   return query;
 }
 
+/** Is this operations/day-line shaped rather than analytics shaped? */
+function wantsOperations(text: string): boolean {
+  return /\b(?:today|tomorrow|day\s+line|schedule|route|stops?|what'?s\s+on)\b/i.test(text);
+}
+
 /**
- * Typed retrieval requests for this turn, honouring attention's do-not-retrieve list.
- * A compartment attention excluded is never requested here.
+ * PASS A — cheap and unscoped. Nothing here needs to know who "Dana" is.
  */
-export function planRetrieval(
+export function planRetrievalPassA(
   perceived: PerceivedTurn,
   memory: WorkingMemorySnapshot,
   attention: AttentionPlan
@@ -73,7 +79,7 @@ export function planRetrieval(
     attention.retrieve.includes(compartment) && !attention.doNotRetrieve.includes(compartment);
 
   if (may("businessMemory")) {
-    // A correctness or provenance challenge rechecks the named claim before anything else.
+    // The challenged claim comes first: it decides whether anything else is trusted.
     if (attention.priorClaim !== "none") {
       const target = memory.priorClaims[memory.priorClaims.length - 1];
       if (target) {
@@ -86,55 +92,135 @@ export function planRetrieval(
       }
     }
 
-    const mentions = perceived.entities.filter(entity => entity.kind === "entity_mention").map(entity => entity.raw);
-    if (mentions.length || perceived.businessIntent === "judgment_question") {
+    // Identity before anything scoped to it.
+    if (attention.entitiesToResolve.length) {
       requests.push({
         compartment: "businessMemory",
         kind: "contact_account_resolution",
-        mentions,
+        mentions: attention.entitiesToResolve,
         temporal: perceived.temporalReferences,
       });
-      /**
-       * "What should I do about Dana Tuesday?" names no metric. A judgment needs the
-       * current state of that relationship, so retrieve it directly rather than letting
-       * a keyword metric guess — and never search "Dana Tuesday" as a customer name.
-       */
-      if (perceived.businessIntent === "judgment_question") {
-        requests.push({
-          compartment: "businessMemory",
-          kind: "account_state",
-          mentions,
-          temporal: perceived.temporalReferences,
-        });
-        requests.push({ compartment: "businessMemory", kind: "open_orders", mentions });
-      }
     }
 
     // A pure continuation walks memory's resolved result; it must not re-query.
     if (!attention.continueOrderedQuery) {
-      const query = buildBusinessQuery(perceived);
-      if (query) {
-        requests.push({ compartment: "businessMemory", kind: "business_query", query });
+      if (wantsOperations(perceived.assembledText)) {
+        requests.push({ compartment: "businessMemory", kind: "operations" });
       }
+      const query = buildBusinessQuery(perceived);
+      if (query) requests.push({ compartment: "businessMemory", kind: "business_query", query });
     }
-  }
-
-  if (may("episodicMemory")) {
-    requests.push({
-      compartment: "episodicMemory",
-      kind: perceived.businessIntent === "judgment_question" ? "prior_actions" : "conversation_history",
-      conversationKey: memory.threadId,
-    });
   }
 
   if (may("selfMemory")) {
     requests.push({ compartment: "selfMemory", kind: "disclosure_entitlement" });
   }
 
-  // Goals advise. They are requested only for an unscoped briefing, and always scoped-flagged.
+  return requests;
+}
+
+/** What Pass A resolved: who this turn is about. */
+export type ResolvedScope = {
+  accountIds: number[];
+  /** Cues for episodic recall, chosen by the executive from resolved identity. */
+  terms: string[];
+  ambiguous: boolean;
+};
+
+/**
+ * Read scope out of Pass A's evidence.
+ *
+ * Terms come from what the rows actually resolved to — the contact's name and its
+ * account's name — not from raw speech, so recall is scoped to a real relationship.
+ */
+export function resolveScope(evidence: readonly EvidenceItem[]): ResolvedScope {
+  const accountIds = new Set<number>();
+  const terms = new Set<string>();
+  let ambiguous = false;
+
+  for (const item of evidence) {
+    if (!item.id.startsWith("contact_account_resolution:")) continue;
+    const payload = item.payload as {
+      resolutionKind?: string;
+      mention?: string;
+      accountId?: number | null;
+      accountName?: string | null;
+      contactName?: string | null;
+      candidateAccountIds?: number[];
+    };
+    if (payload.resolutionKind === "ambiguous") ambiguous = true;
+    if (payload.accountId != null) accountIds.add(payload.accountId);
+    for (const candidate of payload.candidateAccountIds ?? []) accountIds.add(candidate);
+    for (const term of [payload.contactName, payload.accountName, payload.mention]) {
+      if (term && term.trim().length >= 3) terms.add(term.trim());
+    }
+  }
+
+  return { accountIds: [...accountIds], terms: [...terms], ambiguous };
+}
+
+/**
+ * PASS B — scoped to what Pass A resolved.
+ *
+ * Returns [] when there is nothing new worth asking, which is what lets the control
+ * allocator stop rather than loop.
+ */
+export function planRetrievalPassB(input: {
+  perceived: PerceivedTurn;
+  memory: WorkingMemorySnapshot;
+  attention: AttentionPlan;
+  scope: ResolvedScope;
+}): RetrievalRequest[] {
+  const { attention, scope } = input;
+  const requests: RetrievalRequest[] = [];
+  const may = (compartment: RetrievalRequest["compartment"]): boolean =>
+    attention.retrieve.includes(compartment) && !attention.doNotRetrieve.includes(compartment);
+  const kinds = new Set(attention.activeTaskSets.map(set => set.kind));
+
+  // Ambiguous identity is a question for the operator; more reading cannot fix it.
+  if (scope.ambiguous) return requests;
+
+  if (may("businessMemory") && scope.accountIds.length) {
+    for (const accountId of scope.accountIds.slice(0, 2)) {
+      requests.push({ compartment: "businessMemory", kind: "account_state", accountId });
+    }
+    if (kinds.has("account_judgment")) {
+      requests.push({ compartment: "businessMemory", kind: "open_orders", accountId: scope.accountIds[0] });
+    }
+  }
+
+  // Episodic recall, cued by resolved identity rather than by the transport.
+  if (may("episodicMemory") && scope.terms.length) {
+    requests.push({
+      compartment: "episodicMemory",
+      kind: kinds.has("account_judgment") ? "prior_actions" : "conversation_history",
+      accountId: scope.accountIds[0] ?? null,
+      terms: scope.terms,
+    });
+  }
+
+  // Goals only for an unscoped briefing.
   if (may("goals") && attention.boardEligible) {
     requests.push({ compartment: "goals", kind: "proactive_board_inputs", scoped: false });
   }
 
   return requests;
+}
+
+/** A verification round: re-read the challenged claim against the source. */
+export function planVerification(
+  memory: WorkingMemorySnapshot,
+  attention: AttentionPlan
+): RetrievalRequest[] {
+  if (attention.priorClaim === "none") return [];
+  const target = memory.priorClaims[memory.priorClaims.length - 1];
+  if (!target || !target.recheckable) return [];
+  return [
+    {
+      compartment: "businessMemory",
+      kind: "prior_claim_recheck",
+      receiptId: target.receiptId,
+      mode: "correctness",
+    },
+  ];
 }

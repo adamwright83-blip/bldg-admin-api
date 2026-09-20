@@ -1,27 +1,50 @@
 /**
- * The executive loop. Exactly one ExecutiveDecision per completed turn.
+ * The executive cycle. Exactly one ExecutiveDecision per completed turn.
  *
- *   Perception → Attention → Retrieval → Integration → Inhibition → Authority → Decision
+ *   Perception
+ *     → Working-Memory Gate        (what may be written / what may influence)
+ *     → Attention                  (lanes, compartments, what to resolve)
+ *     → Retrieval A                (cheap, unscoped)
+ *     → Scope Resolution           (who is this actually about?)
+ *     → Conflict + Epistemic       (do things line up? what do we know?)
+ *     → Control Allocation         (fast / deliberate / verify / clarify)
+ *         ├── enough  → Integration
+ *         └── more    → Retrieval B / Verify → re-monitor
+ *     → Integration → Inhibition → Judgment → Authority
+ *     → ExecutiveDecision → ResponsePlan / Action Gateway / Call Control
+ *     → Working-Memory Update
  *
- * No downstream subsystem selects a top-level intent, and nothing here mutates.
+ * COGNITION MAY LOOP, but always terminates: every exit records a StoppingReason, and
+ * the allocator refuses a round that would repeat a request or could not change the
+ * answer.
  *
  * Retrieval is INJECTED and defaults to retrieving nothing. Reading production data is
- * an explicit act: a caller that wants live reads must pass `liveReadOnlyRetrieval`.
- * That keeps every existing caller — and every test — hermetic by construction, and
- * means no code path can quietly reach the database just by calling the brain.
+ * an explicit act, so no code path reaches the database merely by calling the brain.
  */
 
 import type { ExecutiveDecision, InhibitedCandidate } from "../contracts/executiveDecision";
-import type { EvidenceItem } from "../contracts/evidence";
+import type { EvidenceItem, PriorClaimRecheckResult } from "../contracts/evidence";
 import type { PerceivedTurn } from "../contracts/perceivedTurn";
 import type { ResponseSegment } from "../contracts/responsePlan";
-import type { RetrievalRequest, RetrievalResult } from "../contracts/retrieval";
+import type { RetrievalRequest } from "../contracts/retrieval";
 import type { WorkingMemorySnapshot } from "../contracts/workingMemory";
+import { initialControlState, type ExecutiveControlState } from "../contracts/control";
 import { planAttention } from "./attention";
-import { planRetrieval } from "./retrievalPlan";
+import { activeTaskSets, classifyChange, gateWorkingMemory, outputAllowed, suppressedSlots } from "./workingMemoryGate";
+import {
+  planRetrievalPassA,
+  planRetrievalPassB,
+  planVerification,
+  resolveScope,
+  type ResolvedScope,
+} from "./retrievalPlan";
+import { monitorConflicts } from "./conflictMonitor";
+import { assessEpistemicState } from "./epistemicState";
+import { allocateControl, anotherRoundIsWorthwhile, terminalReason } from "./controlAllocator";
 import { integrate, type IntegrationContext } from "./integrate";
-import { proposalText, proposedWorkTitle } from "./proposal";
+import { applyInhibition } from "./inhibition";
 import { mintActionGrant, mintCallControlGrant } from "./grants";
+import { proposalText, proposedWorkTitle } from "./proposal";
 import { assertGovernedDecision } from "./governor";
 import {
   defaultBusinessMemoryDeps,
@@ -38,12 +61,12 @@ import {
 import { noSelfMemory, retrieveSelfEvidence, type SelfMemoryContext, type SelfMemoryDeps } from "../selfMemory/adapter";
 import { noGoals, retrieveGoalEvidence, type GoalsContext, type GoalsDeps } from "../goals/adapter";
 
-/** One function per compartment. Each returns evidence; none decides anything. */
 export type RetrievalRunner = (request: RetrievalRequest) => Promise<EvidenceItem[]>;
 
 export type ExecutiveDeps = {
   retrieve: RetrievalRunner;
   ctx: IntegrationContext;
+  nowMs?: () => number;
 };
 
 /** Retrieves nothing. Honest default: we have not looked, so we must not assert. */
@@ -70,17 +93,16 @@ export type LiveRetrievalDeps = {
 
 /**
  * Live, READ-ONLY retrieval against the existing authoritative readers.
- *
- * Nothing in this phase wires it into a production entrypoint. A compartment with no
- * context supplied simply returns nothing: an unconfigured compartment must stay silent
- * rather than fall back to some default that reads more than the caller intended.
+ * A compartment with no context supplied stays silent rather than reading more than
+ * the caller intended.
  */
 export function liveReadOnlyRetrieval(
   ctx: LiveRetrievalContext | BusinessMemoryContext,
   deps: LiveRetrievalDeps | BusinessMemoryDeps = {}
 ): RetrievalRunner {
   const live: LiveRetrievalContext = "business" in ctx ? ctx : { business: ctx as BusinessMemoryContext };
-  const wired: LiveRetrievalDeps = "runQuery" in deps ? { business: deps as BusinessMemoryDeps } : (deps as LiveRetrievalDeps);
+  const wired: LiveRetrievalDeps =
+    "runQuery" in deps ? { business: deps as BusinessMemoryDeps } : (deps as LiveRetrievalDeps);
 
   return async request => {
     switch (request.compartment) {
@@ -105,29 +127,31 @@ function conversational(text: string): ResponseSegment {
   return { type: "ConversationalSegment", text };
 }
 
+function recheckFrom(evidence: readonly EvidenceItem[]): PriorClaimRecheckResult | null {
+  const item = evidence.find(candidate => candidate.type === "prior_claim_recheck");
+  if (!item) return null;
+  return (item.payload as { recheck?: PriorClaimRecheckResult }).recheck ?? null;
+}
+
 export async function decideTurn(
   perceived: PerceivedTurn,
   memory: WorkingMemorySnapshot,
   deps: ExecutiveDeps = defaultExecutiveDeps
 ): Promise<ExecutiveDecision> {
+  const nowMs = deps.nowMs?.() ?? Date.now();
+  const control: ExecutiveControlState = initialControlState();
   const inhibited: InhibitedCandidate[] = [];
-  const attention = planAttention(perceived, memory);
 
-  if (perceived.completeness === "incomplete") {
-    inhibited.push({ kind: "half_turn", detail: "Perception has not released a complete thought" });
-  }
-  if (perceived.mayProposeWorkHint && !perceived.explicitActionRequest && !perceived.operatorWorkCommitment) {
-    inhibited.push({ kind: "parser_text_as_action_authority", detail: "mayProposeWorkHint is not authority" });
-  }
-  if (attention.pendingDisposition === "none" && (memory.pendingBriefing || memory.pendingProposal)) {
-    inhibited.push({ kind: "pending_as_intent", detail: "holding pending must not reinterpret this utterance" });
-  }
-  if (!attention.boardEligible) {
-    inhibited.push({
-      kind: "global_goal_contaminates_scope",
-      detail: "global board/goals not retrieved for this turn",
-    });
-  }
+  // ── Working-memory gating ─────────────────────────────────────────────────
+  const change = classifyChange(perceived, memory);
+  const taskSets = activeTaskSets(perceived, memory, nowMs);
+  const rulings = gateWorkingMemory({ perceived, memory, change, taskSets });
+  control.change = change;
+  control.activeTaskSets = taskSets;
+  control.suppressedContext = suppressedSlots(rulings);
+
+  // ── Attention ─────────────────────────────────────────────────────────────
+  const attention = planAttention({ perceived, memory, change, taskSets, rulings });
 
   const segments: ResponseSegment[] = [];
   const actionGrants: ExecutiveDecision["actionGrants"] = [];
@@ -136,22 +160,99 @@ export async function decideTurn(
   let evidence: EvidenceItem[] = [];
   let conclusions: ExecutiveDecision["conclusions"] = [];
   let workingMemoryUpdate: ExecutiveDecision["workingMemoryUpdate"];
+  let scope: ResolvedScope = { accountIds: [], terms: [], ambiguous: false };
 
   if (perceived.completeness === "incomplete") {
     // A half-turn never reaches retrieval. Perception holds; the executive stays silent.
+    inhibited.push({ kind: "half_turn", detail: "Perception has not released a complete thought" });
+    control.stoppingReason = "evidence_sufficient";
     segments.push(conversational(""));
   } else {
-    retrievals = planRetrieval(perceived, memory, attention);
-    const results: RetrievalResult[] = [];
-    for (const request of retrievals) {
-      results.push({ request, evidence: await deps.retrieve(request) });
-    }
-    evidence = results.flatMap(result => result.evidence);
+    const run = async (requests: RetrievalRequest[]): Promise<void> => {
+      if (!requests.length) return;
+      retrievals = [...retrievals, ...requests];
+      control.retrievalRounds += 1;
+      for (const request of requests) {
+        evidence = [...evidence, ...(await deps.retrieve(request))];
+      }
+    };
 
-    const integration = integrate({ perceived, attention, evidence, memory, ctx: deps.ctx });
+    // ── Pass A: cheap and unscoped ──────────────────────────────────────────
+    await run(planRetrievalPassA(perceived, memory, attention));
+
+    // ── Scope resolution ────────────────────────────────────────────────────
+    scope = resolveScope(evidence);
+    control.ambiguity = scope.ambiguous
+      ? "requires_clarification"
+      : attention.entitiesToResolve.length && !scope.accountIds.length
+        ? "resolvable"
+        : "none";
+
+    // ── Monitor, allocate, and loop only while it is worth it ───────────────
+    const monitor = (): void => {
+      control.conflicts = monitorConflicts({
+        perceived,
+        memory,
+        evidence,
+        taskSets,
+        recheck: recheckFrom(evidence),
+      });
+      control.epistemic = assessEpistemicState({
+        evidence,
+        unresolvedReferences: scope.ambiguous ? attention.entitiesToResolve : [],
+        priorClaimRechecked: recheckFrom(evidence)?.resolution === "fresh_query",
+        hasConflict: control.conflicts.some(
+          conflict => conflict.kind === "current_source_conflict" || conflict.kind === "prior_claim_conflict"
+        ),
+        retrievalAttempted: retrievals.length > 1,
+      });
+      control.mode = allocateControl({
+        perceived,
+        taskSets,
+        conflicts: control.conflicts,
+        epistemic: control.epistemic,
+      });
+      control.needsVerification = control.mode === "verify";
+    };
+
+    monitor();
+
+    // One bounded escalation: scoped reads, or a verification reread.
+    const proposed =
+      control.mode === "verify"
+        ? planVerification(memory, attention)
+        : planRetrievalPassB({ perceived, memory, attention, scope });
+
+    const verdict = anotherRoundIsWorthwhile({
+      mode: control.mode,
+      epistemic: control.epistemic,
+      conflicts: control.conflicts,
+      retrievalRounds: control.retrievalRounds,
+      issued: retrievals,
+      proposed,
+    });
+
+    if (verdict.worthwhile) {
+      control.deliberationDepth += 1;
+      await run(proposed);
+      scope = resolveScope(evidence);
+      // New evidence can change what we know and what conflicts; look again.
+      monitor();
+      control.stoppingReason = terminalReason({ mode: control.mode, epistemic: control.epistemic });
+    } else {
+      control.stoppingReason = verdict.reason ?? terminalReason({ mode: control.mode, epistemic: control.epistemic });
+    }
+
+    // ── Integration ─────────────────────────────────────────────────────────
+    if (attention.pendingDisposition === "reject") {
+      segments.push(conversational("Understood. I won't."));
+    }
+
+    const integration = integrate({ perceived, attention, evidence, memory, control, ctx: deps.ctx });
     if (integration.extraEvidence.length) evidence = [...evidence, ...integration.extraEvidence];
     conclusions = integration.conclusions;
     inhibited.push(...integration.inhibited);
+    segments.push(...integration.segments);
     if (integration.orderedQueryUpdate || integration.continuationPresented) {
       workingMemoryUpdate = {
         orderedQuery: integration.orderedQueryUpdate,
@@ -159,18 +260,13 @@ export async function decideTurn(
       };
     }
 
-    if (attention.pendingDisposition === "reject") {
-      segments.push(conversational("Understood. I won't."));
-    }
-
-    segments.push(...integration.segments);
-
-    if (
+    // ── Authority ───────────────────────────────────────────────────────────
+    const mayPropose =
       (perceived.explicitActionRequest || perceived.operatorWorkCommitment) &&
       !perceived.refusal &&
-      attention.pendingDisposition !== "reject"
-    ) {
-      // The executive decides WHAT is being proposed; the renderer only phrases the ask.
+      attention.pendingDisposition !== "reject";
+    if (mayPropose) {
+      control.actionRisk = "proposal_only";
       const title = proposedWorkTitle(perceived);
       const grant = mintActionGrant({
         actionClass: "propose_day_line",
@@ -179,22 +275,23 @@ export async function decideTurn(
           ? "current_turn_explicit_request"
           : "current_turn_operator_commitment",
         sourceTurnAssembledText: perceived.assembledText,
-        expiresAtMs: Date.now() + 15 * 60_000,
+        expiresAtMs: nowMs + 15 * 60_000,
         constraints: { mutationAllowed: false, shadowOnly: true },
       });
       actionGrants.push(grant);
       segments.push({ type: "ActionProposalSegment", text: proposalText(title), grant });
     }
 
-    // Confirming a pending item inherits authority from that item's lifecycle.
-    // It is never manufactured from the word "yes" alone.
     if (attention.pendingDisposition === "confirm") {
+      // Authority is inherited from the pending item's lifecycle, never manufactured
+      // from the word "yes" alone.
+      control.actionRisk = "proposal_only";
       const grant = mintActionGrant({
         actionClass: "commit_briefing",
         scope: { identity: memory.pendingBriefing?.identity ?? memory.pendingProposal?.identity },
         authorityBasis: "pending_lifecycle",
         sourceTurnAssembledText: perceived.assembledText,
-        expiresAtMs: Date.now() + 15 * 60_000,
+        expiresAtMs: nowMs + 15 * 60_000,
         constraints: { mutationAllowed: false, shadowOnly: true },
       });
       actionGrants.push(grant);
@@ -213,10 +310,23 @@ export async function decideTurn(
     if (segments.length === 0) segments.push(conversational(""));
   }
 
+  // ── Inhibition ────────────────────────────────────────────────────────────
+  inhibited.push(
+    ...applyInhibition({
+      perceived,
+      memory,
+      attention,
+      control,
+      evidence,
+      orderedQueryAllowed: outputAllowed(rulings, "ordered_query"),
+    })
+  );
+
   const responsePlan = { perceivedTurn: perceived, attention, segments };
   const decision: ExecutiveDecision = {
     perceivedTurn: perceived,
     attention,
+    control,
     retrievals,
     evidence,
     conclusions,

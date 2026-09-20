@@ -1,12 +1,19 @@
 /**
- * Executive attention: which compartments to consult, which not to, whether
- * pending binds this turn. Informs retrieval. Does not speak or mutate.
+ * Executive attention.
+ *
+ * Decides which working-memory slots may influence this turn, which compartments to
+ * consult, which must NOT be consulted, and which mentions need resolving before
+ * scoped retrieval can even be planned.
+ *
+ * Attention informs retrieval. It does not speak, mutate, or choose an answer.
  */
 
 import type { AttentionPlan } from "../contracts/attention";
+import type { ChangeClass, GateRuling, TaskSet } from "../contracts/control";
 import type { PerceivedTurn } from "../contracts/perceivedTurn";
 import type { WorkingMemorySnapshot } from "../contracts/workingMemory";
 import type { CompartmentId } from "../contracts/retrieval";
+import { outputAllowed, suppressedSlots } from "./workingMemoryGate";
 
 function holding(memory: WorkingMemorySnapshot): boolean {
   return Boolean(memory.pendingProposal || memory.pendingBriefing || memory.pendingAccountFollowUp);
@@ -26,36 +33,31 @@ function pendingReply(text: string): "yes" | "no" | "revise" | null {
   return null;
 }
 
-/**
- * Pending may bind yes/no/revise. A new business/personal question supersedes.
- * Pending never supplies the meaning of an unrelated utterance.
- */
-export function planAttention(perceived: PerceivedTurn, memory: WorkingMemorySnapshot): AttentionPlan {
+export function planAttention(input: {
+  perceived: PerceivedTurn;
+  memory: WorkingMemorySnapshot;
+  change: ChangeClass;
+  taskSets: TaskSet[];
+  rulings: GateRuling[];
+}): AttentionPlan {
+  const { perceived, memory, change, taskSets, rulings } = input;
   const rationale: string[] = [];
   const retrieve: CompartmentId[] = ["workingMemory"];
   const doNotRetrieve: CompartmentId[] = [];
+  const kinds = new Set(taskSets.map(set => set.kind));
 
+  // ── Pending disposition ───────────────────────────────────────────────────
   const holdingPending = holding(memory);
   let pendingDisposition: AttentionPlan["pendingDisposition"] = "none";
   const pendingBind = holdingPending ? pendingReply(perceived.assembledText) : null;
   if (holdingPending) {
-    const genuineNewTopic =
-      perceived.priorQueryReference ||
-      perceived.businessIntent === "broad_briefing" ||
-      perceived.businessIntent === "list_query" ||
-      perceived.businessIntent === "judgment_question" ||
-      perceived.businessIntent === "correctness_challenge" ||
-      perceived.businessIntent === "provenance_question" ||
-      perceived.personalProbe ||
-      perceived.narrativeProbe ||
-      (perceived.hasBusinessQuestion && /\?/.test(perceived.assembledText));
-    if (genuineNewTopic && pendingBind === null) {
+    if (change === "task_switch" || change === "set_shift") {
       pendingDisposition = "supersede";
-      rationale.push("new utterance is not about the pending item");
+      rationale.push("the operator moved to a different task; pending is set aside, not applied");
     } else if (pendingBind === "no" || (perceived.refusal && !perceived.correction && pendingBind !== "revise")) {
       pendingDisposition = "reject";
       rationale.push("pending binds a refusal");
-    } else if (pendingBind === "revise" || (perceived.correction && perceived.correctionTarget === "pending_item")) {
+    } else if (pendingBind === "revise" || change === "local_correction") {
       pendingDisposition = "revise";
       rationale.push("pending binds a revision");
     } else if (
@@ -64,42 +66,56 @@ export function planAttention(perceived: PerceivedTurn, memory: WorkingMemorySna
     ) {
       pendingDisposition = "confirm";
       rationale.push("pending binds an acknowledgement");
+    } else if (
+      perceived.priorQueryReference ||
+      perceived.businessIntent !== "none" ||
+      perceived.personalProbe ||
+      perceived.narrativeProbe
+    ) {
+      pendingDisposition = "supersede";
+      rationale.push("a genuine new topic supersedes the pending item");
     } else {
-      rationale.push("holding pending but utterance does not bind it");
+      rationale.push("holding pending but this utterance does not bind it");
     }
   }
 
+  // ── Lanes ─────────────────────────────────────────────────────────────────
   const lanes: AttentionPlan["lanes"] = [];
   if (perceived.callControl === "end") lanes.push("call_control");
   if (perceived.personalProbe) lanes.push("personal");
   if (perceived.narrativeProbe) lanes.push("narrative");
-
-  const actionLane =
+  if (
     pendingDisposition === "confirm" ||
     pendingDisposition === "revise" ||
     pendingDisposition === "reject" ||
     perceived.explicitActionRequest ||
-    perceived.operatorWorkCommitment;
-  if (actionLane) lanes.push("action");
-
+    perceived.operatorWorkCommitment
+  ) {
+    lanes.push("action");
+  }
   const businessLane =
-    perceived.hasBusinessQuestion ||
-    perceived.priorQueryReference ||
-    perceived.businessIntent !== "none" ||
-    pendingDisposition === "supersede";
+    kinds.has("business_query") || kinds.has("account_judgment") || kinds.has("broad_planning");
   if (businessLane) lanes.push("business");
+  if (!lanes.length) lanes.push("conversation");
 
-  if (lanes.length === 0) lanes.push("conversation");
-
+  // ── Compartments ──────────────────────────────────────────────────────────
   if (businessLane) retrieve.push("businessMemory");
+
   if (perceived.personalProbe || perceived.narrativeProbe) retrieve.push("selfMemory");
   else doNotRetrieve.push("selfMemory");
 
+  // History is consulted for judgment and for continuing a thread — not routinely.
   const needsHistory =
-    perceived.businessIntent === "judgment_question" || perceived.priorQueryReference || Boolean(memory.orderedQuery);
+    kinds.has("account_judgment") ||
+    (perceived.priorQueryReference && outputAllowed(rulings, "ordered_query"));
   if (needsHistory) retrieve.push("episodicMemory");
   else doNotRetrieve.push("episodicMemory");
 
+  /**
+   * The global board is for an unscoped briefing only. A question that names anything
+   * is scoped, and a scoped question must not be answered with the board — this is the
+   * structural form of the Dana guarantee.
+   */
   const boardEligible =
     perceived.broadBriefingRequest &&
     perceived.entities.filter(entity => entity.kind !== "temporal").length === 0 &&
@@ -108,7 +124,6 @@ export function planAttention(perceived: PerceivedTurn, memory: WorkingMemorySna
     !perceived.correction &&
     !perceived.refusal &&
     pendingDisposition !== "confirm";
-
   if (boardEligible) {
     retrieve.push("goals");
     rationale.push("unscoped briefing may consult goal/board inputs");
@@ -117,24 +132,35 @@ export function planAttention(perceived: PerceivedTurn, memory: WorkingMemorySna
     rationale.push("scoped or non-briefing turn must not retrieve the global board");
   }
 
-  const priorClaim: AttentionPlan["priorClaim"] = perceived.businessIntent === "correctness_challenge"
-    ? "correctness"
-    : perceived.businessIntent === "provenance_question"
-      ? "provenance"
-      : "none";
+  const priorClaim: AttentionPlan["priorClaim"] =
+    perceived.businessIntent === "correctness_challenge"
+      ? "correctness"
+      : perceived.businessIntent === "provenance_question"
+        ? "provenance"
+        : "none";
+  if (priorClaim !== "none" && !retrieve.includes("businessMemory")) retrieve.push("businessMemory");
 
+  // A continuation only continues if the gate actually allows that slot to speak.
   const continueOrderedQuery =
     Boolean(memory.orderedQuery) &&
-    (perceived.priorQueryReference || perceived.businessIntent === "query_refinement" || perceived.exclusions.length > 0);
+    outputAllowed(rulings, "ordered_query") &&
+    (perceived.priorQueryReference ||
+      perceived.businessIntent === "query_refinement" ||
+      perceived.exclusions.length > 0);
+  if (continueOrderedQuery && !retrieve.includes("businessMemory")) retrieve.push("businessMemory");
 
-  if (!retrieve.includes("businessMemory") && (priorClaim !== "none" || continueOrderedQuery)) {
-    retrieve.push("businessMemory");
-  }
+  // Mentions that must be resolved before Pass B can be scoped.
+  const entitiesToResolve = outputAllowed(rulings, "focus_entity")
+    ? perceived.entities.filter(entity => entity.kind === "entity_mention").map(entity => entity.raw)
+    : [];
 
   return {
     lanes: Array.from(new Set(lanes)),
     retrieve: Array.from(new Set(retrieve)),
     doNotRetrieve: Array.from(new Set(doNotRetrieve.filter(id => !retrieve.includes(id)))),
+    activeTaskSets: taskSets,
+    suppressedContext: suppressedSlots(rulings),
+    entitiesToResolve,
     boardEligible,
     pendingDisposition,
     priorClaim,

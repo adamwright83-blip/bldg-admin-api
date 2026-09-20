@@ -26,6 +26,8 @@ import {
 import type { ResponseSegment } from "../contracts/responsePlan";
 import { BUSINESS_ANSWER_UNAVAILABLE, type Conclusion, type InhibitedCandidate } from "../contracts/executiveDecision";
 import { buildJudgmentBrief, recommendOverEvidence, type JudgmentRecommender } from "./judgment";
+import { epistemicQualifier } from "./epistemicState";
+import type { ExecutiveControlState } from "../contracts/control";
 import { mintPersonalDisclosureGrant } from "./grants";
 import { selectDialogueLine } from "../../progression/dialogueRegistry";
 
@@ -170,9 +172,10 @@ function integrateBusiness(input: {
   attention: AttentionPlan;
   evidence: EvidenceItem[];
   memory: WorkingMemorySnapshot;
+  control: ExecutiveControlState;
   ctx: IntegrationContext;
 }): IntegrationOutput {
-  const { perceived, attention, evidence, memory, ctx } = input;
+  const { perceived, attention, evidence, memory, control, ctx } = input;
   const segments: ResponseSegment[] = [];
   const conclusions: Conclusion[] = [];
   const inhibited: InhibitedCandidate[] = [];
@@ -190,6 +193,26 @@ function integrateBusiness(input: {
 
   const businessLane = attention.lanes.includes("business");
   if (!businessLane) return { segments, conclusions, inhibited, extraEvidence };
+
+  /**
+   * Clarification outranks answering. When rows cannot settle who was meant, the only
+   * honest move is to ask — picking one arbitrarily would be a confident wrong answer.
+   */
+  if (control.mode === "clarify") {
+    const identity = control.conflicts.find(conflict => conflict.kind === "identity_conflict");
+    segments.push({
+      type: "ConversationalSegment",
+      text: identity
+        ? `${identity.detail}. Which one do you mean?`
+        : "I'm not sure which one you mean — can you narrow it down?",
+    });
+    conclusions.push({
+      kind: "clarification_required",
+      detail: identity?.detail ?? "the subject could not be resolved from authoritative rows",
+      evidenceIds: identity?.evidenceIds ?? [],
+    });
+    return { segments, conclusions, inhibited, extraEvidence };
+  }
 
   if (attention.continueOrderedQuery) {
     const continuation = continueFromMemory(perceived, memory);
@@ -283,9 +306,13 @@ function integrateBusiness(input: {
   for (const item of speakableResults(evidence)) {
     const text = speakResult(item, perceived, ctx);
     if (!text) continue;
+    // Say what we know AS we know it: a partial or stale read is qualified, never
+    // presented as exhaustive current truth.
+    const qualifier = epistemicQualifier(control.epistemic);
+    const qualified = qualifier ? `${qualifier}: ${text}` : text;
     const segment: ResponseSegment = {
       type: "BusinessFactSegment",
-      text,
+      text: qualified,
       evidence: refs([item]),
       origin: "authoritative_reader",
       ...(recheck ? { recheck } : {}),
@@ -406,6 +433,7 @@ export function integrate(input: {
   attention: AttentionPlan;
   evidence: EvidenceItem[];
   memory: WorkingMemorySnapshot;
+  control: ExecutiveControlState;
   ctx: IntegrationContext;
 }): IntegrationOutput {
   const business = integrateBusiness(input);

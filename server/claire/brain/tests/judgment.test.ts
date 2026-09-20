@@ -93,7 +93,7 @@ describe("a judgment actually recommends something", () => {
 
   it("recommends a next move rather than restating who the contact is", async () => {
     const { segment } = await judge(async r =>
-      r.kind === "contact_account_resolution" ? [resolution] : r.kind === "prior_actions" ? [history] : []
+      r.kind === "contact_account_resolution" ? [resolution] : r.compartment === "episodicMemory" ? [history] : []
     );
     // It must contain an actual recommendation, not just the resolved identity.
     expect(segment?.text).toMatch(/I'd\b/);
@@ -110,7 +110,7 @@ describe("a judgment actually recommends something", () => {
 
   it("uses history to shape the recommendation without making it current truth", async () => {
     const { decision, segment } = await judge(async r =>
-      r.kind === "contact_account_resolution" ? [resolution] : r.kind === "prior_actions" ? [history] : []
+      r.kind === "contact_account_resolution" ? [resolution] : r.compartment === "episodicMemory" ? [history] : []
     );
     expect(segment?.text).toContain("2026-09-12");
     // Recorded as an explicit inhibition, so the shadow record shows history informed

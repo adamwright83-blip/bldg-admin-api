@@ -10,6 +10,7 @@ import type { PerceivedTurn } from "./perceivedTurn";
 import type { RetrievalRequest } from "./retrieval";
 import type { ResponsePlan, ResponseSegment } from "./responsePlan";
 import type { OrderedQueryMember } from "./workingMemory";
+import type { ExecutiveControlState } from "./control";
 import type { OrderedQueryUpdate } from "../executive/integrate";
 
 export type InhibitedCandidate = {
@@ -49,6 +50,8 @@ export type CallControlDecision =
 export type ExecutiveDecision = {
   perceivedTurn: PerceivedTurn;
   attention: AttentionPlan;
+  /** How this turn was reasoned about. Control signals, never evidence. */
+  control: ExecutiveControlState;
   retrievals: RetrievalRequest[];
   evidence: EvidenceItem[];
   conclusions: Conclusion[];

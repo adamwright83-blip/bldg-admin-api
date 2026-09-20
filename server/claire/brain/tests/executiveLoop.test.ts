@@ -8,14 +8,29 @@
 
 import { describe, expect, it } from "vitest";
 import { decideTurn, noRetrieval, type ExecutiveDeps, type RetrievalRunner } from "../executive/decide";
-import { buildBusinessQuery, inferBusinessMetric, planRetrieval } from "../executive/retrievalPlan";
+import {
+  buildBusinessQuery,
+  inferBusinessMetric,
+  planRetrievalPassA,
+  planRetrievalPassB,
+  resolveScope,
+} from "../executive/retrievalPlan";
 import { planAttention } from "../executive/attention";
+import { activeTaskSets, classifyChange, gateWorkingMemory } from "../executive/workingMemoryGate";
 import { ExecutiveGovernorError } from "../executive/governor";
 import { perceiveTurn } from "../perception/perceive";
 import { snapshotWorkingMemory } from "../workingMemory/snapshot";
 import { BUSINESS_ANSWER_UNAVAILABLE } from "../contracts/executiveDecision";
 import type { EvidenceItem } from "../contracts/evidence";
 import type { BusinessQueryResult } from "../../../analytics/businessQuery";
+
+/** The executive gates working memory before attention; tests must do the same. */
+function attentionFor(perceived: Parameters<typeof classifyChange>[0], memory: Parameters<typeof classifyChange>[1]) {
+  const change = classifyChange(perceived, memory);
+  const taskSets = activeTaskSets(perceived, memory, Date.now());
+  const rulings = gateWorkingMemory({ perceived, memory, change, taskSets });
+  return planAttention({ perceived, memory, change, taskSets, rulings });
+}
 
 const CTX = {
   conversationKey: "claire-call:test",
@@ -130,15 +145,52 @@ describe("retrieval planning", () => {
 
   it("a scoped Dana question never requests the global board", () => {
     const perceived = perceiveTurn({ rawText: "What should I do about Dana Tuesday?", completeness: "complete" });
-    const attention = planAttention(perceived, memory());
-    const requests = planRetrieval(perceived, memory(), attention);
-    expect(requests.some(request => request.compartment === "goals")).toBe(false);
+    const attention = attentionFor(perceived, memory());
+    const passA = planRetrievalPassA(perceived, memory(), attention);
+    const passB = planRetrievalPassB({
+      perceived,
+      memory: memory(),
+      attention,
+      scope: resolveScope([]),
+    });
+    expect([...passA, ...passB].some(request => request.compartment === "goals")).toBe(false);
+  });
+
+  it("Pass A resolves identity before anything is scoped to it", () => {
+    const perceived = perceiveTurn({ rawText: "What should I do about Dana Tuesday?", completeness: "complete" });
+    const attention = attentionFor(perceived, memory());
+    const passA = planRetrievalPassA(perceived, memory(), attention);
+    // Identity first; account state is not planned until scope is known.
+    expect(passA.some(request => request.kind === "contact_account_resolution")).toBe(true);
+    expect(passA.some(request => request.kind === "account_state")).toBe(false);
+  });
+
+  it("Pass B scopes to what Pass A actually resolved", () => {
+    const perceived = perceiveTurn({ rawText: "What should I do about Dana Tuesday?", completeness: "complete" });
+    const attention = attentionFor(perceived, memory());
+    const scope = resolveScope([resolutionEvidence()]);
+    const passB = planRetrievalPassB({ perceived, memory: memory(), attention, scope });
+    expect(passB.some(request => request.kind === "account_state" && request.accountId === 77)).toBe(true);
+    // Episodic cues come from resolved identity, never from the transport.
+    const episodic = passB.find(request => request.compartment === "episodicMemory");
+    expect(episodic && "terms" in episodic && episodic.terms).toContain("Dana");
+  });
+
+  it("an ambiguous subject plans no scoped reads — it needs the operator", () => {
+    const perceived = perceiveTurn({ rawText: "What should I do about Dana Tuesday?", completeness: "complete" });
+    const attention = attentionFor(perceived, memory());
+    const ambiguous = { accountIds: [1, 3], terms: ["Dana"], ambiguous: true };
+    expect(planRetrievalPassB({ perceived, memory: memory(), attention, scope: ambiguous })).toEqual([]);
   });
 
   it("a pure continuation does not issue a fresh business query", () => {
     const perceived = perceiveTurn({ rawText: "What about the other four?", completeness: "complete" });
-    const attention = { ...planAttention(perceived, memory()), continueOrderedQuery: true, retrieve: ["workingMemory", "businessMemory"] as never };
-    const requests = planRetrieval(perceived, memory(), attention);
+    const attention = {
+      ...attentionFor(perceived, memory()),
+      continueOrderedQuery: true,
+      retrieve: ["workingMemory", "businessMemory"] as never,
+    };
+    const requests = planRetrievalPassA(perceived, memory(), attention);
     expect(requests.some(request => request.kind === "business_query")).toBe(false);
   });
 });
@@ -223,7 +275,13 @@ describe("business judgment is not a business fact", () => {
     const decision = await decideTurn(
       perceiveTurn({ rawText: "What should I do about Dana Tuesday?", completeness: "complete" }),
       memory(),
-      deps(async request => (request.kind === "account_state" ? [accountEvidence()] : []))
+      deps(async request =>
+        request.kind === "contact_account_resolution"
+          ? [resolutionEvidence()]
+          : request.kind === "account_state"
+            ? [accountEvidence()]
+            : []
+      )
     );
     const judgment = decision.responsePlan.segments.find(segment => segment.type === "BusinessJudgmentSegment");
     expect(judgment).toBeDefined();
