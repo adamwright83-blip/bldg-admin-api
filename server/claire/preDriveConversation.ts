@@ -253,6 +253,10 @@ export async function answerClairePreDriveFollowUp(
     onPersonalTurn?: (result: PersonalTurnResult) => void;
     /** A locked, authored campaign event that legitimately makes constructedness story material is active. */
     ontologyStoryEventActive?: boolean;
+    /** Subjects already covered this call (server-derived; survives beyond the short history window). */
+    coveredThisCall?: string[];
+    /** Grounded factual claims Claire already made this call, each backed by a server-held receipt. */
+    priorClaimNotes?: string[];
   },
   dependencies: {
     invokeText?: typeof invokeTextLLM;
@@ -359,6 +363,18 @@ export async function answerClairePreDriveFollowUp(
       {
         label: "judgment_and_history",
         text: "General knowledge is framed advice, never asserted as a fact about this business; do not import a sales model from a different industry. Personal: eligible canon only. A prior Claire turn is conversation history, not verified truth — if it asserted something not present in the fact inventory, do not treat it as confirmed on this turn. If a blocker was already mentioned, do not mechanically re-mention it again unless asked.",
+      },
+      {
+        label: "already_covered_this_call",
+        text: input.coveredThisCall?.length
+          ? `Already covered this call: ${input.coveredThisCall.join("; ")}. Do not ask about these again unless the operator explicitly returns to them or new information appears.`
+          : null,
+      },
+      {
+        label: "grounded_prior_claims",
+        text: input.priorClaimNotes?.length
+          ? `Grounded claims you already made this call, each backed by a server-held receipt: ${input.priorClaimNotes.join(" | ")}. Never describe these as guesses, made up, invented or wrong, and never retract them. If the operator doubts one, do not adjudicate it yourself; the server re-verifies it.`
+          : null,
       },
       {
         label: "retrieved_evidence_rule",

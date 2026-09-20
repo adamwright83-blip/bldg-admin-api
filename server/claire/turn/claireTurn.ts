@@ -70,6 +70,8 @@ import {
   type ClaimGrounding,
   type FactualClaimReceipt,
 } from "../provenance/claimReceipts";
+import { coveredThisCallLines, recordClaireQuestionCoverage, recordOperatorReplyCoverage, suppressRestartedQuestion, type CoveredSubject } from "../provenance/callCoverage";
+import type { AccountRef as CoverageAccountRef } from "../knowledge/accountKnowledge";
 import { classifyPriorClaimAct, isChallengeCandidate, type ClassifyPriorClaimAct } from "../provenance/priorClaimChallenge";
 import type { MutationReceipt } from "../assertionGuard";
 import type { EncyclopediaAnswer } from "../knowledge/encyclopediaAgent";
@@ -124,6 +126,8 @@ export type ClaireTurnState = PendingProposalState &
     claimReceipts?: FactualClaimReceipt[];
     /** Count of Claire's spoken turns, so a receipt can name the turn that produced it. */
     claireTurnCount?: number;
+    /** Subjects this call has already covered; survives beyond the model's short prompt-history window. */
+    coverage?: CoveredSubject[];
   };
 
 export type ClaireTurnInput = {
@@ -435,6 +439,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const claireOrdinal = (state.claireTurnCount ?? 0) + 1;
   /** Receipt for the factual claim this turn makes, attached to durable state in `finish`. */
   let pendingReceipt: FactualClaimReceipt | null = null;
+  let knownAccounts: CoverageAccountRef[] = [];
   const readerReceipt = (answerPath: string, claimType: string, grounding: ClaimGrounding, sources: string[], answerText: string) => {
     pendingReceipt = receiptFromReader({ conversationKey: input.conversationKey, claireTurnOrdinal: claireOrdinal, nowMs, answerText, answerPath, claimType, grounding, sources });
   };
@@ -453,6 +458,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
     remember(state, "claire", guarded.speak, nowMs);
     state.claireTurnCount = claireOrdinal;
+    if (knownAccounts.length && guarded.speak) {
+      state.coverage = recordClaireQuestionCoverage(state.coverage, { claireText: guarded.speak, accounts: knownAccounts, turnOrdinal: claireOrdinal });
+    }
     if (pendingReceipt && guarded.speak) {
       const receipt: FactualClaimReceipt = { ...(pendingReceipt as FactualClaimReceipt), answerText: guarded.speak };
       state.claimReceipts = appendClaimReceipt(state.claimReceipts, receipt);
@@ -699,6 +707,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
 
   // ── 3. A field report with a follow-up instruction for a real account ─────
   const accounts = await deps.accounts(input.tenantId).catch(() => [] as AccountRef[]);
+  knownAccounts = accounts;
+  state.coverage = recordOperatorReplyCoverage(state.coverage, { operatorText: utterance, accounts, turnOrdinal: claireOrdinal });
   const mentioned = matchAccounts(lower, accounts);
   const account =
     mentioned.length === 1
@@ -904,6 +914,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       context: input.context,
       recentTurns: history().slice(0, -1),
       conversationId: input.conversationKey,
+      coveredThisCall: coveredThisCallLines(state.coverage),
+      priorClaimNotes: priorClaimNotes(),
       onPersonalTurn: personal => {
         if (personal.endCall) personalEndCall = true;
       },
@@ -1070,6 +1082,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       recentTurns: history().slice(0, -1),
       retrievedEvidence: evidence.length ? evidence : undefined,
       conversationId: input.conversationKey,
+      coveredThisCall: coveredThisCallLines(state.coverage),
+      priorClaimNotes: priorClaimNotes(),
       onPersonalTurn: personal => {
         if (personal.endCall) personalEndCall = true;
       },
@@ -1091,6 +1105,14 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     });
     mark("follow_up_model");
     return finalizeModelReply(reply, evidence.map(item => item.source));
+  }
+
+  /** Grounded claims Claire has already made this call, for the prompt: they may not be re-characterised by the model. */
+  function priorClaimNotes(): string[] {
+    return (state.claimReceipts ?? [])
+      .filter(receipt => receipt.grounding === "deterministic" || receipt.grounding === "retrieved")
+      .slice(-4)
+      .map(receipt => `${receipt.claimType} (${receipt.answerPath}): ${receipt.answerText.slice(0, 160)}`);
   }
 
   function recordPriorClaimTrace(
@@ -1138,6 +1160,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   async function finalizeModelReply(reply: string, evidenceSources: string[]): Promise<string> {
     const replacement = await rewriteAttemptReplacement(reply);
     if (replacement) return replacement;
+    const withoutRestart = suppressRestartedQuestion(reply, { coverage: state.coverage, operatorText: utterance, accounts: knownAccounts });
+    if (withoutRestart !== null) {
+      trace.fallbackReason ??= "covered_subject_restart_suppressed";
+      return withoutRestart;
+    }
     if (evidenceSources.length) {
       readerReceipt(trace.path ?? "follow_up_model", "retrieved_statement", "retrieved", evidenceSources, reply);
     } else if (/\d/.test(reply)) {
