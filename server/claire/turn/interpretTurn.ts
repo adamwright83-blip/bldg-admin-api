@@ -163,6 +163,8 @@ const FIRST_PERSON_MUTATION =
   /\b(?:i|we)\s+(?:can|should|need\s+to|want\s+to|have\s+to|will|'ll)\s+(?:remove|cancel|delete|edit|change|move|reschedule|push|add|schedule|save|track)\b/i;
 
 function detectExplicitActionRequest(text: string): boolean {
+  // "Remind me what revenue was" means tell me again; it is not authority to create a reminder.
+  if (/\bremind\s+me\s+(?:what|who|when|where|why|how|which)\b/i.test(text)) return false;
   return (
     ACTION_DIRECTIVE_SHAPE.test(text.trim()) ||
     ACTION_DIRECTIVE_CLAUSE.test(text) ||
@@ -365,8 +367,13 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   const aboutClaireCapability = ABOUT_CLAIRE_CAPABILITY.test(text);
   const hasExplicitActionRequest = detectExplicitActionRequest(text) && !actionRefused;
   const operatorWorkCommitment = detectOperatorWorkCommitment(text) && !actionRefused;
+  const businessQuestionLead = BUSINESS_QUESTION_LEAD.test(text.split(/\s+/).slice(0, 4).join(" "));
+  // A polite command such as "Can you change that to Tuesday?" is still an action, not a business
+  // question merely because speech recognition supplied a question mark. Mixed "Did Dana reply,
+  // and add..." retains both lanes because its first clause is genuinely interrogative.
   const hasBusinessQuestion =
-    !acknowledgement && (QUESTION_MARK.test(text) || BUSINESS_QUESTION_LEAD.test(text.split(/\s+/).slice(0, 4).join(" ")));
+    !acknowledgement &&
+    (businessQuestionLead || (!hasExplicitActionRequest && QUESTION_MARK.test(text)));
 
   const cardinality = parseCardinality(text);
   const correctnessChallenge = CORRECTNESS_CHALLENGE.test(text) && !acknowledgement;
