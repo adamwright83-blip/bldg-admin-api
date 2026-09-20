@@ -253,6 +253,18 @@ describe("P1 review regressions", () => {
     expect(directive.mayProposeWork).toBe(true);
   });
 
+  it("a polite action question stays in the action lane, while conversational 'remind me what' stays factual", () => {
+    const action = interpretTurn("Can you change that to Tuesday?");
+    expect(action.hasExplicitActionRequest).toBe(true);
+    expect(action.hasBusinessQuestion).toBe(false);
+    expect(action.mayProposeWork).toBe(true);
+
+    const factual = interpretTurn("Can you remind me what revenue was last month?");
+    expect(factual.hasExplicitActionRequest).toBe(false);
+    expect(factual.hasBusinessQuestion).toBe(true);
+    expect(factual.mayProposeWork).toBe(false);
+  });
+
   it.each([
     "Buy detergent",
     "Order hangers",
