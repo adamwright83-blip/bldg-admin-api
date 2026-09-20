@@ -73,6 +73,8 @@ export type InterpretedTurn = {
   exclusions: string[];
   /** A named record the query is anchored to ("before Thomas"). */
   anchorEntity: string | null;
+  /** Temporal direction around the anchor; independent from the entity itself. */
+  anchorDirection: "before" | "after" | null;
   /** The operator explicitly asks whether a prior factual answer is correct/current. */
   correctnessChallenge: boolean;
   /** Advice/judgment is requested; this never authorizes a mutation by itself. */
@@ -224,11 +226,19 @@ const TEMPORAL_REFERENCE =
   /\b(today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
 
 /** "before Thomas", "after the Louise order" — anchor the window on a named record. */
-const ANCHOR = /\b(?:before|prior\s+to|preceding|after|since)\s+([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)?)/;
-/** Only a capitalised token in the ORIGINAL text is a name; "about the rest" is not an entity. */
+const ANCHOR = /\b(before|prior\s+to|preceding|after|since)\s+([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)?)/;
+const TEMPORAL_ENTITY_WORDS = new Set([
+  "today", "tomorrow", "tonight", "yesterday",
+  "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+  "january", "february", "march", "april", "may", "june", "july", "august",
+  "september", "october", "november", "december",
+]);
+/** Only a capitalised non-temporal token in the ORIGINAL text is a name. */
 function properNoun(candidate: string | undefined): string | null {
   const token = candidate?.trim();
-  return token && /^[A-Z]/.test(token) ? token : null;
+  if (!token || !/^[A-Z]/.test(token)) return null;
+  const first = token.split(/\s+/)[0]!.toLowerCase();
+  return TEMPORAL_ENTITY_WORDS.has(first) ? null : token;
 }
 
 /** "don't tell me about Thomas" — an exclusion, not a refusal to act. */
@@ -326,7 +336,13 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   const exclusionMatch = EXCLUSION.exec(text);
   const excluded = properNoun(exclusionMatch?.[1]);
   const exclusions = excluded ? [excluded] : [];
-  const anchorEntity = properNoun(anchorMatch?.[1]);
+  const anchorEntity = properNoun(anchorMatch?.[2]);
+  const anchorDirection =
+    !anchorEntity || !anchorMatch
+      ? null
+      : /^(?:after|since)$/i.test(anchorMatch[1]!)
+        ? "after"
+        : "before";
 
   if (acknowledgement) intents.push("acknowledgement");
   if (actionRefused) intents.push("action_refusal");
@@ -372,6 +388,7 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
     queryRefinement,
     exclusions,
     anchorEntity,
+    anchorDirection,
     correctnessChallenge,
     businessJudgment,
     broadOperationalBriefing,
