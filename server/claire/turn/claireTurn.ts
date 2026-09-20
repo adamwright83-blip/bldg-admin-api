@@ -176,8 +176,9 @@ export type ClaireTurnResult = {
     | "commitment"
     | "follow_up";
   listenOnly?: boolean;
-  /** A personal turn closed the personal thread AND business is complete AND an authored exit exists: hang up after speaking. */
+  /** Hang up after speaking this response. */
   endCall?: boolean;
+  endCallReason?: "operator_closing" | "personal_thread_closed";
   commitmentTurn?: VoiceCommitmentTurnResult;
   actionIds?: string[];
   mutationReceipts?: MutationReceipt[];
@@ -512,7 +513,17 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       receiptBackedCommit: channels.receiptBackedCommit || undefined,
       mutationReceipts: result.mutationReceipts,
     });
-    const guarded: ClaireTurnResult = { ...result, speak, responsePlan };
+    const endFromOperator = authoritativeInterpretation?.callControl === "end";
+    const guarded: ClaireTurnResult =
+      result.endCall || personalEndCall || endFromOperator
+        ? {
+            ...result,
+            speak,
+            responsePlan,
+            endCall: true,
+            endCallReason: endFromOperator ? "operator_closing" : result.endCallReason ?? "personal_thread_closed",
+          }
+        : { ...result, speak, responsePlan };
     if (trace.synthesisRequired) {
       trace.needs_synthesis = telemetryClaireAnswerClass(utterance, true) === "needs_synthesis";
     }
@@ -539,7 +550,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
     persistClaireTurnTrace(trace, { turnKind: guarded.kind, spokenText: guarded.speak });
     deps.onTurnTrace?.(trace);
-    return personalEndCall ? { ...guarded, endCall: true } : guarded;
+    return guarded;
   };
   const finishCommitmentTurn = (
     turn: Exclude<VoiceCommitmentTurnResult, { kind: "not_applicable" }>
