@@ -127,6 +127,7 @@ export async function getDayDirectorState(input: {
           ? metadata.missingDetails.map(String)
           : [],
         detailNote: typeof metadata.detailNote === "string" ? metadata.detailNote : null,
+        sourceText: row.sourceText ?? null,
       } satisfies DayDirectorCommitment;
     }).filter((row): row is NonNullable<typeof row> => row != null),
     dismissedPromptKeys: prompts.map(row => row.promptKey),
