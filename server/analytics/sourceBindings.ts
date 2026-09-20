@@ -57,7 +57,7 @@ export type SourceCoverageRange = {
   to: string;
   completedAt: Date;
   basis: SourceCoverageBasis;
-  provenance: "browser_sync_receipt";
+  provenance: "browser_sync_receipt" | "reconciled_import" | "test_fixture";
 };
 
 export type SourceAttempt = {
