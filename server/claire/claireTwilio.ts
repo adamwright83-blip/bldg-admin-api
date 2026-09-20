@@ -540,13 +540,12 @@ function startVoiceTurn(input: {
         await linkClaireActionIds({ callSid: input.callSid, claireConversationId: conversationId, actionIds: result.actionIds });
       }
       if (result.endCall) {
-        // A guarded personal turn closed the thread with business complete and an authored exit line.
         await dropCall(conversationId);
         await endClaireCallLedger({
           callSid: input.callSid,
           claireConversationId: conversationId,
           claireText: result.speak,
-          reason: "personal_thread_closed",
+          reason: result.endCallReason === "operator_closing" ? "closing_phrase" : "personal_thread_closed",
         });
         return speakAndHangUp(result.speak);
       }
