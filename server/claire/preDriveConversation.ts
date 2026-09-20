@@ -36,6 +36,7 @@ import { checkOntologyBoundary, operatorAskedOntology } from "./progression/onto
 import { checkBiographyBoundary, makeBiographyVerifier, type BiographyVerifier } from "./progression/generalBiographyBoundary";
 import { lintFailureDayLanguage } from "./progression/toneLint";
 import { selectDialogueLine } from "./progression/dialogueRegistry";
+import { deriveMomentStance, momentStanceGuidance, type MomentSignals } from "./progression/momentStance";
 import { answerPersonalFollowUp } from "./progression/personalFollowUp";
 import type { ProgressionStore } from "./progression/store";
 import type { PersonalTurnResult } from "./progression/personalReveal";
@@ -257,6 +258,8 @@ export async function answerClairePreDriveFollowUp(
     coveredThisCall?: string[];
     /** Grounded factual claims Claire already made this call, each backed by a server-held receipt. */
     priorClaimNotes?: string[];
+    /** Verified situational signals the caller already holds; the stance layer only shapes tone from them. */
+    momentSignals?: Partial<MomentSignals>;
   },
   dependencies: {
     invokeText?: typeof invokeTextLLM;
@@ -363,6 +366,19 @@ export async function answerClairePreDriveFollowUp(
       {
         label: "judgment_and_history",
         text: "General knowledge is framed advice, never asserted as a fact about this business; do not import a sales model from a different industry. Personal: eligible canon only. A prior Claire turn is conversation history, not verified truth — if it asserted something not present in the fact inventory, do not treat it as confirmed on this turn. If a blocker was already mentioned, do not mechanically re-mention it again unless asked.",
+      },
+      {
+        label: "moment_stance",
+        text: momentStanceGuidance(
+          deriveMomentStance({
+            urgentBusinessOpen: input.context.blockers.length > 0,
+            businessAgendaFinished: false,
+            difficultVerifiedDay: false,
+            sharedSetback: false,
+            boundaryPushesThisCall: 0,
+            ...input.momentSignals,
+          })
+        ),
       },
       {
         label: "already_covered_this_call",

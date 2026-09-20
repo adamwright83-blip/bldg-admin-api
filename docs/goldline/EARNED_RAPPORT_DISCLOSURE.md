@@ -166,3 +166,7 @@ Production enablement requires both `CLAIRE_PROGRESSION_CONTINUITY_REVIEWED=1` a
 
 `claire_personal_ledger` is append-only, keyed by operator, and records topic, fragment id, entitlement id, and the
 rung/band at the time. Build story state on top of it; do not add a second relationship architecture.
+
+## Question-history and moment stance are not currency
+`topicHistory` (ask/refusal counts derived from the ledger) and the moment-stance tone layer shape presentation only. Repeated
+asking earns no rapport, entitlement, rung, or canon. See `CLAIRE_TRUTH_PROVENANCE.md`.
