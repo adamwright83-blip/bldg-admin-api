@@ -989,7 +989,7 @@ export type ClaireBusinessTurnDeps = {
   now: () => Date;
   timeZone: () => string;
   speakResult?: typeof speakBusinessResult;
-  /** Source-binding probe. Injectable so tests can prove the zero gate without a database. */
+  /** Source membership/health/range evidence. Injectable so tests can prove coverage without a database. */
   loadBindings?: (tenantId: string) => Promise<LedgerSourceEvidence>;
 };
 
@@ -1221,7 +1221,7 @@ export async function answerClaireBusinessTurn(
         evidence,
         loadedSources: result.status === "ok" ? result.coverage?.loadedSources ?? [] : [],
         failedSources: result.status === "ok" ? result.coverage?.failedSources ?? [] : [],
-        // Freshness is question-relative: a closed past window only needs a sync after it closed.
+        // Membership, schedule freshness and exact interval coverage are question-relative.
         period: result.period,
         now,
       });
