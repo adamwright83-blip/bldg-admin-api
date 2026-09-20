@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -46,13 +47,40 @@ describe("Brain V2 production isolation", () => {
     expect(BRAIN_V2_PRODUCTION_AUTHORITY).toBe(false);
   });
 
-  it("Twilio and the desk router do not import the brain", () => {
+  /**
+   * Phase I changed this invariant deliberately. Production V1 paths may now emit a
+   * ONE-WAY shadow observation, so a bare "must not import the brain" assertion is no
+   * longer the rule. The rule is narrower and stronger: they may import the observer
+   * and the snapshot boundary, and NOTHING else from the brain.
+   */
+  it("Twilio and the desk router import only the shadow observer, never the decision path", () => {
     const twilio = readFileSync(path.join(process.cwd(), "server/claire/claireTwilio.ts"), "utf8");
     const router = readFileSync(path.join(process.cwd(), "server/claire/claireRouter.ts"), "utf8");
-    expect(twilio).not.toMatch(/claire\/brain/);
-    expect(router).not.toMatch(/claire\/brain/);
-    expect(twilio).not.toMatch(/runClaireBrainTurn/);
-    expect(router).not.toMatch(/runClaireBrainTurn/);
+
+    for (const source of [twilio, router]) {
+      const brainImports = source.match(/from "\.\/brain\/[^"]+"/g) ?? [];
+      expect(brainImports.sort()).toEqual([
+        'from "./brain/shadow/observeShadowTurn"',
+        'from "./brain/shadow/v1Snapshot"',
+      ]);
+      // The decision entrypoint and its authority types stay out of production.
+      expect(source).not.toMatch(/runClaireBrainTurn/);
+      expect(source).not.toMatch(/decideTurn/);
+      expect(source).not.toMatch(/mintActionGrant|ExecutiveActionGrant|assertGovernedDecision/);
+    }
+  });
+
+  it("no production file outside the transport surfaces imports the brain at all", () => {
+    const offenders = execSync(
+      "grep -rln 'claire/brain\\|\\./brain/' server client --include=*.ts --include=*.tsx || true",
+      { encoding: "utf8" }
+    )
+      .split("\n")
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .filter(line => !line.startsWith("server/claire/brain/"))
+      .filter(line => line !== "server/claire/claireTwilio.ts" && line !== "server/claire/claireRouter.ts");
+    expect(offenders).toEqual([]);
   });
 
   it("runClaireBrainTurn never returns mutations or live authority", async () => {

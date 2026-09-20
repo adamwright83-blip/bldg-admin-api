@@ -52,6 +52,8 @@ import {
 } from "./conversation/pipeline";
 import { isValidTwilioWebhook } from "./conversation/twilioSignature";
 import { runClaireTurn, type ClaireTurnState } from "./turn/claireTurn";
+import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
+import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
 import { claireConversationStateStore } from "./turn/conversationStateStore";
 import { getUserByOpenId } from "../db";
 import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
@@ -517,6 +519,24 @@ function startVoiceTurn(input: {
       );
       conversation.touchedAt = Date.now();
       await saveCall(conversationId, conversation);
+
+      /**
+       * Brain V2 shadow observation. V1's authoritative result already exists above;
+       * this is a ONE-WAY emission with no return path. It is fire-and-forget (never
+       * awaited), default-off behind CLAIRE_BRAIN_V2_SHADOW, cannot throw, and receives
+       * a frozen copy of state rather than the live conversation object. Nothing below
+       * reads its result: V1 remains the sole speech, mutation and call-control authority.
+       */
+      observeShadowTurnDetached({
+        rawText: input.utterance,
+        state: readOnlyWorkingMemorySource(conversation as unknown as Parameters<typeof readOnlyWorkingMemorySource>[0]),
+        tenantId: conversation.tenantId,
+        operatorUserId: conversation.actorId,
+        surface: "voice",
+        conversationKey: callStateKey(conversationId),
+        v1: { endedCall: Boolean(result.endCall), mutated: Boolean(result.actionIds?.length), spokeSomething: Boolean(result.speak) },
+      });
+
       if (result.listenOnly) {
         return preDriveConversationTwiML({ text: "", token, hints: conversation.hints, listenOnly: true });
       }

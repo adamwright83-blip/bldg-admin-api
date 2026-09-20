@@ -74,7 +74,8 @@ Open design choices (allowed to refine, not reverse):
 - [x] Phase F — Episodic / Self / Goals adapters wrapped read-only with injected readers
 - [x] Phase G — Character renderer fed only by ResponsePlan (`assertRenderedFromPlan` lint)
 - [x] Phase I mechanism — `observeShadowTurn`: default off, cannot throw, cannot delay
-- [ ] Phase I wiring — import into `claireTwilio.ts` / `claireRouter.ts` (**Adam's call**)
+- [x] Phase I wiring — one-way observation from BOTH `claireTwilio.ts` and `claireRouter.ts`,
+      authorized by Adam; flag stays OFF
 - [ ] Guarded operator-only cutover (**authorization required**)
 - [ ] Phase J — Retire old control plane
 
@@ -87,24 +88,24 @@ is correct for this phase.
 
 ## Next task
 
-**One decision, then Phase J planning.**
+**Turning the flag on is the next decision, and it is Adam's.**
 
-The shadow MECHANISM is complete: `server/claire/brain/shadow/observeShadowTurn.ts`.
-It is default off (`CLAIRE_BRAIN_V2_SHADOW`), structurally cannot throw, and
-structurally cannot delay (`observeShadowTurnDetached` returns void synchronously).
+Shadow observation is wired on both surfaces and is inert until
+`CLAIRE_BRAIN_V2_SHADOW=1`. With the flag off there is no V2 execution, no added model
+calls, no added DB reads, and no behavioural difference.
 
-What is deliberately NOT done: importing it into `claireTwilio.ts` / `claireRouter.ts`.
-That single import is the only line that touches a live production path. This branch has
-held production Claire files at ZERO changes throughout, and the binding section of this
-handoff forbids the import in this phase. **Adam authorizes it, not an agent.**
+Read `docs/claire-brain-v2.md` §19a (authority lifecycle) before touching either
+transport file. The binding rules there — V1 completes first, return values ignored,
+fire-and-forget, frozen state copy, zero action/speech/call-control authority, default
+off, fails open to V1, safe telemetry only — are enforced by
+`server/claire/brain/tests/shadowWiring.test.ts`. Those tests read the production call
+sites as text on purpose, so a later edit that starts awaiting V2 or feeds a V2 value
+into a V1 decision fails there rather than in someone's phone call.
 
-When authorized, the wiring is one fire-and-forget call after V1 completes its turn:
-
-```ts
-observeShadowTurnDetached({ rawText, state, tenantId, operatorUserId, surface, conversationKey, v1 });
-```
-
-Do not `await` it. Do not branch production behaviour on its result.
+Note the superseded rule: the old "do not import Brain V2 from claireTwilio/claireRouter"
+was a **construction-phase** isolation rule (stage A). Stage B supersedes it for
+read-only observation only. The decision path (`runClaireBrainTurn`, `decideTurn`, grant
+minting) must still never be imported by production.
 
 Remaining model work: `correctionTarget`, `personalProbe` and `narrativeProbe` are still
 stubbed in Perception, so no turn currently opens a personal lane in practice. The
@@ -212,7 +213,8 @@ None.
   lane in practice. The firewall that governs mixed turns is implemented and tested
   directly against the governor.
 - Fragment completeness not wired; caller must pass `completeness` (shadow defaults to `"complete"`)
-- Shadow is not hooked to Twilio/desk (deliberate — awaiting Adam's authorization)
+- Shadow IS hooked to both Twilio and desk, one-way, behind a default-off flag. It has
+  never been run with the flag on, so no real comparison telemetry exists yet.
 - Live Dana → The Louise never verified (no `DATABASE_URL`). Do not hardcode the pair.
   Nothing in the code hardcodes it; resolution goes through `contact_account_resolution`.
 - **No live database verification was performed.** This environment has no `DATABASE_URL`
@@ -240,7 +242,10 @@ None.
 
 - Do not merge PR #192 or this PR
 - Do not continue the strangler rewrite of `runClaireTurn`
-- Do not import Brain V2 from `claireTwilio.ts` / `claireRouter.ts` in this phase
+- Do not import Brain V2's DECISION path (`runClaireBrainTurn`, `decideTurn`, grant
+  minting) from `claireTwilio.ts` / `claireRouter.ts`. The shadow observer and the
+  snapshot boundary are the only permitted imports, and only for one-way observation.
+- Do not enable `CLAIRE_BRAIN_V2_SHADOW` without Adam
 - Do not call the real operator phone
 - Do not log secrets, phone numbers, provider ids, tokens, or env values
 - Do not broaden transcript logging

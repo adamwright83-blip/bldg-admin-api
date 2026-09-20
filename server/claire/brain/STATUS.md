@@ -12,19 +12,29 @@ Executive Governor: COMPLETE (deterministic; mixed-lane firewall ENFORCED)
 Response Plan: COMPLETE (typed segments upstream of prose)
 Character Renderer: COMPLETE (fed only by ResponsePlan; assertRenderedFromPlan lints it)
 Action Gateway: COMPLETE (refuses live mutations)
-Shadow Mode: MECHANISM COMPLETE, NOT WIRED (default off; transport import awaits Adam)
+Shadow Mode: WIRED on BOTH surfaces, one-way, DEFAULT OFF (CLAIRE_BRAIN_V2_SHADOW)
 Production Cutover: PROHIBITED
 
-Tests: 130 passed, 0 todo (brain). Full suite 7042 passed, 0 failed. `tsc --noEmit` green.
+Tests: 146 passed, 0 todo (brain). Full suite 7059 passed, 0 failed. `tsc --noEmit` green.
+
+Authority stage: **B — shadow observation** (see `docs/claire-brain-v2.md` §19a).
+
+```
+BRAIN V2 MAY OBSERVE A COMPLETED V1 TURN.
+BRAIN V2 MAY NEVER AFFECT THAT TURN.
+```
+
+`claireTwilio.ts` and `claireRouter.ts` each emit ONE fire-and-forget observation
+after V1's authoritative result exists. No return path. V2 receives a frozen state
+copy, never the live object.
+
+**The flag stays OFF.** `CLAIRE_BRAIN_V2_SHADOW=1` enables observation; unset or
+malformed disables it. Turning it on is a separate, explicit authorization.
 
 Current next step:
-The ONE remaining Phase I step is a decision, not code: whether to import
-`observeShadowTurnDetached` into `claireTwilio.ts` / `claireRouter.ts`. The mechanism
-is built, default off, cannot throw and cannot delay — but that import is the only
-line that touches a live production path, and the binding handoff forbids it in this
-phase. Adam authorizes it, not an agent.
-
-Shadow mode flag: `CLAIRE_BRAIN_V2_SHADOW=1`. Unset or malformed disables observation.
+Nothing is wired-but-unfinished. Remaining model work before any cutover discussion:
+`correctionTarget`, `personalProbe` and `narrativeProbe` are still stubbed in
+Perception, so no turn yet opens a personal lane in practice.
 
 Retrieval safety note:
 `decideTurn` retrieves NOTHING by default. Live reads require a caller to pass

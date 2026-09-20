@@ -528,6 +528,86 @@ Shadow wiring into Twilio/desk is a later phase. Until then `runClaireBrainTurn`
 
 ---
 
+---
+
+## 19a. Authority lifecycle (binding)
+
+Brain V2 moves through four stages. Each has a different, explicit rule about what
+production may import and what V2 may do. Do not blur them.
+
+### A. Construction isolation — COMPLETE
+
+Production files do not import Brain V2 at all. V2 exists only under
+`server/claire/brain/` and is reachable only from its own tests.
+
+### B. Shadow observation — CURRENT
+
+Production V1 paths may emit a **one-way observation** into Brain V2. This supersedes
+stage A's blanket import prohibition, and only for read-only observation.
+
+```
+                     ┌──→ Brain V2 observer
+                     │       ↓
+REAL TURN → V1 ──────┤    telemetry only
+            │        │
+            ↓        X  NO RETURN PATH
+       live response
+       live mutations
+       live call control
+```
+
+The permanent invariant of this stage:
+
+```
+BRAIN V2 MAY OBSERVE A COMPLETED V1 TURN.
+BRAIN V2 MAY NEVER AFFECT THAT TURN.
+```
+
+Binding rules:
+
+1. **V1 completes first.** V1's authoritative result must already exist before
+   observation is launched. The two minds never race, and results are never combined
+   or selected between.
+2. **V2 return values are ignored.** No V2 value may determine V1 speech, mutation,
+   pending state, call control, response kind, action ids, receipts, TwiML, or the
+   HTTP response. There is no fallback from V1 to V2.
+3. **Fire-and-forget.** Observation may not delay the user-facing response. V2 is
+   never awaited on the response-critical path.
+4. **No mutable V1 state.** V2 receives a frozen copy via `readOnlyWorkingMemorySource`,
+   never the live `ClaireTurnState` object V1 continues to own.
+5. **Zero action authority.** `productionAuthority` stays false, `mutationAllowed`
+   stays false, and the Action Gateway keeps refusing execution.
+6. **Zero speech authority.** Candidate speech is telemetry. It never reaches the desk
+   client, Twilio, or TTS.
+7. **Zero call-control authority.** V2 records `candidateEndCall` for comparison only.
+   V1 remains the sole live call-control authority.
+8. **Default off.** With `CLAIRE_BRAIN_V2_SHADOW` absent or false there is no V2
+   execution, no added model calls, no added DB reads, and no behavioural difference.
+9. **Shadow fails open to V1.** A V2 failure leaves V1 completely unaffected. This is
+   the opposite of the fail-closed rule that governs business truth *inside* V2, and
+   the distinction is deliberate: V2's own truth rules must fail closed, while V2's
+   infrastructure must never impair V1.
+10. **Safe telemetry only.** Persist cognition, not content: perceived summary,
+    attention lanes, retrieval classes, evidence ids/types/provenance classes,
+    inhibited candidates, decision summary, segment types, candidate action classes,
+    candidate call control, and the comparison against V1. Never credentials, secrets,
+    phone numbers, provider ids, raw provider payloads, or environment values. Do not
+    duplicate raw transcript text — the conversation ledger already owns it.
+
+Both surfaces are wired: `claireTwilio.ts` (voice) and `claireRouter.ts` (desk).
+`server/claire/brain/tests/shadowWiring.test.ts` asserts the absence of a return path.
+
+### C. Guarded cutover — NOT AUTHORIZED
+
+Brain V2 gains selected authority only after explicit authorization, against the
+criteria in §20.
+
+### D. Retirement — LATER
+
+The V1 control plane is removed only after V2 proves itself in stage C.
+
+---
+
 ## 20. Cutover criteria
 
 V2 is **not** ready because types compile, unit tests pass, fixtures answer, or the model “sounds better.”

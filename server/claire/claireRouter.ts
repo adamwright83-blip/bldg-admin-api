@@ -53,6 +53,8 @@ import {
   previewWorkdayLoop,
 } from "./workdayPlanService";
 import { runClaireTurn, type ClaireTurnState } from "./turn/claireTurn";
+import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
+import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
 import { claireConversationStateStore } from "./turn/conversationStateStore";
 import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
 import {
@@ -287,6 +289,23 @@ export const claireRouter = router({
         }
       );
       await store.save(key, { tenantId: ctx.tenantId, operatorUserId: ctx.user.openId, surface: "text" }, state, DESK_CONVERSATION_TTL_MS);
+
+      /**
+       * Brain V2 shadow observation. V1's authoritative result already exists and is
+       * saved above; this is a ONE-WAY emission with no return path. Fire-and-forget,
+       * default-off behind CLAIRE_BRAIN_V2_SHADOW, cannot throw, and receives a frozen
+       * copy of state rather than the live object. The reply below is V1's alone.
+       */
+      observeShadowTurnDetached({
+        rawText: input.utterance,
+        state: readOnlyWorkingMemorySource(state),
+        tenantId: ctx.tenantId,
+        operatorUserId: ctx.user.openId,
+        surface: "text",
+        conversationKey: key,
+        v1: { endedCall: false, mutated: Boolean(result.actionIds?.length), spokeSomething: Boolean(result.speak) },
+      });
+
       return {
         reply: result.speak || preview.brief,
         brief: preview.brief,
