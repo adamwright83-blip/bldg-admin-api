@@ -253,6 +253,7 @@ describe("Slice 3: assertion-guard production wiring", () => {
         state: {},
         context,
         conversationKey: "test-thread",
+        allowFragmentWait: false,
       },
       {
         doctrineTurn: async () => UNVERIFIED_SENT,
@@ -274,6 +275,7 @@ describe("Slice 3: assertion-guard production wiring", () => {
         state: {},
         context,
         conversationKey: "test-thread",
+        allowFragmentWait: false,
       },
       {
         doctrineTurn: async () => VERIFIED_SCHEDULED,
