@@ -70,7 +70,23 @@ describe("runBusinessQuery", () => {
     );
     if (anchored.status !== "ok" || anchored.data.kind !== "orders") throw new Error("unexpected anchor result");
     expect(anchored.data.orders.every(order => order.customerName !== "Ben Ortiz")).toBe(true);
-    expect(anchored.data.orders[0]?.occurredAt < first.data.orders.find(order => order.customerName === "Ben Ortiz")!.occurredAt).toBe(true);
+    const anchorAt = first.data.orders.find(order => order.customerName === "Ben Ortiz")!.occurredAt;
+    expect(anchored.data.orders[0]?.occurredAt < anchorAt).toBe(true);
+
+    const afterAnchor = await runBusinessQuery(
+      "tenant-1",
+      {
+        ...base,
+        limit: 3,
+        anchorCustomerName: "Ben Ortiz",
+        anchorDirection: "after",
+        excludeCustomerNames: ["Ben Ortiz"],
+      },
+      deps(fixtureLoaders())
+    );
+    if (afterAnchor.status !== "ok" || afterAnchor.data.kind !== "orders") throw new Error("unexpected after-anchor result");
+    expect(afterAnchor.data.orders.every(order => order.customerName !== "Ben Ortiz")).toBe(true);
+    expect(afterAnchor.data.orders.every(order => order.occurredAt > anchorAt)).toBe(true);
   });
 
   it("discloses in-scope CleanCloud orders a service filter cannot classify", async () => {
