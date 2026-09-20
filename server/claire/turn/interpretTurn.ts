@@ -1,3 +1,5 @@
+import { containsBriefingAction } from "../briefing/deterministicBriefing";
+
 /**
  * ONE authoritative interpretation of the operator's utterance, produced before any route acts.
  *
@@ -70,6 +72,14 @@ export type InterpretedTurn = {
   exclusions: string[];
   /** A named record the query is anchored to ("before Thomas"). */
   anchorEntity: string | null;
+  /** The operator explicitly asks whether a prior factual answer is correct/current. */
+  correctnessChallenge: boolean;
+  /** Advice/judgment is requested; this never authorizes a mutation by itself. */
+  businessJudgment: boolean;
+  /** A genuinely broad request for the operating brief, not "what should I do about Dana". */
+  broadOperationalBriefing: boolean;
+  /** Weekday/date language resolved separately from entity names. */
+  temporalReference: string | null;
 };
 
 // ── Call control ─────────────────────────────────────────────────────────────────────────────
@@ -194,7 +204,19 @@ const LIST_NOUN = /\b(?:sales|orders|customers|clients|payments|invoices|account
 
 /** "the other four", "what about the rest", "and the others" — refine the previous query. */
 const QUERY_REFINEMENT =
-  /\b(?:the\s+)?other\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b|\bthe\s+(?:rest|others)\b|\bwhat\s+about\s+the\s+(?:rest|others)\b|\bi\s+asked\s+(?:you\s+)?for\b/i;
+  /\b(?:the\s+)?other\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b|\bthe\s+(?:rest|others)\b|\bwhat\s+about\s+the\s+(?:rest|others)\b/i;
+
+const CORRECTNESS_CHALLENGE =
+  /\b(?:are\s+you\s+sure|check\s+(?:that|those|it|the\s+(?:number|numbers|figure|figures))\s+again|verify\s+(?:that|those|it|the\s+(?:number|numbers|figure|figures))|is\s+(?:that|this)\s+(?:number|figure|right|correct)|are\s+(?:those|these)\s+(?:numbers|figures)\s+(?:right|correct))\b/i;
+
+const BUSINESS_JUDGMENT =
+  /\b(?:what\s+should\s+i\s+do\s+about|how\s+should\s+i\s+handle|what\s+would\s+you\s+do\s+about|would\s+you\s+(?:call|text|email|visit|go\s+back)|is\s+it\s+worth\s+(?:calling|texting|emailing|visiting|going\s+back))\b/i;
+
+const BROAD_OPERATIONAL_BRIEFING =
+  /^(?:(?:good\s+)?morning(?:\s+claire)?|hey\s+claire|what\s+should\s+i\s+(?:do|know)(?:\s+(?:today|this\s+morning))?|what(?:'s|\s+is)\s+the\s+most\s+important(?:\s+thing)?|what\s+do\s+i\s+need\s+to\s+know(?:\s+(?:today|this\s+morning))?)[?.!]*$/i;
+
+const TEMPORAL_REFERENCE =
+  /\b(today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
 
 /** "before Thomas", "after the Louise order" — anchor the window on a named record. */
 const ANCHOR = /\b(?:before|prior\s+to|preceding|after|since)\s+([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)?)/;
@@ -214,9 +236,6 @@ const EXCLUSION =
  * property that separates the correct proposal ("I need to call Dana on Tuesday") from the wrong
  * one ("What sales happen before Thomas? ... don't tell me about Thomas").
  */
-const WORK_VERB =
-  /\b(?:deliver|deliveries|drop\s*off|dropping\s*off|pick\s*up|picking\s*up|pickup|collect|return|returning|visit|visiting|stop\s+by|swing\s+by|go\s+to|head\s+to|drive\s+to|call|calling|phone|text|texting|email|emailing|message|meet|meeting|hit|hitting|deposit|install|drop|run|deliver|quote|pitch|walk|knock|follow\s+up|invoice|bill|wash|fold|launder)\b/i;
-
 /**
  * The operator describing THEIR OWN work — either committing to it in first person ("I need to
  * call Dana on Tuesday") or dictating it in the imperative shorthand the briefing product is built
@@ -249,12 +268,12 @@ function hasWorkClause(text: string): boolean {
     .some(sentence => {
       const clause = sentence.trim();
       if (!clause || /\?\s*$/.test(clause)) return false;
-      return WORK_VERB.test(clause);
+      return containsBriefingAction(clause);
     });
 }
 
 export function detectOperatorWorkCommitment(text: string): boolean {
-  if (FIRST_PERSON_COMMITMENT.test(text) && WORK_VERB.test(text)) return true;
+  if (FIRST_PERSON_COMMITMENT.test(text) && containsBriefingAction(text)) return true;
   return hasWorkClause(text);
 }
 
@@ -291,7 +310,11 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
     !acknowledgement && (QUESTION_MARK.test(text) || BUSINESS_QUESTION_LEAD.test(text.split(/\s+/).slice(0, 4).join(" ")));
 
   const cardinality = parseCardinality(text);
-  const queryRefinement = QUERY_REFINEMENT.test(text) && !acknowledgement;
+  const correctnessChallenge = CORRECTNESS_CHALLENGE.test(text) && !acknowledgement;
+  const queryRefinement = QUERY_REFINEMENT.test(text) && !acknowledgement && !correctnessChallenge;
+  const businessJudgment = BUSINESS_JUDGMENT.test(text) && !acknowledgement;
+  const broadOperationalBriefing = BROAD_OPERATIONAL_BRIEFING.test(text.trim()) && !businessJudgment;
+  const temporalReference = TEMPORAL_REFERENCE.exec(text)?.[1]?.toLowerCase() ?? null;
   const listRequest = Boolean(cardinality && cardinality > 1) || (LIST_NOUN.test(text) && !acknowledgement);
   const anchorMatch = ANCHOR.exec(text);
   const exclusionMatch = EXCLUSION.exec(text);
@@ -305,6 +328,8 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   if (hasExplicitActionRequest) intents.push("action_request");
   if (operatorWorkCommitment && !hasExplicitActionRequest) intents.push("operator_work_commitment");
   if (queryRefinement) intents.push("query_refinement");
+  if (correctnessChallenge) intents.push("prior_claim_challenge");
+  if (businessJudgment) intents.push("business_judgment");
   if (hasBusinessQuestion) intents.push("business_question");
   if (aboutClaireCapability && !hasExplicitActionRequest) intents.push("context_statement");
 
@@ -341,5 +366,9 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
     queryRefinement,
     exclusions,
     anchorEntity,
+    correctnessChallenge,
+    businessJudgment,
+    broadOperationalBriefing,
+    temporalReference,
   };
 }
