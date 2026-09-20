@@ -58,7 +58,7 @@ import {
 import { persistClaireTurnTrace } from "../answerPathRecorder";
 import { explicitDayLineRefusal, explicitTrackingRequest } from "../briefing/titleContract";
 import { classifyOpenDialogueAct } from "./dialogueAct";
-import { interpretTurn, type InterpretedTurn } from "./interpretTurn";
+import { detectCallControl, interpretTurn, type InterpretedTurn } from "./interpretTurn";
 import {
   planClaireResponse,
   renderClaireResponseChannels,
