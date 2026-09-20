@@ -335,6 +335,64 @@ describe("ordered query continuation reaches the actual business query", () => {
     expect(seen[0]?.customerName).toBeNull();
   });
 
+
+  it("continuing an anchored/excluded list preserves the anchor window and accumulated exclusion", async () => {
+    const baseQuery = {
+      ...defaultBusinessQuery("latest_sales"),
+      limit: 5,
+      anchorCustomerName: "Thomas Hartmann",
+      anchorDirection: "before" as const,
+      excludeCustomerNames: ["Thomas Hartmann"],
+    };
+    const state = {
+      analytics: {
+        query: baseQuery,
+        periods: [],
+        disclosed: [],
+        pendingClarification: null,
+        touchedAt: Date.parse("2026-09-20T17:59:00Z"),
+        focus: {
+          orderList: {
+            baseQuery,
+            shownEventKeys: ["older-1"],
+            lastOrders: [],
+          },
+        },
+      },
+    };
+    const seen: BusinessQuery[] = [];
+    await answerClaireBusinessTurn(
+      {
+        tenantId: "t1",
+        utterance: "What were the other four?",
+        state,
+        surface: "voice",
+        interpretation: interpretTurn("What were the other four?"),
+      },
+      {
+        now: () => new Date("2026-09-20T18:00:00Z"),
+        timeZone: () => "America/Los_Angeles",
+        plan: vi.fn(async () => null) as never,
+        loadBindings: bindings,
+        runQuery: (async (_tenant: string, query: BusinessQuery) => {
+          seen.push(query);
+          return {
+            status: "unavailable",
+            query,
+            period: { label: "x", start: "2020-01-01", end: "2026-09-20" },
+            comparisonPeriod: null,
+            reason: "test",
+          };
+        }) as never,
+      }
+    );
+    expect(seen[0]?.anchorCustomerName).toBe("Thomas Hartmann");
+    expect(seen[0]?.anchorDirection).toBe("before");
+    expect(seen[0]?.excludeCustomerNames).toContain("Thomas Hartmann");
+    expect(seen[0]?.offset).toBe(1);
+    expect(seen[0]?.limit).toBe(4);
+  });
+
   it("'before Thomas; don't tell me about Thomas' becomes an anchored exclusion query", async () => {
     const seen: BusinessQuery[] = [];
     const utterance = "What sales happened before Thomas Hartmann? Don't tell me about Thomas.";
