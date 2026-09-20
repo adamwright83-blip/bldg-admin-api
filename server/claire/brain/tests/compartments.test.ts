@@ -6,6 +6,8 @@
  * assert the stamps rather than trusting callers to be careful.
  */
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { evidenceFromRememberedTurn, retrieveEpisodicEvidence } from "../episodicMemory/adapter";
 import { evidenceFromProgression, retrieveSelfEvidence } from "../selfMemory/adapter";
@@ -142,5 +144,41 @@ describe("goals advise and never hijack a scoped question", () => {
     const item = evidenceFromRecommendation(recommendation, NOW);
     expect(item.authoritativeFor).toEqual(["goal_recommendation"]);
     expect(item.authoritativeFor).not.toContain("current_business_truth");
+  });
+});
+
+
+/** Code only. Comments explain which writers are forbidden and must not trip the check. */
+function codeOf(relativePath: string): string {
+  return readFileSync(path.join(process.cwd(), relativePath), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "");
+}
+
+describe("observers reach only the read-only readers", () => {
+  const selfAdapter = codeOf("server/claire/brain/selfMemory/adapter.ts");
+  const goalsAdapter = codeOf("server/claire/brain/goals/adapter.ts");
+  const observer = codeOf("server/claire/brain/shadow/observeShadowTurn.ts");
+
+  it("self memory uses the non-writing progression reader", () => {
+    // loadPersonalProgressionContext releases expired reservations — that is a WRITE.
+    expect(selfAdapter).toMatch(/readPersonalProgressionContext/);
+    expect(selfAdapter).not.toMatch(/loadPersonalProgressionContext\(/);
+  });
+
+  it("goals use the non-writing board reader", () => {
+    // ensureAdamBoard CREATES obligations. An observer must never create work.
+    expect(goalsAdapter).toMatch(/loadObligations/);
+    expect(goalsAdapter).not.toMatch(/ensureAdamBoard/);
+  });
+
+  it("the observer wires all four compartments", () => {
+    for (const compartment of ["business:", "episodic:", "self:", "goals:"]) {
+      expect(observer).toContain(compartment);
+    }
+  });
+
+  it("the observer never reaches a write-capable reader", () => {
+    expect(observer).not.toMatch(/ensureAdamBoard|loadPersonalProgressionContext|upsertObligation/);
   });
 });

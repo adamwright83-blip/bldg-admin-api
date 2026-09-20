@@ -14,7 +14,8 @@
  * Reads are entitlement accounting. Rapport is never earned from call or chat volume.
  */
 
-import type { PersonalProgressionContext } from "../../progression/service";
+import { readPersonalProgressionContext, type PersonalProgressionContext } from "../../progression/service";
+import { getProgressionStore } from "../../progression/drizzleStore";
 import type { SelfMemoryRequest } from "../contracts/retrieval";
 import type { EvidenceItem } from "../contracts/evidence";
 
@@ -32,6 +33,22 @@ export type SelfMemoryDeps = {
 
 export const noSelfMemory: SelfMemoryDeps = {
   loadProgression: async () => null,
+};
+
+/**
+ * Strictly read-only progression state.
+ *
+ * Deliberately `readPersonalProgressionContext`, NOT `loadPersonalProgressionContext`:
+ * the latter releases expired reservations, which is a write. An observer must not
+ * consume or alter entitlement state, so it accepts a slightly staler view instead.
+ */
+export const readOnlySelfMemoryDeps: SelfMemoryDeps = {
+  loadProgression: ctx =>
+    readPersonalProgressionContext(
+      getProgressionStore(),
+      { tenantId: ctx.tenantId, operatorUserId: ctx.operatorUserId },
+      ctx.conversationId
+    ),
 };
 
 /**

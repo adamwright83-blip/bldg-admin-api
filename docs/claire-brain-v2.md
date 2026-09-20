@@ -612,9 +612,18 @@ Both surfaces are wired: `claireTwilio.ts` (voice) and `claireRouter.ts` (desk).
 ### B.1 What shadow observation actually does now
 
 The observer injects a read-only `ExecutiveDeps`, so an enabled shadow turn genuinely
-retrieves through Business and Episodic Memory. Self Memory and Goals are not yet in
-that context; an unsupplied compartment returns nothing rather than reading something
-the caller did not intend.
+retrieves through all four compartments: Business, Episodic, Self and Goals.
+
+Two of those have write-capable siblings, and an observer must reach neither:
+
+| Compartment | Observer uses | Must NEVER use | Because |
+|---|---|---|---|
+| Self | `readPersonalProgressionContext` | `loadPersonalProgressionContext` | it releases expired reservations — a write |
+| Goals | `loadObligations` | `ensureAdamBoard` | it CREATES obligations — it makes work |
+
+The read-only progression view may therefore show a reservation that has already
+expired. That is the correct trade: a slightly stale read is harmless; a write from an
+observer is not.
 
 Brain V2 keeps its OWN working memory during shadow (`shadow/shadowMemory.ts`), keyed by
 conversation and separate from V1 state. The executive records what a turn RESOLVED and

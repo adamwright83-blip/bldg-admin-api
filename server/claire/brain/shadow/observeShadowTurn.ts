@@ -28,6 +28,8 @@
 import { runClaireBrainTurn, type ClaireBrainTurnInput } from "./runClaireBrainTurn";
 import type { ShadowComparisonRecord } from "../telemetry/comparison";
 import { liveReadOnlyRetrieval, noRetrieval, type ExecutiveDeps } from "../executive/decide";
+import { readOnlySelfMemoryDeps } from "../selfMemory/adapter";
+import { readOnlyGoalsDeps } from "../goals/adapter";
 import {
   shadowMemoryStore,
   updateShadowMemory,
@@ -80,18 +82,23 @@ export type ShadowRetrievalContext = {
 
 function liveExecutiveDeps(ctx: ShadowRetrievalContext): ExecutiveDeps {
   const nowIso = new Date().toISOString();
+  const scope = { tenantId: ctx.tenantId, operatorUserId: ctx.operatorUserId, nowIso };
   return {
-    retrieve: liveReadOnlyRetrieval({
-      business: { tenantId: ctx.tenantId, operatorUserId: ctx.operatorUserId, nowIso },
-      episodic: {
-        tenantId: ctx.tenantId,
-        operatorUserId: ctx.operatorUserId,
-        nowIso,
-        terms: ctx.episodicTerms ?? [],
+    retrieve: liveReadOnlyRetrieval(
+      {
+        business: scope,
+        episodic: { ...scope, terms: ctx.episodicTerms ?? [] },
+        self: { ...scope, conversationId: ctx.conversationId },
+        goals: scope,
       },
-      // Self and Goals stay unsupplied until their read-only entry points are wired;
-      // an unsupplied compartment returns nothing rather than reading something else.
-    }),
+      {
+        // Every one of these is a genuine READ. The write-capable siblings —
+        // loadPersonalProgressionContext (releases reservations) and ensureAdamBoard
+        // (creates obligations) — must never be reachable from an observer.
+        self: readOnlySelfMemoryDeps,
+        goals: readOnlyGoalsDeps,
+      }
+    ),
     ctx: { timeZone: ctx.timeZone, today: ctx.today, surface: ctx.surface },
   };
 }

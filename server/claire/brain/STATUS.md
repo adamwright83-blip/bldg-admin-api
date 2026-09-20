@@ -3,8 +3,7 @@
 Architecture: COMPLETE
 Contracts: COMPLETE
 Business Memory: LIVE read-only (injected readers) + authoritative entity resolution
-Episodic / Self / Goals: LIVE read-only adapters; Self and Goals not yet wired into the
-  shadow observer's live context (an unsupplied compartment returns nothing)
+Episodic / Self / Goals: LIVE read-only adapters, ALL FOUR wired into the observer
 Perception: entity mentions (no shape heuristic), personal + narrative probes,
   correction target, complete-thought assembler — assembler NOT yet owning live voice
 Working Memory: COMPLETE (ordered query — resolved ≠ presented)
@@ -19,7 +18,13 @@ Action Gateway: COMPLETE (refuses live mutations)
 Shadow Mode: WIRED on both surfaces, one-way, DEFAULT OFF, with live read-only retrieval
 Production Cutover: PROHIBITED
 
-Tests: 223 passed, 0 todo (brain). `tsc --noEmit` green.
+Tests: 227 passed, 0 todo (brain). `tsc --noEmit` green.
+
+Read-only enforcement: Self Memory uses `readPersonalProgressionContext`, NOT
+`loadPersonalProgressionContext` (which releases expired reservations — a write).
+Goals use `loadObligations`, NOT `ensureAdamBoard` (which CREATES obligations).
+`compartments.test.ts` asserts the write-capable siblings are unreachable from an
+observer.
 
 Authority stage: **B — shadow observation** (see `docs/claire-brain-v2.md` §19a).
 
@@ -34,24 +39,19 @@ and no added DB reads.
 
 ## Genuine remaining gaps
 
-1. **Self Memory and Goals are not in the observer's live context.** Their adapters are
-   real and tested, but `liveExecutiveDeps` supplies only Business and Episodic. A
-   shadow turn therefore cannot yet exercise a real disclosure entitlement or a real
-   board input. An unsupplied compartment returns nothing rather than reading something
-   unintended.
-2. **The character renderer is not characterful.** It orders segments, adds punctuation
+1. **The character renderer is not characterful.** It orders segments, adds punctuation
    and joins. The phrasing seam is governed by `assertRenderedFromPlan`, but no Claire
    voice system is attached to it.
-3. **Personal disclosure text is empty.** The executive authorises the disclosure; the
+2. **Personal disclosure text is empty.** The executive authorises the disclosure; the
    authored line must come from the canon/dialogue registry, which is not wired. Never
    fill that registry with generated lines.
-4. **Perception does not own live voice completeness.** `perception/completeness.ts` is
+3. **Perception does not own live voice completeness.** `perception/completeness.ts` is
    the V2 destination and is tested, but production voice still gets completeness from
    V1's `listenOnly`. Acceptable for shadow; a blocker for cutover.
-5. **No live database verification.** `DATABASE_URL` is unset locally, so every test
+4. **No live database verification.** `DATABASE_URL` is unset locally, so every test
    injects readers. The wiring to the real readers is type-checked and unit-tested, not
    exercised against production data.
-6. **Shadow has never run with the flag on**, so no real comparison telemetry exists.
+5. **Shadow has never run with the flag on**, so no real comparison telemetry exists.
 
 Canonical design: `docs/claire-brain-v2.md`
 Detailed handoff: `docs/claire-brain-v2-handoff.md`

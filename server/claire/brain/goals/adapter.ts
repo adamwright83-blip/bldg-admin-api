@@ -12,6 +12,7 @@
 
 import type { GoalPlanningRequest } from "../contracts/retrieval";
 import type { EvidenceItem } from "../contracts/evidence";
+import { loadObligations } from "../../proactive/boardService";
 
 export type GoalsContext = {
   tenantId: string;
@@ -32,6 +33,23 @@ export type GoalsDeps = {
 
 export const noGoals: GoalsDeps = {
   loadBoardInputs: async () => [],
+};
+
+/**
+ * Existing board obligations, read only.
+ *
+ * Deliberately `loadObligations`, NOT `ensureAdamBoard`: the sweep CREATES obligations,
+ * and an observer must never create work. This reports what the board already holds.
+ */
+export const readOnlyGoalsDeps: GoalsDeps = {
+  loadBoardInputs: async ctx => {
+    const obligations = await loadObligations(ctx.tenantId, ctx.operatorUserId);
+    // Only obligations still in play; a superseded or finished one is not advice.
+    const live = new Set(["scheduled", "draft_prepared", "awaiting_result"]);
+    return obligations
+      .filter(obligation => live.has(obligation.status))
+      .map(obligation => ({ id: obligation.id, title: obligation.title, rationale: obligation.why }));
+  },
 };
 
 export function evidenceFromRecommendation(
