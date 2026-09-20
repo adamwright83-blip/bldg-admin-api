@@ -88,6 +88,10 @@ export type InterpretedTurn = {
   broadOperationalBriefing: boolean;
   /** Weekday/date language resolved separately from entity names. */
   temporalReference: string | null;
+  /** All resolved temporal tokens; dates/weekdays never become entity names. */
+  temporal: string[];
+  /** Proper-noun entity candidates with temporal/furniture tokens removed. */
+  entities: string[];
   /** Standing/temporary operator doctrine instruction; the doctrine writer may run only when true. */
   doctrineInstruction: boolean;
 };
@@ -270,10 +274,33 @@ const BUSINESS_JUDGMENT =
   /\b(?:what\s+should\s+i\s+do\s+about|how\s+should\s+i\s+handle|what\s+would\s+you\s+do\s+about|would\s+you\s+(?:call|text|email|visit|go\s+back)|is\s+it\s+worth\s+(?:calling|texting|emailing|visiting|going\s+back))\b/i;
 
 const BROAD_OPERATIONAL_BRIEFING =
-  /^(?:(?:good\s+)?morning(?:\s+claire)?|hey\s+claire|what\s+should\s+i\s+(?:do|know)(?:\s+(?:today|this\s+morning))?|what(?:'s|\s+is)\s+the\s+most\s+important(?:\s+thing)?|what\s+do\s+i\s+need\s+to\s+know(?:\s+(?:today|this\s+morning))?)[?.!]*$/i;
+  /^(?:(?:(?:good\s+)?morning|hey|hi|hello)(?:\s+claire)?[,.!]*\s+)?(?:what\s+should\s+i\s+(?:do|know)(?:\s+(?:today|this\s+morning))?|what(?:'s|\s+is)\s+the\s+most\s+important(?:\s+thing)?|what\s+do\s+i\s+need\s+to\s+know(?:\s+(?:today|this\s+morning))?|what(?:'s|\s+is)\s+(?:going\s+on|up)|how(?:'s|\s+is)\s+business)[?.!]*$/i;
 
 const TEMPORAL_REFERENCE =
-  /\b(today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
+  /\b(today|tomorrow|tonight|yesterday|monday|tuesday|wednesday|thursday|friday|saturday|sunday|this\s+week|next\s+week|last\s+week|morning|afternoon|evening|weekend)\b/gi;
+
+const COMMON_ENTITY_FURNITURE = new Set(
+  ("The This That These Those There Did How What When Who Where Which Are Is Was Were Have Has Had And But Okay Yes No Not Claire Adam Goldline Day Line Order Orders Sale Sales Customer Customers Tell Give Show Add Put Call Text Email Dont Um Uh Well Actually Wait Sorry Good Morning Afternoon Evening Hey Hi Hello Thanks Thank Please Let Just Can Could Would Should Do Does So Now Then Also Still Anything Something Nothing I'm Im We're Its It's Right Sure Cool Fine Great Perfect Understood Gotcha").split(/\s+/)
+);
+
+export function extractEntityAndTime(text: string): { entities: string[]; temporal: string[] } {
+  const temporal = Array.from(
+    new Set((text.match(TEMPORAL_REFERENCE) ?? []).map(token => token.toLowerCase()))
+  );
+  const withoutTemporal = text.replace(TEMPORAL_REFERENCE, " ");
+  const entities = Array.from(
+    new Set(
+      (withoutTemporal.match(/\b[A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)?/g) ?? [])
+        .map(candidate => {
+          const words = candidate.trim().split(/\s+/);
+          while (words.length && COMMON_ENTITY_FURNITURE.has(words[0]!)) words.shift();
+          return words.join(" ");
+        })
+        .filter(candidate => candidate && !COMMON_ENTITY_FURNITURE.has(candidate))
+    )
+  );
+  return { entities, temporal };
+}
 
 /** "before Thomas", "after the Louise order" — anchor the window on a named record. */
 const ANCHOR = /\b(before|prior\s+to|preceding|after|since)\s+([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)?)/;
@@ -385,8 +412,11 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   const correctnessChallenge = CORRECTNESS_CHALLENGE.test(text) && !acknowledgement;
   const queryRefinement = QUERY_REFINEMENT.test(text) && !acknowledgement && !correctnessChallenge;
   const businessJudgment = BUSINESS_JUDGMENT.test(text) && !acknowledgement;
-  const broadOperationalBriefing = BROAD_OPERATIONAL_BRIEFING.test(text.trim()) && !businessJudgment;
-  const temporalReference = TEMPORAL_REFERENCE.exec(text)?.[1]?.toLowerCase() ?? null;
+  const { entities, temporal } = extractEntityAndTime(text);
+  const scopedObject = /\b(?:about|with|regarding|concerning)\b/i.test(text) || entities.length > 0;
+  const broadOperationalBriefing =
+    BROAD_OPERATIONAL_BRIEFING.test(text.trim()) && !businessJudgment && !scopedObject;
+  const temporalReference = temporal[0] ?? null;
   const doctrineInstruction = classifyDoctrineUtterance(text) !== "not_doctrine";
   const listRequest = Boolean(cardinality && cardinality > 1) || (LIST_NOUN.test(text) && !acknowledgement);
   const anchorMatch = ANCHOR.exec(text);
@@ -450,6 +480,8 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
     businessJudgment,
     broadOperationalBriefing,
     temporalReference,
+    temporal,
+    entities,
     doctrineInstruction,
   };
 }
