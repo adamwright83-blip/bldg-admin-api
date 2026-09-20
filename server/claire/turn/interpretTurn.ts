@@ -108,7 +108,7 @@ const DEPARTURE =
 const PARTING =
   /\b(?:(?:i|we)(?:'ll|\s+will)\s+)?(?:talk|speak|catch)\s+(?:to\s+|with\s+)?(?:you|ya)?\s*(?:later|tomorrow|soon|then)\b|\b(?:good\s*bye|goodbye|bye(?:\s+claire)?|later\s+claire)\b/;
 const EXPLICIT_END =
-  /\b(?:end\s+(?:the\s+)?call|hang\s+up|we(?:\s+are|'re)\s+done|i(?:\s+am|'m)\s+done\s+talking|that(?:\s+is|'s)\s+it\s+for\s+now|that(?:\s+is|'s)\s+all\s+for\s+now)\b/;
+  /\b(?:end\s+(?:the\s+)?call|hang\s+up|we(?:\s+are|'re)\s+done|i(?:\s+am|'m)\s+done\s+talking|that(?:\s+is|'s)\s+it\s+for\s+now|that(?:\s+is|'s)\s+all\s+for\s+now|(?:you\s+)?have\s+a\s+good\s+(?:day|night|one))\b/;
 
 /**
  * Acknowledgements that merely SOUND final. These must never hang up on their own — a live status
