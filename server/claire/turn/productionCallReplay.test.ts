@@ -222,8 +222,25 @@ describe("P1 review regressions", () => {
     const turn = interpretTurn("What should I do about Dana Tuesday?");
     expect(turn.businessJudgment).toBe(true);
     expect(turn.temporalReference).toBe("tuesday");
+    expect(turn.anchorEntity).toBeNull();
     expect(turn.broadOperationalBriefing).toBe(false);
     expect(turn.mayProposeWork).toBe(false);
+  });
+
+  it("a weekday after 'before' is temporal, never invented as a customer anchor", () => {
+    const turn = interpretTurn("What sales happened before Tuesday?");
+    expect(turn.temporalReference).toBe("tuesday");
+    expect(turn.anchorEntity).toBeNull();
+    expect(turn.anchorDirection).toBeNull();
+  });
+
+  it("named anchors preserve before/after direction separately from the entity", () => {
+    const before = interpretTurn("What sales happened before Thomas Hartmann?");
+    expect(before.anchorEntity).toBe("Thomas Hartmann");
+    expect(before.anchorDirection).toBe("before");
+    const after = interpretTurn("What sales happened after Thomas Hartmann?");
+    expect(after.anchorEntity).toBe("Thomas Hartmann");
+    expect(after.anchorDirection).toBe("after");
   });
 
   it.each([
