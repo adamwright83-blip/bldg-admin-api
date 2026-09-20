@@ -798,6 +798,16 @@ async function startServer() {
     if (process.env.NODE_ENV === "production") {
       startAutomaticGeographicReconciliation();
       startNightShiftScheduler();
+      void import("../claire/conversation/transcriptLog")
+        .then(({ emitLatestConfiguredClaireTranscripts }) =>
+          emitLatestConfiguredClaireTranscripts()
+        )
+        .catch(error => {
+          console.warn(
+            "[ClaireTranscript] boot backfill unavailable",
+            error instanceof Error ? error.message : String(error)
+          );
+        });
     }
     if (process.env.NODE_ENV === "production" || process.env.GOLDLINE_PROOF_MODE === "1") {
       const stopOutbox = startEconomicOutboxDrainer();
