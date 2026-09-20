@@ -1,9 +1,15 @@
 /**
  * Map a V1-shaped state bag into WorkingMemorySnapshot without importing the orchestrator.
- * Ordered query memory is not on production main yet; it starts null until ported.
+ * Ordered query memory carries the resolved result the thread is still walking, so a
+ * continuation answers from that result rather than re-querying.
  */
 
-import type { WorkingMemorySnapshot, PendingProposalSnapshot, PriorClaimRef } from "../contracts/workingMemory";
+import type {
+  OrderedQueryMemory,
+  PendingProposalSnapshot,
+  PriorClaimRef,
+  WorkingMemorySnapshot,
+} from "../contracts/workingMemory";
 
 export type WorkingMemorySource = {
   pendingFragment?: string | null;
@@ -20,6 +26,8 @@ export type WorkingMemorySource = {
   pendingAccountFollowUp?: { createdAt?: number } | null;
   proposal?: { title?: string } | null;
   pendingProposal?: { title?: string } | null;
+  /** The ordered result this thread is still walking, if any. */
+  orderedQuery?: OrderedQueryMemory | null;
 };
 
 export type WorkingMemoryContext = {
@@ -61,7 +69,7 @@ export function snapshotWorkingMemory(source: WorkingMemorySource, ctx: WorkingM
     pendingProposal: proposal,
     pendingBriefing: briefing,
     pendingAccountFollowUp: followUp,
-    orderedQuery: null,
+    orderedQuery: source.orderedQuery ?? null,
     priorClaims,
     unresolvedReferences: [],
     pendingFragment: source.pendingFragment ?? null,

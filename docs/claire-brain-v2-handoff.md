@@ -11,9 +11,14 @@ PR #192 remains open as a parts bin: https://github.com/adamwright83-blip/bldg-a
 
 ## Current head
 
-Implementation with tests: `bc27e6659a94861894603e1fb6c1fe3d4fb8d1f6`
+Phases C-F + H landed by Claude Code. Trust `git rev-parse origin/cursor/claire-brain-v2`.
 
-Trust `git rev-parse origin/cursor/claire-brain-v2` for the actual tip (handoff/PR-link pins may sit on top).
+Handoff verification (Claude Code, 2026-09-20): Cursor's handoff was checked against the
+actual branch and found **truthful** — head SHA, base SHA, zero production imports,
+`37 passed / 10 todo`, `tsc` green, `retrieveBusinessEvidence` returning `[]`, and the
+`void hasBusiness` governor gap all reproduced exactly as described.
+
+Earlier implementation-with-tests head: `bc27e6659a94861894603e1fb6c1fe3d4fb8d1f6`
 
 ## Base
 
@@ -44,7 +49,7 @@ Open design choices (allowed to refine, not reverse):
 - Exact field names on contracts if a cleaner shape appears
 - When (not whether) to move `shouldHoldForContinuation` out of `claireTurn.ts`
 - Shadow telemetry persistence store (in-memory / existing answer-path telemetry first; no new secret logs)
-- How to port `OrderedQueryCursor.resolved` vs `.presented` from PR #192 into Working Memory
+- ~~How to port `OrderedQueryCursor.resolved` vs `.presented`~~ — done: `workingMemory/orderedQuery.ts`
 
 ## Completed
 
@@ -61,26 +66,43 @@ Open design choices (allowed to refine, not reverse):
 - [x] Action gateway that refuses live mutations
 - [x] `runClaireBrainTurn()` shadow runner (not imported by Twilio/desk)
 - [x] Authority / isolation / corpus tests (`37 passed`, `10 todo`)
-- [ ] Phase C — Executive attention + **live retrieval orchestration** (adapters still return `[]`)
-- [ ] Phase D — Integration that emits evidenced BusinessFact/Judgment segments
-- [ ] Phase E — Character renderer (voice), still plan-upstream-of-prose
-- [ ] Phase F — Action gateway executing real adapters under grants (still shadow-only)
-- [ ] Phase G — Shadow mode on real Twilio/desk turns (read-only comparison persistence)
-- [ ] Phase H — Remaining regression / adversarial corpus (the 10 todos)
-- [ ] Phase I — Guarded operator-only cutover (**authorization required**)
+- [x] Phase C — Business Memory live read-only retrieval through existing readers
+- [x] Phase D — Executive retrieval orchestration, integration, inhibition, evidenced segments
+- [x] Phase E — Ordered-query continuation (resolved ≠ presented), prior claims, pending lifecycle
+- [x] Governor fix — mixed business/personal firewall now **enforced**, not computed and dropped
+- [x] Phase H — Regression corpus: all 10 todos implemented (100 brain tests, 0 todo)
+- [ ] Phase F — Episodic / Self / Goals adapters still return `[]` (contracts + wiring exist)
+- [ ] Phase G — Character renderer (voice), still plan-upstream-of-prose
+- [ ] Phase I — Shadow mode on real Twilio/desk turns (read-only comparison persistence)
+- [ ] Guarded operator-only cutover (**authorization required**)
 - [ ] Phase J — Retire old control plane
 
 ## In progress
 
-Working Memory ordered-query cursor is specified but not ported (`orderedQuery: null`). Retrieval adapters do not yet call `businessQuery` / account knowledge. Shadow is invocably in tests only.
+The character renderer is still concatenation rather than Claire's voice. Episodic, self
+and goals adapters return `[]` although the executive already plans and consumes their
+typed requests. Shadow is invocable in tests only and is not wired to Twilio/desk — which
+is correct for this phase.
 
 ## Next task
 
-**Phase C: wire Business Memory retrieval to existing authoritative readers (read-only).**
+**Phase G: replace the concatenation renderer with Claire's character renderer.**
 
-`retrieveBusinessEvidence` currently returns `[]`. Point it at `server/analytics/businessQuery.ts` and account/ops readers through adapters. Filter with `admitBusinessEvidence` / `sourceVisibility.ts` before anything reaches Executive Function. Do **not** reimplement query logic. Do **not** import Brain V2 from `claireTwilio.ts` or `claireRouter.ts`. Do **not** mint live mutation grants.
+`response/render.ts` concatenates segment text. The character renderer must be fed ONLY
+by `ResponsePlan` — it may phrase, compress and keep her voice, but may not add facts,
+numbers, authority, actions, disclosure permissions or call-control decisions. There is
+still no `planFromSpeak` and there must not be one.
 
-After that: port PR #192 `OrderedQueryCursor` resolved-vs-presented into `workingMemory/`, then make “the other four” a real brain-level test.
+Then **Phase F remainder** (episodic / self / goals adapters return `[]`; the executive
+already plans and consumes their requests, so only the adapter bodies are missing), and
+then **Phase I** shadow wiring: V2 observes the same completed operator turn as V1 and
+persists comparison telemetry only. No speech, no mutation, no hangup, no V1 state change.
+
+### Retrieval safety invariant (do not regress)
+
+`decideTurn` retrieves **nothing** by default (`noRetrieval`). A caller wanting live reads
+must pass `liveReadOnlyRetrieval(ctx)` explicitly. This is deliberate: no code path can
+reach the database just by calling the brain, and every test is hermetic by construction.
 
 ## Files added
 
@@ -94,19 +116,23 @@ After that: port PR #192 `OrderedQueryCursor` resolved-vs-presented into `workin
 | `server/claire/brain/perception/perceive.ts` | `interpretTurn` → `PerceivedTurn`. |
 | `server/claire/brain/workingMemory/snapshot.ts` | V1 state → `WorkingMemorySnapshot`. |
 | `server/claire/brain/businessMemory/sourceVisibility.ts` | Write-path provenance filter (from PR #192). |
-| `server/claire/brain/businessMemory/adapter.ts` | Admit-filter; retrieve stub. |
+| `server/claire/brain/businessMemory/adapter.ts` | Live read-only retrieval + synthetic admit-filter + prior-claim recheck. |
+| `server/claire/brain/businessMemory/evidence.ts` | Reader results → `EvidenceItem` with provenance/freshness/coverage preserved. |
+| `server/claire/brain/workingMemory/orderedQuery.ts` | Ordered-query continuation: resolved ≠ presented. |
+| `server/claire/brain/executive/retrievalPlan.ts` | Typed retrieval requests; honours `doNotRetrieve`. |
+| `server/claire/brain/executive/integrate.ts` | Evidence → segments, conclusions, inhibition. |
 | `server/claire/brain/episodicMemory/adapter.ts` | History ≠ current truth helper. |
 | `server/claire/brain/selfMemory/adapter.ts` | Disclosure stub. |
 | `server/claire/brain/goals/adapter.ts` | Scoped turns return no board inputs. |
 | `server/claire/brain/executive/attention.ts` | Retrieval + pending disposition. |
 | `server/claire/brain/executive/grants.ts` | **Only** minting site. |
-| `server/claire/brain/executive/governor.ts` | Deterministic validation. |
-| `server/claire/brain/executive/decide.ts` | Skeleton `ExecutiveDecision`. |
+| `server/claire/brain/executive/governor.ts` | Deterministic validation; mixed-lane firewall enforced. |
+| `server/claire/brain/executive/decide.ts` | The executive loop; retrieval injected, defaults to none. |
 | `server/claire/brain/response/render.ts` | Concatenate plan text. |
 | `server/claire/brain/actions/gateway.ts` | Grant required; live mutate refused. |
 | `server/claire/brain/shadow/runClaireBrainTurn.ts` | Read-only entry. |
 | `server/claire/brain/telemetry/comparison.ts` | Safe comparison record (no secrets). |
-| `server/claire/brain/tests/*.test.ts` | Authority, isolation, corpus. |
+| `server/claire/brain/tests/*.test.ts` | Authority, isolation, corpus, ordered query, business memory, firewall, executive loop. |
 
 ## Files modified
 
@@ -146,13 +172,18 @@ pnpm exec vitest run server/claire/brain
 pnpm check
 ```
 
-Last run (this session): **37 passed, 10 todo, 0 failed.** `pnpm check` (`tsc --noEmit`) green.
+Last run (Claude Code session): **brain 100 passed, 0 todo, 0 failed.**
+Full repo suite: **693 files, 7012 passed, 7 skipped, 0 failed.** `tsc --noEmit` green.
 
 Passing files:
 
 - `server/claire/brain/tests/contracts.test.ts` (2)
 - `server/claire/brain/tests/authority.test.ts` (21)
-- `server/claire/brain/tests/corpus.test.ts` (14 passing + 10 todo)
+- `server/claire/brain/tests/corpus.test.ts` (30 — all former todos implemented)
+- `server/claire/brain/tests/orderedQuery.test.ts` (10)
+- `server/claire/brain/tests/businessMemory.test.ts` (14)
+- `server/claire/brain/tests/firewall.test.ts` (9)
+- `server/claire/brain/tests/executiveLoop.test.ts` (14)
 
 ## Known failing tests
 
@@ -160,16 +191,21 @@ None.
 
 ## Known incomplete work
 
-- `retrieveBusinessEvidence` / episodic / self / goals return `[]`
-- Ordered query memory not ported (`resolved` vs `presented`)
+- Episodic / self / goals adapters still return `[]`. The executive already plans and
+  consumes their typed requests, so only the adapter bodies are missing.
 - `correctionTarget` always `null` (PR #192 field not on main `interpretTurn`)
-- `personalProbe` / `narrativeProbe` always `false`
+- `personalProbe` / `narrativeProbe` always `false`, so no turn currently opens a personal
+  lane in practice. The firewall that governs mixed turns is implemented and tested
+  directly against the governor.
 - Fragment completeness not wired; caller must pass `completeness` (shadow defaults to `"complete"`)
-- Character renderer is concatenation, not Claire’s voice
-- Shadow is not hooked to Twilio/desk (correct)
-- 10 corpus `it.todo` cases listed in `corpus.test.ts`
-- Live Dana → The Louise never verified (no `DATABASE_URL`). Do not hardcode the pair
-- Full V1 suite / Codex are not a Brain V2 gate yet
+- Character renderer is concatenation, not Claire's voice (Phase G)
+- Shadow is not hooked to Twilio/desk (correct — Phase I)
+- Live Dana → The Louise never verified (no `DATABASE_URL`). Do not hardcode the pair.
+  Nothing in the code hardcodes it; resolution goes through `contact_account_resolution`.
+- **No live database verification was performed.** This environment has no `DATABASE_URL`
+  (Railway MySQL is private-network only), so every business-memory test injects readers.
+  The adapter's wiring to `runBusinessQuery` is type-checked and unit-tested, not
+  exercised against production data.
 
 ## Decisions made
 

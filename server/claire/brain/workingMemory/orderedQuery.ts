@@ -45,8 +45,10 @@ export function openOrderedQuery(input: {
   anchorEntity: string | null;
   resolved: OrderedQueryMember[];
   presented?: OrderedQueryMember[];
+  sourceEvidence?: OrderedQueryMemory["sourceEvidence"];
 }): OrderedQueryMemory {
   return {
+    sourceEvidence: input.sourceEvidence ?? null,
     queryFingerprint: input.queryFingerprint,
     parameters: input.parameters,
     requestedCardinality: input.requestedCardinality,

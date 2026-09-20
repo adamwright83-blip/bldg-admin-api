@@ -10,11 +10,18 @@
  * two minds disagreed.
  */
 
-import { speakBusinessResult } from "../../business/businessSpeech";
+import { joinList, speakBusinessResult } from "../../business/businessSpeech";
 import type { BusinessQueryResult } from "../../../analytics/businessQuery";
 import type { EvidenceItem, EvidenceRef, PriorClaimRecheckResult } from "../contracts/evidence";
 import type { PerceivedTurn } from "../contracts/perceivedTurn";
 import type { AttentionPlan } from "../contracts/attention";
+import type { OrderedQueryMember, WorkingMemorySnapshot } from "../contracts/workingMemory";
+import {
+  continueOrderedQuery,
+  excludeFromThread,
+  membersAfterAnchor,
+  membersBeforeAnchor,
+} from "../workingMemory/orderedQuery";
 import type { ResponseSegment } from "../contracts/responsePlan";
 import { BUSINESS_ANSWER_UNAVAILABLE, type Conclusion, type InhibitedCandidate } from "../contracts/executiveDecision";
 
@@ -28,7 +35,33 @@ export type IntegrationOutput = {
   segments: ResponseSegment[];
   conclusions: Conclusion[];
   inhibited: InhibitedCandidate[];
+  /** Evidence served from working memory rather than a fresh retrieval. */
+  extraEvidence: EvidenceItem[];
 };
+
+/**
+ * Serve a continuation from the resolved result already in working memory.
+ *
+ * This is the whole point of separating `resolved` from `presented`: the operator is
+ * asking for more of the SAME answer, so re-querying would silently hand them a
+ * different set of records. The claim cites the original evidence and therefore
+ * carries the original as-of time.
+ */
+function continueFromMemory(
+  perceived: PerceivedTurn,
+  memory: WorkingMemorySnapshot
+): { members: OrderedQueryMember[]; source: EvidenceItem | null } | null {
+  const stored = memory.orderedQuery;
+  if (!stored) return null;
+  const scoped = perceived.exclusions.length ? excludeFromThread(stored, perceived.exclusions) : stored;
+  if (perceived.anchorEntity && perceived.ordering === "before_anchor") {
+    return { members: membersBeforeAnchor(scoped, perceived.anchorEntity), source: scoped.sourceEvidence };
+  }
+  if (perceived.anchorEntity && perceived.ordering === "after_anchor") {
+    return { members: membersAfterAnchor(scoped, perceived.anchorEntity), source: scoped.sourceEvidence };
+  }
+  return { members: continueOrderedQuery(scoped, perceived.cardinality).members, source: scoped.sourceEvidence };
+}
 
 function refs(items: EvidenceItem[]): EvidenceRef[] {
   return items.map(item => ({ evidenceId: item.id }));
@@ -96,12 +129,14 @@ export function integrate(input: {
   perceived: PerceivedTurn;
   attention: AttentionPlan;
   evidence: EvidenceItem[];
+  memory: WorkingMemorySnapshot;
   ctx: IntegrationContext;
 }): IntegrationOutput {
-  const { perceived, attention, evidence, ctx } = input;
+  const { perceived, attention, evidence, memory, ctx } = input;
   const segments: ResponseSegment[] = [];
   const conclusions: Conclusion[] = [];
   const inhibited: InhibitedCandidate[] = [];
+  const extraEvidence: EvidenceItem[] = [];
 
   // History may establish "X was recorded then". It may never become current truth.
   for (const item of evidence) {
@@ -114,7 +149,33 @@ export function integrate(input: {
   }
 
   const businessLane = attention.lanes.includes("business");
-  if (!businessLane) return { segments, conclusions, inhibited };
+  if (!businessLane) return { segments, conclusions, inhibited, extraEvidence };
+
+  if (attention.continueOrderedQuery) {
+    const continuation = continueFromMemory(perceived, memory);
+    const source = continuation?.source ?? null;
+    if (continuation && continuation.members.length > 0 && source?.authoritativeFor.includes("current_business_truth")) {
+      extraEvidence.push(source);
+      segments.push({
+        type: "BusinessFactSegment",
+        text: joinList(continuation.members.map(member => member.label ?? member.id)) + ".",
+        evidence: [{ evidenceId: source.id }],
+        origin: "authoritative_reader",
+      });
+      conclusions.push({
+        kind: "ordered_query_continuation",
+        detail: "served from the resolved result already in working memory; no new query was issued",
+        evidenceIds: [source.id],
+      });
+      return { segments, conclusions, inhibited, extraEvidence };
+    }
+    conclusions.push({
+      kind: BUSINESS_ANSWER_UNAVAILABLE,
+      detail: "nothing remains in the resolved result to continue",
+      evidenceIds: source ? [source.id] : [],
+    });
+    return { segments, conclusions, inhibited, extraEvidence };
+  }
 
   const authoritative = authoritativeBusiness(evidence);
   const recheck = recheckFrom(evidence);
@@ -137,7 +198,7 @@ export function integrate(input: {
           : "no authoritative current-business-truth evidence was retrieved for this turn",
       evidenceIds: evidence.map(item => item.id),
     });
-    return { segments, conclusions, inhibited };
+    return { segments, conclusions, inhibited, extraEvidence };
   }
 
   if (perceived.businessIntent === "judgment_question") {
@@ -162,7 +223,7 @@ export function integrate(input: {
       detail: "recommendation is advisory; it carries no mutation authority",
       evidenceIds: authoritative.map(item => item.id),
     });
-    return { segments, conclusions, inhibited };
+    return { segments, conclusions, inhibited, extraEvidence };
   }
 
   for (const item of speakableResults(evidence)) {
@@ -192,5 +253,5 @@ export function integrate(input: {
     });
   }
 
-  return { segments, conclusions, inhibited };
+  return { segments, conclusions, inhibited, extraEvidence };
 }

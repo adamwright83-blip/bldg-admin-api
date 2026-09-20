@@ -1,3 +1,5 @@
+import type { EvidenceItem } from "./evidence";
+
 /**
  * Working memory is the current conversational thread — not a second database.
  * Pending objects answer "what is yes referring to?" They do not interpret new speech.
@@ -16,6 +18,12 @@ export type OrderedQueryMember = {
  * never a fresh window of records 6–9.
  */
 export type OrderedQueryMemory = {
+  /**
+   * The evidence item that licensed this result. A continuation re-cites it, so
+   * "the other four" carries the original read's as-of time — it is the same read,
+   * a different slice, never a fresh claim about now.
+   */
+  sourceEvidence: EvidenceItem | null;
   queryFingerprint: string;
   parameters: unknown;
   requestedCardinality: number | null;

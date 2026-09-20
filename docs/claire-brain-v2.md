@@ -388,7 +388,12 @@ If the query resolved five sales and Claire presented only Thomas:
 
 A new unrelated query resets exclusions.
 
-PR #192’s `OrderedQueryCursor` (`resolved` vs `presented`) is the piece to port. Do not port “delivered = entire query window.”
+PR #192's `OrderedQueryCursor` (`resolved` vs `presented`) is the piece to port. Do not port "delivered = entire query window."
+
+**Implemented** in `server/claire/brain/workingMemory/orderedQuery.ts`. The memory also
+retains `sourceEvidence`: the evidence item that licensed the result. A continuation
+re-cites that same item, so "the other four" carries the original read's as-of time — it
+is the same read, a different slice, never a fresh claim about now.
 
 ---
 
@@ -551,18 +556,25 @@ Then Phase I: guarded operator-only cutover. Then Phase J: retire the old contro
 
 ## 21. Implementation phases
 
-| Phase | Name | Production behavior |
-|---|---|---|
-| A | Contracts + compartment adapters | none |
-| B | Perception + Working Memory | none |
-| C | Executive attention + retrieval | none |
-| D | Integration / inhibition / authority | none |
-| E | ResponsePlan + renderer | none |
-| F | Action gateway | none (grants still unenforced in prod) |
-| G | Shadow mode on real turns | read-only comparison |
-| H | Regression / adversarial corpus | none |
-| I | Guarded operator-only cutover | **only after authorization** |
-| J | Retire old control plane | after V2 proves itself |
+| Phase | Name | Status | Production behavior |
+|---|---|---|---|
+| A | Contracts + compartment adapters | done | none |
+| B | Perception + Working Memory | done | none |
+| C | Executive attention + retrieval | done | none |
+| D | Integration / inhibition / authority | done | none |
+| E | ResponsePlan + ordered-query continuation | done | none |
+| F | Action gateway | gateway done; episodic/self/goals adapters stubbed | none |
+| G | Character renderer | **next** | none |
+| H | Regression / adversarial corpus | done (100 brain tests, 0 todo) | none |
+| I | Shadow mode on real turns + guarded cutover | not started | read-only comparison, then **only after authorization** |
+| J | Retire old control plane | not started | after V2 proves itself |
+
+### Retrieval safety invariant
+
+`decideTurn` retrieves **nothing** by default. A caller that wants live reads must pass
+`liveReadOnlyRetrieval(ctx)` explicitly. Reading production data is an explicit act: no
+code path may reach the database merely by calling the brain. Do not add a default that
+silently retrieves.
 
 ---
 

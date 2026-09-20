@@ -105,7 +105,8 @@ export async function decideTurn(
     }
     evidence = results.flatMap(result => result.evidence);
 
-    const integration = integrate({ perceived, attention, evidence, ctx: deps.ctx });
+    const integration = integrate({ perceived, attention, evidence, memory, ctx: deps.ctx });
+    if (integration.extraEvidence.length) evidence = [...evidence, ...integration.extraEvidence];
     conclusions = integration.conclusions;
     inhibited.push(...integration.inhibited);
 
