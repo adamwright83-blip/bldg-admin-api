@@ -537,7 +537,12 @@ function startVoiceTurn(input: {
         operatorUserId: conversation.actorId,
         surface: "voice",
         conversationKey: callStateKey(conversationId),
-        v1: { endedCall: Boolean(result.endCall), mutated: Boolean(result.actionIds?.length), spokeSomething: Boolean(result.speak) },
+        v1: {
+          endedCall: Boolean(result.endCall),
+          // Voice records work either as a commitment turn or as linked action ids.
+          mutated: Boolean(result.commitmentTurn) || Boolean(result.actionIds?.length),
+          spokeSomething: Boolean(result.speak),
+        },
       });
 
       if (result.listenOnly) {

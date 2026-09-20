@@ -15,7 +15,7 @@ Action Gateway: COMPLETE (refuses live mutations)
 Shadow Mode: WIRED on BOTH surfaces, one-way, DEFAULT OFF (CLAIRE_BRAIN_V2_SHADOW)
 Production Cutover: PROHIBITED
 
-Tests: 147 passed, 0 todo (brain). Full suite 7060 passed, 0 failed. `tsc --noEmit` green.
+Tests: 148 passed, 0 todo (brain). Full suite 7060 passed, 0 failed. `tsc --noEmit` green.
 
 Authority stage: **B — shadow observation** (see `docs/claire-brain-v2.md` §19a).
 

@@ -186,8 +186,9 @@ pnpm exec vitest run server/claire/brain
 pnpm check
 ```
 
-Last run (Claude Code session): **brain 100 passed, 0 todo, 0 failed.**
-Full repo suite: **693 files, 7012 passed, 7 skipped, 0 failed.** `tsc --noEmit` green.
+Last run (Claude Code session): **brain 148 passed, 0 todo, 0 failed.**
+Full repo suite: **697 files, 7060 passed, 7 skipped, 0 failed.** `tsc --noEmit` green.
+V1 Claire suite specifically: 1401 passed.
 
 Passing files:
 
@@ -198,6 +199,10 @@ Passing files:
 - `server/claire/brain/tests/businessMemory.test.ts` (14)
 - `server/claire/brain/tests/firewall.test.ts` (9)
 - `server/claire/brain/tests/executiveLoop.test.ts` (14)
+- `server/claire/brain/tests/compartments.test.ts` (10)
+- `server/claire/brain/tests/renderer.test.ts` (9)
+- `server/claire/brain/tests/shadow.test.ts` (11)
+- `server/claire/brain/tests/shadowWiring.test.ts` (17 — asserts the absence of a return path)
 
 ## Known failing tests
 
