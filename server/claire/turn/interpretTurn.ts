@@ -34,7 +34,10 @@ export type TurnIntentKind =
   | "personal_probe"
   | "narrative_probe"
   | "prior_claim_challenge"
-  | "call_control";
+  | "call_control"
+  | "acknowledgement"
+  | "operator_work_commitment"
+  | "query_refinement";
 
 export type InterpretedTurn = {
   intents: TurnIntentKind[];
@@ -53,6 +56,20 @@ export type InterpretedTurn = {
   aboutClaireCapability: boolean;
   hasBusinessQuestion: boolean;
   hasExplicitActionRequest: boolean;
+  /** The operator says THEY will do something ("I need to call Dana Tuesday"). */
+  operatorWorkCommitment: boolean;
+  /** A bare acknowledgement: "I'm good", "got it". Not a query, not a challenge, not work. */
+  acknowledgement: boolean;
+  /** How many records were asked for. `null` when unstated. */
+  cardinality: number | null;
+  /** The operator asked for a LIST ("sales", "the other four"), not a single record. */
+  listRequest: boolean;
+  /** Refines the previous business query rather than challenging its truth ("the other four"). */
+  queryRefinement: boolean;
+  /** Entities the operator asked to leave OUT ("don't tell me about Thomas"). */
+  exclusions: string[];
+  /** A named record the query is anchored to ("before Thomas"). */
+  anchorEntity: string | null;
 };
 
 // ── Call control ─────────────────────────────────────────────────────────────────────────────
@@ -145,12 +162,115 @@ const CORRECTION = new RegExp(
   "i"
 );
 
+const SPOKEN_NUMBERS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, fifteen: 15, twenty: 20, twentyfive: 25,
+};
+
+/**
+ * Cardinality is a STRUCTURAL property of the request, not a quirk of one parser's regex.
+ * `parseLimit` in businessConversation only matched "(top|the|my) <n>", so "last five sales"
+ * silently became the singular latest-sale reader — three times in the 2026-09-20 call.
+ */
+export function parseCardinality(text: string): number | null {
+  const lower = text.toLowerCase();
+  const N = String.raw`(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty)`;
+  const toValue = (raw: string | undefined): number | null => {
+    if (!raw) return null;
+    const value = /^\d+$/.test(raw) ? Number(raw) : (SPOKEN_NUMBERS[raw] ?? null);
+    return value && value > 0 ? Math.min(value, 25) : null;
+  };
+  // A refinement's own count wins over the count it is refining: "I asked you for the last five
+  // sales … what were the other four?" is a request for FOUR.
+  const refined = toValue(new RegExp(String.raw`\bother\s+${N}\b`).exec(lower)?.[1]);
+  if (refined) return refined;
+  const leading = new RegExp(String.raw`\b(?:last|latest|first|recent|previous|next|top|biggest|best|another|most\s+recent)\s+${N}\b`).exec(lower);
+  const trailing = new RegExp(String.raw`\b${N}\s+(?:most\s+recent|latest|last|biggest|newest)\b`).exec(lower);
+  return toValue(leading?.[1]) ?? toValue(trailing?.[1]);
+}
+
+/** Plural record nouns mean a list even when no number is given. */
+const LIST_NOUN = /\b(?:sales|orders|customers|clients|payments|invoices|accounts|visits|follow[-\s]?ups)\b/i;
+
+/** "the other four", "what about the rest", "and the others" — refine the previous query. */
+const QUERY_REFINEMENT =
+  /\b(?:the\s+)?other\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b|\bthe\s+(?:rest|others)\b|\bwhat\s+about\s+the\s+(?:rest|others)\b|\bi\s+asked\s+(?:you\s+)?for\b/i;
+
+/** "before Thomas", "after the Louise order" — anchor the window on a named record. */
+const ANCHOR = /\b(?:before|prior\s+to|preceding|after|since)\s+([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)?)/;
+/** Only a capitalised token in the ORIGINAL text is a name; "about the rest" is not an entity. */
+function properNoun(candidate: string | undefined): string | null {
+  const token = candidate?.trim();
+  return token && /^[A-Z]/.test(token) ? token : null;
+}
+
+/** "don't tell me about Thomas" — an exclusion, not a refusal to act. */
+const EXCLUSION =
+  /\b(?:don'?t|do\s+not|stop|skip|leave\s+out)\s+(?:tell(?:ing)?|mention(?:ing)?|talk(?:ing)?|say(?:ing)?|include|including|list(?:ing)?)?\s*(?:me\s+)?(?:about\s+)?([A-Za-z][\w'-]+(?:\s+[A-Z][\w'-]+)?)/i;
+
+/**
+ * The operator committing to their OWN work. This — not a downstream parser finding schedulable
+ * nouns — is what may authorize a Day Line proposal. In the 2026-09-20 call it is exactly the
+ * property that separates the correct proposal ("I need to call Dana on Tuesday") from the wrong
+ * one ("What sales happen before Thomas? ... don't tell me about Thomas").
+ */
+const WORK_VERB =
+  /\b(?:deliver|deliveries|drop\s*off|dropping\s*off|pick\s*up|picking\s*up|pickup|collect|return|returning|visit|visiting|stop\s+by|swing\s+by|go\s+to|head\s+to|drive\s+to|call|calling|phone|text|texting|email|emailing|message|meet|meeting|hit|hitting|deposit|install|drop|run|deliver|quote|pitch|walk|knock|follow\s+up|invoice|bill|wash|fold|launder)\b/i;
+
+/**
+ * The operator describing THEIR OWN work — either committing to it in first person ("I need to
+ * call Dana on Tuesday") or dictating it in the imperative shorthand the briefing product is built
+ * around ("Deliver towels to OPUS LA", "Pick up from the dry cleaners at 9").
+ *
+ * This — not a downstream parser finding schedulable nouns — is what may authorize a Day Line
+ * proposal. It requires an actual WORK verb, which is precisely why the 2026-09-20 failure is
+ * excluded: "What sales happen before Thomas? ... don't tell me about Thomas" contains no work
+ * verb at all ("tell" is a speech act aimed at Claire, not work), so it can never mint a task.
+ */
+const FIRST_PERSON_COMMITMENT = new RegExp(
+  [
+    String.raw`\b(?:i|we)\s+(?:need\s+to|have\s+to|gotta|got\s+to|must|should|will|'ll|plan\s+to|want\s+to|am\s+going\s+to|'m\s+going\s+to|'re\s+going\s+to)\s+\w+`,
+    String.raw`\b(?:i'm|i\s+am|we're|we\s+are)\s+\w+ing\b`,
+    String.raw`\b(?:tomorrow|today|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b[^.!?]{0,40}\b(?:i|we)\s+(?:'m|am|'ll|will|have|need|got)\b`,
+  ].join("|"),
+  "i"
+);
+
+/**
+ * A clause that is NOT a question and contains a real work verb. Position is deliberately not the
+ * test: "before noon for the KITH pickup and at 7 deliver the OPUS towels" is genuine dictated
+ * work even though it opens with a time. What excludes the 2026-09-20 failure is stronger — that
+ * utterance contains no work verb anywhere outside its questions ("tell" is a speech act aimed at
+ * Claire, not work), so it cannot mint a task under any phrasing.
+ */
+function hasWorkClause(text: string): boolean {
+  return text
+    .split(/(?<=[.!?])\s+|\n+/)
+    .some(sentence => {
+      const clause = sentence.trim();
+      if (!clause || /\?\s*$/.test(clause)) return false;
+      return WORK_VERB.test(clause);
+    });
+}
+
+export function detectOperatorWorkCommitment(text: string): boolean {
+  if (FIRST_PERSON_COMMITMENT.test(text) && WORK_VERB.test(text)) return true;
+  return hasWorkClause(text);
+}
+
+/** A bare acknowledgement closes a beat. It is not a question, a challenge, or work. */
+const ACKNOWLEDGEMENT =
+  /^(?:ok(?:ay)?|got\s+it|gotcha|understood|i(?:'m|\s+am)\s+(?:all\s+)?good|we'?re\s+good|sure|yeah|yep|yup|right|cool|fine|nice|great|perfect|thanks?|thank\s+you|that\s+answers\s+it|makes\s+sense|no\s+worries)[.!]?$/i;
+
 const QUESTION_MARK = /\?/;
 const BUSINESS_QUESTION_LEAD =
   /\b(?:what|how\s+(?:much|many)|who|when|which|did|does|do|is|are|was|were|has|have)\b/i;
 
 export type InterpretTurnOptions = {
-  /** Did the deterministic briefing parser extract any work items? Evidence, never authority. */
+  /**
+   * Retained for callers/telemetry only. NEVER read when deciding `mayProposeWork` — see the note
+   * there. Kept as a named field so the prohibition is explicit rather than implicit.
+   */
   extractedWorkItems?: number;
 };
 
@@ -161,31 +281,49 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   const callControl = detectCallControl(text);
   if (callControl === "end") intents.push("call_control");
 
+  const acknowledgement = ACKNOWLEDGEMENT.test(text);
   const actionRefused = ACTION_REFUSAL.test(text);
   const correction = CORRECTION.test(text);
   const aboutClaireCapability = ABOUT_CLAIRE_CAPABILITY.test(text);
   const hasExplicitActionRequest = ACTION_DIRECTIVE.test(text) && !actionRefused;
-  const hasBusinessQuestion = QUESTION_MARK.test(text) || BUSINESS_QUESTION_LEAD.test(text.split(/\s+/).slice(0, 4).join(" "));
+  const operatorWorkCommitment = detectOperatorWorkCommitment(text) && !actionRefused;
+  const hasBusinessQuestion =
+    !acknowledgement && (QUESTION_MARK.test(text) || BUSINESS_QUESTION_LEAD.test(text.split(/\s+/).slice(0, 4).join(" ")));
 
+  const cardinality = parseCardinality(text);
+  const queryRefinement = QUERY_REFINEMENT.test(text) && !acknowledgement;
+  const listRequest = Boolean(cardinality && cardinality > 1) || (LIST_NOUN.test(text) && !acknowledgement);
+  const anchorMatch = ANCHOR.exec(text);
+  const exclusionMatch = EXCLUSION.exec(text);
+  const excluded = properNoun(exclusionMatch?.[1]);
+  const exclusions = excluded ? [excluded] : [];
+  const anchorEntity = properNoun(anchorMatch?.[1]);
+
+  if (acknowledgement) intents.push("acknowledgement");
   if (actionRefused) intents.push("action_refusal");
   if (correction) intents.push("correction");
   if (hasExplicitActionRequest) intents.push("action_request");
+  if (operatorWorkCommitment && !hasExplicitActionRequest) intents.push("operator_work_commitment");
+  if (queryRefinement) intents.push("query_refinement");
   if (hasBusinessQuestion) intents.push("business_question");
   if (aboutClaireCapability && !hasExplicitActionRequest) intents.push("context_statement");
 
   /**
-   * POSITIVE ACTION INTENT REQUIRED.
+   * POSITIVE ACTION INTENT REQUIRED — BY CONSTRUCTION.
    *
-   * Extracted items are evidence that schedulable words exist, not that the operator asked for
-   * anything. Work may be proposed only when the operator either issued a directive, or narrated
-   * their own work (the ordinary briefing flow) — and never when they are refusing, correcting, or
-   * talking about what Claire knows.
+   * `options.extractedWorkItems` is deliberately NOT consulted. The previous pass used it to grant
+   * authority while claiming the opposite invariant, which is how "What sales happen before Thomas?
+   * ... don't tell me about Thomas" became "Got it. For today: Hartmann, don't tell me about
+   * Thomas". Work may be proposed only when the operator issued a directive, or committed to their
+   * own work. A downstream parser finding schedulable nouns can never reach this decision.
    */
-  // A turn whose point is leaving is not a work briefing: "I gotta go" must not mint a Day Line
-  // item out of whatever nouns preceded it. An explicit directive still counts.
-  const narratedOwnWork = (options.extractedWorkItems ?? 0) > 0 && callControl !== "end";
   const mayProposeWork =
-    !actionRefused && !correction && !aboutClaireCapability && (hasExplicitActionRequest || narratedOwnWork);
+    !actionRefused &&
+    !correction &&
+    !aboutClaireCapability &&
+    !acknowledgement &&
+    callControl !== "end" &&
+    (hasExplicitActionRequest || operatorWorkCommitment);
 
   return {
     intents,
@@ -196,5 +334,12 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
     aboutClaireCapability,
     hasBusinessQuestion,
     hasExplicitActionRequest,
+    operatorWorkCommitment,
+    acknowledgement,
+    cardinality,
+    listRequest,
+    queryRefinement,
+    exclusions,
+    anchorEntity,
   };
 }
