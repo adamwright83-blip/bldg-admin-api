@@ -87,7 +87,7 @@ export async function loadDayWork(
   for (const commitment of state.commitments) {
     if (
       !isProductionVisibleBusinessRecord({
-        note: [commitment.title, commitment.detailNote].filter(Boolean).join(" "),
+        note: [commitment.title, commitment.detailNote, commitment.sourceText].filter(Boolean).join(" "),
       })
     ) {
       continue;
