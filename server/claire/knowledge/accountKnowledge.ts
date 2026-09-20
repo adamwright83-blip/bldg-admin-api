@@ -276,7 +276,9 @@ export async function loadAccountHistory(input: {
     pipelineStage: pipelines[0]?.stage ?? null,
     pipelineId: pipelines[0]?.id ?? null,
     contacts: contacts.map(row => ({ name: row.name, title: row.title, relationshipType: row.relationshipType })),
-    dayLineMentions: dayLine.map(row => ({ title: row.title, businessDate: row.businessDate, status: row.status })),
+    dayLineMentions: dayLine
+      .filter(row => isProductionVisibleBusinessRecord({ note: row.title }))
+      .map(row => ({ title: row.title, businessDate: row.businessDate, status: row.status })),
     conversationMentions: mentions,
   };
 }
