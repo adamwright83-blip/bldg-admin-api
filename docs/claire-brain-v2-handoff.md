@@ -1,16 +1,19 @@
 # Claire Brain V2 Handoff
 
-This file is for the next coding agent. Do not rely on any Cursor chat. If you cloned the repo, checked out `cursor/claire-brain-v2`, and read `server/claire/brain/STATUS.md`, `docs/claire-brain-v2.md`, this file, and the draft PR, you have the full state.
+This file is for the next coding agent. Do not rely on any Cursor chat. If you cloned the repo, checked out `cursor/claire-brain-v2`, and read `server/claire/brain/STATUS.md`, `docs/claire-brain-v2.md`, this file, and draft PR https://github.com/adamwright83-blip/bldg-admin-api/pull/193, you have the full state.
 
 ## Current branch
 
 `cursor/claire-brain-v2`
 
+Draft PR (do **not** merge): https://github.com/adamwright83-blip/bldg-admin-api/pull/193
+PR #192 remains open as a parts bin: https://github.com/adamwright83-blip/bldg-admin-api/pull/192
+
 ## Current head
 
-`bc27e6659a94861894603e1fb6c1fe3d4fb8d1f6`
+Implementation with tests: `bc27e6659a94861894603e1fb6c1fe3d4fb8d1f6`
 
-That is the first origin push of architecture + contracts + skeleton + tests. Later commits on this branch, if any, should only be documentation pins or Phase C work. Confirm with `git rev-parse origin/cursor/claire-brain-v2`.
+Trust `git rev-parse origin/cursor/claire-brain-v2` for the actual tip (handoff/PR-link pins may sit on top).
 
 ## Base
 
