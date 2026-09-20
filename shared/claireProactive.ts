@@ -85,6 +85,12 @@ export type ProactiveObligation = {
   draft: { message: string; sent: false } | null;
   historyIntact: true;
   moveCount: number;
+  accountProvenance?: {
+    name?: string | null;
+    accountType?: string | null;
+    providerName?: string | null;
+    identityKey?: string | null;
+  };
 };
 
 export type SalesFollowUpEvidence = {
@@ -94,6 +100,7 @@ export type SalesFollowUpEvidence = {
   nextStep: string;
   lastOutcome: string | null;
   history: string[];
+  accountProvenance?: ProactiveObligation["accountProvenance"];
 };
 
 export type FreshnessEvidence = {
@@ -348,6 +355,7 @@ export function salesFollowUpObligation(evidence: SalesFollowUpEvidence): Proact
     draft: null,
     historyIntact: true,
     moveCount: 0,
+    accountProvenance: evidence.accountProvenance,
   };
 }
 

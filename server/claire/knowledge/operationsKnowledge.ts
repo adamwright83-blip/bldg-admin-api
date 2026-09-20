@@ -3,6 +3,7 @@ import { getFieldToday } from "../../field/fieldTodayService";
 import { addDaysYmd } from "../../analytics/businessPeriods";
 import { zonedYmd } from "../../dashboardZoned";
 import { joinList, plural } from "../business/businessSpeech";
+import { isAuthorizedProductionOperator, isOperatorVisibleAccount, isOperatorVisibleDerivedWork, isOperatorVisibleFieldCommercial } from "./sourceVisibility";
 
 /**
  * "What do I have left today?", "What did I finish?", "What's tomorrow?"
@@ -81,9 +82,18 @@ export async function loadDayWork(
       return null;
     }),
   ]);
+  const operator = { tenantId: input.tenantId, operatorUserId: input.operatorUserId };
+  const hideTestOrigin = isAuthorizedProductionOperator(operator);
   const open: DayWorkItem[] = [];
   const completed: DayWorkItem[] = [];
   for (const commitment of state.commitments) {
+    const meta = {
+      claireProactive: commitment.claireProactive,
+      sourceKind: commitment.proactiveSourceKind,
+      accountProvenance: commitment.accountProvenance,
+    };
+    if (!isOperatorVisibleDerivedWork(meta, operator)) continue;
+    if (meta.accountProvenance && !isOperatorVisibleAccount(meta.accountProvenance)) continue;
     const item: DayWorkItem = {
       id: `day-director:${commitment.id}`,
       title: commitment.title,
@@ -97,6 +107,15 @@ export async function loadDayWork(
   const ROUTE_KINDS = new Set(["pickup", "delivery", "follow_up", "commercial_visit", "commercial_call", "payment_blocker"]);
   for (const entry of field?.timeline ?? []) {
     if (!ROUTE_KINDS.has(entry.kind)) continue;
+    if (
+      !isOperatorVisibleFieldCommercial(
+        { kind: entry.kind, accountProvenance: entry.accountProvenance },
+        operator
+      )
+    ) {
+      continue;
+    }
+    if (hideTestOrigin && entry.accountProvenance && !isOperatorVisibleAccount(entry.accountProvenance)) continue;
     const timing = entry.scheduledAt
       ? new Intl.DateTimeFormat("en-US", { timeZone: input.timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(entry.scheduledAt))
       : null;

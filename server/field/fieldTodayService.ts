@@ -208,6 +208,12 @@ export async function getFieldToday(input: {
       missionId: item.missionId ?? null,
       pipelineId: item.pipelineId ?? null,
       destinationPath: item.destinationPath ?? null,
+      accountProvenance: item.accountProvenance ?? {
+        name: item.accountName,
+        accountType: null,
+        providerName: null,
+        identityKey: null,
+      },
     });
   }
   const openRecoveries = recoveries.filter(item =>

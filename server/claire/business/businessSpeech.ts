@@ -477,14 +477,14 @@ function speakOrders(
   data: Extract<Extract<BusinessQueryResult, { status: "ok" }>["data"], { kind: "orders" }>,
   speech: Speech,
   context: SpeakContext
-): void {
+): OrderBrief[] {
   const scope = scopeWords(result.query);
   const noun = scope.prefix ? `${scope.prefix} ` : "";
   const allTime = result.query.period.kind === "all_time";
   const when = allTime ? "on record" : during(speech.label(result.period.label));
   if (!data.orders.length) {
     speech.say(`I don't see any ${noun}paid orders${scope.suffix} ${when}.`);
-    return;
+    return [];
   }
   const first = data.orders[0]!;
   if (data.orders.length === 1) {
@@ -504,7 +504,7 @@ function speakOrders(
     if (context.hint?.kind === "order_ingested") {
       speech.say(first.ingestedAt ? `Goldline imported it ${speech.time(first.ingestedAt)}.` : "It's a Goldline order, so it wasn't imported.");
     }
-    return;
+    return [first];
   }
   const word = data.ordering === "latest" ? "most recent" : data.ordering === "earliest" ? "first" : "biggest";
   speech.say(
@@ -512,6 +512,7 @@ function speakOrders(
       data.orders.map(order => `${speech.money(order.cents, true)} for ${customerOf(order)} on ${speech.date(order.date)}`)
     )}.`
   );
+  return data.orders;
 }
 
 export function describeOrderLineage(order: OrderBrief, speech: Speech): string {
@@ -869,10 +870,18 @@ function bucketLabel(key: string, groupBy: "month" | "week" | "day", speech: Spe
   return speech.date(key);
 }
 
+export type SpokenBusinessResult = {
+  text: string;
+  facts: string[];
+  disclosures: string[];
+  /** Orders actually named in the spoken answer — not the full query window. */
+  presentedOrders: OrderBrief[];
+};
+
 export function speakBusinessResult(
   result: BusinessQueryResult,
   context: SpeakContext
-): { text: string; facts: string[]; disclosures: string[] } {
+): SpokenBusinessResult {
   const speech = new Speech(context.surface, context.timeZone, context.today);
   const query = result.query;
 
@@ -884,12 +893,13 @@ export function speakBusinessResult(
     } else {
       speech.say(unavailableSentence(query.metric));
     }
-    return { text: speech.text(), facts: speech.facts, disclosures: speech.disclosures };
+    return { text: speech.text(), facts: speech.facts, disclosures: speech.disclosures, presentedOrders: [] };
   }
 
   const { data, period } = result;
   const label = speech.label(period.label);
   const scope = scopeWords(query);
+  let presentedOrders: OrderBrief[] = [];
   switch (data.kind) {
     case "totals":
       speakTotals(result, data, speech, context);
@@ -898,7 +908,7 @@ export function speakBusinessResult(
       speakComposition(data.breakdown, label, speech, context.hint);
       break;
     case "orders":
-      speakOrders(result, data, speech, context);
+      presentedOrders = speakOrders(result, data, speech, context);
       break;
     case "freshness":
       speakFreshness(data.freshness, context.hint?.kind === "freshness" ? context.hint.aspect : "gumball_working", speech);
@@ -1042,5 +1052,5 @@ export function speakBusinessResult(
   if (data.kind !== "freshness" && data.kind !== "orders" && data.kind !== "customer_history") {
     coverageNotes(result, speech, context);
   }
-  return { text: speech.text(), facts: speech.facts, disclosures: speech.disclosures };
+  return { text: speech.text(), facts: speech.facts, disclosures: speech.disclosures, presentedOrders };
 }

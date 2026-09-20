@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { invokeLLM } from "../_core/llm";
 import { claireModelRequest } from "./claireModel";
-import { parseCardinality } from "./turn/interpretTurn";
+import { parseCardinality, type InterpretedTurn } from "./turn/interpretTurn";
 import {
   UNKNOWN_EVIDENCE,
   coverageVerdict,
@@ -119,6 +119,28 @@ export type ClaireAnalyticsFocus = {
   slices?: AnalyticsSlice[];
 };
 
+export type OrderedQueryMember = {
+  eventKey: string;
+  customerName: string | null;
+  occurredAt: string;
+  cents: number;
+};
+
+export type OrderedQueryCursor = {
+  query: BusinessQuery;
+  ordering: "latest" | "earliest" | "largest";
+  requestedCardinality: number;
+  /** Authoritative query window (what the reader resolved). */
+  resolved: OrderedQueryMember[];
+  /** Records Claire actually presented in speech. */
+  presented: OrderedQueryMember[];
+  /** Alias of presented — kept so existing session readers keep working. */
+  delivered: OrderedQueryMember[];
+  offset: number;
+  anchor: string | null;
+  exclusions: string[];
+};
+
 export type ClaireAnalyticsSession = {
   query: BusinessQuery;
   /** Last answered periods, newest first, frozen as explicit spans. */
@@ -128,6 +150,8 @@ export type ClaireAnalyticsSession = {
   disclosed: string[];
   touchedAt: number;
   focus?: ClaireAnalyticsFocus;
+  /** Structural continuation of an ordered list query (last N sales, other four, before X). */
+  orderedQuery?: OrderedQueryCursor | null;
 };
 
 export type ClaireAnalyticsState = { analytics?: ClaireAnalyticsSession | null };
@@ -150,7 +174,15 @@ export type ClaireBusinessReader =
 
 export type ClaireBusinessTurn =
   | { handled: false }
-  | { handled: true; speak: string; facts: string[]; result?: BusinessQueryResult; reader?: ClaireBusinessReader };
+  | {
+      handled: true;
+      speak: string;
+      facts: string[];
+      result?: BusinessQueryResult;
+      reader?: ClaireBusinessReader;
+      presentedOrders?: OrderBrief[];
+      resolvedOrders?: OrderBrief[];
+    };
 
 // ── Intent ───────────────────────────────────────────────────────────────────
 
@@ -396,13 +428,35 @@ export type ParsedBusinessTurn =
   | { kind: "query"; query: BusinessQuery; refinement: boolean; hint?: SpeechHint | null }
   | { kind: "order_focus"; aspect: OrderAspect }
   | { kind: "combine" }
-  | { kind: "compare_customers"; targets: CustomerTarget[]; aspect: CustomerAspect | null; period: PeriodSpec };
+  | { kind: "compare_customers"; targets: CustomerTarget[]; aspect: CustomerAspect | null; period: PeriodSpec }
+  | {
+      kind: "ordered_continuation";
+      mode: "next" | "before_anchor" | "exclude";
+      cardinality: number | null;
+      anchor: string | null;
+      exclusions: string[];
+    };
+
+export type ParseBusinessTurnOptions = {
+  interpretation?: Pick<InterpretedTurn, "queryRefinement" | "priorQueryReference" | "cardinality" | "exclusions" | "anchorEntity" | "listRequest"> | null;
+  resolvedContactNames?: Set<string>;
+  /** RoutePlan.continuePriorQuery — when false, this turn is a new query. */
+  continuePriorQuery?: boolean;
+};
+
+function nameMatchesOrder(order: { customerName: string | null }, name: string): boolean {
+  if (!order.customerName) return false;
+  const have = order.customerName.toLowerCase();
+  const want = name.toLowerCase();
+  return have === want || have.split(/\s+/).includes(want) || have.startsWith(`${want} `);
+}
 
 export function parseBusinessTurn(
   utterance: string,
   session: ClaireAnalyticsSession | null,
   now: Date,
-  timeZone: string
+  timeZone: string,
+  options: ParseBusinessTurnOptions = {}
 ): ParsedBusinessTurn {
   const text = utterance.trim();
   if (!text) return { kind: "not_analytics" };
@@ -412,6 +466,40 @@ export function parseBusinessTurn(
   // "Add them together" is arithmetic on the thread, not a request to add work.
   if (session && (focus.slices?.length ?? 0) >= 2 && words <= 6 && isCombineRequest(lower)) return { kind: "combine" };
   if (looksLikeWorkRequest(text)) return { kind: "not_analytics" };
+
+  const interpretation = options.interpretation ?? null;
+  const cursor = session?.orderedQuery ?? null;
+  const salesListLanguage = /\b(sales?|orders?)\b/.test(lower);
+  const allowContinuation = options.continuePriorQuery !== false;
+  const continuationAsked =
+    allowContinuation &&
+    Boolean(cursor) &&
+    (interpretation?.queryRefinement ||
+      interpretation?.priorQueryReference ||
+      Boolean(interpretation?.anchorEntity) ||
+      (interpretation?.exclusions.length ?? 0) > 0 ||
+      /\b(?:the\s+)?other\s+(?:\d+|four|five|rest|others)\b|\bthe\s+rest\b|\bbefore\s+[a-z]|\bwho\s+was\s+before\b|\bwhat\s+came\s+before\b|\bdon'?t\s+(?:tell|include|mention)\b/i.test(
+        lower
+      ));
+  const bootstrapOrdered =
+    allowContinuation &&
+    !cursor &&
+    salesListLanguage &&
+    Boolean(interpretation?.anchorEntity || (interpretation?.exclusions.length ?? 0) > 0);
+  if (continuationAsked || bootstrapOrdered) {
+    const mode: "next" | "before_anchor" | "exclude" = interpretation?.anchorEntity || /\bbefore\b/.test(lower)
+      ? "before_anchor"
+      : interpretation?.exclusions.length || /\bdon'?t\s+(?:tell|include|mention)\b/.test(lower)
+        ? "exclude"
+        : "next";
+    return {
+      kind: "ordered_continuation",
+      mode,
+      cardinality: interpretation?.cardinality ?? parseCardinality(text),
+      anchor: interpretation?.anchorEntity ?? cursor?.anchor ?? null,
+      exclusions: Array.from(new Set([...(cursor?.exclusions ?? []), ...(interpretation?.exclusions ?? [])])),
+    };
+  }
 
   const pending = session?.pendingClarification ?? null;
   if (pending?.kind === "revenue_or_profit") {
@@ -448,7 +536,12 @@ export function parseBusinessTurn(
   const address = addressScope(text);
   const scopeMentioned = Boolean(lineage || buildings || address);
   const there = /\bthere\b/.test(lower) && Boolean(session?.query.filters?.includeBuildings?.length);
-  const names = extractCustomerNames(text);
+  const names = extractCustomerNames(text).filter(name => {
+    if (!options.resolvedContactNames?.has(name.toLowerCase())) return true;
+    // A known commercial contact is not a paid-order customer unless the operator asked
+    // about spend/orders for that person.
+    return /\b(spent|spend|order|orders|ordered|paid|revenue|how much|how many|history)\b/.test(lower);
+  });
   const aspect = customerAspect(lower);
   const pronoun = PRONOUN.test(lower);
   const focusCustomers = focus.customers ?? [];
@@ -1031,6 +1124,9 @@ export async function answerClaireBusinessTurn(
     state: ClaireAnalyticsState;
     surface: ClaireSurface;
     context?: ClaireDriveContext | null;
+    interpretation?: ParseBusinessTurnOptions["interpretation"];
+    resolvedContactNames?: Set<string>;
+    continuePriorQuery?: boolean;
   },
   deps: Partial<ClaireBusinessTurnDeps> = {}
 ): Promise<ClaireBusinessTurn> {
@@ -1044,7 +1140,11 @@ export async function answerClaireBusinessTurn(
 
   let parsed: ParsedBusinessTurn;
   try {
-    parsed = parseBusinessTurn(input.utterance, session, now, timeZone);
+    parsed = parseBusinessTurn(input.utterance, session, now, timeZone, {
+      interpretation: input.interpretation,
+      resolvedContactNames: input.resolvedContactNames,
+      continuePriorQuery: input.continuePriorQuery,
+    });
   } catch (error) {
     console.warn("[Claire] business question parsing failed", error);
     return { handled: false };
@@ -1202,6 +1302,165 @@ export async function answerClaireBusinessTurn(
     return guardedTurn({ handled: true, speak: speech.text(), facts: speech.facts });
   }
 
+  if (parsed.kind === "ordered_continuation") {
+    reader = "query";
+    const seeded = session?.orderedQuery ?? {
+      query: { ...defaultBusinessQuery("latest_sales"), period: { kind: "all_time" as const }, limit: 15 },
+      ordering: "latest" as const,
+      requestedCardinality: parsed.cardinality ?? 5,
+      resolved: [],
+      presented: [],
+      delivered: [],
+      offset: 0,
+      anchor: parsed.anchor,
+      exclusions: parsed.exclusions,
+    };
+    const cursor = {
+      ...seeded,
+      resolved: seeded.resolved ?? seeded.delivered ?? [],
+      presented: seeded.presented ?? seeded.delivered ?? [],
+      delivered: seeded.presented ?? seeded.delivered ?? [],
+    };
+    const exclusions = Array.from(new Set([...cursor.exclusions, ...parsed.exclusions]));
+    const presentedKeys = new Set(cursor.presented.map(item => item.eventKey));
+    const remainingInWindow = cursor.resolved.filter(order => !presentedKeys.has(order.eventKey) && !exclusions.some(name => nameMatchesOrder(order, name)));
+    const take =
+      parsed.mode === "exclude"
+        ? Math.max(cursor.presented.length, parsed.cardinality ?? cursor.requestedCardinality)
+        : parsed.cardinality ?? (remainingInWindow.length > 0 ? remainingInWindow.length : 5);
+
+    const toMember = (order: { eventKey: string; customerName: string | null; occurredAt: string; cents: number }): OrderedQueryMember => ({
+      eventKey: order.eventKey,
+      customerName: order.customerName,
+      occurredAt: order.occurredAt,
+      cents: order.cents,
+    });
+
+    let pool: OrderBrief[] = [];
+    let continuedResult: BusinessQueryResult | null = null;
+
+    if (parsed.mode === "next" && remainingInWindow.length >= take && take > 0) {
+      pool = remainingInWindow.slice(0, take) as unknown as OrderBrief[];
+      // Reconstruct a result shaped like the prior window so speech stays on THAT query.
+      try {
+        const fetchLimit = Math.min(25, Math.max(cursor.requestedCardinality, cursor.resolved.length));
+        continuedResult = await run({ ...cursor.query, limit: Math.max(fetchLimit, cursor.resolved.length) });
+      } catch {
+        continuedResult = null;
+      }
+      if (!continuedResult || continuedResult.status !== "ok" || continuedResult.data.kind !== "orders") {
+        return guardedTurn({ handled: true, speak: unavailableSentence(cursor.query.metric), facts: [] });
+      }
+      const byKey = new Map(continuedResult.data.orders.map(order => [order.eventKey, order]));
+      pool = remainingInWindow
+        .map(member => byKey.get(member.eventKey))
+        .filter((order): order is OrderBrief => Boolean(order))
+        .slice(0, take);
+      if (!pool.length) {
+        // Fall through to a wider fetch below.
+      }
+    }
+
+    if (!pool.length) {
+      const fetchLimit = Math.min(25, Math.max(cursor.requestedCardinality, cursor.offset + take + exclusions.length + 8, cursor.resolved.length + take + 8));
+      let result: BusinessQueryResult;
+      try {
+        result = await run({ ...cursor.query, limit: fetchLimit });
+      } catch {
+        return guardedTurn({ handled: true, speak: unavailableSentence(cursor.query.metric), facts: [] });
+      }
+      if (result.status !== "ok" || result.data.kind !== "orders") {
+        return guardedTurn({ handled: true, speak: unavailableSentence(cursor.query.metric), facts: [] });
+      }
+      continuedResult = result;
+      const excluded = (order: { customerName: string | null }) => exclusions.some(name => nameMatchesOrder(order, name));
+      pool = result.data.orders.filter(order => !excluded(order));
+      if (parsed.mode === "before_anchor") {
+        const anchorName = parsed.anchor ?? cursor.anchor;
+        const anchor =
+          result.data.orders.find(order => (anchorName ? nameMatchesOrder(order, anchorName) : false)) ??
+          cursor.presented.find(order => (anchorName ? nameMatchesOrder(order, anchorName) : false)) ??
+          cursor.resolved.find(order => (anchorName ? nameMatchesOrder(order, anchorName) : false));
+        if (anchor) {
+          const at = Date.parse(anchor.occurredAt);
+          pool = pool.filter(order => Date.parse(order.occurredAt) < at);
+        }
+      } else if (parsed.mode !== "exclude") {
+        pool = pool.filter(order => !presentedKeys.has(order.eventKey));
+      } else {
+        pool = result.data.orders.filter(order => !excluded(order)).slice(0, cursor.requestedCardinality);
+      }
+      if (parsed.mode !== "exclude") pool = pool.slice(0, Math.max(1, take));
+    }
+
+    if (!pool.length) {
+      input.state.analytics = {
+        ...(session as ClaireAnalyticsSession),
+        touchedAt: nowMs,
+        orderedQuery: { ...cursor, exclusions, anchor: parsed.anchor ?? cursor.anchor },
+      };
+      return guardedTurn({
+        handled: true,
+        speak: parsed.mode === "before_anchor" ? "I don't have another paid order before that one." : "That's all I have in that list.",
+        facts: [],
+      });
+    }
+    const source = continuedResult!;
+    if (source.status !== "ok" || source.data.kind !== "orders") {
+      return guardedTurn({ handled: true, speak: unavailableSentence(cursor.query.metric), facts: [] });
+    }
+    const continued: Extract<BusinessQueryResult, { status: "ok" }> = {
+      ...source,
+      query: { ...cursor.query, limit: pool.length },
+      data: { ...source.data, orders: pool },
+    };
+    const spoken = (deps.speakResult ?? speakBusinessResult)(continued, {
+      surface: input.surface,
+      previous: cursor.query,
+      refinement: true,
+      utterance: input.utterance,
+      today,
+      disclosed: session?.disclosed ?? [],
+      timeZone,
+      hint: null,
+    });
+    const presentedNow = (spoken.presentedOrders ?? pool).map(toMember);
+    const nextPresented =
+      parsed.mode === "exclude"
+        ? presentedNow
+        : [...cursor.presented, ...presentedNow.filter(item => !presentedKeys.has(item.eventKey))];
+    input.state.analytics = {
+      ...(session as ClaireAnalyticsSession),
+      query: cursor.query,
+      pendingClarification: null,
+      touchedAt: nowMs,
+      disclosed: [...(session?.disclosed ?? []), ...spoken.disclosures].slice(-20),
+      focus: {
+        ...(session?.focus ?? {}),
+        order: pool[0] ?? null,
+        orderQuery: cursor.query,
+        orderIndex: nextPresented.length - 1,
+      },
+      orderedQuery: {
+        ...cursor,
+        exclusions,
+        anchor: parsed.anchor ?? cursor.anchor,
+        resolved: cursor.resolved.length ? cursor.resolved : source.data.orders.map(toMember),
+        presented: nextPresented,
+        delivered: nextPresented,
+        offset: Math.max(cursor.resolved.length, nextPresented.length),
+      },
+    };
+    return guardedTurn({
+      handled: true,
+      speak: spoken.text,
+      facts: spoken.facts,
+      result: continued,
+      presentedOrders: spoken.presentedOrders ?? pool,
+      resolvedOrders: source.data.kind === "orders" ? source.data.orders : pool,
+    });
+  }
+
   return finishQuery(parsed, false);
 
   function guardedTurn(turn: ClaireBusinessTurn): ClaireBusinessTurn {
@@ -1276,14 +1535,39 @@ export async function answerClaireBusinessTurn(
     );
     const focus: ClaireAnalyticsFocus = { ...(session?.focus ?? {}) };
     let pendingClarification: PendingAnalyticsClarification | null = null;
+    let orderedQuery: OrderedQueryCursor | null = session?.orderedQuery ?? null;
     if (result.status === "ok") {
       const data = result.data;
       if (data.kind === "orders") {
         focus.order = data.orders[0] ?? null;
         focus.orderQuery = turn.query;
         focus.orderIndex = 0;
+        const ordering = data.ordering;
+        const toMember = (order: { eventKey: string; customerName: string | null; occurredAt: string; cents: number }) => ({
+          eventKey: order.eventKey,
+          customerName: order.customerName,
+          occurredAt: order.occurredAt,
+          cents: order.cents,
+        });
+        const resolved = data.orders.map(toMember);
+        const presented = (spoken.presentedOrders ?? data.orders).map(toMember);
+        const newExclusions = input.interpretation?.exclusions ?? [];
+        orderedQuery = {
+          query: turn.query,
+          ordering,
+          requestedCardinality: Math.max(turn.query.limit, data.orders.length),
+          resolved,
+          presented,
+          delivered: presented,
+          offset: resolved.length,
+          anchor: null,
+          exclusions: input.continuePriorQuery
+            ? Array.from(new Set([...(session?.orderedQuery?.exclusions ?? []), ...newExclusions]))
+            : newExclusions,
+        };
       } else if (data.kind !== "freshness" && data.kind !== "composition") {
         focus.order = null;
+        orderedQuery = null;
       }
       if (data.kind === "customer_history") {
         const aspect = turn.hint?.kind === "customer_aspect" ? turn.hint.aspect : null;
@@ -1321,10 +1605,18 @@ export async function answerClaireBusinessTurn(
       disclosed: [...(session?.disclosed ?? []), ...spoken.disclosures].slice(-20),
       touchedAt: nowMs,
       focus,
+      orderedQuery,
     };
     const spokenText =
       coverage.kind === "provable" ? spoken.text : `${spoken.text} ${speakPartialCoverage(coverage)}`.trim();
-    return guardedTurn({ handled: true, speak: spokenText, facts: spoken.facts, result });
+    return guardedTurn({
+      handled: true,
+      speak: spokenText,
+      facts: spoken.facts,
+      result,
+      presentedOrders: spoken.presentedOrders,
+      resolvedOrders: result.status === "ok" && result.data.kind === "orders" ? result.data.orders : undefined,
+    });
   }
 }
 

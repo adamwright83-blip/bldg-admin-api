@@ -138,3 +138,16 @@ describe("B. call ending is a first-class intent", () => {
     expect(interpretTurn("I gotta go.", { extractedWorkItems: 1 }).mayProposeWork).toBe(false);
   });
 });
+
+describe("greeting remainder, not prefix, decides board breadth", () => {
+  it("a greeting alone may be a broad check-in", () => {
+    expect(interpretTurn("Good morning.").broadBriefingRequest).toBe(true);
+    expect(interpretTurn("Good morning — what should I know today?").broadBriefingRequest).toBe(true);
+  });
+
+  it("a greeting plus work is not broad", () => {
+    const turn = interpretTurn("Good morning, I need to call the dry cleaner and deliver towels today.");
+    expect(turn.broadBriefingRequest).toBe(false);
+    expect(turn.operatorWorkCommitment).toBe(true);
+  });
+});

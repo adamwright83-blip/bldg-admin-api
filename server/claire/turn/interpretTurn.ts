@@ -42,7 +42,11 @@ export type TurnIntentKind =
   | "correctness_challenge"
   | "provenance_question";
 
+export type CorrectionTarget = "pending_item" | "topic" | null;
+
 export type InterpretedTurn = {
+  /** Original utterance, after trim. Downstream may read it; it may not re-decide intent. */
+  rawText: string;
   intents: TurnIntentKind[];
   /** The operator is leaving. Resolved before any business/Day Line routing. */
   callControl: "end" | "continue";
@@ -83,6 +87,23 @@ export type InterpretedTurn = {
   provenanceQuestion: boolean;
   /** A named record the query is anchored to ("before Thomas"). */
   anchorEntity: string | null;
+  /** A greeting opened the turn. Breadth is decided from the remainder, not the prefix. */
+  greetingLead: boolean;
+  /** The utterance after a leading greeting is stripped. Empty when the turn was only a greeting. */
+  substantiveBody: string;
+  /** Continue a prior ordered query ("the other four", "the rest"). */
+  priorQueryReference: boolean;
+  /** A personal question about Claire-the-person, isolated from business truth. */
+  personalProbe: boolean;
+  /** A constructedness / story probe, isolated from business truth. */
+  narrativeProbe: boolean;
+  /**
+   * What a correction is aimed at. `pending_item` is an edit of something Claire is holding
+   * (time, person, keep-the-list). `topic` replaces the held interpretation. Pending state
+   * does not set this — the utterance does; routing uses pending only to decide whether an
+   * item-edit can land.
+   */
+  correctionTarget: CorrectionTarget;
 };
 
 // ── Call control ─────────────────────────────────────────────────────────────────────────────
@@ -170,6 +191,8 @@ const ABOUT_CLAIRE_CAPABILITY = new RegExp(
 const CORRECTION = new RegExp(
   [
     String.raw`\b(?:no|nope),?\s+i\s+(?:meant|said|didn'?t)\b`,
+    String.raw`\bwait,?\s+change\b`,
+    String.raw`\bkeep\s+the\s+list\b`,
     String.raw`\bi\s+said\b[^.!?]{0,60}\bi\s+did\s*n'?t\b`,
     String.raw`\bthat(?:'s| is)\s+(?:not|n'?t)\s+what\s+i\b`,
     String.raw`\bwell,?\s+of\s+course\b`,
@@ -210,7 +233,7 @@ const LIST_NOUN = /\b(?:sales|orders|customers|clients|payments|invoices|account
 
 /** "the other four", "what about the rest", "and the others" — refine the previous query. */
 const QUERY_REFINEMENT =
-  /\b(?:the\s+)?other\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b|\bthe\s+(?:rest|others)\b|\bwhat\s+about\s+the\s+(?:rest|others)\b|\bi\s+asked\s+(?:you\s+)?for\b/i;
+  /\b(?:the\s+)?other\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b|\bthe\s+(?:rest|others|remaining)\b|\bwhat\s+about\s+the\s+(?:rest|others)\b|\bok(?:ay)?,?\s+now\s+the\s+other\b|\bi\s+asked\s+(?:you\s+)?for\b/i;
 
 /** "before Thomas", "after the Louise order" — anchor the window on a named record. */
 const ANCHOR = /\b(?:before|prior\s+to|preceding|after|since)\s+([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)?)/;
@@ -265,13 +288,25 @@ function hasWorkClause(text: string): boolean {
     .some(sentence => {
       const clause = sentence.trim();
       if (!clause || /\?\s*$/.test(clause)) return false;
+      if (/^\s*(?:what|how|who|when|which|where|why)\b/i.test(clause)) return false;
       return WORK_VERB.test(clause);
     });
 }
 
 export function detectOperatorWorkCommitment(text: string): boolean {
-  if (FIRST_PERSON_COMMITMENT.test(text) && WORK_VERB.test(text)) return true;
-  return hasWorkClause(text);
+  const actionable = text
+    .split(/(?<=[.!?])\s+|\n+/)
+    .filter(clause => {
+      const trimmed = clause.trim();
+      if (!trimmed || /\?/.test(trimmed)) return false;
+      if (/^\s*(?:what|how|who|when|which|where|why)\b/i.test(trimmed)) return false;
+      if (/\bwhat happens if\b|\bwhat if\b/i.test(trimmed)) return false;
+      return true;
+    })
+    .join(" ");
+  if (!actionable) return false;
+  if (FIRST_PERSON_COMMITMENT.test(actionable) && WORK_VERB.test(actionable)) return true;
+  return hasWorkClause(actionable);
 }
 
 /** A bare acknowledgement closes a beat. It is not a question, a challenge, or work. */
@@ -307,14 +342,43 @@ export function extractEntities(text: string): { entities: string[]; temporal: s
 }
 
 /**
- * A BROAD briefing request has no scoped object. "What should I do?" is broad; "What should I do
- * about Dana?" is a scoped judgment question and must never reach the global proactive board,
- * which on 2026-09-20 answered a Dana question with GUMBALL status, Andrew Molina and Mission 6.
+ * A leading greeting is not itself a briefing request. "Good morning." may be a check-in;
+ * "Good morning, I need to call Dana" is work. Breadth is decided from the remainder.
  */
-const BROAD_BRIEFING =
-  /^(?:good\s+)?morning\b|^hey\s+claire\b|^what\s+do\s+i\s+need\s+to\s+know\b|^what(?:'s| is)\s+(?:the\s+)?most\s+important\b|^what\s+should\s+i\s+(?:do|know)\b|^what(?:'s| is)\s+(?:going\s+on|up)\b|^how(?:'s| is)\s+business\b/i;
+const GREETING_LEAD =
+  /^(?:(?:good\s+)?morning|hey(?:\s+claire)?|hi(?:\s+claire)?|hello(?:\s+claire)?)[,.\s!—–-]+/i;
+const GREETING_ONLY =
+  /^(?:(?:good\s+)?morning|hey(?:\s+claire)?|hi(?:\s+claire)?|hello(?:\s+claire)?)[.!?]*$/i;
+
+/**
+ * A BROAD briefing request has no scoped object and no leftover work. "What should I do?" is
+ * broad; "What should I do about Dana?" is a scoped judgment question and must never reach the
+ * global proactive board.
+ */
+const BROAD_OPENER =
+  /^(?:what\s+do\s+i\s+need\s+to\s+know\b|what(?:'s| is)\s+(?:the\s+)?most\s+important\b|what\s+should\s+i\s+(?:do|know)\b|what(?:'s| is)\s+(?:going\s+on|up)\b|how(?:'s| is)\s+business\b)/i;
 /** Any of these makes the request SCOPED rather than broad. */
 const SCOPED_OBJECT = /\b(?:about|with|regarding|concerning)\b/i;
+
+export function splitGreeting(text: string): { greetingLead: boolean; body: string } {
+  const trimmed = text.trim();
+  if (GREETING_ONLY.test(trimmed)) return { greetingLead: true, body: "" };
+  const lead = GREETING_LEAD.exec(trimmed);
+  if (!lead) return { greetingLead: false, body: trimmed };
+  return { greetingLead: true, body: trimmed.slice(lead[0].length).trim() };
+}
+
+/** Item-level edit of a held proposal/briefing ("No, I meant Wednesday"). */
+const ITEM_CORRECTION =
+  /\b(?:i\s+meant|change|move|switch|make(?:\s+it)?)\b[\s\S]{0,80}\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|before|after|noon)\b|\bwait,?\s+change\b|\bkeep\s+the\s+list\b/i;
+
+const PERSONAL_PROBE =
+  /\b(?:how old are you|tell me about yourself|what(?:'s| is) your (?:age|weekend|life|story)|do you have (?:a |any )?(?:weekend|family|boyfriend|girlfriend|partner)|are you (?:dating|seeing) )\b/i;
+const NARRATIVE_PROBE =
+  /\b(?:are you (?:real|an ai|a person|human|constructed)|what are you\??$)\b/i;
+
+const PRIOR_QUERY_REFERENCE =
+  /\b(?:the\s+)?other\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b|\bthe\s+(?:rest|others|remaining)\b|\bwhat\s+about\s+the\s+(?:rest|others)\b|\bok(?:ay)?,?\s+now\s+the\s+other\b|\bi\s+asked\s+(?:you\s+)?for\s+.+\b(?:rest|other|remaining)\b/i;
 
 /** Explicit correctness challenge — must outrank refinement wording and force a fresh reread. */
 const CORRECTNESS_CHALLENGE =
@@ -339,6 +403,9 @@ export type InterpretTurnOptions = {
 export function interpretTurn(utterance: string, options: InterpretTurnOptions = {}): InterpretedTurn {
   const text = utterance.trim();
   const intents: TurnIntentKind[] = [];
+  const { greetingLead, body } = splitGreeting(text);
+  const substantiveBody = body;
+  const interpretOn = body || text;
 
   const callControl = detectCallControl(text);
   if (callControl === "end") intents.push("call_control");
@@ -347,26 +414,38 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   const actionRefused = ACTION_REFUSAL.test(text);
   const correction = CORRECTION.test(text);
   const aboutClaireCapability = ABOUT_CLAIRE_CAPABILITY.test(text);
-  const hasExplicitActionRequest = ACTION_DIRECTIVE.test(text) && !actionRefused;
-  const operatorWorkCommitment = detectOperatorWorkCommitment(text) && !actionRefused;
+  const hasExplicitActionRequest = ACTION_DIRECTIVE.test(interpretOn) && !actionRefused;
+  const operatorWorkCommitment = detectOperatorWorkCommitment(interpretOn) && !actionRefused;
   const hasBusinessQuestion =
-    !acknowledgement && (QUESTION_MARK.test(text) || BUSINESS_QUESTION_LEAD.test(text.split(/\s+/).slice(0, 4).join(" ")));
+    !acknowledgement && (QUESTION_MARK.test(interpretOn) || BUSINESS_QUESTION_LEAD.test(interpretOn.split(/\s+/).slice(0, 4).join(" ")));
 
   const cardinality = parseCardinality(text);
   // A correctness challenge outranks refinement wording: "I asked you for revenue — are you sure
   // those numbers are correct?" contains both, and must reread rather than re-list.
   const queryRefinement = QUERY_REFINEMENT.test(text) && !acknowledgement && !CORRECTNESS_CHALLENGE.test(text);
+  const priorQueryReference = PRIOR_QUERY_REFERENCE.test(text) && !CORRECTNESS_CHALLENGE.test(text);
   const listRequest = Boolean(cardinality && cardinality > 1) || (LIST_NOUN.test(text) && !acknowledgement);
   const anchorMatch = ANCHOR.exec(text);
   const exclusionMatch = EXCLUSION.exec(text);
   const excluded = properNoun(exclusionMatch?.[1]);
   const exclusions = excluded ? [excluded] : [];
   const anchorEntity = properNoun(anchorMatch?.[1]);
-  const { entities, temporal } = extractEntities(text);
-  // Broad only when nothing scopes it: no scoping preposition (ASR may clip it to "about?") and no
-  // named entity. A named subject always makes the question scoped.
+  const { entities, temporal } = extractEntities(interpretOn);
+  const personalProbe = PERSONAL_PROBE.test(text);
+  const narrativeProbe = NARRATIVE_PROBE.test(text);
+  const correctionTarget: CorrectionTarget = !correction ? null : ITEM_CORRECTION.test(text) ? "pending_item" : "topic";
+  /**
+   * Broad briefing is a property of the remainder, not a prefix. A greeting plus work, a named
+   * subject, or a scoped object is never the global board.
+   */
   const broadBriefingRequest =
-    BROAD_BRIEFING.test(text.trim()) && !SCOPED_OBJECT.test(text) && entities.length === 0;
+    !operatorWorkCommitment &&
+    !hasExplicitActionRequest &&
+    !actionRefused &&
+    !correction &&
+    entities.length === 0 &&
+    !SCOPED_OBJECT.test(interpretOn) &&
+    (substantiveBody === "" ? GREETING_ONLY.test(text) || greetingLead : BROAD_OPENER.test(substantiveBody));
   const correctnessChallenge = CORRECTNESS_CHALLENGE.test(text) && !acknowledgement;
   const provenanceQuestion = PROVENANCE_QUESTION.test(text) && !correctnessChallenge;
 
@@ -380,6 +459,8 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   if (correctnessChallenge) intents.push("correctness_challenge");
   if (provenanceQuestion) intents.push("provenance_question");
   if (hasBusinessQuestion) intents.push("business_question");
+  if (personalProbe) intents.push("personal_probe");
+  if (narrativeProbe) intents.push("narrative_probe");
   if (aboutClaireCapability && !hasExplicitActionRequest) intents.push("context_statement");
 
   /**
@@ -400,6 +481,7 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
     (hasExplicitActionRequest || operatorWorkCommitment);
 
   return {
+    rawText: text,
     intents,
     callControl,
     mayProposeWork,
@@ -420,5 +502,11 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
     broadBriefingRequest,
     correctnessChallenge,
     provenanceQuestion,
+    greetingLead,
+    substantiveBody,
+    priorQueryReference,
+    personalProbe,
+    narrativeProbe,
+    correctionTarget,
   };
 }

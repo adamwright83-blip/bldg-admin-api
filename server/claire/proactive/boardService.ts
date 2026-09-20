@@ -1,13 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { index, json, mysqlEnum, mysqlTable, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
-import { commercialFollowUps, dayDirectorCommitments } from "../../../drizzle/schema";
+import { commercialFollowUps, commercialMissions, commercialOpportunities, commercialAccounts, dayDirectorCommitments } from "../../../drizzle/schema";
 import { addDaysYmd, businessToday } from "../../analytics/businessPeriods";
 import { groupCustomers } from "../../analytics/businessMetrics";
 import { loadDataFreshness } from "../../analytics/dataFreshness";
 import { loadPaidOrderLedger } from "../../analytics/paidOrderLedger";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../../dashboardZoned";
 import { getDb } from "../../db";
+import {
+  isOperatorVisibleDerivedWork,
+  isOperatorVisibleFollowUp,
+  type AccountProvenance,
+  type DerivedWorkMetadata,
+} from "../knowledge/sourceVisibility";
 import {
   DEFAULT_DOCTRINE,
   applyDoctrineUtterance,
@@ -133,9 +139,18 @@ async function placeOnDayLine(input: {
   title: string;
   idempotencyKey: string;
   sourceText: string;
+  sourceKind: "sales_follow_up" | "dormant_recovery";
+  accountProvenance?: AccountProvenance | null;
 }): Promise<void> {
   const db = await getDb();
   if (!db) return;
+  const metadataJson: DerivedWorkMetadata & { detailState: string; missingDetails: unknown[] } = {
+    claireProactive: true,
+    detailState: "COMPLETE",
+    missingDetails: [],
+    sourceKind: input.sourceKind,
+    accountProvenance: input.accountProvenance ?? null,
+  };
   const row = {
     id: randomUUID(),
     tenantId: input.tenantId,
@@ -147,9 +162,27 @@ async function placeOnDayLine(input: {
     quantity: null,
     provenance: "manual" as const,
     sourceText: input.sourceText,
-    metadataJson: { claireProactive: true, detailState: "COMPLETE", missingDetails: [] },
+    metadataJson,
   };
-  await db.insert(dayDirectorCommitments).values(row).onDuplicateKeyUpdate({ set: { title: row.title } });
+  await db.insert(dayDirectorCommitments).values(row).onDuplicateKeyUpdate({ set: { title: row.title, metadataJson: row.metadataJson } });
+}
+
+export function operatorVisibleObligations(
+  items: ProactiveObligation[],
+  operator: { tenantId: string; operatorUserId: string }
+): ProactiveObligation[] {
+  return items.filter(item => {
+    if (item.kind === "sales_follow_up") {
+      return (
+        isOperatorVisibleFollowUp({ account: item.accountProvenance ?? null }) &&
+        isOperatorVisibleDerivedWork(
+          { claireProactive: true, sourceKind: "sales_follow_up", accountProvenance: item.accountProvenance ?? null },
+          operator
+        )
+      );
+    }
+    return true;
+  });
 }
 
 export async function ensureAdamBoard(input: {
@@ -257,6 +290,7 @@ export async function ensureAdamBoard(input: {
       title: obligation.title,
       idempotencyKey: `claire-proactive:${obligation.id}`,
       sourceText: `${obligation.why} Rook draft is prepared; sending still needs you.`,
+      sourceKind: "dormant_recovery",
     });
     created += 1;
   }
@@ -264,14 +298,34 @@ export async function ensureAdamBoard(input: {
   if (!skipSales) {
     try {
       const due = await db
-        .select()
+        .select({
+          follow: commercialFollowUps,
+          accountName: commercialAccounts.name,
+          accountType: commercialAccounts.accountType,
+          providerName: commercialAccounts.providerName,
+          identityKey: commercialAccounts.identityKey,
+        })
         .from(commercialFollowUps)
+        .innerJoin(commercialMissions, eq(commercialMissions.id, commercialFollowUps.missionId))
+        .innerJoin(commercialOpportunities, eq(commercialOpportunities.id, commercialMissions.opportunityId))
+        .innerJoin(commercialAccounts, eq(commercialAccounts.id, commercialOpportunities.accountId))
         .where(and(eq(commercialFollowUps.tenantId, input.tenantId), eq(commercialFollowUps.status, "open")));
       const already = await loadObligations(input.tenantId, input.operatorUserId);
-      for (const follow of due.slice(0, 5)) {
+      const visibleDue = due.filter(row =>
+        isOperatorVisibleFollowUp({
+          account: {
+            name: row.accountName,
+            accountType: row.accountType,
+            providerName: row.providerName,
+            identityKey: row.identityKey,
+          },
+        })
+      );
+      for (const row of visibleDue.slice(0, 5)) {
+        const follow = row.follow;
         const dueDate = follow.dueAt.toISOString().slice(0, 10);
         if (dueDate > addDaysYmd(today, 7)) continue;
-        const name = `Mission ${follow.missionId}`;
+        const name = row.accountName;
         const obligation = salesFollowUpObligation({
           accountKey: String(follow.missionId),
           accountName: name,
@@ -279,6 +333,12 @@ export async function ensureAdamBoard(input: {
           nextStep: follow.note,
           lastOutcome: null,
           history: [follow.note],
+          accountProvenance: {
+            name: row.accountName,
+            accountType: row.accountType,
+            providerName: row.providerName,
+            identityKey: row.identityKey,
+          },
         });
         if (already.some(item => item.id === obligation.id)) continue;
         await upsertObligation(input.tenantId, input.operatorUserId, obligation);
@@ -289,6 +349,8 @@ export async function ensureAdamBoard(input: {
           title: obligation.title,
           idempotencyKey: `claire-proactive:${obligation.id}`,
           sourceText: obligation.why,
+          sourceKind: "sales_follow_up",
+          accountProvenance: obligation.accountProvenance,
         });
         created += 1;
       }
@@ -297,7 +359,8 @@ export async function ensureAdamBoard(input: {
     }
   }
 
-  const obligations = await loadObligations(input.tenantId, input.operatorUserId);
+  const operator = { tenantId: input.tenantId, operatorUserId: input.operatorUserId };
+  const obligations = operatorVisibleObligations(await loadObligations(input.tenantId, input.operatorUserId), operator);
   const warnings: string[] = [];
   try {
     const freshness = await loadDataFreshness({ tenantId: input.tenantId, timeZone });

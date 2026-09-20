@@ -2,9 +2,11 @@ import { parseBusinessTurn, type ClaireAnalyticsSession } from "./businessConver
 import { normalizeUtterance } from "./business/businessLanguage";
 import type { EncyclopediaAnswer } from "./knowledge/encyclopediaAgent";
 import { accountAspect, isAccountQuestion, matchAccounts, type AccountRef } from "./knowledge/accountKnowledge";
+import { resolveEntitiesToAccounts } from "./knowledge/contactAccountResolution";
 import { operationsQuestion } from "./knowledge/operationsKnowledge";
 import { isUnpaidQuestion } from "./knowledge/openOrdersKnowledge";
 import type { ClaireAnswerPath } from "./answerPathTelemetry";
+import { extractEntities, interpretTurn } from "./turn/interpretTurn";
 
 /**
  * Claire Intelligence Repair Part 2, Slice C+D corrective pass.
@@ -148,7 +150,9 @@ export function collectClaireLocalFactMatches(
   }
   if (!operations && !unpaid && !memory) {
     try {
-      const parsed = parseBusinessTurn(utterance, input.session ?? null, input.now, input.timeZone);
+      const parsed = parseBusinessTurn(utterance, input.session ?? null, input.now, input.timeZone, {
+        interpretation: interpretTurn(utterance),
+      });
       if (parsed.kind !== "not_analytics") {
         matches.push({
           path: "business_reader",
@@ -165,6 +169,18 @@ export function collectClaireLocalFactMatches(
       path: "account_history",
       source: "account_history",
       mayTerminate: accountCanFinish,
+    });
+  }
+  const scopedContactJudgment =
+    !operations &&
+    !unpaid &&
+    /\b(?:what should i|how should i|what about)\b/i.test(lower) &&
+    resolveEntitiesToAccounts(extractEntities(utterance).entities, input.accounts).some(item => item.kind === "contact");
+  if (scopedContactJudgment) {
+    matches.push({
+      path: "account_history",
+      source: "contact_account_judgment",
+      mayTerminate: true,
     });
   }
   return matches;
@@ -240,7 +256,8 @@ export function decideClaireAnswerRoute(input: {
       item.source === "day_work" ||
       item.source === "unpaid_orders" ||
       item.source === "call_memory" ||
-      item.source === "memory_quote"
+      item.source === "memory_quote" ||
+      item.source === "contact_account_judgment"
     ) {
       return true;
     }
@@ -261,7 +278,7 @@ export function decideClaireAnswerRoute(input: {
           ? "day_work"
           : source === "unpaid_orders"
             ? "unpaid_orders"
-            : source === "account_history"
+            : source === "account_history" || source === "contact_account_judgment"
               ? "account_history"
               : "business_reader";
     return { outcome: "deterministic_final", path, evidence: localEvidence };
