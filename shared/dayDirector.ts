@@ -10,6 +10,8 @@ export type DayDirectorCommitment = {
   detailState?: "COMPLETE" | "NEEDS_DETAILS";
   missingDetails?: string[];
   detailNote?: string | null;
+  /** Original operator/system text retained for provenance-sensitive readers. */
+  sourceText?: string | null;
 };
 
 export type DayDirectorProposal = {
