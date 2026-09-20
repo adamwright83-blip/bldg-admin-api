@@ -20,6 +20,8 @@ vi.mock("../_core/env", () => ({
     xaiApiKey: "",
     claireXaiTtsEnabled: false,
     claireXaiTtsVoiceId: "eve",
+    // The single configured phone belongs to this operator; nobody else may dial it.
+    ownerOpenId: "operator-1",
   },
 }));
 // The call path now verifies the operator is a real, persisted user of the same tenant before a

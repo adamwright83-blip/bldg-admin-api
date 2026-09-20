@@ -227,7 +227,10 @@ describe("Slice 3: assertion-guard production wiring", () => {
             previous: null,
           },
           completeness: { coverage: "complete", notes: [] },
+          // Real coverage shape: this test is about the assertion guard, not source coverage.
+          coverage: { completeness: "complete", loadedSources: ["laundry_butler", "cleancloud"], failedSources: [] },
         } as never),
+        loadBindings: async () => ({ laundry_butler: "bound" as const, cleancloud: "bound" as const }),
         speakResult: () => ({
           text: VERIFIED_SCHEDULED,
           facts: [],

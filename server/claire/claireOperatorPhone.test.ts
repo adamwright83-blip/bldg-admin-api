@@ -7,7 +7,7 @@ vi.hoisted(() => {
   process.env.CLAIRE_OPERATOR_PHONE = "+13105550001";
 });
 
-vi.mock("../_core/env", () => ({ ENV: { adminBaseUrl: "https://api.example.test" } }));
+vi.mock("../_core/env", () => ({ ENV: { adminBaseUrl: "https://api.example.test", ownerOpenId: "adam-admin" } }));
 vi.mock("twilio", async importOriginal => {
   const actual = (await importOriginal()) as { default?: Record<string, unknown> } & Record<string, unknown>;
   const real = (actual.default ?? actual) as Record<string, unknown>;
@@ -22,8 +22,14 @@ afterEach(() => {
 });
 
 describe("Claire dials the authenticated operator's own phone", () => {
-  it("uses the single configured operator phone when no per-operator map exists", () => {
+  it("uses the single configured operator phone for its owner", () => {
     expect(operatorPhoneFor("adam-admin")).toBe("+13105550001");
+  });
+
+  it("never dials the single configured phone for a different real operator", () => {
+    // driver-primary is a genuine persisted user; the number still is not theirs.
+    expect(() => operatorPhoneFor("driver-primary")).toThrow(/belongs to "adam-admin"/);
+    expect(() => operatorPhoneFor("slice0-adam")).toThrow(/belongs to "adam-admin"/);
   });
 
   it("with a per-operator map, never dials another operator's number", () => {

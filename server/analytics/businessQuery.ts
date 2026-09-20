@@ -245,6 +245,27 @@ export function businessResultIsEmpty(result: BusinessQueryResult): boolean {
   }
 }
 
+/**
+ * Is this result an aggregate drawn from the paid-order ledger? Those are the answers whose
+ * truthfulness depends on having read every source the question needs. Questions ABOUT source
+ * health (freshness, coverage) are excluded, or Claire could never explain why she is blind.
+ */
+export function businessResultUsesLedger(result: BusinessQueryResult): boolean {
+  if (result.status !== "ok") return false;
+  switch (result.data.kind) {
+    case "totals":
+    case "orders":
+    case "customers":
+    case "top_customers":
+    case "customer_history":
+    case "customer_share":
+    case "period_ranking":
+      return true;
+    default:
+      return false;
+  }
+}
+
 export type BusinessQueryDeps = {
   loadLedger: typeof loadPaidOrderLedger;
   loadOpenOrders: (tenantId: string) => Promise<OpenOrderStats>;

@@ -2,10 +2,12 @@ import { z } from "zod";
 import { invokeLLM } from "../_core/llm";
 import { claireModelRequest } from "./claireModel";
 import {
+  coverageVerdict,
   loadLedgerSourceBindings,
   requiredSourcesFor,
+  speakPartialCoverage,
   speakUnprovableZero,
-  zeroVerdict,
+  type CoverageVerdict,
   type LedgerSourceBindings,
 } from "../analytics/sourceBindings";
 import type { ClaireDriveContext } from "./contextAssembler";
@@ -30,6 +32,7 @@ import {
 import {
   BUSINESS_METRICS,
   businessResultIsEmpty,
+  businessResultUsesLedger,
   defaultBusinessQuery,
   runBusinessQuery,
   type BusinessMetric,
@@ -1200,27 +1203,28 @@ export async function answerClaireBusinessTurn(
     }
 
     /**
-     * ZERO REQUIRES POSITIVE PROOF.
+     * WHOLE-BUSINESS ANSWERS REQUIRE PROVEN COVERAGE.
      *
      * `coverage.completeness` only reports whether the queries threw, so an untouched business
      * with no connected sources produced a confident "$0.00 across 0 orders" on a live call.
-     * Before any empty ledger result is spoken as a number, the sources this question actually
-     * needs must be proven bound and read. Anything else is a gap in what Claire can see, and
-     * she says so instead.
+     * The same error hides inside NON-zero answers: reporting "$500" as the whole business while
+     * CleanCloud is unread is just less visually alarming. So every ledger aggregate is checked,
+     * not only the empty ones — an empty one cannot be spoken as a zero at all, and a real one
+     * is spoken with its scope stated.
      */
-    if (businessResultIsEmpty(result)) {
-      const required = requiredSourcesFor(turn.query.filters?.sources);
+    let coverage: CoverageVerdict = { kind: "provable" };
+    if (businessResultUsesLedger(result)) {
       const bindings = await (deps.loadBindings ?? loadLedgerSourceBindings)(input.tenantId).catch(
         () => ({ laundry_butler: "unknown", cleancloud: "unknown" }) as LedgerSourceBindings
       );
-      const verdict = zeroVerdict({
-        required,
+      coverage = coverageVerdict({
+        required: requiredSourcesFor(turn.query.filters?.sources),
         bindings,
         loadedSources: result.status === "ok" ? result.coverage?.loadedSources ?? [] : [],
         failedSources: result.status === "ok" ? result.coverage?.failedSources ?? [] : [],
       });
-      if (verdict.kind !== "provable") {
-        return guardedTurn({ handled: true, speak: speakUnprovableZero(verdict), facts: [] });
+      if (coverage.kind !== "provable" && businessResultIsEmpty(result)) {
+        return guardedTurn({ handled: true, speak: speakUnprovableZero(coverage), facts: [] });
       }
     }
 
@@ -1294,7 +1298,9 @@ export async function answerClaireBusinessTurn(
       touchedAt: nowMs,
       focus,
     };
-    return guardedTurn({ handled: true, speak: spoken.text, facts: spoken.facts, result });
+    const spokenText =
+      coverage.kind === "provable" ? spoken.text : `${spoken.text} ${speakPartialCoverage(coverage)}`.trim();
+    return guardedTurn({ handled: true, speak: spokenText, facts: spoken.facts, result });
   }
 }
 

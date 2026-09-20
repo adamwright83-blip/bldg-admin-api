@@ -181,6 +181,23 @@ export function operatorPhoneFor(actorId: string): string {
     if (!phone) throw new Error("No Claire phone number is configured for this operator");
     return assertPhone(phone);
   }
+  /**
+   * Single-number configuration (`CLAIRE_OPERATOR_PHONE`) is the OWNER's phone, not a general
+   * destination. Without this binding the number is returned for any actorId at all, so any
+   * other persisted user — `driver-primary`, a teammate, a synthetic identity — would ring it.
+   * Multi-operator deployments must use `CLAIRE_OPERATOR_PHONES`.
+   */
+  const owner = ENV.ownerOpenId?.trim();
+  if (!owner) {
+    throw new Error(
+      "CLAIRE_OPERATOR_PHONE is configured without OWNER_OPEN_ID, so Claire cannot prove whose phone it is. Set OWNER_OPEN_ID, or configure CLAIRE_OPERATOR_PHONES."
+    );
+  }
+  if (actorId !== owner) {
+    throw new Error(
+      `Claire will not dial the configured operator phone for "${actorId}": that number belongs to "${owner}". Configure CLAIRE_OPERATOR_PHONES to call anyone else.`
+    );
+  }
   return assertPhone(operatorNumber);
 }
 

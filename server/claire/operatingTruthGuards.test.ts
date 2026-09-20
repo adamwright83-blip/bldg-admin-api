@@ -4,7 +4,7 @@ import { answerClairePreDriveFollowUp } from "./preDriveConversation";
 import { loadPaidOrderLedger } from "../analytics/paidOrderLedger";
 import { runBusinessQuery } from "../analytics/businessQuery";
 import { emptyLoaders, fixtureLoaders } from "../analytics/businessLedgerFixture";
-import { requiredSourcesFor, zeroVerdict, type LedgerSourceBindings } from "../analytics/sourceBindings";
+import { requiredSourcesFor, coverageVerdict, type LedgerSourceBindings } from "../analytics/sourceBindings";
 
 /**
  * The two invariants that broke the 2026-09-20 production call:
@@ -57,10 +57,18 @@ describe("zero requires positive proof", () => {
     expect(speak).toMatch(ZERO_CLAIM);
   });
 
-  it("a non-empty result is unaffected by the gate", async () => {
-    const turn = await ask("What was revenue this year?", unbound, fixtureLoaders());
+  it("A REAL BUT PARTIAL TOTAL cannot pass as the whole business", async () => {
+    // The $0 bug's quieter twin: a true number from one source, reported as if it were everything.
+    const turn = await ask("What was revenue this year?", { laundry_butler: "bound", cleancloud: "unbound" }, fixtureLoaders());
     const speak = turn.handled ? turn.speak : "";
-    expect(speak).not.toMatch(/aren't connected/i);
+    expect(speak).toMatch(/\$/); // the verified figure is still spoken
+    expect(speak).toMatch(/partial|not the whole business/i); // but its scope is stated
+  });
+
+  it("a fully covered non-empty total carries no caveat", async () => {
+    const turn = await ask("What was revenue this year?", bound, fixtureLoaders());
+    const speak = turn.handled ? turn.speak : "";
+    expect(speak).not.toMatch(/partial|not the whole business/i);
   });
 
   it("bindings that cannot be established do not license a zero either", async () => {
@@ -87,13 +95,13 @@ describe("coverage is question-relative", () => {
   it("an unbound source only blocks a zero when the question actually needs it", () => {
     const partiallyBound: LedgerSourceBindings = { laundry_butler: "bound", cleancloud: "unbound" };
     const loaded = ["laundry_butler", "cleancloud"] as const;
-    expect(zeroVerdict({ required: ["laundry_butler"], bindings: partiallyBound, loadedSources: loaded, failedSources: [] })).toEqual({ kind: "provable" });
-    expect(zeroVerdict({ required: requiredSourcesFor(null), bindings: partiallyBound, loadedSources: loaded, failedSources: [] })).toMatchObject({ kind: "unbound" });
+    expect(coverageVerdict({ required: ["laundry_butler"], bindings: partiallyBound, loadedSources: loaded, failedSources: [] })).toEqual({ kind: "provable" });
+    expect(coverageVerdict({ required: requiredSourcesFor(null), bindings: partiallyBound, loadedSources: loaded, failedSources: [] })).toMatchObject({ kind: "unbound" });
   });
 
   it("a source that failed to load blocks a zero even when it is bound", () => {
     expect(
-      zeroVerdict({ required: requiredSourcesFor(null), bindings: bound, loadedSources: ["laundry_butler"], failedSources: ["cleancloud"] })
+      coverageVerdict({ required: requiredSourcesFor(null), bindings: bound, loadedSources: ["laundry_butler"], failedSources: ["cleancloud"] })
     ).toMatchObject({ kind: "unreadable", sources: ["cleancloud"] });
   });
 });
