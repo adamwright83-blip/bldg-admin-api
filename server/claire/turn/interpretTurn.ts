@@ -140,6 +140,8 @@ const ACTION_REFUSAL = new RegExp(
     String.raw`\bdid\s*n'?t\s+ask\s+you\s+to\b`,
     // "don't put anything on the Day Line"
     String.raw`\b(?:don'?t|do\s+not)\b[^.!?]{0,30}\banything\b`,
+    // "actually don't do that" / "don't save it" — refusal of the currently pending action.
+    String.raw`\b(?:don'?t|do\s+not)\s+(?:do|add|put|change|save|schedule|track|keep)\s+(?:that|it|anything)\b`,
   ].join("|"),
   "i"
 );
