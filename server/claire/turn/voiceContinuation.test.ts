@@ -100,6 +100,12 @@ describe("latest production-call ASR fragments", () => {
   });
 });
 
+describe("call-control turns are complete even when they carry business context", () => {
+  it("does not hold a mixed status update plus departure for another ASR fragment", () => {
+    expect(shouldHoldForContinuation("Dana still hasn't replied, but I gotta go.")).toBe(false);
+  });
+});
+
 describe("normal short answers get no added dead air", () => {
   it.each(["Yes.", "No thanks.", "That's fine.", "What should I lead with at The Louise?", "Do you have plans this weekend?"])(
     "%s is answered immediately", async utterance => {
