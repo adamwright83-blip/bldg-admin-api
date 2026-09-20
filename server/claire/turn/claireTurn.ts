@@ -540,6 +540,48 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const interpreted = interpretTurn(utterance);
   trace.turnKind ??= null;
 
+  /**
+   * CURRENT TURN OUTRANKS PENDING STATE.
+   *
+   * A pending proposal is context, never an interpreter. A direct refusal clears it. A new
+   * business question/judgment/correction/refinement supersedes it instead of being forced through
+   * yesterday's yes/no loop.
+   */
+  const hadPendingAction = Boolean(
+    state.pendingBriefing ||
+      state.pendingProposal ||
+      state.pendingAccountFollowUp ||
+      state.pendingUpdate ||
+      state.pendingFieldCapture ||
+      state.pendingEngineeringOffer ||
+      state.pendingDayLineChoice ||
+      state.clarifyingUtterance
+  );
+  const clearPendingActions = () => {
+    state.pendingBriefing = null;
+    state.pendingProposal = null;
+    state.pendingAccountFollowUp = null;
+    state.pendingUpdate = null;
+    state.pendingFieldCapture = null;
+    state.pendingEngineeringOffer = null;
+    state.pendingDayLineChoice = null;
+    state.clarifyingUtterance = null;
+  };
+  if (interpreted.actionRefused && hadPendingAction) {
+    clearPendingActions();
+    mark("briefing");
+    return finish({ speak: "Okay. I won't add or change that.", kind: "briefing_declined" });
+  }
+  const currentTurnChangesTopic =
+    interpreted.hasBusinessQuestion ||
+    interpreted.businessJudgment ||
+    interpreted.queryRefinement ||
+    interpreted.correctnessChallenge ||
+    interpreted.correction;
+  if (hadPendingAction && currentTurnChangesTopic && replyDecision(utterance).decision === "other") {
+    clearPendingActions();
+  }
+
   // Acknowledgements close a beat. They are not questions, challenges, or work — and must never
   // reach prior-claim adjudication, which answered "I'm good." with "I can't verify that properly
   // right now." on the live call.
@@ -556,11 +598,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     return finish({ speak: doctrineSpeak, kind: "answered" });
   }
 
-  const shortCheckIn = utterance.trim().split(/\s+/).filter(Boolean).length <= 8;
   if (
     !state.proactiveMorning &&
-    shortCheckIn &&
-    /^(?:good )?morning\b|^hey claire\b|^what should i (?:do|know)\b|^what(?:'s| is) the most important\b|^what do i need to know\b/i.test(utterance)
+    interpreted.broadOperationalBriefing
   ) {
     state.proactiveMorning = true;
     if (deps.watchBoard) {
@@ -593,7 +633,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // A refinement of the previous QUERY ("I asked you for the last five... what were the other
   // four?") is not a challenge to its TRUTH. Prior-claim used to swallow both, plus bare
   // acknowledgements — three of the worst turns in the 2026-09-20 call.
-  if (resolution.kind !== "none" && !interpreted.acknowledgement && !interpreted.queryRefinement) {
+  if (
+    resolution.kind !== "none" &&
+    !interpreted.acknowledgement &&
+    (!interpreted.queryRefinement || interpreted.correctnessChallenge)
+  ) {
     // Deterministic referent (name / number / immediately preceding): the classifier only labels the act.
     const explicit = resolution.kind === "ambiguous" || resolution.via === "explicit_reference";
     if (isChallengeCandidate(utterance, explicit)) {
@@ -626,7 +670,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         if (targets.some(receipt => !isKnownJudgment(receipt))) uncertainChallenge = resolution;
       }
     }
-  } else if ((state.claimReceipts?.length ?? 0) > 0 && utterance.trim().split(/\s+/).length <= SEMANTIC_REFERENT_MAX_WORDS) {
+  } else if (
+    (state.claimReceipts?.length ?? 0) > 0 &&
+    !interpreted.acknowledgement &&
+    !interpreted.queryRefinement &&
+    utterance.trim().split(/\s+/).length <= SEMANTIC_REFERENT_MAX_WORDS
+  ) {
     // No name/number/adjacent match. An older claim may still be referenced in other words ("that sale thing you
     // told me earlier…"). Resolve it semantically, IN PARALLEL with normal routing so deterministic answers pay
     // no wait: a deterministic route only honours the result if it has already landed; any model-generated reply
@@ -805,7 +854,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         ? state.focusAccount ?? null
         : null;
   const followUpDay = account ? followUpDayIntent(utterance, today) : null;
-  if (account && followUpDay) {
+  if (account && followUpDay && interpreted.mayProposeWork) {
     try {
       const historyForAccount = await deps.accountHistory({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, account });
       const pending = proposeAccountFollowUp({ history: historyForAccount, utterance, dueDate: followUpDay.ymd, conversationKey: input.conversationKey });
@@ -978,12 +1027,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // ── 6. Questions ──────────────────────────────────────────────────────────
   const answer = await answerQuestion(utterance);
   if (answer) {
-    const reminder = state.pendingBriefing
-      ? " I'm still holding your list; say yes when you want it on the Day Line."
-      : state.pendingProposal
-        ? ` I'm still holding "${state.pendingProposal.title}"; say yes to add it.`
-        : "";
-    return finish({ speak: `${answer}${reminder}`, kind: "answered" });
+    return finish({ speak: answer, kind: "answered" });
   }
 
   if (!commitmentTried && !isCombineRequest(lower) && !parsed.questions.length && !singleFlow && parsed.items.length === 0 && !looksLikeQuestion(utterance)) {
@@ -1062,7 +1106,14 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     if (!skipGreedyBusiness) {
       try {
         const business = await answerClaireBusinessTurn(
-          { tenantId: input.tenantId, utterance: question, state, surface: input.surface, context: input.context },
+          {
+            tenantId: input.tenantId,
+            utterance: question,
+            state,
+            surface: input.surface,
+            context: input.context,
+            interpretation: question === utterance ? interpreted : interpretTurn(question),
+          },
           { now: deps.now, timeZone: deps.timeZone, ...deps.business }
         );
         if (business.handled) evidence.push({ source: `business_reader:${business.reader ?? "query"}`, text: business.speak, businessResult: business.result, reader: business.reader ?? "query", factual: business.facts.length > 0 });
