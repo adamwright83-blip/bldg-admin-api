@@ -293,6 +293,9 @@ export function shouldHoldForContinuation(
   const text = utterance.trim();
   const words = wordCount(text);
   if (words < 2) return false;
+  // Leave-taking is semantically complete even when it carries a status update. Never hold a caller
+  // who has just said they need to leave.
+  if (detectCallControl(text) === "end") return false;
   if (looksUnfinished(text)) return true;
   if (words > CONTINUATION_MAX_WORDS) return false;
   if (/[?]\s*$/.test(text)) return false;
