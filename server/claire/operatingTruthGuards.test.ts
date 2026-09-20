@@ -5,6 +5,7 @@ import { loadPaidOrderLedger } from "../analytics/paidOrderLedger";
 import { runBusinessQuery } from "../analytics/businessQuery";
 import { emptyLoaders, fixtureLoaders } from "../analytics/businessLedgerFixture";
 import {
+  coverageRangesFromReceiptRows,
   coverageVerdict,
   deriveCleanCloudEvidence,
   expectedCleanCloudCoverageThrough,
@@ -229,6 +230,38 @@ describe("a real phone is only dialed for a real operator of that tenant", () =>
 });
 
 // ── Source health + exact range coverage ──────────────────────────────────────────────────────
+describe("browser receipt range extraction", () => {
+  it("uses persisted receipt from/to/completedAt and ignores cancelled receipts", () => {
+    const ranges = coverageRangesFromReceiptRows([
+      {
+        receiptJson: {
+          status: "imported",
+          from: "2026-08-01",
+          to: "2026-08-31",
+          completedAt: "2026-09-01T02:00:00.000Z",
+        },
+        createdAt: new Date("2026-09-01T02:00:01.000Z"),
+      },
+      {
+        receiptJson: {
+          status: "cancelled",
+          from: "2026-09-01",
+          to: "2026-09-01",
+          completedAt: "2026-09-02T02:00:00.000Z",
+        },
+        createdAt: new Date("2026-09-02T02:00:01.000Z"),
+      },
+    ]);
+    expect(ranges).toHaveLength(1);
+    expect(ranges[0]).toMatchObject({
+      from: "2026-08-01",
+      to: "2026-08-31",
+      basis: "orders_created",
+      provenance: "browser_sync_receipt",
+    });
+  });
+});
+
 describe("source health and exact range coverage", () => {
   const loaded = ["laundry_butler", "cleancloud"] as const;
   const verdict = (
