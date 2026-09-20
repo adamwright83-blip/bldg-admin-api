@@ -125,9 +125,19 @@ export function detectCallControl(utterance: string): "end" | "continue" {
 }
 
 // ── Action intent ────────────────────────────────────────────────────────────────────────────
-/** A directive aimed at Claire's tracking systems: "add…", "put… on the Day Line", "remind me…". */
-const ACTION_DIRECTIVE =
-  /\b(?:add|put|schedule|book|remind\s+me|track|log|note|create|set\s+up|pencil|block\s+out|move|reschedule|push|cancel|remove|delete|edit|change|mark\s+(?:done|complete|completed))\b/i;
+/** A directive aimed at Claire's systems, not merely an action word inside a question. */
+const ACTION_VERB =
+  String.raw`(?:add|put|schedule|book|track|log|note|create|set\s+up|pencil|block\s+out|move|reschedule|push|cancel|remove|delete|edit|change|mark(?:\s+(?:it|that|this))?\s+(?:done|complete|completed)|remind\s+me)`;
+const ACTION_DIRECTIVE_SHAPE = new RegExp(
+  String.raw`^(?:(?:ok(?:ay)?|hey|claire|so|and|also|yeah|yes|please)[,.!\s]+)*(?:(?:can|could|would|will)\s+you\s+|i\s+(?:need|want|would\s+like)\s+you\s+to\s+|please\s+)?${ACTION_VERB}\b`,
+  "i"
+);
+const ACTION_TRACKING_PHRASE =
+  /\byou\s+can\s+put\s+(?:that|it|this)\b|\bremind\s+me\b|\b(?:add|put|save|track)\b[^.!?]{0,60}\b(?:day\s*line|calendar|reminder|to-?do|my\s+list|the\s+list)\b/i;
+
+function detectExplicitActionRequest(text: string): boolean {
+  return ACTION_DIRECTIVE_SHAPE.test(text.trim()) || ACTION_TRACKING_PHRASE.test(text);
+}
 
 /**
  * Explicit refusal. Any of these makes work proposal impossible for the turn, even alongside a
@@ -319,7 +329,7 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   const actionRefused = ACTION_REFUSAL.test(text);
   const correction = CORRECTION.test(text);
   const aboutClaireCapability = ABOUT_CLAIRE_CAPABILITY.test(text);
-  const hasExplicitActionRequest = ACTION_DIRECTIVE.test(text) && !actionRefused;
+  const hasExplicitActionRequest = detectExplicitActionRequest(text) && !actionRefused;
   const operatorWorkCommitment = detectOperatorWorkCommitment(text) && !actionRefused;
   const hasBusinessQuestion =
     !acknowledgement && (QUESTION_MARK.test(text) || BUSINESS_QUESTION_LEAD.test(text.split(/\s+/).slice(0, 4).join(" ")));
