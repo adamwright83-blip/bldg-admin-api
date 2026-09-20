@@ -1128,11 +1128,16 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   async function gatherDeterministicEvidence(question: string): Promise<ClaireRouteEvidence[]> {
     const questionLower = normalizeUtterance(question);
     const evidence: ClaireRouteEvidence[] = [];
+    const questionInterpretation = question === utterance ? interpreted : interpretTurn(question);
+    const namedAccountMatches = matchAccounts(questionLower, accounts);
+    const explicitLedgerQuestion =
+      /\b(revenue|sales?|orders?|customers?|clients?|paid|payments?|spend|spent|average|aov|gross|income|clean\s*cloud|stripe|laundry\s+(?:butler|farm))\b/.test(questionLower);
     const skipGreedyBusiness =
       (isUnpaidQuestion(questionLower) && !/\bfollow[- ]?up\b/.test(questionLower)) ||
       Boolean(operationsQuestion(questionLower)) ||
       MEMORY_QUESTION.test(questionLower) ||
-      (question === utterance && parsed.items.length > 0);
+      (question === utterance && parsed.items.length > 0) ||
+      (questionInterpretation.businessJudgment && namedAccountMatches.length === 1 && !explicitLedgerQuestion);
 
     if (!skipGreedyBusiness) {
       try {
@@ -1178,7 +1183,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       }
     }
 
-    const questionAccounts = matchAccounts(questionLower, accounts);
+    const questionAccounts = namedAccountMatches;
     const pronounAccount =
       /\b(?:them|there|that account|that property|that building|they|it)\b/.test(questionLower) ||
       (isAccountQuestion(questionLower) && /\b(?:my last|last contact|follow[- ]?up|visit|what happened|what did i)\b/.test(questionLower))
