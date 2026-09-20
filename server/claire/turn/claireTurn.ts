@@ -33,6 +33,7 @@ import {
 import {
   accountAspect,
   isAccountQuestion,
+  lastContact,
   listAccountRefs,
   loadAccountHistory,
   matchAccounts,
@@ -58,7 +59,19 @@ import {
 import { persistClaireTurnTrace } from "../answerPathRecorder";
 import { explicitDayLineRefusal, explicitTrackingRequest } from "../briefing/titleContract";
 import { classifyOpenDialogueAct } from "./dialogueAct";
-import { interpretTurn } from "./interpretTurn";
+import { interpretTurn, detectOperatorWorkCommitment, extractEntities } from "./interpretTurn";
+import { planRoute, type RoutePlan } from "./routePlan";
+import {
+  planFromSpeak,
+  type ResponsePlan,
+} from "./responsePlan";
+import { markPendingReminded, syncPendingReminderIdentity } from "./pendingIdentity";
+import {
+  accountsFromResolution,
+  contactLinksFromAccounts,
+  resolveEntitiesToAccounts,
+  speakScopedContactJudgment,
+} from "../knowledge/contactAccountResolution";
 import { runBusinessQuery } from "../../analytics/businessQuery";
 import {
   appendClaimReceipt,
@@ -130,8 +143,9 @@ export type ClaireTurnState = PendingProposalState &
     claimReceipts?: FactualClaimReceipt[];
     /** Count of Claire's spoken turns, so a receipt can name the turn that produced it. */
     claireTurnCount?: number;
-    /** A pending item is surfaced at most once; Claire does not nag on every later answer. */
+    /** A pending item is surfaced at most once; keyed to that item's identity, not the conversation. */
     pendingReminded?: boolean;
+    pendingReminderKey?: string | null;
     /** Subjects this call has already covered; survives beyond the model's short prompt-history window. */
     coverage?: CoveredSubject[];
   };
@@ -174,6 +188,8 @@ export type ClaireTurnResult = {
   listenOnly?: boolean;
   /** A personal turn closed the personal thread AND business is complete AND an authored exit exists: hang up after speaking. */
   endCall?: boolean;
+  /** Typed lane plan for this turn. Present on every finished (non-listen-only) path. */
+  responsePlan?: ResponsePlan;
   commitmentTurn?: VoiceCommitmentTurnResult;
   actionIds?: string[];
   mutationReceipts?: MutationReceipt[];
@@ -277,6 +293,9 @@ const INTERROGATIVE_OPENER =
 
 const wordCount = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
 
+const COMPLETE_IMMEDIATE =
+  /^(?:thanks?|thank you|i(?:'m| am)\s+(?:all\s+)?good|got it|gotcha|good morning|morning|hey claire|ok(?:ay)?)[.!]?$/i;
+
 export function shouldHoldForContinuation(
   utterance: string,
   context: { awaitingReply?: boolean } = {}
@@ -284,12 +303,19 @@ export function shouldHoldForContinuation(
   const text = utterance.trim();
   const words = wordCount(text);
   if (words < 2) return false;
+  if (COMPLETE_IMMEDIATE.test(text)) return false;
   if (looksUnfinished(text)) return true;
   if (words > CONTINUATION_MAX_WORDS) return false;
   if (/[?]\s*$/.test(text)) return false;
   if (INTERROGATIVE_OPENER.test(text)) return false;
-  if (words < CONTINUATION_HOLD_MIN_WORDS) return false;
   if (context.awaitingReply && words <= 12 && replyDecision(text).decision !== "other") return false;
+  // A truncated work commitment ("I need to call Dana") is a natural ASR split, not a complete turn.
+  // A complete one names the time ("Call Dana Tuesday.") and should not incur delay.
+  const { temporal } = extractEntities(text);
+  if (detectOperatorWorkCommitment(text) && temporal.length === 0 && words <= 8 && !/[.!?]$/.test(text)) {
+    return true;
+  }
+  if (words < CONTINUATION_HOLD_MIN_WORDS) return false;
   return true;
 }
 
@@ -466,10 +492,15 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const claireOrdinal = (state.claireTurnCount ?? 0) + 1;
   /** Receipt for the factual claim this turn makes, attached to durable state in `finish`. */
   let pendingReceipt: FactualClaimReceipt | null = null;
+  let pendingJudgment: { accountId: number | null; contactName: string | null } | null = null;
   let knownAccounts: CoverageAccountRef[] = [];
   let uncertainChallenge: ClaimResolution | null = null;
   type SemanticSlot = { promise: Promise<ClaimChallengeReading | null>; settled: ClaimChallengeReading | null | undefined; classifierMs?: number };
   let semantic: SemanticSlot | null = null;
+  const kernel: { interpreted: ReturnType<typeof interpretTurn> | null; route: RoutePlan | null } = {
+    interpreted: null,
+    route: null,
+  };
   const readerReceipt = (answerPath: string, claimType: string, grounding: ClaimGrounding, sources: string[], answerText: string) => {
     pendingReceipt = receiptFromReader({ conversationKey: input.conversationKey, claireTurnOrdinal: claireOrdinal, nowMs, answerText, answerPath, claimType, grounding, sources });
   };
@@ -509,7 +540,25 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
     persistClaireTurnTrace(trace, { turnKind: guarded.kind, spokenText: guarded.speak });
     deps.onTurnTrace?.(trace);
-    return personalEndCall ? { ...guarded, endCall: true } : guarded;
+    const endCall = Boolean(personalEndCall || guarded.endCall || kernel.route?.callEnd);
+    const evidence =
+      !pendingJudgment &&
+      pendingReceipt &&
+      (pendingReceipt.grounding === "deterministic" || pendingReceipt.grounding === "retrieved")
+        ? { source: pendingReceipt.reader ?? pendingReceipt.answerPath, reader: pendingReceipt.reader }
+        : undefined;
+    const responsePlan =
+      guarded.responsePlan ??
+      (kernel.interpreted && kernel.route
+        ? planFromSpeak(kernel.interpreted, kernel.route, guarded.speak, {
+            endCall,
+            kind: guarded.kind,
+            mutationReceipts: guarded.mutationReceipts,
+            evidence,
+            judgment: pendingJudgment ?? undefined,
+          })
+        : undefined);
+    return { ...guarded, endCall: endCall || undefined, responsePlan };
   };
   const finishCommitmentTurn = (
     turn: Exclude<VoiceCommitmentTurnResult, { kind: "not_applicable" }>
@@ -537,9 +586,23 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   /**
    * THE authoritative interpretation of this turn. Produced once, here, before any route that can
    * mutate, terminate, select truth, or consult pending state. Everything downstream consumes it;
-   * nothing downstream re-decides what Adam meant.
+   * nothing downstream re-decides what Adam meant. Pending state may INFORM the route plan; it
+   * does not interpret the utterance.
    */
   const interpreted = interpretTurn(utterance);
+  kernel.interpreted = interpreted;
+  const route = planRoute(interpreted, {
+    proactiveMorning: Boolean(state.proactiveMorning),
+    holdingBriefing: Boolean(state.pendingBriefing),
+    holdingProposal: Boolean(state.pendingProposal),
+    holdingFollowUp: Boolean(state.pendingAccountFollowUp),
+    pendingHints: [
+      ...(state.pendingProposal?.title ? [state.pendingProposal.title] : []),
+      ...(state.pendingBriefing?.parsed.items ?? []).flatMap(item => [item.title, ...item.people]),
+    ].filter(Boolean),
+  });
+  kernel.route = route;
+  syncPendingReminderIdentity(state);
   trace.turnKind ??= null;
 
   // Acknowledgements close a beat. They are not questions, challenges, or work — and must never
@@ -559,12 +622,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   }
 
   /**
-   * The global board answers only a BROAD briefing request. Its old pattern matched any "what
-   * should I do…", so "What should I do about? Dana Tuesday." returned GUMBALL status, Andrew
-   * Molina and Mission 6 — an answer about nothing the operator asked. Scope is now a property of
-   * the interpretation, not a prefix match.
+   * The global board answers only a BROAD briefing request. Mixed greetings that continue into
+   * work or a named subject are not broad — the operator's remainder is the turn.
    */
-  if (!state.proactiveMorning && interpreted.broadBriefingRequest) {
+  if (route.board) {
     state.proactiveMorning = true;
     if (deps.watchBoard) {
       const board = await deps.watchBoard({
@@ -654,16 +715,18 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   }
 
   /**
-   * SUPERSESSION. A correction, a refusal, or a refinement invalidates the interpretation that
-   * produced any pending proposal, so the proposal is cleared rather than left to be re-offered or
-   * nagged about. Stale pending state must not survive the turn that contradicts it.
+   * SUPERSESSION is a route disposition, not a blanket clear. A correction that edits a held
+   * item must reach reviseBriefing. A query refinement supersedes an unrelated action proposal
+   * but does not destroy an editable briefing.
    */
-  if (interpreted.correction || interpreted.actionRefused || interpreted.queryRefinement) {
-    if (state.pendingProposal || state.pendingBriefing) {
-      state.pendingProposal = null;
-      state.pendingBriefing = null;
-      state.pendingReminded = false;
-    }
+  if (route.pending === "reject") {
+    state.pendingProposal = null;
+    state.pendingBriefing = null;
+    syncPendingReminderIdentity(state);
+  } else if (route.pending === "supersede") {
+    state.pendingProposal = null;
+    if (interpreted.correctionTarget === "topic") state.pendingBriefing = null;
+    syncPendingReminderIdentity(state);
   }
 
   // A refusal with nothing pending is settled. Live, "Um, actually don't do that." was answered
@@ -727,17 +790,20 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   if (state.pendingBriefing && nowMs - state.pendingBriefing.createdAt > PENDING_BRIEFING_TTL_MS) state.pendingBriefing = null;
   if (state.pendingBriefing) {
     const reply = replyDecision(utterance);
+    const itemEdit = route.pending === "revise" || interpreted.correctionTarget === "pending_item";
     const revisionText =
-      reply.decision === "yes" && /^(?:but|except|only|without|minus|and change|change|make)\b/i.test(reply.remainder)
-        ? reply.remainder
-        : reply.decision === "other"
-          ? utterance
-          : null;
+      itemEdit
+        ? (reply.remainder || utterance)
+        : reply.decision === "yes" && /^(?:but|except|only|without|minus|and change|change|make)\b/i.test(reply.remainder)
+          ? reply.remainder
+          : reply.decision === "other"
+            ? utterance
+            : null;
     if (revisionText) {
       const revision = reviseBriefing(state.pendingBriefing.parsed, revisionText, clock);
       if (revision.changes.length) {
         state.pendingBriefing = { parsed: revision.parsed, createdAt: nowMs };
-      state.pendingReminded = false;
+        syncPendingReminderIdentity(state);
         const remaining = briefingAdditions(revision.parsed).length;
         mark("briefing");
         return finish({
@@ -775,7 +841,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         mutationReceipts: receipts,
       });
     }
-    if (reply.decision === "no" || explicitDayLineRefusal(utterance)) {
+    if ((reply.decision === "no" && !itemEdit) || explicitDayLineRefusal(utterance)) {
       state.pendingBriefing = null;
       mark("briefing");
       const remainder = reply.decision === "no" ? reply.remainder : "";
@@ -828,14 +894,20 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const accounts = await deps.accounts(input.tenantId).catch(() => [] as AccountRef[]);
   knownAccounts = accounts;
   state.coverage = recordOperatorReplyCoverage(state.coverage, { operatorText: utterance, accounts, turnOrdinal: claireOrdinal });
+  const contactLinks = contactLinksFromAccounts(accounts);
+  const resolvedEntities = resolveEntitiesToAccounts(interpreted.entities, accounts, contactLinks);
+  const resolvedAccounts = accountsFromResolution(resolvedEntities);
   const mentioned = matchAccounts(lower, accounts);
   const account =
     mentioned.length === 1
       ? mentioned[0]!
-      : /\b(?:them|there|that account|that property|they)\b|\bthe follow[- ]?up\b/.test(lower)
-        ? state.focusAccount ?? null
-        : null;
-  const followUpDay = account ? followUpDayIntent(utterance, today) : null;
+      : resolvedAccounts.length === 1
+        ? resolvedAccounts[0]!
+        : /\b(?:them|there|that account|that property|they)\b|\bthe follow[- ]?up\b/.test(lower)
+          ? state.focusAccount ?? null
+          : null;
+  if (account) state.focusAccount = account;
+  const followUpDay = account && interpreted.mayProposeWork ? followUpDayIntent(utterance, today) : null;
   if (account && followUpDay) {
     try {
       const historyForAccount = await deps.accountHistory({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, account });
@@ -978,6 +1050,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       });
     }
     state.pendingBriefing = addable ? { parsed: reconciled, createdAt: nowMs } : null;
+    syncPendingReminderIdentity(state);
     let speak = summary.text;
     if (state.pendingBriefing && !summary.asksConfirmation) speak = `${speak} Want me to put all of it on the Day Line?`;
     mark("briefing");
@@ -1021,7 +1094,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         : state.pendingProposal
           ? ` I'm still holding "${state.pendingProposal.title}"; say yes to add it.`
           : "";
-    if (reminder) state.pendingReminded = true;
+    if (reminder) markPendingReminded(state);
     return finish({ speak: `${answer}${reminder}`, kind: "answered" });
   }
 
@@ -1037,7 +1110,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
   }
 
-  if (input.context && input.brief) {
+  if (input.context && input.brief && !route.callEnd) {
     const generationStartedAt = Date.now();
     trace.latency.generationStartMs = generationStartedAt - trace.startedAtMs;
     trace.synthesisRequired = true;
@@ -1078,10 +1151,15 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     mark("follow_up_model");
     return finish({ speak: await finalizeModelReply(reply, []), kind: "follow_up" });
   }
-  mark("fallback", { fallbackReason: "no_brief_or_context" });
+  mark("fallback", { fallbackReason: route.callEnd ? "call_control" : "no_brief_or_context" });
   return finish({
-    speak: "I don't have a record that answers that, so I won't guess. Ask it another way, or tell me which customer, account, or day you mean.",
+    speak: route.callEnd
+      ? interpreted.entities.length
+        ? "Noted. I'll let you go."
+        : "All right. I'll let you go."
+      : "I don't have a record that answers that, so I won't guess. Ask it another way, or tell me which customer, account, or day you mean.",
     kind: "answered",
+    endCall: route.callEnd || undefined,
   });
 
   /**
@@ -1096,12 +1174,25 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       (isUnpaidQuestion(questionLower) && !/\bfollow[- ]?up\b/.test(questionLower)) ||
       Boolean(operationsQuestion(questionLower)) ||
       MEMORY_QUESTION.test(questionLower) ||
-      (question === utterance && parsed.items.length > 0);
+      (question === utterance && parsed.items.length > 0) ||
+      (resolvedEntities.some(item => item.kind === "contact") &&
+        /\b(?:what should i|how should i|what about)\b/.test(questionLower) &&
+        !/\b(?:spent|spend|order|orders|ordered|paid|revenue|how much|how many|history)\b/.test(questionLower));
 
     if (!skipGreedyBusiness) {
       try {
         const business = await answerClaireBusinessTurn(
-          { tenantId: input.tenantId, utterance: question, state, surface: input.surface, context: input.context },
+          {
+            tenantId: input.tenantId,
+            utterance: question,
+            state,
+            surface: input.surface,
+            context: input.context,
+            interpretation: question === utterance ? interpreted : interpretTurn(question),
+            resolvedContactNames: new Set(
+              resolvedEntities.filter(item => item.kind === "contact" && item.contactName).map(item => item.contactName!.toLowerCase())
+            ),
+          },
           { now: deps.now, timeZone: deps.timeZone, ...deps.business }
         );
         if (business.handled) evidence.push({ source: `business_reader:${business.reader ?? "query"}`, text: business.speak, businessResult: business.result, reader: business.reader ?? "query", factual: business.facts.length > 0 });
@@ -1136,18 +1227,39 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
 
     const questionAccounts = matchAccounts(questionLower, accounts);
+    const fromContacts = question === utterance ? resolvedAccounts : accountsFromResolution(resolveEntitiesToAccounts(interpretTurn(question).entities, accounts, contactLinks));
+    const mergedAccounts = questionAccounts.length ? questionAccounts : fromContacts;
     const pronounAccount =
       /\b(?:them|there|that account|that property|that building|they|it)\b/.test(questionLower) ||
       (isAccountQuestion(questionLower) && /\b(?:my last|last contact|follow[- ]?up|visit|what happened|what did i)\b/.test(questionLower))
         ? state.focusAccount ?? null
         : null;
-    const target = questionAccounts.length === 1 ? questionAccounts[0]! : questionAccounts.length === 0 ? pronounAccount : null;
-    if (target && (isAccountQuestion(questionLower) || questionAccounts.length === 1)) {
+    const target = mergedAccounts.length === 1 ? mergedAccounts[0]! : mergedAccounts.length === 0 ? pronounAccount : null;
+    const scopedJudgment =
+      Boolean(target) &&
+      !interpreted.mayProposeWork &&
+      (interpreted.hasBusinessQuestion || /\bwhat should i\b|\bhow should i\b|\bwhat about\b/.test(questionLower));
+    if (target && (isAccountQuestion(questionLower) || mergedAccounts.length === 1 || scopedJudgment)) {
       try {
         const accountHistory = await deps.accountHistory({ tenantId: input.tenantId, operatorUserId: input.operatorUserId, account: target });
         state.focusAccount = target;
-        const aspect = MEMORY_QUESTION.test(questionLower) ? "said" : accountAspect(questionLower);
-        evidence.push({ source: "account_history", text: speakAccountHistory(accountHistory, aspect, { timeZone, today }) });
+        const contact = resolvedEntities.find(item => item.account?.id === target.id && item.kind === "contact");
+        if (scopedJudgment && contact) {
+          const last = lastContact(accountHistory);
+          const open = accountHistory.followUps.filter(followUp => followUp.status === "open")[0];
+          evidence.push({
+            source: "contact_account_judgment",
+            text: speakScopedContactJudgment({
+              resolved: contact,
+              temporal: interpreted.temporal,
+              lastContact: last ? `Last recorded contact: ${last.what}.` : null,
+              openFollowUp: open ? `An open follow-up is on file.` : null,
+            }),
+          });
+        } else {
+          const aspect = MEMORY_QUESTION.test(questionLower) ? "said" : accountAspect(questionLower);
+          evidence.push({ source: "account_history", text: speakAccountHistory(accountHistory, aspect, { timeZone, today }) });
+        }
       } catch (error) {
         console.warn("[Claire] account-history evidence unavailable", error instanceof Error ? error.message : error);
       }
@@ -1427,9 +1539,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     const briefingQuestions = options.briefingMix ? Math.max(parsed.questions.length, 1) : 0;
 
     const questionAccounts = matchAccounts(questionLower, accounts);
-    if (questionAccounts.length > 1 && !multipleAsks && !options.briefingMix) {
+    const fromContacts =
+      question === utterance ? resolvedAccounts : accountsFromResolution(resolveEntitiesToAccounts(interpretTurn(question).entities, accounts, contactLinks));
+    const mergedQuestionAccounts = questionAccounts.length ? questionAccounts : fromContacts;
+    if (mergedQuestionAccounts.length > 1 && !multipleAsks && !options.briefingMix) {
       mark("account_disambiguation");
-      return `I have ${questionAccounts.length} accounts that could be: ${questionAccounts.slice(0, 4).map(item => item.name).join(", ")}. Which one?`;
+      return `I have ${mergedQuestionAccounts.length} accounts that could be: ${mergedQuestionAccounts.slice(0, 4).map(item => item.name).join(", ")}. Which one?`;
     }
 
     const localMatches = collectClaireLocalFactMatches(question, {
@@ -1519,8 +1634,19 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         readerReceipt("day_work", "day_line_state", "deterministic", ["day_work"], dayWork.text);
         return dayWork.text;
       }
+      const judgment = loadedEvidence.find(entry => entry.source === "contact_account_judgment");
+      if (judgment) {
+        const contact = resolvedEntities.find(item => item.kind === "contact");
+        pendingJudgment = {
+          accountId: contact?.account?.id ?? resolvedAccounts[0]?.id ?? null,
+          contactName: contact?.contactName ?? null,
+        };
+        mark("account_history");
+        readerReceipt("account_history", "contact_account_judgment", "retrieved", ["contact_account_judgment"], judgment.text);
+        return judgment.text;
+      }
       const account = loadedEvidence.find(entry => entry.source === "account_history");
-      if (account && accountHistoryMayFinish(question)) {
+      if (account && (accountHistoryMayFinish(question) || /\bwhat should i\b|\bhow should i\b|\bwhat about\b/i.test(question))) {
         mark("account_history");
         readerReceipt("account_history", "account_history", "deterministic", ["account_history"], account.text);
         return account.text;

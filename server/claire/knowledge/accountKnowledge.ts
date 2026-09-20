@@ -15,6 +15,7 @@ import { getDb } from "../../db";
 import { addDaysYmd, daysInclusive, formatBusinessDate } from "../../analytics/businessPeriods";
 import { zonedYmd } from "../../dashboardZoned";
 import { searchOperatorConversation, type RememberedTurn } from "./conversationMemory";
+import { isOperatorVisibleAccount, isOperatorVisibleMissionSnapshot } from "./sourceVisibility";
 
 /**
  * Everything Goldline recorded about a commercial account (The Louise,
@@ -25,7 +26,7 @@ import { searchOperatorConversation, type RememberedTurn } from "./conversationM
  * call quote is only what Adam said.
  */
 
-export type AccountRef = { id: number; name: string; accountType: string };
+export type AccountRef = { id: number; name: string; accountType: string; contacts?: Array<{ name: string | null; title: string | null }> };
 
 export type AccountHistory = {
   account: AccountRef;
@@ -49,8 +50,6 @@ export type AccountHistory = {
   conversationMentions: RememberedTurn[];
 };
 
-const TEST_ACCOUNT = /\bSAFE TO ARCHIVE\b|\bE2E\b|\bCODEX\b/i;
-
 function tokens(value: string): string[] {
   return value
     .toLowerCase()
@@ -63,12 +62,33 @@ export async function listAccountRefs(tenantId: string): Promise<AccountRef[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const rows = await db
-    .select({ id: commercialAccounts.id, name: commercialAccounts.name, accountType: commercialAccounts.accountType })
+    .select({
+      id: commercialAccounts.id,
+      name: commercialAccounts.name,
+      accountType: commercialAccounts.accountType,
+      providerName: commercialAccounts.providerName,
+      identityKey: commercialAccounts.identityKey,
+    })
     .from(commercialAccounts)
     .where(eq(commercialAccounts.tenantId, tenantId))
     .orderBy(asc(commercialAccounts.name))
     .limit(500);
-  return rows.filter(row => !TEST_ACCOUNT.test(row.name));
+  const visible = rows.filter(row => isOperatorVisibleAccount(row));
+  if (!visible.length) return [];
+  const contacts = await db
+    .select({
+      accountId: commercialAccountContacts.accountId,
+      name: commercialAccountContacts.name,
+      title: commercialAccountContacts.title,
+    })
+    .from(commercialAccountContacts)
+    .where(and(eq(commercialAccountContacts.tenantId, tenantId), inArray(commercialAccountContacts.accountId, visible.map(row => row.id))));
+  return visible.map(row => ({
+    id: row.id,
+    name: row.name,
+    accountType: row.accountType,
+    contacts: contacts.filter(contact => contact.accountId === row.id).map(contact => ({ name: contact.name, title: contact.title })),
+  }));
 }
 
 /** Accounts whose distinctive name words appear in what Adam said. */
@@ -127,12 +147,24 @@ export async function loadAccountHistory(input: {
           status: commercialMissions.status,
           createdAt: commercialMissions.createdAt,
           updatedAt: commercialMissions.updatedAt,
+          accountSnapshotJson: commercialMissions.accountSnapshotJson,
+          opportunitySnapshotJson: commercialMissions.opportunitySnapshotJson,
         })
         .from(commercialMissions)
         .where(and(eq(commercialMissions.tenantId, tenantId), inArray(commercialMissions.opportunityId, opportunityIds)))
         .orderBy(desc(commercialMissions.createdAt))
     : [];
-  const missionIds = missions.map(row => row.id);
+  const visibleMissions = missions.filter(row => {
+    const snapshot = row.accountSnapshotJson as { name?: string; accountType?: string; providerName?: string } | null;
+    const opportunity = row.opportunitySnapshotJson as { evidence?: Array<Record<string, unknown>> } | null;
+    return isOperatorVisibleMissionSnapshot({
+      name: snapshot?.name,
+      accountType: snapshot?.accountType,
+      providerName: snapshot?.providerName,
+      evidence: opportunity?.evidence ?? null,
+    });
+  });
+  const missionIds = visibleMissions.map(row => row.id);
   const nameTerms = tokens(account.name);
   const [events, fields, outcomes, followUps, pipelines, contacts, dayLine, mentions] = await Promise.all([
     missionIds.length
@@ -196,7 +228,7 @@ export async function loadAccountHistory(input: {
   ]);
   return {
     account,
-    missions: missions.map(row => ({
+    missions: visibleMissions.map(row => ({
       id: row.id,
       code: row.code,
       status: row.status,
@@ -236,7 +268,9 @@ export async function loadAccountHistory(input: {
     pipelineStage: pipelines[0]?.stage ?? null,
     pipelineId: pipelines[0]?.id ?? null,
     contacts: contacts.map(row => ({ name: row.name, title: row.title, relationshipType: row.relationshipType })),
-    dayLineMentions: dayLine.map(row => ({ title: row.title, businessDate: row.businessDate, status: row.status })),
+    dayLineMentions: dayLine
+      .filter(row => isOperatorVisibleAccount({ name: row.title }))
+      .map(row => ({ title: row.title, businessDate: row.businessDate, status: row.status })),
     conversationMentions: mentions,
   };
 }

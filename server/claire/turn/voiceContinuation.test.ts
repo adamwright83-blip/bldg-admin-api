@@ -84,7 +84,7 @@ describe("natural pauses inside long speech are never answered mid-thought", () 
 });
 
 describe("normal short answers get no added dead air", () => {
-  it.each(["Yes.", "No thanks.", "That's fine.", "What should I lead with at The Louise?", "Do you have plans this weekend?"])(
+  it.each(["Yes.", "No thanks.", "That's fine.", "What should I lead with at The Louise?", "Do you have plans this weekend?", "Thanks.", "I'm good.", "Good morning.", "Call Dana Tuesday."])(
     "%s is answered immediately", async utterance => {
       expect(shouldHoldForContinuation(utterance)).toBe(false);
       const result = await runClaireTurn({ ...base, utterance, state: {} }, turnDeps());
@@ -98,6 +98,16 @@ describe("normal short answers get no added dead air", () => {
 });
 
 describe("safety valves", () => {
+  it("ASR split: 'I need to call Dana...' then '...Tuesday because she still hasn't replied' stitches once", async () => {
+    const { held, state, answeredAt } = await speak([
+      "I need to call Dana",
+      "Tuesday because she still hasn't replied",
+    ]);
+    expect(held[0]).toBe(true);
+    expect(operatorHistory(state)[0]).toMatch(/Dana Tuesday because she still hasn't replied/i);
+    expect(answeredAt === "fragment" || answeredAt === "grace").toBe(true);
+  });
+
   it("a rambling speaker is not held forever", async () => {
     const state: ClaireTurnState = {};
     let last = { listenOnly: true } as { listenOnly?: boolean };

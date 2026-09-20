@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { index, json, mysqlEnum, mysqlTable, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
-import { commercialFollowUps, dayDirectorCommitments } from "../../../drizzle/schema";
+import { commercialFollowUps, commercialMissions, commercialOpportunities, commercialAccounts, dayDirectorCommitments } from "../../../drizzle/schema";
 import { addDaysYmd, businessToday } from "../../analytics/businessPeriods";
 import { groupCustomers } from "../../analytics/businessMetrics";
 import { loadDataFreshness } from "../../analytics/dataFreshness";
 import { loadPaidOrderLedger } from "../../analytics/paidOrderLedger";
 import { getDashboardTimeZone, zonedDayStartUtc } from "../../dashboardZoned";
 import { getDb } from "../../db";
+import { isOperatorVisibleAccount, isOperatorVisibleFollowUp } from "../knowledge/sourceVisibility";
 import {
   DEFAULT_DOCTRINE,
   applyDoctrineUtterance,
@@ -264,14 +265,34 @@ export async function ensureAdamBoard(input: {
   if (!skipSales) {
     try {
       const due = await db
-        .select()
+        .select({
+          follow: commercialFollowUps,
+          accountName: commercialAccounts.name,
+          accountType: commercialAccounts.accountType,
+          providerName: commercialAccounts.providerName,
+          identityKey: commercialAccounts.identityKey,
+        })
         .from(commercialFollowUps)
+        .innerJoin(commercialMissions, eq(commercialMissions.id, commercialFollowUps.missionId))
+        .innerJoin(commercialOpportunities, eq(commercialOpportunities.id, commercialMissions.opportunityId))
+        .innerJoin(commercialAccounts, eq(commercialAccounts.id, commercialOpportunities.accountId))
         .where(and(eq(commercialFollowUps.tenantId, input.tenantId), eq(commercialFollowUps.status, "open")));
       const already = await loadObligations(input.tenantId, input.operatorUserId);
-      for (const follow of due.slice(0, 5)) {
+      const visibleDue = due.filter(row =>
+        isOperatorVisibleFollowUp({
+          account: {
+            name: row.accountName,
+            accountType: row.accountType,
+            providerName: row.providerName,
+            identityKey: row.identityKey,
+          },
+        })
+      );
+      for (const row of visibleDue.slice(0, 5)) {
+        const follow = row.follow;
         const dueDate = follow.dueAt.toISOString().slice(0, 10);
         if (dueDate > addDaysYmd(today, 7)) continue;
-        const name = `Mission ${follow.missionId}`;
+        const name = row.accountName;
         const obligation = salesFollowUpObligation({
           accountKey: String(follow.missionId),
           accountName: name,
@@ -297,7 +318,10 @@ export async function ensureAdamBoard(input: {
     }
   }
 
-  const obligations = await loadObligations(input.tenantId, input.operatorUserId);
+  const obligations = (await loadObligations(input.tenantId, input.operatorUserId)).filter(item => {
+    if (item.kind === "sales_follow_up" && /^Mission\s+\d+$/i.test(item.subjectName)) return false;
+    return isOperatorVisibleAccount({ name: item.subjectName });
+  });
   const warnings: string[] = [];
   try {
     const freshness = await loadDataFreshness({ tenantId: input.tenantId, timeZone });

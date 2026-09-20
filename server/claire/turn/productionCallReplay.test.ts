@@ -254,6 +254,13 @@ describe("2026-09-20 replay — route scope (turn 12/13)", () => {
     expect(h.board).toHaveBeenCalled();
   });
 
+  it("REPRODUCTION: greeting plus work is not swallowed by the board", async () => {
+    const h = stateful();
+    const result = await h.say("Good morning, I need to call the dry cleaner and deliver towels today.");
+    expect(h.board).not.toHaveBeenCalled();
+    expect(result.speak).not.toMatch(/GUMBALL|Andrew|Mission 6|Synthetic/i);
+  });
+
   it.each([
     "What should I do about The Louise?",
     "What should I do about Thomas's order?",

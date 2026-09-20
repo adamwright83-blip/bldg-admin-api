@@ -3,6 +3,7 @@ import { getFieldToday } from "../../field/fieldTodayService";
 import { addDaysYmd } from "../../analytics/businessPeriods";
 import { zonedYmd } from "../../dashboardZoned";
 import { joinList, plural } from "../business/businessSpeech";
+import { isOperatorVisibleAccount } from "./sourceVisibility";
 
 /**
  * "What do I have left today?", "What did I finish?", "What's tomorrow?"
@@ -84,6 +85,8 @@ export async function loadDayWork(
   const open: DayWorkItem[] = [];
   const completed: DayWorkItem[] = [];
   for (const commitment of state.commitments) {
+    if (!isOperatorVisibleAccount({ name: commitment.title })) continue;
+    if (/^Follow up:\s*Mission\s+\d+$/i.test(commitment.title)) continue;
     const item: DayWorkItem = {
       id: `day-director:${commitment.id}`,
       title: commitment.title,
