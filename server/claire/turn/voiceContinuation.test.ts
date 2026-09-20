@@ -83,6 +83,23 @@ describe("natural pauses inside long speech are never answered mid-thought", () 
   });
 });
 
+describe("latest production-call ASR fragments", () => {
+  it("holds the exact unfinished mixed business/personal fragment instead of answering mid-sentence", () => {
+    const fragment = "I asked you my highest paying customers into your best friend, is";
+    expect(shouldHoldForContinuation(fragment)).toBe(true);
+  });
+
+  it("stitches an unfinished fragment into the next provider result before reasoning", async () => {
+    const pieces = [
+      "I asked you my highest paying customers into your best friend, is",
+      "who are my five highest-paying customers, and who is your best friend?",
+    ];
+    const { held, state } = await speak(pieces);
+    expect(held[0]).toBe(true);
+    expect(operatorHistory(state)[0]).toContain("who are my five highest-paying customers");
+  });
+});
+
 describe("normal short answers get no added dead air", () => {
   it.each(["Yes.", "No thanks.", "That's fine.", "What should I lead with at The Louise?", "Do you have plans this weekend?"])(
     "%s is answered immediately", async utterance => {
