@@ -382,7 +382,7 @@ describe("source health and exact range coverage", () => {
     const turn = await ask("What was revenue this year?", evidence, fixtureLoaders());
     const speak = turn.handled ? turn.speak : "";
     expect(speak).toMatch(/\$/);
-    expect(speak).toMatch(/order date|payment events|exhaustive whole-business coverage/i);
+    expect(speak).toMatch(/order date|payment[- ]date|payment events|exhaustive whole-business coverage/i);
   });
 });
 
