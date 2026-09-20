@@ -293,7 +293,12 @@ export function extractEntityAndTime(text: string): { entities: string[]; tempor
       (withoutTemporal.match(/\b[A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)?/g) ?? [])
         .map(candidate => {
           const words = candidate.trim().split(/\s+/);
-          while (words.length && COMMON_ENTITY_FURNITURE.has(words[0]!)) words.shift();
+          while (words.length) {
+            const raw = words[0]!;
+            const normalized = raw.replace(/'(?:s|re|ve|d|ll|m|t)$/i, "");
+            if (!COMMON_ENTITY_FURNITURE.has(raw) && !COMMON_ENTITY_FURNITURE.has(normalized)) break;
+            words.shift();
+          }
           return words.join(" ");
         })
         .filter(candidate => candidate && !COMMON_ENTITY_FURNITURE.has(candidate))
