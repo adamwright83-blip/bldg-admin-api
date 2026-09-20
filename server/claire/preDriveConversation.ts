@@ -484,16 +484,47 @@ export async function answerClairePreDriveFollowUp(
     // verifier (one bounded model call) runs when progression is ON, or when the operator is addressing
     // Claire herself ("you"/"your") and the answer speaks in the first person — the only turns where
     // invented biography or an unsupported emotional/relational claim can occur.
+    /**
+     * STORY / BUSINESS FIREWALL.
+     *
+     * The personal-biography and Narrative OS authorization path may remove only PERSONAL content.
+     * It must never be able to suppress an authoritative business fact — not by rejecting one, not
+     * by timing out, and not by returning a false positive. Before this boundary existed, any
+     * `checkBiographyBoundary` failure (including `verifier_unavailable`, a 4s timeout on an
+     * unrelated model call) replaced the whole answer with the conservative fallback, so a grounded
+     * revenue figure could be destroyed by a biography verifier having a bad day.
+     *
+     * Three rules:
+     *  1. A turn carrying no personal probe never enters the semantic biography path at all.
+     *  2. A grounded business answer falls back to its OWN evidence, never to "I don't have a record".
+     *  3. On a mixed business+personal turn, a personal rejection keeps the business half and
+     *     declines only the personal half.
+     */
     if (recoveredVia === null) {
       const addressesClaire = /\b(?:you|your|yours|yourself|you'?re|you'?ve)\b/i.test(input.utterance);
       const personalTurn = conversationalMode === "personal" || isPersonalQuestionAboutClaire(input.utterance);
-      // Invented biography need not use first person ("A quiet Sunday, mostly."), so the gate is the operator
-      // addressing Claire herself; a turn grounded in retrieved business evidence skips it (no personal ask there).
-      const runSemantic = progressionOn || personalTurn || (addressesClaire && !input.retrievedEvidence?.length);
+      const groundedEvidence = (input.retrievedEvidence ?? []).map(item => item.text).filter(Boolean);
+      const businessGrounded = groundedEvidence.length > 0;
+      // The verifier still RUNS broadly — a judgment answer can volunteer biography ("Cairo taught me
+      // to travel light") on a turn that named nothing personal, and skipping the check there would
+      // let it through. The firewall is not that the check is skipped; it is that the check has no
+      // authority to delete a grounded business fact (see `guardedReplacement`).
+      const runSemantic = progressionOn || personalTurn || (addressesClaire && !businessGrounded);
+      const declineLine = () => selectDialogueLine({ category: "decline", rapportBand: 0 })?.text ?? null;
+      // Rules 2 and 3.
+      const guardedReplacement = (): string => {
+        const decline = personalTurn ? declineLine() : null;
+        if (businessGrounded) {
+          const facts = groundedEvidence.join(" ");
+          return decline ? `${facts} ${decline}`.trim() : facts;
+        }
+        return decline ?? fallback;
+      };
+
       const tone = lintFailureDayLanguage(answer);
       if (!tone.passes) {
         console.warn("[Claire] general answer violated failure-day tone contract; replaced", tone.violations.map(v => v.category));
-        answer = personalTurn ? (selectDialogueLine({ category: "decline", rapportBand: 0 })?.text ?? fallback) : fallback;
+        answer = guardedReplacement();
         guardReason = `failure_day_tone:${tone.violations[0]!.category}`;
       } else {
         const biography = await checkBiographyBoundary({
@@ -504,8 +535,7 @@ export async function answerClairePreDriveFollowUp(
         });
         if (!biography.ok) {
           console.warn("[Claire] general answer could assert unauthorized Claire history; replaced", biography.reason);
-          // A personal question gets an authored decline; a business turn gets the conservative business fallback.
-          answer = personalTurn ? (selectDialogueLine({ category: "decline", rapportBand: 0 })?.text ?? fallback) : fallback;
+          answer = guardedReplacement();
           guardReason = `personal_biography_guard:${biography.reason}`;
         }
       }

@@ -216,6 +216,35 @@ export type BusinessQueryResult =
       data: BusinessResultData;
     };
 
+/**
+ * Would this result be spoken as "nothing"? Only ledger-derived metrics are considered: a
+ * question ABOUT source health (freshness, coverage) must still answer even when sources are
+ * unbound, or Claire could never explain why she is blind.
+ */
+export function businessResultIsEmpty(result: BusinessQueryResult): boolean {
+  if (result.status !== "ok") return false;
+  const data = result.data;
+  switch (data.kind) {
+    case "totals":
+      return data.current.revenueCents === 0 && data.current.orderCount === 0;
+    case "orders":
+      return data.orders.length === 0;
+    case "customers":
+      return data.population.count === 0;
+    case "top_customers":
+      return data.members.length === 0;
+    case "customer_history":
+      return data.details.length === 0 && data.matches.length === 0;
+    case "customer_share":
+      return data.totalCents === 0;
+    case "period_ranking":
+      return data.rows.length === 0;
+    default:
+      // open_orders, freshness, composition, profit, data_coverage: not ledger-window zeros.
+      return false;
+  }
+}
+
 export type BusinessQueryDeps = {
   loadLedger: typeof loadPaidOrderLedger;
   loadOpenOrders: (tenantId: string) => Promise<OpenOrderStats>;

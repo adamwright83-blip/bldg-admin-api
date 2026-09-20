@@ -28,6 +28,8 @@ function claire(options: { loaders?: LedgerLoaders; surface?: ClaireSurface; now
     now: () => clock,
     timeZone: () => FIXTURE_TZ,
     plan: options.plan ?? vi.fn(async () => null),
+    // These fixtures model a business whose sources ARE connected; the zero gate needs that proven.
+    loadBindings: async () => ({ laundry_butler: "bound" as const, cleancloud: "bound" as const }),
     runQuery: (tenantId, query) =>
       runBusinessQuery(tenantId, query, {
         loadLedger: input => loadPaidOrderLedger(input, options.loaders ?? fixtureLoaders(options.seenTenants)),

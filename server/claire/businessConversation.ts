@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { invokeLLM } from "../_core/llm";
 import { claireModelRequest } from "./claireModel";
+import {
+  loadLedgerSourceBindings,
+  requiredSourcesFor,
+  speakUnprovableZero,
+  zeroVerdict,
+  type LedgerSourceBindings,
+} from "../analytics/sourceBindings";
 import type { ClaireDriveContext } from "./contextAssembler";
 import { sanitizeSpeakAgainstInventory, buildClaireVerifiedFactInventory } from "./verifiedFactInventoryFromContext";
 import { getDashboardTimeZone } from "../dashboardZoned";
@@ -22,6 +29,7 @@ import {
 } from "../analytics/businessPeriods";
 import {
   BUSINESS_METRICS,
+  businessResultIsEmpty,
   defaultBusinessQuery,
   runBusinessQuery,
   type BusinessMetric,
@@ -977,6 +985,8 @@ export type ClaireBusinessTurnDeps = {
   now: () => Date;
   timeZone: () => string;
   speakResult?: typeof speakBusinessResult;
+  /** Source-binding probe. Injectable so tests can prove the zero gate without a database. */
+  loadBindings?: (tenantId: string) => Promise<LedgerSourceBindings>;
 };
 
 function focusCustomerOf(detail: CustomerDetail): FocusCustomer {
@@ -1187,6 +1197,31 @@ export async function answerClaireBusinessTurn(
     } catch (error) {
       console.warn("[Claire] business query failed", error instanceof Error ? error.message : error);
       return guardedTurn({ handled: true, speak: "I couldn't get that number reliably just now, so I won't guess.", facts: [] });
+    }
+
+    /**
+     * ZERO REQUIRES POSITIVE PROOF.
+     *
+     * `coverage.completeness` only reports whether the queries threw, so an untouched business
+     * with no connected sources produced a confident "$0.00 across 0 orders" on a live call.
+     * Before any empty ledger result is spoken as a number, the sources this question actually
+     * needs must be proven bound and read. Anything else is a gap in what Claire can see, and
+     * she says so instead.
+     */
+    if (businessResultIsEmpty(result)) {
+      const required = requiredSourcesFor(turn.query.filters?.sources);
+      const bindings = await (deps.loadBindings ?? loadLedgerSourceBindings)(input.tenantId).catch(
+        () => ({ laundry_butler: "unknown", cleancloud: "unknown" }) as LedgerSourceBindings
+      );
+      const verdict = zeroVerdict({
+        required,
+        bindings,
+        loadedSources: result.status === "ok" ? result.coverage?.loadedSources ?? [] : [],
+        failedSources: result.status === "ok" ? result.coverage?.failedSources ?? [] : [],
+      });
+      if (verdict.kind !== "provable") {
+        return guardedTurn({ handled: true, speak: speakUnprovableZero(verdict), facts: [] });
+      }
     }
 
     const spoken = (deps.speakResult ?? speakBusinessResult)(result, {
