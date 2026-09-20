@@ -18,7 +18,8 @@ describe("Claire operations visibility", () => {
             {
               id: "bad",
               title: "Follow up: Mission 6",
-              detailNote: "Synthetic verification follow-up",
+              detailNote: null,
+              sourceText: "Synthetic verification follow-up",
               status: "active",
               completedAt: null,
             },
@@ -26,6 +27,7 @@ describe("Claire operations visibility", () => {
               id: "good",
               title: "Call Dana at The Louise",
               detailNote: "Tuesday",
+              sourceText: "Call Dana Tuesday",
               status: "active",
               completedAt: null,
             },
