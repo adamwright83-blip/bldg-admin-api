@@ -476,6 +476,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // authored exit line exists). Dormant in production until such a line is authored.
   let personalEndCall = false;
   let personalLaneSeen = false;
+  let turnConversationalPrefix = "";
   const claireOrdinal = (state.claireTurnCount ?? 0) + 1;
   /** Receipt for the factual claim this turn makes, attached to durable state in `finish`. */
   let pendingReceipt: FactualClaimReceipt | null = null;
@@ -497,7 +498,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
             ? "business_judgment"
             : "business_fact"
           : null);
-    const responsePlan =
+    const baseResponsePlan =
       result.responsePlan ??
       planClaireResponse({
         text: result.speak,
@@ -507,6 +508,15 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         lane: responseLane,
         receiptBackedCommit: result.receiptBackedCommit,
       });
+    const responsePlan: ClaireResponsePlan = turnConversationalPrefix
+      ? {
+          ...baseResponsePlan,
+          segments: [
+            { kind: "conversational", text: turnConversationalPrefix },
+            ...baseResponsePlan.segments,
+          ],
+        }
+      : baseResponsePlan;
     const channels = renderClaireResponseChannels(responsePlan);
     const inventory = buildClaireVerifiedFactInventory(input.context);
     const speak = assembleGuardedClaireSpeak({
@@ -615,8 +625,19 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   };
   if (interpreted.actionRefused && hadPendingAction) {
     clearPendingActions();
-    mark("briefing");
-    return finish({ speak: "Okay. I won't add or change that.", kind: "briefing_declined" });
+    const hasRemainderIntent =
+      interpreted.hasBusinessQuestion ||
+      interpreted.businessJudgment ||
+      interpreted.queryRefinement ||
+      interpreted.correctnessChallenge ||
+      interpreted.correction;
+    if (!hasRemainderIntent) {
+      mark("briefing");
+      return finish({ speak: "Okay. I won't add or change that.", kind: "briefing_declined" });
+    }
+    // Mixed refusal + new request: clear the stale action, acknowledge that once, then continue
+    // through the CURRENT turn's business/conversational routes. Never discard the second ask.
+    turnConversationalPrefix = "Okay. I won't add or change that.";
   }
   const currentTurnChangesTopic =
     interpreted.hasBusinessQuestion ||
