@@ -127,6 +127,14 @@ export type BusinessQuery = {
   groupBy?: "month" | "week" | "day" | null;
   /** period_ranking: best/worst first. latest_sales: "earliest" returns the first orders on record. */
   rank?: "best" | "worst" | "earliest" | null;
+  /** List continuation: skip records already spoken from this same ordered query. */
+  offset?: number;
+  /** latest_sales: anchor the ordered list on a matching customer record. */
+  anchorCustomerName?: string | null;
+  /** latest_sales: "before" means older than anchor; "after" means newer than anchor. */
+  anchorDirection?: "before" | "after" | null;
+  /** latest_sales: omit records whose customer matches one of these names. */
+  excludeCustomerNames?: string[] | null;
 };
 
 export const CUSTOMER_LOOKBACK_DAYS = 365;
@@ -155,6 +163,10 @@ export function defaultBusinessQuery(metric: BusinessMetric): BusinessQuery {
     filterUnion: null,
     groupBy: metric === "period_ranking" ? "month" : null,
     rank: metric === "period_ranking" ? "best" : null,
+    offset: 0,
+    anchorCustomerName: null,
+    anchorDirection: null,
+    excludeCustomerNames: null,
   };
 }
 
@@ -520,9 +532,47 @@ export async function runBusinessQuery(
       }
       case "latest_sales": {
         const inPeriod = eventsInSpan(history, period);
-        return query.rank === "earliest"
-          ? ok({ kind: "orders", ordering: "earliest", orders: earliestOrders(inPeriod, query.limit) })
-          : ok({ kind: "orders", ordering: "latest", orders: latestOrders(inPeriod, query.limit) });
+        const ordered =
+          query.rank === "earliest"
+            ? earliestOrders(inPeriod, Math.max(1, inPeriod.length))
+            : latestOrders(inPeriod, Math.max(1, inPeriod.length));
+        const normalizeName = (value: string | null | undefined) =>
+          (value ?? "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+        const matchesName = (actual: string | null, requested: string) => {
+          const a = normalizeName(actual);
+          const b = normalizeName(requested);
+          if (!a || !b) return false;
+          const tokens = b.split(" ").filter(token => token.length >= 2);
+          return a === b || tokens.every(token => a.split(" ").includes(token));
+        };
+        let candidateOrders = ordered;
+        let start = Math.max(0, query.offset ?? 0);
+        if (query.anchorCustomerName) {
+          const anchorIndex = ordered.findIndex(order => matchesName(order.customerName, query.anchorCustomerName!));
+          if (anchorIndex < 0) {
+            return ok({
+              kind: "orders",
+              ordering: query.rank === "earliest" ? "earliest" : "latest",
+              orders: [],
+            });
+          }
+          const direction = query.anchorDirection ?? "before";
+          candidateOrders =
+            direction === "after"
+              ? ordered.slice(0, anchorIndex)
+              : ordered.slice(anchorIndex + 1);
+          start = Math.max(0, query.offset ?? 0);
+        }
+        const excluded = query.excludeCustomerNames ?? [];
+        const selected = candidateOrders
+          .slice(start)
+          .filter(order => !excluded.some(name => matchesName(order.customerName, name)))
+          .slice(0, Math.max(1, query.limit));
+        return ok({
+          kind: "orders",
+          ordering: query.rank === "earliest" ? "earliest" : "latest",
+          orders: selected,
+        });
       }
       case "biggest_orders":
         return ok({ kind: "orders", ordering: "largest", orders: largestOrders(eventsInSpan(history, period), query.limit) });

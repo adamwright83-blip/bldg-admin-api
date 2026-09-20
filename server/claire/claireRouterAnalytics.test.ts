@@ -108,7 +108,7 @@ describe("desktop Claire business questions (V)", () => {
     expect(ordinary.reply).toBe("Follow-up answer.");
   });
 
-  it("a pending confirmation survives a business question, and yes still confirms it (T)", async () => {
+  it("a new business question supersedes a pending proposal instead of nagging or accepting a stale yes (T)", async () => {
     const claire = caller(104);
     hoisted.commitment.mockImplementationOnce(async input => {
       input.state.pendingProposal = { title: "Review revenue", sourceText: "Add reviewing revenue." };
@@ -117,10 +117,10 @@ describe("desktop Claire business questions (V)", () => {
     await claire.talk({ utterance: "Add reviewing revenue.", conversationId: "desk-conversation-t" });
     const answer = await claire.talk({ utterance: "What was revenue last month?", conversationId: "desk-conversation-t" });
     expect(answer.reply).toContain("last month");
-    expect(answer.reply).toContain('still holding "Review revenue"');
+    expect(answer.reply).not.toMatch(/still holding|say yes to add/i);
     expect(hoisted.commitment).toHaveBeenCalledTimes(1);
     await claire.talk({ utterance: "Yes.", conversationId: "desk-conversation-t" });
-    expect(hoisted.commitment).toHaveBeenCalledTimes(2);
+    expect(hoisted.commitment).toHaveBeenCalledTimes(1);
   });
 
   it("non-admin users cannot interrogate the business through Claire (Y)", async () => {

@@ -19,6 +19,7 @@ import {
 import { evaluateConversationQualitative, formatLiveTranscript, MalformedConversationEvaluationError } from "./conversationEvaluator";
 import { recordEvaluatorAttempt, recordEvaluatorFailure, recordEvaluatorSuccess } from "./evaluatorStats";
 import { researchFlagFor, type QualitativeEvaluation } from "./conversationAnalysisSchema";
+import { deterministicConversationQa } from "./deterministicConversationQa";
 
 export async function readLinkedActionStats(actionIds: string[]): Promise<{
   acceptedActionCount: number;
@@ -139,6 +140,28 @@ export async function runConversationAnalysis(
     return { ok: false, reason: malformed ? `evaluator_failed:${error.category}` : "evaluator_failed" };
   }
   recordEvaluatorSuccess();
+
+  // Deterministic invariants outrank evaluator optimism. The LLM evaluator is qualitative QA;
+  // it cannot erase a structural failure we can prove from the speaker-attributed transcript.
+  const deterministicFindings = deterministicConversationQa(turns);
+  if (deterministicFindings.length) {
+    evaluation = {
+      ...evaluation,
+      productFriction: [
+        ...evaluation.productFriction,
+        ...deterministicFindings.map(finding => ({
+          category: finding.category,
+          summary: finding.summary,
+          turnOrdinal: finding.turnOrdinal,
+          severity: finding.severity,
+        })),
+      ],
+      recommendedProductReview: true,
+      reviewReason:
+        evaluation.reviewReason ??
+        `Deterministic Claire invariant failed: ${deterministicFindings.map(finding => finding.category).join(", ")}`,
+    };
+  }
 
   const usefulNextStep =
     stats.acceptedActionCount > 0 ? true : evaluation.usefulNextStepReached;

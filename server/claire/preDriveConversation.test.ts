@@ -74,6 +74,15 @@ describe("Claire pre-drive conversation", () => {
     ).toBe(false);
   });
 
+  it("routes mixed business-plus-goodbye content through Claire before ending", () => {
+    expect(
+      shouldEndClaireCallOnUtterance(
+        "Dana still hasn't replied, but I gotta go.",
+        { holding: false }
+      )
+    ).toBe(false);
+  });
+
   it("still ends on an explicit standalone goodbye", () => {
     expect(shouldEndClaireCallOnUtterance("Bye Claire.", { holding: false })).toBe(true);
   });

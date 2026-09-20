@@ -10,7 +10,7 @@ import {
   type ClaireGenerationDiagnostic,
 } from "./generationTelemetry";
 import { detectClaireConversationalMode, detectRequestedClaireTopic, isPersonalQuestionAboutClaire } from "./topicDetection";
-import { detectCallControl } from "./turn/interpretTurn";
+import { detectCallControl, isPureCallControlTurn } from "./turn/interpretTurn";
 import {
   CLAIRE_V1_REASONING_POLICY,
   detectAvoidanceDisclosure,
@@ -104,7 +104,7 @@ export function shouldEndClaireCallOnUtterance(
   utterance: string,
   _options: { holding?: boolean } = {}
 ): boolean {
-  return isExplicitClaireCallEnd(utterance);
+  return isExplicitClaireCallEnd(utterance) && isPureCallControlTurn(utterance);
 }
 
 function currentStop(context: ClaireDriveContext) {

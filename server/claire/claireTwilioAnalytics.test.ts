@@ -190,7 +190,7 @@ describe("live Claire call answers business questions in the call (U)", () => {
     expect(await say(handlers, callA, "Who are they?")).toContain("Ava Stone");
   });
 
-  it("single work goes to the work loop; a question while it waits is answered and the proposal is kept", async () => {
+  it("single work goes to the work loop; a new question supersedes the stale proposal", async () => {
     const handlers = routes();
     const token = await startCall();
     hoisted.commitment.mockImplementationOnce(async input => {
@@ -203,25 +203,12 @@ describe("live Claire call answers business questions in the call (U)", () => {
 
     const answered = await say(handlers, token, "What was revenue last month?");
     expect(answered).toContain("Paid revenue last month was");
-    expect(answered).toContain('I\'m still holding "Review revenue"');
+    expect(answered).not.toMatch(/still holding|say yes to add/i);
     expect(hoisted.commitment).toHaveBeenCalledTimes(1);
 
-    hoisted.commitment.mockImplementationOnce(async input => {
-      input.state.pendingProposal = null;
-      return {
-        kind: "accepted",
-        speak: "Added: Review revenue. What else?",
-        proposal: input.state.pendingProposal ?? { title: "Review revenue", sourceText: "Add reviewing last month's revenue." },
-        commitmentId: "review-revenue-1",
-        mutationReceipt: {
-          claimedState: "created",
-          entityId: "review-revenue-1",
-          statement: "Added Review revenue to the Day Line",
-        },
-      };
-    });
-    expect(await say(handlers, token, "Yes.")).toContain("Added: Review revenue.");
-    expect(hoisted.commitment).toHaveBeenCalledTimes(2);
+    const staleYes = await say(handlers, token, "Yes.");
+    expect(staleYes).not.toContain("Added: Review revenue.");
+    expect(hoisted.commitment).toHaveBeenCalledTimes(1);
   });
 
   it("dated work becomes one briefing proposal, and a save that fails is never spoken as saved", async () => {

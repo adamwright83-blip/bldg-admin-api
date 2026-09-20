@@ -1,13 +1,14 @@
 import { z } from "zod";
 import { invokeLLM } from "../_core/llm";
 import { claireModelRequest } from "./claireModel";
-import { parseCardinality } from "./turn/interpretTurn";
+import { interpretTurn, parseCardinality, type InterpretedTurn } from "./turn/interpretTurn";
 import {
   UNKNOWN_EVIDENCE,
   coverageVerdict,
   loadLedgerSourceEvidence,
   requiredSourcesFor,
   speakPartialCoverage,
+  speakPartialCoverageVoice,
   speakUnprovableZero,
   type CoverageVerdict,
   type LedgerSourceEvidence,
@@ -117,6 +118,12 @@ export type ClaireAnalyticsFocus = {
   orderQuery?: BusinessQuery | null;
   orderIndex?: number;
   slices?: AnalyticsSlice[];
+  /** Ordered-list continuation state for "the other four", "before Thomas", etc. */
+  orderList?: {
+    baseQuery: BusinessQuery;
+    shownEventKeys: string[];
+    lastOrders: OrderBrief[];
+  };
 };
 
 export type ClaireAnalyticsSession = {
@@ -402,13 +409,57 @@ export function parseBusinessTurn(
   utterance: string,
   session: ClaireAnalyticsSession | null,
   now: Date,
-  timeZone: string
+  timeZone: string,
+  authoritativeInterpretation?: InterpretedTurn
 ): ParsedBusinessTurn {
   const text = utterance.trim();
   if (!text) return { kind: "not_analytics" };
   const lower = normalizeUtterance(text);
   const words = lower.split(/\s+/).filter(Boolean).length;
   const focus = session?.focus ?? {};
+  const interpretation = authoritativeInterpretation ?? interpretTurn(utterance);
+
+  // Continuations of an ordered business list are derived from the PREVIOUS QUERY, never reparsed
+  // as a customer lookup merely because the correction names a customer.
+  if (interpretation.queryRefinement && focus.orderList && session) {
+    const base = focus.orderList.baseQuery;
+    const requested = interpretation.cardinality ?? Math.max(1, base.limit - focus.orderList.shownEventKeys.length);
+    const accumulatedExclusions = Array.from(
+      new Set([...(base.excludeCustomerNames ?? []), ...interpretation.exclusions])
+    );
+    return {
+      kind: "query",
+      query: {
+        ...base,
+        limit: Math.max(1, requested),
+        // Offset is relative to the effective ordered window. If the original query was
+        // anchored, runBusinessQuery applies that anchor first and only then applies offset.
+        offset: focus.orderList.shownEventKeys.length,
+        excludeCustomerNames: accumulatedExclusions.length ? accumulatedExclusions : null,
+      },
+      refinement: true,
+    };
+  }
+
+  // "What happened before Thomas? Don't tell me about Thomas." is an ordered-sale refinement,
+  // not customer history and never action intent.
+  if (interpretation.anchorEntity && /\b(?:sale|sales|order|orders)\b/i.test(text)) {
+    const base = session?.query.metric === "latest_sales" ? session.query : defaultBusinessQuery("latest_sales");
+    return {
+      kind: "query",
+      query: {
+        ...base,
+        metric: "latest_sales",
+        limit: interpretation.cardinality ?? (interpretation.listRequest ? Math.max(2, base.limit) : 5),
+        offset: 0,
+        anchorCustomerName: interpretation.anchorEntity,
+        anchorDirection: interpretation.anchorDirection ?? "before",
+        excludeCustomerNames: interpretation.exclusions.length ? interpretation.exclusions : [interpretation.anchorEntity],
+      },
+      refinement: Boolean(session),
+    };
+  }
+
   // "Add them together" is arithmetic on the thread, not a request to add work.
   if (session && (focus.slices?.length ?? 0) >= 2 && words <= 6 && isCombineRequest(lower)) return { kind: "combine" };
   if (looksLikeWorkRequest(text)) return { kind: "not_analytics" };
@@ -1031,6 +1082,8 @@ export async function answerClaireBusinessTurn(
     state: ClaireAnalyticsState;
     surface: ClaireSurface;
     context?: ClaireDriveContext | null;
+    /** The one authoritative interpretation created at Claire turn entry. */
+    interpretation?: InterpretedTurn;
   },
   deps: Partial<ClaireBusinessTurnDeps> = {}
 ): Promise<ClaireBusinessTurn> {
@@ -1044,7 +1097,7 @@ export async function answerClaireBusinessTurn(
 
   let parsed: ParsedBusinessTurn;
   try {
-    parsed = parseBusinessTurn(input.utterance, session, now, timeZone);
+    parsed = parseBusinessTurn(input.utterance, session, now, timeZone, input.interpretation);
   } catch (error) {
     console.warn("[Claire] business question parsing failed", error);
     return { handled: false };
@@ -1282,6 +1335,24 @@ export async function answerClaireBusinessTurn(
         focus.order = data.orders[0] ?? null;
         focus.orderQuery = turn.query;
         focus.orderIndex = 0;
+        const previousList = session?.focus?.orderList;
+        const continuingSameList =
+          turn.refinement &&
+          previousList &&
+          previousList.baseQuery.metric === turn.query.metric &&
+          (turn.query.offset ?? 0) > 0;
+        focus.orderList = {
+          // Preserve anchor direction and exclusions as part of the cursor. "The other four"
+          // must continue the same effective ordered window, not jump back to the full ledger.
+          baseQuery: continuingSameList ? previousList.baseQuery : { ...turn.query, offset: 0 },
+          shownEventKeys: Array.from(
+            new Set([
+              ...(continuingSameList ? previousList.shownEventKeys : []),
+              ...data.orders.map(order => order.eventKey),
+            ])
+          ),
+          lastOrders: data.orders,
+        };
       } else if (data.kind !== "freshness" && data.kind !== "composition") {
         focus.order = null;
       }
@@ -1323,7 +1394,9 @@ export async function answerClaireBusinessTurn(
       focus,
     };
     const spokenText =
-      coverage.kind === "provable" ? spoken.text : `${spoken.text} ${speakPartialCoverage(coverage)}`.trim();
+      coverage.kind === "provable"
+        ? spoken.text
+        : `${spoken.text} ${input.surface === "voice" ? speakPartialCoverageVoice(coverage) : speakPartialCoverage(coverage)}`.trim();
     return guardedTurn({ handled: true, speak: spokenText, facts: spoken.facts, result });
   }
 }

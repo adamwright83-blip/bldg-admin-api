@@ -13,7 +13,7 @@ import type { BriefingClock, BriefingItem, BriefingTiming, ParsedBriefing } from
  */
 
 const ACTION_WORDS =
-  "pick ?up|pickup|pick|drop ?off|drop|deliver|delivery|drive|go|head|deposit|make|call|text|email|visit|stop by|swing by|grab|buy|get|bring|return|collect|run|meet|finish|print|prep|prepare|send|order|wash|fold|clean|check|take|load|unload|fix|book|pay|follow up|follow-up|remind|put|add|schedule|handle|ship|mail|post|install|set up|clear|restock|count|do|pitch|see|talk to|write|draft|update|file|process|sort|bag|tag|iron|press";
+  "pick ?up|pickup|pick|drop ?off|drop|deliver|delivery|drive|go|head|deposit|make|call|phone|text|email|message|visit|stop by|swing by|grab|buy|get|bring|return|collect|run|meet|finish|print|prep|prepare|send|order|wash|fold|launder|clean|check|take|load|unload|fix|book|pay|follow up|follow-up|remind|put|add|schedule|handle|ship|mail|post|install|set up|clear|restock|count|do|pitch|quote|walk|knock|hit|hitting|see|talk to|write|draft|update|file|process|sort|bag|tag|iron|press|invoice|bill";
 const ACTION = `(?:${ACTION_WORDS})`;
 
 const LEAD_IN = new RegExp(
@@ -61,8 +61,12 @@ function capitalizeFirst(value: string): string {
   return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
 }
 
-function hasAction(value: string): boolean {
+export function containsBriefingAction(value: string): boolean {
   return new RegExp(`\\b${ACTION}\\b`, "i").test(value);
+}
+
+function hasAction(value: string): boolean {
+  return containsBriefingAction(value);
 }
 
 function stripLeadIn(clause: string): string {
@@ -93,6 +97,16 @@ function coreOf(value: string): string {
 
 function leadsWithAction(value: string): boolean {
   return new RegExp(`^${ACTION}\\b`, "i").test(coreOf(value));
+}
+
+/** Shared structural predicate for the authoritative turn interpreter. */
+export function briefingClauseLeadsWithAction(value: string): boolean {
+  return leadsWithAction(value);
+}
+
+/** Shared completed-work grammar for the authoritative turn interpreter. */
+export function isCompletedBriefingClause(value: string): boolean {
+  return COMPLETED.test(stripLeadIn(value)) || COMPLETED.test(value);
 }
 
 const FRAGMENT_JOIN = /^(?:for|with|from|to|on|east|west|north|south)\b(?!\s+(?:today|tomorrow|tonight))/i;

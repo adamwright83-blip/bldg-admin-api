@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { index, json, mysqlEnum, mysqlTable, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
-import { commercialFollowUps, dayDirectorCommitments } from "../../../drizzle/schema";
+import {
+  commercialAccounts,
+  commercialFollowUps,
+  commercialMissions,
+  commercialOpportunities,
+  dayDirectorCommitments,
+} from "../../../drizzle/schema";
 import { addDaysYmd, businessToday } from "../../analytics/businessPeriods";
 import { groupCustomers } from "../../analytics/businessMetrics";
 import { loadDataFreshness } from "../../analytics/dataFreshness";
@@ -28,6 +34,7 @@ import {
 import { buildWinBackDraft, scoreCustomerChurn } from "../../../shared/customerChurn";
 import { isStrategyFeatureEnabled, STRATEGY_FLAGS } from "../../../shared/strategyFeatureFlags";
 import { requiresSpendClearance } from "../../strategy/spendClearance";
+import { isProductionVisibleBusinessRecord } from "../knowledge/productionVisibility";
 
 export const claireOperatorDoctrine = mysqlTable(
   "claire_operator_doctrine",
@@ -100,7 +107,14 @@ async function loadObligations(tenantId: string, operatorUserId: string): Promis
       .select()
       .from(claireProactiveObligations)
       .where(and(eq(claireProactiveObligations.tenantId, tenantId), eq(claireProactiveObligations.operatorUserId, operatorUserId)));
-    return rows.map(row => row.payloadJson as ProactiveObligation);
+    return rows
+      .map(row => row.payloadJson as ProactiveObligation)
+      .filter(item =>
+        isProductionVisibleBusinessRecord({
+          accountName: item.subjectName,
+          note: [item.title, item.why].filter(Boolean).join(" "),
+        })
+      );
   } catch {
     return [];
   }
@@ -263,15 +277,61 @@ export async function ensureAdamBoard(input: {
 
   if (!skipSales) {
     try {
-      const due = await db
+      const dueRows = await db
         .select()
         .from(commercialFollowUps)
         .where(and(eq(commercialFollowUps.tenantId, input.tenantId), eq(commercialFollowUps.status, "open")));
+      const missionIds = Array.from(new Set(dueRows.map(row => row.missionId)));
+      const missions = missionIds.length
+        ? await db
+            .select({
+              id: commercialMissions.id,
+              code: commercialMissions.code,
+              createdBy: commercialMissions.createdBy,
+              opportunityId: commercialMissions.opportunityId,
+            })
+            .from(commercialMissions)
+            .where(and(eq(commercialMissions.tenantId, input.tenantId), inArray(commercialMissions.id, missionIds)))
+        : [];
+      const opportunityIds = Array.from(
+        new Set(missions.map(mission => mission.opportunityId).filter((id): id is number => id != null))
+      );
+      const opportunities = opportunityIds.length
+        ? await db
+            .select({ id: commercialOpportunities.id, accountId: commercialOpportunities.accountId })
+            .from(commercialOpportunities)
+            .where(and(eq(commercialOpportunities.tenantId, input.tenantId), inArray(commercialOpportunities.id, opportunityIds)))
+        : [];
+      const accountIds = Array.from(new Set(opportunities.map(opportunity => opportunity.accountId)));
+      const accounts = accountIds.length
+        ? await db
+            .select({ id: commercialAccounts.id, name: commercialAccounts.name })
+            .from(commercialAccounts)
+            .where(and(eq(commercialAccounts.tenantId, input.tenantId), inArray(commercialAccounts.id, accountIds)))
+        : [];
+      const missionById = new Map(missions.map(mission => [mission.id, mission]));
+      const opportunityById = new Map(opportunities.map(opportunity => [opportunity.id, opportunity]));
+      const accountById = new Map(accounts.map(account => [account.id, account]));
+      const due = dueRows.filter(follow => {
+        const mission = missionById.get(follow.missionId);
+        const opportunity = mission?.opportunityId ? opportunityById.get(mission.opportunityId) : undefined;
+        const account = opportunity ? accountById.get(opportunity.accountId) : undefined;
+        return isProductionVisibleBusinessRecord({
+          createdBy: [follow.createdBy, mission?.createdBy].filter(Boolean).join(" "),
+          requestId: follow.requestId,
+          missionCode: mission?.code ?? null,
+          accountName: account?.name ?? null,
+          note: follow.note,
+        });
+      });
       const already = await loadObligations(input.tenantId, input.operatorUserId);
       for (const follow of due.slice(0, 5)) {
         const dueDate = follow.dueAt.toISOString().slice(0, 10);
         if (dueDate > addDaysYmd(today, 7)) continue;
-        const name = `Mission ${follow.missionId}`;
+        const mission = missionById.get(follow.missionId);
+        const opportunity = mission?.opportunityId ? opportunityById.get(mission.opportunityId) : undefined;
+        const account = opportunity ? accountById.get(opportunity.accountId) : undefined;
+        const name = account?.name ?? mission?.code ?? `Mission ${follow.missionId}`;
         const obligation = salesFollowUpObligation({
           accountKey: String(follow.missionId),
           accountName: name,

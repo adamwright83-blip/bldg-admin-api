@@ -15,6 +15,7 @@ import { getDb } from "../../db";
 import { addDaysYmd, daysInclusive, formatBusinessDate } from "../../analytics/businessPeriods";
 import { zonedYmd } from "../../dashboardZoned";
 import { searchOperatorConversation, type RememberedTurn } from "./conversationMemory";
+import { isProductionVisibleBusinessRecord } from "./productionVisibility";
 
 /**
  * Everything Goldline recorded about a commercial account (The Louise,
@@ -25,7 +26,7 @@ import { searchOperatorConversation, type RememberedTurn } from "./conversationM
  * call quote is only what Adam said.
  */
 
-export type AccountRef = { id: number; name: string; accountType: string };
+export type AccountRef = { id: number; name: string; accountType: string; aliases?: string[] };
 
 export type AccountHistory = {
   account: AccountRef;
@@ -62,22 +63,50 @@ function tokens(value: string): string[] {
 export async function listAccountRefs(tenantId: string): Promise<AccountRef[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const rows = await db
-    .select({ id: commercialAccounts.id, name: commercialAccounts.name, accountType: commercialAccounts.accountType })
-    .from(commercialAccounts)
-    .where(eq(commercialAccounts.tenantId, tenantId))
-    .orderBy(asc(commercialAccounts.name))
-    .limit(500);
-  return rows.filter(row => !TEST_ACCOUNT.test(row.name));
+  const [rows, contacts] = await Promise.all([
+    db
+      .select({ id: commercialAccounts.id, name: commercialAccounts.name, accountType: commercialAccounts.accountType })
+      .from(commercialAccounts)
+      .where(eq(commercialAccounts.tenantId, tenantId))
+      .orderBy(asc(commercialAccounts.name))
+      .limit(500),
+    db
+      .select({
+        accountId: commercialAccountContacts.accountId,
+        name: commercialAccountContacts.name,
+        source: commercialAccountContacts.source,
+      })
+      .from(commercialAccountContacts)
+      .where(eq(commercialAccountContacts.tenantId, tenantId))
+      .limit(1000),
+  ]);
+  const aliasesByAccount = new Map<number, string[]>();
+  for (const contact of contacts) {
+    const name = contact.name?.trim();
+    if (
+      !name ||
+      TEST_ACCOUNT.test(name) ||
+      !isProductionVisibleBusinessRecord({ accountName: name, createdBy: contact.source })
+    ) continue;
+    aliasesByAccount.set(contact.accountId, [...(aliasesByAccount.get(contact.accountId) ?? []), name]);
+  }
+  return rows
+    .filter(row => !TEST_ACCOUNT.test(row.name))
+    .map(row => ({ ...row, aliases: aliasesByAccount.get(row.id) ?? [] }));
 }
 
 /** Accounts whose distinctive name words appear in what Adam said. */
 export function matchAccounts(lower: string, accounts: AccountRef[]): AccountRef[] {
   const scored = accounts
     .map(account => {
-      const words = tokens(account.name);
-      const hits = words.filter(word => new RegExp(`\\b${word}\\b`).test(lower)).length;
-      return { account, hits, words: words.length };
+      const candidates = [account.name, ...(account.aliases ?? [])];
+      const candidateScores = candidates.map(candidate => {
+        const words = tokens(candidate);
+        const hits = words.filter(word => new RegExp(`\\b${word}\\b`).test(lower)).length;
+        return { hits, words: words.length };
+      });
+      const bestCandidate = candidateScores.sort((a, b) => b.hits - a.hits || a.words - b.words)[0] ?? { hits: 0, words: 0 };
+      return { account, hits: bestCandidate.hits, words: bestCandidate.words };
     })
     .filter(entry => entry.hits > 0 && entry.hits >= Math.min(1, entry.words));
   if (!scored.length) return [];
@@ -88,6 +117,7 @@ export function matchAccounts(lower: string, accounts: AccountRef[]): AccountRef
 export type AccountAspect = "summary" | "last_contact" | "said" | "follow_up" | "visit";
 
 export function accountAspect(lower: string): AccountAspect {
+  if (/\b(?:what should i do about|how should i handle|should i (?:call|text|email|visit|contact)|is it worth)\b/.test(lower)) return "follow_up";
   if (/\bwhat did i (?:say|tell you|note|report)\b|\bwhat was said\b|\bwhat did (?:i|we) (?:decide|agree)\b|\bwhat did you tell me\b/.test(lower)) return "said";
   if (/\bwhat happened\b.*\b(?:last time|visit|went|go|there)\b|\bhow did (?:the|that|my) visit go\b/.test(lower)) return "visit";
   if (/\bfollow[- ]?up\b|\bowe\b|\bstill (?:need|have) to\b|\bnext step\b/.test(lower)) return "follow_up";
@@ -99,7 +129,7 @@ export function accountAspect(lower: string): AccountAspect {
 }
 
 export function isAccountQuestion(lower: string): boolean {
-  return /\b(what happened|what do (?:we|i) know|tell me about|status|last (?:contact|time|visit|touch)|when did i|follow[- ]?up|owe|what did i (?:say|tell)|what did (?:we|i) decide|how did|visit|pitch|account|prospect)\b/.test(lower);
+  return /\b(what happened|what do (?:we|i) know|tell me about|status|last (?:contact|time|visit|touch)|when did i|follow[- ]?up|owe|what did i (?:say|tell)|what did (?:we|i) decide|how did|visit|pitch|account|prospect|what should i do about|how should i handle|should i (?:call|text|email|visit|contact)|is it worth)\b/.test(lower);
 }
 
 function iso(value: Date | null | undefined): string | null {
@@ -125,6 +155,7 @@ export async function loadAccountHistory(input: {
           id: commercialMissions.id,
           code: commercialMissions.code,
           status: commercialMissions.status,
+          createdBy: commercialMissions.createdBy,
           createdAt: commercialMissions.createdAt,
           updatedAt: commercialMissions.updatedAt,
         })
@@ -132,7 +163,14 @@ export async function loadAccountHistory(input: {
         .where(and(eq(commercialMissions.tenantId, tenantId), inArray(commercialMissions.opportunityId, opportunityIds)))
         .orderBy(desc(commercialMissions.createdAt))
     : [];
-  const missionIds = missions.map(row => row.id);
+  const visibleMissions = missions.filter(row =>
+    isProductionVisibleBusinessRecord({
+      createdBy: row.createdBy,
+      missionCode: row.code,
+      accountName: account.name,
+    })
+  );
+  const missionIds = visibleMissions.map(row => row.id);
   const nameTerms = tokens(account.name);
   const [events, fields, outcomes, followUps, pipelines, contacts, dayLine, mentions] = await Promise.all([
     missionIds.length
@@ -171,7 +209,12 @@ export async function loadAccountHistory(input: {
           .limit(1)
       : Promise.resolve([]),
     db
-      .select({ name: commercialAccountContacts.name, title: commercialAccountContacts.title, relationshipType: commercialAccountContacts.relationshipType })
+      .select({
+        name: commercialAccountContacts.name,
+        title: commercialAccountContacts.title,
+        relationshipType: commercialAccountContacts.relationshipType,
+        source: commercialAccountContacts.source,
+      })
       .from(commercialAccountContacts)
       .where(and(eq(commercialAccountContacts.tenantId, tenantId), eq(commercialAccountContacts.accountId, account.id)))
       .limit(10),
@@ -181,6 +224,7 @@ export async function loadAccountHistory(input: {
             title: dayDirectorCommitments.title,
             businessDate: dayDirectorCommitments.businessDate,
             status: dayDirectorCommitments.status,
+            sourceText: dayDirectorCommitments.sourceText,
           })
           .from(dayDirectorCommitments)
           .where(
@@ -196,47 +240,87 @@ export async function loadAccountHistory(input: {
   ]);
   return {
     account,
-    missions: missions.map(row => ({
+    missions: visibleMissions.map(row => ({
       id: row.id,
       code: row.code,
       status: row.status,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     })),
-    events: events.map(row => ({
-      at: row.createdAt.toISOString(),
-      missionId: row.missionId,
-      eventName: row.eventName,
-      toStatus: row.toStatus,
-      actorType: row.actorType,
-    })),
-    fieldVisits: fields.map(row => ({
-      missionId: row.missionId,
-      arrivedAt: iso(row.arrivedAt),
-      departedAt: iso(row.departedAt),
-      notes: row.notes ?? null,
-    })),
-    outcomes: outcomes.map(row => ({
-      missionId: row.missionId,
-      outcome: row.outcome,
-      notes: row.notes,
-      followUpAt: iso(row.followUpAt),
-      createdAt: row.createdAt.toISOString(),
-      decisionMakerStatus: row.decisionMakerStatus,
-      collateralDelivered: Boolean(row.collateralDelivered),
-    })),
-    followUps: followUps.map(row => ({
-      id: row.id,
-      pipelineId: row.pipelineId,
-      status: row.status,
-      dueAt: row.dueAt.toISOString(),
-      note: row.note,
-      completedAt: iso(row.completedAt),
-    })),
+    events: events
+      .filter(row =>
+        isProductionVisibleBusinessRecord({
+          createdBy: row.actorId,
+          requestId: row.idempotencyKey,
+          note: row.eventName,
+        })
+      )
+      .map(row => ({
+        at: row.createdAt.toISOString(),
+        missionId: row.missionId,
+        eventName: row.eventName,
+        toStatus: row.toStatus,
+        actorType: row.actorType,
+      })),
+    fieldVisits: fields
+      .filter(row => isProductionVisibleBusinessRecord({ note: row.notes }))
+      .map(row => ({
+        missionId: row.missionId,
+        arrivedAt: iso(row.arrivedAt),
+        departedAt: iso(row.departedAt),
+        notes: row.notes ?? null,
+      })),
+    outcomes: outcomes
+      .filter(row =>
+        isProductionVisibleBusinessRecord({
+          createdBy: row.recordedBy,
+          note: row.notes,
+        })
+      )
+      .map(row => ({
+        missionId: row.missionId,
+        outcome: row.outcome,
+        notes: row.notes,
+        followUpAt: iso(row.followUpAt),
+        createdAt: row.createdAt.toISOString(),
+        decisionMakerStatus: row.decisionMakerStatus,
+        collateralDelivered: Boolean(row.collateralDelivered),
+      })),
+    followUps: followUps
+      .filter(row =>
+        isProductionVisibleBusinessRecord({
+          createdBy: row.createdBy,
+          requestId: row.requestId,
+          missionCode: visibleMissions.find(mission => mission.id === row.missionId)?.code ?? null,
+          accountName: account.name,
+          note: row.note,
+        })
+      )
+      .map(row => ({
+        id: row.id,
+        pipelineId: row.pipelineId,
+        status: row.status,
+        dueAt: row.dueAt.toISOString(),
+        note: row.note,
+        completedAt: iso(row.completedAt),
+      })),
     pipelineStage: pipelines[0]?.stage ?? null,
     pipelineId: pipelines[0]?.id ?? null,
-    contacts: contacts.map(row => ({ name: row.name, title: row.title, relationshipType: row.relationshipType })),
-    dayLineMentions: dayLine.map(row => ({ title: row.title, businessDate: row.businessDate, status: row.status })),
+    contacts: contacts
+      .filter(row =>
+        isProductionVisibleBusinessRecord({
+          accountName: row.name,
+          createdBy: row.source,
+        })
+      )
+      .map(row => ({ name: row.name, title: row.title, relationshipType: row.relationshipType })),
+    dayLineMentions: dayLine
+      .filter(row =>
+        isProductionVisibleBusinessRecord({
+          note: [row.title, row.sourceText].filter(Boolean).join(" "),
+        })
+      )
+      .map(row => ({ title: row.title, businessDate: row.businessDate, status: row.status })),
     conversationMentions: mentions,
   };
 }

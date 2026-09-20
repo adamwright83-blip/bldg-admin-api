@@ -164,7 +164,7 @@ describe("A — the final acceptance conversation, as one conversation", () => {
 
     const rebecca = await ask("What about Rebecca?");
     expect(rebecca).toContain("Rebecca Stone has $190 in paid revenue across 4 orders this year so far; the most recent was September 2.");
-    expect(rebecca).toContain("still holding your list");
+    expect(rebecca).not.toMatch(/still holding|say yes/i);
 
     const recent = await ask("Which of them ordered most recently?");
     expect(recent).toContain("John Cunningham ordered most recently, on September 4; Rebecca Stone's last order was September 2.");

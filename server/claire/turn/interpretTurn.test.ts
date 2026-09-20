@@ -109,9 +109,16 @@ describe("B. call ending is a first-class intent", () => {
     expect(result.kind).not.toBe("briefing_proposed");
   });
 
-  it("MIXED: a status update ending in departure still terminates", () => {
-    expect(detectCallControl("Dana still hasn't replied, but I gotta go.")).toBe("end");
-    expect(isExplicitClaireCallEnd("Dana still hasn't replied, but I gotta go.")).toBe(true);
+  it("MIXED: a status update ending in departure is answered once, then terminates", async () => {
+    const utterance = "Dana still hasn't replied, but I gotta go.";
+    expect(detectCallControl(utterance)).toBe("end");
+    expect(isExplicitClaireCallEnd(utterance)).toBe(true);
+    // The webhook must not throw away the business content with an immediate generic hangup.
+    expect(shouldEndClaireCallOnUtterance(utterance, { holding: false })).toBe(false);
+    const h = harness();
+    const { result } = await h.say(utterance, model("Dana is still open. Drive safe."));
+    expect(result.endCall).toBe(true);
+    expect(result.endCallReason).toBe("operator_closing");
   });
 
   it("a judgment question containing 'I go' is NOT a departure (false-hangup guard)", () => {

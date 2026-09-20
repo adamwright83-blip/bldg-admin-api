@@ -1,3 +1,11 @@
+import {
+  briefingClauseLeadsWithAction,
+  containsBriefingAction,
+  isCompletedBriefingClause,
+  splitClauses,
+} from "../briefing/deterministicBriefing";
+import { classifyDoctrineUtterance } from "../../../shared/claireProactive";
+
 /**
  * ONE authoritative interpretation of the operator's utterance, produced before any route acts.
  *
@@ -37,10 +45,7 @@ export type TurnIntentKind =
   | "call_control"
   | "acknowledgement"
   | "operator_work_commitment"
-  | "query_refinement"
-  | "broad_briefing"
-  | "correctness_challenge"
-  | "provenance_question";
+  | "query_refinement";
 
 export type InterpretedTurn = {
   intents: TurnIntentKind[];
@@ -71,18 +76,24 @@ export type InterpretedTurn = {
   queryRefinement: boolean;
   /** Entities the operator asked to leave OUT ("don't tell me about Thomas"). */
   exclusions: string[];
-  /** Weekday/relative-date tokens, kept OUT of entity candidates ("Dana Tuesday" is not a name). */
-  temporal: string[];
-  /** Proper-noun entity candidates with temporal tokens removed. */
-  entities: string[];
-  /** A genuinely BROAD briefing request. A scoped "what should I do about X" is not one. */
-  broadBriefingRequest: boolean;
-  /** An explicit challenge to a prior claim's CORRECTNESS (outranks refinement wording). */
-  correctnessChallenge: boolean;
-  /** A question about where a number came from; provenance may answer it. */
-  provenanceQuestion: boolean;
   /** A named record the query is anchored to ("before Thomas"). */
   anchorEntity: string | null;
+  /** Temporal direction around the anchor; independent from the entity itself. */
+  anchorDirection: "before" | "after" | null;
+  /** The operator explicitly asks whether a prior factual answer is correct/current. */
+  correctnessChallenge: boolean;
+  /** Advice/judgment is requested; this never authorizes a mutation by itself. */
+  businessJudgment: boolean;
+  /** A genuinely broad request for the operating brief, not "what should I do about Dana". */
+  broadOperationalBriefing: boolean;
+  /** Weekday/date language resolved separately from entity names. */
+  temporalReference: string | null;
+  /** All resolved temporal tokens; dates/weekdays never become entity names. */
+  temporal: string[];
+  /** Proper-noun entity candidates with temporal/furniture tokens removed. */
+  entities: string[];
+  /** Standing/temporary operator doctrine instruction; the doctrine writer may run only when true. */
+  doctrineInstruction: boolean;
 };
 
 // ── Call control ─────────────────────────────────────────────────────────────────────────────
@@ -99,9 +110,9 @@ export type InterpretedTurn = {
 const DEPARTURE =
   /\b(?:i|we)\s*(?:'ve|'ll|'m)?\s*(?:have\s+to|has\s+to|had\s+to|need\s+to|needs\s+to|got\s+to|got\s+ta|gotta|must|better|gonna)\s+(?:go|run|head\s+out|get\s+going|get\s+off|get\s+back\s+to\s+it|take\s+off|jump\s+off|leave|jet)\b/;
 const PARTING =
-  /\b(?:talk|speak|catch)\s+(?:to\s+|with\s+)?(?:you|ya)?\s*(?:later|tomorrow|soon|then)\b|\b(?:good\s*bye|goodbye|bye(?:\s+claire)?|later\s+claire)\b/;
+  /\b(?:(?:i|we)(?:'ll|\s+will)\s+)?(?:talk|speak|catch)\s+(?:to\s+|with\s+)?(?:you|ya)?\s*(?:later|tomorrow|soon|then)\b|\b(?:good\s*bye|goodbye|bye(?:\s+claire)?|later\s+claire)\b/;
 const EXPLICIT_END =
-  /\b(?:end\s+(?:the\s+)?call|hang\s+up|we(?:\s+are|'re)\s+done|i(?:\s+am|'m)\s+done\s+talking|that(?:\s+is|'s)\s+it\s+for\s+now|that(?:\s+is|'s)\s+all\s+for\s+now)\b/;
+  /\b(?:end\s+(?:the\s+)?call|hang\s+up|we(?:\s+are|'re)\s+done|i(?:\s+am|'m)\s+done\s+talking|that(?:\s+is|'s)\s+it\s+for\s+now|that(?:\s+is|'s)\s+all\s+for\s+now|(?:you\s+)?have\s+a\s+good\s+(?:day|night|one))\b/;
 
 /**
  * Acknowledgements that merely SOUND final. These must never hang up on their own — a live status
@@ -122,10 +133,55 @@ export function detectCallControl(utterance: string): "end" | "continue" {
   return DEPARTURE.test(text) || PARTING.test(text) || EXPLICIT_END.test(text) ? "end" : "continue";
 }
 
+/**
+ * True only when the turn is essentially just leave-taking. Mixed turns ("Dana hasn't replied,
+ * but I gotta go") must still reach the kernel so Claire can give the minimal useful response and
+ * then hang up.
+ */
+export function isPureCallControlTurn(utterance: string): boolean {
+  if (detectCallControl(utterance) !== "end") return false;
+  let remainder = utterance.toLowerCase();
+  // A caller may stack closes ("Have a good day. I'm done talking."). Remove every recognized
+  // call-control clause, not just the first regex match.
+  for (let i = 0; i < 4; i += 1) {
+    const next = remainder.replace(DEPARTURE, " ").replace(PARTING, " ").replace(EXPLICIT_END, " ");
+    if (next === remainder) break;
+    remainder = next;
+  }
+  remainder = remainder
+    .replace(/\b(?:have\s+a\s+good\s+(?:day|night|one)|drive\s+safe|thanks?|thank\s+you|please|okay|ok|alright|well|so|but|and|then|claire)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return remainder.length === 0;
+}
+
 // ── Action intent ────────────────────────────────────────────────────────────────────────────
-/** A directive aimed at Claire's tracking systems: "add…", "put… on the Day Line", "remind me…". */
-const ACTION_DIRECTIVE =
-  /\b(?:add|put|schedule|book|remind\s+me|track|log|note|create|set\s+up|pencil|block\s+out|move|reschedule|push)\b/i;
+/** A directive aimed at Claire's systems, not merely an action word inside a question. */
+const ACTION_VERB =
+  String.raw`(?:add|put|schedule|book|track|log|note|create|set\s+up|pencil|block\s+out|move|reschedule|push|cancel|remove|delete|edit|change|mark(?:\s+(?:it|that|this))?\s+(?:done|complete|completed)|remind\s+me)`;
+const ACTION_DIRECTIVE_SHAPE = new RegExp(
+  String.raw`^(?:(?:ok(?:ay)?|hey|claire|so|and|also|yeah|yes|please)[,.!\s]+)*(?:(?:can|could|would|will)\s+you\s+|i\s+(?:need|want|would\s+like)\s+you\s+to\s+|please\s+)?${ACTION_VERB}\b`,
+  "i"
+);
+const ACTION_TRACKING_PHRASE =
+  /\byou\s+can\s+put\s+(?:that|it|this)\b|\bremind\s+me\b|\b(?:add|put|save|track)\b[^.!?]{0,60}\b(?:day\s*line|calendar|reminder|to-?do|my\s+list|the\s+list)\b/i;
+const ACTION_DIRECTIVE_CLAUSE = new RegExp(
+  String.raw`(?:^|[?.!,;]\s*|\b(?:and|then|also)\s+)(?:(?:can|could|would|will)\s+you\s+|please\s+)?${ACTION_VERB}\b`,
+  "i"
+);
+const FIRST_PERSON_MUTATION =
+  /\b(?:i|we)\s+(?:can|should|need\s+to|want\s+to|have\s+to|will|'ll)\s+(?:remove|cancel|delete|edit|change|move|reschedule|push|add|schedule|save|track)\b/i;
+
+function detectExplicitActionRequest(text: string): boolean {
+  // "Remind me what revenue was" means tell me again; it is not authority to create a reminder.
+  if (/\bremind\s+me\s+(?:what|who|when|where|why|how|which)\b/i.test(text)) return false;
+  return (
+    ACTION_DIRECTIVE_SHAPE.test(text.trim()) ||
+    ACTION_DIRECTIVE_CLAUSE.test(text) ||
+    ACTION_TRACKING_PHRASE.test(text) ||
+    FIRST_PERSON_MUTATION.test(text)
+  );
+}
 
 /**
  * Explicit refusal. Any of these makes work proposal impossible for the turn, even alongside a
@@ -143,9 +199,8 @@ const ACTION_REFUSAL = new RegExp(
     String.raw`\bdid\s*n'?t\s+ask\s+you\s+to\b`,
     // "don't put anything on the Day Line"
     String.raw`\b(?:don'?t|do\s+not)\b[^.!?]{0,30}\banything\b`,
-    // "actually don't do that" / "don't bother" — a refusal aimed at the pending action itself.
-    String.raw`\b(?:don'?t|do\s+not)\s+(?:do|bother\s+with|worry\s+about)\s+(?:that|it|this|any\s+of\s+that)\b`,
-    String.raw`\b(?:never\s*mind|nevermind|forget\s+(?:it|that)|scratch\s+that|cancel\s+that)\b`,
+    // "actually don't do that" / "don't save it" — refusal of the currently pending action.
+    String.raw`\b(?:don'?t|do\s+not)\s+(?:do|add|put|change|save|schedule|track|keep)\s+(?:that|it|anything)\b`,
   ].join("|"),
   "i"
 );
@@ -210,14 +265,62 @@ const LIST_NOUN = /\b(?:sales|orders|customers|clients|payments|invoices|account
 
 /** "the other four", "what about the rest", "and the others" — refine the previous query. */
 const QUERY_REFINEMENT =
-  /\b(?:the\s+)?other\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b|\bthe\s+(?:rest|others)\b|\bwhat\s+about\s+the\s+(?:rest|others)\b|\bi\s+asked\s+(?:you\s+)?for\b/i;
+  /\b(?:the\s+)?other\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b|\bthe\s+(?:rest|others)\b|\bwhat\s+about\s+the\s+(?:rest|others)\b/i;
+
+const CORRECTNESS_CHALLENGE =
+  /\b(?:are\s+you\s+sure|check\s+(?:that|those|it|the\s+(?:number|numbers|figure|figures))\s+again|verify\s+(?:that|those|it|the\s+(?:number|numbers|figure|figures))|is\s+(?:that|this)\s+(?:number|figure|right|correct)|are\s+(?:those|these)\s+(?:numbers|figures)\s+(?:right|correct))\b/i;
+
+const BUSINESS_JUDGMENT =
+  /\b(?:what\s+should\s+i\s+do\s+about|how\s+should\s+i\s+handle|what\s+would\s+you\s+do\s+about|would\s+you\s+(?:call|text|email|visit|go\s+back)|is\s+it\s+worth\s+(?:calling|texting|emailing|visiting|going\s+back))\b/i;
+
+const BROAD_OPERATIONAL_BRIEFING =
+  /^(?:(?:(?:good\s+)?morning|hey|hi|hello)(?:\s+claire)?[,.!]*\s+)?(?:what\s+should\s+i\s+(?:do|know)(?:\s+(?:today|this\s+morning))?|what(?:'s|\s+is)\s+the\s+most\s+important(?:\s+thing)?|what\s+do\s+i\s+need\s+to\s+know(?:\s+(?:today|this\s+morning))?|what(?:'s|\s+is)\s+(?:going\s+on|up)|how(?:'s|\s+is)\s+business)[?.!]*$/i;
+
+const TEMPORAL_REFERENCE =
+  /\b(today|tomorrow|tonight|yesterday|monday|tuesday|wednesday|thursday|friday|saturday|sunday|this\s+week|next\s+week|last\s+week|morning|afternoon|evening|weekend)\b/gi;
+
+const COMMON_ENTITY_FURNITURE = new Set(
+  ("The This That These Those There Did How What When Who Where Which Are Is Was Were Have Has Had And But Okay Yes No Not Claire Adam Goldline Day Line Order Orders Sale Sales Customer Customers Tell Give Show Add Put Call Text Email Dont Um Uh Well Actually Wait Sorry Good Morning Afternoon Evening Hey Hi Hello Thanks Thank Please Let Just Can Could Would Should Do Does So Now Then Also Still Anything Something Nothing I'm Im We're Its It's Right Sure Cool Fine Great Perfect Understood Gotcha").split(/\s+/)
+);
+
+export function extractEntityAndTime(text: string): { entities: string[]; temporal: string[] } {
+  const temporal = Array.from(
+    new Set((text.match(TEMPORAL_REFERENCE) ?? []).map(token => token.toLowerCase()))
+  );
+  const withoutTemporal = text.replace(TEMPORAL_REFERENCE, " ");
+  const entities = Array.from(
+    new Set(
+      (withoutTemporal.match(/\b[A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)?/g) ?? [])
+        .map(candidate => {
+          const words = candidate.trim().split(/\s+/);
+          while (words.length) {
+            const raw = words[0]!;
+            const normalized = raw.replace(/'(?:s|re|ve|d|ll|m|t)$/i, "");
+            if (!COMMON_ENTITY_FURNITURE.has(raw) && !COMMON_ENTITY_FURNITURE.has(normalized)) break;
+            words.shift();
+          }
+          return words.join(" ");
+        })
+        .filter(candidate => candidate && !COMMON_ENTITY_FURNITURE.has(candidate))
+    )
+  );
+  return { entities, temporal };
+}
 
 /** "before Thomas", "after the Louise order" — anchor the window on a named record. */
-const ANCHOR = /\b(?:before|prior\s+to|preceding|after|since)\s+([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)?)/;
-/** Only a capitalised token in the ORIGINAL text is a name; "about the rest" is not an entity. */
+const ANCHOR = /\b(before|prior\s+to|preceding|after|since)\s+([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)?)/;
+const TEMPORAL_ENTITY_WORDS = new Set([
+  "today", "tomorrow", "tonight", "yesterday",
+  "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+  "january", "february", "march", "april", "may", "june", "july", "august",
+  "september", "october", "november", "december",
+]);
+/** Only a capitalised non-temporal token in the ORIGINAL text is a name. */
 function properNoun(candidate: string | undefined): string | null {
   const token = candidate?.trim();
-  return token && /^[A-Z]/.test(token) ? token : null;
+  if (!token || !/^[A-Z]/.test(token)) return null;
+  const first = token.split(/\s+/)[0]!.toLowerCase();
+  return TEMPORAL_ENTITY_WORDS.has(first) ? null : token;
 }
 
 /** "don't tell me about Thomas" — an exclusion, not a refusal to act. */
@@ -230,9 +333,6 @@ const EXCLUSION =
  * property that separates the correct proposal ("I need to call Dana on Tuesday") from the wrong
  * one ("What sales happen before Thomas? ... don't tell me about Thomas").
  */
-const WORK_VERB =
-  /\b(?:deliver|deliveries|drop\s*off|dropping\s*off|pick\s*up|picking\s*up|pickup|collect|return|returning|visit|visiting|stop\s+by|swing\s+by|go\s+to|head\s+to|drive\s+to|call|calling|phone|text|texting|email|emailing|message|meet|meeting|hit|hitting|deposit|install|drop|run|deliver|quote|pitch|walk|knock|follow\s+up|invoice|bill|wash|fold|launder)\b/i;
-
 /**
  * The operator describing THEIR OWN work — either committing to it in first person ("I need to
  * call Dana on Tuesday") or dictating it in the imperative shorthand the briefing product is built
@@ -263,66 +363,22 @@ function hasWorkClause(text: string): boolean {
   return text
     .split(/(?<=[.!?])\s+|\n+/)
     .some(sentence => {
-      const clause = sentence.trim();
-      if (!clause || /\?\s*$/.test(clause)) return false;
-      return WORK_VERB.test(clause);
+      const whole = sentence.trim();
+      if (!whole || /\?\s*$/.test(whole)) return false;
+      return splitClauses(whole).some(({ text: clause }) =>
+        briefingClauseLeadsWithAction(clause) || isCompletedBriefingClause(clause)
+      );
     });
 }
 
 export function detectOperatorWorkCommitment(text: string): boolean {
-  if (FIRST_PERSON_COMMITMENT.test(text) && WORK_VERB.test(text)) return true;
+  if (FIRST_PERSON_COMMITMENT.test(text) && containsBriefingAction(text)) return true;
   return hasWorkClause(text);
 }
 
 /** A bare acknowledgement closes a beat. It is not a question, a challenge, or work. */
 const ACKNOWLEDGEMENT =
   /^(?:ok(?:ay)?|got\s+it|gotcha|understood|i(?:'m|\s+am)\s+(?:all\s+)?good|we'?re\s+good|sure|yeah|yep|yup|right|cool|fine|nice|great|perfect|thanks?|thank\s+you|that\s+answers\s+it|makes\s+sense|no\s+worries)[.!]?$/i;
-
-const WEEKDAY_OR_DATE =
-  /\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|tonight|yesterday|this\s+week|next\s+week|last\s+week|morning|afternoon|evening|weekend)\b/gi;
-
-const COMMON_CAPS = new Set(
-  ("The This That These Those There Did How What When Who Where Which Are Is Was Were Have Has Had And But Okay Yes No Not Claire Adam Goldline Day Line Order Orders Sale Sales Customer Customers Tell Give Show Add Put Call Text Email Dont Um Uh Well Actually Wait Sorry " +
-  // sentence-initial furniture: "Good morning" must not read as an entity named Good
-  "Good Morning Afternoon Evening Hey Hi Hello Thanks Thank Please Let Just Can Could Would Should Do Does So Now Then Also Still Anything Something Nothing I'm Im We're Its It's Right Sure Cool Fine Great Perfect Understood Gotcha").split(/\s+/)
-);
-
-/** Entity candidates: capitalised tokens that are neither dates nor sentence furniture. */
-export function extractEntities(text: string): { entities: string[]; temporal: string[] } {
-  const temporal = Array.from(new Set((text.match(WEEKDAY_OR_DATE) ?? []).map(token => token.toLowerCase())));
-  const withoutTemporal = text.replace(WEEKDAY_OR_DATE, " ");
-  const entities = Array.from(
-    new Set(
-      (withoutTemporal.match(/\b[A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)?/g) ?? [])
-        .map(match => {
-          // "Call Marcus" → "Marcus": drop leading furniture rather than discarding the name.
-          const words = match.trim().split(/\s+/);
-          while (words.length && COMMON_CAPS.has(words[0]!)) words.shift();
-          return words.join(" ");
-        })
-        .filter(token => token && !COMMON_CAPS.has(token))
-    )
-  );
-  return { entities, temporal };
-}
-
-/**
- * A BROAD briefing request has no scoped object. "What should I do?" is broad; "What should I do
- * about Dana?" is a scoped judgment question and must never reach the global proactive board,
- * which on 2026-09-20 answered a Dana question with GUMBALL status, Andrew Molina and Mission 6.
- */
-const BROAD_BRIEFING =
-  /^(?:good\s+)?morning\b|^hey\s+claire\b|^what\s+do\s+i\s+need\s+to\s+know\b|^what(?:'s| is)\s+(?:the\s+)?most\s+important\b|^what\s+should\s+i\s+(?:do|know)\b|^what(?:'s| is)\s+(?:going\s+on|up)\b|^how(?:'s| is)\s+business\b/i;
-/** Any of these makes the request SCOPED rather than broad. */
-const SCOPED_OBJECT = /\b(?:about|with|regarding|concerning)\b/i;
-
-/** Explicit correctness challenge — must outrank refinement wording and force a fresh reread. */
-const CORRECTNESS_CHALLENGE =
-  /\b(?:are\s+you\s+(?:sure|certain|positive)|are\s+(?:those|these|the)\s+(?:numbers?|figures?|totals?)\s+(?:right|correct|accurate)|is\s+that\s+(?:right|correct|accurate)|check\s+(?:that|it|those)\s+again|double[-\s]?check|verify\s+(?:that|it|those)|can\s+you\s+confirm|you\s+sure\b)/i;
-
-/** Provenance question — where a number came from. Receipt may answer this. */
-const PROVENANCE_QUESTION =
-  /\b(?:where\s+(?:did|does)\s+(?:that|those|it|this|the)(?:\s+\w+){0,2}\s+(?:come|came)\s+from|where(?:'s| is)\s+that\s+from|what(?:'s| is)\s+(?:that|this)(?:\s+\w+){0,2}\s+based\s+on|what\s+are\s+you\s+basing|which\s+(?:source|record|order))\b/i;
 
 const QUESTION_MARK = /\?/;
 const BUSINESS_QUESTION_LEAD =
@@ -347,28 +403,38 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   const actionRefused = ACTION_REFUSAL.test(text);
   const correction = CORRECTION.test(text);
   const aboutClaireCapability = ABOUT_CLAIRE_CAPABILITY.test(text);
-  const hasExplicitActionRequest = ACTION_DIRECTIVE.test(text) && !actionRefused;
+  const hasExplicitActionRequest = detectExplicitActionRequest(text) && !actionRefused;
   const operatorWorkCommitment = detectOperatorWorkCommitment(text) && !actionRefused;
+  const businessQuestionLead = BUSINESS_QUESTION_LEAD.test(text.split(/\s+/).slice(0, 4).join(" "));
+  // A polite command such as "Can you change that to Tuesday?" is still an action, not a business
+  // question merely because speech recognition supplied a question mark. Mixed "Did Dana reply,
+  // and add..." retains both lanes because its first clause is genuinely interrogative.
   const hasBusinessQuestion =
-    !acknowledgement && (QUESTION_MARK.test(text) || BUSINESS_QUESTION_LEAD.test(text.split(/\s+/).slice(0, 4).join(" ")));
+    !acknowledgement &&
+    (businessQuestionLead || (!hasExplicitActionRequest && QUESTION_MARK.test(text)));
 
   const cardinality = parseCardinality(text);
-  // A correctness challenge outranks refinement wording: "I asked you for revenue — are you sure
-  // those numbers are correct?" contains both, and must reread rather than re-list.
-  const queryRefinement = QUERY_REFINEMENT.test(text) && !acknowledgement && !CORRECTNESS_CHALLENGE.test(text);
+  const correctnessChallenge = CORRECTNESS_CHALLENGE.test(text) && !acknowledgement;
+  const queryRefinement = QUERY_REFINEMENT.test(text) && !acknowledgement && !correctnessChallenge;
+  const businessJudgment = BUSINESS_JUDGMENT.test(text) && !acknowledgement;
+  const { entities, temporal } = extractEntityAndTime(text);
+  const scopedObject = /\b(?:about|with|regarding|concerning)\b/i.test(text) || entities.length > 0;
+  const broadOperationalBriefing =
+    BROAD_OPERATIONAL_BRIEFING.test(text.trim()) && !businessJudgment && !scopedObject;
+  const temporalReference = temporal[0] ?? null;
+  const doctrineInstruction = classifyDoctrineUtterance(text) !== "not_doctrine";
   const listRequest = Boolean(cardinality && cardinality > 1) || (LIST_NOUN.test(text) && !acknowledgement);
   const anchorMatch = ANCHOR.exec(text);
   const exclusionMatch = EXCLUSION.exec(text);
   const excluded = properNoun(exclusionMatch?.[1]);
   const exclusions = excluded ? [excluded] : [];
-  const anchorEntity = properNoun(anchorMatch?.[1]);
-  const { entities, temporal } = extractEntities(text);
-  // Broad only when nothing scopes it: no scoping preposition (ASR may clip it to "about?") and no
-  // named entity. A named subject always makes the question scoped.
-  const broadBriefingRequest =
-    BROAD_BRIEFING.test(text.trim()) && !SCOPED_OBJECT.test(text) && entities.length === 0;
-  const correctnessChallenge = CORRECTNESS_CHALLENGE.test(text) && !acknowledgement;
-  const provenanceQuestion = PROVENANCE_QUESTION.test(text) && !correctnessChallenge;
+  const anchorEntity = properNoun(anchorMatch?.[2]);
+  const anchorDirection =
+    !anchorEntity || !anchorMatch
+      ? null
+      : /^(?:after|since)$/i.test(anchorMatch[1]!)
+        ? "after"
+        : "before";
 
   if (acknowledgement) intents.push("acknowledgement");
   if (actionRefused) intents.push("action_refusal");
@@ -376,9 +442,8 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   if (hasExplicitActionRequest) intents.push("action_request");
   if (operatorWorkCommitment && !hasExplicitActionRequest) intents.push("operator_work_commitment");
   if (queryRefinement) intents.push("query_refinement");
-  if (broadBriefingRequest) intents.push("broad_briefing");
-  if (correctnessChallenge) intents.push("correctness_challenge");
-  if (provenanceQuestion) intents.push("provenance_question");
+  if (correctnessChallenge) intents.push("prior_claim_challenge");
+  if (businessJudgment) intents.push("business_judgment");
   if (hasBusinessQuestion) intents.push("business_question");
   if (aboutClaireCapability && !hasExplicitActionRequest) intents.push("context_statement");
 
@@ -415,10 +480,13 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
     queryRefinement,
     exclusions,
     anchorEntity,
+    anchorDirection,
+    correctnessChallenge,
+    businessJudgment,
+    broadOperationalBriefing,
+    temporalReference,
     temporal,
     entities,
-    broadBriefingRequest,
-    correctnessChallenge,
-    provenanceQuestion,
+    doctrineInstruction,
   };
 }
