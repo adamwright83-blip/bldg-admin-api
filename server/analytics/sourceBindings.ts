@@ -22,6 +22,7 @@
  * empty window proves nothing about it.
  */
 import { sql } from "drizzle-orm";
+import { formatInTimeZone } from "date-fns-tz";
 import { getDb } from "../db";
 import { isMysqlMissingTableError } from "../mysqlErrors";
 import type { LedgerSource } from "./businessLineage";
@@ -45,17 +46,34 @@ export type SourceBindingState =
   /** The probe itself failed. */
   | "unknown";
 
-/**
- * Health: is what we can read from it CURRENT enough to answer this question?
- * Only meaningful for imported sources. Native Goldline orders are the system of record —
- * there is no sync lag to be stale about — so they are `current` whenever they read.
- */
-export type SourceHealth = "current" | "stale" | "unknown" | "not_applicable";
+export type SourceCoverageBasis =
+  | "economic_event"
+  | "orders_created";
+
+export type SourceCoverageRange = {
+  /** Inclusive business-local dates. */
+  from: string;
+  to: string;
+  completedAt: Date;
+  basis: SourceCoverageBasis;
+  provenance: "browser_sync_receipt";
+};
+
+export type SourceAttempt = {
+  at: Date;
+  outcome: string;
+  rangeFrom: string | null;
+  rangeTo: string | null;
+};
 
 export type SourceEvidence = {
   state: SourceBindingState;
-  /** Most recent SUCCESSFUL sync/import through this source, when known. */
+  /** Most recent successful integration activity. This is health evidence, NOT range coverage. */
   lastSuccessAt: Date | null;
+  /** Exact intervals whose semantics are actually proven by receipts. */
+  coverageRanges: SourceCoverageRange[];
+  /** Latest recorded attempt, for diagnostics and stale-path evidence. */
+  latestAttempt: SourceAttempt | null;
   /** True for Goldline's own records, which cannot lag behind themselves. */
   isSystemOfRecord: boolean;
 };
@@ -63,7 +81,13 @@ export type SourceEvidence = {
 export type LedgerSourceBindings = Record<LedgerSource, SourceBindingState>;
 export type LedgerSourceEvidence = Record<LedgerSource, SourceEvidence>;
 
-const UNKNOWN_SOURCE: SourceEvidence = { state: "unknown", lastSuccessAt: null, isSystemOfRecord: false };
+const UNKNOWN_SOURCE: SourceEvidence = {
+  state: "unknown",
+  lastSuccessAt: null,
+  coverageRanges: [],
+  latestAttempt: null,
+  isSystemOfRecord: false,
+};
 export const UNKNOWN_BINDINGS: LedgerSourceBindings = { laundry_butler: "unknown", cleancloud: "unknown" };
 export const UNKNOWN_EVIDENCE: LedgerSourceEvidence = {
   laundry_butler: { ...UNKNOWN_SOURCE, isSystemOfRecord: true },
@@ -81,26 +105,91 @@ export function isPresent(state: SourceBindingState): boolean {
 }
 
 /**
- * Freshness is question-relative, not one global threshold. Data for a CLOSED past period is
- * complete once any successful sync happened after that period ended — asking about August does
- * not require a sync this morning. A period that runs up to now requires a recent sync.
+ * GUMBALL's actual contract: one automatic Orders (Sales) pull each day at 18:00 Los Angeles.
+ * A run gets an explicit one-hour execution grace. Before today's checkpoint is due, yesterday
+ * is the latest date the source is expected to have covered; after the grace, today is required.
+ * This replaces the old rolling 36-hour heuristic.
  */
-export const RECENT_SYNC_TOLERANCE_MS = 36 * 60 * 60 * 1000;
+export const GUMBALL_TIME_ZONE = "America/Los_Angeles";
+export const GUMBALL_DAILY_HOUR = 18;
+export const GUMBALL_EXECUTION_GRACE_MINUTES = 60;
 
-export function sourceHealthFor(
-  evidence: SourceEvidence,
-  period: { endExclusiveUtc: Date } | null,
-  now: Date
-): SourceHealth {
-  if (evidence.isSystemOfRecord) return "not_applicable";
-  if (evidence.state === "unknown") return "unknown";
-  if (!evidence.lastSuccessAt) return evidence.state === "legacy_history" ? "stale" : "unknown";
-  const periodEnd = period?.endExclusiveUtc ?? now;
-  if (periodEnd.getTime() <= now.getTime()) {
-    // Closed period: a sync after the window closed covers it.
-    if (evidence.lastSuccessAt.getTime() >= periodEnd.getTime()) return "current";
+function addDaysYmd(ymd: string, days: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d! + days)).toISOString().slice(0, 10);
+}
+
+function validYmd(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+export function expectedCleanCloudCoverageThrough(now: Date): string {
+  const today = formatInTimeZone(now, GUMBALL_TIME_ZONE, "yyyy-MM-dd");
+  const hour = Number(formatInTimeZone(now, GUMBALL_TIME_ZONE, "HH"));
+  const minute = Number(formatInTimeZone(now, GUMBALL_TIME_ZONE, "mm"));
+  const checkpointMinutes =
+    GUMBALL_DAILY_HOUR * 60 + GUMBALL_EXECUTION_GRACE_MINUTES;
+  return hour * 60 + minute >= checkpointMinutes ? today : addDaysYmd(today, -1);
+}
+
+export function rangesCover(
+  ranges: readonly SourceCoverageRange[],
+  input: { from: string; to: string; basis: SourceCoverageBasis }
+): boolean {
+  if (input.to < input.from) return true;
+  const relevant = ranges
+    .filter(range => range.basis === input.basis && range.to >= input.from && range.from <= input.to)
+    .sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to));
+  let cursor = input.from;
+  for (const range of relevant) {
+    if (range.to < cursor) continue;
+    if (range.from > cursor) return false;
+    cursor = addDaysYmd(range.to, 1);
+    if (cursor > input.to) return true;
   }
-  return now.getTime() - evidence.lastSuccessAt.getTime() <= RECENT_SYNC_TOLERANCE_MS ? "current" : "stale";
+  return cursor > input.to;
+}
+
+function parseJsonRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function coverageRangesFromReceiptRows(rows: readonly Row[]): SourceCoverageRange[] {
+  const ranges: SourceCoverageRange[] = [];
+  for (const row of rows) {
+    const receipt = parseJsonRecord(row.receiptJson);
+    if (!receipt || receipt.status === "cancelled") continue;
+    const from = receipt.from;
+    const to = receipt.to;
+    const completedAt = toDate(receipt.completedAt ?? row.createdAt);
+    if (!validYmd(from) || !validYmd(to) || !completedAt || to < from) continue;
+
+    // Browser sync currently imports Orders (Sales). Its selected date interval is an
+    // ORDER-CREATED interval. It is deliberately NOT labelled economic_event coverage:
+    // the receipt itself warns that older orders/later corrections outside the selection
+    // can be missed even when their payment date falls inside a revenue question.
+    ranges.push({
+      from,
+      to,
+      completedAt,
+      basis: "orders_created",
+      provenance: "browser_sync_receipt",
+    });
+  }
+  return ranges;
 }
 
 /** `providerKey` values in `dayforge_saas_import_connections` that map to a ledger source. */
@@ -117,7 +206,12 @@ type Row = Record<string, unknown>;
 async function rows(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, query: ReturnType<typeof sql>): Promise<Row[] | "error"> {
   try {
     const result = (await db.execute(query)) as unknown;
-    return Array.isArray(result) ? (result as Row[]) : ((result as { rows?: Row[] })?.rows ?? []);
+    if (Array.isArray(result)) {
+      // mysql2 returns [rows, fields]; some Drizzle adapters return rows directly.
+      if (Array.isArray(result[0])) return result[0] as Row[];
+      return result as Row[];
+    }
+    return (result as { rows?: Row[] })?.rows ?? [];
   } catch (error) {
     // A missing table means the mechanism was never provisioned here, not that the read failed.
     if (isMysqlMissingTableError(error)) return [];
@@ -155,21 +249,37 @@ export function deriveCleanCloudEvidence(input: {
   syncBinding: { lastSuccessAt: Date | null } | null;
   /** `dayforge_saas_import_connections` row for CleanCloud, if any. */
   saasConnection: { status: string; lastImportedAt: Date | null } | null;
-  /** Most recent non-failed `cleancloud_import_batches` row. */
-  importSuccessAt: Date | null;
   /** Most recent historical paid order attributed to CleanCloud. */
   historyAt: Date | null;
+  /** Exact successful browser-sync receipt ranges. */
+  coverageRanges?: SourceCoverageRange[];
+  latestAttempt?: SourceAttempt | null;
 }): SourceEvidence {
-  const syncSuccess = latest(input.syncBinding?.lastSuccessAt ?? null, input.importSuccessAt);
-  if (input.syncBinding) return { state: "bound", lastSuccessAt: syncSuccess, isSystemOfRecord: false };
+  const coverageRanges = input.coverageRanges ?? [];
+  const receiptSuccessAt = latest(...coverageRanges.map(range => range.completedAt));
+  const liveSuccess = latest(
+    input.syncBinding?.lastSuccessAt ?? null,
+    input.saasConnection?.lastImportedAt ?? null,
+    receiptSuccessAt
+  );
+  const common = {
+    coverageRanges,
+    latestAttempt: input.latestAttempt ?? null,
+    isSystemOfRecord: false as const,
+  };
+  if (input.syncBinding) {
+    return { ...common, state: "bound", lastSuccessAt: liveSuccess };
+  }
   if (input.saasConnection) {
     const status = input.saasConnection.status;
     const state: SourceBindingState =
       status === "connected" ? "bound" : status === "configured" ? "configured" : "disconnected";
-    return { state, lastSuccessAt: latest(input.saasConnection.lastImportedAt, syncSuccess), isSystemOfRecord: false };
+    return { ...common, state, lastSuccessAt: liveSuccess };
   }
-  if (input.historyAt) return { state: "legacy_history", lastSuccessAt: syncSuccess, isSystemOfRecord: false };
-  return { state: "absent", lastSuccessAt: null, isSystemOfRecord: false };
+  if (input.historyAt) {
+    return { ...common, state: "legacy_history", lastSuccessAt: liveSuccess };
+  }
+  return { ...common, state: "absent", lastSuccessAt: liveSuccess };
 }
 
 export async function loadLedgerSourceEvidence(tenantId: string, nowMs = Date.now()): Promise<LedgerSourceEvidence> {
@@ -179,10 +289,11 @@ export async function loadLedgerSourceEvidence(tenantId: string, nowMs = Date.no
   const db = await getDb().catch(() => null);
   if (!db) return UNKNOWN_EVIDENCE;
 
-  const [connectionRows, syncBindingRows, importBatchRows, nativeRows, cleancloudRows] = await Promise.all([
+  const [connectionRows, syncBindingRows, receiptRows, attemptRows, nativeRows, cleancloudRows] = await Promise.all([
     rows(db, sql`select \`providerKey\`, \`status\`, \`lastImportedAt\` from \`dayforge_saas_import_connections\` where \`tenantId\` = ${tenantId}`),
     rows(db, sql`select \`storeId\`, \`lastSuccessAt\` from \`cleancloud_browser_sync_bindings\` where \`tenantId\` = ${tenantId} limit 1`),
-    rows(db, sql`select max(\`createdAt\`) as \`last\` from \`cleancloud_import_batches\` where \`tenantId\` = ${tenantId} and \`importStatus\` <> 'failed'`),
+    rows(db, sql`select \`receiptJson\`, \`createdAt\` from \`cleancloud_browser_sync_receipts\` where \`tenantId\` = ${tenantId} order by \`createdAt\` desc limit 2000`),
+    rows(db, sql`select \`createdAt\`, \`outcome\`, \`rangeFrom\`, \`rangeTo\` from \`cleancloud_browser_sync_attempts\` where \`tenantId\` = ${tenantId} order by \`createdAt\` desc limit 1`),
     rows(db, sql`select max(\`paidAt\`) as \`last\` from \`orders\` where COALESCE(\`tenantId\`, 'default') = ${tenantId} and \`paid\` = 1`),
     rows(db, sql`select max(COALESCE(\`paymentDateUtc\`, \`paidDateUtc\`)) as \`last\` from \`cleancloud_paid_orders\` where \`tenantId\` = ${tenantId}`),
   ]);
@@ -194,12 +305,27 @@ export async function loadLedgerSourceEvidence(tenantId: string, nowMs = Date.no
   const laundry_butler: SourceEvidence =
     nativeHistory === "error"
       ? { ...UNKNOWN_SOURCE, isSystemOfRecord: true }
-      : { state: nativeHistory ? "bound" : "absent", lastSuccessAt: nativeHistory, isSystemOfRecord: true };
+      : {
+          state: nativeHistory ? "bound" : "absent",
+          lastSuccessAt: nativeHistory,
+          coverageRanges: [],
+          latestAttempt: null,
+          isSystemOfRecord: true,
+        };
 
   const ccHistory = historyOf(cleancloudRows);
-  const importSuccess = historyOf(importBatchRows);
+  const coverageRanges = receiptRows === "error" ? [] : coverageRangesFromReceiptRows(receiptRows);
+  const attemptRow = attemptRows === "error" ? undefined : attemptRows[0];
+  const latestAttempt: SourceAttempt | null = attemptRow && toDate(attemptRow.createdAt)
+    ? {
+        at: toDate(attemptRow.createdAt)!,
+        outcome: String(attemptRow.outcome ?? ""),
+        rangeFrom: validYmd(attemptRow.rangeFrom) ? attemptRow.rangeFrom : null,
+        rangeTo: validYmd(attemptRow.rangeTo) ? attemptRow.rangeTo : null,
+      }
+    : null;
   let cleancloud: SourceEvidence;
-  if (ccHistory === "error" && syncBindingRows === "error") {
+  if (ccHistory === "error" && syncBindingRows === "error" && receiptRows === "error") {
     cleancloud = UNKNOWN_SOURCE;
   } else {
     const syncRow = syncBindingRows === "error" ? undefined : syncBindingRows[0];
@@ -210,8 +336,9 @@ export async function loadLedgerSourceEvidence(tenantId: string, nowMs = Date.no
     cleancloud = deriveCleanCloudEvidence({
       syncBinding: syncRow ? { lastSuccessAt: toDate(syncRow.lastSuccessAt) } : null,
       saasConnection: saasRow ? { status: String(saasRow.status ?? ""), lastImportedAt: toDate(saasRow.lastImportedAt) } : null,
-      importSuccessAt: importSuccess === "error" ? null : importSuccess,
       historyAt: ccHistory === "error" ? null : ccHistory,
+      coverageRanges,
+      latestAttempt,
     });
   }
 
@@ -226,12 +353,16 @@ export function resetSourceBindingCacheForTests(): void {
 }
 
 export type CoverageVerdict =
-  /** Every source this question needs is present, current enough, and was read. */
+  /** Every source this question needs is present, semantically complete for the claim, and was read. */
   | { kind: "provable" }
   /** Sources this question needs are not part of this business (or are disconnected). */
   | { kind: "unbound"; sources: LedgerSource[] }
-  /** Present, but the feed is behind the window being asked about. */
+  /** Current-period source is behind the checkpoint that is due under its actual schedule. */
   | { kind: "stale"; sources: LedgerSource[] }
+  /** A closed requested interval has gaps in proven receipt coverage. */
+  | { kind: "range_gap"; sources: LedgerSource[] }
+  /** Available receipts cover a different event basis than the business claim requires. */
+  | { kind: "semantic_gap"; sources: LedgerSource[] }
   /** Binding could not be established, so absence cannot be distinguished from ignorance. */
   | { kind: "unknown"; sources: LedgerSource[] }
   /** A required source failed to load this time. */
@@ -259,21 +390,50 @@ export function coverageVerdict(input: {
   evidence: LedgerSourceEvidence;
   loadedSources: readonly LedgerSource[];
   failedSources: readonly LedgerSource[];
-  period?: { endExclusiveUtc: Date } | null;
+  period?: { start: string; end: string } | null;
   now?: Date;
+  /** Paid-order analytics are economic-event dated, not order-created dated. */
+  basis?: SourceCoverageBasis;
 }): CoverageVerdict {
   const now = input.now ?? new Date();
+  const basis = input.basis ?? "economic_event";
   const unreadable = input.required.filter(s => input.failedSources.includes(s) || !input.loadedSources.includes(s));
   if (unreadable.length) return { kind: "unreadable", sources: unreadable };
   const unknown = input.required.filter(s => input.evidence[s].state === "unknown");
   if (unknown.length) return { kind: "unknown", sources: unknown };
   const missing = input.required.filter(s => !isPresent(input.evidence[s].state));
   if (missing.length) return { kind: "unbound", sources: missing };
-  const stale = input.required.filter(s => {
-    const health = sourceHealthFor(input.evidence[s], input.period ?? null, now);
-    return health === "stale" || health === "unknown";
+
+  const imported = input.required.filter(s => !input.evidence[s].isSystemOfRecord);
+  if (!imported.length) return { kind: "provable" };
+
+  if (!input.period) return { kind: "unknown", sources: imported };
+
+  const today = formatInTimeZone(now, GUMBALL_TIME_ZONE, "yyyy-MM-dd");
+  const isCurrent = input.period.end >= today;
+  const requiredEnd = isCurrent
+    ? expectedCleanCloudCoverageThrough(now)
+    : input.period.end;
+
+  // Before today's 18:00+grace checkpoint, a current-period question is expected to be covered
+  // only through yesterday. If that falls before the query's start (e.g. "today" at noon), the
+  // source is current to its schedule even though today's scheduled import is not due yet.
+  const requiredRange = { from: input.period.start, to: requiredEnd, basis };
+
+  const semanticGap = imported.filter(source => {
+    const ranges = input.evidence[source].coverageRanges;
+    if (!ranges.length || requiredRange.to < requiredRange.from) return false;
+    return !ranges.some(range => range.basis === basis);
   });
-  if (stale.length) return { kind: "stale", sources: stale };
+  if (semanticGap.length) return { kind: "semantic_gap", sources: semanticGap };
+
+  const notCovered = imported.filter(source =>
+    !rangesCover(input.evidence[source].coverageRanges, requiredRange)
+  );
+  if (notCovered.length) {
+    return { kind: isCurrent ? "stale" : "range_gap", sources: notCovered };
+  }
+
   return { kind: "provable" };
 }
 
@@ -296,7 +456,11 @@ export function speakUnprovableZero(verdict: Exclude<CoverageVerdict, { kind: "p
     case "unbound":
       return `I can't answer that from this business's records — ${sources} ${isAre} connected here, so I have nothing to count. That's a gap in what I can see, not a zero.`;
     case "stale":
-      return `I have history from ${sources}, but I can't verify the feed is current, so I won't call that a zero.`;
+      return `I have history from ${sources}, but the scheduled coverage due by now is missing, so I won't call that a zero.`;
+    case "range_gap":
+      return `I have records from ${sources}, but I can't prove they cover the full period you asked about, so I won't call that a zero.`;
+    case "semantic_gap":
+      return `I can see ${sources} Orders (Sales) history, but that feed is selected by order date rather than proving every payment event in the period, so I won't call that a complete zero.`;
     case "unknown":
       return `I can't confirm ${sources} ${verdict.sources.length === 1 ? "is" : "are"} connected right now, so I won't give you a number that might just mean I'm blind to it.`;
     case "unreadable":
@@ -316,7 +480,11 @@ export function speakPartialCoverage(verdict: Exclude<CoverageVerdict, { kind: "
     case "unbound":
       return `That's only what I can see — ${sources} ${isAre} connected here, so treat it as partial, not the whole business.`;
     case "stale":
-      return `I can't verify ${sources} ${verdict.sources.length === 1 ? "is" : "are"} current, so that may be behind and isn't a confirmed whole-business total.`;
+      return `The scheduled ${sources} coverage due by now is missing, so that figure may be behind and isn't a confirmed whole-business total.`;
+    case "range_gap":
+      return `I can't prove ${sources} covers the full period you asked about, so that's partial rather than a confirmed whole-business total.`;
+    case "semantic_gap":
+      return `${sources} Orders (Sales) is selected by order date, while this business figure is dated by payment events. I can report what is in Goldline, but I can't honestly call it exhaustive whole-business coverage.`;
     case "unknown":
       return `I can't confirm ${sources} ${verdict.sources.length === 1 ? "is" : "are"} connected, so that may not be the whole business.`;
     case "unreadable":
