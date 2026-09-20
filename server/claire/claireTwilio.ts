@@ -54,6 +54,7 @@ import { isValidTwilioWebhook } from "./conversation/twilioSignature";
 import { runClaireTurn, type ClaireTurnState } from "./turn/claireTurn";
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
 import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
+import { getDashboardTimeZone } from "../dashboardZoned";
 import { claireConversationStateStore } from "./turn/conversationStateStore";
 import { getUserByOpenId } from "../db";
 import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
@@ -537,6 +538,16 @@ function startVoiceTurn(input: {
         operatorUserId: conversation.actorId,
         surface: "voice",
         conversationKey: callStateKey(conversationId),
+        // Read-only readers, constructed only when the flag is ON.
+        live: {
+          tenantId: conversation.tenantId,
+          operatorUserId: conversation.actorId,
+          conversationId,
+          timeZone: getDashboardTimeZone(),
+          today: conversation.context.businessDate ?? new Date().toISOString().slice(0, 10),
+          surface: "voice",
+          episodicTerms: conversation.context ? [] : [],
+        },
         v1: {
           endedCall: Boolean(result.endCall),
           // Voice records work either as a commitment turn or as linked action ids.

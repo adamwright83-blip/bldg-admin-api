@@ -27,6 +27,12 @@
 
 import { runClaireBrainTurn, type ClaireBrainTurnInput } from "./runClaireBrainTurn";
 import type { ShadowComparisonRecord } from "../telemetry/comparison";
+import { liveReadOnlyRetrieval, noRetrieval, type ExecutiveDeps } from "../executive/decide";
+import {
+  shadowMemoryStore,
+  updateShadowMemory,
+  type ShadowMemoryStore,
+} from "./shadowMemory";
 
 /** What V1 actually did, for comparison. Text is compared by shape, not stored raw. */
 export type V1Outcome = {
@@ -53,6 +59,42 @@ export type ShadowSkipped = { observed: false; reason: "disabled" | "error" };
 export type ShadowResult = ShadowObservation | ShadowSkipped;
 
 export type ShadowSink = (observation: ShadowObservation) => void;
+
+/**
+ * Read-only readers the observer may use when the flag is ON.
+ *
+ * Retrieval stays INJECTED rather than defaulted: a bare brain call still reaches
+ * nothing, and the observer is the one explicit caller allowed to supply live readers.
+ * When the flag is OFF none of this is constructed, so no reads happen at all.
+ */
+export type ShadowRetrievalContext = {
+  tenantId: string;
+  operatorUserId: string;
+  conversationId: string;
+  timeZone: string;
+  today: string;
+  surface: "voice" | "text";
+  /** Terms the executive may recall from the conversation ledger. */
+  episodicTerms?: string[];
+};
+
+function liveExecutiveDeps(ctx: ShadowRetrievalContext): ExecutiveDeps {
+  const nowIso = new Date().toISOString();
+  return {
+    retrieve: liveReadOnlyRetrieval({
+      business: { tenantId: ctx.tenantId, operatorUserId: ctx.operatorUserId, nowIso },
+      episodic: {
+        tenantId: ctx.tenantId,
+        operatorUserId: ctx.operatorUserId,
+        nowIso,
+        terms: ctx.episodicTerms ?? [],
+      },
+      // Self and Goals stay unsupplied until their read-only entry points are wired;
+      // an unsupplied compartment returns nothing rather than reading something else.
+    }),
+    ctx: { timeZone: ctx.timeZone, today: ctx.today, surface: ctx.surface },
+  };
+}
 
 function enabled(env: NodeJS.ProcessEnv): boolean {
   const flag = env.CLAIRE_BRAIN_V2_SHADOW;
@@ -81,7 +123,7 @@ function defaultSink(observation: ShadowObservation): void {
  * a question to investigate, never a signal to change V1.
  */
 export function compareOutcomes(
-  candidate: { endCall: boolean; actionClasses: string[] },
+  candidate: { endCall: boolean; actionClasses: string[]; spoke?: boolean },
   v1: V1Outcome | null
 ): ShadowDisagreement[] {
   if (!v1) return [];
@@ -89,6 +131,8 @@ export function compareOutcomes(
   if (candidate.endCall !== v1.endedCall) out.push("call_control");
   // V2 holds no live grants, so any V1 mutation is by definition a divergence in authority.
   if (v1.mutated && candidate.actionClasses.length === 0) out.push("mutation_authority");
+  // One mind had something to say and the other did not.
+  if (candidate.spoke !== undefined && candidate.spoke !== v1.spokeSomething) out.push("spoke_vs_silent");
   return out;
 }
 
@@ -100,15 +144,32 @@ export function compareOutcomes(
  * behaviour on it.
  */
 export async function observeShadowTurn(
-  input: ClaireBrainTurnInput & { v1?: V1Outcome | null },
-  options: { env?: NodeJS.ProcessEnv; sink?: ShadowSink } = {}
+  input: ClaireBrainTurnInput & { v1?: V1Outcome | null; live?: ShadowRetrievalContext },
+  options: { env?: NodeJS.ProcessEnv; sink?: ShadowSink; memory?: ShadowMemoryStore } = {}
 ): Promise<ShadowResult> {
   const env = options.env ?? process.env;
+  // Nothing below runs while disabled: no brain, no model, no database reads.
   if (!enabled(env)) return { observed: false, reason: "disabled" };
 
+  const memoryStore = options.memory ?? shadowMemoryStore;
+
   try {
-    const { v1, ...turn } = input;
-    const result = await runClaireBrainTurn(turn);
+    const { v1, live, ...turn } = input;
+
+    // V2's own memory of ITS previous answers — separate from V1's conversation state.
+    const shadowKey = `${turn.tenantId}:${turn.operatorUserId}:${turn.conversationKey}`;
+    const priorMemory = await memoryStore.load(shadowKey);
+
+    const executive = turn.executive ?? (live ? liveExecutiveDeps(live) : undefined);
+    const result = await runClaireBrainTurn({
+      ...turn,
+      executive: executive ?? { retrieve: noRetrieval, ctx: { timeZone: "UTC", today: new Date().toISOString().slice(0, 10), surface: turn.surface } },
+      state: {
+        ...(turn.state ?? {}),
+        // V2 continues its OWN resolved/presented thread, not V1's.
+        orderedQuery: priorMemory?.orderedQuery ?? null,
+      },
+    });
 
     // Defence in depth: the runner already guarantees these, and we re-check anyway.
     if (result.productionAuthority !== false || result.mutations.length !== 0) {
@@ -120,12 +181,19 @@ export async function observeShadowTurn(
       observed: true,
       comparison: result.comparison,
       disagreements: compareOutcomes(
-        { endCall: result.candidateEndCall, actionClasses: candidateActionClasses },
+        {
+          endCall: result.candidateEndCall,
+          actionClasses: candidateActionClasses,
+          spoke: result.candidateSpeak.trim().length > 0,
+        },
         v1 ?? null
       ),
       candidateEndCall: result.candidateEndCall,
       candidateActionClasses,
     };
+    // Persist V2's cognitive state so the next real turn can continue this result.
+    await memoryStore.save(shadowKey, updateShadowMemory(priorMemory, result.decision));
+
     (options.sink ?? defaultSink)(observation);
     return observation;
   } catch {
@@ -141,8 +209,8 @@ export async function observeShadowTurn(
  * cannot await V2, cannot slow the live turn, and cannot observe a V2 failure.
  */
 export function observeShadowTurnDetached(
-  input: ClaireBrainTurnInput & { v1?: V1Outcome | null },
-  options: { env?: NodeJS.ProcessEnv; sink?: ShadowSink } = {}
+  input: ClaireBrainTurnInput & { v1?: V1Outcome | null; live?: ShadowRetrievalContext },
+  options: { env?: NodeJS.ProcessEnv; sink?: ShadowSink; memory?: ShadowMemoryStore } = {}
 ): void {
   try {
     void observeShadowTurn(input, options).catch(() => undefined);

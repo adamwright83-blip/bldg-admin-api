@@ -71,6 +71,51 @@ export async function listAccountRefs(tenantId: string): Promise<AccountRef[]> {
   return rows.filter(row => !TEST_ACCOUNT.test(row.name));
 }
 
+export type AccountContactRef = {
+  accountId: number;
+  accountName: string;
+  accountType: string;
+  contactName: string;
+  title: string | null;
+  relationshipType: string;
+};
+
+/**
+ * Every named contact across the tenant's accounts, with the account they belong to.
+ *
+ * `loadAccountHistory` already reads contacts, but only for one account it was given.
+ * Resolving "Dana" to an account requires the reverse lookup, and it belongs here with
+ * the rest of the commercial-account reads rather than in a caller.
+ */
+export async function listAccountContacts(tenantId: string): Promise<AccountContactRef[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db
+    .select({
+      accountId: commercialAccounts.id,
+      accountName: commercialAccounts.name,
+      accountType: commercialAccounts.accountType,
+      contactName: commercialAccountContacts.name,
+      title: commercialAccountContacts.title,
+      relationshipType: commercialAccountContacts.relationshipType,
+    })
+    .from(commercialAccountContacts)
+    .innerJoin(commercialAccounts, eq(commercialAccounts.id, commercialAccountContacts.accountId))
+    .where(eq(commercialAccountContacts.tenantId, tenantId))
+    .limit(1000);
+  return rows
+    .filter(row => row.contactName != null && row.contactName.trim().length > 0)
+    .filter(row => !TEST_ACCOUNT.test(row.accountName))
+    .map(row => ({
+      accountId: row.accountId,
+      accountName: row.accountName,
+      accountType: row.accountType,
+      contactName: row.contactName as string,
+      title: row.title ?? null,
+      relationshipType: row.relationshipType,
+    }));
+}
+
 /** Accounts whose distinctive name words appear in what Adam said. */
 export function matchAccounts(lower: string, accounts: AccountRef[]): AccountRef[] {
   const scored = accounts

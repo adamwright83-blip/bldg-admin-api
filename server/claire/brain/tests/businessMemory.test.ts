@@ -55,6 +55,7 @@ function deps(over: Partial<BusinessMemoryDeps> = {}): BusinessMemoryDeps {
   return {
     runQuery: async () => okResult(),
     listAccounts: async () => [],
+    listContacts: async () => [],
     verifyClaim: async () => ({}) as PriorClaimVerification,
     ...over,
   };
@@ -157,7 +158,7 @@ describe("synthetic evidence is rejected at the boundary", () => {
 
   it("filters synthetic accounts out of contact/account resolution", async () => {
     const items = await retrieveBusinessEvidence(
-      { compartment: "businessMemory", kind: "contact_account_resolution", contactName: "Dana" },
+      { compartment: "businessMemory", kind: "contact_account_resolution" },
       ctx,
       deps({
         listAccounts: async () => [
@@ -167,6 +168,20 @@ describe("synthetic evidence is rejected at the boundary", () => {
       })
     );
     expect(items.map(item => (item.payload as { name: string }).name)).toEqual(["The Louise"]);
+  });
+
+  it("a contact at a synthetic account does not resolve", async () => {
+    const items = await retrieveBusinessEvidence(
+      { compartment: "businessMemory", kind: "contact_account_resolution", mentions: ["Dana"] },
+      ctx,
+      deps({
+        listAccounts: async () => [{ id: 2, name: "Fixture Co", accountType: "qa_fixture" }],
+        listContacts: async () => [
+          { accountId: 2, accountName: "Fixture Co", accountType: "qa_fixture", contactName: "Dana", title: null, relationshipType: "primary" },
+        ],
+      })
+    );
+    expect(items).toEqual([]);
   });
 
   it("does NOT use a display name as provenance", async () => {

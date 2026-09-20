@@ -20,6 +20,7 @@ import type { WorkingMemorySnapshot } from "../contracts/workingMemory";
 import { planAttention } from "./attention";
 import { planRetrieval } from "./retrievalPlan";
 import { integrate, type IntegrationContext } from "./integrate";
+import { proposalText, proposedWorkTitle } from "./proposal";
 import { mintActionGrant, mintCallControlGrant } from "./grants";
 import { assertGovernedDecision } from "./governor";
 import {
@@ -134,6 +135,7 @@ export async function decideTurn(
   let retrievals: RetrievalRequest[] = [];
   let evidence: EvidenceItem[] = [];
   let conclusions: ExecutiveDecision["conclusions"] = [];
+  let workingMemoryUpdate: ExecutiveDecision["workingMemoryUpdate"];
 
   if (perceived.completeness === "incomplete") {
     // A half-turn never reaches retrieval. Perception holds; the executive stays silent.
@@ -150,6 +152,12 @@ export async function decideTurn(
     if (integration.extraEvidence.length) evidence = [...evidence, ...integration.extraEvidence];
     conclusions = integration.conclusions;
     inhibited.push(...integration.inhibited);
+    if (integration.orderedQueryUpdate || integration.continuationPresented) {
+      workingMemoryUpdate = {
+        orderedQuery: integration.orderedQueryUpdate,
+        continuationPresented: integration.continuationPresented,
+      };
+    }
 
     if (attention.pendingDisposition === "reject") {
       segments.push(conversational("Understood. I won't."));
@@ -162,9 +170,11 @@ export async function decideTurn(
       !perceived.refusal &&
       attention.pendingDisposition !== "reject"
     ) {
+      // The executive decides WHAT is being proposed; the renderer only phrases the ask.
+      const title = proposedWorkTitle(perceived);
       const grant = mintActionGrant({
         actionClass: "propose_day_line",
-        scope: {},
+        scope: title ? { titles: [title] } : {},
         authorityBasis: perceived.explicitActionRequest
           ? "current_turn_explicit_request"
           : "current_turn_operator_commitment",
@@ -173,7 +183,7 @@ export async function decideTurn(
         constraints: { mutationAllowed: false, shadowOnly: true },
       });
       actionGrants.push(grant);
-      segments.push({ type: "ActionProposalSegment", text: "", grant });
+      segments.push({ type: "ActionProposalSegment", text: proposalText(title), grant });
     }
 
     // Confirming a pending item inherits authority from that item's lifecycle.
@@ -216,6 +226,7 @@ export async function decideTurn(
     actionGrants,
     callControl,
     productionAuthority: false,
+    workingMemoryUpdate,
   };
   assertGovernedDecision(decision);
   return decision;

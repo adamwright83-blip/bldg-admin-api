@@ -16,7 +16,12 @@ import {
   type BusinessQuery,
   type BusinessQueryResult,
 } from "../../../analytics/businessQuery";
-import { listAccountRefs, type AccountRef } from "../../knowledge/accountKnowledge";
+import {
+  listAccountContacts,
+  listAccountRefs,
+  type AccountContactRef,
+  type AccountRef,
+} from "../../knowledge/accountKnowledge";
 import {
   verifyPriorClaim,
   type FactualClaimReceipt,
@@ -24,7 +29,8 @@ import {
 } from "../../provenance/claimReceipts";
 import type { BusinessRetrievalRequest, PriorClaimRecheckRequest } from "../contracts/retrieval";
 import type { EvidenceItem, PriorClaimRecheckResult } from "../contracts/evidence";
-import { evidenceFromAccountRef, evidenceFromBusinessResult } from "./evidence";
+import { evidenceFromAccountRef, evidenceFromBusinessResult, evidenceFromResolution } from "./evidence";
+import { resolveEntityMentions } from "./entityResolution";
 import { isOperatorVisibleAccount, isOperatorVisibleEvidencePayload } from "./sourceVisibility";
 
 export type BusinessMemoryContext = {
@@ -38,12 +44,14 @@ export type BusinessMemoryContext = {
 export type BusinessMemoryDeps = {
   runQuery: (tenantId: string, query: BusinessQuery) => Promise<BusinessQueryResult>;
   listAccounts: (tenantId: string) => Promise<AccountRef[]>;
+  listContacts: (tenantId: string) => Promise<AccountContactRef[]>;
   verifyClaim: (receipt: FactualClaimReceipt) => Promise<PriorClaimVerification>;
 };
 
 export const defaultBusinessMemoryDeps: BusinessMemoryDeps = {
   runQuery: (tenantId, query) => runBusinessQuery(tenantId, query),
   listAccounts: tenantId => listAccountRefs(tenantId),
+  listContacts: tenantId => listAccountContacts(tenantId),
   verifyClaim: receipt =>
     verifyPriorClaim(receipt, {
       rerun: query => runBusinessQuery("default", query, defaultBusinessQueryDeps),
@@ -164,8 +172,27 @@ export async function retrieveBusinessEvidence(
 
   if (request.kind === "contact_account_resolution" || request.kind === "account_state") {
     const accounts = await deps.listAccounts(ctx.tenantId);
-    // Write-path provenance filter, before anything is scored or spoken.
+    // Write-path provenance filter, before anything is scored or resolved against.
     const visible = accounts.filter(account => isOperatorVisibleAccount({ ...account }));
+
+    const mentions = request.mentions ?? (request.contactName ? [request.contactName] : []);
+    if (mentions.length) {
+      const contacts = (await deps.listContacts(ctx.tenantId)).filter(contact =>
+        isOperatorVisibleAccount({ name: contact.accountName, accountType: contact.accountType })
+      );
+      const resolutions = resolveEntityMentions(mentions, visible, contacts);
+      const resolved = resolutions
+        .filter(entry => entry.kind !== "unknown")
+        .map(entry => evidenceFromResolution({ resolution: entry, reader: "listAccountContacts", observedAtIso: ctx.nowIso }));
+
+      // The accounts a resolution actually points at — not the whole tenant list.
+      const scopedIds = new Set(resolutions.flatMap(entry => entry.candidateAccountIds.concat(entry.accountId ?? [])));
+      const scoped = visible
+        .filter(account => scopedIds.has(account.id))
+        .map(account => evidenceFromAccountRef({ account, reader: "listAccountRefs", observedAtIso: ctx.nowIso }));
+      return admitBusinessEvidence([...resolved, ...scoped]);
+    }
+
     const items = visible.map(account =>
       evidenceFromAccountRef({ account, reader: "listAccountRefs", observedAtIso: ctx.nowIso })
     );

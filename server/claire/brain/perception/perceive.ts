@@ -3,6 +3,8 @@
  */
 
 import { interpretTurn } from "../../turn/interpretTurn";
+import { detectRequestedClaireTopic, isPersonalQuestionAboutClaire } from "../../topicDetection";
+import { operatorAskedOntology } from "../../progression/ontologyGuard";
 import type { BusinessIntentKind, DialogueActKind, PerceivedEntity, PerceivedTurn } from "../contracts/perceivedTurn";
 
 export type PerceiveInput = {
@@ -46,22 +48,52 @@ function acts(turn: ReturnType<typeof interpretTurn>, assembled: string): Dialog
 }
 
 /**
- * Classify the SHAPE of a mention, never its identity. A single bare token reads as a
- * person, a multi-word mention reads as an account. Both are candidates: only
- * authoritative contact/account evidence may say who or what they actually are, and
- * Perception does not get to decide that.
+ * WHAT is being corrected, from the form of the utterance alone.
+ *
+ * Perception reports the correction's apparent target; Executive Function decides what
+ * to do about it. A correction that names ordering, an anchor or a cardinality is about
+ * the previous QUERY; one that challenges a stated figure is about a prior CLAIM;
+ * otherwise a correction lands on whatever is pending.
+ *
+ * This never lets pending state redefine an unrelated utterance — it only labels a turn
+ * that is already a correction.
  */
-function candidateKind(raw: string): PerceivedEntity["kind"] {
-  const trimmed = raw.trim();
-  if (!trimmed) return "unresolved";
-  return /\s/.test(trimmed) ? "account_candidate" : "contact_candidate";
+function correctionTargetOf(
+  assembled: string,
+  turn: ReturnType<typeof interpretTurn>
+): PerceivedTurn["correctionTarget"] {
+  if (turn.correctnessChallenge || turn.provenanceQuestion) return "prior_claim";
+  if (!turn.correction) return null;
+  if (turn.queryRefinement || turn.anchorEntity || turn.exclusions.length > 0) return "prior_query";
+  if (turn.cardinality != null && /\b(?:i (?:meant|said)|not|rather)\b/i.test(assembled)) return "prior_query";
+  if (/\b(?:i (?:meant|said))\b[\s\S]{0,40}\b(?:number|figure|amount|total|revenue|sales)\b/i.test(assembled)) {
+    return "prior_claim";
+  }
+  return "pending_item";
+}
+
+/**
+ * Is the operator asking about Claire herself, or about what she is?
+ *
+ * These wrap the EXISTING detectors rather than adding a second personal-intent system.
+ * Perception only reports the probe; Self Memory decides eligibility and Executive
+ * Function decides the lane. A probe is never itself permission to disclose.
+ */
+function personalProbeOf(assembled: string): boolean {
+  return isPersonalQuestionAboutClaire(assembled) || Boolean(detectRequestedClaireTopic(assembled, true));
+}
+
+function narrativeProbeOf(assembled: string): boolean {
+  return operatorAskedOntology(assembled);
 }
 
 export function perceiveTurn(input: PerceiveInput): PerceivedTurn {
   const assembledText = (input.assembledText ?? input.rawText).trim();
   const turn = interpretTurn(assembledText);
   const entities: PerceivedEntity[] = [
-    ...turn.entities.map(raw => ({ raw, kind: candidateKind(raw) })),
+    // A mention only. Whether it is a person or an account is decided downstream,
+    // by authoritative evidence, never by counting words here.
+    ...turn.entities.map(raw => ({ raw, kind: "entity_mention" as const })),
     ...turn.temporal.map(raw => ({ raw, kind: "temporal" as const })),
   ];
   return {
@@ -78,13 +110,13 @@ export function perceiveTurn(input: PerceiveInput): PerceivedTurn {
     anchorEntity: turn.anchorEntity,
     priorQueryReference: turn.queryRefinement || Boolean(turn.anchorEntity) || turn.exclusions.length > 0,
     correction: turn.correction,
-    correctionTarget: null,
+    correctionTarget: correctionTargetOf(assembledText, turn),
     refusal: turn.actionRefused,
     acknowledgement: turn.acknowledgement,
     explicitActionRequest: turn.hasExplicitActionRequest,
     operatorWorkCommitment: turn.operatorWorkCommitment,
-    personalProbe: false,
-    narrativeProbe: false,
+    personalProbe: personalProbeOf(assembledText),
+    narrativeProbe: narrativeProbeOf(assembledText),
     callControl: turn.callControl,
     ambiguities: [],
     mayProposeWorkHint: turn.mayProposeWork,

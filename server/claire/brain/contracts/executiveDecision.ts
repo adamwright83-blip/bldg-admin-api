@@ -9,6 +9,8 @@ import type { CallControlGrant, ExecutiveActionGrant } from "./grants";
 import type { PerceivedTurn } from "./perceivedTurn";
 import type { RetrievalRequest } from "./retrieval";
 import type { ResponsePlan, ResponseSegment } from "./responsePlan";
+import type { OrderedQueryMember } from "./workingMemory";
+import type { OrderedQueryUpdate } from "../executive/integrate";
 
 export type InhibitedCandidate = {
   kind:
@@ -58,4 +60,12 @@ export type ExecutiveDecision = {
   callControl: CallControlDecision;
   /** Always false until an authorized cutover. */
   productionAuthority: false;
+  /**
+   * What this turn resolved and what it actually presented, for the NEXT turn's
+   * continuation. Cognitive bookkeeping only — it grants nothing and mutates nothing.
+   */
+  workingMemoryUpdate?: {
+    orderedQuery?: OrderedQueryUpdate;
+    continuationPresented?: OrderedQueryMember[];
+  };
 };

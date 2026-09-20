@@ -200,6 +200,24 @@ function accountEvidence(): EvidenceItem {
   });
 }
 
+/** What Business Memory emits once rows settle who a mention is. */
+function resolutionEvidence(): EvidenceItem {
+  return businessEvidence({
+    id: "contact_account_resolution:dana",
+    type: "account_state",
+    source: "listAccountContacts",
+    provenance: { reader: "listAccountContacts" },
+    payload: {
+      mention: "Dana",
+      resolutionKind: "contact",
+      accountId: 77,
+      accountName: "The Louise",
+      contactName: "Dana",
+      candidateAccountIds: [77],
+    },
+  });
+}
+
 describe("business judgment is not a business fact", () => {
   it("a judgment question yields an advisory segment with no mutation authority", async () => {
     const decision = await decideTurn(
@@ -218,10 +236,13 @@ describe("business judgment is not a business fact", () => {
     const decision = await decideTurn(
       perceiveTurn({ rawText: "What should I do about Dana Tuesday?", completeness: "complete" }),
       memory(),
-      deps(async request => (request.kind === "account_state" ? [accountEvidence()] : []))
+      deps(async request =>
+        request.kind === "contact_account_resolution" ? [resolutionEvidence()] : request.kind === "account_state" ? [accountEvidence()] : []
+      )
     );
     const judgment = decision.responsePlan.segments.find(segment => segment.type === "BusinessJudgmentSegment");
-    expect(judgment && "evidence" in judgment && judgment.evidence).toEqual([{ evidenceId: "ev-account" }]);
+    expect(judgment && "evidence" in judgment && judgment.evidence?.length).toBeGreaterThan(0);
+    // Scope comes from the authoritative resolution, never from a whitespace guess.
     expect(judgment && "accountId" in judgment && judgment.accountId).toBe(77);
     expect(judgment && "contactName" in judgment && judgment.contactName).toBe("Dana");
   });

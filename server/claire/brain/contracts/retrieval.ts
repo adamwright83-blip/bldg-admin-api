@@ -26,6 +26,8 @@ export type BusinessRetrievalRequest = {
   /** Opaque query object passed through to the existing authoritative reader. */
   query?: unknown;
   accountId?: number | null;
+  /** Raw mentions from Perception. Business Memory decides what they are. */
+  mentions?: string[];
   contactName?: string | null;
   temporal?: string[];
 };

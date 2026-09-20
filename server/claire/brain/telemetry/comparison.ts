@@ -29,8 +29,15 @@ export type ShadowComparisonRecord = {
     priorClaim: AttentionPlan["priorClaim"];
     continueOrderedQuery: boolean;
   };
+  /** Which compartments were consulted, and for what. Classes only, never payloads. */
+  retrievalKinds: string[];
   evidenceIds: string[];
   evidenceTypes: string[];
+  /** Provenance classes (which reader), so a disagreement can be traced to a source. */
+  evidenceReaders: string[];
+  /** Why a candidate was blocked — the most useful signal when the minds disagree. */
+  inhibited: string[];
+  conclusions: string[];
   actionClasses: string[];
   segmentTypes: string[];
   callEnd: boolean;
@@ -64,8 +71,12 @@ export function comparisonRecordFromDecision(
       priorClaim: decision.attention.priorClaim,
       continueOrderedQuery: decision.attention.continueOrderedQuery,
     },
+    retrievalKinds: decision.retrievals.map(request => `${request.compartment}:${request.kind}`),
     evidenceIds: decision.evidence.map(item => item.id),
     evidenceTypes: decision.evidence.map(item => item.type),
+    evidenceReaders: Array.from(new Set(decision.evidence.map(item => item.provenance.reader))),
+    inhibited: decision.inhibitedCandidates.map(candidate => candidate.kind),
+    conclusions: decision.conclusions.map(conclusion => conclusion.kind),
     actionClasses: decision.actionGrants.map(grant => grant.actionClass),
     segmentTypes: decision.responsePlan.segments.map(segment => segment.type),
     callEnd: decision.callControl.endCall,

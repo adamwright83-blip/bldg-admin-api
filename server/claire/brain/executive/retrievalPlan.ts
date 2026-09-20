@@ -52,8 +52,9 @@ export function buildBusinessQuery(perceived: PerceivedTurn): BusinessQuery | nu
   const query = defaultBusinessQuery(metric);
   if (perceived.cardinality && perceived.cardinality > 0) query.limit = perceived.cardinality;
   if (perceived.ordering === "first") query.rank = "earliest";
-  const contact = perceived.entities.find(entity => entity.kind === "contact_candidate");
-  if (contact) query.customerName = contact.raw;
+  // A single named mention scopes the query; identity resolution happens in Business Memory.
+  const mentions = perceived.entities.filter(entity => entity.kind === "entity_mention");
+  if (mentions.length === 1) query.customerName = mentions[0].raw;
   if (perceived.listRequest) query.listMembers = true;
   return query;
 }
@@ -85,12 +86,12 @@ export function planRetrieval(
       }
     }
 
-    const contact = perceived.entities.find(entity => entity.kind === "contact_candidate");
-    if (contact || perceived.businessIntent === "judgment_question") {
+    const mentions = perceived.entities.filter(entity => entity.kind === "entity_mention").map(entity => entity.raw);
+    if (mentions.length || perceived.businessIntent === "judgment_question") {
       requests.push({
         compartment: "businessMemory",
         kind: "contact_account_resolution",
-        contactName: contact?.raw ?? null,
+        mentions,
         temporal: perceived.temporalReferences,
       });
       /**
@@ -102,14 +103,10 @@ export function planRetrieval(
         requests.push({
           compartment: "businessMemory",
           kind: "account_state",
-          contactName: contact?.raw ?? null,
+          mentions,
           temporal: perceived.temporalReferences,
         });
-        requests.push({
-          compartment: "businessMemory",
-          kind: "open_orders",
-          contactName: contact?.raw ?? null,
-        });
+        requests.push({ compartment: "businessMemory", kind: "open_orders", mentions });
       }
     }
 

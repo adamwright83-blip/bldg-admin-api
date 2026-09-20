@@ -303,7 +303,22 @@ export const claireRouter = router({
         operatorUserId: ctx.user.openId,
         surface: "text",
         conversationKey: key,
-        v1: { endedCall: false, mutated: Boolean(result.actionIds?.length), spokeSomething: Boolean(result.speak) },
+        // Read-only readers, constructed only when the flag is ON.
+        live: {
+          tenantId: ctx.tenantId,
+          operatorUserId: ctx.user.openId,
+          conversationId: input.conversationId ?? "desk",
+          timeZone: input.timeZone ?? "America/Los_Angeles",
+          today: context.businessDate ?? new Date().toISOString().slice(0, 10),
+          surface: "text",
+          episodicTerms: [],
+        },
+        v1: {
+          endedCall: false,
+          // commitmentTurn is on the shared turn result, so desk can record work too.
+          mutated: Boolean(result.commitmentTurn) || Boolean(result.actionIds?.length),
+          spokeSomething: Boolean(result.speak),
+        },
       });
 
       return {

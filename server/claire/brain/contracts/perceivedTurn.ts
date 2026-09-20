@@ -27,10 +27,18 @@ export type BusinessIntentKind =
   | "broad_briefing"
   | "none";
 
+/**
+ * A mention, not an identity.
+ *
+ * Perception reports THAT something was named. It does not decide whether that thing
+ * is a person or an account — a person's name can be two words and an account's can be
+ * one, so any whitespace-based guess is simply wrong some of the time. Resolution is
+ * Business Memory's job, against authoritative contact and account rows.
+ */
 export type PerceivedEntity = {
   raw: string;
   /** Temporal tokens are never person/account names ("Dana Tuesday" → Dana + Tuesday). */
-  kind: "contact_candidate" | "account_candidate" | "temporal" | "unresolved";
+  kind: "entity_mention" | "temporal";
 };
 
 export type CallControlSignal = "end" | "continue";

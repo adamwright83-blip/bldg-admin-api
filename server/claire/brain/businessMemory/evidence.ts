@@ -12,6 +12,7 @@
 
 import type { BusinessQueryResult } from "../../../analytics/businessQuery";
 import type { AccountRef } from "../../knowledge/accountKnowledge";
+import type { ResolvedEntity } from "./entityResolution";
 import type {
   EvidenceAuthority,
   EvidenceCoverage,
@@ -142,6 +143,40 @@ export function evidenceFromAccountRef(input: {
     coverage: null,
     authoritativeFor: ["current_business_truth"],
     payload: { accountId: account.id, name: account.name, accountType: account.accountType },
+    operatorVisible: true,
+  };
+}
+
+/**
+ * A resolution is authoritative evidence about identity: this mention IS this contact
+ * at this account, because rows say so. An ambiguous or unknown resolution carries no
+ * current-truth authority — it is a reason to ask, not a reason to assert.
+ */
+export function evidenceFromResolution(input: {
+  resolution: ResolvedEntity;
+  reader: string;
+  observedAtIso: string;
+}): EvidenceItem {
+  const { resolution, reader, observedAtIso } = input;
+  const settled = resolution.kind === "contact" || resolution.kind === "account";
+  return {
+    id: `contact_account_resolution:${resolution.mention.toLowerCase()}`,
+    type: "account_state",
+    source: reader,
+    provenance: { reader },
+    observedAt: observedAtIso,
+    asOf: observedAtIso,
+    freshness: null,
+    coverage: null,
+    authoritativeFor: settled ? ["current_business_truth"] : [],
+    payload: {
+      mention: resolution.mention,
+      resolutionKind: resolution.kind,
+      accountId: resolution.accountId,
+      accountName: resolution.accountName,
+      contactName: resolution.contactName,
+      candidateAccountIds: resolution.candidateAccountIds,
+    },
     operatorVisible: true,
   };
 }
