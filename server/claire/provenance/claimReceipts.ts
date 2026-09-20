@@ -52,6 +52,12 @@ export type FactualClaimReceipt = {
    * model. Supplying evidence proves the model SAW it, never that the generated prose is entailed by it.
    */
   supportedBy?: FactualClaimReceipt | null;
+  /**
+   * For evidence-free model replies: does the statement assert a business fact (true) or is it advice/opinion
+   * (false)? Unknown (undefined) until the operator probes it — decided then, by the challenge classifier,
+   * so ordinary turns pay no extra model call. Advice is never a factual claim.
+   */
+  assertsFact?: boolean | null;
 };
 
 export const MAX_CLAIM_RECEIPTS = 24;

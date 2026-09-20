@@ -20,6 +20,14 @@ detail (`claimReceipt`). There is no second truth ledger and no schema change.
 - **Referent resolution** (`resolveReferencedClaim`): an explicit reference (name, order number, figure) resolves
   against every receipt held in state, however old; a bare reaction targets only the immediately preceding Claire
   turn; equal matches are ambiguous and fail closed. It identifies a receipt, never judges it.
+- **Semantic referents.** When name/number/adjacent matching fails, the challenge classifier receives compact receipt
+  summaries and returns `{act, receiptId, ambiguous, assertsFact}`. It runs in parallel with routing: a deterministic
+  reply honours it only if already landed (no added wait); any model reply awaits it. Ambiguity fails closed. If it is
+  unavailable and nothing resolves deterministically, no association is invented. It identifies statements; it never
+  judges them. "Immediately preceding" is only a default: a classifier-named older receipt outranks it.
+- **Judgment is not a factual claim.** Evidence-free replies are stored `ungrounded` with `assertsFact` unknown; when
+  probed, the classifier says whether the statement asserted a business fact. Advice/opinion is left to ordinary
+  conversation and never answered "I didn't have enough to state that as fact".
 - **`verified` means re-read now.** A receipt that cannot be re-run is `grounded_as_stated` (provenance only). A
   model synthesis is never verified because evidence was in its prompt: it is `synthesized`, points at the
   authoritative receipt (`supportedBy`), and is credited only for figures/names that trace to that evidence

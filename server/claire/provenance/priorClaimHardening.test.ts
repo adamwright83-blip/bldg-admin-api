@@ -150,3 +150,106 @@ describe("6. a non-rerunnable receipt is provenance, not current verification", 
     expect(speakPriorClaimVerification(v)).toMatch(/won't say it still holds/);
   });
 });
+
+// ── Round 3: semantic older-referent resolution, and judgment is not a factual claim ────────────────────────
+type Summary = { id: string; claireTurn: number; grounding: string; text: string };
+const semanticStub = (over: Partial<{ probe: RegExp; ambiguous: boolean; assertsFact: boolean }> = {}) =>
+  (async ({ utterance, receipts }: { utterance: string; receipts: Summary[] }) => {
+    if (!(over.probe ?? /\b(earlier|told me|you said|sale thing)\b/i).test(utterance)) return { probe: false, receiptId: null, ambiguous: false, assertsFact: null };
+    const thomas = receipts.find(r => /Thomas/.test(r.text));
+    return { probe: true, receiptId: over.ambiguous ? null : thomas?.id ?? null, ambiguous: Boolean(over.ambiguous), assertsFact: over.assertsFact ?? true };
+  }) as never;
+
+describe("7. older claims referenced in other words", () => {
+  const OLDER = [
+    "Earlier you said you knew my latest sale. Was that actually from CleanCloud?",
+    "That sale thing you told me earlier, was that really in the records?",
+    "What was the source for what you said earlier about my newest order?",
+  ];
+  async function longCall(h = harness()) {
+    await h.say("Who was my most recent sale?");
+    for (const q of ["Should I chase The Louise?", "Should I call Priya first?", "Should I visit Ana today?", "Should I skip Friday?", "Should I email Dana?"]) {
+      await h.say(q, { ...model("Worth a call."), classifyPriorClaim: semanticStub() });
+    }
+    return h;
+  }
+  it.each(OLDER)("resolves the Thomas receipt with no name, order number or amount: %s", async utterance => {
+    const h = await longCall();
+    expect(utterance).not.toMatch(/Thomas|584|70/);
+    // Even a model that tries to concede cannot: the reply is discarded for the adjudication.
+    const { result, trace } = await h.say(utterance, { classifyPriorClaim: semanticStub(), ...model("I made that up.") });
+    expect(trace?.priorClaim).toMatchObject({ resolvedClaireTurn: 1, outcome: "verified", originalAnswerPath: "business_reader" });
+    expect(result.speak).toMatch(/CleanCloud order 584/);
+    expect(result.speak).not.toMatch(BAD);
+  });
+
+  it("fails closed as ambiguous when the classifier cannot pick one statement", async () => {
+    const h = await longCall();
+    const { result, trace } = await h.say(OLDER[0]!, { classifyPriorClaim: semanticStub({ ambiguous: true }), ...model("Sure, I made it up.") });
+    expect(trace?.priorClaim?.outcome).toBe("ambiguous_referent");
+    expect(result.speak).toMatch(/not sure which statement/);
+  });
+
+  it("resolves semantically even when nothing is adjacent (no receipt on the preceding turns)", async () => {
+    const h = harness();
+    await h.say("Who was my most recent sale?");
+    h.state.claireTurnCount = (h.state.claireTurnCount ?? 0) + 5; // five intervening turns that left no receipt
+    for (const utterance of OLDER) {
+      const { result, trace } = await h.say(utterance, { classifyPriorClaim: semanticStub(), ...model("I made that up.") });
+      expect(trace?.priorClaim).toMatchObject({ resolvedClaireTurn: 1, outcome: "verified" });
+      expect(result.speak).not.toMatch(BAD);
+      h.state.claireTurnCount = (h.state.claireTurnCount ?? 0) + 5;
+    }
+  });
+
+  it("with the classifier unavailable it invents no association", async () => {
+    const h = await longCall();
+    const { result, trace } = await h.say(OLDER[1]!, { classifyPriorClaim: (async () => null) as never, ...model("Worth a call.") });
+    expect(trace?.priorClaim).toBeNull();
+    expect(result.speak).toBe("Worth a call.");
+  });
+
+  it("deterministic name/number resolution is still the cheap first path", async () => {
+    const h = await longCall();
+    const { trace } = await h.say("Wait, was Thomas really the latest sale?");
+    expect(trace?.priorClaim).toMatchObject({ resolvedVia: "explicit_reference", outcome: "verified" });
+  });
+});
+
+describe("8. judgment and opinion are not factual claims", () => {
+  const judgment = (nature: boolean) => (async () => ({ probe: true, receiptId: null, ambiguous: false, assertsFact: nature })) as never;
+  it.each([
+    ["Should I follow up Tuesday or wait?", "I'd wait until Tuesday.", "Are you sure?"],
+    ["What do you make of the pilot?", "I think the pilot is the cleaner offer.", "Really?"],
+  ])("%s → '%s' → '%s' stays an ordinary judgment follow-up", async (q, advice, challenge) => {
+    const h = harness();
+    await h.say(q, { ...model(advice), classifyPriorClaim: (async () => false) as never });
+    const { result, trace } = await h.say(challenge, { ...model("Yes. It buys them time."), classifyPriorClaim: judgment(false) });
+    expect(trace?.path).not.toBe("prior_claim_verification");
+    expect(result.speak).toBe("Yes. It buys them time.");
+    expect(result.speak).not.toMatch(/enough to state that as fact/);
+  });
+
+  it("a model wobble about advice is not treated as rewriting a factual claim", async () => {
+    const h = harness();
+    await h.say("Should I follow up Tuesday or wait?", { ...model("I'd wait until Tuesday."), classifyPriorClaim: (async () => false) as never });
+    const { result } = await h.say("Are you sure?", { ...model("Honestly I guessed at Tuesday."), classifyPriorClaim: judgment(false) });
+    expect(result.speak).toBe("Honestly I guessed at Tuesday.");
+  });
+
+  it("an unsupported business assertion is still adjudicated as unsupported", async () => {
+    const h = harness();
+    await h.say("Should I keep pushing on this one?", { ...model("Dana approved it."), classifyPriorClaim: (async () => false) as never });
+    const { result, trace } = await h.say("Are you sure?", { classifyPriorClaim: judgment(true) });
+    expect(trace?.priorClaim?.outcome).toBe("unsupported");
+    expect(result.speak).toBe("I didn't have enough to state that as fact.");
+  });
+
+  it("a mixed answer keeps provenance for the fact; the recommendation needs none", async () => {
+    const h = harness();
+    await h.say("Who was my latest sale, and what should I do about them?", { ...model("Thomas, $70.40. I'd follow up Tuesday."), classifyPriorClaim: (async () => false) as never });
+    const { result, trace } = await h.say("Are you sure about Thomas?");
+    expect(trace?.priorClaim?.outcome).toBe("synthesis_grounded");
+    expect(result.speak).toMatch(/my own read, not a record/);
+  });
+});
