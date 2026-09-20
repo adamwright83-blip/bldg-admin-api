@@ -147,6 +147,7 @@ export async function loadAccountHistory(input: {
           id: commercialMissions.id,
           code: commercialMissions.code,
           status: commercialMissions.status,
+          createdBy: commercialMissions.createdBy,
           createdAt: commercialMissions.createdAt,
           updatedAt: commercialMissions.updatedAt,
         })
@@ -154,7 +155,14 @@ export async function loadAccountHistory(input: {
         .where(and(eq(commercialMissions.tenantId, tenantId), inArray(commercialMissions.opportunityId, opportunityIds)))
         .orderBy(desc(commercialMissions.createdAt))
     : [];
-  const missionIds = missions.map(row => row.id);
+  const visibleMissions = missions.filter(row =>
+    isProductionVisibleBusinessRecord({
+      createdBy: row.createdBy,
+      missionCode: row.code,
+      accountName: account.name,
+    })
+  );
+  const missionIds = visibleMissions.map(row => row.id);
   const nameTerms = tokens(account.name);
   const [events, fields, outcomes, followUps, pipelines, contacts, dayLine, mentions] = await Promise.all([
     missionIds.length
@@ -218,7 +226,7 @@ export async function loadAccountHistory(input: {
   ]);
   return {
     account,
-    missions: missions.map(row => ({
+    missions: visibleMissions.map(row => ({
       id: row.id,
       code: row.code,
       status: row.status,
@@ -252,7 +260,7 @@ export async function loadAccountHistory(input: {
         isProductionVisibleBusinessRecord({
           createdBy: row.createdBy,
           requestId: row.requestId,
-          missionCode: missions.find(mission => mission.id === row.missionId)?.code ?? null,
+          missionCode: visibleMissions.find(mission => mission.id === row.missionId)?.code ?? null,
           accountName: account.name,
           note: row.note,
         })
