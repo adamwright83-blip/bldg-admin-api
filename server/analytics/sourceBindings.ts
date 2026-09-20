@@ -14,13 +14,11 @@
  *   4. FRESH      — is the source up to the checkpoint its real schedule requires?
  *   5. COVERED    — does evidence prove the exact requested interval and event basis?
  *
- * Connection is read from `dayforge_saas_import_connections` (tenant + providerKey + status)
- * where a row exists, because an explicitly disabled integration must not look connected just
- * because old rows survive, and a newly connected one with zero orders must not look
- * disconnected. Where no connection row exists — which is the case for businesses that predate
- * the SaaS onboarding flow, including the primary operator's — observed historical data is the
- * fallback evidence. Absence of both is UNBOUND: the business does not use that source, so an
- * empty window proves nothing about it.
+ * CleanCloud membership is resolved from the live browser-sync tenant/store binding first, then
+ * the SaaS import connection, with historical rows only as legacy membership evidence. None of
+ * those signals is allowed to masquerade as interval coverage. Native Goldline orders are the
+ * system of record and are bound whenever that table can be read, including a legitimate zero-row
+ * tenant.
  */
 import { sql } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
@@ -300,13 +298,14 @@ export async function loadLedgerSourceEvidence(tenantId: string, nowMs = Date.no
 
   const historyOf = (result: Row[] | "error") => (result === "error" ? "error" : toDate(result[0]?.last));
 
-  // Native orders ARE Goldline's records: present when any exist, never stale.
+  // Native orders ARE Goldline's system of record. A successful empty read is a real empty
+  // source, not evidence that the source is "unbound"; only a failed probe makes its state unknown.
   const nativeHistory = historyOf(nativeRows);
   const laundry_butler: SourceEvidence =
     nativeHistory === "error"
       ? { ...UNKNOWN_SOURCE, isSystemOfRecord: true }
       : {
-          state: nativeHistory ? "bound" : "absent",
+          state: "bound",
           lastSuccessAt: nativeHistory,
           coverageRanges: [],
           latestAttempt: null,
