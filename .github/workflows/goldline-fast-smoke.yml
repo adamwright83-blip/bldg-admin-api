@@ -122,6 +122,9 @@ jobs:
           server/strategy/snapshotCustomerAggregateLoad.test.ts
           server/claire/slice03AssertionGuardWiring.test.ts
           server/claire/slice01SafetyBaseline.test.ts
+          server/claire/operatingTruthGuards.test.ts
+          server/claire/claireOperatorPhone.test.ts
+          server/claire/businessConversation.test.ts
           shared/claireRelationshipHistory.test.ts
           server/claire/slice06RelationshipHistory.test.ts
       - name: Prove Real Workday truth invariants
