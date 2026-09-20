@@ -161,7 +161,7 @@ describe("paraphrase robustness (not the exact transcript)", () => {
 // ── The LIVE query path, not just the interpreter ────────────────────────────────────────────
 import { vi } from "vitest";
 import { answerClaireBusinessTurn } from "../businessConversation";
-import type { BusinessQuery } from "../../analytics/businessQuery";
+import { defaultBusinessQuery, type BusinessQuery } from "../../analytics/businessQuery";
 
 describe("cardinality reaches the actual business query", () => {
   const askCapturingQuery = async (utterance: string) => {
@@ -206,5 +206,126 @@ describe("cardinality reaches the actual business query", () => {
   it("a plural request with no number asks for more than one", async () => {
     const query = await askCapturingQuery("What were my last sales?");
     expect(query?.limit ?? 0).toBeGreaterThan(1);
+  });
+});
+
+
+describe("P1 review regressions", () => {
+  it("'I asked you for...' does not suppress an explicit correctness challenge", () => {
+    const turn = interpretTurn("I asked you for revenue — are you sure those numbers are correct?");
+    expect(turn.correctnessChallenge).toBe(true);
+    expect(turn.queryRefinement).toBe(false);
+    expect(turn.intents).toContain("prior_claim_challenge");
+  });
+
+  it("Dana + Tuesday keeps time separate from the entity/advice act", () => {
+    const turn = interpretTurn("What should I do about Dana Tuesday?");
+    expect(turn.businessJudgment).toBe(true);
+    expect(turn.temporalReference).toBe("tuesday");
+    expect(turn.broadOperationalBriefing).toBe(false);
+    expect(turn.mayProposeWork).toBe(false);
+  });
+
+  it.each([
+    "Buy detergent",
+    "Order hangers",
+    "Send the proposal",
+    "Check the printer",
+    "Pay the invoice",
+    "Prepare the flyers",
+  ])("all established briefing actions retain work authority: %s", utterance => {
+    const turn = interpretTurn(utterance);
+    expect(turn.operatorWorkCommitment).toBe(true);
+    expect(turn.mayProposeWork).toBe(true);
+  });
+});
+
+describe("ordered query continuation reaches the actual business query", () => {
+  const bindings = async () => ({
+    laundry_butler: { state: "bound" as const, lastSuccessAt: new Date(), isSystemOfRecord: true },
+    cleancloud: { state: "bound" as const, lastSuccessAt: new Date(), isSystemOfRecord: false },
+  });
+
+  it("'the other four' continues after records already spoken instead of restarting or becoming customer history", async () => {
+    const baseQuery = { ...defaultBusinessQuery("latest_sales"), limit: 5 };
+    const state = {
+      analytics: {
+        query: baseQuery,
+        periods: [],
+        disclosed: [],
+        pendingClarification: null,
+        touchedAt: Date.parse("2026-09-20T17:59:00Z"),
+        focus: {
+          orderList: {
+            baseQuery,
+            shownEventKeys: ["cleancloud:584"],
+            lastOrders: [],
+          },
+        },
+      },
+    };
+    const seen: BusinessQuery[] = [];
+    await answerClaireBusinessTurn(
+      {
+        tenantId: "t1",
+        utterance: T6,
+        state,
+        surface: "voice",
+        interpretation: interpretTurn(T6),
+      },
+      {
+        now: () => new Date("2026-09-20T18:00:00Z"),
+        timeZone: () => "America/Los_Angeles",
+        plan: vi.fn(async () => null) as never,
+        loadBindings: bindings,
+        runQuery: (async (_tenant: string, query: BusinessQuery) => {
+          seen.push(query);
+          return {
+            status: "unavailable",
+            query,
+            period: { label: "x", start: "2020-01-01", end: "2026-09-20" },
+            comparisonPeriod: null,
+            reason: "test",
+          };
+        }) as never,
+      }
+    );
+    expect(seen[0]?.metric).toBe("latest_sales");
+    expect(seen[0]?.limit).toBe(4);
+    expect(seen[0]?.offset).toBe(1);
+    expect(seen[0]?.customerName).toBeNull();
+  });
+
+  it("'before Thomas; don't tell me about Thomas' becomes an anchored exclusion query", async () => {
+    const seen: BusinessQuery[] = [];
+    const utterance = "What sales happened before Thomas Hartmann? Don't tell me about Thomas.";
+    await answerClaireBusinessTurn(
+      {
+        tenantId: "t1",
+        utterance,
+        state: {},
+        surface: "voice",
+        interpretation: interpretTurn(utterance),
+      },
+      {
+        now: () => new Date("2026-09-20T18:00:00Z"),
+        timeZone: () => "America/Los_Angeles",
+        plan: vi.fn(async () => null) as never,
+        loadBindings: bindings,
+        runQuery: (async (_tenant: string, query: BusinessQuery) => {
+          seen.push(query);
+          return {
+            status: "unavailable",
+            query,
+            period: { label: "x", start: "2020-01-01", end: "2026-09-20" },
+            comparisonPeriod: null,
+            reason: "test",
+          };
+        }) as never,
+      }
+    );
+    expect(seen[0]?.metric).toBe("latest_sales");
+    expect(seen[0]?.anchorCustomerName).toMatch(/Thomas/);
+    expect(seen[0]?.excludeCustomerNames?.join(" ")).toMatch(/Thomas/);
   });
 });
