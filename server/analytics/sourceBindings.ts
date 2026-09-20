@@ -414,9 +414,18 @@ export function coverageVerdict(input: {
     ? expectedCleanCloudCoverageThrough(now)
     : input.period.end;
 
-  // Before today's 18:00+grace checkpoint, a current-period question is expected to be covered
-  // only through yesterday. If that falls before the query's start (e.g. "today" at noon), the
-  // source is current to its schedule even though today's scheduled import is not due yet.
+  if (isCurrent) {
+    // Source health is independent of the business claim's event basis. Before today's run is due,
+    // yesterday's successful receipt proves the path is on schedule; after the grace, today's
+    // successful receipt is required. A recent timestamp without coverage of that checkpoint is
+    // not enough.
+    const stale = imported.filter(source => {
+      const ranges = input.evidence[source].coverageRanges;
+      return !ranges.some(range => range.from <= requiredEnd && range.to >= requiredEnd);
+    });
+    if (stale.length) return { kind: "stale", sources: stale };
+  }
+
   const requiredRange = { from: input.period.start, to: requiredEnd, basis };
 
   const semanticGap = imported.filter(source => {
