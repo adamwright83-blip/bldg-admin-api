@@ -1,4 +1,5 @@
 import type {
+  KnowledgeState,
   NarrativeBeatId,
   NarrativeDisclosureRule,
   NarrativeKnowledgeMutation,
@@ -7,11 +8,7 @@ import type {
   QuietBehavior,
 } from "../../shared/narratorOs/contracts";
 import { getBeat } from "./registry";
-import {
-  cloneKnowledge,
-  type KnowledgeState,
-  type NarratorSnapshot,
-} from "./store";
+import { cloneKnowledge, type NarratorSnapshot } from "./store";
 
 /**
  * Read layer over authored beats, the fired-beat ledger, knowledge planes,
