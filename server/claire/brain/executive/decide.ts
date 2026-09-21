@@ -148,6 +148,7 @@ export async function decideTurn(
   const rulings = gateWorkingMemory({ perceived, memory, change, taskSets });
   control.change = change;
   control.activeTaskSets = taskSets;
+  control.workingMemoryGates = rulings;
   control.suppressedContext = suppressedSlots(rulings);
 
   // ── Attention ─────────────────────────────────────────────────────────────

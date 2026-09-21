@@ -14,6 +14,7 @@ import {
   observeShadowTurnDetached,
   recordedObservations,
 } from "../shadow/observeShadowTurn";
+import { createInMemoryShadowMemoryStore } from "../shadow/shadowMemory";
 
 const CTX = {
   tenantId: "default",
@@ -25,17 +26,24 @@ const CTX = {
 const ON = { CLAIRE_BRAIN_V2_SHADOW: "1" } as unknown as NodeJS.ProcessEnv;
 const OFF = {} as unknown as NodeJS.ProcessEnv;
 
+function observe(
+  input: Parameters<typeof observeShadowTurn>[0],
+  options: Parameters<typeof observeShadowTurn>[1] = {}
+) {
+  return observeShadowTurn(input, { memory: createInMemoryShadowMemoryStore(), ...options });
+}
+
 beforeEach(() => clearRecordedObservations());
 
 describe("shadow mode is off unless explicitly enabled", () => {
   it("does not observe when the flag is unset", async () => {
-    const result = await observeShadowTurn({ rawText: "What was my revenue?", ...CTX }, { env: OFF });
+    const result = await observe({ rawText: "What was my revenue?", ...CTX }, { env: OFF });
     expect(result.observed).toBe(false);
     expect(recordedObservations()).toHaveLength(0);
   });
 
   it("does not observe on a malformed flag value", async () => {
-    const result = await observeShadowTurn(
+    const result = await observe(
       { rawText: "What was my revenue?", ...CTX },
       { env: { CLAIRE_BRAIN_V2_SHADOW: "yes-please" } as unknown as NodeJS.ProcessEnv }
     );
@@ -43,7 +51,7 @@ describe("shadow mode is off unless explicitly enabled", () => {
   });
 
   it("observes when explicitly enabled", async () => {
-    const result = await observeShadowTurn({ rawText: "What was my revenue?", ...CTX }, { env: ON });
+    const result = await observe({ rawText: "What was my revenue?", ...CTX }, { env: ON });
     expect(result.observed).toBe(true);
     expect(recordedObservations()).toHaveLength(1);
   });
@@ -51,7 +59,7 @@ describe("shadow mode is off unless explicitly enabled", () => {
 
 describe("shadow observation cannot affect production", () => {
   it("never reports production authority or mutations", async () => {
-    const result = await observeShadowTurn({ rawText: "I need to call Dana Tuesday.", ...CTX }, { env: ON });
+    const result = await observe({ rawText: "I need to call Dana Tuesday.", ...CTX }, { env: ON });
     expect(result.observed).toBe(true);
     if (result.observed) {
       expect(result.comparison.productionAuthority).toBe(false);
@@ -59,7 +67,7 @@ describe("shadow observation cannot affect production", () => {
   });
 
   it("swallows a V2 failure instead of surfacing it into the call", async () => {
-    const result = await observeShadowTurn(
+    const result = await observe(
       // A malformed turn that makes the runner throw internally.
       { rawText: null as unknown as string, ...CTX },
       { env: ON }
@@ -70,7 +78,7 @@ describe("shadow observation cannot affect production", () => {
 
   it("a throwing sink cannot break observation for the caller", async () => {
     await expect(
-      observeShadowTurn(
+      observe(
         { rawText: "Good morning.", ...CTX },
         {
           env: ON,
@@ -84,16 +92,24 @@ describe("shadow observation cannot affect production", () => {
 
   it("the detached entrypoint returns synchronously and never rejects", () => {
     expect(() =>
-      observeShadowTurnDetached({ rawText: null as unknown as string, ...CTX }, { env: ON })
+      observeShadowTurnDetached(
+        { rawText: null as unknown as string, ...CTX },
+        { env: ON, memory: createInMemoryShadowMemoryStore() }
+      )
     ).not.toThrow();
     // Returns void, so a production caller structurally cannot await it.
-    expect(observeShadowTurnDetached({ rawText: "Good morning.", ...CTX }, { env: ON })).toBeUndefined();
+    expect(
+      observeShadowTurnDetached(
+        { rawText: "Good morning.", ...CTX },
+        { env: ON, memory: createInMemoryShadowMemoryStore() }
+      )
+    ).toBeUndefined();
   });
 });
 
 describe("comparison telemetry is safe and useful", () => {
   it("carries evidence ids and types, not payloads", async () => {
-    const result = await observeShadowTurn({ rawText: "What were my last five sales?", ...CTX }, { env: ON });
+    const result = await observe({ rawText: "What were my last five sales?", ...CTX }, { env: ON });
     expect(result.observed).toBe(true);
     if (result.observed) {
       const serialized = JSON.stringify(result.comparison);

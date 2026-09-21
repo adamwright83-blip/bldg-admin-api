@@ -59,6 +59,19 @@ export class Speech {
   readonly facts: string[] = [];
   readonly sentences: string[] = [];
   readonly disclosures: string[] = [];
+  /**
+   * Stable ids of the result members this speech actually named.
+   *
+   * A caller tracking "what has the operator been told?" must not infer that from the
+   * prose — duplicate names, omissions, paraphrase and compression all break string
+   * matching. The speaker knows exactly which members it listed, so it says so.
+   */
+  readonly presentedMemberIds: string[] = [];
+
+  /** Record a member as spoken. Order follows the order it was said in. */
+  present(id: string | null | undefined): void {
+    if (id && !this.presentedMemberIds.includes(id)) this.presentedMemberIds.push(id);
+  }
 
   constructor(
     readonly surface: ClaireSurface,
@@ -198,9 +211,16 @@ function describeCriteria(minOrders: number, speech: Speech): string {
   return `at least ${speech.count(minOrders)} paid orders`;
 }
 
-function namesOf(members: Array<{ displayName: string }>, surface: ClaireSurface, speech: Speech): string {
+function namesOf(
+  members: Array<{ displayName: string; identityId?: string }>,
+  surface: ClaireSurface,
+  speech: Speech
+): string {
   const cap = surface === "voice" ? 8 : 20;
-  const shown = members.slice(0, cap).map(member => member.displayName);
+  const visible = members.slice(0, cap);
+  // Only the capped members were named; the remainder is "and N more", not presented.
+  for (const member of visible) speech.present(member.identityId);
+  const shown = visible.map(member => member.displayName);
   const rest = members.length - shown.length;
   return rest > 0 ? `${shown.join(", ")}, and ${speech.count(rest)} more` : joinList(shown);
 }
@@ -488,6 +508,7 @@ function speakOrders(
   }
   const first = data.orders[0]!;
   if (data.orders.length === 1) {
+    if (first.customerName) speech.present(first.eventKey);
     if (data.ordering === "latest") {
       speech.say(
         `The newest ${noun}sale I have${scope.suffix} is ${speech.money(first.cents, true)} for ${customerOf(first)}, paid ${speech.time(first.occurredAt)}.`
@@ -507,6 +528,11 @@ function speakOrders(
     return;
   }
   const word = data.ordering === "latest" ? "most recent" : data.ordering === "earliest" ? "first" : "biggest";
+  // "An unnamed customer" does not identify a result member. Recording that row as
+  // presented would make a later "the other four" silently skip it.
+  for (const order of data.orders) {
+    if (order.customerName) speech.present(order.eventKey);
+  }
   speech.say(
     `The ${speech.count(data.orders.length)} ${word} ${noun}orders${scope.suffix} are ${joinList(
       data.orders.map(order => `${speech.money(order.cents, true)} for ${customerOf(order)} on ${speech.date(order.date)}`)
@@ -872,7 +898,7 @@ function bucketLabel(key: string, groupBy: "month" | "week" | "day", speech: Spe
 export function speakBusinessResult(
   result: BusinessQueryResult,
   context: SpeakContext
-): { text: string; facts: string[]; disclosures: string[] } {
+): { text: string; facts: string[]; disclosures: string[]; presentedMemberIds: string[] } {
   const speech = new Speech(context.surface, context.timeZone, context.today);
   const query = result.query;
 
@@ -884,7 +910,12 @@ export function speakBusinessResult(
     } else {
       speech.say(unavailableSentence(query.metric));
     }
-    return { text: speech.text(), facts: speech.facts, disclosures: speech.disclosures };
+    return {
+      text: speech.text(),
+      facts: speech.facts,
+      disclosures: speech.disclosures,
+      presentedMemberIds: speech.presentedMemberIds,
+    };
   }
 
   const { data, period } = result;
@@ -920,7 +951,10 @@ export function speakBusinessResult(
               ? `Nobody${query.filters?.customerKeys?.length ? " in that group" : scope.suffix} has gone without an order ${during(label)}.`
               : `Nobody matches that${scope.suffix}.`
             : singular && population.count === 1
-              ? `That's ${population.members[0]!.displayName}.`
+              ? (() => {
+                  speech.present(population.members[0]!.identityId);
+                  return `That's ${population.members[0]!.displayName}.`;
+                })()
               : `They are ${namesOf(population.members, context.surface, speech)}.`
         );
         break;
@@ -962,6 +996,7 @@ export function speakBusinessResult(
         break;
       }
       const shown = data.members.slice(0, query.limit);
+      for (const member of shown) speech.present(member.identityId);
       if (data.rankedBy === "orders") {
         const entries = shown.map(member => `${member.displayName} with ${speech.count(member.orderCount)} ${plural(member.orderCount, "order")}`);
         speech.say(
@@ -1042,5 +1077,10 @@ export function speakBusinessResult(
   if (data.kind !== "freshness" && data.kind !== "orders" && data.kind !== "customer_history") {
     coverageNotes(result, speech, context);
   }
-  return { text: speech.text(), facts: speech.facts, disclosures: speech.disclosures };
+  return {
+    text: speech.text(),
+    facts: speech.facts,
+    disclosures: speech.disclosures,
+    presentedMemberIds: speech.presentedMemberIds,
+  };
 }

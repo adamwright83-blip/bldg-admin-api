@@ -6,11 +6,13 @@
  * reimplemented here.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   admitBusinessEvidence,
+  lookupPriorClaimReceipt,
   recheckPriorClaim,
   retrieveBusinessEvidence,
+  UNSUPPORTED_REQUEST,
   type BusinessMemoryDeps,
 } from "../businessMemory/adapter";
 import { evidenceFromBusinessResult, resolvedMembers } from "../businessMemory/evidence";
@@ -56,6 +58,22 @@ function deps(over: Partial<BusinessMemoryDeps> = {}): BusinessMemoryDeps {
     runQuery: async () => okResult(),
     listAccounts: async () => [],
     listContacts: async () => [],
+    loadHistory: async ({ account }) =>
+      ({
+        account,
+        missions: [],
+        events: [],
+        fieldVisits: [],
+        outcomes: [],
+        followUps: [],
+        pipelineStage: null,
+        pipelineId: null,
+        contacts: [],
+        dayLineMentions: [],
+        conversationMentions: [],
+      }) as never,
+    loadOpenOrders: async () => [],
+    loadOperations: async () => ({ businessDate: "2026-09-20", open: [], completed: [], routeAvailable: true }),
     verifyClaim: async () => ({}) as PriorClaimVerification,
     ...over,
   };
@@ -263,5 +281,66 @@ describe("prior claims", () => {
       deps()
     );
     expect(outcome).toBeNull();
+  });
+
+  it("looks up the authoritative receipt by id from the supplied conversation receipts", () => {
+    expect(lookupPriorClaimReceipt([receipt], "r1")).toBe(receipt);
+    expect(lookupPriorClaimReceipt([receipt], "missing")).toBeNull();
+  });
+
+  it("passes the context tenant into verify, never a hardcoded default", async () => {
+    const verifyClaim = vi.fn(
+      async () =>
+        ({
+          receipt,
+          outcome: "verified",
+          resolution: "fresh_query",
+          evidenceChanged: false,
+          freshnessAffected: false,
+          timedOut: false,
+          latencyMs: 1,
+        }) as PriorClaimVerification
+    );
+    await recheckPriorClaim(
+      { compartment: "businessMemory", kind: "prior_claim_recheck", receiptId: "r1", mode: "correctness" },
+      { ...ctx, tenantId: "tenant-b", priorClaimReceipts: [receipt] },
+      deps({ verifyClaim })
+    );
+    expect(verifyClaim).toHaveBeenCalledWith(receipt, "tenant-b");
+  });
+});
+
+describe("open orders cannot contaminate an account judgment", () => {
+  it("refuses an account-scoped unpaid read rather than returning the tenant total", async () => {
+    let loaded = 0;
+    const items = await retrieveBusinessEvidence(
+      { compartment: "businessMemory", kind: "open_orders", accountId: 77 },
+      ctx,
+      deps({
+        loadOpenOrders: async () => {
+          loaded += 1;
+          return [{ id: 1, customerName: "Unrelated", status: "processing", totalCents: 9000, pickupDate: "2026-09-20", deliveryDate: null, building: null }];
+        },
+      })
+    );
+    expect(loaded).toBe(0);
+    expect(items[0]?.source).toBe(UNSUPPORTED_REQUEST);
+    expect(items[0]?.authoritativeFor).toEqual([]);
+    expect((items[0]?.payload as { unsupported?: boolean }).unsupported).toBe(true);
+  });
+});
+
+describe("structural provenance columns reach the classifier", () => {
+  it("excludes a fixture provider even when the display name looks real", async () => {
+    const items = await retrieveBusinessEvidence(
+      { compartment: "businessMemory", kind: "contact_account_resolution" },
+      ctx,
+      deps({
+        listAccounts: async () => [
+          { id: 9, name: "The Marlowe", accountType: "property", providerName: "fixture" },
+        ],
+      })
+    );
+    expect(items).toEqual([]);
   });
 });

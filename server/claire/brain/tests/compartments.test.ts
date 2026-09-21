@@ -42,8 +42,8 @@ describe("episodic memory is history, never current truth", () => {
 
   it("returns stamped history when the executive supplies terms", async () => {
     const items = await retrieveEpisodicEvidence(
-      { compartment: "episodicMemory", kind: "conversation_history" },
-      { tenantId: "default", operatorUserId: "adam-admin", nowIso: NOW, terms: ["dana"] },
+      { compartment: "episodicMemory", kind: "conversation_history", terms: ["dana"] },
+      { tenantId: "default", operatorUserId: "adam-admin", nowIso: NOW },
       { search: async () => [turn] }
     );
     expect(items).toHaveLength(1);

@@ -17,8 +17,14 @@
  * shadow fidelity and nothing else.
  */
 
+import { createHash } from "node:crypto";
 import type { ExecutiveDecision } from "../contracts/executiveDecision";
 import type { FocusEntity, OrderedQueryMemory } from "../contracts/workingMemory";
+import {
+  claireConversationStateStore,
+  type ClaireConversationStateStore,
+  type ConversationStateOwner,
+} from "../../turn/conversationStateStore";
 import { openOrderedQuery, recordPresented, resetForNewQuery } from "../workingMemory/orderedQuery";
 
 export type ShadowMemory = {
@@ -42,16 +48,13 @@ export function emptyShadowMemory(): ShadowMemory {
 
 export interface ShadowMemoryStore {
   load(key: string): Promise<ShadowMemory | null>;
-  save(key: string, memory: ShadowMemory): Promise<void>;
+  save(key: string, memory: ShadowMemory, owner?: ConversationStateOwner): Promise<void>;
   clear(key?: string): Promise<void>;
 }
 
 const MAX_KEYS = 200;
 
-/**
- * Process-local by default. Shadow memory is observational, so it does not need to
- * survive a restart and must not acquire a durable write path into production storage.
- */
+/** Hermetic process-local implementation for tests and degraded fallback. */
 export function createInMemoryShadowMemoryStore(): ShadowMemoryStore {
   const store = new Map<string, ShadowMemory>();
   return {
@@ -72,7 +75,45 @@ export function createInMemoryShadowMemoryStore(): ShadowMemoryStore {
   };
 }
 
-export const shadowMemoryStore: ShadowMemoryStore = createInMemoryShadowMemoryStore();
+export const SHADOW_MEMORY_TTL_MS = 12 * 60 * 60 * 1000;
+
+/** A bounded key in the existing conversation-state table, strictly separate from V1. */
+export function shadowMemoryKey(input: {
+  tenantId: string;
+  operatorUserId: string;
+  conversationKey: string;
+}): string {
+  const digest = createHash("sha256")
+    .update(`${input.tenantId}\0${input.operatorUserId}\0${input.conversationKey}`)
+    .digest("hex")
+    .slice(0, 32);
+  return `claire-brain-v2-shadow:${input.tenantId}:${input.operatorUserId}:${digest}`;
+}
+
+/**
+ * Durable shadow memory reuses Claire's existing conversation-state infrastructure.
+ * Only V2 cognitive state is stored; V1 state and transcript rows are never touched.
+ */
+export function createDurableShadowMemoryStore(
+  store: ClaireConversationStateStore = claireConversationStateStore(),
+  ttlMs: number = SHADOW_MEMORY_TTL_MS
+): ShadowMemoryStore {
+  return {
+    async load(key) {
+      const row = await store.load<ShadowMemory>(key);
+      return row?.state ?? null;
+    },
+    async save(key, memory, owner) {
+      if (!owner) throw new Error("Durable Brain V2 shadow memory requires an owner");
+      await store.save(key, owner, memory, ttlMs);
+    },
+    async clear(key) {
+      if (key) await store.remove(key);
+    },
+  };
+}
+
+export const shadowMemoryStore: ShadowMemoryStore = createDurableShadowMemoryStore();
 
 /**
  * Fold one decision into shadow memory.

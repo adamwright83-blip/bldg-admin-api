@@ -308,10 +308,11 @@ export const claireRouter = router({
           tenantId: ctx.tenantId,
           operatorUserId: ctx.user.openId,
           conversationId: input.conversationId ?? "desk",
+          dayDirectorActorId: actorId,
           timeZone: input.timeZone ?? "America/Los_Angeles",
-          today: context.businessDate ?? new Date().toISOString().slice(0, 10),
+          businessDate: context.businessDate ?? new Date().toISOString().slice(0, 10),
           surface: "text",
-          episodicTerms: [],
+          priorClaimReceipts: state.claimReceipts ?? [],
         },
         v1: {
           endedCall: false,

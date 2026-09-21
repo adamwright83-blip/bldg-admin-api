@@ -543,10 +543,11 @@ function startVoiceTurn(input: {
           tenantId: conversation.tenantId,
           operatorUserId: conversation.actorId,
           conversationId,
+          dayDirectorActorId: conversation.dayDirectorActorId,
           timeZone: getDashboardTimeZone(),
-          today: conversation.context.businessDate ?? new Date().toISOString().slice(0, 10),
+          businessDate: conversation.context.businessDate ?? new Date().toISOString().slice(0, 10),
           surface: "voice",
-          episodicTerms: conversation.context ? [] : [],
+          priorClaimReceipts: conversation.claimReceipts ?? [],
         },
         v1: {
           endedCall: Boolean(result.endCall),

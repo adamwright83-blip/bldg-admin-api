@@ -128,7 +128,7 @@ describe("a judgment actually recommends something", () => {
     const brief = buildJudgmentBrief({ evidence: [resolution], temporal: [] });
     const text = deterministicRecommendation(brief);
     expect(text.length).toBeGreaterThan(20);
-    expect(text).toMatch(/nothing recent|nothing on record|find that out|make contact/i);
+    expect(text).toMatch(/verified recent record|verified record|find that out|make contact/i);
   });
 
   it("refuses to pick a side when the contact is ambiguous", () => {

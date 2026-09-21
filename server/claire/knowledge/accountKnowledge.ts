@@ -25,7 +25,14 @@ import { searchOperatorConversation, type RememberedTurn } from "./conversationM
  * call quote is only what Adam said.
  */
 
-export type AccountRef = { id: number; name: string; accountType: string };
+export type AccountRef = {
+  id: number;
+  name: string;
+  accountType: string;
+  identityKey?: string | null;
+  providerName?: string | null;
+  providerAccountId?: string | null;
+};
 
 export type AccountHistory = {
   account: AccountRef;
@@ -63,7 +70,14 @@ export async function listAccountRefs(tenantId: string): Promise<AccountRef[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const rows = await db
-    .select({ id: commercialAccounts.id, name: commercialAccounts.name, accountType: commercialAccounts.accountType })
+    .select({
+      id: commercialAccounts.id,
+      name: commercialAccounts.name,
+      accountType: commercialAccounts.accountType,
+      identityKey: commercialAccounts.identityKey,
+      providerName: commercialAccounts.providerName,
+      providerAccountId: commercialAccounts.providerAccountId,
+    })
     .from(commercialAccounts)
     .where(eq(commercialAccounts.tenantId, tenantId))
     .orderBy(asc(commercialAccounts.name))
@@ -78,6 +92,9 @@ export type AccountContactRef = {
   contactName: string;
   title: string | null;
   relationshipType: string;
+  identityKey?: string | null;
+  providerName?: string | null;
+  providerAccountId?: string | null;
 };
 
 /**
@@ -95,6 +112,9 @@ export async function listAccountContacts(tenantId: string): Promise<AccountCont
       accountId: commercialAccounts.id,
       accountName: commercialAccounts.name,
       accountType: commercialAccounts.accountType,
+      identityKey: commercialAccounts.identityKey,
+      providerName: commercialAccounts.providerName,
+      providerAccountId: commercialAccounts.providerAccountId,
       contactName: commercialAccountContacts.name,
       title: commercialAccountContacts.title,
       relationshipType: commercialAccountContacts.relationshipType,
@@ -110,6 +130,9 @@ export async function listAccountContacts(tenantId: string): Promise<AccountCont
       accountId: row.accountId,
       accountName: row.accountName,
       accountType: row.accountType,
+      identityKey: row.identityKey,
+      providerName: row.providerName,
+      providerAccountId: row.providerAccountId,
       contactName: row.contactName as string,
       title: row.title ?? null,
       relationshipType: row.relationshipType,

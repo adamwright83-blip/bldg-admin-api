@@ -27,11 +27,20 @@
 
 import { runClaireBrainTurn, type ClaireBrainTurnInput } from "./runClaireBrainTurn";
 import type { ShadowComparisonRecord } from "../telemetry/comparison";
-import { liveReadOnlyRetrieval, noRetrieval, type ExecutiveDeps } from "../executive/decide";
+import {
+  liveReadOnlyRetrieval,
+  noRetrieval,
+  type ExecutiveDeps,
+  type LiveRetrievalDeps,
+} from "../executive/decide";
 import { readOnlySelfMemoryDeps } from "../selfMemory/adapter";
 import { readOnlyGoalsDeps } from "../goals/adapter";
+import { isAuthorizedProductionOperator } from "../businessMemory/sourceVisibility";
+import type { FactualClaimReceipt } from "../../provenance/claimReceipts";
+import { persistShadowFailure, persistShadowObservation } from "../telemetry/shadowRecorder";
 import {
   shadowMemoryStore,
+  shadowMemoryKey,
   updateShadowMemory,
   type ShadowMemoryStore,
 } from "./shadowMemory";
@@ -50,17 +59,20 @@ export type ShadowDisagreement =
 
 export type ShadowObservation = {
   observed: true;
+  tenantId: string;
+  operatorUserId: string;
+  surface: "voice" | "text";
   comparison: ShadowComparisonRecord;
   disagreements: ShadowDisagreement[];
   candidateEndCall: boolean;
   candidateActionClasses: string[];
 };
 
-export type ShadowSkipped = { observed: false; reason: "disabled" | "error" };
+export type ShadowSkipped = { observed: false; reason: "disabled" | "operator_not_authorized" | "error" };
 
 export type ShadowResult = ShadowObservation | ShadowSkipped;
 
-export type ShadowSink = (observation: ShadowObservation) => void;
+export type ShadowSink = (observation: ShadowObservation) => void | Promise<void>;
 
 /**
  * Read-only readers the observer may use when the flag is ON.
@@ -73,33 +85,54 @@ export type ShadowRetrievalContext = {
   tenantId: string;
   operatorUserId: string;
   conversationId: string;
+  /** Day Director's numeric/internal identity; never inferred from operatorUserId. */
+  dayDirectorActorId: string;
   timeZone: string;
-  today: string;
+  businessDate: string;
   surface: "voice" | "text";
-  /** Terms the executive may recall from the conversation ledger. */
-  episodicTerms?: string[];
+  /** Authoritative V1 receipts used only to locate and rerun the challenged claim. */
+  priorClaimReceipts: FactualClaimReceipt[];
 };
 
-function liveExecutiveDeps(ctx: ShadowRetrievalContext): ExecutiveDeps {
+export function liveExecutiveDeps(
+  ctx: ShadowRetrievalContext,
+  retrievalDeps?: LiveRetrievalDeps
+): ExecutiveDeps {
   const nowIso = new Date().toISOString();
   const scope = { tenantId: ctx.tenantId, operatorUserId: ctx.operatorUserId, nowIso };
-  return {
-    retrieve: liveReadOnlyRetrieval(
-      {
-        business: scope,
-        episodic: { ...scope, terms: ctx.episodicTerms ?? [] },
-        self: { ...scope, conversationId: ctx.conversationId },
-        goals: scope,
-      },
-      {
-        // Every one of these is a genuine READ. The write-capable siblings —
-        // loadPersonalProgressionContext (releases reservations) and ensureAdamBoard
-        // (creates obligations) — must never be reachable from an observer.
-        self: readOnlySelfMemoryDeps,
-        goals: readOnlyGoalsDeps,
+  const business = {
+    ...scope,
+    dayDirectorActorId: ctx.dayDirectorActorId,
+    businessDate: ctx.businessDate,
+    timeZone: ctx.timeZone,
+    priorClaimReceipts: ctx.priorClaimReceipts,
+  };
+  const contexts = {
+    business,
+    episodic: { ...scope, excludeSessionId: ctx.conversationId },
+    self: { ...scope, conversationId: ctx.conversationId },
+    goals: scope,
+  };
+  // Injected liveDeps replace READERS, never identity/context. A test that supplies
+  // only business readers must not silently open the production episodic search.
+  const liveContext = retrievalDeps
+    ? {
+        business: contexts.business,
+        ...(retrievalDeps.episodic ? { episodic: contexts.episodic } : {}),
+        ...(retrievalDeps.self ? { self: contexts.self } : {}),
+        ...(retrievalDeps.goals ? { goals: contexts.goals } : {}),
       }
-    ),
-    ctx: { timeZone: ctx.timeZone, today: ctx.today, surface: ctx.surface },
+    : contexts;
+  return {
+    retrieve: liveReadOnlyRetrieval(liveContext, {
+      // Every one of these is a genuine READ. The write-capable siblings —
+      // loadPersonalProgressionContext (releases reservations) and ensureAdamBoard
+      // (creates obligations) — must never be reachable from an observer.
+      self: readOnlySelfMemoryDeps,
+      goals: readOnlyGoalsDeps,
+      ...retrievalDeps,
+    }),
+    ctx: { timeZone: ctx.timeZone, today: ctx.businessDate, surface: ctx.surface },
   };
 }
 
@@ -108,7 +141,7 @@ function enabled(env: NodeJS.ProcessEnv): boolean {
   return flag === "1" || flag?.toLowerCase() === "true";
 }
 
-/** In-memory by default. A real sink may be injected; it must not be a new secret log. */
+/** Recent observations remain useful in tests; the default sink also persists safely. */
 const recent: ShadowObservation[] = [];
 const MAX_RECENT = 50;
 
@@ -120,9 +153,10 @@ export function clearRecordedObservations(): void {
   recent.length = 0;
 }
 
-function defaultSink(observation: ShadowObservation): void {
+async function defaultSink(observation: ShadowObservation): Promise<void> {
   recent.push(observation);
   if (recent.length > MAX_RECENT) recent.shift();
+  await persistShadowObservation(observation).catch(() => undefined);
 }
 
 /**
@@ -152,11 +186,19 @@ export function compareOutcomes(
  */
 export async function observeShadowTurn(
   input: ClaireBrainTurnInput & { v1?: V1Outcome | null; live?: ShadowRetrievalContext },
-  options: { env?: NodeJS.ProcessEnv; sink?: ShadowSink; memory?: ShadowMemoryStore } = {}
+  options: {
+    env?: NodeJS.ProcessEnv;
+    sink?: ShadowSink;
+    memory?: ShadowMemoryStore;
+    liveDeps?: LiveRetrievalDeps;
+  } = {}
 ): Promise<ShadowResult> {
   const env = options.env ?? process.env;
   // Nothing below runs while disabled: no brain, no model, no database reads.
   if (!enabled(env)) return { observed: false, reason: "disabled" };
+  if (!isAuthorizedProductionOperator({ tenantId: input.tenantId, operatorUserId: input.operatorUserId })) {
+    return { observed: false, reason: "operator_not_authorized" };
+  }
 
   const memoryStore = options.memory ?? shadowMemoryStore;
 
@@ -164,28 +206,40 @@ export async function observeShadowTurn(
     const { v1, live, ...turn } = input;
 
     // V2's own memory of ITS previous answers — separate from V1's conversation state.
-    const shadowKey = `${turn.tenantId}:${turn.operatorUserId}:${turn.conversationKey}`;
+    const shadowKey = shadowMemoryKey(turn);
     const priorMemory = await memoryStore.load(shadowKey);
 
-    const executive = turn.executive ?? (live ? liveExecutiveDeps(live) : undefined);
+    const executive = turn.executive ?? (live ? liveExecutiveDeps(live, options.liveDeps) : undefined);
     const result = await runClaireBrainTurn({
       ...turn,
       executive: executive ?? { retrieve: noRetrieval, ctx: { timeZone: "UTC", today: new Date().toISOString().slice(0, 10), surface: turn.surface } },
       state: {
         ...(turn.state ?? {}),
-        // V2 continues its OWN resolved/presented thread, not V1's.
+        // V2 continues its OWN cognitive thread, not V1's.
+        focusEntities: priorMemory?.focusEntities ?? turn.state?.focusEntities,
         orderedQuery: priorMemory?.orderedQuery ?? null,
+        unresolvedReferences: priorMemory?.unresolvedReferences ?? turn.state?.unresolvedReferences,
       },
     });
 
     // Defence in depth: the runner already guarantees these, and we re-check anyway.
     if (result.productionAuthority !== false || result.mutations.length !== 0) {
+      await persistShadowFailure({
+        tenantId: turn.tenantId,
+        operatorUserId: turn.operatorUserId,
+        surface: turn.surface,
+        conversationKey: turn.conversationKey,
+        category: "authority_violation",
+      }).catch(() => undefined);
       return { observed: false, reason: "error" };
     }
 
     const candidateActionClasses = result.decision.actionGrants.map(grant => grant.actionClass);
     const observation: ShadowObservation = {
       observed: true,
+      tenantId: turn.tenantId,
+      operatorUserId: turn.operatorUserId,
+      surface: turn.surface,
       comparison: result.comparison,
       disagreements: compareOutcomes(
         {
@@ -199,12 +253,27 @@ export async function observeShadowTurn(
       candidateActionClasses,
     };
     // Persist V2's cognitive state so the next real turn can continue this result.
-    await memoryStore.save(shadowKey, updateShadowMemory(priorMemory, result.decision));
+    // Persistence failure degrades shadow fidelity only; V1 is unaffected, and the
+    // observation is still recorded.
+    await memoryStore
+      .save(shadowKey, updateShadowMemory(priorMemory, result.decision), {
+        tenantId: turn.tenantId,
+        operatorUserId: turn.operatorUserId,
+        surface: turn.surface,
+      })
+      .catch(() => undefined);
 
-    (options.sink ?? defaultSink)(observation);
+    await (options.sink ?? defaultSink)(observation);
     return observation;
   } catch {
     // A V2 failure must never reach an operator's call.
+    await persistShadowFailure({
+      tenantId: input.tenantId,
+      operatorUserId: input.operatorUserId,
+      surface: input.surface,
+      conversationKey: input.conversationKey,
+      category: "observer_error",
+    }).catch(() => undefined);
     return { observed: false, reason: "error" };
   }
 }
@@ -217,7 +286,12 @@ export async function observeShadowTurn(
  */
 export function observeShadowTurnDetached(
   input: ClaireBrainTurnInput & { v1?: V1Outcome | null; live?: ShadowRetrievalContext },
-  options: { env?: NodeJS.ProcessEnv; sink?: ShadowSink; memory?: ShadowMemoryStore } = {}
+  options: {
+    env?: NodeJS.ProcessEnv;
+    sink?: ShadowSink;
+    memory?: ShadowMemoryStore;
+    liveDeps?: LiveRetrievalDeps;
+  } = {}
 ): void {
   try {
     void observeShadowTurn(input, options).catch(() => undefined);

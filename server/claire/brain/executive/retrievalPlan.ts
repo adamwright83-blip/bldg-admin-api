@@ -184,9 +184,9 @@ export function planRetrievalPassB(input: {
     for (const accountId of scope.accountIds.slice(0, 2)) {
       requests.push({ compartment: "businessMemory", kind: "account_state", accountId });
     }
-    if (kinds.has("account_judgment")) {
-      requests.push({ compartment: "businessMemory", kind: "open_orders", accountId: scope.accountIds[0] });
-    }
+    // Do not request open_orders for an account judgment. Goldline unpaid laundry
+    // orders are not authoritatively joinable to commercial accounts, so a tenant-wide
+    // unpaid read would contaminate "what should I do about Dana?".
   }
 
   // Episodic recall, cued by resolved identity rather than by the transport.

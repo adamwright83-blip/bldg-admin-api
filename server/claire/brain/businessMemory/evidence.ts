@@ -142,7 +142,14 @@ export function evidenceFromAccountRef(input: {
     freshness: null,
     coverage: null,
     authoritativeFor: ["current_business_truth"],
-    payload: { accountId: account.id, name: account.name, accountType: account.accountType },
+    payload: {
+      accountId: account.id,
+      name: account.name,
+      accountType: account.accountType,
+      identityKey: account.identityKey ?? null,
+      providerName: account.providerName ?? null,
+      providerAccountId: account.providerAccountId ?? null,
+    },
     operatorVisible: true,
   };
 }

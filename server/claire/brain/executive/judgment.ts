@@ -106,9 +106,11 @@ function historyLine(brief: JudgmentBrief): string | null {
 function openOrdersLine(brief: JudgmentBrief): string | null {
   const item = brief.current.find(entry => entry.type === "open_orders");
   if (!item) return null;
-  const payload = payloadOf<{ openTotal?: number; awaitingPayment?: number }>(item);
+  const payload = payloadOf<{ openTotal?: number; awaitingPayment?: number; unsupported?: boolean }>(item);
+  if (payload.unsupported) return null;
   if (typeof payload.openTotal !== "number") return null;
-  return `${payload.openTotal} open on the account`;
+  // These are Goldline laundry unpaid orders for the tenant, not commercial-account work.
+  return `${payload.openTotal} Goldline orders waiting on payment`;
 }
 
 function goalLine(brief: JudgmentBrief): string | null {
@@ -147,13 +149,15 @@ export function deterministicRecommendation(brief: JudgmentBrief): string {
   // The recommended move, and what it rests on.
   const timing = when ? ` ${when}` : "";
   if (history && !open) {
-    parts.push(`I'd pick that back up${timing} and get it confirmed, since nothing since then shows it landed.`);
+    parts.push(
+      `I'd pick that back up${timing} and get it confirmed — I don't have a verified later record that it landed.`
+    );
   } else if (open) {
     parts.push(`I'd deal with what's open${timing} before starting anything new there.`);
   } else if (brief.current.length) {
-    parts.push(`I'd make contact${timing} — the account is on record but there's nothing recent to go on.`);
+    parts.push(`I'd make contact${timing} — the account is on record but I don't have a verified recent record to go on.`);
   } else {
-    parts.push(`There's nothing on record for ${who} to base a move on. I'd find that out first.`);
+    parts.push(`I don't have a verified record for ${who} to base a move on. I'd find that out first.`);
   }
   if (goal) parts.push(`Worth doing because ${goal}.`);
 

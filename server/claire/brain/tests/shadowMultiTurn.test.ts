@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { clearRecordedObservations, observeShadowTurn } from "../shadow/observeShadowTurn";
 import {
   createInMemoryShadowMemoryStore,
+  shadowMemoryKey,
   type ShadowMemoryStore,
 } from "../shadow/shadowMemory";
 import type { EvidenceItem } from "../contracts/evidence";
@@ -26,6 +27,7 @@ const CTX = {
   surface: "voice" as const,
   conversationKey: "claire-call:multiturn",
 };
+const MEMORY_KEY = shadowMemoryKey(CTX);
 
 const period = {
   spec: { kind: "all_time" },
@@ -139,7 +141,7 @@ describe("shadow mode remembers its own previous answer", () => {
     const first = await turn("What were my last five sales?", false);
     expect(first.observed).toBe(true);
 
-    const stored = await memory.load(`default:adam-admin:${CTX.conversationKey}`);
+    const stored = await memory.load(MEMORY_KEY);
     expect(stored?.orderedQuery).toBeTruthy();
     // The whole result is remembered...
     expect(stored?.orderedQuery?.resolved).toHaveLength(5);
@@ -166,7 +168,7 @@ describe("shadow mode remembers its own previous answer", () => {
     const second = await turn("What about the other four?", false);
     expect(second.observed).toBe(true);
 
-    const stored = await memory.load(`default:adam-admin:${CTX.conversationKey}`);
+    const stored = await memory.load(MEMORY_KEY);
     // All five of the ORIGINAL result are now presented — nothing new was fetched.
     expect(stored?.orderedQuery?.presented).toHaveLength(5);
     expect(stored?.orderedQuery?.resolved).toHaveLength(5);
@@ -187,7 +189,7 @@ describe("shadow mode remembers its own previous answer", () => {
   it("when Claire names every member, presented equals resolved and nothing remains", async () => {
     // The deterministic speaker lists everything, so there is genuinely no remainder.
     await turn("What were my last five sales?", true);
-    const stored = await memory.load(`default:adam-admin:${CTX.conversationKey}`);
+    const stored = await memory.load(MEMORY_KEY);
     expect(stored?.orderedQuery?.presented).toHaveLength(5);
 
     const second = await turn("What about the other four?", true);
@@ -211,7 +213,7 @@ describe("shadow memory is per-conversation and never touches V1", () => {
 
   it("stores cognitive state only — no transcript, no operator words", async () => {
     await turn("What were my last five sales?", false);
-    const stored = await memory.load(`default:adam-admin:${CTX.conversationKey}`);
+    const stored = await memory.load(MEMORY_KEY);
     const serialized = JSON.stringify(stored);
     expect(serialized).not.toContain("What were my last five sales");
     expect(stored?.priorDecisionRefs.every(ref => /^[A-Za-z+]+$/.test(ref))).toBe(true);
@@ -223,6 +225,6 @@ describe("shadow memory is per-conversation and never touches V1", () => {
       { env: {} as unknown as NodeJS.ProcessEnv, memory }
     );
     expect(off.observed).toBe(false);
-    expect(await memory.load(`default:adam-admin:${CTX.conversationKey}`)).toBeNull();
+    expect(await memory.load(MEMORY_KEY)).toBeNull();
   });
 });

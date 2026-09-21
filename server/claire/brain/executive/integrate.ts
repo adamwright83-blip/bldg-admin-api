@@ -28,7 +28,6 @@ import { BUSINESS_ANSWER_UNAVAILABLE, type Conclusion, type InhibitedCandidate }
 import { buildJudgmentBrief, recommendOverEvidence, type JudgmentRecommender } from "./judgment";
 import { epistemicQualifier } from "./epistemicState";
 import type { ExecutiveControlState } from "../contracts/control";
-import { mintPersonalDisclosureGrant } from "./grants";
 import { selectDialogueLine } from "../../progression/dialogueRegistry";
 
 export type IntegrationContext = {
@@ -72,13 +71,19 @@ export type IntegrationOutput = {
   continuationPresented?: OrderedQueryMember[];
 };
 
-/** A member counts as presented only when Claire actually named it. */
-function presentedFrom(members: readonly OrderedQueryMember[], spoken: string): OrderedQueryMember[] {
-  const haystack = spoken.toLowerCase();
-  return members.filter(member => {
-    const label = member.label?.trim().toLowerCase();
-    return Boolean(label && label.length >= 2 && haystack.includes(label));
-  });
+/**
+ * Which members Claire actually named.
+ *
+ * The speaker reports this directly, so it survives duplicate names, omissions,
+ * paraphrase and compression. Matching the prose was only ever an approximation, and
+ * it is the approximation that would silently corrupt "the other four".
+ */
+function presentedFrom(
+  members: readonly OrderedQueryMember[],
+  presentedIds: readonly string[]
+): OrderedQueryMember[] {
+  const named = new Set(presentedIds);
+  return members.filter(member => named.has(member.id));
 }
 
 /**
@@ -149,10 +154,14 @@ function recheckFrom(evidence: EvidenceItem[]): PriorClaimRecheckResult | null {
  * The brain does not compose numbers of its own — if the reader did not say it,
  * it does not get spoken.
  */
-function speakResult(item: EvidenceItem, perceived: PerceivedTurn, ctx: IntegrationContext): string {
+function speakResult(
+  item: EvidenceItem,
+  perceived: PerceivedTurn,
+  ctx: IntegrationContext
+): { text: string; presentedMemberIds: string[] } {
   const result = item.payload as BusinessQueryResult;
   try {
-    return speakBusinessResult(result, {
+    const spoken = speakBusinessResult(result, {
       surface: ctx.surface,
       previous: null,
       refinement: false,
@@ -160,11 +169,25 @@ function speakResult(item: EvidenceItem, perceived: PerceivedTurn, ctx: Integrat
       today: ctx.today,
       disclosed: [],
       timeZone: ctx.timeZone,
-    }).text;
+    });
+    return { text: spoken.text, presentedMemberIds: spoken.presentedMemberIds };
   } catch {
     // Fail closed: a speaker error yields no claim, never a half-stated number.
-    return "";
+    return { text: "", presentedMemberIds: [] };
   }
+}
+
+/**
+ * V2-only. Shared production speech in businessSpeech.ts must keep its existing
+ * wording. When a negative claim is not licensed, Brain V2 refuses to treat the
+ * speaker's absence sentence as "that did not happen."
+ */
+function v2AbsenceSpeech(text: string, licensed: boolean): string {
+  if (licensed || !text) return text;
+  if (/\bnobody\b|\bnothing happened\b|\bthere are none\b|\bno follow-up\b/i.test(text)) {
+    return "I don't have a verified later record.";
+  }
+  return text;
 }
 
 function integrateBusiness(input: {
@@ -304,7 +327,8 @@ function integrateBusiness(input: {
 
   let orderedQueryUpdate: OrderedQueryUpdate | undefined;
   for (const item of speakableResults(evidence)) {
-    const text = speakResult(item, perceived, ctx);
+    const spoken = speakResult(item, perceived, ctx);
+    const text = v2AbsenceSpeech(spoken.text, control.epistemic.negativeClaimLicensed);
     if (!text) continue;
     // Say what we know AS we know it: a partial or stale read is qualified, never
     // presented as exhaustive current truth.
@@ -331,7 +355,7 @@ function integrateBusiness(input: {
         ordering: perceived.ordering,
         anchorEntity: perceived.anchorEntity,
         resolved: members,
-        presented: presentedFrom(members, text),
+        presented: presentedFrom(members, spoken.presentedMemberIds),
         sourceEvidence: item,
       };
     }
@@ -382,21 +406,12 @@ function integratePersonal(input: {
   const entitlement = evidence.find(item => item.type === "disclosure_entitlement");
   if (entitlement) {
     const entitlementId = (entitlement.payload as { entitlementId?: string }).entitlementId ?? entitlement.id;
-    const grant = mintPersonalDisclosureGrant({
-      entitlementId,
-      basis: "progression_entitlement",
-      rung: null,
-    });
-    segments.push({
-      type: "PersonalDisclosureSegment",
-      // Authored content belongs to the canon/dialogue registry, not to generation here.
-      // The executive authorises the disclosure; it does not write Claire's biography.
-      text: "",
-      grant,
-    });
+    // A granted reveal generates biography and then reserves/consumes an entitlement.
+    // Shadow must not do either, and canon facts must not be rendered as dialogue.
+    // Do not emit an empty PersonalDisclosureSegment as if the lane were finished.
     conclusions.push({
-      kind: "personal_disclosure_authorised",
-      detail: `entitlement ${entitlementId} permits one disclosure`,
+      kind: "personal_disclosure_preview_unavailable",
+      detail: `entitlement ${entitlementId} would permit one disclosure; authored reveal requires reservation and is cutover work`,
       evidenceIds: [entitlement.id],
     });
     return { segments, conclusions, inhibited, extraEvidence: [] };

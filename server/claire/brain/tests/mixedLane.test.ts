@@ -162,7 +162,8 @@ describe("neither lane suppresses the other", () => {
     );
     const types = decision.responsePlan.segments.map(s => s.type);
     expect(types).toContain("BusinessFactSegment");
-    expect(types).toContain("PersonalDisclosureSegment");
+    expect(types).not.toContain("PersonalDisclosureSegment");
+    expect(decision.conclusions.some(c => c.kind === "personal_disclosure_preview_unavailable")).toBe(true);
     // The business answer is real speech, not an empty placeholder.
     const fact = decision.responsePlan.segments.find(s => s.type === "BusinessFactSegment");
     expect(fact?.text).toMatch(/Thomas|\$42/);
@@ -191,7 +192,7 @@ describe("neither lane suppresses the other", () => {
     expect(decision.conclusions.some(c => c.kind === BUSINESS_ANSWER_UNAVAILABLE)).toBe(true);
   });
 
-  it("personal comes after business, so it cannot bury the answer", async () => {
+  it("an authorised disclosure still cannot bury or empty the business answer", async () => {
     const decision = await decideTurn(
       perceiveTurn({ rawText: MIXED, completeness: "complete" }),
       memory(),
@@ -204,7 +205,9 @@ describe("neither lane suppresses the other", () => {
       )
     );
     const types = decision.responsePlan.segments.map(s => s.type);
-    expect(types.indexOf("BusinessFactSegment")).toBeLessThan(types.indexOf("PersonalDisclosureSegment"));
+    expect(types[0]).toBe("BusinessFactSegment");
+    expect(types).not.toContain("PersonalDisclosureSegment");
+    expect(decision.conclusions.some(c => c.kind === "personal_disclosure_preview_unavailable")).toBe(true);
   });
 
   it("a self-memory failure never takes the business answer with it", async () => {

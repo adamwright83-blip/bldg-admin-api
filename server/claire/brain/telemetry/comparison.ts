@@ -12,13 +12,26 @@ export type ShadowComparisonRecord = {
     businessIntent: PerceivedTurn["businessIntent"];
     callControl: PerceivedTurn["callControl"];
     completeness: PerceivedTurn["completeness"];
-    entities: string[];
-    temporal: string[];
+    entityKinds: string[];
+    temporalReferenceCount: number;
     cardinality: number | null;
     acknowledgement: boolean;
     refusal: boolean;
     explicitActionRequest: boolean;
     operatorWorkCommitment: boolean;
+  };
+  control: {
+    mode: ExecutiveDecision["control"]["mode"];
+    stoppingReason: ExecutiveDecision["control"]["stoppingReason"];
+    change: ExecutiveDecision["control"]["change"];
+    activeTaskSets: string[];
+    workingMemoryGates: Array<{ slot: string; input: string; output: string }>;
+    retrievalRounds: number;
+    deliberationDepth: number;
+    epistemic: Omit<ExecutiveDecision["control"]["epistemic"], "notes" | "unresolvedReferences"> & {
+      unresolvedReferenceCount: number;
+    };
+    conflicts: string[];
   };
   attention: {
     lanes: AttentionPlan["lanes"];
@@ -54,13 +67,36 @@ export function comparisonRecordFromDecision(
       businessIntent: decision.perceivedTurn.businessIntent,
       callControl: decision.perceivedTurn.callControl,
       completeness: decision.perceivedTurn.completeness,
-      entities: decision.perceivedTurn.entities.map(entity => entity.raw),
-      temporal: decision.perceivedTurn.temporalReferences,
+      entityKinds: decision.perceivedTurn.entities.map(entity => entity.kind),
+      temporalReferenceCount: decision.perceivedTurn.temporalReferences.length,
       cardinality: decision.perceivedTurn.cardinality,
       acknowledgement: decision.perceivedTurn.acknowledgement,
       refusal: decision.perceivedTurn.refusal,
       explicitActionRequest: decision.perceivedTurn.explicitActionRequest,
       operatorWorkCommitment: decision.perceivedTurn.operatorWorkCommitment,
+    },
+    control: {
+      mode: decision.control.mode,
+      stoppingReason: decision.control.stoppingReason,
+      change: decision.control.change,
+      activeTaskSets: decision.control.activeTaskSets.map(task => task.kind),
+      workingMemoryGates: decision.control.workingMemoryGates.map(gate => ({
+        slot: gate.slot,
+        input: gate.input,
+        output: gate.output,
+      })),
+      retrievalRounds: decision.control.retrievalRounds,
+      deliberationDepth: decision.control.deliberationDepth,
+      epistemic: {
+        classification: decision.control.epistemic.classification,
+        sufficiency: decision.control.epistemic.sufficiency,
+        coverage: decision.control.epistemic.coverage,
+        freshness: decision.control.epistemic.freshness,
+        negativeClaimLicensed: decision.control.epistemic.negativeClaimLicensed,
+        priorClaimRechecked: decision.control.epistemic.priorClaimRechecked,
+        unresolvedReferenceCount: decision.control.epistemic.unresolvedReferences.length,
+      },
+      conflicts: decision.control.conflicts.map(conflict => conflict.kind),
     },
     attention: {
       lanes: decision.attention.lanes,

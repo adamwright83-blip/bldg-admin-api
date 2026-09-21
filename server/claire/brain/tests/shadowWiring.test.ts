@@ -18,6 +18,7 @@ import { describe, expect, it } from "vitest";
 import { readOnlyWorkingMemorySource } from "../shadow/v1Snapshot";
 import { observeShadowTurn, observeShadowTurnDetached } from "../shadow/observeShadowTurn";
 import { snapshotWorkingMemory } from "../workingMemory/snapshot";
+import { createInMemoryShadowMemoryStore } from "../shadow/shadowMemory";
 
 const TWILIO = readFileSync(path.join(process.cwd(), "server/claire/claireTwilio.ts"), "utf8");
 const ROUTER = readFileSync(path.join(process.cwd(), "server/claire/claireRouter.ts"), "utf8");
@@ -29,6 +30,13 @@ const CTX = {
   conversationKey: "claire-call:wiring",
 };
 const ON = { CLAIRE_BRAIN_V2_SHADOW: "1" } as unknown as NodeJS.ProcessEnv;
+
+function observe(
+  input: Parameters<typeof observeShadowTurn>[0],
+  options: Parameters<typeof observeShadowTurn>[1] = {}
+) {
+  return observeShadowTurn(input, { memory: createInMemoryShadowMemoryStore(), ...options });
+}
 
 describe("both surfaces observe, and only observe", () => {
   it("voice and desk both emit a shadow observation", () => {
@@ -75,7 +83,7 @@ describe("both surfaces observe, and only observe", () => {
     // was asked to reason over.
     expect(TWILIO).toMatch(/completeness:\s*result\.listenOnly\s*\?\s*"incomplete"\s*:\s*"complete"/);
 
-    const held = await observeShadowTurn(
+    const held = await observe(
       { rawText: "So for Dana I was thinking", completeness: "incomplete", ...CTX },
       { env: ON }
     );
@@ -140,7 +148,7 @@ describe("the snapshot boundary cannot be written through", () => {
     };
     const before = JSON.stringify(live);
 
-    await observeShadowTurn(
+    await observe(
       { rawText: "What were my last five sales?", state: readOnlyWorkingMemorySource(live), ...CTX },
       { env: ON }
     );
@@ -164,7 +172,7 @@ describe("the snapshot boundary cannot be written through", () => {
 describe("shadow wiring is inert while the flag is off", () => {
   it("does not invoke the observer when disabled", async () => {
     let ran = 0;
-    const result = await observeShadowTurn(
+    const result = await observe(
       { rawText: "What was my revenue?", ...CTX },
       { env: {} as unknown as NodeJS.ProcessEnv, sink: () => { ran += 1; } }
     );
@@ -185,13 +193,16 @@ describe("shadow wiring is inert while the flag is off", () => {
   it("the flag is not enabled by default anywhere in the repo", () => {
     for (const source of [TWILIO, ROUTER]) {
       expect(source).not.toMatch(/CLAIRE_BRAIN_V2_SHADOW\s*=/);
+      expect(source).not.toMatch(/episodicTerms/);
+      expect(source).toMatch(/dayDirectorActorId:/);
+      expect(source).toMatch(/priorClaimReceipts:/);
     }
   });
 });
 
 describe("observation carries no authority", () => {
   it("a candidate action grant is never live and never executes", async () => {
-    const result = await observeShadowTurn({ rawText: "I need to call Dana Tuesday.", ...CTX }, { env: ON });
+    const result = await observe({ rawText: "I need to call Dana Tuesday.", ...CTX }, { env: ON });
     expect(result.observed).toBe(true);
     if (result.observed) {
       expect(result.comparison.productionAuthority).toBe(false);
@@ -201,7 +212,7 @@ describe("observation carries no authority", () => {
   });
 
   it("a candidate call-end is recorded but never terminates anything", async () => {
-    const result = await observeShadowTurn({ rawText: "I gotta go.", ...CTX }, { env: ON });
+    const result = await observe({ rawText: "I gotta go.", ...CTX }, { env: ON });
     expect(result.observed).toBe(true);
     if (result.observed) expect(result.candidateEndCall).toBe(true);
     // V1 remains the sole live call-control authority; nothing here can hang up.

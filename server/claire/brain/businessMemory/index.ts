@@ -2,6 +2,7 @@ export {
   retrieveBusinessEvidence,
   admitBusinessEvidence,
   recheckPriorClaim,
+  lookupPriorClaimReceipt,
   recheckResultFromVerification,
   defaultBusinessMemoryDeps,
   UNSUPPORTED_REQUEST,

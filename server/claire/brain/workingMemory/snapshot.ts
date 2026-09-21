@@ -5,6 +5,7 @@
  */
 
 import type {
+  FocusEntity,
   OrderedQueryMemory,
   PendingProposalSnapshot,
   PriorClaimRef,
@@ -26,6 +27,10 @@ export type WorkingMemorySource = {
   pendingAccountFollowUp?: { createdAt?: number } | null;
   proposal?: { title?: string } | null;
   pendingProposal?: { title?: string } | null;
+  /** Brain V2-owned focus from the preceding shadow turn. */
+  focusEntities?: FocusEntity[];
+  /** Brain V2-owned unresolved references from the preceding shadow turn. */
+  unresolvedReferences?: string[];
   /** The ordered result this thread is still walking, if any. */
   orderedQuery?: OrderedQueryMemory | null;
 };
@@ -63,15 +68,17 @@ export function snapshotWorkingMemory(source: WorkingMemorySource, ctx: WorkingM
 
   return {
     threadId: ctx.conversationKey,
-    focusEntities: source.focusAccount
-      ? [{ mentioned: source.focusAccount.name, contactName: null, accountId: source.focusAccount.id, accountName: source.focusAccount.name }]
-      : [],
+    focusEntities:
+      source.focusEntities ??
+      (source.focusAccount
+        ? [{ mentioned: source.focusAccount.name, contactName: null, accountId: source.focusAccount.id, accountName: source.focusAccount.name }]
+        : []),
     pendingProposal: proposal,
     pendingBriefing: briefing,
     pendingAccountFollowUp: followUp,
     orderedQuery: source.orderedQuery ?? null,
     priorClaims,
-    unresolvedReferences: [],
+    unresolvedReferences: source.unresolvedReferences ?? [],
     pendingFragment: source.pendingFragment ?? null,
     fragmentHolds: source.fragmentHolds ?? 0,
     currentCallContext: {

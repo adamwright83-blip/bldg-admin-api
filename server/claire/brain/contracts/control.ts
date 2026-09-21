@@ -149,6 +149,8 @@ export type ExecutiveControlState = {
   ambiguity: "none" | "resolvable" | "requires_clarification";
   change: ChangeClass;
   activeTaskSets: TaskSet[];
+  /** Full input/output gate rulings, retained for inspectable shadow cognition. */
+  workingMemoryGates: GateRuling[];
   suppressedContext: WorkingMemorySlot[];
   epistemic: EpistemicState;
   conflicts: Conflict[];
@@ -169,6 +171,7 @@ export function initialControlState(): ExecutiveControlState {
     ambiguity: "none",
     change: "continuation",
     activeTaskSets: [],
+    workingMemoryGates: [],
     suppressedContext: [],
     epistemic: {
       classification: "unknown",

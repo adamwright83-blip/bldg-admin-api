@@ -87,6 +87,39 @@ export const defaultBusinessMemoryDeps: BusinessMemoryDeps = {
 /** Marks a capability that has no reader yet, so it cannot be mistaken for "none". */
 export const UNSUPPORTED_REQUEST = "unsupported_request" as const;
 
+/**
+ * Locate the authoritative receipt by identity.
+ *
+ * Working Memory holds receipt ids, not truth. The receipts themselves live in V1
+ * conversation state and are supplied here as a read-only lookup source.
+ */
+export function lookupPriorClaimReceipt(
+  receipts: FactualClaimReceipt[] | undefined,
+  receiptId: string
+): FactualClaimReceipt | null {
+  return (receipts ?? []).find(item => item.id === receiptId) ?? null;
+}
+
+function unsupportedEvidence(input: {
+  kind: "open_orders" | "operations" | "day_line_read" | "field_today";
+  reason: string;
+  nowIso: string;
+}): EvidenceItem {
+  return {
+    id: `${input.kind}:${UNSUPPORTED_REQUEST}`,
+    type: input.kind === "field_today" ? "field_today" : input.kind === "open_orders" ? "open_orders" : "day_line_read",
+    source: UNSUPPORTED_REQUEST,
+    provenance: { reader: UNSUPPORTED_REQUEST },
+    observedAt: input.nowIso,
+    asOf: input.nowIso,
+    freshness: null,
+    coverage: { complete: false, gaps: [input.reason] },
+    authoritativeFor: [],
+    payload: { unsupported: true, reason: input.reason },
+    operatorVisible: true,
+  };
+}
+
 function operatorVisible(item: EvidenceItem): boolean {
   const payload = (item.payload ?? {}) as Record<string, unknown>;
   return item.operatorVisible && admitsToOperatorEvidence({ ...item.provenance, ...payload });
@@ -124,7 +157,7 @@ export async function recheckPriorClaim(
   ctx: BusinessMemoryContext,
   deps: BusinessMemoryDeps = defaultBusinessMemoryDeps
 ): Promise<{ recheck: PriorClaimRecheckResult; evidence: EvidenceItem[] } | null> {
-  const receipt = (ctx.priorClaimReceipts ?? []).find(item => item.id === request.receiptId);
+  const receipt = lookupPriorClaimReceipt(ctx.priorClaimReceipts, request.receiptId);
   if (!receipt) return null;
 
   if (request.mode === "provenance") {
@@ -184,7 +217,13 @@ async function scopedAccounts(
   if (!mentions.length) return [];
 
   const contacts = (await deps.listContacts(ctx.tenantId)).filter(contact =>
-    admitsToOperatorEvidence({ name: contact.accountName, accountType: contact.accountType })
+    admitsToOperatorEvidence({
+      name: contact.accountName,
+      accountType: contact.accountType,
+      identityKey: contact.identityKey,
+      providerName: contact.providerName,
+      providerAccountId: contact.providerAccountId,
+    })
   );
   const resolutions = resolveEntityMentions(mentions, accounts, contacts);
   const ids = new Set(resolutions.flatMap(entry => entry.candidateAccountIds.concat(entry.accountId ?? [])));
@@ -216,7 +255,13 @@ export async function retrieveBusinessEvidence(
         );
       }
       const contacts = (await deps.listContacts(ctx.tenantId)).filter(contact =>
-        admitsToOperatorEvidence({ name: contact.accountName, accountType: contact.accountType })
+        admitsToOperatorEvidence({
+          name: contact.accountName,
+          accountType: contact.accountType,
+          identityKey: contact.identityKey,
+          providerName: contact.providerName,
+          providerAccountId: contact.providerAccountId,
+        })
       );
       const resolutions = resolveEntityMentions(mentions, accounts, contacts);
       const resolved = resolutions
@@ -248,6 +293,18 @@ export async function retrieveBusinessEvidence(
     }
 
     case "open_orders": {
+      // Laundry unpaid orders have no commercial-account foreign key. An account-scoped
+      // request cannot be answered by the tenant-wide unpaid reader without contaminating
+      // a Dana / The Louise judgment with every open order in the tenant.
+      if (request.accountId != null) {
+        return [
+          unsupportedEvidence({
+            kind: "open_orders",
+            reason: "open orders cannot be scoped to a commercial account",
+            nowIso: ctx.nowIso,
+          }),
+        ];
+      }
       const rows = await deps.loadOpenOrders(ctx.tenantId);
       const item: EvidenceItem = {
         id: "open_orders:tenant",
@@ -271,19 +328,11 @@ export async function retrieveBusinessEvidence(
       if (!ctx.dayDirectorActorId || !ctx.businessDate || !ctx.timeZone) {
         // Say so rather than returning [] — an unconfigured read is not an empty day.
         return [
-          {
-            id: `${request.kind}:${UNSUPPORTED_REQUEST}`,
-            type: request.kind === "field_today" ? "field_today" : "day_line_read",
-            source: UNSUPPORTED_REQUEST,
-            provenance: { reader: UNSUPPORTED_REQUEST },
-            observedAt: ctx.nowIso,
-            asOf: ctx.nowIso,
-            freshness: null,
-            coverage: { complete: false, gaps: ["operations context not supplied"] },
-            authoritativeFor: [],
-            payload: { unsupported: true, reason: "day director actor / business date / time zone missing" },
-            operatorVisible: true,
-          },
+          unsupportedEvidence({
+            kind: request.kind,
+            reason: "day director actor / business date / time zone missing",
+            nowIso: ctx.nowIso,
+          }),
         ];
       }
       const work = await deps.loadOperations({
