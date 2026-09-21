@@ -1,23 +1,22 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  AUTHORED_BEAT_DEFAULTS,
-  asNarrativeBeatId,
-  type AuthoredBeat,
-} from "../../shared/narratorOs/contracts";
 import { isLegalEligibilityGoldlineEvidence } from "./brainBoundary";
 import {
   eligibilityMutates,
   evaluateEligibility,
+  issueEligibilityAuthorizations,
+  isEligibilityAuthorization,
+  outcomeOfPassing,
   type EligibilityInput,
-  type VerifiedGoldlineOutcome,
 } from "./eligibility";
 import {
   applyElapsedTime,
   applyQuietClose,
+  commitAuthorizedBeat,
   commitFiredBeat,
   fireOffscreenIfLegal,
+  IneligibleBeatCommitError,
   recordVerifiedGoldlineOutcome,
 } from "./ledger";
 import { initNarratorOperator } from "./init";
@@ -29,37 +28,32 @@ import {
   getBeat,
   offscreenCatalog,
 } from "./registry";
-import {
-  NonRepeatableReplayError,
-  UnknownBeatLedgerError,
-  applyKnowledgeWrite,
-  type NarratorSnapshot,
-} from "./store";
+import { type NarratorSnapshot } from "./store";
 
 const scope = { tenantId: "t-d", operatorUserId: "op-d" };
 
-function fixtureBeat(
-  partial: Partial<AuthoredBeat> & { id: string }
-): AuthoredBeat {
-  return {
-    ...AUTHORED_BEAT_DEFAULTS,
-    title: partial.title ?? partial.id,
-    canonStatus: "LOCKED",
-    authoredSourceRef: "test-fixture",
-    ...partial,
-    id: asNarrativeBeatId(partial.id),
-  };
-}
+const LATE_REVEAL_IDS = [
+  BEAT_IDS.K_COVE_ORIGIN,
+  BEAT_IDS.CONSTRUCTEDNESS,
+  "M15",
+  "M16",
+  "M17",
+  "M18",
+  "M19",
+  "M20",
+  "M21",
+  "M22",
+  "M23",
+  "M24",
+] as const;
 
-async function seeded(knowledge?: NarratorSnapshot["knowledge"]): Promise<{
+async function seeded(): Promise<{
   store: ReturnType<typeof createInMemoryNarratorStore>;
   snapshot: NarratorSnapshot;
 }> {
   const store = createInMemoryNarratorStore();
   const snapshot = await initNarratorOperator(store, scope);
-  if (!knowledge) return { store, snapshot };
-  await store.replaceKnowledge(scope, knowledge);
-  return { store, snapshot: { ...snapshot, knowledge } };
+  return { store, snapshot };
 }
 
 function evalInput(
@@ -78,28 +72,43 @@ function evalInput(
 }
 
 describe("Narrator OS slice D — ledger + eligibility + persistence", () => {
-  it("returns NO_ELIGIBLE as success with no mutation when nothing passes", async () => {
+  it("returns NO_ELIGIBLE for a brand-new interactive user; late reveals stay ineligible", async () => {
     const { snapshot } = await seeded();
-    const result = evaluateEligibility(
-      evalInput(snapshot, { mode: "offscreen" })
-    );
+    const result = evaluateEligibility(evalInput(snapshot));
     expect(result.outcome).toBe("NO_ELIGIBLE");
     expect(result.eligibleBeatIds).toEqual([]);
+    expect(result.withheldBeatIds).toEqual([]);
     expect(eligibilityMutates(result)).toBe(false);
     expect(snapshot.ledger).toEqual([]);
+    for (const id of LATE_REVEAL_IDS) {
+      const audit = result.audit.find(entry => entry.beatId === id)!;
+      expect(audit.pass).toBe(false);
+      expect(audit.failedGates.length).toBeGreaterThan(0);
+    }
+    expect(
+      result.audit.find(entry => entry.beatId === BEAT_IDS.K_COVE_ORIGIN)
+        ?.failedGates
+    ).toEqual(
+      expect.arrayContaining(["incomplete_eligibility", "open_unresolved"])
+    );
+    expect(
+      result.audit.find(entry => entry.beatId === BEAT_IDS.CONSTRUCTEDNESS)
+        ?.failedGates
+    ).toContain("incomplete_eligibility");
+    expect(
+      result.audit.find(entry => entry.beatId === "M04")?.failedGates
+    ).toContain("prerequisite");
+    expect(
+      result.audit.find(entry => entry.beatId === "M15")?.failedGates
+    ).toContain("incomplete_eligibility");
   });
 
-  it("returns ELIGIBLE_WITHHELD only from authored defaultSurface metadata, never taste", async () => {
-    const { snapshot } = await seeded();
-    const withheld = fixtureBeat({
-      id: "withheld-fixture",
-      defaultSurface: false,
-    });
-    const result = evaluateEligibility(
-      evalInput(snapshot, { registry: [withheld], graph: [] })
+  it("returns ELIGIBLE_WITHHELD only from authored defaultSurface metadata, never taste", () => {
+    expect(getBeat("constructedness").defaultSurface).toBe(false);
+    expect(outcomeOfPassing([getBeat("constructedness")])).toBe(
+      "ELIGIBLE_WITHHELD"
     );
-    expect(result.outcome).toBe("ELIGIBLE_WITHHELD");
-    expect(result.withheldBeatIds).toEqual(["withheld-fixture"]);
+    expect(outcomeOfPassing([getBeat("M03")])).toBe("ELIGIBLE");
     const src = readFileSync(
       resolve(process.cwd(), "server/narratorOs/eligibility.ts"),
       "utf8"
@@ -109,7 +118,7 @@ describe("Narrator OS slice D — ledger + eligibility + persistence", () => {
     );
   });
 
-  it("does not fire offscreen unless mayFireOffscreen is true and prereqs pass", async () => {
+  it("does not fire offscreen when the production catalog is empty", async () => {
     const { store, snapshot } = await seeded();
     expect(offscreenCatalog()).toEqual([]);
     const none = await fireOffscreenIfLegal({
@@ -119,89 +128,108 @@ describe("Narrator OS slice D — ledger + eligibility + persistence", () => {
     });
     expect(none.fired).toEqual([]);
     expect((await store.load(scope))?.ledger).toEqual([]);
+  });
 
-    const legal = fixtureBeat({
-      id: "offscreen-legal",
-      mayFireOffscreen: true,
-      defaultSurface: false,
-      playerVisibility: false,
-      knowledgeMutations: [
+  it("refuses raw-id commit, ineligible commit, offscreen-disallowed commit, and incomplete/OPEN commit", async () => {
+    const { store, snapshot } = await seeded();
+    await expect(
+      commitFiredBeat({ store, scope, beatId: "CL-031" })
+    ).rejects.toBeInstanceOf(IneligibleBeatCommitError);
+    await expect(
+      commitFiredBeat({ store, scope, beatId: "constructedness" })
+    ).rejects.toBeInstanceOf(IneligibleBeatCommitError);
+
+    const interactive = evalInput(snapshot);
+    const result = evaluateEligibility(interactive);
+    expect(issueEligibilityAuthorizations(result, interactive)).toEqual([]);
+
+    await expect(
+      commitAuthorizedBeat({
+        store,
+        scope,
+        authorization: {
+          beatId: BEAT_IDS.CONSTRUCTEDNESS,
+          mode: "interactive",
+          tenantId: scope.tenantId,
+          operatorUserId: scope.operatorUserId,
+          ledgerLength: 0,
+        } as never,
+        eligibility: interactive,
+      })
+    ).rejects.toBeInstanceOf(IneligibleBeatCommitError);
+
+    const m03Ready = evalInput(snapshot, {
+      verifiedGoldline: [
         {
-          plane: "OTHER",
-          factId: "offscreen_occurred",
-          op: "learn",
-          kind: "EVENT_FACT",
+          outcomeId: "spoken_no",
+          verificationClass: "VERIFIED",
+          evidenceClass: "operator_attested",
         },
       ],
     });
-    const blocked = fixtureBeat({
-      id: "offscreen-blocked",
-      mayFireOffscreen: false,
+    const m03Result = evaluateEligibility(m03Ready);
+    const auths = issueEligibilityAuthorizations(m03Result, m03Ready);
+    const m03Auth = auths.find(auth => auth.beatId === BEAT_IDS.M03);
+    expect(m03Auth && isEligibilityAuthorization(m03Auth)).toBe(true);
+    await expect(
+      commitAuthorizedBeat({
+        store,
+        scope,
+        authorization: m03Auth!,
+        eligibility: { ...m03Ready, mode: "offscreen" },
+      })
+    ).rejects.toBeInstanceOf(IneligibleBeatCommitError);
+  });
+
+  it("commits an authorized COMPLETE beat atomically and refuses non-repeatable replay", async () => {
+    const { store, snapshot } = await seeded();
+    const eligibility = evalInput(snapshot, {
+      verifiedGoldline: [
+        {
+          outcomeId: "spoken_no",
+          verificationClass: "VERIFIED",
+          evidenceClass: "operator_attested",
+        },
+      ],
     });
-    const fired = await fireOffscreenIfLegal({
+    const result = evaluateEligibility(eligibility);
+    expect(result.eligibleBeatIds).toContain(BEAT_IDS.M03);
+    const authorization = issueEligibilityAuthorizations(
+      result,
+      eligibility
+    ).find(auth => auth.beatId === BEAT_IDS.M03)!;
+    const after = await commitAuthorizedBeat({
       store,
       scope,
-      eligibility: evalInput(snapshot, {
-        registry: [legal, blocked],
-        graph: [],
-        mode: "offscreen",
-      }),
+      authorization,
+      eligibility,
     });
-    expect(fired.fired).toEqual(["offscreen-legal"]);
-    const after = await store.load(scope);
-    expect(after?.ledger).toHaveLength(1);
-    expect(after?.ledger[0]?.offscreen).toBe(true);
-    expect(after?.ledger[0]?.playerVisible).toBe(false);
-    expect(after?.knowledge.planes.OTHER.knownFactIds).toContain(
-      "offscreen_occurred"
-    );
-  });
-
-  it("refuses unknown beats and non-repeatable replay on the ledger", async () => {
-    const { store } = await seeded();
-    await expect(
-      commitFiredBeat({ store, scope, beatId: "CL-031" })
-    ).rejects.toBeInstanceOf(UnknownBeatLedgerError);
-
-    await commitFiredBeat({ store, scope, beatId: "constructedness" });
-    await expect(
-      commitFiredBeat({ store, scope, beatId: "constructedness" })
-    ).rejects.toBeInstanceOf(NonRepeatableReplayError);
-  });
-
-  it("applies only authored knowledge mutations and preserves visibility when a beat fires", async () => {
-    const { store, snapshot } = await seeded();
-    const withChemist = applyKnowledgeWrite(snapshot.knowledge, {
-      plane: "CHEMIST",
-      factId: "17k_recorded_environmental_provenance_wrong",
-      op: "learn",
-      kind: "EVENT_FACT",
-    });
-    await store.replaceKnowledge(scope, withChemist);
-    const gold: VerifiedGoldlineOutcome[] = [
-      {
-        outcomeId: "17k_physically_evidenced_in_hand",
-        verificationClass: "VERIFIED",
-        evidenceClass: "authoritative_external",
-      },
-    ];
-    const eligible = evaluateEligibility(
-      evalInput(
-        { ...snapshot, knowledge: withChemist },
-        { verifiedGoldline: gold }
-      )
-    );
-    expect(eligible.eligibleBeatIds).toContain(BEAT_IDS.C08);
-    const after = await commitFiredBeat({ store, scope, beatId: "C-08" });
-    expect(after.knowledge.planes.CHEMIST.knownFactIds).toContain(
-      "c08_comparison_occurred"
-    );
+    expect(after.ledger).toHaveLength(1);
+    expect(after.ledger[0]?.beatId).toBe("M03");
+    expect(after.narrativeState.values.m03).toBe("FIRED");
     expect(after.knowledge.planes.PLAYER.knownFactIds).not.toContain(
       "antarctica_is_father_reveal"
     );
-    expect(after.knowledge.planes.CLAIRE.knownFactIds).not.toContain(
-      "antarctica_is_father_reveal"
+
+    const replay = evaluateEligibility(
+      evalInput(after, { verifiedGoldline: eligibility.verifiedGoldline })
     );
+    const replayAuth = issueEligibilityAuthorizations(
+      replay,
+      evalInput(after, { verifiedGoldline: eligibility.verifiedGoldline })
+    ).find(auth => auth.beatId === BEAT_IDS.M03);
+    expect(replayAuth).toBeUndefined();
+    await expect(
+      commitAuthorizedBeat({
+        store,
+        scope,
+        authorization,
+        eligibility: evalInput(after, {
+          verifiedGoldline: eligibility.verifiedGoldline,
+        }),
+      })
+    ).rejects.toBeInstanceOf(IneligibleBeatCommitError);
+    expect((await store.load(scope))?.ledger).toHaveLength(1);
   });
 
   it("lets Quiet close forward possibility without minting facts or rewriting events", async () => {
@@ -233,52 +261,29 @@ describe("Narrator OS slice D — ledger + eligibility + persistence", () => {
       {
         values: {},
         closedForwardPaths: [],
-        holdOpenedAtMs: { authored_hold: 0 },
+        holdOpenedAtMs: { m04_hold: 0 },
       },
       5_000,
       [
         {
-          key: "authored_hold",
+          key: "m04_hold",
           durationMs: 1_000,
-          pathId: "hold-path",
+          pathId: "M04",
           canonStatus: "LOCKED",
         },
       ]
     );
     expect(aged.createdEvents).toBe(false);
-    expect(aged.state.closedForwardPaths).toEqual(["hold-path"]);
+    expect(aged.state.closedForwardPaths).toEqual(["M04"]);
   });
 
-  it("reality firewall: unverified and game-projection evidence cannot satisfy Goldline gates", async () => {
+  it("reality firewall: unverified evidence cannot satisfy Goldline gates", async () => {
     const { snapshot } = await seeded();
-    const withChemist = applyKnowledgeWrite(snapshot.knowledge, {
-      plane: "CHEMIST",
-      factId: "17k_recorded_environmental_provenance_wrong",
-      op: "learn",
-      kind: "EVENT_FACT",
-    });
     expect(
       isLegalEligibilityGoldlineEvidence({
         verificationClass: "CLAIMED",
         evidenceClass: "operator_attested",
       })
-    ).toBe(false);
-    const result = evaluateEligibility(
-      evalInput(
-        { ...snapshot, knowledge: withChemist },
-        {
-          verifiedGoldline: [
-            {
-              outcomeId: "17k_physically_evidenced_in_hand",
-              verificationClass: "VERIFIED",
-              evidenceClass: "authoritative_external",
-            },
-          ].filter(() => false) as VerifiedGoldlineOutcome[],
-        }
-      )
-    );
-    expect(
-      result.audit.find(entry => entry.beatId === BEAT_IDS.C08)?.pass
     ).toBe(false);
     const m03 = evaluateEligibility(evalInput(snapshot)).audit.find(
       entry => entry.beatId === BEAT_IDS.M03
@@ -288,6 +293,11 @@ describe("Narrator OS slice D — ledger + eligibility + persistence", () => {
       kind: "never_manufacture",
       claim: "rejection",
     });
+    expect(
+      evaluateEligibility(evalInput(snapshot)).audit.find(
+        entry => entry.beatId === BEAT_IDS.C08
+      )?.pass
+    ).toBe(false);
   });
 
   it("audits every candidate with gates, not hidden reasoning", async () => {
@@ -298,6 +308,7 @@ describe("Narrator OS slice D — ledger + eligibility + persistence", () => {
       expect(entry.candidateConsidered).toBe(true);
       expect(entry.beatId).toBeTruthy();
       expect(["LOCKED", "WORKING", "OPEN"]).toContain(entry.canonStatus);
+      expect(["COMPLETE", "INCOMPLETE"]).toContain(entry.eligibilityDefinition);
       expect(
         entry.finalOutcome === "pass" || entry.finalOutcome === "fail"
       ).toBe(true);
@@ -321,6 +332,15 @@ describe("Narrator OS slice D — ledger + eligibility + persistence", () => {
     expect(loaded?.ledger).toHaveLength(1);
     expect(loaded?.ledger[0]?.kind).toBe("VERIFIED_GOLDLINE_OUTCOME");
     expect(loaded?.ledger[0]?.goldlineOutcomeId).toBe("spoken_no");
+  });
+
+  it("wraps drizzle knowledge replace and atomic commit in a transaction", () => {
+    const src = readFileSync(
+      resolve(process.cwd(), "server/narratorOs/drizzleStore.ts"),
+      "utf8"
+    );
+    expect(src).toMatch(/async replaceKnowledge[\s\S]*db\.transaction/);
+    expect(src).toMatch(/async commitAtomic[\s\S]*db\.transaction/);
   });
 });
 

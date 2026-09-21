@@ -80,6 +80,41 @@ function ledgerFromRow(
   };
 }
 
+function knowledgeRowsFor(
+  scope: OperatorScope,
+  knowledge: KnowledgeState
+): {
+  id: string;
+  tenantId: string;
+  operatorUserId: string;
+  plane: "PLAYER" | "CLAIRE" | "CHEMIST" | "OTHER";
+  factId: string;
+  factKind: "EVENT_FACT" | "CHARACTER_INTERPRETATION";
+  known: boolean;
+  interpretationText: string | null;
+}[] {
+  return (["PLAYER", "CLAIRE", "CHEMIST", "OTHER"] as const).flatMap(plane => {
+    const state = knowledge.planes[plane];
+    const factIds = new Set([
+      ...state.knownFactIds,
+      ...Object.keys(state.interpretations),
+    ]);
+    return [...factIds].map(factId => ({
+      id: randomUUID(),
+      tenantId: scope.tenantId,
+      operatorUserId: scope.operatorUserId,
+      plane,
+      factId,
+      factKind: (state.factKinds[factId] ??
+        (state.interpretations[factId]
+          ? "CHARACTER_INTERPRETATION"
+          : "EVENT_FACT")) as "EVENT_FACT" | "CHARACTER_INTERPRETATION",
+      known: state.knownFactIds.includes(factId),
+      interpretationText: state.interpretations[factId] ?? null,
+    }));
+  });
+}
+
 export function createDrizzleNarratorStore(): NarratorStore {
   return {
     async initOperator(scope) {
@@ -187,37 +222,18 @@ export function createDrizzleNarratorStore(): NarratorStore {
     async replaceKnowledge(scope, knowledge) {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      await db
-        .delete(narratorOsKnowledge)
-        .where(
-          and(
-            eq(narratorOsKnowledge.tenantId, scope.tenantId),
-            eq(narratorOsKnowledge.operatorUserId, scope.operatorUserId)
-          )
-        );
-      const rows = (["PLAYER", "CLAIRE", "CHEMIST", "OTHER"] as const).flatMap(
-        plane => {
-          const state = knowledge.planes[plane];
-          const factIds = new Set([
-            ...state.knownFactIds,
-            ...Object.keys(state.interpretations),
-          ]);
-          return [...factIds].map(factId => ({
-            id: randomUUID(),
-            tenantId: scope.tenantId,
-            operatorUserId: scope.operatorUserId,
-            plane,
-            factId,
-            factKind: (state.factKinds[factId] ??
-              (state.interpretations[factId]
-                ? "CHARACTER_INTERPRETATION"
-                : "EVENT_FACT")) as "EVENT_FACT" | "CHARACTER_INTERPRETATION",
-            known: state.knownFactIds.includes(factId),
-            interpretationText: state.interpretations[factId] ?? null,
-          }));
-        }
-      );
-      if (rows.length) await db.insert(narratorOsKnowledge).values(rows);
+      await db.transaction(async tx => {
+        await tx
+          .delete(narratorOsKnowledge)
+          .where(
+            and(
+              eq(narratorOsKnowledge.tenantId, scope.tenantId),
+              eq(narratorOsKnowledge.operatorUserId, scope.operatorUserId)
+            )
+          );
+        const rows = knowledgeRowsFor(scope, knowledge);
+        if (rows.length) await tx.insert(narratorOsKnowledge).values(rows);
+      });
     },
     async replaceNarrativeState(scope, state) {
       const db = await getDb();
@@ -268,6 +284,60 @@ export function createDrizzleNarratorStore(): NarratorStore {
             )
             .limit(1);
           if (existing) return ledgerFromRow(existing);
+        }
+        throw error;
+      }
+      return stored;
+    },
+    async commitAtomic(scope, commit) {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      const stored: NarrativeEventLedgerEntry = {
+        ...commit.ledgerEntry,
+        id: commit.ledgerEntry.id ?? randomUUID(),
+        tenantId: scope.tenantId,
+        operatorUserId: scope.operatorUserId,
+      };
+      try {
+        await db.transaction(async tx => {
+          await tx
+            .delete(narratorOsKnowledge)
+            .where(
+              and(
+                eq(narratorOsKnowledge.tenantId, scope.tenantId),
+                eq(narratorOsKnowledge.operatorUserId, scope.operatorUserId)
+              )
+            );
+          const rows = knowledgeRowsFor(scope, commit.knowledge);
+          if (rows.length) await tx.insert(narratorOsKnowledge).values(rows);
+          await tx
+            .update(narratorOsOperator)
+            .set({ narrativeStateJson: commit.narrativeState })
+            .where(
+              and(
+                eq(narratorOsOperator.tenantId, scope.tenantId),
+                eq(narratorOsOperator.operatorUserId, scope.operatorUserId)
+              )
+            );
+          await tx.insert(narratorOsEventLedger).values({
+            id: stored.id,
+            tenantId: stored.tenantId,
+            operatorUserId: stored.operatorUserId,
+            kind: stored.kind,
+            beatId: stored.beatId,
+            goldlineOutcomeId: stored.goldlineOutcomeId,
+            offscreen: stored.offscreen,
+            playerVisible: stored.playerVisible,
+            payloadJson: { evidenceRef: stored.evidenceRef },
+            occurredAt: new Date(stored.occurredAt),
+            idempotencyKey: stored.idempotencyKey,
+          });
+        });
+      } catch (error) {
+        if (isMysqlDuplicateKeyError(error)) {
+          throw new Error(
+            `Non-repeatable or duplicate narrator ledger key: ${stored.idempotencyKey}`
+          );
         }
         throw error;
       }

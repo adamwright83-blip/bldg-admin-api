@@ -30,6 +30,30 @@ export type EligibilityInput = {
   mode: "interactive" | "offscreen";
 };
 
+const ELIGIBILITY_AUTHORIZATION_BRAND: unique symbol = Symbol(
+  "narratorOs.EligibilityAuthorization"
+);
+
+export type EligibilityAuthorization = {
+  readonly [ELIGIBILITY_AUTHORIZATION_BRAND]: true;
+  beatId: NarrativeBeatId;
+  mode: "interactive" | "offscreen";
+  tenantId: string;
+  operatorUserId: string;
+  ledgerLength: number;
+};
+
+export function isEligibilityAuthorization(
+  value: unknown
+): value is EligibilityAuthorization {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      (value as EligibilityAuthorization)[ELIGIBILITY_AUTHORIZATION_BRAND] ===
+        true
+  );
+}
+
 function check(
   gate: NarrativeEligibilityAuditCheck["gate"],
   detail: string,
@@ -181,6 +205,12 @@ function holdQuietPassed(
   return { applied: true, passed: true };
 }
 
+function blocksEligibility(
+  passed: boolean | "unresolved_open"
+): passed is false | "unresolved_open" {
+  return passed === false || passed === "unresolved_open";
+}
+
 function evaluateBeat(
   beat: AuthoredBeat,
   input: EligibilityInput,
@@ -222,7 +252,10 @@ function evaluateBeat(
           true
         );
       }
-      if (edge.kind === "hard_prereq" && edge.fromId) {
+      if (edge.kind === "hard_prereq") {
+        if (!edge.fromId) {
+          return check("graph_detail", "hard_prereq:unnamed", false);
+        }
         return check(
           "graph_detail",
           `hard_prereq:${edge.fromId}`,
@@ -244,7 +277,6 @@ function evaluateBeat(
     ...beat.eligibilityConditions,
   ].flatMap(item => {
     if (item.kind === "verified_goldline_outcome") return [item.outcomeId];
-    if (item.kind === "verified_goldline_any") return [...item.outcomeIds];
     return [];
   });
   const verifiedGoldlineEvidenceChecks = goldlineIds.map(outcomeId =>
@@ -257,10 +289,27 @@ function evaluateBeat(
 
   if (beat.canonStatus === "OPEN") failedGates.push("canon_status_open");
 
-  const prereqFailed = prerequisiteChecks.some(item => item.passed === false);
-  if (prereqFailed) failedGates.push("prerequisite");
+  if (beat.eligibilityDefinition !== "COMPLETE") {
+    failedGates.push("incomplete_eligibility");
+  }
 
+  const prereqFailed = prerequisiteChecks.some(item =>
+    blocksEligibility(item.passed)
+  );
+  if (prereqFailed) {
+    if (prerequisiteChecks.some(item => item.passed === "unresolved_open")) {
+      failedGates.push("open_unresolved");
+    }
+    if (prerequisiteChecks.some(item => item.passed === false)) {
+      failedGates.push("prerequisite");
+    }
+  }
+
+  const graphOpen = graphDependencyChecks.some(
+    item => item.passed === "unresolved_open"
+  );
   const graphFailed = graphDependencyChecks.some(item => item.passed === false);
+  if (graphOpen) failedGates.push("open_unresolved");
   if (graphFailed) failedGates.push("graph_dependency");
 
   const knowledgeFailed = knowledgeRequirementChecks.some(
@@ -296,6 +345,7 @@ function evaluateBeat(
     beatId: beat.id,
     canonStatus: beat.canonStatus,
     candidateConsidered: true,
+    eligibilityDefinition: beat.eligibilityDefinition,
     prerequisiteChecks,
     graphDependencyChecks,
     knowledgeRequirementChecks,
@@ -351,6 +401,21 @@ export function evaluateEligibility(
       .map(beat => beat.id),
     audit,
   };
+}
+
+export function issueEligibilityAuthorizations(
+  result: NarrativeEligibilityResult,
+  input: EligibilityInput
+): readonly EligibilityAuthorization[] {
+  const ids = [...result.eligibleBeatIds, ...result.withheldBeatIds];
+  return ids.map(beatId => ({
+    [ELIGIBILITY_AUTHORIZATION_BRAND]: true as const,
+    beatId,
+    mode: input.mode,
+    tenantId: input.snapshot.tenantId,
+    operatorUserId: input.snapshot.operatorUserId,
+    ledgerLength: input.snapshot.ledger.length,
+  }));
 }
 
 export function eligibilityMutates(_result: NarrativeEligibilityResult): false {

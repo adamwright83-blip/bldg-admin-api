@@ -1,12 +1,16 @@
-import { randomUUID } from "node:crypto";
 import {
-  InvalidNarrativeBeatIdError,
   type AuthoredBeat,
   type NarrativeBeatId,
   type NarrativeKnowledgeMutation,
   type NarrativeState,
 } from "../../shared/narratorOs/contracts";
-import { evaluateEligibility, type EligibilityInput } from "./eligibility";
+import {
+  evaluateEligibility,
+  isEligibilityAuthorization,
+  issueEligibilityAuthorizations,
+  type EligibilityAuthorization,
+  type EligibilityInput,
+} from "./eligibility";
 import { getBeat, isKnownBeatId } from "./registry";
 import {
   NonRepeatableReplayError,
@@ -23,6 +27,13 @@ export class ProhibitedKnowledgeMutationError extends Error {
   constructor(factId: string, beatId: string) {
     super(`Beat ${beatId} cannot establish prohibited knowledge ${factId}`);
     this.name = "ProhibitedKnowledgeMutationError";
+  }
+}
+
+export class IneligibleBeatCommitError extends Error {
+  constructor(beatId: string, reason: string) {
+    super(`Cannot commit beat ${beatId}: ${reason}`);
+    this.name = "IneligibleBeatCommitError";
   }
 }
 
@@ -53,27 +64,86 @@ export function assertMutationsLegal(beat: AuthoredBeat): void {
   }
 }
 
-export async function commitFiredBeat(input: {
+/**
+ * Production mutation. Raw beat ids are not authority. Re-evaluates
+ * eligibility against current snapshot, then writes knowledge + state +
+ * ledger atomically.
+ */
+export async function commitAuthorizedBeat(input: {
   store: NarratorStore;
   scope: OperatorScope;
-  beatId: string;
-  registryLookup?: (id: string) => AuthoredBeat | undefined;
-  offscreen?: boolean;
+  authorization: EligibilityAuthorization;
+  eligibility: EligibilityInput;
   nowIso?: string;
 }): Promise<NarratorSnapshot> {
-  if (!isKnownBeatId(input.beatId) && !input.registryLookup) {
-    throw new UnknownBeatLedgerError(input.beatId);
+  if (!isEligibilityAuthorization(input.authorization)) {
+    throw new IneligibleBeatCommitError(
+      String((input.authorization as { beatId?: string })?.beatId ?? "unknown"),
+      "missing eligibility authorization"
+    );
   }
-  const beat = input.registryLookup
-    ? input.registryLookup(input.beatId)
-    : getBeat(input.beatId);
-  if (!beat) throw new UnknownBeatLedgerError(input.beatId);
-  if (beat.canonStatus === "OPEN") {
-    throw new InvalidNarrativeBeatIdError(input.beatId);
+  const authorization = input.authorization;
+  if (
+    authorization.tenantId !== input.scope.tenantId ||
+    authorization.operatorUserId !== input.scope.operatorUserId
+  ) {
+    throw new IneligibleBeatCommitError(
+      authorization.beatId,
+      "authorization scope mismatch"
+    );
   }
-  assertMutationsLegal(beat);
+  if (authorization.mode !== input.eligibility.mode) {
+    throw new IneligibleBeatCommitError(
+      authorization.beatId,
+      "authorization mode mismatch"
+    );
+  }
+
   const snapshot = await input.store.load(input.scope);
   if (!snapshot) throw new Error("Narrator operator is not initialized");
+
+  const liveInput: EligibilityInput = {
+    ...input.eligibility,
+    snapshot,
+  };
+  const result = evaluateEligibility(liveInput);
+  const authorizedIds = new Set([
+    ...result.eligibleBeatIds,
+    ...result.withheldBeatIds,
+  ]);
+  if (!authorizedIds.has(authorization.beatId)) {
+    const audit = result.audit.find(
+      entry => entry.beatId === authorization.beatId
+    );
+    throw new IneligibleBeatCommitError(
+      authorization.beatId,
+      `not eligible (${audit?.failedGates.join(",") || result.outcome})`
+    );
+  }
+
+  const beat =
+    liveInput.registry.find(entry => entry.id === authorization.beatId) ??
+    (isKnownBeatId(authorization.beatId)
+      ? getBeat(authorization.beatId)
+      : undefined);
+  if (!beat) throw new UnknownBeatLedgerError(authorization.beatId);
+  if (beat.canonStatus === "OPEN") {
+    throw new IneligibleBeatCommitError(beat.id, "OPEN beats cannot fire");
+  }
+  if (beat.eligibilityDefinition !== "COMPLETE") {
+    throw new IneligibleBeatCommitError(
+      beat.id,
+      "incomplete eligibility definition"
+    );
+  }
+  if (liveInput.mode === "offscreen" && beat.mayFireOffscreen !== true) {
+    throw new IneligibleBeatCommitError(
+      beat.id,
+      "offscreen is not permitted for this beat"
+    );
+  }
+  assertMutationsLegal(beat);
+
   const already = snapshot.ledger.some(
     entry => entry.kind === "FIRED_AUTHORED_BEAT" && entry.beatId === beat.id
   );
@@ -93,21 +163,39 @@ export async function commitFiredBeat(input: {
     ...snapshot.narrativeState,
     values,
   };
-  await input.store.replaceKnowledge(input.scope, knowledge);
-  await input.store.replaceNarrativeState(input.scope, narrativeState);
-  await input.store.appendLedger(input.scope, {
-    kind: "FIRED_AUTHORED_BEAT",
-    beatId: beat.id,
-    goldlineOutcomeId: null,
-    offscreen: input.offscreen === true,
-    playerVisible: beat.playerVisibility,
-    evidenceRef: null,
-    occurredAt: input.nowIso ?? new Date().toISOString(),
-    idempotencyKey: `beat:${beat.id}:${already ? randomUUID() : "once"}`,
+
+  await input.store.commitAtomic(input.scope, {
+    knowledge,
+    narrativeState,
+    ledgerEntry: {
+      kind: "FIRED_AUTHORED_BEAT",
+      beatId: beat.id,
+      goldlineOutcomeId: null,
+      offscreen: liveInput.mode === "offscreen",
+      playerVisible: beat.playerVisibility,
+      evidenceRef: null,
+      occurredAt: input.nowIso ?? new Date().toISOString(),
+      idempotencyKey: `beat:${beat.id}:once`,
+    },
   });
   const next = await input.store.load(input.scope);
   if (!next) throw new Error("Narrator operator disappeared after commit");
   return next;
+}
+
+/** @deprecated Raw beat ids are not authority. Use commitAuthorizedBeat. */
+export async function commitFiredBeat(input: {
+  store: NarratorStore;
+  scope: OperatorScope;
+  beatId: string;
+  registryLookup?: (id: string) => AuthoredBeat | undefined;
+  offscreen?: boolean;
+  nowIso?: string;
+}): Promise<NarratorSnapshot> {
+  throw new IneligibleBeatCommitError(
+    input.beatId,
+    "raw beat id is not authority; evaluate eligibility and commitAuthorizedBeat"
+  );
 }
 
 export async function recordVerifiedGoldlineOutcome(input: {
@@ -125,15 +213,21 @@ export async function recordVerifiedGoldlineOutcome(input: {
   if (input.relatedBeatId && !isKnownBeatId(input.relatedBeatId)) {
     throw new UnknownBeatLedgerError(input.relatedBeatId);
   }
-  await input.store.appendLedger(input.scope, {
-    kind: "VERIFIED_GOLDLINE_OUTCOME",
-    beatId: input.relatedBeatId ?? null,
-    goldlineOutcomeId: input.outcomeId,
-    offscreen: false,
-    playerVisible: false,
-    evidenceRef: input.evidenceRef,
-    occurredAt: input.nowIso ?? new Date().toISOString(),
-    idempotencyKey: `goldline:${input.outcomeId}`,
+  const snapshot = await input.store.load(input.scope);
+  if (!snapshot) throw new Error("Narrator operator is not initialized");
+  await input.store.commitAtomic(input.scope, {
+    knowledge: snapshot.knowledge,
+    narrativeState: snapshot.narrativeState,
+    ledgerEntry: {
+      kind: "VERIFIED_GOLDLINE_OUTCOME",
+      beatId: input.relatedBeatId ?? null,
+      goldlineOutcomeId: input.outcomeId,
+      offscreen: false,
+      playerVisible: false,
+      evidenceRef: input.evidenceRef,
+      occurredAt: input.nowIso ?? new Date().toISOString(),
+      idempotencyKey: `goldline:${input.outcomeId}`,
+    },
   });
 }
 
@@ -147,21 +241,21 @@ export async function fireOffscreenIfLegal(input: {
     mode: "offscreen",
   };
   const result = evaluateEligibility(offscreenInput);
+  if (result.outcome === "NO_ELIGIBLE") return { fired: [] };
+  const authorizations = issueEligibilityAuthorizations(result, offscreenInput);
   const fired: string[] = [];
-  if (result.outcome === "NO_ELIGIBLE") return { fired };
-  const ids = [...result.eligibleBeatIds, ...result.withheldBeatIds];
-  for (const beatId of ids) {
-    const beat = offscreenInput.registry.find(entry => entry.id === beatId);
+  for (const authorization of authorizations) {
+    const beat = offscreenInput.registry.find(
+      entry => entry.id === authorization.beatId
+    );
     if (!beat || beat.mayFireOffscreen !== true) continue;
-    await commitFiredBeat({
+    await commitAuthorizedBeat({
       store: input.store,
       scope: input.scope,
-      beatId,
-      registryLookup: id =>
-        offscreenInput.registry.find(entry => entry.id === id)!,
-      offscreen: true,
+      authorization,
+      eligibility: offscreenInput,
     });
-    fired.push(beatId);
+    fired.push(authorization.beatId);
   }
   return { fired };
 }

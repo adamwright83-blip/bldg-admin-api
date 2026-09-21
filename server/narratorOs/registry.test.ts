@@ -4,6 +4,7 @@ import {
   AUTHORED_BEATS,
   AUTHORED_GRAPH,
   BEAT_IDS,
+  INTENTIONALLY_ABSENT_MISSION_IDS,
   assertNoPlaceholderBeats,
   getBeat,
   hasChemistSkipPolicy,
@@ -15,24 +16,14 @@ import { assertMutationsLegal } from "./ledger";
 import { evaluateEligibility, type EligibilityInput } from "./eligibility";
 import { createInMemoryNarratorStore } from "./memoryStore";
 import { initNarratorOperator } from "./init";
-import { applyKnowledgeWrite } from "./store";
 import type { NarratorSnapshot } from "./store";
 
-async function snapshotWithChemistCore(): Promise<NarratorSnapshot> {
+async function newSnapshot(): Promise<NarratorSnapshot> {
   const store = createInMemoryNarratorStore();
-  const seeded = await initNarratorOperator(store, {
+  return initNarratorOperator(store, {
     tenantId: "t-reg",
     operatorUserId: "op-reg",
   });
-  return {
-    ...seeded,
-    knowledge: applyKnowledgeWrite(seeded.knowledge, {
-      plane: "CHEMIST",
-      factId: "17k_recorded_environmental_provenance_wrong",
-      op: "learn",
-      kind: "EVENT_FACT",
-    }),
-  };
 }
 
 function inputFor(
@@ -56,12 +47,23 @@ describe("Narrator OS slice C — authored registry + graph", () => {
     expect(() => getBeat("CL-031")).toThrow(InvalidNarrativeBeatIdError);
   });
 
-  it("fails a missing hard prerequisite and does not treat optional as mandatory", async () => {
-    const snapshot = await snapshotWithChemistCore();
+  it("keeps M05–M14 intentionally absent", () => {
+    for (const id of INTENTIONALLY_ABSENT_MISSION_IDS) {
+      expect(isKnownBeatId(id)).toBe(false);
+    }
+    expect(AUTHORED_BEATS.map(beat => beat.id)).toEqual(
+      expect.arrayContaining(["M01", "M02", "M03", "M04", "M15", "M16", "M24"])
+    );
+    expect(AUTHORED_BEATS.some(beat => beat.id === "M05")).toBe(false);
+  });
+
+  it("fails a missing Goldline prereq and does not treat optional C-08 as mandatory", async () => {
+    const snapshot = await newSnapshot();
     const withoutGold = evaluateEligibility(inputFor(snapshot));
     const c08 = withoutGold.audit.find(entry => entry.beatId === BEAT_IDS.C08)!;
     expect(c08.pass).toBe(false);
-    expect(c08.failedGates).toContain("prerequisite");
+    expect(c08.failedGates).toContain("incomplete_eligibility");
+    expect(c08.failedGates).toContain("verified_goldline_evidence");
 
     const cove = withoutGold.audit.find(
       entry => entry.beatId === BEAT_IDS.K_COVE_ORIGIN
@@ -72,6 +74,7 @@ describe("Narrator OS slice C — authored registry + graph", () => {
           check.detail.startsWith("optional_beat:C-08") && check.passed === true
       )
     ).toBe(true);
+    expect(cove.failedGates).toContain("open_unresolved");
     expect(cove.failedGates).not.toContain("prerequisite");
   });
 
@@ -99,14 +102,27 @@ describe("Narrator OS slice C — authored registry + graph", () => {
     expect(AUTHORED_BEATS.some(beat => /^CL-\d+$/i.test(beat.id))).toBe(false);
   });
 
-  it("enforces C-08 prereqs and cannot establish prohibited knowledge", async () => {
-    const snapshot = await snapshotWithChemistCore();
-    const blocked = evaluateEligibility(inputFor(snapshot));
+  it("does not require C-08's own conclusion as an input, and stays incomplete without the package", async () => {
+    const snapshot = await newSnapshot();
+    const c08 = getBeat("C-08");
+    expect(c08.eligibilityDefinition).toBe("INCOMPLETE");
     expect(
-      blocked.audit.find(entry => entry.beatId === BEAT_IDS.C08)?.pass
+      c08.knowledgeRequirements.some(
+        requirement =>
+          requirement.plane === "CHEMIST" &&
+          requirement.factId === "17k_recorded_environmental_provenance_wrong"
+      )
+    ).toBe(false);
+    expect(
+      c08.prerequisites.some(
+        prereq =>
+          prereq.kind === "knowledge" &&
+          prereq.plane === "CHEMIST" &&
+          prereq.factId === "17k_recorded_environmental_provenance_wrong"
+      )
     ).toBe(false);
 
-    const ready = evaluateEligibility(
+    const withGold = evaluateEligibility(
       inputFor(snapshot, {
         verifiedGoldline: [
           {
@@ -117,11 +133,11 @@ describe("Narrator OS slice C — authored registry + graph", () => {
         ],
       })
     );
-    expect(ready.audit.find(entry => entry.beatId === BEAT_IDS.C08)?.pass).toBe(
-      true
-    );
+    const audit = withGold.audit.find(entry => entry.beatId === BEAT_IDS.C08)!;
+    expect(audit.pass).toBe(false);
+    expect(audit.failedGates).toContain("incomplete_eligibility");
+    expect(audit.failedGates).not.toContain("knowledge_requirement");
 
-    const c08 = getBeat("C-08");
     expect(() => assertMutationsLegal(c08)).not.toThrow();
     expect(c08.legalChemistVerdicts).toEqual([
       "SUPPORTS",
@@ -136,7 +152,7 @@ describe("Narrator OS slice C — authored registry + graph", () => {
   });
 
   it("does not hard-require C-08 for K-COVE-ORIGIN and does not synthesize a Chemist skip policy", async () => {
-    const snapshot = await snapshotWithChemistCore();
+    const snapshot = await newSnapshot();
     const result = evaluateEligibility(inputFor(snapshot));
     const cove = result.audit.find(
       entry => entry.beatId === BEAT_IDS.K_COVE_ORIGIN
@@ -146,7 +162,8 @@ describe("Narrator OS slice C — authored registry + graph", () => {
         check => check.passed === "unresolved_open"
       )
     ).toBe(true);
-    expect(cove.failedGates).not.toContain("graph_dependency");
+    expect(cove.failedGates).toContain("open_unresolved");
+    expect(cove.pass).toBe(false);
     expect(hasChemistSkipPolicy()).toBe(false);
     expect(originFalseWithoutChemistIsOpen()).toBe(true);
     expect(

@@ -72,6 +72,17 @@ export type KnowledgeWrite =
       interpretation: string;
     };
 
+export type NarrativeAtomicCommit = {
+  knowledge: KnowledgeState;
+  narrativeState: NarrativeState;
+  ledgerEntry: Omit<
+    NarrativeEventLedgerEntry,
+    "id" | "tenantId" | "operatorUserId"
+  > & {
+    id?: string;
+  };
+};
+
 export type NarratorStore = {
   initOperator(scope: OperatorScope): Promise<NarratorSnapshot>;
   load(scope: OperatorScope): Promise<NarratorSnapshot | null>;
@@ -91,6 +102,14 @@ export type NarratorStore = {
     > & {
       id?: string;
     }
+  ): Promise<NarrativeEventLedgerEntry>;
+  /**
+   * Knowledge + narrative state + ledger append, all or nothing.
+   * Production beat fire must use this path.
+   */
+  commitAtomic(
+    scope: OperatorScope,
+    commit: NarrativeAtomicCommit
   ): Promise<NarrativeEventLedgerEntry>;
 };
 

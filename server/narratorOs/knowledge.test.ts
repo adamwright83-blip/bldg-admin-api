@@ -1,17 +1,12 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { applyKnowledgeWrite, planeKnows } from "./store";
+import { applyKnowledgeWrite, EMPTY_KNOWLEDGE, planeKnows } from "./store";
 import { assertNewUserSeed, initNarratorOperator } from "./init";
 import { livedBioHasClaireCreatedGoldline } from "./livedBio";
 import { createInMemoryNarratorStore } from "./memoryStore";
 import { worldTruthValue } from "./worldTruth";
-import { commitFiredBeat } from "./ledger";
-import {
-  AUTHORED_BEAT_DEFAULTS,
-  asNarrativeBeatId,
-  type AuthoredBeat,
-} from "../../shared/narratorOs/contracts";
+import { getBeat } from "./registry";
 
 const scope = { tenantId: "t1", operatorUserId: "op-new" };
 
@@ -79,39 +74,26 @@ describe("Narrator OS slice B — knowledge + narrative state", () => {
     ).toBe(false);
   });
 
-  it("does not treat player-visible occurrence as Claire having learned the fact", async () => {
-    const store = createInMemoryNarratorStore();
-    await initNarratorOperator(store, scope);
-    const beat: AuthoredBeat = {
-      ...AUTHORED_BEAT_DEFAULTS,
-      id: asNarrativeBeatId("K-COVE-ORIGIN"),
-      title: "Cove origin-false reveal",
-      canonStatus: "LOCKED",
-      authoredSourceRef: "test",
-      knowledgeMutations: [
-        {
-          plane: "PLAYER",
-          factId: "cove_origin_false",
-          op: "learn",
-          kind: "EVENT_FACT",
-        },
-      ],
-      playerVisibility: true,
-      defaultSurface: true,
-    };
-    const after = await commitFiredBeat({
-      store,
-      scope,
-      beatId: beat.id,
-      registryLookup: () => beat,
+  it("does not treat player-visible occurrence as Claire having learned the fact", () => {
+    const beat = getBeat("K-COVE-ORIGIN");
+    expect(
+      beat.knowledgeMutations.some(mutation => mutation.plane === "PLAYER")
+    ).toBe(true);
+    expect(
+      beat.knowledgeMutations.some(mutation => mutation.plane === "CLAIRE")
+    ).toBe(false);
+    const storeKnowledge = applyKnowledgeWrite(EMPTY_KNOWLEDGE, {
+      plane: "PLAYER",
+      factId: "cove_origin_false",
+      op: "learn",
+      kind: "EVENT_FACT",
     });
-    expect(planeKnows(after.knowledge, "PLAYER", "cove_origin_false")).toBe(
+    expect(planeKnows(storeKnowledge, "PLAYER", "cove_origin_false")).toBe(
       true
     );
-    expect(planeKnows(after.knowledge, "CLAIRE", "cove_origin_false")).toBe(
+    expect(planeKnows(storeKnowledge, "CLAIRE", "cove_origin_false")).toBe(
       false
     );
-    expect(after.ledger[0]?.playerVisible).toBe(true);
   });
 
   it("does not rewrite EVENT_FACT when interpretation changes", async () => {

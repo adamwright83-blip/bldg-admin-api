@@ -91,5 +91,41 @@ export function createInMemoryNarratorStore(): NarratorStore {
       });
       return stored;
     },
+    async commitAtomic(scope, commit) {
+      const current = rows.get(keyOf(scope));
+      if (!current) throw new Error("Narrator operator is not initialized");
+      const duplicate = current.ledger.find(
+        row => row.idempotencyKey === commit.ledgerEntry.idempotencyKey
+      );
+      if (duplicate) {
+        rows.set(keyOf(scope), {
+          ...current,
+          knowledge: cloneKnowledge(commit.knowledge),
+          narrativeState: {
+            values: { ...commit.narrativeState.values },
+            closedForwardPaths: [...commit.narrativeState.closedForwardPaths],
+            holdOpenedAtMs: { ...commit.narrativeState.holdOpenedAtMs },
+          },
+        });
+        return duplicate;
+      }
+      const stored: NarrativeEventLedgerEntry = {
+        ...commit.ledgerEntry,
+        id: commit.ledgerEntry.id ?? randomUUID(),
+        tenantId: scope.tenantId,
+        operatorUserId: scope.operatorUserId,
+      };
+      rows.set(keyOf(scope), {
+        ...current,
+        knowledge: cloneKnowledge(commit.knowledge),
+        narrativeState: {
+          values: { ...commit.narrativeState.values },
+          closedForwardPaths: [...commit.narrativeState.closedForwardPaths],
+          holdOpenedAtMs: { ...commit.narrativeState.holdOpenedAtMs },
+        },
+        ledger: [...current.ledger, stored],
+      });
+      return stored;
+    },
   };
 }

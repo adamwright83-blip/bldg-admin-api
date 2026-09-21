@@ -5,9 +5,13 @@
  * invent the story. Slices A–D stop at eligibility. Dramaturgy, scene
  * selection, Narrator prompts, and Claire dialogue are out of scope.
  *
- * Extra fail-closed defaults (beyond `mayFireOffscreen = false`):
+ * Extra fail-closed defaults:
+ * - mayFireOffscreen = false; defaultSurface = false; playerVisibility = false
+ *   unless a beat explicitly sets them. Omission is not disclosure.
+ * - eligibilityDefinition = INCOMPLETE; incomplete beats cannot pass.
  * - unknown beat IDs are invalid
  * - OPEN facts/beats have no runtime value and cannot fire
+ * - unresolved OPEN policy never satisfies eligibility
  * - new operators have an empty event ledger
  * - knowledge, disclosure, world-truth mutation, and story progression are
  *   never inferred from chats, CRM, customers, or logs
@@ -17,6 +21,7 @@
  * - NO_ELIGIBLE is success with no mutation
  * - ELIGIBLE_WITHHELD requires authored `defaultSurface: false` on every
  *   passing beat; taste / pacing / “feels early” are not inputs
+ * - production mutation requires an eligibility authorization receipt
  */
 
 export const CANON_STATUSES = ["LOCKED", "WORKING", "OPEN"] as const;
@@ -69,9 +74,13 @@ export const GRAPH_EDGE_KINDS = [
 ] as const;
 export type GraphEdgeKind = (typeof GRAPH_EDGE_KINDS)[number];
 
+export const ELIGIBILITY_DEFINITIONS = ["COMPLETE", "INCOMPLETE"] as const;
+export type EligibilityDefinition = (typeof ELIGIBILITY_DEFINITIONS)[number];
+
 export const ELIGIBILITY_GATES = [
   "unknown_beat",
   "canon_status_open",
+  "incomplete_eligibility",
   "prerequisite",
   "graph_dependency",
   "knowledge_requirement",
@@ -212,6 +221,14 @@ export type AuthoredBeat = {
   authoredSourceRef: string;
   prohibitedKnowledgeFactIds: readonly string[];
   legalChemistVerdicts?: readonly ChemistVerdict[];
+  /**
+   * COMPLETE only when GOLDLINE_CANON.md supplies a full machine-readable
+   * eligibility definition. INCOMPLETE beats stay registered but cannot pass.
+   * Absence of gates is not permission.
+   */
+  eligibilityDefinition: EligibilityDefinition;
+  /** Why this beat is INCOMPLETE. Not an OPEN-canon fill. */
+  eligibilityIncompleteReason?: string;
 };
 
 export const CHEMIST_VERDICTS = [
@@ -287,6 +304,7 @@ export type NarrativeEligibilityAudit = {
   graphDependencyChecks: readonly NarrativeEligibilityAuditCheck[];
   knowledgeRequirementChecks: readonly NarrativeEligibilityAuditCheck[];
   verifiedGoldlineEvidenceChecks: readonly NarrativeEligibilityAuditCheck[];
+  eligibilityDefinition: EligibilityDefinition;
   repeatability: Repeatability;
   alreadyFired: boolean;
   offscreenPermission: boolean;
@@ -306,8 +324,9 @@ export type NarrativeEligibilityResult = {
 
 export const AUTHORED_BEAT_DEFAULTS = {
   mayFireOffscreen: false as const,
-  defaultSurface: true as const,
-  playerVisibility: true as const,
+  defaultSurface: false as const,
+  playerVisibility: false as const,
+  eligibilityDefinition: "INCOMPLETE" as const,
   repeatability: "non_repeatable" as const,
   irreversible: true as const,
   quietBehavior: null,

@@ -42,8 +42,11 @@ describe("Narrator OS slice A — domain contracts", () => {
     );
   });
 
-  it("defaults mayFireOffscreen to false", () => {
+  it("defaults mayFireOffscreen, defaultSurface, and playerVisibility to false", () => {
     expect(AUTHORED_BEAT_DEFAULTS.mayFireOffscreen).toBe(false);
+    expect(AUTHORED_BEAT_DEFAULTS.defaultSurface).toBe(false);
+    expect(AUTHORED_BEAT_DEFAULTS.playerVisibility).toBe(false);
+    expect(AUTHORED_BEAT_DEFAULTS.eligibilityDefinition).toBe("INCOMPLETE");
   });
 
   it("treats an empty offscreen catalog as valid", () => {
