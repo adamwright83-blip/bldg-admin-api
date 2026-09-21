@@ -25,7 +25,7 @@ import {
   writeClaireOutcomeConfirmation,
   writeClairePostStopOpening,
 } from "./reasoning";
-import { generateClairePreDriveOutput } from "./preDriveRuntime";
+import { assembleClaireVoiceCallContext, generateClairePreDriveOutput } from "./preDriveRuntime";
 import { shouldEndClaireCallOnUtterance } from "./preDriveConversation";
 import {
   issueClaireToken,
@@ -70,8 +70,16 @@ const DEBRIEF_PATH = "/api/claire/twilio/debrief";
 const CONFIRM_PATH = "/api/claire/twilio/confirm";
 const PRE_DRIVE_PATH = "/api/claire/twilio/pre-drive";
 const CONTINUE_PATH = "/api/claire/twilio/pre-drive/continue";
+export const CLAIRE_INBOUND_VOICE_PATH = "/api/claire/twilio/inbound";
 export const CLAIRE_RECORDING_STATUS_PATH = "/api/claire/twilio/recording-status";
 export const CLAIRE_CALL_STATUS_PATH = "/api/claire/twilio/call-status";
+/** Spoken on inbound pickup only. Outbound still opens with the generated briefing. */
+export const CLAIRE_INBOUND_GREETING = "Hey Adam. What's up?";
+/**
+ * Truthy stand-in so the existing follow-up path still synthesizes from live
+ * context. Never spoken; inbound does not generate or read a pre-drive briefing.
+ */
+const INBOUND_UNSPOKEN_BRIEF = "No opening briefing was spoken.";
 /** Polly stays as the fail-open fallback when xAI TTS is disabled or unconfigured. */
 const CLAIRE_VOICE = "Polly.Ruth-Generative";
 const PRE_DRIVE_CONVERSATION_TTL_MS = 45 * 60 * 1_000;
@@ -234,6 +242,61 @@ export async function authorizedOperatorPhone(input: { tenantId: string; actorId
     );
   }
   return phone;
+}
+
+/**
+ * Reverse of `operatorPhoneFor`: map a Twilio caller number onto the configured
+ * operator id. Unknown, malformed, or ambiguous numbers fail closed — there is
+ * no separate inbound allowlist.
+ */
+export function resolveClaireOperatorIdForPhone(rawPhone: string): string {
+  const caller = assertPhone(rawPhone);
+  const map = operatorPhoneMap();
+  if (map) {
+    const matches: string[] = [];
+    for (const [actorId, phone] of Object.entries(map)) {
+      try {
+        if (assertPhone(phone) === caller) matches.push(actorId);
+      } catch {
+        // Skip malformed map entries rather than guessing.
+      }
+    }
+    if (matches.length === 0) {
+      throw new Error("Claire will not answer: this caller is not a configured operator.");
+    }
+    if (matches.length > 1) {
+      throw new Error("Claire will not answer: this caller maps to more than one operator.");
+    }
+    return matches[0]!;
+  }
+  const owner = ENV.ownerOpenId?.trim();
+  if (!owner) {
+    throw new Error(
+      "CLAIRE_OPERATOR_PHONE is configured without OWNER_OPEN_ID, so Claire cannot prove whose phone is calling. Set OWNER_OPEN_ID, or configure CLAIRE_OPERATOR_PHONES."
+    );
+  }
+  if (!operatorNumber) {
+    throw new Error("Claire calling is not configured (CLAIRE_OPERATOR_PHONE or CLAIRE_OPERATOR_PHONES is required)");
+  }
+  if (assertPhone(operatorNumber) !== caller) {
+    throw new Error("Claire will not answer: this caller is not a configured operator.");
+  }
+  return owner;
+}
+
+/**
+ * Inbound identity binding. Same persisted-user + tenant proof as
+ * `authorizedOperatorPhone`, inverted from the caller's number.
+ */
+export async function authorizedInboundOperator(from: string): Promise<{ actorId: string; tenantId: string }> {
+  const actorId = resolveClaireOperatorIdForPhone(from);
+  const user = await getUserByOpenId(actorId);
+  if (!user) {
+    throw new Error(
+      `Claire will not answer for "${actorId}": no such operator exists. An inbound call is never opened for an unpersisted or synthetic identity.`
+    );
+  }
+  return { actorId, tenantId: user.tenantId?.trim() || "default" };
 }
 
 function stableRequestId(callSid: string, suffix: string): string {
@@ -624,6 +687,49 @@ function startVoiceTurn(input: {
   return job;
 }
 
+async function persistClaireVoiceConversation(input: {
+  tenantId: string;
+  actorId: string;
+  dayDirectorActorId?: string;
+  brief: string;
+  context: PreDriveConversation["context"];
+  spokenOpening: string;
+  missionId?: number | null;
+}): Promise<{ conversationId: string; token: string; hints: string }> {
+  const conversationId = randomUUID();
+  const hints = speechHints(await loadBusinessVocabulary(input.tenantId).catch(() => [] as string[]));
+  const now = Date.now();
+  await saveCall(conversationId, {
+    tenantId: input.tenantId,
+    actorId: input.actorId,
+    dayDirectorActorId: input.dayDirectorActorId ?? input.actorId,
+    brief: input.brief,
+    context: input.context,
+    turns: 0,
+    touchedAt: now,
+    sessionKind: input.context.workday?.session,
+    hints: boundedHints(hints),
+    history: [{ speaker: "claire", text: input.spokenOpening, at: now }],
+  });
+  const token = issueClaireToken({
+    kind: "pre_drive_conversation",
+    tenantId: input.tenantId,
+    userId: input.actorId,
+    conversationId,
+  });
+  await safeClaireLedger(() =>
+    createConversationSession({
+      tenantId: input.tenantId,
+      operatorUserId: input.actorId,
+      claireConversationId: conversationId,
+      conversationKind: input.context.workday?.session ?? "pre_drive",
+      missionId: input.missionId ?? null,
+      recordingEnabled: isClaireVoiceRecordingEnabled(),
+    })
+  );
+  return { conversationId, token, hints };
+}
+
 export async function startClairePreDriveCall(input: {
   tenantId: string;
   actorId: string;
@@ -641,38 +747,15 @@ export async function startClairePreDriveCall(input: {
     dayDirectorActorId: input.dayDirectorActorId,
   });
   const { brief, context } = generated;
-  const conversationId = randomUUID();
-  const hints = speechHints(await loadBusinessVocabulary(input.tenantId).catch(() => [] as string[]));
-  const now = Date.now();
-  await saveCall(conversationId, {
+  const { conversationId, token, hints } = await persistClaireVoiceConversation({
     tenantId: input.tenantId,
     actorId: input.actorId,
-    dayDirectorActorId: input.dayDirectorActorId ?? input.actorId,
+    dayDirectorActorId: input.dayDirectorActorId,
     brief,
     context,
-    turns: 0,
-    touchedAt: now,
-    sessionKind: context.workday?.session,
-    hints: boundedHints(hints),
-    history: [{ speaker: "claire", text: spokenClaireText(brief, true), at: now }],
+    spokenOpening: spokenClaireText(brief, true),
+    missionId: input.missionId,
   });
-  const token = issueClaireToken({
-    kind: "pre_drive_conversation",
-    tenantId: input.tenantId,
-    userId: input.actorId,
-    conversationId,
-  });
-  const recordingEnabled = isClaireVoiceRecordingEnabled();
-  await safeClaireLedger(() =>
-    createConversationSession({
-      tenantId: input.tenantId,
-      operatorUserId: input.actorId,
-      claireConversationId: conversationId,
-      conversationKind: context.workday?.session ?? "pre_drive",
-      missionId: input.missionId ?? null,
-      recordingEnabled,
-    })
-  );
   try {
     const call = await client!.calls.create({
       to,
@@ -702,6 +785,53 @@ export async function startClairePreDriveCall(input: {
     });
     throw error;
   }
+}
+
+async function answerInboundClaireCall(req: Request): Promise<{ status: number; twiml: string }> {
+  const body = (req.body ?? {}) as Record<string, string>;
+  const callSid = String(body.CallSid ?? "").trim();
+  const from = String(body.From ?? "").trim();
+  if (!callSid || !from) {
+    return { status: 403, twiml: speakAndHangUp("This call can't be connected.") };
+  }
+  let operator: { actorId: string; tenantId: string };
+  try {
+    operator = await authorizedInboundOperator(from);
+  } catch {
+    return { status: 403, twiml: speakAndHangUp("This call can't be connected.") };
+  }
+  const context = await assembleClaireVoiceCallContext({
+    tenantId: operator.tenantId,
+    actorId: operator.actorId,
+  });
+  const { conversationId, token, hints } = await persistClaireVoiceConversation({
+    tenantId: operator.tenantId,
+    actorId: operator.actorId,
+    brief: INBOUND_UNSPOKEN_BRIEF,
+    context,
+    spokenOpening: CLAIRE_INBOUND_GREETING,
+  });
+  await safeClaireLedger(async () => {
+    await attachCallSid({
+      claireConversationId: conversationId,
+      callSid,
+    });
+    await persistSpokenTurn({
+      claireConversationId: conversationId,
+      callSid,
+      speaker: "CLAIRE",
+      text: CLAIRE_INBOUND_GREETING,
+      turnKey: 0,
+    });
+  });
+  return {
+    status: 200,
+    twiml: preDriveConversationTwiML({
+      text: CLAIRE_INBOUND_GREETING,
+      token,
+      hints,
+    }),
+  };
 }
 
 export async function startClairePostStopCall(input: {
@@ -804,6 +934,20 @@ export async function startClairePostStopCall(input: {
 
 export function registerClaireRoutes(app: Express): void {
   app.get(CLAIRE_XAI_TTS_PATH, handleClaireXaiTtsRequest);
+
+  app.post(CLAIRE_INBOUND_VOICE_PATH, async (req: Request, res: Response) => {
+    res.type("text/xml");
+    if (!validTwilioRequest(req)) {
+      return res.status(403).send(speakAndHangUp("This Claire call could not be verified."));
+    }
+    try {
+      const result = await answerInboundClaireCall(req);
+      return res.status(result.status).send(result.twiml);
+    } catch (error) {
+      console.error("[Claire] inbound conversation webhook error", error);
+      return res.send(speakAndHangUp("I couldn't take this call safely just now."));
+    }
+  });
 
   app.post(PRE_DRIVE_PATH, async (req: Request, res: Response) => {
     res.type("text/xml");
