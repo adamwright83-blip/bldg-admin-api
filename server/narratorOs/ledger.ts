@@ -13,6 +13,10 @@ import {
 } from "./eligibility";
 import { getBeat, isKnownBeatId } from "./registry";
 import {
+  isVerifiedGoldlineReceipt,
+  type VerifiedGoldlineReceipt,
+} from "./verifiedGoldlineReceipt";
+import {
   NonRepeatableReplayError,
   UnknownBeatLedgerError,
   applyKnowledgeWrite,
@@ -198,18 +202,28 @@ export async function commitFiredBeat(input: {
   );
 }
 
+export class UntrustedGoldlineReceiptError extends Error {
+  constructor(detail: string) {
+    super(`Narrator cannot persist untrusted Goldline evidence: ${detail}`);
+    this.name = "UntrustedGoldlineReceiptError";
+  }
+}
+
+/**
+ * Persist an already-authorized upstream receipt into Narrator's ledger.
+ * Does not mint, upgrade, or reinterpret verification authority.
+ */
 export async function recordVerifiedGoldlineOutcome(input: {
   store: NarratorStore;
   scope: OperatorScope;
-  outcomeId: string;
-  evidenceRef: {
-    sourceType: string;
-    sourceReference: string;
-    classification: "authoritative_external" | "operator_attested";
-  };
+  receipt: VerifiedGoldlineReceipt;
   relatedBeatId?: NarrativeBeatId | null;
   nowIso?: string;
 }): Promise<void> {
+  if (!isVerifiedGoldlineReceipt(input.receipt)) {
+    throw new UntrustedGoldlineReceiptError("missing authorized receipt");
+  }
+  const receipt = input.receipt;
   if (input.relatedBeatId && !isKnownBeatId(input.relatedBeatId)) {
     throw new UnknownBeatLedgerError(input.relatedBeatId);
   }
@@ -221,12 +235,16 @@ export async function recordVerifiedGoldlineOutcome(input: {
     ledgerEntry: {
       kind: "VERIFIED_GOLDLINE_OUTCOME",
       beatId: input.relatedBeatId ?? null,
-      goldlineOutcomeId: input.outcomeId,
+      goldlineOutcomeId: receipt.outcomeId,
       offscreen: false,
       playerVisible: false,
-      evidenceRef: input.evidenceRef,
+      evidenceRef: {
+        sourceType: receipt.evidenceRef.sourceType,
+        sourceReference: receipt.evidenceRef.sourceReference,
+        classification: receipt.evidenceRef.classification,
+      },
       occurredAt: input.nowIso ?? new Date().toISOString(),
-      idempotencyKey: `goldline:${input.outcomeId}`,
+      idempotencyKey: `goldline:${receipt.outcomeId}`,
     },
   });
 }

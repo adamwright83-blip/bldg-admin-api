@@ -1,9 +1,14 @@
+import { isVerifiedGoldlineReceipt } from "./verifiedGoldlineReceipt";
+
 /**
  * One-way valve: verified business may inform Narrator eligibility.
  * Narrator fiction must never write Brain business truth or Goldline evidence.
  *
  * REAL BUSINESS → CLAIRE BRAIN → VERIFIED BUSINESS TRUTH → NARRATOR ELIGIBILITY INPUT
  * Never: NARRATOR FICTION → CLAIRE BRAIN BUSINESS TRUTH
+ *
+ * Structural `{ verificationClass: "VERIFIED" }` is not authority. Only a
+ * branded VerifiedGoldlineReceipt satisfies eligibility Goldline evidence.
  */
 export const NARRATOR_BRAIN_BOUNDARY = {
   narratorMustNotImportBrainWm: true,
@@ -12,13 +17,6 @@ export const NARRATOR_BRAIN_BOUNDARY = {
   brainMustNotDependOnNarrativeEligibility: true,
 } as const;
 
-export function isLegalEligibilityGoldlineEvidence(input: {
-  verificationClass: string;
-  evidenceClass: string;
-}): boolean {
-  return (
-    input.verificationClass === "VERIFIED" &&
-    (input.evidenceClass === "authoritative_external" ||
-      input.evidenceClass === "operator_attested")
-  );
+export function isLegalEligibilityGoldlineEvidence(value: unknown): boolean {
+  return isVerifiedGoldlineReceipt(value);
 }

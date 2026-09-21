@@ -17,6 +17,7 @@ import { evaluateEligibility, type EligibilityInput } from "./eligibility";
 import { createInMemoryNarratorStore } from "./memoryStore";
 import { initNarratorOperator } from "./init";
 import type { NarratorSnapshot } from "./store";
+import { issueVerifiedGoldlineReceiptForTests } from "./verifiedGoldlineReceipt.testSupport";
 
 async function newSnapshot(): Promise<NarratorSnapshot> {
   const store = createInMemoryNarratorStore();
@@ -125,11 +126,15 @@ describe("Narrator OS slice C — authored registry + graph", () => {
     const withGold = evaluateEligibility(
       inputFor(snapshot, {
         verifiedGoldline: [
-          {
+          issueVerifiedGoldlineReceiptForTests({
             outcomeId: "17k_physically_evidenced_in_hand",
-            verificationClass: "VERIFIED",
             evidenceClass: "authoritative_external",
-          },
+            evidenceRef: {
+              sourceType: "external_record",
+              sourceReference: "receipt:17k_physically_evidenced_in_hand",
+              classification: "authoritative_external",
+            },
+          }),
         ],
       })
     );

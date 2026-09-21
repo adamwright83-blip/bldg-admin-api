@@ -9,3 +9,8 @@ export * from "./memoryStore";
 export * from "./registry";
 export * from "./store";
 export * from "./worldTruth";
+export {
+  isVerifiedGoldlineReceipt,
+  type GoldlineEvidenceClass,
+  type VerifiedGoldlineReceipt,
+} from "./verifiedGoldlineReceipt";

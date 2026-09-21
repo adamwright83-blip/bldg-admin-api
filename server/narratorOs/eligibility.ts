@@ -14,18 +14,16 @@ import {
   type KnowledgeState,
 } from "../../shared/narratorOs/contracts";
 import { planeKnows, type NarratorSnapshot } from "./store";
-
-export type VerifiedGoldlineOutcome = {
-  outcomeId: string;
-  verificationClass: "VERIFIED";
-  evidenceClass: "authoritative_external" | "operator_attested";
-};
+import {
+  isVerifiedGoldlineReceipt,
+  type VerifiedGoldlineReceipt,
+} from "./verifiedGoldlineReceipt";
 
 export type EligibilityInput = {
   registry: readonly AuthoredBeat[];
   graph: readonly NarrativeGraphEdge[];
   snapshot: NarratorSnapshot;
-  verifiedGoldline: readonly VerifiedGoldlineOutcome[];
+  verifiedGoldline: readonly VerifiedGoldlineReceipt[];
   nowMs: number;
   mode: "interactive" | "offscreen";
 };
@@ -63,15 +61,12 @@ function check(
 }
 
 function goldlineHas(
-  outcomes: readonly VerifiedGoldlineOutcome[],
+  receipts: readonly VerifiedGoldlineReceipt[],
   outcomeId: string
 ): boolean {
-  return outcomes.some(
-    outcome =>
-      outcome.outcomeId === outcomeId &&
-      outcome.verificationClass === "VERIFIED" &&
-      (outcome.evidenceClass === "authoritative_external" ||
-        outcome.evidenceClass === "operator_attested")
+  return receipts.some(
+    receipt =>
+      isVerifiedGoldlineReceipt(receipt) && receipt.outcomeId === outcomeId
   );
 }
 
@@ -87,7 +82,7 @@ function evaluatePrerequisite(
   prereq: BeatPrerequisite,
   snapshot: NarratorSnapshot,
   fired: Set<string>,
-  goldline: readonly VerifiedGoldlineOutcome[]
+  goldline: readonly VerifiedGoldlineReceipt[]
 ): NarrativeEligibilityAuditCheck {
   switch (prereq.kind) {
     case "hard_beat":
@@ -158,7 +153,7 @@ function evaluateCondition(
   condition: EligibilityCondition,
   snapshot: NarratorSnapshot,
   fired: Set<string>,
-  goldline: readonly VerifiedGoldlineOutcome[]
+  goldline: readonly VerifiedGoldlineReceipt[]
 ): NarrativeEligibilityAuditCheck {
   if (condition.kind === "never_manufacture") {
     return check(

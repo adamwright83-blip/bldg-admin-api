@@ -18,7 +18,13 @@ import {
   fireOffscreenIfLegal,
   IneligibleBeatCommitError,
   recordVerifiedGoldlineOutcome,
+  UntrustedGoldlineReceiptError,
 } from "./ledger";
+import { issueVerifiedGoldlineReceiptForTests } from "./verifiedGoldlineReceipt.testSupport";
+import {
+  isVerifiedGoldlineReceipt,
+  type VerifiedGoldlineReceipt,
+} from "./verifiedGoldlineReceipt";
 import { initNarratorOperator } from "./init";
 import { createInMemoryNarratorStore } from "./memoryStore";
 import {
@@ -54,6 +60,26 @@ async function seeded(): Promise<{
   const store = createInMemoryNarratorStore();
   const snapshot = await initNarratorOperator(store, scope);
   return { store, snapshot };
+}
+
+function issueReceipt(
+  outcomeId: string,
+  evidenceClass:
+    | "authoritative_external"
+    | "operator_attested" = "operator_attested"
+): VerifiedGoldlineReceipt {
+  return issueVerifiedGoldlineReceiptForTests({
+    outcomeId,
+    evidenceClass,
+    evidenceRef: {
+      sourceType:
+        evidenceClass === "operator_attested"
+          ? "field_visit"
+          : "external_record",
+      sourceReference: `receipt:${outcomeId}`,
+      classification: evidenceClass,
+    },
+  });
 }
 
 function evalInput(
@@ -159,13 +185,7 @@ describe("Narrator OS slice D — ledger + eligibility + persistence", () => {
     ).rejects.toBeInstanceOf(IneligibleBeatCommitError);
 
     const m03Ready = evalInput(snapshot, {
-      verifiedGoldline: [
-        {
-          outcomeId: "spoken_no",
-          verificationClass: "VERIFIED",
-          evidenceClass: "operator_attested",
-        },
-      ],
+      verifiedGoldline: [issueReceipt("spoken_no")],
     });
     const m03Result = evaluateEligibility(m03Ready);
     const auths = issueEligibilityAuthorizations(m03Result, m03Ready);
@@ -184,13 +204,7 @@ describe("Narrator OS slice D — ledger + eligibility + persistence", () => {
   it("commits an authorized COMPLETE beat atomically and refuses non-repeatable replay", async () => {
     const { store, snapshot } = await seeded();
     const eligibility = evalInput(snapshot, {
-      verifiedGoldline: [
-        {
-          outcomeId: "spoken_no",
-          verificationClass: "VERIFIED",
-          evidenceClass: "operator_attested",
-        },
-      ],
+      verifiedGoldline: [issueReceipt("spoken_no")],
     });
     const result = evaluateEligibility(eligibility);
     expect(result.eligibleBeatIds).toContain(BEAT_IDS.M03);
@@ -285,6 +299,13 @@ describe("Narrator OS slice D — ledger + eligibility + persistence", () => {
         evidenceClass: "operator_attested",
       })
     ).toBe(false);
+    expect(
+      isLegalEligibilityGoldlineEvidence({
+        outcomeId: "spoken_no",
+        verificationClass: "VERIFIED",
+        evidenceClass: "operator_attested",
+      })
+    ).toBe(false);
     const m03 = evaluateEligibility(evalInput(snapshot)).audit.find(
       entry => entry.beatId === BEAT_IDS.M03
     )!;
@@ -317,21 +338,18 @@ describe("Narrator OS slice D — ledger + eligibility + persistence", () => {
 
   it("records verified Goldline outcomes on the ledger when explicitly relevant", async () => {
     const { store } = await seeded();
+    const receipt = issueReceipt("spoken_no");
     await recordVerifiedGoldlineOutcome({
       store,
       scope,
-      outcomeId: "spoken_no",
-      evidenceRef: {
-        sourceType: "field_visit",
-        sourceReference: "visit:1",
-        classification: "operator_attested",
-      },
+      receipt,
       relatedBeatId: BEAT_IDS.M03,
     });
     const loaded = await store.load(scope);
     expect(loaded?.ledger).toHaveLength(1);
     expect(loaded?.ledger[0]?.kind).toBe("VERIFIED_GOLDLINE_OUTCOME");
-    expect(loaded?.ledger[0]?.goldlineOutcomeId).toBe("spoken_no");
+    expect(loaded?.ledger[0]?.goldlineOutcomeId).toBe(receipt.outcomeId);
+    expect(loaded?.ledger[0]?.evidenceRef).toEqual(receipt.evidenceRef);
   });
 
   it("wraps drizzle knowledge replace and atomic commit in a transaction", () => {
@@ -352,6 +370,7 @@ describe("Narrator OS brain boundary", () => {
       "server/narratorOs/init.ts",
       "server/narratorOs/drizzleStore.ts",
       "server/narratorOs/registry.ts",
+      "server/narratorOs/verifiedGoldlineReceipt.ts",
     ];
     for (const file of files) {
       const src = readFileSync(resolve(process.cwd(), file), "utf8");
@@ -359,5 +378,142 @@ describe("Narrator OS brain boundary", () => {
       expect(src).not.toMatch(/goldlineWorldEvents/);
       expect(src).not.toMatch(/workingMemoryGate/);
     }
+  });
+});
+
+describe("Narrator OS verified Goldline receipt authority", () => {
+  it("does not let a plain VERIFIED object satisfy eligibility", async () => {
+    const { snapshot } = await seeded();
+    const counterfeit = {
+      outcomeId: "spoken_no",
+      verificationClass: "VERIFIED",
+      evidenceClass: "operator_attested",
+      evidenceRef: {
+        sourceType: "field_visit",
+        sourceReference: "visit:1",
+        classification: "operator_attested",
+      },
+    };
+    expect(isVerifiedGoldlineReceipt(counterfeit)).toBe(false);
+    expect(isLegalEligibilityGoldlineEvidence(counterfeit)).toBe(false);
+    const result = evaluateEligibility(
+      evalInput(snapshot, { verifiedGoldline: [counterfeit as never] })
+    );
+    expect(result.eligibleBeatIds).not.toContain(BEAT_IDS.M03);
+    expect(
+      result.audit.find(entry => entry.beatId === BEAT_IDS.M03)?.failedGates
+    ).toEqual(
+      expect.arrayContaining(["prerequisite", "verified_goldline_evidence"])
+    );
+  });
+
+  it("does not let a caller mint spoken_no and unlock M03", async () => {
+    const { snapshot } = await seeded();
+    const minted = {
+      outcomeId: "spoken_no",
+      verificationClass: "VERIFIED" as const,
+      evidenceClass: "operator_attested" as const,
+    };
+    const result = evaluateEligibility(
+      evalInput(snapshot, { verifiedGoldline: [minted as never] })
+    );
+    expect(result.outcome).toBe("NO_ELIGIBLE");
+    expect(result.eligibleBeatIds).not.toContain(BEAT_IDS.M03);
+    expect(
+      result.audit.find(entry => entry.beatId === BEAT_IDS.M03)?.pass
+    ).toBe(false);
+  });
+
+  it("lets only a trusted opaque receipt satisfy a Goldline evidence prerequisite", async () => {
+    const { snapshot } = await seeded();
+    const receipt = issueReceipt("spoken_no");
+    expect(isVerifiedGoldlineReceipt(receipt)).toBe(true);
+    expect(isLegalEligibilityGoldlineEvidence(receipt)).toBe(true);
+    const result = evaluateEligibility(
+      evalInput(snapshot, { verifiedGoldline: [receipt] })
+    );
+    expect(result.eligibleBeatIds).toContain(BEAT_IDS.M03);
+    const m03 = result.audit.find(entry => entry.beatId === BEAT_IDS.M03)!;
+    expect(m03.pass).toBe(true);
+    expect(m03.failedGates).toEqual([]);
+  });
+
+  it("persists an authorized receipt without changing its meaning", async () => {
+    const { store } = await seeded();
+    const receipt = issueReceipt("spoken_no", "operator_attested");
+    await recordVerifiedGoldlineOutcome({
+      store,
+      scope,
+      receipt,
+      relatedBeatId: BEAT_IDS.M03,
+    });
+    const loaded = await store.load(scope);
+    const entry = loaded?.ledger[0];
+    expect(entry?.kind).toBe("VERIFIED_GOLDLINE_OUTCOME");
+    expect(entry?.goldlineOutcomeId).toBe(receipt.outcomeId);
+    expect(entry?.evidenceRef).toEqual({
+      sourceType: receipt.evidenceRef.sourceType,
+      sourceReference: receipt.evidenceRef.sourceReference,
+      classification: receipt.evidenceRef.classification,
+    });
+    expect(entry?.evidenceRef?.classification).toBe(receipt.evidenceClass);
+    expect(receipt.verificationClass).toBe("VERIFIED");
+  });
+
+  it("still cannot write upstream business truth or re-mint from ledger copies", async () => {
+    const { store, snapshot } = await seeded();
+    await expect(
+      recordVerifiedGoldlineOutcome({
+        store,
+        scope,
+        receipt: {
+          outcomeId: "spoken_no",
+          verificationClass: "VERIFIED",
+          evidenceClass: "operator_attested",
+          evidenceRef: {
+            sourceType: "field_visit",
+            sourceReference: "visit:1",
+            classification: "operator_attested",
+          },
+        } as never,
+      })
+    ).rejects.toBeInstanceOf(UntrustedGoldlineReceiptError);
+
+    const receipt = issueReceipt("spoken_no");
+    await recordVerifiedGoldlineOutcome({ store, scope, receipt });
+    const loaded = await store.load(scope);
+    const ledgerCopy = {
+      outcomeId: loaded?.ledger[0]?.goldlineOutcomeId,
+      verificationClass: "VERIFIED",
+      evidenceClass: loaded?.ledger[0]?.evidenceRef?.classification,
+      evidenceRef: loaded?.ledger[0]?.evidenceRef,
+    };
+    expect(isVerifiedGoldlineReceipt(ledgerCopy)).toBe(false);
+    const fromLedger = evaluateEligibility(
+      evalInput(snapshot, { verifiedGoldline: [ledgerCopy as never] })
+    );
+    expect(fromLedger.eligibleBeatIds).not.toContain(BEAT_IDS.M03);
+
+    const productionFiles = [
+      "server/narratorOs/index.ts",
+      "server/narratorOs/eligibility.ts",
+      "server/narratorOs/ledger.ts",
+      "server/narratorOs/brainBoundary.ts",
+      "server/narratorOs/init.ts",
+      "server/narratorOs/registry.ts",
+      "server/narratorOs/drizzleStore.ts",
+    ];
+    for (const file of productionFiles) {
+      const src = readFileSync(resolve(process.cwd(), file), "utf8");
+      expect(src).not.toMatch(/issueVerifiedGoldlineReceiptForTests/);
+      expect(src).not.toMatch(/verifiedGoldlineReceipt\.testSupport/);
+    }
+    const indexSrc = readFileSync(
+      resolve(process.cwd(), "server/narratorOs/index.ts"),
+      "utf8"
+    );
+    expect(indexSrc).not.toMatch(/issueVerifiedGoldlineReceiptForTests/);
+    const prod = await import("./index");
+    expect("issueVerifiedGoldlineReceiptForTests" in prod).toBe(false);
   });
 });
