@@ -29,8 +29,7 @@ export const M03_RETURN_OUTCOME_IDS = [
   "reinspect_previously_deployed_item",
 ] as const;
 
-export const M03_OCCURRENCE_PREFIX = "beat:M03:target:";
-const M03_OCCURRENCE_ARM_MARK = ":arm:";
+export const M03_OCCURRENCE_PREFIX = "beat:M03:occ:";
 
 export type M03QualifyingCycle = {
   readonly targetId: string;
@@ -46,24 +45,46 @@ export type TemporalSameTargetPair = {
   readonly subsequent: VerifiedGoldlineReceipt;
 };
 
+function readLengthPrefixed(
+  encoded: string,
+  start: number
+): { value: string; next: number } | null {
+  if (start >= encoded.length) return null;
+  const colon = encoded.indexOf(":", start);
+  if (colon <= start) return null;
+  const lengthText = encoded.slice(start, colon);
+  if (!/^[0-9]+$/.test(lengthText)) return null;
+  const length = Number(lengthText);
+  if (!Number.isInteger(length) || length <= 0) return null;
+  const valueStart = colon + 1;
+  const valueEnd = valueStart + length;
+  if (valueEnd > encoded.length) return null;
+  return {
+    value: encoded.slice(valueStart, valueEnd),
+    next: valueEnd,
+  };
+}
+
 export function m03OccurrenceIdempotencyKey(
   targetId: string,
   armReceiptId: string
 ): string {
-  return `${M03_OCCURRENCE_PREFIX}${targetId}${M03_OCCURRENCE_ARM_MARK}${armReceiptId}`;
+  return `${M03_OCCURRENCE_PREFIX}${targetId.length}:${targetId}:${armReceiptId.length}:${armReceiptId}`;
 }
 
 export function parseM03OccurrenceKey(
   idempotencyKey: string
 ): { targetId: string; armReceiptId: string } | null {
   if (!idempotencyKey.startsWith(M03_OCCURRENCE_PREFIX)) return null;
-  const rest = idempotencyKey.slice(M03_OCCURRENCE_PREFIX.length);
-  const markAt = rest.indexOf(M03_OCCURRENCE_ARM_MARK);
-  if (markAt <= 0) return null;
-  const targetId = rest.slice(0, markAt);
-  const armReceiptId = rest.slice(markAt + M03_OCCURRENCE_ARM_MARK.length);
-  if (!targetId || !armReceiptId) return null;
-  return { targetId, armReceiptId };
+  const first = readLengthPrefixed(
+    idempotencyKey,
+    M03_OCCURRENCE_PREFIX.length
+  );
+  if (!first || idempotencyKey[first.next] !== ":") return null;
+  const second = readLengthPrefixed(idempotencyKey, first.next + 1);
+  if (!second || second.next !== idempotencyKey.length) return null;
+  if (!first.value || !second.value) return null;
+  return { targetId: first.value, armReceiptId: second.value };
 }
 
 function scopedReceipt(
@@ -149,10 +170,13 @@ function compareByOccurredAtMs(
  * Smallest per-target M03 event-sequence evaluator.
  *
  * Temporal state, not historical-pair search:
- * - eligible silence / no-show → live retry readiness
- * - spoken no → terminal; clears prior retry readiness
+ * - eligible silence / no-show may arm only before a spoken no, or after a
+ *   later trusted reopen has lifted terminal no
+ * - spoken no → terminal; clears live readiness; later silence/no-show
+ *   cannot re-arm until contact_reopened_after_no
  * - trusted reopen after the latest spoken no → live retry readiness again
- * - RETURN while readiness is live → qualifying cycle
+ * - RETURN while readiness is live → qualifying cycle (kept even if a later
+ *   spoken no closes subsequent readiness)
  * - a fired M03 occurrence consumes that arm/reopen receipt
  *
  * Chronology is receipt.occurredAtMs only. Array order is not evidence.
@@ -179,21 +203,24 @@ function replayM03Targets(
     const events = [...list].sort(compareByOccurredAtMs);
     let liveArm: VerifiedGoldlineReceipt | null = null;
     let lastSpokenNoMs: number | null = null;
+    let terminalNoActive = false;
     const cycles: M03QualifyingCycle[] = [];
     const seen = new Set<string>();
 
     for (const event of events) {
       if (event.outcomeId === M03_SPOKEN_NO_OUTCOME_ID) {
         lastSpokenNoMs = event.occurredAtMs;
+        terminalNoActive = true;
         liveArm = null;
         continue;
       }
       if (retryArm.has(event.outcomeId)) {
-        liveArm = event;
+        if (!terminalNoActive) liveArm = event;
         continue;
       }
       if (event.outcomeId === M03_REOPEN_OUTCOME_ID) {
         if (lastSpokenNoMs !== null && lastSpokenNoMs < event.occurredAtMs) {
+          terminalNoActive = false;
           liveArm = event;
         }
         continue;
@@ -224,10 +251,11 @@ function replayM03Targets(
 /**
  * Targets that currently have live, unconsumed M03 retry readiness.
  *
- * - silence_eligible_for_retry / authored eligible no_show → ARMED
- * - spoken_no alone → NOT ARMED (terminal; clears prior readiness)
+ * - silence_eligible_for_retry / authored eligible no_show → ARMED only
+ *   when no terminal spoken no is active
+ * - spoken_no → NOT ARMED (terminal; later silence/no-show cannot lift it)
  * - spoken_no then a later trusted same-target contact_reopened_after_no → ARMED
- * - a newer spoken_no clears that readiness until a later reopen
+ * - a newer spoken_no closes that readiness until a later reopen
  * - a fired M03 occurrence consumes that arm/reopen cycle; it is not ARMED
  *
  * Chronology is receipt.occurredAtMs only. Array order, receiptId lexical

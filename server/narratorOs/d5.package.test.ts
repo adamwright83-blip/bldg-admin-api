@@ -20,6 +20,7 @@ import { issueVerifiedGoldlineReceiptForTests } from "./verifiedGoldlineReceipt.
 import {
   derivedM03ArmedTargetIds,
   m03OccurrenceIdempotencyKey,
+  parseM03OccurrenceKey,
   unconsumedM03FireTargetIds,
 } from "./m03Readiness";
 import { initNarratorOperator } from "./init";
@@ -1287,6 +1288,205 @@ describe("Narrator OS D.5 — M03 live unconsumed readiness", () => {
       derivedM03ArmedTargetIds(noReopenThenNo.slice(0, 2), snapshot)
     ).toEqual(["target-b"]);
     expect(derivedM03ArmedTargetIds(noReopenThenNo, snapshot)).toEqual([]);
+  });
+
+  it("8. spoken_no then later silence cannot arm or license RETURN", async () => {
+    const { snapshot } = await seeded();
+    const receipts = [
+      issueReceipt("spoken_no", {
+        targetId: "target-a",
+        occurredAtMs: MONDAY_MS,
+      }),
+      issueReceipt("silence_eligible_for_retry", {
+        targetId: "target-a",
+        occurredAtMs: TUESDAY_MS,
+      }),
+      issueReceipt("legitimate_second_site_visit", {
+        targetId: "target-a",
+        occurredAtMs: WEDNESDAY_MS,
+      }),
+    ];
+    expect(derivedM03ArmedTargetIds(receipts, snapshot)).toEqual([]);
+    expect(unconsumedM03FireTargetIds(receipts, snapshot)).toEqual([]);
+    expect(
+      evaluateEligibility(evalInput(snapshot, { verifiedGoldline: receipts }))
+        .eligibleBeatIds
+    ).not.toContain("M03");
+  });
+
+  it("9. spoken_no then later no_show cannot arm or license RETURN", async () => {
+    const { snapshot } = await seeded();
+    const receipts = [
+      issueReceipt("spoken_no", {
+        targetId: "target-a",
+        occurredAtMs: MONDAY_MS,
+      }),
+      issueReceipt("no_show", {
+        targetId: "target-a",
+        occurredAtMs: TUESDAY_MS,
+      }),
+      issueReceipt("legitimate_second_site_visit", {
+        targetId: "target-a",
+        occurredAtMs: WEDNESDAY_MS,
+      }),
+    ];
+    expect(derivedM03ArmedTargetIds(receipts, snapshot)).toEqual([]);
+    expect(unconsumedM03FireTargetIds(receipts, snapshot)).toEqual([]);
+    expect(
+      evaluateEligibility(evalInput(snapshot, { verifiedGoldline: receipts }))
+        .eligibleBeatIds
+    ).not.toContain("M03");
+  });
+
+  it("10. spoken_no then reopen then silence/no-show then RETURN may qualify", async () => {
+    const { snapshot } = await seeded();
+    const viaSilence = [
+      issueReceipt("spoken_no", {
+        targetId: "target-a",
+        receiptId: "receipt:no-a-10",
+        occurredAtMs: MONDAY_MS,
+      }),
+      issueReceipt("contact_reopened_after_no", {
+        targetId: "target-a",
+        receiptId: "receipt:reopen-a-10",
+        occurredAtMs: TUESDAY_MS,
+      }),
+      issueReceipt("silence_eligible_for_retry", {
+        targetId: "target-a",
+        receiptId: "receipt:silence-a-10",
+        occurredAtMs: WEDNESDAY_MS,
+      }),
+      issueReceipt("legitimate_second_site_visit", {
+        targetId: "target-a",
+        receiptId: "receipt:return-a-10",
+        occurredAtMs: THURSDAY_MS,
+      }),
+    ];
+    expect(derivedM03ArmedTargetIds(viaSilence, snapshot)).toEqual([
+      "target-a",
+    ]);
+    expect(unconsumedM03FireTargetIds(viaSilence, snapshot)).toEqual([
+      "target-a",
+    ]);
+    expect(
+      evaluateEligibility(evalInput(snapshot, { verifiedGoldline: viaSilence }))
+        .eligibleBeatIds
+    ).toContain("M03");
+
+    const viaNoShow = [
+      issueReceipt("spoken_no", {
+        targetId: "target-b",
+        receiptId: "receipt:no-b-10",
+        occurredAtMs: MONDAY_MS,
+      }),
+      issueReceipt("contact_reopened_after_no", {
+        targetId: "target-b",
+        receiptId: "receipt:reopen-b-10",
+        occurredAtMs: TUESDAY_MS,
+      }),
+      issueReceipt("no_show", {
+        targetId: "target-b",
+        receiptId: "receipt:noshow-b-10",
+        occurredAtMs: WEDNESDAY_MS,
+      }),
+      issueReceipt("legitimate_second_site_visit", {
+        targetId: "target-b",
+        receiptId: "receipt:return-b-10",
+        occurredAtMs: THURSDAY_MS,
+      }),
+    ];
+    expect(derivedM03ArmedTargetIds(viaNoShow, snapshot)).toEqual(["target-b"]);
+    expect(
+      evaluateEligibility(evalInput(snapshot, { verifiedGoldline: viaNoShow }))
+        .eligibleBeatIds
+    ).toContain("M03");
+  });
+
+  it("11. a live RETURN stays a qualifying cycle if a later spoken no closes readiness", async () => {
+    const { snapshot } = await seeded();
+    const silence = issueReceipt("silence_eligible_for_retry", {
+      targetId: "target-a",
+      receiptId: "receipt:silence-keep-cycle",
+      occurredAtMs: MONDAY_MS,
+    });
+    const ret = issueReceipt("legitimate_second_site_visit", {
+      targetId: "target-a",
+      receiptId: "receipt:return-keep-cycle",
+      occurredAtMs: TUESDAY_MS,
+    });
+    const laterNo = issueReceipt("spoken_no", {
+      targetId: "target-a",
+      receiptId: "receipt:no-after-return",
+      occurredAtMs: WEDNESDAY_MS,
+    });
+    const receipts = [laterNo, ret, silence];
+    expect(derivedM03ArmedTargetIds(receipts, snapshot)).toEqual([]);
+    expect(unconsumedM03FireTargetIds(receipts, snapshot)).toEqual([
+      "target-a",
+    ]);
+    expect(
+      evaluateEligibility(evalInput(snapshot, { verifiedGoldline: receipts }))
+        .eligibleBeatIds
+    ).toContain("M03");
+  });
+
+  it("12. occurrence keys remain reversible when the opaque target id contains :arm:", async () => {
+    const { store, snapshot } = await seeded();
+    const targetId = "account:arm:42";
+    const parsed = parseM03OccurrenceKey(
+      m03OccurrenceIdempotencyKey(targetId, "receipt:arm:first")
+    );
+    expect(parsed).toEqual({
+      targetId,
+      armReceiptId: "receipt:arm:first",
+    });
+
+    const silence1 = issueReceipt("silence_eligible_for_retry", {
+      targetId,
+      receiptId: "receipt:silence-arm-1",
+      occurredAtMs: MONDAY_MS,
+    });
+    const return1 = issueReceipt("legitimate_second_site_visit", {
+      targetId,
+      receiptId: "receipt:return-arm-1",
+      occurredAtMs: TUESDAY_MS,
+    });
+    const first = [return1, silence1];
+    const afterFirst = await fireM03(store, snapshot, first);
+    expect(afterFirst.ledger[0]?.idempotencyKey).toBe(
+      m03OccurrenceIdempotencyKey(targetId, silence1.receiptId)
+    );
+    expect(parseM03OccurrenceKey(afterFirst.ledger[0]!.idempotencyKey)).toEqual(
+      { targetId, armReceiptId: silence1.receiptId }
+    );
+    expect(derivedM03ArmedTargetIds(first, afterFirst)).toEqual([]);
+    expect(unconsumedM03FireTargetIds(first, afterFirst)).toEqual([]);
+    expect(
+      evaluateEligibility(evalInput(afterFirst, { verifiedGoldline: first }))
+        .eligibleBeatIds
+    ).not.toContain("M03");
+
+    const silence2 = issueReceipt("silence_eligible_for_retry", {
+      targetId,
+      receiptId: "receipt:silence-arm-2",
+      occurredAtMs: WEDNESDAY_MS,
+    });
+    const return2 = issueReceipt("legitimate_second_site_visit", {
+      targetId,
+      receiptId: "receipt:return-arm-2",
+      occurredAtMs: THURSDAY_MS,
+    });
+    const second = [...first, silence2, return2];
+    expect(derivedM03ArmedTargetIds(second, afterFirst)).toEqual([targetId]);
+    const afterSecond = await fireM03(store, afterFirst, second);
+    expect(
+      afterSecond.ledger.filter(
+        entry => entry.kind === "FIRED_AUTHORED_BEAT" && entry.beatId === "M03"
+      )
+    ).toHaveLength(2);
+    expect(afterSecond.ledger[1]?.idempotencyKey).toBe(
+      m03OccurrenceIdempotencyKey(targetId, silence2.receiptId)
+    );
   });
 });
 
