@@ -18,8 +18,25 @@ import {
 } from "./eligibility";
 import { initNarratorOperator } from "./init";
 import { createInMemoryNarratorStore } from "./memoryStore";
-import { AUTHORED_BEATS, AUTHORED_GRAPH, getBeat } from "./registry";
 import {
+  LiveDramaturgyMismatchError,
+  commitAuthorizedBeat,
+  fireOffscreenIfLegal,
+  recordVerifiedGoldlineOutcome,
+} from "./ledger";
+import {
+  authoredReactionPlan,
+  authoredReactionReceipt,
+  narrativeMemoryView,
+} from "./narrativeReadModels";
+import {
+  AUTHORED_BEATS,
+  AUTHORED_GRAPH,
+  getBeat,
+  offscreenCatalog,
+} from "./registry";
+import {
+  OffscreenReactionOrchestrationError,
   matchSingleSelectedBeatAuthorization,
   orchestrateSelectedBeatReaction,
   type SelectedBeatOrchestrationInput,
@@ -38,7 +55,7 @@ const SURFACEABLE = ["C-08", "M01", "M03", "M04"] as const;
 type OrchestrationKeys = keyof SelectedBeatOrchestrationInput;
 type _InputHasNoDecision = Exclude<
   OrchestrationKeys,
-  "store" | "scope" | "verifiedGoldline" | "nowMs" | "mode" | "nowIso"
+  "store" | "scope" | "verifiedGoldline" | "nowMs" | "nowIso"
 > extends never
   ? true
   : never;
@@ -134,15 +151,13 @@ async function readyFor(
 
 function run(
   store: ReturnType<typeof createInMemoryNarratorStore>,
-  receipts: readonly VerifiedGoldlineReceipt[] = [],
-  mode: SelectedBeatOrchestrationInput["mode"] = "interactive"
+  receipts: readonly VerifiedGoldlineReceipt[] = []
 ) {
   return orchestrateSelectedBeatReaction({
     store,
     scope,
     verifiedGoldline: receipts,
     nowMs: NOW_MS,
-    mode,
     nowIso: NOW_ISO,
   });
 }
@@ -384,15 +399,135 @@ describe("Narrator OS slice G — selected-beat reaction and memory", () => {
     ).toBe("INSUFFICIENT");
   });
 
-  it("offscreen mode does not commit a beat that may not fire offscreen", async () => {
+  it("orchestration cannot execute offscreen", async () => {
     const { store, snapshot } = await seeded();
     const { receipts } = await readyFor(store, snapshot, ["M01"]);
+    const before = await store.load(scope);
+    const attempt = {
+      store,
+      scope,
+      verifiedGoldline: receipts,
+      nowMs: NOW_MS,
+      nowIso: NOW_ISO,
+      mode: "offscreen" as const,
+    };
+    await expect(
+      orchestrateSelectedBeatReaction(attempt)
+    ).rejects.toBeInstanceOf(OffscreenReactionOrchestrationError);
+    expect(await store.load(scope)).toEqual(before);
     expect(getBeat("M01").mayFireOffscreen).toBe(false);
-    const result = await run(store, receipts, "offscreen");
-    expect(result.committed).toBe(false);
-    expect(result.decision.outcome).toBe("SILENCE_NO_ELIGIBLE");
-    expect(result.decision.selectedBeatId).toBeNull();
+    expect(offscreenCatalog()).toEqual([]);
+    const offscreen = await fireOffscreenIfLegal({
+      store,
+      scope,
+      eligibility: {
+        registry: AUTHORED_BEATS,
+        graph: AUTHORED_GRAPH,
+        snapshot: before!,
+        verifiedGoldline: receipts,
+        nowMs: NOW_MS,
+        mode: "offscreen",
+      },
+    });
+    expect(offscreen.fired).toEqual([]);
     expect((await store.load(scope))?.ledger).toEqual([]);
+    const ledgerSrc = readFileSync(
+      resolve(process.cwd(), "server/narratorOs/ledger.ts"),
+      "utf8"
+    );
+    const offscreenFn = ledgerSrc.slice(
+      ledgerSrc.indexOf("export async function fireOffscreenIfLegal")
+    );
+    expect(offscreenFn).toMatch(/mode: "offscreen"/);
+    expect(offscreenFn).toMatch(/mayFireOffscreen !== true/);
+    expect(offscreenFn).toMatch(/commitAuthorizedBeat\(/);
+    expect(offscreenFn).not.toMatch(/decideDramaturgy/);
+  });
+
+  it("the commit reload refuses when live dramaturgy becomes ambiguous", async () => {
+    const { store, snapshot } = await seeded();
+    const receipts = evidenceFor(["M04"]).receipts;
+    const opening = evaluateProductionEligibility({
+      registry: AUTHORED_BEATS,
+      graph: AUTHORED_GRAPH,
+      snapshot,
+      verifiedGoldline: receipts,
+      nowMs: NOW_MS,
+      mode: "interactive",
+    });
+    expect(decideDramaturgy({ eligibility: opening }).selectedBeatId).toBe(
+      "M04"
+    );
+    const originalLoad = store.load.bind(store);
+    let reads = 0;
+    store.load = async scopeArg => {
+      reads += 1;
+      const loaded = await originalLoad(scopeArg);
+      if (reads === 1) {
+        await store.replaceNarrativeState(scopeArg, {
+          ...loaded.narrativeState,
+          values: {
+            ...loaded.narrativeState.values,
+            [AUTHORED_NARRATIVE_FACTS.reservedCorePreserved]: "true",
+            [AUTHORED_NARRATIVE_FACTS.lot17kPhysicallyInHand]: "true",
+          },
+        });
+      }
+      return loaded;
+    };
+    const result = await run(store, receipts);
+    expect(reads).toBeGreaterThanOrEqual(2);
+    expect(result.committed).toBe(false);
+    expect(result.reason).toBe("live_dramaturgy_mismatch");
+    expect(result.decision.outcome).toBe("AMBIGUOUS_REQUIRES_AUTHORED_RULE");
+    expect(result.decision.selectedBeatId).toBeNull();
+    expect(
+      result.snapshot.ledger.filter(entry => entry.kind === "FIRED_AUTHORED_BEAT")
+    ).toEqual([]);
+    expect(result.snapshot.knowledge.planes.PLAYER.knownFactIds).toEqual([]);
+    expect(result.snapshot.knowledge.planes.CLAIRE.knownFactIds).toEqual([]);
+    expect(result.snapshot.knowledge.planes.CHEMIST.knownFactIds).toEqual([]);
+    expect(result.snapshot.narrativeState.values.act_i).toBeUndefined();
+    expect(result.snapshot.worldTruth).toEqual(snapshot.worldTruth);
+    expect(result.snapshot.livedBio).toEqual(snapshot.livedBio);
+  });
+
+  it("a valid authorization does not commit an ambiguous live set", async () => {
+    const { store, snapshot } = await seeded();
+    const both = evidenceFor(["M01", "M04"]);
+    const onlyM04 = evidenceFor(["M04"]);
+    const live = (await store.load(scope))!;
+    const ambiguousInput: EligibilityInput = {
+      registry: AUTHORED_BEATS,
+      graph: AUTHORED_GRAPH,
+      snapshot: live,
+      verifiedGoldline: both.receipts,
+      nowMs: NOW_MS,
+      mode: "interactive",
+    };
+    const ambiguous = evaluateProductionEligibility(ambiguousInput);
+    expect([...ambiguous.eligibleBeatIds]).toEqual(["M01", "M04"]);
+    const singleton = evaluateProductionEligibility({
+      ...ambiguousInput,
+      verifiedGoldline: onlyM04.receipts,
+    });
+    const authorization = issueEligibilityAuthorizations(
+      singleton,
+      { ...ambiguousInput, verifiedGoldline: onlyM04.receipts }
+    ).find(item => item.beatId === "M04");
+    expect(isEligibilityAuthorization(authorization)).toBe(true);
+    const before = await store.load(scope);
+    await expect(
+      commitAuthorizedBeat({
+        store,
+        scope,
+        authorization: authorization!,
+        eligibility: ambiguousInput,
+      })
+    ).rejects.toBeInstanceOf(LiveDramaturgyMismatchError);
+    expect(await store.load(scope)).toEqual(before);
+    expect(before?.narrativeState.values.act_i).toBeUndefined();
+    expect(before?.knowledge.planes.PLAYER.knownFactIds).toEqual([]);
   });
 
   it("an uninitialized operator does not commit", async () => {
@@ -504,13 +639,24 @@ describe("Narrator OS slice G — selected-beat reaction and memory", () => {
     const select = read("dramaturgySelect.ts");
     expect(dramaturgy).not.toMatch(/commitAuthorizedBeat|commitAtomic/);
     expect(select).not.toMatch(/commitAuthorizedBeat|commitAtomic/);
-    expect(read("ledger.ts")).not.toMatch(/dramaturg/);
+    const ledgerSrc = read("ledger.ts");
+    expect(ledgerSrc).toMatch(/input\.store\.commitAtomic\(/);
+    expect(ledgerSrc).toMatch(
+      /liveInput\.mode === "interactive"[\s\S]*decideDramaturgy\(\{ eligibility: result \}\)/
+    );
+    const readModel = read("narrativeReadModels.ts");
+    expect(readModel).not.toMatch(
+      /commitAuthorizedBeat|commitAtomic|appendLedger|replaceKnowledge|replaceNarrativeState|applyKnowledgeWrite/
+    );
     expect(AUTHORED_DRAMATURGY_TIE_BREAKS).toEqual([]);
   });
 
   it("the index exports the orchestrator and not a caller catalog", async () => {
     const narratorIndex = await import("./index");
     expect("orchestrateSelectedBeatReaction" in narratorIndex).toBe(true);
+    expect("authoredReactionPlan" in narratorIndex).toBe(true);
+    expect("authoredReactionReceipt" in narratorIndex).toBe(true);
+    expect("narrativeMemoryView" in narratorIndex).toBe(true);
     expect("decideDramaturgyWithRulesForTests" in narratorIndex).toBe(false);
     expect("decideDramaturgyWithCatalog" in narratorIndex).toBe(false);
     const indexSrc = readFileSync(
@@ -520,5 +666,148 @@ describe("Narrator OS slice G — selected-beat reaction and memory", () => {
     expect(indexSrc).not.toMatch(/dramaturgy\.testSupport|tieBreaks/);
     const beatId: NarrativeBeatId | null = null;
     void beatId;
+  });
+
+  it("reaction plan, receipt, and memory are reads over the existing commit", async () => {
+    const { store, snapshot } = await seeded();
+    const before = await store.load(scope);
+    const m01 = authoredReactionPlan("M01");
+    const m04 = authoredReactionPlan("M04");
+    const c08 = authoredReactionPlan("C-08");
+    expect(await store.load(scope)).toEqual(before);
+    expect(isEligibilityAuthorization(m04)).toBe(false);
+    expect(m01.knowledgeMutations).toEqual([]);
+    expect(m01.stateMutations).toEqual([]);
+    expect(m04.stateMutations).toEqual([{ key: "act_i", value: "complete" }]);
+    expect(m04.knowledgeMutations).toEqual([]);
+    expect(m04.playerVisibility).toBe(getBeat("M04").playerVisibility);
+    expect(m04.authoredSourceRef).toBe(getBeat("M04").authoredSourceRef);
+    expect(m04.characters).toEqual([...getBeat("M04").characters]);
+    expect(c08.knowledgeMutations.map(mutation => mutation.factId)).toEqual([
+      "c08_comparison_occurred",
+      "c08_comparison_occurred",
+      "c08_comparison_occurred",
+    ]);
+    expect(m04).not.toHaveProperty("presented");
+    expect(m04).not.toHaveProperty("delivered");
+    expect(c08).not.toHaveProperty("ranking");
+
+    const { receipts } = await readyFor(store, snapshot, ["M04"]);
+    const committed = await run(store, receipts);
+    expect(committed.committed).toBe(true);
+    const fired = committed.snapshot.ledger[0]!;
+    const receipt = authoredReactionReceipt(committed.snapshot, fired.id);
+    expect(receipt).toEqual({
+      beatId: "M04",
+      ledgerEntryId: fired.id,
+      occurredAt: fired.occurredAt,
+      knowledgeMutationRefs: [],
+      stateMutationRefs: [{ key: "act_i", value: "complete" }],
+      characters: [...getBeat("M04").characters],
+      playerVisible: true,
+    });
+    expect(receipt).not.toHaveProperty("presented");
+    expect(receipt).not.toHaveProperty("delivered");
+    expect(receipt).not.toHaveProperty("surfaced");
+    expect(receipt).not.toHaveProperty("claireSaid");
+    expect(authoredReactionReceipt(committed.snapshot, "missing")).toBeNull();
+
+    const evidence = issueReceipt("kept_promised_send_visit_or_call", {
+      receiptId: "memory-only-goldline",
+    });
+    await recordVerifiedGoldlineOutcome({
+      store,
+      scope,
+      receipt: evidence,
+      nowIso: NOW_ISO,
+    });
+    const stored = (await store.load(scope))!;
+    const ledgerBeforeView = stored.ledger.map(entry => entry.id);
+    const playerFacts = [...stored.knowledge.planes.PLAYER.knownFactIds];
+    const memory = narrativeMemoryView(stored);
+    expect(stored.ledger.map(entry => entry.id)).toEqual(ledgerBeforeView);
+    expect([...stored.knowledge.planes.PLAYER.knownFactIds]).toEqual(playerFacts);
+    expect(memory.firedAuthoredBeats).toHaveLength(1);
+    expect(memory.firedAuthoredBeats[0]).toMatchObject({
+      ledgerEntryId: fired.id,
+      beatId: "M04",
+      occurredAt: NOW_ISO,
+      offscreen: false,
+      playerVisible: true,
+    });
+    expect(memory.firedAuthoredBeats[0]).not.toHaveProperty("presented");
+    expect(memory.firedAuthoredBeats[0]).not.toHaveProperty("delivered");
+    expect(memory.verifiedGoldlineOutcomes).toHaveLength(1);
+    expect(memory.verifiedGoldlineOutcomes[0]).toMatchObject({
+      goldlineOutcomeId: "kept_promised_send_visit_or_call",
+      relatedBeatId: null,
+    });
+    expect(
+      memory.firedAuthoredBeats.map(row => row.ledgerEntryId)
+    ).not.toContain(memory.verifiedGoldlineOutcomes[0]?.ledgerEntryId);
+    expect(
+      authoredReactionReceipt(
+        stored,
+        memory.verifiedGoldlineOutcomes[0]!.ledgerEntryId
+      )
+    ).toBeNull();
+    expect(memory.narrativeStateValues.act_i).toBe("complete");
+    expect(memory.closedForwardPaths).toEqual([]);
+    expect(memory.holdOpenedAtMs).toEqual({});
+    expect(memory.knowledge.planes.PLAYER.knownFactIds).toEqual([]);
+    expect(memory).not.toHaveProperty("presented");
+    expect(memory).not.toHaveProperty("delivered");
+  });
+
+  it("keeps repeat M03 occurrences as separate memory rows", async () => {
+    const { store, snapshot } = await seeded();
+    const first = evidenceFor(["M03"]);
+    const opened = await run(store, first.receipts);
+    expect(opened.committed).toBe(true);
+    const wednesday = Date.parse("2026-09-16T12:00:00Z");
+    const thursday = Date.parse("2026-09-17T12:00:00Z");
+    const secondReceipts = [
+      ...first.receipts,
+      issueReceipt("silence_eligible_for_retry", {
+        receiptId: "m03-arm-2",
+        targetId: "target-g",
+        occurredAtMs: wednesday,
+      }),
+      issueReceipt("legitimate_second_site_visit", {
+        receiptId: "m03-return-2",
+        targetId: "target-g",
+        occurredAtMs: thursday,
+      }),
+    ];
+    const again = await orchestrateSelectedBeatReaction({
+      store,
+      scope,
+      verifiedGoldline: secondReceipts,
+      nowMs: NOW_MS,
+      nowIso: "2026-09-22T00:00:00.000Z",
+    });
+    expect(again.committed).toBe(true);
+    expect(again.decision.selectedBeatId).toBe("M03");
+    const memory = narrativeMemoryView(again.snapshot);
+    expect(memory.firedAuthoredBeats).toHaveLength(2);
+    expect(memory.firedAuthoredBeats.map(row => row.beatId)).toEqual([
+      "M03",
+      "M03",
+    ]);
+    expect(memory.firedAuthoredBeats[0]?.ledgerEntryId).not.toBe(
+      memory.firedAuthoredBeats[1]?.ledgerEntryId
+    );
+    expect(memory.firedAuthoredBeats[0]?.occurredAt).toBe(NOW_ISO);
+    expect(memory.firedAuthoredBeats[1]?.occurredAt).toBe(
+      "2026-09-22T00:00:00.000Z"
+    );
+    expect(memory.firedAuthoredBeats.every(row => row.playerVisible)).toBe(
+      true
+    );
+    expect(memory.firedAuthoredBeats[0]).not.toHaveProperty("presented");
+    expect(again.snapshot.knowledge.planes.CLAIRE.knownFactIds).toEqual([]);
+    const before = again.snapshot.ledger.length;
+    narrativeMemoryView(again.snapshot);
+    expect(again.snapshot.ledger).toHaveLength(before);
   });
 });

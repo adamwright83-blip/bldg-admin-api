@@ -10,8 +10,14 @@ export * from "./eligibility";
 export * from "./dramaturgy";
 export {
   matchSingleSelectedBeatAuthorization,
+  OffscreenReactionOrchestrationError,
   orchestrateSelectedBeatReaction,
 } from "./selectedBeatOrchestration";
+export {
+  authoredReactionPlan,
+  authoredReactionReceipt,
+  narrativeMemoryView,
+} from "./narrativeReadModels";
 export * from "./init";
 export * from "./ledger";
 export * from "./livedBio";

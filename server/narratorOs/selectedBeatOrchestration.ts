@@ -12,7 +12,10 @@ import {
   type EligibilityAuthorization,
   type EligibilityInput,
 } from "./eligibility";
-import { commitAuthorizedBeat } from "./ledger";
+import {
+  commitAuthorizedBeat,
+  LiveDramaturgyMismatchError,
+} from "./ledger";
 import { AUTHORED_BEATS, AUTHORED_GRAPH } from "./registry";
 import type { NarratorSnapshot, NarratorStore, OperatorScope } from "./store";
 import type { VerifiedGoldlineReceipt } from "./verifiedGoldlineReceipt";
@@ -33,21 +36,34 @@ import type { VerifiedGoldlineReceipt } from "./verifiedGoldlineReceipt";
  *
  * Silence, withheld, and ambiguous dramaturgy do not commit. A SELECT
  * decision does not commit unless production eligibility issued
- * authorization for that beat alone.
+ * authorization for that beat alone. The commit reloads and requires
+ * live dramaturgy to SELECT that same beat before it writes.
+ *
+ * This function is interactive only. Offscreen firing stays on
+ * `fireOffscreenIfLegal`.
  */
+
+export class OffscreenReactionOrchestrationError extends Error {
+  constructor() {
+    super(
+      "orchestrateSelectedBeatReaction does not execute offscreen beats"
+    );
+    this.name = "OffscreenReactionOrchestrationError";
+  }
+}
 
 export type SelectedBeatOrchestrationInput = {
   readonly store: NarratorStore;
   readonly scope: OperatorScope;
   readonly verifiedGoldline: readonly VerifiedGoldlineReceipt[];
   readonly nowMs: number;
-  readonly mode: "interactive" | "offscreen";
   readonly nowIso?: string;
 };
 
 export type SelectedBeatOrchestrationReason =
   | DramaturgyReasonCode
   | "selected_beat_without_eligibility_authorization"
+  | "live_dramaturgy_mismatch"
   | "committed_authorized_beat";
 
 export type SelectedBeatOrchestrationResult = {
@@ -97,9 +113,19 @@ function unfinished(input: {
   });
 }
 
+function callerRequestedOffscreen(
+  input: SelectedBeatOrchestrationInput
+): boolean {
+  return (input as { mode?: unknown }).mode === "offscreen";
+}
+
 export async function orchestrateSelectedBeatReaction(
   input: SelectedBeatOrchestrationInput
 ): Promise<SelectedBeatOrchestrationResult> {
+  if (callerRequestedOffscreen(input)) {
+    throw new OffscreenReactionOrchestrationError();
+  }
+
   const snapshot = await input.store.load(input.scope);
   if (!snapshot) throw new Error("Narrator operator is not initialized");
 
@@ -107,7 +133,7 @@ export async function orchestrateSelectedBeatReaction(
     snapshot,
     verifiedGoldline: input.verifiedGoldline,
     nowMs: input.nowMs,
-    mode: input.mode,
+    mode: "interactive",
     registry: AUTHORED_BEATS,
     graph: AUTHORED_GRAPH,
   };
@@ -136,18 +162,39 @@ export async function orchestrateSelectedBeatReaction(
     });
   }
 
-  const committed = await commitAuthorizedBeat({
-    store: input.store,
-    scope: input.scope,
-    authorization,
-    eligibility,
-    nowIso: input.nowIso,
-  });
-  return Object.freeze({
-    committed: true,
-    reason: "committed_authorized_beat",
-    decision,
-    eligibilityOutcome: result.outcome,
-    snapshot: committed,
-  });
+  try {
+    const committed = await commitAuthorizedBeat({
+      store: input.store,
+      scope: input.scope,
+      authorization,
+      eligibility,
+      nowIso: input.nowIso,
+    });
+    return Object.freeze({
+      committed: true,
+      reason: "committed_authorized_beat",
+      decision,
+      eligibilityOutcome: result.outcome,
+      snapshot: committed,
+    });
+  } catch (error) {
+    if (!(error instanceof LiveDramaturgyMismatchError)) throw error;
+    const live = await input.store.load(input.scope);
+    if (!live) throw error;
+    const liveEligibility: EligibilityInput = {
+      snapshot: live,
+      verifiedGoldline: input.verifiedGoldline,
+      nowMs: input.nowMs,
+      mode: "interactive",
+      registry: AUTHORED_BEATS,
+      graph: AUTHORED_GRAPH,
+    };
+    const liveResult = evaluateProductionEligibility(liveEligibility);
+    return unfinished({
+      reason: "live_dramaturgy_mismatch",
+      decision: decideDramaturgy({ eligibility: liveResult }),
+      eligibility: liveResult,
+      snapshot: live,
+    });
+  }
 }

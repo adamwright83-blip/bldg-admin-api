@@ -499,7 +499,9 @@ describe("Narrator OS slice F — deterministic dramaturgy", () => {
       "utf8"
     );
     expect(ledgerSrc).toMatch(/evaluateProductionEligibility/);
-    expect(ledgerSrc).not.toMatch(/dramaturg/);
+    expect(ledgerSrc).toMatch(
+      /if \(liveInput\.mode === "interactive"\) \{\s*const liveDecision = decideDramaturgy\(\{ eligibility: result \}\);/
+    );
     const auth = issueEligibilityAuthorizations(result, input).find(
       item => item.beatId === "M04"
     )!;
@@ -828,19 +830,21 @@ describe("Narrator OS slice F — deterministic dramaturgy", () => {
         ([name, value]) =>
           typeof value === "function" && /dramaturg/i.test(name)
       );
-      expect(indexDramaturgyFns.map(([name]) => name)).toEqual([
+      expect(indexDramaturgyFns.map(([name]) => name).sort()).toEqual([
+        "LiveDramaturgyMismatchError",
         "decideDramaturgy",
       ]);
-      for (const [, value] of indexDramaturgyFns) {
-        const called = (
-          value as (input: {
-            eligibility: NarrativeEligibilityResult;
-            tieBreaks: readonly AuthoredDramaturgyTieBreak[];
-          }) => { outcome: string; selectedBeatId: string | null }
-        )({ eligibility, tieBreaks: [rule] });
-        expect(called.outcome).not.toBe("SELECT");
-        expect(called.selectedBeatId).not.toBe("M04");
-      }
+      const decide = indexDramaturgyFns.find(
+        ([name]) => name === "decideDramaturgy"
+      )?.[1];
+      const called = (
+        decide as (input: {
+          eligibility: NarrativeEligibilityResult;
+          tieBreaks: readonly AuthoredDramaturgyTieBreak[];
+        }) => { outcome: string; selectedBeatId: string | null }
+      )({ eligibility, tieBreaks: [rule] });
+      expect(called.outcome).not.toBe("SELECT");
+      expect(called.selectedBeatId).not.toBe("M04");
     } finally {
       vi.unstubAllEnvs();
     }
