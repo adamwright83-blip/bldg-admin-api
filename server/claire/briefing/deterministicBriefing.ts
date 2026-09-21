@@ -3,6 +3,7 @@ import { parseSpokenNumber } from "../../analytics/businessPeriods";
 import { isCombineRequest } from "../business/businessLanguage";
 import { dayMention, parseTiming, TIME_TOKEN } from "./briefingTiming";
 import type { BriefingClock, BriefingItem, BriefingTiming, ParsedBriefing } from "./briefingTypes";
+import { detectPrimaryDesignation } from "../workdayCommandLanguage";
 
 /**
  * Structural understanding of a briefing without a model: sentences (with
@@ -13,7 +14,7 @@ import type { BriefingClock, BriefingItem, BriefingTiming, ParsedBriefing } from
  */
 
 const ACTION_WORDS =
-  "pick ?up|pickup|pick|drop ?off|drop|deliver|delivery|drive|go|head|deposit|make|call|text|email|visit|stop by|swing by|grab|buy|get|bring|return|collect|run|meet|finish|print|prep|prepare|send|order|wash|fold|clean|check|take|load|unload|fix|book|pay|follow up|follow-up|remind|put|add|schedule|handle|ship|mail|post|install|set up|clear|restock|count|do|pitch|see|talk to|write|draft|update|file|process|sort|bag|tag|iron|press";
+  "pick ?up|pickup|pick|drop ?off|drop|deliver|delivery|drive|go|head|deposit|make|call|text|email|visit|stop by|swing by|grab|buy|get|bring|return|collect|run|meet|finish(?:ing)?|print(?:ing)?|prep|prepare|send(?:ing)?|order|wash|fold|clean|check|take|load|unload|fix|book|pay|follow up|follow-up|remind|put|add|schedule|handle|ship|mail|post|install|set up|clear|restock|count|do|pitch|see|talk to|write|draft|update|file|process|sort|bag|tag|iron|press";
 const ACTION = `(?:${ACTION_WORDS})`;
 
 const LEAD_IN = new RegExp(
@@ -362,7 +363,12 @@ export function parseBriefingDeterministically(utterance: string, clock: Briefin
             .replace(/\s+(?:for|on|by)$/i, "")
         )
       );
-      const actionable = completed || list || hasAction(bare) || /\b(?:need|have|got)\s+to\b/i.test(bare);
+      const actionable =
+        completed ||
+        list ||
+        hasAction(bare) ||
+        /\b(?:need|have|got)\s+to\b/i.test(bare) ||
+        detectPrimaryDesignation(bare);
       if (!title || !actionable) {
         if (bare.split(/\s+/).length >= 2) unparsed.push(bare);
         continue;

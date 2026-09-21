@@ -13,8 +13,8 @@ import { classifyDayDirectorKind, isHousekeepingUtterance, isTomorrowPrepUtteran
 const PRIMARY =
   /\b(?:(?:today|tomorrow|tonight|(?:this |next )?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))(?:'s|s)?\s+)?(?:priority|primary(?: mission)?|main (?:thing|focus|mission)|protected mission)\b|\bmake\s+.+\s+my mission\b|\bthat(?:'s| is) the main thing\b|\bmy mission(?: for| on)?\s+(?:today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
 
-const EXTERNAL =
-  /\b(?:i (?:told|promised|committed to)|send(?:ing)? (?:it|this|the ad) to)\s+([A-Z][a-zA-Z]+)/;
+const EXTERNAL_TOLD = /\bI (?:told|promised|committed to)\s+([A-Z][a-zA-Z]+)/;
+const EXTERNAL_SEND = /\bsend(?:ing)? (?:it|this|the ad) to\s+([A-Z][a-zA-Z]+)/;
 
 const RECURRENCE =
   /\b(?:every|each)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|\bweekly\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(?:weekly|recurring)\b|\bmake\s+.+\s+recurring\b/i;
@@ -32,8 +32,7 @@ export function detectPrimaryDesignation(text: string): boolean {
 }
 
 export function detectExternalPromisee(text: string): string | null {
-  const match = EXTERNAL.exec(text);
-  return match?.[1] ?? null;
+  return EXTERNAL_TOLD.exec(text)?.[1] ?? EXTERNAL_SEND.exec(text)?.[1] ?? null;
 }
 
 export function detectRecurrenceWeekday(text: string): string | null {
