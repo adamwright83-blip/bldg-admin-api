@@ -23,11 +23,6 @@ export const M03_RETRY_ARM_OUTCOME_IDS = [
   "no_show",
 ] as const;
 
-export const M03_ARM_OUTCOME_IDS = [
-  M03_SPOKEN_NO_OUTCOME_ID,
-  ...M03_RETRY_ARM_OUTCOME_IDS,
-] as const;
-
 export const M03_RETURN_OUTCOME_IDS = [
   "legitimate_second_site_visit",
   "timed_retry_after_silence",
@@ -135,20 +130,36 @@ export function hasTemporalSameTargetSequence(
 }
 
 /**
- * Targets that have a trusted no / eligible silence / authored no-show.
- * Derived readiness only. Spoken no remains terminal for RETURN until reopen.
+ * Targets that are legally M03-ARMED for a retry path.
+ *
+ * - silence_eligible_for_retry → ARMED
+ * - authored eligible no_show → ARMED
+ * - spoken_no alone → NOT ARMED (terminal; does not license retry)
+ * - spoken_no then a later trusted same-target contact_reopened_after_no → ARMED
+ *
+ * Chronology is receipt.occurredAtMs only. Array order, receiptId lexical
+ * order, free-form sourceReference, and caller ordering are not evidence.
+ * Derived readiness only — not a beat, not FIRED_AUTHORED_BEAT, not gold.
  */
 export function derivedM03ArmedTargetIds(
   receipts: readonly VerifiedGoldlineReceipt[],
   snapshot: NarratorSnapshot
 ): readonly string[] {
-  const arm = outcomeSet(M03_ARM_OUTCOME_IDS);
   const ids = new Set<string>();
+  const retryArm = outcomeSet(M03_RETRY_ARM_OUTCOME_IDS);
   for (const receipt of receipts) {
     if (!scopedReceipt(receipt, snapshot)) continue;
-    if (!arm.has(receipt.outcomeId)) continue;
+    if (!retryArm.has(receipt.outcomeId)) continue;
     const targetId = opaqueTargetId(receipt);
     if (targetId) ids.add(targetId);
+  }
+  for (const pair of temporalSameTargetPairs(
+    receipts,
+    snapshot,
+    [M03_SPOKEN_NO_OUTCOME_ID],
+    [M03_REOPEN_OUTCOME_ID]
+  )) {
+    ids.add(pair.targetId);
   }
   return [...ids].sort();
 }

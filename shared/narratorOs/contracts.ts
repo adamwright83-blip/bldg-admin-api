@@ -251,9 +251,17 @@ export const CLAIRE_DISCLOSURE_POLICY_IDS = [
   "CL-T2",
   "CL-T3",
   "CL-WARM-1",
+  "CL-PRIV-ADAPTED-FATHER-LAST-EXCHANGE",
+  "CL-PRIV-EX-LAST-EXCHANGE",
 ] as const;
 export type ClaireDisclosurePolicyId =
   (typeof CLAIRE_DISCLOSURE_POLICY_IDS)[number];
+
+/** Permanently private: no authored text exists. Not beats. */
+export const PERMANENTLY_PRIVATE_CLAIRE_DISCLOSURE_POLICY_IDS = [
+  "CL-PRIV-ADAPTED-FATHER-LAST-EXCHANGE",
+  "CL-PRIV-EX-LAST-EXCHANGE",
+] as const satisfies readonly ClaireDisclosurePolicyId[];
 
 export type ClaireDisclosurePolicy = {
   readonly id: ClaireDisclosurePolicyId;

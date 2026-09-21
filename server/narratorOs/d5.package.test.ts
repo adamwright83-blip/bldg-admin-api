@@ -4,8 +4,10 @@ import { describe, expect, it } from "vitest";
 import { AUTHORED_NARRATIVE_FACTS } from "./authoredNarrativeFacts";
 import {
   AUTHORED_BEAT_DEFAULTS,
+  PERMANENTLY_PRIVATE_CLAIRE_DISCLOSURE_POLICY_IDS,
   asNarrativeBeatId,
   type AuthoredBeat,
+  type ClaireDisclosurePolicy,
 } from "../../shared/narratorOs/contracts";
 import {
   evaluateEligibility,
@@ -34,9 +36,11 @@ import {
   originFalseWithoutChemistIsOpen,
 } from "./registry";
 import {
+  disclosurePolicyMayBecomeOrdinarilyEligible,
   getClaireDisclosurePolicy,
   listClaireDisclosurePolicies,
 } from "./disclosurePolicy";
+import { CLAIRE_LIVED_BIO_FACTS } from "./livedBio";
 import type { NarratorSnapshot } from "./store";
 import type { VerifiedGoldlineReceipt } from "./verifiedGoldlineReceipt";
 
@@ -150,16 +154,18 @@ describe("Narrator OS D.5 — canon package ingestion", () => {
     );
   });
 
-  it("3. trusted no/silence creates per-target M03 readiness without firing M03", async () => {
+  it("3. legal M03 ARMED is silence / authored no-show / spoken_no+later reopen, never spoken_no alone", async () => {
     const { store, snapshot } = await seeded();
     const noA = issueReceipt("spoken_no", { targetId: "target-a" });
     const silenceS = issueReceipt("silence_eligible_for_retry", {
       targetId: "target-s",
     });
-    expect(derivedM03ArmedTargetIds([noA], snapshot)).toEqual(["target-a"]);
+    const noShowN = issueReceipt("no_show", { targetId: "target-n" });
+    expect(derivedM03ArmedTargetIds([noA], snapshot)).toEqual([]);
     expect(derivedM03ArmedTargetIds([silenceS], snapshot)).toEqual([
       "target-s",
     ]);
+    expect(derivedM03ArmedTargetIds([noShowN], snapshot)).toEqual(["target-n"]);
     const result = evaluateEligibility(
       evalInput(snapshot, { verifiedGoldline: [noA] })
     );
@@ -501,6 +507,14 @@ describe("Narrator OS D.5 — canon package ingestion", () => {
     }
     expect(AUTHORED_BEATS.some(beat => beat.id === "CL-CORE")).toBe(false);
     expect(AUTHORED_BEATS.some(beat => beat.id === "CL-WARM-1")).toBe(false);
+    expect(
+      AUTHORED_BEATS.some(
+        beat => beat.id === "CL-PRIV-ADAPTED-FATHER-LAST-EXCHANGE"
+      )
+    ).toBe(false);
+    expect(
+      AUTHORED_BEATS.some(beat => beat.id === "CL-PRIV-EX-LAST-EXCHANGE")
+    ).toBe(false);
   });
 
   it("20. disclosure lookup has zero mutation", async () => {
@@ -510,7 +524,9 @@ describe("Narrator OS D.5 — canon package ingestion", () => {
     expect(policy.askOnly).toBe(true);
     expect(policy.fromStart).toBe(true);
     const listed = listClaireDisclosurePolicies();
-    expect(listed).toHaveLength(5);
+    expect(listed).toHaveLength(7);
+    expect(getClaireDisclosurePolicy("CL-PRIV-ADAPTED-FATHER-LAST-EXCHANGE"));
+    expect(getClaireDisclosurePolicy("CL-PRIV-EX-LAST-EXCHANGE"));
     expect(snapshot.ledger).toEqual(before.ledger);
     expect(snapshot.knowledge).toEqual(before.knowledge);
     expect(snapshot.narrativeState).toEqual(before.narrativeState);
@@ -627,7 +643,7 @@ describe("Narrator OS D.5 — M03 authority correction", () => {
         occurredAtMs: TUESDAY_MS,
       }),
     ];
-    expect(derivedM03ArmedTargetIds(receipts, snapshot)).toEqual(["target-a"]);
+    expect(derivedM03ArmedTargetIds(receipts, snapshot)).toEqual([]);
     expect(unconsumedM03FireTargetIds(receipts, snapshot)).toEqual([]);
     expect(
       evaluateEligibility(evalInput(snapshot, { verifiedGoldline: receipts }))
@@ -652,9 +668,16 @@ describe("Narrator OS D.5 — M03 authority correction", () => {
       receiptId: "receipt:return-a",
       occurredAtMs: WEDNESDAY_MS,
     });
+    expect(derivedM03ArmedTargetIds([spokenNo], snapshot)).toEqual([]);
+    expect(derivedM03ArmedTargetIds([spokenNo, reopen], snapshot)).toEqual([
+      "target-a",
+    ]);
     const eligibility = evalInput(snapshot, {
       verifiedGoldline: [ret, spokenNo, reopen],
     });
+    expect(derivedM03ArmedTargetIds([ret, spokenNo, reopen], snapshot)).toEqual(
+      ["target-a"]
+    );
     expect(evaluateEligibility(eligibility).eligibleBeatIds).toContain("M03");
     const auth = issueEligibilityAuthorizations(
       evaluateEligibility(eligibility),
@@ -687,6 +710,7 @@ describe("Narrator OS D.5 — M03 authority correction", () => {
         occurredAtMs: WEDNESDAY_MS,
       }),
     ];
+    expect(derivedM03ArmedTargetIds(reopenFirst, snapshot)).toEqual([]);
     expect(
       evaluateEligibility(
         evalInput(snapshot, { verifiedGoldline: reopenFirst })
@@ -707,6 +731,9 @@ describe("Narrator OS D.5 — M03 authority correction", () => {
         occurredAtMs: WEDNESDAY_MS,
       }),
     ];
+    expect(derivedM03ArmedTargetIds(returnThenReopenThenNo, snapshot)).toEqual(
+      []
+    );
     expect(
       evaluateEligibility(
         evalInput(snapshot, { verifiedGoldline: returnThenReopenThenNo })
@@ -939,6 +966,186 @@ describe("Narrator OS D.5 — package authority without Markdown runtime parse",
     expect(
       getBeat("K-COVE-ORIGIN").prerequisites.some(
         prereq => prereq.kind === "hard_beat" && prereq.beatId === BEAT_IDS.C08
+      )
+    ).toBe(false);
+  });
+});
+
+describe("Narrator OS D.5 — derivedM03ArmedTargetIds is legally armed", () => {
+  it("does not arm from array order, receiptId lexical order, or free-form sourceReference", async () => {
+    const { snapshot } = await seeded();
+    const spokenNoLaterTime = issueReceipt("spoken_no", {
+      targetId: "target-a",
+      receiptId: "a-lexical-first",
+      occurredAtMs: TUESDAY_MS,
+    });
+    const reopenEarlierTime = issueReceipt("contact_reopened_after_no", {
+      targetId: "target-a",
+      receiptId: "z-lexical-last",
+      occurredAtMs: MONDAY_MS,
+    });
+    const reversedCallerOrder = [spokenNoLaterTime, reopenEarlierTime];
+    expect(derivedM03ArmedTargetIds(reversedCallerOrder, snapshot)).toEqual([]);
+
+    const freeForm = issueVerifiedGoldlineReceiptForTests({
+      receiptId: "receipt:free-form-no",
+      tenantId: scope.tenantId,
+      operatorUserId: scope.operatorUserId,
+      outcomeId: "spoken_no",
+      evidenceClass: "operator_attested",
+      evidenceRef: {
+        sourceType: "field_visit",
+        sourceReference: "target-a spoke no then reopened",
+        classification: "operator_attested",
+      },
+      targetRef: { kind: "goldline_target", id: "target-a" },
+      occurredAtMs: MONDAY_MS,
+    });
+    expect(derivedM03ArmedTargetIds([freeForm], snapshot)).toEqual([]);
+  });
+
+  it("arms only when spoken_no is followed later by trusted same-target reopen", async () => {
+    const { snapshot } = await seeded();
+    const spokenNo = issueReceipt("spoken_no", {
+      targetId: "target-a",
+      receiptId: "z-no-later-lexical",
+      occurredAtMs: MONDAY_MS,
+    });
+    const reopen = issueReceipt("contact_reopened_after_no", {
+      targetId: "target-a",
+      receiptId: "a-reopen-earlier-lexical",
+      occurredAtMs: TUESDAY_MS,
+    });
+    expect(derivedM03ArmedTargetIds([reopen, spokenNo], snapshot)).toEqual([
+      "target-a",
+    ]);
+    expect(
+      derivedM03ArmedTargetIds(
+        [
+          issueReceipt("spoken_no", {
+            targetId: "target-a",
+            occurredAtMs: MONDAY_MS,
+          }),
+          issueReceipt("contact_reopened_after_no", {
+            targetId: "target-b",
+            occurredAtMs: TUESDAY_MS,
+          }),
+        ],
+        snapshot
+      )
+    ).toEqual([]);
+  });
+});
+
+describe("Narrator OS D.5 — permanently private Claire disclosures", () => {
+  const privateIds = [
+    "CL-PRIV-ADAPTED-FATHER-LAST-EXCHANGE",
+    "CL-PRIV-EX-LAST-EXCHANGE",
+  ] as const;
+
+  const maxProgress = {
+    asked: true,
+    fromStartSatisfied: true,
+    progressSatisfied: true,
+    highestTierReached: true,
+    rapportUnlocked: true,
+    verifiedBusinessProgress: true,
+  };
+
+  function assertNoInventedExchangeText(value: unknown): void {
+    const serialized = JSON.stringify(value);
+    expect(serialized).not.toMatch(/I (said|told|replied|whispered)/i);
+    expect(serialized).not.toMatch(/last words/i);
+    expect(serialized).not.toMatch(/goodbye,?\s*(dad|father|love)/i);
+    expect(Object.prototype.hasOwnProperty.call(value as object, "text")).toBe(
+      false
+    );
+    expect(
+      Object.prototype.hasOwnProperty.call(value as object, "content")
+    ).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(value as object, "body")).toBe(
+      false
+    );
+    expect(
+      Object.prototype.hasOwnProperty.call(value as object, "dialogue")
+    ).toBe(false);
+  }
+
+  it("catalogs both permanently-private last-exchange policies", () => {
+    expect([...PERMANENTLY_PRIVATE_CLAIRE_DISCLOSURE_POLICY_IDS]).toEqual([
+      ...privateIds,
+    ]);
+    const listed = listClaireDisclosurePolicies();
+    for (const id of privateIds) {
+      const policy = getClaireDisclosurePolicy(id);
+      expect(policy.permanentlyPrivate).toBe(true);
+      expect(policy.canonStatus).toBe("LOCKED");
+      expect(policy.fromStart).toBe(false);
+      expect(policy.progressGated).toBe(false);
+      expect(policy.askOnly).toBe(true);
+      expect(policy.authoredSourceRef).toBe("GOLDLINE_CANON.md§6 disclosure");
+      expect(listed.some(entry => entry.id === id)).toBe(true);
+      expect(isKnownBeatId(id)).toBe(false);
+      expect(AUTHORED_BEATS.some(beat => beat.id === id)).toBe(false);
+      expect(
+        AUTHORED_BEATS.some(beat =>
+          beat.knowledgeMutations.some(mutation =>
+            JSON.stringify(mutation).includes(id)
+          )
+        )
+      ).toBe(false);
+      assertNoInventedExchangeText(policy);
+    }
+    const father = getClaireDisclosurePolicy(
+      "CL-PRIV-ADAPTED-FATHER-LAST-EXCHANGE"
+    );
+    const ex = getClaireDisclosurePolicy("CL-PRIV-EX-LAST-EXCHANGE");
+    expect(father.governedScopeRef.toLowerCase()).toMatch(
+      /adapted father last exchange/
+    );
+    expect(ex.governedScopeRef.toLowerCase()).toMatch(/ex last exchange/);
+  });
+
+  it("cannot convert permanently-private policies into ordinary disclosure eligibility", () => {
+    for (const id of privateIds) {
+      const policy = getClaireDisclosurePolicy(id);
+      expect(disclosurePolicyMayBecomeOrdinarilyEligible(policy)).toBe(false);
+      expect(
+        disclosurePolicyMayBecomeOrdinarilyEligible(policy, maxProgress)
+      ).toBe(false);
+      const spoofed: ClaireDisclosurePolicy = {
+        ...policy,
+        fromStart: true,
+        progressGated: true,
+        askOnly: false,
+      };
+      expect(
+        disclosurePolicyMayBecomeOrdinarilyEligible(spoofed, maxProgress)
+      ).toBe(false);
+    }
+  });
+
+  it("lookup of permanently-private policies causes zero mutation", async () => {
+    const { snapshot } = await seeded();
+    const before = structuredClone(snapshot);
+    for (const id of privateIds) {
+      getClaireDisclosurePolicy(id);
+    }
+    listClaireDisclosurePolicies();
+    expect(snapshot.ledger).toEqual(before.ledger);
+    expect(snapshot.knowledge).toEqual(before.knowledge);
+    expect(snapshot.narrativeState).toEqual(before.narrativeState);
+    expect(snapshot.worldTruth).toEqual(before.worldTruth);
+  });
+
+  it("does not invent last-exchange text in lived biography", () => {
+    for (const fact of CLAIRE_LIVED_BIO_FACTS) {
+      expect(fact.value ?? "").not.toMatch(/last exchange/i);
+      assertNoInventedExchangeText(fact);
+    }
+    expect(
+      CLAIRE_LIVED_BIO_FACTS.some(fact =>
+        /father last exchange|ex last exchange/i.test(fact.factId)
       )
     ).toBe(false);
   });
