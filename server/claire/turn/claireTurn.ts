@@ -1083,14 +1083,14 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
   }
 
-  if (input.context && input.brief) {
+  if (input.context) {
     const generationStartedAt = Date.now();
     trace.latency.generationStartMs = generationStartedAt - trace.startedAtMs;
     trace.synthesisRequired = true;
     const reply = await deps.followUp({
       tenantId: input.tenantId,
       utterance,
-      brief: input.brief,
+      brief: input.brief ?? null,
       context: input.context,
       recentTurns: history().slice(0, -1),
       conversationId: input.conversationKey,
@@ -1244,20 +1244,21 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    * to Claire's own repaired conversational path — never a split or
    * truncated question, and never a deterministic renderer's partial
    * sentence standing in as the whole answer. Returns null (not a guess)
-   * when there is no drive context/brief to synthesize with, so the caller's
-   * existing safety net still applies.
+   * when there is no drive context to synthesize with, so the caller's
+   * existing safety net still applies. An inbound call may have context
+   * without an opening brief; that is still a synthesizable turn.
    */
   async function synthesizeWithEvidence(
     question: string,
     evidence: ClaireRouteEvidence[]
   ): Promise<string | null> {
-    if (!(input.context && input.brief)) return null;
+    if (!input.context) return null;
     trace.synthesisRequired = true;
     trace.evidenceSources = evidence.map(item => item.source);
     const reply = await deps.followUp({
       tenantId: input.tenantId,
       utterance: question,
-      brief: input.brief,
+      brief: input.brief ?? null,
       context: input.context,
       recentTurns: history().slice(0, -1),
       retrievedEvidence: evidence.length ? evidence : undefined,

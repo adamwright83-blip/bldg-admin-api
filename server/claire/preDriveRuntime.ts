@@ -12,7 +12,7 @@ import { detectWorkdaySession } from "../../shared/claireWorkday";
 import { getTodayFeaturedOperation } from "../strategy/todayFeaturedService";
 import { getLatestStrategySnapshot } from "../strategy/snapshotBuilder";
 
-export async function generateClairePreDriveOutput(
+export async function assembleClaireVoiceCallContext(
   input: {
     tenantId: string;
     actorId: string;
@@ -22,11 +22,9 @@ export async function generateClairePreDriveOutput(
   },
   dependencies: {
     assemble?: typeof assembleClaireDriveContext;
-    writeBrief?: typeof writeClairePreDriveBrief;
   } = {}
 ) {
   const assemble = dependencies.assemble ?? assembleClaireDriveContext;
-  const writeBrief = dependencies.writeBrief ?? writeClairePreDriveBrief;
   const context = await assemble({
     tenantId: input.tenantId,
     actorId: input.actorId,
@@ -61,6 +59,24 @@ export async function generateClairePreDriveOutput(
       hasConfirmedPlan: false,
     };
   }
+  return context;
+}
+
+export async function generateClairePreDriveOutput(
+  input: {
+    tenantId: string;
+    actorId: string;
+    timeZone?: string;
+    missionId?: number;
+    dayDirectorActorId?: string;
+  },
+  dependencies: {
+    assemble?: typeof assembleClaireDriveContext;
+    writeBrief?: typeof writeClairePreDriveBrief;
+  } = {}
+) {
+  const writeBrief = dependencies.writeBrief ?? writeClairePreDriveBrief;
+  const context = await assembleClaireVoiceCallContext(input, dependencies);
   let diagnostic: ClaireGenerationDiagnostic | undefined;
   const brief = await writeBrief({
     tenantId: input.tenantId,

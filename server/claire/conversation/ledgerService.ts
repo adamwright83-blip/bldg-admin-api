@@ -112,6 +112,17 @@ export async function attachCallSid(input: {
   return store.updateSession(session.id, { providerCallSid: input.callSid });
 }
 
+export async function attachConversationKind(input: {
+  claireConversationId: string;
+  conversationKind: string;
+}): Promise<ConversationSession | null> {
+  const store = productionConversationStore();
+  const session = await store.getSessionByClaireId(input.claireConversationId);
+  if (!session) return null;
+  if (session.conversationKind === input.conversationKind) return session;
+  return store.updateSession(session.id, { conversationKind: input.conversationKind });
+}
+
 export async function persistSpokenTurn(input: {
   claireConversationId?: string;
   callSid?: string;

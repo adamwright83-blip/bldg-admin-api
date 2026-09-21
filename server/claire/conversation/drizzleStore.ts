@@ -161,6 +161,7 @@ export function createDrizzleClaireConversationStore(): ClaireConversationStore 
       if (!db) return null;
       return failClosed(async () => {
         const values: Record<string, unknown> = {};
+        if (patch.conversationKind !== undefined) values.conversationKind = patch.conversationKind;
         if (patch.providerCallSid !== undefined) values.providerCallSid = patch.providerCallSid;
         if (patch.relatedActionIds !== undefined)
           values.relatedActionIdsJson = patch.relatedActionIds;

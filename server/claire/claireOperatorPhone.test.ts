@@ -15,7 +15,7 @@ vi.mock("twilio", async importOriginal => {
   return { ...actual, default: factory };
 });
 
-import { operatorPhoneFor, preDriveConversationTwiML } from "./claireTwilio";
+import { operatorPhoneFor, preDriveConversationTwiML, resolveClaireOperatorIdForPhone } from "./claireTwilio";
 
 afterEach(() => {
   delete process.env.CLAIRE_OPERATOR_PHONES;
@@ -41,6 +41,35 @@ describe("Claire dials the authenticated operator's own phone", () => {
   it("rejects a malformed map instead of guessing", () => {
     process.env.CLAIRE_OPERATOR_PHONES = "adam=3105550199";
     expect(() => operatorPhoneFor("adam-admin")).toThrow("CLAIRE_OPERATOR_PHONES must be a JSON object");
+  });
+});
+
+describe("inbound caller numbers resolve through the same operator phone binding", () => {
+  it("maps the owner's configured phone back to OWNER_OPEN_ID", () => {
+    expect(resolveClaireOperatorIdForPhone("+13105550001")).toBe("adam-admin");
+    expect(resolveClaireOperatorIdForPhone("(310) 555-0001")).toBe("adam-admin");
+  });
+
+  it("refuses an unknown caller instead of answering as the owner", () => {
+    expect(() => resolveClaireOperatorIdForPhone("+13105559999")).toThrow(/not a configured operator/);
+  });
+
+  it("with a per-operator map, resolves only the matching operator", () => {
+    process.env.CLAIRE_OPERATOR_PHONES = JSON.stringify({
+      "adam-admin": "(310) 555-0199",
+      "driver-2": "+13105550222",
+    });
+    expect(resolveClaireOperatorIdForPhone("+13105550199")).toBe("adam-admin");
+    expect(resolveClaireOperatorIdForPhone("3105550222")).toBe("driver-2");
+    expect(() => resolveClaireOperatorIdForPhone("+13105550001")).toThrow(/not a configured operator/);
+  });
+
+  it("refuses a number that maps to more than one operator", () => {
+    process.env.CLAIRE_OPERATOR_PHONES = JSON.stringify({
+      "adam-admin": "+13105550199",
+      "driver-2": "(310) 555-0199",
+    });
+    expect(() => resolveClaireOperatorIdForPhone("+13105550199")).toThrow(/more than one operator/);
   });
 });
 
