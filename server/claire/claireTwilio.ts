@@ -52,6 +52,9 @@ import {
 } from "./conversation/pipeline";
 import { isValidTwilioWebhook } from "./conversation/twilioSignature";
 import { runClaireTurn, type ClaireTurnState } from "./turn/claireTurn";
+import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
+import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
+import { getDashboardTimeZone } from "../dashboardZoned";
 import { claireConversationStateStore } from "./turn/conversationStateStore";
 import { getUserByOpenId } from "../db";
 import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
@@ -517,6 +520,43 @@ function startVoiceTurn(input: {
       );
       conversation.touchedAt = Date.now();
       await saveCall(conversationId, conversation);
+
+      /**
+       * Brain V2 shadow observation. V1's authoritative result already exists above;
+       * this is a ONE-WAY emission with no return path. It is fire-and-forget (never
+       * awaited), default-off behind CLAIRE_BRAIN_V2_SHADOW, cannot throw, and receives
+       * a frozen copy of state rather than the live conversation object. Nothing below
+       * reads its result: V1 remains the sole speech, mutation and call-control authority.
+       */
+      observeShadowTurnDetached({
+        rawText: input.utterance,
+        // A listen-only turn is V1 holding a fragment, not a complete thought. Telling V2
+        // otherwise would make the comparison lie about what it was asked to reason over.
+        completeness: result.listenOnly ? "incomplete" : "complete",
+        state: readOnlyWorkingMemorySource(conversation as unknown as Parameters<typeof readOnlyWorkingMemorySource>[0]),
+        tenantId: conversation.tenantId,
+        operatorUserId: conversation.actorId,
+        surface: "voice",
+        conversationKey: callStateKey(conversationId),
+        // Read-only readers, constructed only when the flag is ON.
+        live: {
+          tenantId: conversation.tenantId,
+          operatorUserId: conversation.actorId,
+          conversationId,
+          dayDirectorActorId: conversation.dayDirectorActorId,
+          timeZone: getDashboardTimeZone(),
+          businessDate: conversation.context.businessDate ?? new Date().toISOString().slice(0, 10),
+          surface: "voice",
+          priorClaimReceipts: conversation.claimReceipts ?? [],
+        },
+        v1: {
+          endedCall: Boolean(result.endCall),
+          // Voice records work either as a commitment turn or as linked action ids.
+          mutated: Boolean(result.commitmentTurn) || Boolean(result.actionIds?.length),
+          spokeSomething: Boolean(result.speak),
+        },
+      });
+
       if (result.listenOnly) {
         return preDriveConversationTwiML({ text: "", token, hints: conversation.hints, listenOnly: true });
       }

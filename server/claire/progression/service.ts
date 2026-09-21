@@ -207,18 +207,18 @@ export type PersonalProgressionContext = {
   conversationLedger: PersonalLedgerEntry[];
 };
 
-export async function loadPersonalProgressionContext(
-  store: ProgressionStore,
-  scope: OperatorScope,
-  conversationId: string,
-  now: () => Date = () => new Date()
-): Promise<PersonalProgressionContext> {
-  await releaseExpiredReservations(store, scope, now());
-  const [grant, entitlements, ledger] = await Promise.all([
-    store.getGrant(scope),
-    store.listEntitlements(scope),
-    store.listLedger(scope),
-  ]);
+/**
+ * Assemble the context from rows that have already been read. Pure: no store access,
+ * no expiry release, no writes of any kind.
+ */
+function assemblePersonalProgressionContext(input: {
+  scope: OperatorScope;
+  grant: Awaited<ReturnType<ProgressionStore["getGrant"]>>;
+  entitlements: Awaited<ReturnType<ProgressionStore["listEntitlements"]>>;
+  ledger: Awaited<ReturnType<ProgressionStore["listLedger"]>>;
+  conversationId: string;
+}): PersonalProgressionContext {
+  const { scope, grant, entitlements, ledger, conversationId } = input;
   const unused = entitlements.filter(row => row.status === "unused");
   return {
     scope,
@@ -231,6 +231,45 @@ export async function loadPersonalProgressionContext(
     topicHistory: deriveTopicHistory(ledger),
     conversationLedger: ledger.filter(row => row.conversationId === conversationId),
   };
+}
+
+export async function loadPersonalProgressionContext(
+  store: ProgressionStore,
+  scope: OperatorScope,
+  conversationId: string,
+  now: () => Date = () => new Date()
+): Promise<PersonalProgressionContext> {
+  await releaseExpiredReservations(store, scope, now());
+  const [grant, entitlements, ledger] = await Promise.all([
+    store.getGrant(scope),
+    store.listEntitlements(scope),
+    store.listLedger(scope),
+  ]);
+  return assemblePersonalProgressionContext({ scope, grant, entitlements, ledger, conversationId });
+}
+
+/**
+ * Strictly read-only progression context.
+ *
+ * Identical to `loadPersonalProgressionContext` except that it does NOT release expired
+ * reservations — it performs no write at all. An observer that must not consume or alter
+ * entitlement state uses this; the live personal path keeps using the loader above,
+ * because releasing expired reservations is part of doing the real work.
+ *
+ * A reservation that has expired may therefore still appear reserved here. That is the
+ * correct trade: a slightly stale read is harmless, a write from an observer is not.
+ */
+export async function readPersonalProgressionContext(
+  store: ProgressionStore,
+  scope: OperatorScope,
+  conversationId: string
+): Promise<PersonalProgressionContext> {
+  const [grant, entitlements, ledger] = await Promise.all([
+    store.getGrant(scope),
+    store.listEntitlements(scope),
+    store.listLedger(scope),
+  ]);
+  return assemblePersonalProgressionContext({ scope, grant, entitlements, ledger, conversationId });
 }
 
 /** Phase 1 of a reveal: reserve one entitlement, durably recording everything needed to commit it later from any process. */

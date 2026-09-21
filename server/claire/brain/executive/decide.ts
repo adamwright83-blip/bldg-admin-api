@@ -1,0 +1,344 @@
+/**
+ * The executive cycle. Exactly one ExecutiveDecision per completed turn.
+ *
+ *   Perception
+ *     → Working-Memory Gate        (what may be written / what may influence)
+ *     → Attention                  (lanes, compartments, what to resolve)
+ *     → Retrieval A                (cheap, unscoped)
+ *     → Scope Resolution           (who is this actually about?)
+ *     → Conflict + Epistemic       (do things line up? what do we know?)
+ *     → Control Allocation         (fast / deliberate / verify / clarify)
+ *         ├── enough  → Integration
+ *         └── more    → Retrieval B / Verify → re-monitor
+ *     → Integration → Inhibition → Judgment → Authority
+ *     → ExecutiveDecision → ResponsePlan / Action Gateway / Call Control
+ *     → Working-Memory Update
+ *
+ * COGNITION MAY LOOP, but always terminates: every exit records a StoppingReason, and
+ * the allocator refuses a round that would repeat a request or could not change the
+ * answer.
+ *
+ * Retrieval is INJECTED and defaults to retrieving nothing. Reading production data is
+ * an explicit act, so no code path reaches the database merely by calling the brain.
+ */
+
+import type { ExecutiveDecision, InhibitedCandidate } from "../contracts/executiveDecision";
+import type { EvidenceItem, PriorClaimRecheckResult } from "../contracts/evidence";
+import type { PerceivedTurn } from "../contracts/perceivedTurn";
+import type { ResponseSegment } from "../contracts/responsePlan";
+import type { RetrievalRequest } from "../contracts/retrieval";
+import type { WorkingMemorySnapshot } from "../contracts/workingMemory";
+import { initialControlState, type ExecutiveControlState } from "../contracts/control";
+import { planAttention } from "./attention";
+import { activeTaskSets, classifyChange, gateWorkingMemory, outputAllowed, suppressedSlots } from "./workingMemoryGate";
+import {
+  planRetrievalPassA,
+  planRetrievalPassB,
+  planVerification,
+  resolveScope,
+  type ResolvedScope,
+} from "./retrievalPlan";
+import { monitorConflicts } from "./conflictMonitor";
+import { assessEpistemicState } from "./epistemicState";
+import { allocateControl, anotherRoundIsWorthwhile, terminalReason } from "./controlAllocator";
+import { integrate, type IntegrationContext } from "./integrate";
+import { applyInhibition } from "./inhibition";
+import { mintActionGrant, mintCallControlGrant } from "./grants";
+import { proposalText, proposedWorkTitle } from "./proposal";
+import { assertGovernedDecision } from "./governor";
+import {
+  defaultBusinessMemoryDeps,
+  retrieveBusinessEvidence,
+  type BusinessMemoryContext,
+  type BusinessMemoryDeps,
+} from "../businessMemory/adapter";
+import {
+  defaultEpisodicMemoryDeps,
+  retrieveEpisodicEvidence,
+  type EpisodicMemoryContext,
+  type EpisodicMemoryDeps,
+} from "../episodicMemory/adapter";
+import { noSelfMemory, retrieveSelfEvidence, type SelfMemoryContext, type SelfMemoryDeps } from "../selfMemory/adapter";
+import { noGoals, retrieveGoalEvidence, type GoalsContext, type GoalsDeps } from "../goals/adapter";
+
+export type RetrievalRunner = (request: RetrievalRequest) => Promise<EvidenceItem[]>;
+
+export type ExecutiveDeps = {
+  retrieve: RetrievalRunner;
+  ctx: IntegrationContext;
+  nowMs?: () => number;
+};
+
+/** Retrieves nothing. Honest default: we have not looked, so we must not assert. */
+export const noRetrieval: RetrievalRunner = async () => [];
+
+export const defaultExecutiveDeps: ExecutiveDeps = {
+  retrieve: noRetrieval,
+  ctx: { timeZone: "America/Los_Angeles", today: new Date().toISOString().slice(0, 10), surface: "voice" },
+};
+
+export type LiveRetrievalContext = {
+  business: BusinessMemoryContext;
+  episodic?: EpisodicMemoryContext;
+  self?: SelfMemoryContext;
+  goals?: GoalsContext;
+};
+
+export type LiveRetrievalDeps = {
+  business?: BusinessMemoryDeps;
+  episodic?: EpisodicMemoryDeps;
+  self?: SelfMemoryDeps;
+  goals?: GoalsDeps;
+};
+
+/**
+ * Live, READ-ONLY retrieval against the existing authoritative readers.
+ * A compartment with no context supplied stays silent rather than reading more than
+ * the caller intended.
+ */
+export function liveReadOnlyRetrieval(
+  ctx: LiveRetrievalContext | BusinessMemoryContext,
+  deps: LiveRetrievalDeps | BusinessMemoryDeps = {}
+): RetrievalRunner {
+  const live: LiveRetrievalContext = "business" in ctx ? ctx : { business: ctx as BusinessMemoryContext };
+  const wired: LiveRetrievalDeps =
+    "runQuery" in deps ? { business: deps as BusinessMemoryDeps } : (deps as LiveRetrievalDeps);
+
+  return async request => {
+    switch (request.compartment) {
+      case "businessMemory":
+        return retrieveBusinessEvidence(request, live.business, wired.business ?? defaultBusinessMemoryDeps);
+      case "episodicMemory":
+        if (!live.episodic) return [];
+        return retrieveEpisodicEvidence(request, live.episodic, wired.episodic ?? defaultEpisodicMemoryDeps);
+      case "selfMemory":
+        if (!live.self) return [];
+        return retrieveSelfEvidence(request, live.self, wired.self ?? noSelfMemory);
+      case "goals":
+        if (!live.goals) return [];
+        return retrieveGoalEvidence(request, live.goals, wired.goals ?? noGoals);
+      default:
+        return [];
+    }
+  };
+}
+
+function conversational(text: string): ResponseSegment {
+  return { type: "ConversationalSegment", text };
+}
+
+function recheckFrom(evidence: readonly EvidenceItem[]): PriorClaimRecheckResult | null {
+  const item = evidence.find(candidate => candidate.type === "prior_claim_recheck");
+  if (!item) return null;
+  return (item.payload as { recheck?: PriorClaimRecheckResult }).recheck ?? null;
+}
+
+export async function decideTurn(
+  perceived: PerceivedTurn,
+  memory: WorkingMemorySnapshot,
+  deps: ExecutiveDeps = defaultExecutiveDeps
+): Promise<ExecutiveDecision> {
+  const nowMs = deps.nowMs?.() ?? Date.now();
+  const control: ExecutiveControlState = initialControlState();
+  const inhibited: InhibitedCandidate[] = [];
+
+  // ── Working-memory gating ─────────────────────────────────────────────────
+  const change = classifyChange(perceived, memory);
+  const taskSets = activeTaskSets(perceived, memory, nowMs);
+  const rulings = gateWorkingMemory({ perceived, memory, change, taskSets });
+  control.change = change;
+  control.activeTaskSets = taskSets;
+  control.workingMemoryGates = rulings;
+  control.suppressedContext = suppressedSlots(rulings);
+
+  // ── Attention ─────────────────────────────────────────────────────────────
+  const attention = planAttention({ perceived, memory, change, taskSets, rulings });
+
+  const segments: ResponseSegment[] = [];
+  const actionGrants: ExecutiveDecision["actionGrants"] = [];
+  let callControl: ExecutiveDecision["callControl"] = { endCall: false };
+  let retrievals: RetrievalRequest[] = [];
+  let evidence: EvidenceItem[] = [];
+  let conclusions: ExecutiveDecision["conclusions"] = [];
+  let workingMemoryUpdate: ExecutiveDecision["workingMemoryUpdate"];
+  let scope: ResolvedScope = { accountIds: [], terms: [], ambiguous: false };
+
+  if (perceived.completeness === "incomplete") {
+    // A half-turn never reaches retrieval. Perception holds; the executive stays silent.
+    inhibited.push({ kind: "half_turn", detail: "Perception has not released a complete thought" });
+    control.stoppingReason = "evidence_sufficient";
+    segments.push(conversational(""));
+  } else {
+    const run = async (requests: RetrievalRequest[]): Promise<void> => {
+      if (!requests.length) return;
+      retrievals = [...retrievals, ...requests];
+      control.retrievalRounds += 1;
+      for (const request of requests) {
+        evidence = [...evidence, ...(await deps.retrieve(request))];
+      }
+    };
+
+    // ── Pass A: cheap and unscoped ──────────────────────────────────────────
+    await run(planRetrievalPassA(perceived, memory, attention));
+
+    // ── Scope resolution ────────────────────────────────────────────────────
+    scope = resolveScope(evidence);
+    control.ambiguity = scope.ambiguous
+      ? "requires_clarification"
+      : attention.entitiesToResolve.length && !scope.accountIds.length
+        ? "resolvable"
+        : "none";
+
+    // ── Monitor, allocate, and loop only while it is worth it ───────────────
+    const monitor = (): void => {
+      control.conflicts = monitorConflicts({
+        perceived,
+        memory,
+        evidence,
+        taskSets,
+        recheck: recheckFrom(evidence),
+      });
+      control.epistemic = assessEpistemicState({
+        evidence,
+        unresolvedReferences: scope.ambiguous ? attention.entitiesToResolve : [],
+        priorClaimRechecked: recheckFrom(evidence)?.resolution === "fresh_query",
+        hasConflict: control.conflicts.some(
+          conflict => conflict.kind === "current_source_conflict" || conflict.kind === "prior_claim_conflict"
+        ),
+        retrievalAttempted: retrievals.length > 1,
+      });
+      control.mode = allocateControl({
+        perceived,
+        taskSets,
+        conflicts: control.conflicts,
+        epistemic: control.epistemic,
+      });
+      control.needsVerification = control.mode === "verify";
+    };
+
+    monitor();
+
+    // One bounded escalation: scoped reads, or a verification reread.
+    const proposed =
+      control.mode === "verify"
+        ? planVerification(memory, attention)
+        : planRetrievalPassB({ perceived, memory, attention, scope });
+
+    const verdict = anotherRoundIsWorthwhile({
+      mode: control.mode,
+      epistemic: control.epistemic,
+      conflicts: control.conflicts,
+      retrievalRounds: control.retrievalRounds,
+      issued: retrievals,
+      proposed,
+    });
+
+    if (verdict.worthwhile) {
+      control.deliberationDepth += 1;
+      await run(proposed);
+      scope = resolveScope(evidence);
+      // New evidence can change what we know and what conflicts; look again.
+      monitor();
+      control.stoppingReason = terminalReason({ mode: control.mode, epistemic: control.epistemic });
+    } else {
+      control.stoppingReason = verdict.reason ?? terminalReason({ mode: control.mode, epistemic: control.epistemic });
+    }
+
+    // ── Integration ─────────────────────────────────────────────────────────
+    if (attention.pendingDisposition === "reject") {
+      segments.push(conversational("Understood. I won't."));
+    }
+
+    const integration = integrate({ perceived, attention, evidence, memory, control, ctx: deps.ctx });
+    if (integration.extraEvidence.length) evidence = [...evidence, ...integration.extraEvidence];
+    conclusions = integration.conclusions;
+    inhibited.push(...integration.inhibited);
+    segments.push(...integration.segments);
+    if (integration.orderedQueryUpdate || integration.continuationPresented) {
+      workingMemoryUpdate = {
+        orderedQuery: integration.orderedQueryUpdate,
+        continuationPresented: integration.continuationPresented,
+      };
+    }
+
+    // ── Authority ───────────────────────────────────────────────────────────
+    const mayPropose =
+      (perceived.explicitActionRequest || perceived.operatorWorkCommitment) &&
+      !perceived.refusal &&
+      attention.pendingDisposition !== "reject";
+    if (mayPropose) {
+      control.actionRisk = "proposal_only";
+      const title = proposedWorkTitle(perceived);
+      const grant = mintActionGrant({
+        actionClass: "propose_day_line",
+        scope: title ? { titles: [title] } : {},
+        authorityBasis: perceived.explicitActionRequest
+          ? "current_turn_explicit_request"
+          : "current_turn_operator_commitment",
+        sourceTurnAssembledText: perceived.assembledText,
+        expiresAtMs: nowMs + 15 * 60_000,
+        constraints: { mutationAllowed: false, shadowOnly: true },
+      });
+      actionGrants.push(grant);
+      segments.push({ type: "ActionProposalSegment", text: proposalText(title), grant });
+    }
+
+    if (attention.pendingDisposition === "confirm") {
+      // Authority is inherited from the pending item's lifecycle, never manufactured
+      // from the word "yes" alone.
+      control.actionRisk = "proposal_only";
+      const grant = mintActionGrant({
+        actionClass: "commit_briefing",
+        scope: { identity: memory.pendingBriefing?.identity ?? memory.pendingProposal?.identity },
+        authorityBasis: "pending_lifecycle",
+        sourceTurnAssembledText: perceived.assembledText,
+        expiresAtMs: nowMs + 15 * 60_000,
+        constraints: { mutationAllowed: false, shadowOnly: true },
+      });
+      actionGrants.push(grant);
+    }
+
+    if (perceived.callControl === "end") {
+      const grant = mintCallControlGrant({
+        endCall: true,
+        basis: "operator_leave_taking",
+        sourceTurnAssembledText: perceived.assembledText,
+      });
+      callControl = { endCall: true, grant };
+      segments.push({ type: "CallControlSegment", text: "", endCall: true, grant });
+    }
+
+    if (segments.length === 0) segments.push(conversational(""));
+  }
+
+  // ── Inhibition ────────────────────────────────────────────────────────────
+  inhibited.push(
+    ...applyInhibition({
+      perceived,
+      memory,
+      attention,
+      control,
+      evidence,
+      orderedQueryAllowed: outputAllowed(rulings, "ordered_query"),
+    })
+  );
+
+  const responsePlan = { perceivedTurn: perceived, attention, segments };
+  const decision: ExecutiveDecision = {
+    perceivedTurn: perceived,
+    attention,
+    control,
+    retrievals,
+    evidence,
+    conclusions,
+    inhibitedCandidates: inhibited,
+    responsePlan,
+    responseSegments: segments,
+    actionGrants,
+    callControl,
+    productionAuthority: false,
+    workingMemoryUpdate,
+  };
+  assertGovernedDecision(decision);
+  return decision;
+}

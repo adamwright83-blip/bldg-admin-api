@@ -25,7 +25,14 @@ import { searchOperatorConversation, type RememberedTurn } from "./conversationM
  * call quote is only what Adam said.
  */
 
-export type AccountRef = { id: number; name: string; accountType: string };
+export type AccountRef = {
+  id: number;
+  name: string;
+  accountType: string;
+  identityKey?: string | null;
+  providerName?: string | null;
+  providerAccountId?: string | null;
+};
 
 export type AccountHistory = {
   account: AccountRef;
@@ -63,12 +70,73 @@ export async function listAccountRefs(tenantId: string): Promise<AccountRef[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const rows = await db
-    .select({ id: commercialAccounts.id, name: commercialAccounts.name, accountType: commercialAccounts.accountType })
+    .select({
+      id: commercialAccounts.id,
+      name: commercialAccounts.name,
+      accountType: commercialAccounts.accountType,
+      identityKey: commercialAccounts.identityKey,
+      providerName: commercialAccounts.providerName,
+      providerAccountId: commercialAccounts.providerAccountId,
+    })
     .from(commercialAccounts)
     .where(eq(commercialAccounts.tenantId, tenantId))
     .orderBy(asc(commercialAccounts.name))
     .limit(500);
   return rows.filter(row => !TEST_ACCOUNT.test(row.name));
+}
+
+export type AccountContactRef = {
+  accountId: number;
+  accountName: string;
+  accountType: string;
+  contactName: string;
+  title: string | null;
+  relationshipType: string;
+  identityKey?: string | null;
+  providerName?: string | null;
+  providerAccountId?: string | null;
+};
+
+/**
+ * Every named contact across the tenant's accounts, with the account they belong to.
+ *
+ * `loadAccountHistory` already reads contacts, but only for one account it was given.
+ * Resolving "Dana" to an account requires the reverse lookup, and it belongs here with
+ * the rest of the commercial-account reads rather than in a caller.
+ */
+export async function listAccountContacts(tenantId: string): Promise<AccountContactRef[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db
+    .select({
+      accountId: commercialAccounts.id,
+      accountName: commercialAccounts.name,
+      accountType: commercialAccounts.accountType,
+      identityKey: commercialAccounts.identityKey,
+      providerName: commercialAccounts.providerName,
+      providerAccountId: commercialAccounts.providerAccountId,
+      contactName: commercialAccountContacts.name,
+      title: commercialAccountContacts.title,
+      relationshipType: commercialAccountContacts.relationshipType,
+    })
+    .from(commercialAccountContacts)
+    .innerJoin(commercialAccounts, eq(commercialAccounts.id, commercialAccountContacts.accountId))
+    .where(eq(commercialAccountContacts.tenantId, tenantId))
+    .limit(1000);
+  return rows
+    .filter(row => row.contactName != null && row.contactName.trim().length > 0)
+    .filter(row => !TEST_ACCOUNT.test(row.accountName))
+    .map(row => ({
+      accountId: row.accountId,
+      accountName: row.accountName,
+      accountType: row.accountType,
+      identityKey: row.identityKey,
+      providerName: row.providerName,
+      providerAccountId: row.providerAccountId,
+      contactName: row.contactName as string,
+      title: row.title ?? null,
+      relationshipType: row.relationshipType,
+    }));
 }
 
 /** Accounts whose distinctive name words appear in what Adam said. */

@@ -92,7 +92,13 @@ export async function saveDoctrine(tenantId: string, operatorUserId: string, rul
     .onDuplicateKeyUpdate({ set: { rulesJson: rules } });
 }
 
-async function loadObligations(tenantId: string, operatorUserId: string): Promise<ProactiveObligation[]> {
+/**
+ * Read the operator's existing proactive obligations. Pure read — it creates nothing.
+ *
+ * `ensureAdamBoard` is the sweep that WRITES obligations; an observer must never call
+ * it. This is the read-only view of what the board already holds.
+ */
+export async function loadObligations(tenantId: string, operatorUserId: string): Promise<ProactiveObligation[]> {
   const db = await getDb();
   if (!db) return [];
   try {
