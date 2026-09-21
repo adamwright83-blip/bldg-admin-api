@@ -51,7 +51,7 @@ export function planAttention(input: {
   let pendingDisposition: AttentionPlan["pendingDisposition"] = "none";
   const pendingBind = holdingPending ? pendingReply(perceived.assembledText) : null;
   if (holdingPending) {
-    if (change === "task_switch" || change === "set_shift") {
+    if (change === "task_switch" || change === "set_shift" || change === "query_requery") {
       pendingDisposition = "supersede";
       rationale.push("the operator moved to a different task; pending is set aside, not applied");
     } else if (pendingBind === "no" || (perceived.refusal && !perceived.correction && pendingBind !== "revise")) {
@@ -112,9 +112,14 @@ export function planAttention(input: {
   else doNotRetrieve.push("episodicMemory");
 
   /**
-   * The global board is for an unscoped briefing only. A question that names anything
-   * is scoped, and a scoped question must not be answered with the board — this is the
-   * structural form of the Dana guarantee.
+   * The global board is for an unscoped briefing only. A question that names a person
+   * or account is scoped, and a scoped question must not be answered with the board —
+   * this is the structural form of the Dana guarantee.
+   *
+   * "Today" / "tonight" is the board's native window, not a named subject. A future
+   * weekday ("about Tuesday") is scoped by SCOPED_OBJECT upstream and never reaches
+   * here as a briefing. Recency of a prior future intention is a Working-Memory
+   * output-gate problem, not a reason to hide today's board.
    */
   const boardEligible =
     perceived.broadBriefingRequest &&

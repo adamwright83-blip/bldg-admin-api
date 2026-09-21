@@ -261,7 +261,9 @@ describe("Brain V2 regression corpus", () => {
   });
   it("Good morning, what should I know today?", async () => {
     const result = await brain("Good morning, what should I know today?");
+    expect(result.decision.perceivedTurn.broadBriefingRequest).toBe(true);
     expect(result.decision.attention.boardEligible).toBe(true);
+    expect(result.decision.control.activeTaskSets.some(task => task.kind === "account_judgment")).toBe(false);
   });
   it("Good morning, I need to call Dana.", async () => {
     const result = await brain("Good morning, I need to call Dana.");

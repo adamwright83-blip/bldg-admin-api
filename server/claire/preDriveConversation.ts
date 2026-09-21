@@ -391,9 +391,12 @@ export async function answerClairePreDriveFollowUp(
       },
       {
         label: "grounded_prior_claims",
-        text: input.priorClaimNotes?.length
-          ? `Grounded claims you already made this call, each backed by a server-held receipt: ${input.priorClaimNotes.join(" | ")}. Never describe these as guesses, made up, invented or wrong, and never retract them. If the operator doubts one, do not adjudicate it yourself; the server re-verifies it.`
-          : null,
+        text:
+          conversationalMode === "personal"
+            ? null
+            : input.priorClaimNotes?.length
+              ? `Grounded claims you already made this call, each backed by a server-held receipt: ${input.priorClaimNotes.join(" | ")}. Never describe these as guesses, made up, invented or wrong, and never retract them. If the operator doubts one, do not adjudicate it yourself; the server re-verifies it.`
+              : null,
       },
       {
         label: "retrieved_evidence_rule",
@@ -414,19 +417,22 @@ export async function answerClairePreDriveFollowUp(
       .join(" ");
   }
 
+  const personalOnlyTurn = conversationalMode === "personal";
   const conversationMessages = [
-    ...(input.recentTurns ?? []).slice(-8).map(turn => ({
+    ...(personalOnlyTurn ? [] : input.recentTurns ?? []).slice(-8).map(turn => ({
       role: (turn.speaker === "claire" ? "assistant" : "user") as "assistant" | "user",
       content: turn.text,
     })),
     {
       role: "user" as const,
       content: JSON.stringify({
-        openingBrief: input.brief,
-        currentContext: {
-          ...JSON.parse(compactConversationContext(input.context)),
-          retrievedEvidence: input.retrievedEvidence ?? [],
-        },
+        openingBrief: personalOnlyTurn ? null : input.brief,
+        currentContext: personalOnlyTurn
+          ? { businessDate: input.context.businessDate }
+          : {
+              ...JSON.parse(compactConversationContext(input.context)),
+              retrievedEvidence: input.retrievedEvidence ?? [],
+            },
         operatorUtterance: input.utterance.slice(0, 1_000),
       }),
     },

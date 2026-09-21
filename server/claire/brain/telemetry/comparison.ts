@@ -19,6 +19,12 @@ export type ShadowComparisonRecord = {
     refusal: boolean;
     explicitActionRequest: boolean;
     operatorWorkCommitment: boolean;
+    personalProbe: boolean;
+    narrativeProbe: boolean;
+    hasBusinessQuestion: boolean;
+    priorQueryReference: boolean;
+    listRequest: boolean;
+    broadBriefingRequest: boolean;
   };
   control: {
     mode: ExecutiveDecision["control"]["mode"];
@@ -74,6 +80,12 @@ export function comparisonRecordFromDecision(
       refusal: decision.perceivedTurn.refusal,
       explicitActionRequest: decision.perceivedTurn.explicitActionRequest,
       operatorWorkCommitment: decision.perceivedTurn.operatorWorkCommitment,
+      personalProbe: decision.perceivedTurn.personalProbe,
+      narrativeProbe: decision.perceivedTurn.narrativeProbe,
+      hasBusinessQuestion: decision.perceivedTurn.hasBusinessQuestion,
+      priorQueryReference: decision.perceivedTurn.priorQueryReference,
+      listRequest: decision.perceivedTurn.listRequest,
+      broadBriefingRequest: decision.perceivedTurn.broadBriefingRequest,
     },
     control: {
       mode: decision.control.mode,

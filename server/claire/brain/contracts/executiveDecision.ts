@@ -68,7 +68,8 @@ export type ExecutiveDecision = {
    * continuation. Cognitive bookkeeping only — it grants nothing and mutates nothing.
    */
   workingMemoryUpdate?: {
-    orderedQuery?: OrderedQueryUpdate;
+    /** Null means the previous ordered-query thread was invalidated and not replaced. */
+    orderedQuery?: OrderedQueryUpdate | null;
     continuationPresented?: OrderedQueryMember[];
   };
 };

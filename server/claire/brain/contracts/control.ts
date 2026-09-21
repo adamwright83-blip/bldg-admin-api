@@ -48,6 +48,12 @@ export type ChangeClass =
   | "belief_revision"
   /** Same proposition, evidence must be reconsidered. "Are you sure?" */
   | "prior_claim_challenge"
+  /**
+   * Same business-query task, but cardinality / order / named scope changed.
+   * Fresh retrieval; do not walk the previous resolved set.
+   * "Just show my most recent order, not the five."
+   */
+  | "query_requery"
   /** Nothing structural changed. */
   | "continuation";
 

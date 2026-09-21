@@ -6,6 +6,7 @@ import type { ExecutiveDecision } from "../contracts/executiveDecision";
 import type { ShadowComparisonRecord } from "../telemetry/comparison";
 import { decideTurn, type ExecutiveDeps } from "../executive/decide";
 import { perceiveTurn } from "../perception/perceive";
+import { looksUnfinished } from "../../turn/claireTurn";
 import { assertRenderedFromPlan, renderWithCharacter } from "../response/characterRenderer";
 import { comparisonRecordFromDecision } from "../telemetry/comparison";
 import { snapshotWorkingMemory, type WorkingMemorySource } from "../workingMemory/snapshot";
@@ -34,10 +35,25 @@ export type ClaireBrainTurnResult = {
 };
 
 export async function runClaireBrainTurn(input: ClaireBrainTurnInput): Promise<ClaireBrainTurnResult> {
+  const assembled = (input.assembledText ?? input.rawText).trim();
+  let completeness = input.completeness ?? "complete";
+  // Voice owns complete-thought assembly: V1's listenOnly label informs, but an
+  // unfinished spoken form is never reasoned over just because transport flushed it.
+  // A forced flush is the exception — V1 already released that exact text, so V2
+  // must reason over the same assembled utterance rather than re-holding it.
+  // Desk text has no fragment assembler yet, so punctuationless typed questions
+  // ("Tell me where my order is") must not inherit the voice-ending heuristic.
+  if (
+    input.surface === "voice" &&
+    completeness === "complete" &&
+    looksUnfinished(assembled)
+  ) {
+    completeness = "incomplete";
+  }
   const perceived = perceiveTurn({
     rawText: input.rawText,
     assembledText: input.assembledText,
-    completeness: input.completeness ?? "complete",
+    completeness,
   });
   const memory = snapshotWorkingMemory(input.state ?? {}, {
     conversationKey: input.conversationKey,

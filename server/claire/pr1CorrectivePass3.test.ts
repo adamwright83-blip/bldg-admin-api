@@ -10,7 +10,6 @@ import {
   recoverPersonalAnswer,
   renderCanonScopedPersonalAnswer,
   renderCanonFactFirstPerson,
-  CANON_SCOPED_PERSONAL_DEFLECTION,
 } from "./character/personalAnswerRecovery";
 import { VOICE_NATIVE_ANSWER_GUIDANCE, CLAIRE_TEMPORAL_AUTHORITY_INSTRUCTION } from "./conversationVoiceGuidance";
 
@@ -103,11 +102,9 @@ describe("Corrective pass 3 -- item 1: personal-answer recovery", () => {
       eligibleCanonFacts: CANON_AT_TIER_0,
       requestedTopic: "father",
     });
-    expect(recovery).toEqual({
-      text: CANON_SCOPED_PERSONAL_DEFLECTION,
-      via: "canon_scoped_deflection",
-    });
+    expect(recovery.via).toBe("canon_scoped_deflection");
     expect(recovery.text).not.toContain("disappeared");
+    expect(recovery.text).not.toMatch(/specifics I can't stand behind/i);
   });
 
   it("with no eligible canon at all, returns the canon-scoped deflection", () => {
@@ -115,11 +112,14 @@ describe("Corrective pass 3 -- item 1: personal-answer recovery", () => {
       recoverPersonalAnswer({
         eligibleCanonFacts: [],
         requestedTopic: "childhood",
-      })
-    ).toEqual({
-      text: CANON_SCOPED_PERSONAL_DEFLECTION,
-      via: "canon_scoped_deflection",
-    });
+      }).via
+    ).toBe("canon_scoped_deflection");
+    expect(
+      recoverPersonalAnswer({
+        eligibleCanonFacts: [],
+        requestedTopic: "childhood",
+      }).text
+    ).not.toMatch(/specifics I can't stand behind/i);
   });
 
   it("the deterministic renderer converts stored third-person canon without adding facts", () => {

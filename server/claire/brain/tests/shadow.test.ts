@@ -14,7 +14,7 @@ import {
   observeShadowTurnDetached,
   recordedObservations,
 } from "../shadow/observeShadowTurn";
-import { createInMemoryShadowMemoryStore } from "../shadow/shadowMemory";
+import { createInMemoryShadowMemoryStore, shadowMemoryKey } from "../shadow/shadowMemory";
 
 const CTX = {
   tenantId: "default",
@@ -104,6 +104,21 @@ describe("shadow observation cannot affect production", () => {
         { env: ON, memory: createInMemoryShadowMemoryStore() }
       )
     ).toBeUndefined();
+  });
+
+  it("an empty utterance is not a semantic turn and does not advance shadow WM", async () => {
+    const memory = createInMemoryShadowMemoryStore();
+    const key = shadowMemoryKey(CTX);
+    await memory.save(key, {
+      focusEntities: [],
+      orderedQuery: null,
+      unresolvedReferences: [],
+      priorDecisionRefs: ["BusinessFactSegment"],
+      updatedAtMs: 1,
+    });
+    const result = await observe({ rawText: "   ", ...CTX }, { env: ON, memory });
+    expect(result).toEqual({ observed: false, reason: "empty_utterance" });
+    expect((await memory.load(key))?.priorDecisionRefs).toEqual(["BusinessFactSegment"]);
   });
 });
 

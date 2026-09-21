@@ -22,6 +22,7 @@ export type BusinessIntentKind =
   | "judgment_question"
   | "list_query"
   | "query_refinement"
+  | "query_requery"
   | "correctness_challenge"
   | "provenance_question"
   | "broad_briefing"

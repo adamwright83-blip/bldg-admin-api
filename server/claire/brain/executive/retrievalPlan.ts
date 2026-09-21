@@ -61,9 +61,52 @@ export function buildBusinessQuery(perceived: PerceivedTurn): BusinessQuery | nu
   return query;
 }
 
+/**
+ * A parameter-changing re-query often omits the noun ("only the latest one").
+ * That is still a NEW retrieval: borrow the prior metric as a cue, never the
+ * prior resolved members.
+ */
+function requeryUsingPriorParameters(
+  perceived: PerceivedTurn,
+  memory: WorkingMemorySnapshot
+): BusinessQuery | null {
+  if (perceived.businessIntent !== "query_requery") return null;
+  const params = memory.orderedQuery?.parameters;
+  if (!params || typeof params !== "object") return null;
+  const metric = (params as { metric?: unknown }).metric;
+  if (typeof metric !== "string" || !METRIC_PATTERNS.some(entry => entry.metric === metric)) return null;
+  const query = defaultBusinessQuery(metric as BusinessMetric);
+  if (perceived.cardinality && perceived.cardinality > 0) query.limit = perceived.cardinality;
+  if (perceived.ordering === "first") query.rank = "earliest";
+  const mentions = perceived.entities.filter(entity => entity.kind === "entity_mention");
+  if (mentions.length === 1) query.customerName = mentions[0].raw;
+  if (perceived.listRequest) query.listMembers = true;
+  return query;
+}
+
+/** Imperative halt: "Stop." / "Hey, stop." is discourse, not a route object. */
+function isDiscourseStop(text: string): boolean {
+  return /^(?:(?:hey|ok|okay|wait)[,.]?\s+)?(?:please\s+)?stop(?:\s+please)?[.!?]*$/i.test(text.trim());
+}
+
+/**
+ * Singular "stop" as a route noun: a determiner/adjective, or a question word
+ * that later takes "stop" as its object. This is not the bare command Stop.
+ */
+const SINGULAR_STOP_NOUN =
+  /\b(?:next|first|last|current|upcoming|my|the|a|our)\s+stop\b/i;
+const STOP_AS_QUESTION_OBJECT = /\b(?:what|which|where|when)(?:'s|\s+is|\s+are)?\b[\s\S]{0,40}\bstop\b/i;
+
 /** Is this operations/day-line shaped rather than analytics shaped? */
 function wantsOperations(text: string): boolean {
-  return /\b(?:today|tomorrow|day\s+line|schedule|route|stops?|what'?s\s+on)\b/i.test(text);
+  if (isDiscourseStop(text)) return false;
+  return (
+    /\b(?:today|tomorrow|day\s+line|schedule|route|what'?s\s+on)\b/i.test(text) ||
+    /\b(?:stop\s+by|on\s+(?:my\s+|the\s+)?stops)\b/i.test(text) ||
+    /\bstops\b/i.test(text) ||
+    SINGULAR_STOP_NOUN.test(text) ||
+    STOP_AS_QUESTION_OBJECT.test(text)
+  );
 }
 
 /**
@@ -107,7 +150,7 @@ export function planRetrievalPassA(
       if (wantsOperations(perceived.assembledText)) {
         requests.push({ compartment: "businessMemory", kind: "operations" });
       }
-      const query = buildBusinessQuery(perceived);
+      const query = buildBusinessQuery(perceived) ?? requeryUsingPriorParameters(perceived, memory);
       if (query) requests.push({ compartment: "businessMemory", kind: "business_query", query });
     }
   }
