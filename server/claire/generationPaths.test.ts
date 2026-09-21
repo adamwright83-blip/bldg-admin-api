@@ -173,6 +173,39 @@ describe("Claire natural-language generation", () => {
     );
   });
 
+  it("inbound follow-up sends openingBrief null and never falls back into a fake briefing", async () => {
+    const invokeText = vi.fn().mockResolvedValue("What's going on?");
+    const recordGeneration = vi.fn().mockResolvedValue(undefined);
+    await answerClairePreDriveFollowUp(
+      {
+        tenantId: "tenant-1",
+        utterance: "What should I do today?",
+        brief: null,
+        context,
+      },
+      { invokeText, biographyVerifier: async () => true, recordGeneration }
+    );
+    expect(JSON.parse(invokeText.mock.calls[0][0].messages[1].content).openingBrief).toBeNull();
+
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const fallback = await answerClairePreDriveFollowUp(
+      {
+        tenantId: "tenant-1",
+        utterance: "hello",
+        brief: null,
+        context,
+      },
+      {
+        invokeText: vi.fn().mockRejectedValue(new Error("provider down")),
+        recordGeneration,
+      }
+    );
+    expect(fallback).toBe("I'm here.");
+    expect(fallback).not.toContain("No opening briefing was spoken");
+    expect(fallback).not.toMatch(/the brief is:/i);
+    log.mockRestore();
+  });
+
   it("E — post-stop opening falls back to the exact original static line on failure", async () => {
     const result = await writeClairePostStopOpening(
       { tenantId: "tenant-1", operatorUserId: null, accountName: "The Wilshire" },

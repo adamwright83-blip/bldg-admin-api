@@ -5,6 +5,7 @@ import {
   setClaireConversationStateStoreForTests,
 } from "./turn/conversationStateStore";
 import { verifyClaireToken } from "./claireToken";
+import { conservativeClaireFollowUp } from "./preDriveConversation";
 
 const AUTH_TOKEN = "auth_test";
 const INBOUND_URL = "https://api.example.test/api/claire/twilio/inbound";
@@ -162,10 +163,24 @@ function tokenFromTwiml(xml: string): string {
   return decodeURIComponent(match![1]!.replace(/&amp;/g, "&"));
 }
 
+let settleHungAssembly: ((value: unknown) => void) | undefined;
+
 beforeEach(() => {
   setClaireConversationStateStoreForTests(createMemoryConversationStateStore());
   hoisted.generateBrief.mockClear();
-  hoisted.assembleContext.mockClear();
+  hoisted.assembleContext.mockReset();
+  hoisted.assembleContext.mockImplementation(async (input: { actorId: string }) => ({
+    phase: "pre_drive",
+    generatedAt: "2026-09-21T16:00:00.000Z",
+    businessDate: "2026-09-21",
+    actorId: input.actorId,
+    truthLaw: "game_projection_never_creates_business_truth",
+    nextFixedCommitment: null,
+    blockers: [],
+    relevantTimeline: [],
+    mission: null,
+    workday: { session: "pre_drive" },
+  }));
   hoisted.createSession.mockClear();
   hoisted.attachCallSid.mockClear();
   hoisted.persistSpokenTurn.mockClear();
@@ -176,6 +191,19 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  settleHungAssembly?.({
+    phase: "pre_drive",
+    generatedAt: "2026-09-21T16:00:00.000Z",
+    businessDate: "2026-09-21",
+    actorId: OWNER_OPEN_ID,
+    truthLaw: "game_projection_never_creates_business_truth",
+    nextFixedCommitment: null,
+    blockers: [],
+    relevantTimeline: [],
+    mission: null,
+    workday: { session: "pre_drive" },
+  });
+  settleHungAssembly = undefined;
   setClaireConversationStateStoreForTests(null);
   delete process.env.CLAIRE_OPERATOR_PHONES;
 });
@@ -189,8 +217,10 @@ describe("inbound Claire voice uses the existing conversation stack", () => {
 
     expect(res.statusCode).toBe(200);
     expect(hoisted.generateBrief).not.toHaveBeenCalled();
-    expect(hoisted.assembleContext).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: "tenant-1", actorId: OWNER_OPEN_ID })
+    await vi.waitFor(() =>
+      expect(hoisted.assembleContext).toHaveBeenCalledWith(
+        expect.objectContaining({ tenantId: "tenant-1", actorId: OWNER_OPEN_ID })
+      )
     );
     expect(hoisted.createSession).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -231,14 +261,16 @@ describe("inbound Claire voice uses the existing conversation stack", () => {
     const stored = await claireConversationStateStore().load<{
       tenantId: string;
       actorId: string;
-      brief: string;
+      brief: string | null;
       history: Array<{ speaker: string; text: string }>;
     }>(`claire-call:${claims.conversationId}`);
     expect(stored?.state).toMatchObject({
       tenantId: "tenant-1",
       actorId: OWNER_OPEN_ID,
-      brief: "No opening briefing was spoken.",
+      brief: null,
     });
+    expect(stored?.state.brief).toBeNull();
+    expect(JSON.stringify(stored?.state)).not.toContain("No opening briefing was spoken");
     expect(stored?.state.history[0]).toMatchObject({
       speaker: "claire",
       text: CLAIRE_INBOUND_GREETING,
@@ -260,6 +292,59 @@ describe("inbound Claire voice uses the existing conversation stack", () => {
     expect(follow.body).toContain("<Gather");
     expect(follow.body).toContain("/api/claire/twilio/pre-drive?token=");
     expect(follow.body).toContain("Go ahead, I'm listening.");
+  });
+
+  it("returns pickup TwiML without waiting for slow context assembly", async () => {
+    hoisted.assembleContext.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          settleHungAssembly = resolve;
+        })
+    );
+    const handlers = routes();
+    const startedAt = Date.now();
+    const res = await post(handlers, CLAIRE_INBOUND_VOICE_PATH, {
+      body: { CallSid: "CA_slow", From: OWNER_PHONE, To: "+13105550000" },
+    });
+    expect(Date.now() - startedAt).toBeLessThan(1_500);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain(CLAIRE_INBOUND_GREETING);
+    expect(res.body).toContain("<Gather");
+    const token = tokenFromTwiml(res.body);
+    const claims = verifyClaireToken(token);
+    if (claims.kind !== "pre_drive_conversation") throw new Error("expected conversation token");
+    const stored = await claireConversationStateStore().load<{ brief: string | null }>(
+      `claire-call:${claims.conversationId}`
+    );
+    expect(stored?.state.brief).toBeNull();
+  });
+
+  it("follow-up generation and conservative fallback see no opening brief", async () => {
+    const handlers = routes();
+    const started = await post(handlers, CLAIRE_INBOUND_VOICE_PATH, {
+      body: { CallSid: "CA_inbound", From: OWNER_PHONE, To: "+13105550000" },
+    });
+    const claims = verifyClaireToken(tokenFromTwiml(started.body));
+    if (claims.kind !== "pre_drive_conversation") throw new Error("expected conversation token");
+    const stored = await claireConversationStateStore().load<{
+      brief: string | null;
+      context: Parameters<typeof conservativeClaireFollowUp>[0]["context"];
+    }>(`claire-call:${claims.conversationId}`);
+    expect(stored?.state.brief).toBeNull();
+
+    const fallbacks = ["hello", "What did you say?", "asdfghjkl"].map(utterance =>
+      conservativeClaireFollowUp({
+        utterance,
+        brief: stored!.state.brief,
+        context: stored!.state.context,
+      })
+    );
+    for (const spoken of fallbacks) {
+      expect(spoken).not.toContain("No opening briefing was spoken");
+      expect(spoken).not.toMatch(/the brief is:/i);
+      expect(spoken).not.toMatch(/^I mean this:/);
+      expect(spoken).not.toMatch(/^I'm here\. No opening/);
+    }
   });
 
   it("fails closed for an unknown caller", async () => {

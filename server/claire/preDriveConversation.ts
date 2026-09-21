@@ -123,9 +123,14 @@ function currentStop(context: ClaireDriveContext) {
   return item ? { title: item.title, destination: item.destination } : null;
 }
 
+function openingBriefText(brief: string | null | undefined): string | null {
+  const text = brief?.trim() ?? "";
+  return text ? text : null;
+}
+
 export function conservativeClaireFollowUp(input: {
   utterance: string;
-  brief: string;
+  brief: string | null;
   context: ClaireDriveContext;
 }): string {
   const question = input.utterance.toLowerCase();
@@ -170,20 +175,26 @@ export function conservativeClaireFollowUp(input: {
   if (/already (?:have|has)|existing laundry|current laundry/.test(question)) {
     return "The current context doesn't confirm their laundry setup. Don't assume. Ask how laundry works today and what, if anything, management has to coordinate.";
   }
+  const openingBrief = openingBriefText(input.brief);
   if (
     /\b(what do you mean|what are you talking about|what did you say|what was that|say that again|repeat|can't hear|cannot hear|tell me (?:the )?brief|give (?:me|it)|why|explain|clarify)\b/.test(
       question
     )
   ) {
-    return `I mean this: ${input.brief}`.slice(0, MAX_SPOKEN_ANSWER_CHARS);
+    if (openingBrief) return `I mean this: ${openingBrief}`.slice(0, MAX_SPOKEN_ANSWER_CHARS);
+    return "I'm here. What do you need?";
   }
   if (/^(hello|hey|hi)[.! ]*$/.test(question.trim())) {
-    return `I'm here. ${input.brief}`.slice(0, MAX_SPOKEN_ANSWER_CHARS);
+    if (openingBrief) return `I'm here. ${openingBrief}`.slice(0, MAX_SPOKEN_ANSWER_CHARS);
+    return "I'm here.";
   }
-  return `Give me a second—ask me that once more. In the meantime, the brief is: ${input.brief}`.slice(
-    0,
-    MAX_SPOKEN_ANSWER_CHARS
-  );
+  if (openingBrief) {
+    return `Give me a second—ask me that once more. In the meantime, the brief is: ${openingBrief}`.slice(
+      0,
+      MAX_SPOKEN_ANSWER_CHARS
+    );
+  }
+  return "Give me a second—ask me that once more.";
 }
 
 function compactConversationContext(context: ClaireDriveContext): string {
@@ -221,7 +232,7 @@ export async function answerClairePreDriveFollowUp(
   input: {
     tenantId: string;
     utterance: string;
-    brief: string;
+    brief: string | null;
     context: ClaireDriveContext;
     onGeneration?: (diagnostic: ClaireGenerationDiagnostic) => void;
     /** The last turns of this conversation, so follow-ups like "is that…" have a referent. */
@@ -426,7 +437,7 @@ export async function answerClairePreDriveFollowUp(
     {
       role: "user" as const,
       content: JSON.stringify({
-        openingBrief: personalOnlyTurn ? null : input.brief,
+        openingBrief: personalOnlyTurn ? null : openingBriefText(input.brief),
         currentContext: personalOnlyTurn
           ? { businessDate: input.context.businessDate }
           : {

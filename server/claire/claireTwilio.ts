@@ -13,7 +13,7 @@ import { isClaireProgressionEnabled } from "./progression/progressionFlag";
 import { commitPendingDisclosuresForConversation } from "./progression/service";
 import { recordConfirmedVisitEvidence } from "./progression/evidenceSources";
 import { recordClaireMissionOutcomeEvents, recordQualifyingClaireInteraction } from "./character/relationshipEmitters";
-import { assembleClaireDriveContext } from "./contextAssembler";
+import { assembleClaireDriveContext, buildClaireClock } from "./contextAssembler";
 import {
   ensureCurrentMissionSalesBrief,
   getLatestMissionSalesBrief,
@@ -75,11 +75,6 @@ export const CLAIRE_RECORDING_STATUS_PATH = "/api/claire/twilio/recording-status
 export const CLAIRE_CALL_STATUS_PATH = "/api/claire/twilio/call-status";
 /** Spoken on inbound pickup only. Outbound still opens with the generated briefing. */
 export const CLAIRE_INBOUND_GREETING = "Hey Adam. What's up?";
-/**
- * Truthy stand-in so the existing follow-up path still synthesizes from live
- * context. Never spoken; inbound does not generate or read a pre-drive briefing.
- */
-const INBOUND_UNSPOKEN_BRIEF = "No opening briefing was spoken.";
 /** Polly stays as the fail-open fallback when xAI TTS is disabled or unconfigured. */
 const CLAIRE_VOICE = "Polly.Ruth-Generative";
 const PRE_DRIVE_CONVERSATION_TTL_MS = 45 * 60 * 1_000;
@@ -108,7 +103,8 @@ type PreDriveConversation = ClaireTurnState & {
   actorId: string;
   /** The identity Day Director commitments are actually keyed by — see dayDirectorActorId(ctx). Never inferred from speech. */
   dayDirectorActorId: string;
-  brief: string;
+  /** Opening briefing spoken at call start. Null on inbound — there was no briefing. */
+  brief: string | null;
   context: Awaited<ReturnType<typeof assembleClaireDriveContext>>;
   turns: number;
   touchedAt: number;
@@ -496,6 +492,8 @@ function outcomeLabel(outcome: string): string {
 
 /** In-flight turn computations, so a continuation redirect can collect a slow answer. The state itself is durable. */
 const inflightTurns = new Map<string, Promise<string>>();
+/** Inbound context assembly must not block the pickup TwiML webhook. */
+const inflightInboundEnrichment = new Map<string, Promise<void>>();
 
 /**
  * Claire Intelligence Repair Part 2, Slice A: voice turn-around timing.
@@ -687,17 +685,70 @@ function startVoiceTurn(input: {
   return job;
 }
 
+function inboundClaireCallBootstrapContext(actorId: string): PreDriveConversation["context"] {
+  const now = new Date();
+  const clock = buildClaireClock(now);
+  return {
+    phase: "pre_drive",
+    generatedAt: now.toISOString(),
+    businessDate: clock.businessDate,
+    actorId,
+    truthLaw: "game_projection_never_creates_business_truth",
+    nextFixedCommitment: null,
+    blockers: [],
+    relevantTimeline: [],
+    mission: null,
+    clock,
+    macroGoalKnown: false,
+  };
+}
+
+function scheduleInboundContextEnrichment(input: {
+  conversationId: string;
+  tenantId: string;
+  actorId: string;
+}): void {
+  const job = (async () => {
+    const [context, vocabulary] = await Promise.all([
+      assembleClaireVoiceCallContext({
+        tenantId: input.tenantId,
+        actorId: input.actorId,
+      }),
+      loadBusinessVocabulary(input.tenantId).catch(() => [] as string[]),
+    ]);
+    const conversation = await loadCall(input.conversationId);
+    if (!conversation) return;
+    conversation.context = context;
+    conversation.sessionKind = context.workday?.session ?? conversation.sessionKind;
+    conversation.hints = boundedHints(speechHints(vocabulary));
+    await saveCall(input.conversationId, conversation);
+  })().catch(error => {
+    console.warn("[Claire] inbound context enrichment failed", error);
+  });
+  inflightInboundEnrichment.set(input.conversationId, job);
+  void job.finally(() => {
+    if (inflightInboundEnrichment.get(input.conversationId) === job) {
+      inflightInboundEnrichment.delete(input.conversationId);
+    }
+  });
+}
+
 async function persistClaireVoiceConversation(input: {
   tenantId: string;
   actorId: string;
   dayDirectorActorId?: string;
-  brief: string;
+  brief: string | null;
   context: PreDriveConversation["context"];
   spokenOpening: string;
   missionId?: number | null;
+  loadVocabulary?: boolean;
 }): Promise<{ conversationId: string; token: string; hints: string }> {
   const conversationId = randomUUID();
-  const hints = speechHints(await loadBusinessVocabulary(input.tenantId).catch(() => [] as string[]));
+  const hints = boundedHints(
+    input.loadVocabulary === false
+      ? undefined
+      : speechHints(await loadBusinessVocabulary(input.tenantId).catch(() => [] as string[]))
+  );
   const now = Date.now();
   await saveCall(conversationId, {
     tenantId: input.tenantId,
@@ -708,7 +759,7 @@ async function persistClaireVoiceConversation(input: {
     turns: 0,
     touchedAt: now,
     sessionKind: input.context.workday?.session,
-    hints: boundedHints(hints),
+    hints,
     history: [{ speaker: "claire", text: input.spokenOpening, at: now }],
   });
   const token = issueClaireToken({
@@ -800,16 +851,18 @@ async function answerInboundClaireCall(req: Request): Promise<{ status: number; 
   } catch {
     return { status: 403, twiml: speakAndHangUp("This call can't be connected.") };
   }
-  const context = await assembleClaireVoiceCallContext({
-    tenantId: operator.tenantId,
-    actorId: operator.actorId,
-  });
   const { conversationId, token, hints } = await persistClaireVoiceConversation({
     tenantId: operator.tenantId,
     actorId: operator.actorId,
-    brief: INBOUND_UNSPOKEN_BRIEF,
-    context,
+    brief: null,
+    context: inboundClaireCallBootstrapContext(operator.actorId),
     spokenOpening: CLAIRE_INBOUND_GREETING,
+    loadVocabulary: false,
+  });
+  scheduleInboundContextEnrichment({
+    conversationId,
+    tenantId: operator.tenantId,
+    actorId: operator.actorId,
   });
   await safeClaireLedger(async () => {
     await attachCallSid({

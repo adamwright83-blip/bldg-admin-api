@@ -135,4 +135,44 @@ describe("Claire pre-drive conversation", () => {
       })
     ).toContain("Visit The Wilshire and ask about management effort.");
   });
+
+  it("greets by repeating the outbound opening brief", () => {
+    expect(
+      conservativeClaireFollowUp({
+        utterance: "hello",
+        brief: "Visit The Wilshire and ask about management effort.",
+        context,
+      })
+    ).toBe("I'm here. Visit The Wilshire and ask about management effort.");
+  });
+
+  it("inbound with no opening brief never manufactures briefing speech", () => {
+    expect(
+      conservativeClaireFollowUp({
+        utterance: "hello",
+        brief: null,
+        context,
+      })
+    ).toBe("I'm here.");
+    expect(
+      conservativeClaireFollowUp({
+        utterance: "What did you say?",
+        brief: null,
+        context,
+      })
+    ).toBe("I'm here. What do you need?");
+    expect(
+      conservativeClaireFollowUp({
+        utterance: "asdfghjkl",
+        brief: null,
+        context,
+      })
+    ).toBe("Give me a second—ask me that once more.");
+    for (const utterance of ["hello", "What did you say?", "repeat that", "asdfghjkl"]) {
+      const spoken = conservativeClaireFollowUp({ utterance, brief: null, context });
+      expect(spoken).not.toContain("No opening briefing was spoken");
+      expect(spoken).not.toMatch(/the brief is:/i);
+      expect(spoken).not.toMatch(/^I mean this:/);
+    }
+  });
 });
