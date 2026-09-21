@@ -108,6 +108,23 @@ describe("safety valves", () => {
   });
 });
 
+describe("unfinished thoughts stay held across a quiet gather", () => {
+  it("does not answer a fragment that still ends mid-thought", async () => {
+    const state: ClaireTurnState = {};
+    const first = await runClaireTurn(
+      { ...base, utterance: "He was my most recent order for", state },
+      turnDeps()
+    );
+    expect(first.listenOnly).toBe(true);
+    const quiet = await runClaireTurn(
+      { ...base, utterance: "", state, allowFragmentWait: true },
+      turnDeps()
+    );
+    expect(quiet.listenOnly).toBe(true);
+    expect(state.pendingFragment).toMatch(/for$/i);
+  });
+});
+
 describe("the listen-only re-gather is silent and short", () => {
   it("has no <Say>, uses the continuation grace as its start-of-speech timeout, and keeps auto endpointing", () => {
     const xml = preDriveConversationTwiML({ text: "", token: "t", listenOnly: true });

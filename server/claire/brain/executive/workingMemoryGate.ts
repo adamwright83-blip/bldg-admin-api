@@ -43,6 +43,7 @@ export function classifyChange(perceived: PerceivedTurn, memory: WorkingMemorySn
   }
   if (SET_SHIFT.test(perceived.assembledText)) return "set_shift";
   if (ABANDON.test(perceived.assembledText)) return "task_switch";
+  if (perceived.personalProbe && perceived.businessIntent === "none") return "task_switch";
 
   const holdingPending = Boolean(memory.pendingProposal || memory.pendingBriefing || memory.pendingAccountFollowUp);
 
@@ -67,6 +68,7 @@ export function classifyChange(perceived: PerceivedTurn, memory: WorkingMemorySn
     perceived.businessIntent === "list_query" ||
     perceived.businessIntent === "judgment_question" ||
     perceived.businessIntent === "broad_briefing" ||
+    perceived.businessIntent === "query_refinement" ||
     (perceived.businessIntent === "fact_question" && /\?/.test(perceived.assembledText));
   if (holdingPending && newQuestion && !perceived.acknowledgement) return "task_switch";
 
@@ -98,7 +100,7 @@ export function activeTaskSets(perceived: PerceivedTurn, memory: WorkingMemorySn
     perceived.businessIntent === "query_refinement" ||
     perceived.businessIntent === "correctness_challenge" ||
     perceived.businessIntent === "provenance_question" ||
-    perceived.priorQueryReference
+    (perceived.priorQueryReference && !perceived.personalProbe)
   ) {
     add("business_query", mention);
   }
@@ -176,8 +178,10 @@ export function gateWorkingMemory(input: {
   const mentions = perceived.entities.filter(entity => entity.kind === "entity_mention");
   if (mentions.length) {
     rule("focus_entity", "replace", "allow", "the operator named someone or something");
-  } else if (change === "task_switch") {
+  } else if (change === "task_switch" || change === "set_shift") {
     rule("focus_entity", "clear", "suppress", "the previous subject was abandoned");
+  } else if (kinds.has("broad_planning") && perceived.temporalReferences.length) {
+    rule("focus_entity", "dormant", "suppress", "explicit temporal scope is not the previous subject's recency");
   } else if (kinds.has("business_query") || kinds.has("account_judgment")) {
     rule("focus_entity", "maintain", "allow", "the current subject still applies");
   } else {

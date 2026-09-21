@@ -1,3 +1,5 @@
+import { detectRequestedClaireTopic, isPersonalQuestionAboutClaire } from "../topicDetection";
+
 /**
  * ONE authoritative interpretation of the operator's utterance, produced before any route acts.
  *
@@ -210,7 +212,7 @@ const LIST_NOUN = /\b(?:sales|orders|customers|clients|payments|invoices|account
 
 /** "the other four", "what about the rest", "and the others" — refine the previous query. */
 const QUERY_REFINEMENT =
-  /\b(?:the\s+)?other\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b|\bthe\s+(?:rest|others)\b|\bwhat\s+about\s+the\s+(?:rest|others)\b|\bi\s+asked\s+(?:you\s+)?for\b/i;
+  /\b(?:the\s+)?other\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b|\bthe\s+(?:rest|others)\b|\bwhat\s+about\s+the\s+(?:rest|others)\b|\bi\s+asked\s+(?:you\s+)?for\b|\b(?:just|only|actually)\b[\s\S]{0,48}\b(?:most\s+recent|last|latest)\b|\bnot\s+the\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|rest|others)\b|\bjust\s+(?:the\s+)?(?:one|most\s+recent|last|latest)\b/i;
 
 /** "before Thomas", "after the Louise order" — anchor the window on a named record. */
 const ANCHOR = /\b(?:before|prior\s+to|preceding|after|since)\s+([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)?)/;
@@ -276,13 +278,13 @@ export function detectOperatorWorkCommitment(text: string): boolean {
 
 /** A bare acknowledgement closes a beat. It is not a question, a challenge, or work. */
 const ACKNOWLEDGEMENT =
-  /^(?:ok(?:ay)?|got\s+it|gotcha|understood|i(?:'m|\s+am)\s+(?:all\s+)?good|we'?re\s+good|sure|yeah|yep|yup|right|cool|fine|nice|great|perfect|thanks?|thank\s+you|that\s+answers\s+it|makes\s+sense|no\s+worries)[.!]?$/i;
+  /^(?:yes|ok(?:ay)?|got\s+it|gotcha|understood|i(?:'m|\s+am)\s+(?:all\s+)?good|we'?re\s+good|sure|yeah|yep|yup|right|cool|fine|nice|great|perfect|thanks?|thank\s+you|that\s+answers\s+it|makes\s+sense|no\s+worries)[.!]?$/i;
 
 const WEEKDAY_OR_DATE =
   /\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|tonight|yesterday|this\s+week|next\s+week|last\s+week|morning|afternoon|evening|weekend)\b/gi;
 
 const COMMON_CAPS = new Set(
-  ("The This That These Those There Did How What When Who Where Which Are Is Was Were Have Has Had And But Okay Yes No Not Claire Adam Goldline Day Line Order Orders Sale Sales Customer Customers Tell Give Show Add Put Call Text Email Dont Um Uh Well Actually Wait Sorry " +
+  ("The This That These Those There Did How What When Who Where Which Are Is Was Were Have Has Had And But Okay Yes No Not Claire Adam Goldline Day Line Order Orders Sale Sales Customer Customers Tell Give Show Add Put Call Text Email Dont Um Uh Well Actually Wait Sorry Stop Hold " +
   // sentence-initial furniture: "Good morning" must not read as an entity named Good
   "Good Morning Afternoon Evening Hey Hi Hello Thanks Thank Please Let Just Can Could Would Should Do Does So Now Then Also Still Anything Something Nothing I'm Im We're Its It's Right Sure Cool Fine Great Perfect Understood Gotcha").split(/\s+/)
 );
@@ -313,8 +315,10 @@ export function extractEntities(text: string): { entities: string[]; temporal: s
  */
 const BROAD_BRIEFING =
   /^(?:good\s+)?morning\b|^hey\s+claire\b|^what\s+do\s+i\s+need\s+to\s+know\b|^what(?:'s| is)\s+(?:the\s+)?most\s+important\b|^what\s+should\s+i\s+(?:do|know)\b|^what(?:'s| is)\s+(?:going\s+on|up)\b|^how(?:'s| is)\s+business\b/i;
-/** Any of these makes the request SCOPED rather than broad. */
-const SCOPED_OBJECT = /\b(?:about|with|regarding|concerning)\b/i;
+/** A person/account object scopes a briefing. Temporal "about today" does not. */
+const SCOPED_OBJECT = /\b(?:about|with|regarding|concerning)\s+(?!today|tomorrow|tonight|yesterday|now|this\s+week\b)/i;
+const BUSINESS_SUBSTANCE =
+  /\b(?:sales?|orders?|revenue|customers?|clients?|payments?|invoices?|accounts?|day\s*line|unpaid|cleancloud|laundry)\b/i;
 
 /** Explicit correctness challenge — must outrank refinement wording and force a fresh reread. */
 const CORRECTNESS_CHALLENGE =
@@ -349,13 +353,18 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   const aboutClaireCapability = ABOUT_CLAIRE_CAPABILITY.test(text);
   const hasExplicitActionRequest = ACTION_DIRECTIVE.test(text) && !actionRefused;
   const operatorWorkCommitment = detectOperatorWorkCommitment(text) && !actionRefused;
-  const hasBusinessQuestion =
-    !acknowledgement && (QUESTION_MARK.test(text) || BUSINESS_QUESTION_LEAD.test(text.split(/\s+/).slice(0, 4).join(" ")));
 
-  const cardinality = parseCardinality(text);
+  let cardinality = parseCardinality(text);
   // A correctness challenge outranks refinement wording: "I asked you for revenue — are you sure
   // those numbers are correct?" contains both, and must reread rather than re-list.
   const queryRefinement = QUERY_REFINEMENT.test(text) && !acknowledgement && !CORRECTNESS_CHALLENGE.test(text);
+  if (
+    cardinality == null &&
+    queryRefinement &&
+    /\b(?:just|only)\b[\s\S]{0,48}\b(?:most\s+recent|last|latest)\b/i.test(text)
+  ) {
+    cardinality = 1;
+  }
   const listRequest = Boolean(cardinality && cardinality > 1) || (LIST_NOUN.test(text) && !acknowledgement);
   const anchorMatch = ANCHOR.exec(text);
   const exclusionMatch = EXCLUSION.exec(text);
@@ -364,11 +373,31 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   const anchorEntity = properNoun(anchorMatch?.[1]);
   const { entities, temporal } = extractEntities(text);
   // Broad only when nothing scopes it: no scoping preposition (ASR may clip it to "about?") and no
-  // named entity. A named subject always makes the question scoped.
+  // named entity. A named subject always makes the question scoped. "About today" is a time window.
   const broadBriefingRequest =
     BROAD_BRIEFING.test(text.trim()) && !SCOPED_OBJECT.test(text) && entities.length === 0;
   const correctnessChallenge = CORRECTNESS_CHALLENGE.test(text) && !acknowledgement;
   const provenanceQuestion = PROVENANCE_QUESTION.test(text) && !correctnessChallenge;
+  const personalProbe =
+    isPersonalQuestionAboutClaire(text) || Boolean(detectRequestedClaireTopic(text));
+  const businessSubstance =
+    cardinality != null ||
+    listRequest ||
+    queryRefinement ||
+    correctnessChallenge ||
+    provenanceQuestion ||
+    operatorWorkCommitment ||
+    hasExplicitActionRequest ||
+    broadBriefingRequest ||
+    BUSINESS_SUBSTANCE.test(text) ||
+    exclusions.length > 0 ||
+    Boolean(anchorEntity);
+  const looksLikeQuestion =
+    QUESTION_MARK.test(text) || BUSINESS_QUESTION_LEAD.test(text.split(/\s+/).slice(0, 4).join(" "));
+  // A standalone personal-biography question is not a business question just because it opens
+  // with "Were" or "Have". Mixed utterances that also carry business substance stay mixed.
+  const hasBusinessQuestion =
+    !acknowledgement && looksLikeQuestion && !(personalProbe && !businessSubstance);
 
   if (acknowledgement) intents.push("acknowledgement");
   if (actionRefused) intents.push("action_refusal");
@@ -379,6 +408,7 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   if (broadBriefingRequest) intents.push("broad_briefing");
   if (correctnessChallenge) intents.push("correctness_challenge");
   if (provenanceQuestion) intents.push("provenance_question");
+  if (personalProbe) intents.push("personal_probe");
   if (hasBusinessQuestion) intents.push("business_question");
   if (aboutClaireCapability && !hasExplicitActionRequest) intents.push("context_statement");
 

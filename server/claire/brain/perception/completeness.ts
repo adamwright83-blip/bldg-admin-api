@@ -11,7 +11,10 @@
  * subtly different continuation algorithm — two disagreeing answers to "did he stop
  * talking?" is precisely the failure this architecture exists to remove.
  *
- * Nothing here is wired into production. V1 still owns live fragment handling.
+ * Today V1 still owns live fragment handling on the phone. Brain V2 also
+ * independently refuses to reason over an unfinished form: `runClaireBrainTurn`
+ * will not treat `looksUnfinished` text as a complete thought even if the
+ * transport labelled it complete. For CUTOVER, this assembler is the live owner.
  */
 
 import { looksUnfinished, shouldHoldForContinuation } from "../../turn/claireTurn";

@@ -98,10 +98,6 @@ export async function answerPersonalFollowUp(
         onModelServed: model => { modelServed = model; },
         messages: [
           { role: "system", content: sections.map(section => section.text).filter(Boolean).join(" ") },
-          ...(input.recentTurns ?? []).slice(-6).map(turn => ({
-            role: (turn.speaker === "claire" ? "assistant" : "user") as "assistant" | "user",
-            content: turn.text,
-          })),
           { role: "user", content: input.utterance.slice(0, 1_000) },
         ],
       });

@@ -6,6 +6,7 @@ import type { ExecutiveDecision } from "../contracts/executiveDecision";
 import type { ShadowComparisonRecord } from "../telemetry/comparison";
 import { decideTurn, type ExecutiveDeps } from "../executive/decide";
 import { perceiveTurn } from "../perception/perceive";
+import { looksUnfinished } from "../../turn/claireTurn";
 import { assertRenderedFromPlan, renderWithCharacter } from "../response/characterRenderer";
 import { comparisonRecordFromDecision } from "../telemetry/comparison";
 import { snapshotWorkingMemory, type WorkingMemorySource } from "../workingMemory/snapshot";
@@ -34,10 +35,17 @@ export type ClaireBrainTurnResult = {
 };
 
 export async function runClaireBrainTurn(input: ClaireBrainTurnInput): Promise<ClaireBrainTurnResult> {
+  const assembled = (input.assembledText ?? input.rawText).trim();
+  let completeness = input.completeness ?? "complete";
+  // V2 owns complete-thought assembly. V1's listenOnly label informs, but an unfinished
+  // form is never reasoned over as a finished question just because transport flushed it.
+  if (completeness === "complete" && looksUnfinished(assembled)) {
+    completeness = "incomplete";
+  }
   const perceived = perceiveTurn({
     rawText: input.rawText,
     assembledText: input.assembledText,
-    completeness: input.completeness ?? "complete",
+    completeness,
   });
   const memory = snapshotWorkingMemory(input.state ?? {}, {
     conversationKey: input.conversationKey,

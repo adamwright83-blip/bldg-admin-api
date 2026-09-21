@@ -18,7 +18,7 @@ function intentFromAssembled(assembled: string, turn: ReturnType<typeof interpre
   if (turn.provenanceQuestion) return "provenance_question";
   if (turn.queryRefinement) return "query_refinement";
   if (turn.broadBriefingRequest) return "broad_briefing";
-  if (turn.hasBusinessQuestion && /\b(?:what should i do|what would you do|should i)\b/i.test(assembled)) {
+  if (turn.hasBusinessQuestion && /\b(?:what should i do|what would you do)\b/i.test(assembled)) {
     return "judgment_question";
   }
   if (turn.hasBusinessQuestion) return turn.listRequest ? "list_query" : "fact_question";

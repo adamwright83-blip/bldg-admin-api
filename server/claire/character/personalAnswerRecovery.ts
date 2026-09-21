@@ -16,6 +16,7 @@
  */
 import { CLAIRE_CANON } from "./characterDefinition";
 import { assertNoUngroundedPersonalSpecificity } from "./personalSpecificityGuard";
+import { selectDialogueLine } from "../progression/dialogueRegistry";
 
 export const CANON_SCOPED_PERSONAL_DEFLECTION =
   "I'll leave that one vague. I don't hand out specifics I can't stand behind.";
@@ -120,8 +121,11 @@ export function recoverPersonalAnswer(input: {
 }): { text: string; via: PersonalAnswerRecoveryVia } {
   const rendered = renderCanonScopedPersonalAnswer(input);
   if (rendered) return { text: rendered, via: "canon_render" };
+  // Canon does not answer this topic. Speak an authored personal decline, not a
+  // business-epistemic "I can't stand behind specifics" line.
+  const authored = selectDialogueLine({ category: "decline", rapportBand: 0 });
   return {
-    text: CANON_SCOPED_PERSONAL_DEFLECTION,
+    text: authored?.text ?? CANON_SCOPED_PERSONAL_DEFLECTION,
     via: "canon_scoped_deflection",
   };
 }

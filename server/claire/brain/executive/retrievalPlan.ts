@@ -63,7 +63,11 @@ export function buildBusinessQuery(perceived: PerceivedTurn): BusinessQuery | nu
 
 /** Is this operations/day-line shaped rather than analytics shaped? */
 function wantsOperations(text: string): boolean {
-  return /\b(?:today|tomorrow|day\s+line|schedule|route|stops?|what'?s\s+on)\b/i.test(text);
+  return (
+    /\b(?:today|tomorrow|day\s+line|schedule|route|what'?s\s+on)\b/i.test(text) ||
+    /\b(?:stop\s+by|on\s+(?:my\s+|the\s+)?stops)\b/i.test(text) ||
+    /\bstops\b/i.test(text)
+  );
 }
 
 /**

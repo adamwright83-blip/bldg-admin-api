@@ -51,7 +51,7 @@ import {
   handleRecordingStatus,
 } from "./conversation/pipeline";
 import { isValidTwilioWebhook } from "./conversation/twilioSignature";
-import { runClaireTurn, type ClaireTurnState } from "./turn/claireTurn";
+import { runClaireTurn, looksUnfinished, type ClaireTurnState } from "./turn/claireTurn";
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
 import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
 import { getDashboardTimeZone } from "../dashboardZoned";
@@ -847,8 +847,12 @@ export function registerClaireRoutes(app: Express): void {
       let utterance = rawTranscript;
       let allowFragmentWait = true;
       if (!rawTranscript) {
-        if (conversation.pendingFragment) {
-          // Adam went quiet after an unfinished thought: take it as said.
+        if (conversation.pendingFragment && looksUnfinished(conversation.pendingFragment)) {
+          // Quiet after an unfinished thought is still a hold, not an answer.
+          utterance = "";
+          allowFragmentWait = true;
+        } else if (conversation.pendingFragment) {
+          // A finished-looking held fragment with no more speech: take it as said.
           utterance = conversation.pendingFragment;
           conversation.pendingFragment = null;
           allowFragmentWait = false;

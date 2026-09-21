@@ -369,3 +369,38 @@ describe("pending proposals are superseded, not just un-nagged", () => {
     expect([first, second].filter(r => /still holding/i.test(r.speak)).length).toBeLessThanOrEqual(1);
   });
 });
+
+describe("2026-09-21 shadow trial — shared perception", () => {
+  it("a standalone personal-biography question is not a business question", () => {
+    const turn = interpretTurn("Were you ever married?");
+    expect(turn.intents).toContain("personal_probe");
+    expect(turn.hasBusinessQuestion).toBe(false);
+    expect(turn.queryRefinement).toBe(false);
+    expect(turn.correctnessChallenge).toBe(false);
+  });
+
+  it("changing the question to the most recent order is a refinement, not a truth challenge", () => {
+    const turn = interpretTurn("So, just my just, my most recent order not the five.");
+    expect(turn.queryRefinement).toBe(true);
+    expect(turn.correctnessChallenge).toBe(false);
+    expect(turn.cardinality).toBe(1);
+  });
+
+  it("Stop is discourse, not a person, and marriage remains personal", () => {
+    const turn = interpretTurn("Stop. Hey, when you ever married,");
+    expect(turn.entities).not.toContain("Stop");
+    expect(turn.intents).toContain("personal_probe");
+    expect(turn.hasBusinessQuestion).toBe(false);
+  });
+
+  it("what should I know about today is a temporally scoped briefing, not an account judgment", () => {
+    const turn = interpretTurn("What should I know about today?");
+    expect(turn.broadBriefingRequest).toBe(true);
+    expect(turn.hasBusinessQuestion).toBe(true);
+    expect(turn.temporal).toContain("today");
+  });
+
+  it("Yes. is an acknowledgement", () => {
+    expect(interpretTurn("Yes.").acknowledgement).toBe(true);
+  });
+});
