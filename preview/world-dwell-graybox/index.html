@@ -17,18 +17,21 @@
       background: #1f2123;
     }
     canvas { display: block; touch-action: none; background: #4a4d50; }
-    #debugTab {
+    #debugTab, #debug { display: none; }
+    html.tester #debugTab {
+      display: block;
       position: fixed; top: 10px; right: 10px; z-index: 20;
       background: #2c2f33; color: #b7b3aa; border: 1px solid #555;
       font: 700 11px ui-monospace, monospace; letter-spacing: .08em;
       padding: 8px 10px; cursor: pointer;
     }
-    #debug {
+    html.tester #debug {
+      display: block;
       position: fixed; left: 0; right: 0; bottom: -62%; height: 58%; width: auto;
       z-index: 30; background: #1c1e21ee; border-top: 1px solid #555;
       padding: 14px 12px 24px; overflow-y: auto; transition: bottom .18s;
     }
-    #debug.open { bottom: 0; right: 0; }
+    html.tester #debug.open { bottom: 0; }
     #debug h3 { margin: 28px 0 10px; font-size: 11px; letter-spacing: .12em; color: #9a958c; }
     #debug p { font-size: 10px; line-height: 1.45; color: #7d7972; margin: 0 0 12px; }
     .row { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 12px; }
@@ -41,8 +44,8 @@
 </head>
 <body>
   <div id="stage"><canvas id="cv"></canvas></div>
-  <button type="button" id="debugTab">DEBUG</button>
-  <aside id="debug" aria-label="Graybox simulation inputs">
+  <button type="button" id="debugTab" hidden>DEBUG</button>
+  <aside id="debug" hidden aria-label="Graybox simulation inputs">
     <h3>GRAYBOX ONLY</h3>
     <p>Simulation inputs. Not player chrome. Do not persist. Do not call production APIs.</p>
     <div class="row"><label><input type="checkbox" id="dbgGold" /> Gold seam present</label></div>

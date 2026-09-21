@@ -64,7 +64,6 @@
     sound: true,
     morningId: 0,
     goldNotedMorning: -1,
-    seenColonnade: false,
     tracing: null,
     pointer: null,
     lastMove: null,
@@ -74,8 +73,8 @@
   };
 
   const q = new URLSearchParams(location.search);
+  const tester = q.get("debug") === "1";
   if (q.has("lean")) state.lean = clamp(Number(q.get("lean")), LEAN_MIN, LEAN_MAX);
-  if (state.lean > 0.38) state.seenColonnade = true;
   if (q.get("gold") === "1") state.gold = true;
   if (q.get("slack") === "1") state.slack = true;
   if (["none", "pending", "keep", "miss"].includes(q.get("shutter"))) {
@@ -90,9 +89,14 @@
   let view = { x: 0, y: 0, s: 1, w: VW, h: VH };
   let lastT = performance.now();
 
-  debugTab.addEventListener("click", () => {
-    debugEl.classList.toggle("open");
-  });
+  if (tester) {
+    document.documentElement.classList.add("tester");
+    debugTab.hidden = false;
+    debugEl.hidden = false;
+    debugTab.addEventListener("click", () => {
+      debugEl.classList.toggle("open");
+    });
+  }
 
   document.getElementById("dbgGold").addEventListener("change", (e) => {
     state.gold = e.target.checked;
@@ -411,8 +415,7 @@
     ctx.closePath();
     ctx.fill();
 
-    const hint = state.seenColonnade ? 80 : 0;
-    const baseX = 780 - hint;
+    const baseX = 780;
     const colW = 62;
     const gap = 96;
     for (let i = 0; i < 4; i++) {
@@ -753,7 +756,6 @@
         beep("gravel");
         state.lastMove = now;
       }
-      if (state.lean > 0.38) state.seenColonnade = true;
       return;
     }
 
@@ -812,7 +814,6 @@
         v = (b.x - a.x) / dt;
       }
       state.vel = v * (1000 / DRAG_PX);
-      if (state.lean > 0.38) state.seenColonnade = true;
     }
 
     if (ptr.kind === "bob") {
