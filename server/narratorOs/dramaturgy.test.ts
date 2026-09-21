@@ -11,7 +11,13 @@ import {
   AUTHORED_DRAMATURGY_TIE_BREAKS,
   decideDramaturgy,
   type AuthoredDramaturgyTieBreak,
+  type DramaturgyInput,
 } from "./dramaturgy";
+import { decideDramaturgyWithRulesForTests } from "./dramaturgy.testSupport";
+import {
+  AUTHORED_DRAMATURGY_TIE_BREAKS as indexTieBreaks,
+  decideDramaturgy as indexDecideDramaturgy,
+} from "./index";
 import {
   evaluateProductionEligibility,
   isEligibilityAuthorization,
@@ -37,6 +43,16 @@ const MONDAY_MS = Date.parse("2026-09-14T12:00:00Z");
 const TUESDAY_MS = Date.parse("2026-09-15T12:00:00Z");
 
 const SURFACEABLE_CAPABLE = ["C-08", "M01", "M03", "M04"] as const;
+
+type ProductionDramaturgyParameter = Parameters<
+  typeof indexDecideDramaturgy
+>[0];
+type _ProductionInputIsEligibilityOnly =
+  Exclude<keyof ProductionDramaturgyParameter, "eligibility"> extends never
+    ? true
+    : never;
+const productionInputIsEligibilityOnly: _ProductionInputIsEligibilityOnly = true;
+void productionInputIsEligibilityOnly;
 
 async function seeded(): Promise<{
   store: ReturnType<typeof createInMemoryNarratorStore>;
@@ -284,7 +300,8 @@ describe("Narrator OS slice F — deterministic dramaturgy", () => {
     const { snapshot } = await seeded();
     const result = productionResult(snapshot, ["M01", "M04"]);
     expect(result.eligibleBeatIds).toEqual(["M01", "M04"]);
-    const decision = decideDramaturgy({ eligibility: result });
+    const decision = indexDecideDramaturgy({ eligibility: result });
+    expect(indexTieBreaks).toEqual([]);
     expect(AUTHORED_DRAMATURGY_TIE_BREAKS).toEqual([]);
     expect(decision.outcome).toBe("AMBIGUOUS_REQUIRES_AUTHORED_RULE");
     expect(decision.selectedBeatId).toBeNull();
@@ -603,7 +620,7 @@ describe("Narrator OS slice F — deterministic dramaturgy", () => {
       const expected = inRegistryOrder(subset);
       expect(result.outcome).toBe("ELIGIBLE");
       expect([...result.eligibleBeatIds]).toEqual(expected);
-      const decision = decideDramaturgy({ eligibility: result });
+      const decision = indexDecideDramaturgy({ eligibility: result });
       expect(decision.outcome).toBe("AMBIGUOUS_REQUIRES_AUTHORED_RULE");
       expect(decision.selectedBeatId).toBeNull();
       expect(decision.authoredTieBreakExisted).toBe(false);
@@ -632,7 +649,7 @@ describe("Narrator OS slice F — deterministic dramaturgy", () => {
       [AUTHORED_NARRATIVE_FACTS.chemistNonSupportiveResult]: "DOES_NOT_SUPPORT",
     });
     expect(withWithheld.withheldBeatIds).toEqual(["C-06"]);
-    const ambiguous = decideDramaturgy({ eligibility: withWithheld });
+    const ambiguous = indexDecideDramaturgy({ eligibility: withWithheld });
     expect(ambiguous.outcome).toBe("AMBIGUOUS_REQUIRES_AUTHORED_RULE");
     expect(ambiguous.selectedBeatId).toBeNull();
     expect(ambiguous.withheldBeatIds).toEqual(["C-06"]);
@@ -640,7 +657,7 @@ describe("Narrator OS slice F — deterministic dramaturgy", () => {
     const onlyWithheldCompanion = productionResult(snapshot, ["M01"], {
       [AUTHORED_NARRATIVE_FACTS.chemistNonSupportiveResult]: "INSUFFICIENT",
     });
-    const selected = decideDramaturgy({
+    const selected = indexDecideDramaturgy({
       eligibility: onlyWithheldCompanion,
     });
     expect(selected.outcome).toBe("SELECT");
@@ -648,7 +665,7 @@ describe("Narrator OS slice F — deterministic dramaturgy", () => {
     expect(selected.withheldBeatIds).toEqual(["C-06"]);
   });
 
-  it("applies an exact authored tie-break and ignores order and supersets", () => {
+  it("applies an exact authored tie-break only through test support", () => {
     const m01 = asNarrativeBeatId("M01");
     const m04 = asNarrativeBeatId("M04");
     const rule: AuthoredDramaturgyTieBreak = {
@@ -658,7 +675,7 @@ describe("Narrator OS slice F — deterministic dramaturgy", () => {
       authoredSourceRef: "dramaturgy.test.ts — not a canon rule",
     };
     expect(AUTHORED_DRAMATURGY_TIE_BREAKS).toEqual([]);
-    const pair = decideDramaturgy({
+    const pair = decideDramaturgyWithRulesForTests({
       eligibility: fabricated(["M01", "M04"]),
       tieBreaks: [rule],
     });
@@ -667,13 +684,13 @@ describe("Narrator OS slice F — deterministic dramaturgy", () => {
     expect(pair.reasonCode).toBe("authored_tie_break_applied");
     expect(pair.authoredTieBreakRuleId).toBe("test-only-not-canon");
 
-    const reversed = decideDramaturgy({
+    const reversed = decideDramaturgyWithRulesForTests({
       eligibility: fabricated(["M04", "M01"]),
       tieBreaks: [rule],
     });
     expect(reversed.selectedBeatId).toBe("M04");
 
-    const superset = decideDramaturgy({
+    const superset = decideDramaturgyWithRulesForTests({
       eligibility: fabricated(["M01", "M03", "M04"]),
       tieBreaks: [rule],
     });
@@ -681,14 +698,14 @@ describe("Narrator OS slice F — deterministic dramaturgy", () => {
     expect(superset.selectedBeatId).toBeNull();
     expect(superset.authoredTieBreakExisted).toBe(false);
 
-    const singleton = decideDramaturgy({
+    const singleton = decideDramaturgyWithRulesForTests({
       eligibility: fabricated(["M04"]),
       tieBreaks: [rule],
     });
     expect(singleton.reasonCode).toBe("single_surfaceable_eligible_beat");
     expect(singleton.authoredTieBreakRequired).toBe(false);
 
-    const disagree = decideDramaturgy({
+    const disagree = decideDramaturgyWithRulesForTests({
       eligibility: fabricated(["M01", "M04"]),
       tieBreaks: [
         rule,
@@ -704,6 +721,72 @@ describe("Narrator OS slice F — deterministic dramaturgy", () => {
     expect(disagree.selectedBeatId).toBeNull();
     expect(disagree.reasonCode).toBe("authored_tie_breaks_disagree");
     expect(disagree.authoredTieBreakExisted).toBe(true);
+  });
+
+  it("production surface ignores injected tie-breaks and stays ambiguous", async () => {
+    const m01 = asNarrativeBeatId("M01");
+    const m04 = asNarrativeBeatId("M04");
+    const rule: AuthoredDramaturgyTieBreak = {
+      ruleId: "injected-not-canon",
+      surfaceableBeatIds: [m01, m04],
+      selectBeatId: m04,
+      authoredSourceRef: "caller-injected",
+    };
+    const eligibility = fabricated(["M01", "M04"]);
+    const injected = {
+      eligibility,
+      tieBreaks: [rule],
+      priority: ["M04", "M01"],
+      authoredSourceRef: "caller-injected",
+    };
+    const fromModule = decideDramaturgy(injected as DramaturgyInput);
+    const fromIndex = indexDecideDramaturgy(injected as DramaturgyInput);
+    expect(fromModule.outcome).toBe("AMBIGUOUS_REQUIRES_AUTHORED_RULE");
+    expect(fromModule.selectedBeatId).toBeNull();
+    expect(fromModule.reasonCode).toBe(
+      "multiple_surfaceable_no_authored_tie_break"
+    );
+    expect(fromIndex).toEqual(fromModule);
+    expect(indexTieBreaks).toEqual([]);
+    expect(() => {
+      (indexTieBreaks as AuthoredDramaturgyTieBreak[]).push(rule);
+    }).toThrow();
+
+    const narratorIndex = await import("./index");
+    expect("decideDramaturgyWithRulesForTests" in narratorIndex).toBe(false);
+    expect("decideDramaturgyWithCatalog" in narratorIndex).toBe(false);
+    expect("decideDramaturgy" in narratorIndex).toBe(true);
+    const indexSrc = readFileSync(
+      resolve(process.cwd(), "server/narratorOs/index.ts"),
+      "utf8"
+    );
+    expect(indexSrc).not.toMatch(/dramaturgy\.testSupport/);
+    expect(indexSrc).not.toMatch(/dramaturgySelect/);
+    expect(indexSrc).not.toMatch(/decideDramaturgyWithRulesForTests/);
+    expect(indexSrc).not.toMatch(/decideDramaturgyWithCatalog/);
+    expect(indexSrc).not.toMatch(/tieBreaks/);
+    const productionSrc = readFileSync(
+      resolve(process.cwd(), "server/narratorOs/dramaturgy.ts"),
+      "utf8"
+    );
+    expect(productionSrc).not.toMatch(/tieBreaks/);
+    expect(productionSrc).toMatch(/AUTHORED_DRAMATURGY_TIE_BREAKS/);
+
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VITEST", "");
+    try {
+      expect(() =>
+        decideDramaturgyWithRulesForTests({
+          eligibility,
+          tieBreaks: [rule],
+        })
+      ).toThrow(/not available outside tests/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(indexDecideDramaturgy({ eligibility }).outcome).toBe(
+      "AMBIGUOUS_REQUIRES_AUTHORED_RULE"
+    );
   });
 
   it("duplicate copies of one beat are still one selection", () => {
