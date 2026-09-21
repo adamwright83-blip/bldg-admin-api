@@ -12,9 +12,12 @@
  * talking?" is precisely the failure this architecture exists to remove.
  *
  * Today V1 still owns live fragment handling on the phone. Brain V2 also
- * independently refuses to reason over an unfinished form: `runClaireBrainTurn`
- * will not treat `looksUnfinished` text as a complete thought even if the
- * transport labelled it complete. For CUTOVER, this assembler is the live owner.
+ * independently refuses to reason over an unfinished *voice* form:
+ * `runClaireBrainTurn` will not treat `looksUnfinished` speech as a complete
+ * thought even if the transport labelled it complete. That override is
+ * surface-gated: desk text has no fragment assembler, so a typed sentence is
+ * not reclassified by a phone-ending heuristic. For CUTOVER, this assembler
+ * is the live voice owner.
  */
 
 import { looksUnfinished, shouldHoldForContinuation } from "../../turn/claireTurn";

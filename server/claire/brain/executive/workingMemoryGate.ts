@@ -60,15 +60,14 @@ export function classifyChange(perceived: PerceivedTurn, memory: WorkingMemorySn
   if (perceived.correction && perceived.correctionTarget === "prior_query") return "local_correction";
 
   /**
-   * A genuine new question while something is pending is a switch. "Genuine" is
-   * deliberately strict: a bare verb tripping `hasBusinessQuestion` is not a new topic,
-   * so a real interrogative, a list request, or a judgment is required.
+   * A genuine NEW question while something is pending is a switch. Refining the
+   * current ordered result is not: that is continuation of the query thread, and
+   * whether pending work is set aside is a separate slot ruling.
    */
   const newQuestion =
     perceived.businessIntent === "list_query" ||
     perceived.businessIntent === "judgment_question" ||
     perceived.businessIntent === "broad_briefing" ||
-    perceived.businessIntent === "query_refinement" ||
     (perceived.businessIntent === "fact_question" && /\?/.test(perceived.assembledText));
   if (holdingPending && newQuestion && !perceived.acknowledgement) return "task_switch";
 
@@ -141,6 +140,14 @@ export function gateWorkingMemory(input: {
     rule("task_set", "maintain", "allow", "the active frame continues");
   }
 
+  // Continuing a resolved result and setting pending work aside are independent
+  // slot rulings. A global task_switch must not reset the query thread the
+  // utterance is actually walking.
+  const continuing =
+    perceived.priorQueryReference ||
+    perceived.businessIntent === "query_refinement" ||
+    perceived.exclusions.length > 0;
+
   // ── Pending proposal ──────────────────────────────────────────────────────
   const holdingPending = Boolean(memory.pendingProposal || memory.pendingBriefing || memory.pendingAccountFollowUp);
   if (!holdingPending) {
@@ -155,21 +162,19 @@ export function gateWorkingMemory(input: {
   } else if (change === "task_switch" || change === "set_shift") {
     // Remembered, but barred from this turn: it is not what was asked about.
     rule("pending_proposal", "dormant", "suppress", "operator moved to a different task");
+  } else if (continuing && memory.orderedQuery) {
+    rule("pending_proposal", "dormant", "suppress", "continuing a query is not about the pending item");
   } else {
     rule("pending_proposal", "maintain", "suppress", "pending does not interpret an unrelated utterance");
   }
 
   // ── Ordered query thread ──────────────────────────────────────────────────
-  const continuing =
-    perceived.priorQueryReference ||
-    perceived.businessIntent === "query_refinement" ||
-    perceived.exclusions.length > 0;
   if (!memory.orderedQuery) {
     rule("ordered_query", "maintain", "suppress", "no ordered result in play");
-  } else if (change === "task_switch" || change === "set_shift") {
-    rule("ordered_query", "replace", "suppress", "a new query thread replaces the old one, resetting exclusions");
   } else if (continuing) {
     rule("ordered_query", "update", "allow", "the operator is continuing this result");
+  } else if (change === "task_switch" || change === "set_shift") {
+    rule("ordered_query", "replace", "suppress", "a new query thread replaces the old one, resetting exclusions");
   } else {
     rule("ordered_query", "maintain", "suppress", "a new question does not continue the old result");
   }

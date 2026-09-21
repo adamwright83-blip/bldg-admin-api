@@ -46,12 +46,48 @@ const SOURCE: EvidenceItem = {
   operatorVisible: true,
 };
 
+const period = {
+  spec: { kind: "all_time" },
+  start: "2026-01-01",
+  end: "2026-09-21",
+  startUtc: new Date("2026-01-01"),
+  endExclusiveUtc: new Date("2026-09-22"),
+  days: 264,
+  timeZone: "America/Los_Angeles",
+  label: "all time",
+} as never;
+
 const sales: EvidenceItem = {
   ...SOURCE,
   id: "business_query:latest_sales:trial",
   payload: {
     status: "ok",
-    query: { metric: "latest_sales", limit: 5, listMembers: true },
+    query: {
+      metric: "latest_sales",
+      limit: 5,
+      customerName: null,
+      rank: null,
+      filters: null,
+      serviceType: null,
+      listMembers: true,
+      period: { kind: "all_time" },
+      comparison: null,
+      minOrders: 1,
+      groupBy: null,
+    },
+    period,
+    comparisonPeriod: null,
+    coverage: {
+      completeness: "complete",
+      loadedSources: ["laundry_butler"],
+      failedSources: [],
+      unverifiedNativeCount: 0,
+      unverifiedNativeCents: 0,
+      overlap: {},
+      serviceFilterUnclassified: null,
+      lineage: null,
+      union: null,
+    },
     data: {
       kind: "orders",
       ordering: "latest",
@@ -155,6 +191,17 @@ describe("C. personal biography cannot consume business-contact context", () => 
     expect(mentions).not.toContain("Stop");
     expect(result.decision.retrievals.some(request => request.kind === "operations")).toBe(false);
   });
+
+  it("a standalone Stop. is discourse, not a route question", async () => {
+    const result = await brain("Stop.");
+    expect(result.decision.retrievals.some(request => request.kind === "operations")).toBe(false);
+  });
+
+  it("What's my next stop? still retrieves operations", async () => {
+    const result = await brain("What's my next stop?");
+    expect(result.decision.attention.lanes).toContain("business");
+    expect(result.decision.retrievals.some(request => request.kind === "operations")).toBe(true);
+  });
 });
 
 describe("D. today scope does not become a future-account judgment", () => {
@@ -185,6 +232,18 @@ describe("E. unfinished voice is held, not reasoned", () => {
     expect(result.decision.responsePlan.segments.some(segment => segment.type === "BusinessFactSegment")).toBe(false);
     expect(result.decision.retrievals).toEqual([]);
   });
+
+  it("a punctuationless desk query is not held by the voice-fragment heuristic", async () => {
+    const result = await runClaireBrainTurn({
+      rawText: "Tell me where my order is",
+      completeness: "complete",
+      ...CTX,
+      surface: "text",
+      conversationKey: "claire-desk:shadow-trial",
+    });
+    expect(result.decision.perceivedTurn.completeness).toBe("complete");
+    expect(result.decision.inhibitedCandidates.some(candidate => candidate.kind === "half_turn")).toBe(false);
+  });
 });
 
 describe("ordered continuation, mixed lanes, hangup, and authority", () => {
@@ -205,6 +264,54 @@ describe("ordered continuation, mixed lanes, hangup, and authority", () => {
     });
     expect(result.decision.attention.continueOrderedQuery).toBe(true);
     expect(result.decision.perceivedTurn.businessIntent).toBe("query_refinement");
+  });
+
+  it("pending unrelated work does not reset an ordered-query continuation", async () => {
+    const pending = { pendingProposal: { title: "Call Dana Tuesday" } };
+    const first = await brain("What were my last five sales?", pending, async request =>
+      request.kind === "business_query" ? [sales] : []
+    );
+    expect(first.decision.attention.pendingDisposition).toBe("supersede");
+    expect(first.decision.control.workingMemoryGates.find(gate => gate.slot === "pending_proposal")?.output).toBe(
+      "suppress"
+    );
+    const opened = first.decision.workingMemoryUpdate?.orderedQuery;
+    expect(opened?.resolved.map(member => member.id)).toEqual(FIVE.map(member => member.id));
+
+    const second = await brain(
+      "What about the other four?",
+      {
+        ...pending,
+        orderedQuery: recordPresented(
+          openOrderedQuery({
+            queryFingerprint: opened!.queryFingerprint,
+            parameters: opened!.parameters,
+            requestedCardinality: opened!.requestedCardinality,
+            ordering: opened!.ordering,
+            anchorEntity: opened!.anchorEntity,
+            resolved: opened!.resolved,
+            sourceEvidence: opened!.sourceEvidence,
+          }),
+          [opened!.resolved[0]!]
+        ),
+      },
+      async request => {
+        if (request.kind === "business_query") {
+          throw new Error("continuation must not re-query");
+        }
+        return [];
+      }
+    );
+    expect(second.decision.control.change).not.toBe("task_switch");
+    expect(second.decision.attention.pendingDisposition).toBe("supersede");
+    expect(second.decision.control.workingMemoryGates.find(gate => gate.slot === "pending_proposal")?.output).toBe(
+      "suppress"
+    );
+    expect(second.decision.control.workingMemoryGates.find(gate => gate.slot === "ordered_query")?.output).toBe("allow");
+    expect(second.decision.attention.continueOrderedQuery).toBe(true);
+    expect(second.decision.workingMemoryUpdate?.continuationPresented?.map(member => member.id)).toEqual(
+      FIVE.slice(1).map(member => member.id)
+    );
   });
 
   it("mixed personal + business still preserves the business answer", async () => {

@@ -37,9 +37,11 @@ export type ClaireBrainTurnResult = {
 export async function runClaireBrainTurn(input: ClaireBrainTurnInput): Promise<ClaireBrainTurnResult> {
   const assembled = (input.assembledText ?? input.rawText).trim();
   let completeness = input.completeness ?? "complete";
-  // V2 owns complete-thought assembly. V1's listenOnly label informs, but an unfinished
-  // form is never reasoned over as a finished question just because transport flushed it.
-  if (completeness === "complete" && looksUnfinished(assembled)) {
+  // Voice owns complete-thought assembly: V1's listenOnly label informs, but an
+  // unfinished spoken form is never reasoned over just because transport flushed it.
+  // Desk text has no fragment assembler yet, so punctuationless typed questions
+  // ("Tell me where my order is") must not inherit the voice-ending heuristic.
+  if (input.surface === "voice" && completeness === "complete" && looksUnfinished(assembled)) {
     completeness = "incomplete";
   }
   const perceived = perceiveTurn({

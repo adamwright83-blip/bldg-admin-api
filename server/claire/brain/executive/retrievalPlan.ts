@@ -61,12 +61,28 @@ export function buildBusinessQuery(perceived: PerceivedTurn): BusinessQuery | nu
   return query;
 }
 
+/** Imperative halt: "Stop." / "Hey, stop." is discourse, not a route object. */
+function isDiscourseStop(text: string): boolean {
+  return /^(?:(?:hey|ok|okay|wait)[,.]?\s+)?(?:please\s+)?stop(?:\s+please)?[.!?]*$/i.test(text.trim());
+}
+
+/**
+ * Singular "stop" as a route noun: a determiner/adjective, or a question word
+ * that later takes "stop" as its object. This is not the bare command Stop.
+ */
+const SINGULAR_STOP_NOUN =
+  /\b(?:next|first|last|current|upcoming|my|the|a|our)\s+stop\b/i;
+const STOP_AS_QUESTION_OBJECT = /\b(?:what|which|where|when)(?:'s|\s+is|\s+are)?\b[\s\S]{0,40}\bstop\b/i;
+
 /** Is this operations/day-line shaped rather than analytics shaped? */
 function wantsOperations(text: string): boolean {
+  if (isDiscourseStop(text)) return false;
   return (
     /\b(?:today|tomorrow|day\s+line|schedule|route|what'?s\s+on)\b/i.test(text) ||
     /\b(?:stop\s+by|on\s+(?:my\s+|the\s+)?stops)\b/i.test(text) ||
-    /\bstops\b/i.test(text)
+    /\bstops\b/i.test(text) ||
+    SINGULAR_STOP_NOUN.test(text) ||
+    STOP_AS_QUESTION_OBJECT.test(text)
   );
 }
 
