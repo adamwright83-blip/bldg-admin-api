@@ -56,6 +56,7 @@ import {
   derivedM03ArmedTargetIds,
   unconsumedM03QualifyingCycles,
 } from "../narratorOs/m03Readiness";
+import { isLegalEligibilityGoldlineEvidence } from "../narratorOs/brainBoundary";
 import {
   persistableVerifiedGoldlineReceipt,
   productionVerifiedGoldlineEvidence,
@@ -1183,6 +1184,74 @@ describe("Narrator OS Slice E — unforgeable receipt membership and hidden prod
       evalInput(snapshot, { verifiedGoldline: [forged] })
     );
     expect(production.eligibleBeatIds).not.toContain(BEAT_IDS.M04);
+    expect(productionVerifiedGoldlineEvidence(snapshot, [forged])).toEqual([]);
+  });
+
+  it("arbitrary server code cannot promote a forged branded object into legal production eligibility", async () => {
+    const { snapshot } = await seeded();
+    const forged = forgedBrandedKeepReceipt();
+    const authority = await import(
+      "../narratorOs/verifiedGoldlineReceiptAuthority"
+    );
+    const persistence = await import(
+      "../narratorOs/verifiedGoldlinePersistence"
+    );
+    const receiptModule = await import("../narratorOs/verifiedGoldlineReceipt");
+    const narratorIndex = await import("../narratorOs/index");
+    expect("rememberRehydratedVerifiedGoldlineEvidence" in authority).toBe(
+      false
+    );
+    expect("rememberRehydratedVerifiedGoldlineEvidence" in persistence).toBe(
+      false
+    );
+    expect("rememberRehydratedVerifiedGoldlineEvidence" in receiptModule).toBe(
+      false
+    );
+    expect("rememberRehydratedVerifiedGoldlineEvidence" in narratorIndex).toBe(
+      false
+    );
+    const authoritySrc = readFileSync(
+      resolve(
+        REPO_ROOT,
+        "server/narratorOs/verifiedGoldlineReceiptAuthority.ts"
+      ),
+      "utf8"
+    );
+    const persistenceSrc = readFileSync(
+      resolve(REPO_ROOT, "server/narratorOs/verifiedGoldlinePersistence.ts"),
+      "utf8"
+    );
+    expect(authoritySrc).not.toMatch(
+      /export function rememberRehydratedVerifiedGoldlineEvidence/
+    );
+    expect(persistenceSrc).not.toMatch(
+      /rememberRehydratedVerifiedGoldlineEvidence/
+    );
+    for (const mod of [authority, persistence, receiptModule, narratorIndex]) {
+      for (const [name, value] of Object.entries(mod)) {
+        if (typeof value !== "function") continue;
+        if (/test/i.test(name)) continue;
+        try {
+          const result = value(forged);
+          if (
+            result &&
+            typeof (result as Promise<unknown>).then === "function"
+          ) {
+            await result;
+          }
+        } catch {
+          /* production APIs may reject untrusted input */
+        }
+      }
+    }
+    expect(isVerifiedGoldlineReceipt(forged)).toBe(false);
+    expect(isLegalEligibilityGoldlineEvidence(forged)).toBe(false);
+    expect(isRehydratedVerifiedGoldlineEvidence(forged)).toBe(false);
+    expect(
+      evaluateProductionEligibility(
+        evalInput(snapshot, { verifiedGoldline: [forged] })
+      ).eligibleBeatIds
+    ).not.toContain(BEAT_IDS.M04);
     expect(productionVerifiedGoldlineEvidence(snapshot, [forged])).toEqual([]);
   });
 

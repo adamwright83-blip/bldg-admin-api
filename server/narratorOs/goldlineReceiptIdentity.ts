@@ -78,3 +78,46 @@ export function persistedReceiptMatchesLedgerIdentity(
     }) === persisted.receiptId
   );
 }
+
+export function isPersistedVerifiedGoldlineReceipt(
+  value: unknown
+): value is PersistedVerifiedGoldlineReceipt {
+  if (!value || typeof value !== "object") return false;
+  const persisted = value as PersistedVerifiedGoldlineReceipt;
+  const target = persisted.targetRef;
+  const targetOk =
+    target == null ||
+    (target.kind === "goldline_target" &&
+      typeof target.id === "string" &&
+      target.id.length > 0 &&
+      target.id.trim() === target.id);
+  return (
+    typeof persisted.receiptId === "string" &&
+    persisted.receiptId.length > 0 &&
+    typeof persisted.tenantId === "string" &&
+    persisted.tenantId.length > 0 &&
+    typeof persisted.operatorUserId === "string" &&
+    persisted.operatorUserId.length > 0 &&
+    typeof persisted.outcomeId === "string" &&
+    persisted.outcomeId.length > 0 &&
+    persisted.verificationClass === "VERIFIED" &&
+    (persisted.evidenceClass === "authoritative_external" ||
+      persisted.evidenceClass === "operator_attested") &&
+    Boolean(persisted.evidenceRef) &&
+    typeof persisted.evidenceRef === "object" &&
+    typeof persisted.evidenceRef.sourceType === "string" &&
+    persisted.evidenceRef.sourceType.length > 0 &&
+    typeof persisted.evidenceRef.sourceReference === "string" &&
+    persisted.evidenceRef.sourceReference.length > 0 &&
+    persisted.evidenceRef.classification === persisted.evidenceClass &&
+    targetOk &&
+    typeof persisted.occurredAtMs === "number" &&
+    Number.isFinite(persisted.occurredAtMs) &&
+    (persisted.producerNamespace === undefined ||
+      (typeof persisted.producerNamespace === "string" &&
+        persisted.producerNamespace.length > 0)) &&
+    (persisted.sourceEventId === undefined ||
+      (typeof persisted.sourceEventId === "string" &&
+        persisted.sourceEventId.length > 0))
+  );
+}

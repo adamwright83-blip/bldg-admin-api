@@ -5,15 +5,25 @@
  * rehydrated ledger evidence are distinct WeakSet members. Knowing the brand
  * and constructing a matching object does not confer either membership.
  *
+ * Rehydration membership is not a public remember API. It is created only
+ * while walking validated VERIFIED_GOLDLINE_OUTCOME ledger rows.
+ *
  * Production index does not re-export remember functions. Narrator does not
  * issue. Rehydration is not issuance and cannot be re-ingested.
  */
 import { isAuthorizedGoldlineProducerCapability } from "../goldlineVerification/producerCapability";
 import type { GoldlineProducerCapability } from "../goldlineVerification/producerCapability";
+import type { PersistedVerifiedGoldlineReceipt } from "../../shared/narratorOs/contracts";
+import {
+  isPersistedVerifiedGoldlineReceipt,
+  persistedReceiptMatchesLedgerIdentity,
+} from "./goldlineReceiptIdentity";
+import type { NarratorSnapshot } from "./store";
 import {
   isVerifiedGoldlineReceiptShape,
   type VerifiedGoldlineReceipt,
 } from "./verifiedGoldlineReceipt";
+import { VERIFIED_GOLDLINE_RECEIPT_BRAND } from "./verifiedGoldlineReceiptBrand";
 
 const UPSTREAM_ISSUED_VERIFIED_GOLDLINE_RECEIPTS = new WeakSet<object>();
 const REHYDRATED_VERIFIED_GOLDLINE_EVIDENCE = new WeakSet<object>();
@@ -87,16 +97,60 @@ export function rememberTestUpstreamIssuedVerifiedGoldlineReceipt(
   return receipt;
 }
 
-/**
- * Bind validated ledger evidence for eligibility after restart.
- * Does not make the object ingestible as a new upstream event.
- */
-export function rememberRehydratedVerifiedGoldlineEvidence(
-  receipt: VerifiedGoldlineReceipt
+function rehydrateOne(
+  persisted: PersistedVerifiedGoldlineReceipt
 ): VerifiedGoldlineReceipt {
-  if (!isVerifiedGoldlineReceiptShape(receipt)) {
-    throw new Error("Rehydrated Goldline evidence must be well-formed");
-  }
+  const receipt = Object.freeze({
+    [VERIFIED_GOLDLINE_RECEIPT_BRAND]: true as const,
+    receiptId: persisted.receiptId,
+    tenantId: persisted.tenantId,
+    operatorUserId: persisted.operatorUserId,
+    outcomeId: persisted.outcomeId,
+    verificationClass: "VERIFIED" as const,
+    evidenceClass: persisted.evidenceClass,
+    evidenceRef: Object.freeze({
+      sourceType: persisted.evidenceRef.sourceType,
+      sourceReference: persisted.evidenceRef.sourceReference,
+      classification: persisted.evidenceRef.classification,
+    }),
+    targetRef: persisted.targetRef
+      ? Object.freeze({
+          kind: "goldline_target" as const,
+          id: persisted.targetRef.id,
+        })
+      : null,
+    occurredAtMs: persisted.occurredAtMs,
+    ...(persisted.producerNamespace
+      ? { producerNamespace: persisted.producerNamespace }
+      : {}),
+    ...(persisted.sourceEventId
+      ? { sourceEventId: persisted.sourceEventId }
+      : {}),
+  });
   REHYDRATED_VERIFIED_GOLDLINE_EVIDENCE.add(receipt);
   return receipt;
+}
+
+/**
+ * Rebuild branded receipts from ingested ledger evidence. Incomplete or
+ * scope-mismatched rows are skipped (fail closed). Does not mint new
+ * outcomes. Does not accept a caller-constructed receipt object.
+ */
+export function rehydratePersistedVerifiedGoldlineReceipts(
+  snapshot: NarratorSnapshot
+): readonly VerifiedGoldlineReceipt[] {
+  const receipts: VerifiedGoldlineReceipt[] = [];
+  const seen = new Set<string>();
+  for (const entry of snapshot.ledger) {
+    if (entry.kind !== "VERIFIED_GOLDLINE_OUTCOME") continue;
+    const persisted = entry.persistedVerifiedGoldline;
+    if (!isPersistedVerifiedGoldlineReceipt(persisted)) continue;
+    if (!persistedReceiptMatchesLedgerIdentity(entry, persisted)) continue;
+    if (persisted.tenantId !== snapshot.tenantId) continue;
+    if (persisted.operatorUserId !== snapshot.operatorUserId) continue;
+    if (seen.has(persisted.receiptId)) continue;
+    seen.add(persisted.receiptId);
+    receipts.push(rehydrateOne(persisted));
+  }
+  return receipts;
 }
