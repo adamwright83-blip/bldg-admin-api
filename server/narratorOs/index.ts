@@ -11,10 +11,7 @@ export * from "./init";
 export * from "./ledger";
 export * from "./livedBio";
 export * from "./m03Readiness";
-export {
-  createInMemoryNarratorStore,
-  reloadInMemoryNarratorStoreFromSnapshot,
-} from "./memoryStore";
+export { createInMemoryNarratorStore } from "./memoryStore";
 export * from "./registry";
 export * from "./store";
 export * from "./worldTruth";

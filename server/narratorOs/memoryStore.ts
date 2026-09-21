@@ -15,7 +15,6 @@ import type {
 } from "../../shared/narratorOs/contracts";
 import { WORLD_TRUTH_FACTS, NARRATOR_WORLD_TRUTH_VERSION } from "./worldTruth";
 import { resolveDuplicateNarratorLedgerInsert } from "./goldlineLedgerReplay";
-import { createInMemoryNarratorStore } from "./narratorSnapshotAttestation";
 
 function keyOf(scope: OperatorScope): string {
   return `${scope.tenantId}::${scope.operatorUserId}`;
@@ -45,12 +44,22 @@ function seedSnapshot(scope: OperatorScope): NarratorSnapshot {
 }
 
 /**
- * In-memory store. Optional seed is JSON-cloned so a process/store reload
- * test cannot keep the original branded receipt objects as hidden truth.
+ * Unsealed in-memory rows. Public construction goes through
+ * createInMemoryNarratorStore(), which creates fresh internally seeded
+ * state only. Caller snapshot maps are test-only.
  */
 export function createInMemoryNarratorStoreUnsealed(
   seed?: ReadonlyMap<string, NarratorSnapshot>
 ): NarratorStore {
+  if (seed) {
+    const nodeEnv = process.env.NODE_ENV;
+    const inVitest = Boolean(process.env.VITEST);
+    if (nodeEnv !== "test" && !inVitest) {
+      throw new Error(
+        "In-memory Narrator snapshot seed is not available outside tests"
+      );
+    }
+  }
   const rows = new Map<string, NarratorSnapshot>();
   if (seed) {
     for (const [key, snapshot] of seed) {
@@ -160,15 +169,4 @@ export function createInMemoryNarratorStoreUnsealed(
   return store;
 }
 
-export { createInMemoryNarratorStore };
-
-/**
- * Simulate process/store restart: JSON-clone a loaded snapshot into a fresh
- * store. Branded receipts cannot survive this path; only ledger payload can.
- */
-export function reloadInMemoryNarratorStoreFromSnapshot(
-  snapshot: NarratorSnapshot
-): NarratorStore {
-  const cloned = jsonCloneSnapshot(snapshot);
-  return createInMemoryNarratorStore(new Map([[keyOf(cloned), cloned]]));
-}
+export { createInMemoryNarratorStore } from "./narratorSnapshotAttestation";

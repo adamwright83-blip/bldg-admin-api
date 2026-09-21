@@ -44,10 +44,8 @@ import {
 } from "../narratorOs/goldlineReceiptIdentity";
 import { resolveDuplicateNarratorLedgerInsert } from "../narratorOs/drizzleStore";
 import { initNarratorOperator } from "../narratorOs/init";
-import {
-  createInMemoryNarratorStore,
-  reloadInMemoryNarratorStoreFromSnapshot,
-} from "../narratorOs/memoryStore";
+import { createInMemoryNarratorStore } from "../narratorOs/memoryStore";
+import { reloadInMemoryNarratorStoreFromSnapshot } from "../narratorOs/memoryStore.testSupport";
 import {
   AUTHORED_BEATS,
   AUTHORED_GRAPH,
@@ -111,6 +109,8 @@ const NARRATOR_PRODUCTION_FILES = [
   "server/narratorOs/disclosurePolicy.ts",
   "server/narratorOs/authoredNarrativeFacts.ts",
   "server/narratorOs/index.ts",
+  "server/narratorOs/init.ts",
+  "server/narratorOs/memoryStore.ts",
   "server/narratorOs/brainBoundary.ts",
   "server/narratorOs/verifiedGoldlinePersistence.ts",
   "server/narratorOs/goldlineReceiptIdentity.ts",
@@ -250,6 +250,8 @@ describe("Narrator OS Slice E — production verified Goldline ingestion", () =>
         /issueVerifiedGoldlineReceiptFromAuthoritativeMutation/
       );
       expect(src).not.toMatch(/producerCapability\.testSupport/);
+      expect(src).not.toMatch(/memoryStore\.testSupport/);
+      expect(src).not.toMatch(/reloadInMemoryNarratorStoreFromSnapshot/);
       if (file.endsWith("verifiedGoldlineReceiptAuthority.ts")) {
         expect(src).toMatch(
           /from ["']\.\.\/goldlineVerification\/producerCapability["']/
@@ -1296,6 +1298,12 @@ describe("Narrator OS Slice E — unforgeable receipt membership and hidden prod
     expect("isAuthoritativeNarratorSnapshot" in narratorIndex).toBe(false);
     expect("createInMemoryNarratorStoreUnsealed" in narratorIndex).toBe(false);
     expect("createDrizzleNarratorStoreUnsealed" in narratorIndex).toBe(false);
+    expect("reloadInMemoryNarratorStoreFromSnapshot" in narratorIndex).toBe(
+      false
+    );
+    expect("createInMemoryNarratorStoreFromSeedForTests" in narratorIndex).toBe(
+      false
+    );
     const authoritySrc = readFileSync(
       resolve(
         REPO_ROOT,
@@ -1733,5 +1741,49 @@ describe("Narrator OS Slice E — store-loaded snapshots are the only rehydratio
     expect(hydrated[0]?.evidenceRef.sourceReference).toBe(
       "field_commitment:freeze-keep"
     );
+  });
+
+  it("production Narrator index cannot mint attested snapshots from seeded or reloaded caller JSON", async () => {
+    const fake = forgedConsistentKeepSnapshot();
+    const narratorIndex = await import("../narratorOs/index");
+    expect("reloadInMemoryNarratorStoreFromSnapshot" in narratorIndex).toBe(
+      false
+    );
+    expect("createInMemoryNarratorStoreFromSeedForTests" in narratorIndex).toBe(
+      false
+    );
+    expect("createInMemoryNarratorStoreUnsealed" in narratorIndex).toBe(false);
+    const indexSrc = readFileSync(
+      resolve(REPO_ROOT, "server/narratorOs/index.ts"),
+      "utf8"
+    );
+    expect(indexSrc).not.toMatch(/reloadInMemoryNarratorStoreFromSnapshot/);
+    expect(indexSrc).not.toMatch(/memoryStore\.testSupport/);
+    const seeded = (
+      narratorIndex.createInMemoryNarratorStore as (
+        seed?: ReadonlyMap<string, NarratorSnapshot>
+      ) => ReturnType<typeof createInMemoryNarratorStore>
+    )(new Map([[`${fake.tenantId}::${fake.operatorUserId}`, fake]]));
+    const loaded = await seeded.load(scope);
+    expect(loaded).toBeNull();
+    const initialized = await seeded.initOperator(scope);
+    expect(initialized.ledger).toEqual([]);
+    expect(isAuthoritativeNarratorSnapshot(initialized)).toBe(true);
+    expect(rehydratePersistedVerifiedGoldlineReceipts(initialized)).toEqual([]);
+    expect(rehydratePersistedVerifiedGoldlineReceipts(fake)).toEqual([]);
+    expect(
+      evaluateProductionEligibility(
+        evalInput(initialized, { verifiedGoldline: [] })
+      ).eligibleBeatIds
+    ).not.toContain(BEAT_IDS.M04);
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VITEST", "");
+    try {
+      expect(() => reloadInMemoryNarratorStoreFromSnapshot(fake)).toThrow(
+        /not available outside tests/
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

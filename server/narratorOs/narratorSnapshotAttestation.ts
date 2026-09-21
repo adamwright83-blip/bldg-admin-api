@@ -5,8 +5,8 @@
  * Narrator production index.
  *
  * Attestation is minted only inside the concrete in-memory and Drizzle
- * store factories. There is no exported wrap/seal/remember that accepts a
- * caller-supplied store or snapshot.
+ * store factories. Public in-memory construction creates fresh internally
+ * seeded state only. Caller snapshot injection is test-only and env-gated.
  */
 import type {
   NarrativeEventLedgerEntry,
@@ -16,6 +16,15 @@ import type {
 import { createDrizzleNarratorStoreUnsealed } from "./drizzleStore";
 import { createInMemoryNarratorStoreUnsealed } from "./memoryStore";
 import type { NarratorSnapshot, NarratorStore } from "./store";
+
+function assertTestStoreSeedAllowed(): void {
+  const nodeEnv = process.env.NODE_ENV;
+  const inVitest = Boolean(process.env.VITEST);
+  if (nodeEnv === "test" || inVitest) return;
+  throw new Error(
+    "In-memory Narrator snapshot seed is not available outside tests"
+  );
+}
 
 const AUTHORITATIVE_NARRATOR_SNAPSHOTS = new WeakSet<object>();
 
@@ -111,9 +120,14 @@ function wrapConcreteNarratorStore(store: NarratorStore): NarratorStore {
   };
 }
 
-export function createInMemoryNarratorStore(
-  seed?: ReadonlyMap<string, NarratorSnapshot>
+export function createInMemoryNarratorStore(): NarratorStore {
+  return wrapConcreteNarratorStore(createInMemoryNarratorStoreUnsealed());
+}
+
+export function createInMemoryNarratorStoreFromSeedForTests(
+  seed: ReadonlyMap<string, NarratorSnapshot>
 ): NarratorStore {
+  assertTestStoreSeedAllowed();
   return wrapConcreteNarratorStore(createInMemoryNarratorStoreUnsealed(seed));
 }
 
