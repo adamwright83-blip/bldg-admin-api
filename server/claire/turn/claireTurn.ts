@@ -971,7 +971,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
           })
           .catch(() => undefined);
         mark("briefing");
-        return finish({ speak: speakMorningReconciliationAsk(), kind: "clarifying" });
+        return finish({ speak: speakMorningReconciliationAsk(), kind: "answered" });
       }
     }
   }
