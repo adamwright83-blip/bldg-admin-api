@@ -133,7 +133,7 @@ describe("Narrator OS slice B — knowledge + narrative state", () => {
     const snapshot = await initNarratorOperator(store, scope);
     expect(() => assertNewUserSeed(snapshot)).not.toThrow();
     expect(snapshot.ledger).toEqual([]);
-    expect(snapshot.narrativeState.values.m03).toBe("ARMED");
+    expect(snapshot.narrativeState.values.m03).toBeUndefined();
     expect(snapshot.knowledge.planes.PLAYER.knownFactIds).toEqual([]);
   });
 

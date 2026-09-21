@@ -16,6 +16,11 @@ import {
 import { planeKnows, type NarratorSnapshot } from "./store";
 import { AUTHORED_BEATS, AUTHORED_GRAPH } from "./registry";
 import {
+  hasTemporalSameTargetSequence,
+  M03_BEAT_ID,
+  unconsumedM03QualifyingCycles,
+} from "./m03Readiness";
+import {
   isVerifiedGoldlineReceipt,
   type VerifiedGoldlineReceipt,
 } from "./verifiedGoldlineReceipt";
@@ -87,7 +92,8 @@ function evaluatePrerequisite(
   prereq: BeatPrerequisite,
   snapshot: NarratorSnapshot,
   fired: Set<string>,
-  goldline: readonly VerifiedGoldlineReceipt[]
+  goldline: readonly VerifiedGoldlineReceipt[],
+  beatId?: string
 ): NarrativeEligibilityAuditCheck {
   switch (prereq.kind) {
     case "hard_beat":
@@ -114,6 +120,22 @@ function evaluatePrerequisite(
         `verified_goldline_any:${prereq.outcomeIds.join("|")}`,
         prereq.outcomeIds.some(id => goldlineHas(goldline, id, snapshot))
       );
+    case "verified_goldline_same_target": {
+      const ready =
+        beatId === M03_BEAT_ID
+          ? unconsumedM03QualifyingCycles(goldline, snapshot).length > 0
+          : hasTemporalSameTargetSequence(
+              goldline,
+              snapshot,
+              prereq.priorOutcomeIds,
+              prereq.subsequentOutcomeIds
+            );
+      return check(
+        "prerequisite_detail",
+        `verified_goldline_same_target:${prereq.priorOutcomeIds.join("|")}->${prereq.subsequentOutcomeIds.join("|")}`,
+        ready
+      );
+    }
     case "knowledge":
       return check(
         "prerequisite_detail",
@@ -123,10 +145,12 @@ function evaluatePrerequisite(
       );
     case "narrative_state": {
       const actual = snapshot.narrativeState.values[prereq.key];
-      const passed =
-        prereq.equals === undefined
-          ? actual !== undefined && actual !== null
-          : String(actual) === prereq.equals;
+      const present = actual !== undefined && actual !== null;
+      const passed = prereq.equalsAny
+        ? present && prereq.equalsAny.includes(String(actual))
+        : prereq.equals === undefined
+          ? present
+          : present && String(actual) === prereq.equals;
       return check(
         "prerequisite_detail",
         `narrative_state:${prereq.key}`,
@@ -158,7 +182,8 @@ function evaluateCondition(
   condition: EligibilityCondition,
   snapshot: NarratorSnapshot,
   fired: Set<string>,
-  goldline: readonly VerifiedGoldlineReceipt[]
+  goldline: readonly VerifiedGoldlineReceipt[],
+  beatId: string
 ): NarrativeEligibilityAuditCheck {
   if (condition.kind === "never_manufacture") {
     return check(
@@ -167,7 +192,7 @@ function evaluateCondition(
       true
     );
   }
-  return evaluatePrerequisite(condition, snapshot, fired, goldline);
+  return evaluatePrerequisite(condition, snapshot, fired, goldline, beatId);
 }
 
 function evaluateKnowledgeRequirement(
@@ -223,7 +248,8 @@ function evaluateBeat(
         prereq,
         input.snapshot,
         fired,
-        input.verifiedGoldline
+        input.verifiedGoldline,
+        beat.id
       )
     ),
     ...beat.eligibilityConditions.map(condition =>
@@ -231,7 +257,8 @@ function evaluateBeat(
         condition,
         input.snapshot,
         fired,
-        input.verifiedGoldline
+        input.verifiedGoldline,
+        beat.id
       )
     ),
   ];

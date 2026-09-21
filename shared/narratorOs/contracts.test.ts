@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   AUTHORED_BEAT_DEFAULTS,
   CANON_STATUSES,
+  CLAIRE_DISCLOSURE_POLICY_IDS,
+  PERMANENTLY_PRIVATE_CLAIRE_DISCLOSURE_POLICY_IDS,
   ELIGIBILITY_OUTCOMES,
   KNOWLEDGE_PLANES,
   OpenCanonHasNoRuntimeValueError,
@@ -96,5 +98,21 @@ describe("Narrator OS slice A — domain contracts", () => {
     expect(withheldRequiresAuthoredMetadata.defaultSurface).toBe(false);
     expect("taste" in withheldRequiresAuthoredMetadata).toBe(false);
     expect("feelsEarly" in ({} as AuthoredBeat)).toBe(false);
+  });
+
+  it("keeps Claire disclosure policy ids out of the beat contract", () => {
+    expect(CLAIRE_DISCLOSURE_POLICY_IDS).toEqual([
+      "CL-CORE",
+      "CL-T1",
+      "CL-T2",
+      "CL-T3",
+      "CL-WARM-1",
+      "CL-PRIV-ADAPTED-FATHER-LAST-EXCHANGE",
+      "CL-PRIV-EX-LAST-EXCHANGE",
+    ]);
+    expect(PERMANENTLY_PRIVATE_CLAIRE_DISCLOSURE_POLICY_IDS).toEqual([
+      "CL-PRIV-ADAPTED-FATHER-LAST-EXCHANGE",
+      "CL-PRIV-EX-LAST-EXCHANGE",
+    ]);
   });
 });

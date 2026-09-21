@@ -4,9 +4,11 @@
  * cannot call this factory.
  */
 import type { VerifiedGoldlineEvidenceRef } from "../../shared/narratorOs/contracts";
-import type {
-  GoldlineEvidenceClass,
-  VerifiedGoldlineReceipt,
+import {
+  isGoldlineTargetRef,
+  type GoldlineEvidenceClass,
+  type GoldlineTargetRef,
+  type VerifiedGoldlineReceipt,
 } from "./verifiedGoldlineReceipt";
 import { VERIFIED_GOLDLINE_RECEIPT_BRAND } from "./verifiedGoldlineReceiptBrand";
 
@@ -17,6 +19,8 @@ export type VerifiedGoldlineReceiptDraft = {
   outcomeId: string;
   evidenceClass: GoldlineEvidenceClass;
   evidenceRef: VerifiedGoldlineEvidenceRef;
+  targetRef?: GoldlineTargetRef | null;
+  occurredAtMs: number;
 };
 
 function assertTestIssuanceAllowed(): void {
@@ -57,6 +61,18 @@ export function issueVerifiedGoldlineReceiptForTests(
   if (!draft.evidenceRef.sourceType || !draft.evidenceRef.sourceReference) {
     throw new Error("VerifiedGoldlineReceipt requires evidenceRef identity");
   }
+  const targetRef = draft.targetRef ?? null;
+  if (targetRef !== null && !isGoldlineTargetRef(targetRef)) {
+    throw new Error(
+      "VerifiedGoldlineReceipt targetRef is not an opaque goldline_target"
+    );
+  }
+  if (
+    typeof draft.occurredAtMs !== "number" ||
+    !Number.isFinite(draft.occurredAtMs)
+  ) {
+    throw new Error("VerifiedGoldlineReceipt requires trusted occurredAtMs");
+  }
   return Object.freeze({
     [VERIFIED_GOLDLINE_RECEIPT_BRAND]: true as const,
     receiptId: draft.receiptId,
@@ -70,5 +86,9 @@ export function issueVerifiedGoldlineReceiptForTests(
       sourceReference: draft.evidenceRef.sourceReference,
       classification: draft.evidenceRef.classification,
     }),
+    targetRef: targetRef
+      ? Object.freeze({ kind: "goldline_target" as const, id: targetRef.id })
+      : null,
+    occurredAtMs: draft.occurredAtMs,
   });
 }

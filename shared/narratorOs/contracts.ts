@@ -139,12 +139,22 @@ export type BeatPrerequisite =
   | { kind: "verified_goldline_outcome"; outcomeId: string }
   | { kind: "verified_goldline_any"; outcomeIds: readonly string[] }
   | {
+      kind: "verified_goldline_same_target";
+      priorOutcomeIds: readonly string[];
+      subsequentOutcomeIds: readonly string[];
+    }
+  | {
       kind: "knowledge";
       plane: KnowledgePlane;
       factId: string;
       mustKnow: boolean;
     }
-  | { kind: "narrative_state"; key: string; equals?: string }
+  | {
+      kind: "narrative_state";
+      key: string;
+      equals?: string;
+      equalsAny?: readonly string[];
+    }
   | { kind: "world_truth"; factId: string }
   | {
       kind: "open_policy";
@@ -229,6 +239,39 @@ export type AuthoredBeat = {
   eligibilityDefinition: EligibilityDefinition;
   /** Why this beat is INCOMPLETE. Not an OPEN-canon fill. */
   eligibilityIncompleteReason?: string;
+};
+
+/**
+ * Immutable Claire disclosure policy. Not a beat, ledger event, knowledge
+ * mutation, or world-truth write. Permission is not occurrence.
+ */
+export const CLAIRE_DISCLOSURE_POLICY_IDS = [
+  "CL-CORE",
+  "CL-T1",
+  "CL-T2",
+  "CL-T3",
+  "CL-WARM-1",
+  "CL-PRIV-ADAPTED-FATHER-LAST-EXCHANGE",
+  "CL-PRIV-EX-LAST-EXCHANGE",
+] as const;
+export type ClaireDisclosurePolicyId =
+  (typeof CLAIRE_DISCLOSURE_POLICY_IDS)[number];
+
+/** Permanently private: no authored text exists. Not beats. */
+export const PERMANENTLY_PRIVATE_CLAIRE_DISCLOSURE_POLICY_IDS = [
+  "CL-PRIV-ADAPTED-FATHER-LAST-EXCHANGE",
+  "CL-PRIV-EX-LAST-EXCHANGE",
+] as const satisfies readonly ClaireDisclosurePolicyId[];
+
+export type ClaireDisclosurePolicy = {
+  readonly id: ClaireDisclosurePolicyId;
+  readonly canonStatus: CanonStatus;
+  readonly governedScopeRef: string;
+  readonly fromStart: boolean;
+  readonly progressGated: boolean;
+  readonly askOnly: boolean;
+  readonly permanentlyPrivate: boolean;
+  readonly authoredSourceRef: string;
 };
 
 export const CHEMIST_VERDICTS = [

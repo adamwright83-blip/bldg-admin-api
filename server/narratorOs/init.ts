@@ -45,6 +45,11 @@ export function assertNewUserSeed(snapshot: NarratorSnapshot): void {
   if (snapshot.livedBio.length !== CLAIRE_LIVED_BIO_FACTS.length) {
     throw new Error("CLAIRE_LIVED_BIO must be seeded statically");
   }
+  if (snapshot.narrativeState.values.m03 !== undefined) {
+    throw new Error(
+      "New narrator operator must not begin universally M03-ARMED"
+    );
+  }
 }
 
 export { createInMemoryNarratorStore, EMPTY_KNOWLEDGE };
