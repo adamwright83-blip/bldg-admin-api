@@ -150,6 +150,15 @@ export function planRetrievalPassA(
       if (wantsOperations(perceived.assembledText)) {
         requests.push({ compartment: "businessMemory", kind: "operations" });
       }
+      const kinds = new Set(attention.activeTaskSets.map(set => set.kind));
+      const scopedAccount =
+        kinds.has("account_judgment") || attention.entitiesToResolve.length > 0;
+      if (
+        !scopedAccount &&
+        (wantsOperations(perceived.assembledText) || kinds.has("broad_planning") || perceived.broadBriefingRequest)
+      ) {
+        requests.push({ compartment: "businessMemory", kind: "workday_command" });
+      }
       const query = buildBusinessQuery(perceived) ?? requeryUsingPriorParameters(perceived, memory);
       if (query) requests.push({ compartment: "businessMemory", kind: "business_query", query });
     }

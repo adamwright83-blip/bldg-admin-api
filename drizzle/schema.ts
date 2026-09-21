@@ -5931,6 +5931,45 @@ export const dayDirectorPromptStates = mysqlTable(
   })
 );
 
+/**
+ * Operator-confirmed recurrence for Day Line work. A rule is not an order;
+ * it only authorizes projecting one Day Director commitment onto matching
+ * future business dates.
+ */
+export const dayDirectorRecurrenceRules = mysqlTable(
+  "day_director_recurrence_rules",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+    actorId: varchar("actorId", { length: 128 }).notNull(),
+    sourceIdentity: varchar("sourceIdentity", { length: 64 }).notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
+    kind: mysqlEnum("kind", ["growth", "prep", "operations"]).notNull(),
+    weekday: varchar("weekday", { length: 16 }).notNull(),
+    windowStart: varchar("windowStart", { length: 8 }),
+    windowEnd: varchar("windowEnd", { length: 8 }),
+    sourceText: text("sourceText"),
+    status: mysqlEnum("status", ["active", "cancelled"])
+      .notNull()
+      .default("active"),
+    metadataJson: json("metadataJson"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    sourceUnique: uniqueIndex("uq_day_director_recurrence_source").on(
+      table.tenantId,
+      table.actorId,
+      table.sourceIdentity
+    ),
+    actorIdx: index("idx_day_director_recurrence_actor").on(
+      table.tenantId,
+      table.actorId,
+      table.status
+    ),
+  })
+);
+
 /** Canonical address/geocode truth for residential, building, and prospect entities. */
 export const entityLocations = mysqlTable(
   "entity_locations",

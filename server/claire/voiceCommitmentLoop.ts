@@ -27,6 +27,15 @@ import {
 } from "../../shared/claireRuntime";
 import { recordClaireConversionJoin } from "./conversionJoins";
 import { confirmTomorrowUtterance } from "../../shared/claireWorkday";
+import {
+  classifyDayDirectorKind,
+  commandMetadataFromUtterance,
+  detectRecurrenceWeekday,
+  resolveCommitmentBusinessDate,
+  speakCommitmentDay,
+} from "./workdayCommandLanguage";
+import { confirmRecurrenceRule, recurrenceIdempotencyKey } from "./workdayRecurrenceService";
+import { emptyCommandMetadata } from "../../shared/claireWorkdayCommand";
 import { capabilityIsActionable } from "../../shared/goldlineCapabilities";
 import {
   extractCancellationReason,
@@ -85,13 +94,44 @@ export function detectConfirmation(utterance: string): "yes" | "no" | "ambiguous
   return "ambiguous";
 }
 
-export function describeProposalForReadback(proposal: DayDirectorProposal): string {
+export function describeProposalForReadback(proposal: DayDirectorProposal, today?: string): string {
   const quantityPart = proposal.quantity ? `, quantity ${proposal.quantity}` : "";
   const detailPart =
     proposal.detailState === "NEEDS_DETAILS"
       ? " I can add it now and flag the missing details."
       : "";
-  return `I heard: ${proposal.title}${quantityPart}.${detailPart} Should I add that to today's plan? Say yes or no.`;
+  const day =
+    proposal.targetBusinessDate && today
+      ? speakCommitmentDay(proposal.targetBusinessDate, today)
+      : proposal.targetBusinessDate && proposal.targetBusinessDate !== today
+        ? proposal.targetBusinessDate
+        : "today";
+  const dayPhrase = day === "today" ? "today's plan" : `${day}'s plan`;
+  const primaryPart = proposal.command?.role === "primary" ? " as the protected mission" : "";
+  return `I heard: ${proposal.title}${quantityPart}.${detailPart} Should I add that to ${dayPhrase}${primaryPart}? Say yes or no.`;
+}
+
+export function decorateCommitmentProposal(
+  proposal: DayDirectorProposal,
+  utterance: string,
+  today: string
+): DayDirectorProposal {
+  const targetBusinessDate = resolveCommitmentBusinessDate(utterance, today);
+  const interpreted = commandMetadataFromUtterance(utterance, new Date().toISOString());
+  const command = proposal.command ?? emptyCommandMetadata();
+  command.role = interpreted.role;
+  command.designatedBy = interpreted.designatedBy;
+  command.designatedAt = interpreted.designatedAt;
+  command.promisedTo = interpreted.promisedTo;
+  command.identityUnknown = interpreted.identityUnknown;
+  proposal.targetBusinessDate = targetBusinessDate;
+  proposal.command = command;
+  proposal.kind = classifyDayDirectorKind(utterance);
+  const weekday = detectRecurrenceWeekday(utterance);
+  if (weekday) {
+    proposal.recurrence = { weekday, windowStart: null, windowEnd: null };
+  }
+  return proposal;
 }
 
 const classificationSchema = z.object({
@@ -409,6 +449,24 @@ export async function handleVoiceCommitmentTurn(
     const decision = detectConfirmation(input.utterance);
     if (decision === "yes") {
       input.state.pendingProposal = null;
+      if (proposal.recurrence) {
+        const rule = await confirmRecurrenceRule({
+          tenantId: input.tenantId,
+          actorId: input.actorId,
+          title: proposal.title,
+          kind: proposal.kind,
+          weekday: proposal.recurrence.weekday,
+          windowStart: proposal.recurrence.windowStart,
+          windowEnd: proposal.recurrence.windowEnd,
+          sourceText: proposal.sourceText,
+        });
+        proposal.command = proposal.command ?? emptyCommandMetadata();
+        proposal.command.recurrenceRuleId = rule.id;
+        proposal.promptKey = recurrenceIdempotencyKey(
+          rule.id,
+          proposal.targetBusinessDate ?? input.businessDate
+        );
+      }
       const stored = await accept({
         tenantId: input.tenantId,
         actorId: input.actorId,
@@ -647,6 +705,7 @@ export async function handleVoiceCommitmentTurn(
     if (decision === "yes") {
       input.state.clarifyingUtterance = null;
       const proposal = await propose({ tenantId: input.tenantId, sourceText: original });
+      decorateCommitmentProposal(proposal, original, input.businessDate);
       input.state.pendingProposal = proposal;
       recordClaireConversionJoin({
         tenantId: input.tenantId,
@@ -656,7 +715,7 @@ export async function handleVoiceCommitmentTurn(
         proposalTitle: proposal.title,
         detailState: proposal.detailState ?? "COMPLETE",
       });
-      return { kind: "proposed", speak: describeProposalForReadback(proposal) };
+      return { kind: "proposed", speak: describeProposalForReadback(proposal, input.businessDate) };
     }
     if (decision === "no") {
       input.state.clarifyingUtterance = null;
@@ -799,6 +858,7 @@ export async function handleVoiceCommitmentTurn(
     tenantId: input.tenantId,
     sourceText: input.utterance,
   });
+  decorateCommitmentProposal(proposal, input.utterance, input.businessDate);
   if (ambiguity.kind === "non_critical") {
     proposal.detailState = "NEEDS_DETAILS";
     proposal.missingDetails = ambiguity.missingDetails;
@@ -817,5 +877,5 @@ export async function handleVoiceCommitmentTurn(
     proposalTitle: proposal.title,
     detailState: proposal.detailState ?? "COMPLETE",
   });
-  return { kind: "proposed", speak: describeProposalForReadback(proposal) };
+  return { kind: "proposed", speak: describeProposalForReadback(proposal, input.businessDate) };
 }

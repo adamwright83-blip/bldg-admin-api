@@ -8,6 +8,7 @@ import {
 } from "./generationTelemetry";
 import { writeClairePreDriveBrief } from "./reasoning";
 import { previewWorkdayLoop } from "./workdayPlanService";
+import { loadDailyCommand } from "./workdayCommandService";
 import { detectWorkdaySession } from "../../shared/claireWorkday";
 import { getTodayFeaturedOperation } from "../strategy/todayFeaturedService";
 import { getLatestStrategySnapshot } from "../strategy/snapshotBuilder";
@@ -58,6 +59,18 @@ export async function assembleClaireVoiceCallContext(
       deltaCount: 0,
       hasConfirmedPlan: false,
     };
+  }
+  try {
+    context.workdayCommand = await loadDailyCommand({
+      tenantId: input.tenantId,
+      actorId: input.dayDirectorActorId ?? input.actorId,
+      dayDirectorActorId: input.dayDirectorActorId ?? input.actorId,
+      operatorUserId: input.actorId,
+      businessDate: context.businessDate,
+      timeZone: input.timeZone,
+    });
+  } catch {
+    context.workdayCommand = null;
   }
   return context;
 }

@@ -21,13 +21,41 @@ export type WorkdayPlanItem = {
   provenance: string;
 };
 
+export type WorkdayReconciliationStatus = "not_started" | "asked" | "complete";
+
+export type WorkdayReconciliationState = {
+  status: WorkdayReconciliationStatus;
+  askedAt: string | null;
+  completedAt: string | null;
+};
+
+export function emptyWorkdayReconciliation(): WorkdayReconciliationState {
+  return { status: "not_started", askedAt: null, completedAt: null };
+}
+
 export type ConfirmedWorkdayPlan = {
   businessDate: string;
   confirmedAt: string;
   actorId: string;
   items: WorkdayPlanItem[];
   missingQuestion: string | null;
+  reconciliation?: WorkdayReconciliationState;
 };
+
+export function speakMorningReconciliationAsk(): string {
+  return "Before we lock today, which pickups or dropoffs are happening that aren't on the Line?";
+}
+
+export function speakMorningCommandOpening(
+  session: ReturnType<typeof detectWorkdaySession>,
+  reconciliation: WorkdayReconciliationState,
+  deltas: WorkdayDelta[]
+): string {
+  if (session === "morning_reconciliation" && reconciliation.status !== "complete") {
+    return speakMorningReconciliationAsk();
+  }
+  return speakMorningDelta(deltas);
+}
 
 export type WorkdayDeltaKind =
   | "ADDED"

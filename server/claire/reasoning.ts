@@ -13,6 +13,7 @@ import { CLAIRE_V1_REASONING_POLICY } from "../../shared/claireRuntime";
 import { formatCapabilityBriefing } from "../../shared/goldlineCapabilities";
 import { detectWorkdaySession, speakEveningPlan } from "../../shared/claireWorkday";
 import { assembleTomorrowCandidates } from "./workdayPlanService";
+import { toDailyCommandPromptSection } from "../../shared/claireWorkdayCommand";
 import { lintCeoLanguage, lintDisappointmentFraming } from "./disappointmentLint";
 import {
   assertPostGenerationStateVerbs,
@@ -174,6 +175,7 @@ function compactContext(context: ClaireDriveContext): string {
       relationToMacroGoal: item.relationToMacroGoal,
     })),
     workday: context.workday ?? null,
+    workdayCommand: context.workdayCommand ? toDailyCommandPromptSection(context.workdayCommand) : null,
     strategySnapshotId: context.strategySnapshotId ?? null,
     strategyGoal: context.strategySnapshot?.payload.goal ?? null,
     strategyGrowthPlan: context.strategySnapshot?.payload.growthPlan ?? null,
@@ -217,12 +219,19 @@ export function buildClaireOpeningFallback(context: ClaireDriveContext): string 
     lines.push(context.workday?.eveningSpeak ?? speakEveningPlan(assembleTomorrowCandidates(context)));
     return lines.slice(0, 3).join(" ");
   }
-  if (session === "morning_reconciliation" && context.workday?.hasConfirmedPlan) {
-    lines.push(context.workday.morningSpeak);
-    return lines.slice(0, 3).join(" ");
+  if (session === "morning_reconciliation") {
+    if (context.workday?.morningSpeak) {
+      lines.push(context.workday.morningSpeak);
+      if (context.workdayCommand?.primary) {
+        lines.push(`${context.workdayCommand.primary.title} is the protected mission today.`);
+      }
+      return lines.slice(0, 3).join(" ");
+    }
   }
   const runtime = context.runtime ?? assembleClaireRuntimeView(context);
-  if (metric?.completeness === "complete" && metric.value !== null) {
+  if (context.workdayCommand?.primary) {
+    lines.push(`${context.workdayCommand.primary.title} is the protected mission today.`);
+  } else if (metric?.completeness === "complete" && metric.value !== null) {
     lines.push(`The verified 30-calendar-day active-customer count is ${metric.value}.`);
   } else if (metric?.completeness === "partial" && metric.value !== null) {
     lines.push(`I can verify ${metric.value} from ${metric.sources.join(" and ")}, but that is not the full active-customer total.`);
