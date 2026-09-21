@@ -109,6 +109,8 @@ CLOSES: nothing
 PROHIBITED: manufactured rejection; ARM ledger event; M03-ARM beat id  
 SOURCE: Canon §4 M03
 
+**CANON CORRECTION:** `GOLDLINE_CANON.md` LOCKED no/silence outranks this package. A spoken no is terminal unless that person later reopens contact. `spoken_no` alone does not license a retry RETURN; trusted same-target `contact_reopened_after_no` is required first. Eligible silence / authored no-show may still support an appropriately timed return family. Do not treat spoken no like eligible silence.
+
 ---
 
 ### M04 — HELD

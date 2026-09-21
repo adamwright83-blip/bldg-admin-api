@@ -42,6 +42,12 @@ export type VerifiedGoldlineReceipt = {
   readonly evidenceClass: GoldlineEvidenceClass;
   readonly evidenceRef: Readonly<VerifiedGoldlineEvidenceRef>;
   readonly targetRef: GoldlineTargetRef | null;
+  /**
+   * Authoritative source occurrence time. Sequence uses this field only.
+   * Runtime must not infer order from array position, receiptId, or
+   * free-form sourceReference.
+   */
+  readonly occurredAtMs: number;
 };
 
 export function isVerifiedGoldlineReceipt(
@@ -52,6 +58,9 @@ export function isVerifiedGoldlineReceipt(
   const evidenceRef = receipt.evidenceRef;
   const targetRefOk =
     receipt.targetRef == null || isGoldlineTargetRef(receipt.targetRef);
+  const occurredAtOk =
+    typeof receipt.occurredAtMs === "number" &&
+    Number.isFinite(receipt.occurredAtMs);
   return (
     receipt[VERIFIED_GOLDLINE_RECEIPT_BRAND] === true &&
     typeof receipt.receiptId === "string" &&
@@ -74,6 +83,7 @@ export function isVerifiedGoldlineReceipt(
     (evidenceRef.classification === "authoritative_external" ||
       evidenceRef.classification === "operator_attested") &&
     evidenceRef.classification === receipt.evidenceClass &&
-    targetRefOk
+    targetRefOk &&
+    occurredAtOk
   );
 }

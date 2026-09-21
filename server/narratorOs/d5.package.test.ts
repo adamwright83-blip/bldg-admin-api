@@ -17,7 +17,7 @@ import { commitAuthorizedBeat, IneligibleBeatCommitError } from "./ledger";
 import { issueVerifiedGoldlineReceiptForTests } from "./verifiedGoldlineReceipt.testSupport";
 import {
   derivedM03ArmedTargetIds,
-  M03_OCCURRENCE_PREFIX,
+  m03OccurrenceIdempotencyKey,
   unconsumedM03FireTargetIds,
 } from "./m03Readiness";
 import { initNarratorOperator } from "./init";
@@ -72,6 +72,7 @@ function issueReceipt(
     targetId?: string;
     tenantId?: string;
     operatorUserId?: string;
+    occurredAtMs?: number;
   }
 ): VerifiedGoldlineReceipt {
   return issueVerifiedGoldlineReceiptForTests({
@@ -89,8 +90,14 @@ function issueReceipt(
     targetRef: extra?.targetId
       ? { kind: "goldline_target", id: extra.targetId }
       : null,
+    occurredAtMs: extra?.occurredAtMs ?? 1,
   });
 }
+
+const MONDAY_MS = Date.parse("2026-09-14T12:00:00Z");
+const TUESDAY_MS = Date.parse("2026-09-15T12:00:00Z");
+const WEDNESDAY_MS = Date.parse("2026-09-16T12:00:00Z");
+const THURSDAY_MS = Date.parse("2026-09-17T12:00:00Z");
 
 function evalInput(
   snapshot: NarratorSnapshot,
@@ -172,8 +179,14 @@ describe("Narrator OS D.5 — canon package ingestion", () => {
   it("4. unrelated-target return cannot complete M03", async () => {
     const { snapshot } = await seeded();
     const receipts = [
-      issueReceipt("spoken_no", { targetId: "target-a" }),
-      issueReceipt("legitimate_second_site_visit", { targetId: "target-b" }),
+      issueReceipt("silence_eligible_for_retry", {
+        targetId: "target-a",
+        occurredAtMs: MONDAY_MS,
+      }),
+      issueReceipt("legitimate_second_site_visit", {
+        targetId: "target-b",
+        occurredAtMs: TUESDAY_MS,
+      }),
     ];
     expect(derivedM03ArmedTargetIds(receipts, snapshot)).toEqual(["target-a"]);
     expect(unconsumedM03FireTargetIds(receipts, snapshot)).toEqual([]);
@@ -188,11 +201,19 @@ describe("Narrator OS D.5 — canon package ingestion", () => {
 
   it("5. valid same-target return can fire M03", async () => {
     const { store, snapshot } = await seeded();
-    const receipts = [
-      issueReceipt("spoken_no", { targetId: "target-a" }),
-      issueReceipt("legitimate_second_site_visit", { targetId: "target-a" }),
-    ];
-    const eligibility = evalInput(snapshot, { verifiedGoldline: receipts });
+    const silence = issueReceipt("silence_eligible_for_retry", {
+      targetId: "target-a",
+      receiptId: "receipt:silence:target-a",
+      occurredAtMs: MONDAY_MS,
+    });
+    const ret = issueReceipt("legitimate_second_site_visit", {
+      targetId: "target-a",
+      receiptId: "receipt:return:target-a",
+      occurredAtMs: TUESDAY_MS,
+    });
+    const eligibility = evalInput(snapshot, {
+      verifiedGoldline: [ret, silence],
+    });
     const result = evaluateEligibility(eligibility);
     expect(result.eligibleBeatIds).toContain("M03");
     const auth = issueEligibilityAuthorizations(result, eligibility).find(
@@ -210,23 +231,24 @@ describe("Narrator OS D.5 — canon package ingestion", () => {
       )
     ).toHaveLength(1);
     expect(after.ledger[0]?.idempotencyKey).toBe(
-      `${M03_OCCURRENCE_PREFIX}target-a`
+      m03OccurrenceIdempotencyKey("target-a", silence.receiptId)
     );
     expect(after.narrativeState.values.m03).not.toBe("ARMED");
   });
 
-  it("6. M03 recurrence cannot be created by caller-minted occurrence identity", async () => {
+  it("6. M03 recurrence is evidence-cycle identity, not a caller-minted key", async () => {
     const { store, snapshot } = await seeded();
-    const firstPair = [
-      issueReceipt("spoken_no", {
-        targetId: "target-a",
-        receiptId: "receipt:no-a-1",
-      }),
-      issueReceipt("legitimate_second_site_visit", {
-        targetId: "target-a",
-        receiptId: "receipt:return-a-1",
-      }),
-    ];
+    const silenceA = issueReceipt("silence_eligible_for_retry", {
+      targetId: "target-a",
+      receiptId: "receipt:silence-a-1",
+      occurredAtMs: MONDAY_MS,
+    });
+    const returnA = issueReceipt("legitimate_second_site_visit", {
+      targetId: "target-a",
+      receiptId: "receipt:return-a-1",
+      occurredAtMs: TUESDAY_MS,
+    });
+    const firstPair = [returnA, silenceA];
     const eligibility = evalInput(snapshot, { verifiedGoldline: firstPair });
     const result = evaluateEligibility(eligibility);
     const auth = issueEligibilityAuthorizations(result, eligibility).find(
@@ -240,19 +262,7 @@ describe("Narrator OS D.5 — canon package ingestion", () => {
     });
     expect(after.ledger).toHaveLength(1);
 
-    const remintedSameTarget = [
-      issueReceipt("spoken_no", {
-        targetId: "target-a",
-        receiptId: "receipt:no-a-2",
-      }),
-      issueReceipt("legitimate_second_site_visit", {
-        targetId: "target-a",
-        receiptId: "receipt:return-a-2",
-      }),
-    ];
-    const replayInput = evalInput(after, {
-      verifiedGoldline: remintedSameTarget,
-    });
+    const replayInput = evalInput(after, { verifiedGoldline: firstPair });
     const replay = evaluateEligibility(replayInput);
     expect(replay.eligibleBeatIds).not.toContain("M03");
     expect(
@@ -261,37 +271,36 @@ describe("Narrator OS D.5 — canon package ingestion", () => {
       )
     ).toBeUndefined();
 
-    const newTarget = [
-      ...remintedSameTarget,
-      issueReceipt("spoken_no", {
-        targetId: "target-b",
-        receiptId: "receipt:no-b",
-      }),
-      issueReceipt("timed_retry_after_silence", {
-        targetId: "target-b",
-        receiptId: "receipt:return-b",
-      }),
-    ];
-    const bInput = evalInput(after, { verifiedGoldline: newTarget });
-    const bResult = evaluateEligibility(bInput);
-    expect(bResult.eligibleBeatIds).toContain("M03");
-    const bAuth = issueEligibilityAuthorizations(bResult, bInput).find(
-      item => item.beatId === BEAT_IDS.M03
-    )!;
-    const afterB = await commitAuthorizedBeat({
+    const laterSilenceA = issueReceipt("silence_eligible_for_retry", {
+      targetId: "target-a",
+      receiptId: "receipt:silence-a-2",
+      occurredAtMs: WEDNESDAY_MS,
+    });
+    const laterReturnA = issueReceipt("legitimate_second_site_visit", {
+      targetId: "target-a",
+      receiptId: "receipt:return-a-2",
+      occurredAtMs: THURSDAY_MS,
+    });
+    const laterInput = evalInput(after, {
+      verifiedGoldline: [laterReturnA, laterSilenceA, ...firstPair],
+    });
+    const laterResult = evaluateEligibility(laterInput);
+    expect(laterResult.eligibleBeatIds).toContain("M03");
+    const laterAuth = issueEligibilityAuthorizations(
+      laterResult,
+      laterInput
+    ).find(item => item.beatId === BEAT_IDS.M03)!;
+    const afterLater = await commitAuthorizedBeat({
       store,
       scope,
-      authorization: bAuth,
-      eligibility: bInput,
+      authorization: laterAuth,
+      eligibility: laterInput,
     });
-    const fired = afterB.ledger.filter(
-      entry => entry.kind === "FIRED_AUTHORED_BEAT" && entry.beatId === "M03"
-    );
-    expect(fired).toHaveLength(2);
-    expect(fired.map(entry => entry.idempotencyKey).sort()).toEqual([
-      `${M03_OCCURRENCE_PREFIX}target-a`,
-      `${M03_OCCURRENCE_PREFIX}target-b`,
-    ]);
+    expect(
+      afterLater.ledger.filter(
+        entry => entry.kind === "FIRED_AUTHORED_BEAT" && entry.beatId === "M03"
+      )
+    ).toHaveLength(2);
   });
 
   it("7. M04 miss fires nothing", async () => {
@@ -545,6 +554,284 @@ describe("Narrator OS D.5 — canon package ingestion", () => {
   });
 });
 
+describe("Narrator OS D.5 — M03 authority correction", () => {
+  it("1. ARM Monday then RETURN Tuesday on the same target may qualify", async () => {
+    const { snapshot } = await seeded();
+    const receipts = [
+      issueReceipt("legitimate_second_site_visit", {
+        targetId: "target-a",
+        receiptId: "z-return-later-id",
+        occurredAtMs: TUESDAY_MS,
+      }),
+      issueReceipt("silence_eligible_for_retry", {
+        targetId: "target-a",
+        receiptId: "a-silence-earlier-id",
+        occurredAtMs: MONDAY_MS,
+      }),
+    ];
+    expect(unconsumedM03FireTargetIds(receipts, snapshot)).toEqual([
+      "target-a",
+    ]);
+    expect(
+      evaluateEligibility(evalInput(snapshot, { verifiedGoldline: receipts }))
+        .eligibleBeatIds
+    ).toContain("M03");
+  });
+
+  it("2. RETURN Monday then ARM Tuesday on the same target does not qualify", async () => {
+    const { snapshot } = await seeded();
+    const receipts = [
+      issueReceipt("legitimate_second_site_visit", {
+        targetId: "target-a",
+        occurredAtMs: MONDAY_MS,
+      }),
+      issueReceipt("silence_eligible_for_retry", {
+        targetId: "target-a",
+        occurredAtMs: TUESDAY_MS,
+      }),
+    ];
+    expect(unconsumedM03FireTargetIds(receipts, snapshot)).toEqual([]);
+    expect(
+      evaluateEligibility(evalInput(snapshot, { verifiedGoldline: receipts }))
+        .eligibleBeatIds
+    ).not.toContain("M03");
+  });
+
+  it("3. ARM A then RETURN B does not qualify", async () => {
+    const { snapshot } = await seeded();
+    const receipts = [
+      issueReceipt("silence_eligible_for_retry", {
+        targetId: "target-a",
+        occurredAtMs: MONDAY_MS,
+      }),
+      issueReceipt("legitimate_second_site_visit", {
+        targetId: "target-b",
+        occurredAtMs: TUESDAY_MS,
+      }),
+    ];
+    expect(
+      evaluateEligibility(evalInput(snapshot, { verifiedGoldline: receipts }))
+        .eligibleBeatIds
+    ).not.toContain("M03");
+  });
+
+  it("4. spoken_no then later RETURN without reopen does not qualify", async () => {
+    const { snapshot } = await seeded();
+    const receipts = [
+      issueReceipt("spoken_no", {
+        targetId: "target-a",
+        occurredAtMs: MONDAY_MS,
+      }),
+      issueReceipt("legitimate_second_site_visit", {
+        targetId: "target-a",
+        occurredAtMs: TUESDAY_MS,
+      }),
+    ];
+    expect(derivedM03ArmedTargetIds(receipts, snapshot)).toEqual(["target-a"]);
+    expect(unconsumedM03FireTargetIds(receipts, snapshot)).toEqual([]);
+    expect(
+      evaluateEligibility(evalInput(snapshot, { verifiedGoldline: receipts }))
+        .eligibleBeatIds
+    ).not.toContain("M03");
+  });
+
+  it("5. spoken_no then later reopen then later RETURN may qualify", async () => {
+    const { store, snapshot } = await seeded();
+    const spokenNo = issueReceipt("spoken_no", {
+      targetId: "target-a",
+      receiptId: "receipt:no-a",
+      occurredAtMs: MONDAY_MS,
+    });
+    const reopen = issueReceipt("contact_reopened_after_no", {
+      targetId: "target-a",
+      receiptId: "receipt:reopen-a",
+      occurredAtMs: TUESDAY_MS,
+    });
+    const ret = issueReceipt("legitimate_second_site_visit", {
+      targetId: "target-a",
+      receiptId: "receipt:return-a",
+      occurredAtMs: WEDNESDAY_MS,
+    });
+    const eligibility = evalInput(snapshot, {
+      verifiedGoldline: [ret, spokenNo, reopen],
+    });
+    expect(evaluateEligibility(eligibility).eligibleBeatIds).toContain("M03");
+    const auth = issueEligibilityAuthorizations(
+      evaluateEligibility(eligibility),
+      eligibility
+    ).find(item => item.beatId === BEAT_IDS.M03)!;
+    const after = await commitAuthorizedBeat({
+      store,
+      scope,
+      authorization: auth,
+      eligibility,
+    });
+    expect(after.ledger[0]?.idempotencyKey).toBe(
+      m03OccurrenceIdempotencyKey("target-a", reopen.receiptId)
+    );
+  });
+
+  it("6. reopen or RETURN before spoken_no cannot be reordered into a valid sequence", async () => {
+    const { snapshot } = await seeded();
+    const reopenFirst = [
+      issueReceipt("contact_reopened_after_no", {
+        targetId: "target-a",
+        occurredAtMs: MONDAY_MS,
+      }),
+      issueReceipt("spoken_no", {
+        targetId: "target-a",
+        occurredAtMs: TUESDAY_MS,
+      }),
+      issueReceipt("legitimate_second_site_visit", {
+        targetId: "target-a",
+        occurredAtMs: WEDNESDAY_MS,
+      }),
+    ];
+    expect(
+      evaluateEligibility(
+        evalInput(snapshot, { verifiedGoldline: reopenFirst })
+      ).eligibleBeatIds
+    ).not.toContain("M03");
+
+    const returnThenReopenThenNo = [
+      issueReceipt("legitimate_second_site_visit", {
+        targetId: "target-a",
+        occurredAtMs: MONDAY_MS,
+      }),
+      issueReceipt("contact_reopened_after_no", {
+        targetId: "target-a",
+        occurredAtMs: TUESDAY_MS,
+      }),
+      issueReceipt("spoken_no", {
+        targetId: "target-a",
+        occurredAtMs: WEDNESDAY_MS,
+      }),
+    ];
+    expect(
+      evaluateEligibility(
+        evalInput(snapshot, { verifiedGoldline: returnThenReopenThenNo })
+      ).eligibleBeatIds
+    ).not.toContain("M03");
+  });
+
+  it("7. replaying the same qualifying evidence does not fire M03 twice", async () => {
+    const { store, snapshot } = await seeded();
+    const receipts = [
+      issueReceipt("silence_eligible_for_retry", {
+        targetId: "target-a",
+        receiptId: "receipt:silence-same",
+        occurredAtMs: MONDAY_MS,
+      }),
+      issueReceipt("legitimate_second_site_visit", {
+        targetId: "target-a",
+        receiptId: "receipt:return-same",
+        occurredAtMs: TUESDAY_MS,
+      }),
+    ];
+    const eligibility = evalInput(snapshot, { verifiedGoldline: receipts });
+    const auth = issueEligibilityAuthorizations(
+      evaluateEligibility(eligibility),
+      eligibility
+    ).find(item => item.beatId === BEAT_IDS.M03)!;
+    await commitAuthorizedBeat({
+      store,
+      scope,
+      authorization: auth,
+      eligibility,
+    });
+    const after = (await store.load(scope))!;
+    const replay = evaluateEligibility(
+      evalInput(after, { verifiedGoldline: receipts })
+    );
+    expect(replay.eligibleBeatIds).not.toContain("M03");
+    expect(after.ledger.filter(entry => entry.beatId === "M03")).toHaveLength(
+      1
+    );
+  });
+
+  it("8. a later distinct eligible cycle on the same target remains representable", async () => {
+    const { store, snapshot } = await seeded();
+    const first = [
+      issueReceipt("silence_eligible_for_retry", {
+        targetId: "target-a",
+        receiptId: "receipt:silence-1",
+        occurredAtMs: MONDAY_MS,
+      }),
+      issueReceipt("legitimate_second_site_visit", {
+        targetId: "target-a",
+        receiptId: "receipt:return-1",
+        occurredAtMs: TUESDAY_MS,
+      }),
+    ];
+    const firstInput = evalInput(snapshot, { verifiedGoldline: first });
+    const firstAuth = issueEligibilityAuthorizations(
+      evaluateEligibility(firstInput),
+      firstInput
+    ).find(item => item.beatId === BEAT_IDS.M03)!;
+    const afterFirst = await commitAuthorizedBeat({
+      store,
+      scope,
+      authorization: firstAuth,
+      eligibility: firstInput,
+    });
+    const second = [
+      ...first,
+      issueReceipt("silence_eligible_for_retry", {
+        targetId: "target-a",
+        receiptId: "receipt:silence-2",
+        occurredAtMs: WEDNESDAY_MS,
+      }),
+      issueReceipt("legitimate_second_site_visit", {
+        targetId: "target-a",
+        receiptId: "receipt:return-2",
+        occurredAtMs: THURSDAY_MS,
+      }),
+    ];
+    const secondInput = evalInput(afterFirst, { verifiedGoldline: second });
+    expect(evaluateEligibility(secondInput).eligibleBeatIds).toContain("M03");
+  });
+
+  it("9. new user remains not armed / NO_ELIGIBLE", async () => {
+    const { snapshot } = await seeded();
+    const result = evaluateEligibility(evalInput(snapshot));
+    expect(result.outcome).toBe("NO_ELIGIBLE");
+    expect(derivedM03ArmedTargetIds([], snapshot)).toEqual([]);
+    expect(snapshot.narrativeState.values.m03).toBeUndefined();
+  });
+
+  it("10. C-06, C-08, M04, disclosure, OPEN, and registry authority remain intact", async () => {
+    expect(getBeat("C-06").defaultSurface).toBe(false);
+    expect(getBeat("C-08").defaultSurface).toBe(true);
+    expect(getBeat("M04").eligibilityDefinition).toBe("COMPLETE");
+    expect(isKnownBeatId("CL-CORE")).toBe(false);
+    expect(originFalseWithoutChemistIsOpen()).toBe(true);
+    const { store, snapshot } = await seeded();
+    const fake: AuthoredBeat = {
+      ...AUTHORED_BEAT_DEFAULTS,
+      id: asNarrativeBeatId("FAKE-M03-AUTH"),
+      title: "fake",
+      canonStatus: "LOCKED",
+      authoredSourceRef: "not-canon",
+      eligibilityDefinition: "COMPLETE",
+      defaultSurface: true,
+      playerVisibility: true,
+    };
+    const fakeInput = evalInput(snapshot, { registry: [fake], graph: [] });
+    const auth = issueEligibilityAuthorizations(
+      evaluateEligibility(fakeInput),
+      fakeInput
+    )[0]!;
+    await expect(
+      commitAuthorizedBeat({
+        store,
+        scope,
+        authorization: auth,
+        eligibility: fakeInput,
+      })
+    ).rejects.toThrow();
+  });
+});
+
 describe("Narrator OS D.5 — C-08 may execute when eligible; C-06 may not", () => {
   it("does not withhold C-08 like C-06", async () => {
     const { store, snapshot } = await seeded();
@@ -595,6 +882,8 @@ describe("Narrator OS D.5 — package authority without Markdown runtime parse",
     const text = readFileSync(path, "utf8");
     expect(text).toContain("Version: 1.2-proposed");
     expect(text).toContain("CANON PACKAGE (PROPOSED)");
+    expect(text).toContain("does not license a retry RETURN");
+    expect(text).toContain("contact_reopened_after_no");
   });
 
   it("does not parse Markdown or writers-room files at runtime", () => {
@@ -621,11 +910,27 @@ describe("Narrator OS D.5 — package authority without Markdown runtime parse",
       "utf8"
     );
     expect(canon).toMatch(/Never manufacture a rejection/);
+    expect(canon).toMatch(
+      /A spoken no is terminal unless that person later reopens contact/
+    );
     expect(canon).toMatch(/Act I does not complete on a miss/);
     expect(canon).toMatch(/Core facts from start/);
     expect(getBeat("M03").eligibilityConditions).toContainEqual({
       kind: "never_manufacture",
       claim: "rejection",
+    });
+    expect(getBeat("M03").prerequisites).toContainEqual({
+      kind: "verified_goldline_same_target",
+      priorOutcomeIds: [
+        "silence_eligible_for_retry",
+        "no_show",
+        "contact_reopened_after_no",
+      ],
+      subsequentOutcomeIds: [
+        "legitimate_second_site_visit",
+        "timed_retry_after_silence",
+        "reinspect_previously_deployed_item",
+      ],
     });
     expect(getBeat("M04").stateMutations).toContainEqual({
       key: "act_i",

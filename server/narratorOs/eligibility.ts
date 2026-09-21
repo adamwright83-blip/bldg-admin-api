@@ -15,7 +15,11 @@ import {
 } from "../../shared/narratorOs/contracts";
 import { planeKnows, type NarratorSnapshot } from "./store";
 import { AUTHORED_BEATS, AUTHORED_GRAPH } from "./registry";
-import { unconsumedM03FireTargetIds } from "./m03Readiness";
+import {
+  hasTemporalSameTargetSequence,
+  M03_BEAT_ID,
+  unconsumedM03QualifyingCycles,
+} from "./m03Readiness";
 import {
   isVerifiedGoldlineReceipt,
   type VerifiedGoldlineReceipt,
@@ -88,7 +92,8 @@ function evaluatePrerequisite(
   prereq: BeatPrerequisite,
   snapshot: NarratorSnapshot,
   fired: Set<string>,
-  goldline: readonly VerifiedGoldlineReceipt[]
+  goldline: readonly VerifiedGoldlineReceipt[],
+  beatId?: string
 ): NarrativeEligibilityAuditCheck {
   switch (prereq.kind) {
     case "hard_beat":
@@ -116,7 +121,15 @@ function evaluatePrerequisite(
         prereq.outcomeIds.some(id => goldlineHas(goldline, id, snapshot))
       );
     case "verified_goldline_same_target": {
-      const ready = unconsumedM03FireTargetIds(goldline, snapshot).length > 0;
+      const ready =
+        beatId === M03_BEAT_ID
+          ? unconsumedM03QualifyingCycles(goldline, snapshot).length > 0
+          : hasTemporalSameTargetSequence(
+              goldline,
+              snapshot,
+              prereq.priorOutcomeIds,
+              prereq.subsequentOutcomeIds
+            );
       return check(
         "prerequisite_detail",
         `verified_goldline_same_target:${prereq.priorOutcomeIds.join("|")}->${prereq.subsequentOutcomeIds.join("|")}`,
@@ -169,7 +182,8 @@ function evaluateCondition(
   condition: EligibilityCondition,
   snapshot: NarratorSnapshot,
   fired: Set<string>,
-  goldline: readonly VerifiedGoldlineReceipt[]
+  goldline: readonly VerifiedGoldlineReceipt[],
+  beatId: string
 ): NarrativeEligibilityAuditCheck {
   if (condition.kind === "never_manufacture") {
     return check(
@@ -178,7 +192,7 @@ function evaluateCondition(
       true
     );
   }
-  return evaluatePrerequisite(condition, snapshot, fired, goldline);
+  return evaluatePrerequisite(condition, snapshot, fired, goldline, beatId);
 }
 
 function evaluateKnowledgeRequirement(
@@ -234,7 +248,8 @@ function evaluateBeat(
         prereq,
         input.snapshot,
         fired,
-        input.verifiedGoldline
+        input.verifiedGoldline,
+        beat.id
       )
     ),
     ...beat.eligibilityConditions.map(condition =>
@@ -242,7 +257,8 @@ function evaluateBeat(
         condition,
         input.snapshot,
         fired,
-        input.verifiedGoldline
+        input.verifiedGoldline,
+        beat.id
       )
     ),
   ];

@@ -76,6 +76,7 @@ function issueReceipt(
     tenantId?: string;
     operatorUserId?: string;
     targetId?: string;
+    occurredAtMs?: number;
   }
 ): VerifiedGoldlineReceipt {
   const evidenceClass = extra?.evidenceClass ?? "operator_attested";
@@ -96,18 +97,24 @@ function issueReceipt(
     targetRef: extra?.targetId
       ? { kind: "goldline_target", id: extra.targetId }
       : null,
+    occurredAtMs: extra?.occurredAtMs ?? 1,
   });
 }
 
+const M03_MONDAY_MS = Date.parse("2026-09-14T12:00:00Z");
+const M03_TUESDAY_MS = Date.parse("2026-09-15T12:00:00Z");
+
 function m03ReadyReceipts(targetId = "target-a"): VerifiedGoldlineReceipt[] {
   return [
-    issueReceipt("spoken_no", {
+    issueReceipt("silence_eligible_for_retry", {
       targetId,
-      receiptId: `receipt:spoken_no:${targetId}`,
+      receiptId: `receipt:silence:${targetId}`,
+      occurredAtMs: M03_MONDAY_MS,
     }),
     issueReceipt("legitimate_second_site_visit", {
       targetId,
       receiptId: `receipt:return:${targetId}`,
+      occurredAtMs: M03_TUESDAY_MS,
     }),
   ];
 }
@@ -671,6 +678,7 @@ describe("Narrator OS test-only Goldline issuer", () => {
             sourceReference: "visit:prod",
             classification: "operator_attested",
           },
+          occurredAtMs: 1,
         })
       ).toThrow(/not available outside tests/);
     } finally {
@@ -760,5 +768,63 @@ describe("Narrator OS withheld beats have no execution authority", () => {
     expect(loaded?.ledger).toEqual([]);
     expect(loaded?.knowledge).toEqual(snapshot.knowledge);
     expect(loaded?.narrativeState).toEqual(snapshot.narrativeState);
+  });
+});
+
+describe("Narrator OS verified_goldline_same_target uses listed outcomes and time", () => {
+  it("pairs prior then subsequent on the same target using occurredAtMs", async () => {
+    const { snapshot } = await seeded();
+    const isolated = isolatedBeat({
+      id: "SEQ-TEST",
+      eligibilityDefinition: "COMPLETE",
+      defaultSurface: true,
+      playerVisibility: true,
+      prerequisites: [
+        {
+          kind: "verified_goldline_same_target",
+          priorOutcomeIds: ["prior_event"],
+          subsequentOutcomeIds: ["later_event"],
+        },
+      ],
+    });
+    const reversedArray = [
+      issueReceipt("later_event", {
+        targetId: "t-1",
+        receiptId: "aaa-later",
+        occurredAtMs: M03_TUESDAY_MS,
+      }),
+      issueReceipt("prior_event", {
+        targetId: "t-1",
+        receiptId: "zzz-prior",
+        occurredAtMs: M03_MONDAY_MS,
+      }),
+    ];
+    const pass = evaluateEligibility(
+      evalInput(snapshot, {
+        registry: [isolated],
+        graph: [],
+        verifiedGoldline: reversedArray,
+      })
+    );
+    expect(pass.eligibleBeatIds).toContain("SEQ-TEST");
+
+    const wrongOrder = [
+      issueReceipt("later_event", {
+        targetId: "t-1",
+        occurredAtMs: M03_MONDAY_MS,
+      }),
+      issueReceipt("prior_event", {
+        targetId: "t-1",
+        occurredAtMs: M03_TUESDAY_MS,
+      }),
+    ];
+    const fail = evaluateEligibility(
+      evalInput(snapshot, {
+        registry: [isolated],
+        graph: [],
+        verifiedGoldline: wrongOrder,
+      })
+    );
+    expect(fail.eligibleBeatIds).not.toContain("SEQ-TEST");
   });
 });

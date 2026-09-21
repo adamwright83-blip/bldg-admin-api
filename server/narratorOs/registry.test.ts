@@ -149,6 +149,7 @@ describe("Narrator OS slice C — authored registry + graph", () => {
               sourceReference: "receipt:17k_physically_evidenced_in_hand",
               classification: "authoritative_external",
             },
+            occurredAtMs: 1,
           }),
         ],
       })
@@ -210,6 +211,7 @@ describe("Narrator OS slice C — authored registry + graph", () => {
               sourceReference: "receipt:m02-family",
               classification: "operator_attested",
             },
+            occurredAtMs: 1,
           }),
         ],
       })

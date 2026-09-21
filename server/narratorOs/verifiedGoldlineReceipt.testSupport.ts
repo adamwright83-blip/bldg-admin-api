@@ -20,6 +20,7 @@ export type VerifiedGoldlineReceiptDraft = {
   evidenceClass: GoldlineEvidenceClass;
   evidenceRef: VerifiedGoldlineEvidenceRef;
   targetRef?: GoldlineTargetRef | null;
+  occurredAtMs: number;
 };
 
 function assertTestIssuanceAllowed(): void {
@@ -66,6 +67,12 @@ export function issueVerifiedGoldlineReceiptForTests(
       "VerifiedGoldlineReceipt targetRef is not an opaque goldline_target"
     );
   }
+  if (
+    typeof draft.occurredAtMs !== "number" ||
+    !Number.isFinite(draft.occurredAtMs)
+  ) {
+    throw new Error("VerifiedGoldlineReceipt requires trusted occurredAtMs");
+  }
   return Object.freeze({
     [VERIFIED_GOLDLINE_RECEIPT_BRAND]: true as const,
     receiptId: draft.receiptId,
@@ -82,5 +89,6 @@ export function issueVerifiedGoldlineReceiptForTests(
     targetRef: targetRef
       ? Object.freeze({ kind: "goldline_target" as const, id: targetRef.id })
       : null,
+    occurredAtMs: draft.occurredAtMs,
   });
 }

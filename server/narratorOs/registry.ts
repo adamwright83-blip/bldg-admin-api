@@ -10,7 +10,11 @@ import {
   AUTHORED_NARRATIVE_FACTS,
   CHEMIST_NON_SUPPORTIVE_RESULTS,
 } from "./authoredNarrativeFacts";
-import { M03_ARM_OUTCOME_IDS, M03_RETURN_OUTCOME_IDS } from "./m03Readiness";
+import {
+  M03_REOPEN_OUTCOME_ID,
+  M03_RETRY_ARM_OUTCOME_IDS,
+  M03_RETURN_OUTCOME_IDS,
+} from "./m03Readiness";
 
 const beat = (
   partial: Omit<AuthoredBeat, keyof typeof AUTHORED_BEAT_DEFAULTS> &
@@ -267,7 +271,7 @@ export const AUTHORED_BEATS: readonly AuthoredBeat[] = Object.freeze([
     prerequisites: [
       {
         kind: "verified_goldline_same_target",
-        priorOutcomeIds: M03_ARM_OUTCOME_IDS,
+        priorOutcomeIds: [...M03_RETRY_ARM_OUTCOME_IDS, M03_REOPEN_OUTCOME_ID],
         subsequentOutcomeIds: M03_RETURN_OUTCOME_IDS,
       },
     ],
