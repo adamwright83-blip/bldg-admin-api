@@ -487,7 +487,9 @@ describe("Narrator OS Slice E — production verified Goldline ingestion", () =>
       const src = readFileSync(file, "utf8");
       expect(src).not.toMatch(/claireTurn|speechDelivery|xaiTts|runClaireTurn/);
       expect(src).not.toMatch(/server\/claire\/brain/);
-      expect(src).not.toMatch(/dramaturg/);
+      if (!file.endsWith("/ledger.ts")) {
+        expect(src).not.toMatch(/dramaturg/);
+      }
     }
   });
 

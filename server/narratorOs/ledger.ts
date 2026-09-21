@@ -4,6 +4,7 @@ import {
   type NarrativeKnowledgeMutation,
   type NarrativeState,
 } from "../../shared/narratorOs/contracts";
+import { decideDramaturgy } from "./dramaturgy";
 import {
   evaluateProductionEligibility,
   isEligibilityAuthorization,
@@ -53,6 +54,17 @@ export class IneligibleBeatCommitError extends Error {
   }
 }
 
+/**
+ * Interactive commit reloaded a snapshot whose production dramaturgy does
+ * not SELECT this authorized beat. No knowledge, state, or ledger write.
+ */
+export class LiveDramaturgyMismatchError extends IneligibleBeatCommitError {
+  constructor(beatId: string) {
+    super(beatId, "live dramaturgy does not select this beat");
+    this.name = "LiveDramaturgyMismatchError";
+  }
+}
+
 function mutationsFromBeat(beat: AuthoredBeat): KnowledgeWrite[] {
   return beat.knowledgeMutations.map((mutation: NarrativeKnowledgeMutation) => {
     if (mutation.op === "set_interpretation") {
@@ -82,8 +94,10 @@ export function assertMutationsLegal(beat: AuthoredBeat): void {
 
 /**
  * Production mutation. Raw beat ids are not authority. Re-evaluates
- * eligibility against current snapshot, then writes knowledge + state +
- * ledger atomically.
+ * eligibility against the reloaded snapshot. Interactive commits also
+ * rerun production dramaturgy on that same snapshot and write only when
+ * it SELECTs this authorized beat. Offscreen commits do not consult
+ * dramaturgy. Then writes knowledge + state + ledger atomically.
  */
 export async function commitAuthorizedBeat(input: {
   store: NarratorStore;
@@ -142,6 +156,16 @@ export async function commitAuthorizedBeat(input: {
       authorization.beatId,
       `not eligible (${audit?.failedGates.join(",") || result.outcome})`
     );
+  }
+
+  if (liveInput.mode === "interactive") {
+    const liveDecision = decideDramaturgy({ eligibility: result });
+    if (
+      liveDecision.outcome !== "SELECT" ||
+      liveDecision.selectedBeatId !== authorization.beatId
+    ) {
+      throw new LiveDramaturgyMismatchError(authorization.beatId);
+    }
   }
 
   const beat = getBeat(authorization.beatId);
