@@ -129,39 +129,118 @@ export function hasTemporalSameTargetSequence(
   );
 }
 
+type M03TargetReplay = {
+  readonly targetId: string;
+  readonly currentlyArmed: boolean;
+  readonly cycles: readonly M03QualifyingCycle[];
+};
+
+function compareByOccurredAtMs(
+  a: VerifiedGoldlineReceipt,
+  b: VerifiedGoldlineReceipt
+): number {
+  if (a.occurredAtMs !== b.occurredAtMs) {
+    return a.occurredAtMs - b.occurredAtMs;
+  }
+  return a.receiptId.localeCompare(b.receiptId);
+}
+
 /**
- * Targets that are legally M03-ARMED for a retry path.
+ * Smallest per-target M03 event-sequence evaluator.
  *
- * - silence_eligible_for_retry → ARMED
- * - authored eligible no_show → ARMED
- * - spoken_no alone → NOT ARMED (terminal; does not license retry)
+ * Temporal state, not historical-pair search:
+ * - eligible silence / no-show → live retry readiness
+ * - spoken no → terminal; clears prior retry readiness
+ * - trusted reopen after the latest spoken no → live retry readiness again
+ * - RETURN while readiness is live → qualifying cycle
+ * - a fired M03 occurrence consumes that arm/reopen receipt
+ *
+ * Chronology is receipt.occurredAtMs only. Array order is not evidence.
+ */
+function replayM03Targets(
+  receipts: readonly VerifiedGoldlineReceipt[],
+  snapshot: NarratorSnapshot
+): readonly M03TargetReplay[] {
+  const consumed = consumedM03ArmReceiptIds(snapshot);
+  const retryArm = outcomeSet(M03_RETRY_ARM_OUTCOME_IDS);
+  const returns = outcomeSet(M03_RETURN_OUTCOME_IDS);
+  const byTarget = new Map<string, VerifiedGoldlineReceipt[]>();
+  for (const receipt of receipts) {
+    if (!scopedReceipt(receipt, snapshot)) continue;
+    const targetId = opaqueTargetId(receipt);
+    if (!targetId) continue;
+    const list = byTarget.get(targetId);
+    if (list) list.push(receipt);
+    else byTarget.set(targetId, [receipt]);
+  }
+
+  const replays: M03TargetReplay[] = [];
+  for (const [targetId, list] of byTarget) {
+    const events = [...list].sort(compareByOccurredAtMs);
+    let liveArm: VerifiedGoldlineReceipt | null = null;
+    let lastSpokenNoMs: number | null = null;
+    const cycles: M03QualifyingCycle[] = [];
+    const seen = new Set<string>();
+
+    for (const event of events) {
+      if (event.outcomeId === M03_SPOKEN_NO_OUTCOME_ID) {
+        lastSpokenNoMs = event.occurredAtMs;
+        liveArm = null;
+        continue;
+      }
+      if (retryArm.has(event.outcomeId)) {
+        liveArm = event;
+        continue;
+      }
+      if (event.outcomeId === M03_REOPEN_OUTCOME_ID) {
+        if (lastSpokenNoMs !== null && lastSpokenNoMs < event.occurredAtMs) {
+          liveArm = event;
+        }
+        continue;
+      }
+      if (!returns.has(event.outcomeId) || !liveArm) continue;
+      if (!(liveArm.occurredAtMs < event.occurredAtMs)) continue;
+      const key = m03OccurrenceIdempotencyKey(targetId, liveArm.receiptId);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      cycles.push({
+        targetId,
+        armReceiptId: liveArm.receiptId,
+        returnReceiptId: event.receiptId,
+        armOccurredAtMs: liveArm.occurredAtMs,
+        returnOccurredAtMs: event.occurredAtMs,
+      });
+    }
+
+    replays.push({
+      targetId,
+      currentlyArmed: Boolean(liveArm && !consumed.has(liveArm.receiptId)),
+      cycles,
+    });
+  }
+  return replays;
+}
+
+/**
+ * Targets that currently have live, unconsumed M03 retry readiness.
+ *
+ * - silence_eligible_for_retry / authored eligible no_show → ARMED
+ * - spoken_no alone → NOT ARMED (terminal; clears prior readiness)
  * - spoken_no then a later trusted same-target contact_reopened_after_no → ARMED
+ * - a newer spoken_no clears that readiness until a later reopen
+ * - a fired M03 occurrence consumes that arm/reopen cycle; it is not ARMED
  *
  * Chronology is receipt.occurredAtMs only. Array order, receiptId lexical
  * order, free-form sourceReference, and caller ordering are not evidence.
- * Derived readiness only — not a beat, not FIRED_AUTHORED_BEAT, not gold.
  */
 export function derivedM03ArmedTargetIds(
   receipts: readonly VerifiedGoldlineReceipt[],
   snapshot: NarratorSnapshot
 ): readonly string[] {
-  const ids = new Set<string>();
-  const retryArm = outcomeSet(M03_RETRY_ARM_OUTCOME_IDS);
-  for (const receipt of receipts) {
-    if (!scopedReceipt(receipt, snapshot)) continue;
-    if (!retryArm.has(receipt.outcomeId)) continue;
-    const targetId = opaqueTargetId(receipt);
-    if (targetId) ids.add(targetId);
-  }
-  for (const pair of temporalSameTargetPairs(
-    receipts,
-    snapshot,
-    [M03_SPOKEN_NO_OUTCOME_ID],
-    [M03_REOPEN_OUTCOME_ID]
-  )) {
-    ids.add(pair.targetId);
-  }
-  return [...ids].sort();
+  return replayM03Targets(receipts, snapshot)
+    .filter(replay => replay.currentlyArmed)
+    .map(replay => replay.targetId)
+    .sort();
 }
 
 export function consumedM03ArmReceiptIds(
@@ -193,69 +272,17 @@ function sortCycles(cycles: M03QualifyingCycle[]): M03QualifyingCycle[] {
 }
 
 /**
- * M03-legal cycles:
- * - silence / no-show then a later same-target RETURN
- * - spoken_no then a later same-target reopen then a later RETURN
- * Spoken no + RETURN without reopen does not qualify.
+ * M03-legal cycles from live temporal state:
+ * RETURN qualifies only if the applicable silence/no-show/reopen is still
+ * live at RETURN time. An intervening later spoken_no closes that readiness.
  */
 export function m03QualifyingCycles(
   receipts: readonly VerifiedGoldlineReceipt[],
   snapshot: NarratorSnapshot
 ): readonly M03QualifyingCycle[] {
-  const scoped = receipts.filter(receipt => scopedReceipt(receipt, snapshot));
-  const retryArm = outcomeSet(M03_RETRY_ARM_OUTCOME_IDS);
-  const returns = outcomeSet(M03_RETURN_OUTCOME_IDS);
-  const cycles: M03QualifyingCycle[] = [];
-  const seen = new Set<string>();
-
-  const push = (cycle: M03QualifyingCycle) => {
-    const key = m03OccurrenceIdempotencyKey(cycle.targetId, cycle.armReceiptId);
-    if (seen.has(key)) return;
-    seen.add(key);
-    cycles.push(cycle);
-  };
-
-  for (const arm of scoped) {
-    const targetId = opaqueTargetId(arm);
-    if (!targetId || !retryArm.has(arm.outcomeId)) continue;
-    for (const ret of scoped) {
-      if (!returns.has(ret.outcomeId)) continue;
-      if (opaqueTargetId(ret) !== targetId) continue;
-      if (!(arm.occurredAtMs < ret.occurredAtMs)) continue;
-      push({
-        targetId,
-        armReceiptId: arm.receiptId,
-        returnReceiptId: ret.receiptId,
-        armOccurredAtMs: arm.occurredAtMs,
-        returnOccurredAtMs: ret.occurredAtMs,
-      });
-    }
-  }
-
-  for (const spokenNo of scoped) {
-    if (spokenNo.outcomeId !== M03_SPOKEN_NO_OUTCOME_ID) continue;
-    const targetId = opaqueTargetId(spokenNo);
-    if (!targetId) continue;
-    for (const reopen of scoped) {
-      if (reopen.outcomeId !== M03_REOPEN_OUTCOME_ID) continue;
-      if (opaqueTargetId(reopen) !== targetId) continue;
-      if (!(spokenNo.occurredAtMs < reopen.occurredAtMs)) continue;
-      for (const ret of scoped) {
-        if (!returns.has(ret.outcomeId)) continue;
-        if (opaqueTargetId(ret) !== targetId) continue;
-        if (!(reopen.occurredAtMs < ret.occurredAtMs)) continue;
-        push({
-          targetId,
-          armReceiptId: reopen.receiptId,
-          returnReceiptId: ret.receiptId,
-          armOccurredAtMs: reopen.occurredAtMs,
-          returnOccurredAtMs: ret.occurredAtMs,
-        });
-      }
-    }
-  }
-
-  return sortCycles(cycles);
+  return sortCycles(
+    replayM03Targets(receipts, snapshot).flatMap(replay => replay.cycles)
+  );
 }
 
 export function unconsumedM03QualifyingCycles(

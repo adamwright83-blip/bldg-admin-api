@@ -102,6 +102,7 @@ const MONDAY_MS = Date.parse("2026-09-14T12:00:00Z");
 const TUESDAY_MS = Date.parse("2026-09-15T12:00:00Z");
 const WEDNESDAY_MS = Date.parse("2026-09-16T12:00:00Z");
 const THURSDAY_MS = Date.parse("2026-09-17T12:00:00Z");
+const FRIDAY_MS = Date.parse("2026-09-18T12:00:00Z");
 
 function evalInput(
   snapshot: NarratorSnapshot,
@@ -1034,6 +1035,258 @@ describe("Narrator OS D.5 — derivedM03ArmedTargetIds is legally armed", () => 
         snapshot
       )
     ).toEqual([]);
+  });
+});
+
+describe("Narrator OS D.5 — M03 live unconsumed readiness", () => {
+  async function fireM03(
+    store: ReturnType<typeof createInMemoryNarratorStore>,
+    snapshot: NarratorSnapshot,
+    receipts: readonly VerifiedGoldlineReceipt[]
+  ): Promise<NarratorSnapshot> {
+    const eligibility = evalInput(snapshot, { verifiedGoldline: receipts });
+    const result = evaluateEligibility(eligibility);
+    expect(result.eligibleBeatIds).toContain("M03");
+    const auth = issueEligibilityAuthorizations(result, eligibility).find(
+      item => item.beatId === BEAT_IDS.M03
+    )!;
+    return commitAuthorizedBeat({
+      store,
+      scope,
+      authorization: auth,
+      eligibility,
+    });
+  }
+
+  it("1. silence → RETURN → M03 fire → old cycle is not ARMED", async () => {
+    const { store, snapshot } = await seeded();
+    const silence = issueReceipt("silence_eligible_for_retry", {
+      targetId: "target-a",
+      receiptId: "receipt:silence-live-1",
+      occurredAtMs: MONDAY_MS,
+    });
+    const ret = issueReceipt("legitimate_second_site_visit", {
+      targetId: "target-a",
+      receiptId: "receipt:return-live-1",
+      occurredAtMs: TUESDAY_MS,
+    });
+    const receipts = [ret, silence];
+    expect(derivedM03ArmedTargetIds(receipts, snapshot)).toEqual(["target-a"]);
+    const after = await fireM03(store, snapshot, receipts);
+    expect(derivedM03ArmedTargetIds(receipts, after)).toEqual([]);
+    expect(unconsumedM03FireTargetIds(receipts, after)).toEqual([]);
+  });
+
+  it("2. spoken no → reopen → RETURN → M03 fire → old reopen is not ARMED", async () => {
+    const { store, snapshot } = await seeded();
+    const spokenNo = issueReceipt("spoken_no", {
+      targetId: "target-a",
+      receiptId: "receipt:no-live-2",
+      occurredAtMs: MONDAY_MS,
+    });
+    const reopen = issueReceipt("contact_reopened_after_no", {
+      targetId: "target-a",
+      receiptId: "receipt:reopen-live-2",
+      occurredAtMs: TUESDAY_MS,
+    });
+    const ret = issueReceipt("legitimate_second_site_visit", {
+      targetId: "target-a",
+      receiptId: "receipt:return-live-2",
+      occurredAtMs: WEDNESDAY_MS,
+    });
+    const receipts = [ret, spokenNo, reopen];
+    expect(derivedM03ArmedTargetIds(receipts, snapshot)).toEqual(["target-a"]);
+    const after = await fireM03(store, snapshot, receipts);
+    expect(derivedM03ArmedTargetIds(receipts, after)).toEqual([]);
+    expect(unconsumedM03FireTargetIds(receipts, after)).toEqual([]);
+  });
+
+  it("3. after a consumed cycle, a later new legal cycle can ARMED again", async () => {
+    const { store, snapshot } = await seeded();
+    const silence1 = issueReceipt("silence_eligible_for_retry", {
+      targetId: "target-a",
+      receiptId: "receipt:silence-live-3a",
+      occurredAtMs: MONDAY_MS,
+    });
+    const return1 = issueReceipt("legitimate_second_site_visit", {
+      targetId: "target-a",
+      receiptId: "receipt:return-live-3a",
+      occurredAtMs: TUESDAY_MS,
+    });
+    const afterSilenceFire = await fireM03(store, snapshot, [
+      return1,
+      silence1,
+    ]);
+    expect(
+      derivedM03ArmedTargetIds([return1, silence1], afterSilenceFire)
+    ).toEqual([]);
+    const silence2 = issueReceipt("silence_eligible_for_retry", {
+      targetId: "target-a",
+      receiptId: "receipt:silence-live-3b",
+      occurredAtMs: WEDNESDAY_MS,
+    });
+    expect(
+      derivedM03ArmedTargetIds([return1, silence1, silence2], afterSilenceFire)
+    ).toEqual(["target-a"]);
+
+    const { store: storeB, snapshot: snapshotB } = await seeded();
+    const spokenNo = issueReceipt("spoken_no", {
+      targetId: "target-b",
+      receiptId: "receipt:no-live-3",
+      occurredAtMs: MONDAY_MS,
+    });
+    const reopen1 = issueReceipt("contact_reopened_after_no", {
+      targetId: "target-b",
+      receiptId: "receipt:reopen-live-3a",
+      occurredAtMs: TUESDAY_MS,
+    });
+    const returnB = issueReceipt("legitimate_second_site_visit", {
+      targetId: "target-b",
+      receiptId: "receipt:return-live-3b",
+      occurredAtMs: WEDNESDAY_MS,
+    });
+    const firstB = [returnB, spokenNo, reopen1];
+    const afterReopenFire = await fireM03(storeB, snapshotB, firstB);
+    expect(derivedM03ArmedTargetIds(firstB, afterReopenFire)).toEqual([]);
+    const reopen2 = issueReceipt("contact_reopened_after_no", {
+      targetId: "target-b",
+      receiptId: "receipt:reopen-live-3b",
+      occurredAtMs: THURSDAY_MS,
+    });
+    expect(
+      derivedM03ArmedTargetIds([...firstB, reopen2], afterReopenFire)
+    ).toEqual(["target-b"]);
+  });
+
+  it("4. silence → newer spoken no → RETURN does not qualify", async () => {
+    const { snapshot } = await seeded();
+    const receipts = [
+      issueReceipt("silence_eligible_for_retry", {
+        targetId: "target-a",
+        occurredAtMs: MONDAY_MS,
+      }),
+      issueReceipt("spoken_no", {
+        targetId: "target-a",
+        occurredAtMs: TUESDAY_MS,
+      }),
+      issueReceipt("legitimate_second_site_visit", {
+        targetId: "target-a",
+        occurredAtMs: WEDNESDAY_MS,
+      }),
+    ];
+    expect(derivedM03ArmedTargetIds(receipts, snapshot)).toEqual([]);
+    expect(unconsumedM03FireTargetIds(receipts, snapshot)).toEqual([]);
+    expect(
+      evaluateEligibility(evalInput(snapshot, { verifiedGoldline: receipts }))
+        .eligibleBeatIds
+    ).not.toContain("M03");
+  });
+
+  it("5. no → reopen → newer no → RETURN does not qualify", async () => {
+    const { snapshot } = await seeded();
+    const receipts = [
+      issueReceipt("spoken_no", {
+        targetId: "target-a",
+        occurredAtMs: MONDAY_MS,
+      }),
+      issueReceipt("contact_reopened_after_no", {
+        targetId: "target-a",
+        occurredAtMs: TUESDAY_MS,
+      }),
+      issueReceipt("spoken_no", {
+        targetId: "target-a",
+        receiptId: "receipt:spoken_no:target-a:later",
+        occurredAtMs: WEDNESDAY_MS,
+      }),
+      issueReceipt("legitimate_second_site_visit", {
+        targetId: "target-a",
+        occurredAtMs: THURSDAY_MS,
+      }),
+    ];
+    expect(derivedM03ArmedTargetIds(receipts, snapshot)).toEqual([]);
+    expect(unconsumedM03FireTargetIds(receipts, snapshot)).toEqual([]);
+    expect(
+      evaluateEligibility(evalInput(snapshot, { verifiedGoldline: receipts }))
+        .eligibleBeatIds
+    ).not.toContain("M03");
+  });
+
+  it("6. no → reopen → newer no → newer reopen → RETURN may qualify", async () => {
+    const { snapshot } = await seeded();
+    const receipts = [
+      issueReceipt("spoken_no", {
+        targetId: "target-a",
+        receiptId: "receipt:no-1",
+        occurredAtMs: MONDAY_MS,
+      }),
+      issueReceipt("contact_reopened_after_no", {
+        targetId: "target-a",
+        receiptId: "receipt:reopen-1",
+        occurredAtMs: TUESDAY_MS,
+      }),
+      issueReceipt("spoken_no", {
+        targetId: "target-a",
+        receiptId: "receipt:no-2",
+        occurredAtMs: WEDNESDAY_MS,
+      }),
+      issueReceipt("contact_reopened_after_no", {
+        targetId: "target-a",
+        receiptId: "receipt:reopen-2",
+        occurredAtMs: THURSDAY_MS,
+      }),
+      issueReceipt("legitimate_second_site_visit", {
+        targetId: "target-a",
+        receiptId: "receipt:return-2",
+        occurredAtMs: FRIDAY_MS,
+      }),
+    ];
+    expect(derivedM03ArmedTargetIds(receipts, snapshot)).toEqual(["target-a"]);
+    expect(unconsumedM03FireTargetIds(receipts, snapshot)).toEqual([
+      "target-a",
+    ]);
+    expect(
+      evaluateEligibility(evalInput(snapshot, { verifiedGoldline: receipts }))
+        .eligibleBeatIds
+    ).toContain("M03");
+  });
+
+  it("7. a newer terminal no removes the target from derived ARMED state", async () => {
+    const { snapshot } = await seeded();
+    const silenceThenNo = [
+      issueReceipt("silence_eligible_for_retry", {
+        targetId: "target-a",
+        occurredAtMs: MONDAY_MS,
+      }),
+      issueReceipt("spoken_no", {
+        targetId: "target-a",
+        occurredAtMs: TUESDAY_MS,
+      }),
+    ];
+    expect(derivedM03ArmedTargetIds([silenceThenNo[0]!], snapshot)).toEqual([
+      "target-a",
+    ]);
+    expect(derivedM03ArmedTargetIds(silenceThenNo, snapshot)).toEqual([]);
+
+    const noReopenThenNo = [
+      issueReceipt("spoken_no", {
+        targetId: "target-b",
+        receiptId: "receipt:no-b-1",
+        occurredAtMs: MONDAY_MS,
+      }),
+      issueReceipt("contact_reopened_after_no", {
+        targetId: "target-b",
+        occurredAtMs: TUESDAY_MS,
+      }),
+      issueReceipt("spoken_no", {
+        targetId: "target-b",
+        receiptId: "receipt:no-b-2",
+        occurredAtMs: WEDNESDAY_MS,
+      }),
+    ];
+    expect(
+      derivedM03ArmedTargetIds(noReopenThenNo.slice(0, 2), snapshot)
+    ).toEqual(["target-b"]);
+    expect(derivedM03ArmedTargetIds(noReopenThenNo, snapshot)).toEqual([]);
   });
 });
 
