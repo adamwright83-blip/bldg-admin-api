@@ -46,7 +46,6 @@ const hoisted = vi.hoisted(() => {
         : undefined
     ),
     runClaireTurn: vi.fn(),
-    observeShadow: vi.fn(() => undefined),
   };
 });
 
@@ -92,10 +91,6 @@ vi.mock("./turn/claireTurn", async importOriginal => {
     runClaireTurn: (...args: Parameters<typeof actual.runClaireTurn>) => hoisted.runClaireTurn(...args),
   };
 });
-
-vi.mock("./brain/shadow/observeShadowTurn", () => ({
-  observeShadowTurnDetached: (...args: unknown[]) => hoisted.observeShadow(...args),
-}));
 
 vi.mock("./conversation/liveCall", () => ({
   safeClaireLedger: async (work: () => Promise<unknown>) => {
@@ -281,7 +276,6 @@ beforeEach(() => {
     openId === OWNER_OPEN_ID ? persistedOperator(openId) : undefined
   );
   hoisted.runClaireTurn.mockReset();
-  hoisted.observeShadow.mockClear();
   installTurnStub();
 });
 
@@ -557,17 +551,6 @@ describe("inbound Day Director identity is not OpenID", () => {
       claireConversationId: claims.conversationId,
       conversationKind: "morning_reconciliation",
     });
-
-    await vi.waitFor(() => expect(hoisted.observeShadow).toHaveBeenCalled());
-    expect(hoisted.observeShadow).toHaveBeenCalledWith(
-      expect.objectContaining({
-        operatorUserId: OWNER_OPEN_ID,
-        live: expect.objectContaining({
-          operatorUserId: OWNER_OPEN_ID,
-          dayDirectorActorId: "42",
-        }),
-      })
-    );
   });
 });
 
