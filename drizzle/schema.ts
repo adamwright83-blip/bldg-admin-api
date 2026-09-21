@@ -8108,3 +8108,97 @@ export const clairePersonalLedger = mysqlTable(
     kindLookup: index("idx_claire_personal_ledger_kind").on(table.tenantId, table.kind, table.occurredAt),
   })
 );
+
+/**
+ * Narrator OS operator snapshot. WORLD_TRUTH and CLAIRE_LIVED_BIO are
+ * write-once seeded authored catalogs. They are not Brain WM, not
+ * goldline_world_events, and not claire_personal_ledger.
+ */
+export const narratorOsOperator = mysqlTable(
+  "narrator_os_operator",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    worldTruthJson: json("worldTruthJson").notNull(),
+    livedBioJson: json("livedBioJson").notNull(),
+    narrativeStateJson: json("narrativeStateJson").notNull(),
+    worldTruthVersion: varchar("worldTruthVersion", { length: 96 }).notNull(),
+    livedBioVersion: varchar("livedBioVersion", { length: 96 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    operatorUnique: uniqueIndex("uq_narrator_os_operator").on(
+      table.tenantId,
+      table.operatorUserId
+    ),
+  })
+);
+
+export const narratorOsKnowledge = mysqlTable(
+  "narrator_os_knowledge",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    plane: mysqlEnum("plane", ["PLAYER", "CLAIRE", "CHEMIST", "OTHER"]).notNull(),
+    factId: varchar("factId", { length: 128 }).notNull(),
+    factKind: mysqlEnum("factKind", [
+      "EVENT_FACT",
+      "CHARACTER_INTERPRETATION",
+    ]).notNull(),
+    known: boolean("known").notNull(),
+    interpretationText: text("interpretationText"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    factUnique: uniqueIndex("uq_narrator_os_knowledge_fact").on(
+      table.tenantId,
+      table.operatorUserId,
+      table.plane,
+      table.factId
+    ),
+    operatorIdx: index("idx_narrator_os_knowledge_operator").on(
+      table.tenantId,
+      table.operatorUserId,
+      table.plane
+    ),
+  })
+);
+
+export const narratorOsEventLedger = mysqlTable(
+  "narrator_os_event_ledger",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    kind: mysqlEnum("kind", [
+      "FIRED_AUTHORED_BEAT",
+      "VERIFIED_GOLDLINE_OUTCOME",
+    ]).notNull(),
+    beatId: varchar("beatId", { length: 64 }),
+    goldlineOutcomeId: varchar("goldlineOutcomeId", { length: 128 }),
+    offscreen: boolean("offscreen").notNull().default(false),
+    playerVisible: boolean("playerVisible").notNull().default(false),
+    payloadJson: json("payloadJson").notNull(),
+    occurredAt: timestamp("occurredAt").notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_narrator_os_ledger_idempotency").on(
+      table.tenantId,
+      table.idempotencyKey
+    ),
+    operatorIdx: index("idx_narrator_os_ledger_operator").on(
+      table.tenantId,
+      table.operatorUserId,
+      table.occurredAt
+    ),
+  })
+);
+
+export type NarratorOsOperator = typeof narratorOsOperator.$inferSelect;
+export type NarratorOsKnowledge = typeof narratorOsKnowledge.$inferSelect;
+export type NarratorOsEventLedger = typeof narratorOsEventLedger.$inferSelect;
