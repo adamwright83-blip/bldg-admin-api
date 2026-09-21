@@ -559,13 +559,18 @@ describe("Narrator OS verified Goldline receipt authority", () => {
       "server/narratorOs/brainBoundary.ts",
       "server/narratorOs/init.ts",
       "server/narratorOs/registry.ts",
+      "server/narratorOs/memoryStore.ts",
       "server/narratorOs/drizzleStore.ts",
       "server/narratorOs/verifiedGoldlineReceipt.ts",
+      "server/narratorOs/verifiedGoldlineReceiptAuthority.ts",
+      "server/narratorOs/narratorSnapshotAttestation.ts",
     ];
     for (const file of productionFiles) {
       const src = readFileSync(resolve(process.cwd(), file), "utf8");
       expect(src).not.toMatch(/issueVerifiedGoldlineReceiptForTests/);
       expect(src).not.toMatch(/verifiedGoldlineReceipt\.testSupport/);
+      expect(src).not.toMatch(/memoryStore\.testSupport/);
+      expect(src).not.toMatch(/reloadInMemoryNarratorStoreFromSnapshot/);
     }
     const receiptSrc = readFileSync(
       resolve(process.cwd(), "server/narratorOs/verifiedGoldlineReceipt.ts"),
@@ -580,9 +585,22 @@ describe("Narrator OS verified Goldline receipt authority", () => {
     expect(indexSrc).not.toMatch(/issueVerifiedGoldlineReceiptForTests/);
     expect(indexSrc).not.toMatch(/verifiedGoldlineReceiptBrand/);
     expect(indexSrc).not.toMatch(/verifiedGoldlineReceipt\.testSupport/);
+    expect(indexSrc).not.toMatch(/memoryStore\.testSupport/);
+    expect(indexSrc).not.toMatch(/reloadInMemoryNarratorStoreFromSnapshot/);
     const prod = await import("./index");
     expect("issueVerifiedGoldlineReceiptForTests" in prod).toBe(false);
     expect("VERIFIED_GOLDLINE_RECEIPT_BRAND" in prod).toBe(false);
+    expect("rememberUpstreamIssuedVerifiedGoldlineReceipt" in prod).toBe(false);
+    expect("rememberRehydratedVerifiedGoldlineEvidence" in prod).toBe(false);
+    expect("withAuthoritativeNarratorStoreSnapshots" in prod).toBe(false);
+    expect("isAuthoritativeNarratorSnapshot" in prod).toBe(false);
+    expect("createInMemoryNarratorStoreUnsealed" in prod).toBe(false);
+    expect("createDrizzleNarratorStoreUnsealed" in prod).toBe(false);
+    expect("reloadInMemoryNarratorStoreFromSnapshot" in prod).toBe(false);
+    expect("createInMemoryNarratorStoreFromSeedForTests" in prod).toBe(false);
+    expect("rememberTestUpstreamIssuedVerifiedGoldlineReceipt" in prod).toBe(
+      false
+    );
     const receiptModule = await import("./verifiedGoldlineReceipt");
     expect("issueVerifiedGoldlineReceiptForTests" in receiptModule).toBe(false);
   });

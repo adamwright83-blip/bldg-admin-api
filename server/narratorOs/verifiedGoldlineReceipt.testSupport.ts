@@ -10,6 +10,7 @@ import {
   type GoldlineTargetRef,
   type VerifiedGoldlineReceipt,
 } from "./verifiedGoldlineReceipt";
+import { rememberTestUpstreamIssuedVerifiedGoldlineReceipt } from "./verifiedGoldlineReceiptAuthority";
 import { VERIFIED_GOLDLINE_RECEIPT_BRAND } from "./verifiedGoldlineReceiptBrand";
 
 export type VerifiedGoldlineReceiptDraft = {
@@ -73,22 +74,24 @@ export function issueVerifiedGoldlineReceiptForTests(
   ) {
     throw new Error("VerifiedGoldlineReceipt requires trusted occurredAtMs");
   }
-  return Object.freeze({
-    [VERIFIED_GOLDLINE_RECEIPT_BRAND]: true as const,
-    receiptId: draft.receiptId,
-    tenantId: draft.tenantId,
-    operatorUserId: draft.operatorUserId,
-    outcomeId: draft.outcomeId,
-    verificationClass: "VERIFIED" as const,
-    evidenceClass: draft.evidenceClass,
-    evidenceRef: Object.freeze({
-      sourceType: draft.evidenceRef.sourceType,
-      sourceReference: draft.evidenceRef.sourceReference,
-      classification: draft.evidenceRef.classification,
-    }),
-    targetRef: targetRef
-      ? Object.freeze({ kind: "goldline_target" as const, id: targetRef.id })
-      : null,
-    occurredAtMs: draft.occurredAtMs,
-  });
+  return rememberTestUpstreamIssuedVerifiedGoldlineReceipt(
+    Object.freeze({
+      [VERIFIED_GOLDLINE_RECEIPT_BRAND]: true as const,
+      receiptId: draft.receiptId,
+      tenantId: draft.tenantId,
+      operatorUserId: draft.operatorUserId,
+      outcomeId: draft.outcomeId,
+      verificationClass: "VERIFIED" as const,
+      evidenceClass: draft.evidenceClass,
+      evidenceRef: Object.freeze({
+        sourceType: draft.evidenceRef.sourceType,
+        sourceReference: draft.evidenceRef.sourceReference,
+        classification: draft.evidenceRef.classification,
+      }),
+      targetRef: targetRef
+        ? Object.freeze({ kind: "goldline_target" as const, id: targetRef.id })
+        : null,
+      occurredAtMs: draft.occurredAtMs,
+    })
+  );
 }

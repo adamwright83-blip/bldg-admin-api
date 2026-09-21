@@ -18,8 +18,14 @@ import {
   getBeat,
   isKnownBeatId,
 } from "./registry";
+import { goldlineLedgerIdempotencyKey } from "./goldlineReceiptIdentity";
+import { ConflictingGoldlineLedgerReplayError } from "./goldlineLedgerReplay";
 import {
-  isVerifiedGoldlineReceipt,
+  persistableVerifiedGoldlineReceipt,
+  productionVerifiedGoldlineEvidence,
+} from "./verifiedGoldlinePersistence";
+import {
+  isUpstreamIssuedVerifiedGoldlineReceipt,
   type VerifiedGoldlineReceipt,
 } from "./verifiedGoldlineReceipt";
 import {
@@ -118,7 +124,10 @@ export async function commitAuthorizedBeat(input: {
 
   const liveInput: EligibilityInput = {
     snapshot,
-    verifiedGoldline: input.eligibility.verifiedGoldline,
+    verifiedGoldline: productionVerifiedGoldlineEvidence(
+      snapshot,
+      input.eligibility.verifiedGoldline
+    ),
     nowMs: input.eligibility.nowMs,
     mode: input.eligibility.mode,
     registry: AUTHORED_BEATS,
@@ -222,6 +231,8 @@ export async function commitFiredBeat(input: {
   );
 }
 
+export { ConflictingGoldlineLedgerReplayError };
+
 export class UntrustedGoldlineReceiptError extends Error {
   constructor(detail: string) {
     super(`Narrator cannot persist untrusted Goldline evidence: ${detail}`);
@@ -232,6 +243,8 @@ export class UntrustedGoldlineReceiptError extends Error {
 /**
  * Persist an already-authorized upstream receipt into Narrator's ledger.
  * Does not mint, upgrade, or reinterpret verification authority.
+ * Uses ledger append only: knowledge, narrative state, WORLD_TRUTH, and
+ * Claire lived biography are not rewritten. Does not fire a beat.
  */
 export async function recordVerifiedGoldlineOutcome(input: {
   store: NarratorStore;
@@ -240,7 +253,7 @@ export async function recordVerifiedGoldlineOutcome(input: {
   relatedBeatId?: NarrativeBeatId | null;
   nowIso?: string;
 }): Promise<void> {
-  if (!isVerifiedGoldlineReceipt(input.receipt)) {
+  if (!isUpstreamIssuedVerifiedGoldlineReceipt(input.receipt)) {
     throw new UntrustedGoldlineReceiptError("missing authorized receipt");
   }
   const receipt = input.receipt;
@@ -255,23 +268,20 @@ export async function recordVerifiedGoldlineOutcome(input: {
   }
   const snapshot = await input.store.load(input.scope);
   if (!snapshot) throw new Error("Narrator operator is not initialized");
-  await input.store.commitAtomic(input.scope, {
-    knowledge: snapshot.knowledge,
-    narrativeState: snapshot.narrativeState,
-    ledgerEntry: {
-      kind: "VERIFIED_GOLDLINE_OUTCOME",
-      beatId: input.relatedBeatId ?? null,
-      goldlineOutcomeId: receipt.outcomeId,
-      offscreen: false,
-      playerVisible: false,
-      evidenceRef: {
-        sourceType: receipt.evidenceRef.sourceType,
-        sourceReference: receipt.evidenceRef.sourceReference,
-        classification: receipt.evidenceRef.classification,
-      },
-      occurredAt: input.nowIso ?? new Date().toISOString(),
-      idempotencyKey: `goldline:${receipt.receiptId}`,
+  await input.store.appendLedger(input.scope, {
+    kind: "VERIFIED_GOLDLINE_OUTCOME",
+    beatId: input.relatedBeatId ?? null,
+    goldlineOutcomeId: receipt.outcomeId,
+    offscreen: false,
+    playerVisible: false,
+    evidenceRef: {
+      sourceType: receipt.evidenceRef.sourceType,
+      sourceReference: receipt.evidenceRef.sourceReference,
+      classification: receipt.evidenceRef.classification,
     },
+    occurredAt: input.nowIso ?? new Date(receipt.occurredAtMs).toISOString(),
+    idempotencyKey: goldlineLedgerIdempotencyKey(receipt.receiptId),
+    persistedVerifiedGoldline: persistableVerifiedGoldlineReceipt(receipt),
   });
 }
 
@@ -282,7 +292,10 @@ export async function fireOffscreenIfLegal(input: {
 }): Promise<{ fired: readonly string[] }> {
   const offscreenInput: EligibilityInput = {
     snapshot: input.eligibility.snapshot,
-    verifiedGoldline: input.eligibility.verifiedGoldline,
+    verifiedGoldline: productionVerifiedGoldlineEvidence(
+      input.eligibility.snapshot,
+      input.eligibility.verifiedGoldline
+    ),
     nowMs: input.eligibility.nowMs,
     mode: "offscreen",
     registry: AUTHORED_BEATS,

@@ -14,9 +14,14 @@ import type {
   NarrativeState,
 } from "../../shared/narratorOs/contracts";
 import { WORLD_TRUTH_FACTS, NARRATOR_WORLD_TRUTH_VERSION } from "./worldTruth";
+import { resolveDuplicateNarratorLedgerInsert } from "./goldlineLedgerReplay";
 
 function keyOf(scope: OperatorScope): string {
   return `${scope.tenantId}::${scope.operatorUserId}`;
+}
+
+function jsonCloneSnapshot(snapshot: NarratorSnapshot): NarratorSnapshot {
+  return JSON.parse(JSON.stringify(snapshot)) as NarratorSnapshot;
 }
 
 function seedSnapshot(scope: OperatorScope): NarratorSnapshot {
@@ -38,10 +43,31 @@ function seedSnapshot(scope: OperatorScope): NarratorSnapshot {
   };
 }
 
-export function createInMemoryNarratorStore(): NarratorStore {
+/**
+ * Unsealed in-memory rows. Public construction goes through
+ * createInMemoryNarratorStore(), which creates fresh internally seeded
+ * state only. Caller snapshot maps are test-only.
+ */
+export function createInMemoryNarratorStoreUnsealed(
+  seed?: ReadonlyMap<string, NarratorSnapshot>
+): NarratorStore {
+  if (seed) {
+    const nodeEnv = process.env.NODE_ENV;
+    const inVitest = Boolean(process.env.VITEST);
+    if (nodeEnv !== "test" && !inVitest) {
+      throw new Error(
+        "In-memory Narrator snapshot seed is not available outside tests"
+      );
+    }
+  }
   const rows = new Map<string, NarratorSnapshot>();
+  if (seed) {
+    for (const [key, snapshot] of seed) {
+      rows.set(key, jsonCloneSnapshot(snapshot));
+    }
+  }
 
-  return {
+  const store: NarratorStore = {
     async initOperator(scope) {
       const existing = rows.get(keyOf(scope));
       if (existing) return existing;
@@ -75,16 +101,18 @@ export function createInMemoryNarratorStore(): NarratorStore {
     async appendLedger(scope, entry) {
       const current = rows.get(keyOf(scope));
       if (!current) throw new Error("Narrator operator is not initialized");
-      const duplicate = current.ledger.find(
-        row => row.idempotencyKey === entry.idempotencyKey
-      );
-      if (duplicate) return duplicate;
       const stored: NarrativeEventLedgerEntry = {
         ...entry,
         id: entry.id ?? randomUUID(),
         tenantId: scope.tenantId,
         operatorUserId: scope.operatorUserId,
       };
+      const duplicate = current.ledger.find(
+        row => row.idempotencyKey === stored.idempotencyKey
+      );
+      if (duplicate) {
+        return resolveDuplicateNarratorLedgerInsert(duplicate, stored);
+      }
       rows.set(keyOf(scope), {
         ...current,
         ledger: [...current.ledger, stored],
@@ -98,6 +126,16 @@ export function createInMemoryNarratorStore(): NarratorStore {
         row => row.idempotencyKey === commit.ledgerEntry.idempotencyKey
       );
       if (duplicate) {
+        const incoming: NarrativeEventLedgerEntry = {
+          ...commit.ledgerEntry,
+          id: commit.ledgerEntry.id ?? duplicate.id,
+          tenantId: scope.tenantId,
+          operatorUserId: scope.operatorUserId,
+        };
+        const resolved = resolveDuplicateNarratorLedgerInsert(
+          duplicate,
+          incoming
+        );
         rows.set(keyOf(scope), {
           ...current,
           knowledge: cloneKnowledge(commit.knowledge),
@@ -107,7 +145,7 @@ export function createInMemoryNarratorStore(): NarratorStore {
             holdOpenedAtMs: { ...commit.narrativeState.holdOpenedAtMs },
           },
         });
-        return duplicate;
+        return resolved;
       }
       const stored: NarrativeEventLedgerEntry = {
         ...commit.ledgerEntry,
@@ -128,4 +166,7 @@ export function createInMemoryNarratorStore(): NarratorStore {
       return stored;
     },
   };
+  return store;
 }
+
+export { createInMemoryNarratorStore } from "./narratorSnapshotAttestation";
