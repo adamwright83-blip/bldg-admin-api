@@ -433,9 +433,11 @@ export function evaluateEligibility(
 
 /**
  * Production eligibility. Caller-supplied registry/graph are ignored.
- * Goldline evidence is persisted ingested receipts, unioned with live
- * branded receipts. Unbranded caller objects are not authority.
- * Isolated tests may still call evaluateEligibility with a local catalog.
+ * Goldline evidence is persisted ingested receipts on an attested
+ * store-loaded snapshot, unioned with live branded receipts. Caller-
+ * constructed snapshot JSON and unbranded caller objects are not
+ * authority. Isolated tests may still call evaluateEligibility with a
+ * local catalog.
  */
 export function evaluateProductionEligibility(
   input: EligibilityInput

@@ -15,6 +15,7 @@ import type {
 } from "../../shared/narratorOs/contracts";
 import { WORLD_TRUTH_FACTS, NARRATOR_WORLD_TRUTH_VERSION } from "./worldTruth";
 import { resolveDuplicateNarratorLedgerInsert } from "./goldlineLedgerReplay";
+import { withAuthoritativeNarratorStoreSnapshots } from "./narratorSnapshotAttestation";
 
 function keyOf(scope: OperatorScope): string {
   return `${scope.tenantId}::${scope.operatorUserId}`;
@@ -57,7 +58,7 @@ export function createInMemoryNarratorStore(
     }
   }
 
-  return {
+  const store: NarratorStore = {
     async initOperator(scope) {
       const existing = rows.get(keyOf(scope));
       if (existing) return existing;
@@ -156,6 +157,7 @@ export function createInMemoryNarratorStore(
       return stored;
     },
   };
+  return withAuthoritativeNarratorStoreSnapshots(store);
 }
 
 /**

@@ -6,7 +6,9 @@
  * and constructing a matching object does not confer either membership.
  *
  * Rehydration membership is not a public remember API. It is created only
- * while walking validated VERIFIED_GOLDLINE_OUTCOME ledger rows.
+ * while walking validated VERIFIED_GOLDLINE_OUTCOME rows on an attested
+ * store-loaded snapshot. A structurally identical caller-constructed
+ * snapshot is not authority.
  *
  * Production index does not re-export remember functions. Narrator does not
  * issue. Rehydration is not issuance and cannot be re-ingested.
@@ -18,6 +20,7 @@ import {
   isPersistedVerifiedGoldlineReceipt,
   persistedReceiptMatchesLedgerIdentity,
 } from "./goldlineReceiptIdentity";
+import { isAuthoritativeNarratorSnapshot } from "./narratorSnapshotAttestation";
 import type { NarratorSnapshot } from "./store";
 import {
   isVerifiedGoldlineReceiptShape,
@@ -132,13 +135,15 @@ function rehydrateOne(
 }
 
 /**
- * Rebuild branded receipts from ingested ledger evidence. Incomplete or
- * scope-mismatched rows are skipped (fail closed). Does not mint new
- * outcomes. Does not accept a caller-constructed receipt object.
+ * Rebuild branded receipts from ingested ledger evidence. Incomplete,
+ * unattested, or scope-mismatched snapshots/rows are skipped (fail closed).
+ * Does not mint new outcomes. Does not accept a caller-constructed receipt
+ * or a structurally identical caller-constructed snapshot.
  */
 export function rehydratePersistedVerifiedGoldlineReceipts(
   snapshot: NarratorSnapshot
 ): readonly VerifiedGoldlineReceipt[] {
+  if (!isAuthoritativeNarratorSnapshot(snapshot)) return [];
   const receipts: VerifiedGoldlineReceipt[] = [];
   const seen = new Set<string>();
   for (const entry of snapshot.ledger) {

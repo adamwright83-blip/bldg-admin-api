@@ -35,6 +35,7 @@ import {
   recordVerifiedGoldlineOutcome,
   UntrustedGoldlineReceiptError,
   ConflictingGoldlineLedgerReplayError,
+  IneligibleBeatCommitError,
 } from "../narratorOs/ledger";
 import {
   goldlineLedgerIdempotencyKey,
@@ -70,8 +71,23 @@ import {
   type VerifiedGoldlineReceipt,
 } from "../narratorOs/verifiedGoldlineReceipt";
 import { VERIFIED_GOLDLINE_RECEIPT_BRAND } from "../narratorOs/verifiedGoldlineReceiptBrand";
+import { isAuthoritativeNarratorSnapshot } from "../narratorOs/narratorSnapshotAttestation";
 import type { NarrativeEventLedgerEntry } from "../../shared/narratorOs/contracts";
-import type { NarratorSnapshot, NarratorStore } from "../narratorOs/store";
+import {
+  cloneKnowledge,
+  EMPTY_KNOWLEDGE,
+  SEEDED_NARRATIVE_STATE,
+  type NarratorSnapshot,
+  type NarratorStore,
+} from "../narratorOs/store";
+import {
+  NARRATOR_WORLD_TRUTH_VERSION,
+  WORLD_TRUTH_FACTS,
+} from "../narratorOs/worldTruth";
+import {
+  CLAIRE_LIVED_BIO_FACTS,
+  NARRATOR_LIVED_BIO_VERSION,
+} from "../narratorOs/livedBio";
 
 const scope = { tenantId: "t-e", operatorUserId: "op-e" };
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -90,6 +106,7 @@ const NARRATOR_PRODUCTION_FILES = [
   "server/narratorOs/registry.ts",
   "server/narratorOs/verifiedGoldlineReceipt.ts",
   "server/narratorOs/verifiedGoldlineReceiptAuthority.ts",
+  "server/narratorOs/narratorSnapshotAttestation.ts",
   "server/narratorOs/m03Readiness.ts",
   "server/narratorOs/disclosurePolicy.ts",
   "server/narratorOs/authoredNarrativeFacts.ts",
@@ -1157,6 +1174,65 @@ function forgedBrandedKeepReceipt(): VerifiedGoldlineReceipt {
   };
 }
 
+function forgedConsistentKeepSnapshot(): NarratorSnapshot {
+  const producerNamespace = TEST_PRODUCER_A;
+  const sourceEventId = "forged-snapshot-keep";
+  const receiptId = goldlineReceiptIdFromAuthoritativeIdentity({
+    tenantId: scope.tenantId,
+    operatorUserId: scope.operatorUserId,
+    producerNamespace,
+    sourceEventId,
+  });
+  const persisted = {
+    receiptId,
+    tenantId: scope.tenantId,
+    operatorUserId: scope.operatorUserId,
+    outcomeId: "kept_promised_send_visit_or_call" as const,
+    verificationClass: "VERIFIED" as const,
+    evidenceClass: "operator_attested" as const,
+    evidenceRef: {
+      sourceType: "goldline_field_commitment",
+      sourceReference: "field_commitment:forged-snapshot-keep",
+      classification: "operator_attested" as const,
+    },
+    targetRef: { kind: "goldline_target" as const, id: "target-a" },
+    occurredAtMs: MONDAY_MS,
+    producerNamespace,
+    sourceEventId,
+  };
+  const entry: NarrativeEventLedgerEntry = {
+    id: "forged-ledger-row",
+    tenantId: scope.tenantId,
+    operatorUserId: scope.operatorUserId,
+    kind: "VERIFIED_GOLDLINE_OUTCOME",
+    beatId: null,
+    goldlineOutcomeId: "kept_promised_send_visit_or_call",
+    offscreen: false,
+    playerVisible: false,
+    evidenceRef: persisted.evidenceRef,
+    occurredAt: new Date(MONDAY_MS).toISOString(),
+    idempotencyKey: goldlineLedgerIdempotencyKey(receiptId),
+    persistedVerifiedGoldline: persisted,
+  };
+  return {
+    tenantId: scope.tenantId,
+    operatorUserId: scope.operatorUserId,
+    worldTruth: WORLD_TRUTH_FACTS,
+    livedBio: CLAIRE_LIVED_BIO_FACTS,
+    knowledge: cloneKnowledge(EMPTY_KNOWLEDGE),
+    narrativeState: {
+      values: { ...SEEDED_NARRATIVE_STATE.values },
+      closedForwardPaths: [],
+      holdOpenedAtMs: {},
+    },
+    ledger: [entry],
+    catalogVersion: {
+      worldTruth: NARRATOR_WORLD_TRUTH_VERSION,
+      livedBio: NARRATOR_LIVED_BIO_VERSION,
+    },
+  };
+}
+
 describe("Narrator OS Slice E — unforgeable receipt membership and hidden production capabilities", () => {
   it("1. knowing VERIFIED_GOLDLINE_RECEIPT_BRAND does not make a perfect object ingestible", async () => {
     const { store } = await seeded();
@@ -1210,6 +1286,14 @@ describe("Narrator OS Slice E — unforgeable receipt membership and hidden prod
     expect("rememberRehydratedVerifiedGoldlineEvidence" in narratorIndex).toBe(
       false
     );
+    expect("withAuthoritativeNarratorStoreSnapshots" in authority).toBe(false);
+    expect("withAuthoritativeNarratorStoreSnapshots" in persistence).toBe(
+      false
+    );
+    expect("withAuthoritativeNarratorStoreSnapshots" in narratorIndex).toBe(
+      false
+    );
+    expect("isAuthoritativeNarratorSnapshot" in narratorIndex).toBe(false);
     const authoritySrc = readFileSync(
       resolve(
         REPO_ROOT,
@@ -1414,5 +1498,129 @@ describe("Narrator OS Slice E — unforgeable receipt membership and hidden prod
         evalInput(reloaded!, { verifiedGoldline: [] })
       ).eligibleBeatIds
     ).toContain(BEAT_IDS.M03);
+  });
+});
+
+describe("Narrator OS Slice E — store-loaded snapshots are the only rehydration authority", () => {
+  it("a fully consistent caller-constructed snapshot cannot become production Goldline authority", async () => {
+    const { store, snapshot } = await seeded();
+    const fake = forgedConsistentKeepSnapshot();
+    expect(isAuthoritativeNarratorSnapshot(fake)).toBe(false);
+    expect(isAuthoritativeNarratorSnapshot(snapshot)).toBe(true);
+
+    const authority = await import(
+      "../narratorOs/verifiedGoldlineReceiptAuthority"
+    );
+    const persistence = await import(
+      "../narratorOs/verifiedGoldlinePersistence"
+    );
+    const eligibility = await import("../narratorOs/eligibility");
+    const ledger = await import("../narratorOs/ledger");
+    const narratorIndex = await import("../narratorOs/index");
+    for (const mod of [
+      authority,
+      persistence,
+      eligibility,
+      ledger,
+      narratorIndex,
+    ]) {
+      for (const [name, value] of Object.entries(mod)) {
+        if (typeof value !== "function") continue;
+        if (/test/i.test(name)) continue;
+        try {
+          const result = value(fake);
+          if (
+            result &&
+            typeof (result as Promise<unknown>).then === "function"
+          ) {
+            await result;
+          }
+        } catch {
+          /* production APIs may reject untrusted input */
+        }
+      }
+    }
+
+    const hydrated = rehydratePersistedVerifiedGoldlineReceipts(fake);
+    expect(hydrated).toEqual([]);
+    expect(productionVerifiedGoldlineEvidence(fake, [])).toEqual([]);
+    expect(productionVerifiedGoldlineEvidence(fake, fake.ledger)).toEqual([]);
+    const fakeInput = evalInput(fake, { verifiedGoldline: [] });
+    const emptyInput = evalInput(snapshot, { verifiedGoldline: [] });
+    const fakeProduction = evaluateProductionEligibility(fakeInput);
+    const emptyProduction = evaluateProductionEligibility(emptyInput);
+    expect(fakeProduction.eligibleBeatIds).toEqual(
+      emptyProduction.eligibleBeatIds
+    );
+    expect(fakeProduction.eligibleBeatIds).not.toContain(BEAT_IDS.M04);
+    const fakeAuths = issueEligibilityAuthorizations(fakeProduction, fakeInput);
+    expect(fakeAuths.some(auth => auth.beatId === BEAT_IDS.M04)).toBe(false);
+    expect(fakeAuths.map(auth => auth.beatId).sort()).toEqual(
+      issueEligibilityAuthorizations(emptyProduction, emptyInput)
+        .map(auth => auth.beatId)
+        .sort()
+    );
+
+    const isolatedIssued = issueSupported({
+      sourceEventId: "isolated-keep-for-commit",
+    });
+    const isolatedInput = evalInput(fake, {
+      verifiedGoldline: [isolatedIssued],
+    });
+    const isolatedResult = evaluateEligibility(isolatedInput);
+    const isolatedM04 = issueEligibilityAuthorizations(
+      isolatedResult,
+      isolatedInput
+    ).find(auth => auth.beatId === BEAT_IDS.M04);
+    expect(isolatedM04).toBeTruthy();
+    await expect(
+      commitAuthorizedBeat({
+        store,
+        scope,
+        authorization: isolatedM04!,
+        eligibility: fakeInput,
+      })
+    ).rejects.toBeInstanceOf(IneligibleBeatCommitError);
+    expect((await store.load(scope))?.ledger).toEqual([]);
+    expect(
+      await fireOffscreenIfLegal({
+        store,
+        scope,
+        eligibility: fakeInput,
+      })
+    ).toEqual({ fired: [] });
+    expect((await store.load(scope))?.ledger).toEqual([]);
+  });
+
+  it("store-loaded persisted evidence still rehydrates after restart and stays non-ingestible", async () => {
+    const { store } = await seeded();
+    await ingestVerifiedGoldlineOutcome({
+      store,
+      scope,
+      receipt: issueSupported({ sourceEventId: "attested-restart-keep" }),
+    });
+    const reloadedStore = reloadInMemoryNarratorStoreFromSnapshot(
+      (await store.load(scope))!
+    );
+    const reloaded = await reloadedStore.load(scope);
+    expect(isAuthoritativeNarratorSnapshot(reloaded)).toBe(true);
+    const hydrated = rehydratePersistedVerifiedGoldlineReceipts(reloaded!);
+    expect(hydrated).toHaveLength(1);
+    expect(isRehydratedVerifiedGoldlineEvidence(hydrated[0]!)).toBe(true);
+    expect(isUpstreamIssuedVerifiedGoldlineReceipt(hydrated[0]!)).toBe(false);
+    expect(isLegalEligibilityGoldlineEvidence(hydrated[0]!)).toBe(true);
+    expect(
+      evaluateProductionEligibility(
+        evalInput(reloaded!, { verifiedGoldline: [] })
+      ).eligibleBeatIds
+    ).toContain(BEAT_IDS.M04);
+    await expect(
+      ingestVerifiedGoldlineOutcome({
+        store: reloadedStore,
+        scope,
+        receipt: hydrated[0]!,
+      })
+    ).rejects.toBeInstanceOf(UntrustedGoldlineReceiptError);
+    expect((await reloadedStore.load(scope))?.ledger).toHaveLength(1);
   });
 });

@@ -29,6 +29,7 @@ import {
 } from "./store";
 import { NARRATOR_WORLD_TRUTH_VERSION, WORLD_TRUTH_FACTS } from "./worldTruth";
 import { resolveDuplicateNarratorLedgerInsert } from "./goldlineLedgerReplay";
+import { withAuthoritativeNarratorStoreSnapshots } from "./narratorSnapshotAttestation";
 
 function seedState(): NarrativeState {
   return {
@@ -131,7 +132,7 @@ function knowledgeRowsFor(
 
 export { resolveDuplicateNarratorLedgerInsert } from "./goldlineLedgerReplay";
 export function createDrizzleNarratorStore(): NarratorStore {
-  return {
+  const store: NarratorStore = {
     async initOperator(scope) {
       const existing = await this.load(scope);
       if (existing) return existing;
@@ -366,4 +367,5 @@ export function createDrizzleNarratorStore(): NarratorStore {
       return stored;
     },
   };
+  return withAuthoritativeNarratorStoreSnapshots(store);
 }

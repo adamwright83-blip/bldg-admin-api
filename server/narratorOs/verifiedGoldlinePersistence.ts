@@ -2,9 +2,10 @@
  * Persist and recover branded Goldline receipts from the Narrator ledger.
  *
  * Production authority after restart is persisted VERIFIED_GOLDLINE_OUTCOME
- * rows, not a hidden in-memory array. Rehydration walks validated ledger
- * evidence. It is not issuance and is not a generic remember API. A
- * caller-constructed ledger-shaped object is still not a receipt.
+ * rows on an attested store-loaded snapshot, not a hidden in-memory array.
+ * Rehydration walks validated ledger evidence. It is not issuance and is
+ * not a generic remember API. Caller-constructed snapshot JSON is not
+ * authoritative persisted Narrator evidence.
  */
 import type { PersistedVerifiedGoldlineReceipt } from "../../shared/narratorOs/contracts";
 import type { NarratorSnapshot } from "./store";
