@@ -400,11 +400,16 @@ describe("Narrator OS verified Goldline receipt authority", () => {
       evalInput(snapshot, { verifiedGoldline: [counterfeit as never] })
     );
     expect(result.eligibleBeatIds).not.toContain(BEAT_IDS.M03);
+    const m03 = result.audit.find(entry => entry.beatId === BEAT_IDS.M03)!;
+    expect(m03.pass).toBe(false);
+    expect(m03.failedGates).toContain("prerequisite");
     expect(
-      result.audit.find(entry => entry.beatId === BEAT_IDS.M03)?.failedGates
-    ).toEqual(
-      expect.arrayContaining(["prerequisite", "verified_goldline_evidence"])
-    );
+      m03.prerequisiteChecks.some(
+        check =>
+          check.detail.includes("verified_goldline_any") &&
+          check.passed === false
+      )
+    ).toBe(true);
   });
 
   it("does not let a caller mint spoken_no and unlock M03", async () => {
