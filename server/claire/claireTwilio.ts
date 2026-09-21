@@ -47,6 +47,7 @@ import {
   safeClaireLedger,
 } from "./conversation/liveCall";
 import { canonicalOperatorMetadata, claireQueuedSpeechMetadata } from "./conversation/speechDelivery";
+import { claireProviderMetadataWithNarrative } from "./narratorPresentationConsumer";
 import {
   handleCallCompleted,
   handleRecordingStatus,
@@ -695,7 +696,7 @@ function startVoiceTurn(input: {
         claireText: result.speak,
         turnKey: conversation.turns,
         operatorMetadata: canonicalOperatorMetadata(fragments.length ? fragments : [canonicalOperator]),
-        claireMetadata: claireQueuedSpeechMetadata(),
+        claireMetadata: claireProviderMetadataWithNarrative(result.narrativeSpeech),
       });
       if (result.commitmentTurn) {
         await linkClaireCallAction({ callSid: input.callSid, claireConversationId: conversationId, turn: result.commitmentTurn });

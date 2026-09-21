@@ -38,3 +38,25 @@ describe("Narrator OS persistence migration", () => {
     expect(migrate).toContain("this DDL does not backfill chats or CRM");
   });
 });
+
+describe("Narrator OS slice H presentation receipt migration", () => {
+  const presentationSql = readFileSync(
+    resolve(process.cwd(), "drizzle/0091_narrator_presentation_receipt.sql"),
+    "utf8"
+  );
+
+  it("stores presentation apart from the occurrence ledger", () => {
+    expect(presentationSql).toContain(
+      "CREATE TABLE IF NOT EXISTS `narrator_os_presentation_receipt`"
+    );
+    expect(presentationSql).toContain(
+      "enum('prepared','rendered_to_surface')"
+    );
+    expect(presentationSql).not.toMatch(/seen|perceived|confirmed_heard/i);
+    expect(presentationSql).not.toMatch(/INSERT INTO/i);
+    expect(migrate).toContain(
+      "CREATE TABLE IF NOT EXISTS narrator_os_presentation_receipt"
+    );
+    expect(sql).not.toContain("narrator_os_presentation_receipt");
+  });
+});

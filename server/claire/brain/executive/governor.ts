@@ -6,6 +6,7 @@
 import { BUSINESS_ANSWER_UNAVAILABLE, type ExecutiveDecision } from "../contracts/executiveDecision";
 import type { EvidenceItem } from "../contracts/evidence";
 import type { ResponseSegment } from "../contracts/responsePlan";
+import { isNarratorBusinessContamination } from "../businessMemory/narratorFirewall";
 import { isCallControlGrant, isExecutiveActionGrant, isNarrativeRevealGrant, isPersonalDisclosureGrant } from "./grants";
 
 export class ExecutiveGovernorError extends Error {
@@ -49,6 +50,9 @@ export function assertGovernedDecision(decision: ExecutiveDecision): void {
     }
     if (item.type === "conversation_turn" && item.authoritativeFor.includes("current_business_truth")) {
       throw new ExecutiveGovernorError("episodic memory cannot be current business truth");
+    }
+    if (isNarratorBusinessContamination(item)) {
+      throw new ExecutiveGovernorError("authored narrative material cannot become a business fact");
     }
   }
 

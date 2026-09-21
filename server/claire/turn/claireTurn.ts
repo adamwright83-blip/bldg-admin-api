@@ -87,6 +87,12 @@ import {
   utteranceHasMultipleAsks,
   type ClaireRouteEvidence,
 } from "../answerRouter";
+import {
+  narrativeClaireSpeechMetadata,
+  narratorPromptSectionForClaire,
+  type NarrativeClaireSpeechAttachment,
+} from "../narratorPresentationConsumer";
+import type { NarrativePresentationPlan } from "../../narratorOs/presentationPlan";
 
 /**
  * One Claire turn, for the phone and the desk alike.
@@ -151,6 +157,11 @@ export type ClaireTurnInput = {
   /** False flushes a held phone fragment as a complete thought (the caller went quiet). */
   allowFragmentWait?: boolean;
   /**
+   * Already-derived Narrator presentation. This turn does not load Narrator
+   * state, run eligibility, or decide whether a beat occurred.
+   */
+  narrativePresentation?: NarrativePresentationPlan | null;
+  /**
    * Slice A (routing audit): when the turn actually began for the operator —
    * for voice, the moment Twilio's webhook arrived, which is the closest
    * observable proxy for end-of-speech. Defaults to turn entry. Telemetry
@@ -187,6 +198,11 @@ export type ClaireTurnResult = {
   mutationReceipts?: MutationReceipt[];
   /** Deterministic `speakBriefingCommit` (or equivalent) — linted against receipts, not conversational inventory. */
   receiptBackedCommit?: string;
+  /**
+   * Set only when this turn's generation received an authored Narrator
+   * section. Delivery stays generated_queued until playback evidence exists.
+   */
+  narrativeSpeech?: NarrativeClaireSpeechAttachment;
 };
 
 export type ClaireTurnDeps = {
@@ -485,6 +501,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    * only — nothing in this file reads the trace back, and persistence is
    * fire-and-forget behind a tenant-scoped flag.
    */
+  const narratorPromptSection = narratorPromptSectionForClaire(
+    input.narrativePresentation
+  );
+  let narratorAttachedToGeneration = false;
   const trace = beginClaireTurnTrace({
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
@@ -555,7 +575,14 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       assembledUtterance: utterance,
       thoughtCompleteness,
     };
-    return personalEndCall ? { ...withUtterance, endCall: true } : withUtterance;
+    const delivered =
+      narratorAttachedToGeneration && input.narrativePresentation
+        ? {
+            ...withUtterance,
+            narrativeSpeech: narrativeClaireSpeechMetadata(input.narrativePresentation),
+          }
+        : withUtterance;
+    return personalEndCall ? { ...delivered, endCall: true } : delivered;
   };
   const finishCommitmentTurn = (
     turn: Exclude<VoiceCommitmentTurnResult, { kind: "not_applicable" }>
@@ -1087,6 +1114,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     const generationStartedAt = Date.now();
     trace.latency.generationStartMs = generationStartedAt - trace.startedAtMs;
     trace.synthesisRequired = true;
+    if (narratorPromptSection) narratorAttachedToGeneration = true;
     const reply = await deps.followUp({
       tenantId: input.tenantId,
       utterance,
@@ -1096,6 +1124,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       conversationId: input.conversationKey,
       coveredThisCall: coveredThisCallLines(state.coverage),
       priorClaimNotes: priorClaimNotes(),
+      narratorPromptSection,
       onPersonalTurn: personal => {
         if (personal.endCall) personalEndCall = true;
       },
@@ -1255,6 +1284,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     if (!input.context) return null;
     trace.synthesisRequired = true;
     trace.evidenceSources = evidence.map(item => item.source);
+    if (narratorPromptSection) narratorAttachedToGeneration = true;
     const reply = await deps.followUp({
       tenantId: input.tenantId,
       utterance: question,
@@ -1265,6 +1295,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       conversationId: input.conversationKey,
       coveredThisCall: coveredThisCallLines(state.coverage),
       priorClaimNotes: priorClaimNotes(),
+      narratorPromptSection,
       onPersonalTurn: personal => {
         if (personal.endCall) personalEndCall = true;
       },

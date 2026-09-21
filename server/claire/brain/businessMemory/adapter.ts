@@ -39,6 +39,7 @@ import type { EvidenceItem, PriorClaimRecheckResult } from "../contracts/evidenc
 import { evidenceFromAccountRef, evidenceFromBusinessResult, evidenceFromResolution } from "./evidence";
 import { evidenceFromAccountHistory } from "./accountEvidence";
 import { resolveEntityMentions } from "./entityResolution";
+import { isNarratorBusinessContamination } from "./narratorFirewall";
 import { admitsToOperatorEvidence } from "./sourceProvenance";
 
 export type BusinessMemoryContext = {
@@ -127,7 +128,9 @@ function operatorVisible(item: EvidenceItem): boolean {
 
 /** The synthetic firewall. Nothing reaches Executive Function without passing here. */
 export function admitBusinessEvidence(items: EvidenceItem[]): EvidenceItem[] {
-  return items.filter(item => operatorVisible(item));
+  return items.filter(
+    item => operatorVisible(item) && !isNarratorBusinessContamination(item)
+  );
 }
 
 function isBusinessQueryRequest(
