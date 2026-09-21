@@ -35,6 +35,7 @@ import {
 import { isClaireVoiceRecordingEnabled } from "./conversation/consent";
 import {
   attachCallSid,
+  attachConversationKind,
   createConversationSession,
   persistSpokenTurn,
 } from "./conversation/ledgerService";
@@ -57,6 +58,7 @@ import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
 import { getDashboardTimeZone } from "../dashboardZoned";
 import { claireConversationStateStore } from "./turn/conversationStateStore";
 import { getUserByOpenId } from "../db";
+import { dayDirectorActorId as dayDirectorActorIdFromUser } from "../dayDirector/dayDirectorActor";
 import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
 import { loadBusinessVocabulary, speechHints } from "./knowledge/businessVocabulary";
 import {
@@ -111,6 +113,8 @@ type PreDriveConversation = ClaireTurnState & {
   sessionKind?: "evening_planning" | "morning_reconciliation" | "field_debrief" | "pre_drive";
   /** Business names for speech recognition, loaded once per call. */
   hints?: string;
+  /** True after inbound context assembly was applied or conservatively given up. */
+  inboundContextReady?: boolean;
 };
 
 function callStateKey(conversationId: string): string {
@@ -132,6 +136,7 @@ async function saveCall(conversationId: string, conversation: PreDriveConversati
 }
 
 async function dropCall(conversationId: string): Promise<void> {
+  inboundContextPrefetch.delete(conversationId);
   await claireConversationStateStore()
     .remove(callStateKey(conversationId))
     .catch(error => console.warn("[Claire] could not clear call state", error));
@@ -283,16 +288,36 @@ export function resolveClaireOperatorIdForPhone(rawPhone: string): string {
 /**
  * Inbound identity binding. Same persisted-user + tenant proof as
  * `authorizedOperatorPhone`, inverted from the caller's number.
+ * Claire/operator scope is OpenID; Day Director / THE LINE is `String(user.id)`.
  */
-export async function authorizedInboundOperator(from: string): Promise<{ actorId: string; tenantId: string }> {
-  const actorId = resolveClaireOperatorIdForPhone(from);
-  const user = await getUserByOpenId(actorId);
+export async function authorizedInboundOperator(from: string): Promise<{
+  operatorUserId: string;
+  dayDirectorActorId: string;
+  tenantId: string;
+}> {
+  const operatorUserId = resolveClaireOperatorIdForPhone(from);
+  const user = await getUserByOpenId(operatorUserId);
   if (!user) {
     throw new Error(
-      `Claire will not answer for "${actorId}": no such operator exists. An inbound call is never opened for an unpersisted or synthetic identity.`
+      `Claire will not answer for "${operatorUserId}": no such operator exists. An inbound call is never opened for an unpersisted or synthetic identity.`
     );
   }
-  return { actorId, tenantId: user.tenantId?.trim() || "default" };
+  if (user.id == null) {
+    throw new Error(
+      `Claire will not answer for "${operatorUserId}": the persisted operator has no Day Director identity.`
+    );
+  }
+  const directorId = dayDirectorActorIdFromUser({ user });
+  if (!directorId || directorId === "unknown") {
+    throw new Error(
+      `Claire will not answer for "${operatorUserId}": the persisted operator has no Day Director identity.`
+    );
+  }
+  return {
+    operatorUserId,
+    dayDirectorActorId: directorId,
+    tenantId: user.tenantId?.trim() || "default",
+  };
 }
 
 function stableRequestId(callSid: string, suffix: string): string {
@@ -492,8 +517,18 @@ function outcomeLabel(outcome: string): string {
 
 /** In-flight turn computations, so a continuation redirect can collect a slow answer. The state itself is durable. */
 const inflightTurns = new Map<string, Promise<string>>();
-/** Inbound context assembly must not block the pickup TwiML webhook. */
-const inflightInboundEnrichment = new Map<string, Promise<void>>();
+/** Prefetch only — never a concurrent writer of live conversation state. */
+const inboundContextPrefetch = new Map<string, Promise<InboundPreparedContext | null>>();
+
+type InboundPreparedContext = {
+  context: PreDriveConversation["context"];
+  hints: string;
+};
+
+/** Test helper: a replica cannot see another process's in-memory prefetch map. */
+export function resetInboundContextPrefetchForTests(): void {
+  inboundContextPrefetch.clear();
+}
 
 /**
  * Claire Intelligence Repair Part 2, Slice A: voice turn-around timing.
@@ -554,6 +589,25 @@ function startVoiceTurn(input: {
   const { conversationId, conversation, token } = input;
   const job = (async () => {
     try {
+      if (!conversation.inboundContextReady) {
+        const prepared = await preparedInboundContextFor({
+          conversationId,
+          tenantId: conversation.tenantId,
+          actorId: conversation.actorId,
+          dayDirectorActorId: conversation.dayDirectorActorId,
+        });
+        inboundContextPrefetch.delete(conversationId);
+        if (prepared) {
+          applyPreparedInboundContext(conversation, prepared);
+          await safeClaireLedger(() =>
+            attachConversationKind({
+              claireConversationId: conversationId,
+              conversationKind: conversation.sessionKind ?? "pre_drive",
+            })
+          );
+        }
+        conversation.inboundContextReady = true;
+      }
       const result = await runClaireTurn(
         {
           tenantId: conversation.tenantId,
@@ -703,34 +757,57 @@ function inboundClaireCallBootstrapContext(actorId: string): PreDriveConversatio
   };
 }
 
-function scheduleInboundContextEnrichment(input: {
-  conversationId: string;
+async function assembleInboundPreparedContext(input: {
   tenantId: string;
   actorId: string;
-}): void {
-  const job = (async () => {
+  dayDirectorActorId: string;
+}): Promise<InboundPreparedContext | null> {
+  try {
     const [context, vocabulary] = await Promise.all([
       assembleClaireVoiceCallContext({
         tenantId: input.tenantId,
         actorId: input.actorId,
+        dayDirectorActorId: input.dayDirectorActorId,
       }),
       loadBusinessVocabulary(input.tenantId).catch(() => [] as string[]),
     ]);
-    const conversation = await loadCall(input.conversationId);
-    if (!conversation) return;
-    conversation.context = context;
-    conversation.sessionKind = context.workday?.session ?? conversation.sessionKind;
-    conversation.hints = boundedHints(speechHints(vocabulary));
-    await saveCall(input.conversationId, conversation);
-  })().catch(error => {
-    console.warn("[Claire] inbound context enrichment failed", error);
-  });
-  inflightInboundEnrichment.set(input.conversationId, job);
-  void job.finally(() => {
-    if (inflightInboundEnrichment.get(input.conversationId) === job) {
-      inflightInboundEnrichment.delete(input.conversationId);
-    }
-  });
+    return { context, hints: boundedHints(speechHints(vocabulary)) };
+  } catch (error) {
+    console.warn("[Claire] inbound context assembly failed", error);
+    return null;
+  }
+}
+
+function beginInboundContextPrefetch(input: {
+  conversationId: string;
+  tenantId: string;
+  actorId: string;
+  dayDirectorActorId: string;
+}): void {
+  if (inboundContextPrefetch.has(input.conversationId)) return;
+  inboundContextPrefetch.set(input.conversationId, assembleInboundPreparedContext(input));
+}
+
+async function preparedInboundContextFor(input: {
+  conversationId: string;
+  tenantId: string;
+  actorId: string;
+  dayDirectorActorId: string;
+}): Promise<InboundPreparedContext | null> {
+  const existing = inboundContextPrefetch.get(input.conversationId);
+  if (existing) return existing;
+  const job = assembleInboundPreparedContext(input);
+  inboundContextPrefetch.set(input.conversationId, job);
+  return job;
+}
+
+function applyPreparedInboundContext(
+  conversation: PreDriveConversation,
+  prepared: InboundPreparedContext
+): void {
+  conversation.context = prepared.context;
+  conversation.hints = prepared.hints;
+  conversation.sessionKind = prepared.context.workday?.session ?? conversation.sessionKind;
 }
 
 async function persistClaireVoiceConversation(input: {
@@ -742,6 +819,8 @@ async function persistClaireVoiceConversation(input: {
   spokenOpening: string;
   missionId?: number | null;
   loadVocabulary?: boolean;
+  /** Outbound already has assembled context. Inbound pickup bootstraps and waits until the first turn. */
+  inboundContextReady?: boolean;
 }): Promise<{ conversationId: string; token: string; hints: string }> {
   const conversationId = randomUUID();
   const hints = boundedHints(
@@ -760,6 +839,7 @@ async function persistClaireVoiceConversation(input: {
     touchedAt: now,
     sessionKind: input.context.workday?.session,
     hints,
+    inboundContextReady: input.inboundContextReady ?? true,
     history: [{ speaker: "claire", text: input.spokenOpening, at: now }],
   });
   const token = issueClaireToken({
@@ -845,7 +925,11 @@ async function answerInboundClaireCall(req: Request): Promise<{ status: number; 
   if (!callSid || !from) {
     return { status: 403, twiml: speakAndHangUp("This call can't be connected.") };
   }
-  let operator: { actorId: string; tenantId: string };
+  let operator: {
+    operatorUserId: string;
+    dayDirectorActorId: string;
+    tenantId: string;
+  };
   try {
     operator = await authorizedInboundOperator(from);
   } catch {
@@ -853,16 +937,19 @@ async function answerInboundClaireCall(req: Request): Promise<{ status: number; 
   }
   const { conversationId, token, hints } = await persistClaireVoiceConversation({
     tenantId: operator.tenantId,
-    actorId: operator.actorId,
+    actorId: operator.operatorUserId,
+    dayDirectorActorId: operator.dayDirectorActorId,
     brief: null,
-    context: inboundClaireCallBootstrapContext(operator.actorId),
+    context: inboundClaireCallBootstrapContext(operator.operatorUserId),
     spokenOpening: CLAIRE_INBOUND_GREETING,
     loadVocabulary: false,
+    inboundContextReady: false,
   });
-  scheduleInboundContextEnrichment({
+  beginInboundContextPrefetch({
     conversationId,
     tenantId: operator.tenantId,
-    actorId: operator.actorId,
+    actorId: operator.operatorUserId,
+    dayDirectorActorId: operator.dayDirectorActorId,
   });
   await safeClaireLedger(async () => {
     await attachCallSid({
