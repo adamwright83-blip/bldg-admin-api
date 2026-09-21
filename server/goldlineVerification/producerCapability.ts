@@ -81,7 +81,7 @@ export function isAuthorizedGoldlineProducerCapability(
 
 /**
  * Env-gated registration for test-support minting. Production runtime cannot
- * use this to obtain a capability. Does not add to the production registry.
+ * use this to obtain a capability. Does not add to any production collection.
  */
 export function authorizeTestGoldlineProducerCapability(input: {
   producerNamespace: string;
@@ -105,10 +105,11 @@ export function authorizeTestGoldlineProducerCapability(input: {
 }
 
 /**
- * Production capabilities derived from the closed registry. Empty today.
- * Not a map keyed by caller-supplied name.
+ * Production capabilities are minted into the private WeakSet only. The
+ * registry is empty: there is no production capability object to take.
+ * Future producers must be named here and handed to a dedicated adapter,
+ * never exported as a generic array/map/lookup.
  */
-export const PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES: readonly GoldlineProducerCapability[] =
-  REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS.map(definition =>
-    mintGoldlineProducerCapability(definition)
-  );
+for (const definition of REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS) {
+  mintGoldlineProducerCapability(definition);
+}

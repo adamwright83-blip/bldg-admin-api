@@ -12,8 +12,8 @@ import { claimTestGoldlineProducerCapability } from "./producerCapability.testSu
 import {
   isAuthorizedGoldlineProducerCapability,
   isGoldlineProducerCapability,
-  PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES,
 } from "./producerCapability";
+import * as producerCapabilityModule from "./producerCapability";
 import { GOLDLINE_PRODUCER_CAPABILITY_BRAND } from "./producerCapabilityBrand";
 import {
   ingestVerifiedGoldlineOutcome,
@@ -62,9 +62,13 @@ import {
   rehydratePersistedVerifiedGoldlineReceipts,
 } from "../narratorOs/verifiedGoldlinePersistence";
 import {
+  isRehydratedVerifiedGoldlineEvidence,
+  isUpstreamIssuedVerifiedGoldlineReceipt,
   isVerifiedGoldlineReceipt,
+  isVerifiedGoldlineReceiptShape,
   type VerifiedGoldlineReceipt,
 } from "../narratorOs/verifiedGoldlineReceipt";
+import { VERIFIED_GOLDLINE_RECEIPT_BRAND } from "../narratorOs/verifiedGoldlineReceiptBrand";
 import type { NarrativeEventLedgerEntry } from "../../shared/narratorOs/contracts";
 import type { NarratorSnapshot, NarratorStore } from "../narratorOs/store";
 
@@ -84,6 +88,7 @@ const NARRATOR_PRODUCTION_FILES = [
   "server/narratorOs/drizzleStore.ts",
   "server/narratorOs/registry.ts",
   "server/narratorOs/verifiedGoldlineReceipt.ts",
+  "server/narratorOs/verifiedGoldlineReceiptAuthority.ts",
   "server/narratorOs/m03Readiness.ts",
   "server/narratorOs/disclosurePolicy.ts",
   "server/narratorOs/authoredNarrativeFacts.ts",
@@ -191,6 +196,8 @@ describe("Narrator OS Slice E — production verified Goldline ingestion", () =>
       },
     });
     expect(isVerifiedGoldlineReceipt(receipt)).toBe(true);
+    expect(isUpstreamIssuedVerifiedGoldlineReceipt(receipt)).toBe(true);
+    expect(isRehydratedVerifiedGoldlineEvidence(receipt)).toBe(false);
     expect(receipt.receiptId).toBe(
       goldlineReceiptIdFromAuthoritativeIdentity({
         tenantId: scope.tenantId,
@@ -224,11 +231,19 @@ describe("Narrator OS Slice E — production verified Goldline ingestion", () =>
       expect(src).not.toMatch(
         /issueVerifiedGoldlineReceiptFromAuthoritativeMutation/
       );
-      expect(src).not.toMatch(/from ["'].*goldlineVerification/);
       expect(src).not.toMatch(/producerCapability\.testSupport/);
+      if (file.endsWith("verifiedGoldlineReceiptAuthority.ts")) {
+        expect(src).toMatch(
+          /from ["']\.\.\/goldlineVerification\/producerCapability["']/
+        );
+        continue;
+      }
+      expect(src).not.toMatch(/from ["'].*goldlineVerification/);
     }
     expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual([]);
-    expect(PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES).toEqual([]);
+    expect(
+      "PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES" in producerCapabilityModule
+    ).toBe(false);
   });
 
   it("3. structurally similar unbranded object is rejected", async () => {
@@ -711,8 +726,10 @@ function drizzleShapedGoldlineRow(
 
 describe("Narrator OS Slice E — authority, identity, and conflicting replay", () => {
   it("1. empty production registry cannot mint any supported VERIFIED receipt", () => {
-    expect(PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES).toEqual([]);
     expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual([]);
+    expect(
+      "PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES" in producerCapabilityModule
+    ).toBe(false);
     expect(() =>
       issueVerifiedGoldlineReceiptFromAuthoritativeMutation({
         producer: undefined as never,
@@ -765,6 +782,9 @@ describe("Narrator OS Slice E — authority, identity, and conflicting replay", 
     expect(capabilitySrc).not.toMatch(
       /export function (getRegistered|lookup|createProduction)/
     );
+    expect(capabilitySrc).not.toMatch(
+      /export const PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES/
+    );
   });
 
   it("2. test-only authorized producer capability can issue without creating production authority", () => {
@@ -778,13 +798,15 @@ describe("Narrator OS Slice E — authority, identity, and conflicting replay", 
     const capability = testProducer();
     expect(isGoldlineProducerCapability(capability)).toBe(true);
     expect(isAuthorizedGoldlineProducerCapability(capability)).toBe(true);
-    expect(PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES).not.toContain(capability);
     const receipt = issueVerifiedGoldlineReceiptFromAuthoritativeMutation({
       producer: capability,
       mutation: mutation({ sourceEventId: "test-only-src" }),
     });
     expect(isVerifiedGoldlineReceipt(receipt)).toBe(true);
-    expect(PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES).toEqual([]);
+    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual([]);
+    expect(
+      "PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES" in producerCapabilityModule
+    ).toBe(false);
   });
 
   it("3. merely knowing a producer ID/name is insufficient to mint", () => {
@@ -819,11 +841,7 @@ describe("Narrator OS Slice E — authority, identity, and conflicting replay", 
         mutation: mutation(),
       })
     ).toThrow(UntrustedGoldlineIssuanceError);
-    expect(
-      PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES.find(
-        item => item.producerNamespace === knownName
-      )
-    ).toBeUndefined();
+    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual([]);
   });
 
   it("4. same sourceEventId / same tenant / different operator does not collide", () => {
@@ -1083,7 +1101,9 @@ describe("Narrator OS Slice E — authority, identity, and conflicting replay", 
 
   it("14. zero live business mutation producers remain wired", () => {
     expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual([]);
-    expect(PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES).toEqual([]);
+    expect(
+      "PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES" in producerCapabilityModule
+    ).toBe(false);
     const producerRoots = [
       resolve(REPO_ROOT, "server/commercialMissions"),
       resolve(REPO_ROOT, "server/goldlineWorld"),
@@ -1107,5 +1127,223 @@ describe("Narrator OS Slice E — authority, identity, and conflicting replay", 
       expect(src).not.toMatch(/claimTestGoldlineProducerCapability/);
       expect(src).not.toMatch(/GOLDLINE_PRODUCER_CAPABILITY_BRAND/);
     }
+  });
+});
+
+function forgedBrandedKeepReceipt(): VerifiedGoldlineReceipt {
+  return {
+    [VERIFIED_GOLDLINE_RECEIPT_BRAND]: true as const,
+    receiptId: goldlineReceiptIdFromAuthoritativeIdentity({
+      tenantId: scope.tenantId,
+      operatorUserId: scope.operatorUserId,
+      producerNamespace: TEST_PRODUCER_A,
+      sourceEventId: "forged-keep",
+    }),
+    tenantId: scope.tenantId,
+    operatorUserId: scope.operatorUserId,
+    outcomeId: "kept_promised_send_visit_or_call",
+    verificationClass: "VERIFIED",
+    evidenceClass: "operator_attested",
+    evidenceRef: {
+      sourceType: "goldline_field_commitment",
+      sourceReference: "field_commitment:forged-keep",
+      classification: "operator_attested",
+    },
+    targetRef: { kind: "goldline_target", id: "target-a" },
+    occurredAtMs: MONDAY_MS,
+    producerNamespace: TEST_PRODUCER_A,
+    sourceEventId: "forged-keep",
+  };
+}
+
+describe("Narrator OS Slice E — unforgeable receipt membership and hidden production capabilities", () => {
+  it("1. knowing VERIFIED_GOLDLINE_RECEIPT_BRAND does not make a perfect object ingestible", async () => {
+    const { store } = await seeded();
+    const forged = forgedBrandedKeepReceipt();
+    expect(isVerifiedGoldlineReceiptShape(forged)).toBe(true);
+    expect(isVerifiedGoldlineReceipt(forged)).toBe(false);
+    expect(isUpstreamIssuedVerifiedGoldlineReceipt(forged)).toBe(false);
+    await expect(
+      recordVerifiedGoldlineOutcome({
+        store,
+        scope,
+        receipt: forged,
+      })
+    ).rejects.toBeInstanceOf(UntrustedGoldlineReceiptError);
+    await expect(
+      ingestVerifiedGoldlineOutcome({ store, scope, receipt: forged })
+    ).rejects.toBeInstanceOf(UntrustedGoldlineReceiptError);
+    expect((await store.load(scope))?.ledger).toEqual([]);
+  });
+
+  it("2. a forged branded object cannot satisfy production eligibility through live input", async () => {
+    const { snapshot } = await seeded();
+    const forged = forgedBrandedKeepReceipt();
+    const production = evaluateProductionEligibility(
+      evalInput(snapshot, { verifiedGoldline: [forged] })
+    );
+    expect(production.eligibleBeatIds).not.toContain(BEAT_IDS.M04);
+    expect(productionVerifiedGoldlineEvidence(snapshot, [forged])).toEqual([]);
+  });
+
+  it("3. a validated persisted receipt still satisfies production eligibility after restart", async () => {
+    const { store } = await seeded();
+    await ingestVerifiedGoldlineOutcome({
+      store,
+      scope,
+      receipt: issueSupported({ sourceEventId: "persist-keep" }),
+    });
+    const reloaded = await reloadInMemoryNarratorStoreFromSnapshot(
+      (await store.load(scope))!
+    ).load(scope);
+    const hydrated = rehydratePersistedVerifiedGoldlineReceipts(reloaded!);
+    expect(hydrated).toHaveLength(1);
+    expect(isRehydratedVerifiedGoldlineEvidence(hydrated[0]!)).toBe(true);
+    expect(
+      evaluateProductionEligibility(
+        evalInput(reloaded!, { verifiedGoldline: [] })
+      ).eligibleBeatIds
+    ).toContain(BEAT_IDS.M04);
+  });
+
+  it("4. rehydrated persisted evidence cannot be reused as a fresh upstream ingest credential", async () => {
+    const { store } = await seeded();
+    await ingestVerifiedGoldlineOutcome({
+      store,
+      scope,
+      receipt: issueSupported({ sourceEventId: "no-reuse" }),
+    });
+    const reloadedStore = reloadInMemoryNarratorStoreFromSnapshot(
+      (await store.load(scope))!
+    );
+    const reloaded = await reloadedStore.load(scope);
+    const [hydrated] = rehydratePersistedVerifiedGoldlineReceipts(reloaded!);
+    expect(hydrated).toBeTruthy();
+    expect(isUpstreamIssuedVerifiedGoldlineReceipt(hydrated!)).toBe(false);
+    expect(isRehydratedVerifiedGoldlineEvidence(hydrated!)).toBe(true);
+    await expect(
+      ingestVerifiedGoldlineOutcome({
+        store: reloadedStore,
+        scope,
+        receipt: hydrated!,
+      })
+    ).rejects.toBeInstanceOf(UntrustedGoldlineReceiptError);
+    expect((await reloadedStore.load(scope))?.ledger).toHaveLength(1);
+  });
+
+  it("5. no raw production capability collection/object is exported", async () => {
+    expect(
+      "PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES" in producerCapabilityModule
+    ).toBe(false);
+    expect(
+      Object.keys(producerCapabilityModule).some(key => /production/i.test(key))
+    ).toBe(false);
+    const capabilitySrc = readFileSync(
+      resolve(HERE, "producerCapability.ts"),
+      "utf8"
+    );
+    expect(capabilitySrc).not.toMatch(
+      /export const PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES/
+    );
+    expect(capabilitySrc).not.toMatch(
+      /export function (get|list|lookup)\w*[Cc]apabilit/
+    );
+    const narratorIndex = await import("../narratorOs/index");
+    expect(
+      "rememberUpstreamIssuedVerifiedGoldlineReceipt" in narratorIndex
+    ).toBe(false);
+    expect("rememberRehydratedVerifiedGoldlineEvidence" in narratorIndex).toBe(
+      false
+    );
+    expect(
+      "rememberTestUpstreamIssuedVerifiedGoldlineReceipt" in narratorIndex
+    ).toBe(false);
+    expect("PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES" in narratorIndex).toBe(
+      false
+    );
+  });
+
+  it("6. test-only producer authority still works only in test", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VITEST", "");
+    try {
+      expect(() => testProducer()).toThrow(/not available outside tests/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    const capability = testProducer();
+    const receipt = issueVerifiedGoldlineReceiptFromAuthoritativeMutation({
+      producer: capability,
+      mutation: mutation({ sourceEventId: "test-gate" }),
+    });
+    expect(isUpstreamIssuedVerifiedGoldlineReceipt(receipt)).toBe(true);
+    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual([]);
+  });
+
+  it("7. production producer registry remains empty", () => {
+    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual([]);
+    expect(
+      "PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES" in producerCapabilityModule
+    ).toBe(false);
+  });
+
+  it("8. prior Slice E identity/replay/M03 regressions remain green", async () => {
+    const { store } = await seeded();
+    const sourceEventId = "prior-identity";
+    const first = issueSupported({
+      sourceEventId,
+      operatorUserId: "op-e",
+    });
+    const otherOp = issueSupported({
+      sourceEventId,
+      operatorUserId: "op-other",
+    });
+    expect(first.receiptId).not.toBe(otherOp.receiptId);
+    expect(issueSupported({ sourceEventId }).receiptId).toBe(first.receiptId);
+    await ingestVerifiedGoldlineOutcome({ store, scope, receipt: first });
+    await ingestVerifiedGoldlineOutcome({ store, scope, receipt: first });
+    expect((await store.load(scope))?.ledger).toHaveLength(1);
+    const conflicting = issueSupported({
+      sourceEventId,
+      outcomeId: "contact_reopened_after_no",
+    });
+    await expect(
+      ingestVerifiedGoldlineOutcome({ store, scope, receipt: conflicting })
+    ).rejects.toBeInstanceOf(ConflictingGoldlineLedgerReplayError);
+    await ingestVerifiedGoldlineOutcome({
+      store,
+      scope,
+      receipt: issueSupported({
+        sourceEventId: "prior-m03-no",
+        outcomeId: "spoken_no",
+        occurredAtMs: MONDAY_MS,
+      }),
+    });
+    await ingestVerifiedGoldlineOutcome({
+      store,
+      scope,
+      receipt: issueSupported({
+        sourceEventId: "prior-m03-reopen",
+        outcomeId: "contact_reopened_after_no",
+        occurredAtMs: TUESDAY_MS,
+      }),
+    });
+    await ingestVerifiedGoldlineOutcome({
+      store,
+      scope,
+      receipt: issueSupported({
+        sourceEventId: "prior-m03-return",
+        outcomeId: "legitimate_second_site_visit",
+        occurredAtMs: WEDNESDAY_MS,
+      }),
+    });
+    const reloaded = await reloadInMemoryNarratorStoreFromSnapshot(
+      (await store.load(scope))!
+    ).load(scope);
+    expect(
+      evaluateProductionEligibility(
+        evalInput(reloaded!, { verifiedGoldline: [] })
+      ).eligibleBeatIds
+    ).toContain(BEAT_IDS.M03);
   });
 });

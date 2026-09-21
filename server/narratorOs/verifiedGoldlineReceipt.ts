@@ -1,12 +1,11 @@
 import type { VerifiedGoldlineEvidenceRef } from "../../shared/narratorOs/contracts";
+import { isGoldlineReceiptAuthorityMember } from "./verifiedGoldlineReceiptAuthority";
 import { VERIFIED_GOLDLINE_RECEIPT_BRAND } from "./verifiedGoldlineReceiptBrand";
 
 /**
- * Opaque verified-Goldline authority. Types and the runtime guard live here.
- * This module does not issue receipts. Production issuance lives at the
- * Goldline verification boundary (`server/goldlineVerification`), not in
- * Narrator eligibility. A structurally similar object without the brand is
- * not a receipt.
+ * Opaque verified-Goldline types. This module does not issue receipts.
+ * Production issuance lives at the Goldline verification boundary. Brand
+ * possession is not authority; membership is tracked separately.
  */
 export type GoldlineEvidenceClass =
   | "authoritative_external"
@@ -54,7 +53,7 @@ export type VerifiedGoldlineReceipt = {
   readonly sourceEventId?: string;
 };
 
-export function isVerifiedGoldlineReceipt(
+export function isVerifiedGoldlineReceiptShape(
   value: unknown
 ): value is VerifiedGoldlineReceipt {
   if (!value || typeof value !== "object") return false;
@@ -97,3 +96,21 @@ export function isVerifiedGoldlineReceipt(
         receipt.sourceEventId.length > 0))
   );
 }
+
+/**
+ * Authoritative receipt: branded shape plus unforgeable issuance or
+ * rehydration membership. Importing the brand is not enough.
+ */
+export function isVerifiedGoldlineReceipt(
+  value: unknown
+): value is VerifiedGoldlineReceipt {
+  return (
+    isVerifiedGoldlineReceiptShape(value) &&
+    isGoldlineReceiptAuthorityMember(value)
+  );
+}
+
+export {
+  isUpstreamIssuedVerifiedGoldlineReceipt,
+  isRehydratedVerifiedGoldlineEvidence,
+} from "./verifiedGoldlineReceiptAuthority";

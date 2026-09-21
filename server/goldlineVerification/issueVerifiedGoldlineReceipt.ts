@@ -14,6 +14,7 @@ import {
   type GoldlineEvidenceClass,
   type VerifiedGoldlineReceipt,
 } from "../narratorOs/verifiedGoldlineReceipt";
+import { rememberUpstreamIssuedVerifiedGoldlineReceipt } from "../narratorOs/verifiedGoldlineReceiptAuthority";
 import { VERIFIED_GOLDLINE_RECEIPT_BRAND } from "../narratorOs/verifiedGoldlineReceiptBrand";
 import {
   isAuthorizedGoldlineProducerCapability,
@@ -166,22 +167,25 @@ export function issueVerifiedGoldlineReceiptFromAuthoritativeMutation(input: {
     producerNamespace: producer.producerNamespace,
     sourceEventId: mutation.sourceEventId,
   });
-  return Object.freeze({
-    [VERIFIED_GOLDLINE_RECEIPT_BRAND]: true as const,
-    receiptId,
-    tenantId: mutation.tenantId,
-    operatorUserId: mutation.operatorUserId,
-    outcomeId: mutation.outcomeId,
-    verificationClass: "VERIFIED" as const,
-    evidenceClass: mutation.evidenceClass,
-    evidenceRef: Object.freeze({
-      sourceType: mutation.evidenceRef.sourceType,
-      sourceReference: mutation.evidenceRef.sourceReference,
-      classification: mutation.evidenceRef.classification,
-    }),
-    targetRef,
-    occurredAtMs: mutation.occurredAtMs,
-    producerNamespace: producer.producerNamespace,
-    sourceEventId: mutation.sourceEventId,
-  });
+  return rememberUpstreamIssuedVerifiedGoldlineReceipt(
+    producer,
+    Object.freeze({
+      [VERIFIED_GOLDLINE_RECEIPT_BRAND]: true as const,
+      receiptId,
+      tenantId: mutation.tenantId,
+      operatorUserId: mutation.operatorUserId,
+      outcomeId: mutation.outcomeId,
+      verificationClass: "VERIFIED" as const,
+      evidenceClass: mutation.evidenceClass,
+      evidenceRef: Object.freeze({
+        sourceType: mutation.evidenceRef.sourceType,
+        sourceReference: mutation.evidenceRef.sourceReference,
+        classification: mutation.evidenceRef.classification,
+      }),
+      targetRef,
+      occurredAtMs: mutation.occurredAtMs,
+      producerNamespace: producer.producerNamespace,
+      sourceEventId: mutation.sourceEventId,
+    })
+  );
 }

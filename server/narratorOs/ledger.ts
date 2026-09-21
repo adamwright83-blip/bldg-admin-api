@@ -25,7 +25,7 @@ import {
   productionVerifiedGoldlineEvidence,
 } from "./verifiedGoldlinePersistence";
 import {
-  isVerifiedGoldlineReceipt,
+  isUpstreamIssuedVerifiedGoldlineReceipt,
   type VerifiedGoldlineReceipt,
 } from "./verifiedGoldlineReceipt";
 import {
@@ -253,7 +253,7 @@ export async function recordVerifiedGoldlineOutcome(input: {
   relatedBeatId?: NarrativeBeatId | null;
   nowIso?: string;
 }): Promise<void> {
-  if (!isVerifiedGoldlineReceipt(input.receipt)) {
+  if (!isUpstreamIssuedVerifiedGoldlineReceipt(input.receipt)) {
     throw new UntrustedGoldlineReceiptError("missing authorized receipt");
   }
   const receipt = input.receipt;

@@ -11,16 +11,17 @@ import { persistedReceiptMatchesLedgerIdentity } from "./goldlineReceiptIdentity
 import type { NarratorSnapshot } from "./store";
 import {
   isGoldlineTargetRef,
-  isVerifiedGoldlineReceipt,
+  isUpstreamIssuedVerifiedGoldlineReceipt,
   type VerifiedGoldlineReceipt,
 } from "./verifiedGoldlineReceipt";
+import { rememberRehydratedVerifiedGoldlineEvidence } from "./verifiedGoldlineReceiptAuthority";
 import { VERIFIED_GOLDLINE_RECEIPT_BRAND } from "./verifiedGoldlineReceiptBrand";
 
 export function persistableVerifiedGoldlineReceipt(
   receipt: VerifiedGoldlineReceipt
 ): PersistedVerifiedGoldlineReceipt {
-  if (!isVerifiedGoldlineReceipt(receipt)) {
-    throw new Error("Cannot persist an unbranded Goldline object");
+  if (!isUpstreamIssuedVerifiedGoldlineReceipt(receipt)) {
+    throw new Error("Cannot persist an unissued Goldline object");
   }
   return {
     receiptId: receipt.receiptId,
@@ -86,33 +87,35 @@ export function isPersistedVerifiedGoldlineReceipt(
 function rehydrateOne(
   persisted: PersistedVerifiedGoldlineReceipt
 ): VerifiedGoldlineReceipt {
-  return Object.freeze({
-    [VERIFIED_GOLDLINE_RECEIPT_BRAND]: true as const,
-    receiptId: persisted.receiptId,
-    tenantId: persisted.tenantId,
-    operatorUserId: persisted.operatorUserId,
-    outcomeId: persisted.outcomeId,
-    verificationClass: "VERIFIED" as const,
-    evidenceClass: persisted.evidenceClass,
-    evidenceRef: Object.freeze({
-      sourceType: persisted.evidenceRef.sourceType,
-      sourceReference: persisted.evidenceRef.sourceReference,
-      classification: persisted.evidenceRef.classification,
-    }),
-    targetRef: persisted.targetRef
-      ? Object.freeze({
-          kind: "goldline_target" as const,
-          id: persisted.targetRef.id,
-        })
-      : null,
-    occurredAtMs: persisted.occurredAtMs,
-    ...(persisted.producerNamespace
-      ? { producerNamespace: persisted.producerNamespace }
-      : {}),
-    ...(persisted.sourceEventId
-      ? { sourceEventId: persisted.sourceEventId }
-      : {}),
-  });
+  return rememberRehydratedVerifiedGoldlineEvidence(
+    Object.freeze({
+      [VERIFIED_GOLDLINE_RECEIPT_BRAND]: true as const,
+      receiptId: persisted.receiptId,
+      tenantId: persisted.tenantId,
+      operatorUserId: persisted.operatorUserId,
+      outcomeId: persisted.outcomeId,
+      verificationClass: "VERIFIED" as const,
+      evidenceClass: persisted.evidenceClass,
+      evidenceRef: Object.freeze({
+        sourceType: persisted.evidenceRef.sourceType,
+        sourceReference: persisted.evidenceRef.sourceReference,
+        classification: persisted.evidenceRef.classification,
+      }),
+      targetRef: persisted.targetRef
+        ? Object.freeze({
+            kind: "goldline_target" as const,
+            id: persisted.targetRef.id,
+          })
+        : null,
+      occurredAtMs: persisted.occurredAtMs,
+      ...(persisted.producerNamespace
+        ? { producerNamespace: persisted.producerNamespace }
+        : {}),
+      ...(persisted.sourceEventId
+        ? { sourceEventId: persisted.sourceEventId }
+        : {}),
+    })
+  );
 }
 
 /**
@@ -140,9 +143,10 @@ export function rehydratePersistedVerifiedGoldlineReceipts(
 }
 
 /**
- * Production Goldline evidence: persisted ingested receipts are authority.
- * Live branded receipts may join for same-process evaluation. Unbranded
- * caller objects never join. Persisted wins on receiptId collision.
+ * Production Goldline evidence: persisted ingested receipts are authority
+ * after restart via rehydration membership. Live incoming values count only
+ * if they are upstream-issued. Forged branded objects and rehydrated
+ * evidence are not ingest credentials.
  */
 export function productionVerifiedGoldlineEvidence(
   snapshot: NarratorSnapshot,
@@ -153,7 +157,7 @@ export function productionVerifiedGoldlineEvidence(
     byId.set(receipt.receiptId, receipt);
   }
   for (const value of incoming) {
-    if (!isVerifiedGoldlineReceipt(value)) continue;
+    if (!isUpstreamIssuedVerifiedGoldlineReceipt(value)) continue;
     if (value.tenantId !== snapshot.tenantId) continue;
     if (value.operatorUserId !== snapshot.operatorUserId) continue;
     if (byId.has(value.receiptId)) continue;

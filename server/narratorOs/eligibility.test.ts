@@ -561,6 +561,7 @@ describe("Narrator OS verified Goldline receipt authority", () => {
       "server/narratorOs/registry.ts",
       "server/narratorOs/drizzleStore.ts",
       "server/narratorOs/verifiedGoldlineReceipt.ts",
+      "server/narratorOs/verifiedGoldlineReceiptAuthority.ts",
     ];
     for (const file of productionFiles) {
       const src = readFileSync(resolve(process.cwd(), file), "utf8");
@@ -583,6 +584,11 @@ describe("Narrator OS verified Goldline receipt authority", () => {
     const prod = await import("./index");
     expect("issueVerifiedGoldlineReceiptForTests" in prod).toBe(false);
     expect("VERIFIED_GOLDLINE_RECEIPT_BRAND" in prod).toBe(false);
+    expect("rememberUpstreamIssuedVerifiedGoldlineReceipt" in prod).toBe(false);
+    expect("rememberRehydratedVerifiedGoldlineEvidence" in prod).toBe(false);
+    expect("rememberTestUpstreamIssuedVerifiedGoldlineReceipt" in prod).toBe(
+      false
+    );
     const receiptModule = await import("./verifiedGoldlineReceipt");
     expect("issueVerifiedGoldlineReceiptForTests" in receiptModule).toBe(false);
   });
