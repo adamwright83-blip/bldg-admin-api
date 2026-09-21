@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>World Dwell — Act I ruin graybox</title>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0; height: 100%; background: #2a2c2e;
+      overflow: hidden; font-family: ui-monospace, Menlo, monospace;
+      color: #c8c4ba; user-select: none; touch-action: none;
+    }
+    #stage {
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: #1f2123;
+    }
+    canvas { display: block; touch-action: none; background: #4a4d50; }
+    #debugTab, #debug { display: none; }
+    html.tester #debugTab {
+      display: block;
+      position: fixed; top: 10px; right: 10px; z-index: 20;
+      background: #2c2f33; color: #b7b3aa; border: 1px solid #555;
+      font: 700 11px ui-monospace, monospace; letter-spacing: .08em;
+      padding: 8px 10px; cursor: pointer;
+    }
+    html.tester #debug {
+      display: block;
+      position: fixed; left: 0; right: 0; bottom: -62%; height: 58%; width: auto;
+      z-index: 30; background: #1c1e21ee; border-top: 1px solid #555;
+      padding: 14px 12px 24px; overflow-y: auto; transition: bottom .18s;
+    }
+    html.tester #debug.open { bottom: 0; }
+    #debug h3 { margin: 28px 0 10px; font-size: 11px; letter-spacing: .12em; color: #9a958c; }
+    #debug p { font-size: 10px; line-height: 1.45; color: #7d7972; margin: 0 0 12px; }
+    .row { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 12px; }
+    .row label { flex: 1; }
+    input[type="range"] { width: 100%; accent-color: #8a8680; }
+    .radios { display: flex; flex-direction: column; gap: 6px; font-size: 12px; margin: 6px 0 10px; }
+    #clockRead { font-variant-numeric: tabular-nums; color: #d2cdc3; }
+    .note { font-size: 10px; color: #6e6b66; margin-top: 14px; line-height: 1.4; }
+  </style>
+</head>
+<body>
+  <div id="stage"><canvas id="cv"></canvas></div>
+  <button type="button" id="debugTab" hidden>DEBUG</button>
+  <aside id="debug" hidden aria-label="Graybox simulation inputs">
+    <h3>GRAYBOX ONLY</h3>
+    <p>Simulation inputs. Not player chrome. Do not persist. Do not call production APIs.</p>
+    <div class="row"><label><input type="checkbox" id="dbgGold" /> Gold seam present</label></div>
+    <div class="row"><label><input type="checkbox" id="dbgSlack" /> Slack M03 bob present</label></div>
+    <h3>SHUTTER STATE</h3>
+    <div class="radios">
+      <label><input type="radio" name="shutter" value="none" checked /> None (architecture)</label>
+      <label><input type="radio" name="shutter" value="pending" /> Hold pending</label>
+      <label><input type="radio" name="shutter" value="keep" /> KEEP</label>
+      <label><input type="radio" name="shutter" value="miss" /> MISS</label>
+    </div>
+    <h3>CLOCK</h3>
+    <div class="row"><span>Time</span><span id="clockRead">14:00</span></div>
+    <input type="range" id="dbgClock" min="0" max="24" step="0.05" value="14" />
+    <div class="row"><label><input type="checkbox" id="dbgSound" checked /> Sound</label></div>
+    <div class="row"><span>Lean</span><span id="leanRead">0.00</span></div>
+    <p class="note">Touching a toy is never evidence that real work occurred. Drag stone/sky to lean (right drag finds the colonnade). Trace the seam. Lift the bob. Rattle or lift the shutter.</p>
+  </aside>
+  <script src="./scene.js"></script>
+</body>
+</html>
