@@ -1,9 +1,11 @@
 /**
- * Narrator OS slices A–D — domain contracts.
+ * Narrator OS domain contracts.
  *
  * Narrator OS is the runtime director of Claire’s authored life. It does not
- * invent the story. Slices A–D stop at eligibility. Dramaturgy, scene
- * selection, Narrator prompts, and Claire dialogue are out of scope.
+ * invent the story. Eligibility returns the legal set. Slice F dramaturgy
+ * may select from that set and fails closed when canon has no deterministic
+ * rule for a collision. Scene prose, Narrator prompts, and Claire dialogue
+ * stay out of scope.
  *
  * Extra fail-closed defaults:
  * - mayFireOffscreen = false; defaultSurface = false; playerVisibility = false
@@ -21,6 +23,8 @@
  * - NO_ELIGIBLE is success with no mutation
  * - ELIGIBLE_WITHHELD requires authored `defaultSurface: false` on every
  *   passing beat; taste / pacing / “feels early” are not inputs
+ * - dramaturgy does not rank by array order, registry order, recency, or taste
+ * - a dramaturgy decision is not an eligibility authorization
  * - production mutation requires an eligibility authorization receipt
  */
 
@@ -388,6 +392,48 @@ export type NarrativeEligibilityResult = {
   eligibleBeatIds: readonly NarrativeBeatId[];
   withheldBeatIds: readonly NarrativeBeatId[];
   audit: readonly NarrativeEligibilityAudit[];
+};
+
+/**
+ * Slice F. Downstream of eligibility. Not an execution authorization.
+ * `selectedBeatId` is set only when `outcome` is SELECT.
+ */
+export const DRAMATURGY_OUTCOMES = [
+  "SILENCE_NO_ELIGIBLE",
+  "SELECT",
+  "SILENCE_WITHHELD",
+  "AMBIGUOUS_REQUIRES_AUTHORED_RULE",
+] as const;
+export type DramaturgyOutcome = (typeof DRAMATURGY_OUTCOMES)[number];
+
+export const DRAMATURGY_REASON_CODES = [
+  "no_surfaceable_eligible_beat",
+  "single_surfaceable_eligible_beat",
+  "only_withheld_candidates",
+  "multiple_surfaceable_no_authored_tie_break",
+  "authored_tie_break_applied",
+  "authored_tie_breaks_disagree",
+] as const;
+export type DramaturgyReasonCode = (typeof DRAMATURGY_REASON_CODES)[number];
+
+export type DramaturgyDecision = {
+  outcome: DramaturgyOutcome;
+  selectedBeatId: NarrativeBeatId | null;
+  /** Beats the supplied eligibility outcome put forward for this decision. */
+  candidateBeatIds: readonly NarrativeBeatId[];
+  eligibilityOutcome: EligibilityOutcome;
+  surfaceableBeatIds: readonly NarrativeBeatId[];
+  withheldBeatIds: readonly NarrativeBeatId[];
+  /**
+   * Ids on the supplied result that this eligibility outcome forbids
+   * treating as surfaceable. Stuffed `eligibleBeatIds` on
+   * ELIGIBLE_WITHHELD or NO_ELIGIBLE land here and are not selected.
+   */
+  refusedPromotionBeatIds: readonly NarrativeBeatId[];
+  reasonCode: DramaturgyReasonCode;
+  authoredTieBreakRequired: boolean;
+  authoredTieBreakExisted: boolean;
+  authoredTieBreakRuleId: string | null;
 };
 
 export const AUTHORED_BEAT_DEFAULTS = {
