@@ -58,15 +58,18 @@ describe("Narrator OS slice C — authored registry + graph", () => {
     expect(AUTHORED_BEATS.some(beat => beat.id === "M05")).toBe(false);
   });
 
-  it("fails a missing Goldline prereq and does not treat optional C-08 as mandatory", async () => {
+  it("fails missing C-08 narrative-state prereqs and does not treat optional C-08 as mandatory", async () => {
     const snapshot = await newSnapshot();
-    const withoutGold = evaluateEligibility(inputFor(snapshot));
-    const c08 = withoutGold.audit.find(entry => entry.beatId === BEAT_IDS.C08)!;
+    const withoutFacts = evaluateEligibility(inputFor(snapshot));
+    const c08 = withoutFacts.audit.find(
+      entry => entry.beatId === BEAT_IDS.C08
+    )!;
     expect(c08.pass).toBe(false);
-    expect(c08.failedGates).toContain("incomplete_eligibility");
-    expect(c08.failedGates).toContain("verified_goldline_evidence");
+    expect(c08.failedGates).toContain("prerequisite");
+    expect(c08.failedGates).not.toContain("incomplete_eligibility");
+    expect(c08.failedGates).not.toContain("verified_goldline_evidence");
 
-    const cove = withoutGold.audit.find(
+    const cove = withoutFacts.audit.find(
       entry => entry.beatId === BEAT_IDS.K_COVE_ORIGIN
     )!;
     expect(
@@ -96,17 +99,19 @@ describe("Narrator OS slice C — authored registry + graph", () => {
   });
 
   it("loads real fixtures and does not require placeholder beats", () => {
-    expect(getBeat("C-08").title).toBe("Chemist comparison");
+    expect(getBeat("C-08").title).toBe("STRONG COMPARISON");
+    expect(getBeat("C-06").title).toBe("WE'RE NOT SHIPPING IT");
     expect(getBeat("K-COVE-ORIGIN").title).toBe("Cove origin-false reveal");
     expect(getBeat("constructedness").canonStatus).toBe("LOCKED");
     expect(() => assertNoPlaceholderBeats()).not.toThrow();
     expect(AUTHORED_BEATS.some(beat => /^CL-\d+$/i.test(beat.id))).toBe(false);
   });
 
-  it("does not require C-08's own conclusion as an input, and stays incomplete without the package", async () => {
+  it("does not require C-08's own conclusion as an input; Goldline 17-K receipts cannot complete it", async () => {
     const snapshot = await newSnapshot();
     const c08 = getBeat("C-08");
-    expect(c08.eligibilityDefinition).toBe("INCOMPLETE");
+    expect(c08.eligibilityDefinition).toBe("COMPLETE");
+    expect(c08.defaultSurface).toBe(true);
     expect(
       c08.knowledgeRequirements.some(
         requirement =>
@@ -120,6 +125,13 @@ describe("Narrator OS slice C — authored registry + graph", () => {
           prereq.kind === "knowledge" &&
           prereq.plane === "CHEMIST" &&
           prereq.factId === "17k_recorded_environmental_provenance_wrong"
+      )
+    ).toBe(false);
+    expect(
+      c08.prerequisites.some(
+        prereq =>
+          prereq.kind === "verified_goldline_outcome" &&
+          prereq.outcomeId === "17k_physically_evidenced_in_hand"
       )
     ).toBe(false);
 
@@ -143,7 +155,8 @@ describe("Narrator OS slice C — authored registry + graph", () => {
     );
     const audit = withGold.audit.find(entry => entry.beatId === BEAT_IDS.C08)!;
     expect(audit.pass).toBe(false);
-    expect(audit.failedGates).toContain("incomplete_eligibility");
+    expect(audit.failedGates).toContain("prerequisite");
+    expect(audit.failedGates).not.toContain("incomplete_eligibility");
     expect(audit.failedGates).not.toContain("knowledge_requirement");
 
     expect(() => assertMutationsLegal(c08)).not.toThrow();

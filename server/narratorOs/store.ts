@@ -53,7 +53,7 @@ export const EMPTY_KNOWLEDGE: KnowledgeState = {
 };
 
 export const SEEDED_NARRATIVE_STATE: NarrativeState = {
-  values: { m03: "ARMED" },
+  values: {},
   closedForwardPaths: [],
   holdOpenedAtMs: {},
 };

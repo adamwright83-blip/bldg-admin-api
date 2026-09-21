@@ -75,6 +75,7 @@ function issueReceipt(
     receiptId?: string;
     tenantId?: string;
     operatorUserId?: string;
+    targetId?: string;
   }
 ): VerifiedGoldlineReceipt {
   const evidenceClass = extra?.evidenceClass ?? "operator_attested";
@@ -92,7 +93,23 @@ function issueReceipt(
       sourceReference: extra?.receiptId ?? `receipt:${outcomeId}`,
       classification: evidenceClass,
     },
+    targetRef: extra?.targetId
+      ? { kind: "goldline_target", id: extra.targetId }
+      : null,
   });
+}
+
+function m03ReadyReceipts(targetId = "target-a"): VerifiedGoldlineReceipt[] {
+  return [
+    issueReceipt("spoken_no", {
+      targetId,
+      receiptId: `receipt:spoken_no:${targetId}`,
+    }),
+    issueReceipt("legitimate_second_site_visit", {
+      targetId,
+      receiptId: `receipt:return:${targetId}`,
+    }),
+  ];
 }
 
 function isolatedBeat(
@@ -214,7 +231,7 @@ describe("Narrator OS slice D — ledger + eligibility + persistence", () => {
     ).rejects.toBeInstanceOf(IneligibleBeatCommitError);
 
     const m03Ready = evalInput(snapshot, {
-      verifiedGoldline: [issueReceipt("spoken_no")],
+      verifiedGoldline: m03ReadyReceipts(),
     });
     const m03Result = evaluateEligibility(m03Ready);
     const auths = issueEligibilityAuthorizations(m03Result, m03Ready);
@@ -233,14 +250,14 @@ describe("Narrator OS slice D — ledger + eligibility + persistence", () => {
   it("commits an authorized COMPLETE beat atomically and refuses non-repeatable replay", async () => {
     const { store, snapshot } = await seeded();
     const eligibility = evalInput(snapshot, {
-      verifiedGoldline: [issueReceipt("spoken_no")],
+      verifiedGoldline: [issueReceipt("kept_promised_send_visit_or_call")],
     });
     const result = evaluateEligibility(eligibility);
-    expect(result.eligibleBeatIds).toContain(BEAT_IDS.M03);
+    expect(result.eligibleBeatIds).toContain(BEAT_IDS.M04);
     const authorization = issueEligibilityAuthorizations(
       result,
       eligibility
-    ).find(auth => auth.beatId === BEAT_IDS.M03)!;
+    ).find(auth => auth.beatId === BEAT_IDS.M04)!;
     const after = await commitAuthorizedBeat({
       store,
       scope,
@@ -248,8 +265,8 @@ describe("Narrator OS slice D — ledger + eligibility + persistence", () => {
       eligibility,
     });
     expect(after.ledger).toHaveLength(1);
-    expect(after.ledger[0]?.beatId).toBe("M03");
-    expect(after.narrativeState.values.m03).toBe("FIRED");
+    expect(after.ledger[0]?.beatId).toBe("M04");
+    expect(after.narrativeState.values.act_i).toBe("complete");
     expect(after.knowledge.planes.PLAYER.knownFactIds).not.toContain(
       "antarctica_is_father_reveal"
     );
@@ -260,7 +277,7 @@ describe("Narrator OS slice D — ledger + eligibility + persistence", () => {
     const replayAuth = issueEligibilityAuthorizations(
       replay,
       evalInput(after, { verifiedGoldline: eligibility.verifiedGoldline })
-    ).find(auth => auth.beatId === BEAT_IDS.M03);
+    ).find(auth => auth.beatId === BEAT_IDS.M04);
     expect(replayAuth).toBeUndefined();
     await expect(
       commitAuthorizedBeat({
@@ -279,7 +296,7 @@ describe("Narrator OS slice D — ledger + eligibility + persistence", () => {
     const { snapshot } = await seeded();
     const closed = applyQuietClose(snapshot.narrativeState, "M03", true);
     expect(closed.closedForwardPaths).toEqual(["M03"]);
-    expect(closed.values.m03).toBe("ARMED");
+    expect(closed.values.m03).toBeUndefined();
     expect(snapshot.ledger).toEqual([]);
     expect(snapshot.knowledge.planes.PLAYER.knownFactIds).toEqual([]);
 
@@ -435,7 +452,7 @@ describe("Narrator OS verified Goldline receipt authority", () => {
     expect(
       m03.prerequisiteChecks.some(
         check =>
-          check.detail.includes("verified_goldline_any") &&
+          check.detail.includes("verified_goldline_same_target") &&
           check.passed === false
       )
     ).toBe(true);
@@ -460,16 +477,16 @@ describe("Narrator OS verified Goldline receipt authority", () => {
 
   it("lets only a trusted opaque receipt satisfy a Goldline evidence prerequisite", async () => {
     const { snapshot } = await seeded();
-    const receipt = issueReceipt("spoken_no");
+    const receipt = issueReceipt("kept_promised_send_visit_or_call");
     expect(isVerifiedGoldlineReceipt(receipt)).toBe(true);
     expect(isLegalEligibilityGoldlineEvidence(receipt)).toBe(true);
     const result = evaluateEligibility(
       evalInput(snapshot, { verifiedGoldline: [receipt] })
     );
-    expect(result.eligibleBeatIds).toContain(BEAT_IDS.M03);
-    const m03 = result.audit.find(entry => entry.beatId === BEAT_IDS.M03)!;
-    expect(m03.pass).toBe(true);
-    expect(m03.failedGates).toEqual([]);
+    expect(result.eligibleBeatIds).toContain(BEAT_IDS.M04);
+    const m04 = result.audit.find(entry => entry.beatId === BEAT_IDS.M04)!;
+    expect(m04.pass).toBe(true);
+    expect(m04.failedGates).toEqual([]);
   });
 
   it("persists an authorized receipt without changing its meaning", async () => {
@@ -593,7 +610,9 @@ describe("Narrator OS production registry authority", () => {
       })
     ).rejects.toBeInstanceOf(UnknownBeatLedgerError);
     expect((await store.load(scope))?.ledger).toEqual([]);
-    expect((await store.load(scope))?.narrativeState.values.m03).toBe("ARMED");
+    expect(
+      (await store.load(scope))?.narrativeState.values.m03
+    ).toBeUndefined();
   });
 
   it("rejects a rewritten canon beat that is incomplete in AUTHORED_BEATS", async () => {
@@ -663,7 +682,7 @@ describe("Narrator OS test-only Goldline issuer", () => {
 describe("Narrator OS scoped Goldline receipts", () => {
   it("does not let operator A's receipt unlock operator B", async () => {
     const { snapshot } = await seeded();
-    const foreign = issueReceipt("spoken_no", {
+    const foreign = issueReceipt("kept_promised_send_visit_or_call", {
       tenantId: "other-tenant",
       operatorUserId: "other-op",
       receiptId: "evt-a",
@@ -672,7 +691,7 @@ describe("Narrator OS scoped Goldline receipts", () => {
     const result = evaluateEligibility(
       evalInput(snapshot, { verifiedGoldline: [foreign] })
     );
-    expect(result.eligibleBeatIds).not.toContain(BEAT_IDS.M03);
+    expect(result.eligibleBeatIds).not.toContain(BEAT_IDS.M04);
     const { store } = await seeded();
     await expect(
       recordVerifiedGoldlineOutcome({ store, scope, receipt: foreign })

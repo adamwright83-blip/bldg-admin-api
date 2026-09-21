@@ -11,6 +11,7 @@ import {
   type EligibilityAuthorization,
   type EligibilityInput,
 } from "./eligibility";
+import { M03_BEAT_ID, nextM03OccurrenceIdempotencyKey } from "./m03Readiness";
 import {
   AUTHORED_BEATS,
   AUTHORED_GRAPH,
@@ -172,6 +173,21 @@ export async function commitAuthorizedBeat(input: {
     values,
   };
 
+  let idempotencyKey = `beat:${beat.id}:once`;
+  if (beat.id === M03_BEAT_ID) {
+    const occurrence = nextM03OccurrenceIdempotencyKey(
+      liveInput.verifiedGoldline,
+      snapshot
+    );
+    if (!occurrence) {
+      throw new IneligibleBeatCommitError(
+        beat.id,
+        "no unconsumed same-target M03 RETURN"
+      );
+    }
+    idempotencyKey = occurrence;
+  }
+
   await input.store.commitAtomic(input.scope, {
     knowledge,
     narrativeState,
@@ -183,7 +199,7 @@ export async function commitAuthorizedBeat(input: {
       playerVisible: beat.playerVisibility,
       evidenceRef: null,
       occurredAt: input.nowIso ?? new Date().toISOString(),
-      idempotencyKey: `beat:${beat.id}:once`,
+      idempotencyKey,
     },
   });
   const next = await input.store.load(input.scope);

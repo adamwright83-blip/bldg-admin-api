@@ -6,6 +6,11 @@ import {
   type NarrativeBeatId,
   type NarrativeGraphEdge,
 } from "../../shared/narratorOs/contracts";
+import {
+  AUTHORED_NARRATIVE_FACTS,
+  CHEMIST_NON_SUPPORTIVE_RESULTS,
+} from "./authoredNarrativeFacts";
+import { M03_ARM_OUTCOME_IDS, M03_RETURN_OUTCOME_IDS } from "./m03Readiness";
 
 const beat = (
   partial: Omit<AuthoredBeat, keyof typeof AUTHORED_BEAT_DEFAULTS> &
@@ -25,6 +30,7 @@ const beat = (
 };
 
 const C08 = asNarrativeBeatId("C-08");
+const C06 = asNarrativeBeatId("C-06");
 const K_COVE_ORIGIN = asNarrativeBeatId("K-COVE-ORIGIN");
 const CONSTRUCTEDNESS = asNarrativeBeatId("constructedness");
 
@@ -63,17 +69,15 @@ function missionBeat(
 }
 
 /**
- * Harness registry. Only named beats/missions already in GOLDLINE_CANON.md
- * (plus C-08 / K-COVE-ORIGIN as specified for chemist comparison and cove
- * origin-false). No CL-031 placeholders. No invented season population.
- * GOLDLINE_NARRATOR_CANON_PACKAGE.md is absent from the repo.
+ * Typed runtime registry reconciled to GOLDLINE_CANON.md v1.1 plus the
+ * reviewed D.5 package (v1.2-proposed). The Markdown package is repo
+ * authority for authoring, not an executable schema. Runtime stays typed.
+ * Do not parse GOLDLINE_NARRATOR_CANON_PACKAGE.md at runtime.
  *
- * M05–M14 are intentionally absent: canon names M01–M24 as a WORKING list
- * but only M01–M04 and M15 have authored titles/rules on current main.
- * Sparse is correct. Do not invent those missions to fill the gap.
- *
- * Beats whose complete gates cannot be established from repo canon stay
- * registered with eligibilityDefinition INCOMPLETE and cannot pass.
+ * M05–M14 are intentionally absent. Incomplete named beats stay
+ * INCOMPLETE. OPEN stays OPEN. After-No readiness is per-target state,
+ * not a separate beat. A missed hold does not fire a beat.
+ * CL disclosure lives in a separate immutable catalog, not here.
  */
 export const INTENTIONALLY_ABSENT_MISSION_IDS = [
   "M05",
@@ -91,22 +95,40 @@ export const INTENTIONALLY_ABSENT_MISSION_IDS = [
 export const AUTHORED_BEATS: readonly AuthoredBeat[] = Object.freeze([
   beat({
     id: C08,
-    title: "Chemist comparison",
+    title: "STRONG COMPARISON",
     canonStatus: "LOCKED",
     characters: ["Chemist"],
-    authoredSourceRef: "GOLDLINE_CANON.md§1 chemist breadcrumb; §8 science",
-    eligibilityDefinition: "INCOMPLETE",
-    eligibilityIncompleteReason:
-      "GOLDLINE_NARRATOR_CANON_PACKAGE.md is absent; the prior authored beat that preserves the early reserved core cannot be named without inventing an id. C-08 therefore stays runtime-ineligible. 17-K physically evidenced/in hand is encoded but does not complete the definition. Chemist knowledge of the comparison conclusion is not an input.",
+    authoredSourceRef: "GOLDLINE_CANON.md§1 chemist breadcrumb; package C-08",
+    eligibilityDefinition: "COMPLETE",
+    defaultSurface: true,
+    playerVisibility: true,
     prerequisites: [
       {
-        kind: "verified_goldline_outcome",
-        outcomeId: "17k_physically_evidenced_in_hand",
+        kind: "narrative_state",
+        key: AUTHORED_NARRATIVE_FACTS.reservedCorePreserved,
+        equals: "true",
+      },
+      {
+        kind: "narrative_state",
+        key: AUTHORED_NARRATIVE_FACTS.lot17kPhysicallyInHand,
+        equals: "true",
       },
     ],
     knowledgeMutations: [
       {
+        plane: "PLAYER",
+        factId: "c08_comparison_occurred",
+        op: "learn",
+        kind: "EVENT_FACT",
+      },
+      {
         plane: "CHEMIST",
+        factId: "c08_comparison_occurred",
+        op: "learn",
+        kind: "EVENT_FACT",
+      },
+      {
+        plane: "CLAIRE",
         factId: "c08_comparison_occurred",
         op: "learn",
         kind: "EVENT_FACT",
@@ -119,6 +141,26 @@ export const AUTHORED_BEATS: readonly AuthoredBeat[] = Object.freeze([
     irreversible: true,
   }),
   beat({
+    id: C06,
+    title: "WE'RE NOT SHIPPING IT",
+    canonStatus: "LOCKED",
+    characters: ["Claire", "Chemist"],
+    authoredSourceRef: "GOLDLINE_CANON.md§8 power split; package C-06",
+    eligibilityDefinition: "COMPLETE",
+    defaultSurface: false,
+    playerVisibility: false,
+    prerequisites: [
+      {
+        kind: "narrative_state",
+        key: AUTHORED_NARRATIVE_FACTS.chemistNonSupportiveResult,
+        equalsAny: CHEMIST_NON_SUPPORTIVE_RESULTS,
+      },
+    ],
+    mayFireOffscreen: false,
+    repeatability: "repeatable",
+    irreversible: false,
+  }),
+  beat({
     id: K_COVE_ORIGIN,
     title: "Cove origin-false reveal",
     canonStatus: "LOCKED",
@@ -126,7 +168,7 @@ export const AUTHORED_BEATS: readonly AuthoredBeat[] = Object.freeze([
     authoredSourceRef: "GOLDLINE_CANON.md§1 cove; §5 Link 5 / cove",
     eligibilityDefinition: "INCOMPLETE",
     eligibilityIncompleteReason:
-      "Origin-false without Chemist is OPEN. No complete authored route exists that does not depend on that OPEN policy. C-08 is not a hard prereq; chemist-required and chemist-skip are both unauthored.",
+      "K-COVE-ORIGIN playable cove is INCOMPLETE. Origin-false without Chemist / chemist-skip remains OPEN. C-08 is not a hard prereq and does not complete this beat.",
     prerequisites: [
       {
         kind: "optional_beat",
@@ -162,7 +204,7 @@ export const AUTHORED_BEATS: readonly AuthoredBeat[] = Object.freeze([
     authoredSourceRef: "GOLDLINE_CANON.md§5 constructedness event",
     eligibilityDefinition: "INCOMPLETE",
     eligibilityIncompleteReason:
-      "GOLDLINE_CANON.md locks the event and forbids what it reveals, but does not supply a complete machine-readable prerequisite graph. Missing gates are not permission.",
+      "Constructedness / N-TWO-CLAIRES remains INCOMPLETE: late Act III is not a predicate and the inspectable artifact is not specified as data. Missing gates are not permission.",
     knowledgeMutations: [
       {
         plane: "PLAYER",
@@ -218,25 +260,27 @@ export const AUTHORED_BEATS: readonly AuthoredBeat[] = Object.freeze([
     ],
   }),
   missionBeat("M03", "AFTER NO", "LOCKED", {
-    authoredSourceRef: "GOLDLINE_CANON.md§4 M03",
+    authoredSourceRef: "GOLDLINE_CANON.md§4 M03; package M03",
     eligibilityDefinition: "COMPLETE",
     defaultSurface: true,
     playerVisibility: true,
     prerequisites: [
       {
-        kind: "verified_goldline_any",
-        outcomeIds: ["spoken_no", "silence_eligible_for_retry"],
+        kind: "verified_goldline_same_target",
+        priorOutcomeIds: M03_ARM_OUTCOME_IDS,
+        subsequentOutcomeIds: M03_RETURN_OUTCOME_IDS,
       },
     ],
     eligibilityConditions: [{ kind: "never_manufacture", claim: "rejection" }],
-    stateMutations: [{ key: "m03", value: "FIRED" }],
+    repeatability: "repeatable",
+    irreversible: false,
     quietBehavior: {
-      closesForwardPossibility: true,
+      closesForwardPossibility: false,
       holdWindow: null,
     },
   }),
   missionBeat("M04", "HELD", "LOCKED", {
-    authoredSourceRef: "GOLDLINE_CANON.md§4 M04",
+    authoredSourceRef: "GOLDLINE_CANON.md§4 M04; package M04",
     eligibilityDefinition: "COMPLETE",
     defaultSurface: true,
     playerVisibility: true,
@@ -249,6 +293,7 @@ export const AUTHORED_BEATS: readonly AuthoredBeat[] = Object.freeze([
         ],
       },
     ],
+    stateMutations: [{ key: "act_i", value: "complete" }],
     quietBehavior: {
       closesForwardPossibility: false,
       holdWindow: {
@@ -272,7 +317,7 @@ export const AUTHORED_BEATS: readonly AuthoredBeat[] = Object.freeze([
         "GOLDLINE_CANON.md§3 M16–M24 Operation 17-K; §5 WORKING titles",
       eligibilityDefinition: "INCOMPLETE",
       eligibilityIncompleteReason:
-        "M16–M24 are LOCKED as Operation 17-K with WORKING titles. Complete eligibility gates are not in GOLDLINE_CANON.md and the narrator package is absent.",
+        "M16–M24 / Operation 17-K remain INCOMPLETE. Package does not mark them COMPLETE. Missing gates are not permission.",
       eligibilityConditions: [
         { kind: "never_manufacture", claim: "symbolic_rhyme_for_plot" },
       ],
@@ -295,12 +340,6 @@ export const AUTHORED_GRAPH: readonly NarrativeGraphEdge[] = Object.freeze([
     policyId: "origin_false_without_chemist",
   },
   {
-    fromId: asNarrativeBeatId("M03"),
-    toId: asNarrativeBeatId("M03"),
-    kind: "quiet_closure",
-    canonStatus: "LOCKED",
-  },
-  {
     fromId: asNarrativeBeatId("M04"),
     toId: asNarrativeBeatId("M04"),
     kind: "unresolved_thread",
@@ -310,9 +349,11 @@ export const AUTHORED_GRAPH: readonly NarrativeGraphEdge[] = Object.freeze([
 
 export const BEAT_IDS = {
   C08,
+  C06,
   K_COVE_ORIGIN,
   CONSTRUCTEDNESS,
   M01: asNarrativeBeatId("M01"),
+  M02: asNarrativeBeatId("M02"),
   M03: asNarrativeBeatId("M03"),
   M04: asNarrativeBeatId("M04"),
 } as const;

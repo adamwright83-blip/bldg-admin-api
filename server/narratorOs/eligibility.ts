@@ -15,6 +15,7 @@ import {
 } from "../../shared/narratorOs/contracts";
 import { planeKnows, type NarratorSnapshot } from "./store";
 import { AUTHORED_BEATS, AUTHORED_GRAPH } from "./registry";
+import { unconsumedM03FireTargetIds } from "./m03Readiness";
 import {
   isVerifiedGoldlineReceipt,
   type VerifiedGoldlineReceipt,
@@ -47,9 +48,9 @@ export function isEligibilityAuthorization(
 ): value is EligibilityAuthorization {
   return Boolean(
     value &&
-      typeof value === "object" &&
-      (value as EligibilityAuthorization)[ELIGIBILITY_AUTHORIZATION_BRAND] ===
-        true
+    typeof value === "object" &&
+    (value as EligibilityAuthorization)[ELIGIBILITY_AUTHORIZATION_BRAND] ===
+      true
   );
 }
 
@@ -114,6 +115,14 @@ function evaluatePrerequisite(
         `verified_goldline_any:${prereq.outcomeIds.join("|")}`,
         prereq.outcomeIds.some(id => goldlineHas(goldline, id, snapshot))
       );
+    case "verified_goldline_same_target": {
+      const ready = unconsumedM03FireTargetIds(goldline, snapshot).length > 0;
+      return check(
+        "prerequisite_detail",
+        `verified_goldline_same_target:${prereq.priorOutcomeIds.join("|")}->${prereq.subsequentOutcomeIds.join("|")}`,
+        ready
+      );
+    }
     case "knowledge":
       return check(
         "prerequisite_detail",
@@ -123,10 +132,12 @@ function evaluatePrerequisite(
       );
     case "narrative_state": {
       const actual = snapshot.narrativeState.values[prereq.key];
-      const passed =
-        prereq.equals === undefined
-          ? actual !== undefined && actual !== null
-          : String(actual) === prereq.equals;
+      const present = actual !== undefined && actual !== null;
+      const passed = prereq.equalsAny
+        ? present && prereq.equalsAny.includes(String(actual))
+        : prereq.equals === undefined
+          ? present
+          : present && String(actual) === prereq.equals;
       return check(
         "prerequisite_detail",
         `narrative_state:${prereq.key}`,
@@ -370,8 +381,8 @@ export function evaluateEligibility(
   const fired = firedBeatIds(input.snapshot);
   const audit = input.registry.map(beat => evaluateBeat(beat, input, fired));
   const passing = audit.filter(entry => entry.pass);
-  const passingBeats = passing.map(
-    entry => input.registry.find(beat => beat.id === entry.beatId)!
+  const passingBeats = passing.map(entry =>
+    input.registry.find(beat => beat.id === entry.beatId)!
   );
 
   if (passing.length === 0) {
