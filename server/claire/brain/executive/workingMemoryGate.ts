@@ -196,6 +196,8 @@ export function gateWorkingMemory(input: {
   // ── Ordered query thread ──────────────────────────────────────────────────
   if (!memory.orderedQuery) {
     rule("ordered_query", "maintain", "suppress", "no ordered result in play");
+  } else if (change === "query_requery") {
+    rule("ordered_query", "clear", "suppress", "parameter change invalidates the previous result immediately");
   } else if (closesPriorOrderedQuery(change)) {
     rule("ordered_query", "replace", "suppress", "the previous result cannot answer this turn; retrieval must start again");
   } else if (continuing) {

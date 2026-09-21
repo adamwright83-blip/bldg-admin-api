@@ -11,6 +11,7 @@ import { decideTurn, type ExecutiveDeps } from "../executive/decide";
 import { perceiveTurn } from "../perception/perceive";
 import { snapshotWorkingMemory } from "../workingMemory/snapshot";
 import { runClaireBrainTurn } from "../shadow/runClaireBrainTurn";
+import { emptyShadowMemory, updateShadowMemory } from "../shadow/shadowMemory";
 import { openOrderedQuery, recordPresented } from "../workingMemory/orderedQuery";
 import { BRAIN_V2_PRODUCTION_AUTHORITY } from "../contracts";
 import type { EvidenceItem } from "../contracts/evidence";
@@ -177,7 +178,7 @@ describe("B. changing the question is not challenging its truth", () => {
     expect(result.decision.attention.priorClaim).toBe("none");
     expect(result.decision.perceivedTurn.cardinality).toBe(1);
     expect(result.decision.attention.continueOrderedQuery).toBe(false);
-    expect(result.decision.control.workingMemoryGates.find(gate => gate.slot === "ordered_query")?.input).toBe("replace");
+    expect(result.decision.control.workingMemoryGates.find(gate => gate.slot === "ordered_query")?.input).toBe("clear");
     expect(result.decision.control.workingMemoryGates.find(gate => gate.slot === "ordered_query")?.output).toBe(
       "suppress"
     );
@@ -408,7 +409,7 @@ describe("same-set continuation vs parameter-changing re-query", () => {
     expect(result.decision.perceivedTurn.businessIntent).toBe("query_requery");
     expect(result.decision.control.change).toBe("query_requery");
     expect(result.decision.attention.continueOrderedQuery).toBe(false);
-    expect(result.decision.control.workingMemoryGates.find(gate => gate.slot === "ordered_query")?.input).toBe("replace");
+    expect(result.decision.control.workingMemoryGates.find(gate => gate.slot === "ordered_query")?.input).toBe("clear");
     expect(result.decision.control.workingMemoryGates.find(gate => gate.slot === "ordered_query")?.output).toBe(
       "suppress"
     );
@@ -443,6 +444,54 @@ describe("same-set continuation vs parameter-changing re-query", () => {
 
   it("last five → actually give me the last two is a fresh cardinality-2 query", async () => {
     await requery("Actually give me the last two.", 2);
+  });
+
+  it("last five → only the most recent → empty retrieval → the rest does not resurrect the five", async () => {
+    const requeryTurn = await brain("Only the most recent.", afterPresentingFirst(), async () => []);
+    expect(requeryTurn.decision.control.workingMemoryGates.find(gate => gate.slot === "ordered_query")?.input).toBe(
+      "clear"
+    );
+    expect(requeryTurn.decision.workingMemoryUpdate?.orderedQuery).toBeNull();
+    const persisted = updateShadowMemory(
+      { ...emptyShadowMemory(), orderedQuery: afterPresentingFirst().orderedQuery },
+      requeryTurn.decision
+    );
+    expect(persisted.orderedQuery).toBeNull();
+
+    const rest = await brain("What about the rest?", { orderedQuery: persisted.orderedQuery });
+    expect(rest.decision.attention.continueOrderedQuery).toBe(false);
+    expect(rest.decision.workingMemoryUpdate?.continuationPresented).toBeUndefined();
+  });
+
+  it("last five → only the most recent → successful replacement → continuation uses the new result", async () => {
+    const one = {
+      ...sales,
+      id: "business_query:latest_sales:one",
+      payload: {
+        ...(sales.payload as { query: object; data: { orders: object[] } }),
+        query: { ...(sales.payload as { query: object }).query, limit: 1 },
+        data: {
+          ...(sales.payload as { data: { orders: object[]; kind: string; ordering: string } }).data,
+          orders: [(sales.payload as { data: { orders: object[] } }).data.orders[0]!],
+        },
+      },
+    } as EvidenceItem;
+    const requeryTurn = await brain("Only the most recent.", afterPresentingFirst(), async request =>
+      request.kind === "business_query" ? [one] : []
+    );
+    expect(requeryTurn.decision.workingMemoryUpdate?.orderedQuery?.resolved.map(member => member.id)).toEqual([
+      FIVE[0]!.id,
+    ]);
+    const persisted = updateShadowMemory(
+      { ...emptyShadowMemory(), orderedQuery: afterPresentingFirst().orderedQuery },
+      requeryTurn.decision
+    );
+    expect(persisted.orderedQuery?.resolved.map(member => member.id)).toEqual([FIVE[0]!.id]);
+    expect(persisted.orderedQuery?.presented.map(member => member.id)).toEqual([FIVE[0]!.id]);
+
+    const rest = await brain("What about the rest?", { orderedQuery: persisted.orderedQuery });
+    expect(rest.decision.attention.continueOrderedQuery).toBe(true);
+    expect(rest.decision.workingMemoryUpdate?.continuationPresented ?? []).toEqual([]);
   });
 });
 

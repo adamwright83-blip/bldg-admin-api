@@ -30,7 +30,7 @@ import type { RetrievalRequest } from "../contracts/retrieval";
 import type { WorkingMemorySnapshot } from "../contracts/workingMemory";
 import { initialControlState, type ExecutiveControlState } from "../contracts/control";
 import { planAttention } from "./attention";
-import { activeTaskSets, classifyChange, gateWorkingMemory, outputAllowed, suppressedSlots } from "./workingMemoryGate";
+import { activeTaskSets, classifyChange, gateWorkingMemory, inputRuling, outputAllowed, suppressedSlots } from "./workingMemoryGate";
 import {
   planRetrievalPassA,
   planRetrievalPassB,
@@ -259,6 +259,8 @@ export async function decideTurn(
         orderedQuery: integration.orderedQueryUpdate,
         continuationPresented: integration.continuationPresented,
       };
+    } else if (inputRuling(rulings, "ordered_query") === "clear") {
+      workingMemoryUpdate = { orderedQuery: null };
     }
 
     // ── Authority ───────────────────────────────────────────────────────────

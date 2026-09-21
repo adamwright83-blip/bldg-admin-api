@@ -144,6 +144,8 @@ export function updateShadowMemory(
     });
     // Same query again keeps what was already presented; a different one starts clean.
     orderedQuery = resetForNewQuery(base.orderedQuery, opened);
+  } else if (update && update.orderedQuery === null) {
+    orderedQuery = null;
   } else if (update?.continuationPresented?.length && orderedQuery) {
     orderedQuery = recordPresented(orderedQuery, update.continuationPresented);
   }
