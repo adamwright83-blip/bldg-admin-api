@@ -7,7 +7,8 @@ import { VERIFIED_GOLDLINE_RECEIPT_BRAND } from "./verifiedGoldlineReceiptBrand"
  * A structurally similar object without the brand is not a receipt.
  */
 export type GoldlineEvidenceClass =
-  "authoritative_external" | "operator_attested";
+  | "authoritative_external"
+  | "operator_attested";
 
 /**
  * Opaque trusted subject/target identity. Correlation uses this token only.

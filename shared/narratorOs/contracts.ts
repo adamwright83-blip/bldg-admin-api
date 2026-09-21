@@ -163,7 +163,8 @@ export type BeatPrerequisite =
     };
 
 export type EligibilityCondition =
-  BeatPrerequisite | { kind: "never_manufacture"; claim: string };
+  | BeatPrerequisite
+  | { kind: "never_manufacture"; claim: string };
 
 export type KnowledgeRequirement = {
   plane: KnowledgePlane;

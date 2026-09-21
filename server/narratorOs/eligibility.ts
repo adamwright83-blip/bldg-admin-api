@@ -48,9 +48,9 @@ export function isEligibilityAuthorization(
 ): value is EligibilityAuthorization {
   return Boolean(
     value &&
-    typeof value === "object" &&
-    (value as EligibilityAuthorization)[ELIGIBILITY_AUTHORIZATION_BRAND] ===
-      true
+      typeof value === "object" &&
+      (value as EligibilityAuthorization)[ELIGIBILITY_AUTHORIZATION_BRAND] ===
+        true
   );
 }
 
@@ -381,8 +381,8 @@ export function evaluateEligibility(
   const fired = firedBeatIds(input.snapshot);
   const audit = input.registry.map(beat => evaluateBeat(beat, input, fired));
   const passing = audit.filter(entry => entry.pass);
-  const passingBeats = passing.map(entry =>
-    input.registry.find(beat => beat.id === entry.beatId)!
+  const passingBeats = passing.map(
+    entry => input.registry.find(beat => beat.id === entry.beatId)!
   );
 
   if (passing.length === 0) {
