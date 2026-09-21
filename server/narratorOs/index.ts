@@ -7,6 +7,7 @@ export {
   resolveDuplicateNarratorLedgerInsert,
 } from "./drizzleStore";
 export * from "./eligibility";
+export * from "./dramaturgy";
 export * from "./init";
 export * from "./ledger";
 export * from "./livedBio";

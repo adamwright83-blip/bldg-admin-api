@@ -4,6 +4,8 @@ import {
   CANON_STATUSES,
   CLAIRE_DISCLOSURE_POLICY_IDS,
   PERMANENTLY_PRIVATE_CLAIRE_DISCLOSURE_POLICY_IDS,
+  DRAMATURGY_OUTCOMES,
+  DRAMATURGY_REASON_CODES,
   ELIGIBILITY_OUTCOMES,
   KNOWLEDGE_PLANES,
   OpenCanonHasNoRuntimeValueError,
@@ -85,6 +87,21 @@ describe("Narrator OS slice A — domain contracts", () => {
     };
     expect(successfulSilence.outcome).toBe("NO_ELIGIBLE");
     expect(successfulSilence.mutated).toBe(false);
+  });
+
+  it("keeps dramaturgy outcomes downstream of eligibility", () => {
+    expect(DRAMATURGY_OUTCOMES).toEqual([
+      "SILENCE_NO_ELIGIBLE",
+      "SELECT",
+      "SILENCE_WITHHELD",
+      "AMBIGUOUS_REQUIRES_AUTHORED_RULE",
+    ]);
+    expect(DRAMATURGY_REASON_CODES).toContain(
+      "multiple_surfaceable_no_authored_tie_break"
+    );
+    for (const outcome of DRAMATURGY_OUTCOMES) {
+      expect(ELIGIBILITY_OUTCOMES).not.toContain(outcome);
+    }
   });
 
   it("does not encode taste as an ELIGIBLE_WITHHELD input", () => {
