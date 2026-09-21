@@ -8,10 +8,15 @@ import type {
 import type { AuthoredDramaturgyTieBreak } from "./dramaturgy";
 
 /**
- * Shared exact-set matcher. Not a production Narrator export.
- * `server/narratorOs/index.ts` must not re-export this module.
- * Production `decideDramaturgy` calls it with the frozen authored catalog only.
+ * Production dramaturgy selector.
+ *
+ * The only exported function takes eligibility. The rule catalog is the
+ * frozen authored constant below. There is no parameter, export, or
+ * direct-import path that accepts a caller catalog.
  */
+
+export const AUTHORED_DRAMATURGY_TIE_BREAKS: readonly AuthoredDramaturgyTieBreak[] =
+  Object.freeze([]);
 
 function uniqueIds(ids: readonly NarrativeBeatId[]): NarrativeBeatId[] {
   const seen = new Set<string>();
@@ -92,10 +97,10 @@ function silence(input: {
   });
 }
 
-export function decideDramaturgyWithCatalog(
-  eligibility: NarrativeEligibilityResult,
-  rules: readonly AuthoredDramaturgyTieBreak[]
+function renderAuthoredDecision(
+  eligibility: NarrativeEligibilityResult
 ): DramaturgyDecision {
+  const rules = AUTHORED_DRAMATURGY_TIE_BREAKS;
   const suppliedEligible = uniqueIds(eligibility.eligibleBeatIds);
   const suppliedWithheld = uniqueIds(eligibility.withheldBeatIds);
   const eligibilityOutcome = eligibility.outcome;
@@ -179,4 +184,10 @@ export function decideDramaturgyWithCatalog(
     authoredTieBreakExisted: match.status === "conflict",
     authoredTieBreakRuleId: null,
   });
+}
+
+export function selectAuthoredDramaturgy(
+  eligibility: NarrativeEligibilityResult
+): DramaturgyDecision {
+  return renderAuthoredDecision(eligibility);
 }

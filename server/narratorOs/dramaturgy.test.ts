@@ -14,6 +14,7 @@ import {
   type DramaturgyInput,
 } from "./dramaturgy";
 import { decideDramaturgyWithRulesForTests } from "./dramaturgy.testSupport";
+import * as dramaturgySelect from "./dramaturgySelect";
 import {
   AUTHORED_DRAMATURGY_TIE_BREAKS as indexTieBreaks,
   decideDramaturgy as indexDecideDramaturgy,
@@ -771,6 +772,23 @@ describe("Narrator OS slice F — deterministic dramaturgy", () => {
     );
     expect(productionSrc).not.toMatch(/tieBreaks/);
     expect(productionSrc).toMatch(/AUTHORED_DRAMATURGY_TIE_BREAKS/);
+    const selectSrc = readFileSync(
+      resolve(process.cwd(), "server/narratorOs/dramaturgySelect.ts"),
+      "utf8"
+    );
+    expect(selectSrc).not.toMatch(/decideDramaturgyWithCatalog/);
+    expect(selectSrc).not.toMatch(/tieBreaks/);
+    expect(selectSrc).toMatch(
+      /export function selectAuthoredDramaturgy\(\s*eligibility: NarrativeEligibilityResult\s*\)/
+    );
+
+    const selectExports = Object.keys(dramaturgySelect).sort();
+    expect(selectExports).toEqual([
+      "AUTHORED_DRAMATURGY_TIE_BREAKS",
+      "selectAuthoredDramaturgy",
+    ]);
+    expect("decideDramaturgyWithCatalog" in dramaturgySelect).toBe(false);
+    expect(dramaturgySelect.selectAuthoredDramaturgy.length).toBe(1);
 
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("VITEST", "");
@@ -781,6 +799,48 @@ describe("Narrator OS slice F — deterministic dramaturgy", () => {
           tieBreaks: [rule],
         })
       ).toThrow(/not available outside tests/);
+
+      const direct = (
+        dramaturgySelect.selectAuthoredDramaturgy as (
+          eligibility: NarrativeEligibilityResult,
+          rules: readonly AuthoredDramaturgyTieBreak[]
+        ) => ReturnType<typeof dramaturgySelect.selectAuthoredDramaturgy>
+      )(eligibility, [rule]);
+      expect(direct.outcome).toBe("AMBIGUOUS_REQUIRES_AUTHORED_RULE");
+      expect(direct.selectedBeatId).toBeNull();
+      expect(direct.reasonCode).toBe(
+        "multiple_surfaceable_no_authored_tie_break"
+      );
+
+      for (const value of Object.values(dramaturgySelect)) {
+        if (typeof value !== "function") continue;
+        const called = (
+          value as (
+            eligibility: NarrativeEligibilityResult,
+            rules: readonly AuthoredDramaturgyTieBreak[]
+          ) => { outcome?: string; selectedBeatId?: string | null }
+        )(eligibility, [rule]);
+        expect(called.outcome).not.toBe("SELECT");
+        expect(called.selectedBeatId).not.toBe("M04");
+      }
+
+      const indexDramaturgyFns = Object.entries(narratorIndex).filter(
+        ([name, value]) =>
+          typeof value === "function" && /dramaturg/i.test(name)
+      );
+      expect(indexDramaturgyFns.map(([name]) => name)).toEqual([
+        "decideDramaturgy",
+      ]);
+      for (const [, value] of indexDramaturgyFns) {
+        const called = (
+          value as (input: {
+            eligibility: NarrativeEligibilityResult;
+            tieBreaks: readonly AuthoredDramaturgyTieBreak[];
+          }) => { outcome: string; selectedBeatId: string | null }
+        )({ eligibility, tieBreaks: [rule] });
+        expect(called.outcome).not.toBe("SELECT");
+        expect(called.selectedBeatId).not.toBe("M04");
+      }
     } finally {
       vi.unstubAllEnvs();
     }
