@@ -2102,5 +2102,76 @@ await assertRequiredColumns("spirit_human_rescue_missions", [
   "dormancyEpisodeKey", "villagerId", "lifecycle", "sendStatus", "missionJson",
 ]);
 
+// ── Narrator OS slices A–D ──────────────────────────────────────
+// Mirrors drizzle/0090_narrator_os.sql. New tables (existing
+// goldline_world_events / claire_personal_ledger / Brain WM cannot hold
+// WORLD_TRUTH, lived bio, knowledge planes, and the authored event ledger
+// without collapsing those separations). Seed is empty ledger + static
+// authored catalogs at init time; this DDL does not backfill chats or CRM.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS narrator_os_operator (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NOT NULL,
+    worldTruthJson JSON NOT NULL,
+    livedBioJson JSON NOT NULL,
+    narrativeStateJson JSON NOT NULL,
+    worldTruthVersion VARCHAR(96) NOT NULL,
+    livedBioVersion VARCHAR(96) NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_narrator_os_operator (tenantId, operatorUserId)
+  )`,
+  "CREATE TABLE narrator_os_operator"
+);
+await assertRequiredColumns("narrator_os_operator", [
+  "tenantId", "operatorUserId", "worldTruthJson", "livedBioJson",
+  "narrativeStateJson", "worldTruthVersion", "livedBioVersion",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS narrator_os_knowledge (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NOT NULL,
+    plane ENUM('PLAYER','CLAIRE','CHEMIST','OTHER') NOT NULL,
+    factId VARCHAR(128) NOT NULL,
+    factKind ENUM('EVENT_FACT','CHARACTER_INTERPRETATION') NOT NULL,
+    known BOOLEAN NOT NULL,
+    interpretationText TEXT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_narrator_os_knowledge_fact (tenantId, operatorUserId, plane, factId),
+    KEY idx_narrator_os_knowledge_operator (tenantId, operatorUserId, plane)
+  )`,
+  "CREATE TABLE narrator_os_knowledge"
+);
+await assertRequiredColumns("narrator_os_knowledge", [
+  "tenantId", "operatorUserId", "plane", "factId", "factKind", "known",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS narrator_os_event_ledger (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NOT NULL,
+    kind ENUM('FIRED_AUTHORED_BEAT','VERIFIED_GOLDLINE_OUTCOME') NOT NULL,
+    beatId VARCHAR(64) NULL,
+    goldlineOutcomeId VARCHAR(128) NULL,
+    offscreen BOOLEAN NOT NULL DEFAULT 0,
+    playerVisible BOOLEAN NOT NULL DEFAULT 0,
+    payloadJson JSON NOT NULL,
+    occurredAt TIMESTAMP NOT NULL,
+    idempotencyKey VARCHAR(191) NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_narrator_os_ledger_idempotency (tenantId, idempotencyKey),
+    KEY idx_narrator_os_ledger_operator (tenantId, operatorUserId, occurredAt)
+  )`,
+  "CREATE TABLE narrator_os_event_ledger"
+);
+await assertRequiredColumns("narrator_os_event_ledger", [
+  "tenantId", "operatorUserId", "kind", "offscreen", "playerVisible",
+  "payloadJson", "occurredAt", "idempotencyKey",
+]);
+
 await conn.end();
 console.log("\nMigration complete.");
