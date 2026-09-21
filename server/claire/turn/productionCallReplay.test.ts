@@ -379,9 +379,10 @@ describe("2026-09-21 shadow trial — shared perception", () => {
     expect(turn.correctnessChallenge).toBe(false);
   });
 
-  it("changing the question to the most recent order is a refinement, not a truth challenge", () => {
+  it("changing the question to the most recent order is a re-query, not a same-set continuation or a truth challenge", () => {
     const turn = interpretTurn("So, just my just, my most recent order not the five.");
-    expect(turn.queryRefinement).toBe(true);
+    expect(turn.queryParameterChange).toBe(true);
+    expect(turn.queryRefinement).toBe(false);
     expect(turn.correctnessChallenge).toBe(false);
     expect(turn.cardinality).toBe(1);
   });

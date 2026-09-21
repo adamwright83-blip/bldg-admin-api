@@ -40,6 +40,7 @@ export type TurnIntentKind =
   | "acknowledgement"
   | "operator_work_commitment"
   | "query_refinement"
+  | "query_parameter_change"
   | "broad_briefing"
   | "correctness_challenge"
   | "provenance_question";
@@ -69,8 +70,17 @@ export type InterpretedTurn = {
   cardinality: number | null;
   /** The operator asked for a LIST ("sales", "the other four"), not a single record. */
   listRequest: boolean;
-  /** Refines the previous business query rather than challenging its truth ("the other four"). */
+  /**
+   * Same-set continuation: keep walking the already-resolved result
+   * ("the other four", "the rest", "next one"). Not a new query.
+   */
   queryRefinement: boolean;
+  /**
+   * Parameter-changing re-query: cardinality, order, or named scope changed
+   * ("just the most recent", "only the latest one", "the last two", "just Thomas").
+   * Executive must not keep serving the previous resolved set.
+   */
+  queryParameterChange: boolean;
   /** Entities the operator asked to leave OUT ("don't tell me about Thomas"). */
   exclusions: string[];
   /** Weekday/relative-date tokens, kept OUT of entity candidates ("Dana Tuesday" is not a name). */
@@ -210,9 +220,33 @@ export function parseCardinality(text: string): number | null {
 /** Plural record nouns mean a list even when no number is given. */
 const LIST_NOUN = /\b(?:sales|orders|customers|clients|payments|invoices|accounts|visits|follow[-\s]?ups)\b/i;
 
-/** "the other four", "what about the rest", "and the others" — refine the previous query. */
-const QUERY_REFINEMENT =
-  /\b(?:the\s+)?other\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b|\bthe\s+(?:rest|others)\b|\bwhat\s+about\s+the\s+(?:rest|others)\b|\bi\s+asked\s+(?:you\s+)?for\b|\b(?:just|only|actually)\b[\s\S]{0,48}\b(?:most\s+recent|last|latest)\b|\bnot\s+the\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|rest|others)\b|\bjust\s+(?:the\s+)?(?:one|most\s+recent|last|latest)\b/i;
+/**
+ * Same-set continuation — walk members of the already-resolved result.
+ * Exclusions of named members ("don't tell me about Thomas") are a separate field.
+ */
+const SAME_SET_CONTINUATION =
+  /\b(?:the\s+)?other\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b|\bthe\s+(?:rest|others)\b|\bwhat\s+about\s+the\s+(?:rest|others)\b|\b(?:the\s+)?next\s+one\b|\banother\s+one\b/i;
+
+/**
+ * Restrictive particles that change cardinality, order, or named scope of the query
+ * itself. This is a NEW retrieval, not another step through the previous result.
+ */
+const QUERY_PARAMETER_CHANGE =
+  /\b(?:just|only|actually)\b[\s\S]{0,48}\b(?:most\s+recent|last|latest|first)\b|\bjust\s+(?:the\s+)?(?:one|most\s+recent|last|latest)\b|\bonly\s+(?:the\s+)?(?:latest|last|most\s+recent|one)\b|\bnot\s+the\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b/i;
+
+/** Restriction whose object is a new last/latest/most-recent request, not "the other N". */
+const NEW_ORDER_RESTRICTION =
+  /\b(?:just|only|actually)\b[\s\S]{0,48}\b(?:most\s+recent|last|latest|first)\b/i;
+
+function isQueryParameterChange(text: string, entities: string[]): boolean {
+  if (QUERY_PARAMETER_CHANGE.test(text)) return true;
+  // "show just Thomas" / "only Dana" — named-scope restriction of the previous set.
+  return (
+    /\b(?:just|only)\s+(?:show|tell|give|list)?\s*(?:me\s+)?/i.test(text) &&
+    entities.length > 0 &&
+    !SAME_SET_CONTINUATION.test(text)
+  );
+}
 
 /** "before Thomas", "after the Louise order" — anchor the window on a named record. */
 const ANCHOR = /\b(?:before|prior\s+to|preceding|after|since)\s+([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)?)/;
@@ -355,12 +389,19 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   const operatorWorkCommitment = detectOperatorWorkCommitment(text) && !actionRefused;
 
   let cardinality = parseCardinality(text);
-  // A correctness challenge outranks refinement wording: "I asked you for revenue — are you sure
-  // those numbers are correct?" contains both, and must reread rather than re-list.
-  const queryRefinement = QUERY_REFINEMENT.test(text) && !acknowledgement && !CORRECTNESS_CHALLENGE.test(text);
+  const { entities, temporal } = extractEntities(text);
+  const correctnessChallenge = CORRECTNESS_CHALLENGE.test(text) && !acknowledgement;
+  // Same-set continuation and parameter-changing re-query are distinct acts.
+  // "the other four" walks the resolved set; "just the most recent, not the five" does not.
+  const sameSetContinuation =
+    SAME_SET_CONTINUATION.test(text) && !acknowledgement && !correctnessChallenge;
+  const parameterChangeForm =
+    isQueryParameterChange(text, entities) && !acknowledgement && !correctnessChallenge;
+  const queryRefinement = sameSetContinuation && !(parameterChangeForm && NEW_ORDER_RESTRICTION.test(text));
+  const queryParameterChange = parameterChangeForm && !queryRefinement;
   if (
     cardinality == null &&
-    queryRefinement &&
+    queryParameterChange &&
     /\b(?:just|only)\b[\s\S]{0,48}\b(?:most\s+recent|last|latest)\b/i.test(text)
   ) {
     cardinality = 1;
@@ -371,12 +412,10 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   const excluded = properNoun(exclusionMatch?.[1]);
   const exclusions = excluded ? [excluded] : [];
   const anchorEntity = properNoun(anchorMatch?.[1]);
-  const { entities, temporal } = extractEntities(text);
   // Broad only when nothing scopes it: no scoping preposition (ASR may clip it to "about?") and no
   // named entity. A named subject always makes the question scoped. "About today" is a time window.
   const broadBriefingRequest =
     BROAD_BRIEFING.test(text.trim()) && !SCOPED_OBJECT.test(text) && entities.length === 0;
-  const correctnessChallenge = CORRECTNESS_CHALLENGE.test(text) && !acknowledgement;
   const provenanceQuestion = PROVENANCE_QUESTION.test(text) && !correctnessChallenge;
   const personalProbe =
     isPersonalQuestionAboutClaire(text) || Boolean(detectRequestedClaireTopic(text));
@@ -384,6 +423,7 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
     cardinality != null ||
     listRequest ||
     queryRefinement ||
+    queryParameterChange ||
     correctnessChallenge ||
     provenanceQuestion ||
     operatorWorkCommitment ||
@@ -405,6 +445,7 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
   if (hasExplicitActionRequest) intents.push("action_request");
   if (operatorWorkCommitment && !hasExplicitActionRequest) intents.push("operator_work_commitment");
   if (queryRefinement) intents.push("query_refinement");
+  if (queryParameterChange) intents.push("query_parameter_change");
   if (broadBriefingRequest) intents.push("broad_briefing");
   if (correctnessChallenge) intents.push("correctness_challenge");
   if (provenanceQuestion) intents.push("provenance_question");
@@ -443,6 +484,7 @@ export function interpretTurn(utterance: string, options: InterpretTurnOptions =
     cardinality,
     listRequest,
     queryRefinement,
+    queryParameterChange,
     exclusions,
     anchorEntity,
     temporal,

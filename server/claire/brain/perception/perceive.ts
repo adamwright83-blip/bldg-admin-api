@@ -17,6 +17,7 @@ function intentFromAssembled(assembled: string, turn: ReturnType<typeof interpre
   if (turn.correctnessChallenge) return "correctness_challenge";
   if (turn.provenanceQuestion) return "provenance_question";
   if (turn.queryRefinement) return "query_refinement";
+  if (turn.queryParameterChange) return "query_requery";
   if (turn.broadBriefingRequest) return "broad_briefing";
   if (turn.hasBusinessQuestion && /\b(?:what should i do|what would you do)\b/i.test(assembled)) {
     return "judgment_question";
@@ -77,7 +78,7 @@ function correctionTargetOf(
 ): PerceivedTurn["correctionTarget"] {
   if (turn.correctnessChallenge || turn.provenanceQuestion) return "prior_claim";
   if (!correctionOf(assembled, turn)) return null;
-  if (turn.queryRefinement || turn.anchorEntity || turn.exclusions.length > 0) return "prior_query";
+  if (turn.queryRefinement || turn.queryParameterChange || turn.anchorEntity || turn.exclusions.length > 0) return "prior_query";
   if (turn.cardinality != null && /\b(?:i (?:meant|said)|not|rather)\b/i.test(assembled)) return "prior_query";
   if (/\b(?:i (?:meant|said))\b[\s\S]{0,40}\b(?:number|figure|amount|total|revenue|sales)\b/i.test(assembled)) {
     return "prior_claim";

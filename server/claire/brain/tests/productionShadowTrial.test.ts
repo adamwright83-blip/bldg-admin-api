@@ -162,14 +162,27 @@ describe("A. personal biography does not continue analytics", () => {
 });
 
 describe("B. changing the question is not challenging its truth", () => {
-  it("just my most recent order, not the five is a refinement", async () => {
-    const result = await brain("So, just my just, my most recent order not the five.", afterFiveSales(), async request =>
-      request.kind === "business_query" ? [sales] : []
-    );
-    expect(result.decision.perceivedTurn.businessIntent).toBe("query_refinement");
+  it("just my most recent order, not the five is a parameter-changing re-query", async () => {
+    let queried = false;
+    const result = await brain("So, just my just, my most recent order not the five.", afterFiveSales(), async request => {
+      if (request.kind === "business_query") {
+        queried = true;
+        return [sales];
+      }
+      return [];
+    });
+    expect(result.decision.perceivedTurn.businessIntent).toBe("query_requery");
+    expect(result.decision.control.change).toBe("query_requery");
     expect(result.decision.control.change).not.toBe("prior_claim_challenge");
     expect(result.decision.attention.priorClaim).toBe("none");
     expect(result.decision.perceivedTurn.cardinality).toBe(1);
+    expect(result.decision.attention.continueOrderedQuery).toBe(false);
+    expect(result.decision.control.workingMemoryGates.find(gate => gate.slot === "ordered_query")?.input).toBe("replace");
+    expect(result.decision.control.workingMemoryGates.find(gate => gate.slot === "ordered_query")?.output).toBe(
+      "suppress"
+    );
+    expect(queried).toBe(true);
+    expect(result.decision.workingMemoryUpdate?.continuationPresented).toBeUndefined();
   });
 
   it("Are you sure? still challenges the prior claim", async () => {
@@ -380,3 +393,85 @@ describe("ordered continuation, mixed lanes, hangup, and authority", () => {
     ).toBe(true);
   });
 });
+
+describe("same-set continuation vs parameter-changing re-query", () => {
+  async function requery(text: string, expectedCardinality: number | null) {
+    let queried = false;
+    const result = await brain(text, afterPresentingFirst(), async request => {
+      if (request.kind === "business_query") {
+        queried = true;
+        return [sales];
+      }
+      if (request.kind === "contact_account_resolution") return [];
+      return [];
+    });
+    expect(result.decision.perceivedTurn.businessIntent).toBe("query_requery");
+    expect(result.decision.control.change).toBe("query_requery");
+    expect(result.decision.attention.continueOrderedQuery).toBe(false);
+    expect(result.decision.control.workingMemoryGates.find(gate => gate.slot === "ordered_query")?.input).toBe("replace");
+    expect(result.decision.control.workingMemoryGates.find(gate => gate.slot === "ordered_query")?.output).toBe(
+      "suppress"
+    );
+    expect(result.decision.workingMemoryUpdate?.continuationPresented).toBeUndefined();
+    expect(queried).toBe(true);
+    if (expectedCardinality != null) {
+      expect(result.decision.perceivedTurn.cardinality).toBe(expectedCardinality);
+    }
+    return result;
+  }
+
+  it("last five → the other four walks the same resolved set", async () => {
+    const result = await brain("What about the other four?", afterPresentingFirst(), async request => {
+      if (request.kind === "business_query") throw new Error("continuation must not re-query");
+      return [];
+    });
+    expect(result.decision.perceivedTurn.businessIntent).toBe("query_refinement");
+    expect(result.decision.attention.continueOrderedQuery).toBe(true);
+    expect(result.decision.control.workingMemoryGates.find(gate => gate.slot === "ordered_query")?.output).toBe("allow");
+    expect(result.decision.workingMemoryUpdate?.continuationPresented?.map(member => member.id)).toEqual(
+      FIVE.slice(1).map(member => member.id)
+    );
+  });
+
+  it("last five → just show my most recent order, not the five is a fresh cardinality-1 query", async () => {
+    await requery("Just show my most recent order, not the five.", 1);
+  });
+
+  it("last five → only the latest one is a fresh query", async () => {
+    await requery("Only the latest one.", 1);
+  });
+
+  it("last five → actually give me the last two is a fresh cardinality-2 query", async () => {
+    await requery("Actually give me the last two.", 2);
+  });
+});
+
+describe("explicit set-shift after discourse prefixes", () => {
+  it.each([
+    "No, instead, just show my most recent order",
+    "Okay, instead show the latest one",
+    "Actually, rather than sales, show orders",
+    "Yeah, but instead show the latest one",
+  ])("%s is a set-shift that closes the previous result", async utterance => {
+    const result = await brain(utterance, afterPresentingFirst(), async request =>
+      request.kind === "business_query" ? [sales] : []
+    );
+    expect(result.decision.control.change).toBe("set_shift");
+    expect(result.decision.control.workingMemoryGates.find(gate => gate.slot === "ordered_query")?.input).toBe("replace");
+    expect(result.decision.control.workingMemoryGates.find(gate => gate.slot === "ordered_query")?.output).toBe(
+      "suppress"
+    );
+    expect(result.decision.attention.continueOrderedQuery).toBe(false);
+    expect(result.decision.workingMemoryUpdate?.continuationPresented).toBeUndefined();
+  });
+
+  it("ordinary continuation phrases still continue", async () => {
+    for (const utterance of ["the other four", "What about the rest?", "and the next one"]) {
+      const result = await brain(utterance, afterPresentingFirst());
+      expect(result.decision.control.change).not.toBe("set_shift");
+      expect(result.decision.attention.continueOrderedQuery).toBe(true);
+      expect(result.decision.perceivedTurn.businessIntent).toBe("query_refinement");
+    }
+  });
+});
+

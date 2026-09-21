@@ -51,7 +51,7 @@ export function planAttention(input: {
   let pendingDisposition: AttentionPlan["pendingDisposition"] = "none";
   const pendingBind = holdingPending ? pendingReply(perceived.assembledText) : null;
   if (holdingPending) {
-    if (change === "task_switch" || change === "set_shift") {
+    if (change === "task_switch" || change === "set_shift" || change === "query_requery") {
       pendingDisposition = "supersede";
       rationale.push("the operator moved to a different task; pending is set aside, not applied");
     } else if (pendingBind === "no" || (perceived.refusal && !perceived.correction && pendingBind !== "revise")) {

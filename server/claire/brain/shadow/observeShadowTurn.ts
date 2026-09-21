@@ -68,7 +68,10 @@ export type ShadowObservation = {
   candidateActionClasses: string[];
 };
 
-export type ShadowSkipped = { observed: false; reason: "disabled" | "operator_not_authorized" | "error" };
+export type ShadowSkipped = {
+  observed: false;
+  reason: "disabled" | "operator_not_authorized" | "error" | "empty_utterance";
+};
 
 export type ShadowResult = ShadowObservation | ShadowSkipped;
 
@@ -204,6 +207,10 @@ export async function observeShadowTurn(
 
   try {
     const { v1, live, ...turn } = input;
+    const assembled = typeof (turn.assembledText ?? turn.rawText) === "string" ? (turn.assembledText ?? turn.rawText).trim() : null;
+    if (assembled === "") {
+      return { observed: false, reason: "empty_utterance" };
+    }
 
     // V2's own memory of ITS previous answers — separate from V1's conversation state.
     const shadowKey = shadowMemoryKey(turn);
@@ -253,15 +260,18 @@ export async function observeShadowTurn(
       candidateActionClasses,
     };
     // Persist V2's cognitive state so the next real turn can continue this result.
+    // Incomplete / empty thoughts are not semantic turns and must not advance WM.
     // Persistence failure degrades shadow fidelity only; V1 is unaffected, and the
     // observation is still recorded.
-    await memoryStore
-      .save(shadowKey, updateShadowMemory(priorMemory, result.decision), {
-        tenantId: turn.tenantId,
-        operatorUserId: turn.operatorUserId,
-        surface: turn.surface,
-      })
-      .catch(() => undefined);
+    if (result.decision.perceivedTurn.completeness !== "incomplete") {
+      await memoryStore
+        .save(shadowKey, updateShadowMemory(priorMemory, result.decision), {
+          tenantId: turn.tenantId,
+          operatorUserId: turn.operatorUserId,
+          surface: turn.surface,
+        })
+        .catch(() => undefined);
+    }
 
     await (options.sink ?? defaultSink)(observation);
     return observation;

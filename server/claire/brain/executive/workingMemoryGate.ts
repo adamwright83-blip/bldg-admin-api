@@ -32,6 +32,28 @@ const SET_SHIFT =
   /(?:^|[.!?]\s+)(?:instead|rather)\b|\b(?:instead\s+of|rather\s+than|don'?t\s+look\s+at|stop\s+looking\s+at)\b|\bcompare\b[\s\S]{0,40}\binstead\b/i;
 
 /**
+ * Acknowledgements / refusals / discourse particles that can precede an explicit
+ * set-shift without being the shift themselves. Repeated so "Yeah, but instead"
+ * still exposes `instead` at the clause boundary.
+ */
+const LEADING_DISCOURSE =
+  /^(?:(?:no|nope|nah|yes|yeah|yep|yup|ok(?:ay)?|alright|all\s+right|sure|right|well|so|but|and|actually|wait|hold\s+on|um+|uh+|please|look|listen)[,.!?]?\s+)+/i;
+
+function afterLeadingDiscourse(text: string): string {
+  return text.trim().replace(LEADING_DISCOURSE, "").trim();
+}
+
+function isExplicitSetShift(text: string): boolean {
+  if (SET_SHIFT.test(text)) return true;
+  const rest = afterLeadingDiscourse(text);
+  return Boolean(rest) && rest !== text.trim() && SET_SHIFT.test(rest);
+}
+
+function closesPriorOrderedQuery(change: ChangeClass): boolean {
+  return change === "task_switch" || change === "set_shift" || change === "query_requery";
+}
+
+/**
  * Classify how this turn differs from the last.
  *
  * Order matters: a prior-claim challenge is about the ANSWER, an abandonment is about
@@ -41,9 +63,10 @@ export function classifyChange(perceived: PerceivedTurn, memory: WorkingMemorySn
   if (perceived.businessIntent === "correctness_challenge" || perceived.correctionTarget === "prior_claim") {
     return "prior_claim_challenge";
   }
-  if (SET_SHIFT.test(perceived.assembledText)) return "set_shift";
+  if (isExplicitSetShift(perceived.assembledText)) return "set_shift";
   if (ABANDON.test(perceived.assembledText)) return "task_switch";
   if (perceived.personalProbe && perceived.businessIntent === "none") return "task_switch";
+  if (perceived.businessIntent === "query_requery") return "query_requery";
 
   const holdingPending = Boolean(memory.pendingProposal || memory.pendingBriefing || memory.pendingAccountFollowUp);
 
@@ -97,6 +120,7 @@ export function activeTaskSets(perceived: PerceivedTurn, memory: WorkingMemorySn
     perceived.businessIntent === "fact_question" ||
     perceived.businessIntent === "list_query" ||
     perceived.businessIntent === "query_refinement" ||
+    perceived.businessIntent === "query_requery" ||
     perceived.businessIntent === "correctness_challenge" ||
     perceived.businessIntent === "provenance_question" ||
     (perceived.priorQueryReference && !perceived.personalProbe)
@@ -141,12 +165,13 @@ export function gateWorkingMemory(input: {
   }
 
   // Pending-work output and ordered-query output are independent slots.
-  // Explicit abandonment / set-shift still outranks both: it closes the old
-  // query thread even when the new wording looks like a refinement.
+  // Explicit abandonment / set-shift / parameter-changing re-query still
+  // outrank continuation: they close the old result even when the new
+  // wording mentions the previous set.
   const continuing =
-    perceived.priorQueryReference ||
     perceived.businessIntent === "query_refinement" ||
-    perceived.exclusions.length > 0;
+    perceived.exclusions.length > 0 ||
+    (perceived.priorQueryReference && perceived.businessIntent !== "query_requery");
 
   // ── Pending proposal ──────────────────────────────────────────────────────
   const holdingPending = Boolean(memory.pendingProposal || memory.pendingBriefing || memory.pendingAccountFollowUp);
@@ -159,7 +184,7 @@ export function gateWorkingMemory(input: {
     rule("pending_proposal", "update", "allow", "a parameter of the pending item changes");
   } else if (perceived.acknowledgement && !perceived.hasBusinessQuestion) {
     rule("pending_proposal", "update", "allow", "operator confirmed the pending item");
-  } else if (change === "task_switch" || change === "set_shift") {
+  } else if (closesPriorOrderedQuery(change)) {
     // Remembered, but barred from this turn: it is not what was asked about.
     rule("pending_proposal", "dormant", "suppress", "operator moved to a different task");
   } else if (continuing && memory.orderedQuery) {
@@ -171,8 +196,8 @@ export function gateWorkingMemory(input: {
   // ── Ordered query thread ──────────────────────────────────────────────────
   if (!memory.orderedQuery) {
     rule("ordered_query", "maintain", "suppress", "no ordered result in play");
-  } else if (change === "task_switch" || change === "set_shift") {
-    rule("ordered_query", "replace", "suppress", "explicit switch closes the previous result; it may not answer this turn");
+  } else if (closesPriorOrderedQuery(change)) {
+    rule("ordered_query", "replace", "suppress", "the previous result cannot answer this turn; retrieval must start again");
   } else if (continuing) {
     rule("ordered_query", "update", "allow", "the operator is continuing this result");
   } else {
@@ -216,9 +241,11 @@ export function gateWorkingMemory(input: {
   // ── Evidence scope ────────────────────────────────────────────────────────
   rule(
     "evidence_scope",
-    change === "set_shift" ? "replace" : "maintain",
+    change === "set_shift" || change === "query_requery" ? "replace" : "maintain",
     "allow",
-    change === "set_shift" ? "the dimension of the question changed" : "scope carries forward"
+    change === "set_shift" || change === "query_requery"
+      ? "the dimension of the question changed"
+      : "scope carries forward"
   );
 
   return rulings;

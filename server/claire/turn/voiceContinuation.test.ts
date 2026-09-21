@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { CONTINUATION_MAX_HOLDS, runClaireTurn, shouldHoldForContinuation, type ClaireTurnDeps, type ClaireTurnState } from "./claireTurn";
+import { CONTINUATION_MAX_HOLDS, observationUtteranceForBrain, runClaireTurn, shouldHoldForContinuation, type ClaireTurnDeps, type ClaireTurnState } from "./claireTurn";
 import { CONTINUATION_GRACE_SECONDS, preDriveConversationTwiML } from "../claireTwilio";
 
 const NOW = new Date("2026-09-19T17:00:00Z");
@@ -100,11 +100,16 @@ describe("normal short answers get no added dead air", () => {
 describe("safety valves", () => {
   it("a rambling speaker is not held forever", async () => {
     const state: ClaireTurnState = {};
-    let last = { listenOnly: true } as { listenOnly?: boolean };
+    let last = { listenOnly: true } as { listenOnly?: boolean; assembledUtterance?: string; thoughtCompleteness?: string };
+    const pieces: string[] = [];
     for (let i = 0; i <= CONTINUATION_MAX_HOLDS; i += 1) {
-      last = await runClaireTurn({ ...base, utterance: `and then there was another thing I wanted to say number ${i}`, state }, turnDeps());
+      const piece = `and then there was another thing I wanted to say number ${i}`;
+      pieces.push(piece);
+      last = await runClaireTurn({ ...base, utterance: piece, state }, turnDeps());
     }
     expect(last.listenOnly).toBeFalsy();
+    expect(last.thoughtCompleteness).toBe("forced_flush");
+    expect(last.assembledUtterance).toBe(pieces.join(" "));
   });
 });
 
@@ -122,6 +127,63 @@ describe("unfinished thoughts stay held across a quiet gather", () => {
     );
     expect(quiet.listenOnly).toBe(true);
     expect(state.pendingFragment).toMatch(/for$/i);
+  });
+});
+
+describe("V1 and V2 reason over the same assembled utterance", () => {
+  it("a fragment held once is not a V2 reasoning turn", async () => {
+    const state: ClaireTurnState = {};
+    const held = await runClaireTurn({ ...base, utterance: "Desired timing is", state }, turnDeps());
+    expect(held.listenOnly).toBe(true);
+    expect(held.assembledUtterance).toBe("Desired timing is");
+    expect(held.thoughtCompleteness).toBe("incomplete");
+    expect(observationUtteranceForBrain(held).observe).toBe(false);
+  });
+
+  it("a naturally completed thought feeds V1 and V2 the same assembled text", async () => {
+    const state: ClaireTurnState = {};
+    const first = await runClaireTurn({ ...base, utterance: "Desired timing is", state }, turnDeps());
+    expect(first.listenOnly).toBe(true);
+    const second = await runClaireTurn(
+      { ...base, utterance: "next Tuesday morning?", state },
+      turnDeps()
+    );
+    expect(second.listenOnly).toBeFalsy();
+    expect(second.assembledUtterance).toBe("Desired timing is next Tuesday morning?");
+    const observation = observationUtteranceForBrain(second);
+    expect(observation.observe).toBe(true);
+    expect(observation.assembledText).toBe(second.assembledUtterance);
+    expect(observation.completeness).toBe("complete");
+  });
+
+  it("a forced flush after CONTINUATION_MAX_HOLDS feeds V1 and V2 the same assembled text", async () => {
+    const state: ClaireTurnState = {};
+    const pieces: string[] = [];
+    let last = await runClaireTurn({ ...base, utterance: "and then I kept going with more detail", state }, turnDeps());
+    pieces.push("and then I kept going with more detail");
+    for (let i = 0; i < CONTINUATION_MAX_HOLDS; i += 1) {
+      const piece = `and then there was another thing I wanted to say number ${i}`;
+      pieces.push(piece);
+      last = await runClaireTurn({ ...base, utterance: piece, state }, turnDeps());
+    }
+    expect(last.listenOnly).toBeFalsy();
+    expect(last.thoughtCompleteness).toBe("forced_flush");
+    expect(last.assembledUtterance).toBe(pieces.join(" "));
+    const observation = observationUtteranceForBrain(last);
+    expect(observation.observe).toBe(true);
+    expect(observation.assembledText).toBe(last.assembledUtterance);
+    expect(observation.completeness).toBe("forced_flush");
+  });
+
+  it("an empty provider webhook is never a V2 semantic turn", async () => {
+    const empty = await runClaireTurn({ ...base, utterance: "", state: {} }, turnDeps());
+    expect(observationUtteranceForBrain(empty).observe).toBe(false);
+    const quietHold = await runClaireTurn(
+      { ...base, utterance: "", state: { pendingFragment: "He was my most recent order for", fragmentHolds: 1 } },
+      turnDeps()
+    );
+    expect(quietHold.listenOnly).toBe(true);
+    expect(observationUtteranceForBrain(quietHold).observe).toBe(false);
   });
 });
 

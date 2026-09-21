@@ -51,7 +51,7 @@ import {
   handleRecordingStatus,
 } from "./conversation/pipeline";
 import { isValidTwilioWebhook } from "./conversation/twilioSignature";
-import { runClaireTurn, looksUnfinished, type ClaireTurnState } from "./turn/claireTurn";
+import { runClaireTurn, looksUnfinished, observationUtteranceForBrain, type ClaireTurnState } from "./turn/claireTurn";
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
 import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
 import { getDashboardTimeZone } from "../dashboardZoned";
@@ -527,35 +527,40 @@ function startVoiceTurn(input: {
        * awaited), default-off behind CLAIRE_BRAIN_V2_SHADOW, cannot throw, and receives
        * a frozen copy of state rather than the live conversation object. Nothing below
        * reads its result: V1 remains the sole speech, mutation and call-control authority.
+       *
+       * The observer is fed the exact assembled utterance V1 reasoned over — never the
+       * raw provider webhook — and skipped entirely for holds and empty semantic turns.
        */
-      observeShadowTurnDetached({
-        rawText: input.utterance,
-        // A listen-only turn is V1 holding a fragment, not a complete thought. Telling V2
-        // otherwise would make the comparison lie about what it was asked to reason over.
-        completeness: result.listenOnly ? "incomplete" : "complete",
-        state: readOnlyWorkingMemorySource(conversation as unknown as Parameters<typeof readOnlyWorkingMemorySource>[0]),
-        tenantId: conversation.tenantId,
-        operatorUserId: conversation.actorId,
-        surface: "voice",
-        conversationKey: callStateKey(conversationId),
-        // Read-only readers, constructed only when the flag is ON.
-        live: {
+      const observation = observationUtteranceForBrain(result);
+      if (observation.observe) {
+        observeShadowTurnDetached({
+          rawText: observation.assembledText,
+          assembledText: observation.assembledText,
+          completeness: observation.completeness,
+          state: readOnlyWorkingMemorySource(conversation as unknown as Parameters<typeof readOnlyWorkingMemorySource>[0]),
           tenantId: conversation.tenantId,
           operatorUserId: conversation.actorId,
-          conversationId,
-          dayDirectorActorId: conversation.dayDirectorActorId,
-          timeZone: getDashboardTimeZone(),
-          businessDate: conversation.context.businessDate ?? new Date().toISOString().slice(0, 10),
           surface: "voice",
-          priorClaimReceipts: conversation.claimReceipts ?? [],
-        },
-        v1: {
-          endedCall: Boolean(result.endCall),
-          // Voice records work either as a commitment turn or as linked action ids.
-          mutated: Boolean(result.commitmentTurn) || Boolean(result.actionIds?.length),
-          spokeSomething: Boolean(result.speak),
-        },
-      });
+          conversationKey: callStateKey(conversationId),
+          // Read-only readers, constructed only when the flag is ON.
+          live: {
+            tenantId: conversation.tenantId,
+            operatorUserId: conversation.actorId,
+            conversationId,
+            dayDirectorActorId: conversation.dayDirectorActorId,
+            timeZone: getDashboardTimeZone(),
+            businessDate: conversation.context.businessDate ?? new Date().toISOString().slice(0, 10),
+            surface: "voice",
+            priorClaimReceipts: conversation.claimReceipts ?? [],
+          },
+          v1: {
+            endedCall: Boolean(result.endCall),
+            // Voice records work either as a commitment turn or as linked action ids.
+            mutated: Boolean(result.commitmentTurn) || Boolean(result.actionIds?.length),
+            spokeSomething: Boolean(result.speak),
+          },
+        });
+      }
 
       if (result.listenOnly) {
         return preDriveConversationTwiML({ text: "", token, hints: conversation.hints, listenOnly: true });
@@ -563,7 +568,10 @@ function startVoiceTurn(input: {
       conversation.turns += 1;
       await saveCall(conversationId, conversation);
       const fragments = [...(conversation.providerFragments ?? [])];
-      const canonicalOperator = (conversation.history ?? []).filter(entry => entry.speaker === "operator").at(-1)?.text ?? input.utterance;
+      const canonicalOperator =
+        result.assembledUtterance ||
+        (conversation.history ?? []).filter(entry => entry.speaker === "operator").at(-1)?.text ||
+        input.utterance;
       conversation.providerFragments = [];
       await persistOperatorAndClaire({
         callSid: input.callSid,

@@ -78,10 +78,14 @@ describe("both surfaces observe, and only observe", () => {
     expect(ROUTER.indexOf("await runClaireTurn(")).toBeLessThan(ROUTER.indexOf("observeShadowTurnDetached("));
   });
 
-  it("a held voice fragment is observed as incomplete, not as a complete thought", async () => {
-    // Telling V2 a fragment was complete would make the comparison lie about what it
-    // was asked to reason over.
-    expect(TWILIO).toMatch(/completeness:\s*result\.listenOnly\s*\?\s*"incomplete"\s*:\s*"complete"/);
+  it("a held voice fragment is not a V2 reasoning turn", async () => {
+    // Transport skips observation on listen-only holds. Direct observer still
+    // treats an explicit incomplete label as a half-turn with no retrieval.
+    expect(TWILIO).toMatch(/observationUtteranceForBrain\(/);
+    expect(TWILIO).toMatch(/if \(observation\.observe\)/);
+    expect(TWILIO).toMatch(/assembledText:\s*observation\.assembledText/);
+    expect(ROUTER).toMatch(/observationUtteranceForBrain\(/);
+    expect(ROUTER).toMatch(/assembledText:\s*observation\.assembledText/);
 
     const held = await observe(
       { rawText: "So for Dana I was thinking", completeness: "incomplete", ...CTX },

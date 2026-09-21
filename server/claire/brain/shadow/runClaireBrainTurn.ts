@@ -39,9 +39,15 @@ export async function runClaireBrainTurn(input: ClaireBrainTurnInput): Promise<C
   let completeness = input.completeness ?? "complete";
   // Voice owns complete-thought assembly: V1's listenOnly label informs, but an
   // unfinished spoken form is never reasoned over just because transport flushed it.
+  // A forced flush is the exception — V1 already released that exact text, so V2
+  // must reason over the same assembled utterance rather than re-holding it.
   // Desk text has no fragment assembler yet, so punctuationless typed questions
   // ("Tell me where my order is") must not inherit the voice-ending heuristic.
-  if (input.surface === "voice" && completeness === "complete" && looksUnfinished(assembled)) {
+  if (
+    input.surface === "voice" &&
+    completeness === "complete" &&
+    looksUnfinished(assembled)
+  ) {
     completeness = "incomplete";
   }
   const perceived = perceiveTurn({

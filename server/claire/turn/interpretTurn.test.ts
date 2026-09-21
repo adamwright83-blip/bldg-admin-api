@@ -138,3 +138,45 @@ describe("B. call ending is a first-class intent", () => {
     expect(interpretTurn("I gotta go.", { extractedWorkItems: 1 }).mayProposeWork).toBe(false);
   });
 });
+
+describe("same-set continuation is not a parameter-changing re-query", () => {
+  it("the other four keeps walking the resolved set", () => {
+    const turn = interpretTurn("What were the other four?");
+    expect(turn.queryRefinement).toBe(true);
+    expect(turn.queryParameterChange).toBe(false);
+    expect(turn.cardinality).toBe(4);
+  });
+
+  it("the rest / next one are same-set continuations", () => {
+    expect(interpretTurn("What about the rest?").queryRefinement).toBe(true);
+    expect(interpretTurn("the next one").queryRefinement).toBe(true);
+    expect(interpretTurn("the next one").queryParameterChange).toBe(false);
+  });
+
+  it("just show my most recent order, not the five is a fresh cardinality-1 query", () => {
+    const turn = interpretTurn("Just show my most recent order, not the five.");
+    expect(turn.queryParameterChange).toBe(true);
+    expect(turn.queryRefinement).toBe(false);
+    expect(turn.cardinality).toBe(1);
+  });
+
+  it("only the latest one is a fresh query", () => {
+    const turn = interpretTurn("Only the latest one.");
+    expect(turn.queryParameterChange).toBe(true);
+    expect(turn.queryRefinement).toBe(false);
+    expect(turn.cardinality).toBe(1);
+  });
+
+  it("actually give me the last two is a fresh cardinality-2 query", () => {
+    const turn = interpretTurn("Actually give me the last two.");
+    expect(turn.queryParameterChange).toBe(true);
+    expect(turn.queryRefinement).toBe(false);
+    expect(turn.cardinality).toBe(2);
+  });
+
+  it("show just Thomas restricts named scope rather than continuing the set", () => {
+    const turn = interpretTurn("Show just Thomas.");
+    expect(turn.queryParameterChange).toBe(true);
+    expect(turn.queryRefinement).toBe(false);
+  });
+});

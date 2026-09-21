@@ -52,7 +52,7 @@ import {
   confirmWorkdayPlan,
   previewWorkdayLoop,
 } from "./workdayPlanService";
-import { runClaireTurn, type ClaireTurnState } from "./turn/claireTurn";
+import { observationUtteranceForBrain, runClaireTurn, type ClaireTurnState } from "./turn/claireTurn";
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
 import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
 import { claireConversationStateStore } from "./turn/conversationStateStore";
@@ -296,31 +296,36 @@ export const claireRouter = router({
        * default-off behind CLAIRE_BRAIN_V2_SHADOW, cannot throw, and receives a frozen
        * copy of state rather than the live object. The reply below is V1's alone.
        */
-      observeShadowTurnDetached({
-        rawText: input.utterance,
-        state: readOnlyWorkingMemorySource(state),
-        tenantId: ctx.tenantId,
-        operatorUserId: ctx.user.openId,
-        surface: "text",
-        conversationKey: key,
-        // Read-only readers, constructed only when the flag is ON.
-        live: {
+      const observation = observationUtteranceForBrain(result);
+      if (observation.observe) {
+        observeShadowTurnDetached({
+          rawText: observation.assembledText,
+          assembledText: observation.assembledText,
+          completeness: observation.completeness,
+          state: readOnlyWorkingMemorySource(state),
           tenantId: ctx.tenantId,
           operatorUserId: ctx.user.openId,
-          conversationId: input.conversationId ?? "desk",
-          dayDirectorActorId: actorId,
-          timeZone: input.timeZone ?? "America/Los_Angeles",
-          businessDate: context.businessDate ?? new Date().toISOString().slice(0, 10),
           surface: "text",
-          priorClaimReceipts: state.claimReceipts ?? [],
-        },
-        v1: {
-          endedCall: false,
-          // commitmentTurn is on the shared turn result, so desk can record work too.
-          mutated: Boolean(result.commitmentTurn) || Boolean(result.actionIds?.length),
-          spokeSomething: Boolean(result.speak),
-        },
-      });
+          conversationKey: key,
+          // Read-only readers, constructed only when the flag is ON.
+          live: {
+            tenantId: ctx.tenantId,
+            operatorUserId: ctx.user.openId,
+            conversationId: input.conversationId ?? "desk",
+            dayDirectorActorId: actorId,
+            timeZone: input.timeZone ?? "America/Los_Angeles",
+            businessDate: context.businessDate ?? new Date().toISOString().slice(0, 10),
+            surface: "text",
+            priorClaimReceipts: state.claimReceipts ?? [],
+          },
+          v1: {
+            endedCall: false,
+            // commitmentTurn is on the shared turn result, so desk can record work too.
+            mutated: Boolean(result.commitmentTurn) || Boolean(result.actionIds?.length),
+            spokeSomething: Boolean(result.speak),
+          },
+        });
+      }
 
       return {
         reply: result.speak || preview.brief,

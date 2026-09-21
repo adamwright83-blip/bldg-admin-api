@@ -172,6 +172,14 @@ export type ClaireTurnResult = {
     | "commitment"
     | "follow_up";
   listenOnly?: boolean;
+  /**
+   * The exact operator text this turn reasoned over after fragment assembly.
+   * Voice holds, quiet flushes, and max-hold flushes all record this same value
+   * so Brain V2 observes what V1 actually used — not the last provider webhook.
+   */
+  assembledUtterance?: string;
+  /** How the assembled utterance was released. Incomplete holds must not feed V2 as a real turn. */
+  thoughtCompleteness?: "complete" | "incomplete" | "forced_flush";
   /** A personal turn closed the personal thread AND business is complete AND an authored exit exists: hang up after speaking. */
   endCall?: boolean;
   commitmentTurn?: VoiceCommitmentTurnResult;
@@ -301,6 +309,28 @@ export function looksUnfinished(utterance: string): boolean {
   return /\b(?:is|are|was|were|the|a|an|to|for|and|then|at|with|of|from|my|his|her|their|so|but|because|like|um|uh|need|have|going)\s*[.,]?$/i.test(text);
 }
 
+/**
+ * Canonical assembled-turn identity for Brain V2 and transcript/telemetry.
+ *
+ * V1 and V2 must reason over the same string. A held fragment or an empty webhook
+ * is not a semantic turn: the observer must not run, and shadow WM must not advance.
+ */
+export function observationUtteranceForBrain(result: ClaireTurnResult): {
+  observe: boolean;
+  assembledText: string;
+  completeness: "complete" | "incomplete" | "forced_flush";
+} {
+  const assembledText = (result.assembledUtterance ?? "").trim();
+  if (!assembledText || result.listenOnly) {
+    return { observe: false, assembledText, completeness: "incomplete" };
+  }
+  return {
+    observe: true,
+    assembledText,
+    completeness: result.thoughtCompleteness ?? "complete",
+  };
+}
+
 export type ReplyDecision = { decision: "yes" | "no" | "other"; remainder: string };
 
 /**
@@ -415,6 +445,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   };
 
   let utterance = input.utterance.trim();
+  let thoughtCompleteness: NonNullable<ClaireTurnResult["thoughtCompleteness"]> = "complete";
   if (input.surface === "voice" && input.allowFragmentWait !== false) {
     const incoming = utterance;
     if (incoming) {
@@ -426,16 +457,26 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     if (holds < CONTINUATION_MAX_HOLDS && shouldHoldForContinuation(combined, { awaitingReply })) {
       state.pendingFragment = combined;
       state.fragmentHolds = holds + 1;
-      return { speak: "", kind: "listening", listenOnly: true };
+      return {
+        speak: "",
+        kind: "listening",
+        listenOnly: true,
+        assembledUtterance: combined,
+        thoughtCompleteness: "incomplete",
+      };
     }
     utterance = combined;
+    thoughtCompleteness = holds >= CONTINUATION_MAX_HOLDS ? "forced_flush" : "complete";
     state.pendingFragment = null;
     state.fragmentHolds = 0;
   } else if (state.pendingFragment) {
     if (utterance) state.providerFragments = [...(state.providerFragments ?? []), utterance];
     utterance = `${state.pendingFragment} ${utterance}`.trim();
+    thoughtCompleteness = "forced_flush";
     state.pendingFragment = null;
     state.fragmentHolds = 0;
+  } else if (input.surface === "voice" && input.allowFragmentWait === false) {
+    thoughtCompleteness = "forced_flush";
   }
   remember(state, "operator", utterance, nowMs);
   /**
@@ -509,7 +550,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
     persistClaireTurnTrace(trace, { turnKind: guarded.kind, spokenText: guarded.speak });
     deps.onTurnTrace?.(trace);
-    return personalEndCall ? { ...guarded, endCall: true } : guarded;
+    const withUtterance: ClaireTurnResult = {
+      ...guarded,
+      assembledUtterance: utterance,
+      thoughtCompleteness,
+    };
+    return personalEndCall ? { ...withUtterance, endCall: true } : withUtterance;
   };
   const finishCommitmentTurn = (
     turn: Exclude<VoiceCommitmentTurnResult, { kind: "not_applicable" }>
@@ -596,7 +642,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // A refinement of the previous QUERY ("I asked you for the last five... what were the other
   // four?") is not a challenge to its TRUTH. Prior-claim used to swallow both, plus bare
   // acknowledgements — three of the worst turns in the 2026-09-20 call.
-  if (resolution.kind !== "none" && !interpreted.acknowledgement && (interpreted.correctnessChallenge || !interpreted.queryRefinement)) {
+  if (resolution.kind !== "none" && !interpreted.acknowledgement && (interpreted.correctnessChallenge || !(interpreted.queryRefinement || interpreted.queryParameterChange))) {
     // Deterministic referent (name / number / immediately preceding): the classifier only labels the act.
     const explicit = resolution.kind === "ambiguous" || resolution.via === "explicit_reference";
     if (isChallengeCandidate(utterance, explicit)) {
@@ -658,7 +704,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    * produced any pending proposal, so the proposal is cleared rather than left to be re-offered or
    * nagged about. Stale pending state must not survive the turn that contradicts it.
    */
-  if (interpreted.correction || interpreted.actionRefused || interpreted.queryRefinement) {
+  if (interpreted.correction || interpreted.actionRefused || interpreted.queryRefinement || interpreted.queryParameterChange) {
     if (state.pendingProposal || state.pendingBriefing) {
       state.pendingProposal = null;
       state.pendingBriefing = null;
