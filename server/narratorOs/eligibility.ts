@@ -20,6 +20,7 @@ import {
   M03_BEAT_ID,
   unconsumedM03QualifyingCycles,
 } from "./m03Readiness";
+import { productionVerifiedGoldlineEvidence } from "./verifiedGoldlinePersistence";
 import {
   isVerifiedGoldlineReceipt,
   type VerifiedGoldlineReceipt,
@@ -432,6 +433,8 @@ export function evaluateEligibility(
 
 /**
  * Production eligibility. Caller-supplied registry/graph are ignored.
+ * Goldline evidence is persisted ingested receipts, unioned with live
+ * branded receipts. Unbranded caller objects are not authority.
  * Isolated tests may still call evaluateEligibility with a local catalog.
  */
 export function evaluateProductionEligibility(
@@ -439,7 +442,10 @@ export function evaluateProductionEligibility(
 ): NarrativeEligibilityResult {
   return evaluateEligibility({
     snapshot: input.snapshot,
-    verifiedGoldline: input.verifiedGoldline,
+    verifiedGoldline: productionVerifiedGoldlineEvidence(
+      input.snapshot,
+      input.verifiedGoldline
+    ),
     nowMs: input.nowMs,
     mode: input.mode,
     registry: AUTHORED_BEATS,

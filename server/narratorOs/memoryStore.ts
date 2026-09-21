@@ -19,6 +19,10 @@ function keyOf(scope: OperatorScope): string {
   return `${scope.tenantId}::${scope.operatorUserId}`;
 }
 
+function jsonCloneSnapshot(snapshot: NarratorSnapshot): NarratorSnapshot {
+  return JSON.parse(JSON.stringify(snapshot)) as NarratorSnapshot;
+}
+
 function seedSnapshot(scope: OperatorScope): NarratorSnapshot {
   return {
     ...scope,
@@ -38,8 +42,19 @@ function seedSnapshot(scope: OperatorScope): NarratorSnapshot {
   };
 }
 
-export function createInMemoryNarratorStore(): NarratorStore {
+/**
+ * In-memory store. Optional seed is JSON-cloned so a process/store reload
+ * test cannot keep the original branded receipt objects as hidden truth.
+ */
+export function createInMemoryNarratorStore(
+  seed?: ReadonlyMap<string, NarratorSnapshot>
+): NarratorStore {
   const rows = new Map<string, NarratorSnapshot>();
+  if (seed) {
+    for (const [key, snapshot] of seed) {
+      rows.set(key, jsonCloneSnapshot(snapshot));
+    }
+  }
 
   return {
     async initOperator(scope) {
@@ -128,4 +143,15 @@ export function createInMemoryNarratorStore(): NarratorStore {
       return stored;
     },
   };
+}
+
+/**
+ * Simulate process/store restart: JSON-clone a loaded snapshot into a fresh
+ * store. Branded receipts cannot survive this path; only ledger payload can.
+ */
+export function reloadInMemoryNarratorStoreFromSnapshot(
+  snapshot: NarratorSnapshot
+): NarratorStore {
+  const cloned = jsonCloneSnapshot(snapshot);
+  return createInMemoryNarratorStore(new Map([[keyOf(cloned), cloned]]));
 }

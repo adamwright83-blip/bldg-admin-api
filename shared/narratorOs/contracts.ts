@@ -312,6 +312,24 @@ export type VerifiedGoldlineEvidenceRef = {
   classification: "authoritative_external" | "operator_attested";
 };
 
+/**
+ * JSON-safe copy of a branded receipt, stored on VERIFIED_GOLDLINE_OUTCOME
+ * ledger rows. Not itself a receipt. Eligibility never treats this object as
+ * caller-supplied Goldline evidence. Production rehydration is a separate
+ * privileged path.
+ */
+export type PersistedVerifiedGoldlineReceipt = {
+  receiptId: string;
+  tenantId: string;
+  operatorUserId: string;
+  outcomeId: string;
+  verificationClass: "VERIFIED";
+  evidenceClass: "authoritative_external" | "operator_attested";
+  evidenceRef: VerifiedGoldlineEvidenceRef;
+  targetRef: { kind: "goldline_target"; id: string } | null;
+  occurredAtMs: number;
+};
+
 export type NarrativeEvent = {
   kind: NarrativeEventKind;
   beatId: NarrativeBeatId | null;
@@ -320,6 +338,11 @@ export type NarrativeEvent = {
   playerVisible: boolean;
   evidenceRef: VerifiedGoldlineEvidenceRef | null;
   occurredAt: string;
+  /**
+   * Present on VERIFIED_GOLDLINE_OUTCOME rows written by ingestion.
+   * Absent on FIRED_AUTHORED_BEAT and on pre-Slice-E ledger copies.
+   */
+  persistedVerifiedGoldline?: PersistedVerifiedGoldlineReceipt | null;
 };
 
 export type NarrativeEventLedgerEntry = NarrativeEvent & {

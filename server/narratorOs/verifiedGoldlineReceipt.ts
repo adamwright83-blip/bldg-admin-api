@@ -3,8 +3,10 @@ import { VERIFIED_GOLDLINE_RECEIPT_BRAND } from "./verifiedGoldlineReceiptBrand"
 
 /**
  * Opaque verified-Goldline authority. Types and the runtime guard live here.
- * This module does not issue receipts. Production ingestion stays unwired.
- * A structurally similar object without the brand is not a receipt.
+ * This module does not issue receipts. Production issuance lives at the
+ * Goldline verification boundary (`server/goldlineVerification`), not in
+ * Narrator eligibility. A structurally similar object without the brand is
+ * not a receipt.
  */
 export type GoldlineEvidenceClass =
   | "authoritative_external"

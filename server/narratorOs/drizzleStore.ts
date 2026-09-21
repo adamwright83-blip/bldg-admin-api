@@ -11,6 +11,7 @@ import type {
   KnowledgeState,
   NarrativeEventLedgerEntry,
   NarrativeState,
+  PersistedVerifiedGoldlineReceipt,
 } from "../../shared/narratorOs/contracts";
 import { getDb } from "../db";
 import {
@@ -64,6 +65,7 @@ function ledgerFromRow(
 ): NarrativeEventLedgerEntry {
   const payload = (row.payloadJson ?? {}) as {
     evidenceRef?: NarrativeEventLedgerEntry["evidenceRef"];
+    persistedVerifiedGoldline?: PersistedVerifiedGoldlineReceipt | null;
   };
   return {
     id: row.id,
@@ -77,6 +79,17 @@ function ledgerFromRow(
     evidenceRef: payload.evidenceRef ?? null,
     occurredAt: row.occurredAt.toISOString(),
     idempotencyKey: row.idempotencyKey,
+    persistedVerifiedGoldline: payload.persistedVerifiedGoldline ?? null,
+  };
+}
+
+function ledgerPayloadJson(entry: NarrativeEventLedgerEntry): {
+  evidenceRef: NarrativeEventLedgerEntry["evidenceRef"];
+  persistedVerifiedGoldline: PersistedVerifiedGoldlineReceipt | null;
+} {
+  return {
+    evidenceRef: entry.evidenceRef,
+    persistedVerifiedGoldline: entry.persistedVerifiedGoldline ?? null,
   };
 }
 
@@ -267,7 +280,7 @@ export function createDrizzleNarratorStore(): NarratorStore {
           goldlineOutcomeId: stored.goldlineOutcomeId,
           offscreen: stored.offscreen,
           playerVisible: stored.playerVisible,
-          payloadJson: { evidenceRef: stored.evidenceRef },
+          payloadJson: ledgerPayloadJson(stored),
           occurredAt: new Date(stored.occurredAt),
           idempotencyKey: stored.idempotencyKey,
         });
@@ -328,7 +341,7 @@ export function createDrizzleNarratorStore(): NarratorStore {
             goldlineOutcomeId: stored.goldlineOutcomeId,
             offscreen: stored.offscreen,
             playerVisible: stored.playerVisible,
-            payloadJson: { evidenceRef: stored.evidenceRef },
+            payloadJson: ledgerPayloadJson(stored),
             occurredAt: new Date(stored.occurredAt),
             idempotencyKey: stored.idempotencyKey,
           });
