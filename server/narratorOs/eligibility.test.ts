@@ -148,6 +148,9 @@ describe("Narrator OS slice D — ledger + eligibility + persistence", () => {
         ?.failedGates
     ).toContain("incomplete_eligibility");
     expect(
+      result.audit.find(entry => entry.beatId === "M02")?.failedGates
+    ).toContain("incomplete_eligibility");
+    expect(
       result.audit.find(entry => entry.beatId === "M04")?.failedGates
     ).toContain("prerequisite");
     expect(

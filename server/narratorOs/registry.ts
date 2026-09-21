@@ -198,7 +198,9 @@ export const AUTHORED_BEATS: readonly AuthoredBeat[] = Object.freeze([
   }),
   missionBeat("M02", "CONTAINMENT", "LOCKED", {
     authoredSourceRef: "GOLDLINE_CANON.md§4 M02",
-    eligibilityDefinition: "COMPLETE",
+    eligibilityDefinition: "INCOMPLETE",
+    eligibilityIncompleteReason:
+      "GOLDLINE_CANON.md §4 lists M02 allowed action families and truthful-verb rules, but does not define campaign spawn/eligibility relative to prior mission state. An allow-list is not a complete eligibility definition. Known family evidence stays encoded; the missing spawn rule is not invented.",
     defaultSurface: true,
     playerVisibility: true,
     prerequisites: [

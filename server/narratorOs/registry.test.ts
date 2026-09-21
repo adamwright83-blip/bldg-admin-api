@@ -159,6 +159,54 @@ describe("Narrator OS slice C — authored registry + graph", () => {
     }
   });
 
+  it("keeps M02 metadata but marks eligibility incomplete because an allow-list is not a spawn rule", async () => {
+    const snapshot = await newSnapshot();
+    const m02 = getBeat("M02");
+    expect(m02.title).toBe("CONTAINMENT");
+    expect(m02.canonStatus).toBe("LOCKED");
+    expect(m02.defaultSurface).toBe(true);
+    expect(m02.playerVisibility).toBe(true);
+    expect(m02.eligibilityDefinition).toBe("INCOMPLETE");
+    expect(m02.eligibilityIncompleteReason).toMatch(
+      /allow-list is not a complete eligibility definition/i
+    );
+    expect(m02.prerequisites).toContainEqual({
+      kind: "verified_goldline_any",
+      outcomeIds: [
+        "leave_real_packet_or_collateral",
+        "approved_physical_placement",
+        "in_app_verify_placement_just_performed",
+      ],
+    });
+    expect(m02.eligibilityConditions).toContainEqual({
+      kind: "never_manufacture",
+      claim: "physical_verb_mismatch",
+    });
+
+    const withGold = evaluateEligibility(
+      inputFor(snapshot, {
+        verifiedGoldline: [
+          issueVerifiedGoldlineReceiptForTests({
+            receiptId: "receipt:m02-family",
+            tenantId: "t-reg",
+            operatorUserId: "op-reg",
+            outcomeId: "leave_real_packet_or_collateral",
+            evidenceClass: "operator_attested",
+            evidenceRef: {
+              sourceType: "field_visit",
+              sourceReference: "receipt:m02-family",
+              classification: "operator_attested",
+            },
+          }),
+        ],
+      })
+    );
+    const audit = withGold.audit.find(entry => entry.beatId === "M02")!;
+    expect(audit.pass).toBe(false);
+    expect(audit.failedGates).toContain("incomplete_eligibility");
+    expect(withGold.eligibleBeatIds).not.toContain("M02");
+  });
+
   it("does not hard-require C-08 for K-COVE-ORIGIN and does not synthesize a Chemist skip policy", async () => {
     const snapshot = await newSnapshot();
     const result = evaluateEligibility(inputFor(snapshot));
