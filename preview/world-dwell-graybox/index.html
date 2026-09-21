@@ -24,11 +24,11 @@
       padding: 8px 10px; cursor: pointer;
     }
     #debug {
-      position: fixed; top: 0; right: -280px; width: 270px; height: 100%;
-      z-index: 30; background: #1c1e21ee; border-left: 1px solid #555;
-      padding: 14px 12px 24px; overflow-y: auto; transition: right .18s;
+      position: fixed; left: 0; right: 0; bottom: -62%; height: 58%; width: auto;
+      z-index: 30; background: #1c1e21ee; border-top: 1px solid #555;
+      padding: 14px 12px 24px; overflow-y: auto; transition: bottom .18s;
     }
-    #debug.open { right: 0; }
+    #debug.open { bottom: 0; right: 0; }
     #debug h3 { margin: 28px 0 10px; font-size: 11px; letter-spacing: .12em; color: #9a958c; }
     #debug p { font-size: 10px; line-height: 1.45; color: #7d7972; margin: 0 0 12px; }
     .row { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 12px; }
@@ -58,7 +58,8 @@
     <div class="row"><span>Time</span><span id="clockRead">14:00</span></div>
     <input type="range" id="dbgClock" min="0" max="24" step="0.05" value="14" />
     <div class="row"><label><input type="checkbox" id="dbgSound" checked /> Sound</label></div>
-    <p class="note">Touching a toy is never evidence that real work occurred. Lean anywhere on stone/sky. Trace the seam. Lift the bob. Rattle or lift the shutter.</p>
+    <div class="row"><span>Lean</span><span id="leanRead">0.00</span></div>
+    <p class="note">Touching a toy is never evidence that real work occurred. Drag stone/sky to lean (right drag finds the colonnade). Trace the seam. Lift the bob. Rattle or lift the shutter.</p>
   </aside>
   <script src="./scene.js"></script>
 </body>

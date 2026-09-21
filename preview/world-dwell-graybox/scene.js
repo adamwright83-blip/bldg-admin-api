@@ -13,17 +13,17 @@
 
   const VW = 720;
   const VH = 1280;
-  const TRAVEL = 640;
-  const DEPTH = { far: 0.3, mid: 0.6, slack: 0.85, near: 1.1 };
+  const TRAVEL = 720;
+  const DEPTH = { far: 0.3, mid: 0.6, slack: 0.78, near: 1.05, shutter: 0.6 };
   const DEFAULT_LEAN = -0.18;
   const LEAN_MIN = -1;
   const LEAN_MAX = 1;
-  const DRAG_PX = 300;
+  const DRAG_PX = 210;
   const COAST_TAU = 0.22;
   const SETTLE_OFF_STOP = 0.08;
   const WIRE_HIT = 34;
   const WIRE_SCRAPE = 22;
-  const BOB_HIT = 42;
+  const BOB_HIT = 52;
   const SLOW_TRACE_MS = 1100;
   const RUSH_PX_S = 780;
 
@@ -38,10 +38,10 @@
     [1088, 652],
   ];
   const SLACK_PATH = [
-    [88, 1072],
-    [196, 996],
-    [430, 886],
-    [690, 812],
+    [120, 1044],
+    [250, 978],
+    [480, 898],
+    [700, 844],
   ];
 
   const state = {
@@ -72,6 +72,17 @@
     scrapeUntil: 0,
     nightWind: false,
   };
+
+  const q = new URLSearchParams(location.search);
+  if (q.has("lean")) state.lean = clamp(Number(q.get("lean")), LEAN_MIN, LEAN_MAX);
+  if (state.lean > 0.38) state.seenColonnade = true;
+  if (q.get("gold") === "1") state.gold = true;
+  if (q.get("slack") === "1") state.slack = true;
+  if (["none", "pending", "keep", "miss"].includes(q.get("shutter"))) {
+    state.shutterMode = q.get("shutter");
+  }
+  if (q.has("clock")) state.clock = Number(q.get("clock"));
+  if (q.get("open") === "1") state.shutterLift = 1;
 
   let audioCtx = null;
   let windGain = null;
@@ -116,6 +127,14 @@
         }
       }
     });
+  }
+
+  document.getElementById("dbgGold").checked = state.gold;
+  document.getElementById("dbgSlack").checked = state.slack;
+  document.getElementById("dbgClock").value = String(state.clock);
+  document.getElementById("clockRead").textContent = fmtClock(state.clock);
+  for (const el of document.querySelectorAll('input[name="shutter"]')) {
+    el.checked = el.value === state.shutterMode;
   }
 
   function fmtClock(h) {
@@ -355,8 +374,8 @@
     drawFar();
     drawMid();
     drawStronghold();
-    drawSlackAndBob();
     drawNearParapet();
+    drawSlackAndBob();
     drawShutterLeaf();
   }
 
@@ -392,21 +411,21 @@
     ctx.closePath();
     ctx.fill();
 
-    const hint = state.seenColonnade ? 72 : 0;
-    const baseX = 820 - hint;
-    const colW = 46;
-    const gap = 78;
+    const hint = state.seenColonnade ? 80 : 0;
+    const baseX = 780 - hint;
+    const colW = 62;
+    const gap = 96;
     for (let i = 0; i < 4; i++) {
       const half = i === 3;
       const x = baseX + i * gap;
-      const w = half ? colW * 0.55 : colW;
-      const top = 448;
-      const bot = 860;
-      ctx.fillStyle = night ? "#4a4944" : "#6e6c66";
+      const w = half ? colW * 0.52 : colW;
+      const top = 250;
+      const bot = 528;
+      ctx.fillStyle = night ? "#4a4944" : "#7a7870";
       ctx.fillRect(tx(x, d), ty(top, d), w, bot - top);
       ctx.fillStyle = night ? "#3f3e3a" : "#5f5d57";
-      ctx.fillRect(tx(x - 10, d), ty(top - 18, d), w + 20, 22);
-      ctx.fillRect(tx(x - 8, d), ty(bot - 10, d), w + 16, 18);
+      ctx.fillRect(tx(x - 12, d), ty(top - 20, d), w + 24, 24);
+      ctx.fillRect(tx(x - 10, d), ty(bot - 14, d), w + 20, 22);
     }
   }
 
@@ -463,7 +482,7 @@
   }
 
   function shutterRect() {
-    return { x: -44, y: 612, w: 78, h: 148, d: DEPTH.near };
+    return { x: -40, y: 612, w: 86, h: 156, d: DEPTH.shutter };
   }
 
   function drawStronghold() {
@@ -510,7 +529,7 @@
     const left = state.lean < -0.35;
     if (left || keep) {
       ctx.fillStyle = keep ? "#6a4a32" : "#30302c";
-      ctx.fillRect(tx(-48, DEPTH.near * 0.95), ty(760, DEPTH.near * 0.95), 96, 18);
+      ctx.fillRect(tx(-48, d), ty(760, d), 96, 18);
     }
 
     ctx.fillStyle = "#2a2a28";
@@ -533,29 +552,35 @@
     const tx0 = tx(tick[0], d);
     const ty0 = ty(tick[1], d);
     ctx.strokeStyle = "#1f1f1d";
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(tx0 - 11, ty0);
-    ctx.lineTo(tx0 + 11, ty0);
+    ctx.moveTo(tx0 - 16, ty0);
+    ctx.lineTo(tx0 + 16, ty0);
+    ctx.stroke();
+    ctx.strokeStyle = "#c8c4ba";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(tx0 - 7, ty0);
+    ctx.lineTo(tx0 + 7, ty0);
     ctx.stroke();
 
-    const restMiss = 16;
-    const hang = 54 - state.bobLift + state.bobY;
+    const restMiss = 18;
+    const hang = 46 - state.bobLift + state.bobY;
     const bobX = tx0 + restMiss;
     const bobY = ty0 + hang;
     ctx.strokeStyle = "#6a6560";
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(tx0, ty0);
-    ctx.lineTo(bobX, bobY - 16);
+    ctx.lineTo(bobX, bobY - 18);
     ctx.stroke();
-    ctx.fillStyle = "#6a6560";
+    ctx.fillStyle = "#5a564f";
     ctx.beginPath();
-    ctx.arc(bobX, bobY, 13, 0, Math.PI * 2);
+    ctx.arc(bobX, bobY, 18, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = "#8a8680";
     ctx.beginPath();
-    ctx.arc(bobX - 3, bobY - 4, 4, 0, Math.PI * 2);
+    ctx.arc(bobX - 4, bobY - 5, 5, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -624,15 +649,15 @@
     const r = shutterRect();
     const x = tx(r.x, r.d);
     const y = ty(r.y, r.d) - state.shutterLift * (r.h - 18);
-    return px >= x - 10 && px <= x + r.w + 10 && py >= y - 10 && py <= y + r.h + 10;
+    return px >= x - 22 && px <= x + r.w + 22 && py >= y - 22 && py <= y + r.h + 22;
   }
 
   function hitBob(px, py) {
     if (!state.slack) return false;
     const tick = pointAt(SLACK_PATH, 0.42);
     const d = DEPTH.slack;
-    const hang = 54 - state.bobLift + state.bobY;
-    const bobX = tx(tick[0], d) + 16;
+    const hang = 46 - state.bobLift + state.bobY;
+    const bobX = tx(tick[0], d) + 18;
     const bobY = ty(tick[1], d) + hang;
     return Math.hypot(px - bobX, py - bobY) < BOB_HIT;
   }
@@ -652,13 +677,16 @@
     const p = screenFromEvent(e);
     const now = performance.now();
 
-    if (hitBob(p.x, p.y)) {
-      state.pointer = { kind: "bob", id: e.pointerId, y: p.y, lift0: state.bobLift };
-      state.bobHeld = true;
-      state.bobV = 0;
-      state.settleTarget = 22;
-      beep("creak");
-      return;
+    if (state.slack) {
+      const slackHit = closestWorld(SLACK_PATH, p, DEPTH.slack);
+      if (hitBob(p.x, p.y) || slackHit.dist < WIRE_HIT + 8) {
+        state.pointer = { kind: "bob", id: e.pointerId, y: p.y, lift0: state.bobLift };
+        state.bobHeld = true;
+        state.bobV = 0;
+        state.settleTarget = 22;
+        beep("creak");
+        return;
+      }
     }
 
     const goldHit = closestWorld(GOLD_PATH, p, DEPTH.mid);
@@ -676,16 +704,6 @@
       state.tracing = goldHit;
       state.settleTarget = 26;
       return;
-    }
-
-    if (state.slack) {
-      const slackHit = closestWorld(SLACK_PATH, p, DEPTH.slack);
-      if (slackHit.dist < WIRE_HIT) {
-        state.pointer = { kind: "slack-wire", id: e.pointerId };
-        beep("creak");
-        state.settleTarget = 20;
-        return;
-      }
     }
 
     if (hitShutter(p.x, p.y)) {
@@ -735,7 +753,7 @@
         beep("gravel");
         state.lastMove = now;
       }
-      if (state.lean > 0.62) state.seenColonnade = true;
+      if (state.lean > 0.38) state.seenColonnade = true;
       return;
     }
 
@@ -771,10 +789,10 @@
       const dx = p.x - ptr.x;
       ptr.maxUp = Math.max(ptr.maxUp, dy);
       if (state.shutterMode === "keep") {
-        const next = clamp(ptr.lift0 + dy / 160, 0, 1);
+        const next = clamp(ptr.lift0 + dy / 90, 0, 1);
         state.shutterLift = next;
       } else {
-        state.rattleX = clamp(dx * 0.25, -10, 10);
+        state.rattleX = clamp(dx * 0.45, -16, 16);
         state.shutterLift = 0;
       }
     }
@@ -794,7 +812,7 @@
         v = (b.x - a.x) / dt;
       }
       state.vel = v * (1000 / DRAG_PX);
-      if (state.lean > 0.62) state.seenColonnade = true;
+      if (state.lean > 0.38) state.seenColonnade = true;
     }
 
     if (ptr.kind === "bob") {
@@ -823,15 +841,15 @@
 
     if (ptr.kind === "shutter") {
       if (state.shutterMode === "keep") {
-        if (ptr.maxUp > 48 && state.shutterLift > 0.42) {
-          state.shutterLiftVel = 1.6;
+        if (ptr.maxUp > 28 || state.shutterLift > 0.22) {
+          state.shutterLiftVel = 1.8;
         } else if (state.shutterLift < 0.92) {
           state.shutterLiftVel = -2.2;
         }
         if (state.shutterLift > 0.95) beep("knock");
       } else {
-        state.rattleV = Math.abs(state.rattleX) > 1 ? -state.rattleX * 8 : 90;
-        state.rattleX = state.rattleX || 8;
+        state.rattleV = Math.abs(state.rattleX) > 1 ? -state.rattleX * 14 : 140;
+        state.rattleX = state.rattleX || 14;
         beep("clack");
         state.shutterLift = 0;
       }
@@ -915,10 +933,15 @@
     lastT = now;
     step(dt);
     draw();
+    const leanEl = document.getElementById("leanRead");
+    if (leanEl) leanEl.textContent = state.lean.toFixed(2);
     requestAnimationFrame(loop);
   }
 
   cv.addEventListener("pointerdown", onDown);
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onUp);
   cv.addEventListener("pointermove", onMove);
   cv.addEventListener("pointerup", onUp);
   cv.addEventListener("pointercancel", onUp);
