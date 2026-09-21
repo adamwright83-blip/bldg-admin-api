@@ -29,7 +29,7 @@ const ABANDON = /\b(?:forget|drop|never\s+mind|nevermind|scratch)\s+(?:that|it|a
 
 /** A change of the dimension under which the problem is considered. */
 const SET_SHIFT =
-  /\b(?:instead\s+of|rather\s+than|don'?t\s+look\s+at|stop\s+looking\s+at)\b|\bcompare\b[\s\S]{0,40}\binstead\b/i;
+  /(?:^|[.!?]\s+)(?:instead|rather)\b|\b(?:instead\s+of|rather\s+than|don'?t\s+look\s+at|stop\s+looking\s+at)\b|\bcompare\b[\s\S]{0,40}\binstead\b/i;
 
 /**
  * Classify how this turn differs from the last.
@@ -140,9 +140,9 @@ export function gateWorkingMemory(input: {
     rule("task_set", "maintain", "allow", "the active frame continues");
   }
 
-  // Continuing a resolved result and setting pending work aside are independent
-  // slot rulings. A global task_switch must not reset the query thread the
-  // utterance is actually walking.
+  // Pending-work output and ordered-query output are independent slots.
+  // Explicit abandonment / set-shift still outranks both: it closes the old
+  // query thread even when the new wording looks like a refinement.
   const continuing =
     perceived.priorQueryReference ||
     perceived.businessIntent === "query_refinement" ||
@@ -171,10 +171,10 @@ export function gateWorkingMemory(input: {
   // ── Ordered query thread ──────────────────────────────────────────────────
   if (!memory.orderedQuery) {
     rule("ordered_query", "maintain", "suppress", "no ordered result in play");
+  } else if (change === "task_switch" || change === "set_shift") {
+    rule("ordered_query", "replace", "suppress", "explicit switch closes the previous result; it may not answer this turn");
   } else if (continuing) {
     rule("ordered_query", "update", "allow", "the operator is continuing this result");
-  } else if (change === "task_switch" || change === "set_shift") {
-    rule("ordered_query", "replace", "suppress", "a new query thread replaces the old one, resetting exclusions");
   } else {
     rule("ordered_query", "maintain", "suppress", "a new question does not continue the old result");
   }

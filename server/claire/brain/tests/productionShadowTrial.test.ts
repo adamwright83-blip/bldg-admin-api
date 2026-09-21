@@ -117,6 +117,19 @@ function afterFiveSales() {
   return { orderedQuery: recordPresented(opened, FIVE) };
 }
 
+function afterPresentingFirst() {
+  const opened = openOrderedQuery({
+    queryFingerprint: "latest_sales:5",
+    parameters: { metric: "latest_sales", limit: 5 },
+    requestedCardinality: 5,
+    ordering: "last",
+    anchorEntity: null,
+    resolved: FIVE,
+    sourceEvidence: SOURCE,
+  });
+  return { orderedQuery: recordPresented(opened, [FIVE[0]!]) };
+}
+
 function deps(retrieve: ExecutiveDeps["retrieve"] = async () => []): ExecutiveDeps {
   return { retrieve, ctx: INTEGRATION };
 }
@@ -248,22 +261,12 @@ describe("E. unfinished voice is held, not reasoned", () => {
 
 describe("ordered continuation, mixed lanes, hangup, and authority", () => {
   it("the other four continues the ordered result", async () => {
-    const result = await brain("What about the other four?", {
-      orderedQuery: recordPresented(
-        openOrderedQuery({
-          queryFingerprint: "latest_sales:5",
-          parameters: { metric: "latest_sales", limit: 5 },
-          requestedCardinality: 5,
-          ordering: "last",
-          anchorEntity: null,
-          resolved: FIVE,
-          sourceEvidence: SOURCE,
-        }),
-        [FIVE[0]!]
-      ),
-    });
+    const result = await brain("What about the other four?", afterPresentingFirst());
     expect(result.decision.attention.continueOrderedQuery).toBe(true);
     expect(result.decision.perceivedTurn.businessIntent).toBe("query_refinement");
+    expect(result.decision.workingMemoryUpdate?.continuationPresented?.map(member => member.id)).toEqual(
+      FIVE.slice(1).map(member => member.id)
+    );
   });
 
   it("pending unrelated work does not reset an ordered-query continuation", async () => {
@@ -312,6 +315,35 @@ describe("ordered continuation, mixed lanes, hangup, and authority", () => {
     expect(second.decision.workingMemoryUpdate?.continuationPresented?.map(member => member.id)).toEqual(
       FIVE.slice(1).map(member => member.id)
     );
+  });
+
+  it("Forget that; just show my most recent order does not continue the abandoned result", async () => {
+    const result = await brain(
+      "Forget that; just show my most recent order.",
+      afterPresentingFirst(),
+      async request => (request.kind === "business_query" ? [sales] : [])
+    );
+    expect(result.decision.control.change).toBe("task_switch");
+    expect(result.decision.control.workingMemoryGates.find(gate => gate.slot === "ordered_query")?.input).toBe("replace");
+    expect(result.decision.control.workingMemoryGates.find(gate => gate.slot === "ordered_query")?.output).toBe(
+      "suppress"
+    );
+    expect(result.decision.attention.continueOrderedQuery).toBe(false);
+    expect(result.decision.workingMemoryUpdate?.continuationPresented).toBeUndefined();
+  });
+
+  it("Instead, show my most recent order does not continue the previous result", async () => {
+    const result = await brain(
+      "Instead, show my most recent order.",
+      afterPresentingFirst(),
+      async request => (request.kind === "business_query" ? [sales] : [])
+    );
+    expect(result.decision.control.change).toBe("set_shift");
+    expect(result.decision.control.workingMemoryGates.find(gate => gate.slot === "ordered_query")?.output).toBe(
+      "suppress"
+    );
+    expect(result.decision.attention.continueOrderedQuery).toBe(false);
+    expect(result.decision.workingMemoryUpdate?.continuationPresented).toBeUndefined();
   });
 
   it("mixed personal + business still preserves the business answer", async () => {
