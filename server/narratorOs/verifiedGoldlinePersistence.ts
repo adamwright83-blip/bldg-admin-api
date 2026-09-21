@@ -7,6 +7,7 @@
  * A caller-constructed ledger-shaped object is still not a receipt.
  */
 import type { PersistedVerifiedGoldlineReceipt } from "../../shared/narratorOs/contracts";
+import { persistedReceiptMatchesLedgerIdentity } from "./goldlineReceiptIdentity";
 import type { NarratorSnapshot } from "./store";
 import {
   isGoldlineTargetRef,
@@ -37,6 +38,10 @@ export function persistableVerifiedGoldlineReceipt(
       ? { kind: "goldline_target", id: receipt.targetRef.id }
       : null,
     occurredAtMs: receipt.occurredAtMs,
+    ...(receipt.producerNamespace
+      ? { producerNamespace: receipt.producerNamespace }
+      : {}),
+    ...(receipt.sourceEventId ? { sourceEventId: receipt.sourceEventId } : {}),
   };
 }
 
@@ -68,7 +73,13 @@ export function isPersistedVerifiedGoldlineReceipt(
     persisted.evidenceRef.classification === persisted.evidenceClass &&
     targetOk &&
     typeof persisted.occurredAtMs === "number" &&
-    Number.isFinite(persisted.occurredAtMs)
+    Number.isFinite(persisted.occurredAtMs) &&
+    (persisted.producerNamespace === undefined ||
+      (typeof persisted.producerNamespace === "string" &&
+        persisted.producerNamespace.length > 0)) &&
+    (persisted.sourceEventId === undefined ||
+      (typeof persisted.sourceEventId === "string" &&
+        persisted.sourceEventId.length > 0))
   );
 }
 
@@ -95,6 +106,12 @@ function rehydrateOne(
         })
       : null,
     occurredAtMs: persisted.occurredAtMs,
+    ...(persisted.producerNamespace
+      ? { producerNamespace: persisted.producerNamespace }
+      : {}),
+    ...(persisted.sourceEventId
+      ? { sourceEventId: persisted.sourceEventId }
+      : {}),
   });
 }
 
@@ -112,9 +129,9 @@ export function rehydratePersistedVerifiedGoldlineReceipts(
     if (entry.kind !== "VERIFIED_GOLDLINE_OUTCOME") continue;
     const persisted = entry.persistedVerifiedGoldline;
     if (!isPersistedVerifiedGoldlineReceipt(persisted)) continue;
+    if (!persistedReceiptMatchesLedgerIdentity(entry, persisted)) continue;
     if (persisted.tenantId !== snapshot.tenantId) continue;
     if (persisted.operatorUserId !== snapshot.operatorUserId) continue;
-    if (persisted.outcomeId !== entry.goldlineOutcomeId) continue;
     if (seen.has(persisted.receiptId)) continue;
     seen.add(persisted.receiptId);
     receipts.push(rehydrateOne(persisted));

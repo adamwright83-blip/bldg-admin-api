@@ -2,20 +2,23 @@
  * Production Goldline → Narrator receipt issuer.
  *
  * Lives at the Goldline verification boundary, not inside Narrator
- * eligibility. Narrator cannot self-issue. There is no generic public
- * "make verified receipt" API: callers must supply an authoritative
- * mutation record with opaque target identity and trusted chronology.
- *
- * No production mutation is registered in Slice E. The issuer is ready;
- * attaching it to a weak producer is forbidden.
+ * eligibility. Narrator cannot self-issue. A structurally constructible
+ * mutation record is not authority. Issuance requires a branded producer
+ * capability. The production capability list is empty: production minting
+ * is currently impossible.
  */
 import type { VerifiedGoldlineEvidenceRef } from "../../shared/narratorOs/contracts";
+import { goldlineReceiptIdFromAuthoritativeIdentity } from "../narratorOs/goldlineReceiptIdentity";
 import {
   isGoldlineTargetRef,
   type GoldlineEvidenceClass,
   type VerifiedGoldlineReceipt,
 } from "../narratorOs/verifiedGoldlineReceipt";
 import { VERIFIED_GOLDLINE_RECEIPT_BRAND } from "../narratorOs/verifiedGoldlineReceiptBrand";
+import {
+  isAuthorizedGoldlineProducerCapability,
+  type GoldlineProducerCapability,
+} from "./producerCapability";
 import {
   isSupportedProductionGoldlineOutcomeId,
   type SupportedProductionGoldlineOutcomeId,
@@ -49,11 +52,8 @@ export class UnsupportedGoldlineProducerError extends Error {
   }
 }
 
-function stableReceiptId(sourceEventId: string, tenantId: string): string {
-  return `glv:${tenantId}:${sourceEventId}`;
-}
-
 function assertIssuableMutation(
+  producer: GoldlineProducerCapability,
   mutation: AuthoritativeGoldlineMutation
 ): asserts mutation is AuthoritativeGoldlineMutation & {
   outcomeId: SupportedProductionGoldlineOutcomeId;
@@ -74,11 +74,21 @@ function assertIssuableMutation(
       `outcome ${JSON.stringify(mutation.outcomeId)} is not a supported production outcome`
     );
   }
+  if (!producer.allowedOutcomeIds.includes(mutation.outcomeId)) {
+    throw new UntrustedGoldlineIssuanceError(
+      `producer ${producer.producerNamespace} is not authorized for ${mutation.outcomeId}`
+    );
+  }
   if (
     mutation.evidenceClass !== "authoritative_external" &&
     mutation.evidenceClass !== "operator_attested"
   ) {
     throw new UntrustedGoldlineIssuanceError("evidenceClass is not trusted");
+  }
+  if (!producer.allowedEvidenceClasses.includes(mutation.evidenceClass)) {
+    throw new UntrustedGoldlineIssuanceError(
+      `producer ${producer.producerNamespace} is not authorized for ${mutation.evidenceClass}`
+    );
   }
   if (
     mutation.sourceVerificationClass !== "VERIFIED" &&
@@ -125,13 +135,22 @@ function assertIssuableMutation(
 }
 
 /**
- * Issue a branded receipt from an already-authoritative Goldline mutation.
- * Does not persist. Does not evaluate eligibility. Does not fire beats.
+ * Issue a branded receipt from an already-authoritative Goldline mutation
+ * presented by an authorized producer capability. Does not persist. Does
+ * not evaluate eligibility. Does not fire beats.
  */
-export function issueVerifiedGoldlineReceiptFromAuthoritativeMutation(
-  mutation: AuthoritativeGoldlineMutation
-): VerifiedGoldlineReceipt {
-  assertIssuableMutation(mutation);
+export function issueVerifiedGoldlineReceiptFromAuthoritativeMutation(input: {
+  producer: GoldlineProducerCapability;
+  mutation: AuthoritativeGoldlineMutation;
+}): VerifiedGoldlineReceipt {
+  if (!isAuthorizedGoldlineProducerCapability(input.producer)) {
+    throw new UntrustedGoldlineIssuanceError(
+      "missing authorized producer capability"
+    );
+  }
+  const producer = input.producer;
+  const mutation = input.mutation;
+  assertIssuableMutation(producer, mutation);
   const targetRef = Object.freeze({
     kind: "goldline_target" as const,
     id: mutation.targetId,
@@ -141,9 +160,15 @@ export function issueVerifiedGoldlineReceiptFromAuthoritativeMutation(
       "targetRef is not an opaque goldline_target"
     );
   }
+  const receiptId = goldlineReceiptIdFromAuthoritativeIdentity({
+    tenantId: mutation.tenantId,
+    operatorUserId: mutation.operatorUserId,
+    producerNamespace: producer.producerNamespace,
+    sourceEventId: mutation.sourceEventId,
+  });
   return Object.freeze({
     [VERIFIED_GOLDLINE_RECEIPT_BRAND]: true as const,
-    receiptId: stableReceiptId(mutation.sourceEventId, mutation.tenantId),
+    receiptId,
     tenantId: mutation.tenantId,
     operatorUserId: mutation.operatorUserId,
     outcomeId: mutation.outcomeId,
@@ -156,5 +181,7 @@ export function issueVerifiedGoldlineReceiptFromAuthoritativeMutation(
     }),
     targetRef,
     occurredAtMs: mutation.occurredAtMs,
+    producerNamespace: producer.producerNamespace,
+    sourceEventId: mutation.sourceEventId,
   });
 }

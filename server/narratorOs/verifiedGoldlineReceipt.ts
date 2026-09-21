@@ -50,6 +50,8 @@ export type VerifiedGoldlineReceipt = {
    * free-form sourceReference.
    */
   readonly occurredAtMs: number;
+  readonly producerNamespace?: string;
+  readonly sourceEventId?: string;
 };
 
 export function isVerifiedGoldlineReceipt(
@@ -86,6 +88,12 @@ export function isVerifiedGoldlineReceipt(
       evidenceRef.classification === "operator_attested") &&
     evidenceRef.classification === receipt.evidenceClass &&
     targetRefOk &&
-    occurredAtOk
+    occurredAtOk &&
+    (receipt.producerNamespace === undefined ||
+      (typeof receipt.producerNamespace === "string" &&
+        receipt.producerNamespace.length > 0)) &&
+    (receipt.sourceEventId === undefined ||
+      (typeof receipt.sourceEventId === "string" &&
+        receipt.sourceEventId.length > 0))
   );
 }

@@ -28,6 +28,7 @@ import {
   type OperatorScope,
 } from "./store";
 import { NARRATOR_WORLD_TRUTH_VERSION, WORLD_TRUTH_FACTS } from "./worldTruth";
+import { resolveDuplicateNarratorLedgerInsert } from "./goldlineLedgerReplay";
 
 function seedState(): NarrativeState {
   return {
@@ -128,6 +129,7 @@ function knowledgeRowsFor(
   });
 }
 
+export { resolveDuplicateNarratorLedgerInsert } from "./goldlineLedgerReplay";
 export function createDrizzleNarratorStore(): NarratorStore {
   return {
     async initOperator(scope) {
@@ -296,7 +298,14 @@ export function createDrizzleNarratorStore(): NarratorStore {
               )
             )
             .limit(1);
-          if (existing) return ledgerFromRow(existing);
+          if (existing) {
+            // Duplicate Goldline rows must verify payload identity; never
+            // return ledgerFromRow(existing) without conflict detection.
+            return resolveDuplicateNarratorLedgerInsert(
+              ledgerFromRow(existing),
+              stored
+            );
+          }
         }
         throw error;
       }

@@ -31,8 +31,20 @@ export function isSupportedProductionGoldlineOutcomeId(
 }
 
 /**
- * Production mutation functions allowed to call the issuer.
- * Empty on purpose: none of the COMPLETE-mission outcomes currently have a
- * trustworthy producer. Do not put a name here to "complete the table."
+ * Closed production producer registry. Empty on purpose: none of the
+ * COMPLETE-mission outcomes currently have a trustworthy producer. Do not
+ * put a name here to complete the table. A future producer is an explicit
+ * code change here (namespace + allowed outcomes + evidence classes) plus
+ * a named capability constant minted in producerCapability.ts.
  */
-export const REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS: readonly [] = [];
+export type ProductionGoldlineProducerDefinition = {
+  readonly producerNamespace: string;
+  readonly allowedOutcomeIds: readonly SupportedProductionGoldlineOutcomeId[];
+  readonly allowedEvidenceClasses: readonly (
+    | "authoritative_external"
+    | "operator_attested"
+  )[];
+};
+
+export const REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS: readonly ProductionGoldlineProducerDefinition[] =
+  [];

@@ -14,6 +14,7 @@ import type {
   NarrativeState,
 } from "../../shared/narratorOs/contracts";
 import { WORLD_TRUTH_FACTS, NARRATOR_WORLD_TRUTH_VERSION } from "./worldTruth";
+import { resolveDuplicateNarratorLedgerInsert } from "./goldlineLedgerReplay";
 
 function keyOf(scope: OperatorScope): string {
   return `${scope.tenantId}::${scope.operatorUserId}`;
@@ -90,16 +91,18 @@ export function createInMemoryNarratorStore(
     async appendLedger(scope, entry) {
       const current = rows.get(keyOf(scope));
       if (!current) throw new Error("Narrator operator is not initialized");
-      const duplicate = current.ledger.find(
-        row => row.idempotencyKey === entry.idempotencyKey
-      );
-      if (duplicate) return duplicate;
       const stored: NarrativeEventLedgerEntry = {
         ...entry,
         id: entry.id ?? randomUUID(),
         tenantId: scope.tenantId,
         operatorUserId: scope.operatorUserId,
       };
+      const duplicate = current.ledger.find(
+        row => row.idempotencyKey === stored.idempotencyKey
+      );
+      if (duplicate) {
+        return resolveDuplicateNarratorLedgerInsert(duplicate, stored);
+      }
       rows.set(keyOf(scope), {
         ...current,
         ledger: [...current.ledger, stored],
@@ -113,6 +116,16 @@ export function createInMemoryNarratorStore(
         row => row.idempotencyKey === commit.ledgerEntry.idempotencyKey
       );
       if (duplicate) {
+        const incoming: NarrativeEventLedgerEntry = {
+          ...commit.ledgerEntry,
+          id: commit.ledgerEntry.id ?? duplicate.id,
+          tenantId: scope.tenantId,
+          operatorUserId: scope.operatorUserId,
+        };
+        const resolved = resolveDuplicateNarratorLedgerInsert(
+          duplicate,
+          incoming
+        );
         rows.set(keyOf(scope), {
           ...current,
           knowledge: cloneKnowledge(commit.knowledge),
@@ -122,7 +135,7 @@ export function createInMemoryNarratorStore(
             holdOpenedAtMs: { ...commit.narrativeState.holdOpenedAtMs },
           },
         });
-        return duplicate;
+        return resolved;
       }
       const stored: NarrativeEventLedgerEntry = {
         ...commit.ledgerEntry,

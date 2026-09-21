@@ -18,6 +18,8 @@ import {
   getBeat,
   isKnownBeatId,
 } from "./registry";
+import { goldlineLedgerIdempotencyKey } from "./goldlineReceiptIdentity";
+import { ConflictingGoldlineLedgerReplayError } from "./goldlineLedgerReplay";
 import {
   persistableVerifiedGoldlineReceipt,
   productionVerifiedGoldlineEvidence,
@@ -229,6 +231,8 @@ export async function commitFiredBeat(input: {
   );
 }
 
+export { ConflictingGoldlineLedgerReplayError };
+
 export class UntrustedGoldlineReceiptError extends Error {
   constructor(detail: string) {
     super(`Narrator cannot persist untrusted Goldline evidence: ${detail}`);
@@ -276,7 +280,7 @@ export async function recordVerifiedGoldlineOutcome(input: {
       classification: receipt.evidenceRef.classification,
     },
     occurredAt: input.nowIso ?? new Date(receipt.occurredAtMs).toISOString(),
-    idempotencyKey: `goldline:${receipt.receiptId}`,
+    idempotencyKey: goldlineLedgerIdempotencyKey(receipt.receiptId),
     persistedVerifiedGoldline: persistableVerifiedGoldlineReceipt(receipt),
   });
 }

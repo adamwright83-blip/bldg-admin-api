@@ -328,6 +328,8 @@ export type PersistedVerifiedGoldlineReceipt = {
   evidenceRef: VerifiedGoldlineEvidenceRef;
   targetRef: { kind: "goldline_target"; id: string } | null;
   occurredAtMs: number;
+  producerNamespace?: string;
+  sourceEventId?: string;
 };
 
 export type NarrativeEvent = {
