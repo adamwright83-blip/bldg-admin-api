@@ -5,13 +5,18 @@ import {
   type NarrativeState,
 } from "../../shared/narratorOs/contracts";
 import {
-  evaluateEligibility,
+  evaluateProductionEligibility,
   isEligibilityAuthorization,
   issueEligibilityAuthorizations,
   type EligibilityAuthorization,
   type EligibilityInput,
 } from "./eligibility";
-import { getBeat, isKnownBeatId } from "./registry";
+import {
+  AUTHORED_BEATS,
+  AUTHORED_GRAPH,
+  getBeat,
+  isKnownBeatId,
+} from "./registry";
 import {
   isVerifiedGoldlineReceipt,
   type VerifiedGoldlineReceipt,
@@ -106,16 +111,20 @@ export async function commitAuthorizedBeat(input: {
   const snapshot = await input.store.load(input.scope);
   if (!snapshot) throw new Error("Narrator operator is not initialized");
 
+  if (!isKnownBeatId(authorization.beatId)) {
+    throw new UnknownBeatLedgerError(authorization.beatId);
+  }
+
   const liveInput: EligibilityInput = {
-    ...input.eligibility,
     snapshot,
+    verifiedGoldline: input.eligibility.verifiedGoldline,
+    nowMs: input.eligibility.nowMs,
+    mode: input.eligibility.mode,
+    registry: AUTHORED_BEATS,
+    graph: AUTHORED_GRAPH,
   };
-  const result = evaluateEligibility(liveInput);
-  const authorizedIds = new Set([
-    ...result.eligibleBeatIds,
-    ...result.withheldBeatIds,
-  ]);
-  if (!authorizedIds.has(authorization.beatId)) {
+  const result = evaluateProductionEligibility(liveInput);
+  if (!result.eligibleBeatIds.includes(authorization.beatId)) {
     const audit = result.audit.find(
       entry => entry.beatId === authorization.beatId
     );
@@ -125,12 +134,7 @@ export async function commitAuthorizedBeat(input: {
     );
   }
 
-  const beat =
-    liveInput.registry.find(entry => entry.id === authorization.beatId) ??
-    (isKnownBeatId(authorization.beatId)
-      ? getBeat(authorization.beatId)
-      : undefined);
-  if (!beat) throw new UnknownBeatLedgerError(authorization.beatId);
+  const beat = getBeat(authorization.beatId);
   if (beat.canonStatus === "OPEN") {
     throw new IneligibleBeatCommitError(beat.id, "OPEN beats cannot fire");
   }
@@ -224,6 +228,12 @@ export async function recordVerifiedGoldlineOutcome(input: {
     throw new UntrustedGoldlineReceiptError("missing authorized receipt");
   }
   const receipt = input.receipt;
+  if (
+    receipt.tenantId !== input.scope.tenantId ||
+    receipt.operatorUserId !== input.scope.operatorUserId
+  ) {
+    throw new UntrustedGoldlineReceiptError("receipt scope mismatch");
+  }
   if (input.relatedBeatId && !isKnownBeatId(input.relatedBeatId)) {
     throw new UnknownBeatLedgerError(input.relatedBeatId);
   }
@@ -244,7 +254,7 @@ export async function recordVerifiedGoldlineOutcome(input: {
         classification: receipt.evidenceRef.classification,
       },
       occurredAt: input.nowIso ?? new Date().toISOString(),
-      idempotencyKey: `goldline:${receipt.outcomeId}`,
+      idempotencyKey: `goldline:${receipt.receiptId}`,
     },
   });
 }
@@ -255,18 +265,21 @@ export async function fireOffscreenIfLegal(input: {
   eligibility: EligibilityInput;
 }): Promise<{ fired: readonly string[] }> {
   const offscreenInput: EligibilityInput = {
-    ...input.eligibility,
+    snapshot: input.eligibility.snapshot,
+    verifiedGoldline: input.eligibility.verifiedGoldline,
+    nowMs: input.eligibility.nowMs,
     mode: "offscreen",
+    registry: AUTHORED_BEATS,
+    graph: AUTHORED_GRAPH,
   };
-  const result = evaluateEligibility(offscreenInput);
-  if (result.outcome === "NO_ELIGIBLE") return { fired: [] };
+  const result = evaluateProductionEligibility(offscreenInput);
+  if (result.outcome !== "ELIGIBLE") return { fired: [] };
   const authorizations = issueEligibilityAuthorizations(result, offscreenInput);
   const fired: string[] = [];
   for (const authorization of authorizations) {
-    const beat = offscreenInput.registry.find(
-      entry => entry.id === authorization.beatId
-    );
-    if (!beat || beat.mayFireOffscreen !== true) continue;
+    if (!isKnownBeatId(authorization.beatId)) continue;
+    const beat = getBeat(authorization.beatId);
+    if (beat.mayFireOffscreen !== true) continue;
     await commitAuthorizedBeat({
       store: input.store,
       scope: input.scope,

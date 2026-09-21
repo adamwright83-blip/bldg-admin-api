@@ -127,6 +127,9 @@ describe("Narrator OS slice C — authored registry + graph", () => {
       inputFor(snapshot, {
         verifiedGoldline: [
           issueVerifiedGoldlineReceiptForTests({
+            receiptId: "receipt:17k_physically_evidenced_in_hand",
+            tenantId: "t-reg",
+            operatorUserId: "op-reg",
             outcomeId: "17k_physically_evidenced_in_hand",
             evidenceClass: "authoritative_external",
             evidenceRef: {

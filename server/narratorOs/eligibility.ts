@@ -14,6 +14,7 @@ import {
   type KnowledgeState,
 } from "../../shared/narratorOs/contracts";
 import { planeKnows, type NarratorSnapshot } from "./store";
+import { AUTHORED_BEATS, AUTHORED_GRAPH } from "./registry";
 import {
   isVerifiedGoldlineReceipt,
   type VerifiedGoldlineReceipt,
@@ -62,11 +63,15 @@ function check(
 
 function goldlineHas(
   receipts: readonly VerifiedGoldlineReceipt[],
-  outcomeId: string
+  outcomeId: string,
+  snapshot: NarratorSnapshot
 ): boolean {
   return receipts.some(
     receipt =>
-      isVerifiedGoldlineReceipt(receipt) && receipt.outcomeId === outcomeId
+      isVerifiedGoldlineReceipt(receipt) &&
+      receipt.outcomeId === outcomeId &&
+      receipt.tenantId === snapshot.tenantId &&
+      receipt.operatorUserId === snapshot.operatorUserId
   );
 }
 
@@ -101,13 +106,13 @@ function evaluatePrerequisite(
       return check(
         "prerequisite_detail",
         `verified_goldline_outcome:${prereq.outcomeId}`,
-        goldlineHas(goldline, prereq.outcomeId)
+        goldlineHas(goldline, prereq.outcomeId, snapshot)
       );
     case "verified_goldline_any":
       return check(
         "prerequisite_detail",
         `verified_goldline_any:${prereq.outcomeIds.join("|")}`,
-        prereq.outcomeIds.some(id => goldlineHas(goldline, id))
+        prereq.outcomeIds.some(id => goldlineHas(goldline, id, snapshot))
       );
     case "knowledge":
       return check(
@@ -278,7 +283,7 @@ function evaluateBeat(
     check(
       "prerequisite_detail",
       `goldline:${outcomeId}`,
-      goldlineHas(input.verifiedGoldline, outcomeId)
+      goldlineHas(input.verifiedGoldline, outcomeId, input.snapshot)
     )
   );
 
@@ -398,12 +403,29 @@ export function evaluateEligibility(
   };
 }
 
+/**
+ * Production eligibility. Caller-supplied registry/graph are ignored.
+ * Isolated tests may still call evaluateEligibility with a local catalog.
+ */
+export function evaluateProductionEligibility(
+  input: EligibilityInput
+): NarrativeEligibilityResult {
+  return evaluateEligibility({
+    snapshot: input.snapshot,
+    verifiedGoldline: input.verifiedGoldline,
+    nowMs: input.nowMs,
+    mode: input.mode,
+    registry: AUTHORED_BEATS,
+    graph: AUTHORED_GRAPH,
+  });
+}
+
 export function issueEligibilityAuthorizations(
   result: NarrativeEligibilityResult,
   input: EligibilityInput
 ): readonly EligibilityAuthorization[] {
-  const ids = [...result.eligibleBeatIds, ...result.withheldBeatIds];
-  return ids.map(beatId => ({
+  if (result.outcome !== "ELIGIBLE") return [];
+  return result.eligibleBeatIds.map(beatId => ({
     [ELIGIBILITY_AUTHORIZATION_BRAND]: true as const,
     beatId,
     mode: input.mode,

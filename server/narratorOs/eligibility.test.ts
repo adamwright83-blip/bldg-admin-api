@@ -1,10 +1,16 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import {
+  AUTHORED_BEAT_DEFAULTS,
+  asNarrativeBeatId,
+  type AuthoredBeat,
+} from "../../shared/narratorOs/contracts";
 import { isLegalEligibilityGoldlineEvidence } from "./brainBoundary";
 import {
   eligibilityMutates,
   evaluateEligibility,
+  evaluateProductionEligibility,
   issueEligibilityAuthorizations,
   isEligibilityAuthorization,
   outcomeOfPassing,
@@ -34,7 +40,7 @@ import {
   getBeat,
   offscreenCatalog,
 } from "./registry";
-import { type NarratorSnapshot } from "./store";
+import { UnknownBeatLedgerError, type NarratorSnapshot } from "./store";
 
 const scope = { tenantId: "t-d", operatorUserId: "op-d" };
 
@@ -64,11 +70,18 @@ async function seeded(): Promise<{
 
 function issueReceipt(
   outcomeId: string,
-  evidenceClass:
-    | "authoritative_external"
-    | "operator_attested" = "operator_attested"
+  extra?: {
+    evidenceClass?: "authoritative_external" | "operator_attested";
+    receiptId?: string;
+    tenantId?: string;
+    operatorUserId?: string;
+  }
 ): VerifiedGoldlineReceipt {
+  const evidenceClass = extra?.evidenceClass ?? "operator_attested";
   return issueVerifiedGoldlineReceiptForTests({
+    receiptId: extra?.receiptId ?? `receipt:${outcomeId}:${scope.tenantId}`,
+    tenantId: extra?.tenantId ?? scope.tenantId,
+    operatorUserId: extra?.operatorUserId ?? scope.operatorUserId,
     outcomeId,
     evidenceClass,
     evidenceRef: {
@@ -76,10 +89,23 @@ function issueReceipt(
         evidenceClass === "operator_attested"
           ? "field_visit"
           : "external_record",
-      sourceReference: `receipt:${outcomeId}`,
+      sourceReference: extra?.receiptId ?? `receipt:${outcomeId}`,
       classification: evidenceClass,
     },
   });
+}
+
+function isolatedBeat(
+  partial: Partial<AuthoredBeat> & { id: string }
+): AuthoredBeat {
+  return {
+    ...AUTHORED_BEAT_DEFAULTS,
+    title: "isolated-test",
+    canonStatus: "LOCKED",
+    authoredSourceRef: "isolated-test-not-canon",
+    ...partial,
+    id: asNarrativeBeatId(partial.id),
+  };
 }
 
 function evalInput(
@@ -445,7 +471,7 @@ describe("Narrator OS verified Goldline receipt authority", () => {
 
   it("persists an authorized receipt without changing its meaning", async () => {
     const { store } = await seeded();
-    const receipt = issueReceipt("spoken_no", "operator_attested");
+    const receipt = issueReceipt("spoken_no");
     await recordVerifiedGoldlineOutcome({
       store,
       scope,
@@ -507,18 +533,210 @@ describe("Narrator OS verified Goldline receipt authority", () => {
       "server/narratorOs/init.ts",
       "server/narratorOs/registry.ts",
       "server/narratorOs/drizzleStore.ts",
+      "server/narratorOs/verifiedGoldlineReceipt.ts",
     ];
     for (const file of productionFiles) {
       const src = readFileSync(resolve(process.cwd(), file), "utf8");
       expect(src).not.toMatch(/issueVerifiedGoldlineReceiptForTests/);
       expect(src).not.toMatch(/verifiedGoldlineReceipt\.testSupport/);
     }
+    const receiptSrc = readFileSync(
+      resolve(process.cwd(), "server/narratorOs/verifiedGoldlineReceipt.ts"),
+      "utf8"
+    );
+    expect(receiptSrc).not.toMatch(/function issue/);
+    expect(receiptSrc).not.toMatch(/Object\.freeze/);
     const indexSrc = readFileSync(
       resolve(process.cwd(), "server/narratorOs/index.ts"),
       "utf8"
     );
     expect(indexSrc).not.toMatch(/issueVerifiedGoldlineReceiptForTests/);
+    expect(indexSrc).not.toMatch(/verifiedGoldlineReceiptBrand/);
+    expect(indexSrc).not.toMatch(/verifiedGoldlineReceipt\.testSupport/);
     const prod = await import("./index");
     expect("issueVerifiedGoldlineReceiptForTests" in prod).toBe(false);
+    expect("VERIFIED_GOLDLINE_RECEIPT_BRAND" in prod).toBe(false);
+    const receiptModule = await import("./verifiedGoldlineReceipt");
+    expect("issueVerifiedGoldlineReceiptForTests" in receiptModule).toBe(false);
+  });
+});
+
+describe("Narrator OS production registry authority", () => {
+  it("rejects a fake COMPLETE beat that evaluated against a caller registry", async () => {
+    const { store, snapshot } = await seeded();
+    const fake = isolatedBeat({
+      id: "FAKE-COMPLETE",
+      eligibilityDefinition: "COMPLETE",
+      defaultSurface: true,
+      playerVisibility: true,
+    });
+    const fakeInput = evalInput(snapshot, {
+      registry: [fake],
+      graph: [],
+    });
+    const fakeResult = evaluateEligibility(fakeInput);
+    expect(fakeResult.outcome).toBe("ELIGIBLE");
+    expect(fakeResult.eligibleBeatIds).toContain("FAKE-COMPLETE");
+    const auths = issueEligibilityAuthorizations(fakeResult, fakeInput);
+    const fakeAuth = auths.find(auth => auth.beatId === "FAKE-COMPLETE");
+    expect(fakeAuth && isEligibilityAuthorization(fakeAuth)).toBe(true);
+
+    await expect(
+      commitAuthorizedBeat({
+        store,
+        scope,
+        authorization: fakeAuth!,
+        eligibility: fakeInput,
+      })
+    ).rejects.toBeInstanceOf(UnknownBeatLedgerError);
+    expect((await store.load(scope))?.ledger).toEqual([]);
+    expect((await store.load(scope))?.narrativeState.values.m03).toBe("ARMED");
+  });
+
+  it("rejects a rewritten canon beat that is incomplete in AUTHORED_BEATS", async () => {
+    const { store, snapshot } = await seeded();
+    const rewritten = isolatedBeat({
+      ...getBeat("M15"),
+      eligibilityDefinition: "COMPLETE",
+      defaultSurface: true,
+      playerVisibility: true,
+      prerequisites: [],
+      eligibilityConditions: [],
+    });
+    const fakeInput = evalInput(snapshot, {
+      registry: [rewritten],
+      graph: [],
+    });
+    const fakeResult = evaluateEligibility(fakeInput);
+    expect(fakeResult.eligibleBeatIds).toContain("M15");
+    const auth = issueEligibilityAuthorizations(fakeResult, fakeInput).find(
+      item => item.beatId === "M15"
+    )!;
+    expect(isEligibilityAuthorization(auth)).toBe(true);
+
+    await expect(
+      commitAuthorizedBeat({
+        store,
+        scope,
+        authorization: auth,
+        eligibility: fakeInput,
+      })
+    ).rejects.toBeInstanceOf(IneligibleBeatCommitError);
+    expect((await store.load(scope))?.ledger).toEqual([]);
+
+    const production = evaluateProductionEligibility(fakeInput);
+    expect(production.eligibleBeatIds).not.toContain("M15");
+    expect(
+      production.audit.find(entry => entry.beatId === "M15")?.failedGates
+    ).toContain("incomplete_eligibility");
+  });
+});
+
+describe("Narrator OS test-only Goldline issuer", () => {
+  it("refuses to mint receipts in a production runtime", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VITEST", "");
+    try {
+      expect(() =>
+        issueVerifiedGoldlineReceiptForTests({
+          receiptId: "evt-prod",
+          tenantId: scope.tenantId,
+          operatorUserId: scope.operatorUserId,
+          outcomeId: "spoken_no",
+          evidenceClass: "operator_attested",
+          evidenceRef: {
+            sourceType: "field_visit",
+            sourceReference: "visit:prod",
+            classification: "operator_attested",
+          },
+        })
+      ).toThrow(/not available outside tests/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
+
+describe("Narrator OS scoped Goldline receipts", () => {
+  it("does not let operator A's receipt unlock operator B", async () => {
+    const { snapshot } = await seeded();
+    const foreign = issueReceipt("spoken_no", {
+      tenantId: "other-tenant",
+      operatorUserId: "other-op",
+      receiptId: "evt-a",
+    });
+    expect(isVerifiedGoldlineReceipt(foreign)).toBe(true);
+    const result = evaluateEligibility(
+      evalInput(snapshot, { verifiedGoldline: [foreign] })
+    );
+    expect(result.eligibleBeatIds).not.toContain(BEAT_IDS.M03);
+    const { store } = await seeded();
+    await expect(
+      recordVerifiedGoldlineOutcome({ store, scope, receipt: foreign })
+    ).rejects.toBeInstanceOf(UntrustedGoldlineReceiptError);
+    expect((await store.load(scope))?.ledger).toEqual([]);
+  });
+
+  it("idempotently persists one receiptId and keeps distinct receipts distinct", async () => {
+    const { store } = await seeded();
+    const first = issueReceipt("spoken_no", { receiptId: "evt-1" });
+    const second = issueReceipt("spoken_no", { receiptId: "evt-2" });
+    await recordVerifiedGoldlineOutcome({ store, scope, receipt: first });
+    await recordVerifiedGoldlineOutcome({ store, scope, receipt: first });
+    let loaded = await store.load(scope);
+    expect(loaded?.ledger).toHaveLength(1);
+    expect(loaded?.ledger[0]?.idempotencyKey).toBe("goldline:evt-1");
+    expect(loaded?.ledger[0]?.goldlineOutcomeId).toBe("spoken_no");
+
+    await recordVerifiedGoldlineOutcome({ store, scope, receipt: second });
+    loaded = await store.load(scope);
+    expect(loaded?.ledger).toHaveLength(2);
+    expect(loaded?.ledger.map(entry => entry.idempotencyKey)).toEqual([
+      "goldline:evt-1",
+      "goldline:evt-2",
+    ]);
+    expect(
+      loaded?.ledger.every(entry => entry.goldlineOutcomeId === "spoken_no")
+    ).toBe(true);
+  });
+});
+
+describe("Narrator OS withheld beats have no execution authority", () => {
+  it("does not authorize or commit an ELIGIBLE_WITHHELD beat", async () => {
+    const { store, snapshot } = await seeded();
+    const withheld = isolatedBeat({
+      id: "WITHHELD-PASSING",
+      eligibilityDefinition: "COMPLETE",
+      defaultSurface: false,
+      playerVisibility: false,
+    });
+    const input = evalInput(snapshot, {
+      registry: [withheld],
+      graph: [],
+    });
+    const result = evaluateEligibility(input);
+    expect(result.outcome).toBe("ELIGIBLE_WITHHELD");
+    expect(result.eligibleBeatIds).toEqual([]);
+    expect(result.withheldBeatIds).toEqual(["WITHHELD-PASSING"]);
+    expect(issueEligibilityAuthorizations(result, input)).toEqual([]);
+
+    await expect(
+      commitAuthorizedBeat({
+        store,
+        scope,
+        authorization: {
+          beatId: withheld.id,
+          mode: "interactive",
+          tenantId: scope.tenantId,
+          operatorUserId: scope.operatorUserId,
+          ledgerLength: 0,
+        } as never,
+        eligibility: input,
+      })
+    ).rejects.toBeInstanceOf(IneligibleBeatCommitError);
+    const loaded = await store.load(scope);
+    expect(loaded?.ledger).toEqual([]);
+    expect(loaded?.knowledge).toEqual(snapshot.knowledge);
+    expect(loaded?.narrativeState).toEqual(snapshot.narrativeState);
   });
 });

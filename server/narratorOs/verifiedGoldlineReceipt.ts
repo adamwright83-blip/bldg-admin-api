@@ -1,31 +1,24 @@
 import type { VerifiedGoldlineEvidenceRef } from "../../shared/narratorOs/contracts";
+import { VERIFIED_GOLDLINE_RECEIPT_BRAND } from "./verifiedGoldlineReceiptBrand";
 
 /**
  * Opaque verified-Goldline authority. Types and the runtime guard live here.
- * Minting for the A–D harness lives only as test-only issuance; production
- * ingestion is unwired. A structurally similar object without the brand is
- * not a receipt.
+ * This module does not issue receipts. Production ingestion stays unwired.
+ * A structurally similar object without the brand is not a receipt.
  */
-const VERIFIED_GOLDLINE_RECEIPT_BRAND: unique symbol = Symbol(
-  "narratorOs.VerifiedGoldlineReceipt"
-);
-
 export type GoldlineEvidenceClass =
   | "authoritative_external"
   | "operator_attested";
 
 export type VerifiedGoldlineReceipt = {
   readonly [VERIFIED_GOLDLINE_RECEIPT_BRAND]: true;
+  readonly receiptId: string;
+  readonly tenantId: string;
+  readonly operatorUserId: string;
   readonly outcomeId: string;
   readonly verificationClass: "VERIFIED";
   readonly evidenceClass: GoldlineEvidenceClass;
   readonly evidenceRef: Readonly<VerifiedGoldlineEvidenceRef>;
-};
-
-export type VerifiedGoldlineReceiptDraft = {
-  outcomeId: string;
-  evidenceClass: GoldlineEvidenceClass;
-  evidenceRef: VerifiedGoldlineEvidenceRef;
 };
 
 export function isVerifiedGoldlineReceipt(
@@ -36,6 +29,12 @@ export function isVerifiedGoldlineReceipt(
   const evidenceRef = receipt.evidenceRef;
   return (
     receipt[VERIFIED_GOLDLINE_RECEIPT_BRAND] === true &&
+    typeof receipt.receiptId === "string" &&
+    receipt.receiptId.length > 0 &&
+    typeof receipt.tenantId === "string" &&
+    receipt.tenantId.length > 0 &&
+    typeof receipt.operatorUserId === "string" &&
+    receipt.operatorUserId.length > 0 &&
     typeof receipt.outcomeId === "string" &&
     receipt.outcomeId.length > 0 &&
     receipt.verificationClass === "VERIFIED" &&
@@ -51,42 +50,4 @@ export function isVerifiedGoldlineReceipt(
       evidenceRef.classification === "operator_attested") &&
     evidenceRef.classification === receipt.evidenceClass
   );
-}
-
-/**
- * Test-only issuance. Production Narrator index does not re-export this.
- * Production ingestion (Brain / HTTP / Goldline world events) stays unwired.
- * Import from `verifiedGoldlineReceipt.testSupport.ts` in tests.
- */
-export function issueVerifiedGoldlineReceiptForTests(
-  draft: VerifiedGoldlineReceiptDraft
-): VerifiedGoldlineReceipt {
-  if (!draft.outcomeId) {
-    throw new Error("VerifiedGoldlineReceipt requires outcomeId");
-  }
-  if (
-    draft.evidenceClass !== "authoritative_external" &&
-    draft.evidenceClass !== "operator_attested"
-  ) {
-    throw new Error("VerifiedGoldlineReceipt requires trusted evidenceClass");
-  }
-  if (draft.evidenceRef.classification !== draft.evidenceClass) {
-    throw new Error(
-      "VerifiedGoldlineReceipt evidenceRef.classification must match evidenceClass"
-    );
-  }
-  if (!draft.evidenceRef.sourceType || !draft.evidenceRef.sourceReference) {
-    throw new Error("VerifiedGoldlineReceipt requires evidenceRef identity");
-  }
-  return Object.freeze({
-    [VERIFIED_GOLDLINE_RECEIPT_BRAND]: true as const,
-    outcomeId: draft.outcomeId,
-    verificationClass: "VERIFIED" as const,
-    evidenceClass: draft.evidenceClass,
-    evidenceRef: Object.freeze({
-      sourceType: draft.evidenceRef.sourceType,
-      sourceReference: draft.evidenceRef.sourceReference,
-      classification: draft.evidenceRef.classification,
-    }),
-  });
 }
