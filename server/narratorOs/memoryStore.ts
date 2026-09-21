@@ -15,7 +15,7 @@ import type {
 } from "../../shared/narratorOs/contracts";
 import { WORLD_TRUTH_FACTS, NARRATOR_WORLD_TRUTH_VERSION } from "./worldTruth";
 import { resolveDuplicateNarratorLedgerInsert } from "./goldlineLedgerReplay";
-import { withAuthoritativeNarratorStoreSnapshots } from "./narratorSnapshotAttestation";
+import { createInMemoryNarratorStore } from "./narratorSnapshotAttestation";
 
 function keyOf(scope: OperatorScope): string {
   return `${scope.tenantId}::${scope.operatorUserId}`;
@@ -48,7 +48,7 @@ function seedSnapshot(scope: OperatorScope): NarratorSnapshot {
  * In-memory store. Optional seed is JSON-cloned so a process/store reload
  * test cannot keep the original branded receipt objects as hidden truth.
  */
-export function createInMemoryNarratorStore(
+export function createInMemoryNarratorStoreUnsealed(
   seed?: ReadonlyMap<string, NarratorSnapshot>
 ): NarratorStore {
   const rows = new Map<string, NarratorSnapshot>();
@@ -157,8 +157,10 @@ export function createInMemoryNarratorStore(
       return stored;
     },
   };
-  return withAuthoritativeNarratorStoreSnapshots(store);
+  return store;
 }
+
+export { createInMemoryNarratorStore };
 
 /**
  * Simulate process/store restart: JSON-clone a loaded snapshot into a fresh

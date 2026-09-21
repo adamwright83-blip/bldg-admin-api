@@ -4,12 +4,58 @@
  * requires this membership. This module is not re-exported from the
  * Narrator production index.
  *
- * Wrapping is how NarratorStore load/init marks returned snapshots.
- * It is not a Goldline remember API and does not accept receipts.
+ * Attestation is minted only inside the concrete in-memory and Drizzle
+ * store factories. There is no exported wrap/seal/remember that accepts a
+ * caller-supplied store or snapshot.
  */
+import type {
+  NarrativeEventLedgerEntry,
+  PersistedVerifiedGoldlineReceipt,
+  VerifiedGoldlineEvidenceRef,
+} from "../../shared/narratorOs/contracts";
+import { createDrizzleNarratorStoreUnsealed } from "./drizzleStore";
+import { createInMemoryNarratorStoreUnsealed } from "./memoryStore";
 import type { NarratorSnapshot, NarratorStore } from "./store";
 
 const AUTHORITATIVE_NARRATOR_SNAPSHOTS = new WeakSet<object>();
+
+function freezeEvidenceRef(
+  ref: VerifiedGoldlineEvidenceRef | NarrativeEventLedgerEntry["evidenceRef"]
+): NarrativeEventLedgerEntry["evidenceRef"] {
+  if (!ref) return ref;
+  return Object.freeze({
+    sourceType: ref.sourceType,
+    sourceReference: ref.sourceReference,
+    classification: ref.classification,
+  });
+}
+
+function freezePersistedVerifiedGoldline(
+  persisted: PersistedVerifiedGoldlineReceipt
+): PersistedVerifiedGoldlineReceipt {
+  return Object.freeze({
+    ...persisted,
+    evidenceRef: freezeEvidenceRef(persisted.evidenceRef)!,
+    targetRef: persisted.targetRef
+      ? Object.freeze({
+          kind: "goldline_target" as const,
+          id: persisted.targetRef.id,
+        })
+      : persisted.targetRef,
+  });
+}
+
+function freezeLedgerEntry(
+  entry: NarrativeEventLedgerEntry
+): NarrativeEventLedgerEntry {
+  return Object.freeze({
+    ...entry,
+    evidenceRef: freezeEvidenceRef(entry.evidenceRef),
+    persistedVerifiedGoldline: entry.persistedVerifiedGoldline
+      ? freezePersistedVerifiedGoldline(entry.persistedVerifiedGoldline)
+      : entry.persistedVerifiedGoldline,
+  });
+}
 
 function sealAuthoritativeNarratorSnapshot(
   snapshot: NarratorSnapshot
@@ -22,15 +68,8 @@ function sealAuthoritativeNarratorSnapshot(
     livedBio: snapshot.livedBio,
     knowledge: snapshot.knowledge,
     narrativeState: snapshot.narrativeState,
-    ledger: snapshot.ledger.map(entry =>
-      Object.freeze({
-        ...entry,
-        persistedVerifiedGoldline: entry.persistedVerifiedGoldline
-          ? Object.freeze({ ...entry.persistedVerifiedGoldline })
-          : entry.persistedVerifiedGoldline,
-      })
-    ),
-    catalogVersion: snapshot.catalogVersion,
+    ledger: snapshot.ledger.map(freezeLedgerEntry),
+    catalogVersion: Object.freeze({ ...snapshot.catalogVersion }),
   };
   Object.freeze(sealed.ledger);
   Object.freeze(sealed);
@@ -48,13 +87,7 @@ export function isAuthoritativeNarratorSnapshot(
   );
 }
 
-/**
- * Production store factories only. load/init results are attested copies.
- * Caller JSON that never came through these methods is not a member.
- */
-export function withAuthoritativeNarratorStoreSnapshots(
-  store: NarratorStore
-): NarratorStore {
+function wrapConcreteNarratorStore(store: NarratorStore): NarratorStore {
   return {
     async initOperator(scope) {
       return sealAuthoritativeNarratorSnapshot(await store.initOperator(scope));
@@ -76,4 +109,14 @@ export function withAuthoritativeNarratorStoreSnapshots(
       return store.commitAtomic(scope, commit);
     },
   };
+}
+
+export function createInMemoryNarratorStore(
+  seed?: ReadonlyMap<string, NarratorSnapshot>
+): NarratorStore {
+  return wrapConcreteNarratorStore(createInMemoryNarratorStoreUnsealed(seed));
+}
+
+export function createDrizzleNarratorStore(): NarratorStore {
+  return wrapConcreteNarratorStore(createDrizzleNarratorStoreUnsealed());
 }

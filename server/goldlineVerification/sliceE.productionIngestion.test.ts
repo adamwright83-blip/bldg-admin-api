@@ -1294,6 +1294,8 @@ describe("Narrator OS Slice E — unforgeable receipt membership and hidden prod
       false
     );
     expect("isAuthoritativeNarratorSnapshot" in narratorIndex).toBe(false);
+    expect("createInMemoryNarratorStoreUnsealed" in narratorIndex).toBe(false);
+    expect("createDrizzleNarratorStoreUnsealed" in narratorIndex).toBe(false);
     const authoritySrc = readFileSync(
       resolve(
         REPO_ROOT,
@@ -1622,5 +1624,114 @@ describe("Narrator OS Slice E — store-loaded snapshots are the only rehydratio
       })
     ).rejects.toBeInstanceOf(UntrustedGoldlineReceiptError);
     expect((await reloadedStore.load(scope))?.ledger).toHaveLength(1);
+  });
+
+  it("a fake NarratorStore cannot mint attested snapshot membership", async () => {
+    const fakeSnapshot = forgedConsistentKeepSnapshot();
+    const fakeStore: NarratorStore = {
+      async initOperator() {
+        return fakeSnapshot;
+      },
+      async load() {
+        return fakeSnapshot;
+      },
+      async replaceKnowledge() {},
+      async replaceNarrativeState() {},
+      async appendLedger() {
+        return fakeSnapshot.ledger[0]!;
+      },
+      async commitAtomic() {
+        return fakeSnapshot.ledger[0]!;
+      },
+    };
+    const attestation = await import(
+      "../narratorOs/narratorSnapshotAttestation"
+    );
+    expect("withAuthoritativeNarratorStoreSnapshots" in attestation).toBe(
+      false
+    );
+    expect(
+      Object.keys(attestation).some(
+        key =>
+          /wrap|seal|attest/i.test(key) &&
+          key !== "isAuthoritativeNarratorSnapshot"
+      )
+    ).toBe(false);
+    expect(attestation.createInMemoryNarratorStoreUnsealed).toBeUndefined();
+    expect(attestation.createDrizzleNarratorStoreUnsealed).toBeUndefined();
+    for (const [name, value] of Object.entries(attestation)) {
+      if (typeof value !== "function") continue;
+      if (/test/i.test(name)) continue;
+      try {
+        const result = value(fakeStore);
+        if (result && typeof (result as Promise<unknown>).then === "function") {
+          await result;
+        }
+      } catch {
+        /* concrete factories do not accept a fake store */
+      }
+      try {
+        const result = value(fakeSnapshot);
+        if (result && typeof (result as Promise<unknown>).then === "function") {
+          await result;
+        }
+      } catch {
+        /* snapshot arguments are not an attestation mint */
+      }
+    }
+    const loaded = await fakeStore.load(scope);
+    expect(isAuthoritativeNarratorSnapshot(fakeSnapshot)).toBe(false);
+    expect(isAuthoritativeNarratorSnapshot(loaded)).toBe(false);
+    expect(rehydratePersistedVerifiedGoldlineReceipts(fakeSnapshot)).toEqual(
+      []
+    );
+    expect(rehydratePersistedVerifiedGoldlineReceipts(loaded!)).toEqual([]);
+    expect(
+      evaluateProductionEligibility(
+        evalInput(fakeSnapshot, { verifiedGoldline: [] })
+      ).eligibleBeatIds
+    ).not.toContain(BEAT_IDS.M04);
+  });
+
+  it("post-attestation nested target and evidence mutation cannot change rehydrated evidence", async () => {
+    const { store } = await seeded();
+    const receipt = issueSupported({
+      sourceEventId: "freeze-keep",
+      targetId: "target-frozen",
+      evidenceRef: {
+        sourceType: "goldline_field_commitment",
+        sourceReference: "field_commitment:freeze-keep",
+        classification: "operator_attested",
+      },
+    });
+    await ingestVerifiedGoldlineOutcome({ store, scope, receipt });
+    const loaded = (await store.load(scope))!;
+    const persisted = loaded.ledger[0]?.persistedVerifiedGoldline;
+    expect(persisted).toBeTruthy();
+    const originalTarget = persisted!.targetRef!.id;
+    const originalEvidence = persisted!.evidenceRef.sourceReference;
+    expect(() => {
+      (persisted!.targetRef as { id: string }).id = "mutated-target";
+    }).toThrow();
+    expect(() => {
+      (persisted!.evidenceRef as { sourceReference: string }).sourceReference =
+        "mutated-evidence";
+    }).toThrow();
+    expect(() => {
+      (
+        loaded.ledger[0]!.evidenceRef as { sourceReference: string }
+      ).sourceReference = "mutated-ledger-evidence";
+    }).toThrow();
+    expect(persisted!.targetRef!.id).toBe(originalTarget);
+    expect(persisted!.evidenceRef.sourceReference).toBe(originalEvidence);
+    const hydrated = rehydratePersistedVerifiedGoldlineReceipts(loaded);
+    expect(hydrated).toHaveLength(1);
+    expect(hydrated[0]?.targetRef).toEqual({
+      kind: "goldline_target",
+      id: "target-frozen",
+    });
+    expect(hydrated[0]?.evidenceRef.sourceReference).toBe(
+      "field_commitment:freeze-keep"
+    );
   });
 });

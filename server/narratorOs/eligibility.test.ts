@@ -589,6 +589,8 @@ describe("Narrator OS verified Goldline receipt authority", () => {
     expect("rememberRehydratedVerifiedGoldlineEvidence" in prod).toBe(false);
     expect("withAuthoritativeNarratorStoreSnapshots" in prod).toBe(false);
     expect("isAuthoritativeNarratorSnapshot" in prod).toBe(false);
+    expect("createInMemoryNarratorStoreUnsealed" in prod).toBe(false);
+    expect("createDrizzleNarratorStoreUnsealed" in prod).toBe(false);
     expect("rememberTestUpstreamIssuedVerifiedGoldlineReceipt" in prod).toBe(
       false
     );
