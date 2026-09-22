@@ -33,6 +33,8 @@ export type ConversationRelayOutbound = {
   type: "text";
   token: string;
   last: boolean;
+  /** Agrees with TwiML preemptible=false. interruptible is omitted so TwiML "speech" stays in force. */
+  preemptible: false;
 };
 
 export type ConversationRelayLifecycle =
@@ -136,7 +138,7 @@ export class ConversationRelaySession {
     for await (const chunk of this.source.generate({ ...this.identity, utterance })) {
       if (this.stopPlayback) break;
       parts.push(chunk.text);
-      outbound.push({ type: "text", token: chunk.text, last: chunk.last });
+      outbound.push({ type: "text", token: chunk.text, last: chunk.last, preemptible: false });
     }
     if (this.stopPlayback) {
       if (parts.length) {
@@ -162,7 +164,7 @@ export class ConversationRelaySession {
   private enqueueFullText(text: string): ConversationRelayOutbound[] {
     this.observe(beginGeneratedSpeech(text));
     if (this.speech) this.observe(markSpeechQueued(this.speech));
-    return [{ type: "text", token: text, last: true }];
+    return [{ type: "text", token: text, last: true, preemptible: false }];
   }
 
   private observe(account: ClaireSpeechAccount): void {

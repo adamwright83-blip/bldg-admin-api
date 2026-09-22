@@ -26,6 +26,7 @@ import { registerVendorOnboardingSessionRoutes } from "../vendorOnboardingSessio
 import { registerVendorBookingPublicRoutes } from "../vendorBookingPublicApi";
 import { registerLevel4TwilioRoutes } from "../level4Twilio";
 import { registerClaireRoutes } from "../claire/claireTwilio";
+import { attachConversationRelayUpgrade } from "../claire/voice/conversationRelayUpgrade";
 import { registerOperatorArtifactSmsRoutes } from "../operatorArtifact/sendOperatorArtifact";
 import { registerSpiritHumanInboundSmsRoutes } from "../spiritHumanRescue/inboundSmsRoute";
 import { registerSalesCallRoutes } from "../salesCalls";
@@ -152,6 +153,7 @@ async function startServer() {
   app.set("trust proxy", configuredTrustProxy());
   app.use(dayforgeSecurityHeaders());
   const server = createServer(app);
+  attachConversationRelayUpgrade(server);
 
   console.log("[Boot] v9 — REST endpoint for leads with robust error handling");
 

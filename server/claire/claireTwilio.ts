@@ -79,7 +79,10 @@ import {
   handleClaireXaiTtsRequest,
   isClaireXaiTtsEnabled,
 } from "./xaiTts";
-import { renderClaireOpeningVoice } from "./voice/claireVoiceTransport";
+import {
+  CLAIRE_CONVERSATION_RELAY_ACTION_PATH,
+  renderClaireOpeningVoice,
+} from "./voice/claireVoiceTransport";
 import { writeClaireLifecycleReceipt } from "./claireLifecycleReceipt";
 import {
   abandonAuthorizedAmdHandoff,
@@ -137,6 +140,14 @@ type PreDriveConversation = ClaireTurnState & {
   hints?: string;
   /** True after inbound context assembly was applied or conservatively given up. */
   inboundContextReady?: boolean;
+  /** Persisted opening was already queued on the Relay socket. Not a second copy of the line. */
+  relayOpeningQueued?: boolean;
+  /** One Relay → Gather hop has already been used for this call. */
+  relayGatherFallbackUsed?: boolean;
+  /** Claire sent Conversation Relay's documented end message. */
+  relayIntentionalEnd?: boolean;
+  /** CallSid observed on the Relay socket or the Connect action callback. */
+  relayCallSid?: string | null;
 };
 
 function callStateKey(conversationId: string): string {
@@ -614,7 +625,44 @@ async function withinBudget<T>(work: Promise<T>, ms: number): Promise<T | null> 
   }
 }
 
-function startVoiceTurn(input: {
+export type AuthoritativeClaireVoiceTurnResult = {
+  speak: string;
+  endCall: boolean;
+  listenOnly: boolean;
+  /** Gather adapter document. Relay does not play this TwiML. */
+  gatherTwiml: string;
+};
+
+function voiceTurnDocument(input: {
+  speak: string;
+  token: string;
+  hints?: string | null;
+  endCall?: boolean;
+  listenOnly?: boolean;
+}): AuthoritativeClaireVoiceTurnResult {
+  const endCall = Boolean(input.endCall);
+  const listenOnly = Boolean(input.listenOnly);
+  return {
+    speak: input.speak,
+    endCall,
+    listenOnly,
+    gatherTwiml: endCall
+      ? speakAndHangUp(input.speak)
+      : preDriveConversationTwiML({
+          text: listenOnly ? "" : input.speak,
+          token: input.token,
+          hints: input.hints,
+          listenOnly,
+        }),
+  };
+}
+
+/**
+ * The one Claire voice-turn orchestration. Gather and Conversation Relay both
+ * call this. Relay passes allowFragmentWait false so a final provider prompt
+ * is not held as a Gather pause fragment.
+ */
+export function runAuthoritativeClaireVoiceTurn(input: {
   conversationId: string;
   conversation: PreDriveConversation;
   utterance: string;
@@ -624,9 +672,9 @@ function startVoiceTurn(input: {
   token: string;
   /** Slice A: when Twilio's webhook arrived — the proxy for end-of-speech. */
   webhookReceivedAtMs: number;
-}): Promise<string> {
+}): Promise<AuthoritativeClaireVoiceTurnResult> {
   const { conversationId, conversation, token } = input;
-  const job = (async () => {
+  return (async () => {
     try {
       if (!conversation.inboundContextReady) {
         const prepared = await preparedInboundContextFor({
@@ -791,7 +839,7 @@ function startVoiceTurn(input: {
       }
 
       if (result.listenOnly) {
-        return preDriveConversationTwiML({ text: "", token, hints: conversation.hints, listenOnly: true });
+        return voiceTurnDocument({ speak: "", token, hints: conversation.hints, listenOnly: true });
       }
       conversation.turns += 1;
       await saveCall(conversationId, conversation);
@@ -824,9 +872,13 @@ function startVoiceTurn(input: {
           claireText: result.speak,
           reason: "personal_thread_closed",
         });
-        return speakAndHangUp(result.speak);
+        return voiceTurnDocument({ speak: result.speak, token, hints: conversation.hints, endCall: true });
       }
-      return preDriveConversationTwiML({ text: result.speak || "Go ahead.", token, hints: conversation.hints });
+      return voiceTurnDocument({
+        speak: result.speak || "Go ahead.",
+        token,
+        hints: conversation.hints,
+      });
     } catch (error) {
       // Hard truth rule: a failure is never spoken as success.
       console.error("[Claire] voice turn failed", error);
@@ -840,13 +892,18 @@ function startVoiceTurn(input: {
         turnKey: conversation.turns,
         claireMetadata: claireQueuedSpeechMetadata(),
       });
-      return preDriveConversationTwiML({ text: retry, token, hints: conversation.hints });
+      return voiceTurnDocument({ speak: retry, token, hints: conversation.hints });
     }
   })();
-  inflightTurns.set(conversationId, job);
+}
+
+/** Gather adapter. Registers the TwiML job so the continuation redirect can collect it. */
+function startVoiceTurn(input: Parameters<typeof runAuthoritativeClaireVoiceTurn>[0]): Promise<string> {
+  const job = runAuthoritativeClaireVoiceTurn(input).then(result => result.gatherTwiml);
+  inflightTurns.set(input.conversationId, job);
   void job.finally(() => {
     setTimeout(() => {
-      if (inflightTurns.get(conversationId) === job) inflightTurns.delete(conversationId);
+      if (inflightTurns.get(input.conversationId) === job) inflightTurns.delete(input.conversationId);
     }, 60_000).unref?.();
   });
   return job;
@@ -1224,8 +1281,193 @@ export async function startClairePostStopCall(input: {
   return { callSid: call.sid };
 }
 
+export async function loadClaireVoiceConversation(
+  conversationId: string
+): Promise<PreDriveConversation | null> {
+  return loadCall(conversationId);
+}
+
+function persistedClaireOpening(conversation: PreDriveConversation): string {
+  const opening = (conversation.history ?? []).find(
+    entry => entry.speaker === "claire" && entry.text.trim()
+  );
+  return opening?.text ?? "";
+}
+
+/** Queues the already-persisted opening once. Does not generate or append history. */
+export async function queueRelayOpeningOnce(
+  conversationId: string
+): Promise<{ text: string; queued: boolean }> {
+  const conversation = await loadCall(conversationId);
+  if (!conversation) return { text: "", queued: false };
+  const text = persistedClaireOpening(conversation);
+  if (conversation.relayOpeningQueued) return { text, queued: false };
+  conversation.relayOpeningQueued = true;
+  conversation.touchedAt = Date.now();
+  await saveCall(conversationId, conversation);
+  return { text, queued: true };
+}
+
+export async function noteRelayCallSid(conversationId: string, callSid: string): Promise<void> {
+  const sid = callSid.trim();
+  if (!sid) return;
+  const conversation = await loadCall(conversationId);
+  if (!conversation || conversation.relayCallSid) return;
+  conversation.relayCallSid = sid;
+  conversation.touchedAt = Date.now();
+  await saveCall(conversationId, conversation);
+}
+
+export async function markRelayIntentionalEnd(conversationId: string): Promise<void> {
+  const conversation = await loadCall(conversationId);
+  if (!conversation) return;
+  conversation.relayIntentionalEnd = true;
+  conversation.touchedAt = Date.now();
+  await saveCall(conversationId, conversation);
+}
+
+export async function authorizePersistedClaireRelayCall(token: string): Promise<
+  | {
+      ok: true;
+      token: string;
+      conversationId: string;
+      tenantId: string;
+      operatorUserId: string;
+    }
+  | { ok: false }
+> {
+  let claims: ReturnType<typeof verifyClaireToken>;
+  try {
+    claims = verifyClaireToken(token);
+  } catch {
+    return { ok: false };
+  }
+  if (claims.kind !== "pre_drive_conversation") return { ok: false };
+  const conversation = await loadCall(claims.conversationId);
+  if (
+    !conversation ||
+    conversation.tenantId !== claims.tenantId ||
+    conversation.actorId !== claims.userId
+  ) {
+    return { ok: false };
+  }
+  return {
+    ok: true,
+    token,
+    conversationId: claims.conversationId,
+    tenantId: claims.tenantId,
+    operatorUserId: claims.userId,
+  };
+}
+
+/**
+ * Relay adapter. A final prompt is one semantic turn with fragment waiting off.
+ * ConversationRelaySession does not call this.
+ */
+export async function runRelayAuthoritativeTurn(input: {
+  conversationId: string;
+  utterance: string;
+  callSid?: string | null;
+  token: string;
+}): Promise<AuthoritativeClaireVoiceTurnResult> {
+  const conversation = await loadCall(input.conversationId);
+  if (!conversation) {
+    throw new Error("Claire voice conversation is not loaded");
+  }
+  return runAuthoritativeClaireVoiceTurn({
+    conversationId: input.conversationId,
+    conversation,
+    utterance: input.utterance,
+    rawTranscript: input.utterance,
+    allowFragmentWait: false,
+    callSid: input.callSid ?? undefined,
+    token: input.token,
+    webhookReceivedAtMs: Date.now(),
+  });
+}
+
+function hangupOnlyTwiml(): string {
+  const response = new twilio.twiml.VoiceResponse();
+  response.hangup();
+  return response.toString();
+}
+
+/**
+ * Connect action callback. Uses documented SessionStatus values only.
+ * ended and completed hang up. failed may return Gather once for this conversation.
+ */
+export async function renderConversationRelayConnectAction(input: {
+  token: string;
+  body: Record<string, string>;
+}): Promise<string> {
+  let claims: ReturnType<typeof verifyClaireToken>;
+  try {
+    claims = verifyClaireToken(input.token);
+  } catch {
+    return hangupOnlyTwiml();
+  }
+  if (claims.kind !== "pre_drive_conversation") return hangupOnlyTwiml();
+  const conversation = await loadCall(claims.conversationId);
+  if (
+    !conversation ||
+    conversation.tenantId !== claims.tenantId ||
+    conversation.actorId !== claims.userId
+  ) {
+    return hangupOnlyTwiml();
+  }
+  const callSid = String(input.body.CallSid ?? "").trim();
+  if (callSid && conversation.relayCallSid && callSid !== conversation.relayCallSid) {
+    return hangupOnlyTwiml();
+  }
+  const sessionStatus = String(input.body.SessionStatus ?? "").trim();
+  if (
+    conversation.relayIntentionalEnd ||
+    sessionStatus === "ended" ||
+    sessionStatus === "completed"
+  ) {
+    if (callSid && !conversation.relayCallSid) conversation.relayCallSid = callSid;
+    conversation.relayIntentionalEnd = true;
+    await saveCall(claims.conversationId, conversation);
+    return hangupOnlyTwiml();
+  }
+  if (sessionStatus === "failed") {
+    if (conversation.relayGatherFallbackUsed) return hangupOnlyTwiml();
+    conversation.relayGatherFallbackUsed = true;
+    if (callSid) conversation.relayCallSid = callSid;
+    conversation.touchedAt = Date.now();
+    await saveCall(claims.conversationId, conversation);
+    return preDriveConversationTwiML({
+      text: "",
+      token: input.token,
+      hints: conversation.hints,
+      listenOnly: true,
+    });
+  }
+  return hangupOnlyTwiml();
+}
+
 export function registerClaireRoutes(app: Express): void {
   app.get(CLAIRE_XAI_TTS_PATH, handleClaireXaiTtsRequest);
+
+  app.post(CLAIRE_CONVERSATION_RELAY_ACTION_PATH, async (req: Request, res: Response) => {
+    res.type("text/xml");
+    if (!validTwilioRequest(req)) {
+      return res.status(403).send(speakAndHangUp("This Claire call could not be verified."));
+    }
+    try {
+      const twiml = await renderConversationRelayConnectAction({
+        token: String(req.query.token ?? ""),
+        body: (req.body ?? {}) as Record<string, string>,
+      });
+      return res.send(twiml);
+    } catch (error) {
+      console.error("[Claire] conversation relay action failed", {
+        event: "relay_action_failed",
+        reason: error instanceof Error ? error.message : "relay_action_failed",
+      });
+      return res.send(hangupOnlyTwiml());
+    }
+  });
 
   app.post(CLAIRE_INBOUND_VOICE_PATH, async (req: Request, res: Response) => {
     res.type("text/xml");

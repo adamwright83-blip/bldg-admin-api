@@ -196,7 +196,7 @@ Confirm these in the Console. Do not paste SIDs, tokens, or phone numbers into t
 1. **Claire number.** The number already used as `CLAIRE_TWILIO_FROM_NUMBER` is still the Claire voice number. Leave its voice webhook on the existing inbound URL. Do not replace that URL and do not point it at Conversation Relay or Studio.
 2. **Voice webhook.** `POST` to the existing `/api/claire/twilio/inbound` host. Signature validation stays on. Status callbacks stay on the existing call-status path.
 3. **SMS.** If the account sends SMS, the sender is `TWILIO_FROM_NUMBER` or `TWILIO_PHONE_NUMBER`, which may differ from the Claire voice number. Do not repoint the Claire voice webhook to make SMS work.
-4. **Conversation Relay.** Leave it off. `CLAIRE_TWILIO_CONVERSATION_RELAY` stays unset. Gather remains the production default.
+4. **Conversation Relay.** Leave it off. `CLAIRE_TWILIO_CONVERSATION_RELAY` stays unset. Gather remains the production default. Do not set `CLAIRE_TWILIO_RELAY_PUBLIC_BASE_URL` until a non-destructive probe shows the public `wss://` URL reaches the existing server's upgrade handler. See `docs/claire/conversation-relay-reachability.md`.
 5. **Answering machine detection.** Do not enable AMD on the Claire inbound number. `CLAIRE_TWILIO_AMD` stays unset until a later slice attaches it only to calls that were already authorized.
 6. **Lookup.** Enable the Lookup product in the Console only when Goldline is ready to call it, then set `TWILIO_LOOKUP_ENABLED=true`. Until then the capability stays unconfigured.
 7. **Verify.** Create a Verify service when that product is in scope. Put its SID in `TWILIO_VERIFY_SERVICE_SID`. Do not copy the SID into docs or logs.
