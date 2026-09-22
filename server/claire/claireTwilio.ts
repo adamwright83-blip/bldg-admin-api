@@ -64,6 +64,7 @@ import {
   appendOperatorArtifactVoiceHistory,
   executeStandaloneOperatorArtifactVoiceRequest,
   isStandaloneOperatorArtifactVoiceRequest,
+  renderDaylineOperatorArtifact,
 } from "./operatorArtifactVoice";
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
 import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
@@ -73,6 +74,7 @@ import { getUserByOpenId } from "../db";
 import { dayDirectorActorId as dayDirectorActorIdFromUser } from "../dayDirector/dayDirectorActor";
 import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
 import { loadBusinessVocabulary, speechHints } from "./knowledge/businessVocabulary";
+import { loadDayWork } from "./knowledge/operationsKnowledge";
 import {
   CLAIRE_XAI_TTS_PATH,
   claireXaiSpeechUrl,
@@ -741,7 +743,25 @@ export function runAuthoritativeClaireVoiceTurn(input: {
               utterance: artifactCandidate,
               history: conversation.history ?? [],
             },
-            applyOperatorArtifactDecision
+            applyOperatorArtifactDecision,
+            {
+              resolveNamedArtifact: async request => {
+                if (request.kind !== "dayline") return null;
+                const timeZone = getDashboardTimeZone();
+                const businessDate =
+                  conversation.context.clock?.businessDate ??
+                  conversation.context.businessDate;
+                const work = await loadDayWork({
+                  tenantId: conversation.tenantId,
+                  operatorUserId: conversation.actorId,
+                  dayDirectorActorId: conversation.dayDirectorActorId,
+                  businessDate,
+                  now: new Date(),
+                  timeZone,
+                });
+                return renderDaylineOperatorArtifact(work);
+              },
+            }
           );
 
         if (!artifactTurn) {
