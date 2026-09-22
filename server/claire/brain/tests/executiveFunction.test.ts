@@ -657,6 +657,11 @@ describe("movement and work do not hang up", () => {
     "I have to go home, talk later.",
     "Hang up.",
     "End the call.",
+    "I have to go now.",
+    "I gotta go soon.",
+    "I have to go for now.",
+    "I have to go home. Bye.",
+    "I have to go pick up the order. Talk later.",
   ];
   const continues = [
     "I have to go there because they owe me $10,000.",

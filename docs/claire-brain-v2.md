@@ -522,9 +522,10 @@ that continues that same frame, reactivates it. A first-person ordinary plan suc
 An imperative (“Call Dana.”, “Email Dana.”) does not.
 
 Explicit goodbye (“Bye.”, “Talk later.”, “Hang up.”, “I have to go.”) ends the call even when
-a dollar amount is in the same utterance. “go” followed by a same-clause complement
+a dollar amount is in the same utterance. “go” followed by a destination or work complement
 (“go home”, “go pick up the order”, “go there”, “go back”) is movement or work, not
-leave-taking. Explicit goodbye still wins over that complement. An embedded fact cannot
+leave-taking. A temporal modifier of the departure itself (“go now”, “go soon”, “go for now”)
+stays leave-taking. Explicit goodbye still wins over a complement. An embedded fact cannot
 cancel a goodbye.
 
 “Text me that.” is the existing operator-artifact SMS capability. Brain V2 recognizes it and

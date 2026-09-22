@@ -162,7 +162,8 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
   ];
 
   // Explicit goodbye outranks V1 departure and outranks any embedded fact.
-  // "go" plus a same-clause complement is movement or work, not leave-taking.
+  // "go" plus a destination or work complement is movement, not leave-taking.
+  // A temporal modifier ("go now", "go for now") stays leave-taking.
   const callControl = reconcileCallControl(assembledText, turn.callControl);
   if (callControl === "end" && classification.status === "classified") {
     classification = { ...classification, operatorIntentAttested: false, declaredContentLabel: null };
