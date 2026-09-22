@@ -68,6 +68,7 @@ import {
   handleClaireXaiTtsRequest,
   isClaireXaiTtsEnabled,
 } from "./xaiTts";
+import { renderClaireOpeningVoice } from "./voice/claireVoiceTransport";
 
 const DEBRIEF_PATH = "/api/claire/twilio/debrief";
 const CONFIRM_PATH = "/api/claire/twilio/confirm";
@@ -465,6 +466,23 @@ export function preDriveConversationTwiML(input: {
   }
   response.hangup();
   return response.toString();
+}
+
+/**
+ * Gather is the production opening. Conversation Relay is selected only when
+ * its capability is CONFIGURED (flag explicitly on). Flag off returns Gather.
+ */
+function openingVoiceTwiml(input: {
+  text: string;
+  token: string;
+  opening?: boolean;
+  hints?: string | null;
+}): string {
+  return renderClaireOpeningVoice({
+    ...input,
+    publicBaseUrl: publicBaseUrl(),
+    renderGather: preDriveConversationTwiML,
+  });
 }
 
 function stillWorkingTwiML(token: string, attempt: number): string {
@@ -892,7 +910,7 @@ export async function startClairePreDriveCall(input: {
     const call = await client!.calls.create({
       to,
       from: assertPhone(fromNumber),
-      twiml: preDriveConversationTwiML({ text: brief, token, opening: true, hints }),
+      twiml: openingVoiceTwiml({ text: brief, token, opening: true, hints }),
       ...claireVoiceCallCreateOptions(),
     });
     await safeClaireLedger(async () => {
@@ -967,7 +985,7 @@ async function answerInboundClaireCall(req: Request): Promise<{ status: number; 
   });
   return {
     status: 200,
-    twiml: preDriveConversationTwiML({
+    twiml: openingVoiceTwiml({
       text: CLAIRE_INBOUND_GREETING,
       token,
       hints,
