@@ -69,6 +69,15 @@ import {
   isClaireXaiTtsEnabled,
 } from "./xaiTts";
 import { renderClaireOpeningVoice } from "./voice/claireVoiceTransport";
+import {
+  abandonAuthorizedAmdHandoff,
+  amdDetectionTwiml,
+  amdHangupTwiml,
+  authorizedAmdCreateFields,
+  CLAIRE_AMD_PATH,
+  recordAuthorizedCallAttempted,
+  recordExistingCallStatusReceipt,
+} from "./amdVoicemail";
 
 const DEBRIEF_PATH = "/api/claire/twilio/debrief";
 const CONFIRM_PATH = "/api/claire/twilio/confirm";
@@ -907,11 +916,27 @@ export async function startClairePreDriveCall(input: {
     missionId: input.missionId,
   });
   try {
+    const interactiveTwiml = openingVoiceTwiml({ text: brief, token, opening: true, hints });
+    const from = assertPhone(fromNumber);
+    const amdFields = await authorizedAmdCreateFields({
+      token,
+      tenantId: input.tenantId,
+      operatorUserId: input.actorId,
+      interactiveTwiml,
+      decisionUrl: `${publicBaseUrl()}${CLAIRE_AMD_PATH}?token=${encodeURIComponent(token)}`,
+    });
     const call = await client!.calls.create({
       to,
-      from: assertPhone(fromNumber),
-      twiml: openingVoiceTwiml({ text: brief, token, opening: true, hints }),
+      from,
+      ...amdFields,
       ...claireVoiceCallCreateOptions(),
+    });
+    await recordAuthorizedCallAttempted({
+      tenantId: input.tenantId,
+      operatorUserId: input.actorId,
+      callSid: call.sid,
+      from,
+      to,
     });
     await safeClaireLedger(async () => {
       await attachCallSid({
@@ -928,6 +953,7 @@ export async function startClairePreDriveCall(input: {
     });
     return { callSid: call.sid, brief };
   } catch (error) {
+    await abandonAuthorizedAmdHandoff(token);
     await dropCall(conversationId);
     await endClaireCallLedger({
       claireConversationId: conversationId,
@@ -1069,11 +1095,33 @@ export async function startClairePostStopCall(input: {
       recordingEnabled: isClaireVoiceRecordingEnabled(),
     })
   );
-  const call = await client!.calls.create({
+  const interactiveTwiml = response.toString();
+  const from = assertPhone(fromNumber);
+  const amdFields = await authorizedAmdCreateFields({
+    token,
+    tenantId: input.tenantId,
+    operatorUserId: input.actorId,
+    interactiveTwiml,
+    decisionUrl: `${publicBaseUrl()}${CLAIRE_AMD_PATH}?token=${encodeURIComponent(token)}`,
+  });
+  let call: { sid: string };
+  try {
+    call = await client!.calls.create({
+      to,
+      from,
+      ...amdFields,
+      ...claireVoiceCallCreateOptions(),
+    });
+  } catch (error) {
+    await abandonAuthorizedAmdHandoff(token);
+    throw error;
+  }
+  await recordAuthorizedCallAttempted({
+    tenantId: input.tenantId,
+    operatorUserId: input.actorId,
+    callSid: call.sid,
+    from,
     to,
-    from: assertPhone(fromNumber),
-    twiml: response.toString(),
-    ...claireVoiceCallCreateOptions(),
   });
   await safeClaireLedger(async () => {
     await attachCallSid({
@@ -1595,11 +1643,42 @@ export function registerClaireRoutes(app: Express): void {
     }
     const body = (req.body ?? {}) as Record<string, string>;
     res.status(204).end();
-    void handleCallCompleted({
-      callSid: String(body.CallSid ?? ""),
-      callStatus: String(body.CallStatus ?? body.CallStatusEvent ?? ""),
-    }).catch(error => {
+    void (async () => {
+      try {
+        await recordExistingCallStatusReceipt(body);
+      } catch (error) {
+        console.error(
+          "[Claire] call status receipt failed",
+          error instanceof Error ? error.name : "error"
+        );
+      }
+      await handleCallCompleted({
+        callSid: String(body.CallSid ?? ""),
+        callStatus: String(body.CallStatus ?? body.CallStatusEvent ?? ""),
+      });
+    })().catch(error => {
       console.error("[ClaireLedger] call-status failed", error);
     });
+  });
+
+  app.post(CLAIRE_AMD_PATH, async (req: Request, res: Response) => {
+    res.type("text/xml");
+    if (!validTwilioRequest(req)) {
+      return res.status(403).send(amdHangupTwiml());
+    }
+    const body = (req.body ?? {}) as Record<string, string>;
+    try {
+      const result = await amdDetectionTwiml({
+        token: String(req.query.token ?? ""),
+        answeredBy: body.AnsweredBy,
+        callSid: body.CallSid,
+        from: body.From,
+        to: body.To,
+      });
+      return res.status(result.status).send(result.twiml);
+    } catch (error) {
+      console.error("[Claire] amd webhook error", error instanceof Error ? error.name : "error");
+      return res.status(200).send(amdHangupTwiml());
+    }
   });
 }
