@@ -60,7 +60,7 @@ export type CommandCargoLink = {
 
 /**
  * Provenance for an explicit operator mission command.
- * This is today-only displacement evidence. It is not a WeeklyIntent rewrite.
+ * Today-only displacement evidence. It does not rewrite the locked week.
  */
 export type OperatorMissionMetadata = {
   version: 1;

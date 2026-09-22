@@ -542,7 +542,6 @@ describe("operator mission director and playable projection", () => {
     expect(voice.indexOf("executeOperatorMissionCommand")).toBeLessThan(voice.indexOf("result = await runClaireTurn("));
     expect(voice).toMatch(/function startVoiceTurn[\s\S]*runAuthoritativeClaireVoiceTurn/);
     expect(voice).toMatch(/function runRelayAuthoritativeTurn[\s\S]*runAuthoritativeClaireVoiceTurn/);
-    const brain = readFileSync(new URL("./brain/contracts/index.ts", import.meta.url), "utf8");
-    expect(brain).toMatch(/BRAIN_V2_PRODUCTION_AUTHORITY\s*=\s*false/);
+    expect(source).not.toMatch(/from ["'][^"']*brain\//);
   });
 });
