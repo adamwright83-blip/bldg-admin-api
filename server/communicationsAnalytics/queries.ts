@@ -169,7 +169,7 @@ export async function loadCommunicationsProjectionFacts(input: {
               link.goldlineEntityKind === "mission"
           )
           .map(link => Number(link.goldlineEntityId)),
-      ].filter((id): id is number => Number.isInteger(id) && id > 0)
+      ].filter((id): id is number => id != null && Number.isInteger(id) && id > 0)
     ),
   ];
   const explicitOrderIds = [
@@ -181,7 +181,7 @@ export async function loadCommunicationsProjectionFacts(input: {
             link.goldlineEntityKind === "order"
         )
         .map(link => Number(link.goldlineEntityId))
-        .filter((id): id is number => Number.isInteger(id) && id > 0)
+        .filter((id): id is number => Number.isFinite(id) && id > 0)
     ),
   ];
 
