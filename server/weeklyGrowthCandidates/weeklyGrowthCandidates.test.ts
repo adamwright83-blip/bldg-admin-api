@@ -515,6 +515,87 @@ describe("weekly growth candidates", () => {
     expect(feed.candidates[0]?.sourceKind).toBe("unfinished_growth_work");
   });
 
+  it("does not emit a blank candidate when an active run has no authoritative title", async () => {
+    const run = rec({
+      origin: "campaign_run",
+      sourceId: "run-greystar",
+      runId: "run-greystar",
+      campaignId: "greystar-koreatown-colosseum",
+      title: "",
+      objective: "",
+      status: "active",
+      grounding: "campaign_linked",
+      alreadyInFlight: true,
+    });
+    const disabled = await load(bundle({
+      unfinished: available([run]),
+      campaigns: available([campaign("greystar-koreatown-colosseum", "Greystar Hunt", false, { objective: "Pitch Greystar" })]),
+    }));
+    const unavailable = await load(bundle({
+      unfinished: available([run]),
+      campaigns: { status: "unavailable", reason: "database_unavailable" },
+    }));
+    const absent = await load(bundle({
+      unfinished: available([run]),
+      campaigns: available([]),
+    }));
+    for (const feed of [disabled, unavailable, absent]) {
+      expect(feed.candidates.some(item => item.title.trim() === "" || item.objective.trim() === "")).toBe(false);
+      expect(feed.candidates.some(item => item.title === "greystar-koreatown-colosseum" || item.objective === "greystar-koreatown-colosseum")).toBe(false);
+    }
+    expect(disabled.candidates.map(item => item.title)).toEqual(["Greystar Hunt"]);
+    expect(disabled.candidates[0]).toMatchObject({
+      alreadyInFlight: true,
+      sourceKind: "unfinished_growth_work",
+      objective: "Pitch Greystar",
+    });
+    expect(disabled.sources.unfinished_growth_work).toMatchObject({ status: "available", observedCount: 1, eligibleCount: 1, shownCount: 1 });
+    expect(disabled.sources.campaign_library).toMatchObject({ status: "available", observedCount: 1, eligibleCount: 0, shownCount: 0 });
+    expect(unavailable.candidates).toEqual([]);
+    expect(unavailable.sources.unfinished_growth_work).toMatchObject({ status: "available", observedCount: 1, eligibleCount: 1, shownCount: 0 });
+    expect(unavailable.sources.campaign_library).toEqual({ status: "unavailable", reason: "database_unavailable" });
+    expect(absent.candidates).toEqual([]);
+    expect(absent.sources.campaign_library).toMatchObject({ status: "available", observedCount: 0, shownCount: 0 });
+    expect(absent.sources.unfinished_growth_work).toMatchObject({ status: "available", observedCount: 1, eligibleCount: 1, shownCount: 0 });
+  });
+
+  it("titles an active run from its library template and ranks it ahead of an unrelated template", async () => {
+    const feed = await load(bundle({
+      unfinished: available([
+        rec({
+          origin: "campaign_run",
+          sourceId: "run-greystar",
+          runId: "run-greystar",
+          campaignId: "greystar-koreatown-colosseum",
+          title: "",
+          objective: "",
+          status: "active",
+          grounding: "campaign_linked",
+          alreadyInFlight: true,
+        }),
+      ]),
+      campaigns: available([
+        campaign("greystar-koreatown-colosseum", "Greystar Hunt", true, { objective: "Pitch Greystar leasing" }),
+        campaign("review-request", "Ask for reviews", true, { motionHint: "reputation", objective: "Ask a recent customer for a review" }),
+      ]),
+    }));
+    expect(feed.candidates.map(item => item.title)).toEqual(["Greystar Hunt", "Ask for reviews"]);
+    const inFlight = feed.candidates[0]!;
+    expect(inFlight.alreadyInFlight).toBe(true);
+    expect(inFlight.sourceKind).toBe("unfinished_growth_work");
+    expect(inFlight.objective).toBe("Pitch Greystar leasing");
+    expect(inFlight.title).not.toBe("greystar-koreatown-colosseum");
+    expect(inFlight.provenance).toMatchObject({
+      reader: "listOperatorRuns",
+      sourceType: "campaign_run",
+      sourceIds: ["greystar-koreatown-colosseum", "run-greystar"],
+    });
+    expect(inFlight.sourceRefs.map(ref => ref.sourceId).sort()).toEqual(["greystar-koreatown-colosseum", "run-greystar"]);
+    expect(inFlight.rankReasons).toContain("CONTINUE_EXISTING_WORK");
+    expect(feed.candidates[1]?.alreadyInFlight).toBe(false);
+    expect(feed.candidates[1]?.sourceKind).toBe("campaign_library");
+  });
+
   it("does not call writer, planner, recurrence, or mutation paths", () => {
     const source = productionSource();
     const banned = [

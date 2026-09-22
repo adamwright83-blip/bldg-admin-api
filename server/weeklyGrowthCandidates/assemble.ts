@@ -176,8 +176,10 @@ export function assembleWeeklyGrowthCandidates(
   const swingRank = new Map(swingOrder.map((item, index) => [item.id, index]));
 
   const eligible = WEEKLY_GROWTH_SOURCE_KINDS.flatMap(kind => eligibleBySource.get(kind) ?? []);
-  const groups = dedupe(eligible);
-  const ranked: Ranked[] = groups.map(group => toRanked(group, input, macro, warmRank, swingRank, warmOrder.length));
+  const groups = resolveUntitledRuns(dedupe(eligible), libraryTitleDonors(input.bundle, input.tenantId));
+  const ranked: Ranked[] = groups
+    .map(group => toRanked(group, input, macro, warmRank, swingRank, warmOrder.length))
+    .filter(item => item.candidate.title.trim().length > 0 && item.candidate.objective.trim().length > 0);
   ranked.sort(compareRanked);
 
   const shown: WeeklyGrowthCandidate[] = [];
@@ -353,6 +355,41 @@ function toLever(record: WeeklyGrowthRawRecord): LeverCandidate {
     daysSinceLastOrder: record.daysSinceLastOrder,
     estimatedMonthlyImpactCents: record.estimatedMonthlyImpactCents,
   };
+}
+
+/**
+ * A campaign run does not carry its own title. The library row does.
+ * Use that title when the library source actually returned it, including a
+ * disabled template. If the library is unavailable, the template is absent,
+ * or the row has no human-readable title, drop the run. Never mint a title
+ * from campaignId, and never report the run as if it had not been read.
+ */
+function libraryTitleDonors(bundle: WeeklyGrowthSourceBundle, tenantId: string): WeeklyGrowthRawRecord[] {
+  if (bundle.campaigns.status !== "available") return [];
+  return bundle.campaigns.records.filter(record =>
+    record.origin === "campaign_template" &&
+    record.tenantId === tenantId &&
+    Boolean(record.campaignId) &&
+    record.title.trim().length > 0
+  );
+}
+
+function resolveUntitledRuns(
+  groups: WeeklyGrowthRawRecord[][],
+  donors: readonly WeeklyGrowthRawRecord[]
+): WeeklyGrowthRawRecord[][] {
+  const resolved: WeeklyGrowthRawRecord[][] = [];
+  for (const group of groups) {
+    if (group.some(record => record.title.trim().length > 0)) {
+      resolved.push(group);
+      continue;
+    }
+    const campaignIds = new Set(group.map(record => record.campaignId).filter((id): id is string => Boolean(id)));
+    const matched = donors.filter(donor => donor.campaignId != null && campaignIds.has(donor.campaignId) && !group.includes(donor));
+    if (matched.length === 0) continue;
+    resolved.push([...group, ...matched]);
+  }
+  return resolved;
 }
 
 function dedupe(records: WeeklyGrowthRawRecord[]): WeeklyGrowthRawRecord[][] {

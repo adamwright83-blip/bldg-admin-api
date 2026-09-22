@@ -76,6 +76,8 @@ Never emit pickups, drop-offs, route stops, laundry processing, JETRO or procure
 
 Continuity means continue meaningful growth already underway. An enabled template has `alreadyInFlight: false` unless an authoritative record (an active campaign run, or other stable id link) says that motion is underway. A follow-up already on the day line is `alreadyInFlight: true`.
 
+An active campaign run has no title of its own. Its title and objective come from the Campaign Library row for that campaign id, including a disabled row, when that source is available and the row has a human-readable title. If the library is unavailable, the template is absent, or the row has no title, the run is not emitted. The feed does not invent a title from the campaign id, and it does not report the run as unread. Every emitted candidate has a non-empty title and objective.
+
 ## Dedupe
 
 Same underlying motion across Day Director, a proactive obligation, and a commercial follow-up becomes one candidate. The link is a stable id (`followUpId`, obligation id, `sales:{missionId}:{utcDue}`, campaign id, customer key for recovery). Similar titles stay distinct.
