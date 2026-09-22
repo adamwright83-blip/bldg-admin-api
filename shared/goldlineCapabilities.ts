@@ -123,7 +123,7 @@ export function formatCapabilityBriefing(
     unsupported.length
       ? `Not yet supported: ${unsupported.join(", ")}. If asked, say so and offer engineering; never pretend.`
       : "",
-    "The registry is authoritative.",
+    "Registry authoritative.",
   ]
     .filter(Boolean)
     .join(" ");
