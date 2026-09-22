@@ -10,6 +10,7 @@ export type EvidenceType =
   | "operations"
   | "day_line_read"
   | "field_today"
+  | "workday_command"
   | "conversation_turn"
   | "operator_utterance"
   | "claim_receipt"

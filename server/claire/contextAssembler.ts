@@ -16,6 +16,7 @@ import {
   getLatestStrategySnapshot,
 } from "../strategy/snapshotBuilder";
 import type { StrategySnapshot } from "../strategy/snapshotTypes";
+import type { DailyCommand } from "../../shared/claireWorkdayCommand";
 
 export type ClairePhase = "pre_drive" | "post_stop";
 
@@ -125,6 +126,7 @@ export type ClaireDriveContext = {
     deltaCount: number;
     hasConfirmedPlan: boolean;
   };
+  workdayCommand?: DailyCommand | null;
   strategySnapshotId?: string | null;
   strategySnapshot?: StrategySnapshot | null;
 };

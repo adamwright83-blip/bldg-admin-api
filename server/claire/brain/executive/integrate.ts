@@ -121,6 +121,7 @@ const BUSINESS_TRUTH_TYPES = new Set([
   "operations",
   "day_line_read",
   "field_today",
+  "workday_command",
   "prior_claim_recheck",
 ]);
 

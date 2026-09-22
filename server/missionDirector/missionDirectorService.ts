@@ -9,7 +9,9 @@ import { getDb } from "../db";
 import { getFieldToday } from "../field/fieldTodayService";
 import { listCampaigns } from "../campaignLibrary/campaignLibraryService";
 import { getActiveMacroGoal } from "../claire/macroGoalService";
-import { detectTimePockets, DEFAULT_TRAVEL_RESERVE_MINUTES, DEFAULT_UNKNOWN_STOP_WORK_RESERVE_MINUTES } from "./pocketDetection";
+import { loadDailyCommand } from "../claire/dailyCommandContract";
+import { projectRecurrenceForDate } from "../claire/workdayRecurrenceService";
+import { detectTimePockets, applyCommandProtection, DEFAULT_TRAVEL_RESERVE_MINUTES, DEFAULT_UNKNOWN_STOP_WORK_RESERVE_MINUTES } from "./pocketDetection";
 import { eligibleCampaigns } from "./eligibility";
 import { selectMissionPlan } from "./planSelection";
 import { explainMissionPlan } from "./explainPlan";
@@ -118,6 +120,7 @@ export function computePlanningFingerprint(input: {
   campaigns: readonly Parameters<typeof planningCampaignFingerprint>[0][];
   prepReady: Record<string, boolean>;
   rankingContext: RankingContext;
+  commandFingerprint?: string | null;
 }): string {
   return fingerprint({
     businessDate: input.businessDate,
@@ -138,6 +141,7 @@ export function computePlanningFingerprint(input: {
     },
     travelReserveMinutes: DEFAULT_TRAVEL_RESERVE_MINUTES,
     unknownStopWorkReserveMinutes: DEFAULT_UNKNOWN_STOP_WORK_RESERVE_MINUTES,
+    commandFingerprint: input.commandFingerprint ?? null,
   });
 }
 
@@ -224,6 +228,14 @@ export async function computeMissionPlan(input: {
       timeZone: input.timeZone,
     }),
   ]);
+  const command = await loadDailyCommand({
+    tenantId: input.tenantId,
+    actorId: input.operatorId,
+    dayDirectorActorId: input.operatorId,
+    operatorUserId: input.operatorId,
+    businessDate: input.businessDate,
+    timeZone: input.timeZone,
+  }).catch(() => null);
   const enabledCampaigns = allCampaigns.filter(c => c.enabled);
   const prepReady = await computePrepReadiness({
     tenantId: input.tenantId,
@@ -236,7 +248,25 @@ export async function computeMissionPlan(input: {
     businessDate: input.businessDate,
   });
   const { eligible } = eligibleCampaigns({ campaigns: enabledCampaigns, prepReady });
-  const pockets = detectTimePockets({ timeline: fieldToday.timeline });
+  const timeline = [
+    ...fieldToday.timeline.map(item => ({
+      id: item.id,
+      title: item.title,
+      scheduledAt: item.scheduledAt,
+      kind: item.kind,
+    })),
+    ...(command?.constraints.occupancies ?? []).map(occupancy => ({
+      id: occupancy.id,
+      title: occupancy.title,
+      scheduledAt: occupancy.scheduledAt,
+      kind: occupancy.kind,
+      durationMinutes: occupancy.durationMinutes,
+    })),
+  ];
+  const pockets = applyCommandProtection(
+    detectTimePockets({ timeline }),
+    Boolean(command?.constraints.protectDiscretionary)
+  );
   const bare = selectMissionPlan({
     eligible,
     pockets,
@@ -262,6 +292,7 @@ export async function computeMissionPlan(input: {
     campaigns: enabledCampaigns,
     prepReady,
     rankingContext,
+    commandFingerprint: command?.constraints.fingerprint ?? null,
   });
   return { outcome, inputFingerprint };
 }
@@ -298,6 +329,7 @@ async function planForDateInner(input: {
     // Fail closed like every other Goldline service, not by throwing —
     // getFieldToday itself hard-throws with no database, so this must be
     // checked before computeMissionPlan ever calls it.
+    // Recurrence is not projected here: there is no database to write.
     return {
       id: randomUUID(),
       tenantId: input.tenantId,
@@ -315,6 +347,14 @@ async function planForDateInner(input: {
       createdAt: new Date().toISOString(),
     };
   }
+  // Execution write, not a read. Operator-confirmed recurrence rules become
+  // today's Day Director commitments before the plan is computed. Idempotent
+  // per rule and date. computeMissionPlan stays persistence-free and only reads.
+  await projectRecurrenceForDate({
+    tenantId: input.tenantId,
+    actorId: input.operatorId,
+    businessDate: input.businessDate,
+  }).catch(() => ({ projectedIds: [], created: 0 }));
   const { outcome, inputFingerprint } = await computeMissionPlan(input);
   const latest = await getLatestPlan(input);
   if (latest && latest.inputFingerprint === inputFingerprint) {

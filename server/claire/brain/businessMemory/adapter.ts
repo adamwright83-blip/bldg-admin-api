@@ -29,6 +29,7 @@ import {
 } from "../../knowledge/accountKnowledge";
 import { loadUnpaidOrders, type UnpaidOrder } from "../../knowledge/openOrdersKnowledge";
 import { loadDayWork, type DayWork } from "../../knowledge/operationsKnowledge";
+import { loadDailyCommand, type DailyCommand } from "../../dailyCommandContract";
 import {
   verifyPriorClaim,
   type FactualClaimReceipt,
@@ -67,6 +68,14 @@ export type BusinessMemoryDeps = {
     now: Date;
     timeZone: string;
   }) => Promise<DayWork>;
+  loadDailyCommand?: (input: {
+    tenantId: string;
+    operatorUserId: string;
+    dayDirectorActorId: string;
+    businessDate: string;
+    now: Date;
+    timeZone: string;
+  }) => Promise<DailyCommand>;
   /** The tenant is passed in; it is never assumed. */
   verifyClaim: (receipt: FactualClaimReceipt, tenantId: string) => Promise<PriorClaimVerification>;
 };
@@ -78,6 +87,16 @@ export const defaultBusinessMemoryDeps: BusinessMemoryDeps = {
   loadHistory: input => loadAccountHistory(input),
   loadOpenOrders: tenantId => loadUnpaidOrders(tenantId),
   loadOperations: input => loadDayWork(input),
+  loadDailyCommand: input =>
+    loadDailyCommand({
+      tenantId: input.tenantId,
+      actorId: input.dayDirectorActorId,
+      dayDirectorActorId: input.dayDirectorActorId,
+      operatorUserId: input.operatorUserId,
+      businessDate: input.businessDate,
+      now: input.now,
+      timeZone: input.timeZone,
+    }),
   verifyClaim: (receipt, tenantId) =>
     // The rechecked query must run against the SAME tenant that made the claim.
     verifyPriorClaim(receipt, {
@@ -102,13 +121,13 @@ export function lookupPriorClaimReceipt(
 }
 
 function unsupportedEvidence(input: {
-  kind: "open_orders" | "operations" | "day_line_read" | "field_today";
+  kind: "open_orders" | "operations" | "day_line_read" | "field_today" | "workday_command";
   reason: string;
   nowIso: string;
 }): EvidenceItem {
   return {
     id: `${input.kind}:${UNSUPPORTED_REQUEST}`,
-    type: input.kind === "field_today" ? "field_today" : input.kind === "open_orders" ? "open_orders" : "day_line_read",
+    type: input.kind === "field_today" ? "field_today" : input.kind === "open_orders" ? "open_orders" : input.kind === "workday_command" ? "workday_command" : input.kind === "operations" ? "operations" : "day_line_read",
     source: UNSUPPORTED_REQUEST,
     provenance: { reader: UNSUPPORTED_REQUEST },
     observedAt: input.nowIso,
@@ -327,9 +346,9 @@ export async function retrieveBusinessEvidence(
 
     case "operations":
     case "day_line_read":
-    case "field_today": {
+    case "field_today":
+    case "workday_command": {
       if (!ctx.dayDirectorActorId || !ctx.businessDate || !ctx.timeZone) {
-        // Say so rather than returning [] — an unconfigured read is not an empty day.
         return [
           unsupportedEvidence({
             kind: request.kind,
@@ -337,6 +356,43 @@ export async function retrieveBusinessEvidence(
             nowIso: ctx.nowIso,
           }),
         ];
+      }
+      if (request.kind === "workday_command") {
+        const loadCommand = deps.loadDailyCommand;
+        if (!loadCommand) {
+          return [
+            unsupportedEvidence({
+              kind: "workday_command",
+              reason: "daily command reader not configured",
+              nowIso: ctx.nowIso,
+            }),
+          ];
+        }
+        const command = await loadCommand({
+          tenantId: ctx.tenantId,
+          operatorUserId: ctx.operatorUserId,
+          dayDirectorActorId: ctx.dayDirectorActorId,
+          businessDate: ctx.businessDate,
+          now: new Date(ctx.nowIso),
+          timeZone: ctx.timeZone,
+        });
+        const item: EvidenceItem = {
+          id: `workday_command:${command.businessDate}`,
+          type: "workday_command",
+          source: "loadDailyCommand",
+          provenance: { reader: "loadDailyCommand" },
+          observedAt: ctx.nowIso,
+          asOf: command.businessDate,
+          freshness: null,
+          coverage: { complete: true, gaps: [] },
+          authoritativeFor: ["current_business_truth"],
+          payload: {
+            command,
+            epistemic: command.epistemic,
+          },
+          operatorVisible: true,
+        };
+        return admitBusinessEvidence([item]);
       }
       const work = await deps.loadOperations({
         tenantId: ctx.tenantId,

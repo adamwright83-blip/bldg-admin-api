@@ -24,7 +24,7 @@ type ScheduledItem = {
   durationMinutes?: number | null;
 };
 
-const FIXED_KINDS = new Set(["pickup", "delivery", "job"]);
+const FIXED_KINDS = new Set(["pickup", "delivery", "job", "protected"]);
 
 export function detectTimePockets(input: {
   timeline: readonly ScheduledItem[];
@@ -104,4 +104,19 @@ export function detectTimePockets(input: {
     });
   }
   return pockets;
+}
+
+export function applyCommandProtection(
+  pockets: TimePocket[],
+  protectDiscretionary: boolean
+): TimePocket[] {
+  if (!protectDiscretionary) return pockets;
+  return pockets.map(pocket => ({
+    ...pocket,
+    usableMinutes: 0,
+    warnings: [
+      ...pocket.warnings,
+      "Discretionary time reserved for Daily Command primary or tomorrow-blocking prep.",
+    ],
+  }));
 }

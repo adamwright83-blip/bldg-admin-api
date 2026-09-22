@@ -2,7 +2,7 @@ import { businessToday } from "../../analytics/businessPeriods";
 import { getDashboardTimeZone } from "../../dashboardZoned";
 import type { DayDirectorProposal } from "../../../shared/dayDirector";
 import { classifyIntentHeuristics, detectAvoidanceDisclosure, extractConversationalFieldOutcome, looksLikeKnowledgeSeeking } from "../../../shared/claireRuntime";
-import { confirmTomorrowUtterance } from "../../../shared/claireWorkday";
+import { confirmTomorrowUtterance, speakMorningReconciliationAsk } from "../../../shared/claireWorkday";
 import { looksLikeCancelRequest, looksLikeEditRequest } from "../../../shared/goldlineDayLine";
 import { ENV } from "../../_core/env";
 import { answerClaireBusinessTurn, looksLikeWorkRequest, type ClaireAnalyticsState, type ClaireBusinessTurnDeps } from "../businessConversation";
@@ -16,6 +16,8 @@ import { commitPendingDisclosuresForConversation } from "../progression/service"
 import { answerClairePreDriveFollowUp } from "../preDriveConversation";
 import { detectConfirmation, handleVoiceCommitmentTurn, type PendingProposalState, type VoiceCommitmentTurnResult } from "../voiceCommitmentLoop";
 import { commitBriefing, loadExistingWork, matchExistingWork, reconcileBriefing, speakBriefingCommit } from "../briefing/briefingCommit";
+import { detectReconciliationComplete, isMorningGreeting } from "../workdayCommandLanguage";
+import { loadConfirmedWorkdayPlan, markWorkdayReconciliation } from "../workdayPlanService";
 import { briefingClock, dayMention, parseTiming } from "../briefing/briefingTiming";
 import type { BriefingItem, ParsedBriefing } from "../briefing/briefingTypes";
 import { parseBriefingDeterministically } from "../briefing/deterministicBriefing";
@@ -222,6 +224,8 @@ export type ClaireTurnDeps = {
   loadExisting: typeof loadExistingWork;
   commit: typeof commitBriefing;
   campaign: typeof getClaireCampaignSummary;
+  markReconciliation?: typeof markWorkdayReconciliation;
+  loadWorkdayPlan?: typeof loadConfirmedWorkdayPlan;
   vocabulary: typeof loadBusinessVocabulary;
   accounts: typeof listAccountRefs;
   accountHistory: typeof loadAccountHistory;
@@ -259,6 +263,8 @@ export function defaultClaireTurnDeps(): ClaireTurnDeps {
     loadExisting: loadExistingWork,
     commit: commitBriefing,
     campaign: getClaireCampaignSummary,
+    markReconciliation: markWorkdayReconciliation,
+    loadWorkdayPlan: loadConfirmedWorkdayPlan,
     vocabulary: loadBusinessVocabulary,
     accounts: listAccountRefs,
     accountHistory: loadAccountHistory,
@@ -448,6 +454,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const clock = briefingClock(now, timeZone);
   const today = businessToday(now, timeZone);
   const { state } = input;
+  if (!state.sessionKind && input.context?.workday?.session) {
+    state.sessionKind = input.context.workday.session;
+  }
   /** Classifier failure of ANY kind (throw, timeout, malformed output) is "unavailable" — never a guess. */
   const classify = async (args: Parameters<ClassifyPriorClaimAct>[0]): Promise<ClaimChallengeReading | null> => {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -583,6 +592,19 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       ...(narratorContextSupplied ? { narratorContextSupplied: true as const } : {}),
     };
     return personalEndCall ? { ...withUtterance, endCall: true } : withUtterance;
+  };
+  const morningSession =
+    state.sessionKind ?? input.context?.workday?.session ?? null;
+  const completeMorningReconciliation = async () => {
+    if (morningSession !== "morning_reconciliation" || !deps.markReconciliation) return;
+    await deps
+      .markReconciliation({
+        tenantId: input.tenantId,
+        actorId: input.dayDirectorActorId,
+        businessDate: today,
+        status: "complete",
+      })
+      .catch(() => undefined);
   };
   const finishCommitmentTurn = (
     turn: Exclude<VoiceCommitmentTurnResult, { kind: "not_applicable" }>
@@ -826,8 +848,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         tenantId: input.tenantId,
         dayDirectorActorId: input.dayDirectorActorId,
         conversationKey: input.conversationKey,
+        vehicleId: input.operatorUserId,
       });
       mark("briefing");
+      await completeMorningReconciliation();
       const commitSpeak = speakBriefingCommit(result, today);
       const receipts = result.receipts ?? [];
       if (reply.remainder) {
@@ -923,6 +947,34 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   }
 
   // ── 4. The whole utterance as a briefing ──────────────────────────────────
+  if (morningSession === "morning_reconciliation" && deps.markReconciliation) {
+    if (detectReconciliationComplete(utterance)) {
+      await completeMorningReconciliation();
+    }
+    if (isMorningGreeting(utterance) && !state.pendingBriefing && !state.pendingProposal) {
+      const plan = deps.loadWorkdayPlan
+        ? await deps
+            .loadWorkdayPlan({
+              tenantId: input.tenantId,
+              actorId: input.dayDirectorActorId,
+              businessDate: today,
+            })
+            .catch(() => null)
+        : null;
+      if (plan?.reconciliation?.status !== "complete") {
+        await deps
+          .markReconciliation({
+            tenantId: input.tenantId,
+            actorId: input.dayDirectorActorId,
+            businessDate: today,
+            status: "asked",
+          })
+          .catch(() => undefined);
+        mark("briefing");
+        return finish({ speak: speakMorningReconciliationAsk(), kind: "answered" });
+      }
+    }
+  }
   let parsed = parseBriefingDeterministically(utterance, clock);
   const openAct = classifyOpenDialogueAct(utterance);
   /**
@@ -1035,6 +1087,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         tenantId: input.tenantId,
         dayDirectorActorId: input.dayDirectorActorId,
         conversationKey: input.conversationKey,
+        vehicleId: input.operatorUserId,
       });
       if (!result?.commitmentIds) {
         mark("briefing");
@@ -1042,6 +1095,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       }
       state.pendingBriefing = null;
       mark("briefing");
+      await completeMorningReconciliation();
       return finish({
         speak: answers.join(" ").trim(),
         receiptBackedCommit: speakBriefingCommit(result, today),

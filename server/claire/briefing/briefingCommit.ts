@@ -11,6 +11,16 @@ import type { MutationReceipt } from "../assertionGuard";
 import { spokenDay } from "./briefingTiming";
 import type { BriefingItem, ParsedBriefing } from "./briefingTypes";
 import { enforceTitleContract } from "./titleContract";
+import { classifyDayDirectorKind, isHousekeepingUtterance } from "../workdayCommandKind";
+import {
+  commandMetadataFromUtterance,
+  detectPrimaryDesignation,
+  detectUnknownCargoIdentity,
+  isVehicleCargoUtterance,
+  itemMatchesPrimary,
+} from "../workdayCommandLanguage";
+import { emptyCommandMetadata } from "../../../shared/claireWorkdayCommand";
+import { confirmLinkedVehicleWork } from "../workdayCargoOrchestrator";
 
 /**
  * Turning a confirmed briefing into Day Line truth, without duplicates:
@@ -111,6 +121,52 @@ function keyFor(conversationKey: string, item: BriefingItem): string {
     .slice(0, 40);
 }
 
+function itemKey(item: BriefingItem): string {
+  return `${item.kind}|${item.businessDate}|${item.quote}`;
+}
+
+function primaryItemKey(parsed: ParsedBriefing): string | null {
+  const whole = parsed.items.map(entry => entry.quote).join(" ");
+  if (!detectPrimaryDesignation(whole)) return null;
+  const newWork = parsed.items.filter(item => item.kind === "new_work");
+  if (newWork.length === 1) return itemKey(newWork[0]!);
+  const match = newWork.find(item => itemMatchesPrimary(`${item.title} ${item.quote}`, whole));
+  return match ? itemKey(match) : null;
+}
+
+function commandForItem(item: BriefingItem, parsed: ParsedBriefing): import("../../../shared/claireWorkdayCommand").DayDirectorCommandMetadata {
+  const nowIso = new Date().toISOString();
+  const interpreted = commandMetadataFromUtterance(item.quote, nowIso);
+  const command = emptyCommandMetadata();
+  const isPrimary = primaryItemKey(parsed) === itemKey(item);
+  command.role = isPrimary
+    ? "primary"
+    : isHousekeepingUtterance(item.quote)
+      ? "housekeeping"
+      : interpreted.role === "primary"
+        ? null
+        : interpreted.role;
+  command.designatedBy = isPrimary ? "operator" : null;
+  command.designatedAt = isPrimary ? nowIso : null;
+  command.promisedTo = interpreted.promisedTo;
+  command.identityUnknown = detectUnknownCargoIdentity(item.quote);
+  if (item.timing.kind === "at") {
+    command.constraints.windowStart = item.timing.start;
+    command.constraints.scheduleLabel = item.timing.label;
+  } else if (item.timing.kind === "window") {
+    command.constraints.windowStart = item.timing.start;
+    command.constraints.windowEnd = item.timing.end;
+    command.constraints.scheduleLabel = item.timing.label;
+  } else if (item.timing.kind !== "none") {
+    command.constraints.scheduleLabel = item.timing.label;
+  }
+  return command;
+}
+
+function kindForItem(item: BriefingItem): "growth" | "prep" | "operations" {
+  return classifyDayDirectorKind(`${item.title} ${item.quote}`);
+}
+
 function detailNote(item: BriefingItem): string | null {
   const parts = [
     item.timing.kind === "none" ? null : item.timing.label,
@@ -130,21 +186,44 @@ export type BriefingCommitResult = {
 
 export async function commitBriefing(
   parsed: ParsedBriefing,
-  input: { tenantId: string; dayDirectorActorId: string; conversationKey: string },
+  input: { tenantId: string; dayDirectorActorId: string; conversationKey: string; vehicleId?: string },
   deps: {
     accept?: typeof acceptProposal;
     complete?: typeof completeDayDirectorCommitment;
     update?: typeof updateDayDirectorCommitment;
+    linkVehicleWork?: typeof confirmLinkedVehicleWork;
   } = {}
 ): Promise<BriefingCommitResult> {
   const accept = deps.accept ?? acceptProposal;
   const complete = deps.complete ?? completeDayDirectorCommitment;
   const update = deps.update ?? updateDayDirectorCommitment;
+  const linkVehicleWork = deps.linkVehicleWork ?? confirmLinkedVehicleWork;
   const result: BriefingCommitResult = { added: [], completed: [], failed: [], commitmentIds: [], receipts: [] };
   for (const item of parsed.items) {
     try {
       if (item.kind === "new_work") {
         if (item.existing) continue;
+        if (input.vehicleId && isVehicleCargoUtterance(`${item.title} ${item.quote}`)) {
+          const linked = await linkVehicleWork({
+            tenantId: input.tenantId,
+            actorId: input.dayDirectorActorId,
+            vehicleId: input.vehicleId,
+            businessDate: item.businessDate,
+            requestId: keyFor(input.conversationKey, item),
+            transcript: item.quote,
+            place: item.place,
+            confirmed: true,
+          });
+          if (linked.dayLine.ok) {
+            result.added.push(item);
+            result.commitmentIds.push(linked.dayLine.id);
+            result.receipts.push(...linked.receipts);
+            continue;
+          }
+          if (!linked.dayLine.ok && linked.cargo.ok === false && linked.dayLine.error) {
+            throw new Error(linked.dayLine.error);
+          }
+        }
         const stored = await accept({
           tenantId: input.tenantId,
           actorId: input.dayDirectorActorId,
@@ -152,7 +231,7 @@ export async function commitBriefing(
           proposal: {
             promptKey: `briefing:${keyFor(input.conversationKey, item)}`,
             title: enforceTitleContract(item.title).slice(0, 255),
-            kind: "operations",
+            kind: kindForItem(item),
             quantity: item.quantity,
             sourceText: item.quote,
             prerequisites: [],
@@ -161,6 +240,8 @@ export async function commitBriefing(
             detailState: item.needs ? "NEEDS_DETAILS" : "COMPLETE",
             missingDetails: item.needs ? [item.needs] : [],
             detailNote: detailNote(item),
+            targetBusinessDate: item.businessDate,
+            command: commandForItem(item, parsed),
           },
         });
         const id = stored && typeof stored === "object" && "id" in stored ? String((stored as { id?: unknown }).id ?? "") : "";
@@ -196,7 +277,7 @@ export async function commitBriefing(
         proposal: {
           promptKey: `briefing-done:${keyFor(input.conversationKey, item)}`,
           title: enforceTitleContract(item.title).slice(0, 255),
-          kind: "operations",
+          kind: kindForItem(item),
           quantity: null,
           sourceText: item.quote,
           prerequisites: [],
@@ -205,6 +286,8 @@ export async function commitBriefing(
           detailState: "COMPLETE",
           missingDetails: [],
           detailNote: "Operator reported this as already done",
+          targetBusinessDate: item.businessDate,
+          command: commandForItem(item, parsed),
         },
       });
       const id = stored && typeof stored === "object" && "id" in stored ? String((stored as { id?: unknown }).id ?? "") : "";

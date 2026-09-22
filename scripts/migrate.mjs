@@ -2201,5 +2201,33 @@ await assertRequiredColumns("narrator_os_presentation_receipt", [
   "presentationId", "status", "preparedAt", "idempotencyKey",
 ]);
 
+// ── Day Director recurrence (Daily Command) ─────────────────────
+// Mirrors drizzle/0092_day_director_recurrence.sql. A recurrence rule
+// is not an order; it only projects Day Line commitments.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS day_director_recurrence_rules (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL DEFAULT 'default',
+    actorId VARCHAR(128) NOT NULL,
+    sourceIdentity VARCHAR(64) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    kind ENUM('growth','prep','operations') NOT NULL,
+    weekday VARCHAR(16) NOT NULL,
+    windowStart VARCHAR(8) NULL,
+    windowEnd VARCHAR(8) NULL,
+    sourceText TEXT NULL,
+    status ENUM('active','cancelled') NOT NULL DEFAULT 'active',
+    metadataJson JSON NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_day_director_recurrence_source (tenantId, actorId, sourceIdentity),
+    KEY idx_day_director_recurrence_actor (tenantId, actorId, status)
+  )`,
+  "CREATE TABLE day_director_recurrence_rules"
+);
+await assertRequiredColumns("day_director_recurrence_rules", [
+  "tenantId", "actorId", "sourceIdentity", "title", "kind", "weekday", "status",
+]);
+
 await conn.end();
 console.log("\nMigration complete.");

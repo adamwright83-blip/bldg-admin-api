@@ -18,6 +18,7 @@ export type BusinessRetrievalKind =
   | "operations"
   | "day_line_read"
   | "field_today"
+  | "workday_command"
   | "contact_account_resolution";
 
 export type BusinessRetrievalRequest = {

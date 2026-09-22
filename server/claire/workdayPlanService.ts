@@ -8,13 +8,15 @@ import {
   CLAIRE_WORKDAY_PLAN_KEY,
   detectWorkdaySession,
   diffWorkdayPlans,
+  emptyWorkdayReconciliation,
   proposeTomorrowDraft,
   speakEveningPlan,
-  speakMorningDelta,
+  speakMorningCommandOpening,
   workdayItemFromUnified,
   type ConfirmedWorkdayPlan,
   type WorkdayDelta,
   type WorkdayPlanItem,
+  type WorkdayReconciliationState,
 } from "../../shared/claireWorkday";
 
 export function isHiddenWorkdayPlan(metadata: unknown): boolean {
@@ -86,15 +88,18 @@ export async function confirmWorkdayPlan(input: {
   businessDate: string;
   items: WorkdayPlanItem[];
   missingQuestion?: string | null;
+  reconciliation?: WorkdayReconciliationState;
 }): Promise<ConfirmedWorkdayPlan> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const existing = await loadConfirmedWorkdayPlan(input);
   const snapshot: ConfirmedWorkdayPlan = {
     businessDate: input.businessDate,
     confirmedAt: new Date().toISOString(),
     actorId: input.actorId,
     items: input.items,
     missingQuestion: input.missingQuestion ?? null,
+    reconciliation: input.reconciliation ?? existing?.reconciliation ?? emptyWorkdayReconciliation(),
   };
   const row = {
     id: randomUUID(),
@@ -123,6 +128,31 @@ export async function confirmWorkdayPlan(input: {
       },
     });
   return snapshot;
+}
+
+export async function markWorkdayReconciliation(input: {
+  tenantId: string;
+  actorId: string;
+  businessDate: string;
+  status: "asked" | "complete";
+}): Promise<WorkdayReconciliationState> {
+  const existing = await loadConfirmedWorkdayPlan(input);
+  const nowIso = new Date().toISOString();
+  const previous = existing?.reconciliation ?? emptyWorkdayReconciliation();
+  const reconciliation: WorkdayReconciliationState = {
+    status: input.status,
+    askedAt: input.status === "asked" ? previous.askedAt ?? nowIso : previous.askedAt,
+    completedAt: input.status === "complete" ? nowIso : previous.completedAt,
+  };
+  await confirmWorkdayPlan({
+    tenantId: input.tenantId,
+    actorId: input.actorId,
+    businessDate: input.businessDate,
+    items: existing?.items ?? [],
+    missingQuestion: existing?.missingQuestion ?? null,
+    reconciliation,
+  });
+  return reconciliation;
 }
 
 export async function previewWorkdayLoop(input: {
@@ -156,12 +186,14 @@ export async function previewWorkdayLoop(input: {
       ? tomorrowDraft
       : assembleTodayCandidates(input.context);
   const deltas = diffWorkdayPlans({ confirmed, current });
+  const reconciliation = confirmed?.reconciliation ?? emptyWorkdayReconciliation();
+  const morningSpeak = speakMorningCommandOpening(session, reconciliation, deltas);
   return {
     session,
     tomorrowDraft,
     eveningSpeak: speakEveningPlan(tomorrowDraft),
     confirmed,
     deltas,
-    morningSpeak: speakMorningDelta(deltas),
+    morningSpeak,
   };
 }
