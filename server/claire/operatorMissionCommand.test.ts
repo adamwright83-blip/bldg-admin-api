@@ -336,11 +336,72 @@ describe("operator mission command grammar", () => {
     expect(clarify.speak).toBe(OPERATOR_MISSION_CLARIFY_ABSENT_SPEAK);
     expect(clarify.speak).not.toMatch(CLARIFY_BANNED);
     expect(OPERATOR_MISSION_CLARIFY_AMBIGUOUS_SPEAK).not.toMatch(CLARIFY_BANNED);
+    expect(parseExplicitOperatorMissionCommand("Make publishing the Instagram ad a mission.")?.title).toBe(
+      "Publish the Instagram ad"
+    );
+    expect(parseExplicitOperatorMissionCommand("Turn publishing the Instagram ad into a mission.")?.title).toBe(
+      "Publish the Instagram ad"
+    );
+    const inlineReferent = resolveReferentialMissionCommand({
+      assembled: "make this my mission",
+      priorOperatorUtterance: "Create and publish one static-image Instagram ad.",
+    });
+    expect(inlineReferent.status).toBe("resolved");
+    if (inlineReferent.status === "resolved") {
+      expect(inlineReferent.title).toBe("Create and publish one static-image Instagram ad");
+    }
+    const call = resolveReferentialMissionCommand({
+      assembled: "that's my mission today",
+      priorOperatorUtterance: "Call Dana about The Louise.",
+    });
+    expect(call.status).toBe("resolved");
+    if (call.status === "resolved") expect(call.title).toBe("Call Dana about The Louise");
+    const drop = resolveReferentialMissionCommand({
+      assembled: "make this today's mission",
+      priorOperatorUtterance: "Drop the Ryan order at the dry cleaner.",
+    });
+    expect(drop.status).toBe("resolved");
+    for (const fact of [
+      "The Louise is overdue by 45 days.",
+      "Ryan's order was processed incorrectly.",
+      "Dana hasn't replied.",
+      "John owes us $10,000.",
+    ]) {
+      expect(
+        resolveReferentialMissionCommand({
+          assembled: "make that a mission",
+          priorOperatorUtterance: fact,
+        }).status
+      ).toBe("absent");
+    }
+    expect(sameOperatorMission("Publish the Instagram ad", "Publish the Instagram ad and call Dana")).toBe(false);
+    expect(sameOperatorMission("Call Dana", "Call Dana and email Russell")).toBe(false);
+    expect(
+      sameOperatorMission("Publish the Instagram ad", "Create and publish one static-image Instagram ad")
+    ).toBe(true);
   });
 
   it("does not treat ordinary speech as a mission prefix", () => {
     expect(isIncompleteOperatorMissionPrefix("I'm working on the ad today.")).toBe(false);
     expect(isIncompleteOperatorMissionPrefix("I have a mission today.")).toBe(false);
+    for (const ordinary of [
+      "I want to know my sales today.",
+      "I want you to text me the schedule.",
+      "I want to go home after this.",
+      "Make sure I call Dana.",
+      "Consider what we should do about The Louise.",
+    ]) {
+      expect(parseExplicitOperatorMissionCommand(ordinary)).toBeNull();
+      expect(isIncompleteOperatorMissionPrefix(ordinary)).toBe(false);
+      expect(
+        classifyOperatorMissionVoiceTurn({
+          pendingFragment: null,
+          utterance: ordinary,
+          allowFragmentWait: true,
+        }).kind
+      ).toBe("passthrough");
+    }
+    expect(isIncompleteOperatorMissionPrefix("I want this Meta ad")).toBe(true);
     expect(
       classifyOperatorMissionVoiceTurn({
         pendingFragment: null,
@@ -404,12 +465,31 @@ describe("operator mission canonical write", () => {
     expect(first.ok && second.ok && third.ok).toBe(true);
     if (!first.ok || !second.ok || !third.ok) return;
     expect(second.speak).toBe(OPERATOR_MISSION_ALREADY_SPEAK);
+    expect(second.receipts).toEqual([]);
+    expect(second.actionIds).toEqual([]);
     expect(third.speak).toBe(OPERATOR_MISSION_ALREADY_SPEAK);
+    expect(third.receipts).toEqual([]);
+    expect(third.actionIds).toEqual([]);
     expect(second.dayDirectorCommitmentId).toBe(first.dayDirectorCommitmentId);
     expect(third.dayDirectorCommitmentId).toBe(first.dayDirectorCommitmentId);
     expect(box.rows).toHaveLength(1);
     expect(sameOperatorMission(first.title, "Publish the Instagram ad")).toBe(true);
     expect(box.rows[0]?.status).toBe("open");
+  });
+
+  it("an added action verb is a different mission and demotes the previous primary", async () => {
+    const box = harness();
+    const first = await box.run("Make publishing the Instagram ad my mission today.");
+    const second = await box.run("Make publishing the Instagram ad and calling Dana my mission today.");
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    expect(second.speak).toBe(OPERATOR_MISSION_UPDATED_SPEAK);
+    expect(second.title).toBe("Publish the Instagram ad and call Dana");
+    expect(second.dayDirectorCommitmentId).not.toBe(first.dayDirectorCommitmentId);
+    expect(second.receipts.map(receipt => receipt.claimedState)).toEqual(["updated"]);
+    const previous = box.rows.find(row => row.id === first.dayDirectorCommitmentId);
+    expect(previous).toMatchObject({ status: "open", commandRole: null });
+    expect(box.rows.find(row => row.id === second.dayDirectorCommitmentId)?.commandRole).toBe("primary");
   });
 
   it("a different explicit mission replaces the primary without completing the previous one", async () => {

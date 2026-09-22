@@ -10,10 +10,12 @@
  *   and returns the existing commitment.
  * - A restatement is the same mission when its content-token set is a subset of
  *   the stored title's tokens and the smaller set has at least two tokens
- *   (or one token of length >= 5 when the larger set has at most three).
+ *   (or one token of length >= 5 when the larger set has at most three),
+ *   and the larger title does not add a work-action verb.
  *   Command scaffolding (create/make/set/consider/today/mission/...) is not a token.
  *   "Publish the Instagram ad" and "Create and publish one static-image Instagram ad"
- *   share {publish, instagram, ad} and stay one commitment.
+ *   share the action publish and stay one commitment.
+ *   "Publish the Instagram ad and call Dana" adds call, so it is a different mission.
  * - A genuinely different token set creates a new commitment, designates it
  *   primary, and demotes the previous primary. Demotion does not complete it.
  *
@@ -106,7 +108,47 @@ const GERUNDS: Record<string, string> = {
   designing: "design",
   booking: "book",
   scheduling: "schedule",
+  dropping: "drop",
 };
+
+/** Verbs that make a statement executable work. Create stays scaffolding for equivalence. */
+const WORK_ACTION_VERBS = new Set([
+  "call",
+  "publish",
+  "create",
+  "drop",
+  "send",
+  "visit",
+  "finish",
+  "post",
+  "write",
+  "draft",
+  "email",
+  "design",
+  "book",
+  "schedule",
+  "pitch",
+  "deliver",
+  "pick",
+  "follow",
+  "confirm",
+  "review",
+  "prepare",
+  "build",
+  "launch",
+  "ship",
+  "print",
+  "file",
+  "text",
+  "meet",
+  "walk",
+  "update",
+]);
+
+/** Extra verbs that mean a new mission. Create is not one: create-and-publish is still publish. */
+const DIFFERENCE_ACTION_VERBS = new Set(
+  [...WORK_ACTION_VERBS].filter(verb => verb !== "create")
+);
 
 const FRAMES: Array<{ pattern: RegExp; group: number }> = [
   { pattern: /^create today'?s mission:\s*(.+)$/i, group: 1 },
@@ -119,6 +161,8 @@ const FRAMES: Array<{ pattern: RegExp; group: number }> = [
   { pattern: /^i want (.+?) considered as my mission today$/i, group: 1 },
   { pattern: /^consider (.+?) my mission today$/i, group: 1 },
   { pattern: /^consider (.+?) today'?s mission$/i, group: 1 },
+  { pattern: /^make (.+?) a mission$/i, group: 1 },
+  { pattern: /^turn (.+?) into (?:a mission|today'?s mission)$/i, group: 1 },
 ];
 
 export type ParsedOperatorMissionCommand = {
@@ -207,6 +251,16 @@ export function contentTokens(title: string): string[] {
     .filter(token => token.length >= 2 && !STOP_TOKENS.has(token));
 }
 
+function actionVerbsInTitle(title: string, verbs: Set<string>): Set<string> {
+  const found = new Set<string>();
+  for (const raw of title.toLowerCase().split(/[^a-z0-9]+/)) {
+    if (!raw) continue;
+    const base = GERUNDS[raw] ?? raw;
+    if (verbs.has(base)) found.add(base);
+  }
+  return found;
+}
+
 /** Bounded restatement match. See the file header for the exact rule. */
 export function sameOperatorMission(leftTitle: string, rightTitle: string): boolean {
   const left = contentTokens(leftTitle);
@@ -214,9 +268,15 @@ export function sameOperatorMission(leftTitle: string, rightTitle: string): bool
   if (!left.length || !right.length) return false;
   const a = new Set(left);
   const b = new Set(right);
-  const [small, big] = a.size <= b.size ? [a, b] : [b, a];
+  const [small, big, smallTitle, bigTitle] =
+    a.size <= b.size ? [a, b, leftTitle, rightTitle] : [b, a, rightTitle, leftTitle];
   for (const token of small) {
     if (!big.has(token)) return false;
+  }
+  const smallVerbs = actionVerbsInTitle(smallTitle, DIFFERENCE_ACTION_VERBS);
+  const bigVerbs = actionVerbsInTitle(bigTitle, DIFFERENCE_ACTION_VERBS);
+  for (const verb of bigVerbs) {
+    if (!smallVerbs.has(verb)) return false;
   }
   if (small.size >= 2) return true;
   const only = [...small][0] ?? "";
@@ -283,7 +343,7 @@ export function parseExplicitOperatorMissionCommand(utterance: string): ParsedOp
 }
 
 const REFERENTIAL_BODY =
-  "(?:(?:make|set) (?:this|that) (?:a mission|today'?s mission|the mission(?: today)?|my mission today|as today'?s mission|as my mission today)|turn (?:this|that) into (?:a mission|today'?s mission|the mission(?: today)?|my mission today)|set today'?s mission to (?:this|that))";
+  "(?:(?:make|set) (?:this|that) (?:a mission|today'?s mission|the mission(?: today)?|my mission(?: today)?|as today'?s mission|as my mission today)|turn (?:this|that) into (?:a mission|today'?s mission|the mission(?: today)?|my mission today)|set today'?s mission to (?:this|that)|that(?:'s| is) (?:my mission today|today'?s mission))";
 
 const WORK_LEAD =
   /^(?:(?:please|hey|um|uh|so|well|ok|okay|yeah|yes)[,\s]+)*(?:i(?:'d| would)?\s+like\s+to\s+|i\s+want\s+to\s+|i\s+want\s+|i\s+need\s+to\s+|i\s+need\s+|i(?:'m| am)\s+going\s+to\s+|let(?:'s|s)\s+|can\s+you\s+|could\s+you\s+)+/i;
@@ -326,7 +386,36 @@ function referentialParts(assembled: string): { command: string; prefix: string 
   return { command: match[2], prefix };
 }
 
+function leadingWorkAction(text: string): boolean {
+  const cleaned = normalizeMissionUtterance(text).replace(WORK_LEAD, "").trim();
+  const first = cleaned.split(/\s+/)[0] ?? "";
+  if (!first) return false;
+  if (WORK_ACTION_VERBS.has(GERUNDS[first.toLowerCase()] ?? first.toLowerCase())) return true;
+  return /^(?:create|creating)\s+and\s+(?:publish|publishing)\b/i.test(cleaned);
+}
+
+/** A copula, passive, or status fact. Not something Claire may turn into a task. */
+function isFactualStatement(text: string): boolean {
+  const cleaned = normalizeMissionUtterance(text);
+  if (!cleaned || leadingWorkAction(cleaned)) return false;
+  return /\b(?:is|are|was|were|been|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't|owes|owed)\b/i.test(cleaned);
+}
+
+function isExecutableWorkStatement(text: string): boolean {
+  const cleaned = normalizeMissionUtterance(text);
+  if (!cleaned || isReferentialMissionCommand(cleaned)) return false;
+  if (parseExplicitOperatorMissionCommand(cleaned)) return true;
+  if (leadingWorkAction(cleaned)) return true;
+  if (isFactualStatement(cleaned)) return false;
+  const bare = cleaned.replace(WORK_LEAD, "").trim();
+  if (!bare || /\b(?:is|are|was|were|been|has|have|had|hasn't|haven't|owes|owed|did|does|do)\b/i.test(bare)) {
+    return false;
+  }
+  return normalizeMissionClause(bare) !== null;
+}
+
 function concreteWorkTitle(text: string): string | null {
+  if (!isExecutableWorkStatement(text)) return null;
   const cleaned = normalizeMissionUtterance(text).replace(WORK_LEAD, "").trim();
   if (!cleaned || isReferentialMissionCommand(cleaned)) return null;
   if (/^(?:who|what|when|where|why|how|is|are|do|did|can|could|would|should)\b/i.test(cleaned)) return null;
@@ -401,12 +490,25 @@ export function isIncompleteOperatorMissionPrefix(utterance: string): boolean {
   if (/^turn (?:this|that)(?:\s+into(?:\s+(?:a|today'?s|the|my))?)?$/i.test(text)) return true;
   const words = text.split(/\s+/).filter(Boolean);
   if (words.length < 4 || words.length > 24) return false;
-  if (/^i want\s+\S+(?:\s+\S+){1,}/i.test(text) && !/\bconsidered as my mission today$/i.test(text)) return true;
-  if (/^make\s+\S+(?:\s+\S+){1,}/i.test(text) && !/\b(?:my mission today|today'?s mission|the mission today)$/i.test(text)) {
+  if (
+    /^i want\s+(?!to\b)(?!you\b)\S+(?:\s+\S+){1,}/i.test(text) &&
+    !/\bconsidered as my mission today$/i.test(text)
+  ) {
+    return true;
+  }
+  if (
+    /^make\s+(?!sure\b)\S+(?:\s+\S+){1,}/i.test(text) &&
+    !/\b(?:my mission today|today'?s mission|the mission today|a mission)$/i.test(text)
+  ) {
     return true;
   }
   if (/^set\s+(?!today'?s mission\b)\S+/i.test(text) && !/\bas today'?s mission$/i.test(text)) return true;
-  if (/^consider\s+\S+/i.test(text) && !/\b(?:my mission today|today'?s mission)$/i.test(text)) return true;
+  if (
+    /^consider\s+(?!what\b|whether\b|how\b|if\b|why\b)\S+/i.test(text) &&
+    !/\b(?:my mission today|today'?s mission)$/i.test(text)
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -484,6 +586,12 @@ function licensedSpeak(
   receipts: MutationReceipt[],
   nowIso: string
 ): string | null {
+  if (outcome === "already") {
+    if (receipts.length > 0) return null;
+    if (BANNED_CREATION_SPEECH.test(OPERATOR_MISSION_ALREADY_SPEAK)) return null;
+    if (/^(?:Created|Updated|Done)\b/.test(OPERATOR_MISSION_ALREADY_SPEAK)) return null;
+    return OPERATOR_MISSION_ALREADY_SPEAK;
+  }
   const claimed = outcome === "updated" ? "updated" : "created";
   const receipt = receipts.find(item => item.claimedState === claimed && item.entityId === commitmentId);
   if (!receipt) return null;
@@ -494,16 +602,10 @@ function licensedSpeak(
     writtenTruthStatus: claimed,
   });
   if (verified !== "verified") return null;
-  const speak =
-    outcome === "created"
-      ? OPERATOR_MISSION_CREATED_SPEAK
-      : outcome === "updated"
-        ? OPERATOR_MISSION_UPDATED_SPEAK
-        : OPERATOR_MISSION_ALREADY_SPEAK;
+  const speak = outcome === "created" ? OPERATOR_MISSION_CREATED_SPEAK : OPERATOR_MISSION_UPDATED_SPEAK;
   if (BANNED_CREATION_SPEECH.test(speak)) return null;
   if (outcome === "created" && !/^Created\./.test(speak)) return null;
   if (outcome === "updated" && !/^Updated\./.test(speak)) return null;
-  if (outcome === "already" && /^(?:Created|Updated|Done)\b/.test(speak)) return null;
   return speak;
 }
 
@@ -703,18 +805,17 @@ export async function executeOperatorMissionCommand(
     if (!readbackOk) return failure();
 
     const claimed = outcome === "updated" ? "updated" : "created";
-    const receipts: MutationReceipt[] = [
-      {
-        claimedState: claimed,
-        entityId: commitmentId,
-        statement:
-          outcome === "already"
-            ? `Today's mission remains ${title}.`
-            : outcome === "updated"
-              ? `Today's mission is now ${title}.`
-              : `Today's mission is ${title}.`,
-      },
-    ];
+    const receipts: MutationReceipt[] =
+      outcome === "already"
+        ? []
+        : [
+            {
+              claimedState: claimed,
+              entityId: commitmentId,
+              statement:
+                outcome === "updated" ? `Today's mission is now ${title}.` : `Today's mission is ${title}.`,
+            },
+          ];
     const speak = licensedSpeak(outcome, commitmentId, receipts, nowIso);
     if (!speak) return failure();
     const playable = projectPlayableOperatorMission(effective);
@@ -726,7 +827,7 @@ export async function executeOperatorMissionCommand(
       speak,
       dayDirectorCommitmentId: commitmentId,
       opsTaskId: null,
-      actionIds: [commitmentId],
+      actionIds: outcome === "already" ? [] : [commitmentId],
       receipts,
       businessDate,
       title,

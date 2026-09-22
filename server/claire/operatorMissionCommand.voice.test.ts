@@ -330,6 +330,28 @@ describe("operator mission voice seam", () => {
     expect(result.speak).toBe(OPERATOR_MISSION_CREATED_SPEAK);
   });
 
+  it("leaves ordinary I want conversation on the V1 path", async () => {
+    const token = await save();
+    hoisted.runClaireTurn.mockResolvedValue({
+      speak: "Sales are on the board.",
+      kind: "answered",
+      assembledUtterance: "I want to know my sales today.",
+      thoughtCompleteness: "complete",
+    });
+    const result = await runAuthoritativeClaireVoiceTurn({
+      conversationId: CONVERSATION_ID,
+      conversation: conversation() as never,
+      utterance: "I want to know my sales today.",
+      rawTranscript: null,
+      allowFragmentWait: true,
+      token,
+      webhookReceivedAtMs: Date.now(),
+    });
+    expect(hoisted.executeOperatorMissionCommand).not.toHaveBeenCalled();
+    expect(hoisted.runClaireTurn).toHaveBeenCalledTimes(1);
+    expect(result.speak).toBe("Sales are on the board.");
+  });
+
   it("leaves ordinary conversation on the V1 path", async () => {
     const token = await save();
     hoisted.runClaireTurn.mockResolvedValue({
