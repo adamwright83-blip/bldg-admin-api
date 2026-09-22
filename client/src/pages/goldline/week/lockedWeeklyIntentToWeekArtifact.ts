@@ -2,9 +2,8 @@ import {
   isLockedWeeklyIntent,
   type MissionReadinessRequirement,
   type ReadinessStatus,
+  type RemnantDisposition,
   type WeeklyFixedConstraint,
-  type WeeklyIntent,
-  type WeeklyPrimaryPosture,
 } from "./weeklyIntentContract";
 
 /**
@@ -31,9 +30,9 @@ export type WeekArtifactDay = {
   businessDate: string;
   weekdayLabel: string;
   realPrimaryTitle: string;
-  realPrimaryRef: string | null;
-  /** Copied from the locked primary. Stand-down is not a startable mission. */
-  realPrimaryPosture: WeeklyPrimaryPosture | null;
+  /** Copied from the agreement. Not a route. */
+  commitmentId: string | null;
+  disposition: RemnantDisposition;
   fixedConstraints: WeeklyFixedConstraint[];
   readiness: WeekArtifactReadiness[];
 };
@@ -78,11 +77,11 @@ export function shortWeekday(businessDate: string): string {
 }
 
 export function lockedWeeklyIntentToWeekArtifact(
-  intent: WeeklyIntent,
+  intent: unknown,
   now: Date,
   timeZone = "America/Los_Angeles"
 ): WeekArtifactViewModel {
-  if (!isLockedWeeklyIntent(intent) || !intent.lockedAt) {
+  if (!isLockedWeeklyIntent(intent)) {
     throw new WeekIntentNotLockedError();
   }
   const currentBusinessDate = businessDateInTimeZone(now, timeZone);
@@ -92,14 +91,17 @@ export function lockedWeeklyIntentToWeekArtifact(
     .sort((a, b) => a.businessDate.localeCompare(b.businessDate))
     .map(day => ({
       businessDate: day.businessDate,
-      weekdayLabel: weekdayLabel(day.businessDate, timeZone),
-      realPrimaryTitle: day.primary?.title ?? "",
-      realPrimaryRef: day.primary?.ref ?? null,
-      realPrimaryPosture: day.primary?.posture ?? null,
+      weekdayLabel: day.weekday,
+      realPrimaryTitle: day.primary?.text ?? "",
+      commitmentId: day.primary?.commitmentId ?? null,
+      disposition: day.disposition,
       fixedConstraints: day.fixedConstraints.map(constraint => ({
-        text: constraint.text,
+        sourceRef: constraint.sourceRef,
+        title: constraint.title,
+        businessDate: constraint.businessDate,
+        scheduleLabel: constraint.scheduleLabel,
       })),
-      readiness: day.readiness.map(item => ({
+      readiness: day.readinessRequirements.map(item => ({
         text: item.text,
         kind: item.kind,
         status: item.status,
@@ -116,12 +118,12 @@ export function lockedWeeklyIntentToWeekArtifact(
   };
 }
 
-/** Existing playable mission routes only. Anything else is a no-write callback. */
-const AUTHORIZED_MISSION_ROUTE = /^\/driver\/sales-mission\/\d+$/;
-
-export function authorizedMissionHref(ref: string | null): string | null {
-  if (!ref || !AUTHORIZED_MISSION_ROUTE.test(ref)) return null;
-  return ref;
+/**
+ * A commitment id is not a mission route. Nothing in the agreement maps it
+ * onto `/driver/sales-mission/:id`, so Start stays a no-write callback.
+ */
+export function missionHrefForCommitment(_commitmentId: string | null): null {
+  return null;
 }
 
 export function dayGetsPrimaryCta(
@@ -130,7 +132,7 @@ export function dayGetsPrimaryCta(
 ): boolean {
   return (
     day.businessDate === currentBusinessDate &&
-    day.realPrimaryPosture === "mission" &&
+    day.disposition === "primary" &&
     day.realPrimaryTitle.trim().length > 0
   );
 }

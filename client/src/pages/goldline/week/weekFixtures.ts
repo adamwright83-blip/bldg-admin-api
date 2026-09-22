@@ -1,15 +1,18 @@
 import type { WeekPresentationOverlay } from "./weekPresentationOverlay";
 import type {
   MissionReadinessRequirement,
+  PrimarySource,
+  RemnantDisposition,
+  WeekdayName,
   WeeklyFixedConstraint,
-  WeeklyIntent,
   WeeklyIntentDay,
-  WeeklyIntentPrimary,
+  WeeklyIntentRecord,
 } from "./weeklyIntentContract";
 
 /**
- * Fixture-only weeks. Fiction titles in the overlay are not business data
- * and are not persisted. No invented company or location names.
+ * Fixture-only weeks in the frozen agreement shape.
+ * Fiction titles in the overlay are not business data and are not persisted.
+ * No invented company or location names.
  */
 
 export const FIXTURE_WEEK_START = "2026-09-21";
@@ -26,41 +29,89 @@ export function fixtureNow(businessDate: string): Date {
   return new Date(Date.UTC(year, month - 1, day, 19, 0, 0));
 }
 
-function day(
-  businessDate: string,
-  primary: WeeklyIntentPrimary | null,
-  fixedConstraints: WeeklyFixedConstraint[],
-  readiness: MissionReadinessRequirement[]
-): WeeklyIntentDay {
-  return { businessDate, primary, fixedConstraints, readiness };
+function record(
+  id: string,
+  revision: number,
+  lockedAt: string,
+  weekStart: string,
+  days: WeeklyIntentDay[]
+): WeeklyIntentRecord {
+  return {
+    id,
+    tenantId: "fixture-tenant",
+    operatorId: "fixture-operator",
+    weekStart,
+    revision,
+    source: "operator_confirmed_proposal",
+    lockedAt,
+    days,
+  };
 }
 
-const mission = (title: string, ref: string | null = null): WeeklyIntentPrimary => ({
-  title,
-  ref,
-  posture: "mission",
-});
+function day(
+  businessDate: string,
+  weekday: WeekdayName,
+  disposition: RemnantDisposition,
+  primary: WeeklyIntentDay["primary"],
+  fixedConstraints: WeeklyFixedConstraint[],
+  readinessRequirements: MissionReadinessRequirement[]
+): WeeklyIntentDay {
+  return {
+    businessDate,
+    weekday,
+    disposition,
+    primary,
+    fixedConstraints,
+    readinessRequirements,
+  };
+}
 
-export const fixtureFullLockedWeek: WeeklyIntent = {
-  weekStart: FIXTURE_WEEK_START,
-  revision: 3,
-  source: "locked",
-  lockedAt: "2026-09-21T16:00:00.000Z",
-  days: [
-    day(MON, mission("Launch the ad", "/driver/sales-mission/6"), [{ text: "Clear morning" }], [
-      {
-        text: "Field jacket",
-        kind: "physical",
-        neededForDate: MON,
-        completeByDate: MON,
-        status: "open",
-      },
-    ]),
-    day(TUE, mission("Complete required sales follow-up"), [], []),
+function primary(
+  text: string,
+  commitmentId: string,
+  source: PrimarySource = "operator_stated"
+): NonNullable<WeeklyIntentDay["primary"]> {
+  return { text, source, commitmentId };
+}
+
+function constraint(
+  sourceRef: string,
+  title: string,
+  businessDate: string,
+  scheduleLabel: string
+): WeeklyFixedConstraint {
+  return { sourceRef, title, businessDate, scheduleLabel };
+}
+
+export const fixtureFullLockedWeek: WeeklyIntentRecord = record(
+  "weekly-intent-fixture-full",
+  3,
+  "2026-09-21T16:00:00.000Z",
+  FIXTURE_WEEK_START,
+  [
+    day(
+      MON,
+      "Monday",
+      "primary",
+      primary("Launch the ad", "mon-launch-ad"),
+      [constraint("fixture:mon-morning", "Clear morning", MON, "Morning")],
+      [
+        {
+          text: "Field jacket",
+          kind: "physical",
+          neededForDate: MON,
+          completeByDate: MON,
+          status: "open",
+        },
+      ]
+    ),
+    day(TUE, "Tuesday", "primary", primary("Complete required sales follow-up", "tue-follow-up"), [], []),
     day(
       WED,
-      mission("Interview 6 property GMs"),
-      [{ text: "Afternoon only" }],
+      "Wednesday",
+      "primary",
+      primary("Interview 6 property GMs", "wed-interviews"),
+      [constraint("fixture:wed-afternoon", "Afternoon only", WED, "Afternoon")],
       [
         {
           text: "Print collateral",
@@ -78,7 +129,7 @@ export const fixtureFullLockedWeek: WeeklyIntent = {
         },
       ]
     ),
-    day(THU, mission("Return to qualified properties"), [], [
+    day(THU, "Thursday", "primary", primary("Return to qualified properties", "thu-return"), [], [
       {
         text: "Site permit",
         kind: "approval",
@@ -87,7 +138,7 @@ export const fixtureFullLockedWeek: WeeklyIntent = {
         status: "blocked",
       },
     ]),
-    day(FRI, mission("Close open sales loops"), [], [
+    day(FRI, "Friday", "primary", primary("Close open sales loops", "fri-close"), [], [
       {
         text: "Return map",
         kind: "location",
@@ -96,61 +147,41 @@ export const fixtureFullLockedWeek: WeeklyIntent = {
         status: "ready",
       },
     ]),
-  ],
-};
+  ]
+);
 
-/** Intent that only still contains Monday. Do not invent the rest of the week. */
-export const fixtureMondayRemnant: WeeklyIntent = {
-  weekStart: FIXTURE_WEEK_START,
-  revision: 1,
-  source: "locked",
-  lockedAt: "2026-09-21T16:00:00.000Z",
-  days: [
-    day(MON, mission("Launch the ad", "/driver/sales-mission/6"), [], []),
-  ],
-};
+/** Agreement that only still contains Monday. Do not invent the rest of the week. */
+export const fixtureMondayRemnant: WeeklyIntentRecord = record(
+  "weekly-intent-fixture-monday",
+  1,
+  "2026-09-21T16:00:00.000Z",
+  FIXTURE_WEEK_START,
+  [day(MON, "Monday", "primary", primary("Launch the ad", "mon-launch-ad"), [], [])]
+);
 
 /** The agreement itself is two days. Not a five-day week with blanks. */
-export const fixtureTwoDayWeek: WeeklyIntent = {
-  weekStart: THU,
-  revision: 2,
-  source: "locked",
-  lockedAt: "2026-09-24T15:00:00.000Z",
-  days: [
-    day(THU, mission("Return to qualified properties"), [], []),
-    day(FRI, mission("Close open sales loops"), [], []),
-  ],
-};
+export const fixtureTwoDayWeek: WeeklyIntentRecord = record(
+  "weekly-intent-fixture-two-day",
+  2,
+  "2026-09-24T15:00:00.000Z",
+  THU,
+  [
+    day(THU, "Thursday", "primary", primary("Return to qualified properties", "thu-return"), [], []),
+    day(FRI, "Friday", "primary", primary("Close open sales loops", "fri-close"), [], []),
+  ]
+);
 
-export const fixtureStandDownDay: WeeklyIntent = {
-  weekStart: FIXTURE_WEEK_START,
-  revision: 1,
-  source: "locked",
-  lockedAt: "2026-09-21T16:00:00.000Z",
-  days: [
-    day(
-      WED,
-      { title: "Stand down", ref: null, posture: "stand_down" },
-      [],
-      []
-    ),
-  ],
-};
-
-export const fixtureUnconfirmedDraft: WeeklyIntent = {
-  weekStart: FIXTURE_WEEK_START,
-  revision: 0,
-  source: "draft",
-  lockedAt: null,
-  days: [
-    day(MON, mission("Launch the ad"), [], []),
-    day(WED, mission("Interview 6 property GMs"), [], []),
-  ],
-};
+export const fixtureStandDownDay: WeeklyIntentRecord = record(
+  "weekly-intent-fixture-stand-down",
+  1,
+  "2026-09-21T16:00:00.000Z",
+  FIXTURE_WEEK_START,
+  [day(WED, "Wednesday", "stand_down", null, [], [])]
+);
 
 /**
  * FIXTURE_ONLY fiction skin. These titles are not objectives and are not
- * written onto the WeeklyIntent.
+ * written onto the agreement.
  */
 export const fixtureFictionOverlay: WeekPresentationOverlay = {
   [MON]: {

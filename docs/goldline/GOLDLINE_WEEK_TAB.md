@@ -12,13 +12,19 @@ It does not answer “What should I do instead today?” Daily Command, executio
 
 ## Data
 
-The render contract mirrors a locked `WeeklyIntent`:
+The render contract mirrors the locked `WeeklyIntentRecord` field for field:
 
-- `weekStart`, `revision`, `source`, `lockedAt`
-- `days[]`: `businessDate`, `primary` (`title`, `ref`, `posture`), `fixedConstraints[]`, `readiness[]`
-- readiness: `text`, `kind`, `neededForDate`, `completeByDate`, `status`
+- `id`, `tenantId`, `operatorId`, `weekStart`, `revision`
+- `source` is exactly `operator_confirmed_proposal`
+- `lockedAt` is the lock evidence
+- `days[]`: `businessDate`, `weekday`, `disposition` (`primary` | `stand_down`)
+- `primary`: `text`, `source` (`existing_work` | `operator_stated` | `claire_recommended`), `commitmentId` (`string | null`), or null
+- `fixedConstraints[]`: `sourceRef`, `title`, `businessDate`, `scheduleLabel`
+- `readinessRequirements[]`: `text`, `kind`, `neededForDate`, `completeByDate`, `status`
 
-`lockedWeeklyIntentToWeekArtifact` projects that record into a view model with the remaining horizon only (business dates on or after today). It copies primaries. It does not assign them. Fiction fields are not part of the adapter.
+A locked agreement is `source === "operator_confirmed_proposal"` plus a non-empty `lockedAt`. There is no separate `source: "locked"` state.
+
+`lockedWeeklyIntentToWeekArtifact` projects that record into a view model with the remaining horizon only (business dates on or after today). It copies `primary.text`, `commitmentId`, `disposition`, the full constraint record, and `readinessRequirements`. It does not assign primaries. A commitment id is not a mission route. Fiction fields are not part of the adapter.
 
 `WeekPresentationOverlay` is a separate map keyed by business date: optional `fictionTitle`, `artVariant`, `chapterSkinId`. An empty overlay is a finished brochure. Real objective text is never replaced by a fiction title.
 
@@ -26,7 +32,7 @@ Production read is `readWeekVisit()`. Until a locked intent is supplied, it retu
 
 ## Visit
 
-Ordinary launch stays on the Day Line. Opening Week does not write business truth, fire a narrator beat, or mint gold. Start navigates to an existing `/driver/sales-mission/:id` route or calls `onStartMission` without writing. Adjust calls `onAdjustWeek` until a planning route exists.
+Ordinary launch stays on the Day Line. Opening Week does not write business truth, fire a narrator beat, or mint gold. Start calls `onStartMission` without writing. Adjust calls `onAdjustWeek` until a planning route exists. Production `readWeekVisit()` stays `UNPLANNED` until a locked agreement is supplied.
 
 ## Presentation
 

@@ -2,10 +2,10 @@ import React, { useMemo, useRef, useState } from "react";
 import claireMark from "@/assets/goldline/generated/claire-hologram.webp";
 import { GoldlineGameNav } from "../GoldlineGameNav";
 import {
-  authorizedMissionHref,
   dayGetsPrimaryCta,
   forwardingTagsForDay,
   lockedWeeklyIntentToWeekArtifact,
+  missionHrefForCommitment,
   startCtaLabel,
   type WeekArtifactDay,
   type WeekArtifactViewModel,
@@ -16,11 +16,11 @@ import {
   presentationForDay,
   type WeekPresentationOverlay,
 } from "./weekPresentationOverlay";
-import type { WeeklyIntent } from "./weeklyIntentContract";
+import type { WeeklyIntentRecord } from "./weeklyIntentContract";
 import "./week-brochure.css";
 
 export type LockedWeekBrochureProps = {
-  intent: WeeklyIntent;
+  intent: WeeklyIntentRecord;
   overlay?: WeekPresentationOverlay;
   now: Date;
   timeZone?: string;
@@ -214,7 +214,8 @@ function FoldPanel({
   const skin = presentationForDay(overlay, day.businessDate);
   const showCta =
     place === "current" && dayGetsPrimaryCta(day, model.currentBusinessDate);
-  const href = showCta ? authorizedMissionHref(day.realPrimaryRef) : null;
+  const href = showCta ? missionHrefForCommitment(day.commitmentId) : null;
+  const objectiveLabel = day.realPrimaryTitle || (day.disposition === "stand_down" ? "Stand down" : "");
   const tags = place === "current" ? forwardingTagsForDay(model.days, day.businessDate) : [];
   const face = (
     <>
@@ -234,11 +235,15 @@ function FoldPanel({
               {skin.fictionTitle}
             </p>
           ) : null}
-          <h2 className="wb-objective">{day.realPrimaryTitle}</h2>
+          {day.realPrimaryTitle ? (
+            <h2 className="wb-objective">{day.realPrimaryTitle}</h2>
+          ) : day.disposition === "stand_down" ? (
+            <p className="wb-disposition">Stand down</p>
+          ) : null}
           {day.fixedConstraints.length > 0 && (
             <ul className="wb-constraints">
               {day.fixedConstraints.map(constraint => (
-                <li key={constraint.text}>{constraint.text}</li>
+                <li key={constraint.sourceRef}>{constraint.title}</li>
               ))}
             </ul>
           )}
@@ -282,7 +287,7 @@ function FoldPanel({
       <article
         {...shared}
         aria-current="date"
-        aria-label={`${day.weekdayLabel}. ${day.realPrimaryTitle}`}
+        aria-label={`${day.weekdayLabel}. ${objectiveLabel}`}
       >
         {face}
       </article>
@@ -293,7 +298,7 @@ function FoldPanel({
       {...shared}
       role="button"
       tabIndex={0}
-      aria-label={`Show ${day.weekdayLabel}. ${day.realPrimaryTitle}`}
+      aria-label={`Show ${day.weekdayLabel}. ${objectiveLabel}`}
       onClick={onOpen}
       onKeyDown={event => {
         if (event.key === "Enter" || event.key === " ") {

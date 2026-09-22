@@ -1,5 +1,5 @@
 import type { WeekPresentationOverlay } from "./weekPresentationOverlay";
-import type { WeeklyIntent } from "./weeklyIntentContract";
+import type { WeeklyIntentRecord } from "./weeklyIntentContract";
 
 /**
  * What the operator may visit.
@@ -11,7 +11,7 @@ export type WeekVisit =
   | { phase: "IN_PROGRESS" }
   | {
       phase: "LOCKED";
-      intent: WeeklyIntent;
+      intent: WeeklyIntentRecord;
       overlay?: WeekPresentationOverlay;
     };
 

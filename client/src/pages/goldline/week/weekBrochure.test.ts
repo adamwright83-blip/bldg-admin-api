@@ -9,6 +9,7 @@ import {
   businessDateInTimeZone,
   forwardingTagsForDay,
   lockedWeeklyIntentToWeekArtifact,
+  missionHrefForCommitment,
   startCtaLabel,
   weekFoldLayout,
   WeekIntentNotLockedError,
@@ -22,14 +23,14 @@ import {
   fixtureNow,
   fixtureStandDownDay,
   fixtureTwoDayWeek,
-  fixtureUnconfirmedDraft,
   FRI,
   MON,
   THU,
   TUE,
   WED,
 } from "./weekFixtures";
-import type { WeeklyIntent } from "./weeklyIntentContract";
+import type { WeeklyIntentRecord } from "./weeklyIntentContract";
+import { isLockedWeeklyIntent } from "./weeklyIntentContract";
 
 const weekDir = path.dirname(new URL(import.meta.url).pathname);
 const weekSource = readdirSync(weekDir)
@@ -58,7 +59,7 @@ const driver = readFileSync(new URL("../../Driver.tsx", import.meta.url), "utf8"
 const noop = () => undefined;
 
 function lockedHtml(options: {
-  intent?: WeeklyIntent;
+  intent?: WeeklyIntentRecord;
   now?: Date;
   overlay?: typeof fixtureFictionOverlay;
   focus?: string | null;
@@ -112,20 +113,18 @@ describe("mobile Week brochure", () => {
       ...fixtureFullLockedWeek,
       internalHypothesis: "private theory about the operator",
     };
-    const view = lockedWeeklyIntentToWeekArtifact(
-      dirty as WeeklyIntent,
-      fixtureNow(MON)
-    );
+    const view = lockedWeeklyIntentToWeekArtifact(dirty, fixtureNow(MON));
     expect(JSON.stringify(view)).not.toContain("private theory");
   });
 
   it("05 an unconfirmed draft cannot render as a locked week", () => {
-    expect(() =>
-      lockedWeeklyIntentToWeekArtifact(fixtureUnconfirmedDraft, fixtureNow(MON))
-    ).toThrow(WeekIntentNotLockedError);
+    const legacy = legacyCOnlyWeek();
+    expect(() => lockedWeeklyIntentToWeekArtifact(legacy, fixtureNow(MON))).toThrow(
+      WeekIntentNotLockedError
+    );
     const html = renderToStaticMarkup(
       createElement(WeekBrochure, {
-        visit: { phase: "LOCKED", intent: fixtureUnconfirmedDraft },
+        visit: { phase: "LOCKED", intent: legacy as never },
         now: fixtureNow(MON),
         onReturnToDay: noop,
       })
@@ -422,10 +421,12 @@ describe("mobile Week brochure", () => {
     expect(html).not.toContain("Launch the ad");
   });
 
-  it("37 START is navigation or a no-write stub", () => {
+  it("37 START is a no-write stub because a commitment id is not a route", () => {
     const html = lockedHtml({ now: fixtureNow(MON), focus: MON });
-    expect(html).toContain('href="/driver/sales-mission/6"');
     expect(html).toContain("Start Monday");
+    expect(html).toContain('data-testid="week-start"');
+    expect(html).not.toContain("/driver/sales-mission/");
+    expect(html).not.toContain("mon-launch-ad");
     let writes = 0;
     const stubHtml = lockedHtml({
       now: fixtureNow(WED),
@@ -435,7 +436,7 @@ describe("mobile Week brochure", () => {
       },
     });
     expect(stubHtml).toContain("Start Wednesday");
-    expect(stubHtml).not.toContain('href="/driver/sales-mission/6"');
+    expect(stubHtml).not.toContain('href="/driver/sales-mission/');
     expect(writes).toBe(0);
     expect(weekSource).not.toContain("fetch(");
     expect(weekSource).not.toContain("trpc");
@@ -521,20 +522,22 @@ describe("mobile Week brochure", () => {
   });
 
   it("47 C assigns no primary", () => {
-    const blank: WeeklyIntent = {
+    const blank: WeeklyIntentRecord = {
       ...fixtureMondayRemnant,
       days: [
         {
           businessDate: MON,
+          weekday: "Monday",
+          disposition: "primary",
           primary: null,
           fixedConstraints: [],
-          readiness: [],
+          readinessRequirements: [],
         },
       ],
     };
     const view = lockedWeeklyIntentToWeekArtifact(blank, fixtureNow(MON));
     expect(view.days[0].realPrimaryTitle).toBe("");
-    expect(view.days[0].realPrimaryRef).toBeNull();
+    expect(view.days[0].commitmentId).toBeNull();
     expect(adapterSource).not.toContain("Launch the ad");
     expect(adapterSource).not.toContain("Interview 6 property GMs");
   });
@@ -612,6 +615,33 @@ describe("mobile Week brochure", () => {
     expect(adjusts).toBe(0);
   });
 
+  it("56 the frozen agreement is accepted and the old brochure contract is not", () => {
+    const legacy = legacyCOnlyWeek();
+    expect(isLockedWeeklyIntent(legacy)).toBe(false);
+    expect(() => lockedWeeklyIntentToWeekArtifact(legacy, fixtureNow(MON))).toThrow(
+      WeekIntentNotLockedError
+    );
+    expect(isLockedWeeklyIntent(fixtureFullLockedWeek)).toBe(true);
+    const view = lockedWeeklyIntentToWeekArtifact(fixtureFullLockedWeek, fixtureNow(MON));
+    expect(view.days[0].realPrimaryTitle).toBe("Launch the ad");
+    expect(view.days[0].commitmentId).toBe("mon-launch-ad");
+    expect(view.days[0].disposition).toBe("primary");
+    expect(view.days[0].fixedConstraints[0]).toEqual({
+      sourceRef: "fixture:mon-morning",
+      title: "Clear morning",
+      businessDate: MON,
+      scheduleLabel: "Morning",
+    });
+    expect(view.days[0].readiness.map(item => item.text)).toEqual(["Field jacket"]);
+    const wednesday = view.days.find(day => day.businessDate === WED);
+    expect(wednesday?.readiness.map(item => item.text)).toContain("Print collateral");
+    expect(missionHrefForCommitment("mon-launch-ad")).toBeNull();
+    expect(missionHrefForCommitment("/driver/sales-mission/6")).toBeNull();
+    expect(adapterSource).toContain("readinessRequirements");
+    expect(adapterSource).not.toContain("primary?.title");
+    expect(adapterSource).not.toMatch(/day\.readiness(?!Requirements)/);
+  });
+
   it("55 production Week does not plan or invent a lock", () => {
     expect(readWeekVisit().phase).toBe("UNPLANNED");
     const reader = readFileSync(path.join(weekDir, "readWeekVisit.ts"), "utf8");
@@ -625,4 +655,34 @@ describe("mobile Week brochure", () => {
 
 function htmlNav() {
   return lockedHtml({});
+}
+
+/** The brochure-only shape this pass must refuse. */
+function legacyCOnlyWeek() {
+  return {
+    weekStart: MON,
+    revision: 3,
+    source: "locked",
+    lockedAt: "2026-09-21T16:00:00.000Z",
+    days: [
+      {
+        businessDate: MON,
+        primary: {
+          title: "Launch the ad",
+          ref: "/driver/sales-mission/6",
+          posture: "mission",
+        },
+        fixedConstraints: [{ text: "Clear morning" }],
+        readiness: [
+          {
+            text: "Field jacket",
+            kind: "physical",
+            neededForDate: MON,
+            completeByDate: MON,
+            status: "open",
+          },
+        ],
+      },
+    ],
+  };
 }
