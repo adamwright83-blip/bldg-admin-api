@@ -90,6 +90,16 @@ export const GOLDLINE_CAPABILITY_REGISTRY: GoldlineCapability[] = [
     permissionLevel: "operator",
     implementation: "answerClaireBusinessTurn",
   },
+  {
+    id: "operator_sms.send",
+    domain: "communications",
+    description:
+      "Send a plain-text artifact to the authenticated operator's server-bound phone number. Claire may send referential artifacts and supported named artifacts such as today's Dayline; she cannot choose an arbitrary destination.",
+    status: "SUPPORTED",
+    allowedSurfaces: ["phone", "desktop", "mobile"],
+    permissionLevel: "operator",
+    implementation: "sendOperatorArtifact",
+  },
 ];
 
 export function getGoldlineCapability(id: string): GoldlineCapability | undefined {
