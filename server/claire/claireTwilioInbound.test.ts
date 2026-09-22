@@ -775,3 +775,63 @@ describe("inbound context prefetch is not a concurrent conversation writer", () 
     expect(stored?.state.context.workday).toBeUndefined();
   });
 });
+
+describe("Conversation Relay flag stays off the live inbound webhook", () => {
+  it("accepts a valid webhook as Gather and does not dial", async () => {
+    delete process.env.CLAIRE_TWILIO_CONVERSATION_RELAY;
+    const handlers = routes();
+    const res = await post(handlers, CLAIRE_INBOUND_VOICE_PATH, {
+      body: { CallSid: "CA_relay_off", From: OWNER_PHONE, To: "+13105550000" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain("<Gather");
+    expect(res.body).toContain(CLAIRE_INBOUND_GREETING);
+    expect(res.body).toContain('speechModel="experimental_conversations"');
+    expect(res.body).not.toContain("ConversationRelay");
+    expect(res.body).not.toContain("<Stream");
+    expect(hoisted.generateBrief).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid webhook before any conversation is opened", async () => {
+    delete process.env.CLAIRE_TWILIO_CONVERSATION_RELAY;
+    const handlers = routes();
+    const res = await post(handlers, CLAIRE_INBOUND_VOICE_PATH, {
+      body: { CallSid: "CA_relay_bad_sig", From: OWNER_PHONE, To: "+13105550000" },
+      signature: "not-a-real-signature",
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toContain("could not be verified");
+    expect(res.body).not.toContain("<Gather");
+    expect(res.body).not.toContain("ConversationRelay");
+    expect(hoisted.createSession).not.toHaveBeenCalled();
+    expect(hoisted.generateBrief).not.toHaveBeenCalled();
+  });
+
+  it("keeps inbound identity when the experimental flag is on and still does not dial", async () => {
+    process.env.CLAIRE_TWILIO_CONVERSATION_RELAY = "true";
+    try {
+      const handlers = routes();
+      const res = await post(handlers, CLAIRE_INBOUND_VOICE_PATH, {
+        body: { CallSid: "CA_relay_on", From: OWNER_PHONE, To: "+13105550000" },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toContain("<ConversationRelay");
+      expect(res.body).toContain("/api/claire/twilio/conversation-relay?token=");
+      expect(res.body).not.toContain("<Gather");
+      expect(res.body).not.toContain("<Stream");
+      expect(hoisted.generateBrief).not.toHaveBeenCalled();
+      expect(hoisted.persistSpokenTurn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callSid: "CA_relay_on",
+          speaker: "CLAIRE",
+          text: CLAIRE_INBOUND_GREETING,
+        })
+      );
+      expect(hoisted.createSession).toHaveBeenCalledWith(
+        expect.objectContaining({ operatorUserId: OWNER_OPEN_ID, tenantId: "tenant-1" })
+      );
+    } finally {
+      delete process.env.CLAIRE_TWILIO_CONVERSATION_RELAY;
+    }
+  });
+});
