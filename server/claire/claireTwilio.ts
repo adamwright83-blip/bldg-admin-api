@@ -53,7 +53,18 @@ import {
   handleRecordingStatus,
 } from "./conversation/pipeline";
 import { isValidTwilioWebhook } from "./conversation/twilioSignature";
-import { runClaireTurn, looksUnfinished, observationUtteranceForBrain, type ClaireTurnState } from "./turn/claireTurn";
+import {
+  runClaireTurn,
+  looksUnfinished,
+  observationUtteranceForBrain,
+  type ClaireTurnResult,
+  type ClaireTurnState,
+} from "./turn/claireTurn";
+import {
+  appendOperatorArtifactVoiceHistory,
+  executeStandaloneOperatorArtifactVoiceRequest,
+  isStandaloneOperatorArtifactVoiceRequest,
+} from "./operatorArtifactVoice";
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
 import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
 import { getDashboardTimeZone } from "../dashboardZoned";
@@ -636,31 +647,105 @@ function startVoiceTurn(input: {
         }
         conversation.inboundContextReady = true;
       }
-      const result = await runClaireTurn(
-        {
-          tenantId: conversation.tenantId,
-          operatorUserId: conversation.actorId,
-          dayDirectorActorId: conversation.dayDirectorActorId,
-          surface: "voice",
-          utterance: input.utterance,
-          state: conversation,
-          conversationKey: callStateKey(conversationId),
-          brief: conversation.brief,
-          context: conversation.context,
-          allowFragmentWait: input.allowFragmentWait,
-          turnStartedAtMs: input.webhookReceivedAtMs,
-        },
-        {
-          confirmPlan: () =>
-            confirmWorkdayPlan({
-              tenantId: conversation.tenantId,
-              actorId: conversation.dayDirectorActorId,
-              businessDate: conversation.context.clock?.tomorrowBusinessDate ?? conversation.context.businessDate,
-              items: assembleTomorrowCandidates(conversation.context),
-            }).then(() => undefined),
-          encyclopedia: claireEncyclopediaFor({ dayDirectorActorId: conversation.dayDirectorActorId }),
+      /**
+       * Operator-artifact utility turn.
+       *
+       * A short Gather fragment can be held by runClaireTurn before its final
+       * referent arrives ("Can you text me" / "that"). Reassemble that held
+       * fragment here only for the narrow standalone utility grammar. Everything
+       * else continues through Claire V1 unchanged.
+       */
+      const artifactCandidate = conversation.pendingFragment
+        ? `${conversation.pendingFragment} ${input.utterance}`.trim()
+        : input.utterance;
+
+      let result: ClaireTurnResult;
+      if (isStandaloneOperatorArtifactVoiceRequest(artifactCandidate)) {
+        if (input.utterance.trim()) {
+          conversation.providerFragments = [
+            ...(conversation.providerFragments ?? []),
+            input.utterance.trim(),
+          ];
         }
-      );
+        conversation.pendingFragment = null;
+        conversation.fragmentHolds = 0;
+
+        // Same delivery boundary runClaireTurn normally owns: a new operator
+        // turn confirms that the previous Claire line was actually reached.
+        if (isClaireProgressionEnabled(conversation.tenantId)) {
+          await commitPendingDisclosuresForConversation(getProgressionStore(), {
+            tenantId: conversation.tenantId,
+            conversationId: callStateKey(conversationId),
+          });
+        }
+
+        // Lazy import avoids a runtime cycle:
+        // claireTwilio -> operatorArtifactDecision -> sendOperatorArtifact
+        // -> claireTwilio (authorizedOperatorPhone).
+        const { applyOperatorArtifactDecision } = await import(
+          "./operatorArtifactDecision"
+        );
+        const artifactTurn =
+          await executeStandaloneOperatorArtifactVoiceRequest(
+            {
+              tenantId: conversation.tenantId,
+              operatorUserId: conversation.actorId,
+              utterance: artifactCandidate,
+              history: conversation.history ?? [],
+            },
+            applyOperatorArtifactDecision
+          );
+
+        if (!artifactTurn) {
+          throw new Error("operator artifact request was not executable");
+        }
+
+        conversation.history = appendOperatorArtifactVoiceHistory(
+          conversation.history ?? [],
+          {
+            operatorText: artifactCandidate,
+            claireText: artifactTurn.speak,
+            at: Date.now(),
+          }
+        );
+
+        result = {
+          speak: artifactTurn.speak,
+          kind: "answered",
+          assembledUtterance: artifactCandidate,
+          thoughtCompleteness: "complete",
+        };
+      } else {
+        result = await runClaireTurn(
+          {
+            tenantId: conversation.tenantId,
+            operatorUserId: conversation.actorId,
+            dayDirectorActorId: conversation.dayDirectorActorId,
+            surface: "voice",
+            utterance: input.utterance,
+            state: conversation,
+            conversationKey: callStateKey(conversationId),
+            brief: conversation.brief,
+            context: conversation.context,
+            allowFragmentWait: input.allowFragmentWait,
+            turnStartedAtMs: input.webhookReceivedAtMs,
+          },
+          {
+            confirmPlan: () =>
+              confirmWorkdayPlan({
+                tenantId: conversation.tenantId,
+                actorId: conversation.dayDirectorActorId,
+                businessDate:
+                  conversation.context.clock?.tomorrowBusinessDate ??
+                  conversation.context.businessDate,
+                items: assembleTomorrowCandidates(conversation.context),
+              }).then(() => undefined),
+            encyclopedia: claireEncyclopediaFor({
+              dayDirectorActorId: conversation.dayDirectorActorId,
+            }),
+          }
+        );
+      }
       conversation.touchedAt = Date.now();
       await saveCall(conversationId, conversation);
 
