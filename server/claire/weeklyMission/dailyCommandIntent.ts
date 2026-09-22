@@ -149,8 +149,13 @@ export function displacementIsEvidenced(
   return evidence.includes(quote.toLowerCase());
 }
 
+/** Same id the weekly primary wears when it is projected onto Daily Command. */
+export function weeklyIntentPrimaryCommandId(businessDate: string, commitmentId: string | null): string {
+  return commitmentId ? `day-director:${commitmentId}` : `weekly-intent:${businessDate}`;
+}
+
 function intentPrimaryItem(businessDate: string, day: WeeklyIntentDay): DailyCommandItem {
-  const id = day.primary?.commitmentId ? `day-director:${day.primary.commitmentId}` : `weekly-intent:${businessDate}`;
+  const id = weeklyIntentPrimaryCommandId(businessDate, day.primary?.commitmentId ?? null);
   return {
     id,
     title: day.primary?.text ?? day.weekday,

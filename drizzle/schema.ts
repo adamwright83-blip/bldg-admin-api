@@ -6997,6 +6997,51 @@ export const missionDirectorPlans = mysqlTable(
 );
 
 /**
+ * One playable selected-work instance. Not a Mission Director plan (a plan
+ * holds a primary and a fallback) and not a Campaign Run (a run spans days).
+ * Host checkpoints stay in their own stores; gameplayJson is a reference.
+ */
+export const missionExperienceInstances = mysqlTable(
+  "mission_experience_instances",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorId: varchar("operatorId", { length: 128 }).notNull(),
+    businessDate: varchar("businessDate", { length: 10 }).notNull(),
+    authorityKey: varchar("authorityKey", { length: 191 }).notNull(),
+    source: varchar("source", { length: 32 }).notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
+    realObjective: text("realObjective").notNull(),
+    status: varchar("status", { length: 32 }).notNull(),
+    phase: varchar("phase", { length: 64 }).notNull(),
+    playShape: varchar("playShape", { length: 16 }).notNull(),
+    gameplayHost: varchar("gameplayHost", { length: 64 }),
+    visualPackageId: varchar("visualPackageId", { length: 64 }),
+    authorityRefJson: json("authorityRefJson").notNull(),
+    gameplayJson: json("gameplayJson").notNull(),
+    realGateJson: json("realGateJson").notNull(),
+    consequenceJson: json("consequenceJson").notNull(),
+    replacementJson: json("replacementJson"),
+    entrancesJson: json("entrancesJson").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    authorityUnique: uniqueIndex("uq_mission_experience_authority").on(
+      table.tenantId,
+      table.operatorId,
+      table.businessDate,
+      table.authorityKey
+    ),
+    dayIdx: index("idx_mission_experience_day").on(
+      table.tenantId,
+      table.operatorId,
+      table.businessDate
+    ),
+  })
+);
+
+/**
  * Claire Pass 1 — durable, append-only shared-history events (Slice 3).
  * Operator scope is tenantId + operatorUserId + characterId, decided
  * before implementation; never widen this to phone number or device.

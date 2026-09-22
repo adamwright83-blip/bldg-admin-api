@@ -2251,5 +2251,41 @@ await assertRequiredColumns("weekly_intents", [
   "tenantId", "operatorId", "weekStart", "revision", "source", "lockedAt", "daysJson",
 ]);
 
+// ── Mission experience instances ────────────────────────────────
+// Mirrors drizzle/0094_mission_experience_instances.sql. One row per
+// playable selected-work instance. Host saves are not stored here.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS mission_experience_instances (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorId VARCHAR(128) NOT NULL,
+    businessDate VARCHAR(10) NOT NULL,
+    authorityKey VARCHAR(191) NOT NULL,
+    source VARCHAR(32) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    realObjective TEXT NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    phase VARCHAR(64) NOT NULL,
+    playShape VARCHAR(16) NOT NULL,
+    gameplayHost VARCHAR(64) NULL,
+    visualPackageId VARCHAR(64) NULL,
+    authorityRefJson JSON NOT NULL,
+    gameplayJson JSON NOT NULL,
+    realGateJson JSON NOT NULL,
+    consequenceJson JSON NOT NULL,
+    replacementJson JSON NULL,
+    entrancesJson JSON NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_mission_experience_authority (tenantId, operatorId, businessDate, authorityKey),
+    KEY idx_mission_experience_day (tenantId, operatorId, businessDate)
+  )`,
+  "CREATE TABLE mission_experience_instances"
+);
+await assertRequiredColumns("mission_experience_instances", [
+  "tenantId", "operatorId", "businessDate", "authorityKey", "realObjective",
+  "status", "phase", "realGateJson", "gameplayJson", "consequenceJson",
+]);
+
 await conn.end();
 console.log("\nMigration complete.");
