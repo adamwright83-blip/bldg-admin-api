@@ -105,9 +105,6 @@ export function createDrizzleNarratorPresentationStore(): NarratorPresentationSt
       }
     },
     async markRendered(input) {
-      const current = await findRow(input.scope, input.occurrenceLedgerEntryId);
-      if (!current) return null;
-      if (current.status === "rendered_to_surface") return current;
       const db = await getDb();
       if (!db) throw new Error("Database not available");
       await db
@@ -116,12 +113,21 @@ export function createDrizzleNarratorPresentationStore(): NarratorPresentationSt
           status: "rendered_to_surface",
           renderedAt: new Date(input.renderedAt),
         })
-        .where(eq(narratorOsPresentationReceipt.id, current.id));
-      return {
-        ...current,
-        status: "rendered_to_surface",
-        renderedAt: input.renderedAt,
-      };
+        .where(
+          and(
+            eq(narratorOsPresentationReceipt.tenantId, input.scope.tenantId),
+            eq(
+              narratorOsPresentationReceipt.operatorUserId,
+              input.scope.operatorUserId
+            ),
+            eq(
+              narratorOsPresentationReceipt.occurrenceLedgerEntryId,
+              input.occurrenceLedgerEntryId
+            ),
+            eq(narratorOsPresentationReceipt.status, "prepared")
+          )
+        );
+      return findRow(input.scope, input.occurrenceLedgerEntryId);
     },
   };
 }

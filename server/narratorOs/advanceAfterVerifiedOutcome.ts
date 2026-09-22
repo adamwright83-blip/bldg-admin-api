@@ -74,11 +74,9 @@ export async function advanceNarratorAfterVerifiedOutcome(input: {
     return idle("receipt_scope_mismatch");
   }
 
-  let beforeIds: Set<string>;
   try {
     const before = await input.store.load(input.scope);
     if (!before) return failed("narrator_operator_not_initialized");
-    beforeIds = new Set(before.ledger.map(entry => entry.id));
   } catch (error) {
     return failed(error instanceof Error ? error.message : String(error));
   }
@@ -94,11 +92,20 @@ export async function advanceNarratorAfterVerifiedOutcome(input: {
     if (!orchestration.committed) {
       return idle(orchestration.reason);
     }
-    const fired = orchestration.snapshot.ledger.find(
-      entry =>
-        entry.kind === "FIRED_AUTHORED_BEAT" && !beforeIds.has(entry.id)
-    );
-    if (!fired) return idle("committed_without_new_fired_beat");
+    const entryId = orchestration.committedLedgerEntryId;
+    const fired =
+      entryId == null
+        ? undefined
+        : orchestration.snapshot.ledger.find(entry => entry.id === entryId);
+    if (!fired || fired.kind !== "FIRED_AUTHORED_BEAT") {
+      return Object.freeze({
+        advanced: true,
+        narrationFailed: false,
+        failureReason: null,
+        presentation: null,
+        playerPayload: null,
+      });
+    }
     const presentation = deriveNarrativePresentationPlan(
       orchestration.snapshot,
       fired.id

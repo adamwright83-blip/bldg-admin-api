@@ -241,6 +241,19 @@ describe("Narrator OS slice H — presentation boundary", () => {
     expect(memory.occurrences[0]?.presentationStatus).toBe("prepared");
     expect(memory.occurrences[1]?.presentationStatus).toBeNull();
     expect(memory.firedAuthoredBeats[0]).not.toHaveProperty("presented");
+    const claimed = narrativePresentationMemory({
+      snapshot,
+      presentationReceipts: await presentations.loadForOperator(scope),
+      claireDeliveries: [
+        {
+          occurrenceLedgerEntryId: memory.occurrences[0]!.ledgerEntryId,
+          speechDelivery: "generated_queued",
+          heardConfirmed: true,
+        },
+      ],
+    });
+    expect(claimed.occurrences[0]?.claireSpeechDelivery).toBeNull();
+    expect(claimed.occurrences[0]?.claireHeardConfirmed).toBeNull();
   });
 
   it("C-08 teaches Claire the authored fact and still refuses Claire speech", async () => {
@@ -451,6 +464,112 @@ describe("Narrator OS slice H — presentation boundary", () => {
     expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual([]);
   });
 
+  it("identifies its own committed occurrence when a same-beat row is committed beside it", async () => {
+    const inner = await seeded();
+    let injected = false;
+    const store: NarratorStore = {
+      ...inner,
+      async commitAtomic(commitScope, commit) {
+        if (!injected && commit.ledgerEntry.kind === "FIRED_AUTHORED_BEAT") {
+          injected = true;
+          const snap = await inner.load(commitScope);
+          if (!snap) throw new Error("missing snapshot");
+          await inner.commitAtomic(commitScope, {
+            knowledge: snap.knowledge,
+            narrativeState: snap.narrativeState,
+            ledgerEntry: {
+              kind: "FIRED_AUTHORED_BEAT",
+              beatId: "M03",
+              goldlineOutcomeId: null,
+              offscreen: false,
+              playerVisible: true,
+              evidenceRef: null,
+              occurredAt: "2026-09-14T12:00:00.000Z",
+              idempotencyKey: "concurrent-same-beat-m03",
+              id: "concurrent-m03-ledger",
+            },
+          });
+        }
+        return inner.commitAtomic(commitScope, commit);
+      },
+    };
+    const result = await advanceNarratorAfterVerifiedOutcome({
+      store,
+      scope,
+      verifiedGoldline: [
+        issueReceipt("silence_eligible_for_retry", {
+          receiptId: "m03-race-arm",
+          targetId: "target-race",
+          occurredAtMs: MONDAY_MS,
+        }),
+        issueReceipt("legitimate_second_site_visit", {
+          receiptId: "m03-race-return",
+          targetId: "target-race",
+          occurredAtMs: TUESDAY_MS,
+        }),
+      ],
+      nowMs: NOW_MS,
+      nowIso: NOW_ISO,
+    });
+    const snapshot = (await store.load(scope))!;
+    const fired = snapshot.ledger.filter(entry => entry.kind === "FIRED_AUTHORED_BEAT");
+    expect(fired.map(entry => entry.id)[0]).toBe("concurrent-m03-ledger");
+    expect(fired).toHaveLength(2);
+    expect(result.presentation).not.toBeNull();
+    expect(result.presentation?.occurrenceLedgerEntryId).not.toBe(
+      "concurrent-m03-ledger"
+    );
+    const own = fired.find(
+      entry => entry.id === result.presentation?.occurrenceLedgerEntryId
+    );
+    expect(own?.idempotencyKey).not.toBe("concurrent-same-beat-m03");
+    expect(own?.beatId).toBe("M03");
+    expect(result.playerPayload?.occurrenceLedgerEntryId).toBe(
+      result.presentation?.occurrenceLedgerEntryId
+    );
+  });
+
+  it("keeps the first renderedAt when a second render uses a later timestamp", async () => {
+    const store = await seeded();
+    const presentations = createInMemoryNarratorPresentationStore();
+    const result = await advanceNarratorAfterVerifiedOutcome({
+      store,
+      scope,
+      verifiedGoldline: [
+        issueReceipt("kept_promised_send_visit_or_call", { receiptId: "m04-cas" }),
+      ],
+      nowMs: NOW_MS,
+      nowIso: NOW_ISO,
+    });
+    const snapshot = (await store.load(scope))!;
+    const firstStamp = "2026-09-21T01:00:00.000Z";
+    const secondStamp = "2026-09-21T09:00:00.000Z";
+    await preparePlayerPresentationForOccurrence({
+      presentationStore: presentations,
+      snapshot,
+      occurrenceLedgerEntryId: result.presentation!.occurrenceLedgerEntryId,
+      nowIso: NOW_ISO,
+    });
+    const first = await presentations.markRendered({
+      scope,
+      occurrenceLedgerEntryId: result.presentation!.occurrenceLedgerEntryId,
+      renderedAt: firstStamp,
+    });
+    const second = await presentations.markRendered({
+      scope,
+      occurrenceLedgerEntryId: result.presentation!.occurrenceLedgerEntryId,
+      renderedAt: secondStamp,
+    });
+    expect(first?.renderedAt).toBe(firstStamp);
+    expect(second?.renderedAt).toBe(firstStamp);
+    expect(second?.status).toBe("rendered_to_surface");
+    const canonical = await presentations.findByOccurrence(
+      scope,
+      result.presentation!.occurrenceLedgerEntryId
+    );
+    expect(canonical?.renderedAt).toBe(firstStamp);
+  });
+
   it("does not mint Goldline receipts or author story prose", () => {
     const advance = readFileSync(
       resolve(process.cwd(), "server/narratorOs/advanceAfterVerifiedOutcome.ts"),
@@ -478,9 +597,24 @@ describe("Narrator OS slice H — presentation boundary", () => {
     expect(claireTurn).not.toMatch(
       /advanceNarratorAfterVerifiedOutcome|orchestrateSelectedBeatReaction|evaluateProductionEligibility/
     );
+    const index = readFileSync(
+      resolve(process.cwd(), "server/narratorOs/index.ts"),
+      "utf8"
+    );
+    const drizzle = readFileSync(
+      resolve(process.cwd(), "server/narratorOs/presentationDrizzleStore.ts"),
+      "utf8"
+    );
     expect(plan + player).not.toMatch(
       /congratulat|kintsugi|rapport gain|quiet effect|courtyard/i
     );
+    expect(index).not.toMatch(/rememberNarrativePresentationPlanForTests/);
+    expect(claireTurn + advance).not.toMatch(
+      /rememberNarrativePresentationPlanForTests/
+    );
+    expect(advance).not.toMatch(/beforeIds/);
+    expect(drizzle).toMatch(/status,\s*"prepared"/);
+    expect(drizzle).not.toMatch(/renderedAt: input\.renderedAt/);
     expect(player).not.toMatch(/commitAtomic|replaceKnowledge|appendLedger/);
   });
 });

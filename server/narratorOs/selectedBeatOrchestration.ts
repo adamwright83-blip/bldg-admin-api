@@ -72,6 +72,12 @@ export type SelectedBeatOrchestrationResult = {
   readonly decision: DramaturgyDecision;
   readonly eligibilityOutcome: EligibilityOutcome;
   readonly snapshot: NarratorSnapshot;
+  /**
+   * Ledger id returned by this commit's atomic write. Null when nothing
+   * committed. Not inferred from snapshot order or from rows that appeared
+   * beside the commit.
+   */
+  readonly committedLedgerEntryId: string | null;
 };
 
 /**
@@ -110,6 +116,7 @@ function unfinished(input: {
     decision: input.decision,
     eligibilityOutcome: input.eligibility.outcome,
     snapshot: input.snapshot,
+    committedLedgerEntryId: null,
   });
 }
 
@@ -163,12 +170,18 @@ export async function orchestrateSelectedBeatReaction(
   }
 
   try {
+    let committedLedgerEntryId: string | null = null;
     const committed = await commitAuthorizedBeat({
       store: input.store,
       scope: input.scope,
       authorization,
       eligibility,
       nowIso: input.nowIso,
+      onCommittedLedgerEntry: entry => {
+        if (entry.kind === "FIRED_AUTHORED_BEAT") {
+          committedLedgerEntryId = entry.id;
+        }
+      },
     });
     return Object.freeze({
       committed: true,
@@ -176,6 +189,7 @@ export async function orchestrateSelectedBeatReaction(
       decision,
       eligibilityOutcome: result.outcome,
       snapshot: committed,
+      committedLedgerEntryId,
     });
   } catch (error) {
     if (!(error instanceof LiveDramaturgyMismatchError)) throw error;

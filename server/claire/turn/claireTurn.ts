@@ -88,7 +88,6 @@ import {
   type ClaireRouteEvidence,
 } from "../answerRouter";
 import {
-  narrativeClaireSpeechMetadata,
   narratorPromptSectionForClaire,
   type NarrativeClaireSpeechAttachment,
 } from "../narratorPresentationConsumer";
@@ -199,8 +198,15 @@ export type ClaireTurnResult = {
   /** Deterministic `speakBriefingCommit` (or equivalent) — linted against receipts, not conversational inventory. */
   receiptBackedCommit?: string;
   /**
-   * Set only when this turn's generation received an authored Narrator
-   * section. Delivery stays generated_queued until playback evidence exists.
+   * Telemetry that an authored Narrator section was supplied to generation.
+   * This is not speech delivery and does not mean the occurrence was spoken
+   * or heard.
+   */
+  narratorContextSupplied?: boolean;
+  /**
+   * Set only when the final spoken segment is a trusted validated narrative
+   * segment for that occurrence. Prompt context does not set this. Production
+   * has no such segment, so production turns leave it unset.
    */
   narrativeSpeech?: NarrativeClaireSpeechAttachment;
 };
@@ -504,7 +510,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const narratorPromptSection = narratorPromptSectionForClaire(
     input.narrativePresentation
   );
-  let narratorAttachedToGeneration = false;
+  let narratorContextSupplied = false;
   const trace = beginClaireTurnTrace({
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
@@ -574,15 +580,9 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       ...guarded,
       assembledUtterance: utterance,
       thoughtCompleteness,
+      ...(narratorContextSupplied ? { narratorContextSupplied: true as const } : {}),
     };
-    const delivered =
-      narratorAttachedToGeneration && input.narrativePresentation
-        ? {
-            ...withUtterance,
-            narrativeSpeech: narrativeClaireSpeechMetadata(input.narrativePresentation),
-          }
-        : withUtterance;
-    return personalEndCall ? { ...delivered, endCall: true } : delivered;
+    return personalEndCall ? { ...withUtterance, endCall: true } : withUtterance;
   };
   const finishCommitmentTurn = (
     turn: Exclude<VoiceCommitmentTurnResult, { kind: "not_applicable" }>
@@ -1114,7 +1114,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     const generationStartedAt = Date.now();
     trace.latency.generationStartMs = generationStartedAt - trace.startedAtMs;
     trace.synthesisRequired = true;
-    if (narratorPromptSection) narratorAttachedToGeneration = true;
+    if (narratorPromptSection) narratorContextSupplied = true;
     const reply = await deps.followUp({
       tenantId: input.tenantId,
       utterance,
@@ -1284,7 +1284,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     if (!input.context) return null;
     trace.synthesisRequired = true;
     trace.evidenceSources = evidence.map(item => item.source);
-    if (narratorPromptSection) narratorAttachedToGeneration = true;
+    if (narratorPromptSection) narratorContextSupplied = true;
     const reply = await deps.followUp({
       tenantId: input.tenantId,
       utterance: question,

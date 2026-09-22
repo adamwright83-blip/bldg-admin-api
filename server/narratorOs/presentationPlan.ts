@@ -43,6 +43,47 @@ export function presentationIdForOccurrence(
   return `presentation:${occurrenceLedgerEntryId}`;
 }
 
+const trustedNarrativePresentationPlans = new WeakSet<object>();
+
+function assertPresentationPlanTestIssuanceAllowed(): void {
+  const nodeEnv = process.env.NODE_ENV;
+  const inVitest = Boolean(process.env.VITEST);
+  if (nodeEnv === "test" || inVitest) return;
+  throw new Error(
+    "NarrativePresentationPlan test issuance is not available outside tests"
+  );
+}
+
+/**
+ * Membership is the authority. A structurally identical object, including a
+ * spread or JSON clone, is not a member. Production derive is the only
+ * issuer outside tests. This remember is env-gated and is not exported from
+ * the Narrator index.
+ */
+export function rememberNarrativePresentationPlanForTests(
+  plan: NarrativePresentationPlan
+): NarrativePresentationPlan {
+  assertPresentationPlanTestIssuanceAllowed();
+  const frozen = Object.freeze({
+    ...plan,
+    player: Object.freeze({ ...plan.player }),
+    claire: Object.freeze({ ...plan.claire }),
+    authoredReaction: plan.authoredReaction,
+  });
+  trustedNarrativePresentationPlans.add(frozen);
+  return frozen;
+}
+
+export function isTrustedNarrativePresentationPlan(
+  value: unknown
+): value is NarrativePresentationPlan {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    trustedNarrativePresentationPlans.has(value)
+  );
+}
+
 /**
  * OPEN and INCOMPLETE beats are not a valid fired presentation, even if a
  * ledger row names them. Omission of a disclosure rule is not permission.
@@ -113,7 +154,7 @@ export function deriveNarrativePresentationPlan(
   const mayDisclose = claireDisclosurePermitted(beat);
   const maySurface =
     entry.playerVisible === true && beat.playerVisibility === true;
-  return Object.freeze({
+  const plan = Object.freeze({
     occurrenceLedgerEntryId: entry.id,
     beatId: beat.id,
     occurredAt: entry.occurredAt,
@@ -130,4 +171,6 @@ export function deriveNarrativePresentationPlan(
     authoredReaction: receipt,
     authoredSourceRef: beat.authoredSourceRef,
   });
+  trustedNarrativePresentationPlans.add(plan);
+  return plan;
 }

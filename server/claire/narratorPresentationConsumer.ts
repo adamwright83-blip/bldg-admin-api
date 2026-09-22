@@ -5,7 +5,10 @@ import {
   SPEECH_DELIVERY,
   type SpeechDelivery,
 } from "./conversation/speechDelivery";
-import type { NarrativePresentationPlan } from "../narratorOs/presentationPlan";
+import {
+  isTrustedNarrativePresentationPlan,
+  type NarrativePresentationPlan,
+} from "../narratorOs/presentationPlan";
 import type { ClaireOccurrenceDelivery } from "../narratorOs/presentationMemory";
 
 /**
@@ -19,25 +22,20 @@ export const AUTHORED_NARRATIVE_MATERIAL_RULE =
 export function narratorPromptSectionForClaire(
   plan: NarrativePresentationPlan | null | undefined
 ): string | null {
-  if (!plan?.occurrenceLedgerEntryId) return null;
+  if (!isTrustedNarrativePresentationPlan(plan)) return null;
   if (!plan.claire.knows || !plan.claire.mayDisclose || !plan.claire.maySpeak) {
     return null;
   }
   const facts = plan.authoredReaction.knowledgeMutationRefs
     .filter(ref => ref.plane === "CLAIRE")
-    .map(ref => `${ref.plane}:${ref.factId}:${ref.op}`);
-  const states = plan.authoredReaction.stateMutationRefs.map(
-    ref => `${ref.key}=${String(ref.value)}`
-  );
+    .map(ref => `${ref.op} ${ref.factId}`);
   return [
     AUTHORED_NARRATIVE_MATERIAL_RULE,
     `Occurrence ledger id: ${plan.occurrenceLedgerEntryId}.`,
     `Beat id: ${plan.beatId}.`,
-    `Authored title: ${plan.player.title ?? ""}.`,
     `Occurred at: ${plan.occurredAt}.`,
     `Authored source: ${plan.authoredSourceRef}.`,
-    `Authored facts: ${facts.join("; ") || "(none)"}.`,
-    `Authored state references: ${states.join("; ") || "(none)"}.`,
+    `Authored Claire facts: ${facts.join("; ") || "(none)"}.`,
   ].join(" ");
 }
 
@@ -49,35 +47,35 @@ export type NarrativeClaireSpeechAttachment = {
   heardConfirmed: false;
 };
 
+const trustedNarrativeSpeechAttachments = new WeakSet<object>();
+
+export function isTrustedNarrativeSpeechAttachment(
+  value: unknown
+): value is NarrativeClaireSpeechAttachment {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    trustedNarrativeSpeechAttachments.has(value)
+  );
+}
+
 /**
- * Generated narrative speech starts at queued / heard-unconfirmed.
- * Playback completion is a separate evidence event. This helper cannot
- * record confirmed_heard.
+ * Prompt context is not a spoken segment. Production has no validated
+ * narrative-segment issuer, so a plan — trusted or forged — does not
+ * become delivery metadata.
  */
 export function narrativeClaireSpeechMetadata(
-  plan: NarrativePresentationPlan
-): NarrativeClaireSpeechAttachment {
-  const queued = claireQueuedSpeechMetadata();
-  if (
-    queued.speechDelivery !== SPEECH_DELIVERY.GENERATED_QUEUED ||
-    queued.heardConfirmed !== false
-  ) {
-    throw new Error("Claire queued speech is not generated_queued");
-  }
-  return {
-    narratorOccurrenceLedgerId: plan.occurrenceLedgerEntryId,
-    narratorBeatId: plan.beatId,
-    narrativePresentationId: plan.presentationId,
-    speechDelivery: SPEECH_DELIVERY.GENERATED_QUEUED,
-    heardConfirmed: false,
-  };
+  plan: NarrativePresentationPlan | null | undefined
+): null {
+  void plan;
+  return null;
 }
 
 export function claireProviderMetadataWithNarrative(
   attachment: NarrativeClaireSpeechAttachment | null | undefined
 ): Record<string, unknown> {
   const queued = claireQueuedSpeechMetadata();
-  if (!attachment) return { ...queued };
+  if (!isTrustedNarrativeSpeechAttachment(attachment)) return { ...queued };
   return {
     narratorOccurrenceLedgerId: attachment.narratorOccurrenceLedgerId,
     narratorBeatId: attachment.narratorBeatId,

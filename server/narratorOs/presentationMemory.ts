@@ -2,6 +2,23 @@ import { narrativeMemoryView } from "./narrativeReadModels";
 import type { PlayerPresentationReceipt } from "./presentationStore";
 import type { NarratorSnapshot } from "./store";
 
+const trustedClaireOccurrenceDeliveries = new WeakSet<object>();
+
+/**
+ * Spoken-delivery claims are membership, not a field bag. Nothing in
+ * production adds members: prompt context and a business answer are not
+ * speech. An untrusted object is ignored.
+ */
+export function isTrustedClaireOccurrenceDelivery(
+  value: unknown
+): value is ClaireOccurrenceDelivery {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    trustedClaireOccurrenceDeliveries.has(value)
+  );
+}
+
 /**
  * Presentation truth beside the Slice G memory read.
  * `narrativeMemoryView` is unchanged. Occurrences stay keyed by ledger id,
@@ -43,7 +60,9 @@ export function narrativePresentationMemory(input: {
       ) ?? null;
     const claire =
       deliveries.find(
-        item => item.occurrenceLedgerEntryId === row.ledgerEntryId
+        item =>
+          isTrustedClaireOccurrenceDelivery(item) &&
+          item.occurrenceLedgerEntryId === row.ledgerEntryId
       ) ?? null;
     return Object.freeze({
       ledgerEntryId: row.ledgerEntryId,
