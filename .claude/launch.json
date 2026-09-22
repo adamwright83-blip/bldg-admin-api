@@ -82,6 +82,19 @@
         "dev"
       ],
       "port": 3000
+    },
+    {
+      "name": "colosseum-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "--config",
+        "vite.colosseum-preview.config.ts",
+        "--port",
+        "5193",
+        "--strictPort"
+      ],
+      "port": 5193
     }
   ]
 }
