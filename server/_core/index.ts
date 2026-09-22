@@ -26,7 +26,7 @@ import { registerVendorOnboardingSessionRoutes } from "../vendorOnboardingSessio
 import { registerVendorBookingPublicRoutes } from "../vendorBookingPublicApi";
 import { registerLevel4TwilioRoutes } from "../level4Twilio";
 import { registerClaireRoutes } from "../claire/claireTwilio";
-import { registerOperatorArtifactSmsRoutes } from "../twilioPlatform/operatorArtifact";
+import { registerOperatorArtifactSmsRoutes } from "../operatorArtifact/sendOperatorArtifact";
 import { registerSpiritHumanInboundSmsRoutes } from "../spiritHumanRescue/inboundSmsRoute";
 import { registerSalesCallRoutes } from "../salesCalls";
 import { registerGoogleProxyRoutes } from "../google/googleProxyRoutes";

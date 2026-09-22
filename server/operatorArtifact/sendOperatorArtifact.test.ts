@@ -62,13 +62,13 @@ import {
   registerOperatorArtifactSmsRoutes,
   sendOperatorArtifact,
   type SendOperatorArtifactInput,
-} from "./operatorArtifact";
+} from "./sendOperatorArtifact";
 import {
   createMemoryCommunicationReceiptStore,
   setCommunicationReceiptStoreForTests,
-} from "./communicationReceipts";
-import { resetTwilioPlatformClientForTests } from "./client";
-import { resetTwilioCapabilityFailuresForTests } from "./capabilities";
+} from "../twilioPlatform/communicationReceipts";
+import { resetTwilioPlatformClientForTests } from "../twilioPlatform/client";
+import { resetTwilioCapabilityFailuresForTests } from "../twilioPlatform/capabilities";
 
 let seen: TwilioCommunicationReceipt[] = [];
 

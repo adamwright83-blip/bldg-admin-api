@@ -9,14 +9,17 @@ import {
   type CommunicationReceiptEventType,
   type TwilioCommunicationReceipt,
 } from "@shared/twilioPlatform";
-import { assertTwilioCapability } from "./capabilities";
-import { getTwilioPlatformClient } from "./client";
+import { assertTwilioCapability } from "../twilioPlatform/capabilities";
+import { getTwilioPlatformClient } from "../twilioPlatform/client";
 import {
   recordCommunicationReceipt,
   TwilioCommunicationReceiptError,
-} from "./communicationReceipts";
-import { toCommunicationCandidateEvidence } from "./communicationEvidence";
-import { readTwilioPlatformConfig, readTwilioRestCredentials } from "./config";
+} from "../twilioPlatform/communicationReceipts";
+import { toCommunicationCandidateEvidence } from "../twilioPlatform/communicationEvidence";
+import {
+  readTwilioPlatformConfig,
+  readTwilioRestCredentials,
+} from "../twilioPlatform/config";
 
 /**
  * Operator SMS artifact port.
