@@ -78,4 +78,5 @@ Live DB: **not verified.** `DATABASE_URL` is unset locally. Do not invent verifi
 
 Canonical design: `docs/claire-brain-v2.md`
 Detailed handoff: `docs/claire-brain-v2-handoff.md`
-Draft PR (do not merge): https://github.com/adamwright83-blip/bldg-admin-api/pull/193
+This slice (do not merge): https://github.com/adamwright83-blip/bldg-admin-api/pull/221
+Architecture draft (do not merge): https://github.com/adamwright83-blip/bldg-admin-api/pull/193

@@ -6,7 +6,7 @@ This file is for the next coding agent. Do not rely on any Cursor chat. If you c
 
 `cursor/claire-brain-v2-executive-function-v1`
 
-Draft PR (do **not** merge): opened from this branch. Do not deploy. Do not enable the shadow flag.
+Draft PR (do **not** merge): https://github.com/adamwright83-blip/bldg-admin-api/pull/221. Do not deploy. Do not enable the shadow flag.
 
 Earlier architecture draft (do **not** merge): https://github.com/adamwright83-blip/bldg-admin-api/pull/193
 PR #192 remains open as a parts bin: https://github.com/adamwright83-blip/bldg-admin-api/pull/192
