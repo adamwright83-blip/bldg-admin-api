@@ -55,9 +55,35 @@ export type AudioCueId =
   | "shield_clang"
   | "player_stagger"
   | "target_reveal"
-  | "dodge";
+  | "dodge"
+  | "clock_tick"
+  | "clock_tock"
+  | "bolt_hang"
+  | "bolt_resume"
+  | "lineblade_slash"
+  | "lineblade_hit"
+  | "perfect_block"
+  | "return_wave"
+  | "deadline_slam"
+  | "phase_break"
+  | "seal_break"
+  | "door_creak"
+  | "recoil_snap"
+  | "clock_toll";
 
-type ToneStep = { freq: number; durationMs: number; type?: OscillatorType };
+/**
+ * One synthesized step. `glideTo` bends the pitch across the step (whooshes,
+ * snaps); `gain` sets its loudness (default 0.18); `type: "noise"` plays
+ * band-passed white noise centred on `freq` — the grit of an impact that a
+ * pure oscillator cannot make.
+ */
+type ToneStep = {
+  freq: number;
+  durationMs: number;
+  type?: OscillatorType | "noise";
+  glideTo?: number;
+  gain?: number;
+};
 
 const CUE_DEFINITIONS: Record<
   AudioCueId,
@@ -271,6 +297,111 @@ const CUE_DEFINITIONS: Record<
       { freq: 340, durationMs: 55, type: "sawtooth" },
     ],
   },
+  // Colosseum. Every cue below is fiction: encounter, world, traversal or
+  // failure — never "victory", which stays reserved for an authoritative
+  // business capture. Beating Clockhead must not sound like closing a sale.
+  /** Clockhead's heartbeat: the tempo rises each hour. */
+  clock_tick: {
+    category: "encounter",
+    steps: [{ freq: 3100, durationMs: 12, type: "square", gain: 0.05 }],
+  },
+  clock_tock: {
+    category: "encounter",
+    steps: [{ freq: 2050, durationMs: 14, type: "square", gain: 0.045 }],
+  },
+  /** The Aimed Bolt stops mid-air and trembles. */
+  bolt_hang: {
+    category: "encounter",
+    steps: [{ freq: 700, durationMs: 220, type: "triangle", glideTo: 660, gain: 0.07 }],
+  },
+  /** …then suddenly resumes. */
+  bolt_resume: {
+    category: "encounter",
+    steps: [
+      { freq: 1600, durationMs: 16, type: "square", gain: 0.1 },
+      { freq: 520, durationMs: 90, type: "sawtooth", glideTo: 170, gain: 0.12 },
+    ],
+  },
+  /** A luminous edge through space, not steel on steel. */
+  lineblade_slash: {
+    category: "encounter",
+    steps: [
+      { freq: 1800, durationMs: 95, type: "noise", glideTo: 5200, gain: 0.14 },
+      { freq: 1320, durationMs: 70, type: "triangle", glideTo: 1480, gain: 0.05 },
+    ],
+  },
+  lineblade_hit: {
+    category: "encounter",
+    steps: [
+      { freq: 180, durationMs: 36, type: "square", gain: 0.2 },
+      { freq: 900, durationMs: 80, type: "noise", glideTo: 300, gain: 0.2 },
+      { freq: 1560, durationMs: 160, type: "triangle", glideTo: 1500, gain: 0.07 },
+    ],
+  },
+  perfect_block: {
+    category: "encounter",
+    steps: [
+      { freq: 1760, durationMs: 18, type: "square", gain: 0.12 },
+      { freq: 2640, durationMs: 200, type: "triangle", glideTo: 2600, gain: 0.09 },
+    ],
+  },
+  return_wave: {
+    category: "encounter",
+    steps: [
+      { freq: 140, durationMs: 220, type: "sawtooth", glideTo: 620, gain: 0.12 },
+      { freq: 420, durationMs: 260, type: "noise", glideTo: 110, gain: 0.22 },
+      { freq: 68, durationMs: 320, type: "sine", gain: 0.2 },
+    ],
+  },
+  deadline_slam: {
+    category: "encounter",
+    steps: [
+      { freq: 82, durationMs: 60, type: "square", gain: 0.2 },
+      { freq: 260, durationMs: 220, type: "noise", glideTo: 70, gain: 0.2 },
+    ],
+  },
+  /** Between hours: something enormous and bronze is struck once. */
+  phase_break: {
+    category: "encounter",
+    steps: [
+      { freq: 98, durationMs: 80, type: "sine", gain: 0.2 },
+      { freq: 147, durationMs: 650, type: "triangle", glideTo: 139, gain: 0.15 },
+    ],
+  },
+  /**
+   * A seal on his projection breaks because a real visit was recorded. It
+   * presents an authoritative fact, so it is "world", like captured_truth —
+   * restrained, and still not a victory.
+   */
+  seal_break: {
+    category: "world",
+    steps: [
+      { freq: 1250, durationMs: 18, type: "square", gain: 0.1 },
+      { freq: 2400, durationMs: 180, type: "noise", glideTo: 800, gain: 0.14 },
+      { freq: 988, durationMs: 320, type: "triangle", gain: 0.08 },
+    ],
+  },
+  door_creak: {
+    category: "world",
+    steps: [{ freq: 105, durationMs: 460, type: "sawtooth", glideTo: 150, gain: 0.045 }],
+  },
+  /** The Line snaps taut and yanks her back. */
+  recoil_snap: {
+    category: "failure",
+    steps: [
+      { freq: 900, durationMs: 200, type: "sawtooth", glideTo: 110, gain: 0.11 },
+      { freq: 320, durationMs: 140, type: "noise", glideTo: 90, gain: 0.14 },
+    ],
+  },
+  /** The correct time arrives: a single bell. Fiction's resolution, not a sale. */
+  clock_toll: {
+    category: "world",
+    steps: [
+      { freq: 880, durationMs: 50, type: "sine", gain: 0.12 },
+      { freq: 1318, durationMs: 700, type: "triangle", glideTo: 1311, gain: 0.11 },
+      { freq: 659, durationMs: 1100, type: "sine", gain: 0.1 },
+    ],
+  },
 };
 
 const STORAGE_KEY = "goldline:audio:muted";
@@ -346,21 +477,46 @@ export class AudioManager {
     const definition = CUE_DEFINITIONS[cue];
     let cursor = ctx.currentTime;
     for (const step of definition.steps) {
-      const osc = ctx.createOscillator();
+      const end = cursor + step.durationMs / 1000;
       const gain = ctx.createGain();
-      osc.type = step.type ?? "sine";
-      osc.frequency.setValueAtTime(step.freq, cursor);
       gain.gain.setValueAtTime(0.0001, cursor);
-      gain.gain.exponentialRampToValueAtTime(0.18, cursor + 0.01);
-      gain.gain.exponentialRampToValueAtTime(
-        0.0001,
-        cursor + step.durationMs / 1000
-      );
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(cursor);
-      osc.stop(cursor + step.durationMs / 1000 + 0.02);
-      cursor += step.durationMs / 1000;
+      gain.gain.exponentialRampToValueAtTime(step.gain ?? 0.18, cursor + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, end);
+      gain.connect(ctx.destination);
+      if (step.type === "noise") {
+        const source = ctx.createBufferSource();
+        source.buffer = this.noiseBuffer(ctx);
+        const band = ctx.createBiquadFilter();
+        band.type = "bandpass";
+        band.Q.value = 1.4;
+        band.frequency.setValueAtTime(step.freq, cursor);
+        if (step.glideTo) band.frequency.exponentialRampToValueAtTime(step.glideTo, end);
+        source.connect(band).connect(gain);
+        source.start(cursor);
+        source.stop(end + 0.02);
+      } else {
+        const osc = ctx.createOscillator();
+        osc.type = step.type ?? "sine";
+        osc.frequency.setValueAtTime(step.freq, cursor);
+        if (step.glideTo) osc.frequency.exponentialRampToValueAtTime(step.glideTo, end);
+        osc.connect(gain);
+        osc.start(cursor);
+        osc.stop(end + 0.02);
+      }
+      cursor = end;
     }
+  }
+
+  private noise: AudioBuffer | null = null;
+
+  /** One second of white noise, generated once and reused by every noise step. */
+  private noiseBuffer(ctx: AudioContext): AudioBuffer {
+    if (this.noise && this.noise.sampleRate === ctx.sampleRate) return this.noise;
+    const buffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) data[i] = Math.random() * 2 - 1;
+    this.noise = buffer;
+    return buffer;
   }
 
   /** Prevents refetch/resume from replaying the same semantic cue. */

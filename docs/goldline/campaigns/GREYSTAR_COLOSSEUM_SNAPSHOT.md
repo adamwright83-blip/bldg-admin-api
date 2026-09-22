@@ -23,6 +23,9 @@ Guarded by `shared/greystarColosseumBoundary.test.ts`.
 - `Day1TenDoors.tsx` owns the existing Colosseum presentation.
 - `ColosseumBossGate.tsx` calls `onBossDefeated` only after its authored finale resolution.
 - `GoldlineDriverController.tsx` owns the scene transition. It may persist a fantasy Wayward unlock after the already-authoritative campaign is complete and the finale resolves.
+- `colosseumStage.ts` `projectColosseumArena` is the only path from the real campaign into the arena's scenery. It reads `visitedCount`, `totalCount` and `isComplete` from the campaign projection and returns Clockhead's seals, signal, mood and taunt — read-only, one seal per real target, one broken per recorded outcome. `located` follows `isComplete` and nothing else. Nothing in the arena, the doors or the finale can break a seal.
+- The approved facade paints five doors; the sixth fictional door is Door VI, the one the Brass Republic has debated for generations (WORLD_BIBLE §13). Walking into any door is lore — it opens onto nothing — never progress and never a death.
+- `ClockheadDuel.tsx` receives only `onDefeated` and calls it once, from the victory card. The fiction modules (`clockheadDuelEngine`, `colosseumSearchEngine`, `colosseumAvatar`, `colosseumCombat`, `colosseumStage`, `colosseumFx`, the construct, controls, sprites and stage view) import nothing that can read or write the campaign, and no Colosseum surface uses `businessVictoryFeedback` or a `victory`-category cue. Guarded by `client/src/pages/goldline/colosseumTruthBoundary.test.ts`.
 
 ## Protected regression laws
 
