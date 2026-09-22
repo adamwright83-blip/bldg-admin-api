@@ -26,6 +26,7 @@ import { registerVendorOnboardingSessionRoutes } from "../vendorOnboardingSessio
 import { registerVendorBookingPublicRoutes } from "../vendorBookingPublicApi";
 import { registerLevel4TwilioRoutes } from "../level4Twilio";
 import { registerClaireRoutes } from "../claire/claireTwilio";
+import { registerOperatorArtifactSmsRoutes } from "../twilioPlatform/operatorArtifact";
 import { registerSpiritHumanInboundSmsRoutes } from "../spiritHumanRescue/inboundSmsRoute";
 import { registerSalesCallRoutes } from "../salesCalls";
 import { registerGoogleProxyRoutes } from "../google/googleProxyRoutes";
@@ -329,6 +330,9 @@ async function startServer() {
   // recording status, and call status callbacks. Calls must never be placed
   // unless these provider callback routes are mounted on the production app.
   registerClaireRoutes(app);
+  // Operator SMS artifacts. New status callback only — Claire inbound voice
+  // URLs, signature verification, and caller identity stay on their routes.
+  registerOperatorArtifactSmsRoutes(app);
   // Verified inbound SMS is the only path that may claim customer_replied
   // for Spirit Human rescue. It fails closed without an explicit tenant binding.
   registerSpiritHumanInboundSmsRoutes(app);
