@@ -11,6 +11,7 @@ import {
 import {
   emitClaireTranscriptLog,
   parseTranscriptLogScopes,
+  transcriptLogBackfillCount,
   transcriptLoggingAllowed,
 } from "./transcriptLog";
 import { POST_CALL_TRANSCRIPT_SOURCE } from "./types";
@@ -26,6 +27,13 @@ afterEach(() => {
 });
 
 describe("Claire transcript Railway log mirror", () => {
+  it("bounds boot backfill count to a safe recent window", () => {
+    expect(transcriptLogBackfillCount("2")).toBe(2);
+    expect(transcriptLogBackfillCount("0")).toBe(1);
+    expect(transcriptLogBackfillCount("99")).toBe(5);
+    expect(transcriptLogBackfillCount("nope")).toBe(1);
+  });
+
   it("parses explicit tenant/operator scopes and rejects malformed entries", () => {
     expect(
       parseTranscriptLogScopes("default:adam-admin, tenant-2:operator-2, bad")
