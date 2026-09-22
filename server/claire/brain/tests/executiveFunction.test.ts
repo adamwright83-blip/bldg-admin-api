@@ -465,7 +465,7 @@ describe("classifier and authority boundaries", () => {
         durability: "cognitive_only",
         status: "content_held",
         kind: "publish",
-        sourceTurnRef: "claire-call:executive#1",
+        sourceTraceRef: "trace:claire-call:executive#1",
         openedAtMs: 1,
       },
     });
@@ -589,6 +589,142 @@ describe("review tightenings", () => {
     expect(result.decision.actionGrants).toEqual([]);
     expect(result.decision.conclusions.some(item => item.kind === "external_capability_unowned")).toBe(true);
     expect(result.candidateSpeak).not.toMatch(/sent it/i);
+  });
+});
+
+describe("day line is not a generic action sink", () => {
+  async function classes(rawText: string) {
+    const result = await brain(rawText);
+    return {
+      grants: result.decision.actionGrants.map(grant => grant.actionClass),
+      conclusions: result.decision.conclusions.map(item => item.kind),
+      capability: result.decision.perceivedTurn.externalCapability,
+      kind: result.decision.perceivedTurn.workDeclarationKind,
+    };
+  }
+
+  it("an explicit day line request still proposes", async () => {
+    const result = await classes("Put calling Dana on my Day Line.");
+    expect(result.kind).toBe("explicit_day_line");
+    expect(result.grants).toEqual(["propose_day_line"]);
+  });
+
+  it("a first-person ordinary plan still proposes", async () => {
+    const result = await classes("I need to call Dana Tuesday.");
+    expect(result.kind).toBe("ordinary_work");
+    expect(result.grants).toEqual(["propose_day_line"]);
+  });
+
+  it("imperatives aimed at Claire do not propose a day line", async () => {
+    for (const rawText of ["Call Dana.", "Email Dana.", "Text Dana.", "Message Dana.", "Open the route."]) {
+      const result = await classes(rawText);
+      expect(result.grants).toEqual([]);
+      expect(result.grants).not.toContain("propose_day_line");
+    }
+    const scheduled = await classes("Schedule the pickup.");
+    expect(scheduled.kind).toBe("explicit_action");
+    expect(scheduled.grants).toEqual([]);
+    expect(scheduled.conclusions).toContain("action_unsupported");
+  });
+
+  it("text me that stays on the operator-artifact seam", async () => {
+    for (const rawText of ["Text me that.", "Send that to me.", "Send that to my phone."]) {
+      const result = await classes(rawText);
+      expect(result.capability).toBe("operator_artifact_sms");
+      expect(result.grants).toEqual([]);
+      expect(result.conclusions).toContain("external_capability_unowned");
+      expect(result.conclusions).not.toContain("action_unsupported");
+    }
+  });
+
+  it("make that today's mission does not fall through to a day line", async () => {
+    const result = await classes("Make that today's mission.");
+    expect(result.grants).toEqual([]);
+    expect(result.conclusions).toContain("mission_write_unavailable");
+    expect(result.conclusions).not.toContain("propose_day_line");
+  });
+});
+
+describe("movement and work do not hang up", () => {
+  const ends = [
+    "I have to go.",
+    "I gotta go.",
+    "Talk later.",
+    "Bye.",
+    "I need to run.",
+    "I have to go, they owe me $10,000. Bye.",
+    "I have to go pick up the order. Bye.",
+    "I have to go home, talk later.",
+    "Hang up.",
+    "End the call.",
+  ];
+  const continues = [
+    "I have to go there because they owe me $10,000.",
+    "I have to go back to Century Park East.",
+    "I gotta go over there and pick it up.",
+    "I need to go to Koreatown.",
+    "I have to go home.",
+    "I gotta go pick up the order.",
+    "I have to go deliver the towels.",
+    "I need to go meet Dana.",
+    "I have to go grab the laundry.",
+  ];
+
+  it("bare departure and explicit goodbye end the call", async () => {
+    for (const rawText of ends) {
+      const result = await brain(rawText);
+      expect(result.decision.perceivedTurn.callControl).toBe("end");
+      expect(result.decision.callControl.endCall).toBe(true);
+    }
+  });
+
+  it("go plus a destination or work complement continues", async () => {
+    for (const rawText of continues) {
+      const result = await brain(rawText);
+      expect(result.decision.perceivedTurn.callControl).toBe("continue");
+      expect(result.decision.callControl.endCall).toBe(false);
+    }
+  });
+});
+
+describe("strategic source trace", () => {
+  it("stores a synthetic trace and no operator speech", async () => {
+    const utterance = "My mission today is to publish the campaign.";
+    const opened = await brain(utterance);
+    const frame = opened.decision.workingMemoryUpdate?.activeWorkFrame;
+    expect(frame).toMatchObject({
+      durability: "cognitive_only",
+      status: "content_held",
+      kind: "publish",
+    });
+    expect(frame?.sourceTraceRef).toMatch(/^trace:claire-call:executive#\d+$/);
+    expect(JSON.stringify(frame)).not.toContain(utterance);
+    expect(JSON.stringify(frame)).not.toMatch(/campaign/);
+    expect(frame && "sourceTurnRef" in frame).toBe(false);
+  });
+
+  it("does not describe the trace as a ledger turn that retrieves the utterance", () => {
+    const files = [
+      "server/claire/brain/executive/strategicFrame.ts",
+      "server/claire/brain/contracts/workingMemory.ts",
+      "docs/claire-brain-v2.md",
+      "docs/claire-brain-v2-handoff.md",
+      "server/claire/brain/STATUS.md",
+    ];
+    for (const file of files) {
+      const source = readFileSync(path.join(process.cwd(), file), "utf8");
+      expect(source).not.toMatch(/sourceTurnRef/);
+      expect(source).not.toMatch(/back to the conversation turn/i);
+      expect(source).not.toMatch(/ledger owns the words/i);
+      expect(source).not.toMatch(/authoritative conversation turn/i);
+    }
+    const contract = readFileSync(
+      path.join(process.cwd(), "server/claire/brain/contracts/workingMemory.ts"),
+      "utf8"
+    );
+    expect(contract).toMatch(/sourceTraceRef/);
+    expect(contract).toMatch(/synthetic/i);
+    expect(contract).toMatch(/not a conversation-ledger turn id/i);
   });
 });
 

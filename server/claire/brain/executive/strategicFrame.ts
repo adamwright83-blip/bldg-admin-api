@@ -1,9 +1,10 @@
 /**
  * Mission/strategic working memory.
  *
- * The frame records a closed semantic category and a turn reference. It is not
+ * The frame records a closed semantic category and a synthetic trace. It is not
  * WeeklyIntent, Daily Command, Mission Director, Day Line, or Narrator state,
- * and it is not a copy of what the operator said.
+ * and it is not a copy of what the operator said. The trace is not a ledger
+ * turn id and does not look up the utterance.
  *
  * Remembered is not active. Whether this turn is controlled by the frame is a
  * separate question from whether the frame still exists.
@@ -22,8 +23,9 @@ const STRATEGIC_RETURN =
 
 export type StrategicRelation = "declare" | "continue" | "return" | "dormant";
 
-function sourceTurnRef(memory: WorkingMemorySnapshot, nowMs: number): string {
-  return `${memory.currentCallContext.conversationKey}#${nowMs}`;
+/** Synthetic shadow trace. Not a conversation-ledger turn id. */
+function sourceTraceRef(memory: WorkingMemorySnapshot, nowMs: number): string {
+  return `trace:${memory.currentCallContext.conversationKey}#${nowMs}`;
 }
 
 /** Map an utterance onto a closed category. The utterance itself is not stored. */
@@ -79,7 +81,7 @@ function frame(
   source: string | null,
   openedAtMs: number
 ): StrategicWorkMemory {
-  return { durability: "cognitive_only", status, kind, sourceTurnRef: source, openedAtMs };
+  return { durability: "cognitive_only", status, kind, sourceTraceRef: source, openedAtMs };
 }
 
 /**
@@ -96,7 +98,7 @@ export function nextStrategicFrame(input: {
   if (relation === "dormant") return undefined;
 
   const previous = held(memory);
-  const ref = sourceTurnRef(memory, nowMs);
+  const ref = sourceTraceRef(memory, nowMs);
 
   if (relation === "return") {
     return previous ?? undefined;

@@ -23,7 +23,7 @@ Executive task switching and mission intent. Shadow cognition only.
 - “No.” still rejects. “No, Wednesday.” still revises. “No.” followed by a new subject or “listen to me” does not reject.
 - Attention repair is not prior-claim verification and cannot mint a grant.
 - Operator-attested intention is not an external fact. An embedded debt or price stays unverified and does not erase the intention.
-- Strategic / mission declarations open `activeWorkFrame` with `durability: "cognitive_only"`, a closed kind, and a turn reference. No clipped transcript. A remembered frame is dormant on an unrelated turn and is not in `activeTaskSets`.
+- Strategic / mission declarations open `activeWorkFrame` with `durability: "cognitive_only"`, a closed kind, and a synthetic `sourceTraceRef`. The trace is not a ledger turn id and does not retrieve the utterance. No clipped transcript. A remembered frame is dormant on an unrelated turn and is not in `activeTaskSets`.
 - There is **no canonical speech-to-mission write**. No new `ActionClass`. No `propose_daily_mission`. No fallback to `propose_day_line`.
 - Explicit “Put that on my Day Line” still proposes Day Line, shadow-only.
 - A bounded work-frame classifier may return `classified`, `unknown`, or `failed`. Unknown and failed hold. They are not Executive-2.
@@ -121,9 +121,9 @@ pnpm exec vitest run server/claire/brain
 pnpm check
 ```
 
-Last focused brain run: **25 files, 316 passed, 0 todo, 0 failed.**
-Full repository suite: **760 files, 7800 passed, 7 skipped, 0 failed.**
-Dayforge release gate: **175 files, 1965 passed.** `pnpm check`, `pnpm check:dayforge:release`, and `pnpm build` green.
+Last focused brain run: **25 files, 325 passed, 0 todo, 0 failed.**
+Full repository suite: **760 files, 7809 passed, 7 skipped, 0 failed.**
+Dayforge release gate: **175 files, 1979 passed.** `pnpm check`, `pnpm check:dayforge:release`, and `pnpm build` green.
 
 ## Known incomplete / honest gates
 

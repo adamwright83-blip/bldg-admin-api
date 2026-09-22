@@ -162,7 +162,7 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
   ];
 
   // Explicit goodbye outranks V1 departure and outranks any embedded fact.
-  // Movement toward a place ("go there", "go back", "go to") is not leave-taking.
+  // "go" plus a same-clause complement is movement or work, not leave-taking.
   const callControl = reconcileCallControl(assembledText, turn.callControl);
   if (callControl === "end" && classification.status === "classified") {
     classification = { ...classification, operatorIntentAttested: false, declaredContentLabel: null };

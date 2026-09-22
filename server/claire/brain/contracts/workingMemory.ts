@@ -66,7 +66,7 @@ export type StrategicWorkKind = "publish" | "contact" | "field_movement" | "unsp
 /**
  * Cognitive strategic-work frame. Understanding a declaration is not a write.
  * `durability` is fixed so this object cannot be mistaken for a mission receipt.
- * The frame stores a closed kind and a turn reference. It does not store speech.
+ * The frame stores a closed kind and a synthetic trace. It does not store speech.
  */
 export type StrategicWorkMemory = {
   durability: "cognitive_only";
@@ -74,10 +74,10 @@ export type StrategicWorkMemory = {
   /** Null while the declaration has not named a category. */
   kind: StrategicWorkKind | null;
   /**
-   * Points at the conversation turn that supplied this state.
-   * The ledger owns the words. This is not a transcript slice.
+   * Synthetic cognitive trace for this shadow decision (`trace:<conversationKey>#<ms>`).
+   * Not a conversation-ledger turn id. It cannot be resolved back to the utterance.
    */
-  sourceTurnRef: string | null;
+  sourceTraceRef: string | null;
   openedAtMs: number;
 };
 

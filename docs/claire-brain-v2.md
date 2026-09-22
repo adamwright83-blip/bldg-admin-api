@@ -483,9 +483,9 @@ Perception describes a bounded work frame. Executive Function decides. The frame
 
 | Declaration | What V2 may do |
 |---|---|
-| Ordinary work (“I need to call Dana Tuesday.”) | May propose Day Line. Still no live mutation |
+| Ordinary first-person plan (“I need to call Dana Tuesday.”) | May propose Day Line. Still no live mutation |
 | Explicit Day Line (“Put that on my Day Line.”) | Existing `propose_day_line` proposal |
-| Explicit other action (“remind me to…”) | Existing proposal semantics |
+| Imperative or other explicit action (“Call Dana.”, “remind me to…”) | Recognized. No Day Line grant. No invented sender, caller, or reminder |
 | Strategic / mission (“My mission today is …”, “considered as my mission”) | Cognitive frame only. No Day Line proposal |
 | Context narration (“I’m heading home.”, “I need you to know…”) | No mutation proposal |
 | “Make that today’s mission.” | Understand it. **No canonical mission write exists**, so no action class is minted and nothing falls back to Day Line |
@@ -511,16 +511,21 @@ speak between the two pieces.
 
 The strategic frame lives in V2 working memory as `activeWorkFrame` with
 `durability: "cognitive_only"`. It stores a closed `kind` (`publish`, `contact`,
-`field_movement`, `unspecified`) and a `sourceTurnRef` back to the conversation turn. It does
+`field_movement`, `unspecified`) and a synthetic `sourceTraceRef`
+(`trace:<conversationKey>#<ms>`). That value is a shadow decision trace. It is not a
+conversation-ledger turn id, and nothing resolves it back to the utterance. The frame does
 not store operator prose. Remembered is not active: an unrelated sales question leaves the
 frame in memory, sets the `strategic_frame` slot to dormant and suppressed, and does not put
 `strategic_work` on `activeTaskSets`. An explicit return to the mission, or a later intention
-that continues that same frame, reactivates it. Ordinary work such as calling Dana can still
-propose Day Line without deleting the mission.
+that continues that same frame, reactivates it. A first-person ordinary plan such as
+“I need to call Dana Tuesday.” can still propose Day Line without deleting the mission.
+An imperative (“Call Dana.”, “Email Dana.”) does not.
 
 Explicit goodbye (“Bye.”, “Talk later.”, “Hang up.”, “I have to go.”) ends the call even when
-a dollar amount is in the same utterance. “I have to go there / go back / go to …” is movement,
-not leave-taking. An embedded fact cannot cancel a goodbye.
+a dollar amount is in the same utterance. “go” followed by a same-clause complement
+(“go home”, “go pick up the order”, “go there”, “go back”) is movement or work, not
+leave-taking. Explicit goodbye still wins over that complement. An embedded fact cannot
+cancel a goodbye.
 
 “Text me that.” is the existing operator-artifact SMS capability. Brain V2 recognizes it and
 mints no grant. It is not a Day Line proposal.

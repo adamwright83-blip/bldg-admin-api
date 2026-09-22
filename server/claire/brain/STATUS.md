@@ -11,7 +11,7 @@ Shadow Working Memory: DURABLE via claire-brain-v2-shadow namespace; in-memory f
 Executive Attention / Retrieval / Integration / Inhibition: COMPLETE
   (WM gate, TaskSets, ConflictMonitor, EpistemicState, ControlAllocator, two-pass retrieval)
 Executive task switching + mission intent: SHADOW COGNITION ONLY
-  Strategic work is an activeWorkFrame (cognitive_only, closed kind + turn ref).
+  Strategic work is an activeWorkFrame (cognitive_only, closed kind + synthetic trace ref).
   Remembered strategic state is output-gated. It is not active on an unrelated turn.
   No mission write path exists.
   Pending task-switch is dormant+suppress, not reject/delete/commit.
@@ -27,7 +27,7 @@ Shadow Mode: WIRED on both surfaces, one-way, DEFAULT OFF, operator-scoped,
   live read-only retrieval, durable WM, durable safe telemetry
 Production Cutover: PROHIBITED
 
-Tests: 316 passed, 0 todo (brain). Full suite: 760 files, 7800 passed, 7 skipped. `tsc --noEmit` green.
+Tests: 325 passed, 0 todo (brain). Full suite: 760 files, 7809 passed, 7 skipped. `tsc --noEmit` green.
 
 Read-only enforcement: Self Memory uses `readPersonalProgressionContext`, NOT
 `loadPersonalProgressionContext` (which releases expired reservations — a write).

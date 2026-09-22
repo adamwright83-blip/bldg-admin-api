@@ -402,6 +402,24 @@ export async function decideTurn(
           },
         ];
       }
+      if (
+        !mayPropose &&
+        attention.pendingDisposition !== "reject" &&
+        !perceived.openFragment &&
+        !perceived.refusal &&
+        !perceived.externalCapability &&
+        !perceived.explicitMissionWriteRequest &&
+        (perceived.workDeclarationKind === "explicit_action" || perceived.workDeclarationKind === "ordinary_work")
+      ) {
+        conclusions = [
+          ...conclusions,
+          {
+            kind: "action_unsupported",
+            detail: "recognized an action Brain V2 does not own; no Day Line grant",
+            evidenceIds: [],
+          },
+        ];
+      }
     }
 
     if (perceived.callControl === "end") {
