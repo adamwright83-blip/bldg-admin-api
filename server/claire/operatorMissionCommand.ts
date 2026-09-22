@@ -16,6 +16,17 @@
  *   share {publish, instagram, ad} and stay one commitment.
  * - A genuinely different token set creates a new commitment, designates it
  *   primary, and demotes the previous primary. Demotion does not complete it.
+ *
+ * Referential commands ("make this a mission", "make that today's mission",
+ * "turn that into a mission", and the close make/set/turn + this/that variants)
+ * do not contain a title. The referent is one work statement already in the
+ * live turn, in this order:
+ * - the words in the assembled thought before the command (pending fragment
+ *   included);
+ * - otherwise the immediately previous operator utterance.
+ * "this" and "that" do not choose between items. Two coordinated work titles,
+ * or no concrete work statement, clarify and do not write. The day's task
+ * list, WeeklyIntent, and any older stop are not candidates.
  */
 
 import { createHash } from "node:crypto";
@@ -43,6 +54,8 @@ export const OPERATOR_MISSION_CREATED_SPEAK = "Created. That's today's mission."
 export const OPERATOR_MISSION_ALREADY_SPEAK = "That's already today's mission.";
 export const OPERATOR_MISSION_UPDATED_SPEAK = "Updated. That's today's mission.";
 export const OPERATOR_MISSION_FAILED_SPEAK = "I couldn't set today's mission just now.";
+export const OPERATOR_MISSION_CLARIFY_ABSENT_SPEAK = "What should today's mission be?";
+export const OPERATOR_MISSION_CLARIFY_AMBIGUOUS_SPEAK = "Which one should be today's mission?";
 
 const BANNED_CREATION_SPEECH =
   /\b(?:locked|your week is set|week locked|week is set|done|mission completed|published|ad is live)\b/i;
@@ -115,10 +128,17 @@ export type ParsedOperatorMissionCommand = {
 };
 
 export type OperatorMissionVoiceClass =
-  | { kind: "execute"; assembled: string }
+  | { kind: "execute"; assembled: string; resolvedMissionClause?: string }
   | { kind: "hold"; assembled: string }
   | { kind: "flush"; assembled: string }
+  | { kind: "clarify"; assembled: string; speak: string }
   | { kind: "passthrough" };
+
+export type ReferentialMissionResolution =
+  | { status: "not_referential" }
+  | { status: "resolved"; clause: string; title: string; evidenceQuote: string }
+  | { status: "absent"; speak: typeof OPERATOR_MISSION_CLARIFY_ABSENT_SPEAK }
+  | { status: "ambiguous"; speak: typeof OPERATOR_MISSION_CLARIFY_AMBIGUOUS_SPEAK };
 
 export type OperatorMissionCommandSuccess = {
   ok: true;
@@ -262,12 +282,123 @@ export function parseExplicitOperatorMissionCommand(utterance: string): ParsedOp
   return null;
 }
 
+const REFERENTIAL_BODY =
+  "(?:(?:make|set) (?:this|that) (?:a mission|today'?s mission|the mission(?: today)?|my mission today|as today'?s mission|as my mission today)|turn (?:this|that) into (?:a mission|today'?s mission|the mission(?: today)?|my mission today)|set today'?s mission to (?:this|that))";
+
+const WORK_LEAD =
+  /^(?:(?:please|hey|um|uh|so|well|ok|okay|yeah|yes)[,\s]+)*(?:i(?:'d| would)?\s+like\s+to\s+|i\s+want\s+to\s+|i\s+want\s+|i\s+need\s+to\s+|i\s+need\s+|i(?:'m| am)\s+going\s+to\s+|let(?:'s|s)\s+|can\s+you\s+|could\s+you\s+)+/i;
+
+const NON_WORK_TOKENS = new Set([
+  "have",
+  "got",
+  "gotta",
+  "need",
+  "want",
+  "working",
+  "work",
+  "doing",
+  "do",
+  "something",
+  "stuff",
+  "things",
+  "thing",
+]);
+
+const VERB_ONLY =
+  /^(?:create|creating|publish|publishing|send|sending|visit|visiting|call|calling|finish|finishing|make|making|set|setting|turn|turning)$/i;
+
+export function isReferentialMissionCommand(utterance: string): boolean {
+  const text = normalizeMissionUtterance(utterance);
+  if (!text) return false;
+  return new RegExp(`^${REFERENTIAL_BODY}$`, "i").test(text);
+}
+
+function referentialParts(assembled: string): { command: string; prefix: string } | null {
+  const text = normalizeMissionUtterance(assembled);
+  if (!text) return null;
+  if (new RegExp(`^${REFERENTIAL_BODY}$`, "i").test(text)) return { command: text, prefix: "" };
+  const match = new RegExp(`^(.*\\S)\\s+(${REFERENTIAL_BODY})$`, "i").exec(text);
+  if (!match?.[1] || !match[2]) return null;
+  const prefix = match[1]
+    .trim()
+    .replace(/\s+(?:make|set|turn) (?:this|that)(?:\s+into)?(?:\s+(?:a|the|today'?s|my|as))?$/i, "")
+    .trim();
+  return { command: match[2], prefix };
+}
+
+function concreteWorkTitle(text: string): string | null {
+  const cleaned = normalizeMissionUtterance(text).replace(WORK_LEAD, "").trim();
+  if (!cleaned || isReferentialMissionCommand(cleaned)) return null;
+  if (/^(?:who|what|when|where|why|how|is|are|do|did|can|could|would|should)\b/i.test(cleaned)) return null;
+  const titled = parseExplicitOperatorMissionCommand(cleaned);
+  const title = titled?.title ?? normalizeMissionClause(cleaned);
+  if (!title) return null;
+  const concrete = contentTokens(title).filter(token => !NON_WORK_TOKENS.has(token));
+  return concrete.length ? title : null;
+}
+
+/** One statement can name two pieces of work. "create and publish …" stays one. */
+export function workTitlesInStatement(text: string): string[] {
+  const cleaned = normalizeMissionUtterance(text);
+  if (!cleaned || isReferentialMissionCommand(cleaned)) return [];
+  if (/[?]\s*$/.test(text.trim())) return [];
+  const titled = parseExplicitOperatorMissionCommand(cleaned);
+  if (titled) return [titled.title];
+  if (/^(?:create|creating)\s+and\s+(?:publish|publishing)\b/i.test(cleaned)) {
+    const title = concreteWorkTitle(cleaned);
+    return title ? [title] : [];
+  }
+  const parts = cleaned.split(/\s+(?:and|or)\s+/i);
+  if (parts.length > 1) {
+    const titles = parts
+      .filter(part => !VERB_ONLY.test(part.trim()))
+      .map(part => concreteWorkTitle(part))
+      .filter((title): title is string => Boolean(title));
+    if (titles.length >= 2) return titles;
+  }
+  const one = concreteWorkTitle(cleaned);
+  return one ? [one] : [];
+}
+
+function referentialEvidence(command: string, clause: string): string {
+  const spoken = normalizeMissionUtterance(command);
+  const work = normalizeMissionUtterance(clause);
+  if (!work || spoken.toLowerCase().includes(work.toLowerCase())) return spoken;
+  return `${work}. ${spoken}`;
+}
+
+/**
+ * Resolves make/set/turn + this/that to the single work statement already in
+ * this live turn. Does not consult the task list or the locked week.
+ */
+export function resolveReferentialMissionCommand(input: {
+  assembled: string;
+  priorOperatorUtterance?: string | null;
+}): ReferentialMissionResolution {
+  const parts = referentialParts(input.assembled);
+  if (!parts) return { status: "not_referential" };
+  const source = parts.prefix.trim() || input.priorOperatorUtterance?.trim() || "";
+  if (!source) return { status: "absent", speak: OPERATOR_MISSION_CLARIFY_ABSENT_SPEAK };
+  const titles = workTitlesInStatement(source);
+  if (titles.length > 1) return { status: "ambiguous", speak: OPERATOR_MISSION_CLARIFY_AMBIGUOUS_SPEAK };
+  if (titles.length !== 1) return { status: "absent", speak: OPERATOR_MISSION_CLARIFY_ABSENT_SPEAK };
+  return {
+    status: "resolved",
+    clause: source,
+    title: titles[0]!,
+    evidenceQuote: referentialEvidence(input.assembled, source),
+  };
+}
+
 export function isIncompleteOperatorMissionPrefix(utterance: string): boolean {
   if (parseExplicitOperatorMissionCommand(utterance)) return false;
+  if (isReferentialMissionCommand(utterance)) return false;
   const text = normalizeMissionUtterance(utterance);
   if (!text || /[?]\s*$/.test(utterance.trim())) return false;
   if (/^create (?:today'?s mission|a mission for today)\s*:?\s*$/i.test(text)) return true;
   if (/^set today'?s mission\s*:?\s*$/i.test(text)) return true;
+  if (/^(?:make|set) (?:this|that)(?:\s+(?:a|the|today'?s|my|as))?(?:\s+mission)?$/i.test(text)) return true;
+  if (/^turn (?:this|that)(?:\s+into(?:\s+(?:a|today'?s|the|my))?)?$/i.test(text)) return true;
   const words = text.split(/\s+/).filter(Boolean);
   if (words.length < 4 || words.length > 24) return false;
   if (/^i want\s+\S+(?:\s+\S+){1,}/i.test(text) && !/\bconsidered as my mission today$/i.test(text)) return true;
@@ -285,12 +416,24 @@ export function classifyOperatorMissionVoiceTurn(input: {
   allowFragmentWait: boolean;
   fragmentHolds?: number;
   maxHolds?: number;
+  /** Immediately previous operator line. Not the day's task list. */
+  priorOperatorUtterance?: string | null;
 }): OperatorMissionVoiceClass {
   const pending = input.pendingFragment?.trim() || null;
   const incoming = input.utterance.trim();
   const assembled = pending ? `${pending} ${incoming}`.trim() : incoming;
   if (!assembled) return { kind: "passthrough" };
   if (parseExplicitOperatorMissionCommand(assembled)) return { kind: "execute", assembled };
+  const referential = resolveReferentialMissionCommand({
+    assembled,
+    priorOperatorUtterance: input.priorOperatorUtterance,
+  });
+  if (referential.status === "resolved") {
+    return { kind: "execute", assembled, resolvedMissionClause: referential.clause };
+  }
+  if (referential.status === "absent" || referential.status === "ambiguous") {
+    return { kind: "clarify", assembled, speak: referential.speak };
+  }
   const holds = input.fragmentHolds ?? 0;
   const maxHolds = input.maxHolds ?? 5;
   if (input.allowFragmentWait && isIncompleteOperatorMissionPrefix(assembled) && holds < maxHolds) {
@@ -382,6 +525,23 @@ async function defaultListToday(input: {
   }));
 }
 
+function parsedReferentialCommand(
+  utterance: string,
+  resolvedMissionClause: string | null | undefined
+): ParsedOperatorMissionCommand | null {
+  if (!referentialParts(utterance)) return null;
+  const clause = resolvedMissionClause?.trim() ?? "";
+  if (!clause) return null;
+  const titles = workTitlesInStatement(clause);
+  if (titles.length !== 1) return null;
+  const title = titles[0]!;
+  return {
+    evidenceQuote: referentialEvidence(utterance, clause),
+    title,
+    completionCondition: completionConditionForMission(title),
+  };
+}
+
 export async function executeOperatorMissionCommand(
   input: {
     tenantId: string;
@@ -392,6 +552,8 @@ export async function executeOperatorMissionCommand(
     businessDate: string;
     utterance: string;
     sourceCommandRef: string;
+    /** Work statement resolved from this live turn. Ignored unless the utterance is referential. */
+    resolvedMissionClause?: string | null;
   },
   deps: OperatorMissionCommandDeps = {}
 ): Promise<OperatorMissionCommandResult> {
@@ -404,7 +566,9 @@ export async function executeOperatorMissionCommand(
     if (!tenantId || !operatorUserId || !dayDirectorActorId || dayDirectorActorId === "unknown") return failure();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) return failure();
     if (!sourceCommandRef) return failure();
-    const parsed = parseExplicitOperatorMissionCommand(input.utterance);
+    const parsed =
+      parseExplicitOperatorMissionCommand(input.utterance) ??
+      parsedReferentialCommand(input.utterance, input.resolvedMissionClause);
     if (!parsed) return failure();
 
     const now = deps.now?.() ?? new Date();

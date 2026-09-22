@@ -661,6 +661,17 @@ function voiceTurnDocument(input: {
   };
 }
 
+function latestOperatorUtterance(
+  history: Array<{ speaker?: string; text?: string }> | undefined
+): string | null {
+  if (!history?.length) return null;
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const entry = history[index];
+    if (entry?.speaker === "operator" && entry.text?.trim()) return entry.text.trim();
+  }
+  return null;
+}
+
 /**
  * The one Claire voice-turn orchestration. Gather and Conversation Relay both
  * call this. Relay passes allowFragmentWait false so a final provider prompt
@@ -709,10 +720,11 @@ export function runAuthoritativeClaireVoiceTurn(input: {
         utterance: input.utterance,
         allowFragmentWait: input.allowFragmentWait,
         fragmentHolds: conversation.fragmentHolds ?? 0,
+        priorOperatorUtterance: latestOperatorUtterance(conversation.history),
       });
 
       let result: ClaireTurnResult;
-      if (missionClass.kind === "hold" || missionClass.kind === "execute") {
+      if (missionClass.kind === "hold" || missionClass.kind === "execute" || missionClass.kind === "clarify") {
         if (input.utterance.trim()) {
           conversation.providerFragments = [
             ...(conversation.providerFragments ?? []),
@@ -732,43 +744,59 @@ export function runAuthoritativeClaireVoiceTurn(input: {
         } else {
           conversation.pendingFragment = null;
           conversation.fragmentHolds = 0;
-          if (isClaireProgressionEnabled(conversation.tenantId)) {
-            await commitPendingDisclosuresForConversation(getProgressionStore(), {
-              tenantId: conversation.tenantId,
-              conversationId: callStateKey(conversationId),
+          if (missionClass.kind === "clarify") {
+            conversation.history = appendOperatorArtifactVoiceHistory(conversation.history ?? [], {
+              operatorText: missionClass.assembled,
+              claireText: missionClass.speak,
+              at: Date.now(),
             });
-          }
-          const { executeOperatorMissionCommand } = await import("./operatorMissionCommand");
-          const mission = await executeOperatorMissionCommand({
-            tenantId: conversation.tenantId,
-            operatorUserId: conversation.actorId,
-            dayDirectorActorId: conversation.dayDirectorActorId,
-            weeklyIntentOperatorId: conversation.actorId,
-            businessDate: conversation.context.businessDate ?? "",
-            utterance: missionClass.assembled,
-            sourceCommandRef: `voice:${conversationId}:turn:${conversation.turns + 1}`,
-          }).catch(error => {
-            console.error("[Claire] operator mission command failed", error);
-            return {
-              ok: false as const,
-              speak: OPERATOR_MISSION_FAILED_SPEAK,
-              actionIds: [] as string[],
-              receipts: [] as [],
+            result = {
+              speak: missionClass.speak,
+              kind: "answered",
+              assembledUtterance: missionClass.assembled,
+              thoughtCompleteness: "complete",
+              actionIds: [],
             };
-          });
-          conversation.history = appendOperatorArtifactVoiceHistory(conversation.history ?? [], {
-            operatorText: missionClass.assembled,
-            claireText: mission.speak,
-            at: Date.now(),
-          });
-          result = {
-            speak: mission.speak,
-            kind: "answered",
-            assembledUtterance: missionClass.assembled,
-            thoughtCompleteness: "complete",
-            actionIds: mission.ok ? mission.actionIds : [],
-            mutationReceipts: mission.ok ? mission.receipts : undefined,
-          };
+          } else {
+            if (isClaireProgressionEnabled(conversation.tenantId)) {
+              await commitPendingDisclosuresForConversation(getProgressionStore(), {
+                tenantId: conversation.tenantId,
+                conversationId: callStateKey(conversationId),
+              });
+            }
+            const { executeOperatorMissionCommand } = await import("./operatorMissionCommand");
+            const mission = await executeOperatorMissionCommand({
+              tenantId: conversation.tenantId,
+              operatorUserId: conversation.actorId,
+              dayDirectorActorId: conversation.dayDirectorActorId,
+              weeklyIntentOperatorId: conversation.actorId,
+              businessDate: conversation.context.businessDate ?? "",
+              utterance: missionClass.assembled,
+              resolvedMissionClause: missionClass.resolvedMissionClause,
+              sourceCommandRef: `voice:${conversationId}:turn:${conversation.turns + 1}`,
+            }).catch(error => {
+              console.error("[Claire] operator mission command failed", error);
+              return {
+                ok: false as const,
+                speak: OPERATOR_MISSION_FAILED_SPEAK,
+                actionIds: [] as string[],
+                receipts: [] as [],
+              };
+            });
+            conversation.history = appendOperatorArtifactVoiceHistory(conversation.history ?? [], {
+              operatorText: missionClass.assembled,
+              claireText: mission.speak,
+              at: Date.now(),
+            });
+            result = {
+              speak: mission.speak,
+              kind: "answered",
+              assembledUtterance: missionClass.assembled,
+              thoughtCompleteness: "complete",
+              actionIds: mission.ok ? mission.actionIds : [],
+              mutationReceipts: mission.ok ? mission.receipts : undefined,
+            };
+          }
         }
       } else {
       const turnUtterance = missionClass.kind === "flush" ? missionClass.assembled : input.utterance;

@@ -82,7 +82,12 @@ import {
 } from "./turn/conversationStateStore";
 import { issueClaireToken } from "./claireToken";
 import { runAuthoritativeClaireVoiceTurn, runRelayAuthoritativeTurn } from "./claireTwilio";
-import { OPERATOR_MISSION_CREATED_SPEAK, OPERATOR_MISSION_FAILED_SPEAK } from "./operatorMissionCommand";
+import {
+  OPERATOR_MISSION_CLARIFY_ABSENT_SPEAK,
+  OPERATOR_MISSION_CLARIFY_AMBIGUOUS_SPEAK,
+  OPERATOR_MISSION_CREATED_SPEAK,
+  OPERATOR_MISSION_FAILED_SPEAK,
+} from "./operatorMissionCommand";
 
 const CONVERSATION_ID = "conv-mission";
 
@@ -234,6 +239,95 @@ describe("operator mission voice seam", () => {
     const request = hoisted.executeOperatorMissionCommand.mock.calls[0]?.[0] as { utterance: string };
     expect(request.utterance).toBe("I want this Meta ad considered as my mission today.");
     expect(written.speak).toBe(OPERATOR_MISSION_CREATED_SPEAK);
+  });
+
+  it("resolves a held work item without repeating the title", async () => {
+    const token = await save();
+    const state = conversation();
+    const held = await runAuthoritativeClaireVoiceTurn({
+      conversationId: CONVERSATION_ID,
+      conversation: state as never,
+      utterance: "I want this Meta ad",
+      rawTranscript: null,
+      allowFragmentWait: true,
+      token,
+      webhookReceivedAtMs: Date.now(),
+    });
+    expect(held.listenOnly).toBe(true);
+    expect(hoisted.executeOperatorMissionCommand).not.toHaveBeenCalled();
+    const written = await runAuthoritativeClaireVoiceTurn({
+      conversationId: CONVERSATION_ID,
+      conversation: state as never,
+      utterance: "make that today's mission",
+      rawTranscript: null,
+      allowFragmentWait: true,
+      token,
+      webhookReceivedAtMs: Date.now(),
+    });
+    expect(hoisted.runClaireTurn).not.toHaveBeenCalled();
+    expect(hoisted.executeOperatorMissionCommand).toHaveBeenCalledTimes(1);
+    const request = hoisted.executeOperatorMissionCommand.mock.calls[0]?.[0] as {
+      utterance: string;
+      resolvedMissionClause?: string;
+    };
+    expect(request.utterance).toBe("I want this Meta ad make that today's mission");
+    expect(request.resolvedMissionClause).toBe("I want this Meta ad");
+    expect(written.speak).toBe(OPERATOR_MISSION_CREATED_SPEAK);
+  });
+
+  it("asks when the referent is missing or ambiguous and does not write", async () => {
+    const token = await save();
+    const absent = await runAuthoritativeClaireVoiceTurn({
+      conversationId: CONVERSATION_ID,
+      conversation: conversation() as never,
+      utterance: "make that today's mission",
+      rawTranscript: null,
+      allowFragmentWait: true,
+      token,
+      webhookReceivedAtMs: Date.now(),
+    });
+    expect(absent.speak).toBe(OPERATOR_MISSION_CLARIFY_ABSENT_SPEAK);
+    expect(hoisted.executeOperatorMissionCommand).not.toHaveBeenCalled();
+    expect(hoisted.runClaireTurn).not.toHaveBeenCalled();
+    const ambiguous = await runAuthoritativeClaireVoiceTurn({
+      conversationId: CONVERSATION_ID,
+      conversation: conversation({
+        history: [{ speaker: "operator", text: "the postcard and the Instagram ad", at: 1 }],
+      }) as never,
+      utterance: "turn that into a mission",
+      rawTranscript: null,
+      allowFragmentWait: false,
+      token,
+      webhookReceivedAtMs: Date.now(),
+    });
+    expect(ambiguous.speak).toBe(OPERATOR_MISSION_CLARIFY_AMBIGUOUS_SPEAK);
+    expect(hoisted.executeOperatorMissionCommand).not.toHaveBeenCalled();
+    expect(hoisted.runClaireTurn).not.toHaveBeenCalled();
+  });
+
+  it("Relay resolves the previous work item through the same command service", async () => {
+    const token = await save(
+      conversation({
+        history: [
+          { speaker: "operator", text: "create and publish one static-image Instagram ad", at: 1 },
+        ],
+      })
+    );
+    hoisted.runClaireTurn.mockRejectedValue(new Error("V1 must not swallow a resolved referential mission command"));
+    const result = await runRelayAuthoritativeTurn({
+      conversationId: CONVERSATION_ID,
+      utterance: "make this a mission",
+      token,
+    });
+    expect(hoisted.runClaireTurn).not.toHaveBeenCalled();
+    expect(hoisted.executeOperatorMissionCommand).toHaveBeenCalledTimes(1);
+    const request = hoisted.executeOperatorMissionCommand.mock.calls[0]?.[0] as {
+      resolvedMissionClause?: string;
+      utterance: string;
+    };
+    expect(request.utterance).toBe("make this a mission");
+    expect(request.resolvedMissionClause).toBe("create and publish one static-image Instagram ad");
+    expect(result.speak).toBe(OPERATOR_MISSION_CREATED_SPEAK);
   });
 
   it("leaves ordinary conversation on the V1 path", async () => {

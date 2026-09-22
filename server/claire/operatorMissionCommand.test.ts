@@ -13,6 +13,8 @@ import { buildCampaign } from "../missionDirector/testFixtures";
 import type { RankingContext } from "../missionDirector/missionRank";
 import {
   OPERATOR_MISSION_ALREADY_SPEAK,
+  OPERATOR_MISSION_CLARIFY_ABSENT_SPEAK,
+  OPERATOR_MISSION_CLARIFY_AMBIGUOUS_SPEAK,
   OPERATOR_MISSION_CREATED_SPEAK,
   OPERATOR_MISSION_FAILED_SPEAK,
   OPERATOR_MISSION_UPDATED_SPEAK,
@@ -21,11 +23,13 @@ import {
   executeOperatorMissionCommand,
   isIncompleteOperatorMissionPrefix,
   parseExplicitOperatorMissionCommand,
+  resolveReferentialMissionCommand,
   sameOperatorMission,
   type OperatorMissionCommandDeps,
 } from "./operatorMissionCommand";
 
 const BANNED = /\b(?:locked|your week is set|week locked|week is set|done|mission completed|published|ad is live)\b/i;
+const CLARIFY_BANNED = /\b(?:created|done|saved|set|updated|locked|published)\b/i;
 
 type Row = {
   id: string;
@@ -131,7 +135,7 @@ function harness(options?: {
     loadCommand: async query => (loadOverride ? loadOverride(query) : loadFromRows(query)),
   };
 
-  const run = (utterance: string, sourceCommandRef = "voice:conv-1:turn:1") =>
+  const run = (utterance: string, sourceCommandRef = "voice:conv-1:turn:1", resolvedMissionClause?: string) =>
     executeOperatorMissionCommand(
       {
         tenantId: "tenant-1",
@@ -141,6 +145,7 @@ function harness(options?: {
         businessDate,
         utterance,
         sourceCommandRef,
+        resolvedMissionClause,
       },
       deps
     );
@@ -272,6 +277,65 @@ describe("operator mission command grammar", () => {
       fragmentHolds: 0,
     });
     expect(make.kind).toBe("execute");
+  });
+
+  it("resolves a referential command from the live work statement and does not guess", () => {
+    const forms = [
+      "make this a mission",
+      "make that today's mission",
+      "turn that into a mission",
+      "make this today's mission",
+      "turn this into today's mission",
+      "set that as today's mission",
+    ];
+    for (const form of forms) {
+      expect(parseExplicitOperatorMissionCommand(form)).toBeNull();
+      expect(resolveReferentialMissionCommand({ assembled: form }).status).toBe("absent");
+    }
+    const held = resolveReferentialMissionCommand({
+      assembled: "I want this Meta ad make that today's mission",
+    });
+    expect(held.status).toBe("resolved");
+    if (held.status !== "resolved") return;
+    expect(held.title).toBe("This Meta ad");
+    const prior = resolveReferentialMissionCommand({
+      assembled: "turn that into a mission",
+      priorOperatorUtterance: "create and publish one static-image Instagram ad",
+    });
+    expect(prior.status).toBe("resolved");
+    if (prior.status !== "resolved") return;
+    expect(prior.title).toBe("Create and publish one static-image Instagram ad");
+    expect(
+      resolveReferentialMissionCommand({
+        assembled: "make that today's mission",
+        priorOperatorUtterance: "the postcard and the Instagram ad",
+      }).status
+    ).toBe("ambiguous");
+    expect(
+      resolveReferentialMissionCommand({
+        assembled: "make this a mission",
+        priorOperatorUtterance: "I have a mission today.",
+      }).status
+    ).toBe("absent");
+    const classified = classifyOperatorMissionVoiceTurn({
+      pendingFragment: "I want this Meta ad",
+      utterance: "make that today's mission",
+      allowFragmentWait: true,
+      priorOperatorUtterance: "Pitch three properties",
+    });
+    expect(classified.kind).toBe("execute");
+    if (classified.kind !== "execute") return;
+    expect(classified.resolvedMissionClause).toBe("I want this Meta ad");
+    const clarify = classifyOperatorMissionVoiceTurn({
+      pendingFragment: null,
+      utterance: "make that today's mission",
+      allowFragmentWait: false,
+    });
+    expect(clarify.kind).toBe("clarify");
+    if (clarify.kind !== "clarify") return;
+    expect(clarify.speak).toBe(OPERATOR_MISSION_CLARIFY_ABSENT_SPEAK);
+    expect(clarify.speak).not.toMatch(CLARIFY_BANNED);
+    expect(OPERATOR_MISSION_CLARIFY_AMBIGUOUS_SPEAK).not.toMatch(CLARIFY_BANNED);
   });
 
   it("does not treat ordinary speech as a mission prefix", () => {
@@ -428,6 +492,35 @@ describe("operator mission canonical write", () => {
     );
     expect(result.speak).toBe(OPERATOR_MISSION_FAILED_SPEAK);
     expect(reads).toBeGreaterThan(1);
+  });
+
+  it("writes the resolved referent through the same command service", async () => {
+    const box = harness();
+    const intent = lockedTuesday();
+    const before = structuredClone(intent);
+    box.setIntent(intent);
+    const missing = await box.run("make that today's mission");
+    expect(missing.ok).toBe(false);
+    if (missing.ok) return;
+    expect(missing.speak).toBe(OPERATOR_MISSION_FAILED_SPEAK);
+    expect(box.rows).toHaveLength(0);
+    const result = await box.run(
+      "I want this Meta ad make that today's mission",
+      "voice:conv-1:turn:2",
+      "I want this Meta ad"
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.speak).toBe(OPERATOR_MISSION_CREATED_SPEAK);
+    expect(result.title).toBe("This Meta ad");
+    expect(result.status).toBe("open");
+    expect(result.verification).toBe("operator_reported");
+    expect(result.kind).toBe("growth");
+    expect(result.businessDate).toBe("2026-09-22");
+    expect(result.opsTaskId).toBeNull();
+    expect(box.rows).toHaveLength(1);
+    expect(intent).toEqual(before);
+    expect(intent.days.find(day => day.businessDate === "2026-09-23")?.primary?.text).toBe("Walk the Louise");
   });
 
   it("does not write a non-command", async () => {
