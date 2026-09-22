@@ -334,7 +334,12 @@ export async function decideTurn(
       if (perceived.attentionRepair !== "none" && attention.priorClaim === "none") {
         segments.push(acknowledge("attention_repaired", false));
       }
-      if (frameUpdate?.status === "content_held" || (perceived.workDeclarationKind === "strategic_work" && perceived.strategicShape === "content")) {
+      const strategicActive = taskSets.some(task => task.kind === "strategic_work");
+      if (
+        strategicActive &&
+        (frameUpdate?.status === "content_held" ||
+          (perceived.workDeclarationKind === "strategic_work" && perceived.strategicShape === "content"))
+      ) {
         segments.push(acknowledge("strategic_content_understood", true));
         conclusions = [
           ...conclusions,
@@ -344,7 +349,7 @@ export async function decideTurn(
             evidenceIds: [],
           },
         ];
-      } else if (perceived.workDeclarationKind === "strategic_work" && perceived.strategicShape === "unresolved") {
+      } else if (strategicActive && perceived.workDeclarationKind === "strategic_work" && perceived.strategicShape === "unresolved") {
         segments.push(acknowledge("awaiting_strategic_content", true));
         conclusions = [
           ...conclusions,
@@ -383,6 +388,16 @@ export async function decideTurn(
           {
             kind: "mission_write_unavailable",
             detail: "no canonical mission write path; declaration held cognitively",
+            evidenceIds: [],
+          },
+        ];
+      }
+      if (perceived.externalCapability) {
+        conclusions = [
+          ...conclusions,
+          {
+            kind: "external_capability_unowned",
+            detail: "recognized an existing capability Brain V2 does not execute; no grant minted",
             evidenceIds: [],
           },
         ];

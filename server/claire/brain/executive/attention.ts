@@ -15,7 +15,7 @@ import type { WorkingMemorySnapshot } from "../contracts/workingMemory";
 import type { CompartmentId } from "../contracts/retrieval";
 import { outputAllowed, suppressedSlots } from "./workingMemoryGate";
 import { dayLineCandidate } from "./dayLineAuthority";
-import { explicitPendingReturn, heldPending } from "./pendingBinding";
+import { explicitPendingReturn, explicitRefusalStands, heldPending } from "./pendingBinding";
 
 function holding(memory: WorkingMemorySnapshot): boolean {
   return Boolean(heldPending(memory));
@@ -56,10 +56,13 @@ export function planAttention(input: {
     pendingDisposition = "none";
     rationale.push("the operator returned to a dormant pending item; it is not confirmed or rejected");
   } else if (holdingPending) {
-    if (change === "task_switch" || change === "set_shift" || change === "query_requery") {
+    if (explicitRefusalStands(perceived, change) && pendingBind !== "revise") {
+      pendingDisposition = "reject";
+      rationale.push("explicit refusal stands even when the turn also repairs attention");
+    } else if (change === "task_switch" || change === "set_shift" || change === "query_requery") {
       pendingDisposition = "supersede";
       rationale.push("the operator moved to a different task; pending is set aside, not applied");
-    } else if (pendingBind === "no" || (perceived.refusal && !perceived.correction && pendingBind !== "revise")) {
+    } else if (pendingBind === "no") {
       pendingDisposition = "reject";
       rationale.push("pending binds a refusal");
     } else if (pendingBind === "revise" || change === "local_correction") {

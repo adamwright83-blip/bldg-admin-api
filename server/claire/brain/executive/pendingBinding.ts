@@ -6,6 +6,7 @@
  * The pending object does not get to decide what new speech means.
  */
 
+import type { ChangeClass } from "../contracts/control";
 import type { PerceivedTurn } from "../contracts/perceivedTurn";
 import type { PendingProposalSnapshot, WorkingMemorySnapshot } from "../contracts/workingMemory";
 
@@ -33,6 +34,17 @@ const GENERIC = new Set([
   "for",
   "you",
 ]);
+
+/**
+ * An explicit refusal still binds when attention repair is in the same turn.
+ * A refusal that abandons into a new task ("Forget that. What were my sales?")
+ * does not: that task switch supersedes instead of rejecting.
+ */
+export function explicitRefusalStands(perceived: PerceivedTurn, change: ChangeClass): boolean {
+  if (!perceived.refusal) return false;
+  if (perceived.attentionRepair !== "none") return true;
+  return change !== "task_switch" && change !== "set_shift" && change !== "query_requery";
+}
 
 /** A whole-utterance no. "No. Listen…" and "No, Wednesday" are not this. */
 export function isBareRefusal(text: string): boolean {

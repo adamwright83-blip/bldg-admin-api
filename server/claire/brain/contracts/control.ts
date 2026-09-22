@@ -82,7 +82,9 @@ export type WorkingMemorySlot =
   | "pending_clarification"
   | "prior_claim"
   | "unresolved_reference"
-  | "evidence_scope";
+  | "evidence_scope"
+  /** Remembered mission/strategic frame. Output-gated independently of task-set activation. */
+  | "strategic_frame";
 
 export type GateRuling = {
   slot: WorkingMemorySlot;

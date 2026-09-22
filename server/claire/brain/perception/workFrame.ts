@@ -68,13 +68,15 @@ const CONTEXT_NARRATION = new RegExp(
   "i"
 );
 
+/**
+ * Conversation repair only. Introducing a mission ("I'm telling you…", "I need you
+ * to know…") is not attention repair. Those phrases stay context or strategic work.
+ */
 const ATTENTION_REPAIR = new RegExp(
   [
     String.raw`\blisten\s+to\s+me\b`,
     String.raw`\byou(?:'re|\s+are)\s+not\s+listening\b`,
-    String.raw`\bi(?:'m|\s+am)\s+telling\s+you\b`,
     String.raw`\blisten\b(?:\s*,\s*|\s+)(?:different\s+thing|this\s+is)\b`,
-    String.raw`\bneed\s+you\s+to\s+(?:know|hear|listen|be\s+aware)\b`,
   ].join("|"),
   "i"
 );

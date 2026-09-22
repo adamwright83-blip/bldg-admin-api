@@ -112,6 +112,11 @@ export type PerceivedTurn = {
   operatorIntentAttested: boolean;
   /** A separate claim about the world (a debt, a price) sits inside the utterance. */
   embeddedExternalFact: boolean;
+  /**
+   * An existing capability owned outside Brain V2 (operator-artifact SMS).
+   * Recognition is not a grant and is not a Day Line proposal.
+   */
+  externalCapability: "operator_artifact_sms" | null;
   /** Operator asked to persist today's mission. Only an existing canonical action could. */
   explicitMissionWriteRequest: boolean;
   /** Desire pointed at a thing, with no complement yet. Not a finished declaration. */

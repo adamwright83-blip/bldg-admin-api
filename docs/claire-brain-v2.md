@@ -498,18 +498,32 @@ Operator-attested intention (“I have to post an ad”) is not an external fact
 through prior-claim verification. An embedded external claim (“because they owe me $10,000”)
 stays unverified and does not erase the intention.
 
-Attention repair (“Listen to me.”, “No. Listen to me.”, “That’s not what I’m saying.”) is not
+Attention repair is only a meta-conversational signal (“Listen to me.”, “You’re not listening.”,
+“That’s not what I’m saying.”). “I’m telling you…” and “I need you to know…” introduce context
+or a mission. They are not attention repair by themselves. Repair is not
 `prior_claim_challenge`, not `correctness_challenge`, and not verification. It cannot mint a
-grant by itself. “Are you sure?” and “Where did that number come from?” still do.
+grant by itself, and it cannot erase an explicit “don’t add / don’t log / don’t schedule.”
+“Are you sure?” and “Where did that number come from?” still do.
 
 An open fragment (“I want this …”) is incomplete. It mints nothing. A continuation that
 supplies the role (“considered as my mission today”) joins it. Dormant pending work cannot
 speak between the two pieces.
 
 The strategic frame lives in V2 working memory as `activeWorkFrame` with
-`durability: "cognitive_only"`. Status is `unresolved` until a later declaration supplies a
-short content label. That label is semantic state, not a second transcript. The conversation
-ledger still owns the words.
+`durability: "cognitive_only"`. It stores a closed `kind` (`publish`, `contact`,
+`field_movement`, `unspecified`) and a `sourceTurnRef` back to the conversation turn. It does
+not store operator prose. Remembered is not active: an unrelated sales question leaves the
+frame in memory, sets the `strategic_frame` slot to dormant and suppressed, and does not put
+`strategic_work` on `activeTaskSets`. An explicit return to the mission, or a later intention
+that continues that same frame, reactivates it. Ordinary work such as calling Dana can still
+propose Day Line without deleting the mission.
+
+Explicit goodbye (“Bye.”, “Talk later.”, “Hang up.”, “I have to go.”) ends the call even when
+a dollar amount is in the same utterance. “I have to go there / go back / go to …” is movement,
+not leave-taking. An embedded fact cannot cancel a goodbye.
+
+“Text me that.” is the existing operator-artifact SMS capability. Brain V2 recognizes it and
+mints no grant. It is not a Day Line proposal.
 
 The work-frame classifier returns `classified`, `unknown`, or `failed`. Unknown and failed
 hold. They do not propose Day Line and they do not change the strategic frame. Model text is

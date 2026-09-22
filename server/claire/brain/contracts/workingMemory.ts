@@ -58,14 +58,26 @@ export type PriorClaimRef = {
 };
 
 /**
+ * Closed semantic category for a strategic declaration.
+ * Fixture names and operator prose are not members of this set.
+ */
+export type StrategicWorkKind = "publish" | "contact" | "field_movement" | "unspecified";
+
+/**
  * Cognitive strategic-work frame. Understanding a declaration is not a write.
  * `durability` is fixed so this object cannot be mistaken for a mission receipt.
+ * The frame stores a closed kind and a turn reference. It does not store speech.
  */
 export type StrategicWorkMemory = {
   durability: "cognitive_only";
   status: "unresolved" | "content_held";
-  /** Short semantic label. Not a copy of the turn transcript. */
-  contentLabel: string | null;
+  /** Null while the declaration has not named a category. */
+  kind: StrategicWorkKind | null;
+  /**
+   * Points at the conversation turn that supplied this state.
+   * The ledger owns the words. This is not a transcript slice.
+   */
+  sourceTurnRef: string | null;
   openedAtMs: number;
 };
 

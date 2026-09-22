@@ -6,6 +6,8 @@ import { interpretTurn } from "../../turn/interpretTurn";
 import { detectRequestedClaireTopic, isPersonalQuestionAboutClaire } from "../../topicDetection";
 import { operatorAskedOntology } from "../../progression/ontologyGuard";
 import type { BusinessIntentKind, DialogueActKind, PerceivedEntity, PerceivedTurn } from "../contracts/perceivedTurn";
+import { isStandaloneOperatorArtifactVoiceRequest } from "../../operatorArtifactVoice";
+import { reconcileCallControl } from "../executive/callControl";
 import { classifyWorkFrame, type WorkFrameClassification } from "./workFrame";
 
 export type PerceiveInput = {
@@ -143,6 +145,15 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
       factualChallenge: false,
     };
   }
+  const externalCapability = isStandaloneOperatorArtifactVoiceRequest(assembledText)
+    ? ("operator_artifact_sms" as const)
+    : null;
+  if (
+    externalCapability &&
+    (classification.workDeclarationKind === "ordinary_work" || classification.workDeclarationKind === "explicit_action")
+  ) {
+    classification = { ...classification, workDeclarationKind: "none" };
+  }
   const entities: PerceivedEntity[] = [
     // A mention only. Whether it is a person or an account is decided downstream,
     // by authoritative evidence, never by counting words here.
@@ -150,12 +161,10 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
     ...turn.temporal.map(raw => ({ raw, kind: "temporal" as const })),
   ];
 
-  // A bare departure still ends the call. "I have to go there because …" is an
-  // intention plus an external claim, not leave-taking. V1's detector stays as it is.
-  let callControl = turn.callControl;
-  if (callControl === "end" && classification.status === "classified" && classification.embeddedExternalFact) {
-    callControl = "continue";
-  } else if (callControl === "end" && classification.status === "classified") {
+  // Explicit goodbye outranks V1 departure and outranks any embedded fact.
+  // Movement toward a place ("go there", "go back", "go to") is not leave-taking.
+  const callControl = reconcileCallControl(assembledText, turn.callControl);
+  if (callControl === "end" && classification.status === "classified") {
     classification = { ...classification, operatorIntentAttested: false, declaredContentLabel: null };
   }
 
@@ -165,8 +174,8 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
   let correctionTarget = correctionTargetOf(assembledText, turn);
   let refusal = turn.actionRefused;
   // A leading "No" followed by a new subject is not a pending refusal.
-  // "No, Wednesday" is a revision and is left alone. A real "don't add" stays a refusal
-  // unless the rest of the turn is attention repair or a new frame.
+  // "No, Wednesday" is a revision and is left alone. Explicit "don't add / don't log /
+  // don't schedule" stays a refusal even when the same turn repairs attention.
   const substantiveNo = leadingNegationHasSubstance(assembledText);
   const repairing = classification.status === "classified" && classification.attentionRepair !== "none";
   const newFrame =
@@ -175,7 +184,7 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
       classification.workDeclarationKind === "context_narration" ||
       classification.operatorIntentAttested ||
       classification.openFragment);
-  if (!factual && (repairing || (substantiveNo && newFrame))) {
+  if (!factual && !turn.actionRefused && (repairing || (substantiveNo && newFrame))) {
     refusal = false;
     if (repairing && correctionTarget !== "prior_claim") {
       correction = false;
@@ -230,6 +239,7 @@ export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): Per
     attentionRepair: classification.status === "classified" ? classification.attentionRepair : "none",
     operatorIntentAttested: classification.status === "classified" ? classification.operatorIntentAttested : false,
     embeddedExternalFact: classification.status === "classified" ? classification.embeddedExternalFact : false,
+    externalCapability,
     explicitMissionWriteRequest:
       classification.status === "classified" ? classification.explicitMissionWriteRequest : false,
     openFragment: classification.status === "classified" ? classification.openFragment : false,

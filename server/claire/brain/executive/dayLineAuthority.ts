@@ -9,6 +9,7 @@ import type { PerceivedTurn } from "../contracts/perceivedTurn";
 
 export function dayLineCandidate(perceived: PerceivedTurn): boolean {
   if (perceived.completeness === "incomplete" || perceived.openFragment) return false;
+  if (perceived.externalCapability) return false;
   if (perceived.classifierStatus !== "classified") return false;
   if (perceived.explicitMissionWriteRequest) return false;
   if (perceived.refusal) return false;

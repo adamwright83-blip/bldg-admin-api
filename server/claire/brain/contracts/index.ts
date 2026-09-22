@@ -18,6 +18,7 @@ export type {
   PendingProposalSnapshot,
   PriorClaimRef,
   StrategicWorkMemory,
+  StrategicWorkKind,
 } from "./workingMemory";
 export type {
   EvidenceItem,

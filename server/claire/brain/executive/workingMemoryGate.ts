@@ -24,7 +24,8 @@ import type {
 import type { PerceivedTurn } from "../contracts/perceivedTurn";
 import type { WorkingMemorySnapshot } from "../contracts/workingMemory";
 import { dayLineCandidate } from "./dayLineAuthority";
-import { explicitPendingReturn, heldPending, isBareRefusal } from "./pendingBinding";
+import { explicitPendingReturn, explicitRefusalStands, heldPending, isBareRefusal } from "./pendingBinding";
+import { strategicFrameControlsTurn } from "./strategicFrame";
 
 /** Explicit abandonment of the current subject. */
 const ABANDON = /\b(?:forget|drop|never\s+mind|nevermind|scratch)\s+(?:that|it|about\s+\w+|\w+)\b/i;
@@ -144,12 +145,8 @@ export function activeTaskSets(perceived: PerceivedTurn, memory: WorkingMemorySn
     add("pending_confirmation", memory.pendingProposal?.identity ?? memory.pendingBriefing?.identity ?? null);
   }
   if (dayLineCandidate(perceived)) add("action_proposal", mention);
-  if (
-    perceived.classifierStatus === "classified" &&
-    (perceived.workDeclarationKind === "strategic_work" || memory.activeWorkFrame)
-  ) {
-    add("strategic_work", null);
-  }
+  // Remembered strategic state does not activate itself. Only this turn can.
+  if (strategicFrameControlsTurn(perceived, memory)) add("strategic_work", null);
   if (perceived.businessIntent === "judgment_question") add("account_judgment", mention);
   if (perceived.broadBriefingRequest) add("broad_planning", null);
   if (
@@ -215,7 +212,9 @@ export function gateWorkingMemory(input: {
     rule("pending_proposal", "maintain", "suppress", "nothing pending");
   } else if (explicitPendingReturn(perceived, memory)) {
     rule("pending_proposal", "maintain", "allow", "the operator returned to the dormant item");
-  } else if ((perceived.refusal || isBareRefusal(perceived.assembledText)) && !substantiveNewTopic(perceived)) {
+  } else if (explicitRefusalStands(perceived, change)) {
+    rule("pending_proposal", "clear", "allow", "operator refused the pending item");
+  } else if (isBareRefusal(perceived.assembledText) && !substantiveNewTopic(perceived)) {
     // "No." and "Actually don't do that." both end it, and it must not come back.
     rule("pending_proposal", "clear", "allow", "operator refused the pending item");
   } else if (change === "local_correction") {
@@ -277,6 +276,23 @@ export function gateWorkingMemory(input: {
 
   // ── Pending clarification ─────────────────────────────────────────────────
   rule("pending_clarification", "maintain", "suppress", "no clarification outstanding");
+
+  // ── Strategic frame ───────────────────────────────────────────────────────
+  // Stored memory and the active task set are different. A sales question leaves
+  // the frame in memory and bars it from this turn.
+  const strategicActive = kinds.has("strategic_work");
+  if (!memory.activeWorkFrame && !strategicActive) {
+    rule("strategic_frame", "maintain", "suppress", "no strategic frame");
+  } else if (strategicActive) {
+    rule(
+      "strategic_frame",
+      perceived.workDeclarationKind === "strategic_work" ? "update" : "maintain",
+      "allow",
+      "this turn is operating the strategic frame"
+    );
+  } else {
+    rule("strategic_frame", "dormant", "suppress", "remembered strategic frame does not control this turn");
+  }
 
   // ── Evidence scope ────────────────────────────────────────────────────────
   rule(

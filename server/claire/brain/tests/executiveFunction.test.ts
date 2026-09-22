@@ -45,6 +45,7 @@ const GENERIC_FILES = [
   "executive/dayLineAuthority.ts",
   "executive/strategicFrame.ts",
   "executive/pendingBinding.ts",
+  "executive/callControl.ts",
   "shadow/shadowMemory.ts",
   "response/cognitiveAcknowledgement.ts",
 ];
@@ -120,7 +121,7 @@ describe("pending binding", () => {
       pending(STALE_PENDING_TITLE)
     );
     expect(mission.decision.attention.pendingDisposition).not.toBe("reject");
-    expect(mission.decision.perceivedTurn.attentionRepair).not.toBe("none");
+    expect(mission.decision.perceivedTurn.attentionRepair).toBe("none");
     expect(mission.decision.control.change).toBe("task_switch");
     expect(slot(mission, "pending_proposal")?.input).toBe("dormant");
     expect(mission.decision.control.activeTaskSets.some(task => task.kind === "strategic_work")).toBe(true);
@@ -216,7 +217,8 @@ describe("mission and strategic work", () => {
     expect(result.decision.control.activeTaskSets.some(task => task.kind === "strategic_work")).toBe(true);
     expect(result.decision.workingMemoryUpdate?.activeWorkFrame?.status).toBe("content_held");
     expect(result.decision.workingMemoryUpdate?.activeWorkFrame?.durability).toBe("cognitive_only");
-    expect(result.decision.workingMemoryUpdate?.activeWorkFrame?.contentLabel).toMatch(/publish/i);
+    expect(result.decision.workingMemoryUpdate?.activeWorkFrame?.kind).toBe("publish");
+    expect(JSON.stringify(result.decision.workingMemoryUpdate?.activeWorkFrame)).not.toMatch(/Meta|meta ad/);
     expect(result.decision.actionGrants).toEqual([]);
     expect(result.decision.responsePlan.segments.some(segment => segment.type === "ActionProposalSegment")).toBe(false);
     expect(ack(result, "strategic_content_understood")).toBeTruthy();
@@ -228,20 +230,22 @@ describe("mission and strategic work", () => {
     const result = await brain("I want the Meta ad considered my mission today.");
     expect(result.decision.perceivedTurn.workDeclarationKind).toBe("strategic_work");
     expect(result.decision.actionGrants).toEqual([]);
-    expect(result.decision.workingMemoryUpdate?.activeWorkFrame?.contentLabel).toMatch(/meta ad/i);
+    expect(result.decision.workingMemoryUpdate?.activeWorkFrame?.kind).toBe("unspecified");
+    expect(JSON.stringify(result.decision.workingMemoryUpdate?.activeWorkFrame)).not.toMatch(/Meta/);
   });
 
   it("an incomplete mission frame does not invent content, and the next declaration may supply it", async () => {
     const opened = await brain("I have a mission today I need you to know about.");
     expect(opened.decision.workingMemoryUpdate?.activeWorkFrame?.status).toBe("unresolved");
-    expect(opened.decision.workingMemoryUpdate?.activeWorkFrame?.contentLabel).toBeNull();
+    expect(opened.decision.workingMemoryUpdate?.activeWorkFrame?.kind).toBeNull();
     expect(opened.decision.actionGrants).toEqual([]);
     expect(ack(opened, "awaiting_strategic_content")).toBeTruthy();
 
     const shadow = updateShadowMemory(emptyShadowMemory(), opened.decision, 1);
     const filled = await brain("I have to publish the Meta ad.", { activeWorkFrame: shadow.activeWorkFrame });
     expect(filled.decision.workingMemoryUpdate?.activeWorkFrame?.status).toBe("content_held");
-    expect(filled.decision.workingMemoryUpdate?.activeWorkFrame?.contentLabel).toMatch(/publish/i);
+    expect(filled.decision.workingMemoryUpdate?.activeWorkFrame?.kind).toBe("publish");
+    expect(JSON.stringify(filled.decision.workingMemoryUpdate?.activeWorkFrame)).not.toMatch(/Meta/);
     expect(filled.decision.actionGrants).toEqual([]);
   });
 
@@ -343,7 +347,8 @@ describe("completeness and split thoughts", () => {
     expect(second.assembledText).toBe("I want this Meta ad considered as my mission today.");
     const done = await brain(second.assembledText, pending(STALE_PENDING_TITLE), "complete");
     expect(done.decision.perceivedTurn.workDeclarationKind).toBe("strategic_work");
-    expect(done.decision.workingMemoryUpdate?.activeWorkFrame?.contentLabel).toMatch(/meta ad/i);
+    expect(done.decision.workingMemoryUpdate?.activeWorkFrame?.kind).toBe("unspecified");
+    expect(JSON.stringify(done.decision.workingMemoryUpdate?.activeWorkFrame)).not.toMatch(/Meta/);
     expect(done.decision.actionGrants).toEqual([]);
     expect(slot(done, "pending_proposal")?.input).toBe("dormant");
     expect(slot(done, "pending_proposal")?.output).toBe("suppress");
@@ -398,21 +403,32 @@ describe("multi-turn strategic memory", () => {
     expect(slot(opened, "pending_proposal")?.input).toBe("dormant");
 
     const filled = await step("I have to publish the Meta ad.");
-    expect(filled.decision.workingMemoryUpdate?.activeWorkFrame?.contentLabel).toMatch(/publish/i);
+    expect(filled.decision.workingMemoryUpdate?.activeWorkFrame?.kind).toBe("publish");
     expect(slot(filled, "pending_proposal")?.output).toBe("suppress");
     expect(filled.decision.actionGrants).toEqual([]);
 
     const plan = await step("What do I still have to do today?");
-    expect(shadow.activeWorkFrame?.contentLabel).toMatch(/publish/i);
-    expect(plan.decision.control.activeTaskSets.some(task => task.kind === "strategic_work")).toBe(true);
+    expect(shadow.activeWorkFrame?.kind).toBe("publish");
+    expect(plan.decision.control.activeTaskSets.some(task => task.kind === "strategic_work")).toBe(false);
+    expect(plan.decision.control.activeTaskSets.some(task => task.kind === "business_query" || task.kind === "broad_planning")).toBe(true);
+    expect(slot(plan, "strategic_frame")?.input).toBe("dormant");
+    expect(slot(plan, "strategic_frame")?.output).toBe("suppress");
+    expect(ack(plan, "strategic_content_understood")).toBeUndefined();
+    expect(ack(plan, "awaiting_strategic_content")).toBeUndefined();
     expect(plan.decision.actionGrants.some(grant => grant.actionClass === "commit_day_line")).toBe(false);
+
+    const missionAgain = await step("What about the mission?");
+    expect(missionAgain.decision.control.activeTaskSets.some(task => task.kind === "strategic_work")).toBe(true);
+    expect(slot(missionAgain, "strategic_frame")?.output).toBe("allow");
+    expect(missionAgain.decision.workingMemoryUpdate?.activeWorkFrame?.kind).toBe("publish");
 
     const back = await step("What about the Ryan stop?");
     expect(slot(back, "pending_proposal")?.output).toBe("allow");
     expect(back.decision.attention.pendingDisposition).not.toBe("confirm");
     expect(back.decision.attention.pendingDisposition).not.toBe("reject");
     expect(back.decision.actionGrants).toEqual([]);
-    expect(shadow.activeWorkFrame?.contentLabel).toMatch(/publish/i);
+    expect(shadow.activeWorkFrame?.kind).toBe("publish");
+    expect(JSON.stringify(shadow.activeWorkFrame)).not.toMatch(/Meta/);
   });
 });
 
@@ -445,12 +461,18 @@ describe("classifier and authority boundaries", () => {
     );
     expect(failedTurn.classifierStatus).toBe("failed");
     const existing = memory({
-      activeWorkFrame: { durability: "cognitive_only", status: "content_held", contentLabel: "keep", openedAtMs: 1 },
+      activeWorkFrame: {
+        durability: "cognitive_only",
+        status: "content_held",
+        kind: "publish",
+        sourceTurnRef: "claire-call:executive#1",
+        openedAtMs: 1,
+      },
     });
     const failed = await decideTurn(failedTurn, existing);
     expect(failed.actionGrants).toEqual([]);
     expect(failed.workingMemoryUpdate?.activeWorkFrame).toBeUndefined();
-    expect(existing.activeWorkFrame?.contentLabel).toBe("keep");
+    expect(existing.activeWorkFrame?.kind).toBe("publish");
   });
 
   it("model text cannot mint a grant, and only the executive mint site brands one", async () => {
@@ -491,6 +513,82 @@ describe("classifier and authority boundaries", () => {
       expect(source).not.toMatch(/\bRyan\b/);
       expect(source).not.toMatch(/\bMeta\b/);
     }
+  });
+});
+
+describe("review tightenings", () => {
+  it("an unrelated sales turn output-gates a remembered mission", async () => {
+    const opened = await brain("My mission today is to publish the campaign.");
+    expect(opened.decision.workingMemoryUpdate?.activeWorkFrame?.kind).toBe("publish");
+    const shadow = updateShadowMemory(emptyShadowMemory(), opened.decision, 1);
+    const sales = await brain("What were my last five sales?", { activeWorkFrame: shadow.activeWorkFrame });
+    expect(sales.decision.control.activeTaskSets.some(task => task.kind === "strategic_work")).toBe(false);
+    expect(sales.decision.control.activeTaskSets.some(task => task.kind === "business_query")).toBe(true);
+    expect(slot(sales, "strategic_frame")?.input).toBe("dormant");
+    expect(slot(sales, "strategic_frame")?.output).toBe("suppress");
+    expect(ack(sales, "strategic_content_understood")).toBeUndefined();
+    expect(ack(sales, "awaiting_strategic_content")).toBeUndefined();
+    expect(sales.candidateSpeak).not.toMatch(/mission/i);
+    const kept = updateShadowMemory(shadow, sales.decision, 2);
+    expect(kept.activeWorkFrame?.kind).toBe("publish");
+    expect(kept.activeWorkFrame?.status).toBe("content_held");
+    expect(JSON.stringify(kept.activeWorkFrame)).not.toMatch(/campaign/);
+  });
+
+  it("ordinary Dana work stays a day-line candidate and does not erase the mission", async () => {
+    const opened = await brain("My mission today is to publish the campaign.");
+    const shadow = updateShadowMemory(emptyShadowMemory(), opened.decision, 1);
+    const dana = await brain("I also need to call Dana Tuesday.", { activeWorkFrame: shadow.activeWorkFrame });
+    expect(dana.decision.perceivedTurn.workDeclarationKind).toBe("ordinary_work");
+    expect(dana.decision.actionGrants.map(grant => grant.actionClass)).toEqual(["propose_day_line"]);
+    expect(dana.decision.actionGrants[0]?.constraints).toEqual({ mutationAllowed: false, shadowOnly: true });
+    expect(dana.decision.control.activeTaskSets.some(task => task.kind === "strategic_work")).toBe(false);
+    expect(slot(dana, "strategic_frame")?.input).toBe("dormant");
+    expect(dana.decision.workingMemoryUpdate?.activeWorkFrame).toBeUndefined();
+    const kept = updateShadowMemory(shadow, dana.decision, 2);
+    expect(kept.activeWorkFrame).toEqual(shadow.activeWorkFrame);
+  });
+
+  it("explicit goodbye ends the call and destination movement does not", async () => {
+    for (const rawText of ["Bye.", "Talk later.", "Hang up.", "End the call.", "I have to go.", "I have to go, they owe me $10,000. Bye.", "I need to run. Talk later."]) {
+      const result = await brain(rawText);
+      expect(result.decision.callControl.endCall).toBe(true);
+      expect(result.decision.perceivedTurn.callControl).toBe("end");
+    }
+    for (const rawText of [
+      "I have to go there because they owe me $10,000.",
+      "I have to go back to Century Park East.",
+      "I gotta go over there and pick it up.",
+      "I need to go to Koreatown.",
+    ]) {
+      const result = await brain(rawText);
+      expect(result.decision.callControl.endCall).toBe(false);
+      expect(result.decision.perceivedTurn.callControl).toBe("continue");
+    }
+  });
+
+  it("introducing a mission is not attention repair, and don't-add survives listen", async () => {
+    const intro = await brain("I'm telling you that today I have a mission.");
+    expect(intro.decision.perceivedTurn.attentionRepair).toBe("none");
+    expect(intro.decision.perceivedTurn.workDeclarationKind).toBe("strategic_work");
+
+    const aware = await brain("I need you to know the delivery is late.");
+    expect(aware.decision.perceivedTurn.attentionRepair).toBe("none");
+
+    const both = await brain("No, don't add that. Listen to me — I'm talking about something else.", pending());
+    expect(both.decision.perceivedTurn.attentionRepair).not.toBe("none");
+    expect(both.decision.perceivedTurn.refusal).toBe(true);
+    expect(both.decision.attention.pendingDisposition).toBe("reject");
+    expect(slot(both, "pending_proposal")?.input).toBe("clear");
+  });
+
+  it("text me that is an external capability and not a day line grant", async () => {
+    const result = await brain("Text me that.");
+    expect(result.decision.perceivedTurn.externalCapability).toBe("operator_artifact_sms");
+    expect(result.decision.perceivedTurn.workDeclarationKind).not.toBe("ordinary_work");
+    expect(result.decision.actionGrants).toEqual([]);
+    expect(result.decision.conclusions.some(item => item.kind === "external_capability_unowned")).toBe(true);
+    expect(result.candidateSpeak).not.toMatch(/sent it/i);
   });
 });
 
@@ -545,7 +643,8 @@ describe("production call regression", () => {
     expect(slot(declared, "pending_proposal")?.input).toBe("dormant");
     expect(slot(declared, "pending_proposal")?.output).toBe("suppress");
     expect(declared.decision.control.activeTaskSets.some(task => task.kind === "strategic_work")).toBe(true);
-    expect(declared.decision.workingMemoryUpdate?.activeWorkFrame?.contentLabel).toMatch(/meta ad/i);
+    expect(declared.decision.workingMemoryUpdate?.activeWorkFrame?.kind).toBe("publish");
+    expect(JSON.stringify(declared.decision.workingMemoryUpdate?.activeWorkFrame)).not.toMatch(/meta/i);
     expect(declared.decision.attention.priorClaim).toBe("none");
     expect(declared.decision.actionGrants).toEqual([]);
     expect(declared.candidateSpeak).not.toMatch(/Ryan|should I add|say yes or no|unverif/i);
@@ -553,7 +652,7 @@ describe("production call regression", () => {
 
     const repair = await step(EXECUTIVE_CALL_TURNS.missionRepair);
     expect(repair.decision.attention.pendingDisposition).not.toBe("reject");
-    expect(repair.decision.perceivedTurn.attentionRepair).not.toBe("none");
+    expect(repair.decision.perceivedTurn.attentionRepair).toBe("none");
     expect(repair.decision.control.activeTaskSets.some(task => task.kind === "strategic_work")).toBe(true);
     expect(repair.decision.attention.priorClaim).toBe("none");
     expect(slot(repair, "pending_proposal")?.output).toBe("suppress");
@@ -567,8 +666,8 @@ describe("production call regression", () => {
 
     const posted = await step(EXECUTIVE_CALL_TURNS.postAd);
     expect(posted.decision.perceivedTurn.operatorIntentAttested).toBe(true);
-    expect(posted.decision.workingMemoryUpdate?.activeWorkFrame?.contentLabel).toMatch(/post/i);
-    expect(posted.decision.workingMemoryUpdate?.activeWorkFrame?.contentLabel).toMatch(/ad/i);
+    expect(posted.decision.workingMemoryUpdate?.activeWorkFrame?.kind).toBe("publish");
+    expect(JSON.stringify(posted.decision.workingMemoryUpdate?.activeWorkFrame)).not.toMatch(/meta|instagram/i);
     expect(posted.decision.control.change).toBe("task_switch");
     expect(slot(posted, "pending_proposal")?.input).toBe("dormant");
     expect(slot(posted, "pending_proposal")?.output).toBe("suppress");
