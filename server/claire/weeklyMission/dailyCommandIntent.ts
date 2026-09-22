@@ -33,11 +33,18 @@ export type WeeklyIntentOverride = {
   commandPrimaryId: string | null;
 };
 
-/** Explicit operator replacement. "Daily Command is running X" is not a reason. */
+/**
+ * Explicit operator replacement. "Daily Command is running X" is not a reason.
+ * source is set only for an explicit operator mission command stored on the
+ * Day Director commitment. Title drift alone must not construct this object.
+ */
 export type WeeklyPrimaryDisplacement = {
   allowed: true;
   reason: string;
   evidenceQuote: string;
+  source?: "explicit_operator_mission_command";
+  sourceCommandRef?: string;
+  businessDate?: string;
 };
 
 export type DailyCommandWithIntent = DailyCommand & {
@@ -144,9 +151,43 @@ export function displacementIsEvidenced(
   const quote = displacement.evidenceQuote.trim();
   if (!reason || !quote) return false;
   if (/daily command is running/i.test(reason)) return false;
+  if (displacement.source !== undefined && displacement.source !== "explicit_operator_mission_command") {
+    return false;
+  }
+  if (displacement.businessDate && displacement.businessDate !== command.businessDate) return false;
+  if (displacement.source === "explicit_operator_mission_command" && !displacement.sourceCommandRef?.trim()) {
+    return false;
+  }
   if (!reason.toLowerCase().includes(quote.toLowerCase())) return false;
   const evidence = `${command.primary?.provenance.quote ?? ""}`.toLowerCase();
   return evidence.includes(quote.toLowerCase());
+}
+
+/**
+ * Builds today-only displacement from the primary commitment's stored command.
+ * Returns null when that provenance is absent. Callers must not invent this
+ * from "Daily Command is now running a different title."
+ */
+export function explicitOperatorMissionDisplacement(
+  command: DailyCommand
+): WeeklyPrimaryDisplacement | null {
+  const evidence = command.explicitOperatorMission;
+  if (!evidence?.weeklyIntentDisplacement) return null;
+  if (evidence.source !== "operator_explicit" || evidence.scope !== "today_only") return null;
+  if (evidence.businessDate !== command.businessDate) return null;
+  const quote = evidence.evidenceQuote.trim();
+  const ref = evidence.sourceCommandRef.trim();
+  if (!quote || !ref) return null;
+  const provenance = command.primary?.provenance.quote ?? "";
+  if (!provenance.toLowerCase().includes(quote.toLowerCase())) return null;
+  return {
+    allowed: true,
+    source: "explicit_operator_mission_command",
+    sourceCommandRef: ref,
+    businessDate: evidence.businessDate,
+    evidenceQuote: quote,
+    reason: `Explicit operator mission command: ${quote}`,
+  };
 }
 
 function intentPrimaryItem(businessDate: string, day: WeeklyIntentDay): DailyCommandItem {

@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { DailyCommand } from "../dailyCommandContract";
 import type { WeeklyIntentDay } from "../../../shared/weeklyMissionReadiness";
-import { applyWeeklyIntentToCommand, loadDailyCommandWithWeeklyIntent, playableToday } from "./dailyCommandIntent";
+import {
+  applyWeeklyIntentToCommand,
+  explicitOperatorMissionDisplacement,
+  loadDailyCommandWithWeeklyIntent,
+  playableToday,
+} from "./dailyCommandIntent";
 
 function command(
   primaryTitle: string | null,
@@ -284,6 +289,47 @@ describe("Daily Command weekly intent", () => {
     expect(calls).toEqual(["load", "intent"]);
     expect(pictured.primary?.title).toBe("Field the six buildings");
     expect(pictured.weeklyIntentOverride).toBeNull();
+  });
+
+  it("displaces today's weekly primary only from stored explicit operator mission evidence", () => {
+    const quote = "Make publishing the Instagram ad my mission today";
+    const tuesday: WeeklyIntentDay = {
+      ...intentDay,
+      businessDate: "2026-09-22",
+      weekday: "Tuesday",
+      primary: { text: "Pitch three properties", source: "operator_stated", commitmentId: "pitch" },
+    };
+    const original = structuredClone(tuesday);
+    const base = command("Publish the Instagram ad", "day-director:ad", "2026-09-22");
+    base.primary!.provenance.quote = quote;
+    base.primary!.provenance.sourceIds = ["commitment-ad"];
+    base.explicitOperatorMission = {
+      version: 1,
+      source: "operator_explicit",
+      scope: "today_only",
+      completionCondition: "The Instagram ad is published.",
+      verification: "operator_reported",
+      operatorMissionKey: "om:test",
+      requestedAt: "2026-09-22T15:00:00.000Z",
+      weeklyIntentDisplacement: true,
+      sourceCommandRef: "voice:conv:turn:1",
+      evidenceQuote: quote,
+      businessDate: "2026-09-22",
+    };
+    const pictured = applyWeeklyIntentToCommand(base, tuesday, explicitOperatorMissionDisplacement(base));
+    expect(pictured.primary?.title).toBe("Publish the Instagram ad");
+    expect(pictured.weeklyIntentOverride?.code).toBe("operator_replaced_weekly_primary");
+    expect(pictured.weeklyIntentOverride?.reason).toMatch(/Explicit operator mission command/);
+    expect(pictured.weeklyIntentOverride?.reason).not.toMatch(/daily command is running/i);
+    expect(pictured.weeklyIntentOverride?.evidenceQuote).toBe(quote);
+    expect(tuesday).toEqual(original);
+    const drift = applyWeeklyIntentToCommand(
+      command("Publish the Instagram ad", "day-director:ad", "2026-09-22"),
+      tuesday
+    );
+    expect(drift.primary?.title).toBe("Pitch three properties");
+    expect(explicitOperatorMissionDisplacement(drift)).toBeNull();
+    expect(drift.weeklyIntentOverride).toBeNull();
   });
 
   it("leaves Brain V2 without authority and without a weekly_planning task set", () => {

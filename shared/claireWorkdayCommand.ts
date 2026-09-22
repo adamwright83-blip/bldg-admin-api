@@ -58,6 +58,58 @@ export type CommandCargoLink = {
   id: string;
 };
 
+/**
+ * Provenance for an explicit operator mission command.
+ * This is today-only displacement evidence. It is not a WeeklyIntent rewrite.
+ */
+export type OperatorMissionMetadata = {
+  version: 1;
+  source: "operator_explicit";
+  scope: "today_only";
+  completionCondition: string;
+  verification: "operator_reported";
+  operatorMissionKey: string;
+  requestedAt: string;
+  weeklyIntentDisplacement: true;
+  sourceCommandRef: string;
+  evidenceQuote: string;
+  businessDate: string;
+};
+
+export function readOperatorMissionMetadata(metadata: unknown): OperatorMissionMetadata | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const record = metadata as Record<string, unknown>;
+  const raw =
+    record.operatorMission && typeof record.operatorMission === "object"
+      ? (record.operatorMission as Record<string, unknown>)
+      : null;
+  if (!raw) return null;
+  if (raw.version !== 1) return null;
+  if (raw.source !== "operator_explicit") return null;
+  if (raw.scope !== "today_only") return null;
+  if (raw.verification !== "operator_reported") return null;
+  if (raw.weeklyIntentDisplacement !== true) return null;
+  if (typeof raw.completionCondition !== "string" || !raw.completionCondition.trim()) return null;
+  if (typeof raw.operatorMissionKey !== "string" || !raw.operatorMissionKey.trim()) return null;
+  if (typeof raw.requestedAt !== "string" || !raw.requestedAt.trim()) return null;
+  if (typeof raw.sourceCommandRef !== "string" || !raw.sourceCommandRef.trim()) return null;
+  if (typeof raw.evidenceQuote !== "string" || !raw.evidenceQuote.trim()) return null;
+  if (typeof raw.businessDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(raw.businessDate)) return null;
+  return {
+    version: 1,
+    source: "operator_explicit",
+    scope: "today_only",
+    completionCondition: raw.completionCondition.trim(),
+    verification: "operator_reported",
+    operatorMissionKey: raw.operatorMissionKey.trim(),
+    requestedAt: raw.requestedAt,
+    weeklyIntentDisplacement: true,
+    sourceCommandRef: raw.sourceCommandRef.trim(),
+    evidenceQuote: raw.evidenceQuote.trim(),
+    businessDate: raw.businessDate,
+  };
+}
+
 export type DayDirectorCommandMetadata = {
   role: CommandRole;
   designatedBy: "operator" | "operator_confirmed_proposal" | null;
@@ -218,6 +270,11 @@ export type DailyCommand = {
       policy: readonly string[];
     };
   };
+  /**
+   * Present only when today's open primary commitment itself carries an explicit
+   * operator mission command. A different Daily Command title is not this field.
+   */
+  explicitOperatorMission?: OperatorMissionMetadata | null;
 };
 
 export type CommandCommitmentSource = {
@@ -230,6 +287,7 @@ export type CommandCommitmentSource = {
   scheduleKind: string | null;
   scheduleLabel: string | null;
   command: DayDirectorCommandMetadata;
+  operatorMission?: OperatorMissionMetadata | null;
 };
 
 export type CommandRouteSource = {
@@ -316,6 +374,19 @@ function commitmentProvenance(commitment: CommandCommitmentSource): CommandProve
   };
 }
 
+/** The open primary's own metadata, and only when its stored quote contains the command. */
+function explicitOperatorMissionFrom(
+  commitment: CommandCommitmentSource | null,
+  businessDate: string
+): OperatorMissionMetadata | null {
+  const mission = commitment?.operatorMission;
+  if (!mission || mission.businessDate !== businessDate) return null;
+  const quote = mission.evidenceQuote.trim();
+  const source = commitment?.sourceText ?? "";
+  if (!quote || !source.toLowerCase().includes(quote.toLowerCase())) return null;
+  return mission;
+}
+
 function routeChronology(route: CommandRouteSource): DailyCommandItem["chronology"] {
   if (route.scheduledAt) {
     return { axis: "fixed_window", windowStart: route.scheduledAt, windowEnd: null, label: route.scheduledAt };
@@ -351,6 +422,7 @@ export function deriveDailyCommand(input: {
   const openCommitments = input.commitments.filter(row => row.status === "open");
   const primaries = openCommitments.filter(row => row.command.role === "primary");
   const primarySource = primaries[0] ?? null;
+  const explicitOperatorMission = explicitOperatorMissionFrom(primarySource, input.businessDate);
 
   const primary = primarySource
     ? item({
@@ -626,6 +698,7 @@ export function deriveDailyCommand(input: {
         policy: DAILY_COMMAND_POLICY,
       },
     },
+    ...(explicitOperatorMission ? { explicitOperatorMission } : {}),
   };
 }
 

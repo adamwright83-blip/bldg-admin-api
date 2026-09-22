@@ -8,7 +8,12 @@ import {
   towerWarsPromises,
 } from "../../drizzle/schema";
 import type { DayDirectorCommitment, DayDirectorProposal } from "../../shared/dayDirector";
-import { demotePrimaryCommand, emptyCommandMetadata, readCommandMetadata } from "../../shared/claireWorkdayCommand";
+import {
+  demotePrimaryCommand,
+  emptyCommandMetadata,
+  readCommandMetadata,
+  readOperatorMissionMetadata,
+} from "../../shared/claireWorkdayCommand";
 import {
   dayLineDisplayTitle,
   readDayLineOverlay,
@@ -133,6 +138,7 @@ export async function getDayDirectorState(input: {
         scheduleLabel: typeof metadata.scheduleLabel === "string" ? metadata.scheduleLabel : null,
         sourceText: row.sourceText,
         command,
+        operatorMission: readOperatorMissionMetadata(metadata),
       } satisfies DayDirectorCommitment;
     }).filter((row): row is NonNullable<typeof row> => row != null),
     dismissedPromptKeys: prompts.map(row => row.promptKey),
@@ -285,6 +291,7 @@ export async function acceptProposal(input: {
       missingDetails: input.proposal.missingDetails ?? [],
       detailNote: input.proposal.detailNote ?? null,
       command,
+      ...(input.proposal.operatorMission ? { operatorMission: input.proposal.operatorMission } : {}),
     },
   };
   await db
@@ -462,6 +469,8 @@ export async function designateDayDirectorPrimary(input: {
   businessDate: string;
   commitmentId: string;
   nowIso: string;
+  /** Defaults to the proposal-confirmation path. Operator mission commands pass "operator". */
+  designatedBy?: "operator" | "operator_confirmed_proposal";
 }): Promise<{ commitmentId: string }> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -477,6 +486,7 @@ export async function designateDayDirectorPrimary(input: {
     );
   const target = rows.find(row => row.id === input.commitmentId);
   if (!target) throw new Error("Day Director commitment not found");
+  const designatedBy = input.designatedBy ?? "operator_confirmed_proposal";
   for (const row of rows) {
     const current =
       row.metadataJson && typeof row.metadataJson === "object"
@@ -485,7 +495,7 @@ export async function designateDayDirectorPrimary(input: {
     const isTarget = row.id === target.id;
     const command = readCommandMetadata(current);
     if (!isTarget && command.role !== "primary") continue;
-    if (isTarget && command.role === "primary" && command.designatedBy === "operator_confirmed_proposal") {
+    if (isTarget && command.role === "primary" && command.designatedBy === designatedBy) {
       continue;
     }
     await db
@@ -497,7 +507,7 @@ export async function designateDayDirectorPrimary(input: {
             ? {
                 ...command,
                 role: "primary",
-                designatedBy: "operator_confirmed_proposal",
+                designatedBy,
                 designatedAt: input.nowIso,
               }
             : demotePrimaryCommand(command, input.nowIso),
