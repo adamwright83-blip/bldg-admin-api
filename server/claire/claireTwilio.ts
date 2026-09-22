@@ -864,6 +864,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
         await linkClaireActionIds({ callSid: input.callSid, claireConversationId: conversationId, actionIds: result.actionIds });
       }
       if (result.endCall) {
+        const gatherTwiml = speakAndHangUp(result.speak);
         // A guarded personal turn closed the thread with business complete and an authored exit line.
         await dropCall(conversationId);
         await endClaireCallLedger({
@@ -872,7 +873,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
           claireText: result.speak,
           reason: "personal_thread_closed",
         });
-        return voiceTurnDocument({ speak: result.speak, token, hints: conversation.hints, endCall: true });
+        return { speak: result.speak, endCall: true, listenOnly: false, gatherTwiml };
       }
       return voiceTurnDocument({
         speak: result.speak || "Go ahead.",

@@ -79,10 +79,6 @@ vi.mock("../conversation/ledgerService", () => ({
   persistSpokenTurn: vi.fn(async () => undefined),
 }));
 
-vi.mock("../brain/shadow/observeShadowTurn", () => ({
-  observeShadowTurnDetached: vi.fn(),
-}));
-
 vi.mock("../progression/progressionFlag", () => ({
   isClaireProgressionEnabled: () => false,
 }));
