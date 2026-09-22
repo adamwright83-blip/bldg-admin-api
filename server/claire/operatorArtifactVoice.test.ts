@@ -76,6 +76,7 @@ describe("operator artifact voice request", () => {
     "Claire, send me today's Day Line",
     "Can you text me my schedule for today?",
     "send today's plan to my phone",
+    "Can you send me a text with my day line schedule today?",
   ])("recognizes a named Dayline artifact request: %s", utterance => {
     expect(parseOperatorArtifactVoiceRequest(utterance)).toEqual({ kind: "dayline" });
   });
