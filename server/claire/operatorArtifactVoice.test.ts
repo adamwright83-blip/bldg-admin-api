@@ -128,6 +128,27 @@ describe("operator artifact voice request", () => {
     );
   });
 
+  it("warns when route coverage is unavailable instead of presenting a complete schedule", () => {
+    const rendered = renderDaylineOperatorArtifact({
+      businessDate: "2026-09-22",
+      routeAvailable: false,
+      open: [
+        {
+          id: "day-director:1",
+          title: "Print sales collateral",
+          status: "open",
+          source: "day_line",
+          timing: null,
+          completedAt: null,
+        },
+      ],
+      completed: [],
+    });
+
+    expect(rendered).toContain("Route stops unavailable");
+    expect(rendered).toContain("Print sales collateral");
+  });
+
   it("resolves and sends a named Dayline artifact instead of reusing the previous Claire line", async () => {
     const apply = vi.fn(
       async (_decision: OperatorArtifactDecision): Promise<OperatorArtifactDecisionResult> =>
