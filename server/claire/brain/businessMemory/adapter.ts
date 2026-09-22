@@ -29,8 +29,7 @@ import {
 } from "../../knowledge/accountKnowledge";
 import { loadUnpaidOrders, type UnpaidOrder } from "../../knowledge/openOrdersKnowledge";
 import { loadDayWork, type DayWork } from "../../knowledge/operationsKnowledge";
-import { loadDailyCommand } from "../../workdayCommandService";
-import type { DailyCommand } from "../../../../shared/claireWorkdayCommand";
+import { loadDailyCommand, type DailyCommand } from "../../dailyCommandContract";
 import {
   verifyPriorClaim,
   type FactualClaimReceipt,

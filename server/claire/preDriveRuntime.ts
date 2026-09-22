@@ -8,7 +8,7 @@ import {
 } from "./generationTelemetry";
 import { writeClairePreDriveBrief } from "./reasoning";
 import { previewWorkdayLoop } from "./workdayPlanService";
-import { loadDailyCommand } from "./workdayCommandService";
+import { loadDailyCommand } from "./dailyCommandContract";
 import { detectWorkdaySession } from "../../shared/claireWorkday";
 import { getTodayFeaturedOperation } from "../strategy/todayFeaturedService";
 import { getLatestStrategySnapshot } from "../strategy/snapshotBuilder";

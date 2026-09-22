@@ -11,6 +11,12 @@ describe("V1 production reads Daily Command", () => {
     expect(reasoning).toMatch(/workdayCommand/);
     expect(preDrive).toMatch(/loadDailyCommand/);
     expect(turn).toMatch(/speakMorningReconciliationAsk/);
-    expect(turn).not.toMatch(/narratorOs/);
+    const reconciliation = turn.slice(
+      turn.indexOf("morning_reconciliation"),
+      turn.indexOf("parseBriefingDeterministically")
+    );
+    expect(reconciliation).not.toMatch(/narratorOs/);
+    const command = readFileSync(path.join(process.cwd(), "server/claire/workdayCommandService.ts"), "utf8");
+    expect(command).not.toMatch(/narratorOs/);
   });
 });

@@ -9,7 +9,7 @@ import { getDb } from "../db";
 import { getFieldToday } from "../field/fieldTodayService";
 import { listCampaigns } from "../campaignLibrary/campaignLibraryService";
 import { getActiveMacroGoal } from "../claire/macroGoalService";
-import { loadDailyCommand } from "../claire/workdayCommandService";
+import { loadDailyCommand } from "../claire/dailyCommandContract";
 import { projectRecurrenceForDate } from "../claire/workdayRecurrenceService";
 import { detectTimePockets, applyCommandProtection, DEFAULT_TRAVEL_RESERVE_MINUTES, DEFAULT_UNKNOWN_STOP_WORK_RESERVE_MINUTES } from "./pocketDetection";
 import { eligibleCampaigns } from "./eligibility";
@@ -228,11 +228,6 @@ export async function computeMissionPlan(input: {
       timeZone: input.timeZone,
     }),
   ]);
-  await projectRecurrenceForDate({
-    tenantId: input.tenantId,
-    actorId: input.operatorId,
-    businessDate: input.businessDate,
-  }).catch(() => ({ projectedIds: [], created: 0 }));
   const command = await loadDailyCommand({
     tenantId: input.tenantId,
     actorId: input.operatorId,
@@ -334,6 +329,7 @@ async function planForDateInner(input: {
     // Fail closed like every other Goldline service, not by throwing —
     // getFieldToday itself hard-throws with no database, so this must be
     // checked before computeMissionPlan ever calls it.
+    // Recurrence is not projected here: there is no database to write.
     return {
       id: randomUUID(),
       tenantId: input.tenantId,
@@ -351,6 +347,14 @@ async function planForDateInner(input: {
       createdAt: new Date().toISOString(),
     };
   }
+  // Execution write, not a read. Operator-confirmed recurrence rules become
+  // today's Day Director commitments before the plan is computed. Idempotent
+  // per rule and date. computeMissionPlan stays persistence-free and only reads.
+  await projectRecurrenceForDate({
+    tenantId: input.tenantId,
+    actorId: input.operatorId,
+    businessDate: input.businessDate,
+  }).catch(() => ({ projectedIds: [], created: 0 }));
   const { outcome, inputFingerprint } = await computeMissionPlan(input);
   const latest = await getLatestPlan(input);
   if (latest && latest.inputFingerprint === inputFingerprint) {

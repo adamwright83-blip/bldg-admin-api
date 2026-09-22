@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { retrieveBusinessEvidence, type BusinessMemoryDeps } from "../businessMemory/adapter";
-import { planRetrievalPassA } from "../executive/retrievalPlan";
+import { planRetrievalPassA, planRetrievalPassB } from "../executive/retrievalPlan";
 import { perceiveTurn } from "../perception/perceive";
 import { snapshotWorkingMemory } from "../workingMemory/snapshot";
 import { planAttention } from "../executive/attention";
@@ -110,6 +110,19 @@ describe("Brain V2 Daily Command shadow retrieval", () => {
     const attention = attentionFor(perceived, memory);
     const requests = planRetrievalPassA(perceived, memory, attention);
     expect(requests.some(request => request.kind === "workday_command")).toBe(false);
+  });
+
+  it("does not ask retrieval pass B to load Daily Command", () => {
+    const perceived = perceiveTurn({ rawText: "What should I know about today?", completeness: "complete" });
+    const memory = snapshotWorkingMemory({}, { conversationKey: "c1", tenantId: "default", operatorUserId: "u1", surface: "voice" });
+    const attention = attentionFor(perceived, memory);
+    const passB = planRetrievalPassB({
+      perceived,
+      memory,
+      attention,
+      scope: { accountIds: [], terms: [], ambiguous: false },
+    });
+    expect(passB.some(request => "kind" in request && request.kind === "workday_command")).toBe(false);
   });
 
   it("constructs a shadow judgment with zero live mutations", async () => {

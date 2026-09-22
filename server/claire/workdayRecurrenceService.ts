@@ -4,6 +4,10 @@
  * A recurrence rule is not an order. It is authority to project one Day
  * Director commitment onto matching future business dates. Historical
  * cadence never creates a rule.
+ *
+ * `projectRecurrenceForDate` is an execution write. Daily Command's reader
+ * must not call it. Mission Director calls it only from `planForDate`, the
+ * path that persists the day's plan — never from the persistence-free compute.
  */
 
 import { createHash, randomUUID } from "node:crypto";

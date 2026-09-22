@@ -2,14 +2,20 @@
  * Daily Command read model: derive "what actually matters today?" from
  * authoritative stores. This is not a planner and not a second task table.
  *
- * Narrator OS is never imported. Brain V2 consumes this read-only.
+ * READ. Does not project recurrence, designate a primary, write Day Director
+ * rows, create ops tasks, or mutate campaigns. Recurrence materialization
+ * belongs to the day-execution writer (`planForDate`), and only after an
+ * operator has confirmed a rule.
+ *
+ * Narrator OS is never imported. Brain V2 consumes this read-only, in shadow.
+ * A future locked weekly primary may wrap this picture. This reader does not
+ * plan a week and does not read or overwrite locked weekly history.
  */
 
 import { createHash } from "node:crypto";
 import {
   deriveDailyCommand,
   readCommandMetadata,
-  toDailyCommandPromptSection,
   UNKNOWN_CARGO_IDENTITY,
   type CommandCargoSource,
   type CommandCommitmentSource,
@@ -21,7 +27,6 @@ import { getClaireCampaignSummary } from "./campaignAwareness";
 import { getDayDirectorState } from "../dayDirector/dayDirectorService";
 import { getFieldToday } from "../field/fieldTodayService";
 import { listCargo } from "../goldlineCargo/cargoService";
-import { projectRecurrenceForDate } from "./workdayRecurrenceService";
 
 export type DailyCommandDeps = {
   getState?: typeof getDayDirectorState;
@@ -38,29 +43,29 @@ export function fingerprintCommandConstraints(fingerprintSource: string): string
   return sha(fingerprintSource);
 }
 
+export type LoadDailyCommandInput = {
+  tenantId: string;
+  actorId: string;
+  dayDirectorActorId: string;
+  operatorUserId: string;
+  businessDate: string;
+  vehicleId?: string;
+  now?: Date;
+  timeZone?: string;
+};
+
+/**
+ * Read today's derived command. Callers that need recurring Day Line rows
+ * must materialize them on the execution path first. This function never does.
+ */
 export async function loadDailyCommand(
-  input: {
-    tenantId: string;
-    actorId: string;
-    dayDirectorActorId: string;
-    operatorUserId: string;
-    businessDate: string;
-    vehicleId?: string;
-    now?: Date;
-    timeZone?: string;
-  },
+  input: LoadDailyCommandInput,
   deps: DailyCommandDeps = {}
 ): Promise<DailyCommand> {
   const getState = deps.getState ?? getDayDirectorState;
   const getField = deps.getField ?? getFieldToday;
   const getCampaign = deps.getCampaign ?? getClaireCampaignSummary;
   const listVehicleCargo = deps.listVehicleCargo ?? listCargo;
-
-  await projectRecurrenceForDate({
-    tenantId: input.tenantId,
-    actorId: input.dayDirectorActorId,
-    businessDate: input.businessDate,
-  }).catch(() => ({ projectedIds: [], created: 0 }));
 
   const [state, field, campaign, cargoRows] = await Promise.all([
     getState({
@@ -154,5 +159,3 @@ export async function loadDailyCommand(
     },
   };
 }
-
-export { toDailyCommandPromptSection, deriveDailyCommand };
