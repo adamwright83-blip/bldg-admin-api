@@ -16,6 +16,7 @@ import {
   TwilioCommunicationReceiptError,
 } from "../twilioPlatform/communicationReceipts";
 import { toCommunicationCandidateEvidence } from "../twilioPlatform/communicationEvidence";
+import { recordOperatorArtifactInternalLink } from "../communicationsAnalytics/contextLinks";
 import {
   readTwilioPlatformConfig,
   readTwilioRestCredentials,
@@ -469,7 +470,7 @@ async function recordMessageReceipt(input: {
   providerErrorCode?: string | null;
   providerErrorMessage?: string | null;
 }): Promise<{ receipt: TwilioCommunicationReceipt; duplicate: boolean }> {
-  return recordCommunicationReceipt({
+  const recorded = await recordCommunicationReceipt({
     tenantId: input.tenantId,
     operatorUserId: input.operatorUserId,
     eventType: input.eventType,
@@ -481,6 +482,12 @@ async function recordMessageReceipt(input: {
     providerErrorCode: input.providerErrorCode,
     providerErrorMessage: input.providerErrorMessage,
   });
+  await recordOperatorArtifactInternalLink({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    messageSid: input.messageSid,
+  });
+  return recorded;
 }
 
 export async function sendOperatorArtifact(
@@ -663,6 +670,11 @@ export async function recordOperatorArtifactProviderStatus(input: {
     providerErrorCode: eventType === "MESSAGE_FAILED" ? input.errorCode : null,
     providerErrorMessage:
       eventType === "MESSAGE_FAILED" ? input.errorMessage : null,
+  });
+  await recordOperatorArtifactInternalLink({
+    tenantId,
+    operatorUserId: input.operatorUserId,
+    messageSid,
   });
   return {
     delivered: eventType === "MESSAGE_DELIVERED",

@@ -82,3 +82,97 @@
   background: #ecebe6;
   color: #4a4a45;
 }
+
+.sales-intel-admin.effectiveness-admin {
+  background: #f7f6f1;
+  color: #1f1f1b;
+  padding: 2rem 1.25rem 3rem;
+}
+
+.sales-intel-admin.effectiveness-admin header small {
+  color: var(--si-muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.sales-intel-admin.effectiveness-admin header h1,
+.sales-intel-admin.effectiveness-admin h2 {
+  color: #1f1f1b;
+}
+
+.sales-intel-admin.effectiveness-admin header p,
+.sales-intel-admin .communications-disclaimer,
+.sales-intel-admin .sales-intel-source .si-hint {
+  color: var(--si-muted);
+  max-width: 46rem;
+}
+
+.sales-intel-admin .effectiveness-window-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.sales-intel-admin .effectiveness-window-toggle button {
+  background: #fffdf9;
+  border: 1px solid #d8d4c8;
+  color: #1f1f1b;
+  border-radius: 9999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.sales-intel-admin .effectiveness-window-toggle button.is-active {
+  background: #1f1f1b;
+  color: #fffdf9;
+  border-color: #1f1f1b;
+}
+
+.sales-intel-admin .sales-intel-sources {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  margin-top: 1.5rem;
+}
+
+.sales-intel-admin .sales-intel-source {
+  background: #fffdf9;
+  border: 1px solid #e4e0d4;
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.sales-intel-admin .sales-intel-source-head {
+  margin-bottom: 0.75rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sales-intel-admin .effectiveness-stat-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.25rem 0;
+  color: #1f1f1b;
+  font-size: 0.875rem;
+}
+
+.sales-intel-admin .communications-analytics {
+  margin-top: 2.5rem;
+}
+
+.sales-intel-admin .communications-disclaimer {
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.sales-intel-admin .sales-intel-empty {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--si-muted);
+}

@@ -2291,5 +2291,39 @@ await assertRequiredColumns("communication_receipts", [
   "providerErrorCode", "providerErrorMessage", "idempotencyKey", "createdAt",
 ]);
 
+await run(
+  `ALTER TABLE communication_receipts
+    ADD KEY idx_communication_receipts_tenant_created (tenantId, createdAt)`,
+  "ADD KEY idx_communication_receipts_tenant_created"
+);
+
+// ── Communications analytics explicit linkage ───────────────────
+// Mirrors drizzle/0095_communication_context_links.sql.
+// Additive. No historical backfill. Provider SIDs are not Goldline entity IDs.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS communication_context_links (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    providerResourceSid VARCHAR(64) NOT NULL,
+    resourceKind VARCHAR(16) NOT NULL,
+    partyClass VARCHAR(64) NULL,
+    goldlineEntityKind VARCHAR(32) NULL,
+    goldlineEntityId VARCHAR(128) NULL,
+    source VARCHAR(32) NOT NULL,
+    proof VARCHAR(191) NOT NULL,
+    idempotencyKey VARCHAR(191) NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_communication_context_links_idempotency (idempotencyKey),
+    KEY idx_communication_context_links_resource (tenantId, providerResourceSid),
+    KEY idx_communication_context_links_entity (tenantId, goldlineEntityKind, goldlineEntityId)
+  )`,
+  "CREATE TABLE communication_context_links"
+);
+await assertRequiredColumns("communication_context_links", [
+  "tenantId", "providerResourceSid", "resourceKind", "partyClass",
+  "goldlineEntityKind", "goldlineEntityId", "source", "proof",
+  "idempotencyKey", "createdAt",
+]);
+
 await conn.end();
 console.log("\nMigration complete.");

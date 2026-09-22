@@ -27,6 +27,7 @@ import {
 } from "@shared/dayforgeEvents";
 import { writeDayforgeEvent } from "./dayforgeEventStore";
 import { getGoldlineEffectivenessSummary } from "./goldlineEffectivenessQueries";
+import { getCommunicationsEffectiveness } from "../communicationsAnalytics/communicationsEffectiveness";
 
 export const goldlineEventRouter = router({
   record: dayforgeMissionFieldProcedure
@@ -67,6 +68,25 @@ export const goldlineEventRouter = router({
     .input(z.object({ windowDays: z.number().int().min(1).max(90).optional() }).optional())
     .query(({ ctx, input }) =>
       getGoldlineEffectivenessSummary({
+        tenantId: ctx.tenantId,
+        windowDays: input?.windowDays,
+      })
+    ),
+
+  /**
+   * Communications analytics over communication_receipts plus explicit
+   * Goldline linkage. Admin-only. Observed associations, not causal lift.
+   */
+  communicationsEffectiveness: adminProcedure
+    .input(
+      z
+        .object({
+          windowDays: z.union([z.literal(7), z.literal(30), z.literal(90)]).optional(),
+        })
+        .optional()
+    )
+    .query(({ ctx, input }) =>
+      getCommunicationsEffectiveness({
         tenantId: ctx.tenantId,
         windowDays: input?.windowDays,
       })
