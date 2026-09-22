@@ -122,6 +122,8 @@ describe("Conversation Relay transport — experimental flag on", () => {
     expect(xml).toContain(CLAIRE_CONVERSATION_RELAY_PATH);
     expect(xml).toContain("wss://api.example.test");
     expect(xml).toContain("interruptible=\"speech\"");
+    expect(xml).toContain("preemptible=\"false\"");
+    expect(xml).toContain("/api/claire/twilio/conversation-relay/action?token=");
     expect(xml).not.toContain("<Gather");
     expect(xml).not.toContain("<Stream");
     expect(xml).not.toContain("welcomeGreeting");
@@ -215,7 +217,7 @@ describe("barge-in", () => {
     });
 
     const spoken = await session.handle({ type: "setup", callSid: "CA_barge" });
-    expect(spoken).toEqual([{ type: "text", token: FULL_SENTENCE, last: true }]);
+    expect(spoken).toEqual([{ type: "text", token: FULL_SENTENCE, last: true, preemptible: false }]);
     expect(session.speech?.phase).toBe("queued");
     expect(session.speech?.heardCompletely).toBe(false);
 
@@ -276,7 +278,7 @@ describe("relay session lifecycle", () => {
     });
     await session.handle({ type: "setup" });
     const reply = await session.handle({ type: "prompt", voicePrompt: "What should I do first?", last: true });
-    expect(reply).toEqual([{ type: "text", token: "Noted.", last: true }]);
+    expect(reply).toEqual([{ type: "text", token: "Noted.", last: true, preemptible: false }]);
     expect(speak).toHaveBeenCalledWith({ ...identity, utterance: "What should I do first?" });
     expect(session.speech?.heardCompletely).toBe(false);
     expect(session.speech?.phase).toBe("queued");
@@ -338,6 +340,10 @@ describe("webhooks and dialer boundary", () => {
       "claireStreamingSpeechSource.ts",
       "conversationRelaySession.ts",
       "claireVoiceTransport.ts",
+      "conversationRelaySignature.ts",
+      "conversationRelayFrames.ts",
+      "conversationRelayRuntime.ts",
+      "conversationRelayUpgrade.ts",
     ];
     const source = voiceDir
       .map(name => readFileSync(new URL(`./${name}`, import.meta.url), "utf8"))

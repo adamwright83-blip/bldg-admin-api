@@ -95,6 +95,7 @@ describe("Claire production Twilio callback registration", () => {
     } as never);
     expect(getPaths).toEqual(["/api/claire/voice/xai"]);
     expect(postPaths).toEqual([
+      "/api/claire/twilio/conversation-relay/action",
       "/api/claire/twilio/inbound",
       "/api/claire/twilio/pre-drive",
       "/api/claire/twilio/pre-drive/continue",
