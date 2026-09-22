@@ -162,6 +162,9 @@ export function renderDaylineOperatorArtifact(work: DayWork): string | null {
   if (!items.length) return null;
 
   const lines = [`DAYLINE — ${work.businessDate}`];
+  if (!work.routeAvailable) {
+    lines.push("Route stops unavailable — this list may omit pickups, deliveries, or commercial stops.");
+  }
   let included = 0;
 
   for (const item of items) {
