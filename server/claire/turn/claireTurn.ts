@@ -61,6 +61,7 @@ import { persistClaireTurnTrace } from "../answerPathRecorder";
 import { explicitDayLineRefusal, explicitTrackingRequest } from "../briefing/titleContract";
 import { classifyOpenDialogueAct } from "./dialogueAct";
 import { interpretTurn } from "./interpretTurn";
+import { routeActiveWeeklySession } from "../weeklyMission/route";
 import { runBusinessQuery } from "../../analytics/businessQuery";
 import {
   appendClaimReceipt,
@@ -636,6 +637,34 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    */
   const interpreted = interpretTurn(utterance);
   trace.turnKind ??= null;
+
+  // Incomplete fragments already returned. A weekly session owns this completed thought.
+  const weekly = await routeActiveWeeklySession({
+    tenantId: input.tenantId,
+    operatorId: input.operatorUserId,
+    dayDirectorActorId: input.dayDirectorActorId,
+    utterance,
+    now: deps.now(),
+    timeZone: deps.timeZone(),
+  });
+  if (weekly) {
+    mark("fallback", { fallbackReason: "weekly_planning" });
+    if (weekly.receiptBackedCommit) {
+      return finish({
+        speak: "",
+        receiptBackedCommit: weekly.receiptBackedCommit,
+        mutationReceipts: weekly.mutationReceipts,
+        kind: "answered",
+        actionIds: weekly.actionIds ?? [],
+      });
+    }
+    const weeklySpeech = weekly.speak || "I still have the week open. Say that once more.";
+    return finish({
+      speak: weeklySpeech,
+      kind: "answered",
+      actionIds: [...(weekly.actionIds ?? [])],
+    });
+  }
 
   // Acknowledgements close a beat. They are not questions, challenges, or work — and must never
   // reach prior-claim adjudication, which answered "I'm good." with "I can't verify that properly

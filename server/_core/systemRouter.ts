@@ -34,6 +34,7 @@ import { driverGameWorldRouter } from "../driverGameWorld/driverGameWorldRouter"
 import { salesIntelRouter } from "../salesIntel/salesIntelRouter";
 import { goldlineEventRouter } from "../dayforgeEvents/goldlineEventRouter";
 import { dayDirectorRouter } from "../dayDirector/dayDirectorRouter";
+import { weeklyMissionRouter } from "../claire/weeklyMission/weeklyMissionRouter";
 import { nightShiftRouter } from "../nightShift/nightShiftRouter";
 import { towerWarsRouter } from "../towerWars/towerWarsRouter";
 import { geographicTruthRouter } from "../geography/geographicTruthRouter";
@@ -91,6 +92,7 @@ export const systemRouter = router({
   salesIntel: salesIntelRouter,
   goldlineEvents: goldlineEventRouter,
   dayDirector: dayDirectorRouter,
+  weeklyMission: weeklyMissionRouter,
   nightShift: nightShiftRouter,
   towerWars: towerWarsRouter,
   geographicTruth: geographicTruthRouter,

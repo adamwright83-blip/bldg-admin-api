@@ -2229,5 +2229,27 @@ await assertRequiredColumns("day_director_recurrence_rules", [
   "tenantId", "actorId", "sourceIdentity", "title", "kind", "weekday", "status",
 ]);
 
+// ── Weekly intent ───────────────────────────────────────────────
+// Mirrors drizzle/0093_weekly_intent.sql.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS weekly_intents (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL DEFAULT 'default',
+    operatorId VARCHAR(128) NOT NULL,
+    weekStart VARCHAR(10) NOT NULL,
+    revision INT NOT NULL,
+    source ENUM('operator_confirmed_proposal') NOT NULL,
+    lockedAt TIMESTAMP NOT NULL,
+    daysJson JSON NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_weekly_intent_revision (tenantId, operatorId, weekStart, revision),
+    KEY idx_weekly_intent_week (tenantId, operatorId, weekStart)
+  )`,
+  "CREATE TABLE weekly_intents"
+);
+await assertRequiredColumns("weekly_intents", [
+  "tenantId", "operatorId", "weekStart", "revision", "source", "lockedAt", "daysJson",
+]);
+
 await conn.end();
 console.log("\nMigration complete.");
