@@ -2,6 +2,8 @@
 
 Studio is a future outage path. This document does not install a flow, change a webhook, or turn `CLAIRE_TWILIO_STUDIO_FALLBACK` on.
 
+Capability state stays on the foundation registry (`studioFallback` in `server/twilioPlatform/capabilities.ts`). The platform contract is `docs/twilio/GOLDLINE_TWILIO_PLATFORM.md`.
+
 Goldline remains the place where Claire decides. Studio may only speak the two scripts below, then stop.
 
 ## Goldline unavailable

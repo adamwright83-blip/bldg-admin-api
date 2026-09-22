@@ -10,7 +10,7 @@ import {
   type GoldlineCanonicalJob,
   type GoldlineCommEvent,
 } from "@shared/twilioFuture";
-import { TWILIO_CAPABILITY_STATES, logContainsTwilioSecret } from "@shared/twilioPlatform";
+import { TWILIO_CAPABILITY_STATES } from "@shared/twilioPlatform";
 import {
   evaluateTwilioCapability,
   noteTwilioCapabilityFailure,
@@ -30,7 +30,7 @@ import {
   promoteTranscriptCandidate,
 } from "./transcriptCandidate";
 import {
-  claireTurnVerifyPolicy,
+  conversationVerifyPolicy,
   issueVerifyActionGrant,
   verifyGrantBusinessEffects,
   verifyGrantCovers,
@@ -223,7 +223,7 @@ describe("verify grants", () => {
 
   it("keeps ordinary Claire for a known authorized inbound phone", () => {
     const operatorId = resolveClaireOperatorIdForPhone("+13105550001");
-    const ordinary = claireTurnVerifyPolicy({
+    const ordinary = conversationVerifyPolicy({
       knownAuthorizedOperatorId: operatorId,
       requestedActionClass: null,
     });
@@ -231,7 +231,7 @@ describe("verify grants", () => {
     expect(ordinary.keepsOrdinaryClaire).toBe(true);
     expect(ordinary.actionGrantRequired).toBe(false);
 
-    const action = claireTurnVerifyPolicy({
+    const action = conversationVerifyPolicy({
       knownAuthorizedOperatorId: operatorId,
       requestedActionClass: "high_value_spend",
     });
@@ -267,7 +267,7 @@ describe("verify grants", () => {
     expect(verifyGrantCovers(issued.grant, { ...demand, nowMs: issued.grant.expiresAtMs })).toBe(false);
     expect(issued.log).not.toContain("918273");
     expect(issued.log).not.toContain(TOKEN);
-    expect(logContainsTwilioSecret(issued.log, env)).toBe(false);
+    expect(configLogContainsTwilioSecret(issued.log, env)).toBe(false);
   });
 
   it("does not grant when Verify is unconfigured", () => {
@@ -498,12 +498,15 @@ describe("future adapters do not call Twilio or open product tables", () => {
     expect(sources).not.toContain("communication_receipts");
     expect(sources).not.toContain("lookups.v2");
     expect(sources).not.toContain("advanceNarrator");
-    expect(sources).not.toContain("claireTurn");
+    expect(sources).not.toContain("claire/turn/");
+    expect(sources).not.toContain("preDriveConversation");
+    expect(sources).not.toContain("voiceCommitment");
+    expect(sources).not.toContain("contextAssembler");
     const lookupLog = lookupLogLine(
       observeLookup({ env: voiceEnv({ TWILIO_LOOKUP_ENABLED: "true" }) }),
       voiceEnv()
     );
     expect(lookupLog).not.toContain(TOKEN);
-    expect(logContainsTwilioSecret(lookupLog, voiceEnv())).toBe(false);
+    expect(configLogContainsTwilioSecret(lookupLog, voiceEnv())).toBe(false);
   });
 });

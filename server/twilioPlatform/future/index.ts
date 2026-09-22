@@ -1,7 +1,7 @@
 export { safeFutureLog } from "./safeLog";
 export { authorizationFromLookup, lookupLogLine, lookupPackagesPermittedByAccount, observeLookup } from "./lookup";
 export {
-  claireTurnVerifyPolicy,
+  conversationVerifyPolicy,
   issueVerifyActionGrant,
   verifyGrantBusinessEffects,
   verifyGrantCovers,

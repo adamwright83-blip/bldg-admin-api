@@ -27,7 +27,7 @@ function isActionClass(value: string): value is VerifyActionClass {
  * A known authorized operator id (the result of resolveClaireOperatorIdForPhone)
  * keeps ordinary Claire. An action class requires a separate grant.
  */
-export function claireTurnVerifyPolicy(input: {
+export function conversationVerifyPolicy(input: {
   knownAuthorizedOperatorId: string | null;
   requestedActionClass: VerifyActionClass | null;
 }): ClaireTurnVerifyPolicy {

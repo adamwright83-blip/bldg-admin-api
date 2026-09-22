@@ -2,6 +2,8 @@
 
 Reporting and registration notes only. Code in this repository cannot submit, approve, or assign a Branded Calling registration. Claire's dial path does not read branded-calling state. If the registration is missing, Claire still places an ordinary call when her own voice configuration is present.
 
+Capability state stays on the foundation registry (`brandedCalling` in `server/twilioPlatform/capabilities.ts`). The platform contract is `docs/twilio/GOLDLINE_TWILIO_PLATFORM.md`. `TWILIO_BRANDED_DISPLAY_NAME` and `TWILIO_BRANDED_CALL_REASON`, when set, are local labels on the report. They are not sent to Trust Hub.
+
 Account setup that this slice does not perform:
 
 - Trust Hub customer profile
