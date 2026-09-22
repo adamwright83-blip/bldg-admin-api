@@ -81,11 +81,15 @@ const DAYLINE_ARTIFACT =
 
 const STANDALONE_DAYLINE_REQUESTS = [
   new RegExp(
-    `^${COURTESY}(?:text|send)\\s+me\\s+(?:${DAYLINE_ARTIFACT})(?:\\s+to\\s+my\\s+phone)?$`,
+    `^${COURTESY}(?:text|send)\\s+me\\s+(?:a\\s+text\\s+(?:with|of)\\s+)?(?:${DAYLINE_ARTIFACT})(?:\\s+today)?(?:\\s+to\\s+my\\s+phone)?$`,
     "i"
   ),
   new RegExp(
-    `^${COURTESY}(?:text|send)\\s+(?:${DAYLINE_ARTIFACT})\\s+to\\s+(?:me|my\\s+phone)$`,
+    `^${COURTESY}(?:text|send)\\s+(?:${DAYLINE_ARTIFACT})(?:\\s+today)?\\s+to\\s+(?:me|my\\s+phone)$`,
+    "i"
+  ),
+  new RegExp(
+    `^${COURTESY}(?:text|send)\\s+(?:my\\s+)?(?:day\\s*line|dayline)(?:\\s+schedule)?\\s+to\\s+me(?:\\s+today)?$`,
     "i"
   ),
 ];
