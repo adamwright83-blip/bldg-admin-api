@@ -57,6 +57,7 @@ const agentToolAllowlist: Record<AgentType, Set<string>> = {
     "cancelResidentOrderTool",
   ]),
   operator_voice_agent: new Set([
+    "sendOperatorArtifactTool",
     "getResidentContextTool",
     "createPendingDryCleaningOrderTool",
     "updateOperatorAvailabilityTool",

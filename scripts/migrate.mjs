@@ -2251,5 +2251,45 @@ await assertRequiredColumns("weekly_intents", [
   "tenantId", "operatorId", "weekStart", "revision", "source", "lockedAt", "daysJson",
 ]);
 
+// ── Twilio platform Slice 1 ─────────────────────────────────────
+// Mirrors drizzle/0094_communication_receipts.sql.
+// One communications receipt table. Not twilio_calls, twilio_sms, or business truth.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS communication_receipts (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NULL,
+    provider VARCHAR(32) NOT NULL DEFAULT 'twilio',
+    providerEventId VARCHAR(191) NULL,
+    eventType VARCHAR(64) NOT NULL,
+    callSid VARCHAR(64) NULL,
+    parentCallSid VARCHAR(64) NULL,
+    messageSid VARCHAR(64) NULL,
+    direction VARCHAR(16) NULL,
+    fromNumber VARCHAR(64) NULL,
+    toNumber VARCHAR(64) NULL,
+    status VARCHAR(64) NULL,
+    startedAt TIMESTAMP NULL DEFAULT NULL,
+    answeredAt TIMESTAMP NULL DEFAULT NULL,
+    completedAt TIMESTAMP NULL DEFAULT NULL,
+    durationSeconds INT NULL,
+    providerErrorCode VARCHAR(32) NULL,
+    providerErrorMessage VARCHAR(512) NULL,
+    idempotencyKey VARCHAR(191) NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_communication_receipts_idempotency (idempotencyKey),
+    UNIQUE KEY uq_communication_receipts_provider_event (provider, providerEventId),
+    KEY idx_communication_receipts_call (tenantId, callSid, eventType),
+    KEY idx_communication_receipts_message (tenantId, messageSid, eventType)
+  )`,
+  "CREATE TABLE communication_receipts"
+);
+await assertRequiredColumns("communication_receipts", [
+  "tenantId", "operatorUserId", "provider", "providerEventId", "eventType",
+  "callSid", "parentCallSid", "messageSid", "direction", "fromNumber", "toNumber",
+  "status", "startedAt", "answeredAt", "completedAt", "durationSeconds",
+  "providerErrorCode", "providerErrorMessage", "idempotencyKey", "createdAt",
+]);
+
 await conn.end();
 console.log("\nMigration complete.");

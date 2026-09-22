@@ -16,6 +16,7 @@ import { attachReceiptToOrderTool } from "./tools/attachReceiptToOrderTool";
 import { extractReceiptLineItemsTool } from "./tools/extractReceiptLineItemsTool";
 import { completeDryCleaningIntakeTool } from "./tools/completeDryCleaningIntakeTool";
 import { draftCustomerMessageTool } from "./tools/draftCustomerMessageTool";
+import { sendOperatorArtifactTool } from "./tools/sendOperatorArtifactTool";
 import { sendCustomerReminderTool } from "./tools/sendCustomerReminderTool";
 import { logRevenueInterventionTool } from "./tools/logRevenueInterventionTool";
 import { updateOrderStatusTool } from "./tools/updateOrderStatusTool";
@@ -76,6 +77,7 @@ const tools = [
   extractReceiptLineItemsTool,
   completeDryCleaningIntakeTool,
   draftCustomerMessageTool,
+  sendOperatorArtifactTool,
   sendCustomerReminderTool,
   logRevenueInterventionTool,
   updateOrderStatusTool,

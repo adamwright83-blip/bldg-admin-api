@@ -11,6 +11,7 @@ vi.mock("../_core/env", () => ({
   },
 }));
 
+import { CLAIRE_AMD_PATH } from "./amdVoicemail";
 import {
   claireVoiceCallCreateOptions,
   CLAIRE_CALL_STATUS_PATH,
@@ -101,6 +102,7 @@ describe("Claire production Twilio callback registration", () => {
       "/api/claire/twilio/confirm",
       CLAIRE_RECORDING_STATUS_PATH,
       CLAIRE_CALL_STATUS_PATH,
+      CLAIRE_AMD_PATH,
     ]);
   });
 

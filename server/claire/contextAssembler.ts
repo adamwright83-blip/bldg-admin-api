@@ -17,6 +17,10 @@ import {
 } from "../strategy/snapshotBuilder";
 import type { StrategySnapshot } from "../strategy/snapshotTypes";
 import type { DailyCommand } from "../../shared/claireWorkdayCommand";
+import {
+  loadClaireCommunicationsContext,
+  type ClaireCommunicationsContextPort,
+} from "./communicationsContextPort";
 
 export type ClairePhase = "pre_drive" | "post_stop";
 
@@ -129,6 +133,11 @@ export type ClaireDriveContext = {
   workdayCommand?: DailyCommand | null;
   strategySnapshotId?: string | null;
   strategySnapshot?: StrategySnapshot | null;
+  /**
+   * Read-only communications evidence. Absent on older literals.
+   * It does not feed Daily Command, Weekly Mission, or Narrator derivation.
+   */
+  communications?: ClaireCommunicationsContextPort;
 };
 
 const PRE_DRIVE_KINDS = new Set<FieldTodayItem["kind"]>([
@@ -460,5 +469,9 @@ export async function assembleClaireDriveContext(input: {
     ...(missionSalesBrief !== undefined ? { missionSalesBrief } : {}),
   };
   assembled.runtime = assembleClaireRuntimeView(assembled, now);
+  assembled.communications = await loadClaireCommunicationsContext({
+    tenantId: input.tenantId,
+    operatorUserId: input.actorId,
+  });
   return assembled;
 }
