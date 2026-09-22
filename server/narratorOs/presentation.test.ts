@@ -7,9 +7,11 @@ import { advanceNarratorAfterVerifiedOutcome } from "./advanceAfterVerifiedOutco
 import { initNarratorOperator } from "./init";
 import { createInMemoryNarratorStore } from "./memoryStore";
 import { narrativePresentationMemory } from "./presentationMemory";
+import { isAuthoritativeNarratorSnapshot } from "./narratorSnapshotAttestation";
 import {
   authoredBeatMayPresent,
   deriveNarrativePresentationPlan,
+  isTrustedNarrativePresentationPlan,
 } from "./presentationPlan";
 import { playerPresentationPayload } from "./playerPresentation";
 import {
@@ -19,7 +21,15 @@ import {
   renderPlayerPresentationToSurface,
 } from "./presentationStore";
 import { AUTHORED_BEATS, getBeat } from "./registry";
-import type { NarratorSnapshot, NarratorStore } from "./store";
+import {
+  EMPTY_KNOWLEDGE,
+  SEEDED_NARRATIVE_STATE,
+  cloneKnowledge,
+  type NarratorSnapshot,
+  type NarratorStore,
+} from "./store";
+import { CLAIRE_LIVED_BIO_FACTS, NARRATOR_LIVED_BIO_VERSION } from "./livedBio";
+import { NARRATOR_WORLD_TRUTH_VERSION, WORLD_TRUTH_FACTS } from "./worldTruth";
 import { issueVerifiedGoldlineReceiptForTests } from "./verifiedGoldlineReceipt.testSupport";
 import type { VerifiedGoldlineReceipt } from "./verifiedGoldlineReceipt";
 import { REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS } from "../goldlineVerification/supportedOutcomes";
@@ -312,6 +322,85 @@ describe("Narrator OS slice H — presentation boundary", () => {
     ).toBeNull();
     expect(await presentations.loadForOperator(scope)).toEqual([]);
     expect(loaded.knowledge).toEqual(snapshot?.knowledge);
+  });
+
+  it("derives a trusted plan only from an attested store snapshot", async () => {
+    const fabricated: NarratorSnapshot = {
+      tenantId: scope.tenantId,
+      operatorUserId: scope.operatorUserId,
+      worldTruth: WORLD_TRUTH_FACTS,
+      livedBio: CLAIRE_LIVED_BIO_FACTS,
+      knowledge: cloneKnowledge(EMPTY_KNOWLEDGE),
+      narrativeState: {
+        values: { ...SEEDED_NARRATIVE_STATE.values },
+        closedForwardPaths: [...SEEDED_NARRATIVE_STATE.closedForwardPaths],
+        holdOpenedAtMs: { ...SEEDED_NARRATIVE_STATE.holdOpenedAtMs },
+      },
+      ledger: [
+        {
+          id: "fabricated-m04",
+          tenantId: scope.tenantId,
+          operatorUserId: scope.operatorUserId,
+          kind: "FIRED_AUTHORED_BEAT",
+          beatId: getBeat("M04").id,
+          goldlineOutcomeId: null,
+          offscreen: false,
+          playerVisible: true,
+          evidenceRef: null,
+          occurredAt: NOW_ISO,
+          idempotencyKey: "beat:M04:once",
+        },
+      ],
+      catalogVersion: {
+        worldTruth: NARRATOR_WORLD_TRUTH_VERSION,
+        livedBio: NARRATOR_LIVED_BIO_VERSION,
+      },
+    };
+    expect(getBeat("M04").eligibilityDefinition).toBe("COMPLETE");
+    expect(isAuthoritativeNarratorSnapshot(fabricated)).toBe(false);
+    expect(deriveNarrativePresentationPlan(fabricated, "fabricated-m04")).toBeNull();
+    expect(
+      isTrustedNarrativePresentationPlan(
+        deriveNarrativePresentationPlan(fabricated, "fabricated-m04")
+      )
+    ).toBe(false);
+
+    const store = await seeded();
+    const fired = await advanceNarratorAfterVerifiedOutcome({
+      store,
+      scope,
+      verifiedGoldline: [
+        issueReceipt("kept_promised_send_visit_or_call", {
+          receiptId: "m04-attested",
+        }),
+      ],
+      nowMs: NOW_MS,
+      nowIso: NOW_ISO,
+    });
+    const loaded = await store.load(scope);
+    const occurrenceId = fired.presentation?.occurrenceLedgerEntryId;
+    expect(occurrenceId).toBeTruthy();
+    expect(isAuthoritativeNarratorSnapshot(loaded)).toBe(true);
+    const trusted = deriveNarrativePresentationPlan(loaded!, occurrenceId!);
+    expect(trusted?.beatId).toBe("M04");
+    expect(trusted?.player.maySurface).toBe(true);
+    expect(isTrustedNarrativePresentationPlan(trusted)).toBe(true);
+
+    const spread = {
+      ...loaded!,
+      ledger: [...loaded!.ledger],
+      catalogVersion: { ...loaded!.catalogVersion },
+      narrativeState: {
+        ...loaded!.narrativeState,
+        values: { ...loaded!.narrativeState.values },
+      },
+    };
+    const cloned = JSON.parse(JSON.stringify(loaded)) as NarratorSnapshot;
+    expect(isAuthoritativeNarratorSnapshot(spread)).toBe(false);
+    expect(isAuthoritativeNarratorSnapshot(cloned)).toBe(false);
+    expect(deriveNarrativePresentationPlan(spread, occurrenceId!)).toBeNull();
+    expect(deriveNarrativePresentationPlan(cloned, occurrenceId!)).toBeNull();
+    expect(isTrustedNarrativePresentationPlan(trusted)).toBe(true);
   });
 
   it("rejects fabricated occurrences, unknown beats, and OPEN or INCOMPLETE beats", async () => {
@@ -613,6 +702,12 @@ describe("Narrator OS slice H — presentation boundary", () => {
       /rememberNarrativePresentationPlanForTests/
     );
     expect(advance).not.toMatch(/beforeIds/);
+    const deriveAt = plan.indexOf("export function deriveNarrativePresentationPlan");
+    const attestAt = plan.indexOf("isAuthoritativeNarratorSnapshot", deriveAt);
+    const mintAt = plan.indexOf("trustedNarrativePresentationPlans.add", deriveAt);
+    expect(attestAt).toBeGreaterThan(deriveAt);
+    expect(mintAt).toBeGreaterThan(attestAt);
+    expect(index).not.toMatch(/isAuthoritativeNarratorSnapshot/);
     expect(drizzle).toMatch(/status,\s*"prepared"/);
     expect(drizzle).not.toMatch(/renderedAt: input\.renderedAt/);
     expect(player).not.toMatch(/commitAtomic|replaceKnowledge|appendLedger/);

@@ -3,6 +3,7 @@ import {
   authoredReactionReceipt,
   type AuthoredReactionReceipt,
 } from "./narrativeReadModels";
+import { isAuthoritativeNarratorSnapshot } from "./narratorSnapshotAttestation";
 import { getBeat } from "./registry";
 import { planeKnows, type NarratorSnapshot } from "./store";
 
@@ -136,6 +137,7 @@ export function deriveNarrativePresentationPlan(
   snapshot: NarratorSnapshot,
   occurrenceLedgerEntryId: string
 ): NarrativePresentationPlan | null {
+  if (!isAuthoritativeNarratorSnapshot(snapshot)) return null;
   const receipt = authoredReactionReceipt(snapshot, occurrenceLedgerEntryId);
   if (!receipt) return null;
   let beat: AuthoredBeat;
