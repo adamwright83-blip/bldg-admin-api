@@ -74,7 +74,7 @@ import { getUserByOpenId } from "../db";
 import { dayDirectorActorId as dayDirectorActorIdFromUser } from "../dayDirector/dayDirectorActor";
 import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
 import { loadBusinessVocabulary, speechHints } from "./knowledge/businessVocabulary";
-import { loadDayWork } from "./knowledge/operationsKnowledge";
+import { businessDateFor, loadDayWork } from "./knowledge/operationsKnowledge";
 import {
   CLAIRE_XAI_TTS_PATH,
   claireXaiSpeechUrl,
@@ -746,16 +746,16 @@ export function runAuthoritativeClaireVoiceTurn(input: {
             applyOperatorArtifactDecision,
             {
               resolveNamedArtifact: async _request => {
-                const timeZone = getDashboardTimeZone();
-                const businessDate =
-                  conversation.context.clock?.businessDate ??
-                  conversation.context.businessDate;
+                const now = new Date();
+                const timeZone =
+                  conversation.context.clock?.timeZone ?? getDashboardTimeZone();
+                const businessDate = businessDateFor("today", now, timeZone);
                 const work = await loadDayWork({
                   tenantId: conversation.tenantId,
                   operatorUserId: conversation.actorId,
                   dayDirectorActorId: conversation.dayDirectorActorId,
                   businessDate,
-                  now: new Date(),
+                  now,
                   timeZone,
                 });
                 return renderDaylineOperatorArtifact(work);
