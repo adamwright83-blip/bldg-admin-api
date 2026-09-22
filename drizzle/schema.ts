@@ -5910,6 +5910,31 @@ export const dayDirectorCommitments = mysqlTable(
   })
 );
 
+/** Locked weekly agreement. Not a task table. */
+export const weeklyIntents = mysqlTable(
+  "weekly_intents",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
+    operatorId: varchar("operatorId", { length: 128 }).notNull(),
+    weekStart: varchar("weekStart", { length: 10 }).notNull(),
+    revision: int("revision").notNull(),
+    source: mysqlEnum("source", ["operator_confirmed_proposal"]).notNull(),
+    lockedAt: timestamp("lockedAt").notNull(),
+    daysJson: json("daysJson").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    revisionUnique: uniqueIndex("uq_weekly_intent_revision").on(
+      table.tenantId,
+      table.operatorId,
+      table.weekStart,
+      table.revision
+    ),
+    weekIdx: index("idx_weekly_intent_week").on(table.tenantId, table.operatorId, table.weekStart),
+  })
+);
+
 export const dayDirectorPromptStates = mysqlTable(
   "day_director_prompt_states",
   {

@@ -452,3 +452,65 @@ export async function updateDayDirectorCommitment(input: {
   return { ok: true as const, id: existing.id };
 }
 
+/**
+ * Mark one commitment as the day's discretionary primary.
+ * Idempotent. Does not insert a second row. Other primaries that date are demoted.
+ */
+export async function designateDayDirectorPrimary(input: {
+  tenantId: string;
+  actorId: string;
+  businessDate: string;
+  commitmentId: string;
+  nowIso: string;
+}): Promise<{ commitmentId: string }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db
+    .select()
+    .from(dayDirectorCommitments)
+    .where(
+      and(
+        eq(dayDirectorCommitments.tenantId, input.tenantId),
+        eq(dayDirectorCommitments.actorId, input.actorId),
+        eq(dayDirectorCommitments.businessDate, input.businessDate)
+      )
+    );
+  const target = rows.find(row => row.id === input.commitmentId);
+  if (!target) throw new Error("Day Director commitment not found");
+  for (const row of rows) {
+    const current =
+      row.metadataJson && typeof row.metadataJson === "object"
+        ? (row.metadataJson as Record<string, unknown>)
+        : {};
+    const isTarget = row.id === target.id;
+    const command = readCommandMetadata(current);
+    if (!isTarget && command.role !== "primary") continue;
+    if (isTarget && command.role === "primary" && command.designatedBy === "operator_confirmed_proposal") {
+      continue;
+    }
+    await db
+      .update(dayDirectorCommitments)
+      .set({
+        metadataJson: {
+          ...current,
+          command: isTarget
+            ? {
+                ...command,
+                role: "primary",
+                designatedBy: "operator_confirmed_proposal",
+                designatedAt: input.nowIso,
+              }
+            : demotePrimaryCommand(command, input.nowIso),
+        },
+      })
+      .where(
+        and(
+          eq(dayDirectorCommitments.tenantId, input.tenantId),
+          eq(dayDirectorCommitments.actorId, input.actorId),
+          eq(dayDirectorCommitments.id, row.id)
+        )
+      );
+  }
+  return { commitmentId: target.id };
+}
+

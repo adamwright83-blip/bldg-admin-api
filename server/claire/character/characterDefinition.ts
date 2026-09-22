@@ -157,6 +157,11 @@ const MODE_POLICY: Record<ClaireMode, ClaireModePolicy> = {
     lengthGuidance: CONCISE_BUT_FULL,
     fieldOverride: true,
   },
+  weekly_planning: {
+    objective: "Investigate the remaining week from the dossier. One question. Do not invent the week.",
+    lengthGuidance: CONCISE_BUT_FULL,
+    fieldOverride: true,
+  },
 };
 
 export const CLAIRE_CHARACTER_DEFINITION: CharacterDefinition = {

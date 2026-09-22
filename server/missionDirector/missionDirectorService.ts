@@ -10,6 +10,9 @@ import { getFieldToday } from "../field/fieldTodayService";
 import { listCampaigns } from "../campaignLibrary/campaignLibraryService";
 import { getActiveMacroGoal } from "../claire/macroGoalService";
 import { loadDailyCommand } from "../claire/dailyCommandContract";
+import { weekStartMonday } from "../../shared/weeklyMissionReadiness";
+import { latestWeeklyIntent } from "../claire/weeklyMission/intentStore";
+import { applyWeeklyIntentToCommand } from "../claire/weeklyMission/dailyCommandIntent";
 import { projectRecurrenceForDate } from "../claire/workdayRecurrenceService";
 import { detectTimePockets, applyCommandProtection, DEFAULT_TRAVEL_RESERVE_MINUTES, DEFAULT_UNKNOWN_STOP_WORK_RESERVE_MINUTES } from "./pocketDetection";
 import { eligibleCampaigns } from "./eligibility";
@@ -228,7 +231,7 @@ export async function computeMissionPlan(input: {
       timeZone: input.timeZone,
     }),
   ]);
-  const command = await loadDailyCommand({
+  const loaded = await loadDailyCommand({
     tenantId: input.tenantId,
     actorId: input.operatorId,
     dayDirectorActorId: input.operatorId,
@@ -236,6 +239,14 @@ export async function computeMissionPlan(input: {
     businessDate: input.businessDate,
     timeZone: input.timeZone,
   }).catch(() => null);
+  const weeklyIntent = loaded
+    ? await latestWeeklyIntent({
+        tenantId: input.tenantId,
+        operatorId: input.operatorId,
+        weekStart: weekStartMonday(input.businessDate),
+      })
+    : null;
+  const command = loaded ? applyWeeklyIntentToCommand(loaded, weeklyIntent?.days ?? null) : null;
   const enabledCampaigns = allCampaigns.filter(c => c.enabled);
   const prepReady = await computePrepReadiness({
     tenantId: input.tenantId,
