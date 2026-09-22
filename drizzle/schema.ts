@@ -8305,3 +8305,57 @@ export type NarratorOsOperator = typeof narratorOsOperator.$inferSelect;
 export type NarratorOsKnowledge = typeof narratorOsKnowledge.$inferSelect;
 export type NarratorOsEventLedger = typeof narratorOsEventLedger.$inferSelect;
 export type NarratorOsPresentationReceipt = typeof narratorOsPresentationReceipt.$inferSelect;
+
+/**
+ * One communications receipt log for provider pipes (Twilio first).
+ * Provider retries collapse on idempotencyKey and, when present, providerEventId.
+ * These rows are not calls, messages, sales, missions, or narrator events.
+ * Endpoint addresses follow the existing E.164 varchar convention. Do not log them raw.
+ */
+export const communicationReceipts = mysqlTable(
+  "communication_receipts",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }),
+    provider: varchar("provider", { length: 32 }).notNull().default("twilio"),
+    providerEventId: varchar("providerEventId", { length: 191 }),
+    eventType: varchar("eventType", { length: 64 }).notNull(),
+    callSid: varchar("callSid", { length: 64 }),
+    parentCallSid: varchar("parentCallSid", { length: 64 }),
+    messageSid: varchar("messageSid", { length: 64 }),
+    direction: varchar("direction", { length: 16 }),
+    fromNumber: varchar("fromNumber", { length: 64 }),
+    toNumber: varchar("toNumber", { length: 64 }),
+    status: varchar("status", { length: 64 }),
+    startedAt: timestamp("startedAt"),
+    answeredAt: timestamp("answeredAt"),
+    completedAt: timestamp("completedAt"),
+    durationSeconds: int("durationSeconds"),
+    providerErrorCode: varchar("providerErrorCode", { length: 32 }),
+    providerErrorMessage: varchar("providerErrorMessage", { length: 512 }),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_communication_receipts_idempotency").on(
+      table.idempotencyKey
+    ),
+    providerEventUnique: uniqueIndex("uq_communication_receipts_provider_event").on(
+      table.provider,
+      table.providerEventId
+    ),
+    callLookup: index("idx_communication_receipts_call").on(
+      table.tenantId,
+      table.callSid,
+      table.eventType
+    ),
+    messageLookup: index("idx_communication_receipts_message").on(
+      table.tenantId,
+      table.messageSid,
+      table.eventType
+    ),
+  })
+);
+
+export type CommunicationReceiptRow = typeof communicationReceipts.$inferSelect;
