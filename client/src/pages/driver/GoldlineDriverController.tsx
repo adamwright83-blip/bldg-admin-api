@@ -34,6 +34,10 @@ import type {
   ColdCallTarget,
 } from "../../../../shared/coldCallBurst";
 import type { RealActionRequest } from "../../game/encounters/RealActionBridge";
+import {
+  openMissionFromDayLine,
+  openMissionFromOverworld,
+} from "../../game/missionExperience/openMissionExperience";
 import type {
   GoldlineActionServices,
   GoldlineVisitContext,
@@ -384,6 +388,11 @@ function LiveGoldlineDriverController({
     { businessDate: tomorrowBusinessDate },
     { refetchInterval: 60_000, retry: false }
   );
+  const missionExperience = trpc.system.missionExperience.current.useQuery(
+    { businessDate: selectedDate },
+    { retry: false, staleTime: 15_000 }
+  );
+  const openMissionExperienceEntrance = trpc.system.missionExperience.open.useMutation();
   const campaignRuns = trpc.system.campaignRuns.listMine.useQuery(undefined, {
     staleTime: 15_000,
     retry: false,
@@ -1475,6 +1484,12 @@ function LiveGoldlineDriverController({
           setDriverScene("game");
         }}
         onEnterWorld={trackedStopId => {
+          const instanceId = missionExperience.data?.instance?.id;
+          if (instanceId) {
+            openMissionFromDayLine(instanceId, input => {
+              openMissionExperienceEntrance.mutate(input);
+            });
+          }
           const commercialId = trackedStopId?.match(/^commercial-(\d+)/)?.[1];
           if (commercialId) {
             window.location.assign(`/driver/sales-mission/${commercialId}`);
@@ -1587,6 +1602,12 @@ function LiveGoldlineDriverController({
     );
 
   const enterCampaignHost = (hosted: CampaignHostInvocation) => {
+    const instanceId = missionExperience.data?.instance?.id;
+    if (instanceId) {
+      openMissionFromOverworld(instanceId, input => {
+        openMissionExperienceEntrance.mutate(input);
+      });
+    }
     const focus = hosted.objectiveIds[0];
     if (focus) setActiveAdventureObjectiveId(focus);
     switch (surfaceForCampaignHost(hosted.binding)) {
