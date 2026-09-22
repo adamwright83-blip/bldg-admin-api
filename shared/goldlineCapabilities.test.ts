@@ -13,11 +13,13 @@ describe("Goldline operator SMS capability", () => {
       implementation: "sendOperatorArtifact",
       permissionLevel: "operator",
     });
-    expect(capability?.allowedSurfaces).toContain("phone");
+    expect(capability?.allowedSurfaces).toEqual(["phone"]);
     expect(capabilityIsActionable("operator_sms.send")).toBe(true);
   });
 
-  it("puts the SMS capability in Claire's authoritative capability briefing", () => {
-    expect(formatCapabilityBriefing()).toContain("operator_sms.send");
+  it("advertises SMS only on the phone capability briefing", () => {
+    expect(formatCapabilityBriefing(undefined, "phone")).toContain("operator_sms.send");
+    expect(formatCapabilityBriefing(undefined, "desktop")).not.toContain("operator_sms.send");
+    expect(formatCapabilityBriefing(undefined, "mobile")).not.toContain("operator_sms.send");
   });
 });
