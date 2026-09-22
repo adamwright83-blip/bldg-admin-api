@@ -22,6 +22,7 @@
 
 import { looksUnfinished, shouldHoldForContinuation } from "../../turn/claireTurn";
 import type { Completeness } from "../contracts/perceivedTurn";
+import { endsWithOpenDesire, strategicJoinCompletes } from "./workFrame";
 
 /** How many silent continuation gathers a single thought may use before we flush. */
 export const MAX_FRAGMENT_HOLDS = 2;
@@ -91,6 +92,22 @@ export function assembleThought(input: AssemblyInput): AssemblyResult {
   // Safety limit reached: flush instead of holding a thought indefinitely.
   if (state.fragmentHolds >= MAX_FRAGMENT_HOLDS) {
     return { assembledText: combined, completeness: "forced_flush", state: emptyFragmentState() };
+  }
+
+  // A continuation that supplies the missing role ("…considered as my mission")
+  // finishes the held fragment. V1's word-count grace would otherwise keep holding it.
+  if (state.pendingFragment && strategicJoinCompletes(combined)) {
+    return { assembledText: combined, completeness: "complete", state: emptyFragmentState() };
+  }
+
+  // "I want this …" with no complement is not a finished thought, even when it is
+  // too short for V1's continuation grace.
+  if (endsWithOpenDesire(combined)) {
+    return {
+      assembledText: combined,
+      completeness: "incomplete",
+      state: { pendingFragment: combined, fragmentHolds: state.fragmentHolds + 1, providerFragments },
+    };
   }
 
   if (shouldHoldForContinuation(combined, { awaitingReply })) {

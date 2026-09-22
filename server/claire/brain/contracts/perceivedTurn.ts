@@ -15,7 +15,32 @@ export type DialogueActKind =
   | "confide"
   | "greeting"
   | "leave_taking"
+  | "attention_repair"
   | "continue";
+
+/**
+ * How the operator's words relate to work. Descriptive only.
+ * This enum is not an authority object and cannot mint a grant.
+ */
+export type WorkDeclarationKind =
+  | "none"
+  | "ordinary_work"
+  | "explicit_day_line"
+  | "explicit_action"
+  | "strategic_work"
+  | "context_narration";
+
+/** Dialogue act: the operator is repairing attention or leaving the current subject. */
+export type AttentionRepairKind = "none" | "attention_repair" | "subject_change";
+
+/**
+ * Bounded classifier outcome. `unknown` and `failed` are not authority.
+ * Executive Function must fail them toward hold, not toward a proposal.
+ */
+export type WorkFrameClassifierStatus = "classified" | "unknown" | "failed";
+
+/** Whether a strategic frame, if any, already names its content. */
+export type StrategicShape = "none" | "unresolved" | "content";
 
 export type BusinessIntentKind =
   | "fact_question"
@@ -76,4 +101,30 @@ export type PerceivedTurn = {
   listRequest: boolean;
   broadBriefingRequest: boolean;
   aboutClaireCapability: boolean;
+  /**
+   * Work-frame description from the bounded classifier. Not evidence and not a grant.
+   * `unknown` / `failed` must not be promoted into action authority.
+   */
+  classifierStatus: WorkFrameClassifierStatus;
+  workDeclarationKind: WorkDeclarationKind;
+  attentionRepair: AttentionRepairKind;
+  /** The operator attested their own intention. That is not an external business fact. */
+  operatorIntentAttested: boolean;
+  /** A separate claim about the world (a debt, a price) sits inside the utterance. */
+  embeddedExternalFact: boolean;
+  /**
+   * An existing capability owned outside Brain V2 (operator-artifact SMS).
+   * Recognition is not a grant and is not a Day Line proposal.
+   */
+  externalCapability: "operator_artifact_sms" | null;
+  /** Operator asked to persist today's mission. Only an existing canonical action could. */
+  explicitMissionWriteRequest: boolean;
+  /** Desire pointed at a thing, with no complement yet. Not a finished declaration. */
+  openFragment: boolean;
+  strategicShape: StrategicShape;
+  /**
+   * Bounded complement of a declaration ("publish the ad"), not a transcript copy.
+   * Null when the frame is open but the content has not been said.
+   */
+  declaredContentLabel: string | null;
 };

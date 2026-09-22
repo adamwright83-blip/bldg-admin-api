@@ -10,6 +10,13 @@ Working Memory: COMPLETE (ordered query — resolved ≠ presented)
 Shadow Working Memory: DURABLE via claire-brain-v2-shadow namespace; in-memory for tests
 Executive Attention / Retrieval / Integration / Inhibition: COMPLETE
   (WM gate, TaskSets, ConflictMonitor, EpistemicState, ControlAllocator, two-pass retrieval)
+Executive task switching + mission intent: SHADOW COGNITION ONLY
+  Strategic work is an activeWorkFrame (cognitive_only, closed kind + synthetic trace ref).
+  Remembered strategic state is output-gated. It is not active on an unrelated turn.
+  No mission write path exists.
+  Pending task-switch is dormant+suppress, not reject/delete/commit.
+  Explicit don't-add still rejects when attention repair is in the same turn.
+  productionAuthority false. mutationAllowed false. shadowOnly true.
 Business Judgment: COMPLETE for shadow (deterministic only; model seam exists but is not injected)
 Executive Governor: COMPLETE (mixed-lane firewall ENFORCED)
 Response Plan: COMPLETE (segments carry real content: facts, judgments, proposals)
@@ -20,7 +27,7 @@ Shadow Mode: WIRED on both surfaces, one-way, DEFAULT OFF, operator-scoped,
   live read-only retrieval, durable WM, durable safe telemetry
 Production Cutover: PROHIBITED
 
-Tests: 248 passed, 0 todo (brain). Full suite: 7160 passed, 7 skipped, 0 failed. `tsc --noEmit` green.
+Tests: 325 passed, 0 todo (brain). Full suite: 760 files, 7809 passed, 7 skipped. `tsc --noEmit` green.
 
 Read-only enforcement: Self Memory uses `readPersonalProgressionContext`, NOT
 `loadPersonalProgressionContext` (which releases expired reservations — a write).
@@ -70,7 +77,9 @@ Live DB: **not verified.** `DATABASE_URL` is unset locally. Do not invent verifi
    from V1's `listenOnly`.
 4. **No live database verification.**
 5. **Shadow has never run with the flag on**, so no real comparison telemetry exists.
+6. **Mission understanding has no live write.** There is no canonical speech-to-mission action. Cutover must not invent one.
 
 Canonical design: `docs/claire-brain-v2.md`
 Detailed handoff: `docs/claire-brain-v2-handoff.md`
-Draft PR (do not merge): https://github.com/adamwright83-blip/bldg-admin-api/pull/193
+This slice (do not merge): https://github.com/adamwright83-blip/bldg-admin-api/pull/221
+Architecture draft (do not merge): https://github.com/adamwright83-blip/bldg-admin-api/pull/193

@@ -6,6 +6,9 @@ import { interpretTurn } from "../../turn/interpretTurn";
 import { detectRequestedClaireTopic, isPersonalQuestionAboutClaire } from "../../topicDetection";
 import { operatorAskedOntology } from "../../progression/ontologyGuard";
 import type { BusinessIntentKind, DialogueActKind, PerceivedEntity, PerceivedTurn } from "../contracts/perceivedTurn";
+import { isStandaloneOperatorArtifactVoiceRequest } from "../../operatorArtifactVoice";
+import { reconcileCallControl } from "../executive/callControl";
+import { classifyWorkFrame, type WorkFrameClassification } from "./workFrame";
 
 export type PerceiveInput = {
   rawText: string;
@@ -101,20 +104,114 @@ function narrativeProbeOf(assembled: string): boolean {
   return operatorAskedOntology(assembled);
 }
 
-export function perceiveTurn(input: PerceiveInput): PerceivedTurn {
+export type PerceiveDeps = {
+  /** Test seam. A throw is a failed classifier, never mission authority. */
+  classifyWorkFrame?: (text: string) => WorkFrameClassification;
+};
+
+function leadingNegationHasSubstance(text: string): boolean {
+  const match = /^(?:no|nope|nah)\b[.!?,]*\s*([\s\S]*)$/i.exec(text.trim());
+  if (!match) return false;
+  const rest = match[1]?.trim() ?? "";
+  if (!rest) return false;
+  if (/^(?:on\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|tonight)\b[.!?]*$/i.test(rest)) {
+    return false;
+  }
+  return true;
+}
+
+export function perceiveTurn(input: PerceiveInput, deps: PerceiveDeps = {}): PerceivedTurn {
   const assembledText = (input.assembledText ?? input.rawText).trim();
   const turn = interpretTurn(assembledText);
+  let classification: WorkFrameClassification;
+  try {
+    classification = deps.classifyWorkFrame
+      ? deps.classifyWorkFrame(assembledText)
+      : classifyWorkFrame(assembledText, {
+          explicitActionRequest: turn.hasExplicitActionRequest,
+          operatorWorkCommitment: turn.operatorWorkCommitment,
+        });
+  } catch {
+    classification = {
+      status: "failed",
+      workDeclarationKind: "none",
+      attentionRepair: "none",
+      operatorIntentAttested: false,
+      embeddedExternalFact: false,
+      explicitMissionWriteRequest: false,
+      openFragment: false,
+      strategicShape: "none",
+      declaredContentLabel: null,
+      factualChallenge: false,
+    };
+  }
+  const externalCapability = isStandaloneOperatorArtifactVoiceRequest(assembledText)
+    ? ("operator_artifact_sms" as const)
+    : null;
+  if (
+    externalCapability &&
+    (classification.workDeclarationKind === "ordinary_work" || classification.workDeclarationKind === "explicit_action")
+  ) {
+    classification = { ...classification, workDeclarationKind: "none" };
+  }
   const entities: PerceivedEntity[] = [
     // A mention only. Whether it is a person or an account is decided downstream,
     // by authoritative evidence, never by counting words here.
     ...turn.entities.map(raw => ({ raw, kind: "entity_mention" as const })),
     ...turn.temporal.map(raw => ({ raw, kind: "temporal" as const })),
   ];
+
+  // Explicit goodbye outranks V1 departure and outranks any embedded fact.
+  // "go" plus a destination or work complement is movement, not leave-taking.
+  // A temporal modifier ("go now", "go for now") stays leave-taking.
+  const callControl = reconcileCallControl(assembledText, turn.callControl);
+  if (callControl === "end" && classification.status === "classified") {
+    classification = { ...classification, operatorIntentAttested: false, declaredContentLabel: null };
+  }
+
+  const factual =
+    turn.correctnessChallenge || turn.provenanceQuestion || classification.factualChallenge;
+  let correction = correctionOf(assembledText, turn);
+  let correctionTarget = correctionTargetOf(assembledText, turn);
+  let refusal = turn.actionRefused;
+  // A leading "No" followed by a new subject is not a pending refusal.
+  // "No, Wednesday" is a revision and is left alone. Explicit "don't add / don't log /
+  // don't schedule" stays a refusal even when the same turn repairs attention.
+  const substantiveNo = leadingNegationHasSubstance(assembledText);
+  const repairing = classification.status === "classified" && classification.attentionRepair !== "none";
+  const newFrame =
+    classification.status === "classified" &&
+    (classification.workDeclarationKind === "strategic_work" ||
+      classification.workDeclarationKind === "context_narration" ||
+      classification.operatorIntentAttested ||
+      classification.openFragment);
+  if (!factual && !turn.actionRefused && (repairing || (substantiveNo && newFrame))) {
+    refusal = false;
+    if (repairing && correctionTarget !== "prior_claim") {
+      correction = false;
+      correctionTarget = null;
+    }
+  }
+
+  let dialogueActs = acts(turn, assembledText);
+  if (repairing) {
+    dialogueActs = dialogueActs.filter(act => act !== "continue");
+    if (!dialogueActs.includes("attention_repair")) dialogueActs.push("attention_repair");
+    if (!refusal) dialogueActs = dialogueActs.filter(act => act !== "refusal");
+  }
+  if (callControl !== "end") {
+    dialogueActs = dialogueActs.filter(act => act !== "leave_taking");
+  }
+
+  const ambiguities: string[] = [];
+  if (classification.status === "unknown") ambiguities.push("work_frame_unknown");
+  if (classification.status === "failed") ambiguities.push("work_frame_failed");
+
   return {
     rawText: input.rawText,
     assembledText,
     completeness: input.completeness,
-    dialogueActs: acts(turn, assembledText),
+    dialogueActs,
     businessIntent: intentFromAssembled(assembledText, turn),
     entities,
     temporalReferences: turn.temporal,
@@ -123,20 +220,31 @@ export function perceiveTurn(input: PerceiveInput): PerceivedTurn {
     exclusions: turn.exclusions,
     anchorEntity: turn.anchorEntity,
     priorQueryReference: turn.queryRefinement || Boolean(turn.anchorEntity) || turn.exclusions.length > 0,
-    correction: correctionOf(assembledText, turn),
-    correctionTarget: correctionTargetOf(assembledText, turn),
-    refusal: turn.actionRefused,
+    correction,
+    correctionTarget,
+    refusal,
     acknowledgement: turn.acknowledgement,
     explicitActionRequest: turn.hasExplicitActionRequest,
     operatorWorkCommitment: turn.operatorWorkCommitment,
     personalProbe: personalProbeOf(assembledText),
     narrativeProbe: narrativeProbeOf(assembledText),
-    callControl: turn.callControl,
-    ambiguities: [],
+    callControl,
+    ambiguities,
     mayProposeWorkHint: turn.mayProposeWork,
     hasBusinessQuestion: turn.hasBusinessQuestion,
     listRequest: turn.listRequest,
     broadBriefingRequest: turn.broadBriefingRequest,
     aboutClaireCapability: turn.aboutClaireCapability,
+    classifierStatus: classification.status,
+    workDeclarationKind: classification.status === "classified" ? classification.workDeclarationKind : "none",
+    attentionRepair: classification.status === "classified" ? classification.attentionRepair : "none",
+    operatorIntentAttested: classification.status === "classified" ? classification.operatorIntentAttested : false,
+    embeddedExternalFact: classification.status === "classified" ? classification.embeddedExternalFact : false,
+    externalCapability,
+    explicitMissionWriteRequest:
+      classification.status === "classified" ? classification.explicitMissionWriteRequest : false,
+    openFragment: classification.status === "classified" ? classification.openFragment : false,
+    strategicShape: classification.status === "classified" ? classification.strategicShape : "none",
+    declaredContentLabel: classification.status === "classified" ? classification.declaredContentLabel : null,
   };
 }

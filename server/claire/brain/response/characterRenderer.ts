@@ -51,10 +51,11 @@ const SEGMENT_ORDER: Record<ResponseSegment["type"], number> = {
   BusinessJudgmentSegment: 1,
   ActionConfirmationSegment: 2,
   ActionProposalSegment: 3,
-  ConversationalSegment: 4,
-  PersonalDisclosureSegment: 5,
-  NarrativeRevealSegment: 6,
-  CallControlSegment: 7,
+  CognitiveAcknowledgementSegment: 4,
+  ConversationalSegment: 5,
+  PersonalDisclosureSegment: 6,
+  NarrativeRevealSegment: 7,
+  CallControlSegment: 8,
 };
 
 function sentence(text: string): string {

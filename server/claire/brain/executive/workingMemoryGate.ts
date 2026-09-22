@@ -23,6 +23,9 @@ import type {
 } from "../contracts/control";
 import type { PerceivedTurn } from "../contracts/perceivedTurn";
 import type { WorkingMemorySnapshot } from "../contracts/workingMemory";
+import { dayLineCandidate } from "./dayLineAuthority";
+import { explicitPendingReturn, explicitRefusalStands, heldPending, isBareRefusal } from "./pendingBinding";
+import { strategicFrameControlsTurn } from "./strategicFrame";
 
 /** Explicit abandonment of the current subject. */
 const ABANDON = /\b(?:forget|drop|never\s+mind|nevermind|scratch)\s+(?:that|it|about\s+\w+|\w+)\b/i;
@@ -59,6 +62,19 @@ function closesPriorOrderedQuery(change: ChangeClass): boolean {
  * Order matters: a prior-claim challenge is about the ANSWER, an abandonment is about
  * the TASK, and a correction inside a live task is neither.
  */
+function substantiveNewTopic(perceived: PerceivedTurn): boolean {
+  return (
+    perceived.attentionRepair !== "none" ||
+    perceived.openFragment ||
+    perceived.operatorIntentAttested ||
+    perceived.workDeclarationKind === "ordinary_work" ||
+    perceived.workDeclarationKind === "strategic_work" ||
+    perceived.workDeclarationKind === "context_narration" ||
+    perceived.workDeclarationKind === "explicit_day_line" ||
+    perceived.workDeclarationKind === "explicit_action"
+  );
+}
+
 export function classifyChange(perceived: PerceivedTurn, memory: WorkingMemorySnapshot): ChangeClass {
   if (perceived.businessIntent === "correctness_challenge" || perceived.correctionTarget === "prior_claim") {
     return "prior_claim_challenge";
@@ -68,7 +84,17 @@ export function classifyChange(perceived: PerceivedTurn, memory: WorkingMemorySn
   if (perceived.personalProbe && perceived.businessIntent === "none") return "task_switch";
   if (perceived.businessIntent === "query_requery") return "query_requery";
 
-  const holdingPending = Boolean(memory.pendingProposal || memory.pendingBriefing || memory.pendingAccountFollowUp);
+  const holdingPending = Boolean(heldPending(memory));
+
+  // Coming back to a dormant item is not a new task and not a yes/no.
+  if (explicitPendingReturn(perceived, memory)) return "continuation";
+
+  /**
+   * A new subject while something is pending is a switch. The pending item goes
+   * dormant; it is not rejected and it does not interpret the new speech.
+   * Attention repair and a leading "No" plus new speech are this case, not a refusal.
+   */
+  if (holdingPending && substantiveNewTopic(perceived)) return "task_switch";
 
   /**
    * A refusal binds the pending item; it is never a task switch. "Actually don't do
@@ -109,11 +135,18 @@ export function activeTaskSets(perceived: PerceivedTurn, memory: WorkingMemorySn
   if (perceived.callControl === "end") add("call_closure", null);
   if (perceived.personalProbe || perceived.narrativeProbe) add("personal_disclosure", null);
 
-  const holdingPending = Boolean(memory.pendingProposal || memory.pendingBriefing || memory.pendingAccountFollowUp);
-  if (holdingPending && (perceived.acknowledgement || perceived.refusal || perceived.correction)) {
+  const holdingPending = Boolean(heldPending(memory));
+  if (
+    holdingPending &&
+    (perceived.acknowledgement || perceived.refusal || perceived.correction) &&
+    perceived.attentionRepair === "none" &&
+    !substantiveNewTopic(perceived)
+  ) {
     add("pending_confirmation", memory.pendingProposal?.identity ?? memory.pendingBriefing?.identity ?? null);
   }
-  if (perceived.explicitActionRequest || perceived.operatorWorkCommitment) add("action_proposal", mention);
+  if (dayLineCandidate(perceived)) add("action_proposal", mention);
+  // Remembered strategic state does not activate itself. Only this turn can.
+  if (strategicFrameControlsTurn(perceived, memory)) add("strategic_work", null);
   if (perceived.businessIntent === "judgment_question") add("account_judgment", mention);
   if (perceived.broadBriefingRequest) add("broad_planning", null);
   if (
@@ -174,10 +207,14 @@ export function gateWorkingMemory(input: {
     (perceived.priorQueryReference && perceived.businessIntent !== "query_requery");
 
   // ── Pending proposal ──────────────────────────────────────────────────────
-  const holdingPending = Boolean(memory.pendingProposal || memory.pendingBriefing || memory.pendingAccountFollowUp);
+  const holdingPending = Boolean(heldPending(memory));
   if (!holdingPending) {
     rule("pending_proposal", "maintain", "suppress", "nothing pending");
-  } else if (perceived.refusal) {
+  } else if (explicitPendingReturn(perceived, memory)) {
+    rule("pending_proposal", "maintain", "allow", "the operator returned to the dormant item");
+  } else if (explicitRefusalStands(perceived, change)) {
+    rule("pending_proposal", "clear", "allow", "operator refused the pending item");
+  } else if (isBareRefusal(perceived.assembledText) && !substantiveNewTopic(perceived)) {
     // "No." and "Actually don't do that." both end it, and it must not come back.
     rule("pending_proposal", "clear", "allow", "operator refused the pending item");
   } else if (change === "local_correction") {
@@ -239,6 +276,23 @@ export function gateWorkingMemory(input: {
 
   // ── Pending clarification ─────────────────────────────────────────────────
   rule("pending_clarification", "maintain", "suppress", "no clarification outstanding");
+
+  // ── Strategic frame ───────────────────────────────────────────────────────
+  // Stored memory and the active task set are different. A sales question leaves
+  // the frame in memory and bars it from this turn.
+  const strategicActive = kinds.has("strategic_work");
+  if (!memory.activeWorkFrame && !strategicActive) {
+    rule("strategic_frame", "maintain", "suppress", "no strategic frame");
+  } else if (strategicActive) {
+    rule(
+      "strategic_frame",
+      perceived.workDeclarationKind === "strategic_work" ? "update" : "maintain",
+      "allow",
+      "this turn is operating the strategic frame"
+    );
+  } else {
+    rule("strategic_frame", "dormant", "suppress", "remembered strategic frame does not control this turn");
+  }
 
   // ── Evidence scope ────────────────────────────────────────────────────────
   rule(

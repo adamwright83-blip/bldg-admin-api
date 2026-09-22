@@ -21,7 +21,9 @@ export type TaskSetKind =
   | "personal_disclosure"
   | "broad_planning"
   | "call_closure"
-  | "conversation";
+  | "conversation"
+  /** Operator-declared strategic work. Cognitive frame only — not a mission write. */
+  | "strategic_work";
 
 export type TaskSet = {
   kind: TaskSetKind;
@@ -80,7 +82,9 @@ export type WorkingMemorySlot =
   | "pending_clarification"
   | "prior_claim"
   | "unresolved_reference"
-  | "evidence_scope";
+  | "evidence_scope"
+  /** Remembered mission/strategic frame. Output-gated independently of task-set activation. */
+  | "strategic_frame";
 
 export type GateRuling = {
   slot: WorkingMemorySlot;

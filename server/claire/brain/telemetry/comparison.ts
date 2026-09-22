@@ -25,6 +25,12 @@ export type ShadowComparisonRecord = {
     priorQueryReference: boolean;
     listRequest: boolean;
     broadBriefingRequest: boolean;
+    workDeclarationKind: string;
+    attentionRepair: string;
+    operatorIntentAttested: boolean;
+    embeddedExternalFact: boolean;
+    classifierStatus: string;
+    strategicShape: string;
   };
   control: {
     mode: ExecutiveDecision["control"]["mode"];
@@ -38,6 +44,7 @@ export type ShadowComparisonRecord = {
       unresolvedReferenceCount: number;
     };
     conflicts: string[];
+    suppressedContext: string[];
   };
   attention: {
     lanes: AttentionPlan["lanes"];
@@ -59,6 +66,8 @@ export type ShadowComparisonRecord = {
   conclusions: string[];
   actionClasses: string[];
   segmentTypes: string[];
+  cognitiveAcknowledgement: string[];
+  verificationInvoked: boolean;
   callEnd: boolean;
   productionAuthority: false;
 };
@@ -85,8 +94,14 @@ export function comparisonRecordFromDecision(
       hasBusinessQuestion: decision.perceivedTurn.hasBusinessQuestion,
       priorQueryReference: decision.perceivedTurn.priorQueryReference,
       listRequest: decision.perceivedTurn.listRequest,
-      broadBriefingRequest: decision.perceivedTurn.broadBriefingRequest,
-    },
+    broadBriefingRequest: decision.perceivedTurn.broadBriefingRequest,
+      workDeclarationKind: decision.perceivedTurn.workDeclarationKind,
+      attentionRepair: decision.perceivedTurn.attentionRepair,
+      operatorIntentAttested: decision.perceivedTurn.operatorIntentAttested,
+      embeddedExternalFact: decision.perceivedTurn.embeddedExternalFact,
+      classifierStatus: decision.perceivedTurn.classifierStatus,
+      strategicShape: decision.perceivedTurn.strategicShape,
+  },
     control: {
       mode: decision.control.mode,
       stoppingReason: decision.control.stoppingReason,
@@ -109,6 +124,7 @@ export function comparisonRecordFromDecision(
         unresolvedReferenceCount: decision.control.epistemic.unresolvedReferences.length,
       },
       conflicts: decision.control.conflicts.map(conflict => conflict.kind),
+      suppressedContext: decision.control.suppressedContext,
     },
     attention: {
       lanes: decision.attention.lanes,
@@ -127,6 +143,13 @@ export function comparisonRecordFromDecision(
     conclusions: decision.conclusions.map(conclusion => conclusion.kind),
     actionClasses: decision.actionGrants.map(grant => grant.actionClass),
     segmentTypes: decision.responsePlan.segments.map(segment => segment.type),
+    cognitiveAcknowledgement: decision.responsePlan.segments
+      .filter(segment => segment.type === "CognitiveAcknowledgementSegment")
+      .map(segment => segment.kind),
+    verificationInvoked:
+      decision.attention.priorClaim !== "none" ||
+      decision.control.needsVerification ||
+      decision.retrievals.some(request => request.kind === "prior_claim_recheck"),
     callEnd: decision.callControl.endCall,
     productionAuthority: false,
   };

@@ -34,6 +34,8 @@ export type ShadowInspectorRecord = {
   conclusions: string[];
   actionClasses: string[];
   segmentTypes: string[];
+  cognitiveAcknowledgement: string[];
+  verificationInvoked: boolean;
   callEnd: boolean;
   disagreements: ShadowObservation["disagreements"];
   candidateEndCall: boolean;
@@ -59,6 +61,8 @@ export function shadowObservationInspectorRecord(
     conclusions: observation.comparison.conclusions,
     actionClasses: observation.comparison.actionClasses,
     segmentTypes: observation.comparison.segmentTypes,
+    cognitiveAcknowledgement: observation.comparison.cognitiveAcknowledgement,
+    verificationInvoked: observation.comparison.verificationInvoked,
     callEnd: observation.comparison.callEnd,
     disagreements: observation.disagreements,
     candidateEndCall: observation.candidateEndCall,
