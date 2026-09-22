@@ -8,7 +8,7 @@ Conversation Relay is a speech transport. It may carry speech in and out, token 
 
 If Claire has started speaking and the operator interrupts, playback stops. The full sentence does not become heard. Narrator disclosure accounting reads that as not confirmed-heard.
 
-The WebSocket upgrade handler is attached to the existing HTTP server. It does not add a listener, a port, or a second public origin. Inbound, pre-drive, debrief, and status webhook URLs are unchanged, and their HTTP signature check is unchanged.
+The WebSocket upgrade handler is attached to the existing HTTP server, including while the Relay flag is off. It does not add a listener, a port, or a second public origin. A missing or bad Twilio signature is rejected with HTTP 403 before the socket is accepted. That 403 carries the fixed marker `goldline-relay-upgrade-rejected` and does not say whether the signature or the Claire identity failed. Inbound, pre-drive, debrief, and status webhook URLs are unchanged, and their HTTP signature check is unchanged.
 
 `ConversationRelay` does not set `welcomeGreeting`. After setup, the server queues the opening already stored on the Claire conversation, once. Inbound that line is "Hey Adam. What's up?". Outbound it is the briefing already generated for the call.
 

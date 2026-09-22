@@ -1,4 +1,4 @@
-import { createServer, request as httpRequest, type IncomingMessage } from "node:http";
+import { createServer, request as httpRequest, type IncomingHttpHeaders, type IncomingMessage } from "node:http";
 import { readFileSync } from "node:fs";
 import type { Duplex } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -10,7 +10,7 @@ import {
   validateConversationRelayUpgrade,
 } from "./conversationRelaySignature";
 import { ConversationRelaySocketRuntime } from "./conversationRelayRuntime";
-import { attachConversationRelayUpgrade } from "./conversationRelayUpgrade";
+import { attachConversationRelayUpgrade, GOLDLINE_RELAY_UPGRADE_REJECTED } from "./conversationRelayUpgrade";
 import { claireVoiceSession } from "./claireVoiceSession";
 import { renderClaireOpeningVoice } from "./claireVoiceTransport";
 import { preDriveConversationTwiML } from "../claireTwilio";
@@ -24,6 +24,21 @@ const HTTPS = `https://api.example.test${PATH}`;
 
 function signatureFor(url: string): string {
   return twilio.getExpectedTwilioSignature(AUTH, url, {});
+}
+
+function expectGoldlineForbidden(result: {
+  status: number | null;
+  upgraded: boolean;
+  body: string;
+  headers: IncomingHttpHeaders;
+}) {
+  expect(result.upgraded).toBe(false);
+  expect(result.status).toBe(403);
+  expect(result.body).toBe(GOLDLINE_RELAY_UPGRADE_REJECTED);
+  expect(result.headers["x-goldline-relay-upgrade"]).toBe(GOLDLINE_RELAY_UPGRADE_REJECTED);
+  expect(result.body).not.toContain(TOKEN);
+  expect(result.body).not.toContain("signature");
+  expect(result.body).not.toContain("identity");
 }
 
 function runtime(runTurn = vi.fn(async () => ({ speak: "Noted.", endCall: false, listenOnly: false }))) {
@@ -330,30 +345,33 @@ describe("existing HTTP server upgrade", () => {
   function rawUpgrade(
     port: number,
     path: string,
-    headers: Record<string, string> = {}
-  ): Promise<{ status: number | null; upgraded: boolean; body: string }> {
+    headers: Record<string, string> = {},
+    options: { websocketKey?: boolean } = {}
+  ): Promise<{ status: number | null; upgraded: boolean; body: string; headers: IncomingHttpHeaders }> {
+    const requestHeaders: Record<string, string> = {
+      Connection: "Upgrade",
+      Upgrade: "websocket",
+      "Sec-WebSocket-Version": "13",
+      ...headers,
+    };
+    if (options.websocketKey !== false && !requestHeaders["Sec-WebSocket-Key"]) {
+      requestHeaders["Sec-WebSocket-Key"] = "dGhlIHNhbXBsZSBub25jZQ==";
+    }
     return new Promise((resolve, reject) => {
       const req = httpRequest({
         host: "127.0.0.1",
         port,
         path,
-        headers: {
-          Connection: "Upgrade",
-          Upgrade: "websocket",
-          "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
-          "Sec-WebSocket-Version": "13",
-          ...headers,
-        },
+        headers: requestHeaders,
       });
       const timer = setTimeout(() => {
         req.destroy();
-        resolve({ status: null, upgraded: false, body: "" });
+        resolve({ status: null, upgraded: false, body: "", headers: {} });
       }, 800);
       req.on("upgrade", (res: IncomingMessage, socket: Duplex) => {
         clearTimeout(timer);
         socket.destroy();
-        resolve({ status: 101, upgraded: true, body: "" });
-        void res;
+        resolve({ status: 101, upgraded: true, body: "", headers: res.headers });
       });
       req.on("response", (res: IncomingMessage) => {
         const chunks: Buffer[] = [];
@@ -364,6 +382,7 @@ describe("existing HTTP server upgrade", () => {
             status: res.statusCode ?? 0,
             upgraded: false,
             body: Buffer.concat(chunks).toString("utf8"),
+            headers: res.headers,
           });
         });
       });
@@ -407,8 +426,7 @@ describe("existing HTTP server upgrade", () => {
     expect(otherHits).toBe(1);
 
     const missing = await rawUpgrade(port, PATH);
-    expect(missing.upgraded).toBe(false);
-    expect(missing.status).toBe(403);
+    expectGoldlineForbidden(missing);
 
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const accepted = await rawUpgrade(port, PATH, {
@@ -498,8 +516,33 @@ describe("existing HTTP server upgrade", () => {
     const rejected = await rawUpgrade(port, PATH, {
       "X-Twilio-Signature": signatureFor(WSS),
     });
+    expectGoldlineForbidden(rejected);
+  });
+
+  it("answers a missing websocket key with 400 and without the Goldline 403 marker", async () => {
+    const { server, port } = await listen();
+    attachConversationRelayUpgrade(server, {
+      publicBaseUrl: PUBLIC_BASE,
+      authToken: AUTH,
+      nodeEnv: "production",
+      authorize: async () => ({
+        ok: true,
+        token: TOKEN,
+        conversationId: "conv-socket",
+        tenantId: "tenant-1",
+        operatorUserId: "adam-admin",
+      }),
+    });
+    const rejected = await rawUpgrade(
+      port,
+      PATH,
+      { "X-Twilio-Signature": signatureFor(WSS) },
+      { websocketKey: false }
+    );
     expect(rejected.upgraded).toBe(false);
-    expect(rejected.status).toBe(403);
+    expect(rejected.status).toBe(400);
+    expect(rejected.body).toBe("Bad Request");
+    expect(rejected.headers["x-goldline-relay-upgrade"]).toBeUndefined();
   });
 
   it("is mounted on the existing application server", () => {

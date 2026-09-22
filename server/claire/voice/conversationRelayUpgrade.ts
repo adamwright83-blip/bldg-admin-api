@@ -55,16 +55,27 @@ function logRelay(event: string, fields: Record<string, string | number | boolea
   console.info("[Claire] conversation relay", { event, ...fields });
 }
 
-function rejectUpgrade(socket: Duplex, status: number, reason: string): void {
-  const body = reason;
-  socket.write(
-    `HTTP/1.1 ${status} ${status === 401 ? "Unauthorized" : "Forbidden"}\r\n` +
+/**
+ * Fixed, non-secret marker on every pre-accept 403. Signature failure and
+ * identity failure return the same bytes so the response does not say which
+ * check failed. An anonymous upgrade probe uses this to tell our handler from
+ * an edge or proxy 403.
+ */
+export const GOLDLINE_RELAY_UPGRADE_REJECTED = "goldline-relay-upgrade-rejected";
+
+function rejectUpgrade(socket: Duplex, status: number): void {
+  const forbidden = status === 403;
+  const body = forbidden ? GOLDLINE_RELAY_UPGRADE_REJECTED : status === 400 ? "Bad Request" : "Forbidden";
+  const statusText = status === 400 ? "Bad Request" : status === 401 ? "Unauthorized" : "Forbidden";
+  const marker = forbidden ? `X-Goldline-Relay-Upgrade: ${GOLDLINE_RELAY_UPGRADE_REJECTED}\r\n` : "";
+  socket.end(
+    `HTTP/1.1 ${status} ${statusText}\r\n` +
       "Content-Type: text/plain\r\n" +
+      marker +
       `Content-Length: ${Buffer.byteLength(body)}\r\n` +
       "Connection: close\r\n\r\n" +
       body
   );
-  socket.destroy();
 }
 
 async function defaultAuthorize(token: string): Promise<RelayUpgradeAuthorization> {
@@ -147,7 +158,7 @@ export function attachConversationRelayUpgrade(server: Server, deps: Conversatio
         reason: message.includes("?") || message.includes("wss://") ? "upgrade_failed" : message.slice(0, 120),
         path: CLAIRE_CONVERSATION_RELAY_PATH,
       });
-      if (!socket.destroyed) rejectUpgrade(socket, 403, "Forbidden");
+      if (!socket.destroyed) rejectUpgrade(socket, 403);
     });
   });
 }
@@ -175,7 +186,7 @@ async function acceptConversationRelayUpgrade(
   });
   if (!validation.ok) {
     logRelay("upgrade_rejected", { reason: "signature", path: CLAIRE_CONVERSATION_RELAY_PATH });
-    rejectUpgrade(socket, 403, "Forbidden");
+    rejectUpgrade(socket, 403);
     return;
   }
 
@@ -184,14 +195,14 @@ async function acceptConversationRelayUpgrade(
   const authorized = await authorize(token);
   if (!authorized.ok) {
     logRelay("upgrade_rejected", { reason: "identity", path: CLAIRE_CONVERSATION_RELAY_PATH });
-    rejectUpgrade(socket, 403, "Forbidden");
+    rejectUpgrade(socket, 403);
     return;
   }
 
   const key = req.headers["sec-websocket-key"];
   if (typeof key !== "string" || !key.trim()) {
     logRelay("upgrade_rejected", { reason: "websocket_key", path: CLAIRE_CONVERSATION_RELAY_PATH });
-    rejectUpgrade(socket, 400, "Bad Request");
+    rejectUpgrade(socket, 400);
     return;
   }
 
