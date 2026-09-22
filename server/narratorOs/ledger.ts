@@ -1,6 +1,7 @@
 import {
   type AuthoredBeat,
   type NarrativeBeatId,
+  type NarrativeEventLedgerEntry,
   type NarrativeKnowledgeMutation,
   type NarrativeState,
 } from "../../shared/narratorOs/contracts";
@@ -105,6 +106,11 @@ export async function commitAuthorizedBeat(input: {
   authorization: EligibilityAuthorization;
   eligibility: EligibilityInput;
   nowIso?: string;
+  /**
+   * Receives the ledger row this commit wrote or resolved. Existing callers
+   * omit it. The return value stays the reloaded snapshot.
+   */
+  onCommittedLedgerEntry?: (entry: NarrativeEventLedgerEntry) => void;
 }): Promise<NarratorSnapshot> {
   if (!isEligibilityAuthorization(input.authorization)) {
     throw new IneligibleBeatCommitError(
@@ -221,7 +227,7 @@ export async function commitAuthorizedBeat(input: {
     idempotencyKey = occurrence;
   }
 
-  await input.store.commitAtomic(input.scope, {
+  const committedEntry = await input.store.commitAtomic(input.scope, {
     knowledge,
     narrativeState,
     ledgerEntry: {
@@ -235,6 +241,7 @@ export async function commitAuthorizedBeat(input: {
       idempotencyKey,
     },
   });
+  input.onCommittedLedgerEntry?.(committedEntry);
   const next = await input.store.load(input.scope);
   if (!next) throw new Error("Narrator operator disappeared after commit");
   return next;

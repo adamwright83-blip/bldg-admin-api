@@ -274,6 +274,12 @@ export async function answerClairePreDriveFollowUp(
     priorClaimNotes?: string[];
     /** Verified situational signals the caller already holds; the stance layer only shapes tone from them. */
     momentSignals?: Partial<MomentSignals>;
+    /**
+     * Already-gated authored narrative section. Omitted unless occurrence,
+     * Claire knowledge, and authored disclosure all passed outside this
+     * function. It is not added to the business fact inventory.
+     */
+    narratorPromptSection?: string | null;
   },
   dependencies: {
     invokeText?: typeof invokeTextLLM;
@@ -417,6 +423,9 @@ export async function answerClairePreDriveFollowUp(
         label: "mission_sales_brief",
         text: input.context.missionSalesBrief ? MISSION_SALES_BRIEF_INSTRUCTION : null,
       },
+      ...(input.narratorPromptSection
+        ? [{ label: "authored_narrative", text: input.narratorPromptSection }]
+        : []),
       { label: "delivery_voice", text: surface === "voice" ? VOICE_NATIVE_ANSWER_GUIDANCE : null },
     ];
   }

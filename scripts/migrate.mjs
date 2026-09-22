@@ -2173,5 +2173,33 @@ await assertRequiredColumns("narrator_os_event_ledger", [
   "payloadJson", "occurredAt", "idempotencyKey",
 ]);
 
+// ── Narrator OS slice H ─────────────────────────────────────────
+// Mirrors drizzle/0091_narrator_presentation_receipt.sql.
+// Presentation receipts are not occurrence-ledger rows and not business truth.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS narrator_os_presentation_receipt (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorUserId VARCHAR(128) NOT NULL,
+    occurrenceLedgerEntryId VARCHAR(36) NOT NULL,
+    beatId VARCHAR(64) NOT NULL,
+    presentationId VARCHAR(96) NOT NULL,
+    status ENUM('prepared','rendered_to_surface') NOT NULL,
+    preparedAt TIMESTAMP NOT NULL,
+    renderedAt TIMESTAMP NULL DEFAULT NULL,
+    idempotencyKey VARCHAR(191) NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_narrator_os_presentation_occurrence (tenantId, operatorUserId, occurrenceLedgerEntryId),
+    UNIQUE KEY uq_narrator_os_presentation_idempotency (tenantId, idempotencyKey),
+    KEY idx_narrator_os_presentation_operator (tenantId, operatorUserId)
+  )`,
+  "CREATE TABLE narrator_os_presentation_receipt"
+);
+await assertRequiredColumns("narrator_os_presentation_receipt", [
+  "tenantId", "operatorUserId", "occurrenceLedgerEntryId", "beatId",
+  "presentationId", "status", "preparedAt", "idempotencyKey",
+]);
+
 await conn.end();
 console.log("\nMigration complete.");

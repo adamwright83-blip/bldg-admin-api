@@ -18,6 +18,21 @@ export {
   authoredReactionReceipt,
   narrativeMemoryView,
 } from "./narrativeReadModels";
+export { advanceNarratorAfterVerifiedOutcome } from "./advanceAfterVerifiedOutcome";
+export {
+  authoredBeatMayPresent,
+  deriveNarrativePresentationPlan,
+  presentationIdForOccurrence,
+} from "./presentationPlan";
+export { playerPresentationPayload } from "./playerPresentation";
+export { narrativePresentationMemory } from "./presentationMemory";
+export {
+  createInMemoryNarratorPresentationStore,
+  preparePlayerPresentation,
+  preparePlayerPresentationForOccurrence,
+  renderPlayerPresentationToSurface,
+} from "./presentationStore";
+export { createDrizzleNarratorPresentationStore } from "./presentationDrizzleStore";
 export * from "./init";
 export * from "./ledger";
 export * from "./livedBio";

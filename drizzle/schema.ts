@@ -8199,6 +8199,45 @@ export const narratorOsEventLedger = mysqlTable(
   })
 );
 
+/**
+ * Player-surface presentation receipts. Separate from narrator_os_event_ledger
+ * so "story happened" stays distinct from "story was presented".
+ * Status is prepared or rendered_to_surface. Not human perception.
+ */
+export const narratorOsPresentationReceipt = mysqlTable(
+  "narrator_os_presentation_receipt",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorUserId: varchar("operatorUserId", { length: 128 }).notNull(),
+    occurrenceLedgerEntryId: varchar("occurrenceLedgerEntryId", { length: 36 }).notNull(),
+    beatId: varchar("beatId", { length: 64 }).notNull(),
+    presentationId: varchar("presentationId", { length: 96 }).notNull(),
+    status: mysqlEnum("status", ["prepared", "rendered_to_surface"]).notNull(),
+    preparedAt: timestamp("preparedAt").notNull(),
+    renderedAt: timestamp("renderedAt"),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    occurrenceUnique: uniqueIndex("uq_narrator_os_presentation_occurrence").on(
+      table.tenantId,
+      table.operatorUserId,
+      table.occurrenceLedgerEntryId
+    ),
+    idempotencyUnique: uniqueIndex("uq_narrator_os_presentation_idempotency").on(
+      table.tenantId,
+      table.idempotencyKey
+    ),
+    operatorIdx: index("idx_narrator_os_presentation_operator").on(
+      table.tenantId,
+      table.operatorUserId
+    ),
+  })
+);
+
 export type NarratorOsOperator = typeof narratorOsOperator.$inferSelect;
 export type NarratorOsKnowledge = typeof narratorOsKnowledge.$inferSelect;
 export type NarratorOsEventLedger = typeof narratorOsEventLedger.$inferSelect;
+export type NarratorOsPresentationReceipt = typeof narratorOsPresentationReceipt.$inferSelect;
