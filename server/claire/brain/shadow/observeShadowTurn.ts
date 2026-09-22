@@ -226,6 +226,7 @@ export async function observeShadowTurn(
         focusEntities: priorMemory?.focusEntities ?? turn.state?.focusEntities,
         orderedQuery: priorMemory?.orderedQuery ?? null,
         unresolvedReferences: priorMemory?.unresolvedReferences ?? turn.state?.unresolvedReferences,
+        activeWorkFrame: priorMemory?.activeWorkFrame ?? turn.state?.activeWorkFrame ?? null,
       },
     });
 

@@ -19,7 +19,7 @@
 
 import { createHash } from "node:crypto";
 import type { ExecutiveDecision } from "../contracts/executiveDecision";
-import type { FocusEntity, OrderedQueryMemory } from "../contracts/workingMemory";
+import type { FocusEntity, OrderedQueryMemory, StrategicWorkMemory } from "../contracts/workingMemory";
 import {
   claireConversationStateStore,
   type ClaireConversationStateStore,
@@ -31,6 +31,8 @@ export type ShadowMemory = {
   focusEntities: FocusEntity[];
   orderedQuery: OrderedQueryMemory | null;
   unresolvedReferences: string[];
+  /** Strategic/mission frame. Cognitive only — not a transcript and not a write. */
+  activeWorkFrame: StrategicWorkMemory | null;
   /** Shape of recent V2 decisions, for tracing a disagreement back through the thread. */
   priorDecisionRefs: string[];
   updatedAtMs: number;
@@ -41,6 +43,7 @@ export function emptyShadowMemory(): ShadowMemory {
     focusEntities: [],
     orderedQuery: null,
     unresolvedReferences: [],
+    activeWorkFrame: null,
     priorDecisionRefs: [],
     updatedAtMs: 0,
   };
@@ -173,6 +176,10 @@ export function updateShadowMemory(
     focusEntities: resolvedFocus.length ? resolvedFocus : base.focusEntities,
     orderedQuery,
     unresolvedReferences: decision.perceivedTurn.ambiguities,
+    activeWorkFrame:
+      update && Object.prototype.hasOwnProperty.call(update, "activeWorkFrame")
+        ? (update.activeWorkFrame ?? null)
+        : base.activeWorkFrame,
     priorDecisionRefs: [
       ...base.priorDecisionRefs,
       // Segment shape, never the operator's words — this store is not a transcript.

@@ -4,16 +4,44 @@ This file is for the next coding agent. Do not rely on any Cursor chat. If you c
 
 ## Current branch
 
-`cursor/claire-brain-v2`
+`cursor/claire-brain-v2-executive-function-v1`
 
-Draft PR (do **not** merge): https://github.com/adamwright83-blip/bldg-admin-api/pull/193
+Draft PR (do **not** merge): opened from this branch. Do not deploy. Do not enable the shadow flag.
+
+Earlier architecture draft (do **not** merge): https://github.com/adamwright83-blip/bldg-admin-api/pull/193
 PR #192 remains open as a parts bin: https://github.com/adamwright83-blip/bldg-admin-api/pull/192
 
 ## Current head
 
-Trust `git rev-parse origin/cursor/claire-brain-v2` after this push. Do not trust older SHAs quoted in historical sections below.
+Trust `git rev-parse HEAD` on this branch after the push. Base is current `origin/main`.
 
-Production base: `ac2f973117fcd929c04f5c61309ab3563a6af53e`
+## This slice
+
+Executive task switching and mission intent. Shadow cognition only.
+
+- Pending work on a real topic switch is **dormant and suppressed**. It is not rejected, deleted, or committed.
+- “No.” still rejects. “No, Wednesday.” still revises. “No.” followed by a new subject or “listen to me” does not reject.
+- Attention repair is not prior-claim verification and cannot mint a grant.
+- Operator-attested intention is not an external fact. An embedded debt or price stays unverified and does not erase the intention.
+- Strategic / mission declarations open `activeWorkFrame` with `durability: "cognitive_only"`.
+- There is **no canonical speech-to-mission write**. No new `ActionClass`. No `propose_daily_mission`. No fallback to `propose_day_line`.
+- Explicit “Put that on my Day Line” still proposes Day Line, shadow-only.
+- A bounded work-frame classifier may return `classified`, `unknown`, or `failed`. Unknown and failed hold. They are not Executive-2.
+- `productionAuthority` is false. Every grant keeps `mutationAllowed: false` and `shadowOnly: true`.
+- V1 (`runClaireTurn`, Twilio, pending handlers, routing) is not patched.
+
+Regression fixture: `server/claire/brain/tests/fixtures/executiveCallSequence.ts`, from the 2026-09-22 call `b9938fe9-ae81-4500-a535-223fcea3fbe7`. Hermetic. No production DB.
+
+## Cutover gates that remain
+
+1. Character renderer is still punctuation and concatenation.
+2. Granted personal disclosure still cannot preview in shadow.
+3. V2 Perception does not yet own live voice completeness. The assembler can join an open desire with a mission continuation, and live voice still gets completeness from V1.
+4. No live database verification. `DATABASE_URL` is unset here.
+5. Shadow has not had an authorized flag-on comparison trial. Do not turn `CLAIRE_BRAIN_V2_SHADOW` on from this PR.
+6. Mission understanding has no live write. Cutover would still not be allowed to invent one.
+
+Do not mark production cutover complete. Brain V2 is not live authority.
 
 ## Architecture status
 
@@ -93,8 +121,9 @@ pnpm exec vitest run server/claire/brain
 pnpm check
 ```
 
-Last focused brain run: **248 passed, 0 todo, 0 failed.**
-Full repository suite: **707 files, 7160 passed, 7 skipped, 0 failed.** `tsc --noEmit` green.
+Last focused brain run: **25 files, 311 passed, 0 todo, 0 failed.**
+Full repository suite: **760 files, 7795 passed, 7 skipped, 0 failed.**
+Dayforge release gate: **175 files, 1965 passed.** `pnpm check`, `pnpm check:dayforge:release`, and `pnpm build` green.
 
 ## Known incomplete / honest gates
 

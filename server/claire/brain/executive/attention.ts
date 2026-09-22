@@ -14,9 +14,11 @@ import type { PerceivedTurn } from "../contracts/perceivedTurn";
 import type { WorkingMemorySnapshot } from "../contracts/workingMemory";
 import type { CompartmentId } from "../contracts/retrieval";
 import { outputAllowed, suppressedSlots } from "./workingMemoryGate";
+import { dayLineCandidate } from "./dayLineAuthority";
+import { explicitPendingReturn, heldPending } from "./pendingBinding";
 
 function holding(memory: WorkingMemorySnapshot): boolean {
-  return Boolean(memory.pendingProposal || memory.pendingBriefing || memory.pendingAccountFollowUp);
+  return Boolean(heldPending(memory));
 }
 
 /** Bindings for a pending item only — never a reading of a new unrelated utterance. */
@@ -50,7 +52,10 @@ export function planAttention(input: {
   const holdingPending = holding(memory);
   let pendingDisposition: AttentionPlan["pendingDisposition"] = "none";
   const pendingBind = holdingPending ? pendingReply(perceived.assembledText) : null;
-  if (holdingPending) {
+  if (explicitPendingReturn(perceived, memory)) {
+    pendingDisposition = "none";
+    rationale.push("the operator returned to a dormant pending item; it is not confirmed or rejected");
+  } else if (holdingPending) {
     if (change === "task_switch" || change === "set_shift" || change === "query_requery") {
       pendingDisposition = "supersede";
       rationale.push("the operator moved to a different task; pending is set aside, not applied");
@@ -88,8 +93,7 @@ export function planAttention(input: {
     pendingDisposition === "confirm" ||
     pendingDisposition === "revise" ||
     pendingDisposition === "reject" ||
-    perceived.explicitActionRequest ||
-    perceived.operatorWorkCommitment
+    dayLineCandidate(perceived)
   ) {
     lanes.push("action");
   }

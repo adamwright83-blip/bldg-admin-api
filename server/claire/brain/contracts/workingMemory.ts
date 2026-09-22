@@ -57,6 +57,18 @@ export type PriorClaimRef = {
   recheckable: boolean;
 };
 
+/**
+ * Cognitive strategic-work frame. Understanding a declaration is not a write.
+ * `durability` is fixed so this object cannot be mistaken for a mission receipt.
+ */
+export type StrategicWorkMemory = {
+  durability: "cognitive_only";
+  status: "unresolved" | "content_held";
+  /** Short semantic label. Not a copy of the turn transcript. */
+  contentLabel: string | null;
+  openedAtMs: number;
+};
+
 export type WorkingMemorySnapshot = {
   threadId: string;
   focusEntities: FocusEntity[];
@@ -66,6 +78,8 @@ export type WorkingMemorySnapshot = {
   orderedQuery: OrderedQueryMemory | null;
   priorClaims: PriorClaimRef[];
   unresolvedReferences: string[];
+  /** Mission/strategic thread. Null when no such frame is open. */
+  activeWorkFrame: StrategicWorkMemory | null;
   pendingFragment: string | null;
   fragmentHolds: number;
   currentCallContext: {

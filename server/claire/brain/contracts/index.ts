@@ -1,4 +1,15 @@
-export type { PerceivedTurn, Completeness, DialogueActKind, BusinessIntentKind, PerceivedEntity, CallControlSignal } from "./perceivedTurn";
+export type {
+  PerceivedTurn,
+  Completeness,
+  DialogueActKind,
+  BusinessIntentKind,
+  PerceivedEntity,
+  CallControlSignal,
+  WorkDeclarationKind,
+  AttentionRepairKind,
+  WorkFrameClassifierStatus,
+  StrategicShape,
+} from "./perceivedTurn";
 export type {
   WorkingMemorySnapshot,
   OrderedQueryMemory,
@@ -6,6 +17,7 @@ export type {
   FocusEntity,
   PendingProposalSnapshot,
   PriorClaimRef,
+  StrategicWorkMemory,
 } from "./workingMemory";
 export type {
   EvidenceItem,
@@ -58,8 +70,12 @@ export type {
   PersonalDisclosureSegment,
   NarrativeRevealSegment,
   ConversationalSegment,
+  CognitiveAcknowledgementSegment,
+  CognitiveAcknowledgementKind,
+  PlanningAuthorityNotTouched,
   CallControlSegment,
 } from "./responsePlan";
+export { PLANNING_AUTHORITIES_NOT_TOUCHED } from "./responsePlan";
 export type {
   ExecutiveDecision,
   InhibitedCandidate,

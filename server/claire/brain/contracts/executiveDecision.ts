@@ -9,7 +9,7 @@ import type { CallControlGrant, ExecutiveActionGrant } from "./grants";
 import type { PerceivedTurn } from "./perceivedTurn";
 import type { RetrievalRequest } from "./retrieval";
 import type { ResponsePlan, ResponseSegment } from "./responsePlan";
-import type { OrderedQueryMember } from "./workingMemory";
+import type { OrderedQueryMember, StrategicWorkMemory } from "./workingMemory";
 import type { ExecutiveControlState } from "./control";
 import type { OrderedQueryUpdate } from "../executive/integrate";
 
@@ -26,7 +26,10 @@ export type InhibitedCandidate = {
     | "model_statement_as_evidence"
     | "synthetic_evidence"
     | "call_end_without_leave_taking"
-    | "half_turn";
+    | "half_turn"
+    | "attention_repair_as_claim_challenge"
+    | "operator_intent_as_external_fact"
+    | "mission_as_generic_day_line";
   detail: string;
 };
 
@@ -71,5 +74,11 @@ export type ExecutiveDecision = {
     /** Null means the previous ordered-query thread was invalidated and not replaced. */
     orderedQuery?: OrderedQueryUpdate | null;
     continuationPresented?: OrderedQueryMember[];
+    /**
+     * Present only when this turn opens or fills the strategic frame.
+     * Omitted means the previous frame is left untouched. Null clears it — unused,
+     * because a declaration is not deleted by an unrelated turn.
+     */
+    activeWorkFrame?: StrategicWorkMemory | null;
   };
 };

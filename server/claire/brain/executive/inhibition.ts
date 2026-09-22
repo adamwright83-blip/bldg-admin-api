@@ -36,10 +36,35 @@ export function applyInhibition(input: {
 
   // A pending item exists but this utterance is not about it.
   const holdingPending = Boolean(memory.pendingProposal || memory.pendingBriefing || memory.pendingAccountFollowUp);
-  if (holdingPending && attention.pendingDisposition === "none") {
+  const pendingSuppressed = control.suppressedContext.includes("pending_proposal");
+  if (holdingPending && attention.pendingDisposition === "none" && pendingSuppressed) {
     out.push({
       kind: "pending_as_intent",
       detail: "a held pending item must not supply the meaning of an unrelated utterance",
+    });
+  }
+
+  if (perceived.attentionRepair !== "none" && attention.priorClaim === "none" && control.change !== "prior_claim_challenge") {
+    out.push({
+      kind: "attention_repair_as_claim_challenge",
+      detail: "attention repair was not treated as a claim challenge or verification",
+    });
+  }
+
+  if (perceived.operatorIntentAttested && perceived.embeddedExternalFact) {
+    out.push({
+      kind: "operator_intent_as_external_fact",
+      detail: "operator-attested intention was not sent to external verification",
+    });
+  }
+
+  if (
+    perceived.workDeclarationKind === "strategic_work" &&
+    !attention.lanes.includes("action")
+  ) {
+    out.push({
+      kind: "mission_as_generic_day_line",
+      detail: "strategic work was not promoted to a day line proposal",
     });
   }
 

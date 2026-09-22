@@ -21,7 +21,9 @@ export type TaskSetKind =
   | "personal_disclosure"
   | "broad_planning"
   | "call_closure"
-  | "conversation";
+  | "conversation"
+  /** Operator-declared strategic work. Cognitive frame only — not a mission write. */
+  | "strategic_work";
 
 export type TaskSet = {
   kind: TaskSetKind;

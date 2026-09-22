@@ -45,6 +45,11 @@ import { integrate, type IntegrationContext } from "./integrate";
 import { applyInhibition } from "./inhibition";
 import { mintActionGrant, mintCallControlGrant } from "./grants";
 import { proposalText, proposedWorkTitle } from "./proposal";
+import { dayLineCandidate } from "./dayLineAuthority";
+import { nextStrategicFrame } from "./strategicFrame";
+import { explicitPendingReturn } from "./pendingBinding";
+import { PLANNING_AUTHORITIES_NOT_TOUCHED, type CognitiveAcknowledgementKind } from "../contracts/responsePlan";
+import { phraseCognitiveAcknowledgement } from "../response/cognitiveAcknowledgement";
 import { assertGovernedDecision } from "./governor";
 import {
   defaultBusinessMemoryDeps,
@@ -125,6 +130,16 @@ export function liveReadOnlyRetrieval(
 
 function conversational(text: string): ResponseSegment {
   return { type: "ConversationalSegment", text };
+}
+
+function acknowledge(kind: CognitiveAcknowledgementKind, strategic: boolean): ResponseSegment {
+  return {
+    type: "CognitiveAcknowledgementSegment",
+    kind,
+    durableWrite: false,
+    ...(strategic ? { collisionsAvoided: PLANNING_AUTHORITIES_NOT_TOUCHED } : {}),
+    text: phraseCognitiveAcknowledgement(kind),
+  };
 }
 
 function recheckFrom(evidence: readonly EvidenceItem[]): PriorClaimRecheckResult | null {
@@ -264,10 +279,8 @@ export async function decideTurn(
     }
 
     // ── Authority ───────────────────────────────────────────────────────────
-    const mayPropose =
-      (perceived.explicitActionRequest || perceived.operatorWorkCommitment) &&
-      !perceived.refusal &&
-      attention.pendingDisposition !== "reject";
+    // Work-frame classification informs this choice. It does not mint the grant.
+    const mayPropose = dayLineCandidate(perceived) && attention.pendingDisposition !== "reject";
     if (mayPropose) {
       control.actionRisk = "proposal_only";
       const title = proposedWorkTitle(perceived);
@@ -298,6 +311,82 @@ export async function decideTurn(
         constraints: { mutationAllowed: false, shadowOnly: true },
       });
       actionGrants.push(grant);
+    }
+
+    const frameUpdate = nextStrategicFrame({ perceived, memory, nowMs });
+    if (frameUpdate) {
+      workingMemoryUpdate = { ...(workingMemoryUpdate ?? {}), activeWorkFrame: frameUpdate };
+    }
+
+    if (perceived.classifierStatus !== "classified") {
+      conclusions = [
+        ...conclusions,
+        {
+          kind: "classification_hold",
+          detail: "work-frame classification did not authorize an action",
+          evidenceIds: [],
+        },
+      ];
+    } else {
+      if (explicitPendingReturn(perceived, memory) && attention.pendingDisposition === "none") {
+        segments.push(acknowledge("pending_reactivated", false));
+      }
+      if (perceived.attentionRepair !== "none" && attention.priorClaim === "none") {
+        segments.push(acknowledge("attention_repaired", false));
+      }
+      if (frameUpdate?.status === "content_held" || (perceived.workDeclarationKind === "strategic_work" && perceived.strategicShape === "content")) {
+        segments.push(acknowledge("strategic_content_understood", true));
+        conclusions = [
+          ...conclusions,
+          {
+            kind: "strategic_work_understood",
+            detail: "operator-declared strategic work held cognitively; no durable write",
+            evidenceIds: [],
+          },
+        ];
+      } else if (perceived.workDeclarationKind === "strategic_work" && perceived.strategicShape === "unresolved") {
+        segments.push(acknowledge("awaiting_strategic_content", true));
+        conclusions = [
+          ...conclusions,
+          {
+            kind: "strategic_work_understood",
+            detail: "strategic frame open; content unresolved; no durable write",
+            evidenceIds: [],
+          },
+        ];
+      } else if (perceived.operatorIntentAttested && perceived.workDeclarationKind !== "ordinary_work" && perceived.workDeclarationKind !== "explicit_day_line" && perceived.workDeclarationKind !== "explicit_action") {
+        segments.push(acknowledge("operator_intent_understood", false));
+      }
+      if (perceived.operatorIntentAttested) {
+        conclusions = [
+          ...conclusions,
+          {
+            kind: "operator_intent_attested",
+            detail: "operator-attested intention; not an external fact to verify",
+            evidenceIds: [],
+          },
+        ];
+      }
+      if (perceived.embeddedExternalFact) {
+        conclusions = [
+          ...conclusions,
+          {
+            kind: "external_fact_unverified",
+            detail: "an embedded external claim was not verified and was not treated as the intention",
+            evidenceIds: [],
+          },
+        ];
+      }
+      if (perceived.explicitMissionWriteRequest) {
+        conclusions = [
+          ...conclusions,
+          {
+            kind: "mission_write_unavailable",
+            detail: "no canonical mission write path; declaration held cognitively",
+            evidenceIds: [],
+          },
+        ];
+      }
     }
 
     if (perceived.callControl === "end") {

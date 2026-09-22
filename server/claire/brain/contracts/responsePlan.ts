@@ -62,6 +62,37 @@ export type ConversationalSegment = {
   text: string;
 };
 
+/**
+ * Executive understood something. This segment carries no grant.
+ * `durableWrite` is the literal false so a renderer cannot treat understanding as a save.
+ */
+export type CognitiveAcknowledgementKind =
+  | "awaiting_strategic_content"
+  | "strategic_content_understood"
+  | "operator_intent_understood"
+  | "attention_repaired"
+  | "pending_reactivated";
+
+export const PLANNING_AUTHORITIES_NOT_TOUCHED = [
+  "weekly_intent",
+  "daily_command",
+  "mission_director",
+  "day_line_commit",
+  "narrator",
+  "mission_completion",
+] as const;
+
+export type PlanningAuthorityNotTouched = (typeof PLANNING_AUTHORITIES_NOT_TOUCHED)[number];
+
+export type CognitiveAcknowledgementSegment = {
+  type: "CognitiveAcknowledgementSegment";
+  kind: CognitiveAcknowledgementKind;
+  durableWrite: false;
+  /** Present when the turn understood strategic work and did not touch those systems. */
+  collisionsAvoided?: readonly PlanningAuthorityNotTouched[];
+  text: string;
+};
+
 export type CallControlSegment = {
   type: "CallControlSegment";
   text: string;
@@ -78,6 +109,7 @@ export type ResponseSegment =
   | PersonalDisclosureSegment
   | NarrativeRevealSegment
   | ConversationalSegment
+  | CognitiveAcknowledgementSegment
   | CallControlSegment;
 
 export type ResponsePlan = {

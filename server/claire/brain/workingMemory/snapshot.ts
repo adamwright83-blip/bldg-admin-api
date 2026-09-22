@@ -9,6 +9,7 @@ import type {
   OrderedQueryMemory,
   PendingProposalSnapshot,
   PriorClaimRef,
+  StrategicWorkMemory,
   WorkingMemorySnapshot,
 } from "../contracts/workingMemory";
 
@@ -31,6 +32,8 @@ export type WorkingMemorySource = {
   focusEntities?: FocusEntity[];
   /** Brain V2-owned unresolved references from the preceding shadow turn. */
   unresolvedReferences?: string[];
+  /** Brain V2-owned strategic frame. Cognitive only. */
+  activeWorkFrame?: StrategicWorkMemory | null;
   /** The ordered result this thread is still walking, if any. */
   orderedQuery?: OrderedQueryMemory | null;
 };
@@ -79,6 +82,7 @@ export function snapshotWorkingMemory(source: WorkingMemorySource, ctx: WorkingM
     orderedQuery: source.orderedQuery ?? null,
     priorClaims,
     unresolvedReferences: source.unresolvedReferences ?? [],
+    activeWorkFrame: source.activeWorkFrame ?? null,
     pendingFragment: source.pendingFragment ?? null,
     fragmentHolds: source.fragmentHolds ?? 0,
     currentCallContext: {

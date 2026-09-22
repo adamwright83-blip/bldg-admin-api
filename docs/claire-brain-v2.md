@@ -456,6 +456,76 @@ This is where model reasoning belongs. The model may not manufacture evidence.
 | “No, Wednesday.” | revise existing item if valid; proposal authority inherited from pending lifecycle, not manufactured |
 | “Forget that. What were my last five sales?” | supersede and route business |
 | Unrelated new turn | pending does not reinterpret meaning; it may be reminded at most once per item identity |
+| Substantive new topic, attention repair, or mission declaration | **dormant + suppress**. Remembered. Not rejected, not deleted, not committed. It cannot speak or act on that turn |
+| “No. I’m telling you I have a mission…” / “No. Listen to me.” | not a pending refusal. Attention repair / task switch wins |
+| “What about that stop?” when the words match the held item | reactivates the dormant item. Does not confirm it |
+
+Dormant is not rejected, not deleted, and not committed. Bare “No.” still rejects and clears. “No, Wednesday.” still revises.
+
+---
+
+## 14a. Executive task switching and mission intent
+
+Motivating failure: the production Claire call that opened around 2026-09-22 08:50 AM PDT
+(conversation `b9938fe9-ae81-4500-a535-223fcea3fbe7`). After a stale pending stop confirmation,
+the operator moved to publishing an ad and then said it was today’s mission. Live V1 treated
+the continuation as the old yes/no, then treated attention repair and the operator’s own
+intention as unverifiable. Brain V2’s shadow cognition for that sequence is the regression in
+`server/claire/brain/tests/fixtures/executiveCallSequence.ts`. It is hermetic. It does not read
+production.
+
+```
+EVERYTHING MAY INFORM.
+ONLY EXECUTIVE FUNCTION MAY DECIDE.
+```
+
+Perception describes a bounded work frame. Executive Function decides. The frame kind is not a grant.
+
+| Declaration | What V2 may do |
+|---|---|
+| Ordinary work (“I need to call Dana Tuesday.”) | May propose Day Line. Still no live mutation |
+| Explicit Day Line (“Put that on my Day Line.”) | Existing `propose_day_line` proposal |
+| Explicit other action (“remind me to…”) | Existing proposal semantics |
+| Strategic / mission (“My mission today is …”, “considered as my mission”) | Cognitive frame only. No Day Line proposal |
+| Context narration (“I’m heading home.”, “I need you to know…”) | No mutation proposal |
+| “Make that today’s mission.” | Understand it. **No canonical mission write exists**, so no action class is minted and nothing falls back to Day Line |
+
+There is no `propose_daily_mission` action. Mission Director, WeeklyIntent, Daily Command, and
+Narrator are different authorities. Understanding “today’s mission” does not lock, assign,
+complete, or narrate any of them, and it does not commit the Day Line.
+
+Operator-attested intention (“I have to post an ad”) is not an external fact and is not sent
+through prior-claim verification. An embedded external claim (“because they owe me $10,000”)
+stays unverified and does not erase the intention.
+
+Attention repair (“Listen to me.”, “No. Listen to me.”, “That’s not what I’m saying.”) is not
+`prior_claim_challenge`, not `correctness_challenge`, and not verification. It cannot mint a
+grant by itself. “Are you sure?” and “Where did that number come from?” still do.
+
+An open fragment (“I want this …”) is incomplete. It mints nothing. A continuation that
+supplies the role (“considered as my mission today”) joins it. Dormant pending work cannot
+speak between the two pieces.
+
+The strategic frame lives in V2 working memory as `activeWorkFrame` with
+`durability: "cognitive_only"`. Status is `unresolved` until a later declaration supplies a
+short content label. That label is semantic state, not a second transcript. The conversation
+ledger still owns the words.
+
+The work-frame classifier returns `classified`, `unknown`, or `failed`. Unknown and failed
+hold. They do not propose Day Line and they do not change the strategic frame. Model text is
+not authority. Only `executive/grants.ts` mints branded grants. Every grant remains
+`mutationAllowed: false` and `shadowOnly: true`. `productionAuthority` stays false.
+
+Shadow comparison records the work-frame kind, attention repair, operator-intent and
+external-fact flags, classifier status, suppressed slots, whether verification ran, and
+cognitive-acknowledgement kinds. It does not copy the utterance.
+
+ResponsePlan uses `CognitiveAcknowledgementSegment` with `durableWrite: false`. That segment
+cannot carry a grant. Its wording may confirm understanding. It must not claim the work was
+locked, committed, added, logged, saved, or made today’s mission.
+
+This slice does not cut V2 over. V1 still speaks and mutates. Do not enable
+`CLAIRE_BRAIN_V2_SHADOW` from this change. Do not set `BRAIN_V2_PRODUCTION_AUTHORITY`.
 
 ---
 

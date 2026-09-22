@@ -8,6 +8,7 @@ import type { EvidenceItem } from "../contracts/evidence";
 import type { ResponseSegment } from "../contracts/responsePlan";
 import { isNarratorBusinessContamination } from "../businessMemory/narratorFirewall";
 import { isCallControlGrant, isExecutiveActionGrant, isNarrativeRevealGrant, isPersonalDisclosureGrant } from "./grants";
+import { DURABLE_WRITE_CLAIM } from "../response/cognitiveAcknowledgement";
 
 export class ExecutiveGovernorError extends Error {
   constructor(message: string) {
@@ -99,6 +100,18 @@ export function assertGovernedDecision(decision: ExecutiveDecision): void {
       case "NarrativeRevealSegment": {
         if (!isNarrativeRevealGrant(segment.grant)) {
           throw new ExecutiveGovernorError("NarrativeRevealSegment requires a branded narrative grant");
+        }
+        break;
+      }
+      case "CognitiveAcknowledgementSegment": {
+        if (segment.durableWrite !== false) {
+          throw new ExecutiveGovernorError("understanding a declaration is not a durable write");
+        }
+        if (DURABLE_WRITE_CLAIM.test(segment.text)) {
+          throw new ExecutiveGovernorError("cognitive acknowledgement must not claim a durable write");
+        }
+        if ("grant" in segment) {
+          throw new ExecutiveGovernorError("cognitive acknowledgement cannot carry a grant");
         }
         break;
       }
