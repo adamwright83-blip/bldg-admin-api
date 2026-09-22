@@ -6,10 +6,8 @@ import {
   CloudUpload,
   Compass,
   Menu,
-  ScrollText,
   X,
   Flame,
-  Building2,
 } from "lucide-react";
 import type { Order } from "@shared/types";
 import type { CommercialMission } from "@shared/commercialMission";
@@ -34,6 +32,7 @@ import type { VehicleCargoItem } from "@/components/goldline/VehicleCargo";
 import { DriverVehicleDrawer } from "@/components/goldline/DriverVehicleDrawer";
 import { DriverStopChapter } from "@/components/goldline/DriverStopChapter";
 import { LanternRun } from "@/components/goldline/LanternRun";
+import { GoldlineGameNav } from "./GoldlineGameNav";
 import "./goldline-day-plan.css";
 
 export type GoldlineDayPlanProps = {
@@ -59,6 +58,8 @@ export type GoldlineDayPlanProps = {
   onEnterOperations: () => void;
   onEnterWorld: (trackedStopId?: string) => void;
   onEnterColosseum: () => void;
+  /** Opens the Week brochure. Day Line stays the launch surface. */
+  onOpenWeek?: () => void;
   processingLocation?: ProcessingLocation | null;
   commitments?: DayDirectorCommitment[];
   intelligenceAvailable?: boolean;
@@ -732,36 +733,13 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         </button>
       </section>
 
-      <nav className="gdp-game-nav" aria-label="Goldline navigation">
-        <button
-          className="is-active"
-          type="button"
-          aria-current="page"
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-        >
-          <ScrollText />
-          <span>YOUR DAY</span>
-        </button>
-        <button type="button" onClick={() => setPlaying(true)}>
-          <Flame />
-          <span>PLAY</span>
-        </button>
-        <button
-          type="button"
-          onClick={props.onOpenJournal ?? props.onEnterOperations}
-        >
-          <ScrollText />
-          <span>JOURNAL</span>
-        </button>
-        <a
-          href="https://admin.bldg.chat/growth/lantern-city"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <Building2 />
-          <span>CITY</span>
-        </a>
-      </nav>
+      <GoldlineGameNav
+        active="day"
+        onYourDay={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        onWeek={props.onOpenWeek}
+        onPlay={() => setPlaying(true)}
+        onJournal={props.onOpenJournal ?? props.onEnterOperations}
+      />
       {activeStop && (
         <DriverStopChapter
           stop={activeStop}

@@ -43,6 +43,7 @@ import {
   liveObjectivesFromFieldToday,
   type DayPlanStop,
 } from "./goldlineDayPlanModel";
+import { readWeekVisit } from "../goldline/week/readWeekVisit";
 import {
   canCompleteDelivery,
   nextCommitmentDate,
@@ -102,6 +103,7 @@ const REQUESTING_LOCATION: GoldlineLocationSnapshot = {
 };
 
 const GoldlineGameHome = lazy(() => import("../../game/GoldlineGameHome"));
+const WeekBrochure = lazy(() => import("../goldline/week/WeekBrochure"));
 const WaywardTetheredDeck = lazy(
   () => import("../goldline/stages/WaywardTetheredDeck")
 );
@@ -213,6 +215,8 @@ function LiveGoldlineDriverController({
     useState<"overworld">("overworld");
   /** The day briefing, opened over Overland without leaving it. */
   const [dayBriefingOpen, setDayBriefingOpen] = useState(!launchOperationId);
+  /** Week is a visit. Launch never opens it, even when a lock exists. */
+  const [weekOpen, setWeekOpen] = useState(false);
   const [campaignRunMissionOpen, setCampaignRunMissionOpen] = useState(false);
   const [spiritHumanRescueOpen, setSpiritHumanRescueOpen] = useState(false);
   const [waywardProgress, setWaywardProgress] = useState<WaywardProgress>(() =>
@@ -1464,6 +1468,7 @@ function LiveGoldlineDriverController({
           pickups.isLoading || deliveries.isLoading || externalOrders.isLoading
         }
         onOpenImport={() => setAddExternalWorkOpen(true)}
+        onOpenWeek={() => setWeekOpen(true)}
         onEnterOperations={() => {
           setDayBriefingOpen(false);
           setRequestedGameplayHost(null);
@@ -1603,7 +1608,33 @@ function LiveGoldlineDriverController({
     }
   };
 
-  // The real day is the home. Expensive traversal is mounted only when chosen;
+  // The real day is the home. Week opens only when the operator asks.
+  // A locked week must not redirect launch onto the brochure.
+  if (weekOpen) {
+    return (
+      <Suspense fallback={<div className="wb-shell" data-testid="week-brochure-loading" />}>
+        <WeekBrochure
+          visit={readWeekVisit()}
+          now={new Date()}
+          onReturnToDay={() => setWeekOpen(false)}
+          onStartMission={() => undefined}
+          onAdjustWeek={() => undefined}
+          onPlay={() => {
+            setWeekOpen(false);
+            setDayBriefingOpen(false);
+            setRequestedGameplayHost(null);
+            setDriverScene("game");
+          }}
+          onJournal={() => {
+            setWeekOpen(false);
+            setJournalOpen(true);
+          }}
+        />
+      </Suspense>
+    );
+  }
+
+  // Expensive traversal is mounted only when chosen;
   // no onboarding or canvas loading state can swallow the route underneath it.
   if (dayBriefingOpen) return dayBriefing;
 

@@ -30,6 +30,10 @@ const GoldlineDayPlanFixture =
   import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"
     ? lazy(() => import("./goldline/GoldlineDayPlanFixture"))
     : null;
+const WeekBrochureCapture =
+  import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"
+    ? lazy(() => import("./goldline/week/WeekBrochureCapture"))
+    : null;
 
 export default function Driver() {
   if (ClockheadDuelFixture && new URLSearchParams(window.location.search).get("goldlineStageFixture") === "clockhead") {
@@ -48,6 +52,18 @@ export default function Driver() {
           "goldlineDayPlanFixture"
         )
       : null;
+  const weekFixture =
+    import.meta.env.VITE_GOLDLINE_TEST_HARNESS === "1"
+      ? new URLSearchParams(window.location.search).get("goldlineWeekFixture")
+      : null;
+
+  if (WeekBrochureCapture && weekFixture) {
+    return (
+      <Suspense fallback={null}>
+        <WeekBrochureCapture fixture={weekFixture} />
+      </Suspense>
+    );
+  }
 
   if (GoldlineDayPlanFixture && dayPlanFixture) {
     return (
