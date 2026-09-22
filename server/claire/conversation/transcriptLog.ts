@@ -6,6 +6,15 @@ import { POST_CALL_TRANSCRIPT_SOURCE, type ConversationSession } from "./types";
 
 const LOG_PREFIX = "[ClaireTranscript]";
 const POST_CALL_CHUNK_SIZE = 3500;
+const MAX_BOOT_BACKFILL_COUNT = 5;
+
+export function transcriptLogBackfillCount(
+  raw = process.env.CLAIRE_TRANSCRIPT_LOG_BACKFILL_COUNT ?? "1"
+): number {
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.min(MAX_BOOT_BACKFILL_COUNT, Math.max(1, parsed));
+}
 
 type TranscriptLogOptions = {
   includeLiveTurns?: boolean;
@@ -146,21 +155,22 @@ export async function emitClaireTranscriptLog(
 
 /**
  * Boot-time backfill used only when explicitly enabled. It logs the latest
- * Claire call for each configured scope so a newly deployed connector can
- * immediately inspect the most recent call without any manual copy/paste.
+ * configured number of Claire calls for each scoped operator so a newly
+ * deployed connector can inspect recent calls without any manual copy/paste.
  */
 export async function emitLatestConfiguredClaireTranscripts(): Promise<void> {
   if (process.env.CLAIRE_TRANSCRIPT_LOG_BACKFILL_ON_BOOT !== "true") return;
 
   const scopes = parseTranscriptLogScopes();
   if (!scopes.length) return;
+  const backfillCount = transcriptLogBackfillCount();
 
   const db = await getDb();
   if (!db) return;
 
   for (const scope of scopes) {
     try {
-      const [row] = await db
+      const rows = await db
         .select({ id: claireConversationSessions.id })
         .from(claireConversationSessions)
         .where(
@@ -170,9 +180,10 @@ export async function emitLatestConfiguredClaireTranscripts(): Promise<void> {
           )
         )
         .orderBy(desc(claireConversationSessions.startedAt))
-        .limit(1);
+        .limit(backfillCount);
 
-      if (row?.id) {
+      for (const row of rows) {
+        if (!row?.id) continue;
         await emitClaireTranscriptLog(row.id, {
           includeLiveTurns: true,
           includePostCall: true,
