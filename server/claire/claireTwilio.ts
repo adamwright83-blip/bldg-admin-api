@@ -69,6 +69,7 @@ import {
   isClaireXaiTtsEnabled,
 } from "./xaiTts";
 import { renderClaireOpeningVoice } from "./voice/claireVoiceTransport";
+import { writeClaireLifecycleReceipt } from "./claireLifecycleReceipt";
 import {
   abandonAuthorizedAmdHandoff,
   amdDetectionTwiml,
@@ -76,7 +77,6 @@ import {
   authorizedAmdCreateFields,
   CLAIRE_AMD_PATH,
   recordAuthorizedCallAttempted,
-  recordExistingCallStatusReceipt,
 } from "./amdVoicemail";
 
 const DEBRIEF_PATH = "/api/claire/twilio/debrief";
@@ -1623,16 +1623,26 @@ export function registerClaireRoutes(app: Express): void {
     }
     const body = (req.body ?? {}) as Record<string, string>;
     res.status(204).end();
-    void handleRecordingStatus({
-      callSid: String(body.CallSid ?? ""),
-      recordingSid: String(body.RecordingSid ?? ""),
-      recordingStatus: String(body.RecordingStatus ?? ""),
-      recordingDuration: body.RecordingDuration,
-      recordingChannels: body.RecordingChannels,
-      recordingTrack: body.RecordingTrack,
-      accountSid,
-      authToken,
-    }).catch(error => {
+    void (async () => {
+      try {
+        await writeClaireLifecycleReceipt(body);
+      } catch (error) {
+        console.error(
+          "[Claire] recording status receipt failed",
+          error instanceof Error ? error.name : "error"
+        );
+      }
+      await handleRecordingStatus({
+        callSid: String(body.CallSid ?? ""),
+        recordingSid: String(body.RecordingSid ?? ""),
+        recordingStatus: String(body.RecordingStatus ?? ""),
+        recordingDuration: body.RecordingDuration,
+        recordingChannels: body.RecordingChannels,
+        recordingTrack: body.RecordingTrack,
+        accountSid,
+        authToken,
+      });
+    })().catch(error => {
       console.error("[ClaireLedger] recording-status failed", error);
     });
   });
@@ -1645,7 +1655,7 @@ export function registerClaireRoutes(app: Express): void {
     res.status(204).end();
     void (async () => {
       try {
-        await recordExistingCallStatusReceipt(body);
+        await writeClaireLifecycleReceipt(body);
       } catch (error) {
         console.error(
           "[Claire] call status receipt failed",

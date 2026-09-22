@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { communicationReceipts } from "../../drizzle/schema";
 import {
   COMMUNICATION_RECEIPT_TABLE,
@@ -352,6 +352,35 @@ async function resolveStore(
     "persistence_unconfigured",
     "communication receipts require the database store or a test store"
   );
+}
+
+/**
+ * Read path for Claire's communications context. Returns nothing when the
+ * database is not configured. Does not write a receipt.
+ */
+export async function listCommunicationReceiptsForOperator(input: {
+  tenantId: string;
+  operatorUserId: string;
+  limit?: number;
+}): Promise<TwilioCommunicationReceipt[]> {
+  const tenantId = input.tenantId.trim();
+  const operatorUserId = input.operatorUserId.trim();
+  if (!tenantId || !operatorUserId || !process.env.DATABASE_URL) return [];
+  const db = await getDb();
+  if (!db) return [];
+  const limit = Math.min(50, Math.max(1, input.limit ?? 20));
+  const rows = await db
+    .select()
+    .from(communicationReceipts)
+    .where(
+      and(
+        eq(communicationReceipts.tenantId, tenantId),
+        eq(communicationReceipts.operatorUserId, operatorUserId)
+      )
+    )
+    .orderBy(desc(communicationReceipts.createdAt))
+    .limit(limit);
+  return rows.map(row => communicationReceiptFromRow(row));
 }
 
 export async function recordCommunicationReceipt(

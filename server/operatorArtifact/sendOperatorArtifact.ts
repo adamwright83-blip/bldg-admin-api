@@ -27,7 +27,8 @@ import {
  * The action is "send this artifact to the currently authorized operator."
  * The caller never supplies the destination number. V1 transport is SMS
  * through the platform client. WhatsApp, MMS, and Conversations are not
- * required. This module is not wired into Claire's turn loop.
+ * required. Claire's turn loop does not call this. The operator-artifact
+ * decision seam does, and only for an explicit send decision.
  */
 
 export const OPERATOR_ARTIFACT_STATUS_PATH =
