@@ -745,8 +745,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
             },
             applyOperatorArtifactDecision,
             {
-              resolveNamedArtifact: async request => {
-                if (request.kind !== "dayline") return null;
+              resolveNamedArtifact: async _request => {
                 const timeZone = getDashboardTimeZone();
                 const businessDate =
                   conversation.context.clock?.businessDate ??
