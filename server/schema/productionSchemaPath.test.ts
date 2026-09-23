@@ -1,5 +1,9 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
 const migrate = readFileSync(new URL("../../scripts/migrate.mjs", import.meta.url), "utf8");
 
@@ -97,6 +101,47 @@ describe("production schema path", () => {
     expect(targets).toBeGreaterThan(-1);
     expect(link).toBeGreaterThan(attempts);
     expect(contact).toBeGreaterThan(targets);
+    const assertLink = migrate.indexOf(
+      'await assertRequiredColumns("sales_call_attempts", ["cold_call_target_id"]);'
+    );
+    const assertContact = migrate.indexOf(
+      'await assertRequiredColumns("driver_cold_call_targets", [\n  "contactId",\n  "rollClaimId",\n]);'
+    );
+    expect(assertLink).toBeGreaterThan(link);
+    expect(assertContact).toBeGreaterThan(contact);
+  });
+
+  it("does not privately create progression or cold-call base tables", () => {
+    const bootOnly = new Set([
+      "sales_call_attempts",
+      "driver_cold_call_batches",
+      "driver_cold_call_targets",
+      "driver_capability_unlocks",
+      "driver_scout_reports",
+      "driver_scout_discoveries",
+      "goldline_domain_progression",
+    ]);
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir)) {
+        if (entry === "node_modules" || entry === "dist" || entry.startsWith(".")) continue;
+        const path = join(dir, entry);
+        if (statSync(path).isDirectory()) {
+          walk(path);
+          continue;
+        }
+        if (!/\.(ts|js|mjs)$/.test(entry)) continue;
+        if (path.endsWith(`${join("scripts", "migrate.mjs")}`)) continue;
+        const source = readFileSync(path, "utf8");
+        if (!source.includes("CREATE TABLE")) continue;
+        for (const table of tableNames(source)) {
+          if (bootOnly.has(table)) offenders.push(`${path} creates ${table}`);
+        }
+      }
+    };
+    walk(join(repoRoot, "server"));
+    walk(join(repoRoot, "scripts"));
+    expect(offenders).toEqual([]);
   });
 
   it("creates empty goldline_domain_progression for Project E and does not backfill it", () => {

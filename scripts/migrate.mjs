@@ -2509,6 +2509,15 @@ await run(
   `CREATE INDEX idx_driver_cold_call_target_contact ON driver_cold_call_targets (tenantId, contactId)`,
   "CREATE INDEX idx_driver_cold_call_target_contact"
 );
+// The ALTERs above stay on `run()` so a second boot can skip duplicate
+// columns and indexes. The columns themselves are not optional: Cold Call
+// writes `cold_call_target_id`, `contactId`, and `rollClaimId`. A swallowed
+// alter must fail boot here instead of serving a table that is missing them.
+await assertRequiredColumns("sales_call_attempts", ["cold_call_target_id"]);
+await assertRequiredColumns("driver_cold_call_targets", [
+  "contactId",
+  "rollClaimId",
+]);
 
 // ── One schema path: private bootstraps and the missing ledger ──
 // BEGIN schema-path-normalized
