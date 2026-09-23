@@ -138,7 +138,7 @@ describe("business source coverage contract", () => {
     expect(result.book.exhaustiveCurrent).toBe(true);
     expect(result.book.current).toBe(true);
     expect(result.book.paymentEventsProven).toBe(false);
-    expect(result.book.exactRevenueLicensed).toBe(false);
+    expect("exactRevenueLicensed" in result.book).toBe(false);
     expect(result.book.allCustomersLicensed).toBe(false);
     expect(result.book.outsideProvenSpan).toBe("unknown_not_empty");
     expect(result.blockingSources).toEqual([]);
@@ -438,7 +438,11 @@ describe("business source coverage contract", () => {
     });
     expect(withPayments.book.status).toBe("fresh");
     expect(withPayments.book.paymentEventsProven).toBe(true);
-    expect(withPayments.book.exactRevenueLicensed).toBe(false);
+    expect(withPayments.book.scope.cleancloudOrdersCreated).toEqual({
+      from: "2026-09-01",
+      through: "2026-09-19",
+    });
+    expect("exactRevenueLicensed" in withPayments.book).toBe(false);
   });
 
   it("parses Gumball receipts without treating a cancelled export as coverage", () => {
@@ -567,7 +571,7 @@ describe("business source coverage contract", () => {
     expect(source(result, "cleancloud").status).toBe("fresh");
     expect(result.book.exhaustiveCurrent).toBe(true);
     expect(result.book.paymentEventsProven).toBe(false);
-    expect(result.book.exactRevenueLicensed).toBe(false);
+    expect("exactRevenueLicensed" in result.book).toBe(false);
   });
 
   it("does not let skipped, pending, missing, or cancelled customer truth freshen the book", () => {
@@ -706,7 +710,7 @@ describe("business source coverage contract", () => {
       },
     ]);
     expect(checkpointDay.book.paymentEventsProven).toBe(true);
-    expect(checkpointDay.book.exactRevenueLicensed).toBe(false);
+    expect("exactRevenueLicensed" in checkpointDay.book).toBe(false);
   });
 
   it("stays partial when assimilation receipts are unreadable and no checkpoint range was loaded", () => {

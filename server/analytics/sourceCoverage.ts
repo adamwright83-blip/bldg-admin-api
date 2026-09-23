@@ -19,6 +19,11 @@
  * not be called exhaustive or current. Stale is not zero. Missing is not
  * "no customers." A fresh Orders (Sales) span is not payment-event completeness
  * and is not a revenue total.
+ *
+ * This contract does not license exact revenue for a requested window. It
+ * publishes which sources are held, whether each is fresh, stale, partial, or
+ * unavailable, the proven span, and whether payment events are proven. The
+ * revenue read decides whether that window is exact.
  */
 import { desc, eq } from "drizzle-orm";
 import { browserSyncReceipts } from "../cleancloudBrowserSync/schema";
@@ -142,8 +147,6 @@ export type BusinessSourceCoverageSnapshot = {
     interpretEmptyAsNoCustomers: boolean;
     /** Days outside a proven CleanCloud span are unknown. They are not empty. */
     outsideProvenSpan: "unknown_not_empty";
-    /** This contract does not emit a revenue total. */
-    exactRevenueLicensed: false;
     /** Unbounded "all customers" is not licensed, even when the book is fresh. */
     allCustomersLicensed: false;
     staleIsZero: false;
@@ -591,7 +594,6 @@ function combineBook(
       included.length > 0 &&
       included.every(source => source.emptyReadMeansNoRecords),
     outsideProvenSpan: "unknown_not_empty",
-    exactRevenueLicensed: false,
     allCustomersLicensed: false,
     staleIsZero: false,
     missingIsNoCustomers: false,
