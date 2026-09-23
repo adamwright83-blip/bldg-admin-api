@@ -6,11 +6,16 @@ import {
   activeCustomerPopulation,
   bucketSeries,
   compareTotals,
-  eventsInSpan,
   summarizeTotals,
   topCustomers,
 } from "./businessMetrics";
 import { ALL_TIME_START, addDaysYmd, daysInclusive, isValidYmd } from "./businessPeriods";
+import {
+  interpretSourceCoverage,
+  loadRevenueSourceCoverage,
+  reconcileLedgerSpan,
+  revenueMayStateExact,
+} from "./canonicalRevenue";
 import {
   AnalyticsUnavailableError,
   loadPaidOrderLedger,
@@ -39,6 +44,22 @@ export type RevenueSummary = {
   avgOrderValue: number;
   series: RevenuePoint[];
   coverage?: AnalyticsCoverage;
+  /**
+   * `totalRevenue` is recorded included dollars. `statedExactRevenue` is set
+   * only when B1 coverage and reconciliation both allow an exact total.
+   */
+  statedExactRevenue?: number | null;
+  reconciliation?: {
+    exactIncludedCents: number;
+    statedExactCents: number | null;
+    mayStateExact: boolean;
+    definiteDuplicateExclusionCents: number;
+    suspectedWithheldCents: number;
+    unverifiedNativeCents: number;
+    coverageAllowsExact: boolean;
+    paymentEventsProven: boolean;
+    exhaustiveCurrent: boolean;
+  };
 };
 
 export type OrderStats = {
@@ -173,8 +194,9 @@ async function requireDb() {
 }
 
 /**
- * Paid revenue totals + business-local time series. Revenue is always dated
- * by payment; `basis` is accepted for older callers but does not change that.
+ * Paid revenue totals + business-local time series. The stated total is
+ * `readCanonicalRevenue` / `reconcileLedgerSpan` (exact included cents).
+ * `basis` is accepted for older callers but revenue stays payment-dated.
  */
 export async function getRevenueSummary(
   tenantId: string,
@@ -186,18 +208,39 @@ export async function getRevenueSummary(
   deps: AnalyticsQueryDeps = defaultDeps
 ): Promise<RevenueSummary> {
   const ledger = await ledgerFor(tenantId, [params.range], deps);
-  const events = eventsInSpan(ledger.events, boundedRange(params.range));
-  const totals = summarizeTotals(events);
+  const range = boundedRange(params.range);
+  const reconciled = reconcileLedgerSpan(ledger, range);
+  const totals = summarizeTotals(reconciled.includedEvents);
+  const snapshot = await loadRevenueSourceCoverage({ tenantId });
+  const revenueCoverage = interpretSourceCoverage({
+    snapshot,
+    window: { from: range.start, to: range.end },
+    loadedSources: ledger.loadedSources,
+    failedSources: ledger.failedSources,
+  });
+  const mayStateExact = revenueMayStateExact({ coverage: revenueCoverage, reconciled });
   return {
     totalRevenue: dollars(totals.revenueCents),
+    statedExactRevenue: mayStateExact ? dollars(totals.revenueCents) : null,
     orderCount: totals.orderCount,
     avgOrderValue: totals.aovCents == null ? 0 : dollars(totals.aovCents),
-    series: bucketSeries(events, params.groupBy).map(point => ({
+    series: bucketSeries(reconciled.includedEvents, params.groupBy).map(point => ({
       bucket: point.bucket,
       revenue: dollars(point.revenueCents),
       orderCount: point.orderCount,
     })),
     coverage: coverageOf(ledger, [params.range]),
+    reconciliation: {
+      exactIncludedCents: reconciled.exactIncludedCents,
+      statedExactCents: mayStateExact ? reconciled.exactIncludedCents : null,
+      mayStateExact,
+      definiteDuplicateExclusionCents: reconciled.definiteDuplicateExclusions.cents,
+      suspectedWithheldCents: reconciled.suspectedWithheld.cents,
+      unverifiedNativeCents: reconciled.unverifiedNative.cents,
+      coverageAllowsExact: revenueCoverage.coverageAllowsExact,
+      paymentEventsProven: revenueCoverage.paymentEventsProven,
+      exhaustiveCurrent: revenueCoverage.exhaustiveCurrent,
+    },
   };
 }
 
@@ -357,8 +400,10 @@ export async function getMetricComparison(
     case "orders_paid":
     case "avg_order_value": {
       const ledger = await ledgerFor(tenantId, [currentRange, compRange], deps);
-      const curEvents = eventsInSpan(ledger.events, currentRange);
-      const prevEvents = eventsInSpan(ledger.events, compRange);
+      const curReconciled = reconcileLedgerSpan(ledger, currentRange);
+      const prevReconciled = reconcileLedgerSpan(ledger, compRange);
+      const curEvents = curReconciled.includedEvents;
+      const prevEvents = prevReconciled.includedEvents;
       const bridge = compareTotals(summarizeTotals(curEvents), summarizeTotals(prevEvents));
       const coverage = coverageOf(ledger, [currentRange, compRange]);
       const curAov = bridge.current.aovCents == null ? 0 : dollars(bridge.current.aovCents);

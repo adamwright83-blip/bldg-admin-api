@@ -7,6 +7,7 @@ import {
 } from "./analyticsQueries";
 import {
   applyLineageFilters,
+  hasLineageFilters,
   lineageBreakdown,
   unionOfSlices,
   type LedgerFilters,
@@ -48,6 +49,16 @@ import {
   type PeriodSpec,
   type ResolvedPeriod,
 } from "./businessPeriods";
+import {
+  interpretSourceCoverage,
+  loadRevenueSourceCoverage,
+  reconcilePaidRevenue,
+  revenueMayStateExact,
+  type CanonicalRevenuePrecision,
+  type ReadBusinessSourceCoverage,
+  type ReconciledRevenue,
+} from "./canonicalRevenue";
+import type { BusinessSourceCoverageSnapshot } from "./sourceCoverage";
 import { loadDataFreshness, type DataFreshness } from "./dataFreshness";
 import {
   detectCrossSourceOverlap,
@@ -171,6 +182,27 @@ export type BusinessCoverage = {
   lineage: LineageBreakdown | null;
   /** When slices were combined: orders that matched more than one slice (counted once). */
   union: { overlapOrders: number; overlapCents: number } | null;
+  /**
+   * Present on revenue, AOV, revenue-driver, and profit reads.
+   * The stated cents are `exactIncludedCents`.
+   */
+  canonicalRevenue?: {
+    exactIncludedCents: number;
+    recordedCents: number;
+    statedExactCents: number | null;
+    mayStateExact: boolean;
+    exactIncludedOrderCount: number;
+    definiteDuplicateExclusionCents: number;
+    suspectedWithheldCents: number;
+    suspectedWithheldCount: number;
+    precision: CanonicalRevenuePrecision;
+    incompleteForWindow: boolean;
+    coverageAllowsExact: boolean;
+    cleanCloudFresh: boolean;
+    exhaustiveCurrent: boolean;
+    paymentEventsProven: boolean;
+    contractVersion: 1 | null;
+  } | null;
 };
 
 export type BusinessResultData =
@@ -271,6 +303,11 @@ export type BusinessQueryDeps = {
   loadOpenOrders: (tenantId: string) => Promise<OpenOrderStats>;
   loadCompleteness: (tenantId: string) => Promise<DataCompleteness>;
   loadFreshness?: (input: { tenantId: string; now: Date; timeZone: string }) => Promise<DataFreshness>;
+  /**
+   * B1 `loadBusinessSourceCoverage`. Omit to load it. An explicit null snapshot
+   * means the contract could not be read, which is not a fresh book.
+   */
+  readSourceCoverage?: ReadBusinessSourceCoverage;
   now: () => Date;
   timeZone: () => string;
 };
@@ -280,6 +317,7 @@ export const defaultBusinessQueryDeps: BusinessQueryDeps = {
   loadOpenOrders: getOpenOrderStats,
   loadCompleteness: getDataCompleteness,
   loadFreshness: loadDataFreshness,
+  readSourceCoverage: input => loadRevenueSourceCoverage({ tenantId: input.tenantId, now: input.now }),
   now: () => new Date(),
   timeZone: getDashboardTimeZone,
 };
@@ -428,14 +466,40 @@ export async function runBusinessQuery(
       data,
     });
     const today = businessToday(now, timeZone);
+    const reconcileHistorySpan = (span: { start: string; end: string }) => {
+      const events = eventsInSpan(history, span);
+      const keys = new Set(events.map(event => event.eventKey));
+      return reconcilePaidRevenue({
+        events,
+        provenExclusions: ledger.provenDuplicateExclusions.filter(item => keys.has(item.keptEventKey)),
+        unverifiedNative: ledger.unverifiedNative.filter(
+          order => order.businessDate >= span.start && order.businessDate <= span.end
+        ),
+      });
+    };
 
     switch (query.metric) {
       case "revenue":
       case "orders":
       case "aov":
       case "revenue_drivers": {
-        const current = summarizeTotals(eventsInSpan(history, period));
-        const previous = comparisonPeriod ? summarizeTotals(eventsInSpan(history, comparisonPeriod)) : null;
+        const usesCanonicalRevenue = query.metric !== "orders";
+        const coverageSeam = usesCanonicalRevenue ? await readCoverageSeam(deps, tenantId, period) : null;
+        const currentRead = usesCanonicalRevenue ? reconcileHistorySpan(period) : null;
+        const previousRead = usesCanonicalRevenue && comparisonPeriod ? reconcileHistorySpan(comparisonPeriod) : null;
+        const current = currentRead ? totalsFromReconciled(currentRead) : summarizeTotals(eventsInSpan(history, period));
+        const previous = previousRead
+          ? totalsFromReconciled(previousRead)
+          : comparisonPeriod
+            ? summarizeTotals(eventsInSpan(history, comparisonPeriod))
+            : null;
+        const moverEvents =
+          currentRead && query.metric === "revenue_drivers"
+            ? historyKeepingIncluded(history, period, comparisonPeriod, currentRead, previousRead)
+            : history;
+        if (currentRead) {
+          stampCanonicalRevenue(coverage, currentRead, coverageSeam, ledger, period, !queryNarrowsRevenue(query));
+        }
         return ok({
           kind: "totals",
           current,
@@ -443,7 +507,7 @@ export async function runBusinessQuery(
           comparison: previous ? compareTotals(current, previous) : null,
           movers:
             query.metric === "revenue_drivers" && comparisonPeriod
-              ? customerRevenueMovers(history, period, comparisonPeriod, 3)
+              ? customerRevenueMovers(moverEvents, period, comparisonPeriod, 3)
               : null,
         });
       }
@@ -456,7 +520,10 @@ export async function runBusinessQuery(
         } catch (error) {
           console.warn("[Analytics] completeness lookup failed", error);
         }
-        return ok({ kind: "profit", revenue: summarizeTotals(eventsInSpan(history, period)), missing });
+        const coverageSeam = await readCoverageSeam(deps, tenantId, period);
+        const currentRead = reconcileHistorySpan(period);
+        stampCanonicalRevenue(coverage, currentRead, coverageSeam, ledger, period, !queryNarrowsRevenue(query));
+        return ok({ kind: "profit", revenue: totalsFromReconciled(currentRead), missing });
       }
       case "active_customers":
         return ok({
@@ -545,4 +612,86 @@ export async function runBusinessQuery(
     });
     return unavailable("query_failed");
   }
+}
+
+function totalsFromReconciled(read: ReconciledRevenue): RevenueTotals {
+  return {
+    revenueCents: read.exactIncludedCents,
+    orderCount: read.exactIncludedOrderCount,
+    aovCents: read.exactIncludedOrderCount ? Math.round(read.exactIncludedCents / read.exactIncludedOrderCount) : null,
+  };
+}
+
+async function readCoverageSeam(
+  deps: BusinessQueryDeps,
+  tenantId: string,
+  period: { start: string; end: string }
+): Promise<BusinessSourceCoverageSnapshot | null> {
+  const now = deps.now();
+  if (!deps.readSourceCoverage) return loadRevenueSourceCoverage({ tenantId, now });
+  try {
+    return await deps.readSourceCoverage({ tenantId, from: period.start, to: period.end, now });
+  } catch (error) {
+    console.warn("[Analytics] source coverage contract unavailable", error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+function queryNarrowsRevenue(query: BusinessQuery): boolean {
+  return Boolean(query.serviceType || query.filterUnion?.length || hasLineageFilters(query.filters));
+}
+
+function stampCanonicalRevenue(
+  coverage: BusinessCoverage,
+  read: ReconciledRevenue,
+  snapshot: BusinessSourceCoverageSnapshot | null,
+  ledger: { loadedSources: LedgerSource[]; failedSources: LedgerSource[] },
+  window: { start: string; end: string },
+  fullWindow: boolean
+): void {
+  const interpreted = interpretSourceCoverage({
+    snapshot,
+    window: { from: window.start, to: window.end },
+    loadedSources: ledger.loadedSources,
+    failedSources: ledger.failedSources,
+  });
+  const mayStateExact = fullWindow && revenueMayStateExact({ coverage: interpreted, reconciled: read });
+  coverage.canonicalRevenue = {
+    exactIncludedCents: read.exactIncludedCents,
+    recordedCents: read.exactIncludedCents,
+    statedExactCents: mayStateExact ? read.exactIncludedCents : null,
+    mayStateExact,
+    exactIncludedOrderCount: read.exactIncludedOrderCount,
+    definiteDuplicateExclusionCents: read.definiteDuplicateExclusions.cents,
+    suspectedWithheldCents: read.suspectedWithheld.cents,
+    suspectedWithheldCount: read.suspectedWithheld.count,
+    precision: mayStateExact ? "exact" : "recorded_only",
+    incompleteForWindow: interpreted.incompleteForWindow,
+    coverageAllowsExact: interpreted.coverageAllowsExact,
+    cleanCloudFresh: interpreted.cleanCloudFresh,
+    exhaustiveCurrent: interpreted.exhaustiveCurrent,
+    paymentEventsProven: interpreted.paymentEventsProven,
+    contractVersion: interpreted.contractVersion,
+  };
+}
+
+function historyKeepingIncluded(
+  history: PaidOrderEvent[],
+  period: { start: string; end: string },
+  comparisonPeriod: { start: string; end: string } | null,
+  currentRead: ReconciledRevenue,
+  previousRead: ReconciledRevenue | null
+): PaidOrderEvent[] {
+  const included = new Set([
+    ...currentRead.includedEvents.map(event => event.eventKey),
+    ...(previousRead?.includedEvents.map(event => event.eventKey) ?? []),
+  ]);
+  return history.filter(event => {
+    const inCurrent = event.businessDate >= period.start && event.businessDate <= period.end;
+    const inPrevious = comparisonPeriod
+      ? event.businessDate >= comparisonPeriod.start && event.businessDate <= comparisonPeriod.end
+      : false;
+    if (!inCurrent && !inPrevious) return true;
+    return included.has(event.eventKey);
+  });
 }

@@ -26,9 +26,11 @@ import { identityKeysFor, type IdentityEvidence } from "./customerIdentityResolu
  *   reported as unverified rather than silently added or dropped.
  * - CleanCloud orders can appear in both the Orders (Sales) and Orders
  *   (Revenue) exports; each CleanCloud order counts once, preferring Sales.
- * - Native and CleanCloud orders share no order key, so cross-source overlap
- *   cannot be removed. It is probed (same customer, business day and amount)
- *   and disclosed instead.
+ *   The dropped twin is reported as a proven duplicate exclusion.
+ * - Native and CleanCloud orders share no order key. Pairs that match on
+ *   customer, business day, and amount stay in this ledger and are flagged.
+ *   Exact revenue withholding of those suspected copies lives in
+ *   `readCanonicalRevenue` (`canonicalRevenue.ts`), not in a second sum.
  *
  * Every event also carries its lineage (business line, processor, building,
  * service class, event time vs. ingestion time) — see businessLineage.ts.
@@ -68,12 +70,22 @@ export type UnverifiedPaidOrder = { eventKey: string; businessDate: string; cent
 
 export type LedgerCompleteness = "complete" | "partial" | "unavailable";
 
+/** A second source row proved to be the same CleanCloud order. Not counted in `events`. */
+export type ProvenDuplicateExclusion = {
+  keptEventKey: string;
+  excludedEventKey: string;
+  cents: number;
+  reason: "cleancloud_sales_and_revenue_report";
+};
+
 export type PaidOrderLedger = {
   startUtc: Date;
   endExclusiveUtc: Date;
   timeZone: string;
   events: PaidOrderEvent[];
   unverifiedNative: UnverifiedPaidOrder[];
+  /** Proven CleanCloud report twins already removed from `events`. */
+  provenDuplicateExclusions: ProvenDuplicateExclusion[];
   loadedSources: LedgerSource[];
   failedSources: LedgerSource[];
   completeness: LedgerCompleteness;
@@ -210,49 +222,74 @@ export function mapNativeOrders(
   return { events, unverified };
 }
 
+export function partitionCleanCloudOrders(
+  rows: readonly CleanCloudOrderRow[],
+  window: { startUtc: Date; endExclusiveUtc: Date },
+  timeZone: string
+): { events: PaidOrderEvent[]; provenDuplicateExclusions: ProvenDuplicateExclusion[] } {
+  const grouped = new Map<string, CleanCloudOrderRow[]>();
+  for (const row of rows) {
+    if (!row.paid) continue;
+    const list = grouped.get(row.cleancloudOrderId) ?? [];
+    list.push(row);
+    grouped.set(row.cleancloudOrderId, list);
+  }
+  const events: PaidOrderEvent[] = [];
+  const provenDuplicateExclusions: ProvenDuplicateExclusion[] = [];
+  let excludedSeq = 0;
+  for (const [cleancloudOrderId, group] of Array.from(grouped.entries())) {
+    let preferred = group[0]!;
+    for (const row of group.slice(1)) {
+      if (preferred.sourceReportType === "orders_revenue" && row.sourceReportType === "orders_sales") {
+        preferred = row;
+      }
+    }
+    const occurredAt = preferred.sourceReportType === "orders_sales" ? preferred.paymentDateUtc : preferred.paidDateUtc;
+    if (!inWindow(occurredAt, window)) continue;
+    const keptEventKey = `cleancloud:${cleancloudOrderId}`;
+    const serviceClass = classifyCleanCloudService({ summaryText: preferred.summaryText ?? null });
+    events.push({
+      source: "cleancloud",
+      eventKey: keptEventKey,
+      occurredAt,
+      businessDate: businessDateOf(occurredAt, timeZone),
+      cents: Math.round(Number(preferred.totalCents ?? 0)),
+      serviceType: serviceTypeFromCleanCloudClass(serviceClass),
+      customerName: preferred.customerName?.trim() || null,
+      identity: {
+        phone: preferred.customerPhone,
+        email: preferred.customerEmail,
+        cleancloudCustomerId: preferred.cleancloudCustomerId,
+      },
+      orderNumber: cleancloudOrderId,
+      businessLine: cleanCloudBusinessLine(preferred.storeLabel),
+      processor: cleanCloudProcessor(preferred.paymentType, preferred.cardPaymentType),
+      building: buildingFor({ buildingSlug: preferred.buildingSlug, address: preferred.address }),
+      address: preferred.address?.trim() || null,
+      serviceClass,
+      summary: cleanCloudSummaryText(preferred.summaryText),
+      placedAt: preferred.placedAtUtc ?? null,
+      ingestedAt: preferred.createdAt ?? null,
+    });
+    for (const row of group) {
+      if (row === preferred) continue;
+      provenDuplicateExclusions.push({
+        keptEventKey,
+        excludedEventKey: `cleancloud:${cleancloudOrderId}:excluded:${row.sourceReportType}:${excludedSeq++}`,
+        cents: Math.round(Number(row.totalCents ?? 0)),
+        reason: "cleancloud_sales_and_revenue_report",
+      });
+    }
+  }
+  return { events, provenDuplicateExclusions };
+}
+
 export function mapCleanCloudOrders(
   rows: readonly CleanCloudOrderRow[],
   window: { startUtc: Date; endExclusiveUtc: Date },
   timeZone: string
 ): PaidOrderEvent[] {
-  const preferred = new Map<string, CleanCloudOrderRow>();
-  for (const row of rows) {
-    if (!row.paid) continue;
-    const current = preferred.get(row.cleancloudOrderId);
-    if (!current || (current.sourceReportType === "orders_revenue" && row.sourceReportType === "orders_sales")) {
-      preferred.set(row.cleancloudOrderId, row);
-    }
-  }
-  const events: PaidOrderEvent[] = [];
-  for (const row of Array.from(preferred.values())) {
-    const occurredAt = row.sourceReportType === "orders_sales" ? row.paymentDateUtc : row.paidDateUtc;
-    if (!inWindow(occurredAt, window)) continue;
-    const serviceClass = classifyCleanCloudService({ summaryText: row.summaryText ?? null });
-    events.push({
-      source: "cleancloud",
-      eventKey: `cleancloud:${row.cleancloudOrderId}`,
-      occurredAt,
-      businessDate: businessDateOf(occurredAt, timeZone),
-      cents: Math.round(Number(row.totalCents ?? 0)),
-      serviceType: serviceTypeFromCleanCloudClass(serviceClass),
-      customerName: row.customerName?.trim() || null,
-      identity: {
-        phone: row.customerPhone,
-        email: row.customerEmail,
-        cleancloudCustomerId: row.cleancloudCustomerId,
-      },
-      orderNumber: row.cleancloudOrderId,
-      businessLine: cleanCloudBusinessLine(row.storeLabel),
-      processor: cleanCloudProcessor(row.paymentType, row.cardPaymentType),
-      building: buildingFor({ buildingSlug: row.buildingSlug, address: row.address }),
-      address: row.address?.trim() || null,
-      serviceClass,
-      summary: cleanCloudSummaryText(row.summaryText),
-      placedAt: row.placedAtUtc ?? null,
-      ingestedAt: row.createdAt ?? null,
-    });
-  }
-  return events;
+  return partitionCleanCloudOrders(rows, window, timeZone).events;
 }
 
 async function requireDb() {
@@ -395,6 +432,7 @@ export async function loadPaidOrderLedger(
   const failedSources: LedgerSource[] = [];
   const events: PaidOrderEvent[] = [];
   let unverifiedNative: UnverifiedPaidOrder[] = [];
+  const provenDuplicateExclusions: ProvenDuplicateExclusion[] = [];
 
   if (native.status === "fulfilled") {
     const mapped = mapNativeOrders(native.value, window, input.timeZone);
@@ -406,7 +444,9 @@ export async function loadPaidOrderLedger(
     failedSources.push("laundry_butler");
   }
   if (cleancloud.status === "fulfilled") {
-    events.push(...mapCleanCloudOrders(cleancloud.value, window, input.timeZone));
+    const mapped = partitionCleanCloudOrders(cleancloud.value, window, input.timeZone);
+    events.push(...mapped.events);
+    provenDuplicateExclusions.push(...mapped.provenDuplicateExclusions);
     loadedSources.push("cleancloud");
   } else {
     console.warn("[Analytics] CleanCloud paid-order load failed", cleancloud.reason);
@@ -420,6 +460,7 @@ export async function loadPaidOrderLedger(
     timeZone: input.timeZone,
     events,
     unverifiedNative,
+    provenDuplicateExclusions,
     loadedSources,
     failedSources,
     completeness: failedSources.length === 0 ? "complete" : loadedSources.length ? "partial" : "unavailable",
@@ -432,13 +473,17 @@ export type OverlapProbe = {
   suspectedCents: number;
 };
 
+export type SuspectedCrossSourcePair = {
+  native: PaidOrderEvent;
+  cleancloud: PaidOrderEvent;
+};
+
 /**
- * Flags native/CleanCloud order pairs that look like the same real order:
- * same customer phone or email, same business day, amounts within a cent.
- * Nothing is removed — this only decides whether a combined total needs a
- * caveat.
+ * Native/CleanCloud pairs that share a phone or email, a business day, and an
+ * amount within one cent. The systems share no order key, so this is a
+ * suspicion, not proof. The ledger keeps both events.
  */
-export function detectCrossSourceOverlap(events: readonly PaidOrderEvent[]): OverlapProbe {
+export function findSuspectedCrossSourcePairs(events: readonly PaidOrderEvent[]): SuspectedCrossSourcePair[] {
   const contactKeys = (event: PaidOrderEvent) =>
     identityKeysFor({ phone: event.identity.phone, email: event.identity.email });
   const cleancloudByDayKey = new Map<string, PaidOrderEvent[]>();
@@ -450,8 +495,7 @@ export function detectCrossSourceOverlap(events: readonly PaidOrderEvent[]): Ove
     }
   }
   const used = new Set<string>();
-  let suspectedPairs = 0;
-  let suspectedCents = 0;
+  const pairs: SuspectedCrossSourcePair[] = [];
   for (const event of events) {
     if (event.source !== "laundry_butler") continue;
     for (const key of contactKeys(event)) {
@@ -460,11 +504,21 @@ export function detectCrossSourceOverlap(events: readonly PaidOrderEvent[]): Ove
       );
       if (match) {
         used.add(match.eventKey);
-        suspectedPairs += 1;
-        suspectedCents += match.cents;
+        pairs.push({ native: event, cleancloud: match });
         break;
       }
     }
   }
-  return { status: suspectedPairs ? "suspected" : "none_detected", suspectedPairs, suspectedCents };
+  return pairs;
+}
+
+/** Flags suspected cross-source pairs. Nothing is removed from the ledger. */
+export function detectCrossSourceOverlap(events: readonly PaidOrderEvent[]): OverlapProbe {
+  const pairs = findSuspectedCrossSourcePairs(events);
+  const suspectedCents = pairs.reduce((sum, pair) => sum + pair.cleancloud.cents, 0);
+  return {
+    status: pairs.length ? "suspected" : "none_detected",
+    suspectedPairs: pairs.length,
+    suspectedCents,
+  };
 }

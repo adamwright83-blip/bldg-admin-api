@@ -254,11 +254,27 @@ function coverageNotes(result: Extract<BusinessQueryResult, { status: "ok" }>, s
         `It leaves out ${speech.count(coverage.unverifiedNativeCount)} Goldline ${plural(coverage.unverifiedNativeCount, "order")} marked paid without a payment record, worth ${speech.money(coverage.unverifiedNativeCents)}.`
     );
   }
-  if (coverage.overlap.status === "suspected" && !result.query.filterUnion?.length) {
+  const canonical = coverage.canonicalRevenue;
+  if (canonical && canonical.suspectedWithheldCents > 0 && !result.query.filterUnion?.length) {
+    once(
+      `overlap:${canonical.suspectedWithheldCount}:${canonical.suspectedWithheldCents}`,
+      () =>
+        canonical.mayStateExact
+          ? `I withheld ${speech.money(canonical.suspectedWithheldCents)} from that exact total. ${capitalize(speech.count(canonical.suspectedWithheldCount))} CleanCloud ${plural(canonical.suspectedWithheldCount, "order")} match a Goldline order for the same customer, day, and amount, and the records do not prove a single sale.`
+          : `I withheld ${speech.money(canonical.suspectedWithheldCents)} from that recorded figure because ${speech.count(canonical.suspectedWithheldCount)} CleanCloud ${plural(canonical.suspectedWithheldCount, "order")} match a Goldline order for the same customer, day, and amount, and the records do not prove a single sale.`
+    );
+  } else if (coverage.overlap.status === "suspected" && !result.query.filterUnion?.length) {
     once(
       `overlap:${coverage.overlap.suspectedPairs}:${coverage.overlap.suspectedCents}`,
       () =>
         `${capitalize(speech.count(coverage.overlap.suspectedPairs))} CleanCloud ${plural(coverage.overlap.suspectedPairs, "order")} match a Goldline order for the same customer, day, and amount, so this may double-count up to ${speech.money(coverage.overlap.suspectedCents)}.`
+    );
+  }
+  if (canonical && !canonical.coverageAllowsExact && moneyMetric) {
+    once(
+      "canonical-coverage-incomplete",
+      () =>
+        "Source coverage does not support an exact total for this window, so that figure is recorded revenue only."
     );
   }
   if (coverage.serviceFilterUnclassified) {

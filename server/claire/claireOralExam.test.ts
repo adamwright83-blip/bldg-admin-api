@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { runBusinessQuery } from "../analytics/businessQuery";
 import { loadPaidOrderLedger, type LedgerLoaders } from "../analytics/paidOrderLedger";
-import { failingLoaders } from "../analytics/businessLedgerFixture";
+import { failingLoaders, provenBusinessCoverageSnapshot } from "../analytics/businessLedgerFixture";
 import type { AccountHistory, AccountRef } from "./knowledge/accountKnowledge";
 import type { DayWork } from "./knowledge/operationsKnowledge";
 import type { RememberedTurn } from "./knowledge/conversationMemory";
@@ -101,6 +101,7 @@ function exam(options: { loaders?: LedgerLoaders; importedToday?: boolean } = {}
           loadLedger: input => loadPaidOrderLedger(input, options.loaders ?? businessLoaders()),
           loadOpenOrders: async () => ({ openTotal: 2, byStatus: {}, awaitingPayment: 1 }),
           loadCompleteness: async () => businessCompleteness,
+          readSourceCoverage: async () => provenBusinessCoverageSnapshot(tenantId),
           loadFreshness: async () => businessFreshness({ importedToday: options.importedToday }),
           now: () => BUSINESS_NOW,
           timeZone: () => BUSINESS_TZ,
@@ -243,7 +244,9 @@ describe("E — location thread", () => {
 describe("F — account thread", () => {
   it("OPUS lifetime, this month, orders, most recent orderer, most frequent there", async () => {
     const { ask } = exam();
-    expect(await ask("How much has OPUS LA generated?")).toBe("Paid revenue at OPUS LA over all time is $194 across 5 orders.");
+    expect(await ask("How much has OPUS LA generated?")).toBe(
+      "Paid revenue at OPUS LA over all time is $194 across 5 orders."
+    );
     expect(await ask("This month.")).toBe("This month so far, paid revenue at OPUS LA is $140 across 3 orders.");
     expect(await ask("How many orders?")).toBe("There are 3 paid orders at OPUS LA this month so far.");
     expect(await ask("Who ordered most recently?")).toBe("The newest sale I have at OPUS LA is $79.41 for Maria Chen, paid September 9 at 8:53 PM.");
@@ -293,7 +296,9 @@ describe("H — operations thread", () => {
 describe("I — source / filter thread, and business lineage", () => {
   it("Laundry Farm last month, Laundry Butler, dry cleaning only, laundry again", async () => {
     const { ask } = exam();
-    expect(await ask("How much did Laundry Farm do last month?")).toBe("Laundry Farm revenue last month was $224 across 4 orders.");
+    expect(await ask("How much did Laundry Farm do last month?")).toBe(
+      "Laundry Farm revenue last month was $224 across 4 orders."
+    );
     expect(await ask("What about Laundry Butler?")).toBe("Laundry Butler revenue last month was $104 across 3 orders.");
     expect(await ask("Dry cleaning only.")).toContain("Laundry Butler dry-cleaning revenue was $12.00 across 1 order.");
     expect(await ask("Now include laundry again.")).toContain("Laundry Butler revenue was $104 across 3 orders.");
