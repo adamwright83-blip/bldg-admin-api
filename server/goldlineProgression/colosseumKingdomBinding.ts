@@ -35,3 +35,11 @@ export function colosseumKingdomBindingSatisfied(outcomes: Record<string, unknow
   const recorded = new Set(Object.keys(outcomes));
   return definition.targetIds.every(id => recorded.has(id));
 }
+
+/** True only on the transition into satisfied. An already-satisfied map does not record again. */
+export function colosseumKingdomBindingNewlySatisfied(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>
+): boolean {
+  return !colosseumKingdomBindingSatisfied(before) && colosseumKingdomBindingSatisfied(after);
+}

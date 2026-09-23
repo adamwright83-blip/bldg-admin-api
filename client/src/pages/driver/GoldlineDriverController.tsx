@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { overworldPostRookOpen } from "../../../../shared/goldlineDomainProgression";
 import { createGoldlineEventEmitter } from "../../game/analytics/emitGoldlineEvent";
 import { QuickNewOrderSheet } from "@/components/driver/QuickNewOrderSheet";
 import { AddExternalWorkSheet } from "@/components/driver/AddExternalWorkSheet";
@@ -512,6 +513,7 @@ function LiveGoldlineDriverController({
   const day1TenDoors = trpc.system.day1TenDoors.current.useQuery(undefined, {
     refetchInterval: 15_000,
   });
+  const domainProgression = trpc.system.goldlineProgression.get.useQuery({});
   useEffect(() => {
     const playerIdentity = identity.data?.openId ?? null;
     const stored = loadWaywardProgress(playerIdentity);
@@ -1664,7 +1666,7 @@ function LiveGoldlineDriverController({
             day1TenDoors.data && !day1TenDoors.data.isComplete
           )}
           greystarCompleted={Boolean(day1TenDoors.data?.isComplete)}
-          waywardUnlocked={waywardProgress.unlocked}
+          waywardUnlocked={overworldPostRookOpen(domainProgression.data)}
           playerIdentity={identity.data?.openId ?? null}
           onEmitEvent={emitGoldlineEvent}
           onEnterOperations={() => {

@@ -1,18 +1,27 @@
 /**
  * domain.goldline progression read contract for Project J.
  *
- * Durable flags are server-owned. This module does not create tables.
- * `scripts/migrate.mjs` is the production schema authority (Project 0).
- * Until `goldline_domain_progression` exists, level resolution, Rook
- * ownership, Brass Republic completion, and Overworld unlocks stay
- * unrecorded. localStorage is not an input.
+ * Durable flags are rows in goldline_domain_progression. A missing row
+ * or a null timestamp is unearned. localStorage is not an input.
+ * kingdom.brass_republic is a separate column and is not written here.
  */
+import { overworldPostRookOpen } from "../../shared/goldlineDomainProgression";
 import {
   COLOSSEUM_KINGDOM_BINDING_FUNCTION,
   COLOSSEUM_KINGDOM_BINDING_ID,
   colosseumKingdomBindingSatisfied,
   colosseumLeadHuntDefinition,
 } from "./colosseumKingdomBinding";
+
+export type StoredProgressionRow = {
+  levelColosseumResolvedAt: Date | null;
+  companionRookOwnedAt: Date | null;
+  kingdomBrassRepublicCompletedAt: Date | null;
+};
+
+export type StoredProgressionLookup =
+  | { readable: true; row: StoredProgressionRow | null }
+  | { readable: false };
 
 export const GOLDLINE_DOMAIN_PROGRESSION_MIGRATION = {
   authority: "scripts/migrate.mjs",
@@ -43,11 +52,12 @@ const CLIENT_FORGE_KEYS = [
 
 export type KingdomBindingStatus = "satisfied" | "unsatisfied" | "uncertain";
 
-export type UnrecordedFlag = {
-  status: "unrecorded";
-  value: false;
-  reason: "schema_blocked";
-  migrationLabel: typeof GOLDLINE_DOMAIN_PROGRESSION_MIGRATION.label;
+export type ProgressionFlagStatus = "earned" | "unearned" | "uncertain";
+
+export type ProgressionFlag = {
+  status: ProgressionFlagStatus;
+  /** True only when status is earned. Unknown and missing rows stay false. */
+  value: boolean;
 };
 
 export type GoldlineProgressionRead = {
@@ -62,20 +72,19 @@ export type GoldlineProgressionRead = {
     recordedTargetIds: string[];
     missingTargetIds: string[];
   };
-  /** Permitted only after the binding is satisfied. Not stored until the migration lands. */
-  levelColosseumResolved: UnrecordedFlag;
-  /** Separate from the level flag and from `capability.rook.contact`. */
-  companionRookOwned: UnrecordedFlag;
-  /** Separate authored state. Never implied by the Colosseum binding or by `kingdom-1-colosseum`. */
-  kingdomBrassRepublicCompleted: UnrecordedFlag & {
+  /** Server timestamp levelColosseumResolvedAt. Missing or null is unearned. */
+  levelColosseumResolved: ProgressionFlag;
+  /** Server timestamp companionRookOwnedAt. Separate from the level and from capability.rook.contact. */
+  companionRookOwned: ProgressionFlag;
+  /** Separate authored state. Never implied by the Colosseum binding or by level.colosseum. */
+  kingdomBrassRepublicCompleted: ProgressionFlag & {
     impliedByLevelColosseum: false;
     impliedByStoredKingdomRow: false;
   };
   overworldUnlocks: {
-    status: "unrecorded";
-    flags: Record<string, never>;
-    reason: "schema_blocked";
-    migrationLabel: typeof GOLDLINE_DOMAIN_PROGRESSION_MIGRATION.label;
+    status: ProgressionFlagStatus;
+    /** postRook is true only when both server values are true. */
+    flags: { postRook: boolean };
   };
   capabilityRookContact: {
     granted: boolean;
@@ -85,7 +94,7 @@ export type GoldlineProgressionRead = {
   };
   localStorage: "cache_and_present_only";
   schema: {
-    blocked: true;
+    blocked: false;
     migration: typeof GOLDLINE_DOMAIN_PROGRESSION_MIGRATION;
   };
 };
@@ -126,13 +135,10 @@ export function rejectClientProgressionForge(input: unknown): void {
   }
 }
 
-function unrecordedFlag(): UnrecordedFlag {
-  return {
-    status: "unrecorded",
-    value: false,
-    reason: "schema_blocked",
-    migrationLabel: GOLDLINE_DOMAIN_PROGRESSION_MIGRATION.label,
-  };
+function flagFromTimestamp(readable: boolean, at: Date | null | undefined): ProgressionFlag {
+  if (!readable) return { status: "uncertain", value: false };
+  if (at) return { status: "earned", value: true };
+  return { status: "unearned", value: false };
 }
 
 export function projectGoldlineProgression(input: {
@@ -143,8 +149,24 @@ export function projectGoldlineProgression(input: {
   outcomesAvailable: boolean;
   capabilityRookContactGranted: boolean;
   capabilityRookContactReadable: boolean;
+  /** Omitted lookups are treated as no row: unearned, not completed. */
+  stored?: StoredProgressionLookup;
 }): GoldlineProgressionRead {
   rejectClientProgressionForge(input);
+  const stored = input.stored ?? { readable: true, row: null };
+  const levelColosseumResolved = flagFromTimestamp(
+    stored.readable,
+    stored.readable ? stored.row?.levelColosseumResolvedAt : null
+  );
+  const companionRookOwned = flagFromTimestamp(
+    stored.readable,
+    stored.readable ? stored.row?.companionRookOwnedAt : null
+  );
+  const kingdomBrassRepublicCompleted = flagFromTimestamp(
+    stored.readable,
+    stored.readable ? stored.row?.kingdomBrassRepublicCompletedAt : null
+  );
+  const postRook = overworldPostRookOpen({ levelColosseumResolved, companionRookOwned });
   const definition = colosseumLeadHuntDefinition();
   const targetIds = definition?.targetIds ?? [];
   const outcomeKeys = input.outcomesAvailable && input.outcomes ? Object.keys(input.outcomes) : [];
@@ -168,18 +190,16 @@ export function projectGoldlineProgression(input: {
       recordedTargetIds,
       missingTargetIds,
     },
-    levelColosseumResolved: unrecordedFlag(),
-    companionRookOwned: unrecordedFlag(),
+    levelColosseumResolved,
+    companionRookOwned,
     kingdomBrassRepublicCompleted: {
-      ...unrecordedFlag(),
+      ...kingdomBrassRepublicCompleted,
       impliedByLevelColosseum: false,
       impliedByStoredKingdomRow: false,
     },
     overworldUnlocks: {
-      status: "unrecorded",
-      flags: {},
-      reason: "schema_blocked",
-      migrationLabel: GOLDLINE_DOMAIN_PROGRESSION_MIGRATION.label,
+      status: stored.readable ? (postRook ? "earned" : "unearned") : "uncertain",
+      flags: { postRook },
     },
     capabilityRookContact: {
       granted: input.capabilityRookContactReadable && input.capabilityRookContactGranted,
@@ -189,7 +209,7 @@ export function projectGoldlineProgression(input: {
     },
     localStorage: "cache_and_present_only",
     schema: {
-      blocked: true,
+      blocked: false,
       migration: GOLDLINE_DOMAIN_PROGRESSION_MIGRATION,
     },
   };
@@ -208,39 +228,36 @@ function assertBindingAllowsAuthoredResolution(outcomes: Record<string, unknown>
   }
 }
 
-/**
- * Binding satisfied → authored resolution would be permitted → no row exists
- * to record `level.colosseum` resolved. Never accepts a client resolved flag.
- */
-export function attemptRecordLevelColosseumResolved(input: {
+/** The only Colosseum write gate. A client resolved flag is rejected first. */
+export function assertLevelColosseumRecordPermitted(input: {
   outcomes: Record<string, unknown> | null;
   outcomesAvailable: boolean;
   clientPayload?: unknown;
-}): never {
+}): void {
   rejectClientProgressionForge(input);
   rejectClientProgressionForge(input.clientPayload);
   assertBindingAllowsAuthoredResolution(input.outcomes, input.outcomesAvailable);
-  throw new ProgressionSchemaBlockedError(
-    `${GOLDLINE_DOMAIN_PROGRESSION_MIGRATION.label} is required before level.colosseum can be recorded`
-  );
 }
 
 /**
- * Rook ownership follows a server-recorded level resolution. The level row
- * cannot exist yet, so ownership is not recorded and is not inferred from
- * the binding or from capability unlocks.
+ * Rook is a separate write. It requires a server level timestamp already
+ * stored for this tenant and operator. The binding remains required. A
+ * client rookOwned flag is rejected and is not evidence.
  */
-export function attemptRecordCompanionRookOwned(input: {
+export function assertCompanionRookRecordPermitted(input: {
   outcomes: Record<string, unknown> | null;
   outcomesAvailable: boolean;
+  levelColosseumResolvedAt: Date | null;
   clientPayload?: unknown;
-}): never {
+}): void {
   rejectClientProgressionForge(input);
   rejectClientProgressionForge(input.clientPayload);
   assertBindingAllowsAuthoredResolution(input.outcomes, input.outcomesAvailable);
-  throw new ProgressionSchemaBlockedError(
-    `${GOLDLINE_DOMAIN_PROGRESSION_MIGRATION.label} is required before companion.rook can be recorded; level.colosseum is unrecorded`
-  );
+  if (!input.levelColosseumResolvedAt) {
+    throw new ProgressionNotPermittedError(
+      "companion.rook cannot be recorded until level.colosseum is server-recorded for this operator"
+    );
+  }
 }
 
 /**

@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { colosseumKingdomBindingSatisfied, colosseumLeadHuntDefinition } from "./colosseumKingdomBinding";
+import { overworldPostRookOpen } from "../../shared/goldlineDomainProgression";
 import {
-  attemptRecordCompanionRookOwned,
+  colosseumKingdomBindingNewlySatisfied,
+  colosseumKingdomBindingSatisfied,
+  colosseumLeadHuntDefinition,
+} from "./colosseumKingdomBinding";
+import {
+  assertCompanionRookRecordPermitted,
+  assertLevelColosseumRecordPermitted,
   attemptRecordKingdomBrassRepublicCompleted,
-  attemptRecordLevelColosseumResolved,
-  GOLDLINE_DOMAIN_PROGRESSION_MIGRATION,
   ProgressionForgeError,
   ProgressionNotPermittedError,
-  ProgressionSchemaBlockedError,
   projectGoldlineProgression,
 } from "./progressionContract";
 
@@ -17,7 +20,12 @@ function outcomesFor(ids: string[]): Record<string, unknown> {
   return Object.fromEntries(ids.map(id => [id, "pitched"]));
 }
 
-function project(outcomes: Record<string, unknown> | null, available = true, capability = false) {
+function project(
+  outcomes: Record<string, unknown> | null,
+  available = true,
+  stored?: Parameters<typeof projectGoldlineProgression>[0]["stored"],
+  capability = false
+) {
   return projectGoldlineProgression({
     tenantId: "tenant-a",
     operatorId: "op-a",
@@ -25,6 +33,7 @@ function project(outcomes: Record<string, unknown> | null, available = true, cap
     outcomesAvailable: available,
     capabilityRookContactGranted: capability,
     capabilityRookContactReadable: true,
+    stored,
   });
 }
 
@@ -34,39 +43,82 @@ describe("colosseumKingdomBindingSatisfied", () => {
     expect(ids).toHaveLength(5);
     expect(colosseumKingdomBindingSatisfied(outcomesFor(ids))).toBe(true);
     expect(colosseumKingdomBindingSatisfied(outcomesFor(ids.slice(0, 4)))).toBe(false);
-    expect(colosseumKingdomBindingSatisfied(outcomesFor(["other-building", "another-building"]))).toBe(false);
+    expect(colosseumKingdomBindingSatisfied(outcomesFor(["other-building"]))).toBe(false);
     expect(colosseumKingdomBindingSatisfied({ "kingdom-1-colosseum": "complete" })).toBe(false);
+  });
+
+  it("records only the transition into satisfied, not an already-complete hunt", () => {
+    const ids = TARGETS();
+    const four = outcomesFor(ids.slice(0, 4));
+    const all = outcomesFor(ids);
+    expect(colosseumKingdomBindingNewlySatisfied(four, all)).toBe(true);
+    expect(colosseumKingdomBindingNewlySatisfied(all, all)).toBe(false);
+    expect(colosseumKingdomBindingNewlySatisfied(four, four)).toBe(false);
   });
 });
 
 describe("progression read contract", () => {
-  it("does not resolve the level, own Rook, or complete Brass Republic when the binding is satisfied", () => {
+  it("keeps a satisfied binding unearned when no progression row exists", () => {
     const read = project(outcomesFor(TARGETS()));
     expect(read.kingdomBinding.status).toBe("satisfied");
-    expect(read.kingdomBinding.function).toBe("colosseumKingdomBindingSatisfied");
-    expect(read.levelColosseumResolved.value).toBe(false);
-    expect(read.levelColosseumResolved.status).toBe("unrecorded");
-    expect(read.companionRookOwned.value).toBe(false);
+    expect(read.levelColosseumResolved).toEqual({ status: "unearned", value: false });
+    expect(read.companionRookOwned).toEqual({ status: "unearned", value: false });
     expect(read.kingdomBrassRepublicCompleted.value).toBe(false);
+    expect(read.kingdomBrassRepublicCompleted.status).toBe("unearned");
     expect(read.kingdomBrassRepublicCompleted.impliedByLevelColosseum).toBe(false);
     expect(read.kingdomBrassRepublicCompleted.impliedByStoredKingdomRow).toBe(false);
-    expect(read.overworldUnlocks.flags).toEqual({});
-    expect(read.schema.migration.label).toBe(GOLDLINE_DOMAIN_PROGRESSION_MIGRATION.label);
+    expect(read.overworldUnlocks.flags.postRook).toBe(false);
+  });
+
+  it("does not complete Brass Republic or open post-Rook when only the level is earned", () => {
+    const read = project(outcomesFor(TARGETS()), true, {
+      readable: true,
+      row: {
+        levelColosseumResolvedAt: new Date("2026-09-23T00:00:00.000Z"),
+        companionRookOwnedAt: null,
+        kingdomBrassRepublicCompletedAt: null,
+      },
+    });
+    expect(read.levelColosseumResolved).toEqual({ status: "earned", value: true });
+    expect(read.companionRookOwned.value).toBe(false);
+    expect(read.kingdomBrassRepublicCompleted.value).toBe(false);
+    expect(read.overworldUnlocks.flags.postRook).toBe(false);
+    expect(overworldPostRookOpen(read)).toBe(false);
+  });
+
+  it("opens post-Rook only when both server values are earned", () => {
+    const read = project(outcomesFor(TARGETS()), true, {
+      readable: true,
+      row: {
+        levelColosseumResolvedAt: new Date("2026-09-23T00:00:00.000Z"),
+        companionRookOwnedAt: new Date("2026-09-23T01:00:00.000Z"),
+        kingdomBrassRepublicCompletedAt: null,
+      },
+    });
+    expect(read.levelColosseumResolved.value).toBe(true);
+    expect(read.companionRookOwned.value).toBe(true);
+    expect(read.kingdomBrassRepublicCompleted.value).toBe(false);
+    expect(overworldPostRookOpen(read)).toBe(true);
+    expect(overworldPostRookOpen(null)).toBe(false);
+    expect(overworldPostRookOpen({
+      levelColosseumResolved: { value: true },
+      companionRookOwned: { value: false },
+    })).toBe(false);
+  });
+
+  it("keeps an unreadable row unknown and unearned", () => {
+    const read = project(null, false, { readable: false });
+    expect(read.kingdomBinding.status).toBe("uncertain");
+    expect(read.levelColosseumResolved).toEqual({ status: "uncertain", value: false });
+    expect(read.companionRookOwned.value).toBe(false);
+    expect(read.kingdomBrassRepublicCompleted.value).toBe(false);
+    expect(overworldPostRookOpen(read)).toBe(false);
   });
 
   it("keeps capability.rook.contact from granting companion.rook", () => {
-    const read = project(outcomesFor(TARGETS()), true, true);
+    const read = project({}, true, undefined, true);
     expect(read.capabilityRookContact.granted).toBe(true);
     expect(read.capabilityRookContact.grantsCompanionOwnership).toBe(false);
-    expect(read.capabilityRookContact.implementationCapabilityId).toBe("rook.outreach_drafting");
-    expect(read.companionRookOwned.value).toBe(false);
-  });
-
-  it("stays uncertain when outcome evidence is unavailable and does not invent completion", () => {
-    const read = project(null, false);
-    expect(read.kingdomBinding.status).toBe("uncertain");
-    expect(read.levelColosseumResolved.value).toBe(false);
-    expect(read.kingdomBrassRepublicCompleted.value).toBe(false);
     expect(read.companionRookOwned.value).toBe(false);
   });
 
@@ -75,7 +127,7 @@ describe("progression read contract", () => {
       projectGoldlineProgression({
         tenantId: "tenant-a",
         operatorId: "op-a",
-        outcomes: outcomesFor(TARGETS()),
+        outcomes: {},
         outcomesAvailable: true,
         capabilityRookContactGranted: false,
         capabilityRookContactReadable: true,
@@ -83,58 +135,38 @@ describe("progression read contract", () => {
       } as never)
     ).toThrow(ProgressionForgeError);
   });
-
-  it("returns the same unrecorded Rook when read twice, with no client storage input", () => {
-    const first = project({});
-    const second = project({});
-    expect(first.companionRookOwned).toEqual(second.companionRookOwned);
-    expect(first.localStorage).toBe("cache_and_present_only");
-    expect(first.companionRookOwned.value).toBe(false);
-  });
 });
 
-describe("progression write boundary", () => {
+describe("progression write gates", () => {
   const satisfied = { outcomes: outcomesFor(TARGETS()), outcomesAvailable: true };
 
-  it("refuses a client forge before any durable write", () => {
-    expect(() => attemptRecordLevelColosseumResolved({ ...satisfied, clientPayload: { resolved: true } })).toThrow(
+  it("refuses a client forge before either write", () => {
+    expect(() => assertLevelColosseumRecordPermitted({ ...satisfied, clientPayload: { resolved: true } })).toThrow(
       ProgressionForgeError
     );
-    expect(() => attemptRecordCompanionRookOwned({ ...satisfied, clientPayload: { rookOwned: true } })).toThrow(
-      ProgressionForgeError
-    );
+    expect(() =>
+      assertCompanionRookRecordPermitted({
+        ...satisfied,
+        levelColosseumResolvedAt: new Date(),
+        clientPayload: { rookOwned: true },
+      })
+    ).toThrow(ProgressionForgeError);
     expect(() =>
       attemptRecordKingdomBrassRepublicCompleted({ ...satisfied, clientPayload: { kingdomComplete: true } })
     ).toThrow(ProgressionForgeError);
   });
 
-  it("blocks level and Rook records on the named migration and does not complete Brass Republic", () => {
-    expect(() => attemptRecordLevelColosseumResolved(satisfied)).toThrow(ProgressionSchemaBlockedError);
-    expect(() => attemptRecordCompanionRookOwned(satisfied)).toThrow(ProgressionSchemaBlockedError);
-    expect(() => attemptRecordKingdomBrassRepublicCompleted(satisfied)).toThrow(ProgressionNotPermittedError);
-    try {
-      attemptRecordLevelColosseumResolved(satisfied);
-    } catch (error) {
-      expect(error).toBeInstanceOf(ProgressionSchemaBlockedError);
-      expect((error as ProgressionSchemaBlockedError).migrationLabel).toBe("CREATE TABLE goldline_domain_progression");
-    }
-  });
-
-  it("is idempotent: a second attempt raises the same refusal and still does not complete the kingdom", () => {
-    const once = () => attemptRecordLevelColosseumResolved(satisfied);
-    const twice = () => attemptRecordLevelColosseumResolved(satisfied);
-    expect(once).toThrow(ProgressionSchemaBlockedError);
-    expect(twice).toThrow(ProgressionSchemaBlockedError);
-    expect(() => attemptRecordKingdomBrassRepublicCompleted(satisfied)).toThrow(ProgressionNotPermittedError);
-    expect(() => attemptRecordKingdomBrassRepublicCompleted(satisfied)).toThrow(ProgressionNotPermittedError);
-  });
-
-  it("does not permit resolution when the binding is short", () => {
+  it("does not permit the level write when the binding is short, or Rook before the level row", () => {
     expect(() =>
-      attemptRecordLevelColosseumResolved({ outcomes: outcomesFor(TARGETS().slice(0, 4)), outcomesAvailable: true })
+      assertLevelColosseumRecordPermitted({ outcomes: outcomesFor(TARGETS().slice(0, 4)), outcomesAvailable: true })
     ).toThrow(ProgressionNotPermittedError);
     expect(() =>
-      attemptRecordCompanionRookOwned({ outcomes: {}, outcomesAvailable: true })
+      assertCompanionRookRecordPermitted({ ...satisfied, levelColosseumResolvedAt: null })
     ).toThrow(ProgressionNotPermittedError);
+  });
+
+  it("never permits kingdom.brass_republic completion from the Colosseum binding", () => {
+    expect(() => attemptRecordKingdomBrassRepublicCompleted(satisfied)).toThrow(ProgressionNotPermittedError);
+    expect(() => attemptRecordKingdomBrassRepublicCompleted(satisfied)).toThrow(ProgressionNotPermittedError);
   });
 });

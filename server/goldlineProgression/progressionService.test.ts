@@ -15,68 +15,206 @@ vi.mock("../companions/companionService", () => ({
 vi.mock("../db", () => ({ getDb: mocks.getDb }));
 
 import { colosseumLeadHuntDefinition } from "./colosseumKingdomBinding";
-import { readGoldlineProgression } from "./progressionService";
+import { ProgressionNotPermittedError } from "./progressionContract";
+import {
+  readGoldlineProgression,
+  recordCompanionRookOwned,
+  recordKingdomBrassRepublicCompleted,
+  recordLevelColosseumResolved,
+} from "./progressionService";
 
 const TARGETS = [...(colosseumLeadHuntDefinition()?.targetIds ?? [])];
+const five = () => Object.fromEntries(TARGETS.map(id => [id, "pitched"]));
 
-describe("readGoldlineProgression", () => {
+type Row = {
+  id: string;
+  tenantId: string;
+  operatorId: string;
+  levelColosseumResolvedAt: Date | null;
+  companionRookOwnedAt: Date | null;
+  kingdomBrassRepublicCompletedAt: Date | null;
+  overworldUnlocksJson: unknown;
+};
+
+function predicateParameters(predicate: unknown): unknown[] {
+  if (!predicate || typeof predicate !== "object") return [];
+  const node = predicate as { constructor?: { name?: string }; queryChunks?: unknown[]; value?: unknown };
+  if (node.constructor?.name === "Param") return [node.value];
+  return (node.queryChunks ?? []).flatMap(predicateParameters);
+}
+
+function memoryDb() {
+  const rows: Row[] = [];
+  const patches: Record<string, unknown>[] = [];
+  const match = (predicate: unknown) => {
+    const [tenantId, operatorId] = predicateParameters(predicate);
+    return rows.filter(row => row.tenantId === tenantId && row.operatorId === operatorId);
+  };
+  const db = {
+    patches,
+    rows,
+    select: () => ({
+      from: () => ({
+        where: (predicate: unknown) => {
+          const found = match(predicate);
+          return { limit: async (n: number) => found.slice(0, n) };
+        },
+      }),
+    }),
+    insert: () => ({
+      values: async (value: Row) => {
+        if (rows.some(row => row.tenantId === value.tenantId && row.operatorId === value.operatorId)) {
+          const error = new Error("duplicate") as Error & { code: string };
+          error.code = "ER_DUP_ENTRY";
+          throw error;
+        }
+        rows.push({ ...value });
+      },
+    }),
+    update: () => ({
+      set: (patch: Partial<Row>) => ({
+        where: async (predicate: unknown) => {
+          patches.push(patch);
+          for (const row of match(predicate)) {
+            if ("levelColosseumResolvedAt" in patch && row.levelColosseumResolvedAt == null) {
+              row.levelColosseumResolvedAt = patch.levelColosseumResolvedAt ?? null;
+            }
+            if (
+              "companionRookOwnedAt" in patch &&
+              row.levelColosseumResolvedAt != null &&
+              row.companionRookOwnedAt == null
+            ) {
+              row.companionRookOwnedAt = patch.companionRookOwnedAt ?? null;
+            }
+          }
+        },
+      }),
+    }),
+  };
+  return db;
+}
+
+describe("goldline domain progression persistence", () => {
+  let db: ReturnType<typeof memoryDb>;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getDb.mockResolvedValue({});
+    db = memoryDb();
+    mocks.getDb.mockResolvedValue(db);
     mocks.isCompanionEarned.mockResolvedValue(false);
-  });
-
-  it("scopes the outcome read to the requested tenant and operator", async () => {
-    mocks.readMission.mockImplementation(async ({ tenantId, driverId }: { tenantId: string; driverId: string }) => {
-      if (tenantId === "tenant-a" && driverId === "op-a") {
-        return { outcomes: Object.fromEntries(TARGETS.map(id => [id, "pitched"])) };
-      }
-      if (tenantId === "tenant-b" && driverId === "op-b") return { outcomes: {} };
-      throw new Error(`unexpected identity ${tenantId}/${driverId}`);
-    });
-
-    const tenantA = await readGoldlineProgression({ tenantId: "tenant-a", operatorId: "op-a" });
-    const tenantB = await readGoldlineProgression({ tenantId: "tenant-b", operatorId: "op-b" });
-
-    expect(tenantA.kingdomBinding.status).toBe("satisfied");
-    expect(tenantA.levelColosseumResolved.value).toBe(false);
-    expect(tenantA.kingdomBrassRepublicCompleted.value).toBe(false);
-    expect(tenantA.companionRookOwned.value).toBe(false);
-    expect(tenantB.kingdomBinding.status).toBe("unsatisfied");
-    expect(tenantB.companionRookOwned.value).toBe(false);
-    expect(mocks.readMission).toHaveBeenCalledWith({ tenantId: "tenant-a", driverId: "op-a" });
-    expect(mocks.readMission).toHaveBeenCalledWith({ tenantId: "tenant-b", driverId: "op-b" });
-  });
-
-  it("does not promote a capability unlock into Rook ownership", async () => {
     mocks.readMission.mockResolvedValue({ outcomes: {} });
+  });
+
+  it("reads a missing row as unearned and does not insert one", async () => {
+    const read = await readGoldlineProgression({ tenantId: "tenant-a", operatorId: "op-a" });
+    expect(read.levelColosseumResolved).toEqual({ status: "unearned", value: false });
+    expect(read.companionRookOwned).toEqual({ status: "unearned", value: false });
+    expect(read.kingdomBrassRepublicCompleted.value).toBe(false);
+    expect(db.rows).toHaveLength(0);
+  });
+
+  it("records the level only through the binding, without Rook or Kingdom completion", async () => {
+    mocks.readMission.mockImplementation(async ({ tenantId, driverId }: { tenantId: string; driverId: string }) => {
+      if (tenantId === "tenant-a" && driverId === "op-a") return { outcomes: five() };
+      return { outcomes: {} };
+    });
+    await expect(recordLevelColosseumResolved({ tenantId: "tenant-b", operatorId: "op-b" })).rejects.toBeInstanceOf(
+      ProgressionNotPermittedError
+    );
+    expect(db.rows).toHaveLength(0);
+
+    const first = await recordLevelColosseumResolved({ tenantId: "tenant-a", operatorId: "op-a" });
+    const second = await recordLevelColosseumResolved({ tenantId: "tenant-a", operatorId: "op-a" });
+    expect(first.levelColosseumResolved).toEqual({ status: "earned", value: true });
+    expect(first.companionRookOwned.value).toBe(false);
+    expect(first.kingdomBrassRepublicCompleted.value).toBe(false);
+    expect(second.levelColosseumResolved.value).toBe(true);
+    expect(db.rows).toHaveLength(1);
+    expect(db.rows[0]?.levelColosseumResolvedAt?.toISOString()).toBe(
+      first.levelColosseumResolved.value ? db.rows[0]?.levelColosseumResolvedAt?.toISOString() : ""
+    );
+    expect(db.rows[0]?.companionRookOwnedAt).toBeNull();
+    expect(db.rows[0]?.kingdomBrassRepublicCompletedAt).toBeNull();
+    expect(db.patches.every(patch => !("kingdomBrassRepublicCompletedAt" in patch))).toBe(true);
+    const other = await readGoldlineProgression({ tenantId: "tenant-b", operatorId: "op-b" });
+    expect(other.levelColosseumResolved.value).toBe(false);
+  });
+
+  it("keeps the first level timestamp when the write is repeated", async () => {
+    mocks.readMission.mockResolvedValue({ outcomes: five() });
+    const first = await recordLevelColosseumResolved({ tenantId: "tenant-a", operatorId: "op-a" });
+    const stamp = db.rows[0]?.levelColosseumResolvedAt;
+    await recordLevelColosseumResolved({ tenantId: "tenant-a", operatorId: "op-a" });
+    expect(db.rows).toHaveLength(1);
+    expect(db.rows[0]?.levelColosseumResolvedAt).toBe(stamp);
+    expect(first.companionRookOwned.value).toBe(false);
+  });
+
+  it("records Rook as a separate idempotent write and still does not complete the Kingdom", async () => {
+    mocks.readMission.mockResolvedValue({ outcomes: five() });
+    await expect(recordCompanionRookOwned({ tenantId: "tenant-a", operatorId: "op-a" })).rejects.toBeInstanceOf(
+      ProgressionNotPermittedError
+    );
+    expect(db.rows).toHaveLength(0);
+
+    await recordLevelColosseumResolved({ tenantId: "tenant-a", operatorId: "op-a" });
+    const owned = await recordCompanionRookOwned({ tenantId: "tenant-a", operatorId: "op-a" });
+    const again = await recordCompanionRookOwned({ tenantId: "tenant-a", operatorId: "op-a" });
+    expect(owned.levelColosseumResolved.value).toBe(true);
+    expect(owned.companionRookOwned).toEqual({ status: "earned", value: true });
+    expect(owned.kingdomBrassRepublicCompleted.value).toBe(false);
+    expect(owned.overworldUnlocks.flags.postRook).toBe(true);
+    expect(again.companionRookOwned.value).toBe(true);
+    expect(db.rows).toHaveLength(1);
+    expect(db.rows[0]?.kingdomBrassRepublicCompletedAt).toBeNull();
+    expect(db.rows[0]?.companionRookOwnedAt).toBe(db.rows[0]?.companionRookOwnedAt);
+  });
+
+  it("does not let another tenant's Rook row satisfy this operator", async () => {
+    mocks.readMission.mockResolvedValue({ outcomes: five() });
+    await recordLevelColosseumResolved({ tenantId: "tenant-a", operatorId: "op-a" });
+    await recordCompanionRookOwned({ tenantId: "tenant-a", operatorId: "op-a" });
+    const other = await readGoldlineProgression({ tenantId: "tenant-a", operatorId: "op-b" });
+    expect(other.companionRookOwned.value).toBe(false);
+    expect(other.levelColosseumResolved.value).toBe(false);
+    expect(other.overworldUnlocks.flags.postRook).toBe(false);
+  });
+
+  it("does not promote a capability unlock or a client forge into ownership", async () => {
+    mocks.readMission.mockResolvedValue({ outcomes: five() });
     mocks.isCompanionEarned.mockResolvedValue(true);
     const read = await readGoldlineProgression({ tenantId: "tenant-a", operatorId: "op-a" });
     expect(read.capabilityRookContact.granted).toBe(true);
     expect(read.companionRookOwned.value).toBe(false);
-    expect(mocks.isCompanionEarned).toHaveBeenCalledWith({
-      tenantId: "tenant-a",
-      operatorId: "op-a",
-      companionId: "rook",
-    });
+    await expect(
+      recordLevelColosseumResolved({ tenantId: "tenant-a", operatorId: "op-a", clientPayload: { resolved: true } })
+    ).rejects.toThrow(/resolved/);
+    await expect(
+      recordCompanionRookOwned({ tenantId: "tenant-a", operatorId: "op-a", clientPayload: { rookOwned: true } })
+    ).rejects.toThrow(/rookOwned/);
+    expect(db.rows).toHaveLength(0);
   });
 
-  it("fails closed when the outcome source is unavailable", async () => {
-    mocks.readMission.mockRejectedValue(new Error("database unavailable"));
-    const read = await readGoldlineProgression({ tenantId: "tenant-a", operatorId: "op-a" });
-    expect(read.kingdomBinding.status).toBe("uncertain");
-    expect(read.levelColosseumResolved.value).toBe(false);
-    expect(read.companionRookOwned.value).toBe(false);
-    expect(read.kingdomBrassRepublicCompleted.value).toBe(false);
+  it("refuses kingdom completion without writing a row", async () => {
+    mocks.readMission.mockResolvedValue({ outcomes: five() });
+    await expect(
+      recordKingdomBrassRepublicCompleted({
+        tenantId: "tenant-a",
+        operatorId: "op-a",
+        outcomes: five(),
+        outcomesAvailable: true,
+      })
+    ).rejects.toBeInstanceOf(ProgressionNotPermittedError);
+    expect(db.rows).toHaveLength(0);
   });
 
-  it("does not treat an unreadable capability table as ownership", async () => {
-    mocks.readMission.mockResolvedValue(null);
-    mocks.getDb.mockResolvedValue(null);
-    const read = await readGoldlineProgression({ tenantId: "tenant-a", operatorId: "op-a" });
-    expect(read.capabilityRookContact.readable).toBe(false);
-    expect(read.capabilityRookContact.granted).toBe(false);
-    expect(read.companionRookOwned.value).toBe(false);
-    expect(mocks.isCompanionEarned).not.toHaveBeenCalled();
+  it("keeps a second read earned after the client cache is absent", async () => {
+    mocks.readMission.mockResolvedValue({ outcomes: five() });
+    await recordLevelColosseumResolved({ tenantId: "tenant-a", operatorId: "op-a" });
+    await recordCompanionRookOwned({ tenantId: "tenant-a", operatorId: "op-a" });
+    const fresh = await readGoldlineProgression({ tenantId: "tenant-a", operatorId: "op-a" });
+    expect(fresh.companionRookOwned.value).toBe(true);
+    expect(fresh.levelColosseumResolved.value).toBe(true);
+    expect(fresh.localStorage).toBe("cache_and_present_only");
   });
 });

@@ -62,10 +62,10 @@ describe("goldlineProgression router", () => {
     const caller = progressionRouter.createCaller(context("tenant-a", 7));
     const read = await caller.get({});
     expect(read.tenantId).toBe("tenant-a");
-    expect(read.operatorId).toBe("7");
+    expect(read.operatorId).toBe("open-7");
     expect(read.companionRookOwned.value).toBe(false);
     expect(read.kingdomBrassRepublicCompleted.value).toBe(false);
-    expect(mocks.readMission).toHaveBeenCalledWith({ tenantId: "tenant-a", driverId: "7" });
+    expect(mocks.readMission).toHaveBeenCalledWith({ tenantId: "tenant-a", driverId: "open-7" });
   });
 
   it("rejects a client payload that tries to forge resolution, Rook, or kingdom completion", async () => {

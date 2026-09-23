@@ -6996,6 +6996,32 @@ export const goldlineCompanionUnlocks = mysqlTable(
 );
 
 /**
+ * Durable domain.goldline progression. The empty table is created by
+ * scripts/migrate.mjs (Project 0). Null timestamps are unearned. This
+ * module does not create the table and does not backfill rows.
+ */
+export const goldlineDomainProgression = mysqlTable(
+  "goldline_domain_progression",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorId: varchar("operatorId", { length: 128 }).notNull(),
+    levelColosseumResolvedAt: timestamp("levelColosseumResolvedAt"),
+    companionRookOwnedAt: timestamp("companionRookOwnedAt"),
+    kingdomBrassRepublicCompletedAt: timestamp("kingdomBrassRepublicCompletedAt"),
+    overworldUnlocksJson: json("overworldUnlocksJson").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    progressionUnique: uniqueIndex("uq_goldline_domain_progression").on(
+      table.tenantId,
+      table.operatorId
+    ),
+  })
+);
+
+/**
  * Slice 4 — Mission Director plans. Append-only revisions per business
  * date — a plan is never overwritten, so it stays provable what the plan
  * said before the day changed. Follows the authoredDays stableKey /

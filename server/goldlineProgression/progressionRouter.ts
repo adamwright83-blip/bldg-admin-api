@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { dayforgeTenantMemberProcedure, router } from "../_core/trpc";
-import { dayDirectorActorId } from "../dayDirector/dayDirectorActor";
 import { readGoldlineProgression } from "./progressionService";
 
 /**
@@ -13,7 +12,7 @@ export const progressionRouter = router({
     .query(({ ctx }) =>
       readGoldlineProgression({
         tenantId: ctx.tenantId,
-        operatorId: dayDirectorActorId(ctx),
+        operatorId: ctx.user.openId,
       })
     ),
 });

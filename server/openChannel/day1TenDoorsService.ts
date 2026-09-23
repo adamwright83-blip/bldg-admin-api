@@ -25,6 +25,8 @@ import {
   openChannelMissions,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { colosseumKingdomBindingNewlySatisfied } from "../goldlineProgression/colosseumKingdomBinding";
+import { recordLevelFromOutcomes } from "../goldlineProgression/progressionWrites";
 import { ensureOpenChannelTables } from "./openChannelService";
 import {
   DAY1_BUSINESS_DATE,
@@ -489,6 +491,22 @@ export async function recordDay1TenDoorsOutcome(input: {
     taskId: task.id,
     payload: nextPayload,
   });
+
+  if (colosseumKingdomBindingNewlySatisfied(payload.outcomes, nextPayload.outcomes)) {
+    try {
+      await recordLevelFromOutcomes({
+        tenantId: input.tenantId,
+        operatorId: input.driverId,
+        outcomes: nextPayload.outcomes,
+        outcomesAvailable: true,
+      });
+    } catch (error) {
+      console.warn(
+        "[goldline-progression] level.colosseum was not recorded",
+        error instanceof Error ? error.message : error
+      );
+    }
+  }
 
   if (day1IsComplete(nextPayload) && mission.status !== "completed") {
     const completedAt = new Date();
