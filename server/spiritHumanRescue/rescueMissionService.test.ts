@@ -13,10 +13,12 @@ import {
   deferRescueMission,
   enterRescueMission,
   instantiateRescueMission,
+  listRescueMissions,
   MemoryRescueMissionStore,
   prepareRescueDraft,
   recordRescueConsequence,
 } from "./rescueMissionService";
+import { toPublicRescueCandidate } from "./listCandidates";
 import { canCompleteRescue, publicMissionHasNoPhone } from "../../shared/spiritHumanRescue";
 import { assertAuthoritativeRescueSendEnabled } from "./rescueRouter";
 
@@ -311,6 +313,123 @@ describe("Spirit Human rescue send boundary", () => {
       "customer_replied",
       "customer_ordered",
     ]);
+  });
+
+  it("keeps raw contact PII off the public Objective and resolves it only at send", async () => {
+    const store = new MemoryRescueMissionStore();
+    let resolveCalls = 0;
+    const deps = depsFor({
+      store,
+      resolveSendContact: async () => {
+        resolveCalls += 1;
+        return { kind: "ready" as const, contact: contactFor() };
+      },
+    });
+    const created = await instantiateRescueMission(
+      { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
+      deps
+    );
+    const stored = (await store.get("tenant-a", created.missionId))!;
+    await store.save({
+      ...stored,
+      spiritHuman: {
+        ...stored.spiritHuman,
+        phone: "3105550101",
+        email: "priya@example.com",
+        address: "3545 Wilshire Blvd",
+        lastName: "Test",
+      },
+    } as typeof stored);
+    const listed = await listRescueMissions(
+      { tenantId: "tenant-a", operatorUserId: "op-a" },
+      deps
+    );
+    expect(JSON.stringify(listed)).not.toMatch(/3105550101|priya@example.com|Wilshire|lastName/);
+    expect(publicMissionHasNoPhone(listed[0]!)).toBe(true);
+    expect(listed[0]?.spiritHuman.firstName).toBe("Priya");
+    expect(listed[0]?.spiritHuman.snapshotCustomerId).toBe(created.spiritHuman.snapshotCustomerId);
+
+    const otherTenant = await listRescueMissions(
+      { tenantId: "tenant-b", operatorUserId: "op-a" },
+      deps
+    );
+    expect(otherTenant).toEqual([]);
+    await expect(
+      approveAndSendRescue(
+        {
+          tenantId: "tenant-b",
+          operatorUserId: "op-a",
+          missionId: created.missionId,
+          approvedByUserId: "op-a",
+          operatorAuthorizedSend: true,
+        },
+        deps
+      )
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(resolveCalls).toBe(0);
+    expect(deps.sendAdapter.attempts).toHaveLength(0);
+
+    const sent = await approveAndSendRescue(
+      {
+        tenantId: "tenant-a",
+        operatorUserId: "op-a",
+        missionId: created.missionId,
+        approvedByUserId: "op-a",
+        operatorAuthorizedSend: true,
+      },
+      deps
+    );
+    expect(resolveCalls).toBe(1);
+    expect(deps.sendAdapter.attempts).toEqual([
+      expect.objectContaining({ to: "3105550101" }),
+    ]);
+    expect(sent.lifecycle).toBe("completed");
+    expect(JSON.stringify(sent)).not.toMatch(/3105550101|priya@example.com|Wilshire/);
+    expect(canCompleteRescue(sent.send)).toBe(true);
+    const durable = await store.get("tenant-a", created.missionId);
+    expect(JSON.stringify(durable)).not.toMatch(/3105550101|priya@example.com|Wilshire/);
+  });
+
+  it("still rejects a public payload that contains a phone number", async () => {
+    const store = new MemoryRescueMissionStore();
+    const deps = depsFor({ store });
+    const created = await instantiateRescueMission(
+      { tenantId: "tenant-a", operatorUserId: "op-a", snapshotCustomerId: snapshotId() },
+      deps
+    );
+    await expect(
+      prepareRescueDraft(
+        {
+          tenantId: "tenant-a",
+          operatorUserId: "op-a",
+          missionId: created.missionId,
+          editedDraft: "Call me at 310-555-0199",
+        },
+        deps
+      )
+    ).rejects.toThrow("Spirit Human public mission leaked contact PII.");
+    expect((await store.get("tenant-a", created.missionId))?.draft).toBeNull();
+    expect(deps.sendAdapter.attempts).toHaveLength(0);
+  });
+
+  it("publishes rescue candidates without contact fields", () => {
+    const published = toPublicRescueCandidate({
+      id: "cust_safe",
+      firstName: "Priya",
+      buildingName: "Opus LA",
+      lastOrderAt: "2026-07-01T12:00:00.000Z",
+      daysSinceLastOrder: 78,
+      phone: "3105550101",
+      email: "priya@example.com",
+      address: "3545 Wilshire Blvd",
+    } as never);
+    expect(published).toEqual({
+      id: "cust_safe",
+      firstName: "Priya",
+      buildingName: "Opus LA",
+      lastOrderAt: "2026-07-01T12:00:00.000Z",
+      daysSinceLastOrder: 78,
+    });
   });
 
   it("isolates tenants and operators, and never puts a phone on the public mission", async () => {

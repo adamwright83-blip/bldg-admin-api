@@ -135,9 +135,17 @@ export type SpiritHumanRescueMission = {
   updatedAt: string;
 };
 
-export type PublicRescueMission = Omit<SpiritHumanRescueMission, never>;
+export type PublicRescueMission = SpiritHumanRescueMission;
 
-const PHONE_LEAK = /(?:\+?1[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/;
+/**
+ * Contact-shaped phone. A bare digit run inside a provider SID or snapshot
+ * hash is not a phone; a standalone or formatted number is.
+ */
+const PHONE_LEAK =
+  /(?:^|[^\w])(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}(?!\w)/;
+const EMAIL_LEAK = /(?:^|[^\w])[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}(?!\w)/i;
+const STREET_ADDRESS_LEAK =
+  /(?:^|[^\w])\d{1,6}\s+(?:[A-Za-z0-9.'-]+\s+){0,5}(?:street|st|avenue|ave|boulevard|blvd|road|rd|drive|dr|lane|ln|way|court|ct|place|pl)\b/i;
 
 export function selectVillagerIndependentOfCustomer(
   missionId: string,
@@ -252,6 +260,66 @@ export function assertSendRecordImmutableAfterSuccess(
 
 export function publicMissionHasNoPhone(mission: PublicRescueMission): boolean {
   return !PHONE_LEAK.test(JSON.stringify(mission));
+}
+
+export function publicMissionHasNoContactPii(mission: PublicRescueMission): boolean {
+  const serialized = JSON.stringify(mission);
+  return !PHONE_LEAK.test(serialized) && !EMAIL_LEAK.test(serialized) && !STREET_ADDRESS_LEAK.test(serialized);
+}
+
+/**
+ * Public Objective payload for the rescue Challenge.
+ * Identifiers and safe presentation only. Phone, email, street address,
+ * and other contact fields are dropped here; the authorized send boundary
+ * resolves the destination from tenant aggregates.
+ */
+export function projectPublicRescueMission(mission: SpiritHumanRescueMission): PublicRescueMission {
+  const spirit = mission.spiritHuman;
+  const publicSpirit: FrozenRescueFacts = {
+    snapshotCustomerId: spirit.snapshotCustomerId,
+    firstName: spirit.firstName,
+    lastOrderAt: spirit.lastOrderAt,
+    daysSinceLastOrder: spirit.daysSinceLastOrder,
+  };
+  if (spirit.buildingName) publicSpirit.buildingName = spirit.buildingName;
+  if (spirit.paidOrderCount != null) publicSpirit.paidOrderCount = spirit.paidOrderCount;
+  if (spirit.historicalSpendCents != null) publicSpirit.historicalSpendCents = spirit.historicalSpendCents;
+
+  return {
+    missionId: mission.missionId,
+    tenantId: mission.tenantId,
+    operatorUserId: mission.operatorUserId,
+    kind: SPIRIT_HUMAN_RESCUE_KIND,
+    lifecycle: mission.lifecycle,
+    villager: {
+      id: mission.villager.id,
+      displayName: mission.villager.displayName,
+      role: mission.villager.role,
+    },
+    spiritHuman: publicSpirit,
+    draft: mission.draft,
+    send: {
+      status: mission.send.status,
+      idempotencyKey: mission.send.idempotencyKey,
+      approvedByUserId: mission.send.approvedByUserId,
+      attemptedAt: mission.send.attemptedAt,
+      acceptedAt: mission.send.acceptedAt,
+      failedAt: mission.send.failedAt,
+      providerMessageId: mission.send.providerMessageId,
+      providerStatus: mission.send.providerStatus,
+      evidenceName: mission.send.evidenceName,
+      failureReason: mission.send.failureReason,
+    },
+    consequences: mission.consequences.map(item => ({
+      kind: item.kind,
+      observedAt: item.observedAt,
+      evidenceId: item.evidenceId,
+    })),
+    opsTaskId: mission.opsTaskId,
+    deferredAt: mission.deferredAt,
+    createdAt: mission.createdAt,
+    updatedAt: mission.updatedAt,
+  };
 }
 
 export function composeReactivationDraft(facts: FrozenRescueFacts): string {

@@ -10,6 +10,8 @@ import {
   canClaimOutboundSend,
   isSendClaimLocked,
   missionLifecycleFromSend,
+  projectPublicRescueMission,
+  publicMissionHasNoContactPii,
   publicMissionHasNoPhone,
   selectVillagerIndependentOfCustomer,
   SPIRIT_HUMAN_VILLAGERS,
@@ -154,12 +156,45 @@ describe("Spirit Human rescue contract", () => {
         lastOrderAt: "2026-07-01T12:00:00.000Z",
         daysSinceLastOrder: 40,
       },
+      send: {
+        ...emptySendRecord("mission-1"),
+        status: "sent",
+        providerMessageId: "SM12345678901234567890123456789012",
+        evidenceName: "provider_accepted",
+      },
     });
     expect(publicMissionHasNoPhone(row)).toBe(true);
     expect(publicMissionHasNoPhone({
       ...row,
       draft: "Call me at 310-555-0199",
     })).toBe(false);
+    expect(publicMissionHasNoPhone({
+      ...row,
+      draft: "Text 3105550101",
+    })).toBe(false);
+    expect(publicMissionHasNoContactPii({
+      ...row,
+      draft: "Write priya@example.com",
+    })).toBe(false);
+    expect(publicMissionHasNoContactPii({
+      ...row,
+      draft: "Meet at 3545 Wilshire Blvd",
+    })).toBe(false);
+    const leaked = {
+      ...row,
+      spiritHuman: {
+        ...row.spiritHuman,
+        phone: "3105550101",
+        email: "priya@example.com",
+        address: "3545 Wilshire Blvd",
+        lastName: "Rao",
+      },
+    } as SpiritHumanRescueMission;
+    const projected = projectPublicRescueMission(leaked);
+    expect(publicMissionHasNoContactPii(projected)).toBe(true);
+    expect(JSON.stringify(projected)).not.toMatch(/3105550101|priya@example.com|Wilshire|Rao/);
+    expect(projected.spiritHuman.firstName).toBe("Alex");
+    expect(projected.send.providerMessageId).toBe("SM12345678901234567890123456789012");
   });
 
   it("composes a truthful draft without invented offers or shame", () => {

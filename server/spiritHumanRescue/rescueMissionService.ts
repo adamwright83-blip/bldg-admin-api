@@ -9,7 +9,8 @@ import {
   isAmbiguousSend,
   isSendClaimLocked,
   missionLifecycleFromSend,
-  publicMissionHasNoPhone,
+  projectPublicRescueMission,
+  publicMissionHasNoContactPii,
   selectVillagerIndependentOfCustomer,
   SEND_CLAIMABLE_LIFECYCLES,
   SEND_EVIDENCE_NAME,
@@ -58,13 +59,9 @@ export type RescueServiceDeps = {
   persistOpsTask?: boolean;
 };
 
-function cloneMission(mission: SpiritHumanRescueMission): SpiritHumanRescueMission {
-  return JSON.parse(JSON.stringify(mission)) as SpiritHumanRescueMission;
-}
-
 function publicize(mission: SpiritHumanRescueMission): SpiritHumanRescueMission {
-  const copy = cloneMission(mission);
-  if (!publicMissionHasNoPhone(copy)) {
+  const copy = projectPublicRescueMission(mission);
+  if (!publicMissionHasNoContactPii(copy)) {
     throw new Error("Spirit Human public mission leaked contact PII.");
   }
   return copy;
@@ -87,16 +84,17 @@ async function persistIfCurrent(
   expected: SpiritHumanRescueMission,
   next: SpiritHumanRescueMission
 ): Promise<{ claimed: boolean; mission: SpiritHumanRescueMission }> {
+  const safeNext = publicize(next);
   const claimed = await store.compareAndSet({
     tenantId: expected.tenantId,
     missionId: expected.missionId,
     fromStatuses: [expected.send.status],
     fromLifecycles: [expected.lifecycle],
-    next,
+    next: safeNext,
   });
-  if (claimed === "claimed") return { claimed: true, mission: next };
+  if (claimed === "claimed") return { claimed: true, mission: safeNext };
   const latest = await store.get(expected.tenantId, expected.missionId);
-  return { claimed: false, mission: latest ?? expected };
+  return { claimed: false, mission: latest ? publicize(latest) : safeNext };
 }
 
 function refuseIfSendLocked(mission: SpiritHumanRescueMission): SpiritHumanRescueMission | null {
@@ -164,7 +162,7 @@ export async function instantiateRescueMission(
     updatedAt: now.toISOString(),
   };
 
-  const episodeClaim = await store.createForDormancyEpisode(mission);
+  const episodeClaim = await store.createForDormancyEpisode(publicize(mission));
   if (episodeClaim.mission.operatorUserId !== input.operatorUserId) {
     throw Object.assign(new Error("This dormant customer episode is already assigned to another operator."), {
       code: "TARGET_ALREADY_CLAIMED",
@@ -384,7 +382,7 @@ async function sendOnce(
     return persistFailure(store, mission, startedAt, "contact_unresolved", "Customer contact could not be resolved.");
   }
 
-  const sending: SpiritHumanRescueMission = {
+  const sending = publicize({
     ...mission,
     draft,
     send: {
@@ -395,7 +393,7 @@ async function sendOnce(
     },
     lifecycle: "active",
     updatedAt: startedAt.toISOString(),
-  };
+  });
   const claimed = await store.compareAndSet({
     tenantId: input.tenantId,
     missionId: input.missionId,
@@ -456,12 +454,12 @@ async function sendOnce(
       "sending",
     ]);
   }
-  const completed: SpiritHumanRescueMission = {
+  const completed = publicize({
     ...sending,
     send: sentRecord,
     lifecycle: "completed",
     updatedAt: acceptedAt.toISOString(),
-  };
+  });
   const completedClaim = await store.compareAndSet({
     tenantId: input.tenantId,
     missionId: input.missionId,
@@ -535,7 +533,7 @@ async function markSendOutcomeUnknown(
   now: Date
 ): Promise<SpiritHumanRescueMission> {
   if (mission.send.status === "send_outcome_unknown") return publicize(mission);
-  const next: SpiritHumanRescueMission = {
+  const next = publicize({
     ...mission,
     send: {
       ...mission.send,
@@ -547,7 +545,7 @@ async function markSendOutcomeUnknown(
     },
     lifecycle: "problem",
     updatedAt: now.toISOString(),
-  };
+  });
   const claimed = await store.compareAndSet({
     tenantId: mission.tenantId,
     missionId: mission.missionId,
@@ -571,7 +569,7 @@ async function persistFailure(
     ...CLAIMABLE_SEND_STATES,
   ]
 ): Promise<SpiritHumanRescueMission> {
-  const failed: SpiritHumanRescueMission = {
+  const failed = publicize({
     ...mission,
     send: {
       ...mission.send,
@@ -582,7 +580,7 @@ async function persistFailure(
     },
     lifecycle: "problem",
     updatedAt: now.toISOString(),
-  };
+  });
   const claimed = await store.compareAndSet({
     tenantId: mission.tenantId,
     missionId: mission.missionId,

@@ -2,7 +2,7 @@ import { loadPaidOrderLedger, type PaidOrderEvent } from "../analytics/paidOrder
 import { listAdminCustomerAggregates } from "../db";
 import { strategyCustomerSnapshotId } from "../strategy/snapshotDormantCustomers";
 import { canCompleteRescue, type SpiritHumanRescueMission } from "../../shared/spiritHumanRescue";
-import { recordRescueConsequence } from "./rescueMissionService";
+import { listRescueMissions, recordRescueConsequence } from "./rescueMissionService";
 import { requireDurableRescueStore, type RescueMissionStore } from "./rescueMissionStore";
 import type { AdminCustomerAggregateDbRow } from "../adminCustomerAggregate";
 
@@ -95,5 +95,8 @@ export async function reconcilePaidOrderConsequencesForOperator(
     );
   }
 
-  return store.listForOperator(input.tenantId, input.operatorUserId);
+  return listRescueMissions(
+    { tenantId: input.tenantId, operatorUserId: input.operatorUserId },
+    { store }
+  );
 }
