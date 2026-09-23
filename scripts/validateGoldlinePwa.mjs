@@ -21,6 +21,11 @@ if (!existsSync(manifestPath)) {
 } else {
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   const requiredFields = ["name", "short_name", "start_url", "scope", "display", "background_color", "theme_color", "icons"];
+  if (manifest.name !== "JOYSTICK" || manifest.short_name !== "JOYSTICK") {
+    fail(`manifest product name must be JOYSTICK, got name=${JSON.stringify(manifest.name)} short_name=${JSON.stringify(manifest.short_name)}`);
+  } else {
+    pass("manifest product name is JOYSTICK");
+  }
   for (const field of requiredFields) {
     if (manifest[field] == null) fail(`manifest missing required field: ${field}`);
     else pass(`manifest.${field} = ${JSON.stringify(manifest[field])}`);
@@ -45,6 +50,23 @@ if (!existsSync(manifestPath)) {
   }
 }
 
+const installHeadPath = resolve(process.cwd(), "client/src/game/pwa/installPwaHead.ts");
+if (!existsSync(installHeadPath)) {
+  fail(`install wiring not found at ${installHeadPath}`);
+} else {
+  const installHead = readFileSync(installHeadPath, "utf8");
+  if (!installHead.includes('manifestLink.href = "/goldline.webmanifest"')) {
+    fail("install wiring does not point at /goldline.webmanifest");
+  } else {
+    pass("install wiring links /goldline.webmanifest");
+  }
+  if (!installHead.includes('"/assets/goldline/pwa/icon-192.png"')) {
+    fail("install wiring does not use the existing 192 icon");
+  } else {
+    pass("install wiring uses the existing 192 icon");
+  }
+}
+
 const swPath = resolve(process.cwd(), "client/public/goldline-sw.js");
 if (!existsSync(swPath)) {
   fail(`service worker not found at ${swPath}`);
@@ -56,8 +78,16 @@ if (!existsSync(swPath)) {
   } catch (error) {
     fail(`service worker has a syntax error: ${error.message}`);
   }
-  if (!source.includes("CACHE_VERSION")) fail("service worker has no cache versioning constant");
-  else pass("service worker declares a cache version");
+  if (!source.includes('const CACHE_VERSION = "goldline-shell-v3"')) {
+    fail("service worker cache version must be goldline-shell-v3");
+  } else {
+    pass("service worker cache is goldline-shell-v3");
+  }
+  if (!source.includes('"/goldline.webmanifest"')) {
+    fail("service worker precache does not include the manifest");
+  } else {
+    pass("service worker precache includes the manifest");
+  }
   if (!/pathname\.startsWith\("\/api\/"\)/.test(source)) {
     fail("service worker does not appear to special-case /api/ requests — authoritative data could be cached");
   } else {

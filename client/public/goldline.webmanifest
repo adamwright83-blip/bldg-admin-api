@@ -1,6 +1,6 @@
 {
-  "name": "Goldline",
-  "short_name": "Goldline",
+  "name": "JOYSTICK",
+  "short_name": "JOYSTICK",
   "description": "A real playable action-adventure game whose save file is the real business.",
   "start_url": "/",
   "scope": "/",
