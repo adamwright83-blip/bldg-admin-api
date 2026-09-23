@@ -50,11 +50,17 @@ Do not build a new agent runtime, tool dispatcher, permission layer, or approval
 - Greystar snapshot: five/ten wording confirmed as described. `day1TenDoors` owns ten real targets, `COLOSSEUM_LEAD_HUNT` is the five-target projection defining Kingdom 1 completion. Amend the protected snapshot doc with this.
 - Chapter entry: `/goldline-chapter` is reached through Kingdom 2, which unlocks only after Kingdom 1 (the Greystar hunt + in-fiction Clockhead defeat) is complete. Kingdom 2 is locked on the map until then.
 
+## Resolved decisions (2026-09-22, Adam)
+- Colosseum prologue: four hits before Clockhead escapes (a full 3-hit combo + one more); shown only to players with zero recorded Colosseum outcomes, never retroactively; one hard red flush per hit, never a strobe; mute suspends the audio context app-wide and unmute resumes from the tap.
+- Rook joins the party when Kingdom 1 (the Colosseum) resolves — after LEVEL COMPLETE, through the WORLD_BIBLE §12 reveal (the illegal communications network in the Republic's clocks), never a prison door — and travels into Kingdom 2. His in-world mechanic is CONTACT (= `rook.outreach_drafting`). Recorded in `docs/goldline/campaigns/KINGDOM_2_COMPANION_EVALUATION.md` §Amendment. Party membership lives in `client/src/pages/goldline/stages/goldlineParty.ts` as same-device local fantasy continuity (`localStorage`, like the Wayward unlock) — not durable or server state.
+- Use the approved Rook render from `goldline/rook-3d-asset-pipeline` as-is (mold approved; coloring unfinished but acceptable). Do not regenerate or redesign him.
+
 ## Corrections to earlier notes in this file
 - The claim that drizzle/0067 + 0068 "need hand-written blocks in scripts/migrate.mjs" was wrong. Both files' own header comments say they apply via `applyDayforgeReleaseMigrations` with `DAYFORGE_RELEASE_DB=1` — a deliberately separate, gated path from `scripts/migrate.mjs`. Do not add them there.
 - The claim that "FirstChapter.tsx is localStorage-only ... persistence.ts sits unused" was wrong. `client/src/pages/GoldlineChapterHost.tsx` already wires `FirstChapter.tsx` to the server via `goldlineChapterState.get/save` and `goldlineChapterEventBinding`, with revision-conflict handling, a 4s sync loop, and graceful fallback to local storage when the server table doesn't exist yet (`state.error` path). The code is done; only applying the migration is outstanding, and that was already correctly recorded as blocked on Adam.
 
 ## Backlog
+- [adam] Decide whether Kingdom 1's real completion should count as `earnCompanion` evidence for Rook. Today Rook's party membership is same-device local fantasy continuity (`localStorage`), recorded at the Colosseum-resolution boundary; the server's evidence-backed unlock (which requires a completed `ops_tasks` row — Colosseum outcomes are open-channel mission tasks) is not written, and `seedKingdoms.ts` still says Kingdom 2's campaign earns him.
 - [claude] Next Jawbreaker sidebench after PR #175: unify Churn Radar / recovery / lantern-city churn snapshots onto canonical customer/order history. Those paths still scan native `orders` (service type, weight, recovery drafts, `lastOrderId` join to `orders`). Do not describe them as unified Goldline customer truth until that work lands. Geographic Truth, StrategyEngine aggregates, and admin customer list already consume native + CleanCloud.
 - [cursor] Behavioral-science Slice 6 leftover — Driver/Admin offboarding UI for Claire relationship closing. Server contract is `composeClaireRelationshipClosing`; do not delete business records. Handoff: `docs/goldline/SLICE_6_HANDOFF.md`.
 - [chatgpt] (09/16) Complete the “mission genre system for conquering psychological blockers” multi-slice prompt — finish the psychological-friction-to-mission-genre system on top of Campaign Run + Fiction Packs.
@@ -126,6 +132,7 @@ Full spec: `docs/goldline/FICTION_PACKS.md` (binding). Campaign truth stays belo
 - [chatgpt] Design Companion 2's agentic power — blocked on Kingdom 3 definition, power must make K3 genuinely require it
 
 ## Done
+- [claude] Colosseum quality pass — PR #223 (branch `claude/colosseum-quality-pass`): arena + Clockhead finale rebuild, hit feel, first-entry prologue, review fixes, and the end-of-level Rook sequence (LEVEL COMPLETE → Rook on the line → ROOK JOINED THE PARTY / CONTACT → Take the Wayward route). Rook's party membership is same-device local fantasy continuity, not server state; the server `earnCompanion` evidence question stays open (Backlog).
 - [cursor] Claire Intelligence Repair Part 2, Slice C+D — retrieval ≠ answer. Merged PR #174 / `c96e99e`.
 - [claude] Jawbreaker / Gumball → Goldline customer truth repair. Merged PR #175 / `fec0627`.
 - [cursor] Wire the 8 approved BIO CONTAINMENT mission images into the mobile Campaign Run / Fiction Pack experience. Merged PR #162 / `9ce811ce65bc92c26e228fa79c6f6e854c418f2d`. Assets remain byte-identical; Clockhead comms and ENTER FIELD persistence are presentation-only.

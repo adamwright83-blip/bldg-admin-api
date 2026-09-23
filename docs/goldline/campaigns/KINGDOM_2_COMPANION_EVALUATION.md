@@ -47,6 +47,42 @@ companion Rook *is* that Rook, extended with the companion capability above —
 one character, not a fork. See `goldlineCompanions.unifiedProductPersona` on the
 seeded roster row.
 
+## Amendment — Rook joins at the Colosseum (Adam, 2026-09-22)
+
+Per Adam's direction, Rook joins the party when **Kingdom 1 (the Colosseum) resolves** —
+the same boundary as the Wayward unlock — and travels with Trailblazer into Kingdom 2,
+whose real campaign is exactly what his capability is for. That was already the reading
+of Adam's `goldline/rook-3d-asset-pipeline` work (2026-09-11: "Rook is Kingdom 2's
+companion; the Clockhead duel win is the closest thing today to a durable 'Colosseum
+complete' signal"). He is still earned through real field work: the finale that ends
+with him only exists once the five real Colosseum outcomes are recorded.
+
+His reveal follows WORLD_BIBLE §12 rather than a rescue: rumoured captured, he has been
+running an illegal communications network through the Republic's own clocks. After
+Clockhead falls, one of his handless dials — a speaker all along — crackles: "You took
+your time."
+
+What this changes, and what it does not:
+
+- **Party membership** (fiction) is same-device local continuity: recorded per player in
+  this device's `localStorage` at the Colosseum-resolution boundary, exactly like the
+  Wayward unlock and the local Colosseum resolution it derives from. It is not durable,
+  account-level or server state — another device, a cleared browser or a private window
+  will not have it. Later kingdoms and the Road read it from
+  `client/src/pages/goldline/stages/goldlineParty.ts` (`isTravelingWith`,
+  `useGoldlineParty`).
+- **CONTACT** is the in-world name of his mechanic: Rook can reach people, open
+  conversations, and get through social barriers Trailblazer cannot. It names the same
+  protected capability, `rook.outreach_drafting` (REALITY_BRIDGE §6), and widens none of
+  its may / may-not rules. No authored canon named his ability before this.
+- **The server's evidence-backed unlock is not written.** `earnCompanion` grants the real
+  capability only against a completed `ops_tasks` row; the Colosseum's outcomes are
+  recorded as open-channel mission tasks, not ops tasks. Whether Kingdom 1's real
+  completion should count as that evidence is an open decision for Adam.
+- `server/goldlineKingdoms/seedKingdoms.ts` still describes Rook as the companion Kingdom
+  2's campaign earns, and every kingdom's `companionEarnedId` is still null. Server code
+  was not changed with this amendment.
+
 ## Necessity for Kingdom 3
 
 Kingdom 3's real challenge is not yet defined (open ChatGPT task,

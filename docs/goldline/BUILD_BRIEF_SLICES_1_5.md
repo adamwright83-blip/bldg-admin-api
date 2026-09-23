@@ -337,6 +337,12 @@ earns one specified companion; that companion's protected capability is necessar
 Kingdom 3; the chapter remains completable with zero qualifying business events; and
 the Rook decision is recorded either way.
 
+> **Amended 2026-09-22 (Adam):** Rook joins the party when Kingdom 1 (the Colosseum)
+> resolves and travels into Kingdom 2 as its companion; his in-world mechanic is CONTACT
+> (`rook.outreach_drafting`). Party membership is currently same-device local fantasy
+> continuity, not server state. The evidence-backed server unlock of his real capability
+> is unchanged and still open. See `campaigns/KINGDOM_2_COMPANION_EVALUATION.md` §Amendment.
+
 ---
 
 # Slice 4 — Mission Director v1

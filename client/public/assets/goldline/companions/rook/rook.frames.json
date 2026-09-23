@@ -1,0 +1,55 @@
+{
+ "assetId": "rook",
+ "source": "rook.glb",
+ "concept": "rook-cutout.png",
+ "pivot": "center_bottom",
+ "frameSize": {
+  "width": 512,
+  "height": 512
+ },
+ "targetHeightBlenderUnits": 1.75,
+ "normalization": {
+  "source_height": 0.9993040561676025,
+  "applied_scale": 1.7512187498881635
+ },
+ "shading": "concept-projection",
+ "registeredView": {
+  "yaw": 38.0,
+  "elev": 14.0
+ },
+ "rotateX": -90.0,
+ "cameraAzimuth": 60.0,
+ "projectedVertexShare": 0.11549998262809848,
+ "states": {
+  "idle": {
+   "frames": 24,
+   "files": [
+    "rook-idle-01.png",
+    "rook-idle-02.png",
+    "rook-idle-03.png",
+    "rook-idle-04.png",
+    "rook-idle-05.png",
+    "rook-idle-06.png",
+    "rook-idle-07.png",
+    "rook-idle-08.png",
+    "rook-idle-09.png",
+    "rook-idle-10.png",
+    "rook-idle-11.png",
+    "rook-idle-12.png",
+    "rook-idle-13.png",
+    "rook-idle-14.png",
+    "rook-idle-15.png",
+    "rook-idle-16.png",
+    "rook-idle-17.png",
+    "rook-idle-18.png",
+    "rook-idle-19.png",
+    "rook-idle-20.png",
+    "rook-idle-21.png",
+    "rook-idle-22.png",
+    "rook-idle-23.png",
+    "rook-idle-24.png"
+   ]
+  }
+ },
+ "rig": "scripts/assets/blender/rig.py"
+}

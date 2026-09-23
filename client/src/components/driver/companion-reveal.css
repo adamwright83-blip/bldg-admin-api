@@ -1,0 +1,156 @@
+/*
+ * A companion's reward card: a lit stage where the companion's idle loop plays,
+ * then who they are and what they bring. A bottom sheet, so whatever scene it
+ * rewards stays in frame above it. Compositor-only motion.
+ */
+
+.companion-reveal {
+  position: absolute;
+  z-index: 1300;
+  left: 50%;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  width: min(calc(100% - 24px), 400px);
+  max-height: calc(100dvh - 28px);
+  overflow: auto;
+  padding: 0 20px 18px;
+  border-radius: 24px;
+  text-align: center;
+  color: #f2efe4;
+  background: linear-gradient(180deg, #0b1813 0%, #10221b 40%, #121d18 100%);
+  border: 1px solid rgba(141, 255, 180, 0.42);
+  box-shadow:
+    0 0 0 4px rgba(141, 255, 180, 0.12),
+    0 30px 70px rgba(3, 9, 6, 0.62);
+  transform: translateX(-50%);
+  animation: companionRevealIn 560ms cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+  touch-action: manipulation;
+}
+
+@keyframes companionRevealIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(36px) scale(0.97); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+.companion-reveal-stage {
+  position: relative;
+  height: 212px;
+  margin: 0 -20px 6px;
+  overflow: hidden;
+  border-radius: 24px 24px 0 0;
+  background:
+    radial-gradient(ellipse at 50% 92%, rgba(141, 255, 180, 0.3), transparent 62%),
+    linear-gradient(180deg, #050f0b 0%, #0c1c16 100%);
+}
+
+/* His signal, rippling out behind him. */
+.companion-reveal-halo {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  background: repeating-radial-gradient(circle, rgba(141, 255, 180, 0.2) 0 1.5px, transparent 1.5px 26px);
+  transform: translate(-50%, -50%) scale(0.9);
+  opacity: 0.8;
+  animation: companionSignal 2600ms ease-out infinite;
+}
+
+@keyframes companionSignal {
+  from { transform: translate(-50%, -50%) scale(0.72); opacity: 0.9; }
+  to { transform: translate(-50%, -50%) scale(1.12); opacity: 0.25; }
+}
+
+/* The render's feet sit at 84% of its 512px frame: stand them just above the floor. */
+.companion-reveal-figure {
+  position: absolute;
+  left: 50%;
+  bottom: -28px;
+  width: 270px;
+  height: 270px;
+  object-fit: contain;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.55));
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+.companion-reveal-ground {
+  position: absolute;
+  left: 50%;
+  bottom: 7px;
+  width: 150px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.6), transparent);
+  transform: translateX(-50%);
+}
+
+.companion-reveal-kicker {
+  display: block;
+  margin-top: 4px;
+  font: 800 10px/1.3 var(--cz-caps, "Barlow Condensed", system-ui, sans-serif);
+  letter-spacing: 0.3em;
+  color: #8dffb4;
+}
+
+.companion-reveal-title {
+  margin: 6px 0 0;
+  font: 600 clamp(26px, 8vw, 34px) / 1.02 var(--cz-display, "Fraunces", Georgia, serif);
+  letter-spacing: 0.03em;
+  color: #fff4d6;
+  text-shadow: 0 0 18px rgba(255, 211, 107, 0.35);
+}
+
+.companion-reveal-sub {
+  margin: 8px 0 0;
+  font: 800 10.5px/1.4 var(--cz-caps, "Barlow Condensed", system-ui, sans-serif);
+  letter-spacing: 0.16em;
+  color: #a9c7b6;
+}
+
+.companion-reveal-cta {
+  display: block;
+  width: 100%;
+  min-height: 56px;
+  margin-top: 16px;
+  border-radius: 16px;
+  border: 1.5px solid #fff1c8;
+  background: linear-gradient(180deg, #ffe08a 0%, #e0a13a 55%, #b8741c 100%);
+  color: #2b1904;
+  font: 800 17px/1 var(--cz-caps, "Barlow Condensed", system-ui, sans-serif);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+}
+
+.companion-reveal-cta:focus-visible {
+  outline: 3px solid #8dffb4;
+  outline-offset: 3px;
+}
+
+.companion-reveal-caption {
+  display: block;
+  margin-top: 8px;
+  font: 500 11px/1.3 var(--cz-body, system-ui, sans-serif);
+  color: rgba(242, 239, 228, 0.55);
+}
+
+@media (max-height: 700px) {
+  .companion-reveal-stage {
+    height: 168px;
+  }
+  .companion-reveal-figure {
+    width: 220px;
+    height: 220px;
+    bottom: -22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .companion-reveal,
+  .companion-reveal-halo {
+    animation: none !important;
+  }
+}
