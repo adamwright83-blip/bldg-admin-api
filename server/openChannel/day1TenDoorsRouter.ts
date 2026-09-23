@@ -51,17 +51,19 @@ export const day1TenDoorsRouter = router({
     ),
   recordOutcome: dayforgeTenantMemberProcedure
     .input(
-      z.object({
-        missionId: z.string().uuid(),
-        targetId: z.string().trim().min(1).max(80),
-        outcome: z.enum(["pitched", "couldnt_reach"]),
-        requestId: z.string().uuid().optional(),
-        decisionMaker: z
-          .enum(["reached", "unavailable", "not_recorded"])
-          .optional(),
-        followUpNeeded: z.boolean().optional(),
-        source: evidenceSource.optional(),
-      })
+      z
+        .object({
+          missionId: z.string().uuid(),
+          targetId: z.string().trim().min(1).max(80),
+          outcome: z.enum(["pitched", "couldnt_reach"]),
+          requestId: z.string().uuid().optional(),
+          decisionMaker: z
+            .enum(["reached", "unavailable", "not_recorded"])
+            .optional(),
+          followUpNeeded: z.boolean().optional(),
+          source: evidenceSource.optional(),
+        })
+        .strict()
     )
     .mutation(({ ctx, input }) =>
       recordDay1TenDoorsOutcome({

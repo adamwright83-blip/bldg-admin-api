@@ -113,6 +113,34 @@ describe("goldline domain progression persistence", () => {
     expect(db.rows).toHaveLength(0);
   });
 
+  it("does not insert a level row when a read sees a satisfied hunt", async () => {
+    mocks.readMission.mockResolvedValue({ outcomes: five() });
+    const read = await readGoldlineProgression({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      capabilityOperatorId: "cap-a",
+    });
+    expect(read.kingdomBinding.status).toBe("satisfied");
+    expect(read.levelColosseumResolved).toEqual({ status: "unearned", value: false });
+    expect(read.kingdomBrassRepublicCompleted.value).toBe(false);
+    expect(db.rows).toHaveLength(0);
+  });
+
+  it("does not resolve another tenant from a caller-supplied outcome map", async () => {
+    mocks.readMission.mockImplementation(async ({ tenantId, driverId }: { tenantId: string; driverId: string }) => {
+      if (tenantId === "tenant-a" && driverId === "op-a") return { outcomes: five() };
+      return { outcomes: {} };
+    });
+    await expect(
+      recordLevelColosseumResolved({
+        tenantId: "tenant-b",
+        operatorId: "op-b",
+        outcomes: five(),
+      } as never)
+    ).rejects.toBeInstanceOf(ProgressionNotPermittedError);
+    expect(db.rows).toHaveLength(0);
+  });
+
   it("records the level only through the binding, without Rook or Kingdom completion", async () => {
     mocks.readMission.mockImplementation(async ({ tenantId, driverId }: { tenantId: string; driverId: string }) => {
       if (tenantId === "tenant-a" && driverId === "op-a") return { outcomes: five() };

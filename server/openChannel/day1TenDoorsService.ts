@@ -25,7 +25,8 @@ import {
   openChannelMissions,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { colosseumKingdomBindingNewlySatisfied } from "../goldlineProgression/colosseumKingdomBinding";
+import { colosseumKingdomBindingSatisfied } from "../goldlineProgression/colosseumKingdomBinding";
+import { rejectClientProgressionForge } from "../goldlineProgression/progressionContract";
 import { recordLevelFromOutcomes } from "../goldlineProgression/progressionWrites";
 import { ensureOpenChannelTables } from "./openChannelService";
 import {
@@ -225,6 +226,56 @@ async function writePayload(input: {
     );
 }
 
+/** Re-read the task row. The in-memory next-outcome map is not evidence. */
+async function readCommittedDay1Evidence(input: {
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
+  tenantId: string;
+  missionId: string;
+  taskId: string;
+}): Promise<EvidencePayload | null> {
+  const [task] = await input.db
+    .select()
+    .from(openChannelMissionTasks)
+    .where(
+      and(
+        eq(openChannelMissionTasks.tenantId, input.tenantId),
+        eq(openChannelMissionTasks.missionId, input.missionId),
+        eq(openChannelMissionTasks.id, input.taskId)
+      )
+    )
+    .limit(1);
+  if (!task?.detail || typeof task.detail !== "string") return null;
+  const decoded = decodeDay1Payload(task.detail);
+  if (!decoded) return null;
+  return normaliseEvidence(decoded);
+}
+
+/**
+ * Idempotent level.colosseum write from a map already read back from the
+ * task row. A failure here does not roll back that business outcome.
+ * kingdom.brass_republic is not written.
+ */
+async function recordColosseumLevelFromCommittedEvidence(input: {
+  tenantId: string;
+  operatorId: string;
+  outcomes: Record<string, unknown>;
+}): Promise<void> {
+  if (!colosseumKingdomBindingSatisfied(input.outcomes)) return;
+  try {
+    await recordLevelFromOutcomes({
+      tenantId: input.tenantId,
+      operatorId: input.operatorId,
+      outcomes: { ...input.outcomes },
+      outcomesAvailable: true,
+    });
+  } catch (error) {
+    console.warn(
+      "[goldline-progression] level.colosseum was not recorded after the business outcome committed",
+      error instanceof Error ? error.message : error
+    );
+  }
+}
+
 function blankVisit(targetId: string): Day1VisitEvidence {
   return {
     targetId,
@@ -408,6 +459,12 @@ export async function recordDay1TenDoorsEvidence(input: {
  * for a target that already has one is a no-op unless the operator explicitly
  * supplies source=operator_backfill to attach truthful metadata to a legacy
  * outcome. Backfill timestamps mean "recorded now", never "this happened now".
+ *
+ * level.colosseum is recorded only after this outcome is on the task row
+ * and a fresh read of that row satisfies kingdom_binding.level.colosseum.
+ * The in-memory next-outcome map is not evidence. A progression failure
+ * does not undo the business outcome. A later call derives a missing level
+ * from the committed row. Reading the mission does not.
  */
 export async function recordDay1TenDoorsOutcome(input: {
   tenantId: string;
@@ -420,6 +477,7 @@ export async function recordDay1TenDoorsOutcome(input: {
   followUpNeeded?: boolean;
   source?: Day1EvidenceSource;
 }): Promise<Day1TenDoorsMission> {
+  rejectClientProgressionForge(input);
   const { db, mission, task, payload } = await loadWritableDay1Mission(input);
   assertTarget(payload, input.targetId);
 
@@ -435,12 +493,25 @@ export async function recordDay1TenDoorsOutcome(input: {
     existingVisit.outcomeRecordedAt == null;
 
   if (existingOutcome != null && !mayBackfillLegacyOutcome) {
+    const confirmed = await readCommittedDay1Evidence({
+      db,
+      tenantId: input.tenantId,
+      missionId: mission.id,
+      taskId: task.id,
+    });
+    if (confirmed) {
+      await recordColosseumLevelFromCommittedEvidence({
+        tenantId: input.tenantId,
+        operatorId: input.driverId,
+        outcomes: confirmed.outcomes,
+      });
+    }
     return projectMission({
       missionId: mission.id,
       taskId: task.id,
       title: mission.title,
       briefing: mission.operatorBriefing,
-      payload,
+      payload: confirmed ?? payload,
     });
   }
 
@@ -485,28 +556,6 @@ export async function recordDay1TenDoorsOutcome(input: {
     },
   };
 
-  // Record the level before the outcome commits. A retry of an already-saved
-  // outcome returns above and must not backfill. A missing progression table
-  // must not block the business outcome; any other failure leaves it uncommitted.
-  if (colosseumKingdomBindingNewlySatisfied(payload.outcomes, nextPayload.outcomes)) {
-    try {
-      await recordLevelFromOutcomes({
-        tenantId: input.tenantId,
-        operatorId: input.driverId,
-        outcomes: nextPayload.outcomes,
-        outcomesAvailable: true,
-      });
-    } catch (error) {
-      if (!(error instanceof Error) || error.name !== "ProgressionSchemaBlockedError") {
-        throw error;
-      }
-      console.warn(
-        "[goldline-progression] level.colosseum was not recorded",
-        error.message
-      );
-    }
-  }
-
   await writePayload({
     db,
     tenantId: input.tenantId,
@@ -514,7 +563,18 @@ export async function recordDay1TenDoorsOutcome(input: {
     payload: nextPayload,
   });
 
-  if (day1IsComplete(nextPayload) && mission.status !== "completed") {
+  const confirmed = await readCommittedDay1Evidence({
+    db,
+    tenantId: input.tenantId,
+    missionId: mission.id,
+    taskId: task.id,
+  });
+  const committedOutcome = confirmed?.outcomes[input.targetId];
+  if (!confirmed || committedOutcome !== outcome) {
+    throw new Error("Day 1 outcome was not committed");
+  }
+
+  if (day1IsComplete(confirmed) && mission.status !== "completed") {
     const completedAt = new Date();
     await db
       .update(openChannelMissions)
@@ -536,11 +596,17 @@ export async function recordDay1TenDoorsOutcome(input: {
       );
   }
 
+  await recordColosseumLevelFromCommittedEvidence({
+    tenantId: input.tenantId,
+    operatorId: input.driverId,
+    outcomes: confirmed.outcomes,
+  });
+
   return projectMission({
     missionId: mission.id,
     taskId: task.id,
     title: mission.title,
     briefing: mission.operatorBriefing,
-    payload: nextPayload,
+    payload: confirmed,
   });
 }
