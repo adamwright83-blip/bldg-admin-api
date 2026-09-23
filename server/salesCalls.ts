@@ -20,7 +20,7 @@
  */
 import type { Express, Request, Response } from "express";
 import twilio from "twilio";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { getDb } from "./db";
 import {
   driverColdCallTargets,
@@ -461,6 +461,15 @@ export async function handleCallStatus(req: Request, res: Response): Promise<voi
     }
 
     if (leg === "rep") {
+      const operatorCallSid = body.CallSid?.trim() || "";
+      if (operatorCallSid && !attempt.repLegCallSid?.trim()) {
+        await db
+          .update(salesCallAttempts)
+          .set({ repLegCallSid: operatorCallSid })
+          .where(
+            and(eq(salesCallAttempts.id, attemptId), isNull(salesCallAttempts.repLegCallSid))
+          );
+      }
       if (callStatus === "in-progress" || callStatus === "answered") {
         await db
           .update(salesCallAttempts)

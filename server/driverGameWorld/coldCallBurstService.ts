@@ -445,6 +445,7 @@ function timestampMs(value: Date | string | null | undefined): number | null {
   return Number.isNaN(ms) ? null : ms;
 }
 
+/** The attempt row is the provider-leg signal. A SID repaired from an operator callback counts. Receipts are not consulted. */
 function providerLegEstablished(attempt: {
   status: string;
   repLegCallSid?: string | null;

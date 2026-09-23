@@ -251,6 +251,14 @@ function fixture() {
                   Object.assign(stale, vals);
                   return Promise.resolve([{ affectedRows: 1 }]);
                 }
+                if (
+                  attempts[0] &&
+                  Object.keys(vals).length === 1 &&
+                  Object.prototype.hasOwnProperty.call(vals, "repLegCallSid") &&
+                  attempts[0].repLegCallSid
+                ) {
+                  return Promise.resolve([{ affectedRows: 0 }]);
+                }
                 if (attempts[0]) Object.assign(attempts[0], vals);
               }
               if (table === driverColdCallTargets) {
@@ -549,7 +557,69 @@ describe("Cold Call Burst operator-first roll", () => {
     expect(mocks.callsCreate).toHaveBeenCalledTimes(2);
   });
 
+  it("repairs a lost operator SID from initiated or ringing and does not redial", async () => {
+    const lostSid = {
+      id: 7,
+      tenantId: input.tenantId,
+      coldCallTargetId: input.targetId,
+      status: "dialing_rep",
+      repLegCallSid: null as string | null,
+      rewardGranted: false,
+      callerId: OPERATOR,
+      customerPhone: PROSPECT,
+      repPhone: OPERATOR,
+      createdAt: olderThanRecoveryBound(),
+    };
+    world.attempts.unshift({ ...lostSid });
+    world.targetRow.status = "live";
+    world.targetRow.rollClaimId = "lost-sid-claim";
+    world.targetRow.updatedAt = olderThanRecoveryBound();
+
+    await handleCallStatus(
+      signedRequest("/api/saleslay/twilio/call-status?attemptId=7&leg=rep", {
+        CallSid: "CA_repaired_initiated",
+        CallStatus: "initiated",
+        From: CLAIRE_FROM,
+        To: OPERATOR,
+      }),
+      mockRes() as unknown as Response
+    );
+    expect(world.attempts[0]?.repLegCallSid).toBe("CA_repaired_initiated");
+    expect(world.attempts[0]?.status).toBe("dialing_rep");
+    await handleCallStatus(
+      signedRequest("/api/saleslay/twilio/call-status?attemptId=7&leg=rep", {
+        CallSid: "CA_should_not_replace",
+        CallStatus: "ringing",
+        From: CLAIRE_FROM,
+        To: OPERATOR,
+      }),
+      mockRes() as unknown as Response
+    );
+    expect(world.attempts[0]?.repLegCallSid).toBe("CA_repaired_initiated");
+
+    await rollColdCallTarget(input);
+    expect(mocks.callsCreate).not.toHaveBeenCalled();
+    expect(mocks.recordCommercialMissionCallAttempt).not.toHaveBeenCalled();
+    expect(world.targetRow.outcome).toBeNull();
+
+    world.attempts.splice(0, world.attempts.length, { ...lostSid, repLegCallSid: null });
+    await handleCallStatus(
+      signedRequest("/api/saleslay/twilio/call-status?attemptId=7&leg=rep", {
+        CallSid: "CA_repaired_ringing",
+        CallStatus: "ringing",
+        From: CLAIRE_FROM,
+        To: OPERATOR,
+      }),
+      mockRes() as unknown as Response
+    );
+    expect(world.attempts[0]?.repLegCallSid).toBe("CA_repaired_ringing");
+    expect(world.attempts[0]?.status).toBe("dialing_rep");
+    await rollColdCallTarget(input);
+    expect(mocks.callsCreate).not.toHaveBeenCalled();
+  });
+
   it("reclaims one stale dialing_rep row that never received a provider SID", async () => {
+    expect(world.receipts).toHaveLength(0);
     world.attempts.unshift({
       id: 4,
       tenantId: input.tenantId,
