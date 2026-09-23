@@ -28,10 +28,11 @@ import {
   type RookContactGroundedSentence,
 } from "./rookContactGrounding";
 import {
+  attachRookContactSessionCallAttempt,
+  claimRookContactSessionDial,
   findRookContactSession,
   insertPreparedRookContactSession,
   markRookContactSessionAuthorized,
-  markRookContactSessionDialing,
   markRookContactSessionFailed,
   type RookContactSession,
 } from "./rookContactSessionStore";
@@ -241,7 +242,10 @@ export async function startRookContactBridge(input: {
   await requireContactReady(input);
   const session = await findRookContactSession(input);
   if (!session) throw new RookContactClosedError("CONTACT session was not found for this operator");
-  if (session.status === "dialing_operator" && session.callAttemptId) return session;
+  if (session.status === "dialing_operator") {
+    if (session.callAttemptId) return session;
+    throw new RookContactClosedError("CONTACT dial is already starting for this session");
+  }
   if (session.status !== "authorized" || !session.operatorAuthorizedAt) {
     throw new RookContactClosedError(
       "CONTACT does not dial without operator authorization for this session"
@@ -258,8 +262,22 @@ export async function startRookContactBridge(input: {
   });
   const operatorLegFrom = claireTwilioFromNumber();
   await assertVerifiedOutgoingCallerId(operatorLegTo);
+
+  const claimed = await claimRookContactSessionDial({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    contactSessionId: session.contactSessionId,
+    at: new Date(),
+  });
+  if (!claimed) {
+    const existing = await findRookContactSession(input);
+    if (existing?.status === "dialing_operator" && existing.callAttemptId) return existing;
+    throw new RookContactClosedError("CONTACT dial is already starting or was already claimed");
+  }
+
+  let placed: { attemptId: number; repLegCallSid: string };
   try {
-    const placed = await placeOperatorFirstBridgeCall({
+    placed = await placeOperatorFirstBridgeCall({
       tenantId: input.tenantId,
       legs: {
         operatorLegTo,
@@ -267,13 +285,6 @@ export async function startRookContactBridge(input: {
         prospectLegTo: canonical.phone,
         prospectCallerId: operatorLegTo,
       },
-    });
-    await markRookContactSessionDialing({
-      tenantId: input.tenantId,
-      operatorId: input.operatorId,
-      contactSessionId: session.contactSessionId,
-      callAttemptId: placed.attemptId,
-      at: new Date(),
     });
   } catch (error) {
     await markRookContactSessionFailed({
@@ -284,9 +295,26 @@ export async function startRookContactBridge(input: {
     });
     throw error;
   }
+
+  const attached = await attachRookContactSessionCallAttempt({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    contactSessionId: session.contactSessionId,
+    callAttemptId: placed.attemptId,
+    at: new Date(),
+  });
   const dialing = await findRookContactSession(input);
-  if (!dialing || dialing.status !== "dialing_operator" || !dialing.callAttemptId) {
-    throw new RookContactClosedError("CONTACT session did not record the operator-first attempt");
+  if (
+    !attached ||
+    !dialing ||
+    dialing.status !== "dialing_operator" ||
+    dialing.callAttemptId !== placed.attemptId
+  ) {
+    // The external call already exists. Never mark this "failed" here: that
+    // would hide a live attempt and could invite a retry that places another.
+    throw new RookContactClosedError(
+      "CONTACT operator call was placed but its attempt linkage was not recorded"
+    );
   }
   return dialing;
 }
