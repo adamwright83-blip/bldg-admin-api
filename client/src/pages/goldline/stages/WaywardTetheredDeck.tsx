@@ -6,9 +6,11 @@ import type { WaywardProgressPatch } from "../wayward/WaywardVoyage";
 const WaywardVoyage = lazy(() => import("../wayward/WaywardVoyage"));
 
 /**
- * The Wayward stage mount. Production mounts pass no `rookSource` until the
- * server progression read is wired in, so the voyage fails closed: Trailblazer
- * can cross the broken span, and the outer tether stays sealed.
+ * The Wayward stage mount. Production passes the server progression read as
+ * `rookSource` (kind "server"); without an earned read the voyage fails closed:
+ * Trailblazer can cross the broken span, and the outer tether stays sealed.
+ * Rook's presence is fixed when a run starts — a background refetch never
+ * adds or removes him mid-voyage.
  *
  * `fixture` exists only under the compile-time Goldline test harness
  * (Driver.tsx). There, `?waywardRook=preview` is the explicit testing seam that

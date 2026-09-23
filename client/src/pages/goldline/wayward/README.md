@@ -27,9 +27,11 @@ Trailblazer's first journey with Rook after the Colosseum. Fiction only.
 ## Rules this module keeps
 
 - **Rook aboard fails closed** (`waywardParty.ts`): the server progression read
-  (`companionRookOwned` earned and true) or the explicit preview/test seam. Never the
-  same-device party cache, the Colosseum flag, `capability.rook.contact` or real visits.
-  Without him the span is still crossable and the outer tether stays sealed.
+  (`companionRookOwned` earned and true — production passes the overworld gate's
+  identity-guarded read) or the explicit preview/test seam. Never the same-device party
+  cache, the Colosseum flag, `capability.rook.contact` or real visits. Without him the
+  span is still crossable and the outer tether stays sealed. His presence is fixed when a
+  run starts; a background refetch never adds or removes him mid-voyage.
 - **Rook cannot speak a direct lie**: every Rook line in `waywardLines.ts` carries the
   reason it is true, and a test keeps that note mandatory.
 - Nothing here reads or writes business state, storage or the network; no cue is a
@@ -45,6 +47,6 @@ Trailblazer's first journey with Rook after the Colosseum. Fiction only.
 npx vite --config vite.wayward-preview.config.ts
 ```
 
-`?start=deck|span|sail`, `&rook=0` (production today), `&cache=1`. In dev and in the test
+`?start=deck|span|sail`, `&rook=0` (a player without Rook), `&cache=1`. In dev and in the test
 harness, `window.__wayward` exposes `state()`, `skipTo(beat)`, `setTimeScale`, `teleport`,
 `act` and `forceFall` for bots.

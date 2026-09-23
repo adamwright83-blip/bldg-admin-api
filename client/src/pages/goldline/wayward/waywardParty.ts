@@ -2,10 +2,12 @@
  * Is Rook physically aboard the Wayward? Fails closed.
  *
  * Durable Rook ownership belongs to the server progression read
- * (`goldlineProgression.get` → `companionRookOwned`, drafted in PRs #227/#240,
- * not on main yet). Until a caller passes that read in, production shows the
- * Wayward without him: Trailblazer can still cross the broken span, but the
- * outer tether stays sealed, because only Rook can talk the inspectors off it.
+ * (`goldlineProgression.get` → `companionRookOwned`). The production mount
+ * passes the same identity-guarded read the overworld gate uses
+ * (`progressionForSignedInOperator`). Anything short of earned-and-true — no
+ * read, someone else's read, unearned, uncertain — shows the Wayward without
+ * him: Trailblazer can still cross the broken span, but the outer tether stays
+ * sealed, because only Rook can talk the inspectors off it.
  *
  * What is deliberately NOT evidence here:
  *   - the same-device party cache (`goldlineParty.ts`, localStorage);
@@ -18,10 +20,13 @@
  * never construct it (colosseumTruthBoundary-style guard in waywardTruth.test.ts).
  */
 
-/** The server's tri-state read, as `goldlineProgression.get` publishes it. */
+/**
+ * The server's tri-state flag, as `goldlineProgression.get` publishes it. Read
+ * structurally, like the overworld gate: an unexpected shape is not earned.
+ */
 export type ServerCompanionRead = {
-  status: "earned" | "unearned" | "uncertain";
-  value: boolean;
+  status?: unknown;
+  value?: unknown;
 };
 
 export type WaywardRookSource =

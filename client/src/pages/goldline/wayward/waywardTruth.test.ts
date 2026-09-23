@@ -32,6 +32,13 @@ describe("Rook aboard the Wayward fails closed", () => {
     expect(rookAboard({ kind: "server", companionRookOwned: { status: "earned", value: false } })).toBe(false);
   });
 
+  it("treats an unexpected server shape as not earned", () => {
+    expect(rookAboard({ kind: "server", companionRookOwned: { status: "earned", value: "true" } })).toBe(false);
+    expect(rookAboard({ kind: "server", companionRookOwned: { status: "EARNED", value: true } })).toBe(false);
+    expect(rookAboard({ kind: "server", companionRookOwned: { value: true } })).toBe(false);
+    expect(rookAboard({ kind: "server", companionRookOwned: undefined })).toBe(false);
+  });
+
   it("is aboard on the server's earned read, or through the explicit preview seam", () => {
     expect(rookAboard({ kind: "server", companionRookOwned: { status: "earned", value: true } })).toBe(true);
     expect(rookAboard({ kind: "preview", reason: "wayward-preview-harness" })).toBe(true);
@@ -43,6 +50,16 @@ describe("Rook aboard the Wayward fails closed", () => {
         expect(`${file}: ${source.includes(forbidden) ? forbidden : ""}`).toBe(`${file}: `);
       }
     }
+  });
+
+  it("production passes the identity-guarded server read the overworld gate uses", () => {
+    const controller = code(read(join(CLIENT, "src/pages/driver/GoldlineDriverController.tsx")));
+    const at = controller.indexOf("<WaywardTetheredDeck");
+    expect(at).toBeGreaterThan(0);
+    const mount = controller.slice(at, controller.indexOf("/>", at));
+    expect(mount).toMatch(/kind:\s*"server"/);
+    expect(mount).toMatch(/companionRookOwned:\s*progressionForOverworld\?\.companionRookOwned/);
+    expect(controller).toMatch(/const progressionForOverworld = progressionForSignedInOperator\(/);
   });
 
   it("constructs the preview seam only behind the compile-time fixture", () => {
