@@ -10,7 +10,10 @@ import {
   salesCallAttempts,
   territoryOperatorProfiles,
 } from "../../drizzle/schema";
-import { COLD_CALL_CALLER_ID_UNVERIFIED_MESSAGE } from "../../shared/coldCallBurst";
+import {
+  COLD_CALL_CALLER_ID_UNVERIFIED_MESSAGE,
+  ProspectLegNotConnectedError,
+} from "../../shared/coldCallBurst";
 
 const OPERATOR = "+13105550111";
 const CLAIRE_FROM = "+13105550000";
@@ -851,11 +854,32 @@ describe("Cold Call Burst operator-first roll", () => {
 
   it("keeps a long prospect connection from becoming a Goldline commercial outcome", async () => {
     expect(
-      goldlineTransportStatusFromCustomerLeg({ callStatus: "completed", durationSec: 224 }).rewardGranted
-    ).toBe(false);
+      goldlineTransportStatusFromCustomerLeg({ callStatus: "completed", durationSec: 224 })
+    ).toEqual({
+      status: "completed_no_connect",
+      rewardGranted: false,
+      failureReason: "customer_leg_completed_224s",
+    });
     expect(
-      goldlineTransportStatusFromCustomerLeg({ callStatus: "completed", durationSec: 5 }).rewardGranted
-    ).toBe(false);
+      goldlineTransportStatusFromCustomerLeg({
+        callStatus: "completed",
+        durationSec: 224,
+        prospectLegConnected: true,
+      })
+    ).toEqual({
+      status: "completed_success",
+      rewardGranted: false,
+      failureReason: null,
+    });
+    expect(
+      goldlineTransportStatusFromCustomerLeg({ callStatus: "no-answer", durationSec: 0 })
+    ).toMatchObject({ status: "completed_no_connect", rewardGranted: false });
+    expect(
+      goldlineTransportStatusFromCustomerLeg({ callStatus: "busy", durationSec: 0 })
+    ).toMatchObject({ status: "completed_no_connect", rewardGranted: false });
+    expect(
+      goldlineTransportStatusFromCustomerLeg({ callStatus: "failed", durationSec: 0 })
+    ).toMatchObject({ status: "completed_no_connect", rewardGranted: false });
 
     world.attempts.unshift({
       id: 7,
@@ -905,6 +929,195 @@ describe("Cold Call Burst operator-first roll", () => {
     expect(completed?.targets[0]?.status).toBe("completed");
     expect(completed?.targets[0]?.outcome).toBe("spoke");
     expect(world.attempts[0]?.rewardGranted).toBe(false);
+    expect(world.attempts[0]?.recordingEnabled).toBe(false);
+  });
+
+  it("refuses spoke when the rep answers and the prospect never does", async () => {
+    await rollColdCallTarget(input);
+    await handleCallStatus(
+      signedRequest("/api/saleslay/twilio/call-status?attemptId=7&leg=rep", {
+        CallSid: "CA_operator_leg",
+        CallStatus: "in-progress",
+        From: CLAIRE_FROM,
+        To: OPERATOR,
+      }),
+      mockRes() as unknown as Response
+    );
+    await handleCallStatus(
+      signedRequest("/api/saleslay/twilio/call-status?attemptId=7&leg=customer", {
+        CallSid: "CA_prospect_leg",
+        CallStatus: "no-answer",
+        CallDuration: "0",
+        From: OPERATOR,
+        To: PROSPECT,
+      }),
+      mockRes() as unknown as Response
+    );
+    expect(world.attempts[0]?.status).toBe("completed_no_connect");
+    expect(world.attempts[0]?.recordingEnabled).toBe(false);
+    await expect(
+      completeColdCallTarget({
+        ...input,
+        requestId: "44444444-4444-4444-8444-444444444444",
+        outcome: "spoke",
+        notes: "They picked up.",
+      })
+    ).rejects.toBeInstanceOf(ProspectLegNotConnectedError);
+    expect(mocks.recordCommercialMissionCallAttempt).not.toHaveBeenCalled();
+    expect(world.targetRow.status).toBe("live");
+    expect(world.targetRow.outcome).toBeNull();
+
+    const logged = await completeColdCallTarget({
+      ...input,
+      requestId: "55555555-5555-4555-8555-555555555555",
+      outcome: "no_answer",
+      notes: "Prospect never answered.",
+    });
+    expect(mocks.recordCommercialMissionCallAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: "no_answer" })
+    );
+    expect(logged?.targets[0]?.outcome).toBe("no_answer");
+  });
+
+  it("refuses spoke while the prospect is only ringing", async () => {
+    await rollColdCallTarget(input);
+    await handleCallStatus(
+      signedRequest("/api/saleslay/twilio/call-status?attemptId=7&leg=customer", {
+        CallSid: "CA_prospect_leg",
+        CallStatus: "ringing",
+        From: OPERATOR,
+        To: PROSPECT,
+      }),
+      mockRes() as unknown as Response
+    );
+    expect(world.receipts.some(row => row.eventType === "CALL_RINGING")).toBe(true);
+    expect(world.receipts.some(row => row.eventType === "CALL_CONNECTED")).toBe(false);
+    await expect(
+      completeColdCallTarget({
+        ...input,
+        requestId: "66666666-6666-4666-8666-666666666666",
+        outcome: "spoke",
+        notes: "Still ringing.",
+      })
+    ).rejects.toBeInstanceOf(ProspectLegNotConnectedError);
+    expect(mocks.recordCommercialMissionCallAttempt).not.toHaveBeenCalled();
+    expect(world.targetRow.outcome).toBeNull();
+  });
+
+  it("refuses spoke when a long completed callback never showed the prospect connect", async () => {
+    await rollColdCallTarget(input);
+    await handleCallStatus(
+      signedRequest("/api/saleslay/twilio/call-status?attemptId=7&leg=customer", {
+        CallSid: "CA_prospect_leg",
+        CallStatus: "completed",
+        CallDuration: "224",
+        From: OPERATOR,
+        To: PROSPECT,
+      }),
+      mockRes() as unknown as Response
+    );
+    expect(world.attempts[0]?.status).toBe("completed_no_connect");
+    expect(world.receipts.some(row => row.eventType === "CALL_COMPLETED")).toBe(true);
+    expect(world.receipts.some(row => row.eventType === "CALL_CONNECTED")).toBe(false);
+    expect(mocks.recordCommercialMissionCallAttempt).not.toHaveBeenCalled();
+    await expect(
+      completeColdCallTarget({
+        ...input,
+        requestId: "77777777-7777-4777-8777-777777777777",
+        outcome: "visit_booked",
+        notes: "Booked from a completed transport status.",
+      })
+    ).rejects.toBeInstanceOf(ProspectLegNotConnectedError);
+    expect(world.targetRow.status).toBe("live");
+  });
+
+  it("allows spoke and visit_booked only after the prospect leg connects", async () => {
+    await rollColdCallTarget(input);
+    await handleCallStatus(
+      signedRequest("/api/saleslay/twilio/call-status?attemptId=7&leg=customer", {
+        CallSid: "CA_prospect_leg",
+        CallStatus: "answered",
+        From: OPERATOR,
+        To: PROSPECT,
+      }),
+      mockRes() as unknown as Response
+    );
+    await handleCallStatus(
+      signedRequest("/api/saleslay/twilio/call-status?attemptId=7&leg=customer", {
+        CallSid: "CA_prospect_leg",
+        CallStatus: "answered",
+        From: OPERATOR,
+        To: PROSPECT,
+      }),
+      mockRes() as unknown as Response
+    );
+    expect(world.receipts.filter(row => row.eventType === "CALL_CONNECTED")).toHaveLength(1);
+    expect(world.attempts[0]?.status).toBe("customer_connected");
+    expect(world.attempts[0]?.recordingEnabled).toBe(false);
+    await handleCallStatus(
+      signedRequest("/api/saleslay/twilio/call-status?attemptId=7&leg=customer", {
+        CallSid: "CA_prospect_leg",
+        CallStatus: "completed",
+        CallDuration: "40",
+        From: OPERATOR,
+        To: PROSPECT,
+      }),
+      mockRes() as unknown as Response
+    );
+    expect(world.attempts[0]).toEqual(
+      expect.objectContaining({
+        status: "completed_success",
+        rewardGranted: false,
+        recordingEnabled: false,
+      })
+    );
+    expect(mocks.recordCommercialMissionCallAttempt).not.toHaveBeenCalled();
+
+    mocks.recordCommercialMissionCallAttempt.mockResolvedValueOnce({
+      id: 100,
+      missionId: 11,
+      outcome: "visit_booked",
+      notes: "Thursday at the property.",
+      actorId: input.actorId,
+      createdAt: "2026-09-23T00:00:00.000Z",
+    });
+    const booked = await completeColdCallTarget({
+      ...input,
+      requestId: "88888888-8888-4888-8888-888888888888",
+      outcome: "visit_booked",
+      notes: "Thursday at the property.",
+    });
+    expect(mocks.recordCommercialMissionCallAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: "visit_booked" })
+    );
+    expect(booked?.targets[0]?.outcome).toBe("visit_booked");
+    expect(world.attempts[0]?.rewardGranted).toBe(false);
+  });
+
+  it("still records voicemail, busy, and failed without turning them into a connected conversation", async () => {
+    await rollColdCallTarget(input);
+    await handleCallStatus(
+      signedRequest("/api/saleslay/twilio/call-status?attemptId=7&leg=customer", {
+        CallSid: "CA_prospect_leg",
+        CallStatus: "busy",
+        From: OPERATOR,
+        To: PROSPECT,
+      }),
+      mockRes() as unknown as Response
+    );
+    expect(world.receipts.some(row => row.eventType === "CALL_BUSY")).toBe(true);
+    const voicemail = await completeColdCallTarget({
+      ...input,
+      requestId: "99999999-9999-4999-8999-999999999999",
+      outcome: "left_voicemail",
+      notes: "Left a voicemail.",
+    });
+    expect(mocks.recordCommercialMissionCallAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: "left_voicemail" })
+    );
+    expect(voicemail?.targets[0]?.outcome).toBe("left_voicemail");
+    expect(world.attempts[0]?.rewardGranted).toBe(false);
+    expect(world.attempts[0]?.recordingEnabled).toBe(false);
   });
 
   it("still applies the Saleslay 20-second reward only when the attempt is not a cold call", async () => {

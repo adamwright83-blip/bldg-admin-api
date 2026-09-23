@@ -1,6 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { commercialMissionEvents } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { assertMissionConversationOutcome } from "../salesCalls";
 import { getCommercialMission } from "./commercialMissionStore";
 import { awardDriverSalesPoints } from "./driverSalesMotivationService";
 
@@ -63,6 +64,33 @@ export async function listCommercialMissionCallAttempts(input: {
   return rows.map(callAttemptView);
 }
 
+async function awardLoggedColdCall(input: {
+  tenantId: string;
+  missionId: number;
+  actorId: string;
+  requestId: string;
+  outcome: CommercialMissionCallOutcome;
+}) {
+  const attempts = await listCommercialMissionCallAttempts({
+    tenantId: input.tenantId,
+    missionId: input.missionId,
+  });
+  const activityPoints = attempts.length <= 1 ? 4 : attempts.length === 2 ? 2 : 1;
+  const outcomeBonus: Partial<Record<CommercialMissionCallOutcome, number>> = {
+    spoke: 6,
+    visit_booked: 18,
+  };
+  await awardDriverSalesPoints({
+    tenantId: input.tenantId,
+    driverId: input.actorId,
+    missionId: input.missionId,
+    eventType: "cold_call_completed",
+    points: activityPoints + (outcomeBonus[input.outcome] ?? 0),
+    dedupeKey: `score:cold-call:${input.requestId}`,
+    metadata: { outcome: input.outcome },
+  });
+}
+
 export async function recordCommercialMissionCallAttempt(input: {
   tenantId: string;
   missionId: number;
@@ -79,6 +107,31 @@ export async function recordCommercialMissionCallAttempt(input: {
   if (!["phone_ready", "preparing"].includes(mission.status)) {
     throw new Error(`Cold calls cannot be logged while the mission is ${mission.status}`);
   }
+
+  const [existing] = await db
+    .select()
+    .from(commercialMissionEvents)
+    .where(
+      and(
+        eq(commercialMissionEvents.tenantId, input.tenantId),
+        eq(commercialMissionEvents.idempotencyKey, idempotencyKey)
+      )
+    )
+    .limit(1);
+  if (existing) {
+    if (existing.missionId !== input.missionId) {
+      throw new Error("Cold-call request ID is already bound to another mission");
+    }
+    const view = callAttemptView(existing);
+    await awardLoggedColdCall({ ...input, outcome: view.outcome });
+    return view;
+  }
+
+  await assertMissionConversationOutcome({
+    tenantId: input.tenantId,
+    missionId: input.missionId,
+    outcome: input.outcome,
+  });
 
   await db
     .insert(commercialMissionEvents)
@@ -108,20 +161,7 @@ export async function recordCommercialMissionCallAttempt(input: {
   if (!persisted || persisted.missionId !== input.missionId) {
     throw new Error("Cold-call request ID is already bound to another mission");
   }
-  const attempts = await listCommercialMissionCallAttempts({ tenantId: input.tenantId, missionId: input.missionId });
-  const activityPoints = attempts.length <= 1 ? 4 : attempts.length === 2 ? 2 : 1;
-  const outcomeBonus: Partial<Record<CommercialMissionCallOutcome, number>> = {
-    spoke: 6,
-    visit_booked: 18,
-  };
-  await awardDriverSalesPoints({
-    tenantId: input.tenantId,
-    driverId: input.actorId,
-    missionId: input.missionId,
-    eventType: "cold_call_completed",
-    points: activityPoints + (outcomeBonus[input.outcome] ?? 0),
-    dedupeKey: `score:cold-call:${input.requestId}`,
-    metadata: { outcome: input.outcome },
-  });
-  return callAttemptView(persisted);
+  const view = callAttemptView(persisted);
+  await awardLoggedColdCall({ ...input, outcome: view.outcome });
+  return view;
 }

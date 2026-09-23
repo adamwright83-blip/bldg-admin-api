@@ -33,6 +33,7 @@ import {
   claireTwilioFromNumber,
 } from "../claire/claireTwilio";
 import {
+  assertColdCallConversationOutcome,
   assertVerifiedOutgoingCallerId,
   placeOperatorFirstBridgeCall,
 } from "../salesCalls";
@@ -812,6 +813,11 @@ export async function completeColdCallTarget(input: {
   if (target.status !== "live") {
     throw new Error("Start the real phone action before logging its outcome");
   }
+  await assertColdCallConversationOutcome({
+    tenantId: input.tenantId,
+    coldCallTargetId: target.id,
+    outcome: input.outcome,
+  });
   const attempt = await recordCommercialMissionCallAttempt({
     tenantId: input.tenantId,
     missionId: target.missionId,

@@ -6,6 +6,7 @@ import {
   coldCallRollingStatusCopy,
   comboAfterChain,
   isColdCallRollingTerminal,
+  prospectLegConnected,
   type ColdCallBatch,
 } from "./coldCallBurst";
 
@@ -107,5 +108,93 @@ describe("Cold Call Burst truth contracts", () => {
         hasEligibleNextTarget: false,
       })
     ).toEqual({ combo: 2, result: "sweep_complete" });
+  });
+});
+
+describe("prospect-leg connection", () => {
+  const base = {
+    tenantId: "tenant-1",
+    attemptStatus: "dialing_customer",
+    repLegCallSid: "CA_rep",
+    customerLegCallSid: "CA_prospect",
+    receipts: [] as Array<{
+      tenantId?: string | null;
+      eventType: string;
+      callSid: string | null;
+      parentCallSid: string | null;
+    }>,
+  };
+
+  it("accepts a live prospect connection and a prospect CALL_CONNECTED receipt", () => {
+    expect(prospectLegConnected({ ...base, attemptStatus: "customer_connected" })).toBe(true);
+    expect(prospectLegConnected({ ...base, attemptStatus: "completed_success" })).toBe(true);
+    expect(
+      prospectLegConnected({
+        ...base,
+        receipts: [
+          {
+            tenantId: "tenant-1",
+            eventType: "CALL_CONNECTED",
+            callSid: "CA_prospect",
+            parentCallSid: "CA_rep",
+          },
+        ],
+      })
+    ).toBe(true);
+  });
+
+  it("rejects the bridge, the rep leg, ringing, duration stand-ins, and non-connect receipts", () => {
+    expect(prospectLegConnected({ ...base, attemptStatus: "dialing_rep" })).toBe(false);
+    expect(prospectLegConnected({ ...base, attemptStatus: "rep_connected" })).toBe(false);
+    expect(prospectLegConnected({ ...base, attemptStatus: "completed_no_connect" })).toBe(false);
+    expect(prospectLegConnected({ ...base, attemptStatus: "failed" })).toBe(false);
+    for (const eventType of [
+      "CALL_RINGING",
+      "CALL_COMPLETED",
+      "CALL_NO_ANSWER",
+      "CALL_BUSY",
+      "CALL_FAILED",
+      "VOICEMAIL_DETECTED",
+    ]) {
+      expect(
+        prospectLegConnected({
+          ...base,
+          receipts: [
+            {
+              tenantId: "tenant-1",
+              eventType,
+              callSid: "CA_prospect",
+              parentCallSid: "CA_rep",
+            },
+          ],
+        })
+      ).toBe(false);
+    }
+    expect(
+      prospectLegConnected({
+        ...base,
+        receipts: [
+          {
+            tenantId: "tenant-1",
+            eventType: "CALL_CONNECTED",
+            callSid: "CA_rep",
+            parentCallSid: null,
+          },
+        ],
+      })
+    ).toBe(false);
+    expect(
+      prospectLegConnected({
+        ...base,
+        receipts: [
+          {
+            tenantId: "other-tenant",
+            eventType: "CALL_CONNECTED",
+            callSid: "CA_prospect",
+            parentCallSid: "CA_rep",
+          },
+        ],
+      })
+    ).toBe(false);
   });
 });

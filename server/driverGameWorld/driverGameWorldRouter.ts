@@ -20,6 +20,7 @@ import {
   selectColdCallChainTarget,
 } from "./coldCallBurstService";
 import { ColdCallCallerIdUnverifiedError } from "../salesCalls";
+import { ProspectLegNotConnectedError } from "../../shared/coldCallBurst";
 import { COMMERCIAL_MISSION_CALL_OUTCOMES } from "../commercialMissions/commercialMissionCallService";
 import { evaluateExpansionScoutForIdentity } from "../capabilities/expansionScoutCapability";
 import {
@@ -165,13 +166,20 @@ export const driverGameWorldRouter = router({
         notes: z.string().trim().min(1).max(2_000),
       })
     )
-    .mutation(({ ctx, input }) =>
-      completeColdCallTarget({
-        ...input,
-        tenantId: ctx.tenantId,
-        actorId: ctx.user.openId,
-      })
-    ),
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await completeColdCallTarget({
+          ...input,
+          tenantId: ctx.tenantId,
+          actorId: ctx.user.openId,
+        });
+      } catch (error) {
+        if (error instanceof ProspectLegNotConnectedError) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+        }
+        throw error;
+      }
+    }),
   selectColdCallChainTarget: dayforgeMissionFieldProcedure
     .input(
       z.object({

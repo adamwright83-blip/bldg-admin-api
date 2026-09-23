@@ -64,6 +64,7 @@ import {
   generateDayforgeMissionCoaching,
   getActiveDayforgeCoachingArtifact,
 } from "../dayforgeCoaching/dayforgeCoachingRuntime";
+import { ProspectLegNotConnectedError } from "@shared/coldCallBurst";
 import {
   COMMERCIAL_MISSION_CALL_OUTCOMES,
   listCommercialMissionCallAttempts,
@@ -409,11 +410,19 @@ export const commercialMissionRouter = router({
         userId: ctx.user.openId,
         isAdmin: ctx.dayforgeMembership.role !== "field",
       });
-      const result = await recordCommercialMissionCallAttempt({
-        ...input,
-        tenantId: ctx.tenantId,
-        actorId: ctx.user.openId,
-      });
+      let result: Awaited<ReturnType<typeof recordCommercialMissionCallAttempt>>;
+      try {
+        result = await recordCommercialMissionCallAttempt({
+          ...input,
+          tenantId: ctx.tenantId,
+          actorId: ctx.user.openId,
+        });
+      } catch (error) {
+        if (error instanceof ProspectLegNotConnectedError) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+        }
+        throw error;
+      }
       const worldEvent = await appendGoldlineWorldEvent({
         tenantId: ctx.tenantId,
         physicalEntityId: null,

@@ -160,6 +160,75 @@ export function coldCallAmmo(batch: ColdCallBatch) {
   };
 }
 
+/**
+ * Operator-entered outcomes that claim a real conversation.
+ * Busy, no answer, voicemail, and failed stay recordable and are not these.
+ */
+export const CONNECTED_CONVERSATION_OUTCOMES = ["spoke", "visit_booked"] as const;
+
+export type ConnectedConversationOutcome =
+  (typeof CONNECTED_CONVERSATION_OUTCOMES)[number];
+
+export function isConnectedConversationOutcome(
+  outcome: string
+): outcome is ConnectedConversationOutcome {
+  return (CONNECTED_CONVERSATION_OUTCOMES as readonly string[]).includes(outcome);
+}
+
+export class ProspectLegNotConnectedError extends Error {
+  readonly code = "PROSPECT_LEG_NOT_CONNECTED" as const;
+  constructor() {
+    super("A connected conversation requires the prospect leg to have connected.");
+    this.name = "ProspectLegNotConnectedError";
+  }
+}
+
+export type ProspectLegReceiptFact = {
+  tenantId?: string | null;
+  eventType: string;
+  callSid: string | null;
+  parentCallSid: string | null;
+};
+
+/**
+ * Prospect-leg connection from the existing attempt status and receipt spine.
+ *
+ * Connected when the attempt is `customer_connected` or `completed_success`,
+ * or a `CALL_CONNECTED` receipt belongs to the prospect leg.
+ * `completed_success` is written only after that same signal on a terminal
+ * customer-leg callback. It is transport, not a commercial outcome.
+ *
+ * Not enough: the bridge exists, the rep answered, the prospect is ringing,
+ * dial started, a duration, `CALL_COMPLETED` without `CALL_CONNECTED`,
+ * busy, no answer, voicemail, or failed.
+ */
+export function prospectLegConnected(input: {
+  tenantId: string;
+  attemptStatus: string | null;
+  repLegCallSid: string | null;
+  customerLegCallSid: string | null;
+  receipts: ProspectLegReceiptFact[];
+}): boolean {
+  if (
+    input.attemptStatus === "customer_connected" ||
+    input.attemptStatus === "completed_success"
+  ) {
+    return true;
+  }
+  const repSid = input.repLegCallSid?.trim() || "";
+  const customerSid = input.customerLegCallSid?.trim() || "";
+  return input.receipts.some(receipt => {
+    if (receipt.tenantId && receipt.tenantId !== input.tenantId) return false;
+    if (receipt.eventType !== "CALL_CONNECTED") return false;
+    const callSid = receipt.callSid?.trim() || "";
+    const parentSid = receipt.parentCallSid?.trim() || "";
+    if (!callSid) return false;
+    if (customerSid && callSid === customerSid && callSid !== repSid) return true;
+    if (repSid && parentSid === repSid && callSid !== repSid) return true;
+    return false;
+  });
+}
+
 export function comboAfterChain(input: {
   currentCombo: number;
   selectedNextTarget: boolean;
