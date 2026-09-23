@@ -508,7 +508,7 @@ const STORAGE_KEY = "goldline:audio:muted";
 /**
  * Gestures that can unlock audio. Browsers differ on which count — on touch
  * screens a pointerdown is not a user activation, a pointerup/touchend/click
- * is — so listen for all of them and stop only once audio is really running.
+ * is — so listen for all of them.
  */
 const UNLOCK_EVENTS = ["pointerdown", "pointerup", "touchend", "click", "keydown"] as const;
 
@@ -631,10 +631,9 @@ export class AudioManager {
   private ctx: AudioContext | null = null;
   private master: AudioNode | null = null;
   private muted: boolean;
-  private unlockTarget: EventTarget | null = null;
+  private unlockArmed = false;
   /** A resume() is in flight from a gesture: cues queue and play the moment it lands. */
   private resumePending = false;
-  private gestureTarget: EventTarget | null = null;
   private playedTokens = new Set<string>();
 
   constructor() {
@@ -680,16 +679,15 @@ export class AudioManager {
   }
 
   /**
-   * Arm audio to unlock on the next user gesture (autoplay policy). The
-   * listeners stay armed until the context is actually running: a gesture
-   * made while muted, or one the browser does not count as an activation,
-   * does not use the unlock up.
+   * Arm audio to unlock on user gestures (autoplay policy). Armed once for the
+   * life of the page and never removed — one passive listener per gesture
+   * type, a no-op while audio runs. So a gesture made while muted, or one the
+   * browser does not count as an activation, never uses the unlock up, and if
+   * the OS takes audio away (a call, another app) the next tap brings it back.
    */
   primeOnGesture(target: EventTarget = window) {
-    if (typeof window === "undefined") return;
-    this.gestureTarget = target;
-    if (this.unlockTarget || this.ctx?.state === "running") return;
-    this.unlockTarget = target;
+    if (typeof window === "undefined" || this.unlockArmed) return;
+    this.unlockArmed = true;
     for (const type of UNLOCK_EVENTS) {
       target.addEventListener(type, this.onUnlockGesture, { capture: true, passive: true });
     }
@@ -697,24 +695,11 @@ export class AudioManager {
 
   private readonly onUnlockGesture = () => this.unlock();
 
-  private disarmUnlock() {
-    const target = this.unlockTarget;
-    if (!target) return;
-    for (const type of UNLOCK_EVENTS) {
-      target.removeEventListener(type, this.onUnlockGesture, { capture: true });
-    }
-    this.unlockTarget = null;
-  }
-
   /** Create or resume the context. Meant for inside a user gesture; safe to repeat. */
   unlock() {
     if (this.muted || typeof window === "undefined") return;
     const ctx = this.ensureContext();
-    if (!ctx) return;
-    if (ctx.state === "running") {
-      this.disarmUnlock();
-      return;
-    }
+    if (!ctx || ctx.state === "running") return;
     // iOS Safari: starting any buffer inside the gesture opens the output.
     try {
       const kick = ctx.createBufferSource();
@@ -727,9 +712,6 @@ export class AudioManager {
     this.resumePending = true;
     void ctx
       .resume()
-      .then(() => {
-        if (ctx.state === "running") this.disarmUnlock();
-      })
       .catch(() => undefined)
       .finally(() => {
         this.resumePending = false;
@@ -743,17 +725,7 @@ export class AudioManager {
       (window as unknown as { webkitAudioContext?: typeof AudioContext })
         .webkitAudioContext;
     if (!Ctor) return null;
-    if (!this.ctx) {
-      const ctx = new Ctor();
-      this.ctx = ctx;
-      // If the OS takes audio away (a call, another app), the next gesture
-      // brings it back.
-      ctx.addEventListener?.("statechange", () => {
-        if (ctx.state !== "running" && !this.muted && this.gestureTarget) {
-          this.primeOnGesture(this.gestureTarget);
-        }
-      });
-    }
+    if (!this.ctx) this.ctx = new Ctor();
     return this.ctx;
   }
 

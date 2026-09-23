@@ -124,7 +124,7 @@ describe("audio unlock", () => {
     expect(audio.isRunning).toBe(true);
   });
 
-  it("keeps listening when the browser does not count a gesture, then stops once running", async () => {
+  it("keeps listening when the browser does not count a gesture, and does nothing more once running", async () => {
     const audio = new AudioManager();
     audio.primeOnGesture(fakeWindow);
 
@@ -186,7 +186,7 @@ describe("audio unlock", () => {
     }
   });
 
-  it("re-arms if the device takes the audio away", async () => {
+  it("brings audio back on the next tap if the device takes it away", async () => {
     const audio = new AudioManager();
     audio.primeOnGesture(fakeWindow);
     fakeWindow.dispatchEvent(new Event("click"));
@@ -194,10 +194,41 @@ describe("audio unlock", () => {
 
     const ctx = contexts[0]!;
     ctx.state = "suspended";
-    ctx.dispatchEvent(new Event("statechange"));
     fakeWindow.dispatchEvent(new Event("touchend"));
     await settle();
     expect(ctx.state).toBe("running");
+  });
+
+  it("arms once for the life of the page: listener counts never change", async () => {
+    // Goldline's e2e lifecycle gate compares listener counts before and after
+    // remounts, so arming must add each listener exactly once and never
+    // remove it — not even once audio is running.
+    const added: string[] = [];
+    const removed: string[] = [];
+    const addEventListener = fakeWindow.addEventListener.bind(fakeWindow);
+    const removeEventListener = fakeWindow.removeEventListener.bind(fakeWindow);
+    fakeWindow.addEventListener = ((type: string, ...rest: unknown[]) => {
+      added.push(type);
+      return (addEventListener as (...args: unknown[]) => void)(type, ...rest);
+    }) as typeof fakeWindow.addEventListener;
+    fakeWindow.removeEventListener = ((type: string, ...rest: unknown[]) => {
+      removed.push(type);
+      return (removeEventListener as (...args: unknown[]) => void)(type, ...rest);
+    }) as typeof fakeWindow.removeEventListener;
+
+    const audio = new AudioManager();
+    audio.primeOnGesture(fakeWindow);
+    audio.primeOnGesture(fakeWindow);
+    fakeWindow.dispatchEvent(new Event("click"));
+    await settle();
+    audio.setMuted(true);
+    audio.setMuted(false);
+    audio.primeOnGesture(fakeWindow);
+    await settle();
+
+    expect(audio.isRunning).toBe(true);
+    expect([...added].sort()).toEqual(["click", "keydown", "pointerdown", "pointerup", "touchend"]);
+    expect(removed).toEqual([]);
   });
 });
 
