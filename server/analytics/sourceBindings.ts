@@ -19,6 +19,11 @@
  * those signals is allowed to masquerade as interval coverage. Native Goldline orders are the
  * system of record and are bound whenever that table can be read, including a legitimate zero-row
  * tenant.
+ *
+ * Book-level coverage for other consumers lives in `./sourceCoverage`
+ * (`loadBusinessSourceCoverage`). It reuses this binding evidence and
+ * `expectedCleanCloudCoverageThrough`. Do not add another freshness clock.
+ * This file stays the question-relative interval guard.
  */
 import { sql } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
