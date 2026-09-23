@@ -179,11 +179,51 @@ describe("readCanonicalRevenue", () => {
     expect(result.exactIncludedCents).toBe(1200);
     expect(result.exactIncludedOrderCount).toBe(1);
     expect(result.provenance.sources).toEqual(["laundry_butler"]);
-    expect(result.precision).toBe("exact");
-    expect(result.statedExactCents).toBe(1200);
-    expect(result.mayStateExact).toBe(true);
+    expect(result.recordedCents).toBe(1200);
+    expect(result.statedExactCents).toBeNull();
+    expect(result.mayStateExact).toBe(false);
+    expect(result.precision).toBe("recorded_only");
     expect(result.coverage.exactRevenueLicensed).toBe(false);
+    expect(result.coverage.coverageAllowsExact).toBe(false);
     expect(result.coverage.cleanCloudFresh).toBe(true);
+  });
+
+  it("keeps a proven empty ledger as recorded zero and does not license it", async () => {
+    const result = await readCanonicalRevenue({
+      tenantId: "tenant-a",
+      ...WINDOW,
+      timeZone: FIXTURE_TZ,
+      coverage: exactPaymentCoverage(),
+      loaders: loaders([], []),
+    });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.recordedCents).toBe(0);
+    expect(result.exactIncludedOrderCount).toBe(0);
+    expect(result.statedExactCents).toBeNull();
+    expect(result.mayStateExact).toBe(false);
+    expect(result.precision).toBe("recorded_only");
+  });
+
+  it("does not turn an unreadable coverage contract into a zero", async () => {
+    const unread = await readCanonicalRevenue({
+      tenantId: "tenant-a",
+      ...WINDOW,
+      timeZone: FIXTURE_TZ,
+      coverage: null,
+      loaders: {
+        laundry_butler: async () => {
+          throw new Error("down");
+        },
+        cleancloud: async () => {
+          throw new Error("down");
+        },
+      },
+    });
+    expect(unread.status).toBe("unavailable");
+    if (unread.status !== "unavailable") return;
+    expect(unread.exactIncludedCents).toBeNull();
+    expect(unread.coverage.coverageAllowsExact).toBe(false);
   });
 
   it("counts a CleanCloud-only book", async () => {
@@ -504,5 +544,29 @@ describe("Claire revenue consumes the canonical read", () => {
     expect(spoken.text).toContain("$45.00");
     expect(spoken.text).toContain("I withheld");
     expect(spoken.text).not.toContain("$90.00");
+  });
+
+  it("says a proven empty period is zero without licensing that zero", async () => {
+    const result = await runBusinessQuery(
+      "tenant-a",
+      defaultBusinessQuery("revenue"),
+      deps(loaders([], []), exactPaymentCoverage())
+    );
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok" || result.data.kind !== "totals") throw new Error("unexpected");
+    expect(result.data.current.revenueCents).toBe(0);
+    expect(result.coverage?.canonicalRevenue?.statedExactCents).toBeNull();
+    expect(result.coverage?.canonicalRevenue?.mayStateExact).toBe(false);
+    const spoken = speakBusinessResult(result, {
+      surface: "text",
+      previous: null,
+      refinement: false,
+      utterance: "What was revenue in the last 30 days?",
+      today: "2026-09-14",
+      disclosed: [],
+      timeZone: FIXTURE_TZ,
+    });
+    expect(spoken.text).toContain("$0.00 across 0 orders");
+    expect(spoken.text).toContain("Source coverage does not support an exact total for this window");
   });
 });

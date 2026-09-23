@@ -34,9 +34,11 @@ import {
  * Coverage comes only from B1 `loadBusinessSourceCoverage` (contract version 1).
  * This module does not decide fresh, stale, partial, or unavailable.
  * `book.exactRevenueLicensed` and `book.allCustomersLicensed` stay false.
- * Exact whole-business payment revenue requires `book.exhaustiveCurrent`,
- * `book.paymentEventsProven`, a window inside the proven CleanCloud span when
- * that source is held, and completed reconciliation. Stale is not zero.
+ * A false `exactRevenueLicensed` is not a license. Exact payment revenue also
+ * needs `book.exhaustiveCurrent`, `book.paymentEventsProven`, a window inside
+ * the proven CleanCloud span when that source is held, and completed
+ * reconciliation. A loaded empty ledger may still be spoken as recorded zero.
+ * An unread ledger is unavailable, not zero. Stale is not zero.
  */
 
 export type ReadBusinessSourceCoverage = (input: {
@@ -287,13 +289,15 @@ export function interpretSourceCoverage(input: {
     source => source.includedInCombinedBook && source.status !== "fresh"
   );
   const spanCovers = windowInsideProvenSpan(input.window, snapshot);
-  const flagsTrusted =
-    snapshot.book.exactRevenueLicensed === false &&
+  // B1 publishes exactRevenueLicensed as false. False does not grant an exact total.
+  const exactRevenueLicensed: boolean = snapshot.book.exactRevenueLicensed;
+  const otherFlagsTrusted =
     snapshot.book.allCustomersLicensed === false &&
     snapshot.book.staleIsZero === false &&
     snapshot.book.missingIsNoCustomers === false;
   const coverageAllowsExact =
-    flagsTrusted &&
+    exactRevenueLicensed === true &&
+    otherFlagsTrusted &&
     snapshot.book.exhaustiveCurrent &&
     snapshot.book.paymentEventsProven &&
     heldNotFresh.length === 0 &&
