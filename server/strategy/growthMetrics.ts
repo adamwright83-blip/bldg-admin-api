@@ -6,6 +6,7 @@ import {
   type ActiveCustomerLoaders,
   type ActiveCustomerMetric,
 } from "../claire/activeCustomerMetric";
+import { reconcilePaidRevenue } from "../analytics/canonicalRevenue";
 import { activeCustomerPopulation } from "../analytics/businessMetrics";
 import { resolveCustomerIdentities } from "../analytics/customerIdentityResolution";
 import {
@@ -253,8 +254,9 @@ export async function getStrategyGrowthMetrics(
   const periodEvents = events.filter(
     e => e.businessDate >= input.period.startYmd && e.businessDate <= input.period.endYmd
   );
-  const paidOrdersCount = periodEvents.length;
-  const netSalesCents = periodEvents.reduce((sum, e) => sum + (e.cents || 0), 0);
+  const reconciledSales = reconcilePaidRevenue({ events: periodEvents });
+  const paidOrdersCount = reconciledSales.exactIncludedOrderCount;
+  const netSalesCents = reconciledSales.exactIncludedCents;
 
   // Net active customer change (rolling active at endYmd vs rolling active at startYmd)
   const startWindowEnd = fromZonedTime(`${input.period.startYmd}T00:00:00`, timeZone);
@@ -303,8 +305,8 @@ export async function getStrategyGrowthMetrics(
     paidOrders: {
       count: paidOrdersCount,
       provenance: {
-        sourceService: "server/analytics/paidOrderLedger.ts",
-        queryOrDefinition: "Verified paid orders occurring within business-local period",
+        sourceService: "server/analytics/canonicalRevenue.ts",
+        queryOrDefinition: "Exact included orders from the canonical revenue read within the business-local period",
         window: `${input.period.startYmd}..${input.period.endYmd}`,
         computedAt,
       },
@@ -312,10 +314,13 @@ export async function getStrategyGrowthMetrics(
     netSales: {
       amountCents: netSalesCents,
       isUncertain: true,
-      uncertaintyReason: "Canonical paid order ledger does not record refunds or cancellations for cleancloud/native orders",
+      uncertaintyReason:
+        reconciledSales.suspectedWithheld.count > 0
+          ? "Canonical revenue withheld suspected cross-source duplicates from the exact total. The paid order ledger also does not record refunds or cancellations for cleancloud/native orders"
+          : "Canonical paid order ledger does not record refunds or cancellations for cleancloud/native orders",
       provenance: {
-        sourceService: "server/analytics/paidOrderLedger.ts",
-        queryOrDefinition: "Sum of verified paid order cents within business-local period",
+        sourceService: "server/analytics/canonicalRevenue.ts",
+        queryOrDefinition: "readCanonicalRevenue exact included cents within the business-local period",
         window: `${input.period.startYmd}..${input.period.endYmd}`,
         computedAt,
       },

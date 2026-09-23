@@ -26,6 +26,10 @@ export function eventsInSpan(
   );
 }
 
+/**
+ * Adds the events it is given. Whole-business revenue is `readCanonicalRevenue`;
+ * pass that read's included events here when a total will be stated as revenue.
+ */
 export function summarizeTotals(events: readonly PaidOrderEvent[]): RevenueTotals {
   const revenueCents = events.reduce((sum, event) => sum + event.cents, 0);
   return {

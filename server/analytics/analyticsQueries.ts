@@ -6,11 +6,11 @@ import {
   activeCustomerPopulation,
   bucketSeries,
   compareTotals,
-  eventsInSpan,
   summarizeTotals,
   topCustomers,
 } from "./businessMetrics";
 import { ALL_TIME_START, addDaysYmd, daysInclusive, isValidYmd } from "./businessPeriods";
+import { reconcileLedgerSpan } from "./canonicalRevenue";
 import {
   AnalyticsUnavailableError,
   loadPaidOrderLedger,
@@ -39,6 +39,13 @@ export type RevenueSummary = {
   avgOrderValue: number;
   series: RevenuePoint[];
   coverage?: AnalyticsCoverage;
+  /** Exact-revenue breakdown. `totalRevenue` is `exactIncludedCents` in dollars. */
+  reconciliation?: {
+    exactIncludedCents: number;
+    definiteDuplicateExclusionCents: number;
+    suspectedWithheldCents: number;
+    unverifiedNativeCents: number;
+  };
 };
 
 export type OrderStats = {
@@ -173,8 +180,9 @@ async function requireDb() {
 }
 
 /**
- * Paid revenue totals + business-local time series. Revenue is always dated
- * by payment; `basis` is accepted for older callers but does not change that.
+ * Paid revenue totals + business-local time series. The stated total is
+ * `readCanonicalRevenue` / `reconcileLedgerSpan` (exact included cents).
+ * `basis` is accepted for older callers but revenue stays payment-dated.
  */
 export async function getRevenueSummary(
   tenantId: string,
@@ -186,18 +194,25 @@ export async function getRevenueSummary(
   deps: AnalyticsQueryDeps = defaultDeps
 ): Promise<RevenueSummary> {
   const ledger = await ledgerFor(tenantId, [params.range], deps);
-  const events = eventsInSpan(ledger.events, boundedRange(params.range));
-  const totals = summarizeTotals(events);
+  const range = boundedRange(params.range);
+  const reconciled = reconcileLedgerSpan(ledger, range);
+  const totals = summarizeTotals(reconciled.includedEvents);
   return {
     totalRevenue: dollars(totals.revenueCents),
     orderCount: totals.orderCount,
     avgOrderValue: totals.aovCents == null ? 0 : dollars(totals.aovCents),
-    series: bucketSeries(events, params.groupBy).map(point => ({
+    series: bucketSeries(reconciled.includedEvents, params.groupBy).map(point => ({
       bucket: point.bucket,
       revenue: dollars(point.revenueCents),
       orderCount: point.orderCount,
     })),
     coverage: coverageOf(ledger, [params.range]),
+    reconciliation: {
+      exactIncludedCents: reconciled.exactIncludedCents,
+      definiteDuplicateExclusionCents: reconciled.definiteDuplicateExclusions.cents,
+      suspectedWithheldCents: reconciled.suspectedWithheld.cents,
+      unverifiedNativeCents: reconciled.unverifiedNative.cents,
+    },
   };
 }
 
@@ -357,8 +372,10 @@ export async function getMetricComparison(
     case "orders_paid":
     case "avg_order_value": {
       const ledger = await ledgerFor(tenantId, [currentRange, compRange], deps);
-      const curEvents = eventsInSpan(ledger.events, currentRange);
-      const prevEvents = eventsInSpan(ledger.events, compRange);
+      const curReconciled = reconcileLedgerSpan(ledger, currentRange);
+      const prevReconciled = reconcileLedgerSpan(ledger, compRange);
+      const curEvents = curReconciled.includedEvents;
+      const prevEvents = prevReconciled.includedEvents;
       const bridge = compareTotals(summarizeTotals(curEvents), summarizeTotals(prevEvents));
       const coverage = coverageOf(ledger, [currentRange, compRange]);
       const curAov = bridge.current.aovCents == null ? 0 : dollars(bridge.current.aovCents);
