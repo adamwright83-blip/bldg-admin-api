@@ -6,6 +6,9 @@ import { COLOSSEUM_TARGET_IDS } from "@/pages/goldline/colosseumCampaign";
 import type { Day1TenDoorsMissionView } from "@/pages/goldline/Day1FieldMission";
 import { DAY1_TARGETS, type Day1TargetOutcome } from "@shared/day1TenDoors";
 import { connectPreviewMission } from "./trpcStub";
+// The global stylesheets every Goldline driver session already has loaded.
+import "@/index.css";
+import "@/pages/goldline/goldline-overworld.css";
 
 /**
  * Local-only harness. Query parameters:

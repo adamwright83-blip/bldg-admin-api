@@ -15,7 +15,7 @@
   z-index: 1100;
   top: max(10px, env(safe-area-inset-top));
   left: max(10px, env(safe-area-inset-left));
-  right: calc(max(10px, env(safe-area-inset-right)) + 104px);
+  right: calc(max(12px, env(safe-area-inset-right)) + 46px);
   max-width: 460px;
   display: flex;
   align-items: center;

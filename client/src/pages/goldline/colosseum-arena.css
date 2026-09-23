@@ -882,16 +882,26 @@
   z-index: 1200;
   top: max(12px, env(safe-area-inset-top));
   right: max(12px, env(safe-area-inset-right));
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
   border: 1px solid var(--cz-plate-edge);
   background: var(--cz-plate);
   color: var(--cz-ivory);
-  font: 800 10px/1 var(--cz-caps);
-  letter-spacing: 0.16em;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+}
+
+.cz-mute svg {
+  width: 20px;
+  height: 20px;
+}
+
+.cz-mute[aria-pressed="true"] {
+  color: rgba(255, 247, 230, 0.6);
 }
 
 .cz-keys {
@@ -926,12 +936,14 @@
   pointer-events: none;
 }
 
+/* The thumb zone stops above any bottom CTA (the service entrance), so
+   steering low can never be mistaken for leaving for the real hunt. */
 .cz-controls .overworld-joystick-zone {
   position: absolute;
   left: 0;
-  bottom: 0;
+  bottom: var(--cz-bottom-gap, 0px);
   width: 56%;
-  height: 46%;
+  height: 44%;
   pointer-events: auto;
   touch-action: none;
 }
@@ -950,6 +962,14 @@
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
   pointer-events: none;
+}
+
+.cz-controls .overworld-joystick::after {
+  content: "";
+  position: absolute;
+  inset: 20px;
+  border: 1px solid rgba(255, 242, 189, 0.22);
+  border-radius: 50%;
 }
 
 .cz-controls .overworld-joystick i {

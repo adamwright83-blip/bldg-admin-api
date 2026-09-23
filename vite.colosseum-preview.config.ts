@@ -1,3 +1,4 @@
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 import { defineConfig } from "vite";
@@ -11,7 +12,9 @@ import { defineConfig } from "vite";
  * production. Run: npx vite --config vite.colosseum-preview.config.ts
  */
 export default defineConfig({
-  plugins: [react()],
+  // Tailwind too: the real app's preflight resets img/svg/button/heading
+  // defaults globally, and the preview should render under the same rules.
+  plugins: [react(), tailwindcss()],
   root: path.resolve(import.meta.dirname, "preview/colosseum"),
   publicDir: path.resolve(import.meta.dirname, "client/public"),
   // Its own dependency cache, so running it never invalidates the app's.

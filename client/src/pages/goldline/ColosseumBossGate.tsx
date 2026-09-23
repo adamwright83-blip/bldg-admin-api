@@ -22,6 +22,7 @@ import {
 import type { Day1TargetOutcome } from "../../../../shared/day1TenDoors";
 import { ClockheadConstruct, type ConstructMood } from "./ClockheadConstruct";
 import { ColosseumControls, useColosseumInput } from "./ColosseumControls";
+import { ColosseumMuteButton } from "./ColosseumMuteButton";
 import { ColosseumStageView, prefersReducedMotion, type StageHandle } from "./ColosseumStageView";
 import {
   ShieldGlyph,
@@ -217,7 +218,6 @@ function ColosseumSearchArena({
   const dodgeFromRef = useRef<StagePoint | null>(null);
   const mountedAt = useRef(performance.now());
   const reduced = useRef(prefersReducedMotion());
-  const [muted, setMuted] = useState(() => getAudioManager().isMuted);
   const [toast, setToast] = useState<Toast | null>(null);
   const toastId = useRef(0);
   const [tauntVisible, setTauntVisible] = useState(true);
@@ -671,17 +671,7 @@ function ColosseumSearchArena({
         </small>
       </header>
 
-      <button
-        type="button"
-        className="cz-mute"
-        onClick={() => {
-          getAudioManager().setMuted(!muted);
-          setMuted(!muted);
-        }}
-        aria-pressed={muted}
-      >
-        {muted ? "SOUND OFF" : "SOUND ON"}
-      </button>
+      <ColosseumMuteButton />
 
       <p
         className={`cs-taunt${tauntVisible || sinceMount < 5200 ? " is-visible" : ""}`}

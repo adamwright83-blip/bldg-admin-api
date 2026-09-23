@@ -28,6 +28,8 @@ const FICTION_MODULES = [
   "ColosseumControls.tsx",
   "ColosseumSprites.tsx",
   "ColosseumStageView.tsx",
+  "ColosseumMuteButton.tsx",
+  "ColosseumLoading.tsx",
 ];
 
 /** Everything that renders the Colosseum, fiction or gate. */

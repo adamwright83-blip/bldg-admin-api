@@ -8,6 +8,7 @@ import {
 } from "@/game/audio/haptics";
 import { ClockheadConstruct, type ConstructMood } from "./ClockheadConstruct";
 import { ColosseumControls, useColosseumInput } from "./ColosseumControls";
+import { ColosseumMuteButton } from "./ColosseumMuteButton";
 import { ColosseumStageView, prefersReducedMotion, type StageHandle } from "./ColosseumStageView";
 import { TRAILBLAZER_FRAME_URLS, TrailblazerSprite, strideLength } from "./ColosseumSprites";
 import {
@@ -132,7 +133,6 @@ export default function ClockheadDuel({ onDefeated }: { onDefeated: () => void }
   const completed = useRef(false);
   const stageRef = useRef<StageHandle>(null);
   const reduced = useRef(prefersReducedMotion());
-  const [muted, setMuted] = useState(() => getAudioManager().isMuted);
   const [callout, setCallout] = useState<Callout | null>(null);
   const [banner, setBanner] = useState<{ id: number; phase: DuelPhase } | null>(null);
   const calloutId = useRef(0);
@@ -493,7 +493,11 @@ export default function ClockheadDuel({ onDefeated }: { onDefeated: () => void }
           })(),
           moving: false,
         }
-      : world.avatar;
+      : scene === "victory"
+        ? // The simulation stops at the win; don't freeze her mid-flinch.
+          // She faces what she just stopped. Sometimes she just looks.
+          { ...world.avatar, hurtMs: 0, dodgeMs: 0, slashMs: 0, guarding: false, moving: false, facing: "back" as const }
+        : world.avatar;
 
   const phaseLabel = CLOCK_PHASE_NAMES[world.phase];
   const bossSegments = Array.from({ length: DUEL_BOSS_HP }, (_, index) => index < world.bossHp);
@@ -632,17 +636,7 @@ export default function ClockheadDuel({ onDefeated }: { onDefeated: () => void }
         </p>
       )}
 
-      <button
-        type="button"
-        className="cz-mute"
-        onClick={() => {
-          getAudioManager().setMuted(!muted);
-          setMuted(!muted);
-        }}
-        aria-pressed={muted}
-      >
-        {muted ? "SOUND OFF" : "SOUND ON"}
-      </button>
+      <ColosseumMuteButton />
 
       {(scene === "fight" || scene === "recoil") && (
         <ColosseumControls
