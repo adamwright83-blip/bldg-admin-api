@@ -49,6 +49,7 @@ import { campaignLibraryRouter } from "../campaignLibrary/campaignLibraryRouter"
 import { campaignRunRouter } from "../campaignRuns/campaignRunRouter";
 import { spiritHumanRescueRouter } from "../spiritHumanRescue/rescueRouter";
 import { kingdomRouter } from "../goldlineKingdoms/kingdomRouter";
+import { progressionRouter } from "../goldlineProgression/progressionRouter";
 import { companionRouter } from "../companions/companionRouter";
 import { missionDirectorRouter } from "../missionDirector/missionDirectorRouter";
 import { currentDayLineRouter } from "../goldline/dayline/currentDayLineRouter";
@@ -107,6 +108,7 @@ export const systemRouter = router({
   campaignRuns: campaignRunRouter,
   spiritHumanRescue: spiritHumanRescueRouter,
   goldlineKingdoms: kingdomRouter,
+  goldlineProgression: progressionRouter,
   goldlineCompanions: companionRouter,
   missionDirector: missionDirectorRouter,
   currentDayLine: currentDayLineRouter,

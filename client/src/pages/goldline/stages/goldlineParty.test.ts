@@ -66,13 +66,11 @@ describe("the Goldline party", () => {
     expect(events).toBe(0);
   });
 
-  it("gives Rook to anyone who resolved the Colosseum before the party existed", () => {
+  it("does not grant Rook from a local Colosseum resolution", () => {
     markColosseumResolved("veteran");
     expect(store.get(colosseumResolutionKey("veteran"))).toBe("1");
-    expect(loadParty("veteran").members).toEqual([
-      { id: "rook", joinedVia: "kingdom-1-colosseum", joinedAt: null },
-    ]);
-    expect(isTravelingWith("veteran", "rook")).toBe(true);
+    expect(loadParty("veteran").members).toEqual([]);
+    expect(isTravelingWith("veteran", "rook")).toBe(false);
   });
 
   it("ignores anything in storage that is not a known companion", () => {

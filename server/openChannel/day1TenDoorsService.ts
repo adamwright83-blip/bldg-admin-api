@@ -25,6 +25,7 @@ import {
   openChannelMissions,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { rejectClientProgressionForge } from "../goldlineProgression/progressionContract";
 import { ensureOpenChannelTables } from "./openChannelService";
 import {
   DAY1_BUSINESS_DATE,
@@ -223,6 +224,30 @@ async function writePayload(input: {
     );
 }
 
+/** Re-read the task row. The in-memory next-outcome map is not evidence. */
+async function readCommittedDay1Evidence(input: {
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
+  tenantId: string;
+  missionId: string;
+  taskId: string;
+}): Promise<EvidencePayload | null> {
+  const [task] = await input.db
+    .select()
+    .from(openChannelMissionTasks)
+    .where(
+      and(
+        eq(openChannelMissionTasks.tenantId, input.tenantId),
+        eq(openChannelMissionTasks.missionId, input.missionId),
+        eq(openChannelMissionTasks.id, input.taskId)
+      )
+    )
+    .limit(1);
+  if (!task?.detail || typeof task.detail !== "string") return null;
+  const decoded = decodeDay1Payload(task.detail);
+  if (!decoded) return null;
+  return normaliseEvidence(decoded);
+}
+
 function blankVisit(targetId: string): Day1VisitEvidence {
   return {
     targetId,
@@ -406,6 +431,11 @@ export async function recordDay1TenDoorsEvidence(input: {
  * for a target that already has one is a no-op unless the operator explicitly
  * supplies source=operator_backfill to attach truthful metadata to a legacy
  * outcome. Backfill timestamps mean "recorded now", never "this happened now".
+ *
+ * This writer does not resolve level.colosseum, own companion.rook, or
+ * complete kingdom.brass_republic. A satisfied kingdom_binding.level.colosseum
+ * is evidence for that binding only. Reading the mission does not write
+ * progression, and retrying an already-recorded outcome does not either.
  */
 export async function recordDay1TenDoorsOutcome(input: {
   tenantId: string;
@@ -418,6 +448,7 @@ export async function recordDay1TenDoorsOutcome(input: {
   followUpNeeded?: boolean;
   source?: Day1EvidenceSource;
 }): Promise<Day1TenDoorsMission> {
+  rejectClientProgressionForge(input);
   const { db, mission, task, payload } = await loadWritableDay1Mission(input);
   assertTarget(payload, input.targetId);
 
@@ -433,12 +464,18 @@ export async function recordDay1TenDoorsOutcome(input: {
     existingVisit.outcomeRecordedAt == null;
 
   if (existingOutcome != null && !mayBackfillLegacyOutcome) {
+    const confirmed = await readCommittedDay1Evidence({
+      db,
+      tenantId: input.tenantId,
+      missionId: mission.id,
+      taskId: task.id,
+    });
     return projectMission({
       missionId: mission.id,
       taskId: task.id,
       title: mission.title,
       briefing: mission.operatorBriefing,
-      payload,
+      payload: confirmed ?? payload,
     });
   }
 
@@ -490,7 +527,18 @@ export async function recordDay1TenDoorsOutcome(input: {
     payload: nextPayload,
   });
 
-  if (day1IsComplete(nextPayload) && mission.status !== "completed") {
+  const confirmed = await readCommittedDay1Evidence({
+    db,
+    tenantId: input.tenantId,
+    missionId: mission.id,
+    taskId: task.id,
+  });
+  const committedOutcome = confirmed?.outcomes[input.targetId];
+  if (!confirmed || committedOutcome !== outcome) {
+    throw new Error("Day 1 outcome was not committed");
+  }
+
+  if (day1IsComplete(confirmed) && mission.status !== "completed") {
     const completedAt = new Date();
     await db
       .update(openChannelMissions)
@@ -517,6 +565,6 @@ export async function recordDay1TenDoorsOutcome(input: {
     taskId: task.id,
     title: mission.title,
     briefing: mission.operatorBriefing,
-    payload: nextPayload,
+    payload: confirmed,
   });
 }
