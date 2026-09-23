@@ -92,6 +92,13 @@ describe("JOYSTICK product identity", () => {
     ]);
   });
 
+  it("names the iOS install title JOYSTICK without editing the manifest link", () => {
+    const head = read("client", "src", "game", "pwa", "installPwaHead.ts");
+    expect(head).toContain("appleTitle.content = PRODUCT_NAME");
+    expect(head).not.toContain('appleTitle.content = "Goldline"');
+    expect(head).toContain('manifestLink.href = "/goldline.webmanifest"');
+  });
+
   it("does not rename the web manifest", () => {
     const manifest = read("client", "public", "goldline.webmanifest");
     expect(manifest).toContain('"name": "Goldline"');

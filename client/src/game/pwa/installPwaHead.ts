@@ -5,6 +5,8 @@
  * index.html — otherwise every other page on this origin would also
  * advertise itself as installable under the Goldline manifest.
  */
+import { PRODUCT_NAME } from "@shared/productIdentity";
+
 const TAG_DATA_ATTR = "data-goldline-pwa";
 
 export function installPwaHeadTags(): () => void {
@@ -32,7 +34,7 @@ export function installPwaHeadTags(): () => void {
 
   const appleTitle = document.createElement("meta");
   appleTitle.name = "apple-mobile-web-app-title";
-  appleTitle.content = "Goldline";
+  appleTitle.content = PRODUCT_NAME;
   appleTitle.setAttribute(TAG_DATA_ATTR, "1");
 
   const appleTouchIcon = document.createElement("link");
