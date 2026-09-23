@@ -136,6 +136,7 @@ export class SpanScene {
     this.cityEnd.addChild(hanging);
     this.cityChunks.push(hanging);
     this.root.addChild(this.cityEnd);
+    this.buildClamp();
 
     // --- tether ropes, ring, loose rigging and the boom crate live in the gap
     this.root.addChild(this.fxBack);
@@ -231,8 +232,12 @@ export class SpanScene {
     return obstructionsAt(time);
   }
 
+  /** Where the ring will be at `time`: its own sway, carried along wherever it is being towed now. */
   ringAtTime(time: number): Vec {
-    return ringPosition(time, shipRoll(time, this.calm).angle);
+    const sway = ringPosition(time, shipRoll(time, this.calm).angle);
+    if (this.departure <= 0) return sway;
+    const now = ringPosition(this.t, shipRoll(this.t, this.calm).angle);
+    return { x: this.ringAt.x + (sway.x - now.x), y: this.ringAt.y + (sway.y - now.y) };
   }
 
   /** Ship-local (painting) point → where it is drawn after roll and cast-off drift. */
@@ -336,6 +341,7 @@ export class SpanScene {
 
     this.updateCargo(dt);
     this.updateCollapse(dt);
+    this.updateClamp(dt);
   }
 
   cityToWorld(p: Vec): Vec {
@@ -439,6 +445,43 @@ export class SpanScene {
   }
 
   private readonly fallers: Array<(dt: number) => boolean> = [];
+  private readonly clamp = new Container();
+  private readonly clampJawTop = new Graphics();
+  private readonly clampJawBottom = new Graphics();
+  private readonly clampSeal = new Graphics();
+  /** 0 shut and sealed .. 1 sprung open. */
+  clampOpen = 0;
+
+  private buildClamp() {
+    const body = new Graphics()
+      .roundRect(-15, -30, 30, 60, 5).fill(0x6f4a22).stroke({ color: 0x2b1a0b, width: 2 })
+      .rect(-15, -6, 30, 12).fill(0x8f6230)
+      .circle(0, -20, 3.5).fill(0xd8a24c).circle(0, 20, 3.5).fill(0xd8a24c);
+    this.clampJawTop.roundRect(0, -8, 42, 12, 4).fill(0xb98437).stroke({ color: 0x3a2610, width: 2 }).circle(36, -2, 3).fill(0xf0c060);
+    this.clampJawTop.position.set(8, -18);
+    this.clampJawBottom.roundRect(0, -4, 42, 12, 4).fill(0xb98437).stroke({ color: 0x3a2610, width: 2 }).circle(36, 2, 3).fill(0xf0c060);
+    this.clampJawBottom.position.set(8, 18);
+    this.clampSeal.circle(0, 0, 9).fill(0x8e1a12).stroke({ color: 0x4a0a06, width: 2 }).circle(0, 0, 4).fill(0xb3261a);
+    this.clampSeal.poly([-4, 8, 4, 8, 7, 22, -1, 18, -7, 22]).fill(0xd9c9a2);
+    this.clampSeal.position.set(22, 0);
+    this.clamp.addChild(this.clampJawBottom, body, this.clampJawTop, this.clampSeal);
+    this.clamp.position.set(CLAMP_POINT.x - 6, CLAMP_POINT.y - 132);
+    this.clamp.zIndex = 5;
+    this.cityEnd.addChild(this.clamp);
+  }
+
+  private updateClamp(dt: number) {
+    const k = this.clampOpen;
+    this.clampJawTop.rotation = -1.1 * k;
+    this.clampJawBottom.rotation = 1.1 * k;
+    if (k > 0) {
+      // The seal tears and tumbles away.
+      this.clampSeal.x += dt * 60;
+      this.clampSeal.y += dt * (40 + 400 * k);
+      this.clampSeal.rotation += dt * 6;
+      this.clampSeal.alpha = Math.max(0, 1 - k * 1.2);
+    }
+  }
 
   /** After cast-off: the city side comes apart, chunk by chunk, and drops away. */
   beginCollapse() {

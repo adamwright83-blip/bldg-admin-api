@@ -1266,27 +1266,27 @@ export class WaywardRuntime {
       { at: 0.5, run: () => { pell.facing = -1; dun.facing = -1; pell.setPose("halt"); this.cue("inspector_shout"); } },
       { at: 1.0, run: () => { dun.setPose("angry"); this.cue("inspector_shout", { pitch: 0.82, delayMs: 120 }); } },
       { at: 1.6, run: () => { R.play("wait", "left"); this.say("rook-wait-here"); } },
-      { at: 2.8, run: () => { dun.setPose("idle"); pell.setPose("idle"); this.walkRookTo({ x: 1352, y: 474 }, () => R.play("talk", "left")); } },
-      { at: 4.2, run: () => { pell.facing = 1; } },
-      { at: 4.5, run: () => { dun.facing = 1; } },
-      { at: 4.8, run: () => { this.murmur("rook", 3.2); pell.setPose("listen"); dun.setPose("listen"); } },
-      { at: 6.6, run: () => { pell.setPose("laugh"); this.cue("inspector_laugh"); } },
-      { at: 8.2, run: () => { pell.setPose("idle"); R.play("confide", "left"); this.murmur("rook", 1.6); } },
-      { at: 9.4, run: () => { dun.setPose("angry"); this.cue("inspector_shout", { pitch: 0.78 }); this.shake.add(0.06); } },
-      { at: 10.8, run: () => { dun.setPose("idle"); R.play("letter", "left"); } },
-      { at: 12.0, run: () => { this.cue("paper_rustle"); } },
-      { at: 12.3, run: () => { dun.setPose("read"); } },
-      { at: 13.4, run: () => { pell.setPose("listen"); R.play("idle", "left"); } },
-      { at: 15.2, run: () => { dun.setPose("pocket"); this.cue("paper_rustle", { pitch: 0.8 }); } },
-      { at: 15.8, run: () => { this.say("inspector-square"); } },
-      { at: 17.4, run: () => { dun.setPose("walk"); dun.walkSpeed = 72; this.cue("inspector_steps"); } },
-      { at: 17.9, run: () => { pell.setPose("tip"); this.cue("inspector_laugh", { pitch: 1.2 }); } },
-      { at: 18.8, run: () => { pell.setPose("walk"); pell.walkSpeed = 84; } },
-      { at: 19.6, run: () => { this.walkRookTo({ x: this.tb.position.x + 74, y: this.tb.position.y + 12 }, () => R.play("idle", "left")); } },
-      { at: 22.4, run: () => this.say("tb-what-did-you-tell-them") },
-      { at: 23.8, run: () => { R.play("shrug", "left"); this.say("rook-nothing-untrue"); } },
-      { at: 26.0, run: () => { R.play("point", "right"); this.say("rook-your-turn"); } },
-      { at: 27.2, run: () => { this.setBeat("clamp"); this.rookScripted = true; } },
+      { at: 2.62, run: () => { dun.setPose("idle"); pell.setPose("idle"); this.walkRookTo({ x: 1352, y: 474 }, () => R.play("talk", "left")); } },
+      { at: 3.81, run: () => { pell.facing = 1; } },
+      { at: 4.06, run: () => { dun.facing = 1; } },
+      { at: 4.32, run: () => { this.murmur("rook", 3.2); pell.setPose("listen"); dun.setPose("listen"); } },
+      { at: 5.85, run: () => { pell.setPose("laugh"); this.cue("inspector_laugh"); } },
+      { at: 7.21, run: () => { pell.setPose("idle"); R.play("confide", "left"); this.murmur("rook", 1.6); } },
+      { at: 8.23, run: () => { dun.setPose("angry"); this.cue("inspector_shout", { pitch: 0.78 }); this.shake.add(0.06); } },
+      { at: 9.42, run: () => { dun.setPose("idle"); R.play("letter", "left"); } },
+      { at: 10.44, run: () => { this.cue("paper_rustle"); } },
+      { at: 10.7, run: () => { dun.setPose("read"); } },
+      { at: 11.63, run: () => { pell.setPose("listen"); R.play("idle", "left"); } },
+      { at: 13.16, run: () => { dun.setPose("pocket"); this.cue("paper_rustle", { pitch: 0.8 }); } },
+      { at: 13.67, run: () => { this.say("inspector-square"); } },
+      { at: 15.03, run: () => { dun.setPose("walk"); dun.walkSpeed = 72; this.cue("inspector_steps"); } },
+      { at: 15.45, run: () => { pell.setPose("tip"); this.cue("inspector_laugh", { pitch: 1.2 }); } },
+      { at: 16.22, run: () => { pell.setPose("walk"); pell.walkSpeed = 84; } },
+      { at: 16.9, run: () => { this.walkRookTo({ x: this.tb.position.x + 74, y: this.tb.position.y + 12 }, () => R.play("idle", "left")); } },
+      { at: 19.28, run: () => this.say("tb-what-did-you-tell-them") },
+      { at: 20.47, run: () => { R.play("shrug", "left"); this.say("rook-nothing-untrue"); } },
+      { at: 22.34, run: () => { R.play("point", "right"); this.say("rook-your-turn"); } },
+      { at: 23.36, run: () => { this.setBeat("clamp"); this.rookScripted = true; } },
     ]);
   }
 
@@ -1338,6 +1338,7 @@ export class WaywardRuntime {
     this.tb.setPose("vault", { flip: false });
     this.setGlyph(null);
     this.cue("clamp_release");
+    this.span.clampOpen = 0.001;
     this.shake.add(0.3);
     haptic([30, 20, 60]);
     this.particles.emit("spark", { x: CLAMP_POINT.x, y: CLAMP_POINT.y - 150 }, { count: 20, speed: 300 });
@@ -1353,6 +1354,7 @@ export class WaywardRuntime {
 
   private updateCastOff() {
     const t = this.beatClock;
+    this.span.clampOpen = Math.min(1, t / 0.25);
     const d = Math.max(0, t - 0.6);
     // The Wayward pulls away: slowly, then not slowly at all.
     this.span.shipShift = { x: -(14 * d + 7.5 * d * d), y: Math.sin(d * 0.8) * 10 + d * 4 };
@@ -1372,11 +1374,14 @@ export class WaywardRuntime {
     // Aboard. Behind them, the mooring stage goes into the clouds.
     this.tbMode = "locked";
     this.setBeat("toSail");
-    this.span.beginCollapse();
+    // Whatever is left of the mooring stage goes now, while the camera holds on it.
+    if (this.span.collapse <= 0) this.span.beginCollapse();
+    this.span.collapse = Math.max(this.span.collapse, 3.0);
     this.options.events.onProgress({ tetherAwake: true, spanCrossed: true });
     this.schedule([
       { at: 0.2, run: () => { this.cue("debris_fall"); } },
-      { at: 1.5, run: () => {
+      { at: 0.6, run: () => { this.cue("ship_groan", { pitch: 0.62 }); this.cue("debris_fall", { delayMs: 300 }); this.shake.add(0.25); } },
+      { at: 3.1, run: () => {
         this.cue("wind_rush");
         this.fadeTo(0xf2efe6, 0.7, () => {
           this.enterSail(false);
@@ -1496,7 +1501,10 @@ export class WaywardRuntime {
       };
     } else if (this.stage === "span") {
       const b = this.beat;
-      const frame = b === "swing" || b === "returnSwing" ? 560 : b === "parley" || b === "sealed" ? 470 : b === "clamp" ? 480 : b === "castoff" || b === "toSail" ? 640 : 520;
+      const c = this.beatClock;
+      const letter = b === "parley" ? smoothstep(9.0, 10.2, c) * (1 - smoothstep(13.2, 14.4, c)) : 0;
+      const parleyFrame = lerp(lerp(480, 430, smoothstep(2.4, 12, c)), 360, letter);
+      const frame = b === "swing" || b === "returnSwing" ? 560 : b === "parley" ? parleyFrame : b === "sealed" ? 470 : b === "clamp" ? 480 : b === "castoff" ? 640 : b === "toSail" ? 980 : 520;
       this.cam.frame = this.cam.frame ? lerp(this.cam.frame, frame, 1 - Math.pow(0.02, dt)) : frame;
       zoom = sw / this.cam.frame;
       const visibleH = sh / zoom;
@@ -1506,10 +1514,11 @@ export class WaywardRuntime {
         // Keep her in the left third and the ring in frame: the question is always visible.
         x = Math.max(feet.x + this.cam.frame * 0.16, this.span.ringAt.x - this.cam.frame * 0.36);
       }
-      if (b === "parley" || b === "sealed") x = 1188;
+      if (b === "sealed") x = 1188;
+      if (b === "parley") x = lerp(lerp(1188, 1206, smoothstep(2.4, 12, this.beatClock)), 1300, letter);
       if (b === "clamp") x = lerp(feet.x, CLAMP_POINT.x, 0.4);
       if (b === "castoff") x = lerp(feet.x, this.span.ringAt.x, 0.42);
-      if (b === "toSail") x = this.span.shipToWorld({ x: 400, y: 430 }).x + 80;
+      if (b === "toSail") x = lerp(this.span.shipToWorld({ x: 400, y: 430 }).x, 1150, 0.5);
       const deckLine = 432;
       target = { x, y: deckLine - visibleH * 0.08 };
       if (this.tbMode === "traverse" || this.tbMode === "recoil") target = { x: feet.x, y: Math.min(deckLine - visibleH * 0.08, feet.y - visibleH * 0.1) };
