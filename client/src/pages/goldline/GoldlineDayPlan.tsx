@@ -19,6 +19,11 @@ import type {
 } from "@shared/dayDirector";
 import type { AuthoredDayRecord } from "@shared/authoredDay";
 import type { MissionPlanOutcome } from "@shared/missionDirector";
+import {
+  executionTypeLabel,
+  presentCurrentDayLine,
+  type CurrentDayLine,
+} from "@shared/currentDayLine";
 import type { OpenChannelMission } from "../../../../server/openChannel/openChannelTypes";
 import {
   buildDayPlanProjection,
@@ -34,6 +39,37 @@ import { DriverStopChapter } from "@/components/goldline/DriverStopChapter";
 import { LanternRun } from "@/components/goldline/LanternRun";
 import { GoldlineGameNav } from "./GoldlineGameNav";
 import "./goldline-day-plan.css";
+
+function CurrentDayLineBlock({ line }: { line: CurrentDayLine }) {
+  const presented = presentCurrentDayLine(line);
+  return (
+    <div data-testid="current-day-line" data-ranking-status={presented.rankingStatus}>
+      <p>
+        <strong>Today</strong>
+      </p>
+      {presented.items.length ? (
+        <ol>
+          {presented.items.map(item => (
+            <li
+              key={item.id}
+              data-day-line-id={item.id}
+              data-execution-type={item.executionType ?? "unspecified"}
+            >
+              {executionTypeLabel(item.executionType)} · {item.title}
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p data-testid="current-day-line-status">{presented.statusText}</p>
+      )}
+      {presented.designated ? (
+        <p data-testid="current-day-line-designated">
+          {executionTypeLabel(presented.designated.executionType)} · {presented.designated.title}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export type GoldlineDayPlanProps = {
   businessDate: string;
@@ -75,6 +111,8 @@ export type GoldlineDayPlanProps = {
   cargoFixture?: VehicleCargoItem[];
   /** Slice 4/5: the Mission Director's plan for tomorrow, surfaced unprompted. */
   missionPlan?: MissionPlanOutcome | null;
+  /** Today's prioritized line, already ordered by Mission Director. */
+  currentDayLine?: CurrentDayLine | null;
   /** Slice 5 §5.4: shown when Kingdom 2 has unlocked (Kingdom 1 complete). */
   onEnterChapter?: () => void;
   /** Compact Campaign Run identity on the Day Line, when a run exists. */
@@ -353,6 +391,9 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
               </p>
             )}
           </div>
+        ) : null}
+        {props.currentDayLine ? (
+          <CurrentDayLineBlock line={props.currentDayLine} />
         ) : null}
         {props.onEnterChapter ? (
           <button
