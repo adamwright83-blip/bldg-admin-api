@@ -17,11 +17,13 @@ import {
   isWeeklyRejection,
   parseDayMove,
   readinessCompleteByOverride,
+  resolveWeeklyExecutionType,
   splitReadinessClauses,
   weekdayName,
   type WeeklyAct,
   type WeeklyDayDraft,
   type WeeklyDraft,
+  type WeeklyExecutionCandidateContract,
 } from "../../../shared/weeklyMissionReadiness";
 import { deriveInternalHypothesis, type WeeklyDossier } from "./dossier";
 import { acceptPlanningDecision, applyPlanningDecision } from "./planningDecision";
@@ -114,7 +116,7 @@ export async function advanceWeeklySession(
   if (utterance) session.operatorEvidence.push(utterance.slice(0, 500));
   const decision = await modelDecision(input, deps, session);
   if (decision) {
-    applyPlanningDecision(session, decision);
+    applyPlanningDecision(session, decision, input.dossier.growthCandidates);
     return finish(session, decision.act, decision.speech, input.dossier);
   }
 
@@ -123,14 +125,14 @@ export async function advanceWeeklySession(
     session.substantiveQuestions += 1;
     revised = true;
   } else if (utterance && (session.lastQuestionKind === "primary" || session.lastQuestionKind === "blocking") && session.lastQuestionDate) {
-    capturePrimary(session, utterance);
+    capturePrimary(session, utterance, input.dossier.growthCandidates);
     session.substantiveQuestions += 1;
     revised = true;
   } else if (utterance && session.lastQuestionKind === null && session.substantiveQuestions === 0) {
     const target = session.draft.days.find(day => day.disposition === "primary" && !day.primary);
     if (target) session.lastQuestionDate = target.businessDate;
     session.lastQuestionKind = "primary";
-    capturePrimary(session, utterance);
+    capturePrimary(session, utterance, input.dossier.growthCandidates);
     session.substantiveQuestions += 1;
     revised = true;
   }
@@ -217,12 +219,17 @@ function captureReadiness(session: WeeklyPlanningSession, utterance: string, dos
       text,
       neededForDate: day.businessDate,
       completeByDate: override ?? undefined,
+      executionType: day.primary?.executionType ?? null,
     })
   );
   day.readinessRequirements = capReadiness([...day.readinessRequirements, ...additions]);
 }
 
-function capturePrimary(session: WeeklyPlanningSession, utterance: string): void {
+function capturePrimary(
+  session: WeeklyPlanningSession,
+  utterance: string,
+  candidates?: readonly WeeklyExecutionCandidateContract[]
+): void {
   const today = session.draft.days[0];
   const namedSkip = /\bskip\s+(monday|tuesday|wednesday|thursday|friday|today)\b/i.exec(utterance);
   if (namedSkip && today && session.lastQuestionDate === today.businessDate) {
@@ -237,10 +244,12 @@ function capturePrimary(session: WeeklyPlanningSession, utterance: string): void
   const date = session.lastQuestionDate ?? session.draft.days.find(day => !day.primary && day.disposition === "primary")?.businessDate;
   const day = session.draft.days.find(item => item.businessDate === date);
   if (!day || day.disposition === "stand_down") return;
+  const text = utterance.replace(/\s+/g, " ").trim().slice(0, 255);
   day.primary = {
-    text: utterance.replace(/\s+/g, " ").trim().slice(0, 255),
+    text,
     source: "operator_stated",
     existingCommitmentId: null,
+    executionType: resolveWeeklyExecutionType({ text, candidates }),
   };
   day.uncertainty = null;
 }

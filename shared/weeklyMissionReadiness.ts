@@ -3,7 +3,15 @@
  *
  * Product law: docs/goldline/GOLDLINE_WEEKLY_MISSION_READINESS.md
  * Week status is derived. Nothing here writes business truth.
+ * Execution type is classified by shared/objectiveExecution.ts.
  */
+
+import {
+  OBJECTIVE_EXECUTION_TYPES,
+  classifyObjectiveExecution,
+  isObjectiveExecutionType,
+  type ObjectiveExecutionType,
+} from "./objectiveExecution";
 
 export const WEEKLY_MISSION_READINESS_VERSION = "v1";
 
@@ -28,6 +36,26 @@ export type WeeklySessionPhase = "interview" | "proposal" | "awaiting_confirmati
 export type WeeklyAct = "ASK" | "PROPOSE" | "REVISE" | "AWAIT_CONFIRMATION" | "CANCEL";
 export type RemnantDisposition = "primary" | "stand_down";
 export type PrimarySource = "existing_work" | "operator_stated" | "claire_recommended";
+
+/**
+ * JOYSTICK execution type for one weekly primary.
+ * Absent or null is unknown. Never defaulted to mission.
+ * Same three values as ObjectiveExecutionType.
+ */
+export const WEEKLY_EXECUTION_TYPES = OBJECTIVE_EXECUTION_TYPES;
+export type WeeklyExecutionType = ObjectiveExecutionType;
+
+export function isWeeklyExecutionType(value: unknown): value is WeeklyExecutionType {
+  return isObjectiveExecutionType(value);
+}
+
+/** Growth-candidate contract used only to read title and objective. Id and motion are not evidence. */
+export type WeeklyExecutionCandidateContract = {
+  id: string;
+  title: string;
+  objective: string;
+  motion?: string | null;
+};
 
 export const MAX_READINESS_PER_DAY = 4;
 export const WEEKLY_QUESTION_PROPOSE_AT = 6;
@@ -62,6 +90,8 @@ export type WeeklyPrimary = {
   text: string;
   source: PrimarySource;
   existingCommitmentId: string | null;
+  /** Absent or null means unknown. Never inferred from the word "mission". */
+  executionType?: WeeklyExecutionType | null;
 };
 
 export type WeeklyDayDraft = {
@@ -246,16 +276,111 @@ export function defaultReadiness(input: {
   kind?: ReadinessKind;
   completeByDate?: string;
   status?: ReadinessStatus;
+  /** Challenge objectives do not gain invented physical or location prep. */
+  executionType?: WeeklyExecutionType | null;
 }): MissionReadinessRequirement {
   const text = input.text.trim();
   if (!text) throw new Error("Readiness text is required");
   return {
     text,
-    kind: input.kind ?? inferReadinessKind(text),
+    kind: input.kind ?? groundedReadinessKind(text, input.executionType),
     neededForDate: input.neededForDate,
     completeByDate: input.completeByDate ?? previousBusinessDay(input.neededForDate),
     status: input.status ?? "open",
   };
+}
+
+/**
+ * A Challenge keeps a physical or location kind only when the requirement text
+ * itself names that prep. The fallback kind is information, not a site visit.
+ */
+export function groundedReadinessKind(text: string, executionType?: WeeklyExecutionType | null): ReadinessKind {
+  const kind = inferReadinessKind(text);
+  if (executionType !== "challenge") return kind;
+  if (kind === "physical" && !explicitPhysicalPrep(text)) return "information";
+  if (kind === "location" && !explicitLocationPrep(text)) return "information";
+  return kind;
+}
+
+/** Readiness-prep wording. It does not assign mission, challenge, or hybrid. */
+const DIGITAL_VISIT_OBJECT =
+  "web\\s*sites?|websites?|pages?|urls?|links?|portals?|dashboards?|inboxes|browsers?|apps?|applications?|online";
+
+const TANGIBLE_OR_PLACE =
+  /\b(kits?|samples?|bags?|laundry|linens?|uniforms?|hangers?|supplies|loads?|bins?|carts?|boxes|goods|equipment|materials|towels?|plants?|propert(?:y|ies)|buildings?|desks?|lobbies|lobby|offices?|sites?|doors?|warehouses?|docks?|locations?|addresses?|front desk|(?:the|a|an)\s+orders?)\b/i;
+
+function hasFieldVisit(text: string): boolean {
+  const digitalObject = new RegExp(`\\b(?:${DIGITAL_VISIT_OBJECT})\\b`, "i");
+  const precededByDigital = new RegExp(`\\b(?:${DIGITAL_VISIT_OBJECT})\\s+$`, "i");
+  const re = /\bvisit(?:s|ing|ed)?\b/gi;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text))) {
+    const before = text.slice(Math.max(0, match.index - 40), match.index);
+    if (precededByDigital.test(before)) continue;
+    const after = text.slice(match.index + match[0].length, match.index + match[0].length + 72);
+    const object = /^(?:\s+(?:the|a|an|our|their|its|my))?(?:\s+[\w-]+){0,6}/i.exec(after)?.[0] ?? "";
+    if (digitalObject.test(object) && !TANGIBLE_OR_PLACE.test(object) && !/\bon[\s-]?site\b/i.test(object)) {
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+function hasPhysicalPickup(text: string): boolean {
+  const stripped = text
+    .replace(/\bpick[\s-]?up the phone\b/gi, " ")
+    .replace(/\bpick[\s-]?up where we left off\b/gi, " ")
+    .replace(/\bpick[\s-]?up the slack\b/gi, " ")
+    .replace(/\bpick[\s-]?up the pace\b/gi, " ")
+    .replace(/\bpick[\s-]?up the conversation\b/gi, " ")
+    .replace(/\bpick[\s-]?up the thread\b/gi, " ")
+    .replace(/\bpick[\s-]?up the call\b/gi, " ");
+  if (/\bphysical pick[\s-]?ups?\b/i.test(stripped)) return true;
+  const compound = /\bpick-?ups?\b/i.test(stripped);
+  const phrasal = /\bpick up\b/i.test(stripped);
+  if (!compound && !phrasal) return false;
+  if (compound && !phrasal) return true;
+  return TANGIBLE_OR_PLACE.test(stripped) || /\bon[\s-]?site\b/i.test(stripped);
+}
+
+function hasPhysicalDelivery(text: string): boolean {
+  if (/\bphysical deliver(?:y|ies|ed|ing)?\b/i.test(text)) return true;
+  const stripped = text
+    .replace(/\bemail deliver(?:y|ies|ed|ing)?\b/gi, " ")
+    .replace(/\b(?:e-?mail|sms|text|message|digital|news|results|reports?)\s+deliver(?:y|ies|ed|ing)?\b/gi, " ")
+    .replace(/\bdeliver(?:y|ies|ed|ing)? (?:the |an |a )?(?:e-?mail|sms|text|message)s?\b/gi, " ")
+    .replace(
+      /\bdeliver(?:y|ies)?\s+of\s+(?:the\s+|a\s+|an\s+)?(?:news|results|reports?|updates?|presentations?|speeches|numbers|verdicts?)\b/gi,
+      " "
+    )
+    .replace(
+      /\bdeliver(?:ed|ing)?\s+(?:the\s+|a\s+|an\s+)?(?:news|results|reports?|updates?|presentations?|speeches|numbers|verdicts?)\b/gi,
+      " "
+    )
+    .replace(/\bdeliver on\b/gi, " ");
+  if (/\bdeliver(?:ies|y)\b/i.test(stripped)) return true;
+  if (!/\bdeliver(?:ed|ing)?\b/i.test(stripped)) return false;
+  return TANGIBLE_OR_PLACE.test(stripped) || /\bon[\s-]?site\b/i.test(stripped);
+}
+
+function explicitPhysicalPrep(text: string): boolean {
+  if (
+    /\b(jacket|gas|gasoline|load|loaded|wash|washing|clean|car|uniform|supplies|materials|equipment|bags?|door[\s-]?hangers?)\b/i.test(
+      text
+    )
+  ) {
+    return true;
+  }
+  if (hasFieldVisit(text)) return true;
+  if (/\bon[\s-]?site\b/i.test(text)) return true;
+  if (hasPhysicalPickup(text)) return true;
+  if (hasPhysicalDelivery(text)) return true;
+  return false;
+}
+
+function explicitLocationPrep(text: string): boolean {
+  return /\b(address|location|plant|site|propert(?:y|ies)|on[\s-]?site|visits?|visiting)\b/i.test(text);
 }
 
 export function inferReadinessKind(text: string): ReadinessKind {
@@ -265,6 +390,63 @@ export function inferReadinessKind(text: string): ReadinessKind {
   if (/\b(address|location|where|plant|site)\b/.test(lower)) return "location";
   if (/\b(confirm|which|who|list|information|info)\b/.test(lower)) return "information";
   return "physical";
+}
+
+/**
+ * Classify one execution contract through the shared Objective classifier.
+ * `identifier` and `motion` are accepted and ignored. A growth category, an id
+ * containing "mission", or the word "mission" in the contract is not evidence.
+ * Insufficient contracts return null (unknown).
+ */
+export function classifyWeeklyExecutionType(input: {
+  contract: string;
+  identifier?: string | null;
+  motion?: string | null;
+}): WeeklyExecutionType | null {
+  return classifyObjectiveExecution({
+    contract: input.contract,
+    identifier: input.identifier,
+    motion: input.motion,
+  }).executionType;
+}
+
+/**
+ * Operator text wins when it names an execution contract.
+ * A matching growth candidate contributes title and objective only, and only
+ * when the stated text itself does not already classify.
+ */
+export function resolveWeeklyExecutionType(input: {
+  text: string;
+  candidates?: readonly WeeklyExecutionCandidateContract[];
+}): WeeklyExecutionType | null {
+  const direct = classifyWeeklyExecutionType({ contract: input.text });
+  if (direct) return direct;
+  const needle = executionMatchKey(input.text);
+  if (!needle) return null;
+  const matched = (input.candidates ?? []).filter(candidate => {
+    const title = executionMatchKey(candidate.title);
+    const objective = executionMatchKey(candidate.objective);
+    return needle === title || needle === objective;
+  });
+  if (!matched.length) return null;
+  let agreed: WeeklyExecutionType | null | undefined;
+  for (const candidate of matched) {
+    const type = classifyWeeklyExecutionType({
+      contract: `${candidate.title}. ${candidate.objective}`,
+      identifier: candidate.id,
+      motion: candidate.motion ?? null,
+    });
+    if (agreed === undefined) {
+      agreed = type;
+      continue;
+    }
+    if (agreed !== type) return null;
+  }
+  return agreed ?? null;
+}
+
+function executionMatchKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[.!?]+$/g, "").replace(/\s+/g, " ");
 }
 
 const DAY_WORD = "monday|tuesday|wednesday|thursday|friday";
@@ -345,6 +527,8 @@ export type WeeklyIntentDay = {
     text: string;
     source: PrimarySource;
     commitmentId: string | null;
+    /** Absent or null means unknown. Old locked weeks omit this field. */
+    executionType?: WeeklyExecutionType | null;
   } | null;
   fixedConstraints: WeeklyFixedConstraint[];
   readinessRequirements: MissionReadinessRequirement[];
@@ -379,7 +563,12 @@ function isPrimary(value: unknown): boolean {
   if (typeof value.text !== "string" || value.text.trim().length === 0) return false;
   if (typeof value.source !== "string" || !PRIMARY_SOURCES.includes(value.source)) return false;
   if (value.commitmentId !== null && typeof value.commitmentId !== "string") return false;
+  if (!isOptionalExecutionType(value.executionType)) return false;
   return true;
+}
+
+function isOptionalExecutionType(value: unknown): boolean {
+  return value == null || isWeeklyExecutionType(value);
 }
 
 function isConstraint(value: unknown): boolean {

@@ -8,9 +8,11 @@ import {
   capReadiness,
   defaultReadiness,
   isReadinessKind,
+  resolveWeeklyExecutionType,
   WEEKLY_QUESTION_HARD_STOP,
   type WeeklyAct,
   type WeeklyDraft,
+  type WeeklyExecutionCandidateContract,
   type WeeklyUncertainty,
 } from "../../../shared/weeklyMissionReadiness";
 import { lintPostGenerationStateVerbs, VerifiedFactInventoryBuilder } from "../assertionGuard";
@@ -109,7 +111,7 @@ export function acceptPlanningDecision(
   if (resolvedAct === "AWAIT_CONFIRMATION" && input.session.phase === "interview") {
     resolvedAct = "PROPOSE";
   }
-  const preview = previewDraft(input.session.draft, draftDays);
+  const preview = previewDraft(input.session.draft, draftDays, input.dossier.growthCandidates);
   if (
     (resolvedAct === "PROPOSE" || resolvedAct === "AWAIT_CONFIRMATION") &&
     !weekIsDefensible(preview, input.dossier)
@@ -133,7 +135,11 @@ export function acceptPlanningDecision(
   };
 }
 
-export function applyPlanningDecision(session: WeeklyPlanningSession, decision: WeeklyPlanningDecision): void {
+export function applyPlanningDecision(
+  session: WeeklyPlanningSession,
+  decision: WeeklyPlanningDecision,
+  candidates?: readonly WeeklyExecutionCandidateContract[]
+): void {
   session.internalHypothesis = {
     summary: decision.hypothesisSummary,
     uncertainties: decision.uncertainties.map((item, index) => ({
@@ -149,20 +155,24 @@ export function applyPlanningDecision(session: WeeklyPlanningSession, decision: 
       if (!day || day.disposition === "stand_down") continue;
       if (patch.primaryText) {
         const said = session.operatorEvidence.some(line => line.toLowerCase().includes(patch.primaryText!.toLowerCase()));
+        const executionType = resolveWeeklyExecutionType({ text: patch.primaryText, candidates });
         day.primary = {
           text: patch.primaryText.slice(0, 255),
           source: said ? "operator_stated" : "existing_work",
           existingCommitmentId: day.primary?.existingCommitmentId ?? null,
+          executionType,
         };
         day.uncertainty = null;
       }
       if (patch.readiness) {
+        const executionType = day.primary?.executionType ?? null;
         day.readinessRequirements = capReadiness(
           patch.readiness.map(item =>
             defaultReadiness({
               text: item.text,
               neededForDate: day.businessDate,
               completeByDate: item.completeByDate ?? undefined,
+              executionType,
             })
           )
         );
@@ -313,7 +323,11 @@ export function weekIsDefensible(draft: WeeklyDraft, dossier: WeeklyDossier): bo
   return dossier.horizon.remainingDates.length > 0;
 }
 
-function previewDraft(draft: WeeklyDraft, patches: WeeklyDraftDayPatch[] | null): WeeklyDraft {
+function previewDraft(
+  draft: WeeklyDraft,
+  patches: WeeklyDraftDayPatch[] | null,
+  candidates?: readonly WeeklyExecutionCandidateContract[]
+): WeeklyDraft {
   const next = structuredClone(draft);
   for (const patch of patches ?? []) {
     const day = next.days.find(item => item.businessDate === patch.businessDate);
@@ -323,6 +337,7 @@ function previewDraft(draft: WeeklyDraft, patches: WeeklyDraftDayPatch[] | null)
         text: patch.primaryText,
         source: "operator_stated",
         existingCommitmentId: day.primary?.existingCommitmentId ?? null,
+        executionType: resolveWeeklyExecutionType({ text: patch.primaryText, candidates }),
       };
     }
     if (patch.readiness) {
@@ -332,6 +347,7 @@ function previewDraft(draft: WeeklyDraft, patches: WeeklyDraftDayPatch[] | null)
             text: item.text,
             neededForDate: day.businessDate,
             completeByDate: item.completeByDate ?? undefined,
+            executionType: day.primary?.executionType ?? null,
           })
         )
       );
