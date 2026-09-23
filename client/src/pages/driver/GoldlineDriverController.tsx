@@ -15,14 +15,12 @@ import GoldlineOverworld from "../goldline/GoldlineOverworld";
 import GoldlineDayPlan from "../goldline/GoldlineDayPlan";
 import Day1TenDoors from "../goldline/Day1TenDoors";
 import {
-  hasColosseumResolved,
   hasLegacyDay1Dismissal,
-  loadWaywardProgress,
   markColosseumResolved,
   markLegacyDay1Dismissal,
   unlockWayward,
-  type WaywardProgress,
 } from "../goldline/stages/waywardProgress";
+import { progressionForSignedInOperator } from "../goldline/overworld/overworldProgression";
 import { joinParty } from "../goldline/stages/goldlineParty";
 import { COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE } from "../../../../shared/colosseumAuthoredFinale";
 import type { FieldMoveCandidate } from "../../../../server/field/types";
@@ -223,9 +221,6 @@ function LiveGoldlineDriverController({
   const [weekOpen, setWeekOpen] = useState(false);
   const [campaignRunMissionOpen, setCampaignRunMissionOpen] = useState(false);
   const [spiritHumanRescueOpen, setSpiritHumanRescueOpen] = useState(false);
-  const [waywardProgress, setWaywardProgress] = useState<WaywardProgress>(() =>
-    loadWaywardProgress(null)
-  );
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [newOrderOpen, setNewOrderOpen] = useState(false);
   const [addExternalWorkOpen, setAddExternalWorkOpen] = useState(false);
@@ -518,17 +513,18 @@ function LiveGoldlineDriverController({
   const day1TenDoors = trpc.system.day1TenDoors.current.useQuery(undefined, {
     refetchInterval: 15_000,
   });
-  useEffect(() => {
-    const playerIdentity = identity.data?.openId ?? null;
-    const stored = loadWaywardProgress(playerIdentity);
-    const legacyResolved =
-      day1TenDoors.data?.isComplete === true && hasLegacyDay1Dismissal();
-    if (legacyResolved && !hasColosseumResolved(playerIdentity)) {
-      markColosseumResolved(playerIdentity);
+  const goldlineProgression = trpc.system.goldlineProgression.get.useQuery(
+    {},
+    {
+      retry: false,
+      refetchInterval: 30_000,
+      enabled: Boolean(identity.data?.id),
     }
-    const resolved = hasColosseumResolved(playerIdentity);
-    setWaywardProgress(resolved ? unlockWayward(playerIdentity) : stored);
-  }, [day1TenDoors.data?.isComplete, identity.data?.openId]);
+  );
+  const progressionForOverworld = progressionForSignedInOperator(
+    goldlineProgression.isSuccess ? goldlineProgression.data : null,
+    identity.data
+  );
   const recordDay1Outcome =
     trpc.system.day1TenDoors.recordOutcome.useMutation();
   const acknowledgeColosseumFinale =
@@ -1669,11 +1665,7 @@ function LiveGoldlineDriverController({
           activeObjective={activeAdventureObjective}
           isLoading={pickups.isLoading || deliveries.isLoading}
           isResolvingOrder={updateStatus.isPending}
-          greystarActive={Boolean(
-            day1TenDoors.data && !day1TenDoors.data.isComplete
-          )}
-          greystarCompleted={Boolean(day1TenDoors.data?.isComplete)}
-          waywardUnlocked={waywardProgress.unlocked}
+          progression={progressionForOverworld}
           playerIdentity={identity.data?.openId ?? null}
           onEmitEvent={emitGoldlineEvent}
           onEnterOperations={() => {
@@ -1707,9 +1699,6 @@ function LiveGoldlineDriverController({
         <WaywardTetheredDeck
           playerIdentity={identity.data?.openId ?? null}
           onReturn={() => {
-            setWaywardProgress(
-              loadWaywardProgress(identity.data?.openId ?? null)
-            );
             setDriverScene("overworld");
           }}
         />
@@ -1747,7 +1736,7 @@ function LiveGoldlineDriverController({
           onDismiss={() => {
             markLegacyDay1Dismissal();
             markColosseumResolved(identity.data?.openId ?? null);
-            setWaywardProgress(unlockWayward(identity.data?.openId ?? null));
+            unlockWayward(identity.data?.openId ?? null);
             void acknowledgeColosseumFinale.mutate(
               { authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE },
               {
