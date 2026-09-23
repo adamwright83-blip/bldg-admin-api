@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { cueCategory, type AudioCueId } from "../../game/audio/AudioManager";
+import { AUDIO_CUE_IDS, cueCategory, type AudioCueId } from "../../game/audio/AudioManager";
 
 /**
  * The Colosseum is fiction layered over a real campaign. These checks read
@@ -30,6 +30,8 @@ const FICTION_MODULES = [
   "ColosseumStageView.tsx",
   "ColosseumMuteButton.tsx",
   "ColosseumLoading.tsx",
+  "clockheadHitReaction.ts",
+  "colosseumPrologue.ts",
 ];
 
 /** Everything that renders the Colosseum, fiction or gate. */
@@ -54,9 +56,17 @@ describe("a fictional win never borrows the feel of a real one", () => {
   });
 
   it.each(COLOSSEUM_SURFACES)("%s plays no cue from the reserved victory category", file => {
-    const cues = [...read(file).matchAll(/\.play\(\s*["']([a-z_]+)["']/g)].map(
-      match => match[1] as AudioCueId
-    );
+    // Every cue name anywhere in a play()'s first argument — ternaries included.
+    const known = new Set<string>(AUDIO_CUE_IDS);
+    const cues = [...read(file).matchAll(/\.play\(([^,)]*)/g)].flatMap(match =>
+      [...match[1]!.matchAll(/["']([a-z_]+)["']/g)].map(literal => literal[1]!).filter(name => known.has(name))
+    ) as AudioCueId[];
+    // The scan must actually see the surfaces that make sound, ternaries included.
+    const expected: Record<string, string[]> = {
+      "ClockheadDuel.tsx": ["clockface_impact", "clockhead_roar", "clockhead_howl", "clock_tick"],
+      "ColosseumBossGate.tsx": ["seal_break", "clockhead_sweep", "clockhead_charge"],
+    };
+    if (expected[file]) expect(cues, `${file} was scanned`).toEqual(expect.arrayContaining(expected[file]!));
     for (const cue of cues) expect(cueCategory(cue), `${file} plays ${cue}`).not.toBe("victory");
   });
 });
@@ -77,6 +87,26 @@ describe("the finale is reachable only through the authoritative campaign", () =
       /export default function ClockheadDuel\(\{ onDefeated \}: \{ onDefeated: \(\) => void \}\)/
     );
     expect(duel.match(/onDefeated\(\)/g)).toHaveLength(1);
+  });
+
+  it("lets the first-entry prologue hand back, and nothing else", () => {
+    const duel = read("ClockheadDuel.tsx");
+    expect(duel).toMatch(
+      /export function ClockheadPrologue\(\{ onSealed \}: \{ onSealed: \(\) => void \}\)/
+    );
+    // The finale's unlock is reachable from the finale cut only.
+    expect(duel).toMatch(/if \(current\.mode === "finale"\) current\.onDefeated\(\);/);
+  });
+
+  it("plays the prologue only after every real branch, and only before any real outcome", () => {
+    const gate = read("ColosseumBossGate.tsx");
+    expect(gate.match(/<ClockheadPrologue\b/g)).toHaveLength(1);
+    const finale = gate.indexOf("<ClockheadDuel");
+    const fieldMission = gate.indexOf("<Day1FieldMission");
+    const prologue = gate.indexOf("<ClockheadPrologue");
+    expect(prologue).toBeGreaterThan(finale);
+    expect(prologue).toBeGreaterThan(fieldMission);
+    expect(gate).toMatch(/if \(prologue && campaign\.visitedCount === 0\) \{\s*return \(\s*<ClockheadPrologue\s+onSealed=/);
   });
 
   it("still sends the real hunt through the unmodified field mission", () => {

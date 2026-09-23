@@ -1,5 +1,13 @@
-import { memo, useId, type CSSProperties } from "react";
-import { CLOCKHEAD_DEFERRALS } from "./colosseumStage";
+import {
+  forwardRef,
+  memo,
+  useId,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  type CSSProperties,
+} from "react";
+import { CLOCKHEAD_DEFERRALS, sealAngle } from "./colosseumStage";
 
 /**
  * Clockhead / Vellum Kai, drawn from canon rather than borrowed art
@@ -14,6 +22,12 @@ import { CLOCKHEAD_DEFERRALS } from "./colosseumStage";
  * Every ring is its own layer so that its rotation is a compositor transform,
  * never a repaint. The component is purely presentational: it draws whatever
  * state it is handed and decides nothing.
+ *
+ * Two kinds of input. Props are discrete (mood, damage, seals) and re-render
+ * the SVG. Motion — ring tempo, hands, the hit rattle and flash — changes
+ * every frame, so the scene hands it over through `setMotion` and it is
+ * written straight to the layers' transforms; React never re-renders the
+ * clock for it.
  */
 
 export type ConstructMood =
@@ -25,11 +39,15 @@ export type ConstructMood =
   | "defeated"
   | "disrupted";
 
-export type ConstructSeal = { legend: string; broken: boolean };
+export type ConstructSeal = {
+  legend: string;
+  broken: boolean;
+  /** Prologue only: not on him yet, or slamming shut right now. */
+  hidden?: boolean;
+  locking?: boolean;
+};
 
-export type ClockheadConstructProps = {
-  variant: "hologram" | "solid";
-  mood: ConstructMood;
+export type ConstructMotion = {
   /** Accumulated ring rotation in degrees; the caller owns the tempo. */
   spin: number;
   /** 0..1, how charged the current wind-up is. */
@@ -38,11 +56,23 @@ export type ClockheadConstructProps = {
   minuteHand?: number | null;
   /** Clock-degrees for the hour hand, if it is aiming at something. */
   hourHand?: number | null;
+  /** Taking a hit: the whole construct shakes (percent of its size, degrees)… */
+  rattle?: { x: number; y: number; rotate: number; scale: number };
+  /** …and flashes: white-hot first, then red. Both 0..1. */
+  hurt?: number;
+  pop?: number;
+};
+
+export type ConstructHandle = {
+  setMotion: (motion: ConstructMotion) => void;
+};
+
+export type ClockheadConstructProps = {
+  variant: "hologram" | "solid";
+  mood: ConstructMood;
   /** 0..1 damage taken. Cracks appear at thirds. */
   damage?: number;
-  /** A white flash on a landed hit. */
-  flash?: boolean;
-  /** Real-progress seals, read-only. Omitted in the finale. */
+  /** Real-progress seals, read-only — or, in the prologue, the seals he locks himself behind. */
   seals?: readonly ConstructSeal[];
   /** Index of a seal breaking right now, for its one-off animation. */
   breakingSeal?: number | null;
@@ -100,52 +130,106 @@ const CRACKS = [
   "M -60 30 L -44 22 L -40 40 L -24 44 L -18 60 M -44 22 L -52 8 M -30 -62 L -22 -48 L -32 -36 L -26 -20 M 20 62 L 16 48 L 26 40",
 ];
 
-function sealAngle(index: number, count: number): number {
-  // Spread across the upper three-quarters of the rim, leaving the bottom
-  // (where he lowers himself to wind) clear.
-  if (count <= 1) return 0;
-  return -120 + (240 / (count - 1)) * index;
-}
+type LayerRefs = {
+  root: HTMLDivElement | null;
+  rattle: HTMLDivElement | null;
+  outer: SVGSVGElement | null;
+  legend: SVGSVGElement | null;
+  rete: SVGSVGElement | null;
+  mainspring: SVGSVGElement | null;
+  hour: SVGSVGElement | null;
+  minute: SVGSVGElement | null;
+  subhand: SVGLineElement | null;
+  hurt: HTMLDivElement | null;
+  pop: HTMLDivElement | null;
+};
 
-function ClockheadConstructImpl({
-  variant,
-  mood,
-  spin,
-  charge = 0,
-  minuteHand = null,
-  hourHand = null,
-  damage = 0,
-  flash = false,
-  seals,
-  breakingSeal = null,
-  signal = 1,
-  className = "",
-}: ClockheadConstructProps) {
+const REST: ConstructMotion = { spin: 0 };
+
+const ClockheadConstructImpl = forwardRef<ConstructHandle, ClockheadConstructProps>(function ClockheadConstructImpl(
+  { variant, mood, damage = 0, seals, breakingSeal = null, signal = 1, className = "" },
+  ref
+) {
   const uid = useId().replace(/:/g, "");
   const id = (name: string) => `${uid}-${name}`;
   const url = (name: string) => `url(#${id(name)})`;
 
+  const layers = useRef<LayerRefs>({
+    root: null,
+    rattle: null,
+    outer: null,
+    legend: null,
+    rete: null,
+    mainspring: null,
+    hour: null,
+    minute: null,
+    subhand: null,
+    hurt: null,
+    pop: null,
+  });
+  const motionRef = useRef<ConstructMotion>(REST);
+  const written = useRef<Record<string, string>>({});
+  const moodRef = useRef(mood);
+  moodRef.current = mood;
+
   const exposed = mood === "exposed";
-  const defeated = mood === "defeated";
-  // The correct time finally arrives only in defeat.
-  const minute = defeated ? 360 : minuteHand ?? 354 + Math.sin(spin * 0.9) * 0.9;
-  const hour = defeated ? 360 : hourHand ?? 359.5;
   const cracks = damage >= 0.9 ? 3 : damage >= 0.6 ? 2 : damage >= 0.3 ? 1 : 0;
 
-  const style = {
-    "--cc-charge": charge.toFixed(3),
-    "--cc-signal": signal.toFixed(3),
-  } as CSSProperties;
+  /** Write only what changed: most frames touch a handful of transforms. */
+  const apply = (motion: ConstructMotion) => {
+    motionRef.current = motion;
+    const el = layers.current;
+    const cache = written.current;
+    const put = (key: string, node: HTMLElement | SVGElement | null, value: string, attr?: string) => {
+      if (!node || cache[key] === value) return;
+      cache[key] = value;
+      if (attr) node.setAttribute(attr, value);
+      else if (key.endsWith(":opacity")) node.style.opacity = value;
+      else if (key.endsWith(":charge")) node.style.setProperty("--cc-charge", value);
+      else node.style.transform = value;
+    };
+    const rotate = (degrees: number) => `rotate(${degrees.toFixed(2)}deg)`;
+    const spin = motion.spin;
+    // The correct time finally arrives only in defeat.
+    const defeated = moodRef.current === "defeated";
+    const minute = defeated ? 360 : motion.minuteHand ?? 354 + Math.sin(spin * 0.9) * 0.9;
+    const hour = defeated ? 360 : motion.hourHand ?? 359.5;
+    put("outer", el.outer, rotate(spin * 0.35));
+    put("legend", el.legend, rotate(-spin * 0.22));
+    put("rete", el.rete, rotate(spin * 0.6));
+    put("mainspring", el.mainspring, rotate(-spin * 1.4));
+    put("hour", el.hour, rotate(hour));
+    put("minute", el.minute, rotate(minute));
+    put("subhand", el.subhand, `rotate(${((spin * 14) % 360).toFixed(1)})`, "transform");
+    put("root:charge", el.root, (motion.charge ?? 0).toFixed(3));
+    const shake = motion.rattle;
+    put(
+      "rattle",
+      el.rattle,
+      shake && (shake.x || shake.y || shake.rotate || shake.scale !== 1)
+        ? `translate3d(${shake.x.toFixed(2)}%, ${shake.y.toFixed(2)}%, 0) rotate(${shake.rotate.toFixed(2)}deg) scale(${shake.scale.toFixed(3)})`
+        : "none"
+    );
+    put("hurt:opacity", el.hurt, (motion.hurt ?? 0).toFixed(3));
+    put("pop:opacity", el.pop, (motion.pop ?? 0).toFixed(3));
+  };
 
-  const layer = (rotation: number): CSSProperties => ({
-    transform: `rotate(${rotation.toFixed(2)}deg)`,
+  useImperativeHandle(ref, () => ({ setMotion: apply }));
+
+  // A re-render (new mood, cracks, seals) must not undo the last frame's motion.
+  useLayoutEffect(() => {
+    written.current = {};
+    apply(motionRef.current);
   });
+
+  const style = { "--cc-signal": signal.toFixed(3) } as CSSProperties;
 
   return (
     <div
-      className={`clockhead-construct is-${variant} is-${mood}${flash ? " is-flash" : ""}${
-        className ? ` ${className}` : ""
-      }`}
+      ref={node => {
+        layers.current.root = node;
+      }}
+      className={`clockhead-construct is-${variant} is-${mood}${className ? ` ${className}` : ""}`}
       style={style}
       aria-hidden="true"
     >
@@ -189,12 +273,18 @@ function ClockheadConstructImpl({
         </defs>
       </svg>
 
+      <div
+        className="cc-rattle"
+        ref={node => {
+          layers.current.rattle = node;
+        }}
+      >
       <div className="cc-rays" />
       <div className="cc-aura" />
       <div className="cc-shadow" />
 
       {/* Outer bronze ring: eight segments with amber slots, turning slowly. */}
-      <svg className="cc-layer cc-outer" viewBox="-120 -120 240 240" style={layer(spin * 0.35)}>
+      <svg className="cc-layer cc-outer" viewBox="-120 -120 240 240" ref={node => void (layers.current.outer = node)}>
         {OUTER_SEGMENTS.map((segment, index) => (
           <g key={index} className="cc-segment" style={{ "--cc-i": index } as CSSProperties}>
             <path d={arc(100, segment.from, segment.to)} stroke={url("bronze")} strokeWidth="13" fill="none" strokeLinecap="butt" />
@@ -210,7 +300,7 @@ function ClockheadConstructImpl({
       </svg>
 
       {/* Stone ring engraved with every word he uses instead of "now". */}
-      <svg className="cc-layer cc-legend" viewBox="-120 -120 240 240" style={layer(-spin * 0.22)}>
+      <svg className="cc-layer cc-legend" viewBox="-120 -120 240 240" ref={node => void (layers.current.legend = node)}>
         <circle r="86" fill="none" stroke={url("stone")} strokeWidth="13.5" />
         <circle r="92.6" fill="none" stroke={url("bronze")} strokeWidth="1.6" />
         <circle r="79.4" fill="none" stroke={url("bronze")} strokeWidth="1.6" />
@@ -263,6 +353,7 @@ function ClockheadConstructImpl({
               })}
               {dial.hand && (
                 <line
+                  ref={node => void (layers.current.subhand = node)}
                   className="cc-subhand"
                   x1="0"
                   y1="1.5"
@@ -271,7 +362,6 @@ function ClockheadConstructImpl({
                   stroke="#5a3a12"
                   strokeWidth="1.1"
                   strokeLinecap="round"
-                  transform={`rotate(${(spin * 14) % 360})`}
                 />
               )}
               <circle r="1.3" fill="#5a3a12" />
@@ -284,7 +374,7 @@ function ClockheadConstructImpl({
       </svg>
 
       {/* Astrolabe rete, turning against the face. */}
-      <svg className="cc-layer cc-rete" viewBox="-120 -120 240 240" style={layer(spin * 0.6)}>
+      <svg className="cc-layer cc-rete" viewBox="-120 -120 240 240" ref={node => void (layers.current.rete = node)}>
         <circle cx="0" cy="9" r="41" fill="none" stroke="#9c6a26" strokeOpacity="0.55" strokeWidth="1.3" />
         <circle cx="0" cy="-6" r="26" fill="none" stroke="#9c6a26" strokeOpacity="0.4" strokeWidth="0.9" />
         {[20, 95, 160, 230, 300].map((at, index) => {
@@ -296,14 +386,14 @@ function ClockheadConstructImpl({
       </svg>
 
       {/* The mainspring: hidden behind the dial until he has to wind himself. */}
-      <svg className="cc-layer cc-mainspring" viewBox="-120 -120 240 240" style={layer(-spin * 1.4)}>
+      <svg className="cc-layer cc-mainspring" viewBox="-120 -120 240 240" ref={node => void (layers.current.mainspring = node)}>
         <path d={SPIRAL} fill="none" strokeWidth="2.3" strokeLinecap="round" />
       </svg>
 
-      <svg className="cc-layer cc-hand cc-hand--hour" viewBox="-120 -120 240 240" style={layer(hour)}>
+      <svg className="cc-layer cc-hand cc-hand--hour" viewBox="-120 -120 240 240" ref={node => void (layers.current.hour = node)}>
         <path d="M 0 -40 L 5.5 -22 L 3 8 L -3 8 L -5.5 -22 Z" fill={url("bronze")} stroke="#3f260c" strokeWidth="1" />
       </svg>
-      <svg className="cc-layer cc-hand cc-hand--minute" viewBox="-120 -120 240 240" style={layer(minute)}>
+      <svg className="cc-layer cc-hand cc-hand--minute" viewBox="-120 -120 240 240" ref={node => void (layers.current.minute = node)}>
         <path d="M 0 -66 L 3.2 -54 L 2 -40 L 3.6 -4 L 0 14 L -3.6 -4 L -2 -40 L -3.2 -54 Z" fill={url("bronze")} stroke="#3f260c" strokeWidth="0.9" />
         <circle cy="12" r="4.4" fill={url("bronze")} stroke="#3f260c" strokeWidth="0.8" />
       </svg>
@@ -314,9 +404,14 @@ function ClockheadConstructImpl({
         <circle className="cc-core" r="5.6" fill={url(exposed ? "core-open" : "core")} />
       </svg>
 
+      {/* Taking a hit: a white-hot pop, then the whole clock flushes red. */}
+      <div className="cc-hurt" ref={node => void (layers.current.hurt = node)} />
+      <div className="cc-pop" ref={node => void (layers.current.pop = node)} />
+
       {seals && seals.length > 0 && (
         <svg className="cc-layer cc-seals" viewBox="-120 -120 240 240">
           {seals.map((seal, index) => {
+            if (seal.hidden) return null;
             const at = sealAngle(index, seals.length);
             const breaking = breakingSeal === index;
             const shown = seal.broken && !breaking;
@@ -324,7 +419,9 @@ function ClockheadConstructImpl({
               <g
                 key={`${seal.legend}-${index}`}
                 transform={`rotate(${at}) translate(0 -104)`}
-                className={`cc-seal${shown ? " is-broken" : ""}${breaking ? " is-breaking" : ""}`}
+                className={`cc-seal${shown ? " is-broken" : ""}${breaking ? " is-breaking" : ""}${
+                  seal.locking ? " is-locking" : ""
+                }`}
               >
                 <g transform={`rotate(${-at})`}>
                   <path className="cc-seal-shackle" d="M -6.5 -5 L -6.5 -11 A 6.5 6.5 0 0 1 6.5 -11 L 6.5 -5" fill="none" strokeWidth="3.2" />
@@ -337,8 +434,9 @@ function ClockheadConstructImpl({
           })}
         </svg>
       )}
+      </div>
     </div>
   );
-}
+});
 
 export const ClockheadConstruct = memo(ClockheadConstructImpl);

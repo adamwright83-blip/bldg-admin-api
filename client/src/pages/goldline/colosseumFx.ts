@@ -9,7 +9,18 @@
 import type { ColosseumProjectile } from "./colosseumCombat";
 import { FLOOR_FORESHORTENING, type StagePoint } from "./colosseumStage";
 
-type ParticleKind = "spark" | "ring" | "slash" | "shock" | "debris" | "dust" | "glint" | "ember";
+type ParticleKind =
+  | "spark"
+  | "ring"
+  | "slash"
+  | "shock"
+  | "debris"
+  | "dust"
+  | "glint"
+  | "ember"
+  | "flare"
+  | "star"
+  | "streak";
 
 type Particle = {
   kind: ParticleKind;
@@ -26,6 +37,11 @@ type Particle = {
   /** Slash only: which way the edge travels, and how wide an arc. */
   from?: number;
   to?: number;
+  /** Streak only: where the edge lands. */
+  tx?: number;
+  ty?: number;
+  /** Sparks thrown off metal fall; sparks of light do not. */
+  gravity?: number;
 };
 
 export type FxSecondHand = {
@@ -93,7 +109,7 @@ export class ColosseumFx {
     this.particles.push(particle);
   }
 
-  sparks(at: StagePoint, count: number, color = GOLD, speed = 38, spread = Math.PI * 2, heading = 0) {
+  sparks(at: StagePoint, count: number, color = GOLD, speed = 38, spread = Math.PI * 2, heading = 0, gravity = 0) {
     const n = this.reducedMotion ? Math.ceil(count / 3) : count;
     for (let i = 0; i < n; i += 1) {
       const angle = heading + (Math.random() - 0.5) * spread;
@@ -110,6 +126,7 @@ export class ColosseumFx {
         rotation: angle,
         spin: 0,
         color,
+        gravity,
       });
     }
   }
@@ -142,6 +159,52 @@ export class ColosseumFx {
       from,
       to,
     });
+  }
+
+  /**
+   * The Lineblade connecting: its edge reaches through space from her to the
+   * contact point, the contact goes white-hot, a starburst and a ring punch
+   * out, and bright metal sparks spray on along the cut and fall.
+   * `power` is 1 for a hit and more for a finisher.
+   */
+  impact(from: StagePoint, at: StagePoint, power = 1) {
+    const heading = Math.atan2(at.y - from.y, at.x - from.x);
+    this.push({
+      kind: "streak",
+      x: from.x,
+      y: from.y,
+      tx: at.x,
+      ty: at.y,
+      vx: 0,
+      vy: 0,
+      life: 0,
+      maxLife: 170,
+      size: 1,
+      rotation: 0,
+      spin: 0,
+      color: "#fffbe8",
+    });
+    this.push({ kind: "flare", x: at.x, y: at.y, vx: 0, vy: 0, life: 0, maxLife: 130 + 40 * power, size: 3.4 * power, rotation: 0, spin: 0, color: "#ffffff" });
+    this.push({
+      kind: "star",
+      x: at.x,
+      y: at.y,
+      vx: 0,
+      vy: 0,
+      life: 0,
+      maxLife: 150 + 50 * power,
+      size: 7.5 * power,
+      rotation: Math.random() * Math.PI,
+      spin: 0,
+      color: "#fff4c8",
+    });
+    this.ring(at, 7 * power, "#fff4c8", 240);
+    if (power > 1) this.ring(at, 16 * power, "#ff9a6b", 420);
+    // Hot brass sprays on along the cut and arcs down; a few white sparks fly wide.
+    this.sparks(at, Math.round(18 * power), "#ffe9a6", 96, Math.PI * 0.9, heading, 58);
+    this.sparks(at, Math.round(10 * power), "#ff9d4a", 62, Math.PI * 1.3, heading, 70);
+    this.sparks(at, Math.round(8 * power), "#ffffff", 120, Math.PI * 2, heading);
+    this.debris(at, Math.round(5 * power), ["#ffd36b", "#fff4c8", "#c89a4a"]);
   }
 
   shockwave(at: StagePoint) {
@@ -214,8 +277,10 @@ export class ColosseumFx {
       particle.life += dtMs;
       if (particle.life >= particle.maxLife) continue;
       if (particle.kind === "spark") {
-        particle.vx *= Math.pow(0.02, dt);
-        particle.vy *= Math.pow(0.02, dt);
+        const drag = particle.gravity ? 0.12 : 0.02;
+        particle.vx *= Math.pow(drag, dt);
+        particle.vy *= Math.pow(drag, dt);
+        if (particle.gravity) particle.vy += particle.gravity * dt;
       } else if (particle.kind === "debris") {
         particle.vy += 70 * dt;
         particle.vx *= Math.pow(0.4, dt);
@@ -655,6 +720,63 @@ export class ColosseumFx {
           const r = particle.size * (0.7 + t * 0.8);
           ctx.ellipse(particle.x, particle.y, r, r * FLOOR_FORESHORTENING, 0, 0, Math.PI * 2);
           ctx.fill();
+          break;
+        }
+        case "flare": {
+          const radius = particle.size * (0.7 + t * 0.9);
+          const glow = ctx.createRadialGradient(particle.x, particle.y, 0, particle.x, particle.y, radius);
+          glow.addColorStop(0, "rgba(255, 255, 255, 1)");
+          glow.addColorStop(0.35, "rgba(255, 246, 207, 0.9)");
+          glow.addColorStop(1, "rgba(255, 190, 90, 0)");
+          ctx.globalAlpha = 1 - t * t;
+          ctx.fillStyle = glow;
+          ctx.beginPath();
+          ctx.arc(particle.x, particle.y, radius, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
+        case "star": {
+          // Eight uneven spikes, thrown out and pulled back.
+          const reach = particle.size * (t < 0.3 ? t / 0.3 : 1 - (t - 0.3) * 0.6);
+          ctx.globalAlpha = 1 - t;
+          ctx.fillStyle = particle.color;
+          for (let i = 0; i < 8; i += 1) {
+            const angle = particle.rotation + (i / 8) * Math.PI * 2;
+            const length = reach * (i % 2 === 0 ? 1 : 0.55);
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const width = 0.5 * (1 - t) + 0.12;
+            ctx.beginPath();
+            ctx.moveTo(particle.x - sin * width, particle.y + cos * width);
+            ctx.lineTo(particle.x + cos * length, particle.y + sin * length);
+            ctx.lineTo(particle.x + sin * width, particle.y - cos * width);
+            ctx.closePath();
+            ctx.fill();
+          }
+          break;
+        }
+        case "streak": {
+          // The edge reaches the face in the first third, then its tail follows it in.
+          const tx = particle.tx ?? particle.x;
+          const ty = particle.ty ?? particle.y;
+          const head = Math.min(1, t / 0.3);
+          const tail = Math.max(0, (t - 0.3) / 0.7);
+          const easedHead = 1 - Math.pow(1 - head, 3);
+          const hx = particle.x + (tx - particle.x) * easedHead;
+          const hy = particle.y + (ty - particle.y) * easedHead;
+          const sx = particle.x + (tx - particle.x) * tail;
+          const sy = particle.y + (ty - particle.y) * tail;
+          ctx.globalAlpha = 0.5 * (1 - tail);
+          ctx.strokeStyle = "rgba(255, 196, 92, 1)";
+          ctx.lineWidth = 2.4;
+          ctx.beginPath();
+          ctx.moveTo(sx, sy);
+          ctx.lineTo(hx, hy);
+          ctx.stroke();
+          ctx.globalAlpha = 1 - tail * tail;
+          ctx.strokeStyle = particle.color;
+          ctx.lineWidth = 0.6;
+          ctx.stroke();
           break;
         }
         case "ember":

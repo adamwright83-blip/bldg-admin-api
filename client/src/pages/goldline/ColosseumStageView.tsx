@@ -48,6 +48,13 @@ export type StageHandle = {
   snap: () => void;
 };
 
+/**
+ * Once the painting has decoded in this session, later stages (the prologue
+ * handing over to the arena, say) start ready instead of flashing the
+ * loading screen for a frame.
+ */
+let paintingDecoded = false;
+
 export function prefersReducedMotion(): boolean {
   return (
     typeof window !== "undefined" &&
@@ -79,7 +86,7 @@ export const ColosseumStageView = forwardRef<StageHandle, Props>(function Coloss
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const artRef = useRef<HTMLImageElement>(null);
   const readyFired = useRef(false);
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(paintingDecoded);
   // Scenes pass an inline callback and re-render every frame; keep the
   // identity stable so the fallback timer below is armed exactly once.
   const onReadyRef = useRef(onReady);
@@ -88,6 +95,7 @@ export const ColosseumStageView = forwardRef<StageHandle, Props>(function Coloss
   const markReady = useCallback(() => {
     if (readyFired.current) return;
     readyFired.current = true;
+    paintingDecoded = true;
     setReady(true);
     onReadyRef.current?.();
   }, []);

@@ -459,6 +459,33 @@ export function stepSearchArena(previous: SearchArena, dt: number, input: Search
   return state;
 }
 
+/**
+ * Hold the arena for a cinematic she cannot play through — a seal breaking
+ * because a real outcome was recorded. Anything already in the air is called
+ * off, he goes back to resting with a full rest ahead of him, and she stops
+ * where she stands. The renderer then stops stepping the simulation until the
+ * cinematic is over, so nothing can land while her controls are locked.
+ */
+export function holdSearchArena(previous: SearchArena): SearchArena {
+  const avatar = cloneAvatar(previous.avatar);
+  avatar.velocity = { x: 0, y: 0 };
+  avatar.moving = false;
+  avatar.guarding = false;
+  avatar.guardHeldMs = 0;
+  avatar.strikeBufferMs = 0;
+  avatar.dodgeBufferMs = 0;
+  avatar.returnBufferMs = 0;
+  const state: SearchArena = { ...previous, avatar, projectiles: [], sweep: null, events: [] };
+  if (state.stage === "tell" || state.stage === "attack") {
+    // The volley he was starting is dropped; his rotation still moves on.
+    if (state.stage === "attack") state.patternIndex += 1;
+    toRest(state);
+  } else if (state.stage === "rest") {
+    state.clock = 0;
+  }
+  return state;
+}
+
 /** Is the shield close enough to show the TAKE SHIELD prompt? */
 export function shieldInReach(state: SearchArena): boolean {
   return (

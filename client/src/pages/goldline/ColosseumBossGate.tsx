@@ -10,7 +10,8 @@ import Day1FieldMission, {
   type Day1TenDoorsMissionView,
 } from "./Day1FieldMission";
 import { projectColosseumMission } from "./colosseumCampaign";
-import ClockheadDuel from "./ClockheadDuel";
+import ClockheadDuel, { ClockheadPrologue } from "./ClockheadDuel";
+import { browserStorage, markPrologueSeen, shouldPlayPrologue } from "./colosseumPrologue";
 import { getAudioManager } from "../../game/audio/AudioManager";
 import {
   arcadeFeedback,
@@ -20,7 +21,7 @@ import {
   taskCompleteFeedback,
 } from "../../game/audio/haptics";
 import type { Day1TargetOutcome } from "../../../../shared/day1TenDoors";
-import { ClockheadConstruct, type ConstructMood } from "./ClockheadConstruct";
+import { ClockheadConstruct, type ConstructHandle, type ConstructMood } from "./ClockheadConstruct";
 import { ColosseumControls, useColosseumInput } from "./ColosseumControls";
 import { ColosseumMuteButton } from "./ColosseumMuteButton";
 import { ColosseumStageView, prefersReducedMotion, type StageHandle } from "./ColosseumStageView";
@@ -37,6 +38,7 @@ import {
   SEARCH_TUNING,
   createSearchArena,
   doorProgress,
+  holdSearchArena,
   shieldInReach,
   stepSearchArena,
   type SearchArena,
@@ -47,11 +49,13 @@ import {
   CLOCKHEAD_CENTER,
   COLOSSEUM_DOORS,
   FLOOR_FORESHORTENING,
+  SERVICE_ENTRANCE,
   SHIELD_REST,
   STAGE_HEIGHT,
   artPoint,
   gameplayFocus,
   projectColosseumArena,
+  sealPoint,
   stagePercent,
   torsoPoint,
   type ColosseumDoorId,
@@ -73,6 +77,10 @@ export { ColosseumBossLoading } from "./ColosseumLoading";
  * the finale is reachable only when the authoritative five-site campaign is
  * complete, the real hunt is the unmodified field mission, and everything
  * below `ColosseumSearchArena` is fiction layered on top of it.
+ *
+ * The first-entry prologue is fiction too, and sits after all three: it only
+ * plays before the campaign has a single recorded outcome, it cannot reach
+ * the finale's unlock, and all it can do is hand the player to the arena.
  */
 export default function ColosseumBossGate({
   mission,
@@ -82,6 +90,10 @@ export default function ColosseumBossGate({
 }: Props) {
   const campaign = useMemo(() => projectColosseumMission(mission), [mission]);
   const [fieldMode, setFieldMode] = useState(false);
+  // Presentation memory only: has this device had its first taste of the fight?
+  const [prologue, setPrologue] = useState(() =>
+    shouldPlayPrologue(browserStorage(), campaign.missionId, campaign.visitedCount)
+  );
   if (campaign.isComplete) {
     return <ClockheadDuel onDefeated={onBossDefeated} />;
   }
@@ -108,6 +120,17 @@ export default function ColosseumBossGate({
           }}
         />
       </div>
+    );
+  }
+
+  if (prologue && campaign.visitedCount === 0) {
+    return (
+      <ClockheadPrologue
+        onSealed={() => {
+          markPrologueSeen(browserStorage(), campaign.missionId);
+          setPrologue(false);
+        }}
+      />
     );
   }
 
@@ -146,9 +169,6 @@ const DOOR_VI_PLAQUE = artPoint(78.6, 77.4);
  */
 const TRACE_RING_CENTER = artPoint(50, 60.5);
 const TRACE_RING_WIDTH = 34;
-
-/** Where the Gold Line enters the arena from the service entrance beneath it. */
-const SERVICE_ENTRANCE = artPoint(20, 96);
 
 const SEAL_BREAK_AT_MS = 650;
 const SEAL_REVEAL_MS = 1700;
@@ -210,9 +230,11 @@ function ColosseumSearchArena({
     [mission.visitedCount, mission.totalCount, mission.isComplete]
   );
 
-  const [frame, setFrame] = useState(() => ({ arena: createSearchArena(), spin: 0, stride: 0, now: 0 }));
+  const [frame, setFrame] = useState(() => ({ arena: createSearchArena(), stride: 0, now: 0 }));
   const arenaRef = useRef(frame.arena);
   const stageRef = useRef<StageHandle>(null);
+  const constructRef = useRef<ConstructHandle>(null);
+  const heldRef = useRef(false);
   const spinRef = useRef(0);
   const strideRef = useRef(0);
   const dodgeFromRef = useRef<StagePoint | null>(null);
@@ -450,14 +472,32 @@ function ColosseumSearchArena({
       last = now;
       if (!document.hidden) {
         let arena = arenaRef.current;
+        // A seal reveal (or the descent to the real hunt) locks her controls,
+        // so the fight itself holds still: whatever was in the air is called
+        // off and the simulation does not advance until it is over. Camera
+        // and effects keep running.
         const frozen = leavingRef.current || revealingRef.current != null;
-        arena = stepSearchArena(arena, dt, frozen ? { x: 0, y: 0 } : input.consume());
-        arenaRef.current = arena;
-        for (const event of arena.events) handleEvent(event, arena);
+        if (frozen) {
+          if (!heldRef.current) {
+            heldRef.current = true;
+            arena = holdSearchArena(arena);
+            arenaRef.current = arena;
+          }
+        } else {
+          heldRef.current = false;
+          arena = stepSearchArena(arena, dt, input.consume());
+          arenaRef.current = arena;
+          for (const event of arena.events) handleEvent(event, arena);
+        }
         if (arena.avatar.dodgeMs === 0) dodgeFromRef.current = null;
 
         const spinRate = arena.stage === "tell" ? 160 : arena.stage === "attack" ? 90 : arena.stage === "disrupted" ? 4 : 14;
         spinRef.current += (spinRate * dt) / 1000;
+        constructRef.current?.setMotion({
+          spin: spinRef.current,
+          charge: arena.stage === "tell" ? Math.min(1, arena.clock / SEARCH_TUNING.tellMs) : 0,
+          minuteHand: arena.sweep ? arena.sweep.angle + 90 : null,
+        });
         const speed = Math.hypot(arena.avatar.velocity.x, arena.avatar.velocity.y);
         strideRef.current += (speed * dt) / 1000 / strideLength(arena.avatar.feet.y);
 
@@ -514,7 +554,7 @@ function ColosseumSearchArena({
           fx: fxFrame,
           insets: { top: 72, bottom: 118 },
         });
-        setFrame({ arena, spin: spinRef.current, stride: strideRef.current, now });
+        setFrame({ arena, stride: strideRef.current, now });
       }
       raf = requestAnimationFrame(tick);
     };
@@ -530,15 +570,21 @@ function ColosseumSearchArena({
     window.setTimeout(onBeginHunt, reduced.current ? 0 : 480);
   };
 
-  const { arena, spin, stride, now } = frame;
+  const { arena, stride, now } = frame;
   const door = doorProgress(arena);
   const mood = searchMood(arena);
   const centre = stagePercent(CLOCKHEAD_CENTER);
   const shieldSpot = stagePercent(SHIELD_REST);
-  const displayedSeals = projection.seals.map((seal, index) => ({
-    ...seal,
-    broken: seal.broken && !revealQueue.includes(index) && revealing?.index !== index,
-  }));
+  // Memoised: the clock only re-renders when a seal's state actually changes.
+  const revealingIndex = revealing?.index ?? null;
+  const displayedSeals = useMemo(
+    () =>
+      projection.seals.map((seal, index) => ({
+        ...seal,
+        broken: seal.broken && !revealQueue.includes(index) && revealingIndex !== index,
+      })),
+    [projection.seals, revealQueue, revealingIndex]
+  );
   const breakingSeal =
     revealing && now - revealing.startedAt >= (reduced.current ? 0 : SEAL_BREAK_AT_MS) ? revealing.index : null;
   const disrupted = arena.stage === "disrupted";
@@ -556,6 +602,9 @@ function ColosseumSearchArena({
       data-testid="colosseum-boss-gate"
       data-mood={projection.mood}
       data-traced={projection.tracedCount}
+      data-stage={arena.stage}
+      data-guard={arena.avatar.guardPips}
+      data-revealing={revealing ? "1" : undefined}
     >
       <ColosseumStageView
         ref={stageRef}
@@ -618,11 +667,9 @@ function ColosseumSearchArena({
 
         <div className="cd-boss-anchor cs-boss-anchor" style={{ left: centre.left, top: centre.top }}>
           <ClockheadConstruct
+            ref={constructRef}
             variant="hologram"
             mood={mood}
-            spin={spin}
-            charge={arena.stage === "tell" ? Math.min(1, arena.clock / SEARCH_TUNING.tellMs) : 0}
-            minuteHand={arena.sweep ? arena.sweep.angle + 90 : null}
             seals={displayedSeals}
             breakingSeal={breakingSeal}
             signal={signal}
@@ -736,16 +783,5 @@ function ColosseumSearchArena({
       {leaving && <div className="cs-descend" aria-hidden="true" />}
     </main>
   );
-}
-
-/** Where seal `index` sits on his rim, in stage units (for effects). */
-function sealPoint(index: number, count: number): StagePoint {
-  const at = count <= 1 ? 0 : -120 + (240 / (count - 1)) * index;
-  const radians = ((at - 90) * Math.PI) / 180;
-  const radius = (104 / 100) * 25;
-  return {
-    x: CLOCKHEAD_CENTER.x + Math.cos(radians) * radius,
-    y: CLOCKHEAD_CENTER.y + Math.sin(radians) * radius,
-  };
 }
 

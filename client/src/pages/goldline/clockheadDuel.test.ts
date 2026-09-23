@@ -3,7 +3,9 @@ import {
   CLOCK_ATTACK_NAMES,
   DUEL_BOSS_HP,
   DUEL_TUNING,
+  PHASE_FLOOR,
   PHASE_PATTERNS,
+  PROLOGUE_TUNING,
   createClockDuel,
   recoilToAnchor,
   stepClockDuel,
@@ -390,5 +392,81 @@ describe("losing is RECOIL, not GAME OVER", () => {
         : [];
     for (const key of keys(createClockDuel())) expect(forbidden.test(key), key).toBe(false);
     expect(CLOCKHEAD_WINDING_CENTER).toBeTruthy();
+  });
+});
+
+describe("the first-entry prologue: a real taste of the fight that can be neither won nor lost", () => {
+  /** She is placed in reach whenever he winds, and strikes until something changes. */
+  function tasteIt(state: ClockDuel) {
+    let s = state;
+    const events: DuelEvent[] = [];
+    for (let frame = 0; frame < 20_000 && s.stage !== "escaped"; frame += 1) {
+      s = withAvatar(s, { hurtMs: 5000 });
+      if (s.stage === "exposed" && s.clock < 20) s = withAvatar(s, { feet: REACH });
+      s = stepClockDuel(s, 16, { x: 0, y: 0, strike: s.stage === "exposed" });
+      events.push(...s.events);
+    }
+    return { s, events };
+  }
+
+  it("lets her hits land for real, then he escapes at the end of his first hour", () => {
+    const { s, events } = tasteIt(createClockDuel({ mode: "prologue" }));
+    expect(s.stage).toBe("escaped");
+    expect(s.bossHp).toBe(PROLOGUE_TUNING.bossFloor);
+    expect(events.filter(event => event.type === "strike_hit")).toHaveLength(DUEL_BOSS_HP - PROLOGUE_TUNING.bossFloor);
+    expect(events.some(event => event.type === "escape" && event.reason === "cornered")).toBe(true);
+    // Never the finale's beats: no hour break, no defeat.
+    expect(events.some(event => event.type === "phase_break" || event.type === "defeated")).toBe(false);
+  });
+
+  it("is over once he escapes: nothing she does afterwards moves him", () => {
+    const { s } = tasteIt(createClockDuel({ mode: "prologue" }));
+    const after = run(s, 3000, { x: 0, y: 0, strike: true, returnWave: true });
+    expect(after.state.stage).toBe("escaped");
+    expect(after.state.bossHp).toBe(PROLOGUE_TUNING.bossFloor);
+    expect(after.events).toEqual([]);
+  });
+
+  it("cannot be lost: standing still under fire, the Line never lets her guard reach zero", () => {
+    let s = createClockDuel({ mode: "prologue" });
+    let lowest = s.hp;
+    const events: DuelEvent[] = [];
+    for (let i = 0; i < 8000 && s.stage !== "escaped"; i += 1) {
+      s = stepClockDuel(s, 16, IDLE);
+      lowest = Math.min(lowest, s.hp);
+      events.push(...s.events);
+    }
+    expect(s.stats.hitsTaken).toBeGreaterThan(3);
+    expect(lowest).toBe(PROLOGUE_TUNING.minGuardPips);
+    expect(events.some(event => event.type === "recoil")).toBe(false);
+    // …and a player who never closes in still gets the story, between attacks.
+    expect(s.stage).toBe("escaped");
+    expect(events.some(event => event.type === "escape" && event.reason === "timeout")).toBe(true);
+    expect(s.stats.elapsedMs).toBeGreaterThanOrEqual(PROLOGUE_TUNING.timeoutMs);
+  });
+
+  it("a RETURN that would carry him past the floor only makes him escape sooner", () => {
+    const primed = withAvatar(
+      { ...createClockDuel({ mode: "prologue" }), bossHp: PROLOGUE_TUNING.bossFloor + 1 },
+      { force: AVATAR_TUNING.forceMax, returnBufferMs: 0 }
+    );
+    const released = stepClockDuel(primed, 16, { x: 0, y: 0, returnWave: true });
+    expect(released.stage).toBe("escaped");
+    expect(released.bossHp).toBe(PROLOGUE_TUNING.bossFloor);
+  });
+
+  it("gives a new player a longer winding window than the finale's first hour", () => {
+    expect(PROLOGUE_TUNING.exposedMs).toBeGreaterThan(DUEL_TUNING.exposedMs[1]);
+    const prologue = exposedAt(createClockDuel({ mode: "prologue" }), ARENA_ANCHOR);
+    const stillOpen = run(prologue, DUEL_TUNING.exposedMs[1] + 200).state;
+    expect(stillOpen.stage).toBe("exposed");
+  });
+
+  it("leaves the finale exactly as it was: the same blow there is an hour break", () => {
+    expect(PROLOGUE_TUNING.bossFloor).toBe(PHASE_FLOOR[1]);
+    const finale = exposedAt({ ...createClockDuel(), bossHp: PHASE_FLOOR[1] + 1 });
+    const struck = stepClockDuel(finale, 16, { x: 0, y: 0, strike: true });
+    expect(struck.stage).toBe("phase_break");
+    expect(struck.events.some(event => event.type === "escape")).toBe(false);
   });
 });

@@ -89,6 +89,26 @@ export const CLOCKHEAD_RADIUS = 25;
  */
 export const CLOCKHEAD_WINDING_CENTER = artPoint(50, 38.5);
 
+/** Where the Gold Line enters the arena: the service entrance beneath it. */
+export const SERVICE_ENTRANCE = artPoint(20, 96);
+
+/**
+ * Where seal `index` of `count` sits on his rim, in clock-degrees: spread
+ * across the upper three-quarters, leaving the bottom (where he lowers
+ * himself to wind) clear.
+ */
+export function sealAngle(index: number, count: number): number {
+  if (count <= 1) return 0;
+  return -120 + (240 / (count - 1)) * index;
+}
+
+/** The same seal in stage units, for effects aimed at it. */
+export function sealPoint(index: number, count: number, center: StagePoint = CLOCKHEAD_CENTER): StagePoint {
+  const radians = ((sealAngle(index, count) - 90) * Math.PI) / 180;
+  const radius = CLOCKHEAD_RADIUS * 1.04;
+  return { x: center.x + Math.cos(radians) * radius, y: center.y + Math.sin(radians) * radius };
+}
+
 /**
  * The walkable floor, traced from the painting: the curb and door steps
  * along the top, the curved retaining walls down each side, and the two

@@ -23,6 +23,14 @@
  * Lineblade can reach his mainspring. Perfect blocks store force; three
  * release as RETURN. Losing is not GAME OVER: the Line catches Trailblazer
  * and RECOIL throws her back to the anchor at the start of the current hour.
+ *
+ * PROLOGUE MODE
+ *
+ * The first time she walks into the Colosseum he is careless and there: the
+ * same fight, but it cannot be lost and cannot be won. Her hits land for
+ * real; the moment they bring him to the end of his first hour he spends a
+ * Borrowed Minute, undoes all of it and escapes (`escaped`). The prologue
+ * never reaches `won`, so it can never stand in for the real finale.
  */
 import {
   advanceProjectileClocks,
@@ -62,7 +70,9 @@ import {
 
 export type ClockPattern = "aimed" | "fan" | "sweep" | "deadline" | "rewind";
 export type DuelPhase = 1 | 2 | 3;
-export type DuelStage = "tell" | "attack" | "exposed" | "phase_break" | "won" | "lost";
+export type DuelStage = "tell" | "attack" | "exposed" | "phase_break" | "won" | "lost" | "escaped";
+/** `finale` is the real fight; `prologue` is the first-entry taste of it. */
+export type DuelMode = "finale" | "prologue";
 
 export type SecondHand = {
   /** 1 sweeps left→right across the floor, -1 right→left. */
@@ -101,7 +111,9 @@ export type DuelEvent =
   | { type: "recovered" }
   | { type: "phase_break"; phase: DuelPhase }
   | { type: "defeated" }
-  | { type: "recoil" };
+  | { type: "recoil" }
+  /** Prologue only: he rewinds the damage and gets away. */
+  | { type: "escape"; reason: "cornered" | "timeout" };
 
 export type DuelStats = {
   elapsedMs: number;
@@ -113,6 +125,7 @@ export type DuelStats = {
 };
 
 export type ClockDuel = {
+  mode: DuelMode;
   avatar: Avatar;
   /** Mirrors of avatar fields kept for callers and tests of the first duel. */
   player: StagePoint;
@@ -221,6 +234,9 @@ export const DUEL_TUNING = {
   exposedMs: { 1: 2100, 2: 1900, 3: 1700 } as Record<DuelPhase, number>,
   returnStaggerMs: 700,
   phaseBreakMs: 1700,
+  /** The whole fight holds still for a beat when the Lineblade connects. */
+  hitStopMs: 70,
+  finisherHitStopMs: 180,
   strikeReach: 18,
   maxWindowHits: 3,
   returnDamage: 2,
@@ -244,6 +260,26 @@ export const DUEL_TUNING = {
   rewindAtMs: 1250,
 } as const;
 
+/**
+ * The prologue is the first hour of the real fight, a little gentler: longer
+ * winding windows, and the Line never lets her fall. Its floor is the end of
+ * that hour — where the real fight would break into Overtime, he escapes.
+ */
+export const PROLOGUE_TUNING = {
+  bossFloor: PHASE_FLOOR[1],
+  exposedMs: 2600,
+  /** Guard never drops below this: she can be hurt, never knocked out. */
+  minGuardPips: 1,
+  /** A player who never closes in still gets the story, at the next wind-up. */
+  timeoutMs: 75_000,
+} as const;
+
+const PROLOGUE_LINES = {
+  open: "You’re early. Nobody is ever early.",
+  cornered: "NOT YET!",
+  timeout: "Enough. I have… other appointments.",
+} as const;
+
 function bossGeometry(speed: number): Partial<CombatGeometry> {
   return { origin: CLOCKHEAD_CENTER, speed };
 }
@@ -264,7 +300,7 @@ function emptyStats(): DuelStats {
  */
 export const RECOIL_GUARD_BONUS_MAX = 2;
 
-function freshAt(bossHp: number, stats: DuelStats, anchorRecoils = 0): ClockDuel {
+function freshAt(bossHp: number, stats: DuelStats, anchorRecoils = 0, mode: DuelMode = "finale"): ClockDuel {
   const phase = phaseForHp(bossHp);
   const pattern = PHASE_PATTERNS[phase][0]!;
   const avatar = createAvatar(
@@ -272,6 +308,7 @@ function freshAt(bossHp: number, stats: DuelStats, anchorRecoils = 0): ClockDuel
     AVATAR_TUNING.maxGuardPips + Math.min(RECOIL_GUARD_BONUS_MAX, anchorRecoils)
   );
   return syncMirrors({
+    mode,
     avatar,
     player: avatar.feet,
     hp: avatar.guardPips,
@@ -298,13 +335,19 @@ function freshAt(bossHp: number, stats: DuelStats, anchorRecoils = 0): ClockDuel
     anchorRecoils,
     cue: 0,
     events: [],
-    line: bossHp === DUEL_BOSS_HP ? PHASE_LINES[1] : PHASE_LINES[phase],
+    line: mode === "prologue" ? PROLOGUE_LINES.open : bossHp === DUEL_BOSS_HP ? PHASE_LINES[1] : PHASE_LINES[phase],
     stats,
   });
 }
 
-export function createClockDuel(): ClockDuel {
-  return freshAt(DUEL_BOSS_HP, emptyStats());
+export function createClockDuel(options: { mode?: DuelMode } = {}): ClockDuel {
+  return freshAt(DUEL_BOSS_HP, emptyStats(), 0, options.mode ?? "finale");
+}
+
+/** How long his current winding window lasts, knockback stagger included. */
+export function exposedWindowMs(state: Pick<ClockDuel, "mode" | "phase" | "staggerMs">): number {
+  const base = state.mode === "prologue" ? PROLOGUE_TUNING.exposedMs : DUEL_TUNING.exposedMs[state.phase];
+  return base + state.staggerMs;
 }
 
 /**
@@ -314,7 +357,7 @@ export function createClockDuel(): ClockDuel {
  */
 export function recoilToAnchor(state: ClockDuel): ClockDuel {
   const stats = { ...state.stats, recoils: state.stats.recoils + 1 };
-  const next = freshAt(state.anchorBossHp, stats, state.anchorRecoils + 1);
+  const next = freshAt(state.anchorBossHp, stats, state.anchorRecoils + 1, state.mode);
   next.line = "Back already? Shall we reschedule?";
   return next;
 }
@@ -365,6 +408,10 @@ function damageTrailblazer(state: ClockDuel, source: "bolt" | "sweep" | "deadlin
   if (!hurtAvatar(state.avatar)) return;
   state.freezeMs = Math.max(state.freezeMs, 90);
   state.stats.hitsTaken += 1;
+  if (state.mode === "prologue") {
+    // The Line holds her up: it stings, it never ends the taste of the fight.
+    state.avatar.guardPips = Math.max(PROLOGUE_TUNING.minGuardPips, state.avatar.guardPips);
+  }
   emit(state, { type: "hurt", at, source });
   if (state.avatar.guardPips <= 0) {
     state.stage = "lost";
@@ -376,7 +423,20 @@ function damageTrailblazer(state: ClockDuel, source: "bolt" | "sweep" | "deadlin
   }
 }
 
+/** Prologue: he spends a Borrowed Minute on himself and gets away. */
+function escape(state: ClockDuel, reason: "cornered" | "timeout") {
+  state.stage = "escaped";
+  clearHazards(state);
+  state.line = PROLOGUE_LINES[reason];
+  emit(state, { type: "escape", reason });
+}
+
 function dealBossDamage(state: ClockDuel, amount: number) {
+  if (state.mode === "prologue") {
+    state.bossHp = Math.max(PROLOGUE_TUNING.bossFloor, state.bossHp - amount);
+    if (state.bossHp === PROLOGUE_TUNING.bossFloor) escape(state, "cornered");
+    return;
+  }
   const floor = PHASE_FLOOR[state.phase];
   state.bossHp = Math.max(floor, state.bossHp - amount);
   if (state.bossHp === 0) {
@@ -665,7 +725,8 @@ function updateStrike(state: ClockDuel) {
     const finisher = state.windowHits === DUEL_TUNING.maxWindowHits;
     state.avatar.slashCombo = state.windowHits;
     state.stats.strikes += 1;
-    state.freezeMs = Math.max(state.freezeMs, finisher ? 150 : 70);
+    // Hit-stop grows through the combo so the finisher lands like one.
+    state.freezeMs = Math.max(state.freezeMs, finisher ? DUEL_TUNING.finisherHitStopMs : DUEL_TUNING.hitStopMs + 12 * state.windowHits);
     if (finisher) state.avatar.strikeRecoveryMs = AVATAR_TUNING.finisherRecoveryMs;
     state.line = STRIKE_LINES[(state.windowHits - 1) % STRIKE_LINES.length]!;
     emit(state, {
@@ -677,8 +738,7 @@ function updateStrike(state: ClockDuel) {
     dealBossDamage(state, 1);
     // A finisher knocks him out of the window early; he rewinds himself up.
     if (finisher && state.stage === "exposed") {
-      const total = DUEL_TUNING.exposedMs[state.phase] + state.staggerMs;
-      state.clock = Math.max(state.clock, total - 380);
+      state.clock = Math.max(state.clock, exposedWindowMs(state) - 380);
     }
   } else {
     state.avatar.slashCombo = 0;
@@ -701,15 +761,28 @@ function updateReturn(state: ClockDuel) {
   }
 }
 
+function isOver(state: Pick<ClockDuel, "stage">): boolean {
+  return state.stage === "won" || state.stage === "lost" || state.stage === "escaped";
+}
+
 function stepOnce(state: ClockDuel, ms: number, input: AvatarInput) {
   if (state.freezeMs > 0) {
     state.freezeMs = Math.max(0, state.freezeMs - ms);
     return;
   }
-  if (state.stage === "won" || state.stage === "lost") return;
+  if (isOver(state)) return;
 
   state.stats.elapsedMs += ms;
   state.clock += ms;
+  if (
+    state.mode === "prologue" &&
+    state.stage === "tell" &&
+    state.stats.elapsedMs >= PROLOGUE_TUNING.timeoutMs
+  ) {
+    // Only ever between attacks, so it never cuts a window short.
+    escape(state, "timeout");
+    return;
+  }
   stepAvatarTimers(state.avatar, ms);
   for (const event of stepAvatarMotion(state.avatar, input, ms, {
     canGuard: true,
@@ -747,7 +820,7 @@ function stepOnce(state: ClockDuel, ms: number, input: AvatarInput) {
       if (state.clock >= attackDurationMs(state.pattern, state.phase)) endAttack(state);
       break;
     case "exposed":
-      if (state.clock >= DUEL_TUNING.exposedMs[state.phase] + state.staggerMs) nextPattern(state);
+      if (state.clock >= exposedWindowMs(state)) nextPattern(state);
       break;
   }
 }
@@ -758,7 +831,7 @@ function stepOnce(state: ClockDuel, ms: number, input: AvatarInput) {
  * (a backgrounded tab) is simply not simulated.
  */
 export function stepClockDuel(previous: ClockDuel, dt: number, input: AvatarInput): ClockDuel {
-  if (previous.stage === "won" || previous.stage === "lost") {
+  if (isOver(previous)) {
     return previous.events.length === 0 ? previous : { ...previous, events: [] };
   }
   // Copy every collection this step may push into: `previous` is React state
@@ -778,7 +851,7 @@ export function stepClockDuel(previous: ClockDuel, dt: number, input: AvatarInpu
     const ms = Math.min(1000 / 60, remaining);
     remaining -= ms;
     stepOnce(state, ms, input);
-    if (state.stage === "won" || state.stage === "lost") break;
+    if (isOver(state)) break;
   }
   return syncMirrors(state);
 }

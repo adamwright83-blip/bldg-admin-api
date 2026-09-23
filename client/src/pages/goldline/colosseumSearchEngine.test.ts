@@ -3,6 +3,7 @@ import {
   SEARCH_TUNING,
   createSearchArena,
   doorProgress,
+  holdSearchArena,
   shieldInReach,
   stepSearchArena,
   type SearchArena,
@@ -159,5 +160,44 @@ describe("RETURN can disrupt a projection, but cannot find him", () => {
     const a = play();
     const b = play();
     expect({ ...a, events: [] }).toEqual({ ...b, events: [] });
+  });
+});
+
+describe("a seal reveal is never a free hit", () => {
+  function midVolley() {
+    const armed = stepSearchArena(place(createSearchArena(), SHIELD_REST), 16, IDLE);
+    let s: SearchArena = { ...armed, avatar: { ...armed.avatar, hurtMs: 0 } };
+    for (let i = 0; i < 2000 && !(s.stage === "attack" && s.projectiles.length > 0); i += 1) {
+      s = stepSearchArena(s, 16, IDLE);
+    }
+    expect(s.stage).toBe("attack");
+    return s;
+  }
+
+  it("calls off everything in the air and stops her where she stands", () => {
+    const moving = midVolley();
+    const walking = { ...moving, avatar: { ...moving.avatar, velocity: { x: 20, y: 0 }, moving: true, guarding: true } };
+    const held = holdSearchArena(walking);
+    expect(held.projectiles).toHaveLength(0);
+    expect(held.sweep).toBeNull();
+    expect(held.avatar.velocity).toEqual({ x: 0, y: 0 });
+    expect(held.avatar.guarding).toBe(false);
+    expect(held.stage).toBe("rest");
+    // Pure: the state it was handed is untouched.
+    expect(walking.projectiles.length).toBeGreaterThan(0);
+  });
+
+  it("gives her a full rest after the reveal before his next volley", () => {
+    const held = holdSearchArena(midVolley());
+    const pips = held.avatar.guardPips;
+    const soon = run(held, SEARCH_TUNING.restMs - 80);
+    expect(soon.events.some(event => event.type === "tell" || event.type === "launch" || event.type === "hurt")).toBe(false);
+    expect(soon.state.avatar.guardPips).toBe(pips);
+  });
+
+  it("moves his rotation on, so the dropped volley is not simply replayed", () => {
+    const attacking = midVolley();
+    const held = holdSearchArena(attacking);
+    expect(held.patternIndex).toBe(attacking.patternIndex + 1);
   });
 });
