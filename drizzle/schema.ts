@@ -8355,7 +8355,51 @@ export const communicationReceipts = mysqlTable(
       table.messageSid,
       table.eventType
     ),
+    tenantCreatedLookup: index("idx_communication_receipts_tenant_created").on(
+      table.tenantId,
+      table.createdAt
+    ),
   })
 );
 
 export type CommunicationReceiptRow = typeof communicationReceipts.$inferSelect;
+
+/**
+ * Explicit communications → Goldline context links.
+ * Additive and idempotent. No historical guessing, phone inference, or LLM matching.
+ * Provider SIDs are never Goldline entity IDs. Every row states how the
+ * relationship was proven.
+ */
+export const communicationContextLinks = mysqlTable(
+  "communication_context_links",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    providerResourceSid: varchar("providerResourceSid", { length: 64 }).notNull(),
+    resourceKind: varchar("resourceKind", { length: 16 }).notNull(),
+    partyClass: varchar("partyClass", { length: 64 }),
+    goldlineEntityKind: varchar("goldlineEntityKind", { length: 32 }),
+    goldlineEntityId: varchar("goldlineEntityId", { length: 128 }),
+    source: varchar("source", { length: 32 }).notNull(),
+    proof: varchar("proof", { length: 191 }).notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_communication_context_links_idempotency").on(
+      table.idempotencyKey
+    ),
+    resourceLookup: index("idx_communication_context_links_resource").on(
+      table.tenantId,
+      table.providerResourceSid
+    ),
+    entityLookup: index("idx_communication_context_links_entity").on(
+      table.tenantId,
+      table.goldlineEntityKind,
+      table.goldlineEntityId
+    ),
+  })
+);
+
+export type CommunicationContextLinkRow =
+  typeof communicationContextLinks.$inferSelect;
