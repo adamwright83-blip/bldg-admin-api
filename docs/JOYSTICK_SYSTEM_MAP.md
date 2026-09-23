@@ -50,8 +50,8 @@ Later Kingdoms have no locked place-name. Do not invent one.
 - `surface.driver` — JOYSTICK Driver (mobile field/play).
 - `domain.goldline` — Internal playable reality↔fantasy domain. Not the customer-facing product name.
 - `system.claire` — Cross-surface executive agent. Not a Companion, Narrator, or reward.
-- `system.mission_director` — Existing planner. It can prioritize both Missions and Challenges. The slug stays. Do not create a second planner or director. Older phrases such as “today’s mission” stay as compatibility language and are not renamed in this pass.
-- `plan.day_line` — Today's prioritized Objectives: Missions, Challenges, or Hybrid Objectives. “DayForge Today” is not current vocabulary. The phrase “today’s mission” is compatibility language, not a rename of `plan.day_line`.
+- `system.mission_director` — Existing planner. It can prioritize both Missions and Challenges. The slug stays. Do not create a second planner or director. The name is legacy implementation vocabulary and does not mean the planner handles field Objectives only.
+- `plan.day_line` — Today's prioritized Objectives: Missions, Challenges, or Hybrid Objectives. “DayForge Today” is not current vocabulary. A legacy phrase such as “today’s mission” does not mean the work is a field Objective.
 - `objective` — Neutral umbrella for real work that can satisfy a `kingdom_binding`.
 - `mission` — Field Objective. Requires physical presence / in-person action. Player-facing: MISSIONS = go out into the field and physically do something. Visiting Greystar properties in person is a Mission. Hanging Beverly Hills door hangers is a Mission.
 - `challenge` — Remote Objective. Completed through phone, text, email, browser, Admin, and the like. Player-facing: CHALLENGES = do the real work from the phone or computer. Texting dormant customers is a Challenge. Cold Call Burst is a Challenge. Sending follow-up emails is a Challenge.
@@ -100,7 +100,7 @@ These loops stay separate.
 | `surface.driver` | JOYSTICK Driver |
 | `domain.goldline` | Internal reality↔fantasy domain |
 | `system.claire` | Cross-surface executive agent |
-| `system.mission_director` | Existing planner for Missions and Challenges |
+| `system.mission_director` | Existing planner for Missions and Challenges; the name does not encode Objective type |
 | `plan.day_line` | Today's prioritized Objectives |
 | `objective` | Neutral umbrella for real work that can satisfy a `kingdom_binding` |
 | `mission` | Field Objective: physical presence / in-person |
@@ -142,7 +142,7 @@ One noun = one layer.
 - `growth_campaign` ≠ `kingdom_binding` ≠ `objective` ≠ `encounter.*`.
 - `mission` is a Field Objective. `challenge` is a Remote Objective. `hybrid_objective` requires both. None of them is the Encounter.
 - Completing a Mission or a Challenge may satisfy the real-world side of a `kingdom_binding`. It does not automatically defeat a Boss, resolve a Level, or complete a Kingdom.
-- `system.mission_director` is not renamed. It can prioritize both Missions and Challenges. There is no second planner.
+- `system.mission_director` is not renamed. It can prioritize both Missions and Challenges. There is no second planner. Existing code, API, and system names containing `mission` are legacy implementation vocabulary and may still represent field, remote, or hybrid Objectives until explicitly migrated. Do not infer Objective type from an old identifier containing `mission`; infer it from the actual execution contract.
 - `world.overworld` ≠ `admin.lantern_city`.
 - `system.claire` ≠ `companion.*`.
 - `kingdom.boreslay` ≠ `minigame.boreslay_duel` ≠ `legacy.boreslay_product`.
@@ -159,8 +159,7 @@ LEGACY — compatibility/history, not current architecture:
 
 Allowed to remain, without renaming in this pass:
 
-- `system.mission_director`
-- “today’s mission” and older Mission references in existing code and copy
+- Existing code, API, and system names containing `mission`, including `system.mission_director`. They may still represent field, remote, or hybrid Objectives until explicitly migrated. Do not infer Objective type from the identifier; infer it from the actual execution contract. Do not rename them in this pass.
 - `/api/saleslay/*` routes
 - `dayforge_*` tables and files
 - `BoreslayLanding.tsx` as a superseded public page
@@ -179,7 +178,8 @@ Forbidden for new user-visible copy, new docs, and new modules:
 - introducing Cash or Spark as the JOYSTICK protagonist
 - using “campaign” for both a growth-library motion and a Kingdom story arc without the `growth_campaign` / `kingdom_binding` split
 - using Mission for remote work, or Challenge for in-person field work
-- renaming `system.mission_director`, or adding a second planner for Challenges
+- inferring Objective type from an existing code, API, or system name that contains `mission`
+- renaming an existing API or system whose name contains `mission`, or adding a second planner beside `system.mission_director`
 - treating a completed Mission or Challenge as a Boss defeat, a Level resolution, or Kingdom completion
 
 No nomenclature lint was added. A gate that failed only new files would still need a large grandfather list (`client/src/archive/**`, `client/src/assets/boreslay-rally/**`, historical landings, `/api/saleslay/**`, `dayforge_*` implementation files). This section is the rule.
