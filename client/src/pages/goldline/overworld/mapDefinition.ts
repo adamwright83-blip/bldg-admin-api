@@ -306,7 +306,7 @@ export const GOLDLINE_OVERWORLD_MAP: OverworldMapDefinition = {
     {
       id: "training-grounds",
       name: "TRAINING GROUNDS",
-      subtitle: "Daily XP",
+      subtitle: "Closed",
       point: { x: 700, y: 1410 },
       approachRadius: 82,
       entranceRadius: 45,

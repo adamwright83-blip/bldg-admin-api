@@ -60,7 +60,7 @@ export type OverworldMapDefinition = {
   blockedRegions?: Array<{ id: string; polygon: OverworldPoint[] }>;
 };
 
-export type DestinationAvailability = "active" | "locked" | "completed";
+export type DestinationAvailability = "active" | "locked" | "completed" | "dormant";
 export type DestinationStateMap = Record<string, DestinationAvailability>;
 
 export type OverworldCheckpoint = {

@@ -101,7 +101,6 @@ export default function Driver() {
     return (
       <GoldlineOverworld
         pickups={[fixtureOrder]}
-        greystarActive
         playerIdentity="browser-fixture"
         onEnterGreystar={() => {
           document.body.dataset.greystarEntered = "true";

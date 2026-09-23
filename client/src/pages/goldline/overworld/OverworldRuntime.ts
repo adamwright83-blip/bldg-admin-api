@@ -9,6 +9,7 @@ import {
 } from "pixi.js";
 import { GOLDLINE_OVERWORLD_MAP } from "./mapDefinition";
 import { linehookFrame } from "./linehookTraversal";
+import { destinationPresented } from "./overworldProgression";
 import { getAudioManager } from "@/game/audio/AudioManager";
 import {
   applyCorridorAssist,
@@ -518,9 +519,11 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
       });
       label.anchor.set(0.5, 0);
       label.y = 14;
-      label.visible =
-        (this.destinationStates[destination.id] ?? "locked") === "active";
+      const availability = this.destinationStates[destination.id] ?? "locked";
+      const presented = destinationPresented(availability);
+      label.visible = presented && availability === "active";
       label.label = "destination-label";
+      container.visible = presented;
       container.position.set(destination.point.x, destination.point.y);
       container.zIndex = 11000;
       container.addChild(beacon, label);
@@ -824,6 +827,9 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
 
   private updateProximity() {
     const nearest = this.map.destinations
+      .filter(destination =>
+        destinationPresented(this.destinationStates[destination.id] ?? "locked")
+      )
       .map(destination => ({
         destination,
         distance: distance(
@@ -858,6 +864,11 @@ export class GoldlineOverworldRuntime implements OverworldRuntimeContract {
       const marker = this.markerContainers.get(destination.id);
       if (!marker) continue;
       const availability = this.destinationStates[destination.id] ?? "locked";
+      if (!destinationPresented(availability)) {
+        marker.visible = false;
+        continue;
+      }
+      marker.visible = true;
       const near =
         distance(this.position, destination.point) <=
         destination.approachRadius * 1.5;

@@ -17,6 +17,11 @@ import {
 } from "./overworld/checkpoint";
 import { GoldlineOverworldRuntime } from "./overworld/OverworldRuntime";
 import { GOLDLINE_OVERWORLD_MAP } from "./overworld/mapDefinition";
+import {
+  overworldDestinationStates,
+  postRookContentOpen,
+  type OverworldProgressionReading,
+} from "./overworld/overworldProgression";
 import type { LiveAdventureObjective } from "../driver/goldlineDayPlanModel";
 import type {
   DestinationStateMap,
@@ -57,9 +62,7 @@ export default function GoldlineOverworld({
   activeObjective = null,
   onOpenDayBriefing,
   dayObjectiveCount = 0,
-  greystarActive,
-  greystarCompleted = false,
-  waywardUnlocked = false,
+  progression = null,
   playerIdentity = null,
   isResolvingOrder = false,
   onEmitEvent,
@@ -79,9 +82,11 @@ export default function GoldlineOverworld({
   /** Opens today's briefing over the world, without leaving it. */
   onOpenDayBriefing?: () => void;
   dayObjectiveCount?: number;
-  greystarActive: boolean;
-  greystarCompleted?: boolean;
-  waywardUnlocked?: boolean;
+  /**
+   * Server read from `goldlineProgression.get`. Missing, unrecorded, or
+   * false flags stay pre-Rook. localStorage cannot supply this.
+   */
+  progression?: OverworldProgressionReading;
   playerIdentity?: string | null;
   isResolvingOrder?: boolean;
   onEmitEvent?: GoldlineEventEmitter;
@@ -111,19 +116,14 @@ export default function GoldlineOverworld({
   const sessionStartedAt = useRef(performance.now());
   const orderCount = pickups.length + deliveries.length;
   const destinationStates = useMemo<DestinationStateMap>(
-    () => ({
-      ...Object.fromEntries(GOLDLINE_OVERWORLD_MAP.destinations.filter(destination =>
-        GOLDLINE_OVERWORLD_MAP.traversals.some(node => node.id === destination.traversalId && node.kind === "linehook")
-      ).map(destination => [destination.id, "active" as const])),
-      "greystar-6": greystarCompleted
-        ? "completed"
-        : greystarActive
-          ? "active"
-          : "locked",
-      "wayward-approach": waywardUnlocked ? "active" : "locked",
-    }),
-    [greystarActive, greystarCompleted, waywardUnlocked]
+    () =>
+      overworldDestinationStates(
+        progression,
+        GOLDLINE_OVERWORLD_MAP.destinations.map(destination => destination.id)
+      ),
+    [progression]
   );
+  const postRook = postRookContentOpen(progression);
   const destinationStatesRef = useRef(destinationStates);
   destinationStatesRef.current = destinationStates;
 
@@ -277,16 +277,13 @@ export default function GoldlineOverworld({
       onEnterGreystar();
     } else if (result === "entered" && proximity?.destination.id === "wayward-approach") {
       onEnterWayward?.();
-    } else if (result === "locked") {
+    } else if (result === "locked" || result === "inspected") {
       setLockedMessage(
         proximity?.availability === "completed"
           ? `${proximity.destination.name} CONQUERED`
-          : `${proximity?.destination.name ?? "THIS DESTINATION"} IS NOT YET REACHABLE`
+          : `${proximity?.destination.name ?? "THIS PLACE"} IS NOT ON THIS ROUTE`
       );
       window.setTimeout(() => setLockedMessage(null), 2200);
-    } else if (result === "inspected") {
-      if (onEnterOperations) onEnterOperations();
-      else onOpenDayBriefing?.();
     }
   }
 
@@ -295,6 +292,7 @@ export default function GoldlineOverworld({
       <section
         className="goldline-overworld"
         aria-label={`${PRODUCT_NAME} overworld`}
+        data-overworld-progression={postRook ? "post-rook" : "pre-rook"}
       >
         <div ref={hostRef} className="goldline-overworld-runtime" />
         <div className="goldline-overworld-vignette" aria-hidden="true" />
@@ -429,7 +427,7 @@ export default function GoldlineOverworld({
                       : GOLDLINE_OVERWORLD_MAP.traversals.find(node => node.id === proximity.destination.traversalId)?.label ?? "CONTINUE"
                   : proximity.availability === "completed"
                     ? "CONQUERED"
-                    : "INSPECT"}
+                    : "CLOSED"}
                 {proximity.availability === "locked" ? (
                   <LockKeyhole />
                 ) : (
