@@ -12,6 +12,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { resolveLanternCityClick } from "./lanternClickResolver";
 import { entityFromSearch } from "./worldTransition";
 import {
   SIEGE_LEVELS,
@@ -25,10 +26,19 @@ const siege = read("./TowerSiege.tsx");
 const cityButton = read("./CityTowerButton.tsx");
 
 describe("clicking a tower in Lantern City enters Tower Wars", () => {
-  it("carries the selected canonical building to Tower Wars", () => {
-    expect(cityButton).toContain(
-      "onNavigate(`/growth/tower-wars?building=${buildingId}`)"
-    );
+  it("carries the selected canonical building through the shared click resolver", () => {
+    expect(cityButton).toContain("resolveLanternCityClick");
+    expect(cityButton).toContain("onNavigate(click.path)");
+    expect(
+      resolveLanternCityClick({
+        buildingId: "century_park_east",
+        target: "tower",
+      })
+    ).toEqual({
+      action: "navigate",
+      entityId: "century_park_east",
+      path: "/growth/tower-wars?building=century_park_east",
+    });
     expect(entityFromSearch("?building=century_park_east")).toBe(
       "century_park_east"
     );
