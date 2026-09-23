@@ -265,46 +265,46 @@ function LiveGoldlineDriverController({
     status: "ready" as const,
     dateField: "deliveryDate" as const,
   };
-  const pickups = trpc.admin.listByDate.useQuery(pickupQueryInput);
-  const deliveries = trpc.admin.listByDate.useQuery(deliveryQueryInput);
-  const completedPickups = trpc.admin.listByDate.useQuery({
+  const pickups = trpc.system.field.orders.listByDate.useQuery(pickupQueryInput);
+  const deliveries = trpc.system.field.orders.listByDate.useQuery(deliveryQueryInput);
+  const completedPickups = trpc.system.field.orders.listByDate.useQuery({
     date: selectedDate,
     status: "collected" as const,
     dateField: "pickupDate" as const,
   });
-  const completedDeliveries = trpc.admin.listByDate.useQuery({
+  const completedDeliveries = trpc.system.field.orders.listByDate.useQuery({
     date: selectedDate,
     status: "delivered" as const,
     dateField: "deliveryDate" as const,
   });
 
   /**
-   * AUTHORITATIVE collected-order evidence.
+   * AUTHORITATIVE collected-order evidence for this membership's tenant.
    *
    * The four statuses that prove a pickup genuinely happened: `collected` is
    * the transition itself, and processing/ready/delivered are downstream of
-   * it and unreachable without it. Read through the EXISTING
-   * admin.listByStatus procedure — no migration, no new endpoint, no ledger.
+   * it and unreachable without it. Read through the tenant-scoped field
+   * order procedures. The unscoped admin order routes stay closed.
    *
    * These are polled rather than merely invalidated on our own mutation
    * because the whole point is that this client is not the only way an order
-   * becomes collected. A dispatcher marking it on the admin surface has to
+   * becomes collected. A dispatcher marking it on another surface has to
    * reach the Stronghold here too.
    */
   const evidenceQueryOptions = { refetchInterval: 15_000 } as const;
-  const collectedOrders = trpc.admin.listByStatus.useQuery(
+  const collectedOrders = trpc.system.field.orders.listByStatus.useQuery(
     { status: "collected" },
     evidenceQueryOptions
   );
-  const processingOrders = trpc.admin.listByStatus.useQuery(
+  const processingOrders = trpc.system.field.orders.listByStatus.useQuery(
     { status: "processing" },
     evidenceQueryOptions
   );
-  const readyOrders = trpc.admin.listByStatus.useQuery(
+  const readyOrders = trpc.system.field.orders.listByStatus.useQuery(
     { status: "ready" },
     evidenceQueryOptions
   );
-  const deliveredOrders = trpc.admin.listByStatus.useQuery(
+  const deliveredOrders = trpc.system.field.orders.listByStatus.useQuery(
     { status: "delivered" },
     evidenceQueryOptions
   );
@@ -562,7 +562,7 @@ function LiveGoldlineDriverController({
     retry: false,
   });
 
-  const updateStatus = trpc.admin.updateStatus.useMutation();
+  const updateStatus = trpc.system.field.orders.updateStatus.useMutation();
   const acceptMove = trpc.system.field.acceptMove.useMutation();
   const startVisitRoute = trpc.system.field.startVisitRoute.useMutation();
   const openDispatch = trpc.system.commercialMission.openDispatch.useMutation();
@@ -678,10 +678,10 @@ function LiveGoldlineDriverController({
       builtMissions.refetch(),
       dispatches.refetch(),
       goldlineProgress.refetch(),
-      utils.admin.listByStatus.invalidate({ status: "new" }),
-      utils.admin.listByStatus.invalidate({ status: "collected" }),
-      utils.admin.listByStatus.invalidate({ status: "ready" }),
-      utils.admin.listByStatus.invalidate({ status: "delivered" }),
+      utils.system.field.orders.listByStatus.invalidate({ status: "new" }),
+      utils.system.field.orders.listByStatus.invalidate({ status: "collected" }),
+      utils.system.field.orders.listByStatus.invalidate({ status: "ready" }),
+      utils.system.field.orders.listByStatus.invalidate({ status: "delivered" }),
       utils.admin.dashboardSummary.invalidate(),
       utils.system.businessWorld.get.invalidate(),
       utils.system.driverGameWorld.current.invalidate(),
@@ -708,7 +708,7 @@ function LiveGoldlineDriverController({
     try {
       await updateStatus.mutateAsync({ orderId, status });
       advanceCachedProgress(status === "collected" ? "pickup" : "delivery");
-      utils.admin.listByDate.setData(
+      utils.system.field.orders.listByDate.setData(
         status === "collected" ? pickupQueryInput : deliveryQueryInput,
         rows => rows?.filter(order => order.id !== orderId)
       );

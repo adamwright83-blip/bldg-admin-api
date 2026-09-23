@@ -146,7 +146,12 @@ describe("Goldline canonical driver restoration", () => {
   });
 
   it("uses real order mutation and preserves the unpaid delivery guard", () => {
-    expect(controller).toContain("trpc.admin.updateStatus.useMutation");
+    expect(controller).toContain(
+      "trpc.system.field.orders.updateStatus.useMutation"
+    );
+    expect(controller).not.toContain("trpc.admin.updateStatus.useMutation");
+    expect(controller).not.toContain("trpc.admin.listByDate");
+    expect(controller).not.toContain("trpc.admin.listByStatus");
     expect(controller).toContain("canCompleteDelivery(order)");
     expect(controller).toContain('status === "collected"');
     expect(controller).toContain('status === "delivered"');
@@ -201,7 +206,8 @@ describe("Goldline canonical driver restoration", () => {
   });
 
   it("turns a successful route mutation into visible Goldline progression", () => {
-    expect(controller).toContain("utils.admin.listByDate.setData");
+    expect(controller).toContain("utils.system.field.orders.listByDate.setData");
+    expect(controller).not.toContain("utils.admin.listByDate.setData");
     expect(controller).toContain("rows?.filter(order => order.id !== orderId)");
     expect(controller).toContain("return true");
     expect(goldline).toContain("ROUTE ACTION COMPLETE");

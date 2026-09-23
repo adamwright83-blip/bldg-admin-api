@@ -112,7 +112,7 @@ export type AuthoritativeOrderForEmbodiment = {
   /**
    * Mirrors the same authoritative payment-eligibility check the canonical
    * delivery mutation already enforces server-side (see
-   * `admin.updateStatus`'s payment gate) — presentation-only, never a second
+   * the driver order update's payment gate) — presentation-only, never a second
    * truth source. Always false for pickup.
    */
   blocked: boolean;

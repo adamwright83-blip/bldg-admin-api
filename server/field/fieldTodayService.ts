@@ -172,7 +172,7 @@ export async function getFieldToday(input: {
         scheduledAt: timeFromWindow(order.pickupDate, order.pickupTimeWindow, timeZone), urgency: "scheduled", title: `Pick up ${name}`, subtitle: order.serviceType === "wash_fold" ? "Laundry pickup" : "Dry-cleaning pickup", status: order.status,
         destination: { address: order.address, latitude: null, longitude: null }, customer: { name, phone: order.phone, email: order.email },
         money: deterministicEstimate(moneyCents(order.total), `orders:${order.id}:total`, "high"), verificationClass: "VERIFIED",
-        actions: [{ type: "navigate", label: "Navigate", href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}`, mutation: null }, { type: "start", label: "Mark collected", href: null, mutation: "admin.updateStatus:collected" }],
+        actions: [{ type: "navigate", label: "Navigate", href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}`, mutation: null }, { type: "start", label: "Mark collected", href: null, mutation: "field.orders.updateStatus:collected" }],
       });
     }
     if (order.deliveryDate === date && order.status === "ready") {
@@ -187,7 +187,7 @@ export async function getFieldToday(input: {
         money: sourcedFact(moneyCents(order.total), `orders:${order.id}`), verificationClass: "VERIFIED",
         actions: unpaid
           ? [{ type: "payment", label: "Resolve payment", href: `/payment-reconciliation?orderId=${order.id}`, mutation: null }]
-          : [{ type: "navigate", label: "Navigate", href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}`, mutation: null }, { type: "complete", label: "Mark delivered", href: null, mutation: "admin.updateStatus:delivered" }],
+          : [{ type: "navigate", label: "Navigate", href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}`, mutation: null }, { type: "complete", label: "Mark delivered", href: null, mutation: "field.orders.updateStatus:delivered" }],
       });
     }
   }
