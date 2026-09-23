@@ -3,7 +3,15 @@
  *
  * Product law: docs/goldline/GOLDLINE_WEEKLY_MISSION_READINESS.md
  * Week status is derived. Nothing here writes business truth.
+ * Execution type is classified by shared/objectiveExecution.ts.
  */
+
+import {
+  OBJECTIVE_EXECUTION_TYPES,
+  classifyObjectiveExecution,
+  isObjectiveExecutionType,
+  type ObjectiveExecutionType,
+} from "./objectiveExecution";
 
 export const WEEKLY_MISSION_READINESS_VERSION = "v1";
 
@@ -32,12 +40,13 @@ export type PrimarySource = "existing_work" | "operator_stated" | "claire_recomm
 /**
  * JOYSTICK execution type for one weekly primary.
  * Absent or null is unknown. Never defaulted to mission.
+ * Same three values as ObjectiveExecutionType.
  */
-export const WEEKLY_EXECUTION_TYPES = ["mission", "challenge", "hybrid_objective"] as const;
-export type WeeklyExecutionType = (typeof WEEKLY_EXECUTION_TYPES)[number];
+export const WEEKLY_EXECUTION_TYPES = OBJECTIVE_EXECUTION_TYPES;
+export type WeeklyExecutionType = ObjectiveExecutionType;
 
 export function isWeeklyExecutionType(value: unknown): value is WeeklyExecutionType {
-  return typeof value === "string" && (WEEKLY_EXECUTION_TYPES as readonly string[]).includes(value);
+  return isObjectiveExecutionType(value);
 }
 
 /** Growth-candidate contract used only to read title and objective. Id and motion are not evidence. */
@@ -293,126 +302,12 @@ export function groundedReadinessKind(text: string, executionType?: WeeklyExecut
   return kind;
 }
 
-function explicitPhysicalPrep(text: string): boolean {
-  if (
-    /\b(jacket|gas|gasoline|load|loaded|wash|washing|clean|car|uniform|supplies|materials|equipment|bags?|door[\s-]?hangers?)\b/i.test(
-      text
-    )
-  ) {
-    return true;
-  }
-  if (hasFieldVisit(text)) return true;
-  if (/\bon[\s-]?site\b/i.test(text)) return true;
-  if (hasPhysicalPickup(text)) return true;
-  if (hasPhysicalDelivery(text)) return true;
-  return false;
-}
-
-function explicitLocationPrep(text: string): boolean {
-  return /\b(address|location|plant|site|propert(?:y|ies)|on[\s-]?site|visits?|visiting)\b/i.test(text);
-}
-
-export function inferReadinessKind(text: string): ReadinessKind {
-  const lower = text.toLowerCase();
-  if (/\b(print\w*|packet\w*|document\w*|form|pdf)\b/.test(lower)) return "document";
-  if (/\bapprov\w*\b|\bsign-?off\b|\bsignature\b/.test(lower)) return "approval";
-  if (/\b(address|location|where|plant|site)\b/.test(lower)) return "location";
-  if (/\b(confirm|which|who|list|information|info)\b/.test(lower)) return "information";
-  return "physical";
-}
-
-/**
- * Classify one execution contract.
- * `identifier` and `motion` are accepted and ignored. A growth category, an id
- * containing "mission", or the word "mission" in the contract is not evidence.
- * Insufficient contracts return null (unknown).
- */
-export function classifyWeeklyExecutionType(input: {
-  contract: string;
-  identifier?: string | null;
-  motion?: string | null;
-}): WeeklyExecutionType | null {
-  void input.identifier;
-  void input.motion;
-  const text = input.contract ?? "";
-  const field = hasFieldExecution(text);
-  const remote = hasRemoteExecution(text);
-  if (field && remote) {
-    const exclusive = /\b(?:or|either)\b/i.test(text);
-    const required = /\b(?:and|both|plus|then)\b/i.test(text) || /\bas well as\b/i.test(text);
-    if (!required || exclusive) return null;
-    return "hybrid_objective";
-  }
-  if (field) return "mission";
-  if (remote) return "challenge";
-  return null;
-}
-
-/**
- * Operator text wins when it names an execution contract.
- * A matching growth candidate contributes title and objective only, and only
- * when the stated text itself does not already classify.
- */
-export function resolveWeeklyExecutionType(input: {
-  text: string;
-  candidates?: readonly WeeklyExecutionCandidateContract[];
-}): WeeklyExecutionType | null {
-  const direct = classifyWeeklyExecutionType({ contract: input.text });
-  if (direct) return direct;
-  const needle = executionMatchKey(input.text);
-  if (!needle) return null;
-  const matched = (input.candidates ?? []).filter(candidate => {
-    const title = executionMatchKey(candidate.title);
-    const objective = executionMatchKey(candidate.objective);
-    return needle === title || needle === objective;
-  });
-  if (!matched.length) return null;
-  let agreed: WeeklyExecutionType | null | undefined;
-  for (const candidate of matched) {
-    const type = classifyWeeklyExecutionType({
-      contract: `${candidate.title}. ${candidate.objective}`,
-      identifier: candidate.id,
-      motion: candidate.motion ?? null,
-    });
-    if (agreed === undefined) {
-      agreed = type;
-      continue;
-    }
-    if (agreed !== type) return null;
-  }
-  return agreed ?? null;
-}
-
-function executionMatchKey(value: string): string {
-  return value.trim().toLowerCase().replace(/[.!?]+$/g, "").replace(/\s+/g, " ");
-}
-
-/** Naming idioms are not phone calls and are not field visits. */
-function withoutNamingIdioms(text: string): string {
-  return text
-    .replace(/\bcall it(?:\s+(?:a|an))?(?:\s+[a-z]+)?\b/gi, " ")
-    .replace(/\bwhat\s+(?:we|you|they|i)\s+call\b/gi, " ");
-}
-
+/** Readiness-prep wording. It does not assign mission, challenge, or hybrid. */
 const DIGITAL_VISIT_OBJECT =
   "web\\s*sites?|websites?|pages?|urls?|links?|portals?|dashboards?|inboxes|browsers?|apps?|applications?|online";
 
 const TANGIBLE_OR_PLACE =
   /\b(kits?|samples?|bags?|laundry|linens?|uniforms?|hangers?|supplies|loads?|bins?|carts?|boxes|goods|equipment|materials|towels?|plants?|propert(?:y|ies)|buildings?|desks?|lobbies|lobby|offices?|sites?|doors?|warehouses?|docks?|locations?|addresses?|front desk|(?:the|a|an)\s+orders?)\b/i;
-
-function hasFieldExecution(text: string): boolean {
-  const source = withoutNamingIdioms(text);
-  if (hasFieldVisit(source)) return true;
-  if (/\bon[\s-]?site\b/i.test(source)) return true;
-  if (/\bin[\s-]?person\b/i.test(source)) return true;
-  if (/\bdoor[\s-]?hangers?\b/i.test(source)) return true;
-  if (/\b(?:property|physical) pitch(?:es|ing)?\b/i.test(source)) return true;
-  if (/\bpitch(?:es|ing)?\b(?:\s+\w+){0,8}\s+propert(?:y|ies)\b/i.test(source)) return true;
-  if (/\bpropert(?:y|ies)\b(?:\s+\w+){0,8}\s+pitch(?:es|ing)?\b/i.test(source)) return true;
-  if (hasPhysicalPickup(source)) return true;
-  if (hasPhysicalDelivery(source)) return true;
-  return false;
-}
 
 function hasFieldVisit(text: string): boolean {
   const digitalObject = new RegExp(`\\b(?:${DIGITAL_VISIT_OBJECT})\\b`, "i");
@@ -469,18 +364,89 @@ function hasPhysicalDelivery(text: string): boolean {
   return TANGIBLE_OR_PLACE.test(stripped) || /\bon[\s-]?site\b/i.test(stripped);
 }
 
-function hasRemoteExecution(text: string): boolean {
-  const source = withoutNamingIdioms(text);
-  if (/\b(?:cold[\s-]?)?calls?\b/i.test(source) || /\bcalling\b/i.test(source)) return true;
-  if (/\btexts?\b/i.test(source) || /\btexting\b/i.test(source) || /\bsms\b/i.test(source)) return true;
-  if (/\be-?mails?\b/i.test(source)) return true;
-  if (/\bpublish(?:ed|ing|es)?\b/i.test(source)) return true;
-  if (/\bbrowser\b/i.test(source)) return true;
-  if (/\badmin work\b/i.test(source)) return true;
-  if (/\b(?:in|via|using|through) (?:the )?admin\b(?!\s+(?:district|building|office|person|staff))/i.test(source)) {
+function explicitPhysicalPrep(text: string): boolean {
+  if (
+    /\b(jacket|gas|gasoline|load|loaded|wash|washing|clean|car|uniform|supplies|materials|equipment|bags?|door[\s-]?hangers?)\b/i.test(
+      text
+    )
+  ) {
     return true;
   }
-  return /\bremote follow[\s-]?ups?\b/i.test(source);
+  if (hasFieldVisit(text)) return true;
+  if (/\bon[\s-]?site\b/i.test(text)) return true;
+  if (hasPhysicalPickup(text)) return true;
+  if (hasPhysicalDelivery(text)) return true;
+  return false;
+}
+
+function explicitLocationPrep(text: string): boolean {
+  return /\b(address|location|plant|site|propert(?:y|ies)|on[\s-]?site|visits?|visiting)\b/i.test(text);
+}
+
+export function inferReadinessKind(text: string): ReadinessKind {
+  const lower = text.toLowerCase();
+  if (/\b(print\w*|packet\w*|document\w*|form|pdf)\b/.test(lower)) return "document";
+  if (/\bapprov\w*\b|\bsign-?off\b|\bsignature\b/.test(lower)) return "approval";
+  if (/\b(address|location|where|plant|site)\b/.test(lower)) return "location";
+  if (/\b(confirm|which|who|list|information|info)\b/.test(lower)) return "information";
+  return "physical";
+}
+
+/**
+ * Classify one execution contract through the shared Objective classifier.
+ * `identifier` and `motion` are accepted and ignored. A growth category, an id
+ * containing "mission", or the word "mission" in the contract is not evidence.
+ * Insufficient contracts return null (unknown).
+ */
+export function classifyWeeklyExecutionType(input: {
+  contract: string;
+  identifier?: string | null;
+  motion?: string | null;
+}): WeeklyExecutionType | null {
+  return classifyObjectiveExecution({
+    contract: input.contract,
+    identifier: input.identifier,
+    motion: input.motion,
+  }).executionType;
+}
+
+/**
+ * Operator text wins when it names an execution contract.
+ * A matching growth candidate contributes title and objective only, and only
+ * when the stated text itself does not already classify.
+ */
+export function resolveWeeklyExecutionType(input: {
+  text: string;
+  candidates?: readonly WeeklyExecutionCandidateContract[];
+}): WeeklyExecutionType | null {
+  const direct = classifyWeeklyExecutionType({ contract: input.text });
+  if (direct) return direct;
+  const needle = executionMatchKey(input.text);
+  if (!needle) return null;
+  const matched = (input.candidates ?? []).filter(candidate => {
+    const title = executionMatchKey(candidate.title);
+    const objective = executionMatchKey(candidate.objective);
+    return needle === title || needle === objective;
+  });
+  if (!matched.length) return null;
+  let agreed: WeeklyExecutionType | null | undefined;
+  for (const candidate of matched) {
+    const type = classifyWeeklyExecutionType({
+      contract: `${candidate.title}. ${candidate.objective}`,
+      identifier: candidate.id,
+      motion: candidate.motion ?? null,
+    });
+    if (agreed === undefined) {
+      agreed = type;
+      continue;
+    }
+    if (agreed !== type) return null;
+  }
+  return agreed ?? null;
+}
+
+function executionMatchKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[.!?]+$/g, "").replace(/\s+/g, " ");
 }
 
 const DAY_WORD = "monday|tuesday|wednesday|thursday|friday";

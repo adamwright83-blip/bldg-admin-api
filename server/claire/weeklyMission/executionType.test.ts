@@ -2,6 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DailyCommand } from "../dailyCommandContract";
 import {
+  OBJECTIVE_EXECUTION_AGREEMENT_CASES,
+} from "../../../shared/objectiveExecutionFixture";
+import {
   READINESS_KINDS,
   classifyWeeklyExecutionType,
   defaultReadiness,
@@ -9,6 +12,8 @@ import {
   isWeeklyLockBind,
   remainingWeekHorizon,
   resolveWeeklyExecutionType,
+  weekdayName,
+  type WeeklyExecutionType,
   type WeeklyIntentDay,
   type WeeklyIntentRecord,
 } from "../../../shared/weeklyMissionReadiness";
@@ -376,6 +381,8 @@ describe("weekly execution type", () => {
     const shared = readFileSync(new URL("../../../shared/weeklyMissionReadiness.ts", import.meta.url), "utf8");
     expect(shared).not.toMatch(/weeklyOperatingPlan|createDayLine|WeeklyIntentV2/);
     expect(shared).not.toMatch(/readCurrentDayLine|currentDayLine/);
+    expect(shared).not.toMatch(/function hasFieldExecution|function hasRemoteExecution/);
+    expect(shared).toMatch(/classifyObjectiveExecution/);
     expect(existsSync(new URL("../../weeklyOperatingPlan.ts", import.meta.url))).toBe(false);
     const rank = readFileSync(new URL("../../missionDirector/missionRank.ts", import.meta.url), "utf8");
     const selection = readFileSync(new URL("../../missionDirector/planSelection.ts", import.meta.url), "utf8");
@@ -441,6 +448,130 @@ describe("weekly execution type", () => {
     expect(accepted?.draftDays?.[0]).not.toHaveProperty("executionType");
     applyPlanningDecision(session, accepted!, dossier.growthCandidates);
     expect(session.draft.days.find(day => day.businessDate === "2026-09-15")?.primary?.executionType).toBeNull();
+  });
+
+  it("classifies the shared fixture the same on draft, lock, Daily Command, and Claire's read", async () => {
+    setClaireConversationStateStoreForTests(createMemoryConversationStateStore());
+    const dossier = await loadWeeklyDossier({ horizon: HORIZON }, { factsForDates: async () => [] });
+    const drafted: Array<{ contract: string; executionType: WeeklyExecutionType | null }> = [];
+    for (const row of OBJECTIVE_EXECUTION_AGREEMENT_CASES) {
+      const session = newWeeklySession({
+        tenantId: "default",
+        operatorId: "adam",
+        dayDirectorActorId: "actor-1",
+        weekStart: dossier.horizon.weekStart,
+        draft: {
+          weekStart: dossier.horizon.weekStart,
+          days: dossier.horizon.remainingDates.map(businessDate => ({
+            businessDate,
+            weekday: weekdayName(businessDate),
+            disposition: "primary" as const,
+            primary: null,
+            fixedConstraints: [],
+            readinessRequirements: [],
+            uncertainty: null,
+          })),
+        },
+      });
+      session.lastQuestionKind = "primary";
+      session.lastQuestionDate = dossier.horizon.businessDate;
+      const stated = await advanceWeeklySession({
+        dossier,
+        session,
+        operatorUtterance: row.contract,
+      });
+      const primary = stated.draft.days.find(day => day.businessDate === dossier.horizon.businessDate)?.primary;
+      expect(primary?.text, row.id).toBe(row.contract);
+      expect(primary?.executionType ?? null, row.id).toBe(row.expected);
+      expect(resolveWeeklyExecutionType({ text: row.contract, candidates: dossier.growthCandidates }), row.id).toBe(
+        row.expected
+      );
+      drafted.push({ contract: row.contract, executionType: primary?.executionType ?? null });
+    }
+
+    const lockDays = drafted.slice(0, dossier.horizon.remainingDates.length);
+    const session = newWeeklySession({
+      tenantId: "default",
+      operatorId: "adam",
+      dayDirectorActorId: "actor-1",
+      weekStart: dossier.horizon.weekStart,
+      draft: {
+        weekStart: dossier.horizon.weekStart,
+        days: dossier.horizon.remainingDates.map((businessDate, index) => ({
+          businessDate,
+          weekday: weekdayName(businessDate),
+          disposition: "primary" as const,
+          primary: {
+            text: lockDays[index]!.contract,
+            source: "operator_stated" as const,
+            existingCommitmentId: null,
+            executionType: lockDays[index]!.executionType ?? null,
+          },
+          fixedConstraints: [],
+          readinessRequirements: [],
+          uncertainty: null,
+        })),
+      },
+    });
+    session.phase = "awaiting_confirmation";
+    let saved: WeeklyIntentRecord | null = null;
+    const ports = {
+      acceptProposal: vi.fn(async () => ({ id: "created-fixture" })),
+      designatePrimary: vi.fn(async (input: { commitmentId: string }) => ({ commitmentId: input.commitmentId })),
+      saveIntent: async (intent: WeeklyIntentRecord) => {
+        saved = intent;
+      },
+      latestIntent: async () => saved,
+    } as unknown as WeeklyCommitPorts;
+    const locked = await commitWeeklyPlan({ session, now: new Date("2026-09-15T16:00:00Z") }, ports);
+    expect(locked.locked).toBe(true);
+    expect(isLockedWeeklyIntent(saved)).toBe(true);
+    saved!.days.forEach((day, index) => {
+      expect(day.primary?.executionType ?? null, day.businessDate).toBe(lockDays[index]!.executionType ?? null);
+      const pictured = applyWeeklyIntentToCommand(
+        command(day.primary!.text, "day-director:fixture", { importanceRank: 2 }),
+        { ...day, businessDate: "2026-09-17" }
+      );
+      expect(pictured.weeklyPrimaryExecutionType, day.primary?.text).toBe(lockDays[index]!.executionType ?? null);
+      expect(pictured.primary?.importanceRank).toBe(2);
+    });
+
+    const legacy: WeeklyIntentRecord = {
+      id: "intent-old-onsite",
+      tenantId: "default",
+      operatorId: "adam",
+      weekStart: HORIZON.weekStart,
+      revision: 1,
+      source: "operator_confirmed_proposal",
+      lockedAt: "2026-09-14T12:00:00.000Z",
+      days: [
+        {
+          businessDate: "2026-09-15",
+          weekday: "Tuesday",
+          disposition: "primary",
+          primary: { text: "On-site property pitch", source: "operator_stated", commitmentId: "old-onsite" },
+          fixedConstraints: [],
+          readinessRequirements: [],
+        },
+      ],
+    };
+    expect(isLockedWeeklyIntent(legacy)).toBe(true);
+    expect(legacy.days[0]?.primary?.executionType).toBeUndefined();
+    const legacyCommand = applyWeeklyIntentToCommand(
+      { ...command("Emergency pickup", "day-director:emergency"), businessDate: "2026-09-15" },
+      legacy.days[0]!
+    );
+    expect(legacyCommand.weeklyPrimaryExecutionType).toBeNull();
+    expect(legacyCommand.weeklyPrimaryExecutionType).not.toBe("mission");
+    const reopened = await reopenWeeklySession({
+      tenantId: "default",
+      operatorId: "adam",
+      dayDirectorActorId: "actor-1",
+      dossier,
+      prior: legacy,
+    });
+    expect(reopened.draft.days[0]?.primary?.text).toBe("On-site property pitch");
+    expect(reopened.draft.days[0]?.primary?.executionType).toBeNull();
   });
 });
 
