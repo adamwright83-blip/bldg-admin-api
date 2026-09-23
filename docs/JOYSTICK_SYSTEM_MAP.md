@@ -28,9 +28,9 @@ product.joystick
 ├── system.mission_director
 ├── plan.day_line
 ├── objective
-│   ├── field
-│   ├── remote
-│   └── hybrid
+│   ├── mission
+│   ├── challenge
+│   └── hybrid_objective
 ├── system.reality_bridge
 ├── system.narrator_os
 ├── growth_campaign.*
@@ -39,7 +39,7 @@ product.joystick
     └── service.laundry_butler
 ```
 
-`system.claire`, `system.mission_director`, `plan.day_line`, `objective`, `system.reality_bridge`, and `system.narrator_os` are cross-surface. They are not Companions and not inside one Kingdom. `objective` is real work. `encounter.*` is the playable sequence around an Objective, not the Objective.
+`system.claire`, `system.mission_director`, `plan.day_line`, `objective`, `system.reality_bridge`, and `system.narrator_os` are cross-surface. They are not Companions and not inside one Kingdom. `encounter.*` is the playable sequence around an Objective, not the Objective.
 
 Later Kingdoms have no locked place-name. Do not invent one.
 
@@ -50,9 +50,12 @@ Later Kingdoms have no locked place-name. Do not invent one.
 - `surface.driver` — JOYSTICK Driver (mobile field/play).
 - `domain.goldline` — Internal playable reality↔fantasy domain. Not the customer-facing product name.
 - `system.claire` — Cross-surface executive agent. Not a Companion, Narrator, or reward.
-- `system.mission_director` — Prioritizes legitimate Objectives of any execution type. The slug is not renamed. Mission, Mission Director, and Day Line still refer broadly to real work. They are not field-only.
-- `plan.day_line` — Today's prioritized real work, of any Objective execution type. “DayForge Today” is not current vocabulary.
-- `objective` — Neutral umbrella for real work that can satisfy a `kingdom_binding`. Execution type is `field` (physical presence / in-person), `remote` (phone, text, email, browser, Admin, and the like), or `hybrid` (intentionally both). Challenge is not the locked player-facing name for remote work.
+- `system.mission_director` — Existing planner. It can prioritize both Missions and Challenges. The slug stays. Do not create a second planner or director. Older phrases such as “today’s mission” stay as compatibility language and are not renamed in this pass.
+- `plan.day_line` — Today's prioritized Objectives: Missions, Challenges, or Hybrid Objectives. “DayForge Today” is not current vocabulary. The phrase “today’s mission” is compatibility language, not a rename of `plan.day_line`.
+- `objective` — Neutral umbrella for real work that can satisfy a `kingdom_binding`.
+- `mission` — Field Objective. Requires physical presence / in-person action. Player-facing: MISSIONS = go out into the field and physically do something. Visiting Greystar properties in person is a Mission. Hanging Beverly Hills door hangers is a Mission.
+- `challenge` — Remote Objective. Completed through phone, text, email, browser, Admin, and the like. Player-facing: CHALLENGES = do the real work from the phone or computer. Texting dormant customers is a Challenge. Cold Call Burst is a Challenge. Sending follow-up emails is a Challenge.
+- `hybrid_objective` — Hybrid Objective. Requires both Mission and Challenge components. An authored sequence that requires both is a Hybrid Objective.
 - `system.reality_bridge` — Contract: verified real evidence → allowed fantasy consequence. Not a UI. Not a character.
 - `system.narrator_os` — Selects authored story eligibility from verified truth + canon. Cannot create business truth.
 - `world.overworld` — Driver fantasy connective world. Exists before `level.colosseum`. Trailblazer can travel it while Colosseum is the only unlocked destination.
@@ -68,8 +71,8 @@ Later Kingdoms have no locked place-name. Do not invent one.
 - `kingdom.boreslay` — Kingdom Two. Never the product.
 - `minigame.boreslay_duel` — That Kingdom's 1v1 game (Head Ball 2-influenced). Not the product.
 - `growth_campaign.*` — Reusable real-business growth motions (campaign library).
-- `kingdom_binding.*` — Explicit attachment of authoritative real work to authored fiction. Not a synonym of `growth_campaign`. Completing an Objective may satisfy the real-world side of a binding.
-- `encounter.*` — Playable sequence around an Objective, or around a travel segment. Not the Objective. Mission in this sense is still broad real work, not field-only.
+- `kingdom_binding.*` — Explicit attachment of authoritative real work to authored fiction. Not a synonym of `growth_campaign`. Completing a Mission or a Challenge may satisfy the real-world side of a binding.
+- `encounter.*` — Playable sequence around an Objective. Not the Objective.
 - `minigame.*` — Bounded videogame grammar inside a Kingdom or encounter.
 - `business.laundry_farm` — Adam's real operating laundry business / tenant using JOYSTICK. Never platform identity.
 - `service.laundry_butler` — A real service/product offered by that operating business. Never JOYSTICK platform identity.
@@ -80,7 +83,7 @@ Later Kingdoms have no locked place-name. Do not invent one.
 
 Driver / Goldline loop:
 
-Business Truth → `system.claire` + `system.mission_director` construct `plan.day_line` → real Objective (Mission still names that real work, of any execution type) → `system.reality_bridge` → `domain.goldline` reacts → `world.overworld` / `kingdom.*` / `encounter.*` / `companion.*` may change → `system.narrator_os` may become eligible → return to `world.overworld` / `plan.day_line`
+Business Truth → `system.claire` + `system.mission_director` construct `plan.day_line` → Objective (a Mission, a Challenge, or a Hybrid Objective) → `system.reality_bridge` → `domain.goldline` reacts → `world.overworld` / `kingdom.*` / `encounter.*` / `companion.*` may change → `system.narrator_os` may become eligible → return to `world.overworld` / `plan.day_line`
 
 Admin loop:
 
@@ -97,12 +100,12 @@ These loops stay separate.
 | `surface.driver` | JOYSTICK Driver |
 | `domain.goldline` | Internal reality↔fantasy domain |
 | `system.claire` | Cross-surface executive agent |
-| `system.mission_director` | Prioritizes legitimate Objectives of any execution type |
-| `plan.day_line` | Today's prioritized real work, any execution type |
+| `system.mission_director` | Existing planner for Missions and Challenges |
+| `plan.day_line` | Today's prioritized Objectives |
 | `objective` | Neutral umbrella for real work that can satisfy a `kingdom_binding` |
-| `field` | Objective execution: physical presence / in-person |
-| `remote` | Objective execution: phone, text, email, browser, Admin, and the like |
-| `hybrid` | Objective execution: intentionally both |
+| `mission` | Field Objective: physical presence / in-person |
+| `challenge` | Remote Objective: phone, text, email, browser, Admin, and the like |
+| `hybrid_objective` | Requires both a Mission and a Challenge |
 | `system.reality_bridge` | Verified evidence → allowed fantasy consequence |
 | `system.narrator_os` | Authored story eligibility from verified truth + canon |
 | `world.overworld` | Driver fantasy connective world |
@@ -136,9 +139,10 @@ One noun = one layer.
 - `level.colosseum` resolved ≠ `kingdom.brass_republic` completed.
 - Beating `boss.clockhead` does not complete `kingdom.brass_republic`. Kingdom completion is a separate authored state. Canon does not say a Clockhead defeat completes the Kingdom.
 - `companion.rook` owned ≠ `capability.rook.contact` granted, unless an explicit authored rule and a permission rule both say the grant follows ownership.
-- `growth_campaign` ≠ `kingdom_binding` ≠ `objective` ≠ `encounter.*`. Mission is not a field-only synonym and is not the Encounter.
-- Completing an `objective` may satisfy the real-world side of a `kingdom_binding`. It does not by itself defeat a Boss, resolve a Level, or complete a Kingdom.
-- `system.mission_director` is not renamed. It prioritizes legitimate Objectives of any execution type. Challenge is not canon for remote work.
+- `growth_campaign` ≠ `kingdom_binding` ≠ `objective` ≠ `encounter.*`.
+- `mission` is a Field Objective. `challenge` is a Remote Objective. `hybrid_objective` requires both. None of them is the Encounter.
+- Completing a Mission or a Challenge may satisfy the real-world side of a `kingdom_binding`. It does not automatically defeat a Boss, resolve a Level, or complete a Kingdom.
+- `system.mission_director` is not renamed. It can prioritize both Missions and Challenges. There is no second planner.
 - `world.overworld` ≠ `admin.lantern_city`.
 - `system.claire` ≠ `companion.*`.
 - `kingdom.boreslay` ≠ `minigame.boreslay_duel` ≠ `legacy.boreslay_product`.
@@ -153,8 +157,10 @@ LEGACY — compatibility/history, not current architecture:
 - `legacy.boreslay_product` — Old landing that markets BORESLAY as the whole product. `BoreslayLanding.tsx` is that superseded public page.
 - `legacy.laundry_butler_chrome` — Old platform-facing title/LoginForm/product chrome. Not the current JOYSTICK product identity. Not `business.laundry_farm`. Not `service.laundry_butler`.
 
-Allowed to remain:
+Allowed to remain, without renaming in this pass:
 
+- `system.mission_director`
+- “today’s mission” and older Mission references in existing code and copy
 - `/api/saleslay/*` routes
 - `dayforge_*` tables and files
 - `BoreslayLanding.tsx` as a superseded public page
@@ -172,8 +178,8 @@ Forbidden for new user-visible copy, new docs, and new modules:
 - calling Rook a DayForge field coach
 - introducing Cash or Spark as the JOYSTICK protagonist
 - using “campaign” for both a growth-library motion and a Kingdom story arc without the `growth_campaign` / `kingdom_binding` split
-- redefining Mission, Mission Director, or Day Line as field-only
-- renaming `system.mission_director`
-- canonizing Challenge as the player-facing name for remote work
+- using Mission for remote work, or Challenge for in-person field work
+- renaming `system.mission_director`, or adding a second planner for Challenges
+- treating a completed Mission or Challenge as a Boss defeat, a Level resolution, or Kingdom completion
 
 No nomenclature lint was added. A gate that failed only new files would still need a large grandfather list (`client/src/archive/**`, `client/src/assets/boreslay-rally/**`, historical landings, `/api/saleslay/**`, `dayforge_*` implementation files). This section is the rule.
