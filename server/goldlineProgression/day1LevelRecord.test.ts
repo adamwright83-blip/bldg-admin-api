@@ -716,9 +716,11 @@ describe("Day 1 does not resolve level.colosseum", () => {
     const day1 = readFileSync(new URL("../openChannel/day1TenDoorsService.ts", import.meta.url), "utf8");
     const router = readFileSync(new URL("./progressionRouter.ts", import.meta.url), "utf8");
     expect(day1).not.toMatch(
-      /recordLevelFromOutcomes|recordColosseumLevelFromCommittedEvidence|recordLevelColosseumResolved|setLevelColosseumResolvedAt|insertLevelColosseumResolved|levelColosseumResolvedAt/
+      /recordLevelFromOutcomes|recordColosseumLevelFromCommittedEvidence|recordLevelColosseumResolved|setLevelColosseumResolvedAt|insertLevelColosseumResolved|recordAuthoredColosseumFinale|levelColosseumResolvedAt/
     );
-    expect(router).not.toMatch(/\.mutation\(|recordLevel|acknowledgeColosseum/);
+    expect(router.match(/\.mutation\(/g) ?? []).toHaveLength(1);
+    expect(router).toMatch(/acknowledgeColosseumFinale/);
+    expect(router).not.toMatch(/recordLevelFromOutcomes|setLevelColosseumResolvedAt|insertLevelColosseumResolved/);
     const callers = serverSources(join(process.cwd(), "server")).filter(path => {
       if (path.endsWith(`${join("goldlineProgression", "progressionWrites.ts")}`)) return false;
       if (path.endsWith(`${join("goldlineProgression", "progressionStore.ts")}`)) return false;

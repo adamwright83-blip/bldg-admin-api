@@ -133,6 +133,9 @@ describe("the finale is reachable only through the authoritative campaign", () =
     expect(resolved).toBeGreaterThan(-1);
     expect(joined).toBeGreaterThan(resolved);
     expect(joined).toBeLessThan(boundary.indexOf("}}"));
+    expect(boundary).toContain("acknowledgeColosseumFinale.mutate");
+    expect(boundary).toContain("COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE");
+    expect(boundary).not.toMatch(/rookOwned\s*:/);
   });
 
   it("still sends the real hunt through the unmodified field mission", () => {

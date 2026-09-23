@@ -109,6 +109,67 @@ export async function setLevelColosseumResolvedAt(input: {
     );
 }
 
+/**
+ * Authored finale: level.colosseum resolved, then companion.rook owned.
+ * One transaction. Existing timestamps stay. kingdom.brass_republic is not written.
+ */
+export async function recordAuthoredColosseumFinale(input: {
+  tenantId: string;
+  operatorId: string;
+  at: Date;
+}): Promise<void> {
+  const db = await requireDb();
+  const identity = and(
+    eq(goldlineDomainProgression.tenantId, input.tenantId),
+    eq(goldlineDomainProgression.operatorId, input.operatorId)
+  );
+  await db.transaction(async tx => {
+    const [existing] = await tx
+      .select({
+        levelColosseumResolvedAt: goldlineDomainProgression.levelColosseumResolvedAt,
+        companionRookOwnedAt: goldlineDomainProgression.companionRookOwnedAt,
+      })
+      .from(goldlineDomainProgression)
+      .where(identity)
+      .limit(1);
+    if (!existing) {
+      try {
+        await tx.insert(goldlineDomainProgression).values({
+          id: randomUUID(),
+          tenantId: input.tenantId,
+          operatorId: input.operatorId,
+          levelColosseumResolvedAt: input.at,
+          companionRookOwnedAt: input.at,
+          kingdomBrassRepublicCompletedAt: null,
+          overworldUnlocksJson: {},
+        });
+        return;
+      } catch (error) {
+        if (isMysqlMissingTableError(error)) {
+          const missing = new Error("goldline_domain_progression is not present");
+          missing.name = "ProgressionSchemaBlockedError";
+          throw missing;
+        }
+        if (!isMysqlDuplicateKeyError(error)) throw error;
+      }
+    }
+    await tx
+      .update(goldlineDomainProgression)
+      .set({ levelColosseumResolvedAt: input.at })
+      .where(and(identity, isNull(goldlineDomainProgression.levelColosseumResolvedAt)));
+    await tx
+      .update(goldlineDomainProgression)
+      .set({ companionRookOwnedAt: input.at })
+      .where(
+        and(
+          identity,
+          isNotNull(goldlineDomainProgression.levelColosseumResolvedAt),
+          isNull(goldlineDomainProgression.companionRookOwnedAt)
+        )
+      );
+  });
+}
+
 /** Sets Rook only after the level timestamp exists, and only while Rook is null. */
 export async function setCompanionRookOwnedAt(input: {
   tenantId: string;

@@ -7,6 +7,8 @@
 import {
   assertCompanionRookRecordPermitted,
   assertLevelColosseumRecordPermitted,
+  ProgressionNotPermittedError,
+  rejectClientProgressionForge,
 } from "./progressionContract";
 import {
   findDomainProgression,
@@ -49,14 +51,25 @@ export async function recordRookFromOutcomes(input: {
   operatorId: string;
   outcomes: Record<string, unknown> | null;
   outcomesAvailable: boolean;
+  authoredConsequence?: unknown;
   clientPayload?: unknown;
 }): Promise<void> {
+  rejectClientProgressionForge(input);
+  rejectClientProgressionForge(input.clientPayload);
   const existing = await findDomainProgression(input);
   if (!existing.readable) unreadable();
   assertCompanionRookRecordPermitted({
-    ...input,
+    outcomes: input.outcomes,
+    outcomesAvailable: input.outcomesAvailable,
     levelColosseumResolvedAt: existing.row?.levelColosseumResolvedAt ?? null,
+    authoredConsequence: input.authoredConsequence,
+    clientPayload: input.clientPayload,
   });
   if (existing.row?.companionRookOwnedAt) return;
   await setCompanionRookOwnedAt({ ...input, ownedAt: new Date() });
+  const written = await findDomainProgression(input);
+  if (!written.readable) unreadable();
+  if (!written.row?.companionRookOwnedAt) {
+    throw new ProgressionNotPermittedError("companion.rook was not recorded for this operator");
+  }
 }
