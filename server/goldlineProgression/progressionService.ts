@@ -18,6 +18,14 @@ import {
 import { findDomainProgression, recordAuthoredColosseumFinale } from "./progressionStore";
 import { recordRookFromOutcomes } from "./progressionWrites";
 
+function sameStoredTimestamp(
+  left: Date | null | undefined,
+  right: Date | null | undefined
+): boolean {
+  if (left == null || right == null) return left == null && right == null;
+  return left.getTime() === right.getTime();
+}
+
 async function loadOutcomes(input: { tenantId: string; operatorId: string }): Promise<{
   outcomes: Record<string, unknown> | null;
   outcomesAvailable: boolean;
@@ -195,9 +203,9 @@ export async function acknowledgeWaywardRookContact(input: {
   });
   if (
     !after.readable ||
-    after.row?.levelColosseumResolvedAt !== levelStamp ||
-    after.row?.companionRookOwnedAt !== rookStamp ||
-    after.row?.kingdomBrassRepublicCompletedAt !== kingdomStamp
+    !sameStoredTimestamp(after.row?.levelColosseumResolvedAt, levelStamp) ||
+    !sameStoredTimestamp(after.row?.companionRookOwnedAt, rookStamp) ||
+    !sameStoredTimestamp(after.row?.kingdomBrassRepublicCompletedAt, kingdomStamp)
   ) {
     throw new ProgressionNotPermittedError(
       "capability.rook.contact grant must not change level.colosseum, companion.rook, or kingdom.brass_republic"
