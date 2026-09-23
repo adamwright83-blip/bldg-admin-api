@@ -386,6 +386,10 @@ function LiveGoldlineDriverController({
     { businessDate: tomorrowBusinessDate },
     { refetchInterval: 60_000, retry: false }
   );
+  const currentDayLine = trpc.system.currentDayLine.today.useQuery(undefined, {
+    refetchInterval: 60_000,
+    retry: false,
+  });
   const campaignRuns = trpc.system.campaignRuns.listMine.useQuery(undefined, {
     staleTime: 15_000,
     retry: false,
@@ -1435,6 +1439,7 @@ function LiveGoldlineDriverController({
           authoredDay.data?.available ? authoredDay.data.authoredDay : null
         }
         missionPlan={missionDirectorPlan.data?.outcome ?? null}
+        currentDayLine={currentDayLine.data ?? null}
         onEnterChapter={
           kingdomTwoUnlocked
             ? () => {

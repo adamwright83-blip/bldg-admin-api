@@ -4,6 +4,7 @@ import { CalendarClock, Mail, MapPin, MessageSquare, Phone, Plus, TriangleAlert 
 import { LoginForm } from "@/components/LoginForm";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
+import { executionTypeLabel } from "@shared/currentDayLine";
 import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
 import { PRODUCT_NAME } from "@shared/productIdentity";
 
@@ -15,6 +16,7 @@ export default function DayforgeTodayPage() {
   const { loading, isAuthenticated } = useAuth();
   const [walkInOpen, setWalkInOpen] = useState(() => new URLSearchParams(location.search).get("walkIn") === "1");
   const queue = trpc.system.dayforgeToday.list.useQuery(undefined, { enabled: isAuthenticated });
+  const dayLine = trpc.system.currentDayLine.today.useQuery(undefined, { enabled: isAuthenticated, retry: false });
   const tenant = trpc.system.saas.me.useQuery(undefined, { enabled: isAuthenticated, retry: false });
   const completeFollowUp = trpc.system.dayforgeToday.completeFollowUp.useMutation();
   const rescheduleFollowUp = trpc.system.dayforgeToday.rescheduleFollowUp.useMutation();
@@ -35,6 +37,24 @@ export default function DayforgeTodayPage() {
         </div>
       </header>
       <div className="mx-auto max-w-4xl space-y-7 px-4 py-6">
+        {dayLine.data ? (
+          <section data-testid="current-day-line">
+            <h2 className="mb-3 text-xs font-black tracking-[.18em] text-orange-300">TODAY</h2>
+            <ol className="space-y-2">
+              {dayLine.data.items.map(item => (
+                <li key={item.id} data-day-line-id={item.id} data-execution-type={item.executionType ?? "unspecified"} className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3">
+                  <p className="text-xs font-bold text-orange-300">{executionTypeLabel(item.executionType)}</p>
+                  <p className="font-black">{item.title}</p>
+                </li>
+              ))}
+            </ol>
+            {dayLine.data.designated && dayLine.data.designated.position < 0 ? (
+              <p data-testid="current-day-line-designated" className="mt-3 text-sm text-slate-300">
+                {executionTypeLabel(dayLine.data.designated.executionType)} · {dayLine.data.designated.title}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
         {queue.isLoading ? <p className="text-slate-400">Building your action queue…</p> : null}
         {queue.error ? <p className="rounded-xl bg-red-500/15 p-4 text-red-200">{queue.error.message}</p> : null}
         {queue.data?.length === 0 ? <section className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-6"><h2 className="font-black text-emerald-200">Queue clear.</h2><p className="mt-1 text-sm text-emerald-100/70">Log the next real-world conversation while it is fresh.</p></section> : null}

@@ -51,6 +51,7 @@ import { spiritHumanRescueRouter } from "../spiritHumanRescue/rescueRouter";
 import { kingdomRouter } from "../goldlineKingdoms/kingdomRouter";
 import { companionRouter } from "../companions/companionRouter";
 import { missionDirectorRouter } from "../missionDirector/missionDirectorRouter";
+import { currentDayLineRouter } from "../goldline/dayline/currentDayLineRouter";
 import { claireRouter } from "../claire/claireRouter";
 import { claireRelationshipOffboardingRouter } from "../claire/relationshipOffboardingRouter";
 import { missionSalesBriefRouter } from "../missionSalesBrief/missionSalesBriefRouter";
@@ -108,6 +109,7 @@ export const systemRouter = router({
   goldlineKingdoms: kingdomRouter,
   goldlineCompanions: companionRouter,
   missionDirector: missionDirectorRouter,
+  currentDayLine: currentDayLineRouter,
   claire: claireRouter,
   claireRelationshipOffboarding: claireRelationshipOffboardingRouter,
   missionSalesBrief: missionSalesBriefRouter,

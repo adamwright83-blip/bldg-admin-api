@@ -19,6 +19,10 @@ import type {
 } from "@shared/dayDirector";
 import type { AuthoredDayRecord } from "@shared/authoredDay";
 import type { MissionPlanOutcome } from "@shared/missionDirector";
+import {
+  executionTypeLabel,
+  type CurrentDayLine,
+} from "@shared/currentDayLine";
 import type { OpenChannelMission } from "../../../../server/openChannel/openChannelTypes";
 import {
   buildDayPlanProjection,
@@ -75,6 +79,8 @@ export type GoldlineDayPlanProps = {
   cargoFixture?: VehicleCargoItem[];
   /** Slice 4/5: the Mission Director's plan for tomorrow, surfaced unprompted. */
   missionPlan?: MissionPlanOutcome | null;
+  /** Today's prioritized line, already ordered by Mission Director. */
+  currentDayLine?: CurrentDayLine | null;
   /** Slice 5 §5.4: shown when Kingdom 2 has unlocked (Kingdom 1 complete). */
   onEnterChapter?: () => void;
   /** Compact Campaign Run identity on the Day Line, when a run exists. */
@@ -352,6 +358,31 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
                 {plan.missionPlan.remedy}
               </p>
             )}
+          </div>
+        ) : null}
+        {props.currentDayLine ? (
+          <div data-testid="current-day-line">
+            <p>
+              <strong>Today</strong>
+            </p>
+            <ol>
+              {props.currentDayLine.items.map(item => (
+                <li
+                  key={item.id}
+                  data-day-line-id={item.id}
+                  data-execution-type={item.executionType ?? "unspecified"}
+                >
+                  {executionTypeLabel(item.executionType)} · {item.title}
+                </li>
+              ))}
+            </ol>
+            {props.currentDayLine.designated &&
+            props.currentDayLine.designated.position < 0 ? (
+              <p data-testid="current-day-line-designated">
+                {executionTypeLabel(props.currentDayLine.designated.executionType)} ·{" "}
+                {props.currentDayLine.designated.title}
+              </p>
+            ) : null}
           </div>
         ) : null}
         {props.onEnterChapter ? (

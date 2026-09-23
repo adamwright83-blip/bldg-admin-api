@@ -1,5 +1,7 @@
 import { getDayDirectorState } from "../../dayDirector/dayDirectorService";
 import { getFieldToday } from "../../field/fieldTodayService";
+import { readCurrentDayLine } from "../../goldline/dayline/currentDayLineService";
+import type { CurrentDayLine } from "../../../shared/currentDayLine";
 import { addDaysYmd } from "../../analytics/businessPeriods";
 import { zonedYmd } from "../../dashboardZoned";
 import { joinList, plural } from "../business/businessSpeech";
@@ -23,7 +25,14 @@ export type DayWorkItem = {
   completedAt: string | null;
 };
 
-export type DayWork = { businessDate: string; open: DayWorkItem[]; completed: DayWorkItem[]; routeAvailable: boolean };
+export type DayWork = {
+  businessDate: string;
+  open: DayWorkItem[];
+  completed: DayWorkItem[];
+  routeAvailable: boolean;
+  /** Today's Mission Director order. Absent when this read is not for today. */
+  currentDayLine?: CurrentDayLine | null;
+};
 
 export type OperationsQuestion =
   | { kind: "remaining"; day: "today" }
@@ -63,10 +72,15 @@ export async function loadDayWork(
     now: Date;
     timeZone: string;
   },
-  deps: { getState?: typeof getDayDirectorState; getField?: typeof getFieldToday } = {}
+  deps: {
+    getState?: typeof getDayDirectorState;
+    getField?: typeof getFieldToday;
+    readDayLine?: typeof readCurrentDayLine;
+  } = {}
 ): Promise<DayWork> {
   const getState = deps.getState ?? getDayDirectorState;
   const getField = deps.getField ?? getFieldToday;
+  const readDayLine = deps.readDayLine ?? readCurrentDayLine;
   const [state, field] = await Promise.all([
     getState({ tenantId: input.tenantId, actorId: input.dayDirectorActorId, businessDate: input.businessDate }),
     getField({
@@ -102,7 +116,28 @@ export async function loadDayWork(
       : null;
     open.push({ id: entry.id, title: entry.title, status: "open", source: "route", timing: timing ? `at ${timing}` : null, completedAt: null });
   }
-  return { businessDate: input.businessDate, open, completed, routeAvailable: Boolean(field) };
+  let currentDayLine: CurrentDayLine | null = null;
+  try {
+    const line = await readDayLine({
+      tenantId: input.tenantId,
+      operatorId: input.dayDirectorActorId,
+      timeZone: input.timeZone,
+      now: input.now,
+    });
+    currentDayLine = line.businessDate === input.businessDate ? line : null;
+  } catch (error) {
+    console.warn(
+      "[Claire] current day line unavailable",
+      error instanceof Error ? error.message : error
+    );
+  }
+  return {
+    businessDate: input.businessDate,
+    open,
+    completed,
+    routeAvailable: Boolean(field),
+    currentDayLine,
+  };
 }
 
 function describe(item: DayWorkItem): string {
