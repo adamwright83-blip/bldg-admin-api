@@ -7,10 +7,12 @@ import { acknowledgeColosseumAuthoredFinale, readGoldlineProgression } from "./p
 
 /**
  * Progression read, plus one acknowledgement of the authored Clockhead finale.
- * No input accepts resolved, rookOwned, or kingdomComplete. Tenancy and
- * operator id come from the session. The acknowledgement records companion.rook
- * only when level.colosseum is already durable. It does not complete
- * kingdom.brass_republic and does not grant capability.rook.contact.
+ * The input is the literal clockhead_finale.rook_joined_the_party. It refuses
+ * resolved, rookOwned, kingdomComplete, levelColosseumResolved, and
+ * companionRookOwned. Tenancy and operator id come from the session.
+ * A satisfied binding records level.colosseum and then companion.rook.
+ * It does not complete kingdom.brass_republic and does not grant
+ * capability.rook.contact.
  */
 export const progressionRouter = router({
   get: dayforgeTenantMemberProcedure

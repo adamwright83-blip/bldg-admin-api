@@ -1746,7 +1746,7 @@ function LiveGoldlineDriverController({
               { authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE },
               {
                 onSuccess: () => {
-                  // Cache only after the server records companion.rook.
+                  // Cache only after the server records level.colosseum and companion.rook.
                   // localStorage is not the ownership write.
                   joinParty(identity.data?.openId ?? null, "rook");
                   void utils.system.goldlineProgression.get.invalidate();

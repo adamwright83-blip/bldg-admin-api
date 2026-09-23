@@ -1,17 +1,21 @@
 /**
- * Tenant/operator progression. Reads do not insert rows. Level resolution
- * and Rook ownership are separate writes. Kingdom completion is not written.
+ * Tenant/operator progression. Reads do not insert rows. The authored
+ * Clockhead finale records level.colosseum and then companion.rook.
+ * Kingdom completion is not written.
  */
 import { isCompanionEarned } from "../companions/companionService";
 import { getDb } from "../db";
 import { getDay1TenDoorsMissionReadOnly } from "../openChannel/day1TenDoorsService";
+import { COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE } from "../../shared/colosseumAuthoredFinale";
 import {
+  assertLevelColosseumRecordPermitted,
   attemptRecordKingdomBrassRepublicCompleted,
   projectGoldlineProgression,
+  ProgressionNotPermittedError,
   rejectClientProgressionForge,
   type GoldlineProgressionRead,
 } from "./progressionContract";
-import { findDomainProgression } from "./progressionStore";
+import { findDomainProgression, recordAuthoredColosseumFinale } from "./progressionStore";
 import { recordRookFromOutcomes } from "./progressionWrites";
 
 async function loadOutcomes(input: { tenantId: string; operatorId: string }): Promise<{
@@ -109,8 +113,11 @@ export async function recordCompanionRookOwned(input: {
 
 /**
  * Production acknowledgement of the authored Clockhead finale.
- * Tenant and operator are supplied by the session, never by the payload.
- * This is the only supported way to record companion.rook.
+ * Tenant and operator come from the session. The exact consequence is
+ * checked, then kingdom_binding.level.colosseum is re-read. An unsatisfied
+ * binding writes nothing. A satisfied binding records level.colosseum and
+ * then companion.rook in one transaction. This is the only production
+ * caller that writes levelColosseumResolvedAt.
  */
 export async function acknowledgeColosseumAuthoredFinale(input: {
   tenantId: string;
@@ -120,7 +127,28 @@ export async function acknowledgeColosseumAuthoredFinale(input: {
   clientPayload?: unknown;
 }): Promise<GoldlineProgressionRead> {
   rejectClientProgressionForge(input);
-  return recordCompanionRookOwned(input);
+  rejectClientProgressionForge(input.clientPayload);
+  if (input.authoredConsequence !== COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE) {
+    throw new ProgressionNotPermittedError(
+      "level.colosseum and companion.rook require the authored Clockhead finale clockhead_finale.rook_joined_the_party"
+    );
+  }
+  const outcomes = await loadOutcomes(input);
+  assertLevelColosseumRecordPermitted({
+    outcomes: outcomes.outcomes,
+    outcomesAvailable: outcomes.outcomesAvailable,
+    clientPayload: input.clientPayload,
+  });
+  await recordAuthoredColosseumFinale({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    at: new Date(),
+  });
+  return readGoldlineProgression({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    capabilityOperatorId: input.capabilityOperatorId ?? null,
+  });
 }
 
 /** Kingdom completion stays refused. The Colosseum binding is not that write. */

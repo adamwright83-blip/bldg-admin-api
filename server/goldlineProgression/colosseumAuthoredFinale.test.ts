@@ -27,7 +27,7 @@ vi.mock("../companions/companionService", () => ({
 vi.mock("../db", () => ({ getDb: mocks.getDb }));
 
 import { progressionRouter } from "./progressionRouter";
-import { recordLevelColosseumResolved } from "./progressionService";
+import { acknowledgeColosseumAuthoredFinale } from "./progressionService";
 
 const TARGETS = [...(colosseumLeadHuntDefinition()?.targetIds ?? [])];
 const five = () => Object.fromEntries(TARGETS.map(id => [id, "pitched"]));
@@ -60,7 +60,7 @@ function rowMatches(row: Row, predicate: unknown): boolean {
 function memoryDb() {
   const rows: Row[] = [];
   const match = (predicate: unknown) => rows.filter(row => rowMatches(row, predicate));
-  return {
+  const db = {
     rows,
     select: () => ({
       from: () => ({
@@ -87,7 +87,9 @@ function memoryDb() {
         },
       }),
     }),
+    transaction: async <T>(fn: (tx: unknown) => Promise<T>) => fn(db),
   };
+  return db;
 }
 
 function context(tenantId: string, userId: number): TrpcContext {
@@ -130,37 +132,57 @@ describe("authored Clockhead finale acknowledgement", () => {
     }));
   });
 
-  it("does not own Rook when level.colosseum is unresolved, even after five visits", async () => {
+  it("refuses the finale when the binding is unsatisfied and writes nothing", async () => {
+    mocks.readMission.mockResolvedValue({
+      outcomes: Object.fromEntries(TARGETS.slice(0, 4).map(id => [id, "pitched"])),
+    });
     const caller = progressionRouter.createCaller(context("tenant-a", 7));
-    await expect(caller.acknowledgeColosseumFinale(finale)).rejects.toThrow(/level\.colosseum/);
+    await expect(caller.acknowledgeColosseumFinale(finale)).rejects.toThrow(/not satisfied/);
     expect(db.rows).toHaveLength(0);
     const read = await caller.get({});
+    expect(read.kingdomBinding.status).toBe("unsatisfied");
+    expect(read.levelColosseumResolved).toEqual({ status: "unearned", value: false });
     expect(read.companionRookOwned).toEqual({ status: "unearned", value: false });
     expect(read.kingdomBrassRepublicCompleted.value).toBe(false);
     expect(read.capabilityRookContact.granted).toBe(false);
   });
 
-  it("does not own Rook when the level is resolved without the authored consequence", async () => {
-    await recordLevelColosseumResolved({ tenantId: "tenant-a", operatorId: "open-7" });
+  it("refuses state-setting flags and any consequence other than the authored finale", async () => {
     const caller = progressionRouter.createCaller(context("tenant-a", 7));
     await expect(caller.acknowledgeColosseumFinale({} as never)).rejects.toThrow();
     await expect(
       caller.acknowledgeColosseumFinale({ authoredConsequence: "rookOwned" } as never)
     ).rejects.toThrow();
-    await expect(caller.acknowledgeColosseumFinale({ rookOwned: true } as never)).rejects.toThrow();
-    expect(db.rows[0]?.levelColosseumResolvedAt).toBeInstanceOf(Date);
-    expect(db.rows[0]?.companionRookOwnedAt).toBeNull();
-    expect(db.rows[0]?.kingdomBrassRepublicCompletedAt).toBeNull();
+    for (const forged of [
+      { rookOwned: true },
+      { resolved: true },
+      { kingdomComplete: true },
+      { levelColosseumResolved: true },
+      { companionRookOwned: true },
+    ]) {
+      await expect(caller.acknowledgeColosseumFinale(forged as never)).rejects.toThrow();
+      await expect(
+        acknowledgeColosseumAuthoredFinale({
+          tenantId: "tenant-a",
+          operatorId: "open-7",
+          authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+          ...forged,
+        })
+      ).rejects.toThrow();
+    }
+    expect(db.rows).toHaveLength(0);
     const read = await caller.get({});
-    expect(read.levelColosseumResolved.value).toBe(true);
+    expect(read.kingdomBinding.status).toBe("satisfied");
+    expect(read.levelColosseumResolved.value).toBe(false);
     expect(read.companionRookOwned.value).toBe(false);
+    expect(read.kingdomBrassRepublicCompleted.value).toBe(false);
   });
 
-  it("persists a valid recruitment, repeats it, and keeps Rook after the client cache is gone", async () => {
-    await recordLevelColosseumResolved({ tenantId: "tenant-a", operatorId: "open-7" });
+  it("persists Level and Rook from a satisfied binding, and a repeat keeps both timestamps", async () => {
     const caller = progressionRouter.createCaller(context("tenant-a", 7));
     const owned = await caller.acknowledgeColosseumFinale(finale);
-    const stamp = db.rows[0]?.companionRookOwnedAt;
+    const levelStamp = db.rows[0]?.levelColosseumResolvedAt;
+    const rookStamp = db.rows[0]?.companionRookOwnedAt;
     const again = await caller.acknowledgeColosseumFinale(finale);
     expect(owned.operatorId).toBe("open-7");
     expect(owned.tenantId).toBe("tenant-a");
@@ -171,8 +193,11 @@ describe("authored Clockhead finale acknowledgement", () => {
     expect(owned.capabilityRookContact.granted).toBe(false);
     expect(owned.capabilityRookContact.grantsCompanionOwnership).toBe(false);
     expect(again.companionRookOwned.value).toBe(true);
-    expect(stamp).toBeInstanceOf(Date);
-    expect(db.rows[0]?.companionRookOwnedAt).toBe(stamp);
+    expect(again.levelColosseumResolved.value).toBe(true);
+    expect(levelStamp).toBeInstanceOf(Date);
+    expect(rookStamp).toBeInstanceOf(Date);
+    expect(db.rows[0]?.levelColosseumResolvedAt).toBe(levelStamp);
+    expect(db.rows[0]?.companionRookOwnedAt).toBe(rookStamp);
     expect(db.rows[0]?.kingdomBrassRepublicCompletedAt).toBeNull();
     expect(db.rows).toHaveLength(1);
 
@@ -184,7 +209,6 @@ describe("authored Clockhead finale acknowledgement", () => {
   });
 
   it("does not let another tenant or another operator inherit Rook", async () => {
-    await recordLevelColosseumResolved({ tenantId: "tenant-a", operatorId: "open-7" });
     const owner = progressionRouter.createCaller(context("tenant-a", 7));
     await owner.acknowledgeColosseumFinale(finale);
 
@@ -202,7 +226,12 @@ describe("authored Clockhead finale acknowledgement", () => {
 
     const stillOwned = await owner.get({});
     expect(stillOwned.companionRookOwned.value).toBe(true);
+    expect(stillOwned.levelColosseumResolved.value).toBe(true);
+    expect(stillOwned.kingdomBrassRepublicCompleted.value).toBe(false);
     expect(db.rows.filter(row => row.companionRookOwnedAt)).toEqual([
+      expect.objectContaining({ tenantId: "tenant-a", operatorId: "open-7" }),
+    ]);
+    expect(db.rows.filter(row => row.levelColosseumResolvedAt)).toEqual([
       expect.objectContaining({ tenantId: "tenant-a", operatorId: "open-7" }),
     ]);
   });
@@ -210,8 +239,11 @@ describe("authored Clockhead finale acknowledgement", () => {
   it("keeps Day 1 from recording Rook and does not grant CONTACT from ownership", () => {
     const day1 = readFileSync(new URL("../openChannel/day1TenDoorsService.ts", import.meta.url), "utf8");
     const service = readFileSync(new URL("./progressionService.ts", import.meta.url), "utf8");
-    expect(day1).not.toMatch(/recordRookFromOutcomes|recordCompanionRookOwned|acknowledgeColosseumAuthoredFinale/);
+    expect(day1).not.toMatch(
+      /recordRookFromOutcomes|recordCompanionRookOwned|acknowledgeColosseumAuthoredFinale|recordAuthoredColosseumFinale|recordLevelFromOutcomes|levelColosseumResolvedAt/
+    );
     expect(service).not.toMatch(/earnCompanion/);
     expect(service).toMatch(/acknowledgeColosseumAuthoredFinale/);
+    expect(service).toMatch(/recordAuthoredColosseumFinale/);
   });
 });
