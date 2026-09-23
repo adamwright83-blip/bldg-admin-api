@@ -65,6 +65,10 @@ import {
   executeStandaloneOperatorArtifactVoiceRequest,
   isStandaloneOperatorArtifactVoiceRequest,
 } from "./operatorArtifactVoice";
+import {
+  classifyOperatorMissionVoiceTurn,
+  OPERATOR_MISSION_FAILED_SPEAK,
+} from "./operatorMissionCommand";
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
 import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
 import { getDashboardTimeZone } from "../dashboardZoned";
@@ -657,6 +661,17 @@ function voiceTurnDocument(input: {
   };
 }
 
+function latestOperatorUtterance(
+  history: Array<{ speaker?: string; text?: string }> | undefined
+): string | null {
+  if (!history?.length) return null;
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const entry = history[index];
+    if (entry?.speaker === "operator" && entry.text?.trim()) return entry.text.trim();
+  }
+  return null;
+}
+
 /**
  * The one Claire voice-turn orchestration. Gather and Conversation Relay both
  * call this. Relay passes allowFragmentWait false so a final provider prompt
@@ -696,6 +711,100 @@ export function runAuthoritativeClaireVoiceTurn(input: {
         conversation.inboundContextReady = true;
       }
       /**
+       * Explicit operator mission command. One mutation family, before V1
+       * reasoning and before the artifact utility. A split utterance writes
+       * only after the existing pending fragment assembles a complete command.
+       */
+      const missionClass = classifyOperatorMissionVoiceTurn({
+        pendingFragment: conversation.pendingFragment ?? null,
+        utterance: input.utterance,
+        allowFragmentWait: input.allowFragmentWait,
+        fragmentHolds: conversation.fragmentHolds ?? 0,
+        priorOperatorUtterance: latestOperatorUtterance(conversation.history),
+      });
+
+      let result: ClaireTurnResult;
+      if (missionClass.kind === "hold" || missionClass.kind === "execute" || missionClass.kind === "clarify") {
+        if (input.utterance.trim()) {
+          conversation.providerFragments = [
+            ...(conversation.providerFragments ?? []),
+            input.utterance.trim(),
+          ];
+        }
+        if (missionClass.kind === "hold") {
+          conversation.pendingFragment = missionClass.assembled;
+          conversation.fragmentHolds = (conversation.fragmentHolds ?? 0) + 1;
+          result = {
+            speak: "",
+            kind: "listening",
+            listenOnly: true,
+            assembledUtterance: missionClass.assembled,
+            thoughtCompleteness: "incomplete",
+          };
+        } else {
+          conversation.pendingFragment = null;
+          conversation.fragmentHolds = 0;
+          if (missionClass.kind === "clarify") {
+            conversation.history = appendOperatorArtifactVoiceHistory(conversation.history ?? [], {
+              operatorText: missionClass.assembled,
+              claireText: missionClass.speak,
+              at: Date.now(),
+            });
+            result = {
+              speak: missionClass.speak,
+              kind: "answered",
+              assembledUtterance: missionClass.assembled,
+              thoughtCompleteness: "complete",
+              actionIds: [],
+            };
+          } else {
+            if (isClaireProgressionEnabled(conversation.tenantId)) {
+              await commitPendingDisclosuresForConversation(getProgressionStore(), {
+                tenantId: conversation.tenantId,
+                conversationId: callStateKey(conversationId),
+              });
+            }
+            const { executeOperatorMissionCommand } = await import("./operatorMissionCommand");
+            const mission = await executeOperatorMissionCommand({
+              tenantId: conversation.tenantId,
+              operatorUserId: conversation.actorId,
+              dayDirectorActorId: conversation.dayDirectorActorId,
+              weeklyIntentOperatorId: conversation.actorId,
+              businessDate: conversation.context.businessDate ?? "",
+              utterance: missionClass.assembled,
+              resolvedMissionClause: missionClass.resolvedMissionClause,
+              sourceCommandRef: `voice:${conversationId}:turn:${conversation.turns + 1}`,
+            }).catch(error => {
+              console.error("[Claire] operator mission command failed", error);
+              return {
+                ok: false as const,
+                speak: OPERATOR_MISSION_FAILED_SPEAK,
+                actionIds: [] as string[],
+                receipts: [] as [],
+              };
+            });
+            conversation.history = appendOperatorArtifactVoiceHistory(conversation.history ?? [], {
+              operatorText: missionClass.assembled,
+              claireText: mission.speak,
+              at: Date.now(),
+            });
+            result = {
+              speak: mission.speak,
+              kind: "answered",
+              assembledUtterance: missionClass.assembled,
+              thoughtCompleteness: "complete",
+              actionIds: mission.ok ? mission.actionIds : [],
+              mutationReceipts: mission.ok ? mission.receipts : undefined,
+            };
+          }
+        }
+      } else {
+      const turnUtterance = missionClass.kind === "flush" ? missionClass.assembled : input.utterance;
+      if (missionClass.kind === "flush") {
+        conversation.pendingFragment = null;
+        conversation.fragmentHolds = 0;
+      }
+      /**
        * Operator-artifact utility turn.
        *
        * A short Gather fragment can be held by runClaireTurn before its final
@@ -704,10 +813,9 @@ export function runAuthoritativeClaireVoiceTurn(input: {
        * else continues through Claire V1 unchanged.
        */
       const artifactCandidate = conversation.pendingFragment
-        ? `${conversation.pendingFragment} ${input.utterance}`.trim()
-        : input.utterance;
+        ? `${conversation.pendingFragment} ${turnUtterance}`.trim()
+        : turnUtterance;
 
-      let result: ClaireTurnResult;
       if (isStandaloneOperatorArtifactVoiceRequest(artifactCandidate)) {
         if (input.utterance.trim()) {
           conversation.providerFragments = [
@@ -770,7 +878,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
             operatorUserId: conversation.actorId,
             dayDirectorActorId: conversation.dayDirectorActorId,
             surface: "voice",
-            utterance: input.utterance,
+            utterance: turnUtterance,
             state: conversation,
             conversationKey: callStateKey(conversationId),
             brief: conversation.brief,
@@ -793,6 +901,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
             }),
           }
         );
+      }
       }
       conversation.touchedAt = Date.now();
       await saveCall(conversationId, conversation);

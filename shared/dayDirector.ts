@@ -1,4 +1,4 @@
-import type { DayDirectorCommandMetadata } from "./claireWorkdayCommand";
+import type { DayDirectorCommandMetadata, OperatorMissionMetadata } from "./claireWorkdayCommand";
 
 export type DayDirectorCommitment = {
   id: string;
@@ -16,6 +16,7 @@ export type DayDirectorCommitment = {
   scheduleLabel?: string | null;
   sourceText?: string | null;
   command?: DayDirectorCommandMetadata;
+  operatorMission?: OperatorMissionMetadata | null;
 };
 
 export type DayDirectorProposal = {
@@ -33,6 +34,7 @@ export type DayDirectorProposal = {
   /** Authoritative business date for this commitment. Voice/briefing must not silently rewrite it to today. */
   targetBusinessDate?: string | null;
   command?: DayDirectorCommandMetadata;
+  operatorMission?: OperatorMissionMetadata | null;
   recurrence?: {
     weekday: string;
     windowStart: string | null;

@@ -95,6 +95,7 @@ export async function loadDailyCommand(
     scheduleKind: commitment.scheduleKind ?? null,
     scheduleLabel: commitment.scheduleLabel ?? null,
     command: commitment.command ?? readCommandMetadata(null),
+    operatorMission: commitment.operatorMission ?? null,
   }));
 
   const route: CommandRouteSource[] = (field?.timeline ?? []).map(entry => ({
