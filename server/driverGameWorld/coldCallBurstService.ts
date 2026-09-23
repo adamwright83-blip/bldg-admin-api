@@ -9,13 +9,17 @@ import {
   commercialPipelineRecords,
   driverColdCallBatches,
   driverColdCallTargets,
+  salesCallAttempts,
   territoryOperatorProfiles,
 } from "../../drizzle/schema";
 import type { CommercialMissionBrief } from "../../shared/commercialMission";
 import {
   coldCallEligibility,
   comboAfterChain,
+  isColdCallRollingTerminal,
   type ColdCallBatch,
+  type ColdCallRollingCall,
+  type ColdCallRollingStatus,
   type ColdCallTarget,
 } from "../../shared/coldCallBurst";
 import { getDb } from "../db";
@@ -24,6 +28,14 @@ import {
   recordCommercialMissionCallAttempt,
   type CommercialMissionCallOutcome,
 } from "../commercialMissions/commercialMissionCallService";
+import {
+  authorizedOperatorPhone,
+  claireTwilioFromNumber,
+} from "../claire/claireTwilio";
+import {
+  assertVerifiedOutgoingCallerId,
+  placeOperatorFirstBridgeCall,
+} from "../salesCalls";
 
 type EligibleRow = {
   missionId: number;
@@ -237,6 +249,16 @@ async function readBatch(input: {
       outcome: row.target.outcome,
     });
   }
+  const live =
+    targets.find(target => target.status === "live") ??
+    targets.find(target => target.status === "selected") ??
+    null;
+  const rollingCall = live
+    ? await rollingCallForTarget({
+        tenantId: input.tenantId,
+        target: live,
+      })
+    : null;
   return {
     id: batch.id,
     targets,
@@ -246,6 +268,40 @@ async function readBatch(input: {
     combo: batch.combo,
     completedCount: batch.completedCount,
     totalTargets: batch.totalTargets,
+    rollingCall,
+  };
+}
+
+async function latestColdCallAttempt(tenantId: string, targetId: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db
+    .select()
+    .from(salesCallAttempts)
+    .where(
+      and(
+        eq(salesCallAttempts.tenantId, tenantId),
+        eq(salesCallAttempts.coldCallTargetId, targetId)
+      )
+    )
+    .orderBy(desc(salesCallAttempts.id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+async function rollingCallForTarget(input: {
+  tenantId: string;
+  target: ColdCallTarget;
+}): Promise<ColdCallRollingCall | null> {
+  const attempt = await latestColdCallAttempt(input.tenantId, input.target.id);
+  if (!attempt) return null;
+  return {
+    attemptId: attempt.id,
+    targetId: input.target.id,
+    status: attempt.status as ColdCallRollingStatus,
+    failureReason: attempt.failureReason,
+    companyName: input.target.companyName,
+    phoneNumber: input.target.phoneNumber,
   };
 }
 
@@ -351,6 +407,67 @@ export async function startColdCallTarget(input: {
     .set({ status: "live" })
     .where(eq(driverColdCallTargets.id, target.id));
   return readBatch(input);
+}
+
+/**
+ * Operator-first Cold Call Burst roll.
+ * The browser supplies batch and target ids only. Both phone numbers are
+ * resolved here. The prospect is not dialed by this function.
+ */
+export async function rollColdCallTarget(input: {
+  tenantId: string;
+  actorId: string;
+  batchId: string;
+  targetId: string;
+}) {
+  const target = await ownedTarget(input);
+  if (target.status === "completed") {
+    throw new Error("Call outcome is already recorded");
+  }
+  if (target.status === "live") {
+    const existing = await latestColdCallAttempt(input.tenantId, target.id);
+    if (existing && !isColdCallRollingTerminal(existing.status as ColdCallRollingStatus)) {
+      return readBatch(input);
+    }
+  }
+  const prospect = (await eligibleColdCallRows(input)).find(
+    candidate => candidate.missionId === target.missionId
+  );
+  if (!prospect?.phoneNumber.trim()) {
+    throw new Error("This target is no longer eligible for a cold call");
+  }
+  const operatorLegTo = await authorizedOperatorPhone({
+    tenantId: input.tenantId,
+    actorId: input.actorId,
+  });
+  const operatorLegFrom = claireTwilioFromNumber();
+  const prospectLegTo = prospect.phoneNumber;
+  const prospectCallerId = operatorLegTo;
+  await assertVerifiedOutgoingCallerId(operatorLegTo);
+  await placeOperatorFirstBridgeCall({
+    tenantId: input.tenantId,
+    coldCallTargetId: target.id,
+    legs: {
+      operatorLegTo,
+      operatorLegFrom,
+      prospectLegTo,
+      prospectCallerId,
+    },
+  });
+  return startColdCallTarget(input);
+}
+
+export async function getColdCallRollingCall(input: {
+  tenantId: string;
+  actorId: string;
+  batchId: string;
+  targetId: string;
+}): Promise<ColdCallRollingCall | null> {
+  const target = await ownedTarget(input);
+  const batch = await readBatch(input);
+  const view = batch?.targets.find(item => item.id === target.id);
+  if (!view) return null;
+  return rollingCallForTarget({ tenantId: input.tenantId, target: view });
 }
 
 export async function completeColdCallTarget(input: {

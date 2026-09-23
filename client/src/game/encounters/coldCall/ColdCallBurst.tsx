@@ -7,9 +7,12 @@ import {
   Radio,
   X,
 } from "lucide-react";
-import type {
-  ColdCallBatch,
-  ColdCallTarget,
+import {
+  coldCallRollingStatusCopy,
+  isColdCallRollingTerminal,
+  type ColdCallBatch,
+  type ColdCallRollingCall,
+  type ColdCallTarget,
 } from "../../../../../shared/coldCallBurst";
 
 const OUTCOMES = [
@@ -118,6 +121,9 @@ export function ColdCallBurst(props: {
   batch: ColdCallBatch;
   onClose: () => void;
   onStart: (target: ColdCallTarget) => Promise<ColdCallBatch>;
+  onPollRollingCall?: (
+    target: ColdCallTarget
+  ) => Promise<ColdCallRollingCall | null>;
   onComplete: (input: {
     target: ColdCallTarget;
     outcome: (typeof OUTCOMES)[number][0];
@@ -134,6 +140,12 @@ export function ColdCallBurst(props: {
     useState<(typeof OUTCOMES)[number][0]>("no_answer");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
+  const [callError, setCallError] = useState<string | null>(null);
+  const [rollingCall, setRollingCall] = useState<ColdCallRollingCall | null>(
+    props.batch.rollingCall ?? null
+  );
+  const pollRef = useRef(props.onPollRollingCall);
+  pollRef.current = props.onPollRollingCall;
   const activeTarget = useMemo(
     () =>
       batch.targets.find(target => target.status === "live") ??
@@ -147,15 +159,58 @@ export function ColdCallBurst(props: {
     target => target.status !== "completed"
   ).length;
   const combo = Math.max(batch.combo, batch.completedCount > 0 ? 1 : 0);
+  const truthCompany =
+    rollingCall?.companyName || activeTarget?.companyName || "";
+  const truthPhone =
+    rollingCall?.phoneNumber || activeTarget?.phoneNumber || "";
+
+  useEffect(() => {
+    if (mode !== "live" || !activeTarget) return;
+    let cancelled = false;
+    const poll = async () => {
+      const read = pollRef.current;
+      if (!read) return;
+      try {
+        const next = await read(activeTarget);
+        if (cancelled || !next) return;
+        setRollingCall(next);
+        if (isColdCallRollingTerminal(next.status)) setMode("outcome");
+      } catch {
+        // Keep the last sales_call_attempts status. Do not invent one.
+      }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 2_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [mode, activeTarget]);
 
   async function startCall() {
     if (!activeTarget || busy) return;
+    if (!activeTarget.phoneNumber.trim()) {
+      setCallError("This target no longer has an eligible sourced phone.");
+      return;
+    }
     setBusy(true);
+    setCallError(null);
     try {
       const next = await props.onStart(activeTarget);
       setBatch(next);
-      setMode("live");
-      window.location.href = `tel:${activeTarget.phoneNumber}`;
+      setRollingCall(next.rollingCall);
+      if (
+        next.rollingCall &&
+        isColdCallRollingTerminal(next.rollingCall.status)
+      ) {
+        setMode("outcome");
+      } else {
+        setMode("live");
+      }
+    } catch (error) {
+      setCallError(
+        error instanceof Error ? error.message : "Could not roll this call."
+      );
     } finally {
       setBusy(false);
     }
@@ -253,22 +308,47 @@ export function ColdCallBurst(props: {
             <blockquote>{activeTarget.coaching.openingLine}</blockquote>
           </div>
           {mode === "ready" ? (
-            <button
-              className="cold-call-phone"
-              disabled={busy}
-              onClick={() => void startCall()}
-            >
-              <Phone /> CALL REAL NUMBER
-            </button>
+            <>
+              {callError ? (
+                <p className="cold-call-error" role="alert">
+                  {callError}
+                </p>
+              ) : null}
+              <button
+                className="cold-call-phone"
+                disabled={busy}
+                onClick={() => void startCall()}
+              >
+                <Phone /> CALL REAL NUMBER
+              </button>
+            </>
           ) : null}
           {mode === "live" ? (
             <div className="cold-call-live">
               <Radio />
               <h3>LIVE CALL · NO GAME TIMER</h3>
+              <p className="cold-call-status">
+                {rollingCall
+                  ? coldCallRollingStatusCopy({
+                      status: rollingCall.status,
+                      companyName: truthCompany,
+                    })
+                  : "Calling your phone…"}
+              </p>
+              <p className="cold-call-truth">
+                {truthCompany}
+                <br />
+                {truthPhone}
+              </p>
               <p>
                 Listen and sell. Combo timing is paused until the real
                 conversation ends.
               </p>
+              {rollingCall?.failureReason ? (
+                <p className="cold-call-error" role="alert">
+                  {rollingCall.failureReason}
+                </p>
+              ) : null}
               <button onClick={() => setMode("outcome")}>
                 CALL ENDED — LOG REAL OUTCOME
               </button>

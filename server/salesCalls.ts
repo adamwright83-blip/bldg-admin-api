@@ -1,42 +1,36 @@
 /**
- * Bold Pitch — Saleslay "call" weapon backend.
+ * Operator-first bridge for Saleslay Bold Pitch and Goldline Cold Call Burst.
  *
- * Bridge-through-cellphone architecture: Twilio first dials the rep's own
- * cellphone (repLegCallSid). Only once that leg is answered does the TwiML
- * <Dial> the lead/customer's number (customerLegCallSid). This means the
- * rep is always the one initiating and present for the pitch — Twilio never
- * calls the customer unattended.
+ * Twilio dials the operator cellphone first (repLegCallSid). Only after that
+ * leg is answered does Twilio fetch bridge TwiML, and only that TwiML dials
+ * the prospect (customerLegCallSid). The prospect is never called unattended.
  *
- * Reward rule: the customer leg must reach >=20s of connected duration
- * before completeWeaponAction("call") fires on the frontend — same
- * threshold already used for the Level 4 war call-strike ("connected")
- * event in server/level4Twilio.ts. A shorter or failed customer leg calls
- * failWeaponAction and awards nothing.
+ * Two caller-ID roles stay separate:
+ * - operator leg: to = authorized operator cellphone, from = CLAIRE_TWILIO_FROM_NUMBER
+ * - prospect leg: to = authoritative prospect phone, callerId = operator cellphone
  *
- * Every attempt is a durable row in sales_call_attempts (see
- * drizzle/schema.ts), keyed uniquely on repLegCallSid so a duplicate Twilio
- * status callback can never create a second reward for the same call.
+ * `sales_call_attempts.caller_id` stores the prospect-facing caller ID only.
  *
- * Recording is OFF (no <Record> verb, no recordingStatusCallback, no
- * record: true on the call). Do not add recording without a separate,
- * explicit product decision — call recording has consent implications this
- * slice does not address.
+ * Saleslay Bold Pitch still treats a customer leg of >=20s as completed_success
+ * and rewardGranted. Cold Call Burst rows (coldCallTargetId set) record
+ * communications facts only. Duration never grants a Goldline business outcome
+ * and never writes the commercial mission call attempt.
  *
- * Until the Twilio account is verified for real outbound traffic, calls to
- * initiateBoldPitchCall will fail at the Twilio API step; the DB row and
- * webhook plumbing are still exercised so the feature is ready to flip on.
+ * Recording is OFF. Do not add recording without a separate product decision.
  */
-import crypto from "node:crypto";
 import type { Express, Request, Response } from "express";
 import twilio from "twilio";
 import { eq } from "drizzle-orm";
 import { getDb } from "./db";
 import { salesCallAttempts, type SalesCallAttempt } from "../drizzle/schema";
 import { ENV } from "./_core/env";
-import { registerClaireRoutes } from "./claire/claireTwilio";
+import { claireTwilioFromNumber, registerClaireRoutes } from "./claire/claireTwilio";
+import { isValidTwilioWebhook } from "./claire/conversation/twilioSignature";
+import { COLD_CALL_CALLER_ID_UNVERIFIED_MESSAGE } from "../shared/coldCallBurst";
 
 const CALL_STATUS_PATH = "/api/saleslay/twilio/call-status";
 const CONNECTED_DURATION_THRESHOLD_SEC = 20;
+export const COLD_CALL_OPERATOR_INTRO = "Connecting your next call.";
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -56,6 +50,25 @@ function publicBaseUrl(): string {
   return ENV.adminBaseUrl.replace(/\/$/, "");
 }
 
+export class ColdCallCallerIdUnverifiedError extends Error {
+  readonly code = "COLD_CALL_CALLER_ID_UNVERIFIED" as const;
+  constructor() {
+    super(COLD_CALL_CALLER_ID_UNVERIFIED_MESSAGE);
+    this.name = "ColdCallCallerIdUnverifiedError";
+  }
+}
+
+export type OperatorFirstBridgeLegs = {
+  /** Authorized operator cellphone. Twilio calls this first. */
+  operatorLegTo: string;
+  /** CLAIRE_TWILIO_FROM_NUMBER. Never the prospect caller ID. */
+  operatorLegFrom: string;
+  /** Authoritative prospect phone. Dialed only from bridge TwiML. */
+  prospectLegTo: string;
+  /** Operator cellphone presented to the prospect. */
+  prospectCallerId: string;
+};
+
 export type StartBoldPitchCallInput = {
   tenantId: string;
   leadId?: number | null;
@@ -65,152 +78,311 @@ export type StartBoldPitchCallInput = {
 };
 
 /**
- * Creates the durable attempt row, then asks Twilio to dial the rep's
- * cellphone. The customer is never dialed directly from here — the TwiML
- * served from /api/saleslay/twilio/bridge-twiml/:attemptId only dials the
- * customer once the rep leg is confirmed answered (see the TwiML handler
- * below), and Twilio only fetches that TwiML after the rep leg connects.
+ * Fail closed before any dial when the operator cellphone is not a Twilio
+ * Verified Outgoing Caller ID. Does not substitute CLAIRE_TWILIO_FROM_NUMBER.
  */
-export async function startBoldPitchCall(
-  input: StartBoldPitchCallInput
-): Promise<{ attemptId: number; repLegCallSid: string }> {
+export async function assertVerifiedOutgoingCallerId(phone: string): Promise<void> {
+  if (!client) {
+    throw new Error("Twilio is not configured (TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN missing)");
+  }
+  const wanted = normalizeToE164(phone);
+  let matches: Array<{ phoneNumber?: string | null }> = [];
+  try {
+    matches = await client.outgoingCallerIds.list({ phoneNumber: wanted, limit: 20 });
+  } catch {
+    throw new ColdCallCallerIdUnverifiedError();
+  }
+  const verified = matches.some(row => {
+    const number = row.phoneNumber?.trim();
+    return Boolean(number) && normalizeToE164(number!) === wanted;
+  });
+  if (!verified) throw new ColdCallCallerIdUnverifiedError();
+}
+
+/**
+ * Creates the durable attempt row, then asks Twilio to dial the operator.
+ * The prospect is not a `calls.create` destination. Twilio fetches bridge
+ * TwiML only after the operator answers, and that response is what dials.
+ */
+export async function placeOperatorFirstBridgeCall(input: {
+  tenantId: string;
+  leadId?: number | null;
+  orderId?: number | null;
+  coldCallTargetId?: string | null;
+  legs: OperatorFirstBridgeLegs;
+}): Promise<{ attemptId: number; repLegCallSid: string }> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  if (!client) throw new Error("Twilio is not configured (TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN missing)");
+  if (!client) {
+    throw new Error("Twilio is not configured (TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN missing)");
+  }
 
-  const repPhone = normalizeToE164(input.repPhone);
-  const customerPhone = normalizeToE164(input.customerPhone);
-  // Caller ID must be a number verified/purchased in the Twilio account —
-  // Twilio rejects unverified numbers as Caller ID at the API layer, so
-  // this intentionally is not silently swapped for anything else here.
-  const callerId = repPhone;
+  const operatorLegTo = normalizeToE164(input.legs.operatorLegTo);
+  const operatorLegFrom = normalizeToE164(input.legs.operatorLegFrom);
+  const prospectLegTo = normalizeToE164(input.legs.prospectLegTo);
+  const prospectCallerId = normalizeToE164(input.legs.prospectCallerId);
+
+  if (operatorLegFrom === operatorLegTo) {
+    throw new Error("Operator leg from must be the Twilio number, not the operator cellphone");
+  }
+  if (prospectCallerId !== operatorLegTo) {
+    throw new Error("Prospect caller ID must be the operator cellphone");
+  }
+  if (prospectCallerId === operatorLegFrom) {
+    throw new Error("Prospect caller ID must not fall back to the Twilio number");
+  }
 
   const inserted = await db.insert(salesCallAttempts).values({
     tenantId: input.tenantId,
     leadId: input.leadId ?? null,
     orderId: input.orderId ?? null,
-    repPhone,
-    customerPhone,
-    callerId,
+    coldCallTargetId: input.coldCallTargetId ?? null,
+    repPhone: operatorLegTo,
+    customerPhone: prospectLegTo,
+    callerId: prospectCallerId,
     status: "dialing_rep",
     recordingEnabled: false,
+    rewardGranted: false,
   });
   const attemptId = Number((inserted as { [0]?: { insertId?: number } })[0]?.insertId ?? 0);
   if (!attemptId) throw new Error("Failed to create sales call attempt record");
 
   const base = publicBaseUrl();
-  const call = await client.calls.create({
-    to: repPhone,
-    from: callerId,
-    url: `${base}/api/saleslay/twilio/bridge-twiml/${attemptId}`,
-    statusCallback: `${base}${CALL_STATUS_PATH}?attemptId=${attemptId}&leg=rep`,
-    statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
-    statusCallbackMethod: "POST",
-    record: false,
-  });
-
-  await db
-    .update(salesCallAttempts)
-    .set({ repLegCallSid: call.sid })
-    .where(eq(salesCallAttempts.id, attemptId));
-
-  return { attemptId, repLegCallSid: call.sid };
+  try {
+    const call = await client.calls.create({
+      to: operatorLegTo,
+      from: operatorLegFrom,
+      url: `${base}/api/saleslay/twilio/bridge-twiml/${attemptId}`,
+      method: "POST",
+      statusCallback: `${base}${CALL_STATUS_PATH}?attemptId=${attemptId}&leg=rep`,
+      statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
+      statusCallbackMethod: "POST",
+      record: false,
+    });
+    await db
+      .update(salesCallAttempts)
+      .set({ repLegCallSid: call.sid })
+      .where(eq(salesCallAttempts.id, attemptId));
+    return { attemptId, repLegCallSid: call.sid };
+  } catch (error) {
+    await db
+      .update(salesCallAttempts)
+      .set({
+        status: "failed",
+        rewardGranted: false,
+        failureReason: (error instanceof Error ? error.message : "operator_leg_create_failed").slice(0, 255),
+      })
+      .where(eq(salesCallAttempts.id, attemptId));
+    throw error;
+  }
 }
 
-/** TwiML served to the REP leg once Twilio connects the call to the rep's
- * cellphone. Dials the customer leg only now — after the rep has answered. */
+export async function startBoldPitchCall(
+  input: StartBoldPitchCallInput
+): Promise<{ attemptId: number; repLegCallSid: string }> {
+  const operatorLegTo = normalizeToE164(input.repPhone);
+  const prospectLegTo = normalizeToE164(input.customerPhone);
+  const operatorLegFrom = claireTwilioFromNumber();
+  return placeOperatorFirstBridgeCall({
+    tenantId: input.tenantId,
+    leadId: input.leadId ?? null,
+    orderId: input.orderId ?? null,
+    coldCallTargetId: null,
+    legs: {
+      operatorLegTo,
+      operatorLegFrom,
+      prospectLegTo,
+      prospectCallerId: operatorLegTo,
+    },
+  });
+}
+
+export function buildBridgeTwiml(attempt: {
+  id: number;
+  callerId: string;
+  customerPhone: string;
+  coldCallTargetId?: string | null;
+}): string {
+  const prospectCallerId = attempt.callerId;
+  const prospectLegTo = attempt.customerPhone;
+  const twimlResponse = new twilio.twiml.VoiceResponse();
+  if (attempt.coldCallTargetId) {
+    twimlResponse.say(COLD_CALL_OPERATOR_INTRO);
+  }
+  const base = publicBaseUrl();
+  const dial = twimlResponse.dial({
+    callerId: prospectCallerId,
+    record: "do-not-record",
+    action: `${base}${CALL_STATUS_PATH}?attemptId=${attempt.id}&leg=rep-dial-complete`,
+  });
+  dial.number(
+    {
+      statusCallback: `${base}${CALL_STATUS_PATH}?attemptId=${attempt.id}&leg=customer`,
+      statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
+      statusCallbackMethod: "POST",
+    },
+    prospectLegTo
+  );
+  return twimlResponse.toString();
+}
+
+/** Communications-only terminal mapping for Cold Call Burst. No reward. */
+export function goldlineTransportStatusFromCustomerLeg(input: {
+  callStatus: string;
+  durationSec: number;
+}): {
+  status: "completed_success" | "completed_no_connect";
+  rewardGranted: false;
+  failureReason: string | null;
+} {
+  const completed = input.callStatus === "completed";
+  return {
+    status: completed ? "completed_success" : "completed_no_connect",
+    rewardGranted: false,
+    failureReason: completed ? null : `customer_leg_${input.callStatus}_${input.durationSec}s`,
+  };
+}
+
 export function registerSalesCallRoutes(app: Express): void {
   // Claire shares the already-established Twilio HTTP surface, but writes
   // business state only through existing Goldline mission/recovery services.
   registerClaireRoutes(app);
 
-  app.post("/api/saleslay/twilio/bridge-twiml/:attemptId", async (req: Request, res: Response) => {
-    res.type("text/xml");
-    try {
-      const attemptId = Number(req.params.attemptId);
-      const db = await getDb();
-      if (!db || !attemptId) return res.send(emptyTwiml());
-
-      const rows = await db
-        .select()
-        .from(salesCallAttempts)
-        .where(eq(salesCallAttempts.id, attemptId))
-        .limit(1);
-      const attempt = rows[0] as SalesCallAttempt | undefined;
-      if (!attempt) return res.send(emptyTwiml());
-
-      const base = publicBaseUrl();
-      const twimlResponse = new twilio.twiml.VoiceResponse();
-      const dial = twimlResponse.dial({
-        callerId: attempt.callerId,
-        record: "do-not-record",
-        action: `${base}${CALL_STATUS_PATH}?attemptId=${attemptId}&leg=rep-dial-complete`,
-      });
-      dial.number(
-        {
-          statusCallback: `${base}${CALL_STATUS_PATH}?attemptId=${attemptId}&leg=customer`,
-          statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
-          statusCallbackMethod: "POST",
-        },
-        attempt.customerPhone
-      );
-
-      await db
-        .update(salesCallAttempts)
-        .set({ status: "dialing_customer" })
-        .where(eq(salesCallAttempts.id, attemptId));
-
-      return res.send(twimlResponse.toString());
-    } catch (error) {
-      console.error("[BoldPitch] bridge-twiml error", error);
-      return res.send(emptyTwiml());
-    }
+  app.post("/api/saleslay/twilio/bridge-twiml/:attemptId", (req, res) => {
+    void handleBridgeTwiml(req, res);
   });
 
-  app.post(CALL_STATUS_PATH, async (req: Request, res: Response) => {
-    try {
-      if (!isValidTwilioRequest(req)) {
-        return res.status(403).json({ ok: false, error: "invalid signature" });
+  app.post(CALL_STATUS_PATH, (req, res) => {
+    void handleCallStatus(req, res);
+  });
+}
+
+export async function handleBridgeTwiml(req: Request, res: Response): Promise<void> {
+  res.type("text/xml");
+  if (!validTwilioRequest(req)) {
+    res.status(403).send(emptyTwiml());
+    return;
+  }
+  try {
+    const attemptId = Number(req.params.attemptId);
+    const db = await getDb();
+    if (!db || !attemptId) {
+      res.send(emptyTwiml());
+      return;
+    }
+
+    const rows = await db
+      .select()
+      .from(salesCallAttempts)
+      .where(eq(salesCallAttempts.id, attemptId))
+      .limit(1);
+    const attempt = rows[0] as SalesCallAttempt | undefined;
+    if (!attempt?.customerPhone) {
+      res.send(emptyTwiml());
+      return;
+    }
+
+    const xml = buildBridgeTwiml(attempt);
+    await db
+      .update(salesCallAttempts)
+      .set({ status: "dialing_customer" })
+      .where(eq(salesCallAttempts.id, attemptId));
+    res.status(200).send(xml);
+  } catch (error) {
+    console.error("[BoldPitch] bridge-twiml error", error);
+    res.send(emptyTwiml());
+  }
+}
+
+export async function handleCallStatus(req: Request, res: Response): Promise<void> {
+  try {
+    if (!validTwilioRequest(req)) {
+      res.status(403).json({ ok: false, error: "invalid signature" });
+      return;
+    }
+
+    const attemptId = Number(req.query.attemptId);
+    const leg = String(req.query.leg ?? "");
+    const db = await getDb();
+    if (!db || !attemptId) {
+      res.json({ ok: true, ignored: true });
+      return;
+    }
+
+    const rows = await db
+      .select()
+      .from(salesCallAttempts)
+      .where(eq(salesCallAttempts.id, attemptId))
+      .limit(1);
+    const attempt = rows[0] as SalesCallAttempt | undefined;
+    if (!attempt) {
+      res.json({ ok: true, ignored: true });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, string>;
+    const callStatus = (body.CallStatus || "").toLowerCase();
+    const durationSec = Number.parseInt(body.CallDuration ?? "0", 10) || 0;
+    const errorCode = Number.parseInt(body.ErrorCode ?? "", 10);
+    const TERMINAL = ["completed", "busy", "no-answer", "failed", "canceled"];
+    const goldline = Boolean(attempt.coldCallTargetId);
+
+    if (
+      goldline &&
+      (errorCode === 21210 || /not yet verified|verified outgoing caller/i.test(body.ErrorMessage ?? ""))
+    ) {
+      await db
+        .update(salesCallAttempts)
+        .set({
+          status: "failed",
+          rewardGranted: false,
+          failureReason: COLD_CALL_CALLER_ID_UNVERIFIED_MESSAGE.slice(0, 255),
+          customerLegCallSid: body.CallSid || null,
+          customerLegDurationSec: durationSec,
+        })
+        .where(eq(salesCallAttempts.id, attemptId));
+      res.json({ ok: true });
+      return;
+    }
+
+    if (leg === "rep") {
+      if (callStatus === "in-progress" || callStatus === "answered") {
+        await db
+          .update(salesCallAttempts)
+          .set({ status: "rep_connected" })
+          .where(eq(salesCallAttempts.id, attemptId));
+      } else if (TERMINAL.includes(callStatus) && callStatus !== "completed") {
+        await db
+          .update(salesCallAttempts)
+          .set({ status: "failed", failureReason: `rep_leg_${callStatus}`, rewardGranted: false })
+          .where(eq(salesCallAttempts.id, attemptId));
       }
+      res.json({ ok: true });
+      return;
+    }
 
-      const attemptId = Number(req.query.attemptId);
-      const leg = String(req.query.leg ?? "");
-      const db = await getDb();
-      if (!db || !attemptId) return res.json({ ok: true, ignored: true });
-
-      const body = (req.body ?? {}) as Record<string, string>;
-      const callStatus = (body.CallStatus || "").toLowerCase();
-      const durationSec = Number.parseInt(body.CallDuration ?? "0", 10) || 0;
-      const TERMINAL = ["completed", "busy", "no-answer", "failed", "canceled"];
-
-      if (leg === "rep") {
-        if (callStatus === "in-progress" || callStatus === "answered") {
-          await db
-            .update(salesCallAttempts)
-            .set({ status: "rep_connected" })
-            .where(eq(salesCallAttempts.id, attemptId));
-        } else if (TERMINAL.includes(callStatus) && callStatus !== "completed") {
-          // Rep leg failed to connect at all — no customer leg was ever
-          // dialed. Nothing to reward or fail on the frontend yet since the
-          // engine only cares about the customer leg outcome; this state is
-          // recorded for the durable attempt history.
-          await db
-            .update(salesCallAttempts)
-            .set({ status: "failed", failureReason: `rep_leg_${callStatus}` })
-            .where(eq(salesCallAttempts.id, attemptId));
-        }
-        return res.json({ ok: true });
+    if (leg === "customer") {
+      if (callStatus === "in-progress" || callStatus === "answered") {
+        await db
+          .update(salesCallAttempts)
+          .set({ status: "customer_connected" })
+          .where(eq(salesCallAttempts.id, attemptId));
       }
-
-      if (leg === "customer") {
-        if (callStatus === "in-progress" || callStatus === "answered") {
+      if (TERMINAL.includes(callStatus)) {
+        const customerLegCallSid = body.CallSid || null;
+        if (goldline) {
+          const transport = goldlineTransportStatusFromCustomerLeg({ callStatus, durationSec });
           await db
             .update(salesCallAttempts)
-            .set({ status: "customer_connected" })
+            .set({
+              customerLegCallSid,
+              customerLegDurationSec: durationSec,
+              status: transport.status,
+              failureReason: transport.failureReason,
+              rewardGranted: false,
+            })
             .where(eq(salesCallAttempts.id, attemptId));
-        }
-        if (TERMINAL.includes(callStatus)) {
-          const customerLegCallSid = body.CallSid || null;
+        } else {
           const connected = callStatus === "completed" && durationSec >= CONNECTED_DURATION_THRESHOLD_SEC;
           await db
             .update(salesCallAttempts)
@@ -223,15 +395,16 @@ export function registerSalesCallRoutes(app: Express): void {
             })
             .where(eq(salesCallAttempts.id, attemptId));
         }
-        return res.json({ ok: true });
       }
-
-      return res.json({ ok: true, ignored: leg });
-    } catch (error) {
-      console.error("[BoldPitch] call-status webhook error", error);
-      return res.json({ ok: false });
+      res.json({ ok: true });
+      return;
     }
-  });
+
+    res.json({ ok: true, ignored: leg });
+  } catch (error) {
+    console.error("[BoldPitch] call-status webhook error", error);
+    res.json({ ok: false });
+  }
 }
 
 function emptyTwiml(): string {
@@ -240,37 +413,24 @@ function emptyTwiml(): string {
   return twimlResponse.toString();
 }
 
-function expectedSignature(secret: string, url: string, params: Record<string, unknown>): string {
-  const data =
-    url +
-    Object.keys(params)
-      .sort()
-      .map((k) => k + String(params[k] ?? ""))
-      .join("");
-  return crypto.createHmac("sha1", secret).update(Buffer.from(data, "utf-8")).digest("base64");
-}
-
 function publicUrlFor(req: Request): string {
   const proto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0] || req.protocol;
   const host = (req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.get("host");
   return `${proto}://${host}${req.originalUrl}`;
 }
 
-function isValidTwilioRequest(req: Request): boolean {
-  if (!authToken) {
-    return process.env.NODE_ENV !== "production";
-  }
-  const signature = req.headers["x-twilio-signature"];
-  if (typeof signature !== "string" || !signature) return false;
-  const expected = expectedSignature(authToken, publicUrlFor(req), (req.body ?? {}) as Record<string, unknown>);
-  const a = Buffer.from(signature);
-  const b = Buffer.from(expected);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+function validTwilioRequest(req: Request): boolean {
+  const body = (req.body ?? {}) as Record<string, string>;
+  return isValidTwilioWebhook({
+    authToken: authToken ?? "",
+    signature: req.headers["x-twilio-signature"],
+    urls: [publicUrlFor(req), `${publicBaseUrl()}${req.originalUrl}`],
+    body,
+    nodeEnv: process.env.NODE_ENV ?? "development",
+  });
 }
 
-/** Read-only status lookup for the frontend to poll after starting a call —
- * the picker/confirmation UI uses this to know when to call
- * completeWeaponAction/failWeaponAction. */
+/** Read-only status lookup for the frontend to poll after starting a call. */
 export async function getBoldPitchCallAttempt(attemptId: number): Promise<SalesCallAttempt | undefined> {
   const db = await getDb();
   if (!db) return undefined;

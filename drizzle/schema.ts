@@ -500,7 +500,18 @@ export const salesCallAttempts = mysqlTable(
     orderId: int("order_id"),
     repPhone: varchar("rep_phone", { length: 30 }).notNull(),
     customerPhone: varchar("customer_phone", { length: 30 }).notNull(),
+    /**
+     * Prospect-facing caller ID only (the operator's verified cellphone).
+     * The operator leg's Twilio `from` is CLAIRE_TWILIO_FROM_NUMBER and is
+     * not stored in this column.
+     */
     callerId: varchar("caller_id", { length: 30 }).notNull(),
+    /**
+     * Set only for Goldline Cold Call Burst transport attempts.
+     * Null for Saleslay Bold Pitch. Presence selects communications-only
+     * status updates: duration never grants a Goldline business outcome.
+     */
+    coldCallTargetId: varchar("cold_call_target_id", { length: 36 }),
     repLegCallSid: varchar("rep_leg_call_sid", { length: 64 }),
     customerLegCallSid: varchar("customer_leg_call_sid", { length: 64 }),
     status: mysqlEnum("status", [
@@ -525,6 +536,10 @@ export const salesCallAttempts = mysqlTable(
     repLegCallSidIdx: uniqueIndex(
       "sales_call_attempts_rep_leg_call_sid_idx"
     ).on(table.repLegCallSid),
+    coldCallTargetIdx: index("sales_call_attempts_cold_call_target_idx").on(
+      table.tenantId,
+      table.coldCallTargetId
+    ),
   })
 );
 

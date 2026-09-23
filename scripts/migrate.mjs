@@ -2291,5 +2291,19 @@ await assertRequiredColumns("communication_receipts", [
   "providerErrorCode", "providerErrorMessage", "idempotencyKey", "createdAt",
 ]);
 
+// ── Cold Call Burst transport link ──────────────────────────────
+// Mirrors drizzle/0095_cold_call_attempt_link.sql.
+// Nullable so Saleslay Bold Pitch rows stay unchanged. `run()` is correct:
+// ADD COLUMN is re-run on every boot and the duplicate-column error is the
+// expected steady state. The table itself is created outside this file.
+await run(
+  `ALTER TABLE sales_call_attempts ADD COLUMN cold_call_target_id VARCHAR(36) NULL`,
+  "ALTER sales_call_attempts ADD cold_call_target_id"
+);
+await run(
+  `CREATE INDEX sales_call_attempts_cold_call_target_idx ON sales_call_attempts (tenant_id, cold_call_target_id)`,
+  "CREATE INDEX sales_call_attempts_cold_call_target_idx"
+);
+
 await conn.end();
 console.log("\nMigration complete.");

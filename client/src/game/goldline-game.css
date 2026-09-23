@@ -200,6 +200,21 @@
   color: #c6e4e5;
   font-size: 14px;
 }
+.cold-call-status {
+  color: #72fff4;
+  font-size: 18px;
+  font-weight: 800;
+}
+.cold-call-truth {
+  color: #f4f1e8;
+  font-weight: 800;
+}
+.cold-call-error {
+  margin-top: 12px;
+  color: #ffb4a8;
+  font-size: 14px;
+  font-weight: 700;
+}
 .cold-call-outcome {
   display: grid;
   gap: 12px;
