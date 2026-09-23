@@ -14,6 +14,7 @@ const installHead = readFileSync(
   path.join(root, "client/src/game/pwa/installPwaHead.ts"),
   "utf8"
 );
+const serviceWorker = readFileSync(path.join(root, "client/public/goldline-sw.js"), "utf8");
 
 describe("JOYSTICK web manifest", () => {
   it("names the installed product JOYSTICK and points at existing icons", () => {
@@ -25,5 +26,7 @@ describe("JOYSTICK web manifest", () => {
     }
     expect(installHead).toContain('href = "/goldline.webmanifest"');
     expect(installHead).toContain('"/assets/goldline/pwa/icon-192.png"');
+    expect(serviceWorker).toContain('const CACHE_VERSION = "goldline-shell-v3"');
+    expect(serviceWorker).toContain('"/goldline.webmanifest"');
   });
 });

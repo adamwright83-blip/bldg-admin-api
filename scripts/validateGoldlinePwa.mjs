@@ -78,8 +78,16 @@ if (!existsSync(swPath)) {
   } catch (error) {
     fail(`service worker has a syntax error: ${error.message}`);
   }
-  if (!source.includes("CACHE_VERSION")) fail("service worker has no cache versioning constant");
-  else pass("service worker declares a cache version");
+  if (!source.includes('const CACHE_VERSION = "goldline-shell-v3"')) {
+    fail("service worker cache version must be goldline-shell-v3");
+  } else {
+    pass("service worker cache is goldline-shell-v3");
+  }
+  if (!source.includes('"/goldline.webmanifest"')) {
+    fail("service worker precache does not include the manifest");
+  } else {
+    pass("service worker precache includes the manifest");
+  }
   if (!/pathname\.startsWith\("\/api\/"\)/.test(source)) {
     fail("service worker does not appear to special-case /api/ requests — authoritative data could be cached");
   } else {

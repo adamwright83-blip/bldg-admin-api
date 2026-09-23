@@ -1,13 +1,14 @@
 import express from "express";
 import { z } from "zod";
 import {
+  isFatalCorrelationId,
   sanitizeFatalText,
   type ClientFatalLogRecord,
 } from "@shared/clientFatal";
 
 const reportSchema = z
   .object({
-    correlationId: z.string().uuid(),
+    correlationId: z.string().refine(isFatalCorrelationId),
     name: z.string().max(80),
     message: z.string().max(400),
     stack: z.string().max(1500).optional(),
@@ -28,7 +29,8 @@ export function acceptClientFatalReport(
     message: sanitizeFatalText(parsed.data.message, 400) || "Failure",
   };
   if (parsed.data.stack) {
-    record.stack = sanitizeFatalText(parsed.data.stack, 1500);
+    const stack = sanitizeFatalText(parsed.data.stack, 1500);
+    if (stack) record.stack = stack;
   }
   log(record);
   return { status: 204 };

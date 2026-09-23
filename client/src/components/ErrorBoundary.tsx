@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { customerFatalNotice, createFatalCorrelationId } from "@shared/clientFatal";
 import { AlertTriangle, RotateCcw } from "lucide-react";
-import { Component, ReactNode } from "react";
+import React, { ReactNode } from "react";
 import { reportClientFatal } from "./reportClientFatal";
 
 interface Props {
@@ -13,7 +13,7 @@ interface State {
   correlationId: string | null;
 }
 
-class ErrorBoundary extends Component<Props, State> {
+class ErrorBoundary extends React.Component<Props, State> {
   constructor(props: Props) {
     super(props);
     this.state = { hasError: false, correlationId: null };
