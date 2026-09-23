@@ -116,9 +116,14 @@ function memoryDb() {
         set(patch: Row) {
           return {
             where: async (predicate: unknown) => {
+              let affectedRows = 0;
               for (const row of rows) {
-                if (matches(row, predicate)) Object.assign(row, patch);
+                if (matches(row, predicate)) {
+                  Object.assign(row, patch);
+                  affectedRows += 1;
+                }
               }
+              return [{ affectedRows }];
             },
           };
         },
@@ -359,6 +364,42 @@ describe("CONTACT execution", () => {
     expect(JSON.stringify(db.missions)).toBe(missionBefore);
     expect(JSON.stringify(db.challenges)).toBe(challengeBefore);
     expect(defaultAuthorityForGoldlineAction("CALL")).toBe("HUMAN_EXECUTION");
+  });
+
+  it("24b. concurrent starts can place only one operator call", async () => {
+    seedReady(db);
+    const session = await prepareRookContactSession({ ...actor, accountId: 10, contactId: 20 });
+    await authorizeRookContactSession({
+      ...actor,
+      contactSessionId: session.contactSessionId,
+      contactId: 20,
+    });
+
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    mocks.placeCall.mockImplementationOnce(async () => {
+      await gate;
+      return { attemptId: 42, repLegCallSid: "CA_operator" };
+    });
+
+    const first = startRookContactBridge({ ...actor, contactSessionId: session.contactSessionId });
+    for (let i = 0; i < 20 && mocks.placeCall.mock.calls.length === 0; i += 1) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    expect(mocks.placeCall).toHaveBeenCalledTimes(1);
+
+    await expect(
+      startRookContactBridge({ ...actor, contactSessionId: session.contactSessionId })
+    ).rejects.toThrow(/already starting|already claimed/);
+    expect(mocks.placeCall).toHaveBeenCalledTimes(1);
+
+    release();
+    const started = await first;
+    expect(started.callAttemptId).toBe(42);
+    expect(db.sessions[0]?.status).toBe("dialing_operator");
+    expect(db.sessions[0]?.callAttemptId).toBe(42);
   });
 
   it("25. the operator is dialed first", async () => {
