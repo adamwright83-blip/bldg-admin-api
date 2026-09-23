@@ -38,10 +38,14 @@ export class Particles {
       this.textures.set(kind, renderer.generateTexture({ target: g, resolution: 2 }));
       g.destroy();
     };
-    bake("dust", g => g.circle(0, 0, 14).fill({ color: 0xd9c2a0, alpha: 0.55 }).circle(0, 0, 8).fill({ color: 0xeeddc4, alpha: 0.5 }));
+    bake("dust", g => {
+      for (let i = 12; i >= 1; i -= 1) g.circle(0, 0, i * 1.6).fill({ color: 0xd8c3a4, alpha: 0.07 });
+    });
     bake("spark", g => g.rect(-7, -1.4, 14, 2.8).fill({ color: 0xfff1b8 }).rect(-3, -0.8, 6, 1.6).fill({ color: 0xffffff }));
     bake("splinter", g => g.poly([-9, -2, 8, -3, 10, 1, -7, 3]).fill({ color: 0x6b4a2c }).poly([-6, -1, 6, -2, 7, 0]).fill({ color: 0x9c7147 }));
-    bake("smoke", g => g.circle(0, 0, 16).fill({ color: 0x4b4f55, alpha: 0.45 }).circle(4, -3, 10).fill({ color: 0x6d7178, alpha: 0.35 }));
+    bake("smoke", g => {
+      for (let i = 12; i >= 1; i -= 1) g.circle(0, 0, i * 1.7).fill({ color: 0x55585e, alpha: 0.075 });
+    });
     bake("ember", g => g.circle(0, 0, 3.2).fill({ color: 0xffc85a }).circle(0, 0, 7).fill({ color: 0xffa42a, alpha: 0.25 }));
     bake("streak", g => g.rect(-40, -0.9, 80, 1.8).fill({ color: 0xf6efd8, alpha: 0.55 }));
     bake("glint", g => g.poly([0, -12, 2, -2, 12, 0, 2, 2, 0, 12, -2, 2, -12, 0, -2, -2]).fill({ color: 0xfff4c4 }));

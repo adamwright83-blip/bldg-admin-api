@@ -626,8 +626,8 @@ const CUE_DEFINITIONS: Record<
   wayward_wind: {
     category: "world",
     steps: [
-      { atMs: 0, freq: 520, durationMs: 2600, type: "noise", glideTo: 700, gain: 0.05, attackMs: 1100, sustain: 0.2 },
-      { atMs: 300, freq: 1300, durationMs: 2000, type: "noise", glideTo: 900, gain: 0.018, attackMs: 900 },
+      { atMs: 0, freq: 520, durationMs: 2600, type: "noise", glideTo: 700, gain: 0.1, attackMs: 1100, sustain: 0.2 },
+      { atMs: 300, freq: 1300, durationMs: 2000, type: "noise", glideTo: 900, gain: 0.036, attackMs: 900 },
     ],
   },
   wind_gust: {
@@ -648,7 +648,7 @@ const CUE_DEFINITIONS: Record<
   timber_creak: {
     category: "world",
     steps: [
-      { freq: 92, durationMs: 620, type: "sawtooth", glideTo: 118, gain: 0.035, attackMs: 120, filter: { type: "bandpass", freq: 520, q: 4, glideTo: 700 }, vibrato: { rate: 17, depth: 3 } },
+      { freq: 92, durationMs: 620, type: "sawtooth", glideTo: 118, gain: 0.07, attackMs: 120, filter: { type: "bandpass", freq: 520, q: 4, glideTo: 700 }, vibrato: { rate: 17, depth: 3 } },
     ],
   },
   ship_groan: {
@@ -685,10 +685,10 @@ const CUE_DEFINITIONS: Record<
   plank_crack: {
     category: "world",
     steps: [
-      { atMs: 0, freq: 3200, durationMs: 60, type: "noise", glideTo: 1400, gain: 0.2, attackMs: 1 },
-      { atMs: 40, freq: 1800, durationMs: 120, type: "noise", glideTo: 700, gain: 0.12, attackMs: 1 },
-      { atMs: 0, freq: 180, durationMs: 140, type: "sawtooth", glideTo: 90, gain: 0.05, filter: { type: "lowpass", freq: 700 } },
-      { atMs: 120, freq: 2600, durationMs: 50, type: "noise", gain: 0.08, attackMs: 1 },
+      { atMs: 0, freq: 3200, durationMs: 60, type: "noise", glideTo: 1400, gain: 0.26, attackMs: 1 },
+      { atMs: 40, freq: 1800, durationMs: 120, type: "noise", glideTo: 700, gain: 0.156, attackMs: 1 },
+      { atMs: 0, freq: 180, durationMs: 140, type: "sawtooth", glideTo: 90, gain: 0.065, filter: { type: "lowpass", freq: 700 } },
+      { atMs: 120, freq: 2600, durationMs: 50, type: "noise", gain: 0.104, attackMs: 1 },
     ],
   },
   debris_fall: {
@@ -702,20 +702,20 @@ const CUE_DEFINITIONS: Record<
   linehook_fire: {
     category: "traversal",
     steps: [
-      { atMs: 0, freq: 700, durationMs: 220, type: "noise", glideTo: 3200, gain: 0.14, attackMs: 10 },
-      { atMs: 0, freq: 220, durationMs: 120, type: "triangle", glideTo: 520, gain: 0.05 },
-      ...[40, 78, 112, 150, 182].map((atMs, i) => ({ atMs, freq: 3900 + i * 260, durationMs: 16, type: "noise" as const, gain: 0.06, attackMs: 1 })),
+      { atMs: 0, freq: 700, durationMs: 220, type: "noise", glideTo: 3200, gain: 0.224, attackMs: 10 },
+      { atMs: 0, freq: 220, durationMs: 120, type: "triangle", glideTo: 520, gain: 0.08 },
+      ...[40, 78, 112, 150, 182].map((atMs, i) => ({ atMs, freq: 3900 + i * 260, durationMs: 16, type: "noise" as const, gain: 0.096, attackMs: 1 })),
     ],
   },
   /** The Linehook bites: bronze rings, the line zings taut. */
   linehook_bite: {
     category: "encounter",
     steps: [
-      { atMs: 0, freq: 3800, durationMs: 50, type: "noise", glideTo: 1500, gain: 0.22, attackMs: 1 },
-      { atMs: 0, freq: 110, durationMs: 180, type: "sine", glideTo: 60, gain: 0.22, attackMs: 1 },
-      { atMs: 0, freq: 1480, durationMs: 520, type: "triangle", glideTo: 1440, gain: 0.12, attackMs: 1 },
-      { atMs: 0, freq: 2210, durationMs: 380, type: "sine", gain: 0.06, attackMs: 1 },
-      { atMs: 60, freq: 880, durationMs: 700, type: "triangle", glideTo: 870, gain: 0.04, attackMs: 2, vibrato: { rate: 9, depth: 6 } },
+      { atMs: 0, freq: 3800, durationMs: 50, type: "noise", glideTo: 1500, gain: 0.33, attackMs: 1 },
+      { atMs: 0, freq: 110, durationMs: 180, type: "sine", glideTo: 60, gain: 0.33, attackMs: 1 },
+      { atMs: 0, freq: 1480, durationMs: 520, type: "triangle", glideTo: 1440, gain: 0.18, attackMs: 1 },
+      { atMs: 0, freq: 2210, durationMs: 380, type: "sine", gain: 0.09, attackMs: 1 },
+      { atMs: 60, freq: 880, durationMs: 700, type: "triangle", glideTo: 870, gain: 0.06, attackMs: 2, vibrato: { rate: 9, depth: 6 } },
     ],
   },
   line_twang: {
@@ -745,8 +745,8 @@ const CUE_DEFINITIONS: Record<
   swing_whoosh: {
     category: "traversal",
     steps: [
-      { atMs: 0, freq: 260, durationMs: 1000, type: "noise", glideTo: 1500, gain: 0.1, attackMs: 450 },
-      { atMs: 450, freq: 1500, durationMs: 600, type: "noise", glideTo: 400, gain: 0.08, attackMs: 30 },
+      { atMs: 0, freq: 260, durationMs: 1000, type: "noise", glideTo: 1500, gain: 0.13, attackMs: 450 },
+      { atMs: 450, freq: 1500, durationMs: 600, type: "noise", glideTo: 400, gain: 0.104, attackMs: 30 },
     ],
   },
   line_release: {
@@ -766,13 +766,13 @@ const CUE_DEFINITIONS: Record<
   },
   fall_gasp: {
     category: "failure",
-    steps: [{ freq: 600, durationMs: 420, type: "noise", glideTo: 1800, gain: 0.1, attackMs: 60 }],
+    steps: [{ freq: 600, durationMs: 420, type: "noise", glideTo: 1800, gain: 0.15, attackMs: 60 }],
   },
   rook_grab: {
     category: "encounter",
     steps: [
-      { atMs: 0, freq: 420, durationMs: 140, type: "sawtooth", glideTo: 300, gain: 0.04, filter: { type: "bandpass", freq: 900, q: 5 } },
-      { atMs: 0, freq: 3000, durationMs: 40, type: "noise", gain: 0.1, attackMs: 1 },
+      { atMs: 0, freq: 420, durationMs: 140, type: "sawtooth", glideTo: 300, gain: 0.1, filter: { type: "bandpass", freq: 900, q: 5 } },
+      { atMs: 0, freq: 3000, durationMs: 40, type: "noise", gain: 0.25, attackMs: 1 },
     ],
   },
   rook_haul: {
@@ -822,11 +822,11 @@ const CUE_DEFINITIONS: Record<
   },
   murmur_rook: {
     category: "world",
-    steps: [{ freq: 262, durationMs: 170, type: "sawtooth", bend: { to: 300, at: 0.4 }, glideTo: 236, gain: 0.04, attackMs: 15, filter: { type: "lowpass", freq: 900, q: 6 } }],
+    steps: [{ freq: 262, durationMs: 170, type: "sawtooth", bend: { to: 300, at: 0.4 }, glideTo: 236, gain: 0.056, attackMs: 15, filter: { type: "lowpass", freq: 900, q: 6 } }],
   },
   murmur_inspector: {
     category: "world",
-    steps: [{ freq: 150, durationMs: 200, type: "sawtooth", bend: { to: 172, at: 0.4 }, glideTo: 136, gain: 0.045, attackMs: 15, filter: { type: "lowpass", freq: 700, q: 6 } }],
+    steps: [{ freq: 150, durationMs: 200, type: "sawtooth", bend: { to: 172, at: 0.4 }, glideTo: 136, gain: 0.063, attackMs: 15, filter: { type: "lowpass", freq: 700, q: 6 } }],
   },
   paper_rustle: {
     category: "world",
@@ -919,8 +919,8 @@ const CUE_DEFINITIONS: Record<
   line_clear: {
     category: "traversal",
     steps: [
-      { atMs: 0, freq: 2349, durationMs: 180, type: "sine", gain: 0.03, attackMs: 4 },
-      { atMs: 30, freq: 3136, durationMs: 140, type: "sine", gain: 0.018, attackMs: 4 },
+      { atMs: 0, freq: 2349, durationMs: 180, type: "sine", gain: 0.054, attackMs: 4 },
+      { atMs: 30, freq: 3136, durationMs: 140, type: "sine", gain: 0.032, attackMs: 4 },
     ],
   },
   /** The correct time arrives: a single bell. Fiction's resolution, not a sale. */

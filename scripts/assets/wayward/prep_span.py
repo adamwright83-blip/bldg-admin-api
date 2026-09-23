@@ -15,7 +15,8 @@ Outputs (client/public/assets/goldline/wayward/voyage/):
   span-right-N.webp     city-side chunks (collapse after the tether is cut)
   span-ring.webp        tether ring and straps
   span-crate.webp       the hanging crate (reused as the loose cargo on the boom)
-  span-rope.webp        a straight rope tile for live ropes
+  span-rope.webp        a straight rope tile for live ropes (shaded strand in the painting's rope colours)
+  span-barrel.webp      a barrel from the city side, reused as loose cargo
   span-parts.json       every part's position in painting coordinates
 """
 import json, math, os
@@ -85,26 +86,28 @@ def save_part(rgba, mask, name, parts, anchor=None):
 
 
 def rope_tile(rgba):
-    """Resample the painted left tether rope into a straight horizontal tile."""
-    (ax, ay), (bx, by) = (470, 174), (578, 241)
-    length = int(math.hypot(bx - ax, by - ay))
-    ux, uy = (bx - ax) / length, (by - ay) / length
-    nx, ny = -uy, ux
-    h = 16
-    tile = np.zeros((h, length, 4), np.uint8)
-    src = rgba.astype(np.float32)
-    for i in range(length):
-        for j in range(h):
-            off = j - h / 2
-            x = ax + ux * i + nx * off
-            y = ay + uy * i + ny * off
-            x0, y0 = int(x), int(y)
-            fx, fy = x - x0, y - y0
-            p = (src[y0, x0] * (1 - fx) * (1 - fy) + src[y0, x0 + 1] * fx * (1 - fy)
-                 + src[y0 + 1, x0] * (1 - fx) * fy + src[y0 + 1, x0 + 1] * fx * fy)
-            tile[j, i] = p
-    img = Image.fromarray(tile)
-    img.save(os.path.join(OUT, "span-rope.webp"), "WEBP", quality=90, method=6)
+    """
+    A straight rope tile for live ropes. Sampling the painted rope carried
+    background into its edges and read as beads when tiled, so the tile is a
+    shaded, gently twisted strand in the painted ropes' own colours instead.
+    """
+    del rgba
+    W, H = 96, 16
+    y = np.arange(H)[:, None] / (H - 1)
+    x = np.arange(W)[None, :]
+    r = np.abs(y - 0.5) * 2
+    shade = np.clip(1.0 - r ** 1.8, 0, 1)
+    twist = 0.5 + 0.5 * np.sin((x / 9.0 + y * 1.6) * 2 * np.pi)
+    base = np.array([150, 104, 60], float)
+    dark = np.array([74, 48, 26], float)
+    light = np.array([214, 170, 112], float)
+    col = dark[None, None, :] * (1 - shade[..., None]) + base[None, None, :] * shade[..., None]
+    col = col * (0.86 + 0.14 * twist[..., None])
+    hi = np.clip(1 - np.abs(y - 0.32) * 6, 0, 1) * 0.35
+    col = col * (1 - hi[..., None]) + light[None, None, :] * hi[..., None]
+    alpha = np.clip((1 - r) * 3.2, 0, 1) * 255
+    img = Image.fromarray(np.dstack([np.clip(col, 0, 255), np.broadcast_to(alpha, (H, W))]).astype(np.uint8))
+    img.save(os.path.join(OUT, "span-rope.webp"), "WEBP", quality=92)
     return img
 
 

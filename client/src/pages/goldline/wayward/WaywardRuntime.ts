@@ -1,6 +1,9 @@
 import { Application, ColorMatrixFilter, Container, Graphics, RenderTexture, Sprite, type Texture } from "pixi.js";
 import { getAudioManager, type AudioCueId, type PlayOptions } from "@/game/audio/AudioManager";
 import { remapAnalogInput, stepVelocity } from "../overworld/movement";
+import { moveWithCollision } from "../overworld/navigation";
+import type { OverworldMapDefinition } from "../overworld/types";
+import { CITY_STAGE_MAP, DECK_MAP, SAIL_MAP, SHIP_END_BROKEN_MAP, SHIP_END_MAP } from "./waywardMaps";
 import { RookActor, TrailblazerActor } from "./actors";
 import { DECK_SPAWN, DeckScene, GUARDIAN, HULL_CACHE, SPAN_TRIGGER } from "./deckScene";
 import { Particles, Shake, haptic } from "./fx";
@@ -147,6 +150,9 @@ export class WaywardRuntime {
   private edgeWarned = false;
   private lastTelegraph = 0;
   private readonly crateShadow = new Graphics();
+  private arrival: { clock: number } | null = null;
+  private castOffStarted = false;
+  private castHintShown = false;
 
   private constructor(private readonly options: WaywardRuntimeOptions) {
     this.reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
@@ -183,7 +189,7 @@ export class WaywardRuntime {
       ...FACINGS.flatMap(f => [TRAILBLAZER.directional("idle", f), ...[1, 2, 3, 4, 5].map(n => TRAILBLAZER.directional("walk", f, n))]),
       ...Object.values(TRAILBLAZER.poses),
     ];
-    const plateUrls = [PLATES.bridge, PLATES.awakeDeck, PLATES.deckForeground, PLATES.openSky, PLATES.mooringCity, PLATES.fog, HULL_CACHE_URL];
+    const plateUrls = [PLATES.bridge, PLATES.awakeDeck, PLATES.deckForeground, PLATES.guardian, PLATES.openSky, PLATES.mooringCity, PLATES.fog, HULL_CACHE_URL];
     const partUrls = SPAN_PARTS.map(spanPartUrl);
     const rookStates: RookState[] = ["idle", "walk", "talk", "confide", "wait", "letter", "dangle", "shrug", "brace", "point"];
     const [textures, rookFrames, inspectorFrames] = await Promise.all([
@@ -205,8 +211,8 @@ export class WaywardRuntime {
       this.rook.onStep = () => this.footstep(0.55, 1.4);
       this.rookFollow = { position: { ...this.rook.position }, facing: "back", moving: false, stillFor: 0, side: 1 };
     }
-    this.pell = new InspectorActor(inspectorFrames, "pell", { x: 1262, y: 440 }, 224);
-    this.dunmore = new InspectorActor(inspectorFrames, "dunmore", { x: 1352, y: 458 }, 224);
+    this.pell = new InspectorActor(inspectorFrames, "pell", { x: 1206, y: 444 }, 224);
+    this.dunmore = new InspectorActor(inspectorFrames, "dunmore", { x: 1270, y: 460 }, 224);
 
     this.drain.desaturate();
     this.drain.alpha = 0;
@@ -291,6 +297,8 @@ export class WaywardRuntime {
     this.stage = stage;
     const root = stage === "deck" ? this.deck.root : stage === "span" ? this.span.root : this.sail.root;
     this.world.addChild(root);
+    // The Line is drawn above the scene so the RECOIL's colour drain never touches it.
+    if (stage === "span") this.world.addChild(this.span.hookLine);
     this.world.addChild(this.particles.view);
     this.world.addChild(this.glyph);
     this.particles.clear();
@@ -299,13 +307,17 @@ export class WaywardRuntime {
   private enterDeck() {
     this.mount("deck");
     this.tb.height = TRAILBLAZER_HEIGHT.deck;
-    this.tb.position = { ...DECK_SPAWN };
+    // They come aboard from the gangway behind the camera and walk up into the shot.
+    this.tb.position = { x: DECK_SPAWN.x, y: 668 };
     this.tb.facing = "back";
+    this.tbMode = "locked";
     this.deck.actors.addChild(this.tb.view);
+    this.arrival = { clock: 0 };
     if (this.rook) {
       this.rook.height = TRAILBLAZER_HEIGHT.deck * ROOK_RATIO;
-      this.rook.position = { x: DECK_SPAWN.x + 92, y: DECK_SPAWN.y - 14 };
-      this.rook.play("idle", "back");
+      this.rook.position = { x: DECK_SPAWN.x + 92, y: 700 };
+      this.rook.play("walk", "back");
+      this.rookScripted = true;
       this.rookFollow = { position: { ...this.rook.position }, facing: "back", moving: false, stillFor: 0, side: 1 };
       this.deck.actors.addChild(this.rook.view);
     }
@@ -422,8 +434,8 @@ export class WaywardRuntime {
 
   private placeInspectors() {
     if (!this.pell || !this.dunmore) return;
-    this.pell.position = { x: 1262, y: 440 };
-    this.dunmore.position = { x: 1352, y: 458 };
+    this.pell.position = { x: 1206, y: 444 };
+    this.dunmore.position = { x: 1270, y: 460 };
     this.pell.facing = 1;
     this.dunmore.facing = 1;
     this.pell.setPose("inspect");
@@ -471,7 +483,30 @@ export class WaywardRuntime {
 
   // ------------------------------------------------------------------ deck
   private updateDeck(dt: number) {
-    this.moveFree(dt, p => this.deck.walkable(p), this.deck.depthScale(this.tb.position.y));
+    if (this.arrival) {
+      const a = this.arrival;
+      a.clock += dt;
+      const k = Math.min(1, a.clock / 1.5);
+      const e = 1 - (1 - k) * (1 - k);
+      this.tb.position = { x: DECK_SPAWN.x, y: lerp(668, DECK_SPAWN.y, e) };
+      this.tb.moving = k < 1;
+      this.tb.velocity = { x: 0, y: k < 1 ? -60 : 0 };
+      if (this.rook) {
+        this.rook.position = { x: DECK_SPAWN.x + 92, y: lerp(700, DECK_SPAWN.y - 14, Math.min(1, a.clock / 1.9)) };
+        this.rook.setWalkRate(70, this.deck.depthScale(this.rook.position.y));
+        if (a.clock >= 1.9) {
+          this.rook.play("idle", "back");
+          this.rookScripted = false;
+          this.rookFollow.position = { ...this.rook.position };
+        }
+      }
+      if (k >= 1 && (!this.rook || a.clock >= 1.9)) {
+        this.arrival = null;
+        this.tbMode = "free";
+        this.tb.moving = false;
+      }
+    }
+    this.moveFree(dt, DECK_MAP, this.deck.depthScale(this.tb.position.y));
     const scale = this.deck.depthScale(this.tb.position.y);
     this.tb.update(dt);
     this.tb.present(scale);
@@ -610,19 +645,16 @@ export class WaywardRuntime {
     let p = this.tb.position;
     const forcedTo = { x: p.x + forced.x, y: p.y + forced.y };
     const over = side === "ship" ? this.span.pastShipEdge(forcedTo) : this.span.pastCityEdge(forcedTo);
-    if (over > 6) {
+    if (over > 4) {
       this.tb.position = forcedTo;
       this.startFall();
       return;
     }
     if (this.span.walkable(side, forcedTo)) p = forcedTo;
     const step = { x: this.tb.velocity.x * dt, y: this.tb.velocity.y * dt };
-    const tryAt = (q: Vec) => this.span.walkable(side, q);
-    const next = { x: p.x + step.x, y: p.y + step.y };
-    if (tryAt(next)) p = next;
-    else if (tryAt({ x: p.x + step.x, y: p.y })) p = { x: p.x + step.x, y: p.y };
-    else if (tryAt({ x: p.x, y: p.y + step.y })) p = { x: p.x, y: p.y + step.y };
-    else this.tb.velocity = { x: 0, y: 0 };
+    const moved = moveWithCollision(this.spanMap(side), p, step, 3);
+    if (moved.x === p.x && moved.y === p.y && (step.x || step.y)) this.tb.velocity = { x: 0, y: 0 };
+    p = moved;
     this.tb.position = p;
     const speed = Math.hypot(this.tb.velocity.x, this.tb.velocity.y);
     this.tb.moving = speed > 8 && this.tbMode === "free";
@@ -636,6 +668,11 @@ export class WaywardRuntime {
       const crateHit = this.crateContact();
       if (crateHit) this.knock(crateHit, "crate");
     }
+  }
+
+  private spanMap(side: SpanSide): OverworldMapDefinition {
+    if (side === "city") return CITY_STAGE_MAP;
+    return this.span.edgeBroken ? SHIP_END_BROKEN_MAP : SHIP_END_MAP;
   }
 
   /** The boom crate sweeping the edge: a solid hit if it passes through her. */
@@ -691,7 +728,7 @@ export class WaywardRuntime {
 
     // Standing on the crumbling edge: it groans, then it goes.
     if (this.tbSide === "ship" && this.tbMode === "free" && !this.span.edgeBroken) {
-      const near = this.span.pastShipEdge(this.tb.position) > -44;
+      const near = this.span.pastShipEdge(this.tb.position) > -36;
       this.edgeClock = near ? this.edgeClock + dt : Math.max(0, this.edgeClock - dt * 2);
       if (this.edgeClock > 2.0 && !this.edgeWarned) {
         this.edgeWarned = true;
@@ -764,13 +801,17 @@ export class WaywardRuntime {
       const ahead = this.span.ringAtTime(this.time + len(sub(ring, hand)) / SPAN.hookSpeed);
       g.circle(ahead.x, ahead.y, 22).stroke({ color: 0xfff1c0, width: 1.5, alpha: 0.45 });
     }
-    this.setGlyph(aim.inRange ? (aim.clear ? "cast" : "blocked") : null, { x: hand.x, y: hand.y - 150 });
+    this.setGlyph(aim.inRange ? (aim.clear ? "cast" : "blocked") : null, { x: hand.x, y: hand.y - 70 });
     const clean = aim.inRange && aim.clear;
     if (clean && !this.wasClear && this.tbMode === "free") {
       this.cue("line_clear");
       haptic(6);
     }
     this.wasClear = clean;
+    if (!this.castHintShown && this.beat === "hold" && this.beatClock > 14 && this.fouls === 0 && !this.cast) {
+      this.castHintShown = true;
+      this.options.events.onHint("WHEN THE THREAD RUNS GOLD TO THE RING — TAP");
+    }
     if (this.actQueued && this.tbMode === "free" && this.castCooldown <= 0 && aim.inRange) this.fireCast(hand, ring);
     else if (this.actQueued && !aim.inRange && this.tbMode === "free") this.cue("linehook_dry", { pitch: 1.1 });
   }
@@ -794,8 +835,12 @@ export class WaywardRuntime {
   private updateCast(dt: number) {
     this.castCooldown = Math.max(0, this.castCooldown - dt);
     const cast = this.cast;
+    // The swing and the RECOIL draw their own Line; only a cast owns it otherwise.
+    if (!cast) {
+      if (this.tbMode !== "traverse" && this.tbMode !== "recoil") this.span.hookLine.clear();
+      return;
+    }
     const g = this.span.hookLine.clear();
-    if (!cast) return;
     const hand = this.handWorld();
     if (cast.outcome && cast.outcome.kind !== "flying") {
       // Slack line whipping back to her hand.
@@ -977,7 +1022,8 @@ export class WaywardRuntime {
       this.tb.setPose(null);
       this.tb.facing = side === "city" ? "right" : "left";
       if (this.beat === "swing") this.afterCrossing();
-      else if (this.beat === "returnSwing") this.afterReturn();
+      else if (this.beat === "returnSwing" && this.castOffStarted) this.afterReturn();
+      else if (this.beat === "returnSwing") this.backAboardTethered();
     }, 520);
   }
 
@@ -1030,7 +1076,7 @@ export class WaywardRuntime {
     this.tbModeClock += dt;
     const rook = this.rook;
     if (!rook) return;
-    const edgeLocal = { x: (this.span.edgeBroken ? 480 : SPAN.leftEdgeX) - 22, y: this.tb.position.y };
+    const edgeLocal = { x: this.span.dropX("ship", this.tb.position.y) - 6, y: this.tb.position.y };
     if (this.tbModeClock < 0.12) {
       this.tb.offset = { x: 0, y: 0.5 * 1100 * this.tbModeClock * this.tbModeClock };
     } else if (this.tbModeClock < 0.9) {
@@ -1045,7 +1091,7 @@ export class WaywardRuntime {
       }
     } else {
       this.tb.offset = { x: 0, y: 0 };
-      this.tb.position = { x: edgeLocal.x - 20, y: this.tb.position.y };
+      this.tb.position = { x: edgeLocal.x - 46, y: this.tb.position.y };
       this.tb.setPose("land");
       this.tbMode = "stagger";
       this.tbModeClock = -0.2;
@@ -1064,18 +1110,19 @@ export class WaywardRuntime {
     const toShip = this.tbSide === "ship" || this.beat === "castoff";
     const worldFrom = { x: this.worldOf(this.tb.position).x, y: this.worldOf(this.tb.position).y + this.tb.offset.y };
     this.tb.offset = { x: 0, y: 0 };
-    this.span.root.addChild(this.tb.view);
+    // Colour drains from the world, not from her: she and the Line stay in colour.
+    this.world.addChildAt(this.tb.view, this.world.getChildIndex(this.span.hookLine));
     this.tb.position = worldFrom;
     const anchorLocal = toShip ? ANCHOR_BOLLARD : { x: 1180, y: 440 };
     this.recoil = { from: worldFrom, clock: 0, anchor: anchorLocal, toShip };
-    this.world.filters = [this.drain];
+    this.span.root.filters = [this.drain];
     this.cue("cut_pulse");
     this.slowmo = { until: this.time + 0.35, scale: 0.35 };
     if (this.beat === "castoff" && this.rook && !this.rookAttached) {
       // He will not be left behind: he grabs her boot as the Line takes her.
       this.rookAttached = true;
       this.rookScripted = true;
-      this.span.root.addChild(this.rook.view);
+      this.world.addChildAt(this.rook.view, this.world.getChildIndex(this.span.hookLine));
       this.rook.play("dangle", "left");
     }
   }
@@ -1128,7 +1175,7 @@ export class WaywardRuntime {
       if (Math.random() < 0.4) this.particles.emit("smoke", this.worldOf({ x: this.tb.position.x, y: this.tb.position.y - 50 }), { count: 1, speed: 20, life: 1.4, gravity: -50 });
       if (c > 1.7) {
         this.recoil = null;
-        this.world.filters = [];
+        this.span.root.filters = [];
         this.tb.setPose(null);
         this.tbMode = "free";
         this.tb.facing = "right";
@@ -1163,7 +1210,7 @@ export class WaywardRuntime {
     void dt;
     if (this.beat === "parley" || this.beat === "clamp" || this.beat === "sealed") {
       // The mooring stage belongs to the inspectors until they go.
-      const limit = this.beat === "parley" ? 1178 : this.beat === "sealed" && this.pell?.view.visible ? 1040 : 1480;
+      const limit = this.beat === "parley" ? 1150 : this.beat === "sealed" && this.pell?.view.visible ? 1040 : 1480;
       if (this.tbSide === "city" && this.tb.position.x > limit) {
         this.tb.position = { x: limit, y: this.tb.position.y };
         this.tb.velocity = { x: 0, y: this.tb.velocity.y };
@@ -1214,29 +1261,32 @@ export class WaywardRuntime {
     this.rookScripted = true;
     this.setBeat("parley");
     const R = rook;
+    // Rook goes past them and turns back to talk, so we watch his face over their shoulders.
     this.schedule([
       { at: 0.5, run: () => { pell.facing = -1; dun.facing = -1; pell.setPose("halt"); this.cue("inspector_shout"); } },
       { at: 1.0, run: () => { dun.setPose("angry"); this.cue("inspector_shout", { pitch: 0.82, delayMs: 120 }); } },
       { at: 1.6, run: () => { R.play("wait", "left"); this.say("rook-wait-here"); } },
-      { at: 2.8, run: () => { dun.setPose("idle"); this.walkRookTo({ x: 1180, y: 452 }, () => R.play("talk", "right")); } },
-      { at: 4.6, run: () => { this.murmur("rook", 3.2); pell.setPose("listen"); } },
-      { at: 6.4, run: () => { pell.setPose("laugh"); this.cue("inspector_laugh"); } },
-      { at: 8.0, run: () => { pell.setPose("idle"); R.play("confide", "right"); this.murmur("rook", 1.6); } },
-      { at: 9.2, run: () => { dun.setPose("angry"); this.cue("inspector_shout", { pitch: 0.78 }); this.shake.add(0.06); } },
-      { at: 10.6, run: () => { dun.setPose("idle"); R.play("letter", "right"); } },
-      { at: 11.8, run: () => { this.cue("paper_rustle"); } },
-      { at: 12.1, run: () => { dun.setPose("read"); } },
-      { at: 13.2, run: () => { pell.setPose("listen"); R.play("idle", "right"); } },
-      { at: 15.0, run: () => { dun.setPose("pocket"); this.cue("paper_rustle", { pitch: 0.8 }); } },
-      { at: 15.6, run: () => { this.say("inspector-square"); } },
-      { at: 17.4, run: () => { dun.facing = 1; dun.setPose("walk"); dun.walkSpeed = 70; this.cue("inspector_steps"); } },
+      { at: 2.8, run: () => { dun.setPose("idle"); pell.setPose("idle"); this.walkRookTo({ x: 1352, y: 474 }, () => R.play("talk", "left")); } },
+      { at: 4.2, run: () => { pell.facing = 1; } },
+      { at: 4.5, run: () => { dun.facing = 1; } },
+      { at: 4.8, run: () => { this.murmur("rook", 3.2); pell.setPose("listen"); dun.setPose("listen"); } },
+      { at: 6.6, run: () => { pell.setPose("laugh"); this.cue("inspector_laugh"); } },
+      { at: 8.2, run: () => { pell.setPose("idle"); R.play("confide", "left"); this.murmur("rook", 1.6); } },
+      { at: 9.4, run: () => { dun.setPose("angry"); this.cue("inspector_shout", { pitch: 0.78 }); this.shake.add(0.06); } },
+      { at: 10.8, run: () => { dun.setPose("idle"); R.play("letter", "left"); } },
+      { at: 12.0, run: () => { this.cue("paper_rustle"); } },
+      { at: 12.3, run: () => { dun.setPose("read"); } },
+      { at: 13.4, run: () => { pell.setPose("listen"); R.play("idle", "left"); } },
+      { at: 15.2, run: () => { dun.setPose("pocket"); this.cue("paper_rustle", { pitch: 0.8 }); } },
+      { at: 15.8, run: () => { this.say("inspector-square"); } },
+      { at: 17.4, run: () => { dun.setPose("walk"); dun.walkSpeed = 72; this.cue("inspector_steps"); } },
       { at: 17.9, run: () => { pell.setPose("tip"); this.cue("inspector_laugh", { pitch: 1.2 }); } },
-      { at: 18.8, run: () => { pell.facing = 1; pell.setPose("walk"); pell.walkSpeed = 82; } },
-      { at: 20.2, run: () => { this.walkRookTo({ x: this.tb.position.x + 70, y: this.tb.position.y + 10 }, () => R.play("idle", "left")); } },
-      { at: 21.6, run: () => this.say("tb-what-did-you-tell-them") },
-      { at: 23.0, run: () => { R.play("shrug", "left"); this.say("rook-nothing-untrue"); } },
-      { at: 25.2, run: () => { R.play("point", "right"); this.say("rook-your-turn"); } },
-      { at: 26.4, run: () => { this.setBeat("clamp"); this.rookScripted = true; } },
+      { at: 18.8, run: () => { pell.setPose("walk"); pell.walkSpeed = 84; } },
+      { at: 19.6, run: () => { this.walkRookTo({ x: this.tb.position.x + 74, y: this.tb.position.y + 12 }, () => R.play("idle", "left")); } },
+      { at: 22.4, run: () => this.say("tb-what-did-you-tell-them") },
+      { at: 23.8, run: () => { R.play("shrug", "left"); this.say("rook-nothing-untrue"); } },
+      { at: 26.0, run: () => { R.play("point", "right"); this.say("rook-your-turn"); } },
+      { at: 27.2, run: () => { this.setBeat("clamp"); this.rookScripted = true; } },
     ]);
   }
 
@@ -1274,7 +1324,15 @@ export class WaywardRuntime {
   }
 
   // ------------------------------------------------------------------ cast-off
+  /** Turned back at a sealed tether: she is on the ship's end again, and it is still moored. */
+  private backAboardTethered() {
+    this.setBeat("hold");
+    this.tbMode = "free";
+    this.span.calm = true;
+  }
+
   private releaseClamp() {
+    this.castOffStarted = true;
     this.setBeat("castoff");
     this.tbMode = "locked";
     this.tb.setPose("vault", { flip: false });
@@ -1346,7 +1404,7 @@ export class WaywardRuntime {
       if (c > 0.35 && c < 1.8) this.shake.add(dt * 0.35);
     }
     sail.update(this.time, dt, this.cam.center);
-    if (this.tbMode === "free") this.moveFree(dt, p => this.sail.walkable(p), this.sail.depthScale(this.tb.position.y));
+    if (this.tbMode === "free") this.moveFree(dt, SAIL_MAP, this.sail.depthScale(this.tb.position.y));
     this.tb.update(dt);
     this.tb.present(this.sail.depthScale(this.tb.position.y));
     this.tb.view.zIndex = this.tb.position.y;
@@ -1370,7 +1428,7 @@ export class WaywardRuntime {
   }
 
   // ------------------------------------------------------------------ shared movement
-  private moveFree(dt: number, walkable: (p: Vec) => boolean, depth: number) {
+  private moveFree(dt: number, map: OverworldMapDefinition, depth: number) {
     if (this.tbMode !== "free") {
       this.tb.moving = false;
       return;
@@ -1380,11 +1438,9 @@ export class WaywardRuntime {
     const scale = lerp(0.7, 1, (depth - 0.6) / 0.45);
     const step = { x: this.tb.velocity.x * dt * scale, y: this.tb.velocity.y * dt * scale * 0.8 };
     const p = this.tb.position;
-    const next = { x: p.x + step.x, y: p.y + step.y };
-    if (walkable(next)) this.tb.position = next;
-    else if (walkable({ x: next.x, y: p.y })) this.tb.position = { x: next.x, y: p.y };
-    else if (walkable({ x: p.x, y: next.y })) this.tb.position = { x: p.x, y: next.y };
-    else this.tb.velocity = { x: 0, y: 0 };
+    const next = moveWithCollision(map, p, step, 6);
+    if (next.x === p.x && next.y === p.y && (step.x || step.y)) this.tb.velocity = { x: 0, y: 0 };
+    this.tb.position = next;
     const speed = Math.hypot(this.tb.velocity.x, this.tb.velocity.y);
     this.tb.moving = speed > 8;
     if (this.tb.moving) {
@@ -1450,7 +1506,7 @@ export class WaywardRuntime {
         // Keep her in the left third and the ring in frame: the question is always visible.
         x = Math.max(feet.x + this.cam.frame * 0.16, this.span.ringAt.x - this.cam.frame * 0.36);
       }
-      if (b === "parley" || b === "sealed") x = 1196;
+      if (b === "parley" || b === "sealed") x = 1188;
       if (b === "clamp") x = lerp(feet.x, CLAMP_POINT.x, 0.4);
       if (b === "castoff") x = lerp(feet.x, this.span.ringAt.x, 0.42);
       if (b === "toSail") x = this.span.shipToWorld({ x: 400, y: 430 }).x + 80;
@@ -1657,6 +1713,12 @@ export class WaywardRuntime {
       teleport: (x: number, y: number) => {
         this.tb.position = { x, y };
       },
+      forceFall: () => {
+        this.rookSaveUsed = true;
+        this.startFall();
+      },
+      act: () => this.act(),
+      setMove: (x: number, y: number) => this.setMove(x, y),
       skipTo: (beat: "span" | "parley" | "castoff" | "sail") => {
         if (beat === "span") this.enterSpan(true);
         else if (beat === "parley") this.enterSpanFromSave();

@@ -16,30 +16,17 @@ import {
   type Vec,
 } from "./holdTheLine";
 import { SPAN_LAYOUT, spanPartUrl, PLATES, type SpanPartId } from "./waywardAssets";
-import { pointInPolygon } from "../overworld/navigation";
+import { isWalkable } from "../overworld/navigation";
+import { ANCHOR_BOLLARD, CITY_WALK, CLAMP_POINT, SHIP_WALK, SHIP_WALK_BROKEN } from "./waywardGeometry";
+import { CITY_STAGE_MAP, SHIP_END_BROKEN_MAP, SHIP_END_MAP } from "./waywardMaps";
+
+export { ANCHOR_BOLLARD, CITY_WALK, CLAMP_POINT, SHIP_WALK, SHIP_WALK_BROKEN };
 
 /**
  * The broken span, seen side-on: the Wayward's broken end on the left, the
  * tether ring over the gap, Mooring City's mooring stage on the right. Built
  * only from the approved painting's own pixels, cut into live parts.
  */
-/** The clear planks between the lashed cargo and the broken edge, plus the strip in front of the coils. */
-export const SHIP_WALK: Vec[] = [
-  { x: 196, y: 444 }, { x: 330, y: 440 }, { x: 334, y: 394 }, { x: 560, y: 388 }, { x: 640, y: 398 },
-  { x: 664, y: 414 }, { x: 652, y: 440 }, { x: 560, y: 452 }, { x: 420, y: 460 }, { x: 196, y: 462 },
-];
-export const SHIP_WALK_BROKEN: Vec[] = [
-  { x: 196, y: 444 }, { x: 330, y: 440 }, { x: 334, y: 394 }, { x: 488, y: 390 }, { x: 496, y: 420 },
-  { x: 486, y: 456 }, { x: 420, y: 460 }, { x: 196, y: 462 },
-];
-export const CITY_WALK: Vec[] = [
-  { x: 952, y: 410 }, { x: 1040, y: 398 }, { x: 1200, y: 398 }, { x: 1470, y: 406 },
-  { x: 1490, y: 440 }, { x: 1460, y: 478 }, { x: 1250, y: 482 }, { x: 1060, y: 470 }, { x: 975, y: 450 },
-];
-const BOLLARD = { x: 1330, y: 430, rx: 44, ry: 17 };
-export const ANCHOR_BOLLARD: Vec = { x: 150, y: 432 };
-export const CLAMP_POINT: Vec = { x: 1092, y: 418 };
-
 export type SpanSide = "ship" | "city";
 
 type Cargo = { sprite: Sprite; home: Vec; x: number; y: number; vx: number; state: "resting" | "sliding" | "falling" | "gone"; fall: number; spin: number };
@@ -255,11 +242,8 @@ export class SpanScene {
   }
 
   walkable(side: SpanSide, p: Vec): boolean {
-    if (side === "ship") return pointInPolygon(p, this.edgeBroken ? SHIP_WALK_BROKEN : SHIP_WALK);
-    if (!pointInPolygon(p, CITY_WALK)) return false;
-    const bx = (p.x - BOLLARD.x) / BOLLARD.rx;
-    const by = (p.y - BOLLARD.y) / BOLLARD.ry;
-    return bx * bx + by * by > 1;
+    if (side === "ship") return isWalkable(this.edgeBroken ? SHIP_END_BROKEN_MAP : SHIP_END_MAP, p);
+    return isWalkable(CITY_STAGE_MAP, p);
   }
 
   /** Perspective across the thin plank band: a touch smaller at the back. */
@@ -267,14 +251,28 @@ export class SpanScene {
     return lerp(0.93, 1, smoothstep(396, 470, y));
   }
 
-  /** How far past the ship's broken end a point is (positive = over the drop). */
+  /**
+   * Where the planks end at this depth: the broken ends are staggered, so the
+   * drop is wherever the walkable planks stop on the gap side, lane by lane.
+   */
+  dropX(side: SpanSide, y: number): number {
+    if (side === "ship") {
+      let x = 340;
+      while (x < 720 && this.walkable("ship", { x: x + 4, y })) x += 4;
+      return x;
+    }
+    let x = 1200;
+    while (x > 900 && this.walkable("city", { x: x - 4, y })) x -= 4;
+    return x;
+  }
+
+  /** How far past the drop a point is (positive = over open sky). */
   pastShipEdge(p: Vec): number {
-    const edge = this.edgeBroken ? 492 : SPAN.leftEdgeX + (p.y > 440 ? -18 : 0);
-    return p.x - edge;
+    return p.x - this.dropX("ship", clamp(p.y, 392, 458));
   }
 
   pastCityEdge(p: Vec): number {
-    return 978 - p.x - (p.y > 455 ? 8 : 0);
+    return this.dropX("city", clamp(p.y, 400, 476)) - p.x;
   }
 
   update(t: number, dt: number) {

@@ -6,10 +6,12 @@ import { Assets, Rectangle, Texture, type Spritesheet } from "pixi.js";
  * overworld sheets rendered from his approved model through the shared rig
  * (scripts/assets/blender/rook_rig.py).
  */
-const W = "/assets/goldline/wayward";
+/** Where /assets lives. Empty in the app; "." when the voyage is built as a standalone page. */
+export const ASSET_BASE: string = (import.meta.env.VITE_WAYWARD_ASSET_BASE as string | undefined) ?? "";
+const W = `${ASSET_BASE}/assets/goldline/wayward`;
 const V = `${W}/voyage`;
-const TB = "/assets/goldline/characters/trailblazer";
-const ROOK = "/assets/goldline/companions/rook/overworld";
+const TB = `${ASSET_BASE}/assets/goldline/characters/trailblazer`;
+const ROOK = `${ASSET_BASE}/assets/goldline/companions/rook/overworld`;
 
 export const PLATES = {
   bridge: `${W}/bridge-to-mooring-city.webp`,
@@ -18,8 +20,7 @@ export const PLATES = {
   guardian: `${W}/tether-guardian.webp`,
   openSky: `${V}/open-sky.webp`,
   mooringCity: `${V}/mooring-city.webp`,
-  hullCache: "/assets/goldline/wayward/voyage/hull-cache.webp",
-  fog: "/assets/goldline/procedural-world-v1/08-cloud-fog-overlay.png",
+  fog: `${ASSET_BASE}/assets/goldline/procedural-world-v1/08-cloud-fog-overlay.png`,
 } as const;
 
 export const SPAN_PARTS = [

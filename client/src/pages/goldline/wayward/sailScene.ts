@@ -1,8 +1,11 @@
 import { Container, FillGradient, Graphics, Sprite, Texture } from "pixi.js";
 import { clamp, lerp, smoothstep, type Vec } from "./holdTheLine";
-import { pointInPolygon } from "../overworld/navigation";
 import { PLATES, subTexture } from "./waywardAssets";
-import { GUARDIAN } from "./deckScene";
+import { BOW_POINT, GUARDIAN, GUARDIAN_HEIGHT, GUARDIAN_LIGHTS, SAIL_SPAWN, SAIL_WALK } from "./waywardGeometry";
+import { isWalkable } from "../overworld/navigation";
+import { SAIL_MAP } from "./waywardMaps";
+
+export { BOW_POINT, SAIL_SPAWN, SAIL_WALK };
 
 /**
  * CAST OFF. The deck she walked in on, seen from the same place — and then it
@@ -19,12 +22,6 @@ function lerpColor(a: number, b: number, t: number): number {
   const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
   return (Math.round(ar + (br - ar) * t) << 16) | (Math.round(ag + (bg - ag) * t) << 8) | Math.round(ab + (bb - ab) * t);
 }
-
-export const SAIL_WALK: Vec[] = [
-  { x: 300, y: 646 }, { x: 1236, y: 646 }, { x: 1060, y: 470 }, { x: 488, y: 470 },
-];
-export const BOW_POINT: Vec = { x: 772, y: 478 };
-export const SAIL_SPAWN: Vec = { x: 742, y: 590 };
 
 /** The awakening-deck plate lines up with the bridge plate 105px higher (futureStages.ts). */
 const AWAKE_OFFSET_Y = -105;
@@ -100,7 +97,7 @@ export class SailScene {
     this.guardian = new Sprite(textures.get(PLATES.guardian)!);
     this.guardian.anchor.set(0.46, 0.97);
     this.guardian.position.set(GUARDIAN.x, GUARDIAN.y);
-    this.guardian.scale.set(250 / 900);
+    this.guardian.scale.set(GUARDIAN_HEIGHT / 900);
     this.guardian.zIndex = GUARDIAN.y;
     this.actors.addChild(this.guardian);
     this.guardianGlow.blendMode = "add";
@@ -115,10 +112,7 @@ export class SailScene {
   }
 
   walkable(p: Vec): boolean {
-    const gx = (p.x - GUARDIAN.x) / 74;
-    const gy = (p.y - GUARDIAN.y - 4) / 20;
-    if (gx * gx + gy * gy < 1) return false;
-    return pointInPolygon(p, SAIL_WALK);
+    return isWalkable(SAIL_MAP, p);
   }
 
   depthScale(y: number): number {
@@ -199,14 +193,15 @@ export class SailScene {
     const gold = smoothstep(0.2, 0.8, this.awaken);
     this.guardian.tint = lerpColor(0x8d8f95, 0xffffff, gold);
     const glow = this.guardianGlow.clear();
-    const k = 250 / 900;
+    const k = GUARDIAN_HEIGHT / 900;
     const color = lerpColor(0x59c7ff, 0xffc450, gold);
-    for (const light of [{ x: 282, y: 104, r: 5 }, { x: 262, y: 262, r: 9 }, { x: 590, y: 440, r: 12 }]) {
+    for (const light of GUARDIAN_LIGHTS) {
       const lx = (light.x - 0.46 * 720) * k;
       const ly = (light.y - 0.97 * 900) * k;
       const pulse = 0.6 + 0.4 * Math.sin(t * 2 + light.x);
-      for (let i = 3; i >= 1; i -= 1) glow.circle(lx, ly, light.r * k * 3 * i).fill({ color, alpha: 0.06 * pulse * (0.4 + gold) });
-      glow.circle(lx, ly, light.r * k * 1.6).fill({ color: 0xfff4d8, alpha: 0.55 * pulse * (0.3 + gold) });
+      for (let i = 4; i >= 1; i -= 1) glow.circle(lx, ly, light.r * k * (2.4 + gold) * i).fill({ color, alpha: (0.05 + 0.05 * gold) * pulse });
+      // Gold over the painted blue: the rope-law lights take the Line's colour.
+      glow.circle(lx, ly, light.r * k * (1.4 + gold * 1.2)).fill({ color: lerpColor(0xc8f0ff, 0xffe29a, gold), alpha: (0.45 + 0.45 * gold) * pulse });
     }
   }
 

@@ -1,8 +1,12 @@
 import { Container, FillGradient, Graphics, MeshRope, Point, Sprite, Texture } from "pixi.js";
 import cacheUrl from "@/assets/goldline/heartbeat/pickup_cache_objective.png";
 import { lerp, smoothstep, type Vec } from "./holdTheLine";
-import { pointInPolygon } from "../overworld/navigation";
 import { PLATES, SPAN_LAYOUT, spanPartUrl } from "./waywardAssets";
+import { CACHE_REACH, DECK_SPAWN, DECK_WALK, GUARDIAN, GUARDIAN_HEIGHT, GUARDIAN_LIGHTS, HULL_CACHE, SPAN_TRIGGER } from "./waywardGeometry";
+import { isWalkable } from "../overworld/navigation";
+import { DECK_MAP } from "./waywardMaps";
+
+export { CACHE_REACH, DECK_SPAWN, DECK_WALK, GUARDIAN, HULL_CACHE, SPAN_TRIGGER };
 
 export const HULL_CACHE_URL = cacheUrl;
 
@@ -11,25 +15,6 @@ export const HULL_CACHE_URL = cacheUrl;
  * with Mooring City ahead and the broken span waiting at the far end of the
  * deck. The plate is the stage; everything that moves is a live layer on it.
  */
-export const DECK_WALK: Vec[] = [
-  { x: 212, y: 640 }, { x: 1330, y: 640 }, { x: 1090, y: 462 }, { x: 448, y: 462 },
-];
-export const CACHE_REACH: Vec[] = [
-  { x: 232, y: 600 }, { x: 500, y: 600 }, { x: 482, y: 510 }, { x: 292, y: 502 },
-];
-export const HULL_CACHE: Vec = { x: 318, y: 546 };
-/** Walk into the head of the broken span and the camera goes out to meet it. */
-export const SPAN_TRIGGER = { minX: 732, maxX: 880, maxY: 470 };
-export const DECK_SPAWN: Vec = { x: 760, y: 606 };
-export const GUARDIAN: Vec = { x: 1040, y: 474 };
-const GUARDIAN_HEIGHT = 250;
-/** Glow points on the guardian plate (720×900), relative to its anchor. */
-const GUARDIAN_LIGHTS = [
-  { x: 282, y: 104, r: 5 },
-  { x: 262, y: 262, r: 9 },
-  { x: 590, y: 440, r: 12 },
-];
-
 const LANTERNS: Vec[] = [
   { x: 270, y: 590 }, { x: 486, y: 512 }, { x: 983, y: 506 }, { x: 1120, y: 596 }, { x: 1270, y: 432 },
 ];
@@ -126,7 +111,8 @@ export class DeckScene {
     ];
     for (const spec of specs) {
       const points = Array.from({ length: 8 }, () => new Point(0, 0));
-      const mesh = new MeshRope({ texture: rope, points, width: 9, textureScale: 1 });
+      const mesh = new MeshRope({ texture: rope, points, width: 5, textureScale: 1 });
+      mesh.tint = 0x7d5d3c;
       this.root.addChild(mesh);
       this.danglers.push({ mesh, points, pivot: spec.pivot, length: spec.length, phase: spec.phase });
     }
@@ -136,10 +122,7 @@ export class DeckScene {
   }
 
   walkable(p: Vec): boolean {
-    const gx = (p.x - GUARDIAN.x) / 74;
-    const gy = (p.y - GUARDIAN.y - 4) / 20;
-    if (gx * gx + gy * gy < 1) return false;
-    return pointInPolygon(p, DECK_WALK) || pointInPolygon(p, CACHE_REACH);
+    return isWalkable(DECK_MAP, p);
   }
 
   /** The plate's perspective: a person at the far end of the deck is ~60% of one up close. */

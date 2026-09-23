@@ -1,5 +1,6 @@
 import { Assets, Container, Graphics, Sprite, type Spritesheet, type Texture } from "pixi.js";
 import type { Vec } from "./holdTheLine";
+import { ASSET_BASE } from "./waywardAssets";
 
 /**
  * Mooring City's rope inspectors (WORLD_BIBLE §17: a civilization built around
@@ -33,8 +34,8 @@ const ANCHOR_Y = 256 / 288;
 const PELL_STANDING_PX = 247;
 
 export const INSPECTOR_SHEETS = {
-  pell: "/assets/goldline/wayward/voyage/inspector-pell.json",
-  dunmore: "/assets/goldline/wayward/voyage/inspector-dunmore.json",
+  pell: `${ASSET_BASE}/assets/goldline/wayward/voyage/inspector-pell.json`,
+  dunmore: `${ASSET_BASE}/assets/goldline/wayward/voyage/inspector-dunmore.json`,
 } as const;
 
 export type InspectorFrames = Map<string, Texture[]>;
