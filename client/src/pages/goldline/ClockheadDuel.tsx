@@ -12,6 +12,9 @@ import {
   type ConstructMood,
   type ConstructSeal,
 } from "./ClockheadConstruct";
+import { preloadCompanionIdle } from "@/components/driver/CompanionUnlockReveal";
+import { ColosseumAftermath, type AftermathBeat } from "./ColosseumAftermath";
+import { AFTERMATH_TIMING, speakerPoint } from "./aftermathScript";
 import { ColosseumControls, useColosseumInput } from "./ColosseumControls";
 import { ColosseumMuteButton } from "./ColosseumMuteButton";
 import { ColosseumStageView, prefersReducedMotion, type StageHandle } from "./ColosseumStageView";
@@ -72,9 +75,11 @@ import "./clockhead-duel.css";
  * FINALE (the default export). Receives no person record and cannot publish
  * a business outcome. It is only mounted once the real five-site campaign is
  * already complete, and the only thing it can do to the outside world is
- * call `onDefeated` — once, from the victory card, after the fight has
- * actually been won. That callback persists a fantasy unlock (the Wayward
- * route); it records no visit, sale or revenue.
+ * call `onDefeated` — once, from the party card at the end of the
+ * aftermath (LEVEL COMPLETE, then Rook on the line), after the fight has
+ * actually been won. That callback lets the controller persist the fantasy
+ * consequences (the Wayward route, Rook in the party); it records no visit,
+ * sale or revenue.
  *
  * PROLOGUE (`ClockheadPrologue`). The first time a player walks into the
  * Colosseum, before any real outcome exists, he is simply there: the same
@@ -106,7 +111,6 @@ const FINALE_INTRO = { breakMs: 650, ripMs: 1500, solidMs: 1750, cardMs: 2100 } 
 const PROLOGUE_INTRO = { noticeMs: 320, cardMs: 950 } as const;
 const VICTORY_TOLL_MS = 380;
 const VICTORY_RIP_MS = 1000;
-const VICTORY_CARD_MS = 2300;
 const RECOIL_YANK_MS = 520;
 const RECOIL_CARD_MS = 1150;
 /** Prologue escape: rage, a Borrowed Minute, five seals, a projection. */
@@ -124,11 +128,6 @@ const CHIP_MS = 480;
 
 type Callout = { id: number; text: string; tone: "perfect" | "hit" | "finisher" | "return" | "info" };
 type Banner = { id: number; kicker: string; title: string };
-
-function formatClock(ms: number): string {
-  const seconds = Math.max(0, Math.round(ms / 1000));
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
@@ -249,6 +248,9 @@ function ClockFight(props: FightProps) {
   const bossTrauma = useRef(0);
   const bossHit = useRef<{ at: number; heavy: boolean } | null>(null);
   const chip = useRef<{ from: number; to: number; at: number } | null>(null);
+  /** Written by the aftermath: the speaking dial's glow, and which beat is playing. */
+  const broadcastRef = useRef(0);
+  const beatRef = useRef<AftermathBeat>("stamp");
   const reduced = useRef(prefersReducedMotion());
   const [callout, setCallout] = useState<Callout | null>(null);
   const [banner, setBanner] = useState<Banner | null>(null);
@@ -413,6 +415,9 @@ function ClockFight(props: FightProps) {
           combatRevealFeedback();
           stage?.shake(0.6);
           fx?.debris(CLOCKHEAD_WINDING_CENTER, 18);
+          // Rook's frames have the whole aftermath to arrive before his card.
+          preloadCompanionIdle("rook");
+          beatRef.current = "stamp";
           goTo("victory");
           break;
         case "recoil":
@@ -616,6 +621,7 @@ function ClockFight(props: FightProps) {
           // Reduced motion keeps the meaning (he was hurt) without the pop.
           hurt: calm ? flash.red * 0.55 : flash.red,
           pop: calm ? 0 : flash.white,
+          broadcast: current === "victory" ? broadcastRef.current : 0,
         });
 
         const speed = Math.hypot(world.avatar.velocity.x, world.avatar.velocity.y);
@@ -625,14 +631,25 @@ function ClockFight(props: FightProps) {
         const torso = avatarTorso(world.avatar);
         const bossFocus = { x: CLOCKHEAD_CENTER.x, y: CLOCKHEAD_CENTER.y + 22 };
         const escapeSettled = current === "escape" && (calm || since >= ESCAPE.projectionMs);
+        // After the win the camera stays on him; once the arena goes quiet it
+        // settles on his face, where the dial is about to speak.
+        const aftermath = current === "victory" ? beatRef.current : null;
+        const onTheLine = aftermath === "quiet" || aftermath === "radio" || aftermath === "party";
         const cinematic =
           current === "intro" ||
-          (current === "victory" && since < VICTORY_CARD_MS) ||
+          aftermath === "stamp" ||
           (current === "escape" && !escapeSettled) ||
           now < zoomUntil.current;
+        const dial = speakerPoint();
         // The escape ends on exactly the shot the search arena opens with.
-        const focus = cinematic ? bossFocus : escapeSettled ? gameplayFocus(ARENA_FEET) : gameplayFocus(world.avatar.feet);
-        const zoom = cinematic ? 1.1 : 1;
+        const focus = onTheLine
+          ? { x: (dial.x + CLOCKHEAD_CENTER.x) / 2, y: CLOCKHEAD_CENTER.y + 9 }
+          : cinematic
+            ? bossFocus
+            : escapeSettled
+              ? gameplayFocus(ARENA_FEET)
+              : gameplayFocus(world.avatar.feet);
+        const zoom = onTheLine ? 1.3 : cinematic ? 1.1 : 1;
         const finaleIntro = current === "intro" && propsRef.current.mode === "finale" && !calm;
 
         const fxFrame: FxFrame = {
@@ -694,7 +711,11 @@ function ClockFight(props: FightProps) {
             ? { top: 76, bottom: 24 }
             : escapeSettled
               ? { top: 72, bottom: 118 }
-              : { top: 0, bottom: 0 },
+              : aftermath === "party"
+                ? { top: 0, bottom: 420 }
+                : aftermath === "radio"
+                  ? { top: 0, bottom: 200 }
+                  : { top: 0, bottom: 0 },
         });
 
         setFrame({ world, stride: strideRef.current, now });
@@ -758,7 +779,6 @@ function ClockFight(props: FightProps) {
   const introSolid = prologue || scene !== "intro" || calm || since >= FINALE_INTRO.solidMs;
   const introCard =
     scene === "intro" && (calm || since >= (prologue ? PROLOGUE_INTRO.cardMs : FINALE_INTRO.cardMs));
-  const victoryCard = scene === "victory" && (calm || since >= VICTORY_CARD_MS);
   const recoilCard = scene === "recoil" && (calm || since >= RECOIL_CARD_MS);
   const escapeProjected = scene === "escape" && (calm || since >= ESCAPE.projectionMs);
   const sealedCard = scene === "escape" && (calm || since >= ESCAPE.cardMs);
@@ -939,7 +959,7 @@ function ClockFight(props: FightProps) {
       </ColosseumStageView>
 
       {/* ---------------- HUD ---------------- */}
-      {scene !== "intro" && !sealedCard && (
+      {scene !== "intro" && !sealedCard && !(scene === "victory" && since >= AFTERMATH_TIMING.stampAtMs) && (
         <header
           className={`cd-boss-plate${chipNow ? " is-struck" : ""}`}
           aria-label={`Clockhead, ${phaseLabel}, ${shownBossHp} of ${DUEL_BOSS_HP}`}
@@ -1091,35 +1111,16 @@ function ClockFight(props: FightProps) {
         </section>
       )}
 
-      {victoryCard && (
-        <section className="cd-card cd-card--victory" aria-labelledby="victory-title">
-          <small className="cd-card-kicker">THE CORRECT TIME HAS ARRIVED</small>
-          <h2 id="victory-title">THE FINAL HOUR IS YOURS</h2>
-          <dl className="cd-stats">
-            <div>
-              <dt>TIME</dt>
-              <dd>{formatClock(world.stats.elapsedMs)}</dd>
-            </div>
-            <div>
-              <dt>PERFECT BLOCKS</dt>
-              <dd>{world.stats.perfectBlocks}</dd>
-            </div>
-            <div>
-              <dt>RETURNS</dt>
-              <dd>{world.stats.returns}</dd>
-            </div>
-            <div>
-              <dt>RECOILS</dt>
-              <dd>{world.stats.recoils}</dd>
-            </div>
-          </dl>
-          <p className="cd-truth">
-            The Wayward route is unlocked. This victory records no visit, sale, or revenue.
-          </p>
-          <button type="button" className="cd-cta" onClick={takeWaywardRoute} autoFocus>
-            Take the Wayward route
-          </button>
-        </section>
+      {scene === "victory" && (
+        <ColosseumAftermath
+          startedAt={sceneStartRef.current}
+          stats={world.stats}
+          reduced={calm}
+          broadcast={broadcastRef}
+          beatRef={beatRef}
+          stageRef={stageRef}
+          onContinue={takeWaywardRoute}
+        />
       )}
     </main>
   );

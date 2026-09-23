@@ -6,6 +6,7 @@ import { COLOSSEUM_TARGET_IDS } from "@/pages/goldline/colosseumCampaign";
 import type { Day1TenDoorsMissionView } from "@/pages/goldline/Day1FieldMission";
 import { DAY1_TARGETS, type Day1TargetOutcome } from "@shared/day1TenDoors";
 import { connectPreviewMission } from "./trpcStub";
+import { isTravelingWith, joinParty, partyKey } from "@/pages/goldline/stages/goldlineParty";
 import { createMasterBus, scheduleCue, type AudioCueId, type PlayOptions } from "@/game/audio/AudioManager";
 // The global stylesheets every Goldline driver session already has loaded.
 import "@/index.css";
@@ -27,6 +28,7 @@ import "@/pages/goldline/goldline-overworld.css";
  */
 const params = new URLSearchParams(window.location.search);
 const MISSION_ID = "preview-day1";
+const PREVIEW_IDENTITY = "preview-driver";
 const traced = Math.max(0, Math.min(5, Number(params.get("traced") ?? 0)));
 const seen = params.get("seen");
 try {
@@ -35,6 +37,8 @@ try {
   const prologueKey = `goldline:colosseum:prologue-seen:${MISSION_ID}`;
   if (params.get("prologue") === "1") window.localStorage.removeItem(prologueKey);
   else window.localStorage.setItem(prologueKey, "1");
+  // Every load starts before Rook has joined.
+  window.localStorage.removeItem(partyKey(PREVIEW_IDENTITY));
 } catch {
   // ignore
 }
@@ -61,6 +65,11 @@ function Harness() {
     Object.fromEntries(COLOSSEUM_TARGET_IDS.slice(0, traced).map(id => [id, "pitched" as const]))
   );
   const [defeated, setDefeated] = useState(false);
+  // Mirrors GoldlineDriverController's Colosseum-resolution boundary.
+  const resolve = () => {
+    joinParty(PREVIEW_IDENTITY, "rook");
+    setDefeated(true);
+  };
   const mission = useMemo(() => viewFor(outcomes), [outcomes]);
   connectPreviewMission(mission, view => setOutcomes({ ...view.outcomes }));
   (window as unknown as { __recordNextOutcome?: () => void }).__recordNextOutcome = () =>
@@ -72,20 +81,25 @@ function Harness() {
   if (!mounted) return null;
   if (defeated) {
     return (
-      <div style={{ display: "grid", placeItems: "center", height: "100%", font: "600 20px Fraunces, serif", color: "#1d2433" }}>
-        onDefeated() called once → controller would persist the Wayward unlock.
+      <div
+        data-testid="preview-resolved"
+        style={{ display: "grid", placeItems: "center", height: "100%", padding: 24, textAlign: "center", font: "600 20px Fraunces, serif", color: "#1d2433" }}
+      >
+        onDefeated() called once → the controller persists the Wayward unlock and the party.
+        <br />
+        Rook traveling with Trailblazer: {isTravelingWith(PREVIEW_IDENTITY, "rook") ? "yes" : "no"}
       </div>
     );
   }
   if (params.get("scene") === "duel") {
-    return <ClockheadDuel onDefeated={() => setDefeated(true)} />;
+    return <ClockheadDuel onDefeated={resolve} />;
   }
   return (
     <ColosseumBossGate
       mission={mission}
       isRecordingOutcome={false}
       onRecordOutcome={() => undefined}
-      onBossDefeated={() => setDefeated(true)}
+      onBossDefeated={resolve}
     />
   );
 }

@@ -32,6 +32,10 @@ const FICTION_MODULES = [
   "ColosseumLoading.tsx",
   "clockheadHitReaction.ts",
   "colosseumPrologue.ts",
+  "ColosseumAftermath.tsx",
+  "aftermathScript.ts",
+  "stages/goldlineParty.ts",
+  "../../components/driver/CompanionUnlockReveal.tsx",
 ];
 
 /** Everything that renders the Colosseum, fiction or gate. */
@@ -65,6 +69,7 @@ describe("a fictional win never borrows the feel of a real one", () => {
     const expected: Record<string, string[]> = {
       "ClockheadDuel.tsx": ["clockface_impact", "clockhead_roar", "clockhead_howl", "clock_tick"],
       "ColosseumBossGate.tsx": ["seal_break", "clockhead_sweep", "clockhead_charge"],
+      "ColosseumAftermath.tsx": ["level_complete", "radio_static", "radio_chirp", "voice_cut", "companion_join"],
     };
     if (expected[file]) expect(cues, `${file} was scanned`).toEqual(expect.arrayContaining(expected[file]!));
     for (const cue of cues) expect(cueCategory(cue), `${file} plays ${cue}`).not.toBe("victory");
@@ -107,6 +112,27 @@ describe("the finale is reachable only through the authoritative campaign", () =
     expect(prologue).toBeGreaterThan(finale);
     expect(prologue).toBeGreaterThan(fieldMission);
     expect(gate).toMatch(/if \(prologue && campaign\.visitedCount === 0\) \{\s*return \(\s*<ClockheadPrologue\s+onSealed=/);
+  });
+
+  it("lets the aftermath reach the outside world only through the party card's continue", () => {
+    const aftermath = read("ColosseumAftermath.tsx");
+    // It may mention the boundary in prose; it may never call across it.
+    expect(aftermath).not.toMatch(/onDefeated\s*\(|joinParty\s*\(|localStorage|\.setItem\s*\(/);
+    expect(aftermath).toMatch(/onAction=\{onContinue\}/);
+    const duel = read("ClockheadDuel.tsx");
+    expect(duel).toMatch(/onContinue=\{takeWaywardRoute\}/);
+    expect(duel).not.toMatch(/joinParty/);
+  });
+
+  it("adds Rook to the party only at the controller's Colosseum-resolution boundary", () => {
+    const controller = read("../driver/GoldlineDriverController.tsx");
+    expect(controller.match(/joinParty\(/g)).toHaveLength(1);
+    const boundary = controller.slice(controller.indexOf("onDismiss={() => {"));
+    const resolved = boundary.indexOf("markColosseumResolved(");
+    const joined = boundary.indexOf('joinParty(identity.data?.openId ?? null, "rook")');
+    expect(resolved).toBeGreaterThan(-1);
+    expect(joined).toBeGreaterThan(resolved);
+    expect(joined).toBeLessThan(boundary.indexOf("}}"));
   });
 
   it("still sends the real hunt through the unmodified field mission", () => {

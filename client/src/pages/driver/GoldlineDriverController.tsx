@@ -22,6 +22,7 @@ import {
   unlockWayward,
   type WaywardProgress,
 } from "../goldline/stages/waywardProgress";
+import { joinParty } from "../goldline/stages/goldlineParty";
 import type { FieldMoveCandidate } from "../../../../server/field/types";
 import type { DayResolution } from "../../../../server/unload/unloadTypes";
 import type {
@@ -1726,6 +1727,8 @@ function LiveGoldlineDriverController({
             markLegacyDay1Dismissal();
             markColosseumResolved(identity.data?.openId ?? null);
             setWaywardProgress(unlockWayward(identity.data?.openId ?? null));
+            // Rook joined on the other end of the line; he travels on from here.
+            joinParty(identity.data?.openId ?? null, "rook");
             setDriverScene(stageReturnScene);
           }}
         />

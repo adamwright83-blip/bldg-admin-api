@@ -61,6 +61,11 @@ export type ConstructMotion = {
   /** …and flashes: white-hot first, then red. Both 0..1. */
   hurt?: number;
   pop?: number;
+  /**
+   * 0..1: one of his handless dials was never a clock — it is a speaker, and
+   * someone else is on the line (the Colosseum aftermath).
+   */
+  broadcast?: number;
 };
 
 export type ConstructHandle = {
@@ -123,6 +128,10 @@ const SPIRAL = (() => {
 
 const LEGEND_TEXT = `${CLOCKHEAD_DEFERRALS.join(" · ")} · `;
 
+/** The left handless sub-dial (viewBox units): the one that turns out to be a speaker. */
+export const SPEAKER_DIAL = { x: -27, y: 17 } as const;
+const SPEAKER_SLOTS = [-5.6, -2.8, 0, 2.8, 5.6].map(y => ({ y, half: Math.sqrt(Math.max(0, 7.6 * 7.6 - y * y)) }));
+
 /** Cracks by severity: each third of his health adds one set. */
 const CRACKS = [
   "M -8 -70 L -4 -52 L -12 -40 L -6 -24 M -4 -52 L 6 -46",
@@ -142,6 +151,8 @@ type LayerRefs = {
   subhand: SVGLineElement | null;
   hurt: HTMLDivElement | null;
   pop: HTMLDivElement | null;
+  signal: SVGCircleElement | null;
+  grille: SVGGElement | null;
 };
 
 const REST: ConstructMotion = { spin: 0 };
@@ -166,6 +177,8 @@ const ClockheadConstructImpl = forwardRef<ConstructHandle, ClockheadConstructPro
     subhand: null,
     hurt: null,
     pop: null,
+    signal: null,
+    grille: null,
   });
   const motionRef = useRef<ConstructMotion>(REST);
   const written = useRef<Record<string, string>>({});
@@ -212,6 +225,9 @@ const ClockheadConstructImpl = forwardRef<ConstructHandle, ClockheadConstructPro
     );
     put("hurt:opacity", el.hurt, (motion.hurt ?? 0).toFixed(3));
     put("pop:opacity", el.pop, (motion.pop ?? 0).toFixed(3));
+    const broadcast = motion.broadcast ?? 0;
+    put("signal:opacity", el.signal, broadcast.toFixed(3));
+    put("grille:opacity", el.grille, Math.min(1, broadcast * 3).toFixed(3));
   };
 
   useImperativeHandle(ref, () => ({ setMotion: apply }));
@@ -270,6 +286,12 @@ const ClockheadConstructImpl = forwardRef<ConstructHandle, ClockheadConstructPro
             <stop offset="1" stopColor="#1b8fa6" />
           </radialGradient>
           <path id={id("legend")} d="M 0 -86 A 86 86 0 1 1 -0.01 -86" />
+          <radialGradient id={id("signal")} cx="0.5" cy="0.5" r="0.5">
+            <stop offset="0" stopColor="#f2fff6" stopOpacity="1" />
+            <stop offset="0.3" stopColor="#8dffb4" stopOpacity="0.85" />
+            <stop offset="0.62" stopColor="#3ddc84" stopOpacity="0.35" />
+            <stop offset="1" stopColor="#3ddc84" stopOpacity="0" />
+          </radialGradient>
         </defs>
       </svg>
 
@@ -402,6 +424,19 @@ const ClockheadConstructImpl = forwardRef<ConstructHandle, ClockheadConstructPro
         <circle r="11" fill={url("bronze")} stroke="#3f260c" strokeWidth="1" />
         <circle r="7.6" fill="#3a230b" />
         <circle className="cc-core" r="5.6" fill={url(exposed ? "core-open" : "core")} />
+      </svg>
+
+      {/* One of his handless dials was never a clock: under the glass, a speaker grille. */}
+      <svg className="cc-layer cc-speaker" viewBox="-120 -120 240 240">
+        <g transform={`translate(${SPEAKER_DIAL.x} ${SPEAKER_DIAL.y})`}>
+          <circle ref={node => void (layers.current.signal = node)} r="27" fill={url("signal")} style={{ opacity: 0 }} />
+          <g ref={node => void (layers.current.grille = node)} style={{ opacity: 0 }}>
+            <circle r="9.4" fill="#0e1d15" stroke="#8dffb4" strokeWidth="0.9" />
+            {SPEAKER_SLOTS.map(slot => (
+              <rect key={slot.y} x={-slot.half} y={slot.y - 0.7} width={slot.half * 2} height="1.4" rx="0.7" fill="#b9ffd2" fillOpacity="0.85" />
+            ))}
+          </g>
+        </g>
       </svg>
 
       {/* Taking a hit: a white-hot pop, then the whole clock flushes red. */}

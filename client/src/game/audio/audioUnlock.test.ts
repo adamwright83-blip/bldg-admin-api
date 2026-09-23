@@ -245,6 +245,15 @@ describe("the Colosseum's hit cues", () => {
     expect(cueCategory(cue)).toBe("encounter");
   });
 
+  it.each(["level_complete", "radio_static", "radio_chirp", "voice_cut", "companion_join"] as AudioCueId[])(
+    "%s (the Colosseum aftermath) is fiction's world, never a business win",
+    cue => {
+      expect(cueCategory(cue)).toBe("world");
+      const ctx = new FakeAudioContext() as unknown as BaseAudioContext;
+      expect(() => scheduleCue(ctx, (ctx as unknown as FakeAudioContext).destination as unknown as AudioNode, cue)).not.toThrow();
+    }
+  );
+
   it.each(HIT_CUES)("%s schedules onto any audio graph", cue => {
     const ctx = new FakeAudioContext() as unknown as BaseAudioContext;
     expect(() => scheduleCue(ctx, (ctx as unknown as FakeAudioContext).destination as unknown as AudioNode, cue, { pitch: 1.05 })).not.toThrow();

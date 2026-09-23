@@ -73,7 +73,12 @@ export type AudioCueId =
   | "seal_break"
   | "door_creak"
   | "recoil_snap"
-  | "clock_toll";
+  | "clock_toll"
+  | "level_complete"
+  | "radio_static"
+  | "radio_chirp"
+  | "voice_cut"
+  | "companion_join";
 
 /**
  * One synthesized step. `glideTo` bends the pitch across the step (whooshes,
@@ -490,6 +495,81 @@ const CUE_DEFINITIONS: Record<
     steps: [
       { freq: 900, durationMs: 200, type: "sawtooth", glideTo: 110, gain: 0.11 },
       { freq: 320, durationMs: 140, type: "noise", glideTo: 90, gain: 0.14 },
+    ],
+  },
+  /**
+   * LEVEL COMPLETE: a brass stab and a rising call over the bell. A game's
+   * level win — deliberately "world", not "victory", which stays reserved for
+   * an authoritative business capture. Beating Clockhead is not closing a sale.
+   */
+  level_complete: {
+    category: "world",
+    steps: [
+      { atMs: 0, freq: 3200, durationMs: 60, type: "noise", glideTo: 900, gain: 0.14, attackMs: 1 },
+      { atMs: 0, freq: 98, durationMs: 460, type: "sine", glideTo: 92, gain: 0.2, attackMs: 4, sustain: 0.3 },
+      { atMs: 0, freq: 196, durationMs: 520, type: "sawtooth", gain: 0.09, attackMs: 8, sustain: 0.35, filter: { type: "lowpass", freq: 2200, glideTo: 900, q: 1.2 } },
+      { atMs: 0, freq: 247, durationMs: 520, type: "sawtooth", gain: 0.07, attackMs: 8, sustain: 0.35, filter: { type: "lowpass", freq: 2200, glideTo: 900, q: 1.2 } },
+      { atMs: 0, freq: 294, durationMs: 520, type: "sawtooth", gain: 0.07, attackMs: 8, sustain: 0.35, filter: { type: "lowpass", freq: 2400, glideTo: 1000, q: 1.2 } },
+      { atMs: 190, freq: 392, durationMs: 150, type: "sawtooth", gain: 0.07, attackMs: 6, filter: { type: "lowpass", freq: 2600, q: 1 } },
+      { atMs: 300, freq: 494, durationMs: 150, type: "sawtooth", gain: 0.07, attackMs: 6, filter: { type: "lowpass", freq: 2800, q: 1 } },
+      { atMs: 410, freq: 587, durationMs: 620, type: "sawtooth", gain: 0.08, attackMs: 8, sustain: 0.4, filter: { type: "lowpass", freq: 3000, glideTo: 1400, q: 1 } },
+      { atMs: 410, freq: 1175, durationMs: 1100, type: "triangle", gain: 0.05, attackMs: 4 },
+      { atMs: 410, freq: 1762, durationMs: 900, type: "sine", gain: 0.03, attackMs: 4 },
+    ],
+  },
+  /** A dead speaker coming back: crackle bursts over mains hum. */
+  radio_static: {
+    category: "world",
+    steps: [
+      { atMs: 0, freq: 60, durationMs: 760, type: "sine", gain: 0.08, attackMs: 30, sustain: 0.6 },
+      ...[
+        [0, 40, 2600, 0.16],
+        [55, 30, 4100, 0.22],
+        [120, 60, 1900, 0.14],
+        [210, 25, 3600, 0.24],
+        [260, 50, 2300, 0.18],
+        [340, 35, 4400, 0.2],
+        [420, 70, 2000, 0.16],
+        [520, 30, 3800, 0.24],
+        [600, 60, 2500, 0.18],
+        [690, 45, 3100, 0.14],
+      ].map(([atMs, durationMs, freq, gain]) => ({
+        atMs,
+        freq,
+        durationMs,
+        type: "noise" as const,
+        gain,
+        attackMs: 1,
+      })),
+    ],
+  },
+  /** The squelch as a transmission opens. */
+  radio_chirp: {
+    category: "world",
+    steps: [
+      { atMs: 0, freq: 5200, durationMs: 45, type: "noise", glideTo: 2100, gain: 0.3, attackMs: 1 },
+      { atMs: 8, freq: 1900, durationMs: 32, type: "square", gain: 0.1, attackMs: 1 },
+      { atMs: 45, freq: 2600, durationMs: 90, type: "noise", glideTo: 1500, gain: 0.1, attackMs: 2 },
+    ],
+  },
+  /** The Sunder: a direct lie dies in his mouth — the line drops into hard static. */
+  voice_cut: {
+    category: "world",
+    steps: [
+      { atMs: 0, freq: 2500, durationMs: 240, type: "noise", glideTo: 600, gain: 0.36, attackMs: 1, sustain: 0.4 },
+      { atMs: 0, freq: 70, durationMs: 220, type: "square", gain: 0.09, attackMs: 1, filter: { type: "lowpass", freq: 400 } },
+      { atMs: 230, freq: 4000, durationMs: 60, type: "noise", glideTo: 1800, gain: 0.108, attackMs: 1 },
+    ],
+  },
+  /** A companion joins the party: a dial tuning in, then one warm bell. */
+  companion_join: {
+    category: "world",
+    steps: [
+      { atMs: 0, freq: 380, durationMs: 220, type: "sine", glideTo: 1180, gain: 0.07, attackMs: 20 },
+      { atMs: 0, freq: 1400, durationMs: 200, type: "noise", glideTo: 3200, gain: 0.04, attackMs: 30 },
+      { atMs: 210, freq: 988, durationMs: 900, type: "triangle", gain: 0.1, attackMs: 3 },
+      { atMs: 210, freq: 1482, durationMs: 700, type: "sine", gain: 0.05, attackMs: 3 },
+      { atMs: 210, freq: 494, durationMs: 600, type: "sine", gain: 0.06, attackMs: 3 },
     ],
   },
   /** The correct time arrives: a single bell. Fiction's resolution, not a sale. */
