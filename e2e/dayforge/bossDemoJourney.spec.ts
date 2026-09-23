@@ -97,9 +97,11 @@ test.describe("Boss demo journey — mobile", () => {
     await expect(page.getByRole("button", { name: /map my territory/i })).toBeVisible();
 
     // ---- driver/sales-mission page loads on mobile viewport ----
+    // Signed-out drivers use the membership form (workspace, email, password).
+    // Its heading is "Sign in", not the old shared-password "Driver Sign In".
     await page.goto("/driver/sales-mission/1");
     await expect(
-      page.getByRole("heading", { name: /driver sign in/i })
+      page.getByRole("heading", { name: /^sign in$/i })
     ).toBeVisible({ timeout: 15_000 });
 
     expect(consoleErrors).toEqual([]);
