@@ -294,9 +294,18 @@ export function groundedReadinessKind(text: string, executionType?: WeeklyExecut
 }
 
 function explicitPhysicalPrep(text: string): boolean {
-  return /\b(jacket|gas|gasoline|load|loaded|wash|washing|clean|car|uniform|supplies|materials|equipment|bags?|visits?|visiting|on[\s-]?site|door[\s-]?hangers?|pick[\s-]?ups?|deliver(?:y|ies|ed|ing)?)\b/i.test(
-    text
-  );
+  if (
+    /\b(jacket|gas|gasoline|load|loaded|wash|washing|clean|car|uniform|supplies|materials|equipment|bags?|door[\s-]?hangers?)\b/i.test(
+      text
+    )
+  ) {
+    return true;
+  }
+  if (hasFieldVisit(text)) return true;
+  if (/\bon[\s-]?site\b/i.test(text)) return true;
+  if (hasPhysicalPickup(text)) return true;
+  if (hasPhysicalDelivery(text)) return true;
+  return false;
 }
 
 function explicitLocationPrep(text: string): boolean {
@@ -350,58 +359,128 @@ export function resolveWeeklyExecutionType(input: {
 }): WeeklyExecutionType | null {
   const direct = classifyWeeklyExecutionType({ contract: input.text });
   if (direct) return direct;
-  const needle = input.text.trim().toLowerCase();
+  const needle = executionMatchKey(input.text);
   if (!needle) return null;
-  const matched = (input.candidates ?? []).find(candidate => {
-    const title = candidate.title.trim().toLowerCase();
-    const objective = candidate.objective.trim().toLowerCase();
+  const matched = (input.candidates ?? []).filter(candidate => {
+    const title = executionMatchKey(candidate.title);
+    const objective = executionMatchKey(candidate.objective);
     return needle === title || needle === objective;
   });
-  if (!matched) return null;
-  return classifyWeeklyExecutionType({
-    contract: `${matched.title}. ${matched.objective}`,
-    identifier: matched.id,
-    motion: matched.motion ?? null,
-  });
+  if (!matched.length) return null;
+  let agreed: WeeklyExecutionType | null | undefined;
+  for (const candidate of matched) {
+    const type = classifyWeeklyExecutionType({
+      contract: `${candidate.title}. ${candidate.objective}`,
+      identifier: candidate.id,
+      motion: candidate.motion ?? null,
+    });
+    if (agreed === undefined) {
+      agreed = type;
+      continue;
+    }
+    if (agreed !== type) return null;
+  }
+  return agreed ?? null;
 }
 
+function executionMatchKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[.!?]+$/g, "").replace(/\s+/g, " ");
+}
+
+/** Naming idioms are not phone calls and are not field visits. */
+function withoutNamingIdioms(text: string): string {
+  return text
+    .replace(/\bcall it(?:\s+(?:a|an))?(?:\s+[a-z]+)?\b/gi, " ")
+    .replace(/\bwhat\s+(?:we|you|they|i)\s+call\b/gi, " ");
+}
+
+const DIGITAL_VISIT_OBJECT =
+  "web\\s*sites?|websites?|pages?|urls?|links?|portals?|dashboards?|inboxes|browsers?|apps?|applications?|online";
+
+const TANGIBLE_OR_PLACE =
+  /\b(kits?|samples?|bags?|laundry|linens?|uniforms?|hangers?|supplies|loads?|bins?|carts?|boxes|goods|equipment|materials|towels?|plants?|propert(?:y|ies)|buildings?|desks?|lobbies|lobby|offices?|sites?|doors?|warehouses?|docks?|locations?|addresses?|front desk|(?:the|a|an)\s+orders?)\b/i;
+
 function hasFieldExecution(text: string): boolean {
-  if (/\bvisit(?:s|ing|ed)?\b/i.test(text)) return true;
-  if (/\bon[\s-]?site\b/i.test(text)) return true;
-  if (/\bin[\s-]?person\b/i.test(text)) return true;
-  if (/\bdoor[\s-]?hangers?\b/i.test(text)) return true;
-  if (/\b(?:property|physical) pitch(?:es|ing)?\b/i.test(text)) return true;
-  if (/\bpitch(?:es|ing)?\b(?:\s+\w+){0,8}\s+propert(?:y|ies)\b/i.test(text)) return true;
-  if (/\bpropert(?:y|ies)\b(?:\s+\w+){0,8}\s+pitch(?:es|ing)?\b/i.test(text)) return true;
-  if (hasPhysicalPickup(text)) return true;
-  if (hasPhysicalDelivery(text)) return true;
+  const source = withoutNamingIdioms(text);
+  if (hasFieldVisit(source)) return true;
+  if (/\bon[\s-]?site\b/i.test(source)) return true;
+  if (/\bin[\s-]?person\b/i.test(source)) return true;
+  if (/\bdoor[\s-]?hangers?\b/i.test(source)) return true;
+  if (/\b(?:property|physical) pitch(?:es|ing)?\b/i.test(source)) return true;
+  if (/\bpitch(?:es|ing)?\b(?:\s+\w+){0,8}\s+propert(?:y|ies)\b/i.test(source)) return true;
+  if (/\bpropert(?:y|ies)\b(?:\s+\w+){0,8}\s+pitch(?:es|ing)?\b/i.test(source)) return true;
+  if (hasPhysicalPickup(source)) return true;
+  if (hasPhysicalDelivery(source)) return true;
+  return false;
+}
+
+function hasFieldVisit(text: string): boolean {
+  const digitalObject = new RegExp(`\\b(?:${DIGITAL_VISIT_OBJECT})\\b`, "i");
+  const precededByDigital = new RegExp(`\\b(?:${DIGITAL_VISIT_OBJECT})\\s+$`, "i");
+  const re = /\bvisit(?:s|ing|ed)?\b/gi;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text))) {
+    const before = text.slice(Math.max(0, match.index - 40), match.index);
+    if (precededByDigital.test(before)) continue;
+    const after = text.slice(match.index + match[0].length, match.index + match[0].length + 72);
+    const object = /^(?:\s+(?:the|a|an|our|their|its|my))?(?:\s+[\w-]+){0,6}/i.exec(after)?.[0] ?? "";
+    if (digitalObject.test(object) && !TANGIBLE_OR_PLACE.test(object) && !/\bon[\s-]?site\b/i.test(object)) {
+      continue;
+    }
+    return true;
+  }
   return false;
 }
 
 function hasPhysicalPickup(text: string): boolean {
-  const withoutPhone = text.replace(/\bpick[\s-]?up the phone\b/gi, "");
-  if (/\bphysical pick[\s-]?ups?\b/i.test(withoutPhone)) return true;
-  if (/\bpick[\s-]?ups?\b/i.test(withoutPhone)) return true;
-  return /\bpick up\b/i.test(withoutPhone);
+  const stripped = text
+    .replace(/\bpick[\s-]?up the phone\b/gi, " ")
+    .replace(/\bpick[\s-]?up where we left off\b/gi, " ")
+    .replace(/\bpick[\s-]?up the slack\b/gi, " ")
+    .replace(/\bpick[\s-]?up the pace\b/gi, " ")
+    .replace(/\bpick[\s-]?up the conversation\b/gi, " ")
+    .replace(/\bpick[\s-]?up the thread\b/gi, " ")
+    .replace(/\bpick[\s-]?up the call\b/gi, " ");
+  if (/\bphysical pick[\s-]?ups?\b/i.test(stripped)) return true;
+  const compound = /\bpick-?ups?\b/i.test(stripped);
+  const phrasal = /\bpick up\b/i.test(stripped);
+  if (!compound && !phrasal) return false;
+  if (compound && !phrasal) return true;
+  return TANGIBLE_OR_PLACE.test(stripped) || /\bon[\s-]?site\b/i.test(stripped);
 }
 
 function hasPhysicalDelivery(text: string): boolean {
   if (/\bphysical deliver(?:y|ies|ed|ing)?\b/i.test(text)) return true;
   const stripped = text
-    .replace(/\bemail deliver(?:y|ies|ed|ing)?\b/gi, "")
-    .replace(/\bdeliver(?:y|ies|ed|ing)? (?:the |an |a )?(?:e-?mail|sms|text|message)s?\b/gi, "");
-  return /\bdeliver(?:ies|y|ed|ing)?\b/i.test(stripped);
+    .replace(/\bemail deliver(?:y|ies|ed|ing)?\b/gi, " ")
+    .replace(/\b(?:e-?mail|sms|text|message|digital|news|results|reports?)\s+deliver(?:y|ies|ed|ing)?\b/gi, " ")
+    .replace(/\bdeliver(?:y|ies|ed|ing)? (?:the |an |a )?(?:e-?mail|sms|text|message)s?\b/gi, " ")
+    .replace(
+      /\bdeliver(?:y|ies)?\s+of\s+(?:the\s+|a\s+|an\s+)?(?:news|results|reports?|updates?|presentations?|speeches|numbers|verdicts?)\b/gi,
+      " "
+    )
+    .replace(
+      /\bdeliver(?:ed|ing)?\s+(?:the\s+|a\s+|an\s+)?(?:news|results|reports?|updates?|presentations?|speeches|numbers|verdicts?)\b/gi,
+      " "
+    )
+    .replace(/\bdeliver on\b/gi, " ");
+  if (/\bdeliver(?:ies|y)\b/i.test(stripped)) return true;
+  if (!/\bdeliver(?:ed|ing)?\b/i.test(stripped)) return false;
+  return TANGIBLE_OR_PLACE.test(stripped) || /\bon[\s-]?site\b/i.test(stripped);
 }
 
 function hasRemoteExecution(text: string): boolean {
-  const withoutIdiom = text.replace(/\bcall it\b/gi, "");
-  if (/\b(?:cold[\s-]?)?calls?\b/i.test(withoutIdiom) || /\bcalling\b/i.test(withoutIdiom)) return true;
-  if (/\btexts?\b/i.test(text) || /\btexting\b/i.test(text) || /\bsms\b/i.test(text)) return true;
-  if (/\be-?mails?\b/i.test(text)) return true;
-  if (/\bpublish(?:ed|ing|es)?\b/i.test(text)) return true;
-  if (/\bbrowser\b/i.test(text)) return true;
-  if (/\badmin work\b/i.test(text) || /\b(?:in|via|using|through) (?:the )?admin\b/i.test(text)) return true;
-  return /\bremote follow[\s-]?ups?\b/i.test(text);
+  const source = withoutNamingIdioms(text);
+  if (/\b(?:cold[\s-]?)?calls?\b/i.test(source) || /\bcalling\b/i.test(source)) return true;
+  if (/\btexts?\b/i.test(source) || /\btexting\b/i.test(source) || /\bsms\b/i.test(source)) return true;
+  if (/\be-?mails?\b/i.test(source)) return true;
+  if (/\bpublish(?:ed|ing|es)?\b/i.test(source)) return true;
+  if (/\bbrowser\b/i.test(source)) return true;
+  if (/\badmin work\b/i.test(source)) return true;
+  if (/\b(?:in|via|using|through) (?:the )?admin\b(?!\s+(?:district|building|office|person|staff))/i.test(source)) {
+    return true;
+  }
+  return /\bremote follow[\s-]?ups?\b/i.test(source);
 }
 
 const DAY_WORD = "monday|tuesday|wednesday|thursday|friday";

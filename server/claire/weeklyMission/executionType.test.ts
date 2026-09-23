@@ -21,6 +21,7 @@ import { commitWeeklyPlan, reopenWeeklySession, type WeeklyCommitPorts } from ".
 import { applyWeeklyIntentToCommand, playableToday } from "./dailyCommandIntent";
 import { loadWeeklyDossier } from "./dossier";
 import { newWeeklySession } from "./session";
+import { acceptPlanningDecision, applyPlanningDecision } from "./planningDecision";
 import { lockBindApplies } from "./route";
 
 const HORIZON = remainingWeekHorizon({ businessDate: "2026-09-15", localTime: "09:00" });
@@ -91,6 +92,63 @@ describe("weekly execution type", () => {
     expect(classifyWeeklyExecutionType({ contract: "Visit the property or email the manager" })).toBeNull();
     expect(classifyWeeklyExecutionType({ contract: "Field the six buildings" })).toBeNull();
     expect(classifyWeeklyExecutionType({ contract: "" })).toBeNull();
+    expect(classifyWeeklyExecutionType({ contract: "Visit the website" })).toBeNull();
+    expect(classifyWeeklyExecutionType({ contract: "A website visit for the listing" })).toBeNull();
+    expect(classifyWeeklyExecutionType({ contract: "Pick up where we left off" })).toBeNull();
+    expect(classifyWeeklyExecutionType({ contract: "Deliver the news" })).toBeNull();
+    expect(classifyWeeklyExecutionType({ contract: "Deliver on the promise" })).toBeNull();
+    expect(classifyWeeklyExecutionType({ contract: "What we call the week" })).toBeNull();
+    expect(classifyWeeklyExecutionType({ contract: "Call it a visit" })).toBeNull();
+  });
+
+  it("keeps a physical delivery and does not treat a digital visit as a field Mission", () => {
+    expect(classifyWeeklyExecutionType({ contract: "Deliver sample kit to the front desk" })).toBe("mission");
+    expect(classifyWeeklyExecutionType({ contract: "Tuesday delivery" })).toBe("mission");
+    expect(classifyWeeklyExecutionType({ contract: "Emergency pickup" })).toBe("mission");
+    expect(classifyWeeklyExecutionType({ contract: "Three pickups on Wilshire" })).toBe("mission");
+    expect(classifyWeeklyExecutionType({ contract: "Visit the website in the browser" })).toBe("challenge");
+    expect(classifyWeeklyExecutionType({ contract: "Pick up the call" })).toBe("challenge");
+    expect(classifyWeeklyExecutionType({ contract: "Visit the property and email the manager" })).toBe(
+      "hybrid_objective"
+    );
+    expect(classifyWeeklyExecutionType({ contract: "Tuesday delivery and email the manager" })).toBe(
+      "hybrid_objective"
+    );
+    expect(classifyWeeklyExecutionType({ contract: "Message delivery" })).toBeNull();
+  });
+
+  it("stays unknown when matching candidates disagree", () => {
+    expect(
+      resolveWeeklyExecutionType({
+        text: "Greystar Hunt.",
+        candidates: [
+          {
+            id: "wgc:tenant:commercial_mission:greystar",
+            title: "Greystar Hunt",
+            objective: "On-site property pitch",
+            motion: "digital_presence",
+          },
+        ],
+      })
+    ).toBe("mission");
+    expect(
+      resolveWeeklyExecutionType({
+        text: "Same title",
+        candidates: [
+          { id: "mission-row", title: "Same title", objective: "Visit the property", motion: "account_acquisition" },
+          { id: "challenge-row", title: "Same title", objective: "Email the manager", motion: "commercial_follow_up" },
+        ],
+      })
+    ).toBeNull();
+    expect(
+      resolveWeeklyExecutionType({
+        text: "Board",
+        candidates: [
+          { id: "unknown-row", title: "Board", objective: "Check the board", motion: null },
+          { id: "mission-row", title: "Board", objective: "Visit the property", motion: null },
+        ],
+      })
+    ).toBeNull();
   });
 
   it("keeps an old WeeklyIntent valid and does not default the missing type to mission", () => {
@@ -308,6 +366,13 @@ describe("weekly execution type", () => {
       executionType: "challenge",
     });
     expect(statedVisit.kind).toBe("physical");
+    const emailDelivery = defaultReadiness({
+      text: "Email delivery confirmation",
+      neededForDate: "2026-09-16",
+      executionType: "challenge",
+    });
+    expect(emailDelivery.kind).not.toBe("physical");
+    expect(emailDelivery.kind).not.toBe("location");
     const shared = readFileSync(new URL("../../../shared/weeklyMissionReadiness.ts", import.meta.url), "utf8");
     expect(shared).not.toMatch(/weeklyOperatingPlan|createDayLine|WeeklyIntentV2/);
     expect(shared).not.toMatch(/readCurrentDayLine|currentDayLine/);
@@ -324,6 +389,58 @@ describe("weekly execution type", () => {
     const seam = readFileSync(new URL("./dailyCommandIntent.ts", import.meta.url), "utf8");
     expect(seam).toMatch(/weeklyPrimaryExecutionType/);
     expect(seam).not.toMatch(/importanceRank:\s*executionType|sort\(/);
+  });
+
+  it("stores unknown for a website visit and ignores a model-forged Mission", async () => {
+    setClaireConversationStateStoreForTests(createMemoryConversationStateStore());
+    const dossier = await loadWeeklyDossier({ horizon: HORIZON }, { factsForDates: async () => [] });
+    const session = newWeeklySession({
+      tenantId: "default",
+      operatorId: "adam",
+      dayDirectorActorId: "actor-1",
+      weekStart: dossier.horizon.weekStart,
+      draft: {
+        weekStart: dossier.horizon.weekStart,
+        days: dossier.horizon.remainingDates.map((businessDate, index) => ({
+          businessDate,
+          weekday: (["Tuesday", "Wednesday", "Thursday", "Friday"] as const)[index]!,
+          disposition: "primary" as const,
+          primary: null,
+          fixedConstraints: [],
+          readinessRequirements: [],
+          uncertainty: null,
+        })),
+      },
+    });
+    session.lastQuestionKind = "primary";
+    session.lastQuestionDate = "2026-09-15";
+    const stated = await advanceWeeklySession({
+      dossier,
+      session,
+      operatorUtterance: "Visit the website",
+    });
+    const tuesday = stated.draft.days.find(day => day.businessDate === "2026-09-15");
+    expect(tuesday?.primary?.text).toBe("Visit the website");
+    expect(tuesday?.primary?.executionType).toBeNull();
+
+    const accepted = acceptPlanningDecision(
+      {
+        act: "ASK",
+        speech: "Visit the website is still the open question for Tuesday.",
+        draftDays: [
+          {
+            businessDate: "2026-09-15",
+            primaryText: "Visit the website",
+            executionType: "mission",
+          },
+        ],
+      },
+      { dossier, session, utterance: "Visit the website" }
+    );
+    expect(accepted).not.toBeNull();
+    expect(accepted?.draftDays?.[0]).not.toHaveProperty("executionType");
+    applyPlanningDecision(session, accepted!, dossier.growthCandidates);
+    expect(session.draft.days.find(day => day.businessDate === "2026-09-15")?.primary?.executionType).toBeNull();
   });
 });
 
