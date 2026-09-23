@@ -397,6 +397,7 @@ export const commercialMissionRouter = router({
         requestId: z.string().uuid(),
         outcome: z.enum(COMMERCIAL_MISSION_CALL_OUTCOMES),
         notes: z.string().trim().min(1).max(2_000),
+        salesCallAttemptId: z.number().int().positive().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -444,6 +445,9 @@ export const commercialMissionRouter = router({
           missionId: input.missionId,
           outcome: result.outcome,
           actionOnly: true,
+          ...(result.transportEvidence
+            ? { transportEvidence: result.transportEvidence }
+            : {}),
         },
       });
       return { ...result, worldEvent };

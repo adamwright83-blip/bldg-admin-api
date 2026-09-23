@@ -1,7 +1,10 @@
 import { and, asc, eq } from "drizzle-orm";
 import { commercialMissionEvents } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { assertMissionConversationOutcome } from "../salesCalls";
+import {
+  assertMissionConversationOutcome,
+  type ConnectedCallTransportEvidence,
+} from "../salesCalls";
 import { getCommercialMission } from "./commercialMissionStore";
 import { awardDriverSalesPoints } from "./driverSalesMotivationService";
 
@@ -24,7 +27,29 @@ export type CommercialMissionCallAttempt = {
   notes: string;
   actorId: string;
   createdAt: string;
+  transportEvidence: ConnectedCallTransportEvidence | null;
 };
+
+function transportEvidenceFromMetadata(
+  metadata: Record<string, unknown>
+): ConnectedCallTransportEvidence | null {
+  const raw = metadata.transportEvidence;
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as Record<string, unknown>;
+  if (typeof value.tenantId !== "string") return null;
+  if (typeof value.missionId !== "number") return null;
+  if (typeof value.coldCallTargetId !== "string" || !value.coldCallTargetId) return null;
+  if (typeof value.salesCallAttemptId !== "number") return null;
+  const prospectLegCallSid = value.prospectLegCallSid;
+  if (prospectLegCallSid != null && typeof prospectLegCallSid !== "string") return null;
+  return {
+    tenantId: value.tenantId,
+    missionId: value.missionId,
+    coldCallTargetId: value.coldCallTargetId,
+    salesCallAttemptId: value.salesCallAttemptId,
+    prospectLegCallSid: prospectLegCallSid ?? null,
+  };
+}
 
 function callAttemptView(
   row: typeof commercialMissionEvents.$inferSelect
@@ -41,6 +66,7 @@ function callAttemptView(
     notes: typeof metadata.notes === "string" ? metadata.notes : "",
     actorId: row.actorId ?? "unknown",
     createdAt: row.createdAt.toISOString(),
+    transportEvidence: transportEvidenceFromMetadata(metadata),
   };
 }
 
@@ -98,8 +124,17 @@ export async function recordCommercialMissionCallAttempt(input: {
   requestId: string;
   outcome: CommercialMissionCallOutcome;
   notes: string;
-  /** Present for Cold Call Burst so the gate reads that target, not a newer attempt on the mission. */
+  /**
+   * Cold Call Burst names the target. The latest attempt on that target is
+   * the one whose prospect leg must have connected.
+   */
   coldCallTargetId?: string;
+  /**
+   * Legacy log names the sales_call_attempts row. Required for spoke and
+   * visit_booked when no target is named. The mission's latest attempt is
+   * not a substitute.
+   */
+  salesCallAttemptId?: number;
 }): Promise<CommercialMissionCallAttempt> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -129,10 +164,11 @@ export async function recordCommercialMissionCallAttempt(input: {
     return view;
   }
 
-  await assertMissionConversationOutcome({
+  const transportEvidence = await assertMissionConversationOutcome({
     tenantId: input.tenantId,
     missionId: input.missionId,
     coldCallTargetId: input.coldCallTargetId,
+    salesCallAttemptId: input.salesCallAttemptId,
     outcome: input.outcome,
   });
 
@@ -147,7 +183,11 @@ export async function recordCommercialMissionCallAttempt(input: {
       actorType: "driver",
       actorId: input.actorId,
       idempotencyKey,
-      metadataJson: { outcome: input.outcome, notes: input.notes.trim() },
+      metadataJson: {
+        outcome: input.outcome,
+        notes: input.notes.trim(),
+        ...(transportEvidence ? { transportEvidence } : {}),
+      },
     })
     .onDuplicateKeyUpdate({ set: { idempotencyKey } });
 

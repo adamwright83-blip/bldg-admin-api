@@ -128,13 +128,17 @@ describe("commercial call outcomes and prospect connection", () => {
     );
   });
 
-  it("awards the connected bonus only after the mission prospect leg is connected", async () => {
+  it("awards the connected bonus when the gate allows the named attempt", async () => {
     const spoke = await recordCommercialMissionCallAttempt({
       ...input,
       requestId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       outcome: "spoke",
+      salesCallAttemptId: 41,
     });
     expect(spoke.outcome).toBe("spoke");
+    expect(mocks.assertMissionConversationOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: "spoke", salesCallAttemptId: 41 })
+    );
     expect(mocks.awardDriverSalesPoints).toHaveBeenCalledWith(
       expect.objectContaining({ points: 10, metadata: { outcome: "spoke" } })
     );

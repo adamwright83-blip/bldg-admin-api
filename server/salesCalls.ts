@@ -17,10 +17,12 @@
  * and never writes the commercial mission call attempt.
  *
  * `spoke` and `visit_booked` are connected conversations. They require the
- * prospect leg to have connected: attempt status `customer_connected`, or a
- * same-tenant `CALL_CONNECTED` receipt on the prospect leg. A placed bridge,
- * a rep answer, ringing, `completed_success` alone, or a customer-leg
- * `completed` callback without that signal does not.
+ * prospect leg of the named attempt to have connected: attempt status
+ * `customer_connected`, or a same-tenant `CALL_CONNECTED` receipt on that
+ * attempt's prospect leg. A placed bridge, a rep answer, ringing,
+ * `completed_success` alone, a customer-leg `completed` callback without that
+ * signal, or some other attempt on the mission does not. A legacy log that
+ * cannot name the attempt fails closed.
  *
  * Recording is OFF. Do not add recording without a separate product decision.
  */
@@ -373,7 +375,20 @@ async function receiptsForProspectLeg(input: {
 }
 
 /**
- * Prospect leg connected for one cold-call attempt.
+ * Transport binding stored with a connected commercial outcome.
+ * The attempt id is the sales_call_attempts row whose prospect leg connected.
+ */
+export type ConnectedCallTransportEvidence = {
+  tenantId: string;
+  missionId: number;
+  coldCallTargetId: string;
+  salesCallAttemptId: number;
+  prospectLegCallSid: string | null;
+};
+
+/**
+ * Latest attempt on this target only.
+ * An older connected attempt on the same target is not a substitute.
  * `completed_success` is not enough: older rows used it for any customer-leg
  * `completed` callback. Duration is not an input.
  */
@@ -381,8 +396,20 @@ export async function coldCallTargetProspectLegConnected(input: {
   tenantId: string;
   coldCallTargetId: string;
 }): Promise<boolean> {
+  const attempt = await latestAttemptOnTarget({
+    tenantId: input.tenantId,
+    coldCallTargetId: input.coldCallTargetId,
+  });
+  if (!attempt) return false;
+  return prospectAttemptConnected(attempt);
+}
+
+async function latestAttemptOnTarget(input: {
+  tenantId: string;
+  coldCallTargetId: string;
+}): Promise<SalesCallAttempt | null> {
   const db = await getDb();
-  if (!db) return false;
+  if (!db) return null;
   const [attempt] = await db
     .select()
     .from(salesCallAttempts)
@@ -394,42 +421,81 @@ export async function coldCallTargetProspectLegConnected(input: {
     )
     .orderBy(desc(salesCallAttempts.id))
     .limit(1);
-  if (!attempt) return false;
-  return prospectAttemptConnected(attempt);
+  if (!attempt || attempt.tenantId !== input.tenantId) return null;
+  if (attempt.coldCallTargetId !== input.coldCallTargetId) return null;
+  return attempt;
 }
 
-/** Latest cold-call attempt for this mission, tenant-scoped. */
-export async function missionHasConnectedProspectLeg(input: {
+async function targetBelongsToMission(input: {
   tenantId: string;
   missionId: number;
+  coldCallTargetId: string;
 }): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
-  const [attempt] = await db
-    .select({
-      tenantId: salesCallAttempts.tenantId,
-      status: salesCallAttempts.status,
-      repLegCallSid: salesCallAttempts.repLegCallSid,
-      customerLegCallSid: salesCallAttempts.customerLegCallSid,
-    })
-    .from(salesCallAttempts)
-    .innerJoin(
-      driverColdCallTargets,
-      and(
-        eq(driverColdCallTargets.id, salesCallAttempts.coldCallTargetId),
-        eq(driverColdCallTargets.tenantId, salesCallAttempts.tenantId)
-      )
-    )
+  const [target] = await db
+    .select({ id: driverColdCallTargets.id })
+    .from(driverColdCallTargets)
     .where(
       and(
-        eq(salesCallAttempts.tenantId, input.tenantId),
+        eq(driverColdCallTargets.id, input.coldCallTargetId),
+        eq(driverColdCallTargets.tenantId, input.tenantId),
         eq(driverColdCallTargets.missionId, input.missionId)
       )
     )
-    .orderBy(desc(salesCallAttempts.id))
     .limit(1);
-  if (!attempt) return false;
-  return prospectAttemptConnected(attempt);
+  return Boolean(target);
+}
+
+/**
+ * The attempt the caller named. No fallback to another row on the mission.
+ * Cross-tenant ids and attempts whose target is on a different mission miss.
+ */
+async function namedAttemptOnMission(input: {
+  tenantId: string;
+  missionId: number;
+  salesCallAttemptId: number;
+  coldCallTargetId?: string;
+}): Promise<SalesCallAttempt | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [attempt] = await db
+    .select()
+    .from(salesCallAttempts)
+    .where(
+      and(
+        eq(salesCallAttempts.id, input.salesCallAttemptId),
+        eq(salesCallAttempts.tenantId, input.tenantId)
+      )
+    )
+    .limit(1);
+  if (!attempt || attempt.tenantId !== input.tenantId) return null;
+  const targetId = attempt.coldCallTargetId?.trim() || "";
+  if (!targetId) return null;
+  if (input.coldCallTargetId && input.coldCallTargetId !== targetId) return null;
+  const onMission = await targetBelongsToMission({
+    tenantId: input.tenantId,
+    missionId: input.missionId,
+    coldCallTargetId: targetId,
+  });
+  if (!onMission) return null;
+  return attempt;
+}
+
+function transportEvidence(input: {
+  tenantId: string;
+  missionId: number;
+  attempt: SalesCallAttempt;
+}): ConnectedCallTransportEvidence | null {
+  const targetId = input.attempt.coldCallTargetId?.trim() || "";
+  if (!targetId || input.attempt.tenantId !== input.tenantId) return null;
+  return {
+    tenantId: input.tenantId,
+    missionId: input.missionId,
+    coldCallTargetId: targetId,
+    salesCallAttemptId: input.attempt.id,
+    prospectLegCallSid: input.attempt.customerLegCallSid?.trim() || null,
+  };
 }
 
 async function prospectAttemptConnected(
@@ -465,21 +531,64 @@ export async function assertColdCallConversationOutcome(input: {
   if (!connected) throw new ProspectLegNotConnectedError();
 }
 
+/**
+ * Cold Call Burst names the target and not an attempt id. The latest attempt
+ * on that target is the only candidate. An older connected attempt on the
+ * target, or a connected attempt on another target, is not enough.
+ */
+async function latestTargetAttemptOnMission(input: {
+  tenantId: string;
+  missionId: number;
+  coldCallTargetId: string;
+}): Promise<SalesCallAttempt | null> {
+  const onMission = await targetBelongsToMission(input);
+  if (!onMission) return null;
+  return latestAttemptOnTarget({
+    tenantId: input.tenantId,
+    coldCallTargetId: input.coldCallTargetId,
+  });
+}
+
+/**
+ * Connected outcomes name one attempt.
+ *
+ * `salesCallAttemptId` checks that row's prospect leg. A legacy log with no
+ * attempt id fails closed. The mission's latest attempt, including a latest
+ * connected attempt, is not authorization.
+ */
 export async function assertMissionConversationOutcome(input: {
   tenantId: string;
   missionId: number;
-  /** Cold Call Burst passes the target. The legacy log uses the mission's latest attempt. */
   coldCallTargetId?: string;
+  salesCallAttemptId?: number;
   outcome: string;
-}): Promise<void> {
-  if (!isConnectedConversationOutcome(input.outcome)) return;
-  const connected = input.coldCallTargetId
-    ? await coldCallTargetProspectLegConnected({
-        tenantId: input.tenantId,
-        coldCallTargetId: input.coldCallTargetId,
-      })
-    : await missionHasConnectedProspectLeg(input);
+}): Promise<ConnectedCallTransportEvidence | null> {
+  if (!isConnectedConversationOutcome(input.outcome)) return null;
+  const attempt =
+    input.salesCallAttemptId != null
+      ? await namedAttemptOnMission({
+          tenantId: input.tenantId,
+          missionId: input.missionId,
+          salesCallAttemptId: input.salesCallAttemptId,
+          coldCallTargetId: input.coldCallTargetId,
+        })
+      : input.coldCallTargetId
+        ? await latestTargetAttemptOnMission({
+            tenantId: input.tenantId,
+            missionId: input.missionId,
+            coldCallTargetId: input.coldCallTargetId,
+          })
+        : null;
+  if (!attempt) throw new ProspectLegNotConnectedError();
+  const connected = await prospectAttemptConnected(attempt);
   if (!connected) throw new ProspectLegNotConnectedError();
+  const evidence = transportEvidence({
+    tenantId: input.tenantId,
+    missionId: input.missionId,
+    attempt,
+  });
+  if (!evidence) throw new ProspectLegNotConnectedError();
+  return evidence;
 }
 
 export function goldlineTransportStatusFromCustomerLeg(input: {
