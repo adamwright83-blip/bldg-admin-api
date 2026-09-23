@@ -1,6 +1,8 @@
 import { cn } from "@/lib/utils";
+import { customerFatalNotice, createFatalCorrelationId } from "@shared/clientFatal";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { Component, ReactNode } from "react";
+import { reportClientFatal } from "./reportClientFatal";
 
 interface Props {
   children: ReactNode;
@@ -8,36 +10,43 @@ interface Props {
 
 interface State {
   hasError: boolean;
-  error: Error | null;
+  correlationId: string | null;
 }
 
 class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, correlationId: null };
   }
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+  static getDerivedStateFromError(): Partial<State> {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error): void {
+    const correlationId = createFatalCorrelationId();
+    this.setState({ correlationId });
+    reportClientFatal(error, correlationId);
   }
 
   render() {
     if (this.state.hasError) {
+      const notice = customerFatalNotice(this.state.correlationId);
       return (
         <div className="flex items-center justify-center min-h-screen p-8 bg-background">
-          <div className="flex flex-col items-center w-full max-w-2xl p-8">
+          <div className="flex flex-col items-center w-full max-w-md p-8 text-center">
             <AlertTriangle
               size={48}
               className="text-destructive mb-6 flex-shrink-0"
             />
 
-            <h2 className="text-xl mb-4">An unexpected error occurred.</h2>
-
-            <div className="p-4 w-full rounded bg-muted overflow-auto mb-6">
-              <pre className="text-sm text-muted-foreground whitespace-break-spaces">
-                {this.state.error?.stack}
-              </pre>
-            </div>
+            <h2 className="text-xl mb-2">{notice.headline}</h2>
+            <p className="text-sm text-muted-foreground mb-4">{notice.recovery}</p>
+            {notice.correlationId ? (
+              <p className="text-xs text-muted-foreground mb-6 break-all">
+                Reference {notice.correlationId}
+              </p>
+            ) : null}
 
             <button
               onClick={() => window.location.reload()}

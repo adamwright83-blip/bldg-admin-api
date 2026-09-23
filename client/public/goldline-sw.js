@@ -21,7 +21,7 @@
  * activate() deletes every cache that doesn't match, so an old install
  * never keeps serving an outdated shell.
  */
-const CACHE_VERSION = "goldline-shell-v2";
+const CACHE_VERSION = "goldline-shell-v3";
 const OFFLINE_URL = "/";
 
 const PRECACHE_URLS = [
