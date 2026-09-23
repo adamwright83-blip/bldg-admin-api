@@ -289,14 +289,14 @@ export function interpretSourceCoverage(input: {
     source => source.includedInCombinedBook && source.status !== "fresh"
   );
   const spanCovers = windowInsideProvenSpan(input.window, snapshot);
-  // B1 publishes exactRevenueLicensed as false. False does not grant an exact total.
-  const exactRevenueLicensed: boolean = snapshot.book.exactRevenueLicensed;
+  // B1 types exactRevenueLicensed as false. The flag is a condition, not a
+  // comparison with true, so a false license cannot open an exact total.
   const otherFlagsTrusted =
     snapshot.book.allCustomersLicensed === false &&
     snapshot.book.staleIsZero === false &&
     snapshot.book.missingIsNoCustomers === false;
   const coverageAllowsExact =
-    exactRevenueLicensed === true &&
+    snapshot.book.exactRevenueLicensed &&
     otherFlagsTrusted &&
     snapshot.book.exhaustiveCurrent &&
     snapshot.book.paymentEventsProven &&
