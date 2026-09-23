@@ -2,7 +2,7 @@
  * Factual CONTACT sessions. Not a second call-state machine.
  * scripts/migrate.mjs creates the table. Phone numbers are not stored.
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { goldlineRookContactSessions } from "../../drizzle/schema";
 import {
@@ -92,6 +92,13 @@ async function requireDb() {
   return db;
 }
 
+function mysqlAffectedRows(result: unknown): number | null {
+  const candidate = Array.isArray(result) ? result[0] : result;
+  if (!candidate || typeof candidate !== "object" || !("affectedRows" in candidate)) return null;
+  const value = Number((candidate as { affectedRows?: unknown }).affectedRows);
+  return Number.isFinite(value) ? value : null;
+}
+
 export async function findRookContactSession(input: {
   tenantId: string;
   operatorId: string;
@@ -179,18 +186,47 @@ export async function markRookContactSessionAuthorized(input: {
     );
 }
 
-export async function markRookContactSessionDialing(input: {
+/**
+ * Claims the one authorized CONTACT session before any Twilio side effect.
+ * Exactly one concurrent starter may change authorized -> dialing_operator.
+ */
+export async function claimRookContactSessionDial(input: {
+  tenantId: string;
+  operatorId: string;
+  contactSessionId: string;
+  at: Date;
+}): Promise<boolean> {
+  const db = await requireDb();
+  const result = await db
+    .update(goldlineRookContactSessions)
+    .set({
+      status: "dialing_operator",
+      updatedAt: input.at,
+    })
+    .where(
+      and(
+        eq(goldlineRookContactSessions.contactSessionId, input.contactSessionId),
+        eq(goldlineRookContactSessions.tenantId, input.tenantId),
+        eq(goldlineRookContactSessions.operatorId, input.operatorId),
+        eq(goldlineRookContactSessions.status, "authorized"),
+        isNull(goldlineRookContactSessions.callAttemptId)
+      )
+    );
+  return mysqlAffectedRows(result) === 1;
+}
+
+/** Attach the durable sales-call attempt to the session that already won the dial claim. */
+export async function attachRookContactSessionCallAttempt(input: {
   tenantId: string;
   operatorId: string;
   contactSessionId: string;
   callAttemptId: number;
   at: Date;
-}): Promise<void> {
+}): Promise<boolean> {
   const db = await requireDb();
-  await db
+  const result = await db
     .update(goldlineRookContactSessions)
     .set({
-      status: "dialing_operator",
       callAttemptId: input.callAttemptId,
       updatedAt: input.at,
     })
@@ -199,9 +235,11 @@ export async function markRookContactSessionDialing(input: {
         eq(goldlineRookContactSessions.contactSessionId, input.contactSessionId),
         eq(goldlineRookContactSessions.tenantId, input.tenantId),
         eq(goldlineRookContactSessions.operatorId, input.operatorId),
-        eq(goldlineRookContactSessions.status, "authorized")
+        eq(goldlineRookContactSessions.status, "dialing_operator"),
+        isNull(goldlineRookContactSessions.callAttemptId)
       )
     );
+  return mysqlAffectedRows(result) === 1;
 }
 
 export async function markRookContactSessionFailed(input: {
