@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  COLD_CALL_CALLER_ID_UNVERIFIED_MESSAGE,
   coldCallAmmo,
   coldCallEligibility,
+  coldCallRollingStatusCopy,
   comboAfterChain,
+  isColdCallRollingTerminal,
   type ColdCallBatch,
 } from "./coldCallBurst";
 
@@ -60,6 +63,40 @@ describe("Cold Call Burst truth contracts", () => {
         hasEligibleNextTarget: true,
       })
     ).toEqual({ combo: 0, result: "combo_break" });
+  });
+
+  it("reads rolling-call copy from sales attempt status and the server company", () => {
+    expect(
+      coldCallRollingStatusCopy({
+        status: "dialing_rep",
+        companyName: "Kith Treats",
+      })
+    ).toBe("Calling your phone…");
+    expect(
+      coldCallRollingStatusCopy({
+        status: "rep_connected",
+        companyName: "Kith Treats",
+      })
+    ).toBe("You're connected.");
+    expect(
+      coldCallRollingStatusCopy({
+        status: "dialing_customer",
+        companyName: "Kith Treats",
+      })
+    ).toBe("Calling Kith Treats…");
+    expect(
+      coldCallRollingStatusCopy({
+        status: "customer_connected",
+        companyName: "Kith Treats",
+      })
+    ).toBe("Connected to Kith Treats.");
+    expect(isColdCallRollingTerminal("customer_connected")).toBe(false);
+    expect(isColdCallRollingTerminal("completed_success")).toBe(true);
+    expect(isColdCallRollingTerminal("completed_no_connect")).toBe(true);
+    expect(isColdCallRollingTerminal("failed")).toBe(true);
+    expect(COLD_CALL_CALLER_ID_UNVERIFIED_MESSAGE).toBe(
+      "Your cell must be verified as an outgoing caller ID in Twilio before Goldline can roll this call."
+    );
   });
 
   it("ends normally when the backend has no next target", () => {

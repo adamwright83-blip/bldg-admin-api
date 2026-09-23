@@ -500,7 +500,18 @@ export const salesCallAttempts = mysqlTable(
     orderId: int("order_id"),
     repPhone: varchar("rep_phone", { length: 30 }).notNull(),
     customerPhone: varchar("customer_phone", { length: 30 }).notNull(),
+    /**
+     * Prospect-facing caller ID only (the operator's verified cellphone).
+     * The operator leg's Twilio `from` is CLAIRE_TWILIO_FROM_NUMBER and is
+     * not stored in this column.
+     */
     callerId: varchar("caller_id", { length: 30 }).notNull(),
+    /**
+     * Set only for Goldline Cold Call Burst transport attempts.
+     * Null for Saleslay Bold Pitch. Presence selects communications-only
+     * status updates: duration never grants a Goldline business outcome.
+     */
+    coldCallTargetId: varchar("cold_call_target_id", { length: 36 }),
     repLegCallSid: varchar("rep_leg_call_sid", { length: 64 }),
     customerLegCallSid: varchar("customer_leg_call_sid", { length: 64 }),
     status: mysqlEnum("status", [
@@ -525,6 +536,10 @@ export const salesCallAttempts = mysqlTable(
     repLegCallSidIdx: uniqueIndex(
       "sales_call_attempts_rep_leg_call_sid_idx"
     ).on(table.repLegCallSid),
+    coldCallTargetIdx: index("sales_call_attempts_cold_call_target_idx").on(
+      table.tenantId,
+      table.coldCallTargetId
+    ),
   })
 );
 
@@ -4858,6 +4873,17 @@ export const driverColdCallTargets = mysqlTable(
     actorId: varchar("actorId", { length: 128 }).notNull(),
     missionId: int("missionId").notNull(),
     accountId: int("accountId").notNull(),
+    /**
+     * Exact commercial_account_contacts.id chosen when the target was
+     * created. Dial and display reload this row. A sibling contact on the
+     * same mission or account is not a substitute.
+     */
+    contactId: int("contactId"),
+    /**
+     * Compare-and-swap token for an in-flight roll. A second concurrent
+     * roll cannot take it while this is set.
+     */
+    rollClaimId: varchar("rollClaimId", { length: 36 }),
     position: int("position").notNull(),
     status: mysqlEnum("status", ["pending", "selected", "live", "completed"])
       .notNull()
@@ -4880,6 +4906,10 @@ export const driverColdCallTargets = mysqlTable(
       table.batchId,
       table.status,
       table.position
+    ),
+    contactIdx: index("idx_driver_cold_call_target_contact").on(
+      table.tenantId,
+      table.contactId
     ),
   })
 );

@@ -32,6 +32,7 @@ import type { GoldlineProgressionProjection } from "../../../shared/goldlineProg
 import { gameWorldControlPercent } from "../../../shared/driverGameWorld";
 import type {
   ColdCallBatch,
+  ColdCallRollingCall,
   ColdCallTarget,
 } from "../../../shared/coldCallBurst";
 import type {
@@ -268,6 +269,9 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
   isCreatingColdCall?: boolean;
   onCreateColdCall: () => Promise<ColdCallBatch | null>;
   onStartColdCall: (target: ColdCallTarget) => Promise<ColdCallBatch>;
+  onPollColdCallRolling?: (
+    target: ColdCallTarget
+  ) => Promise<ColdCallRollingCall | null>;
   onCompleteColdCall: (input: {
     target: ColdCallTarget;
     outcome:
@@ -3793,6 +3797,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
             batch={props.coldCallBatch}
             onClose={() => setColdCallOpen(false)}
             onStart={handleColdCallStart}
+            onPollRollingCall={props.onPollColdCallRolling}
             onComplete={handleColdCallComplete}
             onSelectChain={handleColdCallSelectChain}
             onBreakCombo={props.onBreakColdCallCombo}

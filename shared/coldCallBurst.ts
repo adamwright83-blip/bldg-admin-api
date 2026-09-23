@@ -22,6 +22,63 @@ export type ColdCallTarget = {
   outcome: string | null;
 };
 
+export const COLD_CALL_ROLLING_STATUSES = [
+  "dialing_rep",
+  "rep_connected",
+  "dialing_customer",
+  "customer_connected",
+  "completed_success",
+  "completed_no_connect",
+  "failed",
+] as const;
+
+export type ColdCallRollingStatus = (typeof COLD_CALL_ROLLING_STATUSES)[number];
+
+export const COLD_CALL_ROLLING_TERMINAL_STATUSES = [
+  "completed_success",
+  "completed_no_connect",
+  "failed",
+] as const;
+
+/** Transport status from sales_call_attempts. Not a commercial outcome. */
+export type ColdCallRollingCall = {
+  attemptId: number;
+  targetId: string;
+  status: ColdCallRollingStatus;
+  failureReason: string | null;
+  companyName: string;
+  phoneNumber: string;
+};
+
+export const COLD_CALL_CALLER_ID_UNVERIFIED_MESSAGE =
+  "Your cell must be verified as an outgoing caller ID in Twilio before Goldline can roll this call.";
+
+export function coldCallRollingStatusCopy(input: {
+  status: ColdCallRollingStatus;
+  companyName: string;
+}): string {
+  switch (input.status) {
+    case "dialing_rep":
+      return "Calling your phone…";
+    case "rep_connected":
+      return "You're connected.";
+    case "dialing_customer":
+      return `Calling ${input.companyName}…`;
+    case "customer_connected":
+      return `Connected to ${input.companyName}.`;
+    case "completed_success":
+    case "completed_no_connect":
+    case "failed":
+      return "Call ended. Log what actually happened.";
+  }
+}
+
+export function isColdCallRollingTerminal(status: ColdCallRollingStatus): boolean {
+  return (COLD_CALL_ROLLING_TERMINAL_STATUSES as readonly string[]).includes(
+    status
+  );
+}
+
 export type ColdCallBatch = {
   id: string;
   targets: ColdCallTarget[];
@@ -31,6 +88,8 @@ export type ColdCallBatch = {
   combo: number;
   completedCount: number;
   totalTargets: number;
+  /** Latest transport attempt for the live target, when one exists. */
+  rollingCall: ColdCallRollingCall | null;
 };
 
 export type ColdCallEligibilityCandidate = {

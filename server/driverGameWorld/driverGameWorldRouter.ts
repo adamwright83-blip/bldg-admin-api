@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { dayforgeMissionFieldProcedure, router } from "../_core/trpc";
 import {
@@ -14,9 +15,11 @@ import {
   completeColdCallTarget,
   createColdCallBatch,
   getColdCallBurstState,
+  getColdCallRollingCall,
+  rollColdCallTarget,
   selectColdCallChainTarget,
-  startColdCallTarget,
 } from "./coldCallBurstService";
+import { ColdCallCallerIdUnverifiedError } from "../salesCalls";
 import { COMMERCIAL_MISSION_CALL_OUTCOMES } from "../commercialMissions/commercialMissionCallService";
 import { evaluateExpansionScoutForIdentity } from "../capabilities/expansionScoutCapability";
 import {
@@ -121,8 +124,32 @@ export const driverGameWorldRouter = router({
         targetId: z.string().uuid(),
       })
     )
-    .mutation(({ ctx, input }) =>
-      startColdCallTarget({
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await rollColdCallTarget({
+          ...input,
+          tenantId: ctx.tenantId,
+          actorId: ctx.user.openId,
+        });
+      } catch (error) {
+        if (error instanceof ColdCallCallerIdUnverifiedError) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: error.message,
+          });
+        }
+        throw error;
+      }
+    }),
+  coldCallRollingCall: dayforgeMissionFieldProcedure
+    .input(
+      z.object({
+        batchId: z.string().uuid(),
+        targetId: z.string().uuid(),
+      })
+    )
+    .query(({ ctx, input }) =>
+      getColdCallRollingCall({
         ...input,
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,

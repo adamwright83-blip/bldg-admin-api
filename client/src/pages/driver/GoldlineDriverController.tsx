@@ -32,6 +32,7 @@ import type {
 import type { OpenChannelGenerateInput } from "../goldline/OpenChannel";
 import type {
   ColdCallBatch,
+  ColdCallRollingCall,
   ColdCallTarget,
 } from "../../../../shared/coldCallBurst";
 import type { RealActionRequest } from "../../game/encounters/RealActionBridge";
@@ -951,6 +952,17 @@ function LiveGoldlineDriverController({
     return next;
   }
 
+  async function handlePollColdCall(
+    target: ColdCallTarget
+  ): Promise<ColdCallRollingCall | null> {
+    const batch = coldCall.data?.batch;
+    if (!batch) return null;
+    return utils.system.driverGameWorld.coldCallRollingCall.fetch({
+      batchId: batch.id,
+      targetId: target.id,
+    });
+  }
+
   async function handleCompleteColdCall(input: {
     target: ColdCallTarget;
     outcome:
@@ -1784,6 +1796,7 @@ function LiveGoldlineDriverController({
           isCreatingColdCall={createColdCall.isPending}
           onCreateColdCall={handleCreateColdCall}
           onStartColdCall={handleStartColdCall}
+          onPollColdCallRolling={handlePollColdCall}
           onCompleteColdCall={handleCompleteColdCall}
           onSelectColdCallChain={handleSelectColdCallChain}
           onBreakColdCallCombo={handleBreakColdCallCombo}

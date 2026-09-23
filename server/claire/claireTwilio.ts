@@ -217,6 +217,12 @@ function assertTwilioConfigured(): void {
   }
 }
 
+/** Twilio number that places the operator leg. Never the prospect caller ID. */
+export function claireTwilioFromNumber(): string {
+  assertTwilioConfigured();
+  return assertPhone(fromNumber);
+}
+
 /**
  * The number Claire dials for this operator. When CLAIRE_OPERATOR_PHONES is
  * configured, an operator without an entry is never dialed on someone else's
