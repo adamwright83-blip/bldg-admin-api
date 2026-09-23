@@ -72,4 +72,7 @@ export const ENV = {
     process.env.DAYFORGE_DEMO_TENANT_SLUG?.trim() || "sunset-laundry-demo",
   /** World capability: Night Shift authors tomorrow's presentation after LA date roll. Off by default. */
   goldlineNightShiftEnabled: process.env.GOLDLINE_NIGHT_SHIFT === "true",
+  /** xAI realtime foundation: optional until the provider path is invoked. */
+  xaiApiKey: process.env.XAI_API_KEY?.trim() ?? "",
+  xaiVoiceModel: process.env.XAI_VOICE_MODEL?.trim() || "grok-voice-latest",
 };
