@@ -151,12 +151,22 @@ function CommercialProposalPrintRoute() {
  * leaves a signed-out visitor staring at a broken page instead of a login
  * prompt.
  */
+function signedInWithLegacyDriverPassword(user: {
+  openId?: string | null;
+  role?: string | null;
+} | null): boolean {
+  if (!user?.openId || user.role !== "driver") return false;
+  return !user.openId.startsWith("dayforge:");
+}
+
 function DriverMembershipGate({ children }: { children: ReactNode }) {
-  const { loading: authLoading, isAuthenticated } = useAuth();
+  const { user, loading: authLoading, isAuthenticated } = useAuth();
   if (authLoading) {
     return <div style={{ minHeight: "100vh", background: "#fff" }} />;
   }
-  if (!isAuthenticated) {
+  // A shared-password driver cookie is still signed in, but it is not Claire
+  // desk authority. Show the membership form instead of the desk.
+  if (!isAuthenticated || signedInWithLegacyDriverPassword(user)) {
     return (
       <LoginForm
         role="driver"

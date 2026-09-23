@@ -13,6 +13,7 @@ import {
   adminProcedure,
   dayforgeChurnProcedure,
   dayforgeMissionFieldProcedure,
+  joystickClaireDeskFieldProcedure,
   joystickClaireDeskProcedure,
   router,
 } from "../_core/trpc";
@@ -220,7 +221,7 @@ export const claireRouter = router({
       };
     }),
 
-  confirmTomorrow: dayforgeMissionFieldProcedure
+  confirmTomorrow: joystickClaireDeskFieldProcedure
     .input(
       z.object({
         timeZone: z.string().trim().min(1).max(100).optional(),
@@ -677,7 +678,7 @@ export const claireRouter = router({
 
   capabilities: dayforgeMissionFieldProcedure.query(() => GOLDLINE_CAPABILITY_REGISTRY),
 
-  capabilityGap: dayforgeMissionFieldProcedure
+  capabilityGap: joystickClaireDeskFieldProcedure
     .input(z.object({ id: uuid }))
     .query(({ ctx, input }) =>
       loadCapabilityGapForOperator({
@@ -813,7 +814,7 @@ export const claireRouter = router({
       };
     }),
 
-  continueCapabilityEngineering: dayforgeMissionFieldProcedure
+  continueCapabilityEngineering: joystickClaireDeskFieldProcedure
     .input(
       z.object({
         id: uuid,

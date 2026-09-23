@@ -2,6 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type { Request } from "express";
 import { getSessionCookieOptions } from "../_core/cookies";
+import { createContext } from "../_core/context";
+import { sdk } from "../_core/sdk";
+import { claireRouter } from "../claire/claireRouter";
+import { claireRelationshipOffboardingRouter } from "../claire/relationshipOffboardingRouter";
 import { resolveDayforgeMembership } from "../saas/tenantAccess";
 import {
   authorizeJoystickClaireDesk,
@@ -10,6 +14,13 @@ import {
   sharedPasswordLoginSelection,
   tenantForAuthenticatedUser,
 } from "./tenantIdentity";
+
+vi.mock("../_core/sdk", () => ({
+  sdk: {
+    authenticateRequest: vi.fn(),
+    authenticateSessionToken: vi.fn(),
+  },
+}));
 
 const member = {
   openId: "dayforge:member-a",
@@ -211,5 +222,128 @@ describe("JOYSTICK tenant identity", () => {
     expect(claire).toContain("claireOperatorScope");
     expect(claire).toContain("joystickClaireDeskProcedure");
     expect(claire).not.toContain("previewPreDrive: adminProcedure");
+  });
+});
+
+const legacyDriver = {
+  id: 2,
+  openId: "driver-primary",
+  role: "driver" as const,
+  name: "Driver",
+  email: null,
+  loginMethod: "password",
+  tenantId: "tenant-victim",
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  lastSignedIn: new Date(),
+};
+
+function requestContext(input: {
+  user: typeof legacyDriver | null;
+  tenantId: string;
+  host: string;
+}) {
+  return {
+    req: { headers: { host: input.host }, protocol: "https" },
+    res: {},
+    user: input.user,
+    vendorSession: null,
+    tenantId: input.tenantId,
+  } as never;
+}
+
+describe("Claire desk routes reject the shared driver password", () => {
+  it("does not let the shared driver confirm tomorrow on a legacy tenant", async () => {
+    const caller = claireRouter.createCaller(
+      requestContext({
+        user: legacyDriver,
+        tenantId: "laundry_farm",
+        host: "driver.bldg.chat",
+      })
+    );
+    await expect(
+      caller.confirmTomorrow({ timeZone: "America/Los_Angeles" })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("does not let the shared driver open a capability gap", async () => {
+    const caller = claireRouter.createCaller(
+      requestContext({
+        user: legacyDriver,
+        tenantId: "default",
+        host: "driver.bldg.chat",
+      })
+    );
+    await expect(
+      caller.capabilityGap({
+        id: "00000000-0000-4000-8000-000000000001",
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("does not let the shared driver preview a relationship closing", async () => {
+    const caller = claireRelationshipOffboardingRouter.createCaller(
+      requestContext({
+        user: legacyDriver,
+        tenantId: "laundry_farm",
+        host: "laundryfarm.bldg.chat",
+      })
+    );
+    await expect(caller.preview()).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+  });
+});
+
+describe("request tenant bind", () => {
+  it("keeps a membership session on the persisted tenant when the host differs", async () => {
+    vi.mocked(sdk.authenticateRequest).mockResolvedValue({
+      ...legacyDriver,
+      id: 9,
+      openId: "dayforge:member-a",
+      role: "user",
+      tenantId: "tenant-a",
+    } as never);
+    const ctx = await createContext({
+      req: {
+        headers: { host: "driver.bldg.chat", "x-forwarded-host": "laundryfarm.bldg.chat" },
+        protocol: "https",
+      } as never,
+      res: {} as never,
+    });
+    expect(ctx.tenantId).toBe("tenant-a");
+  });
+
+  it("keeps a shared driver session on the host legacy tenant", async () => {
+    vi.mocked(sdk.authenticateRequest).mockResolvedValue(legacyDriver as never);
+    const ctx = await createContext({
+      req: {
+        headers: {
+          host: "driver.bldg.chat",
+          "x-tenant-id": "tenant-victim",
+        },
+        protocol: "https",
+      } as never,
+      res: {} as never,
+    });
+    expect(ctx.tenantId).toBe("default");
+    expect(ctx.tenantId).not.toBe("tenant-victim");
+  });
+
+  it("leaves a dayforge session with no persisted tenant invalid", async () => {
+    vi.mocked(sdk.authenticateRequest).mockResolvedValue({
+      ...legacyDriver,
+      openId: "dayforge:nobody",
+      role: "user",
+      tenantId: "   ",
+    } as never);
+    const ctx = await createContext({
+      req: {
+        headers: { host: "driver.bldg.chat" },
+        protocol: "https",
+      } as never,
+      res: {} as never,
+    });
+    expect(ctx.tenantId).toBe("__invalid_saas_session__");
   });
 });

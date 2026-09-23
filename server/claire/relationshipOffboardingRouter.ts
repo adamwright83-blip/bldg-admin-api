@@ -1,4 +1,4 @@
-import { dayforgeMissionFieldProcedure, router } from "../_core/trpc";
+import { joystickClaireDeskFieldProcedure, router } from "../_core/trpc";
 import { loadClaireRelationshipHistory } from "./character/relationshipHistory";
 import { composeClaireRelationshipClosing } from "./character/relationshipOffboarding";
 
@@ -9,7 +9,7 @@ import { composeClaireRelationshipClosing } from "./character/relationshipOffboa
  * records, relationship events, approval state, or operational truth.
  */
 export const claireRelationshipOffboardingRouter = router({
-  preview: dayforgeMissionFieldProcedure.query(async ({ ctx }) => {
+  preview: joystickClaireDeskFieldProcedure.query(async ({ ctx }) => {
     const history = await loadClaireRelationshipHistory({
       tenantId: ctx.tenantId,
       operatorUserId: ctx.user.openId,
