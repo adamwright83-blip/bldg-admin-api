@@ -178,6 +178,7 @@ export async function reopenWeeklySession(input: {
         text: previous.primary.text,
         source: previous.primary.commitmentId ? "existing_work" : previous.primary.source,
         existingCommitmentId: previous.primary.commitmentId,
+        executionType: previous.primary.executionType ?? null,
       };
     }
   }
@@ -207,6 +208,7 @@ function intentDay(
           text: day.primary.text,
           source: day.primary.source,
           commitmentId,
+          executionType: day.primary.executionType ?? null,
         }
       : null,
     fixedConstraints: day.fixedConstraints,

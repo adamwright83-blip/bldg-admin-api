@@ -12,7 +12,7 @@ import {
   type DailyCommandItem,
   type LoadDailyCommandInput,
 } from "../dailyCommandContract";
-import type { WeeklyIntentDay } from "../../../shared/weeklyMissionReadiness";
+import type { WeeklyExecutionType, WeeklyIntentDay } from "../../../shared/weeklyMissionReadiness";
 import { latestWeeklyIntent } from "./intentStore";
 
 export type WeeklyIntentReadinessItem = {
@@ -50,6 +50,11 @@ export type WeeklyPrimaryDisplacement = {
 export type DailyCommandWithIntent = DailyCommand & {
   weeklyIntentReadiness?: WeeklyIntentReadinessItem[];
   weeklyIntentOverride?: WeeklyIntentOverride | null;
+  /**
+   * Execution type of today's locked weekly primary.
+   * Null is unknown. Not a ranking input. Mission Director still orders today.
+   */
+  weeklyPrimaryExecutionType?: WeeklyExecutionType | null;
 };
 
 export function applyWeeklyIntentToCommand(
@@ -125,6 +130,7 @@ export function applyWeeklyIntentToCommand(
     epistemic,
     weeklyIntentReadiness: readiness,
     weeklyIntentOverride: override,
+    ...(intentPrimary ? { weeklyPrimaryExecutionType: intentPrimary.executionType ?? null } : {}),
   };
 }
 

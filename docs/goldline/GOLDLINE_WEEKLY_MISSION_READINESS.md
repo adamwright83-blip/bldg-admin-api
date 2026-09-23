@@ -14,6 +14,8 @@ Not related: Narrator OS · Act I playable beats · Brain V3
 
 **LOCKED:** Every Monday — or the first time that week the operator opens the app — Claire interviews them until she understands enough of the **remaining** week to assign one real mission to each remaining day and tell them exactly what has to be ready before each mission. They approve the week once. Goldline then turns each day into the adventure they actually play.
 
+**Clarification:** In “one real mission to each remaining day,” lowercase/generic “mission” means the day’s primary Objective. It does not imply every weekly primary is a field Mission. A primary may be a field Mission, a remote Challenge, or a Hybrid Objective. A missing execution type is unknown.
+
 Failure mode this exists to kill: Monday afternoon, no week, therefore no idea what must be cleaned, printed, approved, loaded, or researched beforehand.
 
 ---
