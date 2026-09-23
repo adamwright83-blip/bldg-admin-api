@@ -17,7 +17,10 @@ import {
   databaseLedgerLoaders,
   loadPaidOrderLedger,
   type LedgerLoaders,
+  type LedgerSource,
   type PaidOrderEvent,
+  type ProvenDuplicateExclusion,
+  type UnverifiedPaidOrder,
 } from "../analytics/paidOrderLedger";
 import { getDashboardTimeZone, zonedDayStartUtc, zonedYmd } from "../dashboardZoned";
 
@@ -173,6 +176,10 @@ export async function getStrategyGrowthMetrics(
   const computedAt = (input.now ?? new Date()).toISOString();
 
   let events: PaidOrderEvent[];
+  let loadedSources: LedgerSource[] = [];
+  let failedSources: LedgerSource[] = [];
+  let provenExclusions: ProvenDuplicateExclusion[] = [];
+  let unverifiedNative: UnverifiedPaidOrder[] = [];
   if (input.mockEvents) {
     events = input.mockEvents;
   } else {
@@ -189,6 +196,10 @@ export async function getStrategyGrowthMetrics(
       loaders
     );
     events = ledger.events;
+    loadedSources = ledger.loadedSources;
+    failedSources = ledger.failedSources;
+    provenExclusions = ledger.provenDuplicateExclusions;
+    unverifiedNative = ledger.unverifiedNative;
   }
 
   // Resolve customer identities
@@ -258,15 +269,22 @@ export async function getStrategyGrowthMetrics(
   const periodEvents = events.filter(
     e => e.businessDate >= input.period.startYmd && e.businessDate <= input.period.endYmd
   );
-  const reconciledSales = reconcilePaidRevenue({ events: periodEvents });
+  const periodKeys = new Set(periodEvents.map(event => event.eventKey));
+  const reconciledSales = reconcilePaidRevenue({
+    events: periodEvents,
+    provenExclusions: provenExclusions.filter(item => periodKeys.has(item.keptEventKey)),
+    unverifiedNative: unverifiedNative.filter(
+      order => order.businessDate >= input.period.startYmd && order.businessDate <= input.period.endYmd
+    ),
+  });
   const paidOrdersCount = reconciledSales.exactIncludedOrderCount;
   const netSalesCents = reconciledSales.exactIncludedCents;
   const coverageSnapshot = await loadRevenueSourceCoverage({ tenantId: input.tenantId });
   const salesCoverage = interpretSourceCoverage({
     snapshot: coverageSnapshot,
     window: { from: input.period.startYmd, to: input.period.endYmd },
-    loadedSources: [],
-    failedSources: [],
+    loadedSources,
+    failedSources,
   });
 
   // Net active customer change (rolling active at endYmd vs rolling active at startYmd)
@@ -329,6 +347,9 @@ export async function getStrategyGrowthMetrics(
         "Canonical paid order ledger does not record refunds or cancellations for cleancloud/native orders",
         reconciledSales.suspectedWithheld.count > 0
           ? "Suspected cross-source duplicates are withheld from an exact total"
+          : null,
+        reconciledSales.unverifiedNative.count > 0
+          ? "Unverified native paid rows are unresolved, so the paid total is not exact"
           : null,
         salesCoverage.coverageAllowsExact
           ? null

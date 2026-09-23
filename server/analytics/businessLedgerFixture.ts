@@ -1,5 +1,6 @@
 import type { CleanCloudOrderRow, LedgerLoaders, NativeOrderRow } from "./paidOrderLedger";
 import { ALWAYS_MISSING_SOURCES, type DataCompleteness } from "./analyticsQueries";
+import type { BusinessSourceCoverage, BusinessSourceCoverageSnapshot } from "./sourceCoverage";
 
 /**
  * Deterministic business fixture shared by analytics and Claire tests.
@@ -115,6 +116,63 @@ export const emptyLoaders: LedgerLoaders = {
   laundry_butler: async () => [],
   cleancloud: async () => [],
 };
+
+function provenSource(sourceId: "laundry_butler" | "cleancloud"): BusinessSourceCoverage {
+  const cleancloud = sourceId === "cleancloud";
+  return {
+    sourceId,
+    name: cleancloud ? "CleanCloud" : "Laundry Butler",
+    type: cleancloud ? "cleancloud_paid_book" : "native_orders",
+    availability: "available",
+    includedInCombinedBook: true,
+    status: "fresh",
+    lastSuccessfulAssimilationAt: cleancloud ? "2026-09-15T18:00:00.000Z" : null,
+    assimilationKind: cleancloud ? "customer_truth_refreshed" : "not_applicable",
+    coveredThrough: cleancloud ? "2099-12-31" : null,
+    provenFrom: cleancloud ? "2020-01-01" : null,
+    expectedThrough: cleancloud ? "2099-12-31" : null,
+    records: "readable",
+    supportsExhaustiveCurrentClaim: true,
+    emptyReadMeansNoRecords: false,
+    reason: "Fixture sources are held and fresh for the proven span.",
+    provenance: {
+      bindingState: "bound",
+      schedule: cleancloud ? "gumball_daily_18_america_los_angeles" : "system_of_record",
+      coverageBasis: "economic_event",
+      receiptProvenance: "test_fixture",
+      paymentEventsProven: true,
+      decidedBy: "deterministic_rules",
+    },
+  };
+}
+
+/** Held sources fresh, payment events proven, span covers the fixture ledger. Not a live provider. */
+export function provenBusinessCoverageSnapshot(tenantId = "tenant-1"): BusinessSourceCoverageSnapshot {
+  return {
+    contractVersion: 1,
+    tenantId,
+    checkedAt: "2026-09-15T16:40:00.000Z",
+    timeZone: "America/Los_Angeles",
+    sources: [provenSource("laundry_butler"), provenSource("cleancloud")],
+    book: {
+      status: "fresh",
+      exhaustiveCurrent: true,
+      current: true,
+      scope: {
+        native: "system_of_record",
+        cleancloudOrdersCreated: { from: "2020-01-01", through: "2099-12-31" },
+      },
+      paymentEventsProven: true,
+      knownRecordsReadable: true,
+      interpretEmptyAsNoCustomers: false,
+      outsideProvenSpan: "unknown_not_empty",
+      allCustomersLicensed: false,
+      staleIsZero: false,
+      missingIsNoCustomers: false,
+    },
+    blockingSources: [],
+  };
+}
 
 export const fixtureCompleteness: DataCompleteness = {
   connected: [

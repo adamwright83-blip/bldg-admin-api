@@ -3,6 +3,7 @@ import { speakBusinessResult } from "../claire/business/businessSpeech";
 import { FIXTURE_NOW, FIXTURE_TZ, fixtureCompleteness } from "./businessLedgerFixture";
 import { defaultBusinessQuery, runBusinessQuery, type BusinessQueryDeps } from "./businessQuery";
 import {
+  interpretSourceCoverage,
   readCanonicalRevenue,
   reconcilePaidRevenue,
 } from "./canonicalRevenue";
@@ -136,7 +137,6 @@ function coverageSnapshot(input: {
       knownRecordsReadable: true,
       interpretEmptyAsNoCustomers: false,
       outsideProvenSpan: "unknown_not_empty",
-      exactRevenueLicensed: false,
       allCustomersLicensed: false,
       staleIsZero: false,
       missingIsNoCustomers: false,
@@ -166,7 +166,7 @@ function event(partial: Pick<PaidOrderEvent, "source" | "eventKey" | "cents" | "
 }
 
 describe("readCanonicalRevenue", () => {
-  it("counts a native-only book", async () => {
+  it("states a fully proven book as exact", async () => {
     const result = await readCanonicalRevenue({
       tenantId: "tenant-a",
       ...WINDOW,
@@ -180,15 +180,15 @@ describe("readCanonicalRevenue", () => {
     expect(result.exactIncludedOrderCount).toBe(1);
     expect(result.provenance.sources).toEqual(["laundry_butler"]);
     expect(result.recordedCents).toBe(1200);
-    expect(result.statedExactCents).toBeNull();
-    expect(result.mayStateExact).toBe(false);
-    expect(result.precision).toBe("recorded_only");
-    expect(result.coverage.exactRevenueLicensed).toBe(false);
-    expect(result.coverage.coverageAllowsExact).toBe(false);
+    expect(result.statedExactCents).toBe(1200);
+    expect(result.mayStateExact).toBe(true);
+    expect(result.precision).toBe("exact");
+    expect(result.coverage.coverageAllowsExact).toBe(true);
     expect(result.coverage.cleanCloudFresh).toBe(true);
+    expect("exactRevenueLicensed" in result.coverage).toBe(false);
   });
 
-  it("keeps a proven empty ledger as recorded zero and does not license it", async () => {
+  it("states a proven complete empty period as exact zero", async () => {
     const result = await readCanonicalRevenue({
       tenantId: "tenant-a",
       ...WINDOW,
@@ -200,9 +200,9 @@ describe("readCanonicalRevenue", () => {
     if (result.status !== "ok") return;
     expect(result.recordedCents).toBe(0);
     expect(result.exactIncludedOrderCount).toBe(0);
-    expect(result.statedExactCents).toBeNull();
-    expect(result.mayStateExact).toBe(false);
-    expect(result.precision).toBe("recorded_only");
+    expect(result.statedExactCents).toBe(0);
+    expect(result.mayStateExact).toBe(true);
+    expect(result.precision).toBe("exact");
   });
 
   it("does not turn an unreadable coverage contract into a zero", async () => {
@@ -240,6 +240,9 @@ describe("readCanonicalRevenue", () => {
     expect(result.provenance.sources).toEqual(["cleancloud"]);
     expect(result.definiteDuplicateExclusions.cents).toBe(0);
     expect(result.suspectedWithheld.cents).toBe(0);
+    expect(result.statedExactCents).toBe(8000);
+    expect(result.mayStateExact).toBe(true);
+    expect(result.precision).toBe("exact");
   });
 
   it("counts a proven CleanCloud sales/revenue twin once and records the exclusion", async () => {
@@ -266,6 +269,9 @@ describe("readCanonicalRevenue", () => {
     expect(result.exactIncludedCents).not.toBe(10000);
     expect(result.definiteDuplicateExclusions).toMatchObject({ count: 1, cents: 5000 });
     expect(result.suspectedWithheld.cents).toBe(0);
+    expect(result.statedExactCents).toBe(5000);
+    expect(result.mayStateExact).toBe(true);
+    expect(result.precision).toBe("exact");
   });
 
   it("withholds a suspected cross-source duplicate from the exact total", async () => {
@@ -285,7 +291,9 @@ describe("readCanonicalRevenue", () => {
     expect(result.suspectedWithheld).toMatchObject({ count: 1, cents: 4500 });
     expect(result.exactIncludedCents).not.toBe(4500 + 4500 + 9900);
     expect(result.statedExactCents).toBeNull();
+    expect(result.mayStateExact).toBe(false);
     expect(result.precision).toBe("recorded_only");
+    expect(result.recordedCents).toBe(4500 + 9900);
   });
 
   it("counts clearly distinct same-day orders in full", () => {
@@ -338,7 +346,8 @@ describe("readCanonicalRevenue", () => {
     expect(result.coverage.cleanCloudFresh).toBe(false);
     expect(result.coverage.affectedSources).toContain("cleancloud");
     expect(result.statedExactCents).toBeNull();
-    expect(result.coverage.exactRevenueLicensed).toBe(false);
+    expect(result.mayStateExact).toBe(false);
+    expect(result.coverage.coverageAllowsExact).toBe(false);
     expect(result.coverage.staleIsZero).toBe(false);
     expect(result.precision).toBe("recorded_only");
   });
@@ -359,6 +368,8 @@ describe("readCanonicalRevenue", () => {
     expect(partialSeam.status).toBe("ok");
     if (partialSeam.status !== "ok") return;
     expect(partialSeam.exactIncludedCents).toBe(5000);
+    expect(partialSeam.mayStateExact).toBe(false);
+    expect(partialSeam.statedExactCents).toBeNull();
     expect(partialSeam.coverage.incompleteForWindow).toBe(true);
     expect(partialSeam.coverage.cleanCloudFresh).toBe(false);
 
@@ -379,6 +390,7 @@ describe("readCanonicalRevenue", () => {
     expect(failed.exactIncludedCents).toBe(3000);
     expect(failed.exactIncludedCents).not.toBe(0);
     expect(failed.statedExactCents).toBeNull();
+    expect(failed.mayStateExact).toBe(false);
     expect(failed.coverage.failedSources).toEqual(["cleancloud"]);
     expect(failed.coverage.incompleteForWindow).toBe(true);
     expect(failed.coverage.cleanCloudFresh).toBe(false);
@@ -419,6 +431,10 @@ describe("readCanonicalRevenue", () => {
     if (a.status !== "ok" || b.status !== "ok") return;
     expect(a.exactIncludedCents).toBe(1111);
     expect(b.exactIncludedCents).toBe(2222);
+    expect(a.mayStateExact).toBe(true);
+    expect(a.statedExactCents).toBe(1111);
+    expect(b.mayStateExact).toBe(true);
+    expect(b.statedExactCents).toBe(2222);
     expect(a.provenance.includedEventKeys).toEqual(["order:1"]);
     expect(b.provenance.includedEventKeys).toEqual(["order:2"]);
   });
@@ -441,7 +457,7 @@ describe("readCanonicalRevenue", () => {
     expect(result.statedExactCents).toBeNull();
     expect(result.mayStateExact).toBe(false);
     expect(result.coverage.paymentEventsProven).toBe(false);
-    expect(result.coverage.exactRevenueLicensed).toBe(false);
+    expect(result.coverage.coverageAllowsExact).toBe(false);
     expect(result.coverage.cleanCloudFresh).toBe(true);
   });
 
@@ -458,8 +474,65 @@ describe("readCanonicalRevenue", () => {
     expect(result.coverage.snapshotRead).toBe(false);
     expect(result.coverage.cleanCloudFresh).toBe(false);
     expect(result.statedExactCents).toBeNull();
+    expect(result.mayStateExact).toBe(false);
     expect(result.precision).toBe("recorded_only");
     expect(result.exactIncludedCents).toBe(8000);
+  });
+
+  it("does not state exact when the window is outside the proven span", async () => {
+    const result = await readCanonicalRevenue({
+      tenantId: "tenant-a",
+      ...WINDOW,
+      timeZone: FIXTURE_TZ,
+      coverage: coverageSnapshot({
+        exhaustiveCurrent: true,
+        paymentEventsProven: true,
+        bookStatus: "fresh",
+        span: { from: "2026-01-01", through: "2026-08-31" },
+      }),
+      loaders: loaders([], [cleancloud("cc-1", 8000, "3105550199")]),
+    });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.recordedCents).toBe(8000);
+    expect(result.recordedCents).not.toBe(0);
+    expect(result.statedExactCents).toBeNull();
+    expect(result.mayStateExact).toBe(false);
+    expect(result.precision).toBe("recorded_only");
+  });
+
+  it("does not state exact while an unverified native paid row is unresolved", async () => {
+    const result = await readCanonicalRevenue({
+      tenantId: "tenant-a",
+      ...WINDOW,
+      timeZone: FIXTURE_TZ,
+      coverage: exactPaymentCoverage(),
+      loaders: loaders(
+        [native(1, "12.00", "3105550100"), native(2, "40.00", "3105550101", { stripePaymentIntentId: null })],
+        []
+      ),
+    });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.exactIncludedCents).toBe(1200);
+    expect(result.unverifiedNative).toMatchObject({ count: 1, cents: 4000 });
+    expect(result.recordedCents).toBe(1200);
+    expect(result.recordedCents).not.toBe(0);
+    expect(result.statedExactCents).toBeNull();
+    expect(result.mayStateExact).toBe(false);
+    expect(result.precision).toBe("recorded_only");
+  });
+
+  it("does not allow exact when a held source was not read", () => {
+    const coverage = interpretSourceCoverage({
+      snapshot: exactPaymentCoverage(),
+      window: WINDOW,
+      loadedSources: ["laundry_butler"],
+      failedSources: [],
+    });
+    expect(coverage.coverageAllowsExact).toBe(false);
+    expect(coverage.incompleteForWindow).toBe(true);
+    expect(coverage.paymentEventsProven).toBe(true);
   });
 });
 
@@ -499,7 +572,6 @@ describe("Claire revenue consumes the canonical read", () => {
       mayStateExact: false,
       incompleteForWindow: true,
       cleanCloudFresh: false,
-      exactRevenueLicensed: false,
       contractVersion: 1,
       precision: "recorded_only",
     });
@@ -546,7 +618,34 @@ describe("Claire revenue consumes the canonical read", () => {
     expect(spoken.text).not.toContain("$90.00");
   });
 
-  it("says a proven empty period is zero without licensing that zero", async () => {
+  it("speaks a proven book as the canonical cents without denying exactness", async () => {
+    const result = await runBusinessQuery(
+      "tenant-a",
+      defaultBusinessQuery("revenue"),
+      deps(loaders([native(1, "12.00", "3105550100")], []), exactPaymentCoverage())
+    );
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok" || result.data.kind !== "totals") throw new Error("unexpected");
+    expect(result.data.current.revenueCents).toBe(1200);
+    expect(result.coverage?.canonicalRevenue).toMatchObject({
+      statedExactCents: 1200,
+      mayStateExact: true,
+      precision: "exact",
+    });
+    const spoken = speakBusinessResult(result, {
+      surface: "text",
+      previous: null,
+      refinement: false,
+      utterance: "What was revenue?",
+      today: "2026-09-14",
+      disclosed: [],
+      timeZone: FIXTURE_TZ,
+    });
+    expect(spoken.text).toContain("$12.00");
+    expect(spoken.text).not.toContain("Source coverage does not support an exact total for this window");
+  });
+
+  it("speaks a proven empty period as exact zero", async () => {
     const result = await runBusinessQuery(
       "tenant-a",
       defaultBusinessQuery("revenue"),
@@ -555,8 +654,9 @@ describe("Claire revenue consumes the canonical read", () => {
     expect(result.status).toBe("ok");
     if (result.status !== "ok" || result.data.kind !== "totals") throw new Error("unexpected");
     expect(result.data.current.revenueCents).toBe(0);
-    expect(result.coverage?.canonicalRevenue?.statedExactCents).toBeNull();
-    expect(result.coverage?.canonicalRevenue?.mayStateExact).toBe(false);
+    expect(result.coverage?.canonicalRevenue?.statedExactCents).toBe(0);
+    expect(result.coverage?.canonicalRevenue?.mayStateExact).toBe(true);
+    expect(result.coverage?.canonicalRevenue?.precision).toBe("exact");
     const spoken = speakBusinessResult(result, {
       surface: "text",
       previous: null,
@@ -567,6 +667,20 @@ describe("Claire revenue consumes the canonical read", () => {
       timeZone: FIXTURE_TZ,
     });
     expect(spoken.text).toContain("$0.00 across 0 orders");
-    expect(spoken.text).toContain("Source coverage does not support an exact total for this window");
+    expect(spoken.text).not.toContain("Source coverage does not support an exact total for this window");
+  });
+
+  it("does not call a narrowed service slice the exact window total", async () => {
+    const result = await runBusinessQuery(
+      "tenant-a",
+      { ...defaultBusinessQuery("revenue"), serviceType: "wash_fold" },
+      deps(loaders([native(1, "12.00", "3105550100")], []), exactPaymentCoverage())
+    );
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok" || result.data.kind !== "totals") throw new Error("unexpected");
+    expect(result.data.current.revenueCents).toBe(1200);
+    expect(result.coverage?.canonicalRevenue?.coverageAllowsExact).toBe(true);
+    expect(result.coverage?.canonicalRevenue?.mayStateExact).toBe(false);
+    expect(result.coverage?.canonicalRevenue?.precision).toBe("recorded_only");
   });
 });

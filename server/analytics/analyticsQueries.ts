@@ -59,7 +59,6 @@ export type RevenueSummary = {
     coverageAllowsExact: boolean;
     paymentEventsProven: boolean;
     exhaustiveCurrent: boolean;
-    exactRevenueLicensed: false;
   };
 };
 
@@ -241,7 +240,6 @@ export async function getRevenueSummary(
       coverageAllowsExact: revenueCoverage.coverageAllowsExact,
       paymentEventsProven: revenueCoverage.paymentEventsProven,
       exhaustiveCurrent: revenueCoverage.exhaustiveCurrent,
-      exactRevenueLicensed: false,
     },
   };
 }

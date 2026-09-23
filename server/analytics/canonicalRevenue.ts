@@ -32,13 +32,16 @@ import {
  * - Tower Wars visualization sums
  *
  * Coverage comes only from B1 `loadBusinessSourceCoverage` (contract version 1).
- * This module does not decide fresh, stale, partial, or unavailable.
- * `book.exactRevenueLicensed` and `book.allCustomersLicensed` stay false.
- * A false `exactRevenueLicensed` is not a license. Exact payment revenue also
- * needs `book.exhaustiveCurrent`, `book.paymentEventsProven`, a window inside
- * the proven CleanCloud span when that source is held, and completed
- * reconciliation. A loaded empty ledger may still be spoken as recorded zero.
- * An unread ledger is unavailable, not zero. Stale is not zero.
+ * This module does not decide fresh, stale, partial, or unavailable. B1
+ * publishes those facts, the proven span, and payment-event proof. This read
+ * decides whether the requested window is exact.
+ *
+ * Exact payment revenue needs every held source fresh, the window inside the
+ * proven CleanCloud span when that source is held, payment events proven, the
+ * ledger sources read, no unresolved unverified native paid row, and no
+ * unresolved suspected cross-source duplicate. Proven duplicates count once.
+ * A proven complete empty ledger may be spoken as exact zero. An unread ledger
+ * is unavailable, not zero. Stale is not zero. Missing is not zero.
  */
 
 export type ReadBusinessSourceCoverage = (input: {
@@ -101,8 +104,6 @@ export type CanonicalRevenueCoverage = {
   bookStatus: BusinessSourceCoverageSnapshot["book"]["status"] | null;
   exhaustiveCurrent: boolean;
   paymentEventsProven: boolean;
-  /** Copied from B1. This read never sets it true. */
-  exactRevenueLicensed: false;
   allCustomersLicensed: false;
   staleIsZero: false;
   /** Coverage itself allows an exact whole-business payment total. Reconciliation is separate. */
@@ -243,8 +244,9 @@ function windowInsideProvenSpan(
 
 /**
  * Reads B1's snapshot. Does not compute freshness.
- * Exact payment revenue needs exhaustive current coverage, proven payment
- * events, and the requested window inside the proven span.
+ * Exact coverage for this window needs every held source fresh, payment
+ * events proven, the window inside the proven span, and those held sources
+ * actually read. Reconciliation still has to be unambiguous.
  */
 export function interpretSourceCoverage(input: {
   snapshot: BusinessSourceCoverageSnapshot | null | undefined;
@@ -256,7 +258,6 @@ export function interpretSourceCoverage(input: {
   const base = {
     loadedSources: [...input.loadedSources],
     failedSources: failed,
-    exactRevenueLicensed: false as const,
     allCustomersLicensed: false as const,
     staleIsZero: false as const,
   };
@@ -289,22 +290,24 @@ export function interpretSourceCoverage(input: {
     source => source.includedInCombinedBook && source.status !== "fresh"
   );
   const spanCovers = windowInsideProvenSpan(input.window, snapshot);
-  // B1 types exactRevenueLicensed as false. The flag is a condition, not a
-  // comparison with true, so a false license cannot open an exact total.
+  const held = snapshot.sources.filter(source => source.includedInCombinedBook);
+  const heldSourcesRead =
+    failed.length === 0 &&
+    held.length > 0 &&
+    held.every(source => input.loadedSources.includes(source.sourceId));
   const otherFlagsTrusted =
     snapshot.book.allCustomersLicensed === false &&
     snapshot.book.staleIsZero === false &&
     snapshot.book.missingIsNoCustomers === false;
   const coverageAllowsExact =
-    snapshot.book.exactRevenueLicensed &&
     otherFlagsTrusted &&
     snapshot.book.exhaustiveCurrent &&
     snapshot.book.paymentEventsProven &&
     heldNotFresh.length === 0 &&
     spanCovers &&
-    failed.length === 0;
+    heldSourcesRead;
   const incompleteForWindow =
-    !snapshot.book.exhaustiveCurrent || heldNotFresh.length > 0 || !spanCovers || failed.length > 0;
+    !snapshot.book.exhaustiveCurrent || heldNotFresh.length > 0 || !spanCovers || !heldSourcesRead;
 
   return {
     ...base,
@@ -332,7 +335,11 @@ export function revenueMayStateExact(input: {
   coverage: CanonicalRevenueCoverage;
   reconciled: ReconciledRevenue;
 }): boolean {
-  return input.coverage.coverageAllowsExact && input.reconciled.suspectedWithheld.count === 0;
+  return (
+    input.coverage.coverageAllowsExact &&
+    input.reconciled.suspectedWithheld.count === 0 &&
+    input.reconciled.unverifiedNative.count === 0
+  );
 }
 
 export function reconcileLedgerSpan(

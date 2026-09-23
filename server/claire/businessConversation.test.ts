@@ -8,6 +8,7 @@ import {
   FIXTURE_TZ,
   fixtureCompleteness,
   fixtureLoaders,
+  provenBusinessCoverageSnapshot,
 } from "../analytics/businessLedgerFixture";
 import { runBusinessQuery, type BusinessQuery } from "../analytics/businessQuery";
 import { loadPaidOrderLedger, type LedgerLoaders } from "../analytics/paidOrderLedger";
@@ -35,6 +36,7 @@ function claire(options: { loaders?: LedgerLoaders; surface?: ClaireSurface; now
         loadLedger: input => loadPaidOrderLedger(input, options.loaders ?? fixtureLoaders(options.seenTenants)),
         loadOpenOrders: async () => ({ openTotal: 4, byStatus: {}, awaitingPayment: 1 }),
         loadCompleteness: async () => fixtureCompleteness,
+        readSourceCoverage: async () => provenBusinessCoverageSnapshot(tenantId),
         now: () => clock,
         timeZone: () => FIXTURE_TZ,
       }),
@@ -175,7 +177,7 @@ describe("Claire business conversation — other questions", () => {
     expect(building).toMatchObject({ handled: true });
     if (building.handled) {
       expect(building.speak).toBe(
-        "Paid revenue at OPUS LA last month was $0.00 across 0 orders. Source coverage does not support an exact total for this window, so that figure is recorded revenue only."
+        "Paid revenue at OPUS LA last month was $0.00 across 0 orders."
       );
     }
     await say(ask, "How many active customers do we have?");
@@ -219,7 +221,7 @@ describe("failure honesty (N, O)", () => {
   it("a real empty period is a real zero", async () => {
     const { ask } = claire({ loaders: emptyLoaders });
     expect(await say(ask, "What was revenue in the last 30 days?")).toBe(
-      "Paid revenue in the last 30 days is $0.00 across 0 orders. Source coverage does not support an exact total for this window, so that figure is recorded revenue only."
+      "Paid revenue in the last 30 days is $0.00 across 0 orders."
     );
   });
 

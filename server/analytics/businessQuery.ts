@@ -7,6 +7,7 @@ import {
 } from "./analyticsQueries";
 import {
   applyLineageFilters,
+  hasLineageFilters,
   lineageBreakdown,
   unionOfSlices,
   type LedgerFilters,
@@ -200,7 +201,6 @@ export type BusinessCoverage = {
     cleanCloudFresh: boolean;
     exhaustiveCurrent: boolean;
     paymentEventsProven: boolean;
-    exactRevenueLicensed: false;
     contractVersion: 1 | null;
   } | null;
 };
@@ -497,7 +497,9 @@ export async function runBusinessQuery(
           currentRead && query.metric === "revenue_drivers"
             ? historyKeepingIncluded(history, period, comparisonPeriod, currentRead, previousRead)
             : history;
-        if (currentRead) stampCanonicalRevenue(coverage, currentRead, coverageSeam, ledger, period);
+        if (currentRead) {
+          stampCanonicalRevenue(coverage, currentRead, coverageSeam, ledger, period, !queryNarrowsRevenue(query));
+        }
         return ok({
           kind: "totals",
           current,
@@ -520,7 +522,7 @@ export async function runBusinessQuery(
         }
         const coverageSeam = await readCoverageSeam(deps, tenantId, period);
         const currentRead = reconcileHistorySpan(period);
-        stampCanonicalRevenue(coverage, currentRead, coverageSeam, ledger, period);
+        stampCanonicalRevenue(coverage, currentRead, coverageSeam, ledger, period, !queryNarrowsRevenue(query));
         return ok({ kind: "profit", revenue: totalsFromReconciled(currentRead), missing });
       }
       case "active_customers":
@@ -635,12 +637,17 @@ async function readCoverageSeam(
   }
 }
 
+function queryNarrowsRevenue(query: BusinessQuery): boolean {
+  return Boolean(query.serviceType || query.filterUnion?.length || hasLineageFilters(query.filters));
+}
+
 function stampCanonicalRevenue(
   coverage: BusinessCoverage,
   read: ReconciledRevenue,
   snapshot: BusinessSourceCoverageSnapshot | null,
   ledger: { loadedSources: LedgerSource[]; failedSources: LedgerSource[] },
-  window: { start: string; end: string }
+  window: { start: string; end: string },
+  fullWindow: boolean
 ): void {
   const interpreted = interpretSourceCoverage({
     snapshot,
@@ -648,7 +655,7 @@ function stampCanonicalRevenue(
     loadedSources: ledger.loadedSources,
     failedSources: ledger.failedSources,
   });
-  const mayStateExact = revenueMayStateExact({ coverage: interpreted, reconciled: read });
+  const mayStateExact = fullWindow && revenueMayStateExact({ coverage: interpreted, reconciled: read });
   coverage.canonicalRevenue = {
     exactIncludedCents: read.exactIncludedCents,
     recordedCents: read.exactIncludedCents,
@@ -664,7 +671,6 @@ function stampCanonicalRevenue(
     cleanCloudFresh: interpreted.cleanCloudFresh,
     exhaustiveCurrent: interpreted.exhaustiveCurrent,
     paymentEventsProven: interpreted.paymentEventsProven,
-    exactRevenueLicensed: false,
     contractVersion: interpreted.contractVersion,
   };
 }
