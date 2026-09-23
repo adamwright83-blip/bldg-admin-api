@@ -1,0 +1,146 @@
+{
+ "states": {
+  "idle": {
+   "sheet": "rook-idle.json",
+   "facings": [
+    "front",
+    "back",
+    "left",
+    "right"
+   ],
+   "frames": 12,
+   "size": [
+    2048,
+    895
+   ]
+  },
+  "walk": {
+   "sheet": "rook-walk.json",
+   "facings": [
+    "front",
+    "back",
+    "left",
+    "right"
+   ],
+   "frames": 10,
+   "size": [
+    1993,
+    673
+   ]
+  },
+  "talk": {
+   "sheet": "rook-talk.json",
+   "facings": [
+    "front",
+    "back",
+    "left",
+    "right"
+   ],
+   "frames": 10,
+   "size": [
+    2033,
+    678
+   ]
+  },
+  "confide": {
+   "sheet": "rook-confide.json",
+   "facings": [
+    "back",
+    "left",
+    "right"
+   ],
+   "frames": 8,
+   "size": [
+    1927,
+    643
+   ]
+  },
+  "wait": {
+   "sheet": "rook-wait.json",
+   "facings": [
+    "front",
+    "left",
+    "right"
+   ],
+   "frames": 10,
+   "size": [
+    1932,
+    661
+   ]
+  },
+  "letter": {
+   "sheet": "rook-letter.json",
+   "facings": [
+    "back",
+    "left",
+    "right"
+   ],
+   "frames": 12,
+   "size": [
+    2022,
+    672
+   ]
+  },
+  "dangle": {
+   "sheet": "rook-dangle.json",
+   "facings": [
+    "back",
+    "left",
+    "right"
+   ],
+   "frames": 6,
+   "size": [
+    1941,
+    481
+   ]
+  },
+  "shrug": {
+   "sheet": "rook-shrug.json",
+   "facings": [
+    "front",
+    "left",
+    "right"
+   ],
+   "frames": 8,
+   "size": [
+    1964,
+    448
+   ]
+  },
+  "brace": {
+   "sheet": "rook-brace.json",
+   "facings": [
+    "front",
+    "back",
+    "left",
+    "right"
+   ],
+   "frames": 6,
+   "size": [
+    1941,
+    453
+   ]
+  },
+  "point": {
+   "sheet": "rook-point.json",
+   "facings": [
+    "back",
+    "left",
+    "right"
+   ],
+   "frames": 6,
+   "size": [
+    1933,
+    455
+   ]
+  }
+ },
+ "frameSize": [
+  288,
+  288
+ ],
+ "anchor": [
+  0.5,
+  0.9079861111111112
+ ]
+}
