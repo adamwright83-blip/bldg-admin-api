@@ -195,10 +195,11 @@ function acceptCoverage(
   if (snapshot.contractVersion !== SOURCE_COVERAGE_CONTRACT_VERSION) return null;
   if (snapshot.tenantId !== tenantId) return null;
   const book = snapshot.book;
+  // Customer completeness is these three closed flags. Exact revenue is not a
+  // customer-book gate, and B1 does not publish exactRevenueLicensed.
   if (book.allCustomersLicensed !== false) return null;
   if (book.staleIsZero !== false) return null;
   if (book.missingIsNoCustomers !== false) return null;
-  if (book.exactRevenueLicensed !== false) return null;
   return snapshot;
 }
 
