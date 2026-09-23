@@ -340,7 +340,7 @@ describe("capability.rook.contact grant", () => {
     expect(read.localStorage).toBe("cache_and_present_only");
   });
 
-  it("7. acknowledgement before Rook is owned is rejected", async () => {
+  it("7. acknowledgement before Rook is owned does not grant CONTACT", async () => {
     await expect(
       acknowledgeWaywardRookContact({
         tenantId: "tenant-a",
@@ -360,7 +360,7 @@ describe("capability.rook.contact grant", () => {
         operatorId: "op-a",
         authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
       })
-    ).rejects.toThrow(/companion\.rook/);
+    ).rejects.toThrow(/not granted/);
     expect(db.grants).toHaveLength(0);
     expect(db.progression[0]?.companionRookOwnedAt).toBeNull();
   });
@@ -384,7 +384,7 @@ describe("capability.rook.contact grant", () => {
     expect(db.grants).toHaveLength(0);
   });
 
-  it("9. wayward.rook_contact_demonstrated grants CONTACT when Rook is owned", async () => {
+  it("9. wayward.rook_contact_demonstrated does not grant CONTACT when Rook is owned", async () => {
     await ownRook();
     const before = await readGoldlineProgression({
       tenantId: "tenant-a",
@@ -392,70 +392,80 @@ describe("capability.rook.contact grant", () => {
       capabilityOperatorId: null,
     });
     expect(before.capabilityRookContact.granted).toBe(false);
-    const granted = await acknowledgeWaywardRookContact({
+    await expect(
+      acknowledgeWaywardRookContact({
+        tenantId: "tenant-a",
+        operatorId: "op-a",
+        authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
+      })
+    ).rejects.toThrow(/not granted/);
+    const after = await readGoldlineProgression({
       tenantId: "tenant-a",
       operatorId: "op-a",
-      authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
+      capabilityOperatorId: null,
     });
-    expect(granted.levelColosseumResolved.value).toBe(true);
-    expect(granted.companionRookOwned.value).toBe(true);
-    expect(granted.capabilityRookContact).toMatchObject({
+    expect(after.companionRookOwned.value).toBe(true);
+    expect(after.capabilityRookContact).toMatchObject({
       readable: true,
-      granted: true,
-      status: "granted",
+      granted: false,
+      status: "ungranted",
       grantsCompanionOwnership: false,
       implementationCapabilityId: "rook.outreach_drafting",
     });
-    expect(db.grants).toHaveLength(1);
-    expect(db.grants[0]?.capabilityId).toBe(ROOK_CONTACT_CAPABILITY_ID);
-    expect(db.grants[0]?.capabilityId).not.toBe("rook");
-    expect(db.grants[0]?.grantSource).toBe(WAYWARD_ROOK_CONTACT_CONSEQUENCE);
+    expect(db.grants).toHaveLength(0);
   });
 
-  it("10. replaying the acknowledgement is idempotent", async () => {
+  it("10. replaying the acknowledgement still writes no grant", async () => {
     await ownRook();
-    await acknowledgeWaywardRookContact({
-      tenantId: "tenant-a",
-      operatorId: "op-a",
-      authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
-    });
-    const stamp = db.grants[0]?.grantedAt;
-    const id = db.grants[0]?.id;
-    const again = await acknowledgeWaywardRookContact({
-      tenantId: "tenant-a",
-      operatorId: "op-a",
-      authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
-    });
-    expect(again.capabilityRookContact.granted).toBe(true);
-    expect(db.grants).toHaveLength(1);
-    expect(db.grants[0]?.id).toBe(id);
-    expect(db.grants[0]?.grantedAt).toBe(stamp);
-    expect(db.grants[0]?.grantSource).toBe(WAYWARD_ROOK_CONTACT_CONSEQUENCE);
+    await expect(
+      acknowledgeWaywardRookContact({
+        tenantId: "tenant-a",
+        operatorId: "op-a",
+        authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
+      })
+    ).rejects.toThrow(/not granted/);
+    await expect(
+      acknowledgeWaywardRookContact({
+        tenantId: "tenant-a",
+        operatorId: "op-a",
+        authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
+      })
+    ).rejects.toThrow(/not granted/);
+    expect(db.grants).toHaveLength(0);
   });
 
-  it("11. a tenant A grant is invisible to tenant B", async () => {
-    await ownRook();
-    await acknowledgeWaywardRookContact({
+  it("11. a stored client-source row is not tenant B's grant and is not production authority", async () => {
+    db.grants.push({
+      id: "grant-a",
       tenantId: "tenant-a",
       operatorId: "op-a",
-      authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
+      capabilityId: ROOK_CONTACT_CAPABILITY_ID,
+      grantedAt: new Date("2026-09-23T02:00:00.000Z"),
+      grantSource: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
+    });
+    const owner = await readGoldlineProgression({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      capabilityOperatorId: null,
     });
     const other = await readGoldlineProgression({
       tenantId: "tenant-b",
       operatorId: "op-a",
       capabilityOperatorId: null,
     });
+    expect(owner.capabilityRookContact.granted).toBe(false);
     expect(other.capabilityRookContact.granted).toBe(false);
-    expect(other.companionRookOwned.value).toBe(false);
     expect(db.grants.map(row => row.tenantId)).toEqual(["tenant-a"]);
   });
 
-  it("12. an operator A grant is invisible to operator B", async () => {
-    await ownRook();
-    await acknowledgeWaywardRookContact({
+  it("12. a stored client-source row is not another operator's production grant", async () => {
+    db.grants.push({
+      id: "grant-a",
       tenantId: "tenant-a",
       operatorId: "op-a",
-      authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
+      capabilityId: ROOK_CONTACT_CAPABILITY_ID,
+      grantedAt: new Date("2026-09-23T02:00:00.000Z"),
+      grantSource: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
     });
     const other = await readGoldlineProgression({
       tenantId: "tenant-a",
@@ -463,18 +473,19 @@ describe("capability.rook.contact grant", () => {
       capabilityOperatorId: null,
     });
     expect(other.capabilityRookContact.granted).toBe(false);
-    expect(other.companionRookOwned.value).toBe(false);
     expect(db.grants.map(row => row.operatorId)).toEqual(["op-a"]);
   });
 
-  it("13. the grant does not mutate companion.rook", async () => {
+  it("13. the refusal does not mutate companion.rook", async () => {
     await ownRook();
     const stamp = db.progression[0]?.companionRookOwnedAt;
-    await acknowledgeWaywardRookContact({
-      tenantId: "tenant-a",
-      operatorId: "op-a",
-      authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
-    });
+    await expect(
+      acknowledgeWaywardRookContact({
+        tenantId: "tenant-a",
+        operatorId: "op-a",
+        authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
+      })
+    ).rejects.toThrow(/not granted/);
     expect(db.progression[0]?.companionRookOwnedAt).toBe(stamp);
     expect(db.progression).toHaveLength(1);
     const read = await readGoldlineProgression({
@@ -483,31 +494,41 @@ describe("capability.rook.contact grant", () => {
       capabilityOperatorId: null,
     });
     expect(read.companionRookOwned).toEqual({ status: "earned", value: true });
+    expect(read.capabilityRookContact.granted).toBe(false);
     expect(read.capabilityRookContact.grantsCompanionOwnership).toBe(false);
   });
 
-  it("14. the grant does not resolve Colosseum", async () => {
+  it("14. the refusal does not resolve Colosseum", async () => {
     await ownRook();
     const stamp = db.progression[0]?.levelColosseumResolvedAt;
-    await acknowledgeWaywardRookContact({
-      tenantId: "tenant-a",
-      operatorId: "op-a",
-      authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
-    });
+    await expect(
+      acknowledgeWaywardRookContact({
+        tenantId: "tenant-a",
+        operatorId: "op-a",
+        authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
+      })
+    ).rejects.toThrow(/not granted/);
     expect(db.progression[0]?.levelColosseumResolvedAt).toBe(stamp);
     expect(db.progression).toHaveLength(1);
   });
 
-  it("15. the grant does not complete Brass Republic", async () => {
+  it("15. the refusal does not complete Brass Republic", async () => {
     await ownRook();
-    const granted = await acknowledgeWaywardRookContact({
+    await expect(
+      acknowledgeWaywardRookContact({
+        tenantId: "tenant-a",
+        operatorId: "op-a",
+        authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
+      })
+    ).rejects.toThrow(/not granted/);
+    const read = await readGoldlineProgression({
       tenantId: "tenant-a",
       operatorId: "op-a",
-      authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
+      capabilityOperatorId: null,
     });
     expect(db.progression[0]?.kingdomBrassRepublicCompletedAt).toBeNull();
-    expect(granted.kingdomBrassRepublicCompleted.value).toBe(false);
-    expect(granted.kingdomBrassRepublicCompleted.impliedByLevelColosseum).toBe(false);
+    expect(read.kingdomBrassRepublicCompleted.value).toBe(false);
+    expect(read.kingdomBrassRepublicCompleted.impliedByLevelColosseum).toBe(false);
   });
 
   it("16. the grant does not complete a Mission or a Challenge", async () => {
@@ -523,11 +544,13 @@ describe("capability.rook.contact grant", () => {
       } as never)
     ).rejects.toThrow(/waywardComplete/);
     expect(db.grants).toHaveLength(0);
-    await acknowledgeWaywardRookContact({
-      tenantId: "tenant-a",
-      operatorId: "op-a",
-      authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
-    });
+    await expect(
+      acknowledgeWaywardRookContact({
+        tenantId: "tenant-a",
+        operatorId: "op-a",
+        authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
+      })
+    ).rejects.toThrow(/not granted/);
     expect(JSON.stringify(db.missions)).toBe(missionBefore);
     expect(JSON.stringify(db.challenges)).toBe(challengeBefore);
     expect(db.missions[0]?.status).toBe("active");
@@ -572,13 +595,11 @@ describe("capability.rook.contact grant", () => {
       } as never)
     ).rejects.toThrow();
     expect(db.grants).toHaveLength(0);
-    const granted = await caller.acknowledge({
-      authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
-    });
-    expect(granted.tenantId).toBe("tenant-a");
-    expect(granted.operatorId).toBe("open-7");
-    expect(granted.capabilityRookContact.granted).toBe(true);
-    expect(db.grants[0]?.operatorId).toBe("open-7");
-    expect(db.grants[0]?.tenantId).toBe("tenant-a");
+    await expect(
+      caller.acknowledge({
+        authoredConsequence: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
+      })
+    ).rejects.toThrow(/not granted/);
+    expect(db.grants).toHaveLength(0);
   });
 });

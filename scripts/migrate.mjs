@@ -2195,7 +2195,7 @@ await runRequired(
     id VARCHAR(36) NOT NULL PRIMARY KEY,
     tenantId VARCHAR(64) NOT NULL,
     operatorUserId VARCHAR(128) NOT NULL,
-    kind ENUM('FIRED_AUTHORED_BEAT','VERIFIED_GOLDLINE_OUTCOME') NOT NULL,
+    kind ENUM('FIRED_AUTHORED_BEAT','VERIFIED_GOLDLINE_OUTCOME','SOCIAL_RESIDUE') NOT NULL,
     beatId VARCHAR(64) NULL,
     goldlineOutcomeId VARCHAR(128) NULL,
     offscreen BOOLEAN NOT NULL DEFAULT 0,
@@ -2213,6 +2213,10 @@ await assertRequiredColumns("narrator_os_event_ledger", [
   "tenantId", "operatorUserId", "kind", "offscreen", "playerVisible",
   "payloadJson", "occurredAt", "idempotencyKey",
 ]);
+await runRequired(
+  `ALTER TABLE narrator_os_event_ledger MODIFY kind ENUM('FIRED_AUTHORED_BEAT','VERIFIED_GOLDLINE_OUTCOME','SOCIAL_RESIDUE') NOT NULL`,
+  "narrator_os_event_ledger kind includes SOCIAL_RESIDUE"
+);
 
 // ── Narrator OS slice H ─────────────────────────────────────────
 // Mirrors drizzle/0091_narrator_presentation_receipt.sql.

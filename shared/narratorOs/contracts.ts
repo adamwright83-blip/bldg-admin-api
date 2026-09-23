@@ -48,6 +48,7 @@ export type KnowledgeFactKind = (typeof KNOWLEDGE_FACT_KINDS)[number];
 export const NARRATIVE_EVENT_KINDS = [
   "FIRED_AUTHORED_BEAT",
   "VERIFIED_GOLDLINE_OUTCOME",
+  "SOCIAL_RESIDUE",
 ] as const;
 export type NarrativeEventKind = (typeof NARRATIVE_EVENT_KINDS)[number];
 
@@ -336,6 +337,27 @@ export type PersistedVerifiedGoldlineReceipt = {
   sourceEventId?: string;
 };
 
+/**
+ * Narrative memory of one Rook CONTACT intervention.
+ * Not a verified commercial outcome and not an authored beat fire.
+ * Authored Rook framing stays UNKNOWN unless a server-authoritative
+ * Wayward beat exists. Motive is not a field.
+ */
+export type RookContactInterventionResidue = {
+  event: "rook.contact_intervention";
+  contactSessionId: string;
+  accountId: number;
+  contactId: number;
+  accountName: string;
+  contactName: string | null;
+  occurredAt: string;
+  authoredRookFraming: "UNKNOWN";
+  evidenceRefs: ReadonlyArray<{
+    source: "commercial_account" | "commercial_account_contact";
+    id: string;
+  }>;
+};
+
 export type NarrativeEvent = {
   kind: NarrativeEventKind;
   beatId: NarrativeBeatId | null;
@@ -349,6 +371,10 @@ export type NarrativeEvent = {
    * Absent on FIRED_AUTHORED_BEAT and on pre-Slice-E ledger copies.
    */
   persistedVerifiedGoldline?: PersistedVerifiedGoldlineReceipt | null;
+  /**
+   * Present on SOCIAL_RESIDUE rows. Not verified Goldline evidence.
+   */
+  socialResidue?: RookContactInterventionResidue | null;
 };
 
 export type NarrativeEventLedgerEntry = NarrativeEvent & {

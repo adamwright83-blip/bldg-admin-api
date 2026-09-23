@@ -8352,6 +8352,7 @@ export const narratorOsEventLedger = mysqlTable(
     kind: mysqlEnum("kind", [
       "FIRED_AUTHORED_BEAT",
       "VERIFIED_GOLDLINE_OUTCOME",
+      "SOCIAL_RESIDUE",
     ]).notNull(),
     beatId: varchar("beatId", { length: 64 }),
     goldlineOutcomeId: varchar("goldlineOutcomeId", { length: 128 }),

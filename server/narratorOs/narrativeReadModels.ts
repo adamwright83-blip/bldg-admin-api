@@ -6,6 +6,7 @@ import type {
   NarrativeState,
   NarrativeStateMutation,
   QuietBehavior,
+  RookContactInterventionResidue,
 } from "../../shared/narratorOs/contracts";
 import { getBeat } from "./registry";
 import { cloneKnowledge, type NarratorSnapshot } from "./store";
@@ -63,9 +64,18 @@ export type VerifiedGoldlineMemory = {
   readonly relatedBeatId: NarrativeBeatId | null;
 };
 
+export type SocialResidueMemory = {
+  readonly ledgerEntryId: string;
+  readonly occurredAt: string;
+  readonly tenantId: string;
+  readonly operatorUserId: string;
+  readonly residue: RookContactInterventionResidue;
+};
+
 export type NarrativeMemoryView = {
   readonly firedAuthoredBeats: readonly FiredAuthoredBeatMemory[];
   readonly verifiedGoldlineOutcomes: readonly VerifiedGoldlineMemory[];
+  readonly socialResidues: readonly SocialResidueMemory[];
   readonly knowledge: KnowledgeState;
   readonly narrativeStateValues: NarrativeState["values"];
   readonly closedForwardPaths: readonly string[];
@@ -151,7 +161,23 @@ export function narrativeMemoryView(
 ): NarrativeMemoryView {
   const firedAuthoredBeats: FiredAuthoredBeatMemory[] = [];
   const verifiedGoldlineOutcomes: VerifiedGoldlineMemory[] = [];
+  const socialResidues: SocialResidueMemory[] = [];
   for (const entry of snapshot.ledger) {
+    if (entry.kind === "SOCIAL_RESIDUE" && entry.socialResidue?.event === "rook.contact_intervention") {
+      socialResidues.push(
+        Object.freeze({
+          ledgerEntryId: entry.id,
+          occurredAt: entry.occurredAt,
+          tenantId: entry.tenantId,
+          operatorUserId: entry.operatorUserId,
+          residue: Object.freeze({
+            ...entry.socialResidue,
+            evidenceRefs: Object.freeze([...entry.socialResidue.evidenceRefs]),
+          }),
+        })
+      );
+      continue;
+    }
     if (entry.kind === "FIRED_AUTHORED_BEAT" && entry.beatId) {
       firedAuthoredBeats.push(
         Object.freeze({
@@ -178,6 +204,7 @@ export function narrativeMemoryView(
   return Object.freeze({
     firedAuthoredBeats: Object.freeze(firedAuthoredBeats),
     verifiedGoldlineOutcomes: Object.freeze(verifiedGoldlineOutcomes),
+    socialResidues: Object.freeze(socialResidues),
     knowledge: cloneKnowledge(snapshot.knowledge),
     narrativeStateValues: Object.freeze({ ...snapshot.narrativeState.values }),
     closedForwardPaths: Object.freeze([

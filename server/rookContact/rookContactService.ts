@@ -15,6 +15,7 @@ import type { RookContactEvidenceRef } from "../../shared/rookContact";
 import { authorizedOperatorPhone, claireTwilioFromNumber } from "../claire/claireTwilio";
 import { getDb } from "../db";
 import { findRookContactGrant } from "../goldlineProgression/capabilityGrantStore";
+import { rookContactGrantAllowsExecution, rookContactGrantIsProductionAuthority } from "../goldlineProgression/rookContactAuthority";
 import {
   ProgressionNotPermittedError,
 } from "../goldlineProgression/progressionContract";
@@ -27,6 +28,7 @@ import {
   type RookContactDraftSentence,
   type RookContactGroundedSentence,
 } from "./rookContactGrounding";
+import { rememberRookContactIntervention } from "./rookContactResidue";
 import {
   attachRookContactSessionCallAttempt,
   claimRookContactSessionDial,
@@ -89,6 +91,14 @@ async function requireContactReady(input: { tenantId: string; operatorId: string
   }
   const grant = await findRookContactGrant(input);
   if (!grant.readable || !grant.grant) {
+    throw new ProgressionNotPermittedError(
+      "capability.rook.contact is not granted. Owning Rook does not grant CONTACT."
+    );
+  }
+  if (
+    !rookContactGrantIsProductionAuthority(grant.grant) &&
+    !rookContactGrantAllowsExecution(grant.grant)
+  ) {
     throw new ProgressionNotPermittedError(
       "capability.rook.contact is not granted. Owning Rook does not grant CONTACT."
     );
@@ -316,6 +326,12 @@ export async function startRookContactBridge(input: {
       "CONTACT operator call was placed but its attempt linkage was not recorded"
     );
   }
+  await rememberRookContactIntervention({
+    session: dialing,
+    accountName: canonical.accountName,
+    contactName: canonical.contactName,
+    occurredAt: new Date().toISOString(),
+  });
   return dialing;
 }
 

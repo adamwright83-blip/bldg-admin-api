@@ -10,7 +10,7 @@ import { randomUUID } from "node:crypto";
 import { goldlineDomainCapabilityGrants } from "../../drizzle/schema";
 import {
   ROOK_CONTACT_CAPABILITY_ID,
-  WAYWARD_ROOK_CONTACT_CONSEQUENCE,
+  ROOK_CONTACT_ISOLATED_PREVIEW_GRANT_SOURCE,
 } from "../../shared/rookContact";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError, isMysqlMissingTableError } from "../mysqlErrors";
@@ -82,12 +82,17 @@ export async function findRookContactGrant(input: {
 export async function grantRookContactCapability(input: {
   tenantId: string;
   operatorId: string;
-  grantSource: typeof WAYWARD_ROOK_CONTACT_CONSEQUENCE;
+  grantSource: typeof ROOK_CONTACT_ISOLATED_PREVIEW_GRANT_SOURCE;
   grantedAt: Date;
 }): Promise<void> {
-  if (input.grantSource !== WAYWARD_ROOK_CONTACT_CONSEQUENCE) {
+  if (process.env.NODE_ENV === "production") {
     throw new Error(
-      "capability.rook.contact grantSource must be wayward.rook_contact_demonstrated"
+      "capability.rook.contact has no production grant writer"
+    );
+  }
+  if (input.grantSource !== ROOK_CONTACT_ISOLATED_PREVIEW_GRANT_SOURCE) {
+    throw new Error(
+      "capability.rook.contact refuses client and replacement grant sources"
     );
   }
   const existing = await findRookContactGrant(input);
@@ -106,7 +111,7 @@ export async function grantRookContactCapability(input: {
       operatorId: input.operatorId,
       capabilityId: ROOK_CONTACT_CAPABILITY_ID,
       grantedAt: input.grantedAt,
-      grantSource: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
+      grantSource: ROOK_CONTACT_ISOLATED_PREVIEW_GRANT_SOURCE,
     });
   } catch (error) {
     if (isMysqlDuplicateKeyError(error)) return;
