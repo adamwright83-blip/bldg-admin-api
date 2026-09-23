@@ -45,6 +45,15 @@ const dialect = new MySqlDialect();
 
 type Row = Record<string, unknown>;
 
+function cloneDbRow(row: Row): Row {
+  return Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [
+      key,
+      value instanceof Date ? new Date(value.getTime()) : value,
+    ])
+  );
+}
+
 function matches(row: Row, predicate: unknown): boolean {
   const query = dialect.sqlToQuery(predicate as SQL);
   const token = /`[^`]+`\.`([^`]+)` (is not null|is null|= \?)/g;
@@ -119,7 +128,7 @@ function memoryDb() {
           return {
             where(predicate: unknown) {
               const found = rows.filter(row => matches(row, predicate));
-              return { limit: async (n: number) => found.slice(0, n) };
+              return { limit: async (n: number) => found.slice(0, n).map(cloneDbRow) };
             },
           };
         },
