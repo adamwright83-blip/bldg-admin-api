@@ -1,3 +1,29 @@
+/**
+ * Production schema authority for this API.
+ *
+ * `npm start` runs this file and then the server:
+ *   node scripts/migrate.mjs && NODE_ENV=production node dist/index.js
+ *
+ * This file does not execute `drizzle/*.sql`. A numbered drizzle migration
+ * is not on the production boot path until an idempotent copy is applied
+ * here. `applyDayforgeReleaseMigrations` (`DAYFORGE_RELEASE_DB=1`) replays
+ * numbered drizzle files for proof databases only. It is not production boot,
+ * and it must not be pointed at a database this file has already bootstrapped:
+ * those files use non-idempotent CREATE TABLE.
+ *
+ * Not on this path, on purpose:
+ * - drizzle/0067 and drizzle/0068 (chapter state / event binding). Gated
+ *   release path only, until Adam applies them.
+ * - drizzle/0077_goldline_capability_gaps.sql until Adam approves it.
+ * - `bldg_users` and `service_requests` (resident app owns those tables).
+ * - `procurement/migrations` (separate runner).
+ * - Historical non-idempotent dayforge DDL. Replaying it here is unsafe.
+ *
+ * Runtime `CREATE TABLE IF NOT EXISTS` left in services is a compatibility
+ * guard for deploys that already shipped that lazy create. It is not a second
+ * schema authority. New tables are added here, idempotently, without
+ * backfilling business rows.
+ */
 import mysql from "mysql2/promise";
 import { readFile } from "node:fs/promises";
 
@@ -72,6 +98,21 @@ const assertEnumContainsValues = async (tableName, columnName, values) => {
     );
   }
   console.log("✓", `${tableName}.${columnName} required enum values verified`);
+};
+
+// Idempotent SQL files only. Strips full-line comments, then runs each
+// statement with runRequired so a partial file fails boot instead of being
+// logged and ignored.
+const applyIdempotentSqlFile = async (relativePath, label) => {
+  const sql = await readFile(new URL(relativePath, import.meta.url), "utf8");
+  const statements = sql
+    .replace(/^\s*--.*$/gm, "")
+    .split(";")
+    .map(value => value.trim())
+    .filter(Boolean);
+  for (const statement of statements) {
+    await runRequired(statement, label);
+  }
 };
 
 // ── users table ──────────────────────────────────────────────────
@@ -2291,11 +2332,153 @@ await assertRequiredColumns("communication_receipts", [
   "providerErrorCode", "providerErrorMessage", "idempotencyKey", "createdAt",
 ]);
 
+// ── Cold Call Burst base tables ─────────────────────────────────
+// drizzle/0034 and drizzle/0052 create these with non-idempotent
+// CREATE TABLE, which this boot does not replay. The ALTERs below were
+// no-ops on a fresh database because the tables were missing and `run()`
+// swallowed the error. IF NOT EXISTS keeps an already-migrated production
+// table untouched, then the existing ALTER sequence still adds the
+// nullable link columns. No row backfill was added here; the contactId
+// UPDATE further down is the pre-existing one and only fills nulls that
+// already match its predicate.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS sales_call_attempts (
+    id int AUTO_INCREMENT NOT NULL,
+    tenant_id varchar(64) NOT NULL DEFAULT 'default',
+    lead_id int NULL,
+    order_id int NULL,
+    rep_phone varchar(30) NOT NULL,
+    customer_phone varchar(30) NOT NULL,
+    caller_id varchar(30) NOT NULL,
+    rep_leg_call_sid varchar(64) NULL,
+    customer_leg_call_sid varchar(64) NULL,
+    status enum('dialing_rep','rep_connected','dialing_customer','customer_connected','completed_success','completed_no_connect','failed') NOT NULL DEFAULT 'dialing_rep',
+    customer_leg_duration_sec int NULL,
+    recording_enabled boolean NOT NULL DEFAULT false,
+    reward_granted boolean NOT NULL DEFAULT false,
+    failure_reason varchar(255) NULL,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT sales_call_attempts_id PRIMARY KEY (id),
+    UNIQUE KEY sales_call_attempts_rep_leg_call_sid_idx (rep_leg_call_sid)
+  )`,
+  "CREATE TABLE sales_call_attempts"
+);
+await assertRequiredColumns("sales_call_attempts", [
+  "tenant_id",
+  "rep_leg_call_sid",
+  "customer_leg_call_sid",
+  "status",
+  "recording_enabled",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS driver_cold_call_batches (
+    id varchar(36) NOT NULL,
+    tenantId varchar(64) NOT NULL,
+    actorId varchar(128) NOT NULL,
+    status enum('active','completed') NOT NULL DEFAULT 'active',
+    combo int NOT NULL DEFAULT 0,
+    completedCount int NOT NULL DEFAULT 0,
+    totalTargets int NOT NULL,
+    requestId varchar(36) NOT NULL,
+    sourceReferencesJson json NOT NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT driver_cold_call_batches_id PRIMARY KEY (id),
+    CONSTRAINT uq_driver_cold_call_batch_request UNIQUE (tenantId, actorId, requestId),
+    INDEX idx_driver_cold_call_batch_active (tenantId, actorId, status, updatedAt)
+  )`,
+  "CREATE TABLE driver_cold_call_batches"
+);
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS driver_cold_call_targets (
+    id varchar(36) NOT NULL,
+    batchId varchar(36) NOT NULL,
+    tenantId varchar(64) NOT NULL,
+    actorId varchar(128) NOT NULL,
+    missionId int NOT NULL,
+    accountId int NOT NULL,
+    position int NOT NULL,
+    status enum('pending','selected','live','completed') NOT NULL DEFAULT 'pending',
+    sourceReference varchar(512) NOT NULL,
+    callAttemptEventId int NULL,
+    outcome varchar(64) NULL,
+    completedAt timestamp NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT driver_cold_call_targets_id PRIMARY KEY (id),
+    CONSTRAINT uq_driver_cold_call_batch_mission UNIQUE (batchId, missionId),
+    INDEX idx_driver_cold_call_target_progress (tenantId, actorId, batchId, status, position)
+  )`,
+  "CREATE TABLE driver_cold_call_targets"
+);
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS driver_capability_unlocks (
+    id varchar(36) NOT NULL,
+    tenantId varchar(64) NOT NULL,
+    scopeId varchar(128) NOT NULL DEFAULT 'tenant_business',
+    capabilityId varchar(96) NOT NULL,
+    unlockedByActorId varchar(128) NOT NULL,
+    unlockedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    sourceReferencesJson json NOT NULL,
+    evidenceSummaryJson json NOT NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT driver_capability_unlocks_id PRIMARY KEY (id),
+    CONSTRAINT uq_driver_capability_scope UNIQUE (tenantId, scopeId, capabilityId)
+  )`,
+  "CREATE TABLE driver_capability_unlocks"
+);
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS driver_scout_reports (
+    id varchar(36) NOT NULL,
+    tenantId varchar(64) NOT NULL,
+    actorId varchar(128) NOT NULL,
+    requestId varchar(36) NOT NULL,
+    capabilityUnlockId varchar(36) NOT NULL,
+    sourceScanId varchar(64) NULL,
+    criteriaJson json NOT NULL,
+    sourceReferencesJson json NOT NULL,
+    discoveryCount int NOT NULL DEFAULT 0,
+    generatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT driver_scout_reports_id PRIMARY KEY (id),
+    CONSTRAINT uq_driver_scout_report_request UNIQUE (tenantId, actorId, requestId),
+    INDEX idx_driver_scout_reports_actor (tenantId, actorId, generatedAt)
+  )`,
+  "CREATE TABLE driver_scout_reports"
+);
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS driver_scout_discoveries (
+    id varchar(36) NOT NULL,
+    reportId varchar(36) NOT NULL,
+    tenantId varchar(64) NOT NULL,
+    actorId varchar(128) NOT NULL,
+    candidateKey varchar(191) NOT NULL,
+    providerName varchar(64) NOT NULL,
+    providerAccountId varchar(191) NOT NULL,
+    sourceReference varchar(512) NOT NULL,
+    missionId int NOT NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT driver_scout_discoveries_id PRIMARY KEY (id),
+    CONSTRAINT uq_driver_scout_candidate UNIQUE (tenantId, candidateKey),
+    CONSTRAINT uq_driver_scout_mission UNIQUE (tenantId, missionId),
+    INDEX idx_driver_scout_report_discovery (reportId, createdAt)
+  )`,
+  "CREATE TABLE driver_scout_discoveries"
+);
+await assertRequiredColumns("driver_cold_call_targets", [
+  "id",
+  "batchId",
+  "tenantId",
+  "sourceReference",
+  "status",
+]);
+
 // ── Cold Call Burst transport link ──────────────────────────────
 // Mirrors drizzle/0095_cold_call_attempt_link.sql.
 // Nullable so Saleslay Bold Pitch rows stay unchanged. `run()` is correct:
 // ADD COLUMN is re-run on every boot and the duplicate-column error is the
-// expected steady state. The table itself is created outside this file.
+// expected steady state.
 await run(
   `ALTER TABLE sales_call_attempts ADD COLUMN cold_call_target_id VARCHAR(36) NULL`,
   "ALTER sales_call_attempts ADD cold_call_target_id"
@@ -2326,6 +2509,383 @@ await run(
   `CREATE INDEX idx_driver_cold_call_target_contact ON driver_cold_call_targets (tenantId, contactId)`,
   "CREATE INDEX idx_driver_cold_call_target_contact"
 );
+// The ALTERs above stay on `run()` so a second boot can skip duplicate
+// columns and indexes. The columns themselves are not optional: Cold Call
+// writes `cold_call_target_id`, `contactId`, and `rollClaimId`. A swallowed
+// alter must fail boot here instead of serving a table that is missing them.
+await assertRequiredColumns("sales_call_attempts", ["cold_call_target_id"]);
+await assertRequiredColumns("driver_cold_call_targets", [
+  "contactId",
+  "rollClaimId",
+]);
+
+// ── One schema path: private bootstraps and the missing ledger ──
+// BEGIN schema-path-normalized
+// These tables were created only when a request happened to call the
+// service, or only if someone applied drizzle/0076 by hand. A fresh
+// database that runs this file now has them before the process serves
+// traffic. Statements are CREATE TABLE IF NOT EXISTS only. This section
+// does not write business rows. Service-level CREATE TABLE IF NOT EXISTS
+// stays in place so an older deploy that has not re-run this file still boots.
+//
+// Open-channel uses the current operatorBriefing column. Do not replay
+// drizzle/0050's original briefing column or drizzle/0051's rename.
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS external_operational_orders (
+    id varchar(36) NOT NULL,
+    tenantId varchar(64) NOT NULL DEFAULT 'default',
+    sourceSystem enum('cleancloud','manual_external') NOT NULL,
+    ingestionMethod enum('screenshot','manual','voice') NOT NULL,
+    externalOrderId varchar(191) NULL,
+    jobKind enum('pickup','dropoff') NOT NULL,
+    customerName varchar(191) NOT NULL,
+    address varchar(512) NULL,
+    scheduledDate varchar(10) NULL,
+    windowStart varchar(5) NULL,
+    windowEnd varchar(5) NULL,
+    notes text NULL,
+    operationalStatus enum('scheduled','completed','cancelled') NOT NULL DEFAULT 'scheduled',
+    completedAt timestamp NULL,
+    reconciliationStatus enum('update_required','reconciled') NOT NULL DEFAULT 'update_required',
+    reconciledAt timestamp NULL,
+    externalLastVerifiedAt timestamp NULL,
+    reviewState enum('pending_review','confirmed','discarded') NOT NULL DEFAULT 'pending_review',
+    importBatchId varchar(36) NULL,
+    confirmedAt timestamp NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_external_order_day (tenantId, scheduledDate, reviewState),
+    INDEX idx_external_order_batch (importBatchId),
+    INDEX idx_external_order_reconciliation (tenantId, reconciliationStatus)
+  )`,
+  "CREATE TABLE external_operational_orders"
+);
+await assertRequiredColumns("external_operational_orders", [
+  "id",
+  "tenantId",
+  "sourceSystem",
+  "ingestionMethod",
+  "jobKind",
+  "customerName",
+  "operationalStatus",
+  "reconciliationStatus",
+  "reviewState",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS private_storage_objects (
+    storageKey varchar(512) NOT NULL,
+    contentType varchar(191) NOT NULL,
+    data longblob NOT NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT private_storage_objects_storageKey PRIMARY KEY (storageKey)
+  )`,
+  "CREATE TABLE private_storage_objects"
+);
+await assertRequiredColumns("private_storage_objects", [
+  "storageKey",
+  "contentType",
+  "data",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS driver_game_world_nodes (
+    id varchar(36) NOT NULL PRIMARY KEY,
+    tenantId varchar(64) NOT NULL,
+    actorId varchar(128) NOT NULL,
+    missionId int NOT NULL,
+    entityType varchar(64) NOT NULL DEFAULT 'commercial_mission',
+    entityId varchar(191) NOT NULL,
+    locationId int NULL,
+    visualState enum('available','approaching','active','captured','contested','recovery_available','recovery_active','watching','closed') NOT NULL,
+    worldAnchor varchar(64) NOT NULL DEFAULT 'fortress_gate',
+    unlockedPath varchar(64) NULL,
+    discoveryState enum('hidden','discovered','engaged') NOT NULL DEFAULT 'discovered',
+    lastResolvedAt timestamp NULL,
+    metadataJson json NULL,
+    version int NOT NULL DEFAULT 1,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_driver_game_world_actor_mission (tenantId,actorId,missionId),
+    KEY idx_driver_game_world_tenant_actor_state (tenantId,actorId,visualState,updatedAt)
+  )`,
+  "CREATE TABLE driver_game_world_nodes"
+);
+await assertRequiredColumns("driver_game_world_nodes", [
+  "id",
+  "tenantId",
+  "actorId",
+  "missionId",
+  "visualState",
+  "discoveryState",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS command_sky_settings (
+    tenantId varchar(64) NOT NULL,
+    mode varchar(16) NOT NULL DEFAULT 'campaign',
+    period varchar(16) NOT NULL DEFAULT 'today',
+    redBelowCents int NOT NULL DEFAULT 0,
+    blueAboveCents int NOT NULL DEFAULT 20000,
+    campaignTarget int NOT NULL DEFAULT 50,
+    campaignLabel varchar(120) NOT NULL DEFAULT '50 new customers',
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT command_sky_settings_tenant PRIMARY KEY (tenantId)
+  )`,
+  "CREATE TABLE command_sky_settings"
+);
+await assertRequiredColumns("command_sky_settings", [
+  "tenantId",
+  "mode",
+  "period",
+  "campaignTarget",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS command_sky_wins (
+    id int AUTO_INCREMENT NOT NULL,
+    tenantId varchar(64) NOT NULL DEFAULT 'default',
+    kind varchar(32) NOT NULL,
+    label varchar(191) NOT NULL,
+    dedupeKey varchar(191) NOT NULL,
+    hopeExpiresAt timestamp NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT command_sky_wins_id PRIMARY KEY (id),
+    CONSTRAINT uq_command_sky_wins_tenant_dedupe UNIQUE (tenantId, dedupeKey),
+    INDEX idx_command_sky_wins_tenant_created (tenantId, createdAt)
+  )`,
+  "CREATE TABLE command_sky_wins"
+);
+await assertRequiredColumns("command_sky_wins", [
+  "id",
+  "tenantId",
+  "kind",
+  "dedupeKey",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS level4_war_events (
+    id int AUTO_INCREMENT NOT NULL,
+    tenantId varchar(64) NOT NULL DEFAULT 'default',
+    kind varchar(48) NOT NULL,
+    dedupeKey varchar(191) NOT NULL,
+    pushHundredths int NOT NULL DEFAULT 0,
+    metadata json,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT level4_war_events_id PRIMARY KEY (id),
+    CONSTRAINT uq_level4_war_events_tenant_dedupe UNIQUE (tenantId, dedupeKey),
+    INDEX idx_level4_war_events_tenant_created (tenantId, createdAt)
+  )`,
+  "CREATE TABLE level4_war_events"
+);
+await assertRequiredColumns("level4_war_events", [
+  "id",
+  "tenantId",
+  "kind",
+  "dedupeKey",
+  "pushHundredths",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS google_calendar_connections (
+    tenantId varchar(64) NOT NULL,
+    userId varchar(128) NOT NULL,
+    encryptedRefreshToken text NULL,
+    encryptedAccessToken text NULL,
+    expiryDate bigint NULL,
+    calendarId varchar(255) NOT NULL DEFAULT 'primary',
+    connectedEmail varchar(320) NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (tenantId, userId)
+  )`,
+  "CREATE TABLE google_calendar_connections"
+);
+await assertRequiredColumns("google_calendar_connections", [
+  "tenantId",
+  "userId",
+  "calendarId",
+  "encryptedRefreshToken",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_custody_deliveries (
+    id varchar(36) NOT NULL,
+    tenantId varchar(64) NOT NULL,
+    actorId varchar(128) NOT NULL,
+    vehicleId varchar(128) NULL,
+    orderId int NULL,
+    fieldCargoId varchar(36) NULL,
+    customerDisplayName varchar(191) NOT NULL,
+    custodyLocation varchar(64) NULL,
+    deliveredAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_custody_deliveries_tenant (tenantId, deliveredAt),
+    KEY idx_custody_deliveries_actor (tenantId, actorId, deliveredAt)
+  )`,
+  "CREATE TABLE goldline_custody_deliveries"
+);
+await assertRequiredColumns("goldline_custody_deliveries", [
+  "id",
+  "tenantId",
+  "actorId",
+  "customerDisplayName",
+  "deliveredAt",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS open_channel_missions (
+    id varchar(36) NOT NULL PRIMARY KEY,
+    tenantId varchar(64) NOT NULL,
+    driverId varchar(128) NOT NULL,
+    businessDate varchar(10) NOT NULL,
+    status enum('draft','active','completed','cancelled') NOT NULL DEFAULT 'draft',
+    title varchar(191) NOT NULL,
+    operatorBriefing text NOT NULL,
+    transcript text NOT NULL,
+    generationSource enum('anthropic_structured','deterministic_fallback') NOT NULL,
+    gapStartedAt timestamp NOT NULL,
+    nextCommitmentAt timestamp NULL,
+    availableMinutes int NULL,
+    currentLocationJson json NULL,
+    requestId varchar(36) NOT NULL,
+    approvedAt timestamp NULL,
+    completedAt timestamp NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_open_channel_missions_tenant_request (tenantId,requestId),
+    KEY idx_open_channel_missions_tenant_driver_date_status (tenantId,driverId,businessDate,status)
+  )`,
+  "CREATE TABLE open_channel_missions"
+);
+await assertRequiredColumns("open_channel_missions", [
+  "id",
+  "tenantId",
+  "driverId",
+  "operatorBriefing",
+  "requestId",
+  "status",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS open_channel_mission_tasks (
+    id varchar(36) NOT NULL PRIMARY KEY,
+    tenantId varchar(64) NOT NULL,
+    missionId varchar(36) NOT NULL,
+    position int NOT NULL,
+    title varchar(191) NOT NULL,
+    detail text NOT NULL,
+    estimatedMinutes int NOT NULL,
+    category enum('food','sales','operations','personal','finance','travel','other') NOT NULL,
+    navigationQuery varchar(512) NULL,
+    status enum('pending','completed') NOT NULL DEFAULT 'pending',
+    completedAt timestamp NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_open_channel_tasks_mission_position (missionId,position),
+    KEY idx_open_channel_tasks_tenant_mission_status (tenantId,missionId,status)
+  )`,
+  "CREATE TABLE open_channel_mission_tasks"
+);
+await assertRequiredColumns("open_channel_mission_tasks", [
+  "id",
+  "tenantId",
+  "missionId",
+  "position",
+  "status",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS open_channel_task_events (
+    id varchar(36) NOT NULL PRIMARY KEY,
+    tenantId varchar(64) NOT NULL,
+    missionId varchar(36) NOT NULL,
+    taskId varchar(36) NOT NULL,
+    actorId varchar(128) NOT NULL,
+    requestId varchar(36) NOT NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_open_channel_task_events_tenant_request (tenantId,requestId),
+    KEY idx_open_channel_task_events_tenant_mission (tenantId,missionId,createdAt)
+  )`,
+  "CREATE TABLE open_channel_task_events"
+);
+await assertRequiredColumns("open_channel_task_events", [
+  "id",
+  "tenantId",
+  "missionId",
+  "taskId",
+  "requestId",
+]);
+
+// drizzle/0076_claire_conversation_ledger.sql — Claire reads and writes
+// these tables with no runtime CREATE. The file is already IF NOT EXISTS
+// and contains no row changes.
+await applyIdempotentSqlFile(
+  "../drizzle/0076_claire_conversation_ledger.sql",
+  "Claire conversation ledger"
+);
+await assertRequiredColumns("claire_conversation_sessions", [
+  "id",
+  "tenantId",
+  "operatorUserId",
+  "claireConversationId",
+  "providerCallSid",
+  "status",
+]);
+await assertRequiredColumns("claire_conversation_turns", [
+  "sessionId",
+  "ordinal",
+  "speaker",
+  "idempotencyKey",
+]);
+await assertRequiredColumns("claire_conversation_transcripts", [
+  "sessionId",
+  "source",
+  "text",
+]);
+await assertRequiredColumns("claire_conversation_analyses", [
+  "sessionId",
+  "resultJson",
+  "summaryText",
+]);
+await assertRequiredColumns("claire_conversation_notifications", [
+  "tenantId",
+  "operatorUserId",
+  "sessionId",
+  "kind",
+]);
+
+// Durable domain.goldline progression. Runtime stays in Project E.
+// This statement only creates an empty table. Null timestamps are unearned.
+// No rows are written.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_domain_progression (
+    id VARCHAR(36) NOT NULL,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorId VARCHAR(128) NOT NULL,
+    levelColosseumResolvedAt TIMESTAMP NULL,
+    companionRookOwnedAt TIMESTAMP NULL,
+    kingdomBrassRepublicCompletedAt TIMESTAMP NULL,
+    overworldUnlocksJson JSON NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_goldline_domain_progression (tenantId, operatorId)
+  )`,
+  "CREATE TABLE goldline_domain_progression"
+);
+await assertRequiredColumns("goldline_domain_progression", [
+  "tenantId",
+  "operatorId",
+  "levelColosseumResolvedAt",
+  "companionRookOwnedAt",
+  "kingdomBrassRepublicCompletedAt",
+  "overworldUnlocksJson",
+]);
+// END schema-path-normalized
 
 await conn.end();
 console.log("\nMigration complete.");
