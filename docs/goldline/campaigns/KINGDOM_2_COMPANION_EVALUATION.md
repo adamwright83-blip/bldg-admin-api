@@ -38,24 +38,15 @@ familiarity, inventing a recipient, or claiming a message was read.
 
 **Rook** is assigned as the Kingdom 2 unlock.
 
-## Rook naming — resolved
+## Rook naming
 
-Rook already ships as the Dayforge field-sales coaching persona
-(`server/dayforgeCoaching/dayforgeCoachingRuntime.ts`, public Dayforge landing
-page). Per Adam's decision (2026-09-11): unify rather than rename. The Goldline
-companion Rook *is* that Rook, extended with the companion capability above —
-one character, not a fork. See `goldlineCompanions.unifiedProductPersona` on the
-seeded roster row.
+Rook is `companion.rook`. He is not Claire and not a DayForge field coach. CONTACT (`capability.rook.contact`) is the player-facing mechanic. `rook.outreach_drafting` is the implementation capability id, not the Companion. Owning the Companion does not grant that capability unless an explicit authored rule and a permission rule both say the grant follows ownership.
 
-## Amendment — Rook joins at the Colosseum (Adam, 2026-09-22)
+`server/dayforgeCoaching/dayforgeCoachingRuntime.ts` and the public Dayforge landing are `legacy.dayforge`. They reuse the name. The seeded `unifiedProductPersona` flag still records an older unification; it does not make Rook a DayForge coach.
 
-Per Adam's direction, Rook joins the party when **Kingdom 1 (the Colosseum) resolves** —
-the same boundary as the Wayward unlock — and travels with Trailblazer into Kingdom 2,
-whose real campaign is exactly what his capability is for. That was already the reading
-of Adam's `goldline/rook-3d-asset-pipeline` work (2026-09-11: "Rook is Kingdom 2's
-companion; the Clockhead duel win is the closest thing today to a durable 'Colosseum
-complete' signal"). He is still earned through real field work: the finale that ends
-with him only exists once the five real Colosseum outcomes are recorded.
+## Colosseum level resolution and Rook's party
+
+Rook joins the party when `level.colosseum` resolves — the same local-fantasy boundary as the Wayward unlock — and can travel with Trailblazer afterward. That is not `kingdom.brass_republic` completion. Beating Clockhead does not complete the Kingdom. Kingdom completion is a separate authored state. The finale that ends with him only exists once the five real Colosseum campaign outcomes are recorded. Those outcomes are a growth campaign, not Kingdom completion.
 
 His reveal follows WORLD_BIBLE §12 rather than a rescue: rumoured captured, he has been
 running an illegal communications network through the Republic's own clocks. After
@@ -71,17 +62,18 @@ What this changes, and what it does not:
   will not have it. Later kingdoms and the Road read it from
   `client/src/pages/goldline/stages/goldlineParty.ts` (`isTravelingWith`,
   `useGoldlineParty`).
-- **CONTACT** is the in-world name of his mechanic: Rook can reach people, open
-  conversations, and get through social barriers Trailblazer cannot. It names the same
-  protected capability, `rook.outreach_drafting` (REALITY_BRIDGE §6), and widens none of
-  its may / may-not rules. No authored canon named his ability before this.
+- **CONTACT** (`capability.rook.contact`) is the in-world name of his mechanic: Rook can reach people, open
+  conversations, and get through social barriers Trailblazer cannot. The implementation
+  capability id is `rook.outreach_drafting` (REALITY_BRIDGE §6). CONTACT is not the Companion.
+  The mechanic widens none of the may / may-not rules.
 - **The server's evidence-backed unlock is not written.** `earnCompanion` grants the real
   capability only against a completed `ops_tasks` row; the Colosseum's outcomes are
-  recorded as open-channel mission tasks, not ops tasks. Whether Kingdom 1's real
-  completion should count as that evidence is an open decision for Adam.
+  recorded as open-channel mission tasks, not ops tasks. Whether those campaign outcomes
+  should count as that evidence is an open decision for Adam. That decision is not Kingdom
+  completion and does not by itself grant `capability.rook.contact`.
 - `server/goldlineKingdoms/seedKingdoms.ts` still describes Rook as the companion Kingdom
   2's campaign earns, and every kingdom's `companionEarnedId` is still null. Server code
-  was not changed with this amendment.
+  was not changed with this section.
 
 ## Necessity for Kingdom 3
 

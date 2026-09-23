@@ -94,7 +94,7 @@ enabling it changes how Claire treats an operator on a bad day. Adam's call, not
 
 ## 3. Goldline work
 
-Read `docs/GOLDLINE-TASKS.md` first, then `docs/goldline/BUILD_BRIEF_SLICES_1_5.md`.
+Read `docs/JOYSTICK_SYSTEM_MAP.md` first, then `docs/GOLDLINE-TASKS.md`, then `docs/goldline/BUILD_BRIEF_SLICES_1_5.md`.
 
 Docs whose headers say "This document constrains future Goldline work" are binding —
 `docs/goldline/REALITY_BRIDGE.md`,
