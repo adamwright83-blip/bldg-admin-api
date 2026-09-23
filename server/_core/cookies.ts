@@ -41,6 +41,9 @@ export function getSessionCookieOptions(
 
   const isLocal = LOCAL_HOSTS.has(req.hostname);
 
+  // Host-only on purpose. Do not set Domain=.bldg.chat. Admin and Driver
+  // each keep their own session for the same membership, and preview or
+  // vendor hosts must not receive that cookie.
   return {
     httpOnly: true,
     path: "/",

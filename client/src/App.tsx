@@ -151,6 +151,33 @@ function CommercialProposalPrintRoute() {
  * leaves a signed-out visitor staring at a broken page instead of a login
  * prompt.
  */
+function signedInWithLegacyDriverPassword(user: {
+  openId?: string | null;
+  role?: string | null;
+} | null): boolean {
+  if (!user?.openId || user.role !== "driver") return false;
+  return !user.openId.startsWith("dayforge:");
+}
+
+function DriverMembershipGate({ children }: { children: ReactNode }) {
+  const { user, loading: authLoading, isAuthenticated } = useAuth();
+  if (authLoading) {
+    return <div style={{ minHeight: "100vh", background: "#fff" }} />;
+  }
+  // A shared-password driver cookie is still signed in, but it is not Claire
+  // desk authority. Show the membership form instead of the desk.
+  if (!isAuthenticated || signedInWithLegacyDriverPassword(user)) {
+    return (
+      <LoginForm
+        role="driver"
+        mode="membership"
+        onSuccess={() => window.location.reload()}
+      />
+    );
+  }
+  return <>{children}</>;
+}
+
 function AdminAuthGate({ children }: { children: ReactNode }) {
   const { loading: authLoading, isAuthenticated } = useAuth();
   if (authLoading) {
@@ -472,6 +499,16 @@ function Router() {
   // engineering-request pages are operator follow-through from that line.
   if (isDriverHost) {
     const path = window.location.pathname;
+    // Isolated shared-password entrance. Not linked from the membership form.
+    if (path === "/legacy-driver-login") {
+      return (
+        <LoginForm
+          role="driver"
+          mode="legacy-shared-password"
+          onSuccess={() => window.location.assign("/")}
+        />
+      );
+    }
     if (
       path !== "/" &&
       !path.startsWith("/claire") &&
@@ -480,7 +517,11 @@ function Router() {
       return <Redirect to="/" />;
     }
     if (path.startsWith("/claire") || path.startsWith("/goldline/capability-gaps")) {
-      return <AdminHostApp />;
+      return (
+        <DriverMembershipGate>
+          <AdminHostApp />
+        </DriverMembershipGate>
+      );
     }
   }
 

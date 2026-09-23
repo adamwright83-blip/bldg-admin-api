@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { driverOrderRouter } from "../joystick/driverOrderRouter";
 import { dayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import { activateCommercialMissionForField } from "../commercialMissions/commercialMissionActivationService";
 import { getFieldMoves } from "./fieldOpportunityService";
@@ -9,6 +10,7 @@ import {
 } from "./authoritativeVisitRouteService";
 
 export const fieldRouter = router({
+  orders: driverOrderRouter,
   today: dayforgeTenantMemberProcedure.query(({ ctx }) => getFieldToday({
     tenantId: ctx.tenantId, userId: ctx.user.openId,
     includeAllAssignees: ctx.dayforgeMembership.role !== "field",

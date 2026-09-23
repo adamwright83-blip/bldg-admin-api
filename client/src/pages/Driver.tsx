@@ -143,7 +143,11 @@ function AuthenticatedDriver() {
 
   if (!isAuthenticated) {
     return (
-      <LoginForm role="driver" onSuccess={() => window.location.reload()} />
+      <LoginForm
+        role="driver"
+        mode="membership"
+        onSuccess={() => window.location.reload()}
+      />
     );
   }
 

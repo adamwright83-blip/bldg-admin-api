@@ -39,7 +39,7 @@ import {
 /**
  * How long the fixture waits before authoritative evidence reports the
  * collection, standing in for the real gap between the canonical mutation
- * resolving and the next admin.listByStatus poll returning it.
+ * resolving and the next field order listByStatus poll returning it.
  */
 const SERVER_TRUTH_DELAY_MS = 900;
 
@@ -48,7 +48,7 @@ const SERVER_TRUTH_DELAY_MS = 900;
  *
  * A reload must reproduce the Stronghold from real order truth. That claim
  * is only testable if the thing standing in for the database behaves like
- * one: production re-queries admin.listByStatus and the collected order is
+ * one: production re-queries field order listByStatus and the collected order is
  * still there, so this fixture has to still have it too. Without this, a
  * reload would wipe the fixture's "server" and the test would prove nothing
  * except that a page reload clears React state.
@@ -650,7 +650,7 @@ export default function GoldlineFictionHarness() {
   const [firstStopAddressStripped, setFirstStopAddressStripped] =
     useState(false);
   // Genuine pickup/delivery route-work fixture — mirrors production's
-  // `admin.listByDate` result shape exactly (real Order rows). One pickup
+  // `field.orders.listByDate` result shape exactly (real Order rows). One pickup
   // has no address on file (CASE C — fails closed truthfully); one delivery
   // is genuinely unpaid (payment-blocked, cannot be bypassed by fiction).
   const [pickupOrders, setPickupOrders] = useState<Order[]>(
@@ -668,7 +668,7 @@ export default function GoldlineFictionHarness() {
   );
   /**
    * AUTHORITATIVE collected-order evidence, as the real driver surface
-   * receives it from admin.listByStatus. Starts with genuine history so the
+   * receives it from field order listByStatus. Starts with genuine history so the
    * Stronghold is partially restored before this expedition — a payoff
    * measured against an empty world would prove far less.
    */
@@ -937,9 +937,9 @@ export default function GoldlineFictionHarness() {
 
   // Records a genuine pickup/delivery completion by removing the resolved
   // order from the fixture's own pickups/deliveries arrays — standing in for
-  // production's canonical `admin.updateStatus` write plus its broad
+  // production's tenant-scoped `field.orders.updateStatus` write plus its broad
   // authoritative refetch (`invalidateDriverTruth`), which is what actually
-  // removes a resolved order from `admin.listByDate`'s cache in production.
+  // removes a resolved order from `field.orders.listByDate`'s cache in production.
   function resolveFixtureOrder(
     orderId: number,
     status: "collected" | "delivered"
@@ -954,7 +954,7 @@ export default function GoldlineFictionHarness() {
       setPickupOrders(current => current.filter(row => row.id !== orderId));
       // Stand in for the SERVER's own view catching up, on its own delay.
       //
-      // In production the collected order appears in admin.listByStatus on
+      // In production the collected order appears in field order listByStatus on
       // the next poll, which is strictly later than the mutation resolving.
       // Reproducing that gap is the entire point: a fixture that flipped the
       // evidence synchronously would make VERIFYING SERVER TRUTH

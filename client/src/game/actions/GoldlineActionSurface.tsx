@@ -609,8 +609,8 @@ function SimpleWriteSurface(
 /**
  * A genuine pickup or delivery, staged in-canvas exactly like VISIT/RECOVER —
  * never a redirect to conventional dispatch UI. Records real completion
- * through the same canonical `admin.updateStatus` mutation the pre-existing
- * (non-game) pickup/delivery flow already used (`services.resolveOrder`) —
+ * through the same tenant-scoped `system.field.orders.updateStatus` mutation
+ * the Driver field board uses (`services.resolveOrder`) —
  * no new order-truth store, no fabricated evidence (no scan/signature/photo
  * requirement — none exist in the real business process this represents).
  * A payment-blocked delivery renders truthfully blocked; fiction cannot

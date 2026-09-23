@@ -171,7 +171,14 @@ function responseFor(procedure, input) {
       role: "driver",
     };
   }
-  if (procedure === "admin.listByDate") return [];
+  if (
+    procedure === "admin.listByDate" ||
+    procedure === "system.field.orders.listByDate" ||
+    procedure === "system.field.orders.listByStatus"
+  )
+    return [];
+  if (procedure === "system.field.orders.updateStatus")
+    return { success: true, alreadyCompleted: false };
   if (procedure === "system.field.today") {
     return {
       generatedAt: new Date().toISOString(),

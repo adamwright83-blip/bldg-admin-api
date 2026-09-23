@@ -91,11 +91,19 @@ try {
               },
             },
           };
-        else if (name === "admin.listByDate" || name === "admin.listByStatus")
+        else if (
+          name === "admin.listByDate" ||
+          name === "admin.listByStatus" ||
+          name === "system.field.orders.listByDate" ||
+          name === "system.field.orders.listByStatus"
+        )
           value = empty
             ? []
             : orders.filter(order => order.status === args?.status);
-        else if (name === "admin.updateStatus") {
+        else if (
+          name === "admin.updateStatus" ||
+          name === "system.field.orders.updateStatus"
+        ) {
           writes.push({ name, args });
           if (failure)
             return {
@@ -126,7 +134,11 @@ try {
           value = { cargo: [], unassigned: [], atProcessor: [] };
         else if (/list$|myBuiltMissions$|myDispatches$|territories$/.test(name))
           value = [];
-        if (offline && name === "admin.listByDate")
+        if (
+          offline &&
+          (name === "admin.listByDate" ||
+            name === "system.field.orders.listByDate")
+        )
           return {
             error: {
               json: {

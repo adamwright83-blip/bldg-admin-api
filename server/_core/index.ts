@@ -14,6 +14,7 @@ import { serveStatic, setupVite } from "./vite";
 import { sdk } from "./sdk";
 import { createOrReuseResidentLaundryOrder, upsertUser } from "../db";
 import { getSessionCookieOptions } from "./cookies";
+import { sharedPasswordLoginSelection } from "../joystick/tenantIdentity";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { VENDOR_COOKIE_NAME, THIRTY_DAYS_MS } from "@shared/const";
 import { resolveTenantIdFromHeaders } from "@shared/tenantConfig";
@@ -419,8 +420,10 @@ async function startServer() {
   // Production driver and admin credentials are distinct. Development may
   // fall back to the existing admin/shared secret to preserve local workflows.
   app.post("/api/auth/login", async (req, res) => {
-    const { password, role: requestedRole } = req.body || {};
-    const role = requestedRole === "driver" ? "driver" : "admin";
+    const password =
+      typeof req.body?.password === "string" ? req.body.password : "";
+    // Role only. Slug, email, tenant, and operator ids in this body are ignored.
+    const { role } = sharedPasswordLoginSelection(req.body);
     const validPassword =
       role === "driver"
         ? process.env.DRIVER_PASSWORD ||

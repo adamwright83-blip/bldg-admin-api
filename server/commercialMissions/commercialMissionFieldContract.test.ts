@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { sharedPasswordLoginSelection } from "../joystick/tenantIdentity";
 
 const migration = readFileSync(
   new URL("../../drizzle/0038_commercial_mission_field.sql", import.meta.url),
@@ -72,8 +73,31 @@ describe("DayForge Field production contract", () => {
   it("derives assignment and actor from the signed session", () => {
     expect(router).toContain("assertDriverCanReadMission");
     expect(router).toContain("actorId: ctx.user.openId");
+    expect(router).toContain("actorRole: ctx.dayforgeMembership.role");
     expect(router).not.toContain("actorId: input.actorId");
-    expect(login).toContain('requestedRole === "driver"');
+    expect(router).not.toContain("actorRole: input");
+    expect(login).toContain("sharedPasswordLoginSelection(req.body)");
+    expect(login).toContain("openId: ownerOpenId");
+    expect(login).toContain("process.env.DRIVER_OPEN_ID");
+    expect(login).not.toContain('requestedRole === "driver"');
+    expect(login).not.toMatch(/openId:\s*req\.body/);
+    expect(login).not.toMatch(/openId:\s*.*role/);
+    expect(
+      sharedPasswordLoginSelection({
+        password: "secret",
+        role: "driver",
+        tenantId: "tenant-victim",
+        slug: "victim",
+        email: "ada@victim.example",
+        operatorUserId: "dayforge:ada",
+      })
+    ).toEqual({ role: "driver" });
+    expect(
+      sharedPasswordLoginSelection({
+        role: "owner",
+        operatorUserId: "dayforge:ada",
+      })
+    ).toEqual({ role: "admin" });
     expect(login).toContain("process.env.DRIVER_PASSWORD");
     expect(login).toContain("crypto.timingSafeEqual");
     expect(login).toContain("isAuthLoginRateLimited(req, role)");

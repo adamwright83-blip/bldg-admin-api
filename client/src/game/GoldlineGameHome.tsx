@@ -313,7 +313,7 @@ type GoldlineGameHomeProps = GoldlineHomeProps & {
   actionServices: GoldlineActionServices;
   /**
    * AUTHORITATIVE collected-order evidence — order id and status only, read
-   * from the existing admin.listByStatus queries for collected / processing
+   * from the tenant-scoped field order queries for collected / processing
    * / ready / delivered.
    *
    * This is the ONLY thing that may declare a pickup secured. It is server
