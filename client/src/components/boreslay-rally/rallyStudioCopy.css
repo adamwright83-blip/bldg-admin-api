@@ -1,0 +1,28 @@
+.rally-stage {
+  width: min(100dvw, 223.048327dvh);
+  height: min(100dvh, 44.833333dvw);
+}
+
+.controls-duel .rally-rescue h2,
+.controls-duel .rally-rescue p,
+.controls-duel .rally-rescue button {
+  font-size: 0;
+}
+
+.controls-duel .rally-rescue h2::after {
+  content: "CLOSER BLOCKED THE DEATH SCROLL";
+  display: block;
+  font: 1000 clamp(15px, 3.7vh, 23px) / 0.95 Impact, Haettenschweiler, sans-serif;
+}
+
+.controls-duel .rally-rescue p::after {
+  content: "Take the sales mission now. Complete the lead action, earn the Success Rock, and jump straight back into this rally.";
+  display: block;
+  font: 800 clamp(9px, 2.1vh, 13px) / 1.15 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.controls-duel .rally-rescue button::after {
+  content: "ACCEPT SALES MISSION";
+  display: block;
+  font: 1000 clamp(11px, 2.7vh, 16px) / 1 Impact, Haettenschweiler, sans-serif;
+}
