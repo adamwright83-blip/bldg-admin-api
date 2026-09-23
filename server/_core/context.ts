@@ -2,6 +2,7 @@ import type { CreateExpressContextOptions } from "@trpc/server/adapters/express"
 import type { User } from "../../drizzle/schema";
 import type { VendorSession } from "./vendorAuth";
 import { resolveTenantIdFromHeaders } from "@shared/tenantConfig";
+import { tenantForAuthenticatedUser } from "../joystick/tenantIdentity";
 import { sdk } from "./sdk";
 import { parseVendorCookie, verifyVendorSession } from "./vendorAuth";
 import { authenticateGoldlineDemoRequest } from "../goldlineOnboarding/demoAccess";
@@ -49,19 +50,28 @@ export async function createContext(
   }
 
   const authenticatedTenantId = user?.tenantId?.trim();
-  const tenantId = authenticatedTenantId
-    ? authenticatedTenantId
-    : user?.openId.startsWith("dayforge:")
+  const boundTenant = tenantForAuthenticatedUser({
+    user: user
+      ? {
+          openId: user.openId,
+          role: user.role,
+          tenantId: authenticatedTenantId,
+        }
+      : null,
+    hostTenantId: tenantResolution.tenantId,
+  });
+  const tenantId =
+    user?.openId.startsWith("dayforge:") && !authenticatedTenantId
       ? "__invalid_saas_session__"
-      : tenantResolution.tenantId;
+      : boundTenant.tenantId;
 
   return {
     req: opts.req,
     res: opts.res,
     user,
     vendorSession,
-    // An authenticated user's persisted tenant always wins over untrusted Host
-    // headers. Membership-aware tRPC procedures perform the second check.
+    // A membership session uses its persisted tenant, never the Host header.
+    // A shared-password session stays on the host-mapped legacy tenant.
     tenantId,
   };
 }

@@ -11,6 +11,7 @@ import {
   resolveDayforgeMembership,
   roleAllows,
 } from "../saas/tenantAccess";
+import { authorizeJoystickClaireDesk } from "../joystick/tenantIdentity";
 import { assertTrpcMutationOrigin } from "../dayforgeSecurity/dayforgeSecurity";
 
 const VENDOR_UNAUTHED_MSG = "Please login to the vendor portal (10003)";
@@ -168,6 +169,34 @@ export const dayforgeChurnProcedure = dayforgeProcedure({
   entitlement: "churn_radar",
   roles: operatorRoles,
 });
+
+/** Claire desk on Admin and Driver. Members use membership; shared driver password does not. */
+export const joystickClaireDeskProcedure = baseProcedure.use(
+  t.middleware(async opts => {
+    const decision = await authorizeJoystickClaireDesk({
+      tenantId: opts.ctx.tenantId,
+      user: opts.ctx.user
+        ? { openId: opts.ctx.user.openId, role: opts.ctx.user.role }
+        : null,
+    });
+    if (!decision.ok) {
+      throw new TRPCError({
+        code: decision.reason === "unauthenticated" ? "UNAUTHORIZED" : "FORBIDDEN",
+        message:
+          decision.reason === "unauthenticated"
+            ? UNAUTHED_ERR_MSG
+            : NOT_ADMIN_ERR_MSG,
+      });
+    }
+    return opts.next({
+      ctx: {
+        ...opts.ctx,
+        user: opts.ctx.user!,
+        tenantId: decision.tenantId,
+      },
+    });
+  })
+);
 
 export const adminOrDriverProcedure = baseProcedure.use(
   t.middleware(async opts => {

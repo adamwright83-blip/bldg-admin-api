@@ -134,7 +134,7 @@ describe("G — Claire developer preview and shared generation path", () => {
     ]);
     expect(phoneSource).toContain("generateClairePreDriveOutput(");
     expect(routerSource).toContain("previewClairePreDrive(");
-    expect(routerSource).toContain("previewPreDrive: adminProcedure");
+    expect(routerSource).toContain("previewPreDrive: joystickClaireDeskProcedure");
   });
 
   it("preview reports fallback diagnostics and cannot write business truth", async () => {
@@ -180,7 +180,7 @@ describe("G — Claire developer preview and shared generation path", () => {
       tenantId: "tenant-1",
     } as never);
     await expect(caller.previewPreDrive({})).rejects.toMatchObject({
-      code: "FORBIDDEN",
+      code: "UNAUTHORIZED",
     });
   });
 });

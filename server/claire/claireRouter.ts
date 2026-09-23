@@ -13,8 +13,10 @@ import {
   adminProcedure,
   dayforgeChurnProcedure,
   dayforgeMissionFieldProcedure,
+  joystickClaireDeskProcedure,
   router,
 } from "../_core/trpc";
+import { claireOperatorScope } from "../joystick/tenantIdentity";
 import type { CanonicalGoldlineAction } from "../../shared/goldlineActionContract";
 import { assertDriverCanReadMission } from "../commercialMissions/commercialMissionAuthorization";
 import { dayDirectorActorId } from "../dayDirector/dayDirectorActor";
@@ -169,20 +171,24 @@ export const claireRouter = router({
     )
     .mutation(({ ctx, input }) => setActiveMacroGoal({ tenantId: ctx.tenantId, ...input })),
 
-  previewPreDrive: adminProcedure
+  previewPreDrive: joystickClaireDeskProcedure
     .input(
       z.object({
         timeZone: z.string().trim().min(1).max(100).optional(),
       })
     )
-    .query(({ ctx, input }) =>
-      previewClairePreDrive({
+    .query(({ ctx, input }) => {
+      const scope = claireOperatorScope({
         tenantId: ctx.tenantId,
-        actorId: ctx.user.openId,
+        operatorUserId: ctx.user.openId,
+      });
+      return previewClairePreDrive({
+        tenantId: scope.tenantId,
+        actorId: scope.operatorUserId,
         timeZone: input.timeZone,
         dayDirectorActorId: dayDirectorActorId(ctx),
-      })
-    ),
+      });
+    }),
 
   previewWorkday: dayforgeMissionFieldProcedure
     .input(
@@ -236,7 +242,7 @@ export const claireRouter = router({
       return { confirmedAt: snapshot.confirmedAt, itemCount: snapshot.items.length };
     }),
 
-  talk: adminProcedure
+  talk: joystickClaireDeskProcedure
     .input(
       z.object({
         utterance: z.string().trim().min(1).max(4000),
@@ -245,30 +251,34 @@ export const claireRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const preview = await previewClairePreDrive({
+      const scope = claireOperatorScope({
         tenantId: ctx.tenantId,
-        actorId: ctx.user.openId,
+        operatorUserId: ctx.user.openId,
+      });
+      const preview = await previewClairePreDrive({
+        tenantId: scope.tenantId,
+        actorId: scope.operatorUserId,
         timeZone: input.timeZone,
         dayDirectorActorId: dayDirectorActorId(ctx),
       });
       const context = await assembleClaireDriveContext({
-        tenantId: ctx.tenantId,
-        actorId: ctx.user.openId,
+        tenantId: scope.tenantId,
+        actorId: scope.operatorUserId,
         phase: "pre_drive",
         timeZone: input.timeZone,
       });
       context.workday = preview.workday ?? undefined;
       const actorId = dayDirectorActorId(ctx);
       // Same Claire brain as the phone: one durable state per desk conversation.
-      const key = `claire-desk:${ctx.tenantId}:${actorId}:${input.conversationId ?? "desk"}`;
+      const key = `claire-desk:${scope.tenantId}:${actorId}:${input.conversationId ?? "desk"}`;
       const store = claireConversationStateStore();
       const stored = await store.load<ClaireTurnState>(key);
       const state: ClaireTurnState =
-        stored && stored.tenantId === ctx.tenantId && stored.operatorUserId === ctx.user.openId ? stored.state : {};
+        stored && stored.tenantId === scope.tenantId && stored.operatorUserId === scope.operatorUserId ? stored.state : {};
       const result = await runClaireTurn(
         {
-          tenantId: ctx.tenantId,
-          operatorUserId: ctx.user.openId,
+          tenantId: scope.tenantId,
+          operatorUserId: scope.operatorUserId,
           dayDirectorActorId: actorId,
           surface: "text",
           utterance: input.utterance,
@@ -280,7 +290,7 @@ export const claireRouter = router({
         {
           confirmPlan: () =>
             confirmWorkdayPlan({
-              tenantId: ctx.tenantId,
+              tenantId: scope.tenantId,
               actorId,
               businessDate: context.clock?.tomorrowBusinessDate ?? context.businessDate,
               items: assembleTomorrowCandidates(context),
@@ -288,7 +298,7 @@ export const claireRouter = router({
           encyclopedia: claireEncyclopediaFor({ dayDirectorActorId: actorId }),
         }
       );
-      await store.save(key, { tenantId: ctx.tenantId, operatorUserId: ctx.user.openId, surface: "text" }, state, DESK_CONVERSATION_TTL_MS);
+      await store.save(key, { tenantId: scope.tenantId, operatorUserId: scope.operatorUserId, surface: "text" }, state, DESK_CONVERSATION_TTL_MS);
 
       /**
        * Brain V2 shadow observation. V1's authoritative result already exists and is
@@ -303,14 +313,14 @@ export const claireRouter = router({
           assembledText: observation.assembledText,
           completeness: observation.completeness,
           state: readOnlyWorkingMemorySource(state),
-          tenantId: ctx.tenantId,
-          operatorUserId: ctx.user.openId,
+          tenantId: scope.tenantId,
+          operatorUserId: scope.operatorUserId,
           surface: "text",
           conversationKey: key,
           // Read-only readers, constructed only when the flag is ON.
           live: {
-            tenantId: ctx.tenantId,
-            operatorUserId: ctx.user.openId,
+            tenantId: scope.tenantId,
+            operatorUserId: scope.operatorUserId,
             conversationId: input.conversationId ?? "desk",
             dayDirectorActorId: actorId,
             timeZone: input.timeZone ?? "America/Los_Angeles",
