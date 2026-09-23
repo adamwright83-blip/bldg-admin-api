@@ -485,13 +485,9 @@ export async function recordDay1TenDoorsOutcome(input: {
     },
   };
 
-  await writePayload({
-    db,
-    tenantId: input.tenantId,
-    taskId: task.id,
-    payload: nextPayload,
-  });
-
+  // Record the level before the outcome commits. A retry of an already-saved
+  // outcome returns above and must not backfill. A missing progression table
+  // must not block the business outcome; any other failure leaves it uncommitted.
   if (colosseumKingdomBindingNewlySatisfied(payload.outcomes, nextPayload.outcomes)) {
     try {
       await recordLevelFromOutcomes({
@@ -501,12 +497,22 @@ export async function recordDay1TenDoorsOutcome(input: {
         outcomesAvailable: true,
       });
     } catch (error) {
+      if (!(error instanceof Error) || error.name !== "ProgressionSchemaBlockedError") {
+        throw error;
+      }
       console.warn(
         "[goldline-progression] level.colosseum was not recorded",
-        error instanceof Error ? error.message : error
+        error.message
       );
     }
   }
+
+  await writePayload({
+    db,
+    tenantId: input.tenantId,
+    taskId: task.id,
+    payload: nextPayload,
+  });
 
   if (day1IsComplete(nextPayload) && mission.status !== "completed") {
     const completedAt = new Date();

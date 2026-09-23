@@ -13,6 +13,7 @@ export const progressionRouter = router({
       readGoldlineProgression({
         tenantId: ctx.tenantId,
         operatorId: ctx.user.openId,
+        capabilityOperatorId: String(ctx.user.id),
       })
     ),
 });

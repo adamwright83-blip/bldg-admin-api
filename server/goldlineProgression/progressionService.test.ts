@@ -1,3 +1,5 @@
+import type { SQL } from "drizzle-orm";
+import { MySqlDialect } from "drizzle-orm/mysql-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -36,20 +38,25 @@ type Row = {
   overworldUnlocksJson: unknown;
 };
 
-function predicateParameters(predicate: unknown): unknown[] {
-  if (!predicate || typeof predicate !== "object") return [];
-  const node = predicate as { constructor?: { name?: string }; queryChunks?: unknown[]; value?: unknown };
-  if (node.constructor?.name === "Param") return [node.value];
-  return (node.queryChunks ?? []).flatMap(predicateParameters);
+const dialect = new MySqlDialect();
+
+/** Applies the WHERE drizzle actually built. It does not re-check nulls itself. */
+function rowMatches(row: Row, predicate: unknown): boolean {
+  const query = dialect.sqlToQuery(predicate as SQL);
+  const [tenantId, operatorId] = query.params;
+  if (row.tenantId !== tenantId || row.operatorId !== operatorId) return false;
+  const sql = query.sql;
+  if (sql.includes("`levelColosseumResolvedAt` is null") && row.levelColosseumResolvedAt != null) return false;
+  if (sql.includes("`levelColosseumResolvedAt` is not null") && row.levelColosseumResolvedAt == null) return false;
+  if (sql.includes("`companionRookOwnedAt` is null") && row.companionRookOwnedAt != null) return false;
+  if (sql.includes("`companionRookOwnedAt` is not null") && row.companionRookOwnedAt == null) return false;
+  return true;
 }
 
 function memoryDb() {
   const rows: Row[] = [];
   const patches: Record<string, unknown>[] = [];
-  const match = (predicate: unknown) => {
-    const [tenantId, operatorId] = predicateParameters(predicate);
-    return rows.filter(row => row.tenantId === tenantId && row.operatorId === operatorId);
-  };
+  const match = (predicate: unknown) => rows.filter(row => rowMatches(row, predicate));
   const db = {
     patches,
     rows,
@@ -75,18 +82,7 @@ function memoryDb() {
       set: (patch: Partial<Row>) => ({
         where: async (predicate: unknown) => {
           patches.push(patch);
-          for (const row of match(predicate)) {
-            if ("levelColosseumResolvedAt" in patch && row.levelColosseumResolvedAt == null) {
-              row.levelColosseumResolvedAt = patch.levelColosseumResolvedAt ?? null;
-            }
-            if (
-              "companionRookOwnedAt" in patch &&
-              row.levelColosseumResolvedAt != null &&
-              row.companionRookOwnedAt == null
-            ) {
-              row.companionRookOwnedAt = patch.companionRookOwnedAt ?? null;
-            }
-          }
+          for (const row of match(predicate)) Object.assign(row, patch);
         },
       }),
     }),
@@ -106,7 +102,11 @@ describe("goldline domain progression persistence", () => {
   });
 
   it("reads a missing row as unearned and does not insert one", async () => {
-    const read = await readGoldlineProgression({ tenantId: "tenant-a", operatorId: "op-a" });
+    const read = await readGoldlineProgression({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      capabilityOperatorId: "cap-a",
+    });
     expect(read.levelColosseumResolved).toEqual({ status: "unearned", value: false });
     expect(read.companionRookOwned).toEqual({ status: "unearned", value: false });
     expect(read.kingdomBrassRepublicCompleted.value).toBe(false);
@@ -136,7 +136,11 @@ describe("goldline domain progression persistence", () => {
     expect(db.rows[0]?.companionRookOwnedAt).toBeNull();
     expect(db.rows[0]?.kingdomBrassRepublicCompletedAt).toBeNull();
     expect(db.patches.every(patch => !("kingdomBrassRepublicCompletedAt" in patch))).toBe(true);
-    const other = await readGoldlineProgression({ tenantId: "tenant-b", operatorId: "op-b" });
+    const other = await readGoldlineProgression({
+      tenantId: "tenant-b",
+      operatorId: "op-b",
+      capabilityOperatorId: "cap-b",
+    });
     expect(other.levelColosseumResolved.value).toBe(false);
   });
 
@@ -174,7 +178,11 @@ describe("goldline domain progression persistence", () => {
     mocks.readMission.mockResolvedValue({ outcomes: five() });
     await recordLevelColosseumResolved({ tenantId: "tenant-a", operatorId: "op-a" });
     await recordCompanionRookOwned({ tenantId: "tenant-a", operatorId: "op-a" });
-    const other = await readGoldlineProgression({ tenantId: "tenant-a", operatorId: "op-b" });
+    const other = await readGoldlineProgression({
+      tenantId: "tenant-a",
+      operatorId: "op-b",
+      capabilityOperatorId: "cap-b",
+    });
     expect(other.companionRookOwned.value).toBe(false);
     expect(other.levelColosseumResolved.value).toBe(false);
     expect(other.overworldUnlocks.flags.postRook).toBe(false);
@@ -182,10 +190,27 @@ describe("goldline domain progression persistence", () => {
 
   it("does not promote a capability unlock or a client forge into ownership", async () => {
     mocks.readMission.mockResolvedValue({ outcomes: five() });
-    mocks.isCompanionEarned.mockResolvedValue(true);
-    const read = await readGoldlineProgression({ tenantId: "tenant-a", operatorId: "op-a" });
+    mocks.isCompanionEarned.mockImplementation(
+      async ({ operatorId }: { operatorId: string }) => operatorId === "user-7"
+    );
+    const read = await readGoldlineProgression({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      capabilityOperatorId: "user-7",
+    });
+    expect(mocks.isCompanionEarned).toHaveBeenCalledWith({
+      tenantId: "tenant-a",
+      operatorId: "user-7",
+      companionId: "rook",
+    });
     expect(read.capabilityRookContact.granted).toBe(true);
     expect(read.companionRookOwned.value).toBe(false);
+    const lookedUpAsOpenId = await readGoldlineProgression({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      capabilityOperatorId: "op-a",
+    });
+    expect(lookedUpAsOpenId.capabilityRookContact.granted).toBe(false);
     await expect(
       recordLevelColosseumResolved({ tenantId: "tenant-a", operatorId: "op-a", clientPayload: { resolved: true } })
     ).rejects.toThrow(/resolved/);
@@ -212,7 +237,11 @@ describe("goldline domain progression persistence", () => {
     mocks.readMission.mockResolvedValue({ outcomes: five() });
     await recordLevelColosseumResolved({ tenantId: "tenant-a", operatorId: "op-a" });
     await recordCompanionRookOwned({ tenantId: "tenant-a", operatorId: "op-a" });
-    const fresh = await readGoldlineProgression({ tenantId: "tenant-a", operatorId: "op-a" });
+    const fresh = await readGoldlineProgression({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      capabilityOperatorId: "cap-a",
+    });
     expect(fresh.companionRookOwned.value).toBe(true);
     expect(fresh.levelColosseumResolved.value).toBe(true);
     expect(fresh.localStorage).toBe("cache_and_present_only");

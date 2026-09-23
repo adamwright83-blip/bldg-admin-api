@@ -66,6 +66,21 @@ describe("goldlineProgression router", () => {
     expect(read.companionRookOwned.value).toBe(false);
     expect(read.kingdomBrassRepublicCompleted.value).toBe(false);
     expect(mocks.readMission).toHaveBeenCalledWith({ tenantId: "tenant-a", driverId: "open-7" });
+    expect(mocks.isCompanionEarned).toHaveBeenCalledWith({
+      tenantId: "tenant-a",
+      operatorId: "7",
+      companionId: "rook",
+    });
+  });
+
+  it("does not treat a capability stored under the Day 1 openId as granted", async () => {
+    mocks.isCompanionEarned.mockImplementation(
+      async ({ operatorId }: { operatorId: string }) => operatorId === "open-7"
+    );
+    const caller = progressionRouter.createCaller(context("tenant-a", 7));
+    const read = await caller.get({});
+    expect(read.operatorId).toBe("open-7");
+    expect(read.capabilityRookContact.granted).toBe(false);
   });
 
   it("rejects a client payload that tries to forge resolution, Rook, or kingdom completion", async () => {

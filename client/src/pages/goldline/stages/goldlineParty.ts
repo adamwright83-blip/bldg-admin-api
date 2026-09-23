@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { hasColosseumResolved } from "./waywardProgress";
 
 /**
  * Who travels with Trailblazer, on this device — the one place later
@@ -8,9 +7,8 @@ import { hasColosseumResolved } from "./waywardProgress";
  * FICTION, kept as same-device local continuity: `window.localStorage`, keyed
  * by player identity, recorded at the same boundary as the Wayward unlock
  * (GoldlineDriverController, when the finale resolves after the real campaign
- * is complete). Like the Wayward unlock and the Colosseum resolution it derives
- * from, it is NOT durable, account-level or server state: another device, a
- * cleared browser or a private window will not have it. Party membership never
+ * is complete). It is NOT durable, account-level or server state: another device,
+ * a cleared browser or a private window will not have it. Party membership never
  * records a visit, sale or revenue, and nothing here can write one.
  *
  * It is not the server's evidence-backed companion unlock
@@ -18,11 +16,9 @@ import { hasColosseumResolved } from "./waywardProgress";
  * companion's real product capability only against a completed ops task.
  * Joining the party is the story; that record is the receipt.
  *
- * Rook joins when Kingdom 1 (the Colosseum) resolves: he was never waiting to
- * be rescued — he has been running an illegal communications network through
- * the Republic's clocks the whole time (WORLD_BIBLE §12). A player whose device
- * already holds a Colosseum resolution from before this existed has him too:
- * his membership is derived from that same local resolution.
+ * Rook appears here only after an explicit joinParty call. That call is a
+ * presentation cache. A local Colosseum-resolution flag does not add him, and
+ * this cache is not companion.rook. Server ownership is the progression row.
  */
 
 export type PartyMemberId = "rook";
@@ -101,12 +97,7 @@ function readStored(identity: string | null): PartyMember[] {
 }
 
 export function loadParty(identity: string | null): GoldlineParty {
-  const members = readStored(identity);
-  // Derived: whoever resolved the Colosseum has Rook, recorded or not.
-  if (!members.some(member => member.id === "rook") && hasColosseumResolved(identity)) {
-    members.push({ id: "rook", joinedVia: "kingdom-1-colosseum", joinedAt: null });
-  }
-  return { members };
+  return { members: readStored(identity) };
 }
 
 export function isTravelingWith(identity: string | null, id: PartyMemberId): boolean {
@@ -121,7 +112,7 @@ export function joinParty(identity: string | null, id: PartyMemberId, now: Date 
     try {
       storage()?.setItem(partyKey(identity), JSON.stringify({ members: stored }));
     } catch {
-      // Best-effort fantasy continuity; membership is still derivable from the resolution.
+      // Best-effort presentation cache. A failed write does not grant server ownership.
     }
     if (typeof window !== "undefined") {
       try {

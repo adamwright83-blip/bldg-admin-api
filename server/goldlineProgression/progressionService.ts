@@ -29,17 +29,21 @@ async function loadOutcomes(input: { tenantId: string; operatorId: string }): Pr
   }
 }
 
-async function loadCapability(input: { tenantId: string; operatorId: string }): Promise<{
+async function loadCapability(input: {
+  tenantId: string;
+  capabilityOperatorId: string | null;
+}): Promise<{
   granted: boolean;
   readable: boolean;
 }> {
+  if (!input.capabilityOperatorId) return { granted: false, readable: false };
   try {
     const db = await getDb();
     if (!db) return { granted: false, readable: false };
     return {
       granted: await isCompanionEarned({
         tenantId: input.tenantId,
-        operatorId: input.operatorId,
+        operatorId: input.capabilityOperatorId,
         companionId: "rook",
       }),
       readable: true,
@@ -51,13 +55,24 @@ async function loadCapability(input: { tenantId: string; operatorId: string }): 
 
 export async function readGoldlineProgression(input: {
   tenantId: string;
+  /** Day 1 openId. Progression rows and mission outcomes use this key. */
   operatorId: string;
+  /**
+   * `String(user.id)`. Companion unlocks are stored under this key.
+   * Null skips the lookup instead of querying the Day 1 openId.
+   */
+  capabilityOperatorId: string | null;
 }): Promise<GoldlineProgressionRead> {
   rejectClientProgressionForge(input);
   const [outcomes, capability, stored] = await Promise.all([
-    loadOutcomes(input),
-    loadCapability(input),
-    findDomainProgression(input).catch(() => ({ readable: false as const })),
+    loadOutcomes({ tenantId: input.tenantId, operatorId: input.operatorId }),
+    loadCapability({
+      tenantId: input.tenantId,
+      capabilityOperatorId: input.capabilityOperatorId,
+    }),
+    findDomainProgression({ tenantId: input.tenantId, operatorId: input.operatorId }).catch(() => ({
+      readable: false as const,
+    })),
   ]);
   return projectGoldlineProgression({
     tenantId: input.tenantId,
@@ -78,11 +93,16 @@ export async function readGoldlineProgression(input: {
 export async function recordLevelColosseumResolved(input: {
   tenantId: string;
   operatorId: string;
+  capabilityOperatorId?: string | null;
   clientPayload?: unknown;
 }): Promise<GoldlineProgressionRead> {
   const outcomes = await loadOutcomes(input);
   await recordLevelFromOutcomes({ ...input, ...outcomes });
-  return readGoldlineProgression(input);
+  return readGoldlineProgression({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    capabilityOperatorId: input.capabilityOperatorId ?? null,
+  });
 }
 
 /**
@@ -93,11 +113,16 @@ export async function recordLevelColosseumResolved(input: {
 export async function recordCompanionRookOwned(input: {
   tenantId: string;
   operatorId: string;
+  capabilityOperatorId?: string | null;
   clientPayload?: unknown;
 }): Promise<GoldlineProgressionRead> {
   const outcomes = await loadOutcomes(input);
   await recordRookFromOutcomes({ ...input, ...outcomes });
-  return readGoldlineProgression(input);
+  return readGoldlineProgression({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    capabilityOperatorId: input.capabilityOperatorId ?? null,
+  });
 }
 
 /** Kingdom completion stays refused. The Colosseum binding is not that write. */
