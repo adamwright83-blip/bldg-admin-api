@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { projectCurrentDayLine } from "../../../shared/currentDayLine";
+import { OBJECTIVE_EXECUTION_AGREEMENT_CASES } from "../../../shared/objectiveExecutionFixture";
 import { loadDayWork, speakDayWork } from "./operationsKnowledge";
 
 const line = projectCurrentDayLine({
@@ -109,5 +110,41 @@ describe("Claire current day line attachment", () => {
     );
     expect(work.currentDayLine).toBeNull();
     expect(speakDayWork(work, { kind: "day", day: "tomorrow" }, "text")).not.toContain("Visit Greystar");
+  });
+
+  it("reads the shared execution fixture on today's line without turning unknown into Mission", async () => {
+    const fixtureLine = projectCurrentDayLine({
+      businessDate: "2026-09-23",
+      rankingStatus: "ranked",
+      rankedWorks: OBJECTIVE_EXECUTION_AGREEMENT_CASES.map(row => ({
+        id: row.id,
+        title: row.identifier,
+        objective: row.contract,
+        completionCondition: row.contract,
+      })),
+    });
+    const work = await loadDayWork(
+      { ...input, businessDate: "2026-09-23" },
+      {
+        getState: async () =>
+          ({
+            processingLocation: null,
+            commitments: [],
+            dismissedPromptKeys: [],
+            intelligenceAvailable: false,
+          }) as never,
+        getField: async () => ({ timeline: [] }) as never,
+        readDayLine: async () => fixtureLine,
+      }
+    );
+    expect(work.currentDayLine?.items.map(item => item.executionType)).toEqual(
+      OBJECTIVE_EXECUTION_AGREEMENT_CASES.map(row => row.expected)
+    );
+    expect(work.currentDayLine?.items.map(item => item.id)).toEqual(
+      OBJECTIVE_EXECUTION_AGREEMENT_CASES.map(row => row.id)
+    );
+    expect(work.currentDayLine?.items.some(item => item.id === "website-visit" && item.executionType === "mission")).toBe(
+      false
+    );
   });
 });

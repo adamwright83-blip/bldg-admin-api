@@ -8,11 +8,16 @@ import {
   dayLineForSelectedDate,
   driverCurrentDayLineOrder,
   executionContractFromWork,
+  executionTypeLabel,
   presentCurrentDayLine,
   projectCurrentDayLine,
   stampExecutionType,
   type RankedDayWork,
 } from "./currentDayLine";
+import {
+  OBJECTIVE_EXECUTION_AGREEMENT_CASES,
+  classifyAgreementCase,
+} from "./objectiveExecutionFixture";
 
 function work(partial: RankedDayWork): RankedDayWork {
   return partial;
@@ -277,5 +282,68 @@ describe("current day line ranking projection", () => {
     );
     expect(service).not.toMatch(/rankCampaigns|selectMissionPlan|sortFieldTimeline|sortDayforgeTodayItems|\.sort\(/);
     expect(service).toMatch(/planForDate/);
+  });
+});
+
+describe("shared execution fixture on today's Day Line", () => {
+  const rankedWorks: RankedDayWork[] = OBJECTIVE_EXECUTION_AGREEMENT_CASES.map(row => ({
+    id: row.id,
+    title: row.identifier,
+    objective: row.contract,
+    completionCondition: row.contract,
+  }));
+
+  it("stamps Admin, Driver, and Claire with the same type and does not reorder", () => {
+    const line = projectCurrentDayLine({
+      businessDate: "2026-09-23",
+      rankingStatus: "ranked",
+      rankedWorks,
+    });
+    const expectedIds = OBJECTIVE_EXECUTION_AGREEMENT_CASES.map(row => row.id);
+    const expectedTypes = OBJECTIVE_EXECUTION_AGREEMENT_CASES.map(row => row.expected);
+    expect(line.items.map(item => item.id)).toEqual(expectedIds);
+    expect(line.items.map(item => item.executionType)).toEqual(expectedTypes);
+    for (const row of OBJECTIVE_EXECUTION_AGREEMENT_CASES) {
+      expect(classifyAgreementCase(row).executionType).toBe(row.expected);
+    }
+
+    const admin = presentCurrentDayLine(line);
+    const driver = presentCurrentDayLine(line);
+    expect(driver).toEqual(admin);
+    expect(admin.items.map(item => item.executionType)).toEqual(expectedTypes);
+    expect(admin.items.map(item => executionTypeLabel(item.executionType))).toEqual(
+      expectedTypes.map(type => executionTypeLabel(type))
+    );
+    expect(adminCurrentDayLineOrder(line)).toEqual(expectedIds);
+    expect(driverCurrentDayLineOrder(line)).toEqual(expectedIds);
+    expect(claireCurrentDayLineOrder(line)).toEqual(expectedIds);
+  });
+
+  it("preserves a stored type and keeps a stored unknown from becoming Mission", () => {
+    const line = projectCurrentDayLine({
+      businessDate: "2026-09-23",
+      rankingStatus: "ranked",
+      rankedWorks: [
+        {
+          id: "stored-challenge",
+          title: "commercial_mission:greystar",
+          completionCondition: "On-site property pitch",
+          executionType: "challenge",
+        },
+        {
+          id: "stored-unknown",
+          title: "commercial_mission:onsite",
+          completionCondition: "On-site property pitch",
+          executionType: null,
+        },
+        {
+          id: "derived-mission",
+          title: "commercial_mission:derived",
+          completionCondition: "On-site property pitch",
+        },
+      ],
+    });
+    expect(line.items.map(item => item.executionType)).toEqual(["challenge", null, "mission"]);
+    expect(line.items.map(item => item.id)).toEqual(["stored-challenge", "stored-unknown", "derived-mission"]);
   });
 });

@@ -2,12 +2,16 @@
  * plan.day_line for today.
  *
  * system.mission_director is the only ranker. This module projects that
- * order. It does not score, sort, or plan. Execution type comes from the
- * work's completion contract, not from an identifier that contains "mission".
+ * order. It does not score, sort, or plan. Execution type comes from
+ * shared/objectiveExecution.ts. Type is not a rank.
  *
  * "make this today's mission" stays compatibility language. The phrase does
  * not set the execution type.
  */
+
+import { classifyObjectiveExecution, type ObjectiveExecutionType } from "./objectiveExecution";
+
+export type { ObjectiveExecutionType };
 
 export const CURRENT_DAY_LINE_ORDERING_AUTHORITY = "system.mission_director" as const;
 
@@ -15,8 +19,6 @@ export const CURRENT_DAY_LINE_EXECUTION_RULE = "execution_contract" as const;
 
 export const CURRENT_DAY_LINE_COMPATIBILITY =
   "todays_mission_phrase_does_not_set_execution_type" as const;
-
-export type ObjectiveExecutionType = "mission" | "challenge" | "hybrid_objective";
 
 export type ExecutionContract = {
   fieldRequired: boolean;
@@ -52,95 +54,33 @@ export type RankedDayWork = {
   title: string;
   objective?: string | null;
   completionCondition?: string | null;
+  /**
+   * Stored type. Null is unknown and is not re-derived.
+   * Omit the property when the shared classifier may derive a type.
+   */
+  executionType?: ObjectiveExecutionType | null;
 };
-
-const FIELD_PATTERNS = [
-  /\bvisits?\b/i,
-  /\bvisiting\b/i,
-  /\bpick[\s-]?ups?\b/i,
-  /\bpick up\b/i,
-  /\bdeliver(?:s|ed|ing|y|ies)?\b/i,
-  /\bdrop[\s-]?offs?\b/i,
-  /\bdrop off\b/i,
-  /\bdoor[\s-]?hangers?\b/i,
-  /\bin[\s-]person\b/i,
-  /\bphysical pitch\b/i,
-];
-
-const REMOTE_PATTERNS = [
-  /\bcalls?\b/i,
-  /\bcalling\b/i,
-  /\bphones?\b/i,
-  /\bphoning\b/i,
-  /\bsms\b/i,
-  /\btexts?\b/i,
-  /\btexting\b/i,
-  /\be-?mails?\b/i,
-  /\bemailing\b/i,
-  /\bbrowser\b/i,
-  /\bin admin\b/i,
-  /\badmin console\b/i,
-  /\bmessages?\b/i,
-  /\bmessaging\b/i,
-  /\bpublish(?:ed|ing)?\b/i,
-];
-
-const TRANSPORT_DELIVERY = /\bdeliver(?:s|ed|ing|y|ies)?\b/i;
-
-function scrubTransportDelivery(text: string): string {
-  return text.replace(
-    /\b((?:e-?mail|message|text|sms|post)(?:\s+\w+){0,3}\s+)deliver(?:s|ed|ing|y|ies)?\b/gi,
-    "$1"
-  );
-}
-
-function hasField(text: string): boolean {
-  const scrubbed = scrubTransportDelivery(text);
-  if (!FIELD_PATTERNS.some(pattern => pattern.test(scrubbed))) return false;
-  // "Deliver the email" is a remote send. A visit, pickup, or other field
-  // signal still counts when it is present beside that send.
-  if (!TRANSPORT_DELIVERY.test(scrubbed) || !hasRemote(scrubbed)) return true;
-  const withoutDelivery = scrubbed.replace(/\bdeliver(?:s|ed|ing|y|ies)?\b/gi, " ");
-  return FIELD_PATTERNS.some(pattern => pattern.test(withoutDelivery));
-}
-
-function hasRemote(text: string): boolean {
-  return REMOTE_PATTERNS.some(pattern => pattern.test(text));
-}
-
-function eitherMode(text: string): boolean {
-  const parts = text.split(/\bor\b/i);
-  if (parts.length < 2) return false;
-  for (let index = 0; index < parts.length - 1; index += 1) {
-    const left = parts[index] ?? "";
-    const right = parts[index + 1] ?? "";
-    const leftField = hasField(left) && !hasRemote(left);
-    const leftRemote = hasRemote(left) && !hasField(left);
-    const rightField = hasField(right) && !hasRemote(right);
-    const rightRemote = hasRemote(right) && !hasField(right);
-    if ((leftField && rightRemote) || (leftRemote && rightField)) return true;
-  }
-  return false;
-}
 
 export function executionContractFromWork(input: {
   title?: string | null;
   objective?: string | null;
   completionCondition?: string | null;
+  identifier?: string | null;
 }): ExecutionContract {
-  const completion = input.completionCondition?.trim() ?? "";
-  const text =
-    hasField(completion) || hasRemote(completion)
-      ? completion
-      : [input.title, input.objective].filter(part => part && part.trim()).join("\n");
-  if (eitherMode(text)) {
-    return { fieldRequired: false, remoteRequired: false, eitherAcceptable: true };
-  }
-  const fieldRequired = hasField(text);
-  const remoteRequired = hasRemote(text);
-  return { fieldRequired, remoteRequired, eitherAcceptable: false };
+  const decision = classifyObjectiveExecution({
+    contract: input.completionCondition,
+    title: input.title,
+    objective: input.objective,
+    identifier: input.identifier,
+  });
+  return {
+    fieldRequired: decision.fieldRequired,
+    remoteRequired: decision.remoteRequired,
+    eitherAcceptable: decision.eitherAcceptable,
+  };
 }
 
+/** Maps a contract already produced by the shared classifier. It does not read language. */
 export function stampExecutionType(contract: ExecutionContract): ObjectiveExecutionType | null {
   if (contract.eitherAcceptable) return null;
   if (contract.fieldRequired && contract.remoteRequired) return "hybrid_objective";
@@ -161,17 +101,24 @@ function stampItem(
   position: number,
   compatibilityPhrase: "todays_mission" | null
 ): CurrentDayLineItem {
-  const executionContract = executionContractFromWork({
-    title: work.title,
-    objective: work.objective,
-    completionCondition: work.completionCondition,
-  });
+  const decision = Object.prototype.hasOwnProperty.call(work, "executionType")
+    ? classifyObjectiveExecution({ persistedType: work.executionType ?? null })
+    : classifyObjectiveExecution({
+        contract: work.completionCondition,
+        title: work.title,
+        objective: work.objective,
+        identifier: work.id,
+      });
   return {
     id: work.id,
     title: work.title,
     position,
-    executionType: stampExecutionType(executionContract),
-    executionContract,
+    executionType: decision.executionType,
+    executionContract: {
+      fieldRequired: decision.fieldRequired,
+      remoteRequired: decision.remoteRequired,
+      eitherAcceptable: decision.eitherAcceptable,
+    },
     compatibilityPhrase,
   };
 }
