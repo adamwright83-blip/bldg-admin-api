@@ -21,7 +21,7 @@ test.describe("canonical driver entry", () => {
     });
     await expect(page.getByTestId("goldline-shell")).toHaveCount(0);
     await expect(
-      page.getByRole("region", { name: "Goldline global overworld" })
+      page.getByRole("region", { name: "JOYSTICK overworld" })
     ).toHaveCount(0);
 
     // Exercise the canonical diegetic Overland control that the driver actually
@@ -32,7 +32,7 @@ test.describe("canonical driver entry", () => {
     await exploreOverland.click();
 
     await expect(
-      page.getByRole("region", { name: "Goldline global overworld" })
+      page.getByRole("region", { name: "JOYSTICK overworld" })
     ).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("goldline-shell")).toHaveCount(0);
     await expect(page.getByText("CLOCKHEAD", { exact: false })).toHaveCount(0);
@@ -42,7 +42,7 @@ test.describe("canonical driver entry", () => {
       timeout: 30_000,
     });
     await expect(
-      page.getByRole("region", { name: "Goldline global overworld" })
+      page.getByRole("region", { name: "JOYSTICK overworld" })
     ).toHaveCount(0);
   });
 });

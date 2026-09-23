@@ -85,7 +85,7 @@ describe("demo bypass cannot reach a real tenant", () => {
     expect(server).toContain('app.post("/api/goldline/demo/exit"');
     expect(server).toContain("res.clearCookie(DEMO_COOKIE_NAME");
     expect(server).not.toMatch(/clearCookie\(COOKIE_NAME/);
-    expect(client).toContain("EXIT DEMO / RETURN TO MY GOLDLINE");
+    expect(client).toContain("EXIT DEMO / RETURN TO ${PRODUCT_NAME}");
     expect(client).toContain('sessionStorage.removeItem("goldline:demo-context")');
   });
 
@@ -145,7 +145,7 @@ describe("host routing", () => {
     expect(main).toContain('window.location.pathname === "/onboarding"');
     expect(context).toContain("authenticateGoldlineDemoRequest(opts.req)");
     expect(context).toContain("sdk.authenticateRequest(opts.req)");
-    expect(onboarding).toContain('<a href="/">RETURN TO MY GOLDLINE</a>');
+    expect(onboarding).toContain('<a href="/">RETURN TO {PRODUCT_NAME}</a>');
   });
 
   it("leaves driver.bldg.chat on the Daily Line except operator follow-through paths", () => {

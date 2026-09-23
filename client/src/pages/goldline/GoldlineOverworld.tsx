@@ -8,6 +8,7 @@ import {
 import { Check, ChevronRight, Loader2, LockKeyhole, X } from "lucide-react";
 import { Link } from "wouter";
 import type { Order } from "@shared/types";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 import type { GoldlineEventEmitter } from "../../game/analytics/emitGoldlineEvent";
 import cleanOverworldUrl from "@/assets/goldline/generated/goldline-overworld-clean.png";
 import {
@@ -293,7 +294,7 @@ export default function GoldlineOverworld({
     <main className="goldline-overworld-shell">
       <section
         className="goldline-overworld"
-        aria-label="Goldline global overworld"
+        aria-label={`${PRODUCT_NAME} overworld`}
       >
         <div ref={hostRef} className="goldline-overworld-runtime" />
         <div className="goldline-overworld-vignette" aria-hidden="true" />
@@ -302,12 +303,12 @@ export default function GoldlineOverworld({
           <div className="overworld-loading">
             {runtimeError ? (
               <>
-                <span>GOLDLINE COULD NOT LOAD</span>
+                <span>{PRODUCT_NAME} COULD NOT LOAD</span>
                 <button onClick={() => window.location.reload()}>RETRY</button>
               </>
             ) : (
               <>
-                <Loader2 /> ENTERING GOLDLINE…
+                <Loader2 /> ENTERING {PRODUCT_NAME}…
               </>
             )}
           </div>

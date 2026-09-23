@@ -5,6 +5,7 @@ import { startBrowserSpeechTranscript, type BrowserSpeechSession } from "@/lib/b
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { ONBOARDING_QUESTIONS, type GoldlineOnboardingSession } from "@shared/goldlineOnboarding";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 import "./onboarding.css";
 const art = "/assets/goldline/procedural-world-v1/";
 
@@ -25,7 +26,7 @@ export function OnboardingInterview({ session, busy, error, onAnswer, onInterpre
   <div className="gl-onboarding-preview" aria-hidden="true">
    {Array.from({length: Math.max(1, Math.min(5, question + 1))}, (_,i) => <img key={i} src={art+"02-territory-island-generic.png"} alt="" style={{left:`${12+(i%3)*29}%`,top:`${5+Math.floor(i/3)*26}%`, animationDelay:`${i*100}ms`}} />)}
   </div>
-  <header><span>GOLDLINE</span><span>YOUR FIRST CHAPTER</span></header>
+  <header><span>{PRODUCT_NAME}</span><span>YOUR FIRST CHAPTER</span></header>
   <section className="gl-interview-scene" key={question}>
    <p className="gl-eyebrow">{question < 5 ? `SCENE ${question+1} OF 5` : "THE WORLD IS TAKING SHAPE"}</p>
    <h1>{question < 5 ? ONBOARDING_QUESTIONS[question] : "Reality provides the objectives. You bring the adventure."}</h1>
@@ -57,7 +58,7 @@ export default function GoldlineOnboarding({ entry = "world" }: { entry?: "world
  // A tenant that already owns a world never sees the interview, and /onboarding
  // is not a way to build a second one.
  if (state.data?.compatibility === "LEGACY_EXISTING_WORLD") return <main className="gl-onboarding"><div className="gl-entry"><h1>Your world is waiting.</h1><a href="/growth/lantern-city">RETURN TO LANTERN CITY</a><DemoAccess onEntered={reload}/></div></main>;
- if (!session) return <main className="gl-onboarding"><div className="gl-onboarding-sky"/>{demo?.active&&<DemoExit/>}<div className="gl-entry"><p>GOLDLINE</p><h1>Your work.<br/>An extraordinary world.</h1><p>Five questions. One useful mission. Your first chapter starts here.</p><button disabled={start.isPending} onClick={()=>start.mutate()}>BEGIN YOUR STORY</button>{start.error && <p role="alert">{start.error.message}</p>}<DemoAccess onEntered={reload}/></div></main>;
+ if (!session) return <main className="gl-onboarding"><div className="gl-onboarding-sky"/>{demo?.active&&<DemoExit/>}<div className="gl-entry"><p>{PRODUCT_NAME}</p><h1>Your work.<br/>An extraordinary world.</h1><p>Five questions. One useful mission. Your first chapter starts here.</p><button disabled={start.isPending} onClick={()=>start.mutate()}>BEGIN YOUR STORY</button>{start.error && <p role="alert">{start.error.message}</p>}<DemoAccess onEntered={reload}/></div></main>;
  // Onboarding is finished exactly once. On the dedicated /onboarding entry the
  // completed session hands off to the normal returning-customer experience at
  // the admin root rather than rendering a second reveal, so revisiting the URL
@@ -71,7 +72,7 @@ export default function GoldlineOnboarding({ entry = "world" }: { entry?: "world
    if(demo===null)return <main className="gl-onboarding"><div className="gl-onboarding-sky"/><p className="gl-entry">Opening your world…</p></main>;
    if(!demo.enabled){window.location.replace("/");return <main className="gl-onboarding"><p className="gl-entry">Your world is ready. Opening Lantern City…</p></main>;}
    if(demo.active)return <main className="gl-onboarding"><DemoExit/><DesignPartnerWorld session={session}/><DemoAccess onEntered={reload} showLogin={false}/></main>;
-   return <main className="gl-onboarding"><div className="gl-onboarding-sky"/><div className="gl-entry"><p>GOLDLINE</p><h1>Your world is ready.</h1><p>Onboarding is complete. This page cannot build a second world.</p><a href="/">RETURN TO MY GOLDLINE</a><DemoAccess onEntered={reload}/></div></main>;
+   return <main className="gl-onboarding"><div className="gl-onboarding-sky"/><div className="gl-entry"><p>{PRODUCT_NAME}</p><h1>Your world is ready.</h1><p>Onboarding is complete. This page cannot build a second world.</p><a href="/">RETURN TO {PRODUCT_NAME}</a><DemoAccess onEntered={reload}/></div></main>;
   }
   return <DesignPartnerWorld session={session}/>;
  }

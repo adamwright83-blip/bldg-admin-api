@@ -3221,7 +3221,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         {drivingLikely ? (
           <div className="driving-safety-shield" role="status" data-testid="driving-safety-shield">
             <b>TRAVEL IN PROGRESS</b>
-            <span>GOLDLINE IS WATCHING THE ROUTE · CONTROLS RETURN WHEN PARKED</span>
+            <span>THE ROUTE STAYS IN VIEW · CONTROLS RETURN WHEN PARKED</span>
           </div>
         ) : null}
         {missionAffordance?.primary ? (

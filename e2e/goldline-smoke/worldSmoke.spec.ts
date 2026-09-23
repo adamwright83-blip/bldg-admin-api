@@ -73,7 +73,7 @@ test.describe("Goldline smoke — the world opens, thinks and plays", () => {
       );
     });
     await enterDriverOverland(page);
-    const world = page.getByRole("region", { name: "Goldline global overworld" });
+    const world = page.getByRole("region", { name: "JOYSTICK overworld" });
     await expect(world).toBeVisible();
 
     await page.locator(".driver-return-home").click();

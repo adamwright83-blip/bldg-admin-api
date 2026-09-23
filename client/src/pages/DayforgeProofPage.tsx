@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { LoginForm } from "@/components/LoginForm";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 
 function ymd(date: Date) { return date.toISOString().slice(0, 10); }
 function money(cents: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(cents / 100); }
@@ -15,7 +16,7 @@ export default function DayforgeProofPage() {
   if (!isAuthenticated) return <LoginForm role="admin" onSuccess={() => location.reload()} />;
   const data = dashboard.data;
   return <main className="min-h-screen bg-[#07111f] p-4 text-white md:p-8"><div className="mx-auto max-w-6xl">
-    <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-black tracking-[.2em] text-orange-400">AUGUST PROOF · LIVE TENANT TRUTH</p><h1 className="text-3xl font-black">DayForge revenue proof</h1><p className="text-slate-400">Paid revenue and verified activity only. Estimates are separated.</p></div><div className="flex gap-2"><input type="date" value={start} onChange={e => setStart(e.target.value)} className="rounded-lg bg-slate-900 p-2" /><input type="date" value={end} onChange={e => setEnd(e.target.value)} className="rounded-lg bg-slate-900 p-2" /><Link href="/dayforge-today" className="rounded-lg border border-white/15 p-2">Today</Link></div></header>
+    <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-black tracking-[.2em] text-orange-400">AUGUST PROOF · LIVE TENANT TRUTH</p><h1 className="text-3xl font-black">{PRODUCT_NAME} revenue proof</h1><p className="text-slate-400">Paid revenue and verified activity only. Estimates are separated.</p></div><div className="flex gap-2"><input type="date" value={start} onChange={e => setStart(e.target.value)} className="rounded-lg bg-slate-900 p-2" /><input type="date" value={end} onChange={e => setEnd(e.target.value)} className="rounded-lg bg-slate-900 p-2" /><Link href="/dayforge-today" className="rounded-lg border border-white/15 p-2">Today</Link></div></header>
     {dashboard.error ? <p className="mt-6 rounded-xl bg-red-500/15 p-4 text-red-200">{dashboard.error.message}</p> : null}
     {data ? <>
       <section className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[

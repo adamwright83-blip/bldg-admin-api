@@ -4,6 +4,7 @@ import { Loader2, Plus } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
 import { trpc } from "@/lib/trpc";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 import FieldHome from "./FieldHome";
 import HqHome from "./HqHome";
 import UnloadView from "./UnloadView";
@@ -29,11 +30,11 @@ export default function ProductShell() {
 
   if (loading || (isAuthenticated && me.isLoading)) return <main className="cc-product grid place-items-center"><Loader2 className="animate-spin" /></main>;
   if (!isAuthenticated) return <LoginForm role="admin" onSuccess={() => window.location.reload()} />;
-  const brandName = me.data?.configuration?.tenant.brandName ?? "Laundry Butler";
+  const operatingName = me.data?.configuration?.tenant.brandName;
   return (
     <main className="cc-product">
       <header className="cc-topbar">
-        <Link href={canUseHq ? "/product/hq" : "/product/field"} className="cc-brand"><strong>{brandName}</strong><small>Operate the real business</small></Link>
+        <Link href={canUseHq ? "/product/hq" : "/product/field"} className="cc-brand"><strong>{PRODUCT_NAME}</strong><small>{operatingName ?? "Operate the real business"}</small></Link>
         <nav className="cc-camera-switch" aria-label="Business camera">
           <Link href="/product/field" className={isField ? "active" : ""}>Field</Link>
           {canUseHq ? <Link href="/product/hq" className={isHq ? "active" : ""}>HQ</Link> : null}

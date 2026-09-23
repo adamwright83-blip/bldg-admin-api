@@ -2,6 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import "./dayforge-onboarding.css";
 import { validateInternalReturnTo } from "@shared/dayforgeContinuation";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 
 type OnboardingCredentials = { sessionId: string; resumeToken: string };
 const SESSION_KEY = "dayforge_onboarding_credentials";
@@ -216,13 +217,13 @@ export default function DayforgeOnboardingPage() {
     <main className="df-onboarding">
       <section className="df-onboarding__card">
         <div className="df-onboarding__mark" aria-hidden="true">
-          D
+          {PRODUCT_NAME.charAt(0)}
         </div>
-        <p className="df-onboarding__eyebrow">DAYFORGE OPERATOR SETUP</p>
+        <p className="df-onboarding__eyebrow">{PRODUCT_NAME} OPERATOR SETUP</p>
         <h1>Turn your territory into a revenue system.</h1>
         <p className="df-onboarding__intro">
           Configure the real store capacity, routes, service promise, team, and
-          billing truth DayForge will use.
+          billing truth {PRODUCT_NAME} will use.
         </p>
 
         {error ? (
@@ -294,13 +295,13 @@ export default function DayforgeOnboardingPage() {
               />
             </label>
             <button disabled={busy || ownerPassword.length < 12}>
-              Activate my DayForge workspace
+              Activate my {PRODUCT_NAME} workspace
             </button>
           </form>
         ) : status === "complete" ? (
           <div className="df-onboarding__status">
             <strong>Your workspace is active.</strong>
-            <a href="/dayforge-login">Sign in to DayForge</a>
+            <a href="/dayforge-login">Sign in to {PRODUCT_NAME}</a>
           </div>
         ) : (
           <form

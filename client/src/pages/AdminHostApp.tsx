@@ -1,4 +1,5 @@
 import GoldlineOnboarding from "@/components/goldline/onboarding/GoldlineOnboarding";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
@@ -391,7 +392,7 @@ export default function AdminHostApp() {
             heading. Kept out of the map's transform so panning never drags it.
           */}
           <div className="gl-world-title">
-            <img className="gl-world-title-art" src="/assets/goldline/lantern-city/v4/world-title.png" alt="Goldline Lantern City — Luxury towers. Real power." />
+            <img className="gl-world-title-art" src="/assets/goldline/lantern-city/v4/world-title.png" alt={`${PRODUCT_NAME} Lantern City — Luxury towers. Real power.`} />
             <button type="button" onClick={() => setWorldIntelOpen(open => !open)} aria-expanded={worldIntelOpen} aria-label={worldIntelOpen ? "Close intelligence" : "City intelligence"}>
               <img src="/assets/goldline/lantern-city/v4/city-intelligence.png" alt="" />
             </button>

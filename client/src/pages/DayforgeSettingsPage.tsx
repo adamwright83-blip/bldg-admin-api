@@ -1,6 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { useRef, useState, type FormEvent } from "react";
 import "./dayforge-onboarding.css";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 
 export default function DayforgeSettingsPage() {
   const utils = trpc.useUtils();
@@ -61,8 +62,8 @@ export default function DayforgeSettingsPage() {
   return (
     <main className="df-onboarding">
       <section className="df-onboarding__card">
-        <p className="df-onboarding__eyebrow">DAYFORGE TENANT CONTROL</p>
-        <h1>{tenant?.brandName ?? "DayForge settings"}</h1>
+        <p className="df-onboarding__eyebrow">{PRODUCT_NAME} TENANT CONTROL</p>
+        <h1>{tenant?.brandName ?? `${PRODUCT_NAME} settings`}</h1>
         <p className="df-onboarding__intro">
           {me.data.configuration?.locations.length ?? 0} locations ·{" "}
           {me.data.configuration?.services.length ?? 0} services ·{" "}

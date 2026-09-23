@@ -1,5 +1,6 @@
 import { Search, X } from "lucide-react";
 import { LANTERN_CITY_V5_ASSETS } from "@/components/goldline/lanternCityV5Assets";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 
 export function LanternCityHud({
   businessDate,
@@ -23,7 +24,7 @@ export function LanternCityHud({
   return (
     <div className="lc-v5-hud-top" aria-label="Lantern City game HUD">
       <div className="lc-v5-identity">
-        <span className="lc-v5-brand">Goldline</span>
+        <span className="lc-v5-brand">{PRODUCT_NAME}</span>
         <strong>Lantern City</strong>
         <small>{businessDate}</small>
       </div>

@@ -1,6 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { useState, type FormEvent } from "react";
 import "./dayforge-onboarding.css";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 
 export default function DayforgeInvitePage() {
   const token =
@@ -18,7 +19,7 @@ export default function DayforgeInvitePage() {
   return (
     <main className="df-onboarding">
       <section className="df-onboarding__card df-onboarding__card--compact">
-        <p className="df-onboarding__eyebrow">DAYFORGE TEAM INVITE</p>
+        <p className="df-onboarding__eyebrow">{PRODUCT_NAME} TEAM INVITE</p>
         <h1>Join the mission.</h1>
         {accept.error ? (
           <p className="df-onboarding__error" role="alert">

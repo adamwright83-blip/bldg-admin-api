@@ -1,6 +1,7 @@
 import { Bell, Building2, CalendarDays, ChevronDown, CircleDollarSign, FileText, Home, Map, Menu, Radio, Settings, Sparkles, TrendingUp, Truck, Users } from "lucide-react";
 import { Link } from "wouter";
 import { northDomainForPath } from "@/admin/adminPaths";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 
 const ASSET_ROOT = "/assets/admin/control-room";
 
@@ -121,8 +122,8 @@ export function ControlRoomNav({ path, mobileOpen, onNavigate, onOpenMobileNav, 
     <>
       <header className="cr-north-nav">
         <button type="button" className="cr-north-menu" onClick={onOpenMobileNav} aria-label="Open navigation"><Menu /></button>
-        <Link href="/" className="cr-brand" onClick={onNavigate} aria-label="Tower Wars Admin home">
-          <img src={`${ASSET_ROOT}/brand/goldline-admin-crest.svg`} alt="" /><strong>Tower<br />Wars</strong>
+        <Link href="/" className="cr-brand" onClick={onNavigate} aria-label={`${PRODUCT_NAME} Admin home`}>
+          <img src={`${ASSET_ROOT}/brand/goldline-admin-crest.svg`} alt="" /><strong>{PRODUCT_NAME}</strong>
         </Link>
         <nav aria-label="Admin business domains">
           {NORTH_ITEMS.map(item => {
@@ -136,7 +137,7 @@ export function ControlRoomNav({ path, mobileOpen, onNavigate, onOpenMobileNav, 
       </header>
       {mobileOpen ? <button type="button" className="cr-mobile-scrim" aria-label="Close navigation" onClick={onNavigate} /> : null}
       <aside className={`cr-west-nav ${mobileOpen ? "is-open" : ""}`}>
-        <div className="cr-west-brand-mobile"><img src={`${ASSET_ROOT}/brand/goldline-admin-crest.svg`} alt="" /><strong>Tower Wars</strong></div>
+        <div className="cr-west-brand-mobile"><img src={`${ASSET_ROOT}/brand/goldline-admin-crest.svg`} alt="" /><strong>{PRODUCT_NAME}</strong></div>
         <span className="cr-west-label">{west.label}</span>
         <nav aria-label={`${west.label} views`}>
           {visibleWestItems.map(item => { const Icon = item.icon; const active = isWestActive(path, item.path); return <Link key={item.path} href={item.path} className={`${active ? "is-active" : ""} ${item.nested ? "is-nested" : ""}`} aria-current={active ? "page" : undefined} onClick={onNavigate}><Icon aria-hidden /><span>{item.label}</span></Link>; })}

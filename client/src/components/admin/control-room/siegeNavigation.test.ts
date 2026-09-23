@@ -63,7 +63,7 @@ describe("clicking a tower in Lantern City enters Tower Wars", () => {
 
   it("never conflates the two systems in Siege's own chrome", () => {
     expect(siege).not.toContain("TOWER WARS / SIEGE");
-    expect(siege).toContain('<span className="sg-eyebrow">GOLDLINE: SIEGE</span>');
+    expect(siege).toContain('<span className="sg-eyebrow">{PRODUCT_NAME}: SIEGE</span>');
   });
 });
 
