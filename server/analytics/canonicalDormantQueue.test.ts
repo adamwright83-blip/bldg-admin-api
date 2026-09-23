@@ -535,4 +535,231 @@ describe("canonical dormant queue", () => {
     expect(unknown.exhaustive).toBe(false);
     expect(unknown.emptyMeansNoDormantCustomers).toBe(false);
   });
+
+  it("excludes the same customer when a later order falls inside the window", () => {
+    const result = deriveCanonicalDormantQueue({
+      tenantId: "tenant-a",
+      now: DORMANCY_NOW,
+      records: [
+        truth({
+          source: "laundry_butler",
+          sourceOrderId: "native-old",
+          createdAt: LAST_DORMANT,
+          phone: "3105550101",
+          firstName: "Ada",
+        }),
+        truth({
+          source: "laundry_butler",
+          sourceOrderId: "native-recent-unpaid",
+          createdAt: LAST_ACTIVE,
+          phone: "(310) 555-0101",
+          firstName: "Ada",
+          paid: false,
+        }),
+      ],
+      coverage: freshCoverage(),
+    });
+    expect(result.customers).toEqual([]);
+    expect(result.customerCount).toBe(0);
+    expect(result.claim).toBe("current_held_book");
+    expect(result.emptyMeansNoDormantCustomers).toBe(true);
+  });
+
+  it("includes a customer at exactly 30 days and excludes one a millisecond newer", () => {
+    const exactly = new Date(DORMANCY_NOW.getTime() - 30 * 86_400_000);
+    const newer = new Date(exactly.getTime() + 1);
+    const result = deriveCanonicalDormantQueue({
+      tenantId: "tenant-a",
+      now: DORMANCY_NOW,
+      records: [
+        truth({
+          source: "laundry_butler",
+          sourceOrderId: "exact",
+          createdAt: exactly,
+          phone: "3105550201",
+          email: "edge@example.com",
+          unit: "1A",
+          firstName: "Edge",
+        }),
+        truth({
+          source: "laundry_butler",
+          sourceOrderId: "newer",
+          createdAt: newer,
+          phone: "3105550202",
+          email: "inside@example.com",
+          unit: "2B",
+          firstName: "Inside",
+        }),
+      ],
+      coverage: freshCoverage(),
+    });
+    expect(result.customers.map(customer => customer.firstName)).toEqual(["Edge"]);
+    expect(result.customers[0]?.daysSinceLastOrder).toBe(30);
+  });
+
+  it("does not let a cancelled native order reset dormancy", () => {
+    const result = deriveCanonicalDormantQueue({
+      tenantId: "tenant-a",
+      now: DORMANCY_NOW,
+      records: [
+        truth({
+          source: "laundry_butler",
+          sourceOrderId: "paid-old",
+          createdAt: LAST_DORMANT,
+          phone: "3105550301",
+          firstName: "Ada",
+        }),
+        truth({
+          source: "laundry_butler",
+          sourceOrderId: "cancelled-recent",
+          createdAt: LAST_ACTIVE,
+          phone: "3105550301",
+          firstName: "Ada",
+          cancelled: true,
+        }),
+      ],
+      coverage: freshCoverage(),
+    });
+    expect(result.customers.map(customer => customer.firstName)).toEqual(["Ada"]);
+    expect(result.customers[0]?.paidOrderCount).toBe(1);
+  });
+
+  it("treats a partial book as known candidates, including an empty known list", () => {
+    const partial = freshCoverage();
+    partial.book = {
+      ...partial.book,
+      status: "partial",
+      exhaustiveCurrent: false,
+      current: false,
+    };
+    const withRows = deriveCanonicalDormantQueue({
+      tenantId: "tenant-a",
+      now: DORMANCY_NOW,
+      records: [
+        truth({
+          source: "laundry_butler",
+          sourceOrderId: "native-1",
+          createdAt: LAST_DORMANT,
+          firstName: "Ada",
+        }),
+      ],
+      coverage: partial,
+    });
+    expect(withRows.claim).toBe("known_candidates");
+    expect(withRows.exhaustive).toBe(false);
+    expect(withRows.emptyMeansNoDormantCustomers).toBe(false);
+    expect(withRows.customers).toHaveLength(1);
+
+    const empty = deriveCanonicalDormantQueue({
+      tenantId: "tenant-a",
+      now: DORMANCY_NOW,
+      records: [],
+      coverage: staleCoverage(),
+    });
+    expect(empty.claim).toBe("known_candidates");
+    expect(empty.customerCount).toBe(0);
+    expect(empty.emptyMeansNoDormantCustomers).toBe(false);
+    expect(empty.exhaustive).toBe(false);
+  });
+
+  it("rejects a blank tenant, a missing coverage snapshot, and a snapshot that flips a closed flag", async () => {
+    const seen: string[] = [];
+    const blank = await readCanonicalDormantQueue({
+      tenantId: "   ",
+      now: DORMANCY_NOW,
+      loaders: {
+        loadCoverage: async () => {
+          seen.push("coverage");
+          return freshCoverage();
+        },
+        loadTruth: async () => {
+          seen.push("truth");
+          return [];
+        },
+      },
+    });
+    expect(seen).toEqual([]);
+    expect(blank.claim).toBe("unreadable");
+    expect(blank.customerCount).toBeNull();
+    expect(blank.emptyMeansNoDormantCustomers).toBe(false);
+
+    const thrown = await readCanonicalDormantQueue({
+      tenantId: "tenant-a",
+      now: DORMANCY_NOW,
+      loaders: {
+        loadCoverage: async () => null,
+        loadTruth: async () => [
+          truth({
+            source: "laundry_butler",
+            sourceOrderId: "native-1",
+            createdAt: LAST_DORMANT,
+            firstName: "Ada",
+          }),
+        ],
+      },
+    });
+    expect(thrown.claim).toBe("known_candidates");
+    expect(thrown.coverage.snapshotRead).toBe(false);
+    expect(thrown.exhaustive).toBe(false);
+    expect(thrown.customers.map(customer => customer.firstName)).toEqual(["Ada"]);
+
+    const licensed = freshCoverage();
+    (licensed.book as { allCustomersLicensed: boolean }).allCustomersLicensed = true;
+    const rejected = deriveCanonicalDormantQueue({
+      tenantId: "tenant-a",
+      now: DORMANCY_NOW,
+      records: [
+        truth({
+          source: "laundry_butler",
+          sourceOrderId: "native-1",
+          createdAt: LAST_DORMANT,
+          firstName: "Ada",
+        }),
+      ],
+      coverage: licensed,
+    });
+    expect(rejected.coverage.snapshotRead).toBe(false);
+    expect(rejected.claim).toBe("known_candidates");
+    expect(rejected.allCustomersLicensed).toBe(false);
+    expect(rejected.customers).toHaveLength(1);
+  });
+
+  it("drops a forbidden contact key and throws if one is still present", () => {
+    const queue = deriveCanonicalDormantQueue({
+      tenantId: "tenant-a",
+      now: DORMANCY_NOW,
+      records: [
+        truth({
+          source: "laundry_butler",
+          sourceOrderId: "native-1",
+          createdAt: LAST_DORMANT,
+          phone: PHONE,
+          email: EMAIL,
+          address: STREET,
+          unit: "12B",
+          firstName: "Ada",
+        }),
+      ],
+      coverage: freshCoverage(),
+    });
+    const dirty = {
+      ...queue,
+      customers: queue.customers.map(customer => ({
+        ...customer,
+        phone: PHONE,
+        email: EMAIL,
+      })),
+    };
+    const payload = toPublicDormantObjectivePayload(dirty);
+    const serialized = JSON.stringify(payload);
+    expect(serialized).not.toContain(PHONE);
+    expect(serialized).not.toContain(EMAIL);
+    expect(payload.customers[0]?.id.includes(PHONE)).toBe(false);
+
+    const leaked = {
+      ...queue,
+      coverage: { ...queue.coverage, phone: PHONE },
+    };
+    expect(() => toPublicDormantObjectivePayload(leaked)).toThrow(/forbidden field phone/);
+  });
 });
