@@ -244,8 +244,7 @@ kingdomId · realCampaignId · fictionalFieldMission · lanternCityStatus
 driverDayRelevance · companionEarnedId · enablesKingdomId
 ```
 
-Kingdom 1 is the existing Coliseum / Clockhead campaign, expressed through this
-contract rather than rebuilt, and must round-trip identically.
+Kingdom One is the Brass Republic (`kingdom.brass_republic`). The Colosseum is a Level inside that Kingdom (`level.colosseum`), not the Kingdom. Clockhead (`boss.clockhead`) is that Level's boss. The existing Greystar/Colosseum growth campaign is real work bound to that Level, expressed through this contract rather than rebuilt, and must round-trip identically. Completing that campaign, resolving the Level, or defeating Clockhead does not complete the Kingdom. Kingdom completion is a separate authored state.
 
 ## 2.3 Naming collision
 
@@ -277,6 +276,8 @@ five/ten boundary is covered by a test that fails if either number moves.
 
 # Slice 3 — Assign the companion, then refit The Last Valet as Kingdom 2
 
+Kingdom Two's place-name is Boreslay (`kingdom.boreslay`). The Last Valet names the fictional field mission and the growth campaign bound to that sequence. It is not the Kingdom's name. The Boreslay Duel (`minigame.boreslay_duel`) is that Kingdom's 1v1 game, not the product.
+
 ## 3.1 There are no companions in code
 
 Mara, Sable, Rook, Bront, Ilex, Luma, and Orren exist only in `REALITY_BRIDGE.md`.
@@ -292,16 +293,11 @@ protected may / may-not rules as data, earned state, and the unlock transition �
 only record the assignment and defer the model? Slice 3 cannot claim a companion is
 earned until this is answered.
 
-## 3.2 Rook already ships
+## 3.2 Rook is a Companion
 
-`server/dayforgeCoaching/dayforgeCoachingRuntime.ts` opens with "You are Rook, a
-concise field-sales coach." Rook is on the public Dayforge landing page and asserted
-in `DayforgeLanding.test.ts`.
+`companion.rook` is the first Companion. Rook is not Claire and not a DayForge field coach. `server/dayforgeCoaching/dayforgeCoachingRuntime.ts` and the public Dayforge landing are `legacy.dayforge` surfaces that reuse the name. They are not Rook's identity.
 
-**Blocking decision for Adam if Rook is the chosen fit:** unify the two, or rename
-one. Unifying is the stronger answer — that Rook is already a real agentic capability
-doing real field-sales work, which is what a companion is defined to be — but it
-changes a customer-facing surface, so it is Adam's call.
+CONTACT (`capability.rook.contact`) is the player-facing mechanic. `rook.outreach_drafting` is the implementation capability id, not the Companion. Owning the Companion does not grant the capability unless an explicit authored rule and a permission rule both say the grant follows ownership.
 
 ## 3.3 The paid-order trigger does not block play
 
@@ -337,11 +333,7 @@ earns one specified companion; that companion's protected capability is necessar
 Kingdom 3; the chapter remains completable with zero qualifying business events; and
 the Rook decision is recorded either way.
 
-> **Amended 2026-09-22 (Adam):** Rook joins the party when Kingdom 1 (the Colosseum)
-> resolves and travels into Kingdom 2 as its companion; his in-world mechanic is CONTACT
-> (`rook.outreach_drafting`). Party membership is currently same-device local fantasy
-> continuity, not server state. The evidence-backed server unlock of his real capability
-> is unchanged and still open. See `campaigns/KINGDOM_2_COMPANION_EVALUATION.md` §Amendment.
+> Rook joins the party when `level.colosseum` resolves and can travel onward as `companion.rook`. That resolution is not `kingdom.brass_republic` completion. CONTACT is `capability.rook.contact`; `rook.outreach_drafting` is the implementation capability id, not the Companion. Party membership is same-device local fantasy continuity, not a capability grant and not server state. The evidence-backed server unlock of the capability is still open. See `campaigns/KINGDOM_2_COMPANION_EVALUATION.md`.
 
 ---
 
@@ -458,8 +450,7 @@ None of these are an agent's to make.
 1. **Slice 1 before Slice 4.** Already recorded.
 2. **Companion model scope** (§3.1). Build it in Slice 3, or record the assignment and
    defer? Slice 5's tap-for-help depends on the answer.
-3. **Rook** (§3.2). Unify the Goldline companion with the shipped Dayforge coach, or
-   rename one.
+3. **Rook** (§3.2). Resolved: Rook is `companion.rook`. Do not call him a DayForge coach. The legacy dayforge coaching runtime is not the Companion.
 4. **Greystar snapshot amendment** (§2.1). Confirm the five/ten restatement before it
    is written into the protected document.
 5. **Chapter entry placement** (§5.4). Where `/goldline-chapter` is linked from, and

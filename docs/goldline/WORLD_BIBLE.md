@@ -624,7 +624,9 @@ The route to satisfying it should not be predictable.
 
 ---
 
-# 13. Kingdom One — Brass Republic / Colosseum
+# 13. Kingdom One — Brass Republic
+
+Kingdom One is the Brass Republic. The Colosseum is a level inside that kingdom, not the kingdom. Clockhead is the boss of that level, not the kingdom and not the level. Defeating Clockhead does not complete the kingdom. Kingdom completion is a separate authored state.
 
 The Brass Republic believes **certainty is civilization**.
 
