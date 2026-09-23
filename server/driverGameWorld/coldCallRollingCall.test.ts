@@ -378,14 +378,16 @@ beforeEach(() => {
   mocks.outgoingList.mockReset();
   mocks.outgoingList.mockResolvedValue([{ phoneNumber: OPERATOR }]);
   mocks.recordCommercialMissionCallAttempt.mockReset();
-  mocks.recordCommercialMissionCallAttempt.mockResolvedValue({
-    id: 99,
-    missionId: 11,
-    outcome: "spoke",
-    notes: "Spoke with the buyer.",
-    actorId: input.actorId,
-    createdAt: "2026-09-23T00:00:00.000Z",
-  });
+  mocks.recordCommercialMissionCallAttempt.mockImplementation(
+    async (call: { outcome: string; notes?: string }) => ({
+      id: 99,
+      missionId: 11,
+      outcome: call.outcome,
+      notes: call.notes ?? "Spoke with the buyer.",
+      actorId: input.actorId,
+      createdAt: "2026-09-23T00:00:00.000Z",
+    })
+  );
 });
 
 describe("Cold Call Burst operator-first roll", () => {
@@ -890,12 +892,23 @@ describe("Cold Call Burst operator-first roll", () => {
       recordingEnabled: false,
       customerPhone: PROSPECT,
       callerId: OPERATOR,
+      repLegCallSid: "CA_operator_leg",
+      customerLegCallSid: "CA_prospect_leg",
+    });
+    world.receipts.push({
+      tenantId: input.tenantId,
+      eventType: "CALL_CONNECTED",
+      callSid: "CA_prospect_leg",
+      parentCallSid: "CA_operator_leg",
     });
     const res = mockRes();
     await handleCallStatus(
       signedRequest("/api/saleslay/twilio/call-status?attemptId=7&leg=customer", {
+        CallSid: "CA_prospect_leg",
         CallStatus: "completed",
         CallDuration: "224",
+        From: OPERATOR,
+        To: PROSPECT,
       }),
       res as unknown as Response
     );
@@ -955,6 +968,11 @@ describe("Cold Call Burst operator-first roll", () => {
     );
     expect(world.attempts[0]?.status).toBe("completed_no_connect");
     expect(world.attempts[0]?.recordingEnabled).toBe(false);
+    expect(
+      world.receipts.some(
+        row => row.eventType === "CALL_CONNECTED" && row.callSid === "CA_operator_leg"
+      )
+    ).toBe(true);
     await expect(
       completeColdCallTarget({
         ...input,
@@ -1143,6 +1161,145 @@ describe("Cold Call Burst operator-first roll", () => {
       })
     );
     expect(mocks.recordCommercialMissionCallAttempt).not.toHaveBeenCalled();
+  });
+
+  it("does not treat stored completed_success without a prospect receipt as a conversation", async () => {
+    world.targetRow.status = "live";
+    world.attempts.unshift({
+      id: 7,
+      tenantId: input.tenantId,
+      coldCallTargetId: input.targetId,
+      status: "completed_success",
+      rewardGranted: false,
+      recordingEnabled: false,
+      repLegCallSid: "CA_operator_leg",
+      customerLegCallSid: "CA_prospect_leg",
+      customerPhone: PROSPECT,
+      callerId: OPERATOR,
+    });
+    await expect(
+      completeColdCallTarget({
+        ...input,
+        requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+        outcome: "spoke",
+        notes: "Historical transport success.",
+      })
+    ).rejects.toBeInstanceOf(ProspectLegNotConnectedError);
+    expect(world.targetRow.outcome).toBeNull();
+
+    await handleCallStatus(
+      signedRequest("/api/saleslay/twilio/call-status?attemptId=7&leg=customer", {
+        CallSid: "CA_prospect_leg",
+        CallStatus: "completed",
+        CallDuration: "224",
+        From: OPERATOR,
+        To: PROSPECT,
+      }),
+      mockRes() as unknown as Response
+    );
+    expect(world.attempts[0]?.status).toBe("completed_success");
+    expect(world.attempts[0]?.rewardGranted).toBe(false);
+
+    world.receipts.push({
+      tenantId: "other-tenant",
+      eventType: "CALL_CONNECTED",
+      callSid: "CA_prospect_leg",
+      parentCallSid: "CA_operator_leg",
+    });
+    world.receipts.push({
+      tenantId: input.tenantId,
+      eventType: "CALL_CONNECTED",
+      callSid: "CA_other_child",
+      parentCallSid: "CA_operator_leg",
+    });
+    await expect(
+      completeColdCallTarget({
+        ...input,
+        requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
+        outcome: "visit_booked",
+        notes: "Wrong tenant and a different child.",
+      })
+    ).rejects.toBeInstanceOf(ProspectLegNotConnectedError);
+
+    world.receipts.push({
+      tenantId: input.tenantId,
+      eventType: "CALL_CONNECTED",
+      callSid: "CA_prospect_leg",
+      parentCallSid: "CA_operator_leg",
+    });
+    const booked = await completeColdCallTarget({
+      ...input,
+      requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3",
+      outcome: "visit_booked",
+      notes: "The prospect receipt is the connection.",
+    });
+    expect(booked?.targets[0]?.outcome).toBe("visit_booked");
+    expect(world.attempts[0]?.rewardGranted).toBe(false);
+  });
+
+  it("keeps a stored no_answer when a later spoke request replays the same call", async () => {
+    world.targetRow.status = "live";
+    world.attempts.unshift({
+      id: 7,
+      tenantId: input.tenantId,
+      coldCallTargetId: input.targetId,
+      status: "customer_connected",
+      rewardGranted: false,
+      recordingEnabled: false,
+      repLegCallSid: "CA_operator_leg",
+      customerLegCallSid: "CA_prospect_leg",
+    });
+    mocks.recordCommercialMissionCallAttempt.mockResolvedValueOnce({
+      id: 99,
+      missionId: 11,
+      outcome: "no_answer",
+      notes: "Original log.",
+      actorId: input.actorId,
+      createdAt: "2026-09-23T00:00:00.000Z",
+    });
+    const completed = await completeColdCallTarget({
+      ...input,
+      requestId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+      outcome: "spoke",
+      notes: "Trying to upgrade the stored outcome.",
+    });
+    expect(completed?.targets[0]?.outcome).toBe("no_answer");
+    expect(completed?.targets[0]?.status).toBe("completed");
+  });
+
+  it("accepts spoke after an answered callback that arrives after completed", async () => {
+    await rollColdCallTarget(input);
+    await handleCallStatus(
+      signedRequest("/api/saleslay/twilio/call-status?attemptId=7&leg=customer", {
+        CallSid: "CA_prospect_leg",
+        CallStatus: "completed",
+        CallDuration: "224",
+        From: OPERATOR,
+        To: PROSPECT,
+      }),
+      mockRes() as unknown as Response
+    );
+    expect(world.attempts[0]?.status).toBe("completed_no_connect");
+    await handleCallStatus(
+      signedRequest("/api/saleslay/twilio/call-status?attemptId=7&leg=customer", {
+        CallSid: "CA_prospect_leg",
+        CallStatus: "answered",
+        From: OPERATOR,
+        To: PROSPECT,
+      }),
+      mockRes() as unknown as Response
+    );
+    expect(world.attempts[0]?.status).toBe("completed_no_connect");
+    expect(world.receipts.filter(row => row.eventType === "CALL_CONNECTED")).toHaveLength(1);
+    const booked = await completeColdCallTarget({
+      ...input,
+      requestId: "cccccccc-cccc-4ccc-8ccc-ccccccccccc1",
+      outcome: "visit_booked",
+      notes: "Answered callback arrived after completed.",
+    });
+    expect(booked?.targets[0]?.outcome).toBe("visit_booked");
+    expect(world.attempts[0]?.rewardGranted).toBe(false);
+    expect(world.attempts[0]?.recordingEnabled).toBe(false);
   });
 });
 

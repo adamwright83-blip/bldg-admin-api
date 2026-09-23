@@ -442,7 +442,7 @@ export const commercialMissionRouter = router({
         correlationId: `commercial-mission:${input.missionId}`,
         metadata: {
           missionId: input.missionId,
-          outcome: input.outcome,
+          outcome: result.outcome,
           actionOnly: true,
         },
       });

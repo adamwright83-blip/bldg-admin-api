@@ -98,6 +98,8 @@ export async function recordCommercialMissionCallAttempt(input: {
   requestId: string;
   outcome: CommercialMissionCallOutcome;
   notes: string;
+  /** Present for Cold Call Burst so the gate reads that target, not a newer attempt on the mission. */
+  coldCallTargetId?: string;
 }): Promise<CommercialMissionCallAttempt> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -130,6 +132,7 @@ export async function recordCommercialMissionCallAttempt(input: {
   await assertMissionConversationOutcome({
     tenantId: input.tenantId,
     missionId: input.missionId,
+    coldCallTargetId: input.coldCallTargetId,
     outcome: input.outcome,
   });
 

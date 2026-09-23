@@ -127,7 +127,21 @@ describe("prospect-leg connection", () => {
 
   it("accepts a live prospect connection and a prospect CALL_CONNECTED receipt", () => {
     expect(prospectLegConnected({ ...base, attemptStatus: "customer_connected" })).toBe(true);
-    expect(prospectLegConnected({ ...base, attemptStatus: "completed_success" })).toBe(true);
+    expect(prospectLegConnected({ ...base, attemptStatus: "completed_success" })).toBe(false);
+    expect(
+      prospectLegConnected({
+        ...base,
+        attemptStatus: "completed_success",
+        receipts: [
+          {
+            tenantId: "tenant-1",
+            eventType: "CALL_CONNECTED",
+            callSid: "CA_prospect",
+            parentCallSid: "CA_rep",
+          },
+        ],
+      })
+    ).toBe(true);
     expect(
       prospectLegConnected({
         ...base,
@@ -196,5 +210,44 @@ describe("prospect-leg connection", () => {
         ],
       })
     ).toBe(false);
+    expect(
+      prospectLegConnected({
+        ...base,
+        receipts: [
+          {
+            eventType: "CALL_CONNECTED",
+            callSid: "CA_prospect",
+            parentCallSid: "CA_rep",
+          },
+        ],
+      })
+    ).toBe(false);
+    expect(
+      prospectLegConnected({
+        ...base,
+        receipts: [
+          {
+            tenantId: "tenant-1",
+            eventType: "CALL_CONNECTED",
+            callSid: "CA_other_child",
+            parentCallSid: "CA_rep",
+          },
+        ],
+      })
+    ).toBe(false);
+    expect(
+      prospectLegConnected({
+        ...base,
+        customerLegCallSid: null,
+        receipts: [
+          {
+            tenantId: "tenant-1",
+            eventType: "CALL_CONNECTED",
+            callSid: "CA_prospect",
+            parentCallSid: "CA_rep",
+          },
+        ],
+      })
+    ).toBe(true);
   });
 });

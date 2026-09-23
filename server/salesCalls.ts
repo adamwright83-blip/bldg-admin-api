@@ -17,8 +17,10 @@
  * and never writes the commercial mission call attempt.
  *
  * `spoke` and `visit_booked` are connected conversations. They require the
- * prospect leg to have connected. A placed bridge, a rep answer, ringing,
- * or a customer-leg `completed` callback without that signal does not.
+ * prospect leg to have connected: attempt status `customer_connected`, or a
+ * same-tenant `CALL_CONNECTED` receipt on the prospect leg. A placed bridge,
+ * a rep answer, ringing, `completed_success` alone, or a customer-leg
+ * `completed` callback without that signal does not.
  *
  * Recording is OFF. Do not add recording without a separate product decision.
  */
@@ -372,8 +374,8 @@ async function receiptsForProspectLeg(input: {
 
 /**
  * Prospect leg connected for one cold-call attempt.
- * `completed_success` counts only because this file writes it after the
- * same signal. Duration is not an input.
+ * `completed_success` is not enough: older rows used it for any customer-leg
+ * `completed` callback. Duration is not an input.
  */
 export async function coldCallTargetProspectLegConnected(input: {
   tenantId: string;
@@ -435,12 +437,7 @@ async function prospectAttemptConnected(
   customerLegCallSid?: string | null
 ): Promise<boolean> {
   const customerSid = customerLegCallSid?.trim() || attempt.customerLegCallSid;
-  if (
-    attempt.status === "customer_connected" ||
-    attempt.status === "completed_success"
-  ) {
-    return true;
-  }
+  if (attempt.status === "customer_connected") return true;
   const receipts = await receiptsForProspectLeg({
     tenantId: attempt.tenantId,
     repLegCallSid: attempt.repLegCallSid,
@@ -471,10 +468,17 @@ export async function assertColdCallConversationOutcome(input: {
 export async function assertMissionConversationOutcome(input: {
   tenantId: string;
   missionId: number;
+  /** Cold Call Burst passes the target. The legacy log uses the mission's latest attempt. */
+  coldCallTargetId?: string;
   outcome: string;
 }): Promise<void> {
   if (!isConnectedConversationOutcome(input.outcome)) return;
-  const connected = await missionHasConnectedProspectLeg(input);
+  const connected = input.coldCallTargetId
+    ? await coldCallTargetProspectLegConnected({
+        tenantId: input.tenantId,
+        coldCallTargetId: input.coldCallTargetId,
+      })
+    : await missionHasConnectedProspectLeg(input);
   if (!connected) throw new ProspectLegNotConnectedError();
 }
 
@@ -658,29 +662,31 @@ export async function handleCallStatus(req: Request, res: Response): Promise<voi
       if (TERMINAL.includes(callStatus)) {
         const customerLegCallSid = prospectSid || attempt.customerLegCallSid || null;
         if (goldline) {
-          const connected = await prospectAttemptConnected(
-            {
-              ...attempt,
-              customerLegCallSid,
-            },
-            customerLegCallSid
-          );
-          const transport = goldlineTransportStatusFromCustomerLeg({
-            callStatus,
-            durationSec,
-            prospectLegConnected: connected,
-          });
-          await db
-            .update(salesCallAttempts)
-            .set({
-              customerLegCallSid,
-              customerLegDurationSec: durationSec,
-              status: transport.status,
-              failureReason: transport.failureReason,
-              rewardGranted: false,
-              recordingEnabled: false,
-            })
-            .where(eq(salesCallAttempts.id, attemptId));
+          if (!alreadyTerminal) {
+            const connected = await prospectAttemptConnected(
+              {
+                ...attempt,
+                customerLegCallSid,
+              },
+              customerLegCallSid
+            );
+            const transport = goldlineTransportStatusFromCustomerLeg({
+              callStatus,
+              durationSec,
+              prospectLegConnected: connected,
+            });
+            await db
+              .update(salesCallAttempts)
+              .set({
+                customerLegCallSid,
+                customerLegDurationSec: durationSec,
+                status: transport.status,
+                failureReason: transport.failureReason,
+                rewardGranted: false,
+                recordingEnabled: false,
+              })
+              .where(eq(salesCallAttempts.id, attemptId));
+          }
         } else {
           const connected = callStatus === "completed" && durationSec >= CONNECTED_DURATION_THRESHOLD_SEC;
           await db

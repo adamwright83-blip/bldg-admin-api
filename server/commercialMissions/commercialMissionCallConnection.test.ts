@@ -109,10 +109,15 @@ describe("commercial call outcomes and prospect connection", () => {
     const logged = await recordCommercialMissionCallAttempt({
       ...input,
       outcome: "left_voicemail",
+      coldCallTargetId: "22222222-2222-4222-8222-222222222222",
     });
     expect(logged.outcome).toBe("left_voicemail");
     expect(mocks.assertMissionConversationOutcome).toHaveBeenCalledWith(
-      expect.objectContaining({ outcome: "left_voicemail", missionId: 11 })
+      expect.objectContaining({
+        outcome: "left_voicemail",
+        missionId: 11,
+        coldCallTargetId: "22222222-2222-4222-8222-222222222222",
+      })
     );
     expect(mocks.awardDriverSalesPoints).toHaveBeenCalledWith(
       expect.objectContaining({
