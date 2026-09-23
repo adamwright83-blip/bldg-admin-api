@@ -91,12 +91,14 @@ function memoryDb() {
   const missions: Row[] = [];
   const tasks: Row[] = [];
   const progression: Row[] = [];
+  const grants: Row[] = [];
   const log: string[] = [];
   const flags = { failTaskDetailUpdate: false, failLevelInsert: false, armStaleConfirm: false };
   const tables: Record<string, Row[]> = {
     open_channel_missions: missions,
     open_channel_mission_tasks: tasks,
     goldline_domain_progression: progression,
+    goldline_domain_capability_grants: grants,
   };
   function stored(table: Parameters<typeof getTableName>[0]): { name: string; rows: Row[] } {
     const name = getTableName(table);

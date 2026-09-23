@@ -2885,6 +2885,31 @@ await assertRequiredColumns("goldline_domain_progression", [
   "kingdomBrassRepublicCompletedAt",
   "overworldUnlocksJson",
 ]);
+
+// Durable capability.rook.contact grants. Empty table. No backfill.
+// Existing operators stay ungranted. capabilityId is never the companion id.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_domain_capability_grants (
+    id VARCHAR(36) NOT NULL,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorId VARCHAR(128) NOT NULL,
+    capabilityId VARCHAR(64) NOT NULL,
+    grantedAt TIMESTAMP NOT NULL,
+    grantSource VARCHAR(128) NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_goldline_domain_capability_grant (tenantId, operatorId, capabilityId)
+  )`,
+  "CREATE TABLE goldline_domain_capability_grants"
+);
+await assertRequiredColumns("goldline_domain_capability_grants", [
+  "tenantId",
+  "operatorId",
+  "capabilityId",
+  "grantedAt",
+  "grantSource",
+]);
 // END schema-path-normalized
 
 await conn.end();

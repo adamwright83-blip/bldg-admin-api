@@ -264,12 +264,13 @@ describe("goldline domain progression persistence", () => {
       operatorId: "op-a",
       capabilityOperatorId: "user-7",
     });
-    expect(mocks.isCompanionEarned).toHaveBeenCalledWith({
-      tenantId: "tenant-a",
-      operatorId: "user-7",
-      companionId: "rook",
+    expect(mocks.isCompanionEarned).not.toHaveBeenCalled();
+    expect(read.capabilityRookContact).toMatchObject({
+      granted: false,
+      readable: true,
+      status: "ungranted",
+      grantsCompanionOwnership: false,
     });
-    expect(read.capabilityRookContact.granted).toBe(true);
     expect(read.companionRookOwned.value).toBe(false);
     const lookedUpAsOpenId = await readGoldlineProgression({
       tenantId: "tenant-a",

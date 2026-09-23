@@ -7022,6 +7022,32 @@ export const goldlineDomainProgression = mysqlTable(
 );
 
 /**
+ * Durable grant of capability.rook.contact. Owning companion.rook does not
+ * insert a row. scripts/migrate.mjs creates the empty table. No backfill.
+ * capabilityId is the full id, never the companion id "rook".
+ */
+export const goldlineDomainCapabilityGrants = mysqlTable(
+  "goldline_domain_capability_grants",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorId: varchar("operatorId", { length: 128 }).notNull(),
+    capabilityId: varchar("capabilityId", { length: 64 }).notNull(),
+    grantedAt: timestamp("grantedAt").notNull(),
+    grantSource: varchar("grantSource", { length: 128 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    grantUnique: uniqueIndex("uq_goldline_domain_capability_grant").on(
+      table.tenantId,
+      table.operatorId,
+      table.capabilityId
+    ),
+  })
+);
+
+/**
  * Slice 4 — Mission Director plans. Append-only revisions per business
  * date — a plan is never overwritten, so it stays provable what the plan
  * said before the day changed. Follows the authoredDays stableKey /
