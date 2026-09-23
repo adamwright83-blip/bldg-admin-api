@@ -57,8 +57,11 @@ describe("goldlineProgression router", () => {
     mocks.readMission.mockResolvedValue({ outcomes: {} });
   });
 
-  it("exposes only a read and takes the operator from the session", async () => {
-    expect(Object.keys(progressionRouter._def.procedures)).toEqual(["get"]);
+  it("exposes a read and the authored-finale acknowledgement, and takes the operator from the session", async () => {
+    expect(Object.keys(progressionRouter._def.procedures)).toEqual([
+      "get",
+      "acknowledgeColosseumFinale",
+    ]);
     const caller = progressionRouter.createCaller(context("tenant-a", 7));
     const read = await caller.get({});
     expect(read.tenantId).toBe("tenant-a");
@@ -88,6 +91,23 @@ describe("goldlineProgression router", () => {
     await expect(caller.get({ resolved: true } as never)).rejects.toThrow();
     await expect(caller.get({ rookOwned: true } as never)).rejects.toThrow();
     await expect(caller.get({ kingdomComplete: true } as never)).rejects.toThrow();
+    expect(mocks.readMission).not.toHaveBeenCalled();
+  });
+
+  it("rejects rookOwned and any consequence other than the authored finale", async () => {
+    const caller = progressionRouter.createCaller(context("tenant-a", 7));
+    await expect(caller.acknowledgeColosseumFinale({ rookOwned: true } as never)).rejects.toThrow();
+    await expect(
+      caller.acknowledgeColosseumFinale({ authoredConsequence: "rookOwned" } as never)
+    ).rejects.toThrow();
+    await expect(caller.acknowledgeColosseumFinale({} as never)).rejects.toThrow();
+    await expect(
+      caller.acknowledgeColosseumFinale({
+        authoredConsequence: "clockhead_finale.rook_joined_the_party",
+        tenantId: "tenant-b",
+        operatorId: "open-8",
+      } as never)
+    ).rejects.toThrow();
     expect(mocks.readMission).not.toHaveBeenCalled();
   });
 });

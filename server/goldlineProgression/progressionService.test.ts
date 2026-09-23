@@ -16,6 +16,7 @@ vi.mock("../companions/companionService", () => ({
 }));
 vi.mock("../db", () => ({ getDb: mocks.getDb }));
 
+import { COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE } from "../../shared/colosseumAuthoredFinale";
 import { colosseumLeadHuntDefinition } from "./colosseumKingdomBinding";
 import { ProgressionNotPermittedError } from "./progressionContract";
 import {
@@ -200,16 +201,34 @@ describe("goldline domain progression persistence", () => {
       outcomes: five(),
       outcomesAvailable: true,
     });
-    const owned = await recordCompanionRookOwned({ tenantId: "tenant-a", operatorId: "op-a" });
-    const again = await recordCompanionRookOwned({ tenantId: "tenant-a", operatorId: "op-a" });
+    await expect(recordCompanionRookOwned({ tenantId: "tenant-a", operatorId: "op-a" })).rejects.toThrow(
+      /authored Clockhead finale/
+    );
+    expect(db.rows[0]?.companionRookOwnedAt).toBeNull();
+    expect(db.rows[0]?.kingdomBrassRepublicCompletedAt).toBeNull();
+
+    const owned = await recordCompanionRookOwned({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+    });
+    const stamp = db.rows[0]?.companionRookOwnedAt;
+    const again = await recordCompanionRookOwned({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+    });
     expect(owned.levelColosseumResolved.value).toBe(true);
     expect(owned.companionRookOwned).toEqual({ status: "earned", value: true });
     expect(owned.kingdomBrassRepublicCompleted.value).toBe(false);
+    expect(owned.capabilityRookContact.granted).toBe(false);
+    expect(owned.capabilityRookContact.grantsCompanionOwnership).toBe(false);
     expect(owned.overworldUnlocks.flags.postRook).toBe(true);
     expect(again.companionRookOwned.value).toBe(true);
     expect(db.rows).toHaveLength(1);
     expect(db.rows[0]?.kingdomBrassRepublicCompletedAt).toBeNull();
-    expect(db.rows[0]?.companionRookOwnedAt).toBe(db.rows[0]?.companionRookOwnedAt);
+    expect(stamp).toBeInstanceOf(Date);
+    expect(db.rows[0]?.companionRookOwnedAt).toBe(stamp);
   });
 
   it("does not let another tenant's Rook row satisfy this operator", async () => {
@@ -220,7 +239,11 @@ describe("goldline domain progression persistence", () => {
       outcomes: five(),
       outcomesAvailable: true,
     });
-    await recordCompanionRookOwned({ tenantId: "tenant-a", operatorId: "op-a" });
+    await recordCompanionRookOwned({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+    });
     const other = await readGoldlineProgression({
       tenantId: "tenant-a",
       operatorId: "op-b",
@@ -264,7 +287,20 @@ describe("goldline domain progression persistence", () => {
       })
     ).rejects.toThrow(/resolved/);
     await expect(
-      recordCompanionRookOwned({ tenantId: "tenant-a", operatorId: "op-a", clientPayload: { rookOwned: true } })
+      recordCompanionRookOwned({
+        tenantId: "tenant-a",
+        operatorId: "op-a",
+        authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+        clientPayload: { rookOwned: true },
+      })
+    ).rejects.toThrow(/rookOwned/);
+    await expect(
+      recordCompanionRookOwned({
+        tenantId: "tenant-a",
+        operatorId: "op-a",
+        authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+        rookOwned: true,
+      } as never)
     ).rejects.toThrow(/rookOwned/);
     expect(db.rows).toHaveLength(0);
   });
@@ -290,7 +326,11 @@ describe("goldline domain progression persistence", () => {
       outcomes: five(),
       outcomesAvailable: true,
     });
-    await recordCompanionRookOwned({ tenantId: "tenant-a", operatorId: "op-a" });
+    await recordCompanionRookOwned({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+    });
     const fresh = await readGoldlineProgression({
       tenantId: "tenant-a",
       operatorId: "op-a",

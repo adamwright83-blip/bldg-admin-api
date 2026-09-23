@@ -87,13 +87,15 @@ export async function readGoldlineProgression(input: {
 
 /**
  * Separate authored write for companion.rook. Requires the level timestamp
- * already stored for this tenant and operator. Idempotent. Does not complete
- * the Kingdom and does not grant capability.rook.contact.
+ * already stored for this tenant and operator and the Clockhead finale's
+ * authored consequence. Idempotent. Does not complete the Kingdom and does
+ * not grant capability.rook.contact. Five visits are not this write.
  */
 export async function recordCompanionRookOwned(input: {
   tenantId: string;
   operatorId: string;
   capabilityOperatorId?: string | null;
+  authoredConsequence?: unknown;
   clientPayload?: unknown;
 }): Promise<GoldlineProgressionRead> {
   const outcomes = await loadOutcomes(input);
@@ -103,6 +105,22 @@ export async function recordCompanionRookOwned(input: {
     operatorId: input.operatorId,
     capabilityOperatorId: input.capabilityOperatorId ?? null,
   });
+}
+
+/**
+ * Production acknowledgement of the authored Clockhead finale.
+ * Tenant and operator are supplied by the session, never by the payload.
+ * This is the only supported way to record companion.rook.
+ */
+export async function acknowledgeColosseumAuthoredFinale(input: {
+  tenantId: string;
+  operatorId: string;
+  capabilityOperatorId?: string | null;
+  authoredConsequence: unknown;
+  clientPayload?: unknown;
+}): Promise<GoldlineProgressionRead> {
+  rejectClientProgressionForge(input);
+  return recordCompanionRookOwned(input);
 }
 
 /** Kingdom completion stays refused. The Colosseum binding is not that write. */

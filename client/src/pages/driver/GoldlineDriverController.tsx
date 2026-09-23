@@ -23,6 +23,7 @@ import {
   type WaywardProgress,
 } from "../goldline/stages/waywardProgress";
 import { joinParty } from "../goldline/stages/goldlineParty";
+import { COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE } from "../../../../shared/colosseumAuthoredFinale";
 import type { FieldMoveCandidate } from "../../../../server/field/types";
 import type { DayResolution } from "../../../../server/unload/unloadTypes";
 import type {
@@ -525,6 +526,8 @@ function LiveGoldlineDriverController({
   }, [day1TenDoors.data?.isComplete, identity.data?.openId]);
   const recordDay1Outcome =
     trpc.system.day1TenDoors.recordOutcome.useMutation();
+  const acknowledgeColosseumFinale =
+    trpc.system.goldlineProgression.acknowledgeColosseumFinale.useMutation();
   function advanceCachedProgress(kind: "pickup" | "delivery" | "mission") {
     utils.system.openChannel.progress.setData(progressInput, current => {
       if (!current) return current;
@@ -1739,8 +1742,22 @@ function LiveGoldlineDriverController({
             markLegacyDay1Dismissal();
             markColosseumResolved(identity.data?.openId ?? null);
             setWaywardProgress(unlockWayward(identity.data?.openId ?? null));
-            // Rook joined on the other end of the line; he travels on from here.
-            joinParty(identity.data?.openId ?? null, "rook");
+            void acknowledgeColosseumFinale.mutate(
+              { authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE },
+              {
+                onSuccess: () => {
+                  // Cache only after the server records companion.rook.
+                  // localStorage is not the ownership write.
+                  joinParty(identity.data?.openId ?? null, "rook");
+                  void utils.system.goldlineProgression.get.invalidate();
+                },
+                onError: () => {
+                  toast.error(
+                    "Rook was not recorded. Enter the Colosseum again to acknowledge the finale."
+                  );
+                },
+              }
+            );
             setDriverScene(stageReturnScene);
           }}
         />

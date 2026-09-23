@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE } from "../../shared/colosseumAuthoredFinale";
 import { overworldPostRookOpen } from "../../shared/goldlineDomainProgression";
 import {
   colosseumKingdomBindingNewlySatisfied,
@@ -161,8 +162,43 @@ describe("progression write gates", () => {
       assertLevelColosseumRecordPermitted({ outcomes: outcomesFor(TARGETS().slice(0, 4)), outcomesAvailable: true })
     ).toThrow(ProgressionNotPermittedError);
     expect(() =>
-      assertCompanionRookRecordPermitted({ ...satisfied, levelColosseumResolvedAt: null })
+      assertCompanionRookRecordPermitted({
+        ...satisfied,
+        levelColosseumResolvedAt: null,
+        authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+      })
+    ).toThrow(/level\.colosseum/);
+  });
+
+  it("does not treat a resolved level or five visits as the authored finale", () => {
+    expect(() =>
+      assertCompanionRookRecordPermitted({
+        ...satisfied,
+        levelColosseumResolvedAt: new Date(),
+      })
+    ).toThrow(/authored Clockhead finale/);
+    expect(() =>
+      assertCompanionRookRecordPermitted({
+        ...satisfied,
+        levelColosseumResolvedAt: new Date(),
+        authoredConsequence: "rookOwned",
+      })
     ).toThrow(ProgressionNotPermittedError);
+    expect(() =>
+      assertCompanionRookRecordPermitted({
+        outcomes: outcomesFor(TARGETS().slice(0, 4)),
+        outcomesAvailable: true,
+        levelColosseumResolvedAt: new Date(),
+        authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+      })
+    ).toThrow(/not satisfied/);
+    expect(() =>
+      assertCompanionRookRecordPermitted({
+        ...satisfied,
+        levelColosseumResolvedAt: new Date(),
+        authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+      })
+    ).not.toThrow();
   });
 
   it("never permits kingdom.brass_republic completion from the Colosseum binding", () => {
