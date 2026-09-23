@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { emptySendRecord, SPIRIT_HUMAN_VILLAGERS, type SpiritHumanRescueMission } from "../../shared/spiritHumanRescue";
+import {
+  emptySendRecord,
+  publicMissionHasNoContactPii,
+  SPIRIT_HUMAN_VILLAGERS,
+  type SpiritHumanRescueMission,
+} from "../../shared/spiritHumanRescue";
 import type { AdminCustomerAggregateDbRow } from "../adminCustomerAggregate";
 import { strategyCustomerSnapshotId } from "../strategy/snapshotDormantCustomers";
 import {
@@ -182,5 +187,66 @@ describe("Spirit Human paid-order consequence reconciliation", () => {
     expect(rows[0]?.consequences).toEqual([
       expect.objectContaining({ kind: "customer_ordered", evidenceId: "paid-order:order:3" }),
     ]);
+  });
+
+  it("projects stored contact fields when no paid-order consequence is pending", async () => {
+    const tenantId = "tenant-a";
+    const store = new MemoryRescueMissionStore();
+    const base = mission({ tenantId, snapshotCustomerId: "cust_safe" });
+    await store.save({
+      ...base,
+      consequences: [
+        {
+          kind: "customer_ordered",
+          observedAt: "2026-09-20T00:00:00.000Z",
+          evidenceId: "paid-order:order:1",
+        },
+      ],
+      spiritHuman: {
+        ...base.spiritHuman,
+        phone: "3105550101",
+        email: "priya@example.com",
+        address: "3545 Wilshire Blvd",
+        lastName: "Rao",
+      },
+    } as SpiritHumanRescueMission);
+    let aggregatesLoaded = false;
+    const rows = await reconcilePaidOrderConsequencesForOperator(
+      { tenantId, operatorUserId: "op" },
+      {
+        store,
+        loadAggregates: async () => {
+          aggregatesLoaded = true;
+          return [];
+        },
+      }
+    );
+    expect(aggregatesLoaded).toBe(false);
+    expect(publicMissionHasNoContactPii(rows[0]!)).toBe(true);
+    expect(JSON.stringify(rows)).not.toMatch(/3105550101|priya@example.com|Wilshire|Rao/);
+    expect(rows[0]?.spiritHuman.firstName).toBe("Priya");
+    expect(rows[0]?.consequences).toHaveLength(1);
+  });
+
+  it("refuses a stored draft phone instead of returning it when nothing is pending", async () => {
+    const store = new MemoryRescueMissionStore();
+    const base = mission({ tenantId: "tenant-a", snapshotCustomerId: "cust_safe" });
+    await store.save({
+      ...base,
+      draft: "Call me at 310-555-0199",
+      consequences: [
+        {
+          kind: "customer_ordered",
+          observedAt: "2026-09-20T00:00:00.000Z",
+          evidenceId: "paid-order:order:1",
+        },
+      ],
+    });
+    await expect(
+      reconcilePaidOrderConsequencesForOperator(
+        { tenantId: "tenant-a", operatorUserId: "op" },
+        { store }
+      )
+    ).rejects.toThrow("Spirit Human public mission leaked contact PII.");
   });
 });

@@ -58,7 +58,12 @@ export async function reconcilePaidOrderConsequencesForOperator(
       mission.send.acceptedAt &&
       !mission.consequences.some(item => item.kind === "customer_ordered")
   );
-  if (!pending.length) return rows;
+  if (!pending.length) {
+    return listRescueMissions(
+      { tenantId: input.tenantId, operatorUserId: input.operatorUserId },
+      { store }
+    );
+  }
 
   const acceptedTimes = pending
     .map(mission => Date.parse(mission.send.acceptedAt!))
