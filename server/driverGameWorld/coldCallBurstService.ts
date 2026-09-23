@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, ne } from "drizzle-orm";
 import {
   commercialAccountContacts,
   commercialAccountLocations,
@@ -418,6 +418,42 @@ async function ownedTarget(input: {
 const COLD_CALL_INELIGIBLE = "This target is no longer eligible for a cold call";
 
 /**
+ * Recovery bound for a Cold Call roll that never reached Twilio.
+ *
+ * A `rollClaimId` with no attempt, or a `dialing_rep` attempt whose
+ * `repLegCallSid` is still null, may be reclaimed only after this age.
+ * The claim age is `driver_cold_call_targets.updatedAt` from the claim
+ * write. The attempt age is `sales_call_attempts.created_at`.
+ *
+ * A younger row is an in-flight roll and is not stolen. A non-terminal
+ * attempt with a provider SID, or any status past `dialing_rep`, is a
+ * live leg and is never reclaimed by age.
+ */
+export const COLD_CALL_ROLL_RECOVERY_BOUND_MS = 120_000;
+
+export const COLD_CALL_STALE_DIALING_REP_REASON =
+  "stale_dialing_rep_without_provider_sid";
+
+function coldCallRecoveryDeadline(now = Date.now()): Date {
+  return new Date(now - COLD_CALL_ROLL_RECOVERY_BOUND_MS);
+}
+
+function timestampMs(value: Date | string | null | undefined): number | null {
+  if (value == null) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  const ms = parsed.getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
+function providerLegEstablished(attempt: {
+  status: string;
+  repLegCallSid?: string | null;
+}): boolean {
+  if (attempt.repLegCallSid?.trim()) return true;
+  return attempt.status !== "dialing_rep";
+}
+
+/**
  * Reload the contact id stored on the target. Eligibility is re-checked on
  * that row alone. A sibling contact on the same mission is not a substitute.
  */
@@ -540,6 +576,67 @@ async function claimColdCallRoll(input: {
   return affectedRows(result) === 1 ? claimId : null;
 }
 
+/**
+ * Take a claim that survived a crash. Matches the observed claim id and
+ * only when its write is older than the recovery bound.
+ */
+async function recoverStaleColdCallClaim(input: {
+  tenantId: string;
+  actorId: string;
+  batchId: string;
+  targetId: string;
+  observedClaimId: string;
+  deadline: Date;
+}): Promise<string | null> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const claimId = randomUUID();
+  const result = await db
+    .update(driverColdCallTargets)
+    .set({ rollClaimId: claimId, updatedAt: new Date() })
+    .where(
+      and(
+        eq(driverColdCallTargets.id, input.targetId),
+        eq(driverColdCallTargets.batchId, input.batchId),
+        eq(driverColdCallTargets.tenantId, input.tenantId),
+        eq(driverColdCallTargets.actorId, input.actorId),
+        eq(driverColdCallTargets.rollClaimId, input.observedClaimId),
+        lt(driverColdCallTargets.updatedAt, input.deadline),
+        ne(driverColdCallTargets.status, "completed")
+      )
+    );
+  return affectedRows(result) === 1 ? claimId : null;
+}
+
+/** One later roll retires a SID-less dialing_rep row. A second roll loses. */
+async function retireStaleDialingRepAttempt(input: {
+  attemptId: number;
+  tenantId: string;
+  targetId: string;
+  deadline: Date;
+}): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db
+    .update(salesCallAttempts)
+    .set({
+      status: "failed",
+      rewardGranted: false,
+      failureReason: COLD_CALL_STALE_DIALING_REP_REASON,
+    })
+    .where(
+      and(
+        eq(salesCallAttempts.id, input.attemptId),
+        eq(salesCallAttempts.tenantId, input.tenantId),
+        eq(salesCallAttempts.coldCallTargetId, input.targetId),
+        eq(salesCallAttempts.status, "dialing_rep"),
+        isNull(salesCallAttempts.repLegCallSid),
+        lt(salesCallAttempts.createdAt, input.deadline)
+      )
+    );
+  return affectedRows(result) === 1;
+}
+
 async function releaseColdCallRoll(targetId: string, claimId: string) {
   const db = await getDb();
   if (!db) return;
@@ -595,12 +692,32 @@ export async function rollColdCallTarget(input: {
   if (target.status === "completed") {
     throw new Error("Call outcome is already recorded");
   }
-  const existing = await latestColdCallAttempt(input.tenantId, target.id);
+  const deadline = coldCallRecoveryDeadline();
+  let existing = await latestColdCallAttempt(input.tenantId, target.id);
   if (
     existing &&
     !isColdCallRollingTerminal(existing.status as ColdCallRollingStatus)
   ) {
-    return readBatch(input);
+    const createdMs = timestampMs(existing.createdAt);
+    const staleSidLess =
+      !providerLegEstablished(existing) &&
+      createdMs != null &&
+      createdMs < deadline.getTime();
+    if (!staleSidLess) return readBatch(input);
+    const retired = await retireStaleDialingRepAttempt({
+      attemptId: existing.id,
+      tenantId: input.tenantId,
+      targetId: target.id,
+      deadline,
+    });
+    if (!retired) return readBatch(input);
+    existing = await latestColdCallAttempt(input.tenantId, target.id);
+    if (
+      existing &&
+      !isColdCallRollingTerminal(existing.status as ColdCallRollingStatus)
+    ) {
+      return readBatch(input);
+    }
   }
   // A finished attempt may leave the previous claim in place. Clear only
   // that observed claim. An in-flight roll has no attempt yet, so a peer
@@ -612,7 +729,20 @@ export async function rollColdCallTarget(input: {
   ) {
     await releaseColdCallRoll(target.id, target.rollClaimId);
   }
-  const claimId = await claimColdCallRoll(input);
+  let claimId = await claimColdCallRoll(input);
+  const claimUpdatedMs = timestampMs(target.updatedAt);
+  if (
+    !claimId &&
+    target.rollClaimId &&
+    claimUpdatedMs != null &&
+    claimUpdatedMs < deadline.getTime()
+  ) {
+    claimId = await recoverStaleColdCallClaim({
+      ...input,
+      observedClaimId: target.rollClaimId,
+      deadline,
+    });
+  }
   if (!claimId) return readBatch(input);
   try {
     const prospectLegTo = await loadPinnedColdCallContact({

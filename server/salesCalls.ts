@@ -20,13 +20,22 @@
  */
 import type { Express, Request, Response } from "express";
 import twilio from "twilio";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "./db";
-import { salesCallAttempts, type SalesCallAttempt } from "../drizzle/schema";
+import {
+  driverColdCallTargets,
+  salesCallAttempts,
+  type SalesCallAttempt,
+} from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { claireTwilioFromNumber, registerClaireRoutes } from "./claire/claireTwilio";
 import { isValidTwilioWebhook } from "./claire/conversation/twilioSignature";
 import { COLD_CALL_CALLER_ID_UNVERIFIED_MESSAGE } from "../shared/coldCallBurst";
+import { communicationReceiptEventFromProviderStatus } from "../shared/twilioPlatform";
+import {
+  recordCommunicationReceipt,
+  TwilioCommunicationReceiptError,
+} from "./twilioPlatform/communicationReceipts";
 
 const CALL_STATUS_PATH = "/api/saleslay/twilio/call-status";
 const CONNECTED_DURATION_THRESHOLD_SEC = 20;
@@ -163,6 +172,17 @@ export async function placeOperatorFirstBridgeCall(input: {
       .update(salesCallAttempts)
       .set({ repLegCallSid: call.sid })
       .where(eq(salesCallAttempts.id, attemptId));
+    if (input.coldCallTargetId) {
+      await recordColdCallProviderReceipt({
+        tenantId: input.tenantId,
+        coldCallTargetId: input.coldCallTargetId,
+        callSid: call.sid,
+        from: operatorLegFrom,
+        to: operatorLegTo,
+        callStatus: "initiated",
+        bestEffort: true,
+      });
+    }
     return { attemptId, repLegCallSid: call.sid };
   } catch (error) {
     await db
@@ -227,6 +247,85 @@ export function buildBridgeTwiml(attempt: {
 }
 
 /** Communications-only terminal mapping for Cold Call Burst. No reward. */
+/**
+ * Provider call fact on the existing communication_receipts spine.
+ * Not a commercial outcome, not a dayforge event, and not a customer-message
+ * product event. Claire's read path lists these by tenant and operator.
+ */
+async function recordColdCallProviderReceipt(input: {
+  tenantId: string;
+  coldCallTargetId: string;
+  callSid: string | null;
+  parentCallSid?: string | null;
+  from?: string | null;
+  to?: string | null;
+  callStatus: string;
+  durationSeconds?: number | null;
+  providerErrorCode?: string | null;
+  providerErrorMessage?: string | null;
+  /** Create-path only. The call is already placed; a later status callback can write the receipt. */
+  bestEffort?: boolean;
+}): Promise<void> {
+  const eventType = communicationReceiptEventFromProviderStatus({
+    channel: "voice",
+    status: input.callStatus,
+  });
+  const callSid = input.callSid?.trim() || "";
+  if (!eventType || !callSid) return;
+  const db = await getDb();
+  if (!db) return;
+  const targets = await db
+    .select()
+    .from(driverColdCallTargets)
+    .where(
+      and(
+        eq(driverColdCallTargets.id, input.coldCallTargetId),
+        eq(driverColdCallTargets.tenantId, input.tenantId)
+      )
+    )
+    .limit(1);
+  const operatorUserId = targets[0]?.actorId?.trim() || "";
+  if (!operatorUserId) return;
+  const terminal =
+    eventType === "CALL_COMPLETED" ||
+    eventType === "CALL_NO_ANSWER" ||
+    eventType === "CALL_BUSY" ||
+    eventType === "CALL_FAILED";
+  try {
+    await recordCommunicationReceipt({
+      tenantId: input.tenantId,
+      operatorUserId,
+      eventType,
+      callSid,
+      parentCallSid: input.parentCallSid ?? null,
+      direction: "outbound",
+      from: input.from,
+      to: input.to,
+      status: input.callStatus,
+      durationSeconds: input.durationSeconds ?? null,
+      providerErrorCode: input.providerErrorCode,
+      providerErrorMessage: input.providerErrorMessage,
+      answeredAt: eventType === "CALL_CONNECTED" ? new Date().toISOString() : null,
+      completedAt: terminal ? new Date().toISOString() : null,
+    });
+  } catch (error) {
+    if (
+      error instanceof TwilioCommunicationReceiptError &&
+      error.code === "persistence_unconfigured"
+    ) {
+      return;
+    }
+    if (input.bestEffort) {
+      console.warn(
+        "[ColdCall] communication receipt was not stored",
+        error instanceof Error ? error.name : "error"
+      );
+      return;
+    }
+    throw error;
+  }
+}
+
 export function goldlineTransportStatusFromCustomerLeg(input: {
   callStatus: string;
   durationSec: number;
@@ -326,6 +425,21 @@ export async function handleCallStatus(req: Request, res: Response): Promise<voi
     const errorCode = Number.parseInt(body.ErrorCode ?? "", 10);
     const TERMINAL = ["completed", "busy", "no-answer", "failed", "canceled"];
     const goldline = Boolean(attempt.coldCallTargetId);
+    const recordProviderFact = async () => {
+      if (!goldline || !attempt.coldCallTargetId || !callStatus) return;
+      await recordColdCallProviderReceipt({
+        tenantId: attempt.tenantId,
+        coldCallTargetId: attempt.coldCallTargetId,
+        callSid: body.CallSid || null,
+        parentCallSid: leg === "customer" ? attempt.repLegCallSid : null,
+        from: body.From || (leg === "customer" ? attempt.callerId : null),
+        to: body.To || (leg === "customer" ? attempt.customerPhone : attempt.repPhone),
+        callStatus,
+        durationSeconds: durationSec,
+        providerErrorCode: body.ErrorCode || null,
+        providerErrorMessage: body.ErrorMessage || null,
+      });
+    };
 
     if (
       goldline &&
@@ -341,6 +455,7 @@ export async function handleCallStatus(req: Request, res: Response): Promise<voi
           customerLegDurationSec: durationSec,
         })
         .where(eq(salesCallAttempts.id, attemptId));
+      await recordProviderFact();
       res.json({ ok: true });
       return;
     }
@@ -357,6 +472,7 @@ export async function handleCallStatus(req: Request, res: Response): Promise<voi
           .set({ status: "failed", failureReason: `rep_leg_${callStatus}`, rewardGranted: false })
           .where(eq(salesCallAttempts.id, attemptId));
       }
+      await recordProviderFact();
       res.json({ ok: true });
       return;
     }
@@ -396,6 +512,7 @@ export async function handleCallStatus(req: Request, res: Response): Promise<voi
             .where(eq(salesCallAttempts.id, attemptId));
         }
       }
+      await recordProviderFact();
       res.json({ ok: true });
       return;
     }

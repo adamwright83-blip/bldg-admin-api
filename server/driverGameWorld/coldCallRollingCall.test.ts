@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   commercialAccountContacts,
   commercialMissions,
+  communicationReceipts,
   driverColdCallBatches,
   driverColdCallTargets,
   salesCallAttempts,
@@ -75,7 +76,10 @@ import {
   handleBridgeTwiml,
   handleCallStatus,
 } from "../salesCalls";
+import { loadClaireCommunicationsContext } from "../claire/communicationsContextPort";
 import {
+  COLD_CALL_ROLL_RECOVERY_BOUND_MS,
+  COLD_CALL_STALE_DIALING_REP_REASON,
   completeColdCallTarget,
   getColdCallRollingCall,
   rollColdCallTarget,
@@ -104,6 +108,7 @@ function fixture() {
     callAttemptEventId: null as number | null,
     outcome: null as string | null,
     completedAt: null as Date | null,
+    updatedAt: new Date(),
   };
   const batchRow = {
     id: input.batchId,
@@ -133,6 +138,7 @@ function fixture() {
   };
   const account = { id: 5, name: COMPANY };
   const attempts: Array<Record<string, unknown>> = [];
+  const receipts: Array<Record<string, unknown>> = [];
   const updates: Array<{ table: unknown; vals: Record<string, unknown> }> = [];
   let reads = 0;
 
@@ -159,6 +165,7 @@ function fixture() {
       return contacts.map(item => ({ target: targetRow, mission, account, contact: item }));
     }
     if (state.table === driverColdCallTargets) return [targetRow];
+    if (state.table === communicationReceipts) return receipts;
     return [];
   }
 
@@ -185,8 +192,9 @@ function fixture() {
         orderBy() {
           return self;
         },
-        limit() {
-          return Promise.resolve(rows(state).slice(0, 1));
+        limit(count?: number) {
+          const size = typeof count === "number" ? count : 1;
+          return Promise.resolve(rows(state).slice(0, size));
         },
         then(resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) {
           return Promise.resolve(rows(state)).then(resolve, reject);
@@ -207,9 +215,19 @@ function fixture() {
               repLegCallSid: null,
               customerLegCallSid: null,
               customerLegDurationSec: null,
+              createdAt: new Date(),
               ...vals,
             });
             return Promise.resolve([{ insertId: 7 }]);
+          }
+          if (table === communicationReceipts) {
+            if (receipts.some(row => row.idempotencyKey === vals.idempotencyKey)) {
+              const error = new Error("duplicate entry") as Error & { code?: string };
+              error.code = "ER_DUP_ENTRY";
+              return Promise.reject(error);
+            }
+            receipts.push(vals);
+            return Promise.resolve([{ insertId: 0 }]);
           }
           return Promise.resolve([{ insertId: 1 }]);
         },
@@ -221,12 +239,40 @@ function fixture() {
           return {
             where() {
               updates.push({ table, vals });
-              if (table === salesCallAttempts && attempts[0]) Object.assign(attempts[0], vals);
+              if (table === salesCallAttempts) {
+                const recovery =
+                  vals.status === "failed" &&
+                  vals.failureReason === COLD_CALL_STALE_DIALING_REP_REASON;
+                if (recovery) {
+                  const stale = attempts.find(
+                    item => item.status === "dialing_rep" && !item.repLegCallSid
+                  );
+                  if (!stale) return Promise.resolve([{ affectedRows: 0 }]);
+                  Object.assign(stale, vals);
+                  return Promise.resolve([{ affectedRows: 1 }]);
+                }
+                if (attempts[0]) Object.assign(attempts[0], vals);
+              }
               if (table === driverColdCallTargets) {
                 const nextClaim = Object.prototype.hasOwnProperty.call(vals, "rollClaimId")
                   ? vals.rollClaimId
                   : undefined;
-                if (typeof nextClaim === "string" && nextClaim && targetRow.rollClaimId) {
+                if (typeof nextClaim === "string" && nextClaim) {
+                  const takeover = Object.prototype.hasOwnProperty.call(vals, "updatedAt");
+                  if (!targetRow.rollClaimId) {
+                    Object.assign(targetRow, vals);
+                    if (!takeover) targetRow.updatedAt = new Date();
+                    return Promise.resolve([{ affectedRows: 1 }]);
+                  }
+                  const updatedMs =
+                    targetRow.updatedAt instanceof Date ? targetRow.updatedAt.getTime() : Number.NaN;
+                  const stale =
+                    Number.isFinite(updatedMs) &&
+                    updatedMs < Date.now() - COLD_CALL_ROLL_RECOVERY_BOUND_MS;
+                  if (takeover && stale) {
+                    Object.assign(targetRow, vals);
+                    return Promise.resolve([{ affectedRows: 1 }]);
+                  }
                   return Promise.resolve([{ affectedRows: 0 }]);
                 }
                 Object.assign(targetRow, vals);
@@ -244,7 +290,18 @@ function fixture() {
     },
   };
 
-  return { db, targetRow, contact, contacts, attempts, updates, get reads() { return reads; } };
+  return {
+    db,
+    targetRow,
+    contact,
+    contacts,
+    attempts,
+    receipts,
+    updates,
+    get reads() {
+      return reads;
+    },
+  };
 }
 
 let world: ReturnType<typeof fixture>;
@@ -288,8 +345,13 @@ function signedRequest(urlPath: string, body: Record<string, string>, params?: R
   } as unknown as Request;
 }
 
+function olderThanRecoveryBound(): Date {
+  return new Date(Date.now() - COLD_CALL_ROLL_RECOVERY_BOUND_MS - 5_000);
+}
+
 beforeEach(() => {
   process.env.NODE_ENV = "production";
+  if (!process.env.DATABASE_URL) process.env.DATABASE_URL = "mysql://cold-call-fixture";
   world = fixture();
   mocks.getDb.mockImplementation(async () => world.db);
   mocks.authorizedOperatorPhone.mockClear();
@@ -456,6 +518,180 @@ describe("Cold Call Burst operator-first roll", () => {
     expect(world.attempts.some(attempt => attempt.customerPhone === sibling.phone)).toBe(false);
     expect(world.targetRow.rollClaimId).toBeNull();
     expect(world.targetRow.status).toBe("selected");
+  });
+
+  it("reclaims a stale claim with no attempt and dials once", async () => {
+    world.targetRow.rollClaimId = "stale-claim";
+    world.targetRow.updatedAt = olderThanRecoveryBound();
+    await rollColdCallTarget(input);
+    expect(mocks.callsCreate).toHaveBeenCalledTimes(1);
+    expect(world.attempts.filter(item => item.repLegCallSid === "CA_operator_leg")).toHaveLength(1);
+
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    world.targetRow.rollClaimId = "stale-claim-2";
+    world.targetRow.updatedAt = olderThanRecoveryBound();
+    world.targetRow.status = "selected";
+    world.attempts.splice(0, world.attempts.length);
+    let started = 0;
+    mocks.callsCreate.mockImplementation(async () => {
+      started += 1;
+      await gate;
+      return { sid: "CA_recovered" };
+    });
+    const pending = Promise.all([rollColdCallTarget(input), rollColdCallTarget(input)]);
+    await vi.waitFor(() => expect(started).toBe(1));
+    release();
+    await pending;
+    expect(started).toBe(1);
+    expect(mocks.callsCreate).toHaveBeenCalledTimes(2);
+  });
+
+  it("reclaims one stale dialing_rep row that never received a provider SID", async () => {
+    world.attempts.unshift({
+      id: 4,
+      tenantId: input.tenantId,
+      coldCallTargetId: input.targetId,
+      status: "dialing_rep",
+      repLegCallSid: null,
+      rewardGranted: false,
+      callerId: OPERATOR,
+      customerPhone: PROSPECT,
+      createdAt: olderThanRecoveryBound(),
+    });
+    world.targetRow.rollClaimId = "stale-claim";
+    world.targetRow.updatedAt = olderThanRecoveryBound();
+    await rollColdCallTarget(input);
+    expect(mocks.callsCreate).toHaveBeenCalledTimes(1);
+    expect(world.attempts.find(item => item.id === 4)?.status).toBe("failed");
+    expect(world.attempts.find(item => item.id === 4)?.failureReason).toBe(
+      COLD_CALL_STALE_DIALING_REP_REASON
+    );
+    expect(world.attempts.filter(item => item.repLegCallSid === "CA_operator_leg")).toHaveLength(1);
+
+    world.attempts.splice(0, world.attempts.length, {
+      id: 4,
+      tenantId: input.tenantId,
+      coldCallTargetId: input.targetId,
+      status: "dialing_rep",
+      repLegCallSid: null,
+      rewardGranted: false,
+      callerId: OPERATOR,
+      customerPhone: PROSPECT,
+      createdAt: olderThanRecoveryBound(),
+    });
+    world.targetRow.rollClaimId = "stale-claim";
+    world.targetRow.status = "selected";
+    world.targetRow.updatedAt = olderThanRecoveryBound();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    let started = 0;
+    mocks.callsCreate.mockImplementation(async () => {
+      started += 1;
+      await gate;
+      return { sid: "CA_recovered" };
+    });
+    const pending = Promise.all([rollColdCallTarget(input), rollColdCallTarget(input)]);
+    await vi.waitFor(() => expect(started).toBe(1));
+    release();
+    await pending;
+    expect(started).toBe(1);
+  });
+
+  it("does not steal a live claim or a provider leg that is already established", async () => {
+    world.targetRow.rollClaimId = "live-claim";
+    world.targetRow.updatedAt = new Date();
+    await rollColdCallTarget(input);
+    expect(mocks.callsCreate).not.toHaveBeenCalled();
+    expect(world.targetRow.rollClaimId).toBe("live-claim");
+
+    world.attempts.unshift({
+      id: 4,
+      tenantId: input.tenantId,
+      coldCallTargetId: input.targetId,
+      status: "dialing_rep",
+      repLegCallSid: null,
+      rewardGranted: false,
+      createdAt: new Date(),
+    });
+    await rollColdCallTarget(input);
+    expect(mocks.callsCreate).not.toHaveBeenCalled();
+    expect(world.attempts[0]?.status).toBe("dialing_rep");
+
+    world.attempts[0] = {
+      id: 4,
+      tenantId: input.tenantId,
+      coldCallTargetId: input.targetId,
+      status: "dialing_rep",
+      repLegCallSid: "CA_live",
+      rewardGranted: false,
+      createdAt: olderThanRecoveryBound(),
+    };
+    await rollColdCallTarget(input);
+    expect(mocks.callsCreate).not.toHaveBeenCalled();
+    expect(world.attempts[0]?.repLegCallSid).toBe("CA_live");
+    expect(world.attempts[0]?.status).toBe("dialing_rep");
+  });
+
+  it("writes operator and prospect provider receipts without a commercial outcome", async () => {
+    await rollColdCallTarget(input);
+    const ringing = signedRequest("/api/saleslay/twilio/call-status?attemptId=7&leg=rep", {
+      CallSid: "CA_operator_leg",
+      CallStatus: "ringing",
+      From: CLAIRE_FROM,
+      To: OPERATOR,
+    });
+    await handleCallStatus(ringing, mockRes() as unknown as Response);
+    await handleCallStatus(ringing, mockRes() as unknown as Response);
+    await handleCallStatus(
+      signedRequest("/api/saleslay/twilio/call-status?attemptId=7&leg=customer", {
+        CallSid: "CA_prospect_leg",
+        CallStatus: "completed",
+        CallDuration: "224",
+        From: OPERATOR,
+        To: PROSPECT,
+      }),
+      mockRes() as unknown as Response
+    );
+    await handleCallStatus(
+      signedRequest("/api/saleslay/twilio/call-status?attemptId=7&leg=rep", {
+        CallSid: "CA_operator_leg",
+        CallStatus: "no-answer",
+        From: CLAIRE_FROM,
+        To: OPERATOR,
+      }),
+      mockRes() as unknown as Response
+    );
+
+    const events = world.receipts.map(row => row.eventType);
+    expect(events).toContain("CALL_ATTEMPTED");
+    expect(events).toContain("CALL_RINGING");
+    expect(events).toContain("CALL_COMPLETED");
+    expect(events).toContain("CALL_NO_ANSWER");
+    expect(events.filter(event => event === "CALL_RINGING")).toHaveLength(1);
+    expect(events.some(event => String(event).startsWith("MESSAGE_"))).toBe(false);
+    expect(world.receipts.every(row => row.direction === "outbound")).toBe(true);
+    expect(world.receipts.find(row => row.eventType === "CALL_COMPLETED")?.parentCallSid).toBe(
+      "CA_operator_leg"
+    );
+    expect(mocks.recordCommercialMissionCallAttempt).not.toHaveBeenCalled();
+    expect(world.targetRow.outcome).toBeNull();
+    expect(world.targetRow.status).not.toBe("completed");
+
+    const context = await loadClaireCommunicationsContext({
+      tenantId: input.tenantId,
+      operatorUserId: input.actorId,
+    });
+    expect(context.access).toBe("read_only");
+    expect(context.impliesBusinessOutcome).toBe(false);
+    const concepts = context.evidence.map(item => item.concept);
+    expect(concepts).toContain("CALL_RINGING");
+    expect(concepts).toContain("CALL_COMPLETED");
+    expect(context.evidence.every(item => item.goldlineEntityId === null)).toBe(true);
   });
 
   it("fails closed when the personal caller ID is not verified", async () => {
