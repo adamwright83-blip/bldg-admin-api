@@ -257,7 +257,9 @@ function paymentEventsProven(
   expectedThrough: string
 ): boolean {
   const bounds = spanBounds(evidence.coverageRanges, "economic_event");
-  if (!bounds.from) return false;
+  // `rangesCover` treats an inverted interval as covered. A span that starts
+  // after the due day does not cover that day.
+  if (!bounds.from || bounds.from > expectedThrough) return false;
   return rangesCover(evidence.coverageRanges, {
     from: bounds.from,
     to: expectedThrough,
@@ -370,6 +372,7 @@ function cleancloudCoverage(
   );
   const spanReachesCheckpoint =
     bounds.from !== null &&
+    bounds.from <= expectedThrough &&
     rangesCover(ranges, {
       from: bounds.from,
       to: expectedThrough,
@@ -478,14 +481,14 @@ function cleancloudCoverage(
     };
   }
 
-  if (receipts === "unreadable" && checkpointCovered) {
+  if (receipts === "unreadable") {
     return {
       ...common,
-      availability: "available",
+      availability: records === "readable" ? "available" : "unavailable",
       includedInCombinedBook: true,
       status: "partial",
       reason:
-        "Import ranges exist, but assimilation receipts could not be read. Freshness stays unproven.",
+        "Assimilation receipts could not be read. Freshness stays unproven. That is not zero customers.",
     };
   }
 
@@ -724,6 +727,14 @@ export async function loadBusinessSourceCoverage(
   deps: LoadBusinessSourceCoverageDeps = {}
 ): Promise<BusinessSourceCoverageSnapshot> {
   const now = input.now ?? new Date();
+  if (!input.tenantId?.trim()) {
+    return deriveBusinessSourceCoverage({
+      tenantId: input.tenantId,
+      now,
+      evidence: UNKNOWN_EVIDENCE,
+      cleancloudReceipts: "unreadable",
+    });
+  }
   const loadEvidence =
     deps.loadEvidence ??
     (async (tenantId: string) => {

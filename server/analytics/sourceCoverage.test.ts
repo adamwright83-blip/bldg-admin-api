@@ -6,6 +6,7 @@ import {
   type CleanCloudAssimilationReceipt,
 } from "./sourceCoverage";
 import {
+  coverageRangesFromReceiptRows,
   UNKNOWN_EVIDENCE,
   type LedgerSourceEvidence,
   type SourceBindingState,
@@ -521,5 +522,245 @@ describe("business source coverage contract", () => {
     expect(result.book.status).toBe("unavailable");
     expect(result.book.interpretEmptyAsNoCustomers).toBe(false);
     expect(result.book.missingIsNoCustomers).toBe(false);
+  });
+
+  it("does not query for a blank tenant", async () => {
+    const loadEvidence = vi.fn(async () => UNKNOWN_EVIDENCE);
+    const loadReceipts = vi.fn(async () => [] as const);
+    const result = await loadBusinessSourceCoverage(
+      { tenantId: "   ", now: BEFORE_DUE },
+      { loadEvidence, loadReceipts }
+    );
+    expect(loadEvidence).not.toHaveBeenCalled();
+    expect(loadReceipts).not.toHaveBeenCalled();
+    expect(result.book.status).toBe("unavailable");
+    expect(result.book.exhaustiveCurrent).toBe(false);
+    expect(result.book.interpretEmptyAsNoCustomers).toBe(false);
+    expect(result.book.missingIsNoCustomers).toBe(false);
+  });
+
+  it("joins the real receipt parsers, and pending map geocoding does not block fresh", () => {
+    const rows = [
+      {
+        createdAt: new Date("2026-09-20T01:00:00.000Z"),
+        receiptJson: {
+          tenantId: "someone-else",
+          reportType: "orders_sales",
+          from: "2026-09-01",
+          to: "2026-09-19",
+          completedAt: "2026-09-20T01:00:00.000Z",
+          customerTruth: "refreshed",
+          map: "pending",
+        },
+      },
+    ];
+    const ranges = coverageRangesFromReceiptRows(rows);
+    const receipts = assimilationReceiptsFromRows(rows);
+    const result = deriveBusinessSourceCoverage({
+      tenantId: "tenant-a",
+      now: BEFORE_DUE,
+      evidence: evidence({ ranges }),
+      cleancloudReceipts: receipts,
+    });
+    expect(ranges).toHaveLength(1);
+    expect(receipts).toHaveLength(1);
+    expect(source(result, "cleancloud").status).toBe("fresh");
+    expect(result.book.exhaustiveCurrent).toBe(true);
+    expect(result.book.paymentEventsProven).toBe(false);
+    expect(result.book.exactRevenueLicensed).toBe(false);
+  });
+
+  it("does not let skipped, pending, missing, or cancelled customer truth freshen the book", () => {
+    const completedAt = new Date("2026-09-20T01:00:00.000Z");
+    const covered = [range("2026-09-01", "2026-09-19", completedAt)];
+    for (const customerTruth of ["skipped", "pending", null] as const) {
+      const result = snapshot({
+        ranges: covered,
+        receipts: [receipt(covered[0]!.from, covered[0]!.to, completedAt, customerTruth)],
+      });
+      expect(source(result, "cleancloud").status).toBe("partial");
+      expect(result.book.exhaustiveCurrent).toBe(false);
+    }
+
+    const cancelledOnly = [
+      {
+        createdAt: completedAt,
+        receiptJson: {
+          status: "cancelled",
+          from: "2026-09-01",
+          to: "2026-09-19",
+          completedAt: completedAt.toISOString(),
+          customerTruth: "refreshed",
+        },
+      },
+    ];
+    const dropped = deriveBusinessSourceCoverage({
+      tenantId: "tenant-a",
+      now: BEFORE_DUE,
+      evidence: evidence({
+        ranges: coverageRangesFromReceiptRows(cancelledOnly),
+      }),
+      cleancloudReceipts: assimilationReceiptsFromRows(cancelledOnly),
+    });
+    expect(source(dropped, "cleancloud").status).toBe("stale");
+    expect(dropped.book.exhaustiveCurrent).toBe(false);
+    expect(dropped.book.interpretEmptyAsNoCustomers).toBe(false);
+  });
+
+  it("drops malformed receipts instead of inventing a span", () => {
+    expect(
+      assimilationReceiptsFromRows([
+        { receiptJson: "not-json" },
+        { receiptJson: null },
+        {
+          receiptJson: {
+            from: "2026-09-19",
+            to: "2026-09-01",
+            completedAt: "2026-09-20T01:00:00.000Z",
+            customerTruth: "refreshed",
+          },
+        },
+        {
+          receiptJson: {
+            from: "09-19-2026",
+            to: "2026-09-19",
+            completedAt: "not-a-date",
+            customerTruth: "refreshed",
+          },
+        },
+        {
+          receiptJson: {
+            from: "2026-02-31",
+            to: "2026-02-31",
+            completedAt: "2026-09-20T01:00:00.000Z",
+            customerTruth: "refreshed",
+          },
+        },
+      ])
+    ).toEqual([]);
+  });
+
+  it("does not prove payment events from an economic span that misses the due day", () => {
+    const completedAt = new Date("2026-09-20T01:00:00.000Z");
+    const orders = range("2026-09-01", "2026-09-19", completedAt);
+    const base = evidence({ ranges: [orders] });
+    const withEconomic = (
+      economic: SourceCoverageRange[]
+    ) =>
+      deriveBusinessSourceCoverage({
+        tenantId: "tenant-a",
+        now: BEFORE_DUE,
+        evidence: {
+          ...base,
+          cleancloud: {
+            ...base.cleancloud,
+            coverageRanges: [orders, ...economic],
+          },
+        },
+        cleancloudReceipts: [
+          receipt(orders.from, orders.to, completedAt, "refreshed"),
+        ],
+      });
+
+    const afterDueDay = withEconomic([
+      {
+        from: "2026-09-20",
+        to: "2026-09-21",
+        completedAt,
+        basis: "economic_event",
+        provenance: "test_fixture",
+      },
+    ]);
+    expect(afterDueDay.book.status).toBe("fresh");
+    expect(afterDueDay.book.paymentEventsProven).toBe(false);
+    expect(source(afterDueDay, "cleancloud").provenance.paymentEventsProven).toBe(
+      false
+    );
+
+    const gapped = withEconomic([
+      {
+        from: "2026-09-01",
+        to: "2026-09-10",
+        completedAt,
+        basis: "economic_event",
+        provenance: "test_fixture",
+      },
+      {
+        from: "2026-09-19",
+        to: "2026-09-19",
+        completedAt,
+        basis: "economic_event",
+        provenance: "test_fixture",
+      },
+    ]);
+    expect(gapped.book.status).toBe("fresh");
+    expect(gapped.book.paymentEventsProven).toBe(false);
+
+    const checkpointDay = withEconomic([
+      {
+        from: "2026-09-19",
+        to: "2026-09-19",
+        completedAt,
+        basis: "economic_event",
+        provenance: "test_fixture",
+      },
+    ]);
+    expect(checkpointDay.book.paymentEventsProven).toBe(true);
+    expect(checkpointDay.book.exactRevenueLicensed).toBe(false);
+  });
+
+  it("stays partial when assimilation receipts are unreadable and no checkpoint range was loaded", () => {
+    const result = snapshot({
+      cleancloudLastSuccessAt: null,
+      ranges: [],
+      receipts: "unreadable",
+    });
+    expect(source(result, "cleancloud")).toMatchObject({
+      status: "partial",
+      availability: "unavailable",
+      records: "unknown",
+      supportsExhaustiveCurrentClaim: false,
+      emptyReadMeansNoRecords: false,
+    });
+    expect(result.book.status).toBe("partial");
+    expect(result.book.exhaustiveCurrent).toBe(false);
+    expect(result.book.interpretEmptyAsNoCustomers).toBe(false);
+    expect(result.book.missingIsNoCustomers).toBe(false);
+  });
+
+  it("uses the shared Gumball clock at the grace boundary", () => {
+    const completedAt = new Date("2026-09-21T02:00:00.000Z");
+    const coveredToday = [
+      range("2026-09-19", "2026-09-19", new Date("2026-09-20T01:00:00.000Z")),
+      range("2026-09-20", "2026-09-20", completedAt),
+    ];
+    const duringGrace = snapshot({
+      now: new Date("2026-09-21T01:59:00.000Z"),
+      ranges: coveredToday,
+    });
+    const graceElapsed = snapshot({
+      now: new Date("2026-09-21T02:00:00.000Z"),
+      ranges: coveredToday,
+    });
+    expect(source(duringGrace, "cleancloud").expectedThrough).toBe("2026-09-19");
+    expect(source(duringGrace, "cleancloud").status).toBe("fresh");
+    expect(source(graceElapsed, "cleancloud").expectedThrough).toBe("2026-09-20");
+    expect(source(graceElapsed, "cleancloud").status).toBe("fresh");
+  });
+
+  it("calls the book stale only when every held source missed the checkpoint", () => {
+    const result = snapshot({
+      now: AFTER_DUE,
+      native: "absent",
+      nativeLastSuccessAt: null,
+      ranges: [
+        range("2026-09-01", "2026-09-19", new Date("2026-09-20T01:00:00.000Z")),
+      ],
+    });
+    expect(result.book.status).toBe("stale");
+    expect(result.blockingSources).toEqual([
+      expect.objectContaining({ sourceId: "cleancloud", status: "stale" }),
+    ]);
+    expect(source(result, "laundry_butler").includedInCombinedBook).toBe(false);
   });
 });
