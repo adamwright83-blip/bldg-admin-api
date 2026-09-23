@@ -1,11 +1,14 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseExplicitOperatorMissionCommand } from "../server/claire/operatorMissionCommand";
+import { SEED_CAMPAIGNS } from "../server/campaignLibrary/seedCampaigns";
 import {
   adminCurrentDayLineOrder,
   claireCurrentDayLineOrder,
+  dayLineForSelectedDate,
   driverCurrentDayLineOrder,
   executionContractFromWork,
+  presentCurrentDayLine,
   projectCurrentDayLine,
   stampExecutionType,
   type RankedDayWork,
@@ -68,6 +71,63 @@ describe("current day line execution contract", () => {
       completionCondition: "Operator reports completion of: today's mission",
     });
     expect(stampExecutionType(contract)).toBeNull();
+  });
+
+  it("stamps pickup, physical pitch, and physical delivery as Mission", () => {
+    expect(stampExecutionType(executionContractFromWork({ completionCondition: "Pick up the route bags." }))).toBe("mission");
+    expect(stampExecutionType(executionContractFromWork({ completionCondition: "Give the physical pitch at the office." }))).toBe("mission");
+    expect(stampExecutionType(executionContractFromWork({ completionCondition: "The physical delivery is in the customer's hands." }))).toBe("mission");
+  });
+
+  it("stamps SMS, browser, and Admin work as Challenge", () => {
+    expect(stampExecutionType(executionContractFromWork({ completionCondition: "Send the SMS to the leasing office." }))).toBe("challenge");
+    expect(stampExecutionType(executionContractFromWork({ completionCondition: "Finish the form in the browser." }))).toBe("challenge");
+    expect(stampExecutionType(executionContractFromWork({ completionCondition: "Record the outcome in Admin." }))).toBe("challenge");
+  });
+
+  it("treats delivering an email as a Challenge", () => {
+    const contract = executionContractFromWork({
+      completionCondition: "Deliver the email to the property manager.",
+    });
+    expect(contract.fieldRequired).toBe(false);
+    expect(contract.remoteRequired).toBe(true);
+    expect(stampExecutionType(contract)).toBe("challenge");
+  });
+
+  it("stays Hybrid when a visit is required along with delivering an email", () => {
+    expect(
+      stampExecutionType(
+        executionContractFromWork({
+          completionCondition: "Visit the office and deliver the email before leaving.",
+        })
+      )
+    ).toBe("hybrid_objective");
+  });
+
+  it("stamps the seeded campaign library from completion text", () => {
+    const stamped = Object.fromEntries(
+      SEED_CAMPAIGNS.map(row => [
+        row.campaignId,
+        stampExecutionType(
+          executionContractFromWork({
+            title: row.campaign.title,
+            objective: row.campaign.objective,
+            completionCondition: row.campaign.completionCondition,
+          })
+        ),
+      ])
+    );
+    expect(stamped).toEqual({
+      "door-hanger-territory-operation": "mission",
+      "property-manager-office-pitch": "mission",
+      "referral-ask": null,
+      "review-request": null,
+      "retention-win-back-outreach": "challenge",
+      "local-digital-footprint-post": "challenge",
+      "neighboring-business-partnership-outreach": "mission",
+      "greystar-koreatown-colosseum": "mission",
+      "the-last-valet-recurring-account-pitch": "mission",
+    });
   });
 
   it("keeps a published post remote when the objective mentions a delivery", () => {
@@ -160,6 +220,52 @@ describe("current day line ranking projection", () => {
     expect(line.designated?.compatibilityPhrase).toBe("todays_mission");
     expect(line.designated?.executionType).toBe("challenge");
     expect(line.items.map(item => item.id)).toEqual(["zzz-visit", "aaa-email"]);
+  });
+
+  it("does not present a no_plan or an empty ranking as today's ordered work", () => {
+    const diagnostic = projectCurrentDayLine({
+      businessDate: "2026-09-23",
+      rankingStatus: "no_plan",
+      rankedWorks: ranked,
+      designated: {
+        id: "operator-call",
+        title: "Call Dana",
+        completionCondition: "Operator reports completion of: Call Dana",
+        compatibilityPhrase: "todays_mission",
+      },
+    });
+    const presented = presentCurrentDayLine(diagnostic);
+    expect(presented.rankingStatus).toBe("no_plan");
+    expect(presented.items).toEqual([]);
+    expect(presented.statusText).toBe("No ranked line for today.");
+    expect(presented.designated?.executionType).toBe("challenge");
+    expect(adminCurrentDayLineOrder(diagnostic)).toEqual([]);
+    expect(driverCurrentDayLineOrder(diagnostic)).toEqual(claireCurrentDayLineOrder(diagnostic));
+    expect(presentCurrentDayLine({ ...diagnostic, rankingStatus: "unavailable", designated: null }).statusText).toBe(
+      "Today's ranking is unavailable."
+    );
+    expect(
+      presentCurrentDayLine({
+        ...diagnostic,
+        rankingStatus: "ranked",
+        items: [],
+        designated: null,
+      }).rankingStatus
+    ).toBe("unavailable");
+  });
+
+  it("hides today's line when the selected date is not that business date", () => {
+    const line = projectCurrentDayLine({
+      businessDate: "2026-09-23",
+      rankingStatus: "ranked",
+      rankedWorks: ranked,
+    });
+    expect(dayLineForSelectedDate(line, "2026-09-23")?.items.map(item => item.id)).toEqual([
+      "zzz-visit",
+      "aaa-email",
+    ]);
+    expect(dayLineForSelectedDate(line, "2026-09-24")).toBeNull();
+    expect(dayLineForSelectedDate(null, "2026-09-23")).toBeNull();
   });
 
   it("does not add a second planner beside Mission Director", () => {

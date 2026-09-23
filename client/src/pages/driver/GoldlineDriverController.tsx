@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { dayLineForSelectedDate } from "@shared/currentDayLine";
 import { createGoldlineEventEmitter } from "../../game/analytics/emitGoldlineEvent";
 import { QuickNewOrderSheet } from "@/components/driver/QuickNewOrderSheet";
 import { AddExternalWorkSheet } from "@/components/driver/AddExternalWorkSheet";
@@ -1439,7 +1440,7 @@ function LiveGoldlineDriverController({
           authoredDay.data?.available ? authoredDay.data.authoredDay : null
         }
         missionPlan={missionDirectorPlan.data?.outcome ?? null}
-        currentDayLine={currentDayLine.data ?? null}
+        currentDayLine={dayLineForSelectedDate(currentDayLine.data, selectedDate)}
         onEnterChapter={
           kingdomTwoUnlocked
             ? () => {

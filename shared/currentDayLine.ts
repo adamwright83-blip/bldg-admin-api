@@ -85,6 +85,8 @@ const REMOTE_PATTERNS = [
   /\bpublish(?:ed|ing)?\b/i,
 ];
 
+const TRANSPORT_DELIVERY = /\bdeliver(?:s|ed|ing|y|ies)?\b/i;
+
 function scrubTransportDelivery(text: string): string {
   return text.replace(
     /\b((?:e-?mail|message|text|sms|post)(?:\s+\w+){0,3}\s+)deliver(?:s|ed|ing|y|ies)?\b/gi,
@@ -94,7 +96,12 @@ function scrubTransportDelivery(text: string): string {
 
 function hasField(text: string): boolean {
   const scrubbed = scrubTransportDelivery(text);
-  return FIELD_PATTERNS.some(pattern => pattern.test(scrubbed));
+  if (!FIELD_PATTERNS.some(pattern => pattern.test(scrubbed))) return false;
+  // "Deliver the email" is a remote send. A visit, pickup, or other field
+  // signal still counts when it is present beside that send.
+  if (!TRANSPORT_DELIVERY.test(scrubbed) || !hasRemote(scrubbed)) return true;
+  const withoutDelivery = scrubbed.replace(/\bdeliver(?:s|ed|ing|y|ies)?\b/gi, " ");
+  return FIELD_PATTERNS.some(pattern => pattern.test(withoutDelivery));
 }
 
 function hasRemote(text: string): boolean {
@@ -203,14 +210,61 @@ export function projectCurrentDayLine(input: {
   };
 }
 
-/** The ranked list, in authority order. Surfaces must not sort this. */
+/** The ranked list, in authority order. Empty unless today was actually ranked. */
 export function currentDayLineOrder(line: CurrentDayLine): string[] {
-  return line.items.map(item => item.id);
+  return presentCurrentDayLine(line).items.map(item => item.id);
 }
 
 export const adminCurrentDayLineOrder = currentDayLineOrder;
 export const driverCurrentDayLineOrder = currentDayLineOrder;
 export const claireCurrentDayLineOrder = currentDayLineOrder;
+
+export type CurrentDayLinePresentation = {
+  businessDate: string;
+  rankingStatus: CurrentDayLine["rankingStatus"];
+  /** Empty unless Mission Director actually ranked today. */
+  items: CurrentDayLineItem[];
+  /** Compatibility designation that is not already a ranked row. */
+  designated: CurrentDayLineItem | null;
+  /** Null when the ranked list is the thing to show. */
+  statusText: string | null;
+};
+
+/** Same words on Admin and Driver. An empty list is not a finished ranking. */
+export function presentCurrentDayLine(line: CurrentDayLine): CurrentDayLinePresentation {
+  const ranked = line.rankingStatus === "ranked" && line.items.length > 0;
+  const rankingStatus = ranked
+    ? "ranked"
+    : line.rankingStatus === "ranked"
+      ? "unavailable"
+      : line.rankingStatus;
+  const designated =
+    line.designated && line.designated.position < 0 ? line.designated : null;
+  return {
+    businessDate: line.businessDate,
+    rankingStatus,
+    items: ranked ? line.items : [],
+    designated,
+    statusText:
+      rankingStatus === "ranked"
+        ? null
+        : rankingStatus === "no_plan"
+          ? "No ranked line for today."
+          : "Today's ranking is unavailable.",
+  };
+}
+
+/**
+ * The day line is today's business date only. Another selected date must
+ * not render it.
+ */
+export function dayLineForSelectedDate(
+  line: CurrentDayLine | null | undefined,
+  selectedDate: string
+): CurrentDayLine | null {
+  if (!line || line.scope !== "today" || line.businessDate !== selectedDate) return null;
+  return line;
+}
 
 export function businessDateInZone(now: Date, timeZone: string): string {
   return new Intl.DateTimeFormat("en-CA", {

@@ -21,6 +21,7 @@ import type { AuthoredDayRecord } from "@shared/authoredDay";
 import type { MissionPlanOutcome } from "@shared/missionDirector";
 import {
   executionTypeLabel,
+  presentCurrentDayLine,
   type CurrentDayLine,
 } from "@shared/currentDayLine";
 import type { OpenChannelMission } from "../../../../server/openChannel/openChannelTypes";
@@ -38,6 +39,37 @@ import { DriverStopChapter } from "@/components/goldline/DriverStopChapter";
 import { LanternRun } from "@/components/goldline/LanternRun";
 import { GoldlineGameNav } from "./GoldlineGameNav";
 import "./goldline-day-plan.css";
+
+function CurrentDayLineBlock({ line }: { line: CurrentDayLine }) {
+  const presented = presentCurrentDayLine(line);
+  return (
+    <div data-testid="current-day-line" data-ranking-status={presented.rankingStatus}>
+      <p>
+        <strong>Today</strong>
+      </p>
+      {presented.items.length ? (
+        <ol>
+          {presented.items.map(item => (
+            <li
+              key={item.id}
+              data-day-line-id={item.id}
+              data-execution-type={item.executionType ?? "unspecified"}
+            >
+              {executionTypeLabel(item.executionType)} · {item.title}
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p data-testid="current-day-line-status">{presented.statusText}</p>
+      )}
+      {presented.designated ? (
+        <p data-testid="current-day-line-designated">
+          {executionTypeLabel(presented.designated.executionType)} · {presented.designated.title}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export type GoldlineDayPlanProps = {
   businessDate: string;
@@ -361,29 +393,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
           </div>
         ) : null}
         {props.currentDayLine ? (
-          <div data-testid="current-day-line">
-            <p>
-              <strong>Today</strong>
-            </p>
-            <ol>
-              {props.currentDayLine.items.map(item => (
-                <li
-                  key={item.id}
-                  data-day-line-id={item.id}
-                  data-execution-type={item.executionType ?? "unspecified"}
-                >
-                  {executionTypeLabel(item.executionType)} · {item.title}
-                </li>
-              ))}
-            </ol>
-            {props.currentDayLine.designated &&
-            props.currentDayLine.designated.position < 0 ? (
-              <p data-testid="current-day-line-designated">
-                {executionTypeLabel(props.currentDayLine.designated.executionType)} ·{" "}
-                {props.currentDayLine.designated.title}
-              </p>
-            ) : null}
-          </div>
+          <CurrentDayLineBlock line={props.currentDayLine} />
         ) : null}
         {props.onEnterChapter ? (
           <button

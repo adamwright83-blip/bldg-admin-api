@@ -4,9 +4,35 @@ import { CalendarClock, Mail, MapPin, MessageSquare, Phone, Plus, TriangleAlert 
 import { LoginForm } from "@/components/LoginForm";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { executionTypeLabel } from "@shared/currentDayLine";
+import { executionTypeLabel, presentCurrentDayLine, type CurrentDayLine } from "@shared/currentDayLine";
 import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
 import { PRODUCT_NAME } from "@shared/productIdentity";
+
+function CurrentDayLineSection({ line }: { line: CurrentDayLine }) {
+  const presented = presentCurrentDayLine(line);
+  return (
+    <section data-testid="current-day-line" data-ranking-status={presented.rankingStatus}>
+      <h2 className="mb-3 text-xs font-black tracking-[.18em] text-orange-300">TODAY</h2>
+      {presented.items.length ? (
+        <ol className="space-y-2">
+          {presented.items.map(item => (
+            <li key={item.id} data-day-line-id={item.id} data-execution-type={item.executionType ?? "unspecified"} className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3">
+              <p className="text-xs font-bold text-orange-300">{executionTypeLabel(item.executionType)}</p>
+              <p className="font-black">{item.title}</p>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p data-testid="current-day-line-status" className="text-sm text-slate-300">{presented.statusText}</p>
+      )}
+      {presented.designated ? (
+        <p data-testid="current-day-line-designated" className="mt-3 text-sm text-slate-300">
+          {executionTypeLabel(presented.designated.executionType)} · {presented.designated.title}
+        </p>
+      ) : null}
+    </section>
+  );
+}
 
 function mapsUrl(address: string) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
@@ -38,21 +64,11 @@ export default function DayforgeTodayPage() {
       </header>
       <div className="mx-auto max-w-4xl space-y-7 px-4 py-6">
         {dayLine.data ? (
-          <section data-testid="current-day-line">
+          <CurrentDayLineSection line={dayLine.data} />
+        ) : dayLine.error ? (
+          <section data-testid="current-day-line" data-ranking-status="unavailable">
             <h2 className="mb-3 text-xs font-black tracking-[.18em] text-orange-300">TODAY</h2>
-            <ol className="space-y-2">
-              {dayLine.data.items.map(item => (
-                <li key={item.id} data-day-line-id={item.id} data-execution-type={item.executionType ?? "unspecified"} className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3">
-                  <p className="text-xs font-bold text-orange-300">{executionTypeLabel(item.executionType)}</p>
-                  <p className="font-black">{item.title}</p>
-                </li>
-              ))}
-            </ol>
-            {dayLine.data.designated && dayLine.data.designated.position < 0 ? (
-              <p data-testid="current-day-line-designated" className="mt-3 text-sm text-slate-300">
-                {executionTypeLabel(dayLine.data.designated.executionType)} · {dayLine.data.designated.title}
-              </p>
-            ) : null}
+            <p data-testid="current-day-line-status" className="text-sm text-slate-300">Today's ranking is unavailable.</p>
           </section>
         ) : null}
         {queue.isLoading ? <p className="text-slate-400">Building your action queue…</p> : null}
