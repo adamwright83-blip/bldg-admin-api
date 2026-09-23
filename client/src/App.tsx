@@ -19,6 +19,7 @@ import LaundryFarmHome from "./pages/LaundryFarmHome";
 import LaundryButlerWelcome from "./pages/LaundryButlerWelcome";
 import LaundryButlerAccount from "./pages/LaundryButlerAccount";
 import { GoldlineCelebrationProvider } from "./components/goldline/GoldlineCelebrationProvider";
+import { LegacyLandingFrame } from "./product/LegacyProductNotice";
 
 // Public product sites are lazy so the operational admin bundle never pays for them.
 const BoreslayLanding = lazy(() => import("./pages/BoreslayLanding"));
@@ -72,7 +73,9 @@ function PublicLandingFallback() {
 function BoreslayLandingRoute() {
   return (
     <Suspense fallback={<PublicLandingFallback />}>
-      <BoreslayLanding />
+      <LegacyLandingFrame legacyName="BORESLAY">
+        <BoreslayLanding />
+      </LegacyLandingFrame>
     </Suspense>
   );
 }
@@ -80,7 +83,9 @@ function BoreslayLandingRoute() {
 function DayforgeLandingRoute() {
   return (
     <Suspense fallback={<PublicLandingFallback />}>
-      <DayforgeLanding />
+      <LegacyLandingFrame legacyName="DayForge">
+        <DayforgeLanding />
+      </LegacyLandingFrame>
     </Suspense>
   );
 }

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import "./dayforge-onboarding.css";
 import { resolveDayforgeAuthenticatedDestination } from "@shared/dayforgeContinuation";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 
 function dayforgeApiBase(): string {
   if (
@@ -58,9 +59,9 @@ export default function DayforgeLoginPage() {
     <main className="df-onboarding">
       <section className="df-onboarding__card df-onboarding__card--compact">
         <div className="df-onboarding__mark" aria-hidden="true">
-          D
+          {PRODUCT_NAME.charAt(0)}
         </div>
-        <p className="df-onboarding__eyebrow">DAYFORGE SIGN IN</p>
+        <p className="df-onboarding__eyebrow">{PRODUCT_NAME} SIGN IN</p>
         <h1>Return to the mission.</h1>
         {import.meta.env.VITE_DAYFORGE_DEMO_MODE === "true" ? (
           <p className="df-onboarding__hint">

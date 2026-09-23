@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 
 /**
  * Shown while the Colosseum's code and painting arrive. Styled inline on
@@ -21,7 +22,7 @@ export function ColosseumBossLoading() {
         className="colosseum-loading-mark"
         style={{ font: '800 13px/1 "Barlow Condensed", system-ui, sans-serif', letterSpacing: "0.32em", color: "#7a4f14" }}
       >
-        GOLDLINE
+        {PRODUCT_NAME}
       </div>
       <div
         className="colosseum-loading-copy"

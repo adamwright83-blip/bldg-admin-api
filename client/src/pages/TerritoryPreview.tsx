@@ -1,4 +1,5 @@
 import { trpc } from "@/lib/trpc";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 import {
   ArrowLeft,
   ArrowRight,
@@ -591,7 +592,7 @@ export default function TerritoryPreview() {
 
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = "Map My Territory | DayForge";
+    document.title = `Map My Territory | ${PRODUCT_NAME}`;
     return () => {
       document.title = previousTitle;
     };

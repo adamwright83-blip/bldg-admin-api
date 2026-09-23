@@ -5,6 +5,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 import {
   ArrowRight,
   Check,
@@ -846,8 +847,7 @@ function updateMetadata() {
     target.name = "description";
     document.head.appendChild(target);
   }
-  document.title =
-    "DayForge — Stop driving past businesses that could be paying you";
+  document.title = PRODUCT_NAME;
   target.content =
     "DayForge turns nearby laundry opportunities into playable BORESLAY missions—and real revenue.";
   return () => {

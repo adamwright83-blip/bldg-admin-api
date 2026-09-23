@@ -15,6 +15,7 @@ import {
   Zap,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
   readSiegeChronicle,
@@ -313,7 +314,7 @@ export function SiegeGame({
     <section className="sg" aria-label={`${level.displayName} Siege`}>
       <header className="sg-header">
         <div>
-          <span className="sg-eyebrow">GOLDLINE: SIEGE</span>
+          <span className="sg-eyebrow">{PRODUCT_NAME}: SIEGE</span>
           <h1>Hold the light.</h1>
           <p>
             {level.displayName} <span>·</span> Five waves. Your command.

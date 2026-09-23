@@ -27,7 +27,7 @@ export async function enterDriverOverland(page: Page) {
   await expectDriverDayHome(page);
   await page.getByRole("button", { name: "Enter Overland" }).click();
   await expect(
-    page.getByRole("region", { name: "Goldline global overworld" })
+    page.getByRole("region", { name: "JOYSTICK overworld" })
   ).toBeVisible({ timeout: 30_000 });
 }
 

@@ -16,6 +16,7 @@ import type { CityScene } from "./sceneTypes";
 import { rectStyle } from "./LanternCitySceneRenderer";
 import { LANTERN_CITY_V5_ASSETS as ASSETS } from "@/components/goldline/lanternCityV5Assets";
 import styles from "./lantern-city-v6.module.css";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 
 export type Command =
   | "map"
@@ -141,7 +142,7 @@ export function LanternCityHUD({
       >
         <Crown aria-hidden />
         <div>
-          <span>GOLDLINE</span>
+          <span>{PRODUCT_NAME}</span>
           <h1>LANTERN CITY</h1>
           <small>REAL BUSINESSES. A BRIGHTER LOS ANGELES.</small>
         </div>

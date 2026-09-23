@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 
 export type Capability = { enabled: boolean; active: boolean; tenantId: string | null; businessName: string | null };
 
@@ -92,6 +93,6 @@ export function DemoExit() {
     }
   };
   return <button type="button" className="gl-demo-exit" data-testid="goldline-demo-exit" disabled={busy} onClick={exit}>
-    {busy ? "RETURNING…" : "EXIT DEMO / RETURN TO MY GOLDLINE"}
+    {busy ? "RETURNING…" : `EXIT DEMO / RETURN TO ${PRODUCT_NAME}`}
   </button>;
 }

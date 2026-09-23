@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { useDebounce } from "@/hooks/useDebounce";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 import { LoginForm } from "@/components/LoginForm";
 import { CustomerProfileDrawer } from "@/components/CustomerProfileDrawer";
 import { CustomersTab } from "@/components/CustomersTab";
@@ -511,7 +512,7 @@ export default function Admin() {
                 </DropdownMenuContent>
               </DropdownMenu>
               <span className="text-sm font-semibold tracking-widest uppercase">
-                Laundry Butler
+                {PRODUCT_NAME}
               </span>
             </div>
             <span className="text-xs text-black/40">

@@ -28,6 +28,7 @@ import {
   X,
 } from "lucide-react";
 import type { DriverGameWorldNode } from "../../../shared/driverGameWorld";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 import type { GoldlineProgressionProjection } from "../../../shared/goldlineProgression";
 import { gameWorldControlPercent } from "../../../shared/driverGameWorld";
 import type {
@@ -3050,7 +3051,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
     >
       <section
         className={`playable-goldline is-${view}`}
-        aria-label="Goldline playable field world"
+        aria-label={`${PRODUCT_NAME} playable field world`}
         data-testid="goldline-world"
         data-game-view={view}
         data-encounter-phase={encounterRuntime?.phase ?? "NONE"}
@@ -3221,7 +3222,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
         {drivingLikely ? (
           <div className="driving-safety-shield" role="status" data-testid="driving-safety-shield">
             <b>TRAVEL IN PROGRESS</b>
-            <span>GOLDLINE IS WATCHING THE ROUTE · CONTROLS RETURN WHEN PARKED</span>
+            <span>THE ROUTE STAYS IN VIEW · CONTROLS RETURN WHEN PARKED</span>
           </div>
         ) : null}
         {missionAffordance?.primary ? (
@@ -4056,11 +4057,11 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
                           )
                         }
                       >
-                        INSTALL GOLDLINE
+                        INSTALL {PRODUCT_NAME}
                       </button>
                     ) : isIOS() ? (
                       <p className="pwa-install-hint">
-                        Add Goldline to your Home Screen: tap Share, then "Add
+                        Add {PRODUCT_NAME} to your Home Screen: tap Share, then "Add
                         to Home Screen".
                       </p>
                     ) : null

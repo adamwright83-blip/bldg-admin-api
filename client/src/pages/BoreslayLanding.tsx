@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 import "../components/boreslay/boreslay.css";
 import { PublicBoreslayDemo } from "../components/boreslay-demo/PublicBoreslayDemo";
 import { BsCanonicalSections } from "../components/boreslay/BsCanonicalSections";
@@ -16,8 +17,7 @@ export default function BoreslayLanding() {
 
   useEffect(() => {
     const prevTitle = document.title;
-    document.title =
-      "BORESLAY — Play the game. Command the crew. Grow your business.";
+    document.title = PRODUCT_NAME;
     const meta = document.querySelector('meta[name="description"]');
     const prevDescription = meta?.getAttribute("content") ?? null;
     meta?.setAttribute(
