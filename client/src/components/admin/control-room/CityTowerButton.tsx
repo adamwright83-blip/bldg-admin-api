@@ -11,6 +11,7 @@
  */
 import { useLayoutEffect, useRef } from "react";
 import { CanonicalBuildingArt } from "./CanonicalBuildingArt";
+import { resolveLanternCityClick } from "./lanternClickResolver";
 import { useWorldTransition } from "./WorldTransitionProvider";
 import { BUILDING_ART, type CanonicalBuildingId } from "./buildingArt";
 import type { BuildingVitality } from "./lanternVitality";
@@ -104,8 +105,13 @@ export function CityTowerButton({
       data-damaged={combat && combatArt.showingDamage ? "true" : undefined}
       style={litStyle ? { ...style, ...litStyle } : style}
       onClick={() => {
+        const click = resolveLanternCityClick({
+          buildingId,
+          target: "tower",
+        });
+        if (click.action !== "navigate") return;
         begin({
-          entityId: buildingId,
+          entityId: click.entityId,
           from: "city",
           to: "building",
           sourceEl: artRef.current,
@@ -113,7 +119,7 @@ export function CityTowerButton({
           kind: "traversal",
         });
         // State commits first: navigate immediately, camera follows.
-        onNavigate(`/growth/tower-wars?building=${buildingId}`);
+        onNavigate(click.path);
       }}
       aria-label={`Enter ${art.displayName}`}
     >

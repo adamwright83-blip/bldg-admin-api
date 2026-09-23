@@ -6,6 +6,7 @@ import type { GeographicCustomer } from "../customerGeography";
 import { WorldEntityInspector } from "../WorldEntityInspector";
 import { RekindlingArsenal } from "../RekindlingArsenal";
 import { CampaignChronicleList } from "@/components/goldline/CampaignWorldLayer";
+import { resolveLanternCityClick } from "../lanternClickResolver";
 import { useWorldTransition } from "../WorldTransitionProvider";
 import { composeLanternCityScene } from "./composeLanternCityScene";
 import {
@@ -329,27 +330,26 @@ export default function LanternCityScene({
       object.kind === "second_light" ? "second_light" : "district"
     );
     // The stronghold tower and its attached live customer light are one
-    // scene object but two interaction targets: the tower body enters
-    // Tower Wars, the attached light opens the customer inspector.
-    if (object.buildingId && target !== "light") {
+    // scene object but two interaction targets. The shared resolver
+    // decides which is navigation and which is the inspector.
+    const click = resolveLanternCityClick({
+      buildingId: object.buildingId,
+      target,
+      opensInspector: Boolean(object.cluster || object.prospectId),
+    });
+    if (click.action === "navigate") {
       transition.begin({
-        entityId: object.buildingId,
+        entityId: click.entityId,
         from: "city",
         to: "building",
         sourceEl: element,
         returnPath: "/growth/lantern-city",
         kind: "traversal",
       });
-      // Opus LA gets its own tower-inspection screen before Tower Wars;
-      // every other building keeps going straight there unchanged.
-      onNavigate(
-        object.buildingId === "opus_la"
-          ? "/growth/opus-la-inspection"
-          : `/growth/tower-wars?building=${object.buildingId}`
-      );
+      onNavigate(click.path);
       return;
     }
-    if (object.cluster || object.prospectId) {
+    if (click.action === "inspect") {
       setInspect(true);
       setTerritoryId(object.territoryId);
     }
@@ -460,13 +460,13 @@ export default function LanternCityScene({
             ? Object.entries(CANONICAL_BUILDING_GEOGRAPHY).map(([id, geo]) => (
                 <button
                   key={id}
-                  onClick={() =>
-                    onNavigate(
-                      id === "opus_la"
-                        ? "/growth/opus-la-inspection"
-                        : `/growth/tower-wars?building=${id}`
-                    )
-                  }
+                  onClick={() => {
+                    const click = resolveLanternCityClick({
+                      buildingId: id,
+                      target: "tower",
+                    });
+                    if (click.action === "navigate") onNavigate(click.path);
+                  }}
                 >
                   {geo.name}
                   <small>{geo.address}</small>

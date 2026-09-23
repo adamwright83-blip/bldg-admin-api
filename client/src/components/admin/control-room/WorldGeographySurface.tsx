@@ -6,6 +6,7 @@ import {
 } from "@shared/canonicalGeography";
 import type { CanonicalBuildingId } from "./buildingArt";
 import { CityTowerButton } from "./CityTowerButton";
+import { resolveLanternCityClick } from "./lanternClickResolver";
 import type { BuildingVitality } from "./lanternVitality";
 import { WorldAtmosphereOverlay } from "./WorldAtmosphereOverlay";
 import type { GeographicEntity } from "./GoogleMapsRealityLayer";
@@ -398,13 +399,13 @@ export function WorldGeographySurface({
               <CityTowerButton
                 buildingId={tower.id}
                 className={`pwc-building ${tower.id === "opus_la" ? "opus" : "cpe"}${towerAttachedClusters?.get(tower.id) ? " has-attached-customers" : ""}`}
-                onNavigate={path => {
+                onNavigate={() => {
                   onSelectBuilding?.(tower.id);
-                  // Opus LA gets its own tower-inspection screen before Tower Wars;
-                  // every other building keeps going straight there unchanged.
-                  onNavigate?.(
-                    tower.id === "opus_la" ? "/growth/opus-la-inspection" : path
-                  );
+                  const click = resolveLanternCityClick({
+                    buildingId: tower.id,
+                    target: "tower",
+                  });
+                  if (click.action === "navigate") onNavigate?.(click.path);
                 }}
                 subtitle={
                   combatPresentation

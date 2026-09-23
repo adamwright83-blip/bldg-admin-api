@@ -86,7 +86,7 @@ describe("state commits first, camera follows", () => {
 
   it("navigates immediately rather than waiting for the animation", () => {
     const beginAt = button.indexOf("begin({");
-    const navAt = button.indexOf("onNavigate(`/growth/tower-wars");
+    const navAt = button.indexOf("onNavigate(click.path)");
     expect(beginAt).toBeGreaterThan(-1);
     expect(navAt).toBeGreaterThan(beginAt); // navigation is not gated behind a timer
     expect(button).not.toMatch(/setTimeout[^)]*onNavigate/);

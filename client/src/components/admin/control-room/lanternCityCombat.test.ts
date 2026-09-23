@@ -224,10 +224,10 @@ describe("lanterns keep deriving from real customer cadence", () => {
 });
 
 describe("the tower is the button", () => {
-  it("navigates to each building's own Tower Wars", () => {
-    expect(towerButton).toContain(
-      "onNavigate(`/growth/tower-wars?building=${buildingId}`)"
-    );
+  it("navigates each building through the shared click resolver", () => {
+    expect(towerButton).toContain("resolveLanternCityClick");
+    expect(towerButton).toContain("onNavigate(click.path)");
+    expect(surface).toContain("resolveLanternCityClick");
     expect(surface).toContain("CityTowerButton");
     expect(surface).toContain('id: "century_park_east"');
     expect(surface).toContain('id: "opus_la"');
