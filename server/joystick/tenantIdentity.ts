@@ -218,11 +218,18 @@ export async function authorizeJoystickClaireDesk(
     };
   }
 
-  const membership = await resolveMembership({
-    tenantId: input.tenantId,
-    userOpenId: input.user.openId,
-    platformRole: input.user.role,
-  });
+  let membership: Awaited<ReturnType<MembershipLookup>>;
+  try {
+    membership = await resolveMembership({
+      tenantId: input.tenantId,
+      userOpenId: input.user.openId,
+      platformRole: input.user.role,
+    });
+  } catch {
+    // A failed membership read is not access. Refuse before the query error
+    // can become the caller's response.
+    return { ok: false, reason: "missing_membership" };
+  }
   if (!membership || !roleAllows(membership.role, FIELD_ROLES)) {
     return { ok: false, reason: "missing_membership" };
   }

@@ -123,6 +123,19 @@ describe("JOYSTICK tenant identity", () => {
     expect(bound.denial).toBe("cross_tenant");
   });
 
+  it("refuses a non-admin when the membership lookup fails", async () => {
+    const decision = await authorizeJoystickClaireDesk(
+      {
+        tenantId: "tenant-1",
+        user: { openId: "operator-105", role: "user" },
+      },
+      async () => {
+        throw new Error("Failed query: select `tenantId` from memberships");
+      }
+    );
+    expect(decision).toEqual({ ok: false, reason: "missing_membership" });
+  });
+
   it("does not let the shared driver password select a SaaS tenant", async () => {
     const lookup = vi.fn();
     const bound = tenantForAuthenticatedUser({
