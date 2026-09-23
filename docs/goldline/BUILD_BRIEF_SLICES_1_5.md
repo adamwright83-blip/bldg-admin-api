@@ -339,8 +339,9 @@ the Rook decision is recorded either way.
 
 > **Amended 2026-09-22 (Adam):** Rook joins the party when Kingdom 1 (the Colosseum)
 > resolves and travels into Kingdom 2 as its companion; his in-world mechanic is CONTACT
-> (`rook.outreach_drafting`). The evidence-backed server unlock of his real capability is
-> unchanged and still open. See `campaigns/KINGDOM_2_COMPANION_EVALUATION.md` §Amendment.
+> (`rook.outreach_drafting`). Party membership is currently same-device local fantasy
+> continuity, not server state. The evidence-backed server unlock of his real capability
+> is unchanged and still open. See `campaigns/KINGDOM_2_COMPANION_EVALUATION.md` §Amendment.
 
 ---
 

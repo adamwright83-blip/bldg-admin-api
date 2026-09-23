@@ -41,7 +41,7 @@ describe("the Goldline party", () => {
     expect(isTravelingWith("driver-1", "rook")).toBe(false);
   });
 
-  it("persists Rook joining, per player, and tells whoever is listening", () => {
+  it("records Rook joining in this device's storage, per player, and tells whoever is listening", () => {
     const heard: string[] = [];
     fakeWindow.addEventListener(PARTY_CHANGED_EVENT, event =>
       heard.push((event as CustomEvent<{ id: string }>).detail.id)

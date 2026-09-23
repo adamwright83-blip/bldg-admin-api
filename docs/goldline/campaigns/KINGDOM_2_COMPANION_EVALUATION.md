@@ -64,9 +64,13 @@ your time."
 
 What this changes, and what it does not:
 
-- **Party membership** (fiction) is persisted per player at the Colosseum-resolution
-  boundary in `client/src/pages/goldline/stages/goldlineParty.ts`. Later kingdoms and the
-  Road read it from there (`isTravelingWith`, `useGoldlineParty`).
+- **Party membership** (fiction) is same-device local continuity: recorded per player in
+  this device's `localStorage` at the Colosseum-resolution boundary, exactly like the
+  Wayward unlock and the local Colosseum resolution it derives from. It is not durable,
+  account-level or server state — another device, a cleared browser or a private window
+  will not have it. Later kingdoms and the Road read it from
+  `client/src/pages/goldline/stages/goldlineParty.ts` (`isTravelingWith`,
+  `useGoldlineParty`).
 - **CONTACT** is the in-world name of his mechanic: Rook can reach people, open
   conversations, and get through social barriers Trailblazer cannot. It names the same
   protected capability, `rook.outreach_drafting` (REALITY_BRIDGE §6), and widens none of

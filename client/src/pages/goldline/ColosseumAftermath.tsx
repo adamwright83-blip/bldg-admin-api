@@ -25,8 +25,9 @@ import type { DuelStats } from "./clockheadDuelEngine";
  *   the party        ROOK JOINED THE PARTY, and his mechanic, CONTACT.
  *
  * It can reach the outside world only through `onContinue`, from the party
- * card — the finale's single `onDefeated` path. Persisting Rook is the
- * controller's job at that boundary (stages/goldlineParty.ts), never this.
+ * card — the finale's single `onDefeated` path. Recording Rook (same-device
+ * fantasy continuity, stages/goldlineParty.ts) is the controller's job at that
+ * boundary, never this.
  */
 
 export type AftermathBeat = "stamp" | "quiet" | "radio" | "party";

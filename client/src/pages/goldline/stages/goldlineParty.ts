@@ -2,12 +2,15 @@ import { useEffect, useState } from "react";
 import { hasColosseumResolved } from "./waywardProgress";
 
 /**
- * Who travels with Trailblazer — the single source of truth for every later
- * sequence (the next kingdom, the Road) that needs to know.
+ * Who travels with Trailblazer, on this device — the one place later
+ * sequences (the next kingdom, the Road) ask.
  *
- * FICTION, persisted like the Wayward unlock: per player identity, written at
- * the same authoritative boundary (GoldlineDriverController, when the finale
- * resolves after the real campaign is complete). Party membership never
+ * FICTION, kept as same-device local continuity: `window.localStorage`, keyed
+ * by player identity, recorded at the same boundary as the Wayward unlock
+ * (GoldlineDriverController, when the finale resolves after the real campaign
+ * is complete). Like the Wayward unlock and the Colosseum resolution it derives
+ * from, it is NOT durable, account-level or server state: another device, a
+ * cleared browser or a private window will not have it. Party membership never
  * records a visit, sale or revenue, and nothing here can write one.
  *
  * It is not the server's evidence-backed companion unlock
@@ -17,9 +20,9 @@ import { hasColosseumResolved } from "./waywardProgress";
  *
  * Rook joins when Kingdom 1 (the Colosseum) resolves: he was never waiting to
  * be rescued — he has been running an illegal communications network through
- * the Republic's clocks the whole time (WORLD_BIBLE §12). A player who
- * resolved the Colosseum before this existed has him too: his membership is
- * derived from that same persisted resolution.
+ * the Republic's clocks the whole time (WORLD_BIBLE §12). A player whose device
+ * already holds a Colosseum resolution from before this existed has him too:
+ * his membership is derived from that same local resolution.
  */
 
 export type PartyMemberId = "rook";
