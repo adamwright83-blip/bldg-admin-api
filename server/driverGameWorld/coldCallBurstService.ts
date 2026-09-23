@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import {
   commercialAccountContacts,
   commercialAccountLocations,
@@ -40,6 +40,7 @@ import {
 type EligibleRow = {
   missionId: number;
   accountId: number;
+  contactId: number;
   companyName: string;
   phoneNumber: string;
   reason: string;
@@ -47,6 +48,45 @@ type EligibleRow = {
   openingLine: string;
   provenance: string;
 };
+
+function affectedRows(result: unknown): number {
+  return Number(
+    (result as { affectedRows?: number; [0]?: { affectedRows?: number } })
+      .affectedRows ??
+      (result as { [0]?: { affectedRows?: number } })[0]?.affectedRows ??
+      0
+  );
+}
+
+function withinServiceAreaFor(
+  profile:
+    | {
+        latitude: string | number | null;
+        longitude: string | number | null;
+        serviceRadiusMiles: string | number | null;
+      }
+    | undefined,
+  location:
+    | {
+        latitude: string | number | null;
+        longitude: string | number | null;
+      }
+    | null
+): boolean | null {
+  const hasCoordinates = Boolean(
+    profile?.latitude &&
+      profile.longitude &&
+      location?.latitude &&
+      location.longitude
+  );
+  if (!hasCoordinates || !profile || !location) return null;
+  return (
+    distanceMiles(
+      { lat: Number(profile.latitude), lng: Number(profile.longitude) },
+      { lat: Number(location.latitude), lng: Number(location.longitude) }
+    ) <= Number(profile.serviceRadiusMiles)
+  );
+}
 
 async function eligibleColdCallRows(input: {
   tenantId: string;
@@ -122,21 +162,6 @@ async function eligibleColdCallRows(input: {
   for (const row of rows) {
     if (seen.has(row.mission.id)) continue;
     seen.add(row.mission.id);
-    const hasCoordinates = Boolean(
-      profile?.latitude &&
-        profile.longitude &&
-        row.location?.latitude &&
-        row.location.longitude
-    );
-    const withinServiceArea = hasCoordinates
-      ? distanceMiles(
-          { lat: Number(profile!.latitude), lng: Number(profile!.longitude) },
-          {
-            lat: Number(row.location!.latitude),
-            lng: Number(row.location!.longitude),
-          }
-        ) <= Number(profile!.serviceRadiusMiles)
-      : null;
     const decision = coldCallEligibility({
       missionId: row.mission.id,
       missionStatus: row.mission.status,
@@ -145,7 +170,7 @@ async function eligibleColdCallRows(input: {
       phoneNumber: row.contact.phone,
       contactSource: row.contact.source,
       preferredChannel: row.contact.preferredChannel,
-      withinServiceArea,
+      withinServiceArea: withinServiceAreaFor(profile, row.location),
       alreadyCompleted: row.callEventId != null,
     });
     if (!decision.eligible || !row.contact.phone) continue;
@@ -153,6 +178,7 @@ async function eligibleColdCallRows(input: {
     eligible.push({
       missionId: row.mission.id,
       accountId: row.account.id,
+      contactId: row.contact.id,
       companyName: row.account.name,
       phoneNumber: row.contact.phone,
       reason: decision.reason,
@@ -211,6 +237,7 @@ async function readBatch(input: {
       commercialAccountContacts,
       and(
         eq(commercialAccountContacts.tenantId, driverColdCallTargets.tenantId),
+        eq(commercialAccountContacts.id, driverColdCallTargets.contactId),
         eq(commercialAccountContacts.accountId, driverColdCallTargets.accountId)
       )
     )
@@ -228,8 +255,10 @@ async function readBatch(input: {
   const seen = new Set<string>();
   const targets: ColdCallTarget[] = [];
   for (const row of rows) {
-    if (seen.has(row.target.id) || !row.contact.phone) continue;
+    if (seen.has(row.target.id)) continue;
+    if (row.contact.id !== row.target.contactId) continue;
     seen.add(row.target.id);
+    if (!row.contact.phone?.trim()) continue;
     const brief = row.mission.missionBriefJson as CommercialMissionBrief;
     targets.push({
       id: row.target.id,
@@ -352,6 +381,7 @@ export async function createColdCallBatch(input: {
         actorId: input.actorId,
         missionId: target.missionId,
         accountId: target.accountId,
+        contactId: target.contactId,
         position,
         status: position === 0 ? ("selected" as const) : ("pending" as const),
         sourceReference: target.sourceReference,
@@ -385,6 +415,145 @@ async function ownedTarget(input: {
   return target;
 }
 
+const COLD_CALL_INELIGIBLE = "This target is no longer eligible for a cold call";
+
+/**
+ * Reload the contact id stored on the target. Eligibility is re-checked on
+ * that row alone. A sibling contact on the same mission is not a substitute.
+ */
+async function loadPinnedColdCallContact(input: {
+  tenantId: string;
+  actorId: string;
+  missionId: number;
+  accountId: number;
+  contactId: number | null;
+}): Promise<string> {
+  if (input.contactId == null) throw new Error(COLD_CALL_INELIGIBLE);
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [profile] = await db
+    .select()
+    .from(territoryOperatorProfiles)
+    .where(eq(territoryOperatorProfiles.tenantId, input.tenantId))
+    .limit(1);
+  const rows = await db
+    .select({
+      mission: commercialMissions,
+      account: commercialAccounts,
+      contact: commercialAccountContacts,
+      location: commercialAccountLocations,
+      callEventId: commercialMissionEvents.id,
+    })
+    .from(commercialAccountContacts)
+    .innerJoin(
+      commercialAccounts,
+      and(
+        eq(commercialAccounts.tenantId, commercialAccountContacts.tenantId),
+        eq(commercialAccounts.id, commercialAccountContacts.accountId)
+      )
+    )
+    .innerJoin(
+      commercialPipelineRecords,
+      and(
+        eq(commercialPipelineRecords.tenantId, commercialAccountContacts.tenantId),
+        eq(commercialPipelineRecords.accountId, commercialAccountContacts.accountId)
+      )
+    )
+    .innerJoin(
+      commercialMissions,
+      and(
+        eq(commercialMissions.tenantId, commercialPipelineRecords.tenantId),
+        eq(commercialMissions.id, commercialPipelineRecords.missionId)
+      )
+    )
+    .leftJoin(
+      commercialAccountLocations,
+      and(
+        eq(commercialAccountLocations.tenantId, commercialAccountContacts.tenantId),
+        eq(commercialAccountLocations.accountId, commercialAccountContacts.accountId),
+        eq(commercialAccountLocations.isPrimary, true)
+      )
+    )
+    .leftJoin(
+      commercialMissionEvents,
+      and(
+        eq(commercialMissionEvents.tenantId, commercialMissions.tenantId),
+        eq(commercialMissionEvents.missionId, commercialMissions.id),
+        eq(commercialMissionEvents.eventName, "cold_call_logged")
+      )
+    )
+    .where(
+      and(
+        eq(commercialAccountContacts.id, input.contactId),
+        eq(commercialAccountContacts.tenantId, input.tenantId),
+        eq(commercialAccountContacts.accountId, input.accountId),
+        eq(commercialMissions.id, input.missionId),
+        eq(commercialMissions.tenantId, input.tenantId),
+        eq(commercialMissions.assignedTo, input.actorId)
+      )
+    )
+    .limit(1);
+  const row = rows[0];
+  if (!row || row.contact.id !== input.contactId) {
+    throw new Error(COLD_CALL_INELIGIBLE);
+  }
+  const decision = coldCallEligibility({
+    missionId: row.mission.id,
+    missionStatus: row.mission.status,
+    assignedTo: row.mission.assignedTo,
+    actorId: input.actorId,
+    phoneNumber: row.contact.phone,
+    contactSource: row.contact.source,
+    preferredChannel: row.contact.preferredChannel,
+    withinServiceArea: withinServiceAreaFor(profile, row.location),
+    alreadyCompleted: row.callEventId != null,
+  });
+  if (!decision.eligible || !row.contact.phone?.trim()) {
+    throw new Error(COLD_CALL_INELIGIBLE);
+  }
+  return row.contact.phone;
+}
+
+/** Compare-and-swap. The row update is the lock; a loser does not dial. */
+async function claimColdCallRoll(input: {
+  tenantId: string;
+  actorId: string;
+  batchId: string;
+  targetId: string;
+}): Promise<string | null> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const claimId = randomUUID();
+  const result = await db
+    .update(driverColdCallTargets)
+    .set({ rollClaimId: claimId })
+    .where(
+      and(
+        eq(driverColdCallTargets.id, input.targetId),
+        eq(driverColdCallTargets.batchId, input.batchId),
+        eq(driverColdCallTargets.tenantId, input.tenantId),
+        eq(driverColdCallTargets.actorId, input.actorId),
+        isNull(driverColdCallTargets.rollClaimId),
+        ne(driverColdCallTargets.status, "completed")
+      )
+    );
+  return affectedRows(result) === 1 ? claimId : null;
+}
+
+async function releaseColdCallRoll(targetId: string, claimId: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(driverColdCallTargets)
+    .set({ rollClaimId: null })
+    .where(
+      and(
+        eq(driverColdCallTargets.id, targetId),
+        eq(driverColdCallTargets.rollClaimId, claimId)
+      )
+    );
+}
+
 export async function startColdCallTarget(input: {
   tenantId: string;
   actorId: string;
@@ -396,12 +565,13 @@ export async function startColdCallTarget(input: {
   const target = await ownedTarget(input);
   if (target.status === "completed")
     throw new Error("Call outcome is already recorded");
-  const stillEligible = (await eligibleColdCallRows(input)).some(
-    candidate => candidate.missionId === target.missionId
-  );
-  if (!stillEligible) {
-    throw new Error("This target is no longer eligible for a cold call");
-  }
+  await loadPinnedColdCallContact({
+    tenantId: input.tenantId,
+    actorId: input.actorId,
+    missionId: target.missionId,
+    accountId: target.accountId,
+    contactId: target.contactId,
+  });
   await db
     .update(driverColdCallTargets)
     .set({ status: "live" })
@@ -413,6 +583,7 @@ export async function startColdCallTarget(input: {
  * Operator-first Cold Call Burst roll.
  * The browser supplies batch and target ids only. Both phone numbers are
  * resolved here. The prospect is not dialed by this function.
+ * A compare-and-swap claim is taken before any Twilio call.
  */
 export async function rollColdCallTarget(input: {
   tenantId: string;
@@ -424,37 +595,61 @@ export async function rollColdCallTarget(input: {
   if (target.status === "completed") {
     throw new Error("Call outcome is already recorded");
   }
-  if (target.status === "live") {
-    const existing = await latestColdCallAttempt(input.tenantId, target.id);
-    if (existing && !isColdCallRollingTerminal(existing.status as ColdCallRollingStatus)) {
-      return readBatch(input);
+  const existing = await latestColdCallAttempt(input.tenantId, target.id);
+  if (
+    existing &&
+    !isColdCallRollingTerminal(existing.status as ColdCallRollingStatus)
+  ) {
+    return readBatch(input);
+  }
+  // A finished attempt may leave the previous claim in place. Clear only
+  // that observed claim. An in-flight roll has no attempt yet, so a peer
+  // that lost the compare-and-swap must not clear it.
+  if (
+    target.rollClaimId &&
+    existing &&
+    isColdCallRollingTerminal(existing.status as ColdCallRollingStatus)
+  ) {
+    await releaseColdCallRoll(target.id, target.rollClaimId);
+  }
+  const claimId = await claimColdCallRoll(input);
+  if (!claimId) return readBatch(input);
+  try {
+    const prospectLegTo = await loadPinnedColdCallContact({
+      tenantId: input.tenantId,
+      actorId: input.actorId,
+      missionId: target.missionId,
+      accountId: target.accountId,
+      contactId: target.contactId,
+    });
+    const operatorLegTo = await authorizedOperatorPhone({
+      tenantId: input.tenantId,
+      actorId: input.actorId,
+    });
+    const operatorLegFrom = claireTwilioFromNumber();
+    const prospectCallerId = operatorLegTo;
+    await assertVerifiedOutgoingCallerId(operatorLegTo);
+    await placeOperatorFirstBridgeCall({
+      tenantId: input.tenantId,
+      coldCallTargetId: target.id,
+      legs: {
+        operatorLegTo,
+        operatorLegFrom,
+        prospectLegTo,
+        prospectCallerId,
+      },
+    });
+    return await startColdCallTarget(input);
+  } catch (error) {
+    const attempt = await latestColdCallAttempt(input.tenantId, target.id);
+    if (
+      !attempt ||
+      isColdCallRollingTerminal(attempt.status as ColdCallRollingStatus)
+    ) {
+      await releaseColdCallRoll(target.id, claimId);
     }
+    throw error;
   }
-  const prospect = (await eligibleColdCallRows(input)).find(
-    candidate => candidate.missionId === target.missionId
-  );
-  if (!prospect?.phoneNumber.trim()) {
-    throw new Error("This target is no longer eligible for a cold call");
-  }
-  const operatorLegTo = await authorizedOperatorPhone({
-    tenantId: input.tenantId,
-    actorId: input.actorId,
-  });
-  const operatorLegFrom = claireTwilioFromNumber();
-  const prospectLegTo = prospect.phoneNumber;
-  const prospectCallerId = operatorLegTo;
-  await assertVerifiedOutgoingCallerId(operatorLegTo);
-  await placeOperatorFirstBridgeCall({
-    tenantId: input.tenantId,
-    coldCallTargetId: target.id,
-    legs: {
-      operatorLegTo,
-      operatorLegFrom,
-      prospectLegTo,
-      prospectCallerId,
-    },
-  });
-  return startColdCallTarget(input);
 }
 
 export async function getColdCallRollingCall(input: {

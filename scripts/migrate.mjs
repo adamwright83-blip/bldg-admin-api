@@ -2305,5 +2305,27 @@ await run(
   "CREATE INDEX sales_call_attempts_cold_call_target_idx"
 );
 
+// ── Cold Call Burst contact pin and roll claim ──────────────────
+// Mirrors drizzle/0096_cold_call_target_contact.sql.
+await run(
+  `ALTER TABLE driver_cold_call_targets ADD COLUMN contactId INT NULL`,
+  "ALTER driver_cold_call_targets ADD contactId"
+);
+await run(
+  `ALTER TABLE driver_cold_call_targets ADD COLUMN rollClaimId VARCHAR(36) NULL`,
+  "ALTER driver_cold_call_targets ADD rollClaimId"
+);
+await run(
+  `UPDATE driver_cold_call_targets
+   SET contactId = CAST(SUBSTRING_INDEX(sourceReference, ':', -1) AS UNSIGNED)
+   WHERE contactId IS NULL
+     AND sourceReference LIKE 'commercial_account_contacts:%'`,
+  "BACKFILL driver_cold_call_targets.contactId"
+);
+await run(
+  `CREATE INDEX idx_driver_cold_call_target_contact ON driver_cold_call_targets (tenantId, contactId)`,
+  "CREATE INDEX idx_driver_cold_call_target_contact"
+);
+
 await conn.end();
 console.log("\nMigration complete.");

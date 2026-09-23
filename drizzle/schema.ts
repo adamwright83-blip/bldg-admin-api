@@ -4873,6 +4873,17 @@ export const driverColdCallTargets = mysqlTable(
     actorId: varchar("actorId", { length: 128 }).notNull(),
     missionId: int("missionId").notNull(),
     accountId: int("accountId").notNull(),
+    /**
+     * Exact commercial_account_contacts.id chosen when the target was
+     * created. Dial and display reload this row. A sibling contact on the
+     * same mission or account is not a substitute.
+     */
+    contactId: int("contactId"),
+    /**
+     * Compare-and-swap token for an in-flight roll. A second concurrent
+     * roll cannot take it while this is set.
+     */
+    rollClaimId: varchar("rollClaimId", { length: 36 }),
     position: int("position").notNull(),
     status: mysqlEnum("status", ["pending", "selected", "live", "completed"])
       .notNull()
@@ -4895,6 +4906,10 @@ export const driverColdCallTargets = mysqlTable(
       table.batchId,
       table.status,
       table.position
+    ),
+    contactIdx: index("idx_driver_cold_call_target_contact").on(
+      table.tenantId,
+      table.contactId
     ),
   })
 );

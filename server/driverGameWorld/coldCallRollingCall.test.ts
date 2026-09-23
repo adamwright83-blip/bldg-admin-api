@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import type { Request, Response } from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  commercialAccountContacts,
   commercialMissions,
   driverColdCallBatches,
   driverColdCallTargets,
@@ -95,6 +96,8 @@ function fixture() {
     actorId: input.actorId,
     missionId: 11,
     accountId: 5,
+    contactId: 9 as number | null,
+    rollClaimId: null as string | null,
     position: 0,
     status: "selected" as string,
     sourceReference: "commercial_account_contacts:9",
@@ -120,6 +123,7 @@ function fixture() {
     source: "provider_sourced",
     preferredChannel: "phone",
   };
+  const contacts = [contact];
   const mission = {
     id: 11,
     status: "phone_ready",
@@ -135,20 +139,24 @@ function fixture() {
   function rows(state: { table: unknown; joined: boolean }) {
     if (state.table === territoryOperatorProfiles) return [];
     if (state.table === commercialMissions) {
-      return [
-        {
-          mission,
-          account,
-          contact,
-          location: null,
-          callEventId: null,
-        },
-      ];
+      return contacts.map(item => ({
+        mission,
+        account,
+        contact: item,
+        location: null,
+        callEventId: null,
+      }));
+    }
+    if (state.table === commercialAccountContacts) {
+      const pinned = contacts.find(item => item.id === targetRow.contactId);
+      return pinned
+        ? [{ contact: pinned, mission, account, location: null, callEventId: null }]
+        : [];
     }
     if (state.table === driverColdCallBatches) return [batchRow];
     if (state.table === salesCallAttempts) return attempts;
     if (state.table === driverColdCallTargets && state.joined) {
-      return [{ target: targetRow, mission, account, contact }];
+      return contacts.map(item => ({ target: targetRow, mission, account, contact: item }));
     }
     if (state.table === driverColdCallTargets) return [targetRow];
     return [];
@@ -214,9 +222,18 @@ function fixture() {
             where() {
               updates.push({ table, vals });
               if (table === salesCallAttempts && attempts[0]) Object.assign(attempts[0], vals);
-              if (table === driverColdCallTargets) Object.assign(targetRow, vals);
+              if (table === driverColdCallTargets) {
+                const nextClaim = Object.prototype.hasOwnProperty.call(vals, "rollClaimId")
+                  ? vals.rollClaimId
+                  : undefined;
+                if (typeof nextClaim === "string" && nextClaim && targetRow.rollClaimId) {
+                  return Promise.resolve([{ affectedRows: 0 }]);
+                }
+                Object.assign(targetRow, vals);
+                return Promise.resolve([{ affectedRows: 1 }]);
+              }
               if (table === driverColdCallBatches) Object.assign(batchRow, vals);
-              return Promise.resolve();
+              return Promise.resolve([{ affectedRows: 1 }]);
             },
           };
         },
@@ -227,7 +244,7 @@ function fixture() {
     },
   };
 
-  return { db, targetRow, contact, attempts, updates, get reads() { return reads; } };
+  return { db, targetRow, contact, contacts, attempts, updates, get reads() { return reads; } };
 }
 
 let world: ReturnType<typeof fixture>;
@@ -362,6 +379,83 @@ describe("Cold Call Burst operator-first roll", () => {
     expect(mocks.callsCreate).not.toHaveBeenCalled();
     expect(mocks.authorizedOperatorPhone).not.toHaveBeenCalled();
     expect(world.targetRow.status).toBe("selected");
+    expect(world.targetRow.rollClaimId).toBeNull();
+  });
+
+  it("lets one of two concurrent rolls dial", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    let started = 0;
+    mocks.callsCreate.mockImplementation(async () => {
+      started += 1;
+      await gate;
+      return { sid: "CA_operator_leg" };
+    });
+
+    const pending = Promise.all([rollColdCallTarget(input), rollColdCallTarget(input)]);
+    await vi.waitFor(() => expect(started).toBe(1));
+    expect(mocks.callsCreate).toHaveBeenCalledTimes(1);
+    release();
+    await pending;
+    expect(mocks.callsCreate).toHaveBeenCalledTimes(1);
+    expect(started).toBe(1);
+    expect(world.attempts).toHaveLength(1);
+    expect(world.attempts[0]?.customerPhone).toBe(PROSPECT);
+  });
+
+  it("dials the pinned contact instead of another contact on the mission", async () => {
+    const sibling = {
+      id: 9,
+      phone: "+13105550999",
+      source: "provider_sourced",
+      preferredChannel: "phone",
+    };
+    const pinned = {
+      id: 10,
+      phone: PROSPECT,
+      source: "provider_sourced",
+      preferredChannel: "phone",
+    };
+    world.contacts.splice(0, world.contacts.length, sibling, pinned);
+    world.targetRow.contactId = 10;
+    world.targetRow.sourceReference = "commercial_account_contacts:10";
+
+    const batch = await rollColdCallTarget(input);
+    expect(mocks.callsCreate).toHaveBeenCalledTimes(1);
+    expect(world.attempts[0]?.customerPhone).toBe(PROSPECT);
+    expect(world.attempts[0]?.customerPhone).not.toBe(sibling.phone);
+    expect(batch?.targets).toHaveLength(1);
+    expect(batch?.targets[0]?.phoneNumber).toBe(PROSPECT);
+    expect(batch?.rollingCall?.phoneNumber).toBe(PROSPECT);
+    expect(batch?.targets[0]?.sourceReference).toBe("commercial_account_contacts:10");
+  });
+
+  it("refuses the pinned contact when it is ineligible even if a sibling can be called", async () => {
+    const sibling = {
+      id: 9,
+      phone: "+13105550999",
+      source: "provider_sourced",
+      preferredChannel: "phone",
+    };
+    const pinned = {
+      id: 10,
+      phone: PROSPECT,
+      source: "provider_sourced",
+      preferredChannel: "email",
+    };
+    world.contacts.splice(0, world.contacts.length, sibling, pinned);
+    world.targetRow.contactId = 10;
+    world.targetRow.sourceReference = "commercial_account_contacts:10";
+
+    await expect(rollColdCallTarget(input)).rejects.toThrow(/no longer eligible/);
+    expect(mocks.callsCreate).not.toHaveBeenCalled();
+    expect(mocks.authorizedOperatorPhone).not.toHaveBeenCalled();
+    expect(world.attempts).toHaveLength(0);
+    expect(world.attempts.some(attempt => attempt.customerPhone === sibling.phone)).toBe(false);
+    expect(world.targetRow.rollClaimId).toBeNull();
+    expect(world.targetRow.status).toBe("selected");
   });
 
   it("fails closed when the personal caller ID is not verified", async () => {
@@ -370,6 +464,7 @@ describe("Cold Call Burst operator-first roll", () => {
     expect(mocks.callsCreate).not.toHaveBeenCalled();
     expect(world.attempts).toHaveLength(0);
     expect(world.targetRow.status).toBe("selected");
+    expect(world.targetRow.rollClaimId).toBeNull();
     expect(world.updates.some(update => update.vals.status === "live")).toBe(false);
   });
 
@@ -608,5 +703,17 @@ describe("Cold Call Burst client contract", () => {
     expect(complete).toContain("recordCommercialMissionCallAttempt");
     expect(migration).toContain("cold_call_target_id");
     expect(migrate).toContain("ADD COLUMN cold_call_target_id");
+    const contactMigration = readFileSync(
+      new URL("../../drizzle/0096_cold_call_target_contact.sql", import.meta.url),
+      "utf8"
+    );
+    expect(contactMigration).toContain("contactId");
+    expect(contactMigration).toContain("rollClaimId");
+    expect(contactMigration).toContain("commercial_account_contacts:%");
+    expect(migrate).toContain("ADD COLUMN contactId");
+    expect(migrate).toContain("ADD COLUMN rollClaimId");
+    expect(roll).toContain("claimColdCallRoll");
+    expect(roll).toContain("loadPinnedColdCallContact");
+    expect(roll).not.toContain("eligibleColdCallRows");
   });
 });
