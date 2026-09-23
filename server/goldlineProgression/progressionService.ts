@@ -3,9 +3,9 @@
  * Clockhead finale records level.colosseum and then companion.rook.
  * Kingdom completion is not written.
  */
-import { isCompanionEarned } from "../companions/companionService";
-import { getDb } from "../db";
 import { getDay1TenDoorsMissionReadOnly } from "../openChannel/day1TenDoorsService";
+import { WAYWARD_ROOK_CONTACT_CONSEQUENCE } from "../../shared/rookContact";
+import { findRookContactGrant, grantRookContactCapability } from "./capabilityGrantStore";
 import { COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE } from "../../shared/colosseumAuthoredFinale";
 import {
   assertLevelColosseumRecordPermitted,
@@ -17,6 +17,14 @@ import {
 } from "./progressionContract";
 import { findDomainProgression, recordAuthoredColosseumFinale } from "./progressionStore";
 import { recordRookFromOutcomes } from "./progressionWrites";
+
+function sameStoredTimestamp(
+  left: Date | null | undefined,
+  right: Date | null | undefined
+): boolean {
+  if (left == null || right == null) return left == null && right == null;
+  return left.getTime() === right.getTime();
+}
 
 async function loadOutcomes(input: { tenantId: string; operatorId: string }): Promise<{
   outcomes: Record<string, unknown> | null;
@@ -33,28 +41,24 @@ async function loadOutcomes(input: { tenantId: string; operatorId: string }): Pr
   }
 }
 
+/**
+ * CONTACT authority is goldline_domain_capability_grants for this operator.
+ * Companion unlocks and companionRookOwnedAt are not consulted. An unreadable
+ * grant table stays uncertain.
+ */
 async function loadCapability(input: {
   tenantId: string;
-  capabilityOperatorId: string | null;
+  operatorId: string;
 }): Promise<{
   granted: boolean;
   readable: boolean;
 }> {
-  if (!input.capabilityOperatorId) return { granted: false, readable: false };
-  try {
-    const db = await getDb();
-    if (!db) return { granted: false, readable: false };
-    return {
-      granted: await isCompanionEarned({
-        tenantId: input.tenantId,
-        operatorId: input.capabilityOperatorId,
-        companionId: "rook",
-      }),
-      readable: true,
-    };
-  } catch {
-    return { granted: false, readable: false };
-  }
+  const found = await findRookContactGrant({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+  });
+  if (!found.readable) return { granted: false, readable: false };
+  return { granted: found.grant != null, readable: true };
 }
 
 export async function readGoldlineProgression(input: {
@@ -62,8 +66,8 @@ export async function readGoldlineProgression(input: {
   /** Day 1 openId. Progression rows and mission outcomes use this key. */
   operatorId: string;
   /**
-   * `String(user.id)`. Companion unlocks are stored under this key.
-   * Null skips the lookup instead of querying the Day 1 openId.
+   * Retained for callers. Companion unlocks were stored under the numeric
+   * user id. That key is not capability.rook.contact authority.
    */
   capabilityOperatorId: string | null;
 }): Promise<GoldlineProgressionRead> {
@@ -72,7 +76,7 @@ export async function readGoldlineProgression(input: {
     loadOutcomes({ tenantId: input.tenantId, operatorId: input.operatorId }),
     loadCapability({
       tenantId: input.tenantId,
-      capabilityOperatorId: input.capabilityOperatorId,
+      operatorId: input.operatorId,
     }),
     findDomainProgression({ tenantId: input.tenantId, operatorId: input.operatorId }).catch(() => ({
       readable: false as const,
@@ -148,6 +152,69 @@ export async function acknowledgeColosseumAuthoredFinale(input: {
     tenantId: input.tenantId,
     operatorId: input.operatorId,
     capabilityOperatorId: input.capabilityOperatorId ?? null,
+  });
+}
+
+/**
+ * Grants capability.rook.contact after companion.rook is already owned.
+ * The only accepted consequence is wayward.rook_contact_demonstrated.
+ * Does not own Rook, resolve Colosseum, complete Brass Republic, or complete
+ * a mission or challenge. Entering Wayward is not this acknowledgement.
+ */
+export async function acknowledgeWaywardRookContact(input: {
+  tenantId: string;
+  operatorId: string;
+  authoredConsequence: unknown;
+  clientPayload?: unknown;
+}): Promise<GoldlineProgressionRead> {
+  rejectClientProgressionForge(input);
+  rejectClientProgressionForge(input.clientPayload);
+  if (input.authoredConsequence !== WAYWARD_ROOK_CONTACT_CONSEQUENCE) {
+    throw new ProgressionNotPermittedError(
+      "capability.rook.contact requires the authored consequence wayward.rook_contact_demonstrated"
+    );
+  }
+  const before = await findDomainProgression({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+  });
+  if (!before.readable) {
+    throw new ProgressionNotPermittedError(
+      "companion.rook ownership is uncertain; capability.rook.contact is not granted"
+    );
+  }
+  if (!before.row?.companionRookOwnedAt) {
+    throw new ProgressionNotPermittedError(
+      "capability.rook.contact requires companion.rook; owning Rook is not automatic and this acknowledgement does not own him"
+    );
+  }
+  const levelStamp = before.row.levelColosseumResolvedAt;
+  const rookStamp = before.row.companionRookOwnedAt;
+  const kingdomStamp = before.row.kingdomBrassRepublicCompletedAt;
+  await grantRookContactCapability({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    grantSource: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
+    grantedAt: new Date(),
+  });
+  const after = await findDomainProgression({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+  });
+  if (
+    !after.readable ||
+    !sameStoredTimestamp(after.row?.levelColosseumResolvedAt, levelStamp) ||
+    !sameStoredTimestamp(after.row?.companionRookOwnedAt, rookStamp) ||
+    !sameStoredTimestamp(after.row?.kingdomBrassRepublicCompletedAt, kingdomStamp)
+  ) {
+    throw new ProgressionNotPermittedError(
+      "capability.rook.contact grant must not change level.colosseum, companion.rook, or kingdom.brass_republic"
+    );
+  }
+  return readGoldlineProgression({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    capabilityOperatorId: null,
   });
 }
 

@@ -2885,6 +2885,65 @@ await assertRequiredColumns("goldline_domain_progression", [
   "kingdomBrassRepublicCompletedAt",
   "overworldUnlocksJson",
 ]);
+
+// Durable capability.rook.contact grants. Empty table. No backfill.
+// Existing operators stay ungranted. capabilityId is never the companion id.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_domain_capability_grants (
+    id VARCHAR(36) NOT NULL,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorId VARCHAR(128) NOT NULL,
+    capabilityId VARCHAR(64) NOT NULL,
+    grantedAt TIMESTAMP NOT NULL,
+    grantSource VARCHAR(128) NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_goldline_domain_capability_grant (tenantId, operatorId, capabilityId)
+  )`,
+  "CREATE TABLE goldline_domain_capability_grants"
+);
+await assertRequiredColumns("goldline_domain_capability_grants", [
+  "tenantId",
+  "operatorId",
+  "capabilityId",
+  "grantedAt",
+  "grantSource",
+]);
+
+// CONTACT session facts. Empty table. No backfill. Phone numbers are not stored.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS goldline_rook_contact_sessions (
+    contactSessionId VARCHAR(36) NOT NULL,
+    tenantId VARCHAR(64) NOT NULL,
+    operatorId VARCHAR(128) NOT NULL,
+    accountId INT NOT NULL,
+    contactId INT NOT NULL,
+    capabilityId VARCHAR(64) NOT NULL,
+    implementationCapabilityId VARCHAR(64) NOT NULL,
+    evidenceRefsJson JSON NOT NULL,
+    operatorAuthorizedAt TIMESTAMP NULL,
+    callAttemptId INT NULL,
+    status VARCHAR(32) NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (contactSessionId),
+    KEY idx_goldline_rook_contact_session_tenant_operator (tenantId, operatorId)
+  )`,
+  "CREATE TABLE goldline_rook_contact_sessions"
+);
+await assertRequiredColumns("goldline_rook_contact_sessions", [
+  "tenantId",
+  "operatorId",
+  "accountId",
+  "contactId",
+  "capabilityId",
+  "implementationCapabilityId",
+  "evidenceRefsJson",
+  "operatorAuthorizedAt",
+  "callAttemptId",
+  "status",
+]);
 // END schema-path-normalized
 
 await conn.end();

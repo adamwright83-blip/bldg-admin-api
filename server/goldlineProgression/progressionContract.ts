@@ -49,6 +49,11 @@ const CLIENT_FORGE_KEYS = [
   "companionRookOwned",
   "kingdomBrassRepublicCompleted",
   "localStorage",
+  "contactGranted",
+  "capabilityGranted",
+  "capabilityId",
+  "waywardComplete",
+  "granted",
 ] as const;
 
 export type KingdomBindingStatus = "satisfied" | "unsatisfied" | "uncertain";
@@ -88,8 +93,10 @@ export type GoldlineProgressionRead = {
     flags: { postRook: boolean };
   };
   capabilityRookContact: {
+    /** True only when status is granted. Uncertain stays false and is not a known denial. */
     granted: boolean;
     readable: boolean;
+    status: "granted" | "ungranted" | "uncertain";
     grantsCompanionOwnership: false;
     implementationCapabilityId: "rook.outreach_drafting";
   };
@@ -140,6 +147,29 @@ function flagFromTimestamp(readable: boolean, at: Date | null | undefined): Prog
   if (!readable) return { status: "uncertain", value: false };
   if (at) return { status: "earned", value: true };
   return { status: "unearned", value: false };
+}
+
+function projectCapabilityRookContact(input: {
+  capabilityRookContactGranted: boolean;
+  capabilityRookContactReadable: boolean;
+}): GoldlineProgressionRead["capabilityRookContact"] {
+  if (!input.capabilityRookContactReadable) {
+    return {
+      granted: false,
+      readable: false,
+      status: "uncertain",
+      grantsCompanionOwnership: false,
+      implementationCapabilityId: "rook.outreach_drafting",
+    };
+  }
+  const granted = input.capabilityRookContactGranted;
+  return {
+    granted,
+    readable: true,
+    status: granted ? "granted" : "ungranted",
+    grantsCompanionOwnership: false,
+    implementationCapabilityId: "rook.outreach_drafting",
+  };
 }
 
 export function projectGoldlineProgression(input: {
@@ -202,12 +232,7 @@ export function projectGoldlineProgression(input: {
       status: stored.readable ? (postRook ? "earned" : "unearned") : "uncertain",
       flags: { postRook },
     },
-    capabilityRookContact: {
-      granted: input.capabilityRookContactReadable && input.capabilityRookContactGranted,
-      readable: input.capabilityRookContactReadable,
-      grantsCompanionOwnership: false,
-      implementationCapabilityId: "rook.outreach_drafting",
-    },
+    capabilityRookContact: projectCapabilityRookContact(input),
     localStorage: "cache_and_present_only",
     schema: {
       blocked: false,

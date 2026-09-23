@@ -52,8 +52,14 @@ describe("goldlineProgression router", () => {
       userOpenId: "open-7",
       role: "operator",
     });
-    mocks.getDb.mockResolvedValue({});
-    mocks.isCompanionEarned.mockResolvedValue(false);
+    mocks.getDb.mockResolvedValue({
+      select: () => ({
+        from: () => ({
+          where: () => ({ limit: async () => [] }),
+        }),
+      }),
+    });
+    mocks.isCompanionEarned.mockResolvedValue(true);
     mocks.readMission.mockResolvedValue({ outcomes: {} });
   });
 
@@ -69,21 +75,25 @@ describe("goldlineProgression router", () => {
     expect(read.companionRookOwned.value).toBe(false);
     expect(read.kingdomBrassRepublicCompleted.value).toBe(false);
     expect(mocks.readMission).toHaveBeenCalledWith({ tenantId: "tenant-a", driverId: "open-7" });
-    expect(mocks.isCompanionEarned).toHaveBeenCalledWith({
-      tenantId: "tenant-a",
-      operatorId: "7",
-      companionId: "rook",
+    expect(mocks.isCompanionEarned).not.toHaveBeenCalled();
+    expect(read.capabilityRookContact).toMatchObject({
+      granted: false,
+      readable: true,
+      status: "ungranted",
     });
   });
 
-  it("does not treat a capability stored under the Day 1 openId as granted", async () => {
-    mocks.isCompanionEarned.mockImplementation(
-      async ({ operatorId }: { operatorId: string }) => operatorId === "open-7"
-    );
+  it("does not treat a companion unlock as capability.rook.contact", async () => {
+    mocks.isCompanionEarned.mockResolvedValue(true);
     const caller = progressionRouter.createCaller(context("tenant-a", 7));
     const read = await caller.get({});
     expect(read.operatorId).toBe("open-7");
-    expect(read.capabilityRookContact.granted).toBe(false);
+    expect(mocks.isCompanionEarned).not.toHaveBeenCalled();
+    expect(read.capabilityRookContact).toMatchObject({
+      granted: false,
+      readable: true,
+      status: "ungranted",
+    });
   });
 
   it("rejects a client payload that tries to forge resolution, Rook, or kingdom completion", async () => {

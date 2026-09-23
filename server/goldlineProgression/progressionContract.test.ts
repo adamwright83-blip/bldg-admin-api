@@ -116,6 +116,25 @@ describe("progression read contract", () => {
     expect(overworldPostRookOpen(read)).toBe(false);
   });
 
+  it("keeps an unreadable CONTACT grant uncertain", () => {
+    const read = projectGoldlineProgression({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      outcomes: {},
+      outcomesAvailable: true,
+      capabilityRookContactGranted: true,
+      capabilityRookContactReadable: false,
+    });
+    expect(read.capabilityRookContact).toEqual({
+      granted: false,
+      readable: false,
+      status: "uncertain",
+      grantsCompanionOwnership: false,
+      implementationCapabilityId: "rook.outreach_drafting",
+    });
+    expect(read.companionRookOwned.value).toBe(false);
+  });
+
   it("keeps capability.rook.contact from granting companion.rook", () => {
     const read = project({}, true, undefined, true);
     expect(read.capabilityRookContact.granted).toBe(true);
