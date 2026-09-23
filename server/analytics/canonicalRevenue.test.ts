@@ -108,12 +108,26 @@ function coverageSnapshot(input: {
   paymentEventsProven: boolean;
   bookStatus: SourceCoverageStatus;
   span?: { from: string; through: string } | null;
+  /** Explicit economic-event span. Omit to follow `paymentEventsProven`. */
+  economicSpan?: { from: string; through: string } | null;
 }): BusinessSourceCoverageSnapshot {
   const cleancloudHeld = input.cleancloudHeld !== false;
   const sources = [
     source("laundry_butler", input.native ?? "fresh", true),
     source("cleancloud", input.cleancloud ?? "fresh", cleancloudHeld),
   ];
+  const ordersSpan =
+    input.span === undefined
+      ? cleancloudHeld
+        ? { from: "2026-01-01", through: "2026-09-14" }
+        : null
+      : input.span;
+  const economicSpan =
+    input.economicSpan !== undefined
+      ? input.economicSpan
+      : input.paymentEventsProven
+        ? ordersSpan
+        : null;
   return {
     contractVersion: 1,
     tenantId: "tenant-a",
@@ -126,12 +140,8 @@ function coverageSnapshot(input: {
       current: input.exhaustiveCurrent,
       scope: {
         native: "system_of_record",
-        cleancloudOrdersCreated:
-          input.span === undefined
-            ? cleancloudHeld
-              ? { from: "2026-01-01", through: "2026-09-14" }
-              : null
-            : input.span,
+        cleancloudOrdersCreated: ordersSpan,
+        cleancloudEconomicEvents: economicSpan,
       },
       paymentEventsProven: input.paymentEventsProven,
       knownRecordsReadable: true,
@@ -534,6 +544,110 @@ describe("readCanonicalRevenue", () => {
     expect(coverage.incompleteForWindow).toBe(true);
     expect(coverage.paymentEventsProven).toBe(true);
   });
+
+  it("does not license Sep 1–19 from an economic span that is only Sep 19", async () => {
+    const coverage = coverageSnapshot({
+      exhaustiveCurrent: true,
+      paymentEventsProven: true,
+      bookStatus: "fresh",
+      span: { from: "2026-09-01", through: "2026-09-19" },
+      economicSpan: { from: "2026-09-19", through: "2026-09-19" },
+    });
+    const rows = loaders([], [
+      cleancloud("cc-early", 8000, "3105550199", {
+        paymentDateUtc: new Date("2026-09-10T19:00:00.000Z"),
+      }),
+      cleancloud("cc-day", 2500, "3105550188", {
+        paymentDateUtc: new Date("2026-09-19T19:00:00.000Z"),
+      }),
+    ]);
+
+    const wide = await readCanonicalRevenue({
+      tenantId: "tenant-a",
+      from: "2026-09-01",
+      to: "2026-09-19",
+      timeZone: FIXTURE_TZ,
+      coverage,
+      loaders: rows,
+    });
+    expect(wide.status).toBe("ok");
+    if (wide.status !== "ok") return;
+    expect(wide.recordedCents).toBe(10500);
+    expect(wide.recordedCents).not.toBe(0);
+    expect(wide.statedExactCents).toBeNull();
+    expect(wide.mayStateExact).toBe(false);
+    expect(wide.coverage.paymentEventsProven).toBe(true);
+    expect(wide.coverage.coverageAllowsExact).toBe(false);
+
+    const day = await readCanonicalRevenue({
+      tenantId: "tenant-a",
+      from: "2026-09-19",
+      to: "2026-09-19",
+      timeZone: FIXTURE_TZ,
+      coverage,
+      loaders: rows,
+    });
+    expect(day.status).toBe("ok");
+    if (day.status !== "ok") return;
+    expect(day.recordedCents).toBe(2500);
+    expect(day.statedExactCents).toBe(2500);
+    expect(day.mayStateExact).toBe(true);
+    expect(day.precision).toBe("exact");
+  });
+
+  it("does not license Sep 1–19 when the economic span is gapped", async () => {
+    const result = await readCanonicalRevenue({
+      tenantId: "tenant-a",
+      from: "2026-09-01",
+      to: "2026-09-19",
+      timeZone: FIXTURE_TZ,
+      coverage: coverageSnapshot({
+        exhaustiveCurrent: true,
+        paymentEventsProven: false,
+        bookStatus: "fresh",
+        span: { from: "2026-09-01", through: "2026-09-19" },
+        economicSpan: null,
+      }),
+      loaders: loaders([], [
+        cleancloud("cc-1", 8000, "3105550199", {
+          paymentDateUtc: new Date("2026-09-10T19:00:00.000Z"),
+        }),
+      ]),
+    });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.recordedCents).toBe(8000);
+    expect(result.statedExactCents).toBeNull();
+    expect(result.mayStateExact).toBe(false);
+    expect(result.coverage.coverageAllowsExact).toBe(false);
+  });
+
+  it("licenses Sep 1–19 when the economic span is contiguous across that window", async () => {
+    const result = await readCanonicalRevenue({
+      tenantId: "tenant-a",
+      from: "2026-09-01",
+      to: "2026-09-19",
+      timeZone: FIXTURE_TZ,
+      coverage: coverageSnapshot({
+        exhaustiveCurrent: true,
+        paymentEventsProven: true,
+        bookStatus: "fresh",
+        span: { from: "2026-09-01", through: "2026-09-19" },
+        economicSpan: { from: "2026-09-01", through: "2026-09-19" },
+      }),
+      loaders: loaders([], [
+        cleancloud("cc-1", 8000, "3105550199", {
+          paymentDateUtc: new Date("2026-09-10T19:00:00.000Z"),
+        }),
+      ]),
+    });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.recordedCents).toBe(8000);
+    expect(result.statedExactCents).toBe(8000);
+    expect(result.mayStateExact).toBe(true);
+    expect(result.precision).toBe("exact");
+  });
 });
 
 describe("Claire revenue consumes the canonical read", () => {
@@ -615,6 +729,9 @@ describe("Claire revenue consumes the canonical read", () => {
     });
     expect(spoken.text).toContain("$45.00");
     expect(spoken.text).toContain("I withheld");
+    expect(spoken.text).toContain("from that recorded figure because");
+    expect(spoken.text).not.toContain("from that exact total");
+    expect(result.coverage?.canonicalRevenue?.mayStateExact).toBe(false);
     expect(spoken.text).not.toContain("$90.00");
   });
 

@@ -259,7 +259,9 @@ function coverageNotes(result: Extract<BusinessQueryResult, { status: "ok" }>, s
     once(
       `overlap:${canonical.suspectedWithheldCount}:${canonical.suspectedWithheldCents}`,
       () =>
-        `I withheld ${speech.money(canonical.suspectedWithheldCents)} from that exact total. ${capitalize(speech.count(canonical.suspectedWithheldCount))} CleanCloud ${plural(canonical.suspectedWithheldCount, "order")} match a Goldline order for the same customer, day, and amount, and the records do not prove a single sale.`
+        canonical.mayStateExact
+          ? `I withheld ${speech.money(canonical.suspectedWithheldCents)} from that exact total. ${capitalize(speech.count(canonical.suspectedWithheldCount))} CleanCloud ${plural(canonical.suspectedWithheldCount, "order")} match a Goldline order for the same customer, day, and amount, and the records do not prove a single sale.`
+          : `I withheld ${speech.money(canonical.suspectedWithheldCents)} from that recorded figure because ${speech.count(canonical.suspectedWithheldCount)} CleanCloud ${plural(canonical.suspectedWithheldCount, "order")} match a Goldline order for the same customer, day, and amount, and the records do not prove a single sale.`
     );
   } else if (coverage.overlap.status === "suspected" && !result.query.filterUnion?.length) {
     once(

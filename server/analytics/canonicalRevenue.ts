@@ -33,15 +33,17 @@ import {
  *
  * Coverage comes only from B1 `loadBusinessSourceCoverage` (contract version 1).
  * This module does not decide fresh, stale, partial, or unavailable. B1
- * publishes those facts, the proven span, and payment-event proof. This read
- * decides whether the requested window is exact.
+ * publishes those facts, the orders-created span, and the contiguous
+ * economic-event span. This read decides whether the requested window is exact.
  *
  * Exact payment revenue needs every held source fresh, the window inside the
- * proven CleanCloud span when that source is held, payment events proven, the
- * ledger sources read, no unresolved unverified native paid row, and no
- * unresolved suspected cross-source duplicate. Proven duplicates count once.
- * A proven complete empty ledger may be spoken as exact zero. An unread ledger
- * is unavailable, not zero. Stale is not zero. Missing is not zero.
+ * relevant source coverage, and — when CleanCloud is held — the requested
+ * window entirely inside `scope.cleancloudEconomicEvents`. The checkpoint
+ * boolean `paymentEventsProven` is not that license. The ledger sources must
+ * be read, with no source failures, no unresolved unverified native paid row,
+ * and no unresolved suspected cross-source duplicate. Proven duplicates count
+ * once. A proven complete empty ledger may be spoken as exact zero. An unread
+ * ledger is unavailable, not zero. Stale is not zero. Missing is not zero.
  */
 
 export type ReadBusinessSourceCoverage = (input: {
@@ -231,22 +233,47 @@ export function reconcilePaidRevenue(input: {
   };
 }
 
-function windowInsideProvenSpan(
-  window: { from: string; to: string },
-  snapshot: BusinessSourceCoverageSnapshot
-): boolean {
+function cleancloudIsHeld(snapshot: BusinessSourceCoverageSnapshot): boolean {
   const cleancloud = snapshot.sources.find(source => source.sourceId === "cleancloud");
-  if (!cleancloud?.includedInCombinedBook) return true;
-  const span = snapshot.book.scope.cleancloudOrdersCreated;
+  return Boolean(cleancloud?.includedInCombinedBook);
+}
+
+function windowInsideSpan(
+  window: { from: string; to: string },
+  span: { from: string; through: string } | null
+): boolean {
   if (!span) return false;
   return window.from >= span.from && window.to <= span.through;
 }
 
+/** Orders-created coverage. Native-only books have no CleanCloud span to miss. */
+function windowInsideProvenSpan(
+  window: { from: string; to: string },
+  snapshot: BusinessSourceCoverageSnapshot
+): boolean {
+  if (!cleancloudIsHeld(snapshot)) return true;
+  return windowInsideSpan(window, snapshot.book.scope.cleancloudOrdersCreated);
+}
+
+/**
+ * Payment proof for this window. A true `paymentEventsProven` flag can mean
+ * only the checkpoint day. Exact revenue needs the whole requested window
+ * inside the published contiguous span.
+ */
+function windowInsideEconomicEvents(
+  window: { from: string; to: string },
+  snapshot: BusinessSourceCoverageSnapshot
+): boolean {
+  if (!cleancloudIsHeld(snapshot)) return true;
+  return windowInsideSpan(window, snapshot.book.scope.cleancloudEconomicEvents);
+}
+
 /**
  * Reads B1's snapshot. Does not compute freshness.
- * Exact coverage for this window needs every held source fresh, payment
- * events proven, the window inside the proven span, and those held sources
- * actually read. Reconciliation still has to be unambiguous.
+ * Exact coverage for this window needs every held source fresh, the window
+ * inside source coverage, the window inside the economic-event span when
+ * CleanCloud is held, and those held sources actually read. Reconciliation
+ * still has to be unambiguous.
  */
 export function interpretSourceCoverage(input: {
   snapshot: BusinessSourceCoverageSnapshot | null | undefined;
@@ -290,6 +317,7 @@ export function interpretSourceCoverage(input: {
     source => source.includedInCombinedBook && source.status !== "fresh"
   );
   const spanCovers = windowInsideProvenSpan(input.window, snapshot);
+  const economicSpanCovers = windowInsideEconomicEvents(input.window, snapshot);
   const held = snapshot.sources.filter(source => source.includedInCombinedBook);
   const heldSourcesRead =
     failed.length === 0 &&
@@ -302,12 +330,16 @@ export function interpretSourceCoverage(input: {
   const coverageAllowsExact =
     otherFlagsTrusted &&
     snapshot.book.exhaustiveCurrent &&
-    snapshot.book.paymentEventsProven &&
     heldNotFresh.length === 0 &&
     spanCovers &&
+    economicSpanCovers &&
     heldSourcesRead;
   const incompleteForWindow =
-    !snapshot.book.exhaustiveCurrent || heldNotFresh.length > 0 || !spanCovers || !heldSourcesRead;
+    !snapshot.book.exhaustiveCurrent ||
+    heldNotFresh.length > 0 ||
+    !spanCovers ||
+    !economicSpanCovers ||
+    !heldSourcesRead;
 
   return {
     ...base,

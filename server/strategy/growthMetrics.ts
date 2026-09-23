@@ -346,7 +346,7 @@ export async function getStrategyGrowthMetrics(
       uncertaintyReason: [
         "Canonical paid order ledger does not record refunds or cancellations for cleancloud/native orders",
         reconciledSales.suspectedWithheld.count > 0
-          ? "Suspected cross-source duplicates are withheld from an exact total"
+          ? "Suspected cross-source duplicates are withheld from the recorded figure"
           : null,
         reconciledSales.unverifiedNative.count > 0
           ? "Unverified native paid rows are unresolved, so the paid total is not exact"

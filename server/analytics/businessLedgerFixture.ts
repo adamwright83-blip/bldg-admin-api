@@ -161,6 +161,7 @@ export function provenBusinessCoverageSnapshot(tenantId = "tenant-1"): BusinessS
       scope: {
         native: "system_of_record",
         cleancloudOrdersCreated: { from: "2020-01-01", through: "2099-12-31" },
+        cleancloudEconomicEvents: { from: "2020-01-01", through: "2099-12-31" },
       },
       paymentEventsProven: true,
       knownRecordsReadable: true,
