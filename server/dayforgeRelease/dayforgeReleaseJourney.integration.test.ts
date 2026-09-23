@@ -14,8 +14,10 @@ import {
   dayforgeProductEvents,
   driverGameWorldNodes,
   driverCapabilityUnlocks,
+  communicationReceipts,
   driverColdCallBatches,
   driverColdCallTargets,
+  salesCallAttempts,
   driverScoutDiscoveries,
   driverScoutReports,
   orders,
@@ -358,6 +360,32 @@ describe.skipIf(!runDatabaseGate)("DayForge MySQL release journey", () => {
       actorId: driverId,
       batchId: coldCallBatch.id,
       targetId: coldCallTarget.id,
+    });
+    const prospectSid = `CA_prospect_${suffix}`;
+    const repSid = `CA_rep_${suffix}`;
+    await db.insert(salesCallAttempts).values({
+      tenantId,
+      repPhone: "+13105551000",
+      customerPhone: coldCallTarget.phoneNumber,
+      callerId: "+13105551000",
+      coldCallTargetId: coldCallTarget.id,
+      repLegCallSid: repSid,
+      customerLegCallSid: prospectSid,
+      status: "customer_connected",
+      recordingEnabled: false,
+      rewardGranted: false,
+    });
+    await db.insert(communicationReceipts).values({
+      id: randomUUID(),
+      tenantId,
+      operatorUserId: driverId,
+      provider: "twilio",
+      eventType: "CALL_CONNECTED",
+      callSid: prospectSid,
+      parentCallSid: repSid,
+      direction: "outbound",
+      status: "in-progress",
+      idempotencyKey: `twilio:class:${tenantId}:${prospectSid}:CALL_CONNECTED`,
     });
     const coldCallRequestId = randomUUID();
     const completedColdCall = await completeColdCallTarget({

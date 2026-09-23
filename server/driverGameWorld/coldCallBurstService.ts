@@ -33,6 +33,7 @@ import {
   claireTwilioFromNumber,
 } from "../claire/claireTwilio";
 import {
+  assertColdCallConversationOutcome,
   assertVerifiedOutgoingCallerId,
   placeOperatorFirstBridgeCall,
 } from "../salesCalls";
@@ -812,6 +813,11 @@ export async function completeColdCallTarget(input: {
   if (target.status !== "live") {
     throw new Error("Start the real phone action before logging its outcome");
   }
+  await assertColdCallConversationOutcome({
+    tenantId: input.tenantId,
+    coldCallTargetId: target.id,
+    outcome: input.outcome,
+  });
   const attempt = await recordCommercialMissionCallAttempt({
     tenantId: input.tenantId,
     missionId: target.missionId,
@@ -819,6 +825,7 @@ export async function completeColdCallTarget(input: {
     requestId: input.requestId,
     outcome: input.outcome,
     notes: input.notes,
+    coldCallTargetId: target.id,
   });
   await db.transaction(async tx => {
     await tx
@@ -826,7 +833,7 @@ export async function completeColdCallTarget(input: {
       .set({
         status: "completed",
         callAttemptEventId: attempt.id,
-        outcome: input.outcome,
+        outcome: attempt.outcome,
         completedAt: new Date(),
       })
       .where(eq(driverColdCallTargets.id, target.id));
