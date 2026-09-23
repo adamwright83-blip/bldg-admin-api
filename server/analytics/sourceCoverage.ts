@@ -22,8 +22,10 @@
  *
  * This contract does not license exact revenue for a requested window. It
  * publishes which sources are held, whether each is fresh, stale, partial, or
- * unavailable, the proven span, and whether payment events are proven. The
- * revenue read decides whether that window is exact.
+ * unavailable, the proven orders-created span, and the one contiguous
+ * economic-event span. `paymentEventsProven` is a checkpoint convenience. It
+ * does not name the days that were proven. The revenue read decides whether
+ * a requested window sits inside that economic-event span.
  */
 import { desc, eq } from "drizzle-orm";
 import { browserSyncReceipts } from "../cleancloudBrowserSync/schema";
@@ -139,8 +141,20 @@ export type BusinessSourceCoverageSnapshot = {
     scope: {
       native: "system_of_record" | "not_held" | "unavailable";
       cleancloudOrdersCreated: { from: string; through: string } | null;
+      /**
+       * The single contiguous CleanCloud economic-event span, or null.
+       * Published only when every economic-event day from `from` through
+       * `through` is covered. A gap makes this null. A checkpoint day does
+       * not stretch backward. Orders (Sales) ranges never fill this in.
+       */
+      cleancloudEconomicEvents: { from: string; through: string } | null;
     };
-    /** Orders (Sales) freshness is not payment-dated completeness. */
+    /**
+     * Checkpoint convenience. True when the book is fresh and, if CleanCloud
+     * is held, economic events cover from their earliest day through the due
+     * day. It does not license a wider window. Test
+     * `scope.cleancloudEconomicEvents` for the requested days.
+     */
     paymentEventsProven: boolean;
     knownRecordsReadable: boolean;
     /** True only for a fresh book whose held sources provably contain no records. */
@@ -255,13 +269,34 @@ function recordsOf(
   return "unknown";
 }
 
+/**
+ * One contiguous economic-event span, or null.
+ * `rangesCover` from the earliest day through the latest day is false when
+ * any day in between is missing, so Sep 1–10 plus Sep 19 does not become
+ * Sep 1–19. Overlapping or adjacent ranges still merge. No range means no span.
+ */
+function contiguousEconomicEventSpan(
+  ranges: readonly SourceCoverageRange[]
+): { from: string; through: string } | null {
+  const bounds = spanBounds(ranges, "economic_event");
+  if (!bounds.from || !bounds.through || bounds.from > bounds.through) return null;
+  const covered = rangesCover(ranges, {
+    from: bounds.from,
+    to: bounds.through,
+    basis: "economic_event",
+  });
+  if (!covered) return null;
+  return { from: bounds.from, through: bounds.through };
+}
+
 function paymentEventsProven(
   evidence: SourceEvidence,
   expectedThrough: string
 ): boolean {
   const bounds = spanBounds(evidence.coverageRanges, "economic_event");
   // `rangesCover` treats an inverted interval as covered. A span that starts
-  // after the due day does not cover that day.
+  // after the due day does not cover that day. This boolean is the checkpoint
+  // convenience only; the published span is `contiguousEconomicEventSpan`.
   if (!bounds.from || bounds.from > expectedThrough) return false;
   return rangesCover(evidence.coverageRanges, {
     from: bounds.from,
@@ -542,7 +577,8 @@ function cleancloudCoverage(
 }
 
 function combineBook(
-  sources: readonly BusinessSourceCoverage[]
+  sources: readonly BusinessSourceCoverage[],
+  cleancloudRanges: readonly SourceCoverageRange[]
 ): BusinessSourceCoverageSnapshot["book"] {
   const included = sources.filter(source => source.includedInCombinedBook);
   const statuses = new Set(included.map(source => source.status));
@@ -582,6 +618,9 @@ function combineBook(
     scope: {
       native: nativeScope,
       cleancloudOrdersCreated: cleancloudSpan,
+      cleancloudEconomicEvents: cleancloudHeld
+        ? contiguousEconomicEventSpan(cleancloudRanges)
+        : null,
     },
     paymentEventsProven:
       exhaustiveCurrent &&
@@ -615,7 +654,7 @@ export function deriveBusinessSourceCoverage(
       input.cleancloudReceipts
     ),
   ];
-  const book = combineBook(sources);
+  const book = combineBook(sources, input.evidence.cleancloud.coverageRanges);
   return {
     contractVersion: SOURCE_COVERAGE_CONTRACT_VERSION,
     tenantId: input.tenantId,

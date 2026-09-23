@@ -408,6 +408,7 @@ describe("business source coverage contract", () => {
       ranges: [range("2026-09-01", "2026-09-19", completedAt)],
     });
     expect(ordersOnly.book.paymentEventsProven).toBe(false);
+    expect(ordersOnly.book.scope.cleancloudEconomicEvents).toBeNull();
 
     const withPayments = deriveBusinessSourceCoverage({
       tenantId: "tenant-a",
@@ -439,6 +440,10 @@ describe("business source coverage contract", () => {
     expect(withPayments.book.status).toBe("fresh");
     expect(withPayments.book.paymentEventsProven).toBe(true);
     expect(withPayments.book.scope.cleancloudOrdersCreated).toEqual({
+      from: "2026-09-01",
+      through: "2026-09-19",
+    });
+    expect(withPayments.book.scope.cleancloudEconomicEvents).toEqual({
       from: "2026-09-01",
       through: "2026-09-19",
     });
@@ -699,6 +704,11 @@ describe("business source coverage contract", () => {
     ]);
     expect(gapped.book.status).toBe("fresh");
     expect(gapped.book.paymentEventsProven).toBe(false);
+    expect(gapped.book.scope.cleancloudEconomicEvents).toBeNull();
+    expect(gapped.book.scope.cleancloudEconomicEvents).not.toEqual({
+      from: "2026-09-01",
+      through: "2026-09-19",
+    });
 
     const checkpointDay = withEconomic([
       {
@@ -710,6 +720,14 @@ describe("business source coverage contract", () => {
       },
     ]);
     expect(checkpointDay.book.paymentEventsProven).toBe(true);
+    expect(checkpointDay.book.scope.cleancloudEconomicEvents).toEqual({
+      from: "2026-09-19",
+      through: "2026-09-19",
+    });
+    expect(checkpointDay.book.scope.cleancloudOrdersCreated).toEqual({
+      from: "2026-09-01",
+      through: "2026-09-19",
+    });
     expect("exactRevenueLicensed" in checkpointDay.book).toBe(false);
   });
 
@@ -762,9 +780,76 @@ describe("business source coverage contract", () => {
       ],
     });
     expect(result.book.status).toBe("stale");
+    expect(result.book.staleIsZero).toBe(false);
+    expect(result.book.interpretEmptyAsNoCustomers).toBe(false);
+    expect(result.book.knownRecordsReadable).toBe(true);
+    expect(result.book.missingIsNoCustomers).toBe(false);
+    expect(source(result, "cleancloud").emptyReadMeansNoRecords).toBe(false);
     expect(result.blockingSources).toEqual([
       expect.objectContaining({ sourceId: "cleancloud", status: "stale" }),
     ]);
     expect(source(result, "laundry_butler").includedInCombinedBook).toBe(false);
+  });
+
+  it("publishes a contiguous economic-event span and does not invent one", () => {
+    const completedAt = new Date("2026-09-20T01:00:00.000Z");
+    const orders = range("2026-09-01", "2026-09-19", completedAt);
+    const economic = (
+      from: string,
+      to: string
+    ): SourceCoverageRange => ({
+      from,
+      to,
+      completedAt,
+      basis: "economic_event",
+      provenance: "test_fixture",
+    });
+    const withEconomic = (ranges: SourceCoverageRange[]) =>
+      deriveBusinessSourceCoverage({
+        tenantId: "tenant-a",
+        now: BEFORE_DUE,
+        evidence: evidence({ ranges: [orders, ...ranges] }),
+        cleancloudReceipts: [
+          receipt(orders.from, orders.to, completedAt, "refreshed"),
+        ],
+      });
+
+    expect(
+      withEconomic([economic("2026-09-19", "2026-09-19")]).book.scope
+        .cleancloudEconomicEvents
+    ).toEqual({ from: "2026-09-19", through: "2026-09-19" });
+
+    expect(
+      withEconomic([economic("2026-09-01", "2026-09-19")]).book.scope
+        .cleancloudEconomicEvents
+    ).toEqual({ from: "2026-09-01", through: "2026-09-19" });
+
+    const gapped = withEconomic([
+      economic("2026-09-01", "2026-09-10"),
+      economic("2026-09-19", "2026-09-19"),
+    ]);
+    expect(gapped.book.scope.cleancloudEconomicEvents).toBeNull();
+    expect(gapped.book.outsideProvenSpan).toBe("unknown_not_empty");
+
+    const missing = snapshot({
+      cleancloud: "unknown",
+      cleancloudLastSuccessAt: null,
+      ranges: [],
+      receipts: "unreadable",
+    });
+    expect(missing.book.scope.cleancloudEconomicEvents).toBeNull();
+    expect(missing.book.missingIsNoCustomers).toBe(false);
+    expect(missing.book.interpretEmptyAsNoCustomers).toBe(false);
+
+    const ordersOnly = snapshot({
+      ranges: [range("2026-09-01", "2026-09-19", completedAt)],
+    });
+    expect(ordersOnly.book.status).toBe("fresh");
+    expect(ordersOnly.book.scope.cleancloudOrdersCreated).toEqual({
+      from: "2026-09-01",
+      through: "2026-09-19",
+    });
+    expect(ordersOnly.book.scope.cleancloudEconomicEvents).toBeNull();
+    expect(ordersOnly.book.paymentEventsProven).toBe(false);
   });
 });
