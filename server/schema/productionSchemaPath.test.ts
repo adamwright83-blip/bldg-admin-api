@@ -121,6 +121,7 @@ describe("production schema path", () => {
       "driver_scout_discoveries",
       "goldline_domain_progression",
       "goldline_domain_capability_grants",
+      "goldline_rook_contact_sessions",
     ]);
     const offenders: string[] = [];
     const walk = (dir: string) => {
@@ -213,6 +214,19 @@ describe("production schema path", () => {
     const schema = readFileSync(new URL("../../drizzle/schema.ts", import.meta.url), "utf8");
     expect(schema).toContain('mysqlTable(\n  "goldline_domain_capability_grants"');
     expect(schema).toContain("uq_goldline_domain_capability_grant");
+  });
+
+  it("creates empty goldline_rook_contact_sessions and does not store a phone number", () => {
+    expect(migrate).toContain("CREATE TABLE IF NOT EXISTS goldline_rook_contact_sessions");
+    expect(migrate).toContain(
+      "KEY idx_goldline_rook_contact_session_tenant_operator (tenantId, operatorId)"
+    );
+    const createStart = migrate.indexOf("CREATE TABLE IF NOT EXISTS goldline_rook_contact_sessions");
+    const statement = migrate.slice(createStart, migrate.indexOf(");", createStart));
+    expect(statement).not.toMatch(/phone/i);
+    expect(migrate).not.toMatch(/INSERT\s+INTO\s+goldline_rook_contact_sessions/i);
+    const schema = readFileSync(new URL("../../drizzle/schema.ts", import.meta.url), "utf8");
+    expect(schema).toContain('mysqlTable(\n  "goldline_rook_contact_sessions"');
   });
 
   it("does not add business-row writes to the normalized section", () => {

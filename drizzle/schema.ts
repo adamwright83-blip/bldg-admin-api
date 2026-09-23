@@ -7048,6 +7048,36 @@ export const goldlineDomainCapabilityGrants = mysqlTable(
 );
 
 /**
+ * One CONTACT action. Transport truth stays on sales_call_attempts and
+ * communication_receipts. This row does not copy attempt status and does
+ * not store a narrative judgment or a phone number.
+ */
+export const goldlineRookContactSessions = mysqlTable(
+  "goldline_rook_contact_sessions",
+  {
+    contactSessionId: varchar("contactSessionId", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    operatorId: varchar("operatorId", { length: 128 }).notNull(),
+    accountId: int("accountId").notNull(),
+    contactId: int("contactId").notNull(),
+    capabilityId: varchar("capabilityId", { length: 64 }).notNull(),
+    implementationCapabilityId: varchar("implementationCapabilityId", { length: 64 }).notNull(),
+    evidenceRefsJson: json("evidenceRefsJson").notNull(),
+    operatorAuthorizedAt: timestamp("operatorAuthorizedAt"),
+    callAttemptId: int("callAttemptId"),
+    status: varchar("status", { length: 32 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
+  },
+  table => ({
+    tenantOperatorIdx: index("idx_goldline_rook_contact_session_tenant_operator").on(
+      table.tenantId,
+      table.operatorId
+    ),
+  })
+);
+
+/**
  * Slice 4 — Mission Director plans. Append-only revisions per business
  * date — a plan is never overwritten, so it stays provable what the plan
  * said before the day changed. Follows the authoredDays stableKey /
