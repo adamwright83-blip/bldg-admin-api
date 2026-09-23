@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import type { Order } from "@shared/types";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 import type { OperatorStopIdentity } from "../../../../shared/impactSignal";
 
 /**
@@ -1166,7 +1167,7 @@ export default function GoldlineHome({
 
               {panel === "menu" ? (
                 <>
-                  <p className="drawer-kicker">GOLDLINE</p>
+                  <p className="drawer-kicker">{PRODUCT_NAME}</p>
                   <h2>Live field truth</h2>
                   <ul>
                     <li onClick={() => openRoute()}>

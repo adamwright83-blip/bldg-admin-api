@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { PRODUCT_NAME } from "@shared/productIdentity";
 import { ColosseumFx, fxResolution, type FxFrame } from "./colosseumFx";
 import {
   STAGE_ART,
@@ -265,7 +266,7 @@ export const ColosseumStageView = forwardRef<StageHandle, Props>(function Coloss
       {overlay}
       {!ready && (
         <div className="colosseum-loading cstage-loading" aria-label="Entering the Colosseum">
-          <div className="colosseum-loading-mark">GOLDLINE</div>
+          <div className="colosseum-loading-mark">{PRODUCT_NAME}</div>
           <div className="colosseum-loading-copy">ENTERING THE COLOSSEUM</div>
         </div>
       )}

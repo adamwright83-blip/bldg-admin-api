@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { PRODUCT_NAME } from "@shared/productIdentity";
+import { legacyProductNoticeText } from "@shared/productIdentity";
 
 /** One-line clarification. Does not restyle the legacy page under it. */
 export function LegacyProductNotice({ legacyName }: { legacyName: string }) {
@@ -17,7 +17,7 @@ export function LegacyProductNotice({ legacyName }: { legacyName: string }) {
         textAlign: "center",
       }}
     >
-      {legacyName} is a legacy page. The product is {PRODUCT_NAME}.
+      {legacyProductNoticeText(legacyName)}
     </p>
   );
 }

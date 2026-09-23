@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { installPwaHeadTags } from "../client/src/game/pwa/installPwaHead";
 import { ONBOARDING_QUESTIONS } from "./goldlineOnboarding";
-import { PRODUCT_NAME } from "./productIdentity";
+import { legacyProductNoticeText, PRODUCT_NAME } from "./productIdentity";
 
 const root = path.resolve(import.meta.dirname, "..");
 const read = (...parts: string[]) =>
@@ -63,9 +64,24 @@ describe("JOYSTICK product identity", () => {
       ["client", "src", "components", "admin", "control-room", "TowerSiege.tsx"],
       ["client", "src", "pages", "goldline", "GoldlineOverworld.tsx"],
       ["client", "src", "pages", "AdminHostApp.tsx"],
+      ["client", "src", "game", "GoldlineGameHome.tsx"],
+      ["client", "src", "pages", "goldline", "GoldlineHome.tsx"],
+      ["client", "src", "pages", "goldline", "ColosseumStageView.tsx"],
+      ["client", "src", "pages", "goldline", "ColosseumLoading.tsx"],
+      ["client", "src", "pages", "DayforgeLanding.tsx"],
+      ["client", "src", "pages", "BoreslayLanding.tsx"],
+      ["client", "src", "pages", "TerritoryPreview.tsx"],
     ]) {
       expect(read(...file), file.join("/")).toContain("PRODUCT_NAME");
     }
+
+    const play = read("client", "src", "game", "GoldlineGameHome.tsx");
+    expect(play).toContain("INSTALL {PRODUCT_NAME}");
+    expect(play).toContain("Add {PRODUCT_NAME} to your Home Screen");
+    expect(play).not.toContain("INSTALL GOLDLINE");
+    expect(play).not.toContain("Add Goldline to your Home Screen");
+    expect(play).toContain("THE ROUTE STAYS IN VIEW");
+    expect(play).not.toContain("GOLDLINE IS WATCHING");
   });
 
   it("clarifies legacy landings without rewriting them", () => {
@@ -80,6 +96,39 @@ describe("JOYSTICK product identity", () => {
     expect(read("client", "src", "pages", "DayforgeLanding.tsx")).not.toContain(
       "LegacyProductNotice"
     );
+    expect(read("client", "src", "pages", "DayforgeLanding.tsx")).toContain(
+      "document.title = PRODUCT_NAME"
+    );
+    expect(read("client", "src", "pages", "BoreslayLanding.tsx")).toContain(
+      "document.title = PRODUCT_NAME"
+    );
+    expect(read("client", "src", "pages", "DayforgeLanding.tsx")).toContain(
+      "DayForge turns nearby laundry opportunities into playable"
+    );
+    expect(read("client", "src", "pages", "BoreslayLanding.tsx")).toContain(
+      "Play as Spark in BORESLAY"
+    );
+    expect(read("client", "src", "pages", "TerritoryPreview.tsx")).toContain(
+      "document.title = `Map My Territory | ${PRODUCT_NAME}`"
+    );
+    expect(read("client", "src", "pages", "TerritoryPreview.tsx")).not.toContain(
+      "Map My Territory | DayForge"
+    );
+  });
+
+  it("states the legacy notice without treating a blank name as a product", () => {
+    expect(legacyProductNoticeText(" BORESLAY ")).toBe(
+      `BORESLAY is a legacy page. The product is ${PRODUCT_NAME}.`
+    );
+    expect(legacyProductNoticeText("   ")).toBe(
+      `This is a legacy page. The product is ${PRODUCT_NAME}.`
+    );
+    expect(legacyProductNoticeText("DayForge")).not.toContain(
+      "DayForge is the product"
+    );
+    expect(read("client", "src", "product", "LegacyProductNotice.tsx")).toContain(
+      "legacyProductNoticeText(legacyName)"
+    );
   });
 
   it("leaves the first-run questions laundry-capable and non-vertical", () => {
@@ -93,14 +142,56 @@ describe("JOYSTICK product identity", () => {
   });
 
   it("names the iOS install title JOYSTICK without editing the manifest link", () => {
-    const head = read("client", "src", "game", "pwa", "installPwaHead.ts");
-    expect(head).toContain("appleTitle.content = PRODUCT_NAME");
-    expect(head).not.toContain('appleTitle.content = "Goldline"');
-    expect(head).toContain('manifestLink.href = "/goldline.webmanifest"');
+    const tags: Array<{ name?: string; content?: string; rel?: string; href?: string }> = [];
+    const previous = (globalThis as { document?: unknown }).document;
+    (globalThis as { document?: unknown }).document = {
+      createElement() {
+        const el: {
+          name?: string;
+          content?: string;
+          rel?: string;
+          href?: string;
+          setAttribute: () => void;
+          remove: () => void;
+        } = {
+          setAttribute() {},
+          remove() {
+            const index = tags.indexOf(el);
+            if (index >= 0) tags.splice(index, 1);
+          },
+        };
+        return el;
+      },
+      head: {
+        appendChild(el: (typeof tags)[number]) {
+          tags.push(el);
+        },
+      },
+    };
+    try {
+      const cleanup = installPwaHeadTags();
+      const appleTitle = tags.find(tag => tag.name === "apple-mobile-web-app-title");
+      const manifest = tags.find(tag => tag.rel === "manifest");
+      expect(appleTitle?.content).toBe(PRODUCT_NAME);
+      expect(manifest?.href).toBe("/goldline.webmanifest");
+      cleanup();
+      expect(tags).toHaveLength(0);
+    } finally {
+      (globalThis as { document?: unknown }).document = previous;
+    }
   });
 
-  it("does not rename the web manifest", () => {
-    const manifest = read("client", "public", "goldline.webmanifest");
-    expect(manifest).toContain('"name": "Goldline"');
+  it("does not take ownership of the manifest, Driver login, or LoginForm", () => {
+    expect(read("shared", "productIdentity.ts")).not.toContain("webmanifest");
+    expect(read("client", "src", "pages", "Driver.tsx")).not.toContain("PRODUCT_NAME");
+    expect(read("client", "src", "components", "LoginForm.tsx")).not.toContain(
+      "PRODUCT_NAME"
+    );
+    const app = read("client", "src", "App.tsx");
+    const driverAt = app.indexOf("if (isDriverHost)");
+    expect(driverAt).toBeGreaterThan(0);
+    const driverBlock = app.slice(driverAt);
+    expect(driverBlock).not.toContain("LegacyLandingFrame");
+    expect(driverBlock).not.toContain("PRODUCT_NAME");
   });
 });
