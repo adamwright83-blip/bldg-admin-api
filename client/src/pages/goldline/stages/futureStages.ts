@@ -42,6 +42,11 @@ const WAYWARD_MAP: OverworldMapDefinition = {
   }],
 };
 
+/**
+ * The original Wayward overworld contract. SUPERSEDED at runtime by the voyage in
+ * `client/src/pages/goldline/wayward/` (2026-09-23), which stages the same plates on
+ * its own scene. Kept as the authoring record of the bridge plate's geometry.
+ */
 export const WAYWARD_APPROACH_STAGE: GoldlineStageDefinition = {
   map: WAYWARD_MAP,
   presentation: {

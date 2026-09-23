@@ -498,6 +498,8 @@ Good with strangers.
 
 Must work inside truth.
 
+Visual form (canon): a lanky explorer-messenger bird in a camo bucket hat with a wind-up key, brass goggles and a messenger's kit. He walks upright like a small person — never hops, never flies. See `docs/goldline/companions/ROOK_CONCEPT_SPEC.md`.
+
 ---
 
 ## Bront Mercer

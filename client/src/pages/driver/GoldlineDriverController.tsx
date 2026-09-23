@@ -1698,6 +1698,10 @@ function LiveGoldlineDriverController({
         {returnToDay}
         <WaywardTetheredDeck
           playerIdentity={identity.data?.openId ?? null}
+          rookSource={{
+            kind: "server",
+            companionRookOwned: progressionForOverworld?.companionRookOwned,
+          }}
           onReturn={() => {
             setDriverScene("overworld");
           }}

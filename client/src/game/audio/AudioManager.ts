@@ -78,7 +78,48 @@ export type AudioCueId =
   | "radio_static"
   | "radio_chirp"
   | "voice_cut"
-  | "companion_join";
+  | "companion_join"
+  // The Wayward voyage
+  | "deck_step"
+  | "wayward_wind"
+  | "wind_gust"
+  | "wind_rush"
+  | "timber_creak"
+  | "ship_groan"
+  | "cargo_slide"
+  | "cargo_hit"
+  | "crate_hit"
+  | "plank_crack"
+  | "debris_fall"
+  | "linehook_fire"
+  | "linehook_bite"
+  | "line_twang"
+  | "linehook_foul"
+  | "linehook_dry"
+  | "swing_whoosh"
+  | "line_release"
+  | "deck_land"
+  | "fall_gasp"
+  | "rook_grab"
+  | "rook_haul"
+  | "cut_pulse"
+  | "recoil_crash"
+  | "inspector_shout"
+  | "inspector_laugh"
+  | "murmur_rook"
+  | "murmur_inspector"
+  | "paper_rustle"
+  | "inspector_steps"
+  | "clamp_release"
+  | "tether_run"
+  | "tether_snap"
+  | "wayward_horn"
+  | "sail_fill"
+  | "gold_line_wake"
+  | "vision_flash"
+  | "caption_rook"
+  | "caption_tick"
+  | "line_clear";
 
 /**
  * One synthesized step. `glideTo` bends the pitch across the step (whooshes,
@@ -570,6 +611,316 @@ const CUE_DEFINITIONS: Record<
       { atMs: 210, freq: 988, durationMs: 900, type: "triangle", gain: 0.1, attackMs: 3 },
       { atMs: 210, freq: 1482, durationMs: 700, type: "sine", gain: 0.05, attackMs: 3 },
       { atMs: 210, freq: 494, durationMs: 600, type: "sine", gain: 0.06, attackMs: 3 },
+    ],
+  },
+  // ---------------------------------------------------------------- The Wayward
+  // Fiction only. None of these is "victory": the ship casting off is a story
+  // payoff, never the sound of a closed sale.
+  deck_step: {
+    category: "traversal",
+    steps: [
+      { atMs: 0, freq: 900, durationMs: 40, type: "noise", glideTo: 480, gain: 0.07, attackMs: 1 },
+      { atMs: 0, freq: 125, durationMs: 60, type: "sine", glideTo: 70, gain: 0.08, attackMs: 1 },
+    ],
+  },
+  wayward_wind: {
+    category: "world",
+    steps: [
+      { atMs: 0, freq: 520, durationMs: 2600, type: "noise", glideTo: 700, gain: 0.1, attackMs: 1100, sustain: 0.2 },
+      { atMs: 300, freq: 1300, durationMs: 2000, type: "noise", glideTo: 900, gain: 0.036, attackMs: 900 },
+    ],
+  },
+  wind_gust: {
+    category: "world",
+    steps: [
+      { atMs: 0, freq: 420, durationMs: 1800, type: "noise", glideTo: 900, gain: 0.085, attackMs: 500 },
+      { atMs: 200, freq: 1600, durationMs: 1300, type: "noise", glideTo: 2400, gain: 0.03, attackMs: 400 },
+    ],
+  },
+  wind_rush: {
+    category: "traversal",
+    steps: [
+      { atMs: 0, freq: 300, durationMs: 900, type: "noise", glideTo: 2200, gain: 0.16, attackMs: 500 },
+      { atMs: 500, freq: 2200, durationMs: 700, type: "noise", glideTo: 600, gain: 0.1, attackMs: 20 },
+    ],
+  },
+  /** Old timbers taking the strain of a ship that has wanted to leave for generations. */
+  timber_creak: {
+    category: "world",
+    steps: [
+      { freq: 92, durationMs: 620, type: "sawtooth", glideTo: 118, gain: 0.07, attackMs: 120, filter: { type: "bandpass", freq: 520, q: 4, glideTo: 700 }, vibrato: { rate: 17, depth: 3 } },
+    ],
+  },
+  ship_groan: {
+    category: "world",
+    steps: [
+      { atMs: 0, freq: 48, durationMs: 1500, type: "sawtooth", glideTo: 40, gain: 0.12, attackMs: 260, filter: { type: "lowpass", freq: 320, q: 2, glideTo: 180 }, vibrato: { rate: 7, depth: 2 } },
+      { atMs: 200, freq: 130, durationMs: 1100, type: "sawtooth", glideTo: 96, gain: 0.045, attackMs: 200, filter: { type: "bandpass", freq: 600, q: 5 } },
+      { atMs: 0, freq: 300, durationMs: 1200, type: "noise", glideTo: 180, gain: 0.04, attackMs: 400 },
+    ],
+  },
+  cargo_slide: {
+    category: "encounter",
+    steps: [
+      { atMs: 0, freq: 180, durationMs: 900, type: "noise", glideTo: 120, gain: 0.1, attackMs: 80, sustain: 0.6 },
+      { atMs: 0, freq: 60, durationMs: 900, type: "triangle", gain: 0.05, attackMs: 40, vibrato: { rate: 23, depth: 6 } },
+    ],
+  },
+  cargo_hit: {
+    category: "encounter",
+    steps: [
+      { atMs: 0, freq: 140, durationMs: 160, type: "sine", glideTo: 60, gain: 0.22, attackMs: 1 },
+      { atMs: 0, freq: 1200, durationMs: 70, type: "noise", glideTo: 400, gain: 0.14, attackMs: 1 },
+      { atMs: 10, freq: 320, durationMs: 90, type: "square", glideTo: 180, gain: 0.04, filter: { type: "lowpass", freq: 900 } },
+    ],
+  },
+  crate_hit: {
+    category: "encounter",
+    steps: [
+      { atMs: 0, freq: 110, durationMs: 220, type: "sine", glideTo: 45, gain: 0.3, attackMs: 1 },
+      { atMs: 0, freq: 2000, durationMs: 90, type: "noise", glideTo: 500, gain: 0.2, attackMs: 1 },
+      { atMs: 30, freq: 600, durationMs: 200, type: "noise", glideTo: 220, gain: 0.08 },
+    ],
+  },
+  plank_crack: {
+    category: "world",
+    steps: [
+      { atMs: 0, freq: 3200, durationMs: 60, type: "noise", glideTo: 1400, gain: 0.26, attackMs: 1 },
+      { atMs: 40, freq: 1800, durationMs: 120, type: "noise", glideTo: 700, gain: 0.156, attackMs: 1 },
+      { atMs: 0, freq: 180, durationMs: 140, type: "sawtooth", glideTo: 90, gain: 0.065, filter: { type: "lowpass", freq: 700 } },
+      { atMs: 120, freq: 2600, durationMs: 50, type: "noise", gain: 0.104, attackMs: 1 },
+    ],
+  },
+  debris_fall: {
+    category: "world",
+    steps: [
+      { atMs: 0, freq: 900, durationMs: 1300, type: "noise", glideTo: 220, gain: 0.05, attackMs: 100 },
+      { atMs: 1100, freq: 90, durationMs: 300, type: "sine", glideTo: 50, gain: 0.05, attackMs: 2 },
+      { atMs: 1300, freq: 70, durationMs: 350, type: "sine", glideTo: 40, gain: 0.035, attackMs: 2 },
+    ],
+  },
+  linehook_fire: {
+    category: "traversal",
+    steps: [
+      { atMs: 0, freq: 700, durationMs: 220, type: "noise", glideTo: 3200, gain: 0.224, attackMs: 10 },
+      { atMs: 0, freq: 220, durationMs: 120, type: "triangle", glideTo: 520, gain: 0.08 },
+      ...[40, 78, 112, 150, 182].map((atMs, i) => ({ atMs, freq: 3900 + i * 260, durationMs: 16, type: "noise" as const, gain: 0.096, attackMs: 1 })),
+    ],
+  },
+  /** The Linehook bites: bronze rings, the line zings taut. */
+  linehook_bite: {
+    category: "encounter",
+    steps: [
+      { atMs: 0, freq: 3800, durationMs: 50, type: "noise", glideTo: 1500, gain: 0.33, attackMs: 1 },
+      { atMs: 0, freq: 110, durationMs: 180, type: "sine", glideTo: 60, gain: 0.33, attackMs: 1 },
+      { atMs: 0, freq: 1480, durationMs: 520, type: "triangle", glideTo: 1440, gain: 0.18, attackMs: 1 },
+      { atMs: 0, freq: 2210, durationMs: 380, type: "sine", gain: 0.09, attackMs: 1 },
+      { atMs: 60, freq: 880, durationMs: 700, type: "triangle", glideTo: 870, gain: 0.06, attackMs: 2, vibrato: { rate: 9, depth: 6 } },
+    ],
+  },
+  line_twang: {
+    category: "traversal",
+    steps: [
+      { atMs: 0, freq: 196, durationMs: 620, type: "sawtooth", glideTo: 180, gain: 0.07, attackMs: 2, filter: { type: "lowpass", freq: 1800, glideTo: 400, q: 3 } },
+      { atMs: 0, freq: 98, durationMs: 500, type: "triangle", gain: 0.06, attackMs: 2 },
+    ],
+  },
+  /** The cast caught rigging instead of the ring: the line tangles and snaps back. */
+  linehook_foul: {
+    category: "failure",
+    steps: [
+      { atMs: 0, freq: 2400, durationMs: 90, type: "noise", glideTo: 700, gain: 0.2, attackMs: 1 },
+      { atMs: 20, freq: 260, durationMs: 180, type: "sawtooth", glideTo: 120, gain: 0.08, filter: { type: "lowpass", freq: 900 } },
+      { atMs: 60, freq: 4600, durationMs: 30, type: "noise", gain: 0.1, attackMs: 1 },
+      { atMs: 100, freq: 3400, durationMs: 30, type: "noise", gain: 0.08, attackMs: 1 },
+    ],
+  },
+  linehook_dry: {
+    category: "traversal",
+    steps: [
+      { atMs: 0, freq: 420, durationMs: 60, type: "square", glideTo: 300, gain: 0.03, filter: { type: "lowpass", freq: 1200 } },
+      { atMs: 0, freq: 1600, durationMs: 30, type: "noise", gain: 0.04, attackMs: 1 },
+    ],
+  },
+  swing_whoosh: {
+    category: "traversal",
+    steps: [
+      { atMs: 0, freq: 260, durationMs: 1000, type: "noise", glideTo: 1500, gain: 0.13, attackMs: 450 },
+      { atMs: 450, freq: 1500, durationMs: 600, type: "noise", glideTo: 400, gain: 0.104, attackMs: 30 },
+    ],
+  },
+  line_release: {
+    category: "traversal",
+    steps: [
+      { atMs: 0, freq: 2600, durationMs: 40, type: "noise", gain: 0.08, attackMs: 1 },
+      { atMs: 10, freq: 1250, durationMs: 120, type: "triangle", glideTo: 1600, gain: 0.04, attackMs: 1 },
+    ],
+  },
+  deck_land: {
+    category: "traversal",
+    steps: [
+      { atMs: 0, freq: 120, durationMs: 260, type: "sine", glideTo: 48, gain: 0.3, attackMs: 1 },
+      { atMs: 0, freq: 900, durationMs: 140, type: "noise", glideTo: 300, gain: 0.16, attackMs: 1 },
+      { atMs: 20, freq: 2400, durationMs: 40, type: "noise", gain: 0.06, attackMs: 1 },
+    ],
+  },
+  fall_gasp: {
+    category: "failure",
+    steps: [{ freq: 600, durationMs: 420, type: "noise", glideTo: 1800, gain: 0.15, attackMs: 60 }],
+  },
+  rook_grab: {
+    category: "encounter",
+    steps: [
+      { atMs: 0, freq: 420, durationMs: 140, type: "sawtooth", glideTo: 300, gain: 0.1, filter: { type: "bandpass", freq: 900, q: 5 } },
+      { atMs: 0, freq: 3000, durationMs: 40, type: "noise", gain: 0.25, attackMs: 1 },
+    ],
+  },
+  rook_haul: {
+    category: "encounter",
+    steps: [
+      { atMs: 0, freq: 160, durationMs: 420, type: "sawtooth", glideTo: 220, gain: 0.05, attackMs: 60, filter: { type: "bandpass", freq: 700, q: 6 } },
+      { atMs: 420, freq: 110, durationMs: 180, type: "sine", glideTo: 60, gain: 0.15, attackMs: 2 },
+    ],
+  },
+  /** The Cut wakes under her skin as the Gold Line catches her (WORLD_BIBLE §26). */
+  cut_pulse: {
+    category: "failure",
+    steps: [
+      { atMs: 0, freq: 60, durationMs: 260, type: "sine", glideTo: 40, gain: 0.2, attackMs: 5 },
+      { atMs: 0, freq: 1760, durationMs: 600, type: "sine", glideTo: 2640, gain: 0.05, attackMs: 200 },
+      { atMs: 0, freq: 2200, durationMs: 500, type: "noise", glideTo: 5000, gain: 0.03, attackMs: 300 },
+    ],
+  },
+  recoil_crash: {
+    category: "failure",
+    steps: [
+      { atMs: 0, freq: 90, durationMs: 320, type: "sine", glideTo: 40, gain: 0.32, attackMs: 1 },
+      { atMs: 0, freq: 1600, durationMs: 160, type: "noise", glideTo: 300, gain: 0.22, attackMs: 1 },
+      { atMs: 30, freq: 500, durationMs: 500, type: "noise", glideTo: 200, gain: 0.07, attackMs: 30 },
+      { atMs: 0, freq: 240, durationMs: 140, type: "square", glideTo: 120, gain: 0.05, filter: { type: "lowpass", freq: 800 } },
+    ],
+  },
+  /** Seen, not heard: inspectors' voices arrive through wind, as shapes of speech. */
+  inspector_shout: {
+    category: "world",
+    steps: [
+      { atMs: 0, freq: 170, durationMs: 320, type: "sawtooth", bend: { to: 240, at: 0.3 }, glideTo: 150, gain: 0.07, attackMs: 20, filter: { type: "lowpass", freq: 700, q: 6 } },
+      { atMs: 0, freq: 340, durationMs: 320, type: "sawtooth", bend: { to: 470, at: 0.3 }, glideTo: 300, gain: 0.03, attackMs: 20, filter: { type: "bandpass", freq: 900, q: 4 } },
+    ],
+  },
+  inspector_laugh: {
+    category: "world",
+    steps: [
+      ...[
+        [0, 232, 110],
+        [150, 224, 110],
+        [300, 210, 120],
+        [460, 196, 170],
+      ].map(([atMs, freq, durationMs]) => ({ atMs, freq, durationMs, type: "sawtooth" as const, glideTo: freq! * 0.9, gain: 0.05, attackMs: 8, filter: { type: "lowpass" as const, freq: 820, q: 5 } })),
+      ...[0, 150, 300, 460].map(atMs => ({ atMs, freq: 1400, durationMs: 90, type: "noise" as const, gain: 0.02, attackMs: 5 })),
+    ],
+  },
+  murmur_rook: {
+    category: "world",
+    steps: [{ freq: 262, durationMs: 170, type: "sawtooth", bend: { to: 300, at: 0.4 }, glideTo: 236, gain: 0.056, attackMs: 15, filter: { type: "lowpass", freq: 900, q: 6 } }],
+  },
+  murmur_inspector: {
+    category: "world",
+    steps: [{ freq: 150, durationMs: 200, type: "sawtooth", bend: { to: 172, at: 0.4 }, glideTo: 136, gain: 0.063, attackMs: 15, filter: { type: "lowpass", freq: 700, q: 6 } }],
+  },
+  paper_rustle: {
+    category: "world",
+    steps: [
+      { atMs: 0, freq: 4200, durationMs: 40, type: "noise", gain: 0.06, attackMs: 1 },
+      { atMs: 60, freq: 3600, durationMs: 50, type: "noise", gain: 0.05, attackMs: 1 },
+      { atMs: 130, freq: 5000, durationMs: 30, type: "noise", gain: 0.05, attackMs: 1 },
+      { atMs: 180, freq: 3000, durationMs: 60, type: "noise", gain: 0.04, attackMs: 1 },
+    ],
+  },
+  inspector_steps: {
+    category: "world",
+    steps: [0, 330, 660, 990, 1320].map((atMs, i) => ({ atMs, freq: 820 - i * 40, durationMs: 45, type: "noise" as const, glideTo: 420, gain: 0.05 - i * 0.008, attackMs: 1 })),
+  },
+  /** The outer tether's clamp gives: a heavy latch, then bronze ringing. */
+  clamp_release: {
+    category: "encounter",
+    steps: [
+      { atMs: 0, freq: 70, durationMs: 260, type: "sine", glideTo: 40, gain: 0.2, attackMs: 1 },
+      { atMs: 0, freq: 2800, durationMs: 60, type: "noise", gain: 0.2, attackMs: 1 },
+      { atMs: 0, freq: 180, durationMs: 120, type: "square", glideTo: 90, gain: 0.06, filter: { type: "lowpass", freq: 1200 } },
+      { atMs: 90, freq: 760, durationMs: 600, type: "triangle", glideTo: 740, gain: 0.1, attackMs: 1 },
+      { atMs: 90, freq: 1140, durationMs: 420, type: "sine", gain: 0.05, attackMs: 1 },
+    ],
+  },
+  tether_run: {
+    category: "world",
+    steps: [
+      { atMs: 0, freq: 500, durationMs: 1600, type: "noise", glideTo: 1800, gain: 0.09, attackMs: 150, sustain: 0.6 },
+      { atMs: 0, freq: 90, durationMs: 1600, type: "sawtooth", glideTo: 260, gain: 0.03, filter: { type: "lowpass", freq: 600, glideTo: 1400 }, vibrato: { rate: 31, depth: 12 } },
+    ],
+  },
+  /** Generations of tether let go at once. */
+  tether_snap: {
+    category: "world",
+    steps: [
+      { atMs: 0, freq: 5200, durationMs: 70, type: "noise", glideTo: 900, gain: 0.34, attackMs: 1 },
+      { atMs: 0, freq: 95, durationMs: 700, type: "sine", glideTo: 32, gain: 0.36, attackMs: 1 },
+      { atMs: 0, freq: 190, durationMs: 300, type: "sawtooth", glideTo: 60, gain: 0.08, filter: { type: "lowpass", freq: 1400, glideTo: 200 } },
+      { atMs: 60, freq: 1300, durationMs: 700, type: "noise", glideTo: 180, gain: 0.12, attackMs: 20 },
+    ],
+  },
+  /** The Wayward's own voice, the first time anyone alive has heard it. */
+  wayward_horn: {
+    category: "world",
+    steps: [
+      { atMs: 0, freq: 27.5, durationMs: 3400, type: "sine", gain: 0.18, attackMs: 900, sustain: 0.7 },
+      { atMs: 0, freq: 55, durationMs: 3400, type: "sawtooth", gain: 0.12, attackMs: 700, sustain: 0.7, filter: { type: "lowpass", freq: 300, glideTo: 900, q: 1.5 }, vibrato: { rate: 4.2, depth: 0.6 } },
+      { atMs: 120, freq: 82.4, durationMs: 3280, type: "sawtooth", gain: 0.08, attackMs: 700, sustain: 0.7, filter: { type: "lowpass", freq: 400, glideTo: 1100, q: 1.5 }, vibrato: { rate: 4.6, depth: 0.8 } },
+      { atMs: 240, freq: 110, durationMs: 3160, type: "sawtooth", gain: 0.07, attackMs: 700, sustain: 0.7, filter: { type: "lowpass", freq: 500, glideTo: 1400, q: 1.5 }, vibrato: { rate: 4.9, depth: 1 } },
+      { atMs: 360, freq: 138.6, durationMs: 3040, type: "sawtooth", gain: 0.05, attackMs: 700, sustain: 0.7, filter: { type: "lowpass", freq: 600, glideTo: 1600, q: 1.5 }, vibrato: { rate: 5.1, depth: 1.2 } },
+      { atMs: 0, freq: 600, durationMs: 3000, type: "noise", glideTo: 300, gain: 0.03, attackMs: 900 },
+    ],
+  },
+  sail_fill: {
+    category: "world",
+    steps: [
+      { atMs: 0, freq: 200, durationMs: 700, type: "noise", glideTo: 90, gain: 0.2, attackMs: 40 },
+      { atMs: 0, freq: 70, durationMs: 500, type: "sine", glideTo: 45, gain: 0.2, attackMs: 30 },
+      { atMs: 120, freq: 1400, durationMs: 500, type: "noise", glideTo: 600, gain: 0.05, attackMs: 60 },
+    ],
+  },
+  gold_line_wake: {
+    category: "world",
+    steps: [
+      { atMs: 0, freq: 392, durationMs: 2200, type: "sine", glideTo: 1568, gain: 0.05, attackMs: 600 },
+      { atMs: 0, freq: 784, durationMs: 2200, type: "triangle", glideTo: 2352, gain: 0.03, attackMs: 800 },
+      { atMs: 600, freq: 3000, durationMs: 1600, type: "noise", glideTo: 7000, gain: 0.02, attackMs: 600 },
+      { atMs: 1700, freq: 1568, durationMs: 1400, type: "sine", gain: 0.05, attackMs: 3 },
+      { atMs: 1700, freq: 2349, durationMs: 1200, type: "sine", gain: 0.03, attackMs: 3 },
+    ],
+  },
+  vision_flash: {
+    category: "world",
+    steps: [
+      { atMs: 0, freq: 220, durationMs: 1400, type: "sine", glideTo: 330, gain: 0.05, attackMs: 500 },
+      { atMs: 0, freq: 660, durationMs: 1200, type: "triangle", gain: 0.03, attackMs: 400 },
+      { atMs: 0, freq: 2600, durationMs: 900, type: "noise", glideTo: 900, gain: 0.03, attackMs: 300 },
+    ],
+  },
+  caption_rook: {
+    category: "ui",
+    steps: [{ freq: 1320, durationMs: 40, type: "sine", gain: 0.022, attackMs: 2 }],
+  },
+  caption_tick: {
+    category: "ui",
+    steps: [{ freq: 990, durationMs: 35, type: "sine", gain: 0.018, attackMs: 2 }],
+  },
+  /** The gold thread runs clean to the ring: now. A faint, high glint, never a fanfare. */
+  line_clear: {
+    category: "traversal",
+    steps: [
+      { atMs: 0, freq: 2349, durationMs: 180, type: "sine", gain: 0.054, attackMs: 4 },
+      { atMs: 30, freq: 3136, durationMs: 140, type: "sine", gain: 0.032, attackMs: 4 },
     ],
   },
   /** The correct time arrives: a single bell. Fiction's resolution, not a sale. */
