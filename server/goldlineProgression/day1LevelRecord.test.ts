@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import type { SQL } from "drizzle-orm";
 import { MySqlDialect } from "drizzle-orm/mysql-core";
 import { getTableName } from "drizzle-orm/table";
@@ -34,6 +36,7 @@ import {
   getOrCreateDay1TenDoorsMission,
   recordDay1TenDoorsOutcome,
 } from "../openChannel/day1TenDoorsService";
+import { readGoldlineProgression } from "./progressionService";
 
 const TARGETS = [...(colosseumLeadHuntDefinition()?.targetIds ?? [])];
 const FIFTH = TARGETS[TARGETS.length - 1]!;
@@ -213,16 +216,6 @@ function outcomesOf(db: ReturnType<typeof memoryDb>, taskId: string) {
   return decodeDay1Payload(taskDetail(db, taskId))?.outcomes ?? {};
 }
 
-function assertLevelFollowsConfirmedWrite(log: string[]) {
-  const updateAt = log.indexOf("task-detail-update");
-  const levelAt = log.indexOf("level-insert");
-  expect(updateAt).toBeGreaterThanOrEqual(0);
-  expect(levelAt).toBeGreaterThan(updateAt);
-  const confirmAt = log.findIndex((entry, index) => index > updateAt && entry === "task-select");
-  expect(confirmAt).toBeGreaterThan(updateAt);
-  expect(levelAt).toBeGreaterThan(confirmAt);
-}
-
 function context(): TrpcContext {
   return {
     req: { headers: {} } as never,
@@ -244,13 +237,164 @@ function context(): TrpcContext {
   };
 }
 
-describe("Day 1 level.colosseum recording", () => {
+function serverSources(dir: string): string[] {
+  const found: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "node_modules") continue;
+      found.push(...serverSources(path));
+      continue;
+    }
+    if (!entry.name.endsWith(".ts") || entry.name.endsWith(".test.ts")) continue;
+    found.push(path);
+  }
+  return found;
+}
+
+describe("Day 1 does not resolve level.colosseum", () => {
   let db: ReturnType<typeof memoryDb>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     db = memoryDb();
     mocks.getDb.mockResolvedValue(db);
+  });
+
+  async function read(tenantId: string, operatorId: string) {
+    return readGoldlineProgression({
+      tenantId,
+      operatorId,
+      capabilityOperatorId: null,
+    });
+  }
+
+  it("keeps four committed target outcomes unsatisfied and the level unearned", async () => {
+    const prior = Object.fromEntries(TARGETS.slice(0, 3).map(id => [id, "pitched" as const]));
+    seed(db, {
+      tenantId: "tenant-a",
+      driverId: "open-7",
+      missionId: "mission-1",
+      taskId: "task-1",
+      outcomes: prior,
+    });
+
+    await recordDay1TenDoorsOutcome({
+      tenantId: "tenant-a",
+      driverId: "open-7",
+      missionId: "mission-1",
+      targetId: TARGETS[3]!,
+      outcome: "pitched",
+    });
+
+    const recorded = TARGETS.filter(id => outcomesOf(db, "task-1")[id]);
+    expect(recorded).toHaveLength(4);
+    const projection = await read("tenant-a", "open-7");
+    expect(projection.kingdomBinding.status).toBe("unsatisfied");
+    expect(projection.levelColosseumResolved).toEqual({ status: "unearned", value: false });
+    expect(projection.companionRookOwned.value).toBe(false);
+    expect(projection.kingdomBrassRepublicCompleted.value).toBe(false);
+    expect(db.progression).toEqual([]);
+    expect(db.log).not.toContain("level-insert");
+  });
+
+  it("keeps five committed target outcomes satisfied and the level unearned", async () => {
+    seed(db, {
+      tenantId: "tenant-a",
+      driverId: "open-7",
+      missionId: "mission-1",
+      taskId: "task-1",
+      outcomes: fourOutcomes(),
+    });
+
+    const mission = await recordDay1TenDoorsOutcome({
+      tenantId: "tenant-a",
+      driverId: "open-7",
+      missionId: "mission-1",
+      targetId: FIFTH,
+      outcome: "couldnt_reach",
+    });
+
+    expect(mission.outcomes[FIFTH]).toBe("couldnt_reach");
+    expect(outcomesOf(db, "task-1")[FIFTH]).toBe("couldnt_reach");
+    const projection = await read("tenant-a", "open-7");
+    expect(projection.kingdomBinding.status).toBe("satisfied");
+    expect(projection.kingdomBinding.missingTargetIds).toEqual([]);
+    expect(projection.levelColosseumResolved).toEqual({ status: "unearned", value: false });
+    expect(projection.companionRookOwned).toEqual({ status: "unearned", value: false });
+    expect(projection.kingdomBrassRepublicCompleted).toMatchObject({
+      status: "unearned",
+      value: false,
+      impliedByLevelColosseum: false,
+      impliedByStoredKingdomRow: false,
+    });
+    expect(projection.overworldUnlocks.flags.postRook).toBe(false);
+    expect(db.progression).toEqual([]);
+    expect(db.log).not.toContain("level-insert");
+  });
+
+  it("does not write progression when an already-satisfied binding is read", async () => {
+    seed(db, {
+      tenantId: "tenant-a",
+      driverId: "open-7",
+      missionId: "mission-1",
+      taskId: "task-1",
+      outcomes: { ...fourOutcomes(), [FIFTH]: "pitched" },
+    });
+
+    const mission = await getDay1TenDoorsMissionReadOnly({ tenantId: "tenant-a", driverId: "open-7" });
+    const loaded = await getOrCreateDay1TenDoorsMission({ tenantId: "tenant-a", driverId: "open-7" });
+    const projection = await read("tenant-a", "open-7");
+
+    expect(mission?.outcomes[FIFTH]).toBe("pitched");
+    expect(loaded.outcomes[FIFTH]).toBe("pitched");
+    expect(projection.kingdomBinding.status).toBe("satisfied");
+    expect(projection.levelColosseumResolved).toEqual({ status: "unearned", value: false });
+    expect(db.progression).toEqual([]);
+    expect(db.log).not.toContain("level-insert");
+  });
+
+  it("does not manufacture Level completion when the fifth outcome is retried", async () => {
+    seed(db, {
+      tenantId: "tenant-a",
+      driverId: "open-7",
+      missionId: "mission-1",
+      taskId: "task-1",
+      outcomes: fourOutcomes(),
+    });
+    await recordDay1TenDoorsOutcome({
+      tenantId: "tenant-a",
+      driverId: "open-7",
+      missionId: "mission-1",
+      targetId: FIFTH,
+      outcome: "pitched",
+    });
+    const committed = taskDetail(db, "task-1");
+    db.log.length = 0;
+
+    await recordDay1TenDoorsOutcome({
+      tenantId: "tenant-a",
+      driverId: "open-7",
+      missionId: "mission-1",
+      targetId: FIFTH,
+      outcome: "pitched",
+    });
+    await recordDay1TenDoorsOutcome({
+      tenantId: "tenant-a",
+      driverId: "open-7",
+      missionId: "mission-1",
+      targetId: FIFTH,
+      outcome: "pitched",
+    });
+
+    expect(taskDetail(db, "task-1")).toBe(committed);
+    expect(db.log).not.toContain("task-detail-update");
+    expect(db.log).not.toContain("level-insert");
+    const projection = await read("tenant-a", "open-7");
+    expect(projection.kingdomBinding.status).toBe("satisfied");
+    expect(projection.levelColosseumResolved.value).toBe(false);
+    expect(projection.kingdomBrassRepublicCompleted.value).toBe(false);
+    expect(db.progression).toEqual([]);
   });
 
   it("(A) does not record the level when fifth-outcome persistence fails", async () => {
@@ -280,114 +424,7 @@ describe("Day 1 level.colosseum recording", () => {
     expect(db.log).not.toContain("level-insert");
   });
 
-  it("(B) keeps the committed outcome when the progression write fails", async () => {
-    seed(db, {
-      tenantId: "tenant-a",
-      driverId: "open-7",
-      missionId: "mission-1",
-      taskId: "task-1",
-      outcomes: fourOutcomes(),
-    });
-    db.flags.failLevelInsert = true;
-
-    const mission = await recordDay1TenDoorsOutcome({
-      tenantId: "tenant-a",
-      driverId: "open-7",
-      missionId: "mission-1",
-      targetId: FIFTH,
-      outcome: "couldnt_reach",
-    });
-
-    expect(mission.outcomes[FIFTH]).toBe("couldnt_reach");
-    expect(outcomesOf(db, "task-1")[FIFTH]).toBe("couldnt_reach");
-    expect(db.progression).toEqual([]);
-    assertLevelFollowsConfirmedWrite(db.log);
-  });
-
-  it("(C) retries the level from the committed row, not from a guessed map", async () => {
-    seed(db, {
-      tenantId: "tenant-a",
-      driverId: "open-7",
-      missionId: "mission-1",
-      taskId: "task-1",
-      outcomes: fourOutcomes(),
-    });
-    db.flags.failLevelInsert = true;
-    await recordDay1TenDoorsOutcome({
-      tenantId: "tenant-a",
-      driverId: "open-7",
-      missionId: "mission-1",
-      targetId: FIFTH,
-      outcome: "pitched",
-    });
-    const committed = taskDetail(db, "task-1");
-    db.flags.failLevelInsert = false;
-    db.log.length = 0;
-
-    await recordDay1TenDoorsOutcome({
-      tenantId: "tenant-a",
-      driverId: "open-7",
-      missionId: "mission-1",
-      targetId: FIFTH,
-      outcome: "pitched",
-    });
-
-    expect(taskDetail(db, "task-1")).toBe(committed);
-    expect(db.log).not.toContain("task-detail-update");
-    expect(db.log.indexOf("task-select")).toBeGreaterThanOrEqual(0);
-    expect(db.log.indexOf("level-insert")).toBeGreaterThan(db.log.indexOf("task-select"));
-    expect(db.progression).toHaveLength(1);
-    expect(db.progression[0]).toMatchObject({
-      tenantId: "tenant-a",
-      operatorId: "open-7",
-      companionRookOwnedAt: null,
-      kingdomBrassRepublicCompletedAt: null,
-    });
-    expect(db.progression[0]?.levelColosseumResolvedAt).toBeInstanceOf(Date);
-  });
-
-  it("(D) keeps the first level timestamp on a second retry", async () => {
-    seed(db, {
-      tenantId: "tenant-a",
-      driverId: "open-7",
-      missionId: "mission-1",
-      taskId: "task-1",
-      outcomes: fourOutcomes(),
-    });
-    db.flags.failLevelInsert = true;
-    await recordDay1TenDoorsOutcome({
-      tenantId: "tenant-a",
-      driverId: "open-7",
-      missionId: "mission-1",
-      targetId: FIFTH,
-      outcome: "pitched",
-    });
-    db.flags.failLevelInsert = false;
-    await recordDay1TenDoorsOutcome({
-      tenantId: "tenant-a",
-      driverId: "open-7",
-      missionId: "mission-1",
-      targetId: FIFTH,
-      outcome: "pitched",
-    });
-    const stamp = db.progression[0]?.levelColosseumResolvedAt;
-    const inserts = db.log.filter(entry => entry === "level-insert").length;
-
-    await recordDay1TenDoorsOutcome({
-      tenantId: "tenant-a",
-      driverId: "open-7",
-      missionId: "mission-1",
-      targetId: FIFTH,
-      outcome: "pitched",
-    });
-
-    expect(db.progression).toHaveLength(1);
-    expect(db.progression[0]?.levelColosseumResolvedAt).toBe(stamp);
-    expect(db.progression[0]?.kingdomBrassRepublicCompletedAt).toBeNull();
-    expect(db.log.filter(entry => entry === "level-insert")).toHaveLength(inserts);
-  });
-
-  it("(E) does not let tenant A evidence resolve tenant B", async () => {
+  it("does not let tenant A evidence affect tenant B", async () => {
     const sharedMissionId = "mission-shared";
     seed(db, {
       tenantId: "tenant-a",
@@ -426,13 +463,56 @@ describe("Day 1 level.colosseum recording", () => {
     expect(mission.outcomes[FIFTH]).toBe("couldnt_reach");
     expect(taskDetail(db, "task-a")).toBe(tenantABefore);
     expect(outcomesOf(db, "task-b")[FIFTH]).toBe("couldnt_reach");
-    expect(db.progression).toHaveLength(1);
-    expect(db.progression[0]).toMatchObject({
-      tenantId: "tenant-b",
-      operatorId: "open-b",
-      kingdomBrassRepublicCompletedAt: null,
+    expect(outcomesOf(db, "task-a")[FIFTH]).toBe("pitched");
+    const tenantA = await read("tenant-a", "open-a");
+    const tenantB = await read("tenant-b", "open-b");
+    expect(tenantA.kingdomBinding.status).toBe("satisfied");
+    expect(tenantA.levelColosseumResolved.value).toBe(false);
+    expect(tenantB.kingdomBinding.status).toBe("satisfied");
+    expect(tenantB.levelColosseumResolved.value).toBe(false);
+    expect(tenantB.operatorId).toBe("open-b");
+    expect(tenantB.tenantId).toBe("tenant-b");
+    expect(db.progression).toEqual([]);
+    expect(db.log).not.toContain("level-insert");
+  });
+
+  it("does not let operator A evidence affect operator B", async () => {
+    seed(db, {
+      tenantId: "tenant-a",
+      driverId: "open-a",
+      missionId: "mission-a",
+      taskId: "task-a",
+      outcomes: { ...fourOutcomes(), [FIFTH]: "pitched" },
     });
-    expect(db.progression.some(row => row.tenantId === "tenant-a")).toBe(false);
+    seed(db, {
+      tenantId: "tenant-a",
+      driverId: "open-b",
+      missionId: "mission-b",
+      taskId: "task-b",
+      outcomes: fourOutcomes(),
+    });
+    const operatorABefore = taskDetail(db, "task-a");
+
+    await recordDay1TenDoorsOutcome({
+      tenantId: "tenant-a",
+      driverId: "open-b",
+      missionId: "mission-b",
+      targetId: FIFTH,
+      outcome: "pitched",
+    });
+
+    expect(taskDetail(db, "task-a")).toBe(operatorABefore);
+    const operatorA = await read("tenant-a", "open-a");
+    const operatorB = await read("tenant-a", "open-b");
+    expect(operatorA.kingdomBinding.status).toBe("satisfied");
+    expect(operatorA.levelColosseumResolved.value).toBe(false);
+    expect(operatorA.kingdomBrassRepublicCompleted.value).toBe(false);
+    expect(operatorB.operatorId).toBe("open-b");
+    expect(operatorB.kingdomBinding.status).toBe("satisfied");
+    expect(operatorB.levelColosseumResolved.value).toBe(false);
+    expect(operatorB.companionRookOwned.value).toBe(false);
+    expect(db.progression).toEqual([]);
+    expect(db.log).not.toContain("level-insert");
   });
 
   it("(F) does not let a client forge payload create progression", async () => {
@@ -445,17 +525,24 @@ describe("Day 1 level.colosseum recording", () => {
     });
     const before = taskDetail(db, "task-1");
 
-    await expect(
-      recordDay1TenDoorsOutcome({
-        tenantId: "tenant-a",
-        driverId: "open-7",
-        missionId: "mission-1",
-        targetId: FIFTH,
-        outcome: "pitched",
-        resolved: true,
-        localStorage: { levelColosseumResolved: true },
-      } as never)
-    ).rejects.toBeInstanceOf(ProgressionForgeError);
+    for (const forged of [
+      { resolved: true, localStorage: { levelColosseumResolved: true } },
+      { rookOwned: true },
+      { kingdomComplete: true },
+      { levelColosseumResolved: true },
+      { companionRookOwned: true },
+    ]) {
+      await expect(
+        recordDay1TenDoorsOutcome({
+          tenantId: "tenant-a",
+          driverId: "open-7",
+          missionId: "mission-1",
+          targetId: FIFTH,
+          outcome: "pitched",
+          ...forged,
+        } as never)
+      ).rejects.toBeInstanceOf(ProgressionForgeError);
+    }
 
     expect(taskDetail(db, "task-1")).toBe(before);
     expect(db.progression).toEqual([]);
@@ -622,5 +709,22 @@ describe("Day 1 level.colosseum recording", () => {
     });
 
     expect(db.progression).toEqual([]);
+    expect(db.log).not.toContain("level-insert");
+  });
+
+  it("has no production caller that turns Day 1 completion into Level resolution", () => {
+    const day1 = readFileSync(new URL("../openChannel/day1TenDoorsService.ts", import.meta.url), "utf8");
+    const router = readFileSync(new URL("./progressionRouter.ts", import.meta.url), "utf8");
+    expect(day1).not.toMatch(
+      /recordLevelFromOutcomes|recordColosseumLevelFromCommittedEvidence|recordLevelColosseumResolved|setLevelColosseumResolvedAt|insertLevelColosseumResolved|levelColosseumResolvedAt/
+    );
+    expect(router).not.toMatch(/\.mutation\(|recordLevel|acknowledgeColosseum/);
+    const callers = serverSources(join(process.cwd(), "server")).filter(path => {
+      if (path.endsWith(`${join("goldlineProgression", "progressionWrites.ts")}`)) return false;
+      if (path.endsWith(`${join("goldlineProgression", "progressionStore.ts")}`)) return false;
+      const source = readFileSync(path, "utf8");
+      return /recordLevelFromOutcomes|recordLevelColosseumResolved|setLevelColosseumResolvedAt|insertLevelColosseumResolved/.test(source);
+    });
+    expect(callers).toEqual([]);
   });
 });

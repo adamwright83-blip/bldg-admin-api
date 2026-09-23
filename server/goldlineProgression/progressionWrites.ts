@@ -1,7 +1,8 @@
 /**
- * Durable writes. Callers must already hold the outcome map. This file does
- * not read Day 1 missions, so the outcome writer can call it without a cycle.
- * Reads do not live here. Kingdom completion is not written here.
+ * Durable write primitives. Callers must already hold the outcome map.
+ * This file does not read Day 1 missions. Day 1 must not call these
+ * functions: a satisfied hunt is not level.colosseum. Reads do not live
+ * here. Kingdom completion is not written here.
  */
 import {
   assertCompanionRookRecordPermitted,

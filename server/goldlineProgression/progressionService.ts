@@ -12,7 +12,7 @@ import {
   type GoldlineProgressionRead,
 } from "./progressionContract";
 import { findDomainProgression } from "./progressionStore";
-import { recordLevelFromOutcomes, recordRookFromOutcomes } from "./progressionWrites";
+import { recordRookFromOutcomes } from "./progressionWrites";
 
 async function loadOutcomes(input: { tenantId: string; operatorId: string }): Promise<{
   outcomes: Record<string, unknown> | null;
@@ -82,26 +82,6 @@ export async function readGoldlineProgression(input: {
     capabilityRookContactGranted: capability.granted,
     capabilityRookContactReadable: capability.readable,
     stored,
-  });
-}
-
-/**
- * Records level.colosseum when colosseumKingdomBindingSatisfied is true.
- * Does not own Rook and does not complete kingdom.brass_republic.
- * A second call keeps the first timestamp.
- */
-export async function recordLevelColosseumResolved(input: {
-  tenantId: string;
-  operatorId: string;
-  capabilityOperatorId?: string | null;
-  clientPayload?: unknown;
-}): Promise<GoldlineProgressionRead> {
-  const outcomes = await loadOutcomes(input);
-  await recordLevelFromOutcomes({ ...input, ...outcomes });
-  return readGoldlineProgression({
-    tenantId: input.tenantId,
-    operatorId: input.operatorId,
-    capabilityOperatorId: input.capabilityOperatorId ?? null,
   });
 }
 

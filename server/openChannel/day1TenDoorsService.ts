@@ -25,9 +25,7 @@ import {
   openChannelMissions,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { colosseumKingdomBindingSatisfied } from "../goldlineProgression/colosseumKingdomBinding";
 import { rejectClientProgressionForge } from "../goldlineProgression/progressionContract";
-import { recordLevelFromOutcomes } from "../goldlineProgression/progressionWrites";
 import { ensureOpenChannelTables } from "./openChannelService";
 import {
   DAY1_BUSINESS_DATE,
@@ -250,32 +248,6 @@ async function readCommittedDay1Evidence(input: {
   return normaliseEvidence(decoded);
 }
 
-/**
- * Idempotent level.colosseum write from a map already read back from the
- * task row. A failure here does not roll back that business outcome.
- * kingdom.brass_republic is not written.
- */
-async function recordColosseumLevelFromCommittedEvidence(input: {
-  tenantId: string;
-  operatorId: string;
-  outcomes: Record<string, unknown>;
-}): Promise<void> {
-  if (!colosseumKingdomBindingSatisfied(input.outcomes)) return;
-  try {
-    await recordLevelFromOutcomes({
-      tenantId: input.tenantId,
-      operatorId: input.operatorId,
-      outcomes: { ...input.outcomes },
-      outcomesAvailable: true,
-    });
-  } catch (error) {
-    console.warn(
-      "[goldline-progression] level.colosseum was not recorded after the business outcome committed",
-      error instanceof Error ? error.message : error
-    );
-  }
-}
-
 function blankVisit(targetId: string): Day1VisitEvidence {
   return {
     targetId,
@@ -460,11 +432,10 @@ export async function recordDay1TenDoorsEvidence(input: {
  * supplies source=operator_backfill to attach truthful metadata to a legacy
  * outcome. Backfill timestamps mean "recorded now", never "this happened now".
  *
- * level.colosseum is recorded only after this outcome is on the task row
- * and a fresh read of that row satisfies kingdom_binding.level.colosseum.
- * The in-memory next-outcome map is not evidence. A progression failure
- * does not undo the business outcome. A later call derives a missing level
- * from the committed row. Reading the mission does not.
+ * This writer does not resolve level.colosseum, own companion.rook, or
+ * complete kingdom.brass_republic. A satisfied kingdom_binding.level.colosseum
+ * is evidence for that binding only. Reading the mission does not write
+ * progression, and retrying an already-recorded outcome does not either.
  */
 export async function recordDay1TenDoorsOutcome(input: {
   tenantId: string;
@@ -499,13 +470,6 @@ export async function recordDay1TenDoorsOutcome(input: {
       missionId: mission.id,
       taskId: task.id,
     });
-    if (confirmed) {
-      await recordColosseumLevelFromCommittedEvidence({
-        tenantId: input.tenantId,
-        operatorId: input.driverId,
-        outcomes: confirmed.outcomes,
-      });
-    }
     return projectMission({
       missionId: mission.id,
       taskId: task.id,
@@ -595,12 +559,6 @@ export async function recordDay1TenDoorsOutcome(input: {
         )
       );
   }
-
-  await recordColosseumLevelFromCommittedEvidence({
-    tenantId: input.tenantId,
-    operatorId: input.driverId,
-    outcomes: confirmed.outcomes,
-  });
 
   return projectMission({
     missionId: mission.id,
