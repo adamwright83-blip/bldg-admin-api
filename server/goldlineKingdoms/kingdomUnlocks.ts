@@ -1,31 +1,34 @@
 /**
- * Slice 5 §5.4 — real Kingdom-completion derivation.
+ * Slice 5 §5.4 — legacy lantern status for stored kingdom rows.
  *
- * Kingdom completion must come from real recorded truth, never fictional
- * persistence. Kingdom 1 (the Colosseum) is complete when all five real
- * targets in the Greystar lead hunt — not all ten day1TenDoors targets,
- * see docs/goldline/campaigns/GREYSTAR_COLOSSEUM_SNAPSHOT.md — have a
- * recorded visit outcome. Completing it unlocks Kingdom 2 on the map.
+ * Stored row `kingdom-1-colosseum` moves to lantern status `complete` when
+ * all five Greystar Koreatown lead-hunt targets — not all ten day1TenDoors
+ * targets, see docs/goldline/campaigns/GREYSTAR_COLOSSEUM_SNAPSHOT.md —
+ * have a recorded visit outcome. That unlocks stored row
+ * `kingdom-2-the-last-valet` on the map. Evidence is
+ * `colosseumKingdomBindingSatisfied`. The row ids are not renamed.
  *
- * Per Adam's decision (2026-09-11): the newly-unlocked Kingdom leads to
+ * Per Adam's decision (2026-09-11): the newly-unlocked row leads to
  * /goldline-chapter access. See GoldlineKingdomAdmin.tsx and
  * GoldlineDriverController.tsx for where that surfaces.
+ *
+ * `kingdom-1-colosseum` is not `kingdom.brass_republic`. This lantern write
+ * does not resolve `level.colosseum`, own `companion.rook`, or complete
+ * the Kingdom. Those flags are the read in `server/goldlineProgression/`.
  */
 import { getOrCreateDay1TenDoorsMission } from "../openChannel/day1TenDoorsService";
-import { leadHuntDefinitionForCampaign } from "../campaignLibrary/leadHuntRoundTrip";
+import { colosseumKingdomBindingSatisfied } from "../goldlineProgression/colosseumKingdomBinding";
 import { getKingdom, listKingdoms, setKingdomStatus } from "./kingdomService";
 import type { GoldlineKingdom } from "./kingdomTypes";
 
-const COLOSSEUM_LEGACY_REF = { leadHuntId: "greystar-koreatown-five" } as const;
-
+/**
+ * Existing evidence predicate, now named `colosseumKingdomBindingSatisfied`.
+ * Kept as the local call site for the legacy lantern-status write below.
+ * That write updates stored row `kingdom-1-colosseum` only. It is not
+ * `kingdom.brass_republic` completed and it is not `level.colosseum` resolved.
+ */
 function isColosseumComplete(outcomes: Record<string, unknown>): boolean {
-  const definition = leadHuntDefinitionForCampaign({
-    legacyContract: "lead_hunt",
-    legacyContractRef: COLOSSEUM_LEGACY_REF,
-  });
-  if (!definition) return false;
-  const recorded = new Set(Object.keys(outcomes));
-  return definition.targetIds.every(id => recorded.has(id));
+  return colosseumKingdomBindingSatisfied(outcomes);
 }
 
 /**
