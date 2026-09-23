@@ -10,7 +10,12 @@ import {
   topCustomers,
 } from "./businessMetrics";
 import { ALL_TIME_START, addDaysYmd, daysInclusive, isValidYmd } from "./businessPeriods";
-import { reconcileLedgerSpan } from "./canonicalRevenue";
+import {
+  interpretSourceCoverage,
+  loadRevenueSourceCoverage,
+  reconcileLedgerSpan,
+  revenueMayStateExact,
+} from "./canonicalRevenue";
 import {
   AnalyticsUnavailableError,
   loadPaidOrderLedger,
@@ -39,12 +44,22 @@ export type RevenueSummary = {
   avgOrderValue: number;
   series: RevenuePoint[];
   coverage?: AnalyticsCoverage;
-  /** Exact-revenue breakdown. `totalRevenue` is `exactIncludedCents` in dollars. */
+  /**
+   * `totalRevenue` is recorded included dollars. `statedExactRevenue` is set
+   * only when B1 coverage and reconciliation both allow an exact total.
+   */
+  statedExactRevenue?: number | null;
   reconciliation?: {
     exactIncludedCents: number;
+    statedExactCents: number | null;
+    mayStateExact: boolean;
     definiteDuplicateExclusionCents: number;
     suspectedWithheldCents: number;
     unverifiedNativeCents: number;
+    coverageAllowsExact: boolean;
+    paymentEventsProven: boolean;
+    exhaustiveCurrent: boolean;
+    exactRevenueLicensed: false;
   };
 };
 
@@ -197,8 +212,17 @@ export async function getRevenueSummary(
   const range = boundedRange(params.range);
   const reconciled = reconcileLedgerSpan(ledger, range);
   const totals = summarizeTotals(reconciled.includedEvents);
+  const snapshot = await loadRevenueSourceCoverage({ tenantId });
+  const revenueCoverage = interpretSourceCoverage({
+    snapshot,
+    window: { from: range.start, to: range.end },
+    loadedSources: ledger.loadedSources,
+    failedSources: ledger.failedSources,
+  });
+  const mayStateExact = revenueMayStateExact({ coverage: revenueCoverage, reconciled });
   return {
     totalRevenue: dollars(totals.revenueCents),
+    statedExactRevenue: mayStateExact ? dollars(totals.revenueCents) : null,
     orderCount: totals.orderCount,
     avgOrderValue: totals.aovCents == null ? 0 : dollars(totals.aovCents),
     series: bucketSeries(reconciled.includedEvents, params.groupBy).map(point => ({
@@ -209,9 +233,15 @@ export async function getRevenueSummary(
     coverage: coverageOf(ledger, [params.range]),
     reconciliation: {
       exactIncludedCents: reconciled.exactIncludedCents,
+      statedExactCents: mayStateExact ? reconciled.exactIncludedCents : null,
+      mayStateExact,
       definiteDuplicateExclusionCents: reconciled.definiteDuplicateExclusions.cents,
       suspectedWithheldCents: reconciled.suspectedWithheld.cents,
       unverifiedNativeCents: reconciled.unverifiedNative.cents,
+      coverageAllowsExact: revenueCoverage.coverageAllowsExact,
+      paymentEventsProven: revenueCoverage.paymentEventsProven,
+      exhaustiveCurrent: revenueCoverage.exhaustiveCurrent,
+      exactRevenueLicensed: false,
     },
   };
 }

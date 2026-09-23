@@ -268,11 +268,11 @@ function coverageNotes(result: Extract<BusinessQueryResult, { status: "ok" }>, s
         `${capitalize(speech.count(coverage.overlap.suspectedPairs))} CleanCloud ${plural(coverage.overlap.suspectedPairs, "order")} match a Goldline order for the same customer, day, and amount, so this may double-count up to ${speech.money(coverage.overlap.suspectedCents)}.`
     );
   }
-  if (canonical?.contract === "supplied" && canonical.incompleteForWindow && moneyMetric) {
+  if (canonical && !canonical.coverageAllowsExact && moneyMetric) {
     once(
       "canonical-coverage-incomplete",
       () =>
-        "Source coverage is incomplete for this window, so this is the recorded revenue and not a definitive total."
+        "Source coverage does not support an exact total for this window, so that figure is recorded revenue only."
     );
   }
   if (coverage.serviceFilterUnclassified) {

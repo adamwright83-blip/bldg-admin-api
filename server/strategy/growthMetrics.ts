@@ -6,7 +6,11 @@ import {
   type ActiveCustomerLoaders,
   type ActiveCustomerMetric,
 } from "../claire/activeCustomerMetric";
-import { reconcilePaidRevenue } from "../analytics/canonicalRevenue";
+import {
+  interpretSourceCoverage,
+  loadRevenueSourceCoverage,
+  reconcilePaidRevenue,
+} from "../analytics/canonicalRevenue";
 import { activeCustomerPopulation } from "../analytics/businessMetrics";
 import { resolveCustomerIdentities } from "../analytics/customerIdentityResolution";
 import {
@@ -257,6 +261,13 @@ export async function getStrategyGrowthMetrics(
   const reconciledSales = reconcilePaidRevenue({ events: periodEvents });
   const paidOrdersCount = reconciledSales.exactIncludedOrderCount;
   const netSalesCents = reconciledSales.exactIncludedCents;
+  const coverageSnapshot = await loadRevenueSourceCoverage({ tenantId: input.tenantId });
+  const salesCoverage = interpretSourceCoverage({
+    snapshot: coverageSnapshot,
+    window: { from: input.period.startYmd, to: input.period.endYmd },
+    loadedSources: [],
+    failedSources: [],
+  });
 
   // Net active customer change (rolling active at endYmd vs rolling active at startYmd)
   const startWindowEnd = fromZonedTime(`${input.period.startYmd}T00:00:00`, timeZone);
@@ -314,10 +325,17 @@ export async function getStrategyGrowthMetrics(
     netSales: {
       amountCents: netSalesCents,
       isUncertain: true,
-      uncertaintyReason:
+      uncertaintyReason: [
+        "Canonical paid order ledger does not record refunds or cancellations for cleancloud/native orders",
         reconciledSales.suspectedWithheld.count > 0
-          ? "Canonical revenue withheld suspected cross-source duplicates from the exact total. The paid order ledger also does not record refunds or cancellations for cleancloud/native orders"
-          : "Canonical paid order ledger does not record refunds or cancellations for cleancloud/native orders",
+          ? "Suspected cross-source duplicates are withheld from an exact total"
+          : null,
+        salesCoverage.coverageAllowsExact
+          ? null
+          : "Source coverage does not support an exact total",
+      ]
+        .filter((part): part is string => Boolean(part))
+        .join(". "),
       provenance: {
         sourceService: "server/analytics/canonicalRevenue.ts",
         queryOrDefinition: "readCanonicalRevenue exact included cents within the business-local period",

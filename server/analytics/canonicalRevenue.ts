@@ -10,6 +10,11 @@ import {
   type ProvenDuplicateExclusion,
   type UnverifiedPaidOrder,
 } from "./paidOrderLedger";
+import {
+  loadBusinessSourceCoverage,
+  SOURCE_COVERAGE_CONTRACT_VERSION,
+  type BusinessSourceCoverageSnapshot,
+} from "./sourceCoverage";
 
 /**
  * Canonical revenue read for JOYSTICK.
@@ -26,36 +31,41 @@ import {
  *   already in this book)
  * - Tower Wars visualization sums
  *
- * Coverage seam: Project B1 owns source freshness. This module does not decide
- * whether CleanCloud is fresh. Pass `coverage` from B1's contract, or leave it
- * null. Null means the contract is not supplied: the read will not call
- * CleanCloud fresh and will not call the total definitive.
+ * Coverage comes only from B1 `loadBusinessSourceCoverage` (contract version 1).
+ * This module does not decide fresh, stale, partial, or unavailable.
+ * `book.exactRevenueLicensed` and `book.allCustomersLicensed` stay false.
+ * Exact whole-business payment revenue requires `book.exhaustiveCurrent`,
+ * `book.paymentEventsProven`, a window inside the proven CleanCloud span when
+ * that source is held, and completed reconciliation. Stale is not zero.
  */
-
-export type BusinessSourceCoverageSource = {
-  /** Stable source id. `cleancloud` and `laundry_butler` are recognized. */
-  source: string;
-  /**
-   * B1's status string, read opaquely. Effects this read implements:
-   * `fresh` may support a definitive total when reconciliation is complete;
-   * `stale`, `partial`, and `unavailable` mark the window incomplete and
-   * keep known cents; any other string is not fresh.
-   */
-  coverageStatus: string;
-  lastSuccessfulAssimilation: string | null;
-  provenance: string;
-};
-
-/** The only coverage input B2 accepts. B1 fills it. */
-export type BusinessSourceCoverageSeam = {
-  sources: readonly BusinessSourceCoverageSource[];
-};
 
 export type ReadBusinessSourceCoverage = (input: {
   tenantId: string;
   from: string;
   to: string;
-}) => Promise<BusinessSourceCoverageSeam | null>;
+  now?: Date;
+}) => Promise<BusinessSourceCoverageSnapshot | null>;
+
+/** Loads B1's snapshot. Returns null when the contract cannot be read. Does not invent a status. */
+export async function loadRevenueSourceCoverage(input: {
+  tenantId: string;
+  now?: Date;
+}): Promise<BusinessSourceCoverageSnapshot | null> {
+  try {
+    const snapshot = await loadBusinessSourceCoverage({
+      tenantId: input.tenantId,
+      now: input.now,
+    });
+    if (snapshot.contractVersion !== SOURCE_COVERAGE_CONTRACT_VERSION) return null;
+    return snapshot;
+  } catch (error) {
+    console.warn(
+      "[Revenue] source coverage contract unavailable",
+      error instanceof Error ? error.message : error
+    );
+    return null;
+  }
+}
 
 export type ExplicitEconomicLink = {
   keptEventKey: string;
@@ -76,18 +86,29 @@ export type SuspectedWithheldItem = {
   reason: "same_customer_day_and_amount";
 };
 
-export type CanonicalRevenuePrecision = "definitive" | "exact_for_included_records";
+export type CanonicalRevenuePrecision = "exact" | "recorded_only";
 
 export type CanonicalRevenueCoverage = {
-  contract: "supplied" | "uncontracted";
-  /** True when a supplied source is not fresh, or a source failed to load. */
+  contractVersion: typeof SOURCE_COVERAGE_CONTRACT_VERSION | null;
+  /** False when B1's snapshot could not be read. That is not a fresh book. */
+  snapshotRead: boolean;
   incompleteForWindow: boolean;
-  /** True only when the seam explicitly says CleanCloud is fresh and it loaded. */
+  /** True only when B1's CleanCloud source status is `fresh`. */
   cleanCloudFresh: boolean;
-  sources: readonly BusinessSourceCoverageSource[];
+  cleanCloudStatus: BusinessSourceCoverageSnapshot["sources"][number]["status"] | "not_held" | null;
+  bookStatus: BusinessSourceCoverageSnapshot["book"]["status"] | null;
+  exhaustiveCurrent: boolean;
+  paymentEventsProven: boolean;
+  /** Copied from B1. This read never sets it true. */
+  exactRevenueLicensed: false;
+  allCustomersLicensed: false;
+  staleIsZero: false;
+  /** Coverage itself allows an exact whole-business payment total. Reconciliation is separate. */
+  coverageAllowsExact: boolean;
   affectedSources: string[];
   loadedSources: LedgerSource[];
   failedSources: LedgerSource[];
+  provenance: string | null;
 };
 
 export type ReconciledRevenue = {
@@ -116,6 +137,11 @@ export type CanonicalRevenueOk = ReconciledRevenue & {
   status: "ok";
   tenantId: string;
   window: { from: string; to: string };
+  /** Recorded included cents. Stale coverage does not change this to zero. */
+  recordedCents: number;
+  /** Present only when coverage and reconciliation both allow an exact total. */
+  statedExactCents: number | null;
+  mayStateExact: boolean;
   coverage: CanonicalRevenueCoverage;
   precision: CanonicalRevenuePrecision;
 };
@@ -202,58 +228,107 @@ export function reconcilePaidRevenue(input: {
   };
 }
 
+function windowInsideProvenSpan(
+  window: { from: string; to: string },
+  snapshot: BusinessSourceCoverageSnapshot
+): boolean {
+  const cleancloud = snapshot.sources.find(source => source.sourceId === "cleancloud");
+  if (!cleancloud?.includedInCombinedBook) return true;
+  const span = snapshot.book.scope.cleancloudOrdersCreated;
+  if (!span) return false;
+  return window.from >= span.from && window.to <= span.through;
+}
+
+/**
+ * Reads B1's snapshot. Does not compute freshness.
+ * Exact payment revenue needs exhaustive current coverage, proven payment
+ * events, and the requested window inside the proven span.
+ */
 export function interpretSourceCoverage(input: {
-  coverage: BusinessSourceCoverageSeam | null | undefined;
+  snapshot: BusinessSourceCoverageSnapshot | null | undefined;
+  window: { from: string; to: string };
   loadedSources: readonly LedgerSource[];
   failedSources: readonly LedgerSource[];
 }): CanonicalRevenueCoverage {
   const failed = [...input.failedSources];
-  if (input.coverage == null) {
+  const base = {
+    loadedSources: [...input.loadedSources],
+    failedSources: failed,
+    exactRevenueLicensed: false as const,
+    allCustomersLicensed: false as const,
+    staleIsZero: false as const,
+  };
+  if (input.snapshot == null || input.snapshot.contractVersion !== SOURCE_COVERAGE_CONTRACT_VERSION) {
     return {
-      contract: "uncontracted",
-      incompleteForWindow: failed.length > 0,
+      ...base,
+      contractVersion: null,
+      snapshotRead: false,
+      incompleteForWindow: true,
       cleanCloudFresh: false,
-      sources: [],
+      cleanCloudStatus: null,
+      bookStatus: null,
+      exhaustiveCurrent: false,
+      paymentEventsProven: false,
+      coverageAllowsExact: false,
       affectedSources: failed,
-      loadedSources: [...input.loadedSources],
-      failedSources: failed,
+      provenance: null,
     };
   }
 
-  const affectedFromSeam = input.coverage.sources
-    .filter(source => source.coverageStatus !== "fresh")
-    .map(source => source.source);
-  const affected = Array.from(new Set([...affectedFromSeam, ...failed]));
-  const cleanCloud = input.coverage.sources.find(source => source.source === "cleancloud");
-  const cleanCloudFresh = cleanCloud?.coverageStatus === "fresh" && !failed.includes("cleancloud");
+  const snapshot = input.snapshot;
+  const cleancloud = snapshot.sources.find(source => source.sourceId === "cleancloud");
+  const cleanCloudStatus = !cleancloud
+    ? null
+    : cleancloud.includedInCombinedBook
+      ? cleancloud.status
+      : "not_held";
+  const cleanCloudFresh = Boolean(cleancloud?.status === "fresh" && cleancloud.includedInCombinedBook);
+  const heldNotFresh = snapshot.sources.filter(
+    source => source.includedInCombinedBook && source.status !== "fresh"
+  );
+  const spanCovers = windowInsideProvenSpan(input.window, snapshot);
+  const flagsTrusted =
+    snapshot.book.exactRevenueLicensed === false &&
+    snapshot.book.allCustomersLicensed === false &&
+    snapshot.book.staleIsZero === false &&
+    snapshot.book.missingIsNoCustomers === false;
+  const coverageAllowsExact =
+    flagsTrusted &&
+    snapshot.book.exhaustiveCurrent &&
+    snapshot.book.paymentEventsProven &&
+    heldNotFresh.length === 0 &&
+    spanCovers &&
+    failed.length === 0;
+  const incompleteForWindow =
+    !snapshot.book.exhaustiveCurrent || heldNotFresh.length > 0 || !spanCovers || failed.length > 0;
 
   return {
-    contract: "supplied",
-    incompleteForWindow: affected.length > 0,
+    ...base,
+    contractVersion: snapshot.contractVersion,
+    snapshotRead: true,
+    incompleteForWindow,
     cleanCloudFresh,
-    sources: input.coverage.sources,
-    affectedSources: affected,
-    loadedSources: [...input.loadedSources],
-    failedSources: failed,
+    cleanCloudStatus,
+    bookStatus: snapshot.book.status,
+    exhaustiveCurrent: snapshot.book.exhaustiveCurrent,
+    paymentEventsProven: snapshot.book.paymentEventsProven,
+    coverageAllowsExact,
+    affectedSources: Array.from(
+      new Set([
+        ...heldNotFresh.map(source => source.sourceId),
+        ...snapshot.blockingSources.map(source => source.sourceId),
+        ...failed,
+      ])
+    ),
+    provenance: snapshot.sources.find(source => source.includedInCombinedBook)?.provenance.decidedBy ?? null,
   };
 }
 
-export function revenuePrecision(input: {
+export function revenueMayStateExact(input: {
   coverage: CanonicalRevenueCoverage;
   reconciled: ReconciledRevenue;
-}): CanonicalRevenuePrecision {
-  if (input.coverage.contract !== "supplied" || input.coverage.incompleteForWindow) {
-    return "exact_for_included_records";
-  }
-  if (input.reconciled.suspectedWithheld.count > 0 || input.reconciled.unverifiedNative.count > 0) {
-    return "exact_for_included_records";
-  }
-  if (input.coverage.failedSources.length > 0) return "exact_for_included_records";
-  for (const source of input.coverage.loadedSources) {
-    const entry = input.coverage.sources.find(item => item.source === source);
-    if (!entry || entry.coverageStatus !== "fresh") return "exact_for_included_records";
-  }
-  return "definitive";
+}): boolean {
+  return input.coverage.coverageAllowsExact && input.reconciled.suspectedWithheld.count === 0;
 }
 
 export function reconcileLedgerSpan(
@@ -278,7 +353,9 @@ export async function readCanonicalRevenue(input: {
   from: string;
   to: string;
   timeZone?: string;
-  coverage?: BusinessSourceCoverageSeam | null;
+  now?: Date;
+  /** Pass a snapshot to avoid a second load. Omit to call `loadBusinessSourceCoverage`. Null means the contract could not be read. */
+  coverage?: BusinessSourceCoverageSnapshot | null;
   loaders?: LedgerLoaders;
   explicitEconomicLinks?: readonly ExplicitEconomicLink[];
 }): Promise<CanonicalRevenueResult> {
@@ -294,8 +371,13 @@ export async function readCanonicalRevenue(input: {
     },
     input.loaders
   );
+  const snapshot =
+    input.coverage === undefined
+      ? await loadRevenueSourceCoverage({ tenantId: input.tenantId, now: input.now })
+      : input.coverage;
   const coverage = interpretSourceCoverage({
-    coverage: input.coverage,
+    snapshot,
+    window: { from, to },
     loadedSources: ledger.loadedSources,
     failedSources: ledger.failedSources,
   });
@@ -310,12 +392,16 @@ export async function readCanonicalRevenue(input: {
     };
   }
   const reconciled = reconcileLedgerSpan(ledger, { start: from, end: to }, input.explicitEconomicLinks);
+  const mayStateExact = revenueMayStateExact({ coverage, reconciled });
   return {
     status: "ok",
     tenantId: input.tenantId,
     window: { from, to },
     ...reconciled,
+    recordedCents: reconciled.exactIncludedCents,
+    statedExactCents: mayStateExact ? reconciled.exactIncludedCents : null,
+    mayStateExact,
     coverage,
-    precision: revenuePrecision({ coverage, reconciled }),
+    precision: mayStateExact ? "exact" : "recorded_only",
   };
 }

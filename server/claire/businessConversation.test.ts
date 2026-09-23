@@ -174,7 +174,9 @@ describe("Claire business conversation — other questions", () => {
     const building = await ask("What was revenue from OPUS last month?");
     expect(building).toMatchObject({ handled: true });
     if (building.handled) {
-      expect(building.speak).toBe("Paid revenue at OPUS LA last month was $0.00 across 0 orders.");
+      expect(building.speak).toBe(
+        "Paid revenue at OPUS LA last month was $0.00 across 0 orders. Source coverage does not support an exact total for this window, so that figure is recorded revenue only."
+      );
     }
     await say(ask, "How many active customers do we have?");
     const commercial = await ask("Exclude commercial accounts.");
@@ -216,7 +218,9 @@ describe("failure honesty (N, O)", () => {
 
   it("a real empty period is a real zero", async () => {
     const { ask } = claire({ loaders: emptyLoaders });
-    expect(await say(ask, "What was revenue in the last 30 days?")).toBe("Paid revenue in the last 30 days is $0.00 across 0 orders.");
+    expect(await say(ask, "What was revenue in the last 30 days?")).toBe(
+      "Paid revenue in the last 30 days is $0.00 across 0 orders. Source coverage does not support an exact total for this window, so that figure is recorded revenue only."
+    );
   });
 
   it("a partial source load is qualified", async () => {

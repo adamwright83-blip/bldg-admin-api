@@ -5,7 +5,6 @@ import { defaultBusinessQuery, runBusinessQuery, type BusinessQueryDeps } from "
 import {
   readCanonicalRevenue,
   reconcilePaidRevenue,
-  type BusinessSourceCoverageSeam,
 } from "./canonicalRevenue";
 import {
   loadPaidOrderLedger,
@@ -14,6 +13,11 @@ import {
   type NativeOrderRow,
   type PaidOrderEvent,
 } from "./paidOrderLedger";
+import type {
+  BusinessSourceCoverage,
+  BusinessSourceCoverageSnapshot,
+  SourceCoverageStatus,
+} from "./sourceCoverage";
 
 const WINDOW = { from: "2026-09-01", to: "2026-09-14" };
 const PAID_AT = new Date("2026-09-10T19:00:00.000Z");
@@ -63,13 +67,92 @@ function loaders(nativeRows: NativeOrderRow[], cleancloudRows: CleanCloudOrderRo
   };
 }
 
-function freshCoverage(): BusinessSourceCoverageSeam {
+function source(
+  sourceId: "laundry_butler" | "cleancloud",
+  status: SourceCoverageStatus,
+  held = true
+): BusinessSourceCoverage {
   return {
-    sources: [
-      { source: "laundry_butler", coverageStatus: "fresh", lastSuccessfulAssimilation: "2026-09-14T18:00:00.000Z", provenance: "b1-seam" },
-      { source: "cleancloud", coverageStatus: "fresh", lastSuccessfulAssimilation: "2026-09-14T18:00:00.000Z", provenance: "b1-seam" },
-    ],
+    sourceId,
+    name: sourceId === "cleancloud" ? "CleanCloud" : "Laundry Butler",
+    type: sourceId === "cleancloud" ? "cleancloud_paid_book" : "native_orders",
+    availability: held ? "available" : "not_held",
+    includedInCombinedBook: held,
+    status,
+    lastSuccessfulAssimilationAt: sourceId === "cleancloud" && status === "fresh" ? "2026-09-14T18:00:00.000Z" : null,
+    assimilationKind: sourceId === "cleancloud" ? "customer_truth_refreshed" : "not_applicable",
+    coveredThrough: sourceId === "cleancloud" && held ? "2026-09-14" : null,
+    provenFrom: sourceId === "cleancloud" && held ? "2026-01-01" : null,
+    expectedThrough: sourceId === "cleancloud" && held ? "2026-09-14" : null,
+    records: "readable",
+    supportsExhaustiveCurrentClaim: status === "fresh",
+    emptyReadMeansNoRecords: false,
+    reason: "fixture",
+    provenance: {
+      bindingState: held ? "bound" : "absent",
+      schedule: sourceId === "cleancloud" ? "gumball_daily_18_america_los_angeles" : "system_of_record",
+      coverageBasis: "economic_event",
+      receiptProvenance: "test_fixture",
+      paymentEventsProven: status === "fresh",
+      decidedBy: "deterministic_rules",
+    },
   };
+}
+
+function coverageSnapshot(input: {
+  native?: SourceCoverageStatus;
+  cleancloud?: SourceCoverageStatus;
+  cleancloudHeld?: boolean;
+  exhaustiveCurrent: boolean;
+  paymentEventsProven: boolean;
+  bookStatus: SourceCoverageStatus;
+  span?: { from: string; through: string } | null;
+}): BusinessSourceCoverageSnapshot {
+  const cleancloudHeld = input.cleancloudHeld !== false;
+  const sources = [
+    source("laundry_butler", input.native ?? "fresh", true),
+    source("cleancloud", input.cleancloud ?? "fresh", cleancloudHeld),
+  ];
+  return {
+    contractVersion: 1,
+    tenantId: "tenant-a",
+    checkedAt: "2026-09-14T19:00:00.000Z",
+    timeZone: "America/Los_Angeles",
+    sources,
+    book: {
+      status: input.bookStatus,
+      exhaustiveCurrent: input.exhaustiveCurrent,
+      current: input.exhaustiveCurrent,
+      scope: {
+        native: "system_of_record",
+        cleancloudOrdersCreated:
+          input.span === undefined
+            ? cleancloudHeld
+              ? { from: "2026-01-01", through: "2026-09-14" }
+              : null
+            : input.span,
+      },
+      paymentEventsProven: input.paymentEventsProven,
+      knownRecordsReadable: true,
+      interpretEmptyAsNoCustomers: false,
+      outsideProvenSpan: "unknown_not_empty",
+      exactRevenueLicensed: false,
+      allCustomersLicensed: false,
+      staleIsZero: false,
+      missingIsNoCustomers: false,
+    },
+    blockingSources: sources
+      .filter(item => item.includedInCombinedBook && item.status !== "fresh")
+      .map(item => ({ sourceId: item.sourceId, status: item.status, reason: item.reason })),
+  };
+}
+
+function exactPaymentCoverage(): BusinessSourceCoverageSnapshot {
+  return coverageSnapshot({
+    exhaustiveCurrent: true,
+    paymentEventsProven: true,
+    bookStatus: "fresh",
+  });
 }
 
 function event(partial: Pick<PaidOrderEvent, "source" | "eventKey" | "cents" | "businessDate"> & Partial<PaidOrderEvent>): PaidOrderEvent {
@@ -88,7 +171,7 @@ describe("readCanonicalRevenue", () => {
       tenantId: "tenant-a",
       ...WINDOW,
       timeZone: FIXTURE_TZ,
-      coverage: freshCoverage(),
+      coverage: exactPaymentCoverage(),
       loaders: loaders([native(1, "12.00", "3105550100")], []),
     });
     expect(result.status).toBe("ok");
@@ -96,7 +179,10 @@ describe("readCanonicalRevenue", () => {
     expect(result.exactIncludedCents).toBe(1200);
     expect(result.exactIncludedOrderCount).toBe(1);
     expect(result.provenance.sources).toEqual(["laundry_butler"]);
-    expect(result.precision).toBe("definitive");
+    expect(result.precision).toBe("exact");
+    expect(result.statedExactCents).toBe(1200);
+    expect(result.mayStateExact).toBe(true);
+    expect(result.coverage.exactRevenueLicensed).toBe(false);
     expect(result.coverage.cleanCloudFresh).toBe(true);
   });
 
@@ -105,7 +191,7 @@ describe("readCanonicalRevenue", () => {
       tenantId: "tenant-a",
       ...WINDOW,
       timeZone: FIXTURE_TZ,
-      coverage: freshCoverage(),
+      coverage: exactPaymentCoverage(),
       loaders: loaders([], [cleancloud("cc-1", 8000, "3105550199")]),
     });
     expect(result.status).toBe("ok");
@@ -121,7 +207,7 @@ describe("readCanonicalRevenue", () => {
       tenantId: "tenant-a",
       ...WINDOW,
       timeZone: FIXTURE_TZ,
-      coverage: freshCoverage(),
+      coverage: exactPaymentCoverage(),
       loaders: loaders(
         [],
         [
@@ -147,7 +233,7 @@ describe("readCanonicalRevenue", () => {
       tenantId: "tenant-a",
       ...WINDOW,
       timeZone: FIXTURE_TZ,
-      coverage: freshCoverage(),
+      coverage: exactPaymentCoverage(),
       loaders: loaders(
         [native(1, "45.00", "3105550100")],
         [cleancloud("cc-1", 4500, "+1 310 555 0100"), cleancloud("cc-2", 9900, "3105550100")]
@@ -158,7 +244,8 @@ describe("readCanonicalRevenue", () => {
     expect(result.exactIncludedCents).toBe(4500 + 9900);
     expect(result.suspectedWithheld).toMatchObject({ count: 1, cents: 4500 });
     expect(result.exactIncludedCents).not.toBe(4500 + 4500 + 9900);
-    expect(result.precision).toBe("exact_for_included_records");
+    expect(result.statedExactCents).toBeNull();
+    expect(result.precision).toBe("recorded_only");
   });
 
   it("counts clearly distinct same-day orders in full", () => {
@@ -195,12 +282,12 @@ describe("readCanonicalRevenue", () => {
       tenantId: "tenant-a",
       ...WINDOW,
       timeZone: FIXTURE_TZ,
-      coverage: {
-        sources: [
-          { source: "laundry_butler", coverageStatus: "fresh", lastSuccessfulAssimilation: null, provenance: "b1-seam" },
-          { source: "cleancloud", coverageStatus: "stale", lastSuccessfulAssimilation: "2026-09-01T00:00:00.000Z", provenance: "b1-seam" },
-        ],
-      },
+      coverage: coverageSnapshot({
+        cleancloud: "stale",
+        bookStatus: "partial",
+        exhaustiveCurrent: false,
+        paymentEventsProven: false,
+      }),
       loaders: loaders([], [cleancloud("cc-1", 8000, "3105550199")]),
     });
     expect(result.status).toBe("ok");
@@ -210,7 +297,10 @@ describe("readCanonicalRevenue", () => {
     expect(result.coverage.incompleteForWindow).toBe(true);
     expect(result.coverage.cleanCloudFresh).toBe(false);
     expect(result.coverage.affectedSources).toContain("cleancloud");
-    expect(result.precision).toBe("exact_for_included_records");
+    expect(result.statedExactCents).toBeNull();
+    expect(result.coverage.exactRevenueLicensed).toBe(false);
+    expect(result.coverage.staleIsZero).toBe(false);
+    expect(result.precision).toBe("recorded_only");
   });
 
   it("keeps recorded revenue under partial coverage and when a source fails to load", async () => {
@@ -218,12 +308,12 @@ describe("readCanonicalRevenue", () => {
       tenantId: "tenant-a",
       ...WINDOW,
       timeZone: FIXTURE_TZ,
-      coverage: {
-        sources: [
-          { source: "laundry_butler", coverageStatus: "fresh", lastSuccessfulAssimilation: null, provenance: "b1-seam" },
-          { source: "cleancloud", coverageStatus: "partial", lastSuccessfulAssimilation: null, provenance: "b1-seam" },
-        ],
-      },
+      coverage: coverageSnapshot({
+        cleancloud: "partial",
+        bookStatus: "partial",
+        exhaustiveCurrent: false,
+        paymentEventsProven: false,
+      }),
       loaders: loaders([native(1, "30.00", "3105550100")], [cleancloud("cc-1", 2000, "3105550199")]),
     });
     expect(partialSeam.status).toBe("ok");
@@ -236,6 +326,7 @@ describe("readCanonicalRevenue", () => {
       tenantId: "tenant-a",
       ...WINDOW,
       timeZone: FIXTURE_TZ,
+      coverage: null,
       loaders: {
         laundry_butler: async () => [native(1, "30.00", "3105550100")],
         cleancloud: async () => {
@@ -246,10 +337,12 @@ describe("readCanonicalRevenue", () => {
     expect(failed.status).toBe("ok");
     if (failed.status !== "ok") return;
     expect(failed.exactIncludedCents).toBe(3000);
+    expect(failed.exactIncludedCents).not.toBe(0);
+    expect(failed.statedExactCents).toBeNull();
     expect(failed.coverage.failedSources).toEqual(["cleancloud"]);
     expect(failed.coverage.incompleteForWindow).toBe(true);
     expect(failed.coverage.cleanCloudFresh).toBe(false);
-    expect(failed.coverage.contract).toBe("uncontracted");
+    expect(failed.coverage.snapshotRead).toBe(false);
   });
 
   it("does not treat an unread book as exact zero", async () => {
@@ -278,8 +371,8 @@ describe("readCanonicalRevenue", () => {
       cleancloud: async () => [],
     };
     const [a, b] = await Promise.all([
-      readCanonicalRevenue({ tenantId: "tenant-a", ...WINDOW, timeZone: FIXTURE_TZ, coverage: freshCoverage(), loaders: tenantLoaders }),
-      readCanonicalRevenue({ tenantId: "tenant-b", ...WINDOW, timeZone: FIXTURE_TZ, coverage: freshCoverage(), loaders: tenantLoaders }),
+      readCanonicalRevenue({ tenantId: "tenant-a", ...WINDOW, timeZone: FIXTURE_TZ, coverage: exactPaymentCoverage(), loaders: tenantLoaders }),
+      readCanonicalRevenue({ tenantId: "tenant-b", ...WINDOW, timeZone: FIXTURE_TZ, coverage: exactPaymentCoverage(), loaders: tenantLoaders }),
     ]);
     expect(a.status).toBe("ok");
     expect(b.status).toBe("ok");
@@ -290,24 +383,48 @@ describe("readCanonicalRevenue", () => {
     expect(b.provenance.includedEventKeys).toEqual(["order:2"]);
   });
 
-  it("does not call CleanCloud fresh when B1 has not supplied coverage", async () => {
+  it("does not state an exact total when payment events are not proven", async () => {
     const result = await readCanonicalRevenue({
       tenantId: "tenant-a",
       ...WINDOW,
       timeZone: FIXTURE_TZ,
+      coverage: coverageSnapshot({
+        bookStatus: "fresh",
+        exhaustiveCurrent: true,
+        paymentEventsProven: false,
+      }),
       loaders: loaders([], [cleancloud("cc-1", 8000, "3105550199")]),
     });
     expect(result.status).toBe("ok");
     if (result.status !== "ok") return;
-    expect(result.coverage.contract).toBe("uncontracted");
+    expect(result.recordedCents).toBe(8000);
+    expect(result.statedExactCents).toBeNull();
+    expect(result.mayStateExact).toBe(false);
+    expect(result.coverage.paymentEventsProven).toBe(false);
+    expect(result.coverage.exactRevenueLicensed).toBe(false);
+    expect(result.coverage.cleanCloudFresh).toBe(true);
+  });
+
+  it("does not call CleanCloud fresh when the coverage contract cannot be read", async () => {
+    const result = await readCanonicalRevenue({
+      tenantId: "tenant-a",
+      ...WINDOW,
+      timeZone: FIXTURE_TZ,
+      coverage: null,
+      loaders: loaders([], [cleancloud("cc-1", 8000, "3105550199")]),
+    });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.coverage.snapshotRead).toBe(false);
     expect(result.coverage.cleanCloudFresh).toBe(false);
-    expect(result.precision).toBe("exact_for_included_records");
+    expect(result.statedExactCents).toBeNull();
+    expect(result.precision).toBe("recorded_only");
     expect(result.exactIncludedCents).toBe(8000);
   });
 });
 
 describe("Claire revenue consumes the canonical read", () => {
-  function deps(rows: LedgerLoaders, coverage: BusinessSourceCoverageSeam | null = null): BusinessQueryDeps {
+  function deps(rows: LedgerLoaders, coverage: BusinessSourceCoverageSnapshot | null = null): BusinessQueryDeps {
     return {
       loadLedger: input => loadPaidOrderLedger(input, rows),
       loadOpenOrders: async () => ({ openTotal: 0, byStatus: {}, awaitingPayment: 0 }),
@@ -322,22 +439,29 @@ describe("Claire revenue consumes the canonical read", () => {
     const result = await runBusinessQuery(
       "tenant-a",
       defaultBusinessQuery("revenue"),
-      deps(loaders([], [cleancloud("cc-1", 8000, "3105550199")]), {
-        sources: [
-          { source: "laundry_butler", coverageStatus: "fresh", lastSuccessfulAssimilation: null, provenance: "b1-seam" },
-          { source: "cleancloud", coverageStatus: "stale", lastSuccessfulAssimilation: "2026-09-01T00:00:00.000Z", provenance: "b1-seam" },
-        ],
-      })
+      deps(
+        loaders([], [cleancloud("cc-1", 8000, "3105550199")]),
+        coverageSnapshot({
+          cleancloud: "stale",
+          bookStatus: "partial",
+          exhaustiveCurrent: false,
+          paymentEventsProven: false,
+        })
+      )
     );
     expect(result.status).toBe("ok");
     if (result.status !== "ok" || result.data.kind !== "totals") throw new Error("unexpected");
     expect(result.data.current.revenueCents).toBe(8000);
     expect(result.coverage?.canonicalRevenue).toMatchObject({
       exactIncludedCents: 8000,
+      recordedCents: 8000,
+      statedExactCents: null,
+      mayStateExact: false,
       incompleteForWindow: true,
       cleanCloudFresh: false,
-      contract: "supplied",
-      precision: "exact_for_included_records",
+      exactRevenueLicensed: false,
+      contractVersion: 1,
+      precision: "recorded_only",
     });
     const spoken = speakBusinessResult(result, {
       surface: "text",
@@ -349,7 +473,7 @@ describe("Claire revenue consumes the canonical read", () => {
       timeZone: FIXTURE_TZ,
     });
     expect(spoken.text).toContain("$80.00");
-    expect(spoken.text).toContain("Source coverage is incomplete for this window");
+    expect(spoken.text).toContain("Source coverage does not support an exact total for this window");
     expect(spoken.text).not.toContain("$0.00");
   });
 

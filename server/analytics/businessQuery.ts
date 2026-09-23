@@ -50,13 +50,14 @@ import {
 } from "./businessPeriods";
 import {
   interpretSourceCoverage,
+  loadRevenueSourceCoverage,
   reconcilePaidRevenue,
-  revenuePrecision,
-  type BusinessSourceCoverageSeam,
+  revenueMayStateExact,
   type CanonicalRevenuePrecision,
   type ReadBusinessSourceCoverage,
   type ReconciledRevenue,
 } from "./canonicalRevenue";
+import type { BusinessSourceCoverageSnapshot } from "./sourceCoverage";
 import { loadDataFreshness, type DataFreshness } from "./dataFreshness";
 import {
   detectCrossSourceOverlap,
@@ -186,14 +187,21 @@ export type BusinessCoverage = {
    */
   canonicalRevenue?: {
     exactIncludedCents: number;
+    recordedCents: number;
+    statedExactCents: number | null;
+    mayStateExact: boolean;
     exactIncludedOrderCount: number;
     definiteDuplicateExclusionCents: number;
     suspectedWithheldCents: number;
     suspectedWithheldCount: number;
     precision: CanonicalRevenuePrecision;
     incompleteForWindow: boolean;
+    coverageAllowsExact: boolean;
     cleanCloudFresh: boolean;
-    contract: "supplied" | "uncontracted";
+    exhaustiveCurrent: boolean;
+    paymentEventsProven: boolean;
+    exactRevenueLicensed: false;
+    contractVersion: 1 | null;
   } | null;
 };
 
@@ -296,8 +304,8 @@ export type BusinessQueryDeps = {
   loadCompleteness: (tenantId: string) => Promise<DataCompleteness>;
   loadFreshness?: (input: { tenantId: string; now: Date; timeZone: string }) => Promise<DataFreshness>;
   /**
-   * Project B1's source-coverage contract. Null (the default) means B1 has
-   * not supplied a snapshot. This query does not invent freshness.
+   * B1 `loadBusinessSourceCoverage`. Omit to load it. An explicit null snapshot
+   * means the contract could not be read, which is not a fresh book.
    */
   readSourceCoverage?: ReadBusinessSourceCoverage;
   now: () => Date;
@@ -309,6 +317,7 @@ export const defaultBusinessQueryDeps: BusinessQueryDeps = {
   loadOpenOrders: getOpenOrderStats,
   loadCompleteness: getDataCompleteness,
   loadFreshness: loadDataFreshness,
+  readSourceCoverage: input => loadRevenueSourceCoverage({ tenantId: input.tenantId, now: input.now }),
   now: () => new Date(),
   timeZone: getDashboardTimeZone,
 };
@@ -488,7 +497,7 @@ export async function runBusinessQuery(
           currentRead && query.metric === "revenue_drivers"
             ? historyKeepingIncluded(history, period, comparisonPeriod, currentRead, previousRead)
             : history;
-        if (currentRead) stampCanonicalRevenue(coverage, currentRead, coverageSeam, ledger);
+        if (currentRead) stampCanonicalRevenue(coverage, currentRead, coverageSeam, ledger, period);
         return ok({
           kind: "totals",
           current,
@@ -511,7 +520,7 @@ export async function runBusinessQuery(
         }
         const coverageSeam = await readCoverageSeam(deps, tenantId, period);
         const currentRead = reconcileHistorySpan(period);
-        stampCanonicalRevenue(coverage, currentRead, coverageSeam, ledger);
+        stampCanonicalRevenue(coverage, currentRead, coverageSeam, ledger, period);
         return ok({ kind: "profit", revenue: totalsFromReconciled(currentRead), missing });
       }
       case "active_customers":
@@ -615,12 +624,13 @@ async function readCoverageSeam(
   deps: BusinessQueryDeps,
   tenantId: string,
   period: { start: string; end: string }
-): Promise<BusinessSourceCoverageSeam | null> {
-  if (!deps.readSourceCoverage) return null;
+): Promise<BusinessSourceCoverageSnapshot | null> {
+  const now = deps.now();
+  if (!deps.readSourceCoverage) return loadRevenueSourceCoverage({ tenantId, now });
   try {
-    return await deps.readSourceCoverage({ tenantId, from: period.start, to: period.end });
+    return await deps.readSourceCoverage({ tenantId, from: period.start, to: period.end, now });
   } catch (error) {
-    console.warn("[Analytics] source coverage seam unavailable", error instanceof Error ? error.message : error);
+    console.warn("[Analytics] source coverage contract unavailable", error instanceof Error ? error.message : error);
     return null;
   }
 }
@@ -628,24 +638,34 @@ async function readCoverageSeam(
 function stampCanonicalRevenue(
   coverage: BusinessCoverage,
   read: ReconciledRevenue,
-  seam: BusinessSourceCoverageSeam | null,
-  ledger: { loadedSources: LedgerSource[]; failedSources: LedgerSource[] }
+  snapshot: BusinessSourceCoverageSnapshot | null,
+  ledger: { loadedSources: LedgerSource[]; failedSources: LedgerSource[] },
+  window: { start: string; end: string }
 ): void {
   const interpreted = interpretSourceCoverage({
-    coverage: seam,
+    snapshot,
+    window: { from: window.start, to: window.end },
     loadedSources: ledger.loadedSources,
     failedSources: ledger.failedSources,
   });
+  const mayStateExact = revenueMayStateExact({ coverage: interpreted, reconciled: read });
   coverage.canonicalRevenue = {
     exactIncludedCents: read.exactIncludedCents,
+    recordedCents: read.exactIncludedCents,
+    statedExactCents: mayStateExact ? read.exactIncludedCents : null,
+    mayStateExact,
     exactIncludedOrderCount: read.exactIncludedOrderCount,
     definiteDuplicateExclusionCents: read.definiteDuplicateExclusions.cents,
     suspectedWithheldCents: read.suspectedWithheld.cents,
     suspectedWithheldCount: read.suspectedWithheld.count,
-    precision: revenuePrecision({ coverage: interpreted, reconciled: read }),
+    precision: mayStateExact ? "exact" : "recorded_only",
     incompleteForWindow: interpreted.incompleteForWindow,
+    coverageAllowsExact: interpreted.coverageAllowsExact,
     cleanCloudFresh: interpreted.cleanCloudFresh,
-    contract: interpreted.contract,
+    exhaustiveCurrent: interpreted.exhaustiveCurrent,
+    paymentEventsProven: interpreted.paymentEventsProven,
+    exactRevenueLicensed: false,
+    contractVersion: interpreted.contractVersion,
   };
 }
 
