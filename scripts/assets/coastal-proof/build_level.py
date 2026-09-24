@@ -986,7 +986,26 @@ def build_arch(meta):
         zr = (za + zb) / 2
         length = (pb - pa).length + 0.05
         cen = mid - L * 0.2
-        box(geo("plaster"), v3(cen.x, cen.y, zr + 4.2), (length, hwa * 2 + 1.6, 0.8), fwd=T, bottom=True, cam=True)
+        box(geo("plaster"), v3(cen.x, cen.y, zr + 4.45), (length, hwa * 2 + 1.6, 0.5), fwd=T, bottom=True, cam=True)
+        # barrel vault springing from the walls at 2.9 m, crown just under the slab
+        vault = geo("mortar")
+        span = hwa + 0.35
+        n_arc = 8
+        for j in range(n_arc):
+            a0, a1 = math.pi * j / n_arc, math.pi * (j + 1) / n_arc
+            def ring(a):
+                return (math.cos(a) * span, 2.9 + math.sin(a) * 1.25)
+            (u0, h0), (u1, h1) = ring(a0), ring(a1)
+            pa0 = pa + sa["L"] * u0 - sa["L"] * 0.2
+            pa1 = pa + sa["L"] * u1 - sa["L"] * 0.2
+            pb0 = pb + sb["L"] * u0 - sb["L"] * 0.2
+            pb1 = pb + sb["L"] * u1 - sb["L"] * 0.2
+            shade = 0.72 + 0.28 * math.sin(a0 + 0.2)
+            vault.quad(v3(pa0.x, pa0.y, za + h0), v3(pb0.x, pb0.y, zb + h0), v3(pb1.x, pb1.y, zb + h1), v3(pa1.x, pa1.y, za + h1),
+                       col=(shade, shade, shade, 1))
+        # a transverse rib at each pier line
+        rib = pa - sa["L"] * 0.2
+        box(geo("step"), v3(rib.x, rib.y, za + 4.12), (0.35, hwa * 2 + 0.8, 0.22), fwd=T)
         box(geo("plaster_warm"), v3(cen.x, cen.y, zr + 6.4), (length, hwa * 2 + 1.2, 3.6), fwd=T, cam=True)
         # arched opening on the sea side: lintel between piers + low balustrade
         sea = mid - L * (hwa + 0.35)
@@ -994,9 +1013,11 @@ def build_arch(meta):
         box(geo("mortar"), v3(sea.x, sea.y, zr + 0.45), (length - 0.6, 0.45, 0.9), fwd=T)
         # windows on the upper storey facing the sea
         box(geo("glow" if k % 2 == 0 else "window"), v3(sea.x, sea.y, zr + 6.3), (length * 0.35, 0.7, 1.0), fwd=T)
-        if k % 2 == 1:
-            lan = mid + L * (hwa - 0.2)
-            wall_lantern(lan, -L, zr + 3.0, meta["lanterns"])
+        # a lantern hanging from the vault crown every bay
+        hang = mid - L * 0.2
+        tube(geo("iron"), [v3(hang.x, hang.y, zr + 4.15), v3(hang.x, hang.y, zr + 3.35)], 0.012, 3)
+        box(geo("glow"), v3(hang.x, hang.y, zr + 3.2), (0.22, 0.22, 0.3), fwd=T)
+        meta["lanterns"].append(v3(hang.x, hang.y, zr + 3.2))
 
 
 def build_edges(meta):
@@ -1185,6 +1206,44 @@ def build_boats(meta):
         {"type": "skiff", "circle": {"c": [-104.0, 34.0], "r": 17.0, "speed": -0.5}},
         {"type": "ship", "line": {"a": [-395.0, 108.0], "b": [-640.0, 180.0], "speed": 1.4}},
     ]
+
+
+def build_foreground(meta):
+    """Near-camera framing along the path: banner poles, hanging vines, flower pots on the parapets.
+
+    The concepts all frame the view with something close to the lens; the camera rides 4-5 m
+    behind her, so these sit right at the path edges where it passes them.
+    """
+    def pole_banner(s, side, height=4.2, color="cloth_red"):
+        p, z, r = route_at(s)
+        base = p + r["L"] * (side * (r["w"] / 2 + 0.35))
+        cylinder(geo("wood_dark"), v3(base.x, base.y, z - 0.4), 0.075, height + 0.4, seg=6)
+        tube(geo("wood_dark"), [v3(base.x, base.y, z + height - 0.1), v3(base.x - r["L"].x * side * 0.9, base.y - r["L"].y * side * 0.9, z + height - 0.1)], 0.03, 4)
+        top = v3(base.x - r["L"].x * side * 0.12, base.y - r["L"].y * side * 0.12, z + height - 0.12)
+        top2 = v3(base.x - r["L"].x * side * 0.85, base.y - r["L"].y * side * 0.85, z + height - 0.12)
+        cloth(geo(color), top, top2, 1.9, cols=3, rows=7)
+        meta["banners"].append({"top": [top.x, top.y, top.z]})
+        box(COL_WALL, v3(base.x, base.y, z + 1), (0.3, 0.3, 2), fwd=r["T"])
+
+    def vines(s, side, drop=2.6):
+        p, z, r = route_at(s)
+        e = p + r["L"] * (side * (r["w"] / 2 + 0.18))
+        a = e + r["T"] * -0.6
+        b = e + r["T"] * 0.6
+        cloth(geo("foliage"), v3(a.x, a.y, z + 4.6), v3(b.x, b.y, z + 4.6), drop + rng.random(), cols=3, rows=6)
+
+    def pots(s, side):
+        p, z, r = route_at(s)
+        e = p + r["L"] * (side * (r["w"] / 2 + 0.2))
+        cylinder(geo("roof"), v3(e.x, e.y, z + 0.85), 0.2, 0.3, seg=8, r_top=0.26)
+        plant("shrub", (e.x, e.y, z + 1.12), 0.55)
+
+    for s, side in ((9.0, -1), (22.0, -1), (80.5, -1), (107.0, 1), (126.0, -1), (146.0, 1)):
+        pole_banner(s, side, color="cloth_red" if side < 0 else "cloth_blue")
+    for s in (30, 38, 45, 52, 58):
+        vines(s, 1)
+    for s in (33, 41, 49, 60, 64):
+        pots(s, -1)
 
 
 def build_waterfall(meta):
@@ -1545,6 +1604,7 @@ def main():
     build_props(meta)
     build_waterfall(meta)
     build_boats(meta)
+    build_foreground(meta)
     build_far(meta)
 
     for g in list(GEOS.values()) + [COL_WALK, COL_WALL, COL_CAM]:

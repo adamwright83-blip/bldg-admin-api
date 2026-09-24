@@ -119,6 +119,43 @@ async function main() {
           await context.close();
         }
       }
+    } else if (mode === "film") {
+      // unedited autowalk walkthrough via CDP screencast at device resolution -> MP4 (needs ffmpeg)
+      const device = flag("desktop") ? DESKTOP : PHONE;
+      const { context, page } = await openPage(browser, base, "?autowalk=1", device);
+      const cdp = await context.newCDPSession(page);
+      const dir = join(OUT, "film-frames");
+      const { rm } = await import("node:fs/promises");
+      await rm(dir, { recursive: true, force: true });
+      await mkdir(dir, { recursive: true });
+      const frames = [];
+      const { writeFile } = await import("node:fs/promises");
+      cdp.on("Page.screencastFrame", async f => {
+        const file = join(dir, `f${String(frames.length).padStart(5, "0")}.jpg`);
+        frames.push({ file, t: f.metadata.timestamp });
+        await writeFile(file, Buffer.from(f.data, "base64"));
+        await cdp.send("Page.screencastFrameAck", { sessionId: f.sessionId }).catch(() => {});
+      });
+      await cdp.send("Page.startScreencast", { format: "jpeg", quality: 82, maxWidth: device.width * 2, maxHeight: device.height * 2, everyNthFrame: 1 });
+      for (let t = 0; t < 120; t++) {
+        await page.waitForTimeout(1000);
+        const st = await page.evaluate(() => window.__coastalProof.state());
+        if (st.autowalkFinished) break;
+      }
+      await page.waitForTimeout(2500);
+      await cdp.send("Page.stopScreencast");
+      await context.close();
+      const lines = [];
+      for (let i = 0; i < frames.length; i++) {
+        const next = frames[i + 1]?.t ?? frames[i].t + 1 / 30;
+        lines.push(`file '${frames[i].file}'`, `duration ${Math.max(0.001, next - frames[i].t).toFixed(4)}`);
+      }
+      lines.push(`file '${frames.at(-1).file}'`);
+      await writeFile(join(dir, "list.txt"), lines.join("\n"));
+      const out = join(OUT, flag("desktop") ? "walkthrough-desktop.mp4" : "walkthrough-phone.mp4");
+      const { execFileSync } = await import("node:child_process");
+      execFileSync("ffmpeg", ["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", join(dir, "list.txt"), "-vf", "fps=30,scale=trunc(iw/2)*2:trunc(ih/2)*2", "-c:v", "libx264", "-preset", "slow", "-crf", "24", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out]);
+      console.log(`[film] ${frames.length} frames -> ${out}`);
     } else if (mode === "sightlines") {
       // every 2 m: settle the gameplay camera and list what blocks the view of her chest
       const device = flag("desktop") ? DESKTOP : PHONE;

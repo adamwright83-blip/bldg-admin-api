@@ -115,7 +115,7 @@ function patchLevelShader(shader: THREE.WebGLProgramParametersWithUniforms, sunV
 
 export function createLevelMaterial(name: string, ctx: MaterialContext, far: boolean, geometry: THREE.BufferGeometry): THREE.Material {
   if (name === "glow") {
-    return withSunFog(new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.68, 0.34).multiplyScalar(3.0) }));
+    return withSunFog(new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.56, 0.22).multiplyScalar(1.7) }));
   }
   const spec = SPECS[name] ?? { tint: "#bbbbbb" };
   const set = spec.tex ? ctx.textures.get(spec.tex) : undefined;

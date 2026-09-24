@@ -342,7 +342,7 @@ export function createLife(opts: {
   const glowPhase: number[] = [];
   for (const l of data.lanterns) {
     glowPos.push(...l);
-    glowSize.push(1.1);
+    glowSize.push(1.7);
     glowPhase.push(Math.random() * 10);
   }
   glowPos.push(...data.lighthouse.lamp);
@@ -352,7 +352,7 @@ export function createLife(opts: {
   glowGeo.setAttribute("position", new THREE.Float32BufferAttribute(glowPos, 3));
   glowGeo.setAttribute("size", new THREE.Float32BufferAttribute(glowSize, 1));
   glowGeo.setAttribute("phase", new THREE.Float32BufferAttribute(glowPhase, 1));
-  const glowMat = pointsMaterial(true, new THREE.Color(1.0, 0.62, 0.28).multiplyScalar(0.9));
+  const glowMat = pointsMaterial(true, new THREE.Color(1.0, 0.55, 0.2).multiplyScalar(0.8));
   const glows = new THREE.Points(glowGeo, glowMat);
   glows.frustumCulled = false;
   glows.renderOrder = 3;

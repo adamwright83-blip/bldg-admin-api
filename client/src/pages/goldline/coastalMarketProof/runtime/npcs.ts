@@ -33,7 +33,7 @@ const DEFS: NpcDef[] = [
   { model: "f", behavior: "lean", s: 34, side: -1.35, face: -Math.PI / 2, palette: ["#c99a78", "#6d4b8a", "#5a4a3c", "#2e2019", "#1c1512", "#b33a2c", "#d8c8a6"] },
   { model: "f", behavior: "talk", s: 47, side: 1.4, along: -0.55, face: Math.PI / 2 + 0.25, palette: ["#8c5a3c", "#2f6b73", "#6b5a44", "#2a1d15", "#15100d", "#e2d3b0", "#9b3b2e"] },
   { model: "m", behavior: "folded", s: 47, side: 1.25, along: 0.6, face: -Math.PI / 2 - 0.3, palette: ["#e0b394", "#b8873a", "#3f4a56", "#2a1d15", "#2b1d14", "#2b1d14", "#5b3a24"] },
-  { model: "m", behavior: "walk", s: 30, side: 0.7, walk: [29, 52], palette: ["#b07a57", "#8a3a2a", "#4a3a2c", "#20160f", "#16110d", "#16110d", "#c9b58f"] },
+  { model: "m", behavior: "walk", s: 30, side: -0.9, walk: [28, 44], palette: ["#b07a57", "#8a3a2a", "#4a3a2c", "#20160f", "#16110d", "#16110d", "#c9b58f"] },
   { model: "m", behavior: "carry", s: 152, side: 2.4, walk: [150.5, 158], palette: ["#6e4631", "#d8c8a6", "#50433a", "#20160f", "#0f0b09", "#0f0b09", "#7a5234"] },
   { model: "m", behavior: "kneel", s: 146.5, side: 1.4, face: -Math.PI / 2, palette: ["#d2a07f", "#3d5f7d", "#5c4b3b", "#20160f", "#8a8a86", "#8a8a86", "#6b4a2e"] },
 ];
