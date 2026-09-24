@@ -396,6 +396,7 @@ export async function createCoastalProof(
   let reachedEnd = false;
   let began = false;
   const frame = (t: number) => {
+    const workStart = performance.now();
     clock.update(t);
     const dt = Math.min(clock.getDelta(), 1 / 20);
     const now = performance.now();
@@ -423,6 +424,7 @@ export async function createCoastalProof(
     heroRoot.updateMatrixWorld(true);
     measureSlip(dt);
     renderer.render(scene, camera);
+    perf.recordWork(performance.now() - workStart);
     perf.frame(now, renderer);
     if (!reachedEnd && controller.progress > route.length - 3) {
       reachedEnd = true;

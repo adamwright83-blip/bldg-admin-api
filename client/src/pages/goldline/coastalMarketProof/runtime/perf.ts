@@ -8,6 +8,8 @@ const bufferSize = new THREE.Vector2();
  */
 export class PerfMeter {
   private readonly frames: number[] = [];
+  /** main-thread ms spent inside our frame callback (update + render submit), independent of vsync */
+  private readonly work: number[] = [];
   private last = 0;
   private fpsWindowStart = 0;
   private fpsFrames = 0;
@@ -31,6 +33,11 @@ export class PerfMeter {
     parent.appendChild(this.el);
   }
 
+  recordWork(ms: number) {
+    this.work.push(ms);
+    if (this.work.length > 300) this.work.shift();
+  }
+
   frame(now: number, renderer: THREE.WebGLRenderer) {
     if (this.last) {
       this.frames.push(now - this.last);
@@ -52,11 +59,16 @@ export class PerfMeter {
       this.lastPaint = now;
       const size = renderer.getDrawingBufferSize(bufferSize);
       this.el.textContent =
-        `${this.fps.toFixed(0)} fps  p95 ${this.p95.toFixed(1)} ms\n` +
+        `${this.fps.toFixed(0)} fps  p95 ${this.p95.toFixed(1)} ms  cpu ${this.workP95().toFixed(1)} ms\n` +
         `${this.drawCalls} draws  ${(this.triangles / 1000).toFixed(0)}k tris\n` +
         `${size.x}x${size.y} @${renderer.getPixelRatio().toFixed(2)}  dpr ${window.devicePixelRatio}\n` +
         `${this.gpu.slice(0, 60)}\n${this.build}`;
     }
+  }
+
+  private workP95() {
+    const w = [...this.work].sort((a, b) => a - b);
+    return w.length ? w[Math.floor(w.length * 0.95)] : 0;
   }
 
   snapshot() {
@@ -68,6 +80,8 @@ export class PerfMeter {
       p95FrameMs: sorted.length ? sorted[Math.floor(sorted.length * 0.95)] : 0,
       p99FrameMs: sorted.length ? sorted[Math.floor(sorted.length * 0.99)] : 0,
       samples: sorted.length,
+      cpuMeanMs: this.work.length ? this.work.reduce((a, b) => a + b, 0) / this.work.length : 0,
+      cpuP95Ms: this.workP95(),
       drawCalls: this.drawCalls,
       triangles: this.triangles,
       gpu: this.gpu,

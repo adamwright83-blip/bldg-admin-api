@@ -266,6 +266,8 @@ async function main() {
         fpsMin: Math.min(...fps),
         fpsMedian: fps.sort((a, b) => a - b)[Math.floor(fps.length / 2)],
         p95FrameMsWorst: Math.max(...p95),
+        cpuMeanMs: +(samples.slice(2).reduce((a, s) => a + s.perf.cpuMeanMs, 0) / Math.max(1, samples.length - 2)).toFixed(2),
+        cpuP95MsWorst: +Math.max(...samples.slice(2).map(s => s.perf.cpuP95Ms)).toFixed(2),
         drawCallsMax: Math.max(...samples.map(s => s.perf.drawCalls)),
         trianglesMax: Math.max(...samples.map(s => s.perf.triangles)),
         errors,
