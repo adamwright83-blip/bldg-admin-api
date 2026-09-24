@@ -172,6 +172,7 @@ export class PlayerController {
     }
     const step = this.speed * dt;
     const prevY = this.position.y;
+    const before = this.progress;
     if (step > 0) this.moveHorizontal(Math.sin(this.heading) * step, Math.cos(this.heading) * step);
     if (this.mantle) {
       this.verticalRate = 0;
@@ -201,6 +202,10 @@ export class PlayerController {
     const smp = this.route.samples[this.routeIndex];
     this.progress = smp.s;
     this.surface = this.surfaceByKind[smp.kind] ?? "stone";
+    if (Math.abs(this.progress - before) > 0.02 || mag < 0.2) {
+      this.stalledSeconds = 0;
+      if (mag < 0.2) this.stalledAt = null;
+    }
     if (this.grounded) {
       this.lastSafeS = this.progress;
     } else if (this.position.y < smp.p.y - 6) {
@@ -211,6 +216,9 @@ export class PlayerController {
   }
 
   respawns = 0;
+  /** what stopped her most recently (a closed gate, the edge of a gap) and for how long */
+  stalledAt: "gate" | "edge" | null = null;
+  stalledSeconds = 0;
 
   private stepMantle(dt: number) {
     const m = this.mantle!;
@@ -240,11 +248,13 @@ export class PlayerController {
     return this.mantle !== null;
   }
 
+  /** A closed gate stops her going forward through it, never backing away from it. */
   private blocked(p: THREE.Vector3): boolean {
     if (!this.blockers.some(b => b.on)) return false;
     const i = this.route.nearest(p, this.routeIndex);
     const s = this.route.samples[i].s;
-    return this.blockers.some(b => b.on && s >= b.s0 && s <= b.s1 + 0.4 && this.progress < b.s1);
+    if (s <= this.progress + 1e-3) return false;
+    return this.blockers.some(b => b.on && this.progress < b.s1 && s > b.s0);
   }
 
   private moveHorizontal(dx: number, dz: number) {
@@ -255,6 +265,8 @@ export class PlayerController {
     this.resolveWalls(target);
     if (this.blocked(target)) {
       this.speed *= 0.5;
+      this.stalledAt = "gate";
+      this.stalledSeconds += 1 / 60;
       return;
     }
     if (!this.grounded) {
@@ -268,7 +280,8 @@ export class PlayerController {
       return;
     }
     const g = this.groundAt(target.x, target.z, start.y + MANTLE_HEIGHT + 0.35);
-    if (g !== null && g - start.y > MAX_STEP_UP && g - start.y <= MANTLE_HEIGHT && this.speed > 3.2) {
+    // she climbs anything waist-high she walks into: no need to be at a run
+    if (g !== null && g - start.y > MAX_STEP_UP && g - start.y <= MANTLE_HEIGHT && this.speed > 1.0) {
       this.startMantle(start, target, g);
       return;
     }
@@ -280,6 +293,10 @@ export class PlayerController {
       return;
     }
     if (g === null || g - start.y > MAX_STEP_UP) {
+      if (g === null) {
+        this.stalledAt = "edge";
+        this.stalledSeconds += 1 / 60;
+      }
       // slide along the edge: try each axis on its own before refusing
       for (const [ax, az] of [[dx, 0], [0, dz]] as const) {
         const t2 = start.clone();

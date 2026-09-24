@@ -571,6 +571,20 @@ export class Phase2World {
 
     this.stampTimer = Math.max(0, this.stampTimer - dt);
     if (this.stampTimer === 0) this.state.stamp = "";
+    // Stopped at a closed gate or the edge of a gap: say what gets her through, once she has tried.
+    if (controller && !this.active && controller.stalledSeconds > 0.5) {
+      const s = controller.progress;
+      const r = this.rigs;
+      let hint = "";
+      if (controller.stalledAt === "gate" && !this.used.has("ride") && Math.abs(s - r.gate1.cs) < 3) hint = "HOLD LINE AT THE HOOK";
+      else if (controller.stalledAt === "gate" && !this.used.has("transfer") && Math.abs(s - r.gate3.cs) < 3) hint = "HOLD LINE AS A CARRIER PASSES";
+      else if (controller.stalledAt === "edge" && !this.used.has("release") && Math.abs(s - r.bridge.hole[0]) < 3) hint = "HOLD LINE AT THE HOOK";
+      else if (controller.stalledAt === "edge" && Math.abs(s - r.holes[0][0]) < 3) hint = "JUMP";
+      if (hint) {
+        this.state.stamp = hint;
+        this.stampTimer = 2.2;
+      }
+    }
 
     if (controller) {
       // contact shadow on the floor under her, fading and spreading with height
