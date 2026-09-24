@@ -6,7 +6,7 @@ import { LoginForm } from "@/components/LoginForm";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { executionTypeLabel, presentCurrentDayLine, type CurrentDayLine } from "@shared/currentDayLine";
-import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
+import { WalkInCapture } from "@/components/legacy-dayforge/WalkInCapture";
 import { PRODUCT_NAME } from "@shared/productIdentity";
 
 function CurrentDayLineSection({ line }: { line: CurrentDayLine }) {
