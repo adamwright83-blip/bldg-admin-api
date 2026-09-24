@@ -157,22 +157,37 @@ LEGACY — compatibility/history, not current architecture:
 - `legacy.boreslay_product` — Old landing that markets BORESLAY as the whole product. `BoreslayLanding.tsx` is that superseded public page.
 - `legacy.laundry_butler_chrome` — Old platform-facing title/LoginForm/product chrome. Not the current JOYSTICK product identity. Not `business.laundry_farm`. Not `service.laundry_butler`.
 
-Allowed to remain, without renaming in this pass:
+Compatibility may remain only when its legacy status is explicit:
 
 - Existing code, API, and system names containing `mission`, including `system.mission_director`. They may still represent field, remote, or hybrid Objectives until explicitly migrated. Do not infer Objective type from the identifier; infer it from the actual execution contract. Do not rename them in this pass.
 - `/api/saleslay/*` routes
-- `dayforge_*` tables and files
 - `BoreslayLanding.tsx` as a superseded public page
-- historical comments
+- historical comments that are clearly marked historical
 - real-business use of the words Laundry Farm / Laundry Butler
+
+### Retired DayForge name — repository rule
+
+`legacy.dayforge` is the **only** semantic meaning of the retired DayForge name.
+
+The previous rule allowing bare `dayforge_*` files, modules, CI jobs, symbols, and docs is revoked. Bare DayForge naming is ambiguous to humans and language models and must not represent current architecture.
+
+Required treatment:
+
+- Current product/domain code uses the current term: `product.joystick`, `plan.day_line`, Goldline game/system terms, or the actual domain concept.
+- Retained compatibility code is namespaced structurally as `legacy/dayforge`, `legacyDayforge*`, or `legacy_dayforge_*`.
+- Applied migration identifiers, deployed database names, environment-variable names, and public compatibility routes may preserve their historical literal only when changing the literal could break compatibility. Every such literal must live behind an explicitly named legacy compatibility seam or carry an adjacent `LEGACY DAYFORGE COMPATIBILITY` marker.
+- New code must never introduce an unqualified `DayForge` / `dayforge` identifier.
+- CI includes a nomenclature guard. An agent must not weaken its allowlist to make a new violation pass.
+- See `docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md` for the compatibility inventory and migration rules.
 
 Stored kingdom-row ids are not semantic slugs and are not renamed here: `kingdom-1-colosseum` (stored title “The Colosseum”) and `kingdom-2-the-last-valet` (stored title “The Last Valet”). “The Colosseum” in that row is not `kingdom.brass_republic`. “The Last Valet” is not a second name for `kingdom.boreslay` and is not `level.colosseum`.
 
 ## 7. Forbidden ambiguities
 
-Forbidden for new user-visible copy, new docs, and new modules:
+Forbidden for user-visible copy, docs, modules, symbols, filenames, and CI names unless explicitly marked as legacy compatibility:
 
 - calling the product DayForge, Goldline, BORESLAY, or Laundry Butler
+- using bare `DayForge` / `dayforge` as though it were a current subsystem or architecture namespace
 - calling Claire a companion
 - calling Rook a DayForge field coach
 - introducing Cash or Spark as the JOYSTICK protagonist
@@ -182,4 +197,4 @@ Forbidden for new user-visible copy, new docs, and new modules:
 - renaming an existing API or system whose name contains `mission`, or adding a second planner beside `system.mission_director`
 - treating a completed Mission or Challenge as a Boss defeat, a Level resolution, or Kingdom completion
 
-No nomenclature lint was added. A gate that failed only new files would still need a large grandfather list (`client/src/archive/**`, `client/src/assets/boreslay-rally/**`, historical landings, `/api/saleslay/**`, `dayforge_*` implementation files). This section is the rule.
+The nomenclature guard is part of the repository contract.
