@@ -65,6 +65,13 @@ const DayforgeDemoControlPage = lazy(
   () => import("./pages/DayforgeDemoControlPage")
 );
 const ProductShell = lazy(() => import("./product/ProductShell"));
+// Isolated three.js experiment (Coastal Market Phase 1 proof). Nothing else
+// imports this module, so normal Goldline never downloads three.js; it is not
+// a corridor, not linked, and carries no business state.
+const CoastalMarketProofPage = lazy(
+  () => import("./pages/goldline/coastalMarketProof/CoastalMarketProofPage")
+);
+const COASTAL_MARKET_PROOF_PATH = "/goldline/coastal-market-proof";
 
 function PublicLandingFallback() {
   return <div style={{ minHeight: "100vh", background: "#F6F1E8" }} />;
@@ -494,6 +501,20 @@ function Router() {
   const vendorSlug = isVendorHost
     ? hostname.replace(".ops.bldg.chat", "")
     : null;
+
+  // The proof route is answered before host routing so no host redirect or
+  // auth gate swallows it, and so it never enters the Goldline route graph.
+  if (
+    !isBoreslayHost &&
+    !isVendorHost &&
+    window.location.pathname.replace(/\/+$/, "") === COASTAL_MARKET_PROOF_PATH
+  ) {
+    return (
+      <Suspense fallback={<div style={{ minHeight: "100vh", background: "#1b1410" }} />}>
+        <CoastalMarketProofPage assetBase="/assets/goldline/coastal-market-three-proof/" />
+      </Suspense>
+    );
+  }
 
   // driver.bldg.chat has one product URL: the Daily Line. Claire analysis and
   // engineering-request pages are operator follow-through from that line.
