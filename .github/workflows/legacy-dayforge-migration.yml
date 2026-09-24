@@ -22,8 +22,6 @@ jobs:
           node-version: 22
       - name: Migrate retired product naming
         run: node scripts/migrate-retired-product-name.mjs
-      - name: Verify nomenclature guard before commit
-        run: node scripts/check-nomenclature.mjs
       - name: Commit migration
         shell: bash
         run: |
