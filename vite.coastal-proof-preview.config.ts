@@ -1,4 +1,5 @@
 import react from "@vitejs/plugin-react";
+import { execSync } from "node:child_process";
 import path from "node:path";
 import { defineConfig } from "vite";
 
@@ -10,8 +11,17 @@ import { defineConfig } from "vite";
  *   npx vite --config vite.coastal-proof-preview.config.ts          (dev, :5197)
  *   npx vite build --config vite.coastal-proof-preview.config.ts    (tmp/coastal-proof-preview-build)
  */
+const sha = (() => {
+  try {
+    return execSync("git rev-parse --short HEAD", { cwd: import.meta.dirname }).toString().trim();
+  } catch {
+    return "unknown";
+  }
+})();
+
 export default defineConfig({
   plugins: [react()],
+  define: { __COASTAL_PROOF_BUILD__: JSON.stringify(`coastal-proof phase1 ${sha}`) },
   root: path.resolve(import.meta.dirname, "preview/coastal-proof"),
   publicDir: path.resolve(import.meta.dirname, "client/public/assets/goldline/coastal-market-three-proof"),
   cacheDir: path.resolve(import.meta.dirname, "tmp/coastal-proof-preview-vite-cache"),

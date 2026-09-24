@@ -34,7 +34,9 @@ export type RuntimeHandle = {
   dispose(): void;
 };
 
-export const PROOF_BUILD = "coastal-proof stage2";
+declare const __COASTAL_PROOF_BUILD__: string | undefined;
+/** Printed in the ?perf overlay so a screenshot names its build (the preview config stamps the git SHA). */
+export const PROOF_BUILD = typeof __COASTAL_PROOF_BUILD__ !== "undefined" ? __COASTAL_PROOF_BUILD__ : "coastal-proof phase1";
 
 type TestApi = {
   ready: boolean;
