@@ -1,0 +1,237 @@
+/* Coastal Market proof: full-bleed canvas, almost no UI. */
+.cmp-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #1b1410;
+  color: #f4e9d8;
+  font-family: "Fraunces", Georgia, "Times New Roman", serif;
+  touch-action: none;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cmp-host {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+.cmp-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.cmp-title {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 14px);
+  left: calc(env(safe-area-inset-left, 0px) + 16px);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 6px 4px 0;
+  cursor: pointer;
+  text-shadow: 0 1px 6px rgba(20, 10, 4, 0.55);
+  opacity: 0.92;
+}
+
+.cmp-title-name {
+  font-size: 13px;
+  letter-spacing: 0.22em;
+}
+
+.cmp-title-tag {
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  opacity: 0.7;
+}
+
+.cmp-objective {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 36px);
+  left: calc(env(safe-area-inset-left, 0px) + 16px);
+  font-size: 13px;
+  font-style: italic;
+  pointer-events: none;
+  text-shadow: 0 1px 6px rgba(20, 10, 4, 0.6);
+  opacity: 0.85;
+  transition: opacity 1.2s ease;
+}
+.cmp-objective strong,
+.cmp-objective span { display: block; }
+.cmp-objective strong { font: 600 11px/1.4 "Barlow Condensed", sans-serif; letter-spacing: .24em; color: #ffd77a; }
+
+.cmp-action {
+  position: absolute;
+  right: calc(env(safe-area-inset-right, 0px) + 18px);
+  width: 68px;
+  height: 68px;
+  border: 1px solid rgba(255, 225, 154, .55);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(146, 105, 48, .66), rgba(22, 14, 8, .74));
+  color: #fff0ca;
+  font: 700 11px "Barlow Condensed", sans-serif;
+  letter-spacing: .13em;
+  box-shadow: inset 0 0 18px rgba(255, 202, 95, .14), 0 3px 18px rgba(0,0,0,.32);
+  touch-action: none;
+}
+.cmp-jump { bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); }
+.cmp-hook { bottom: calc(env(safe-area-inset-bottom, 0px) + 108px); color: #ffd66b; }
+
+/* dialogue: speaker in small gold capitals over the line, cinema-subtitle weight */
+.cmp-caption {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 11%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity .25s ease, transform .25s ease;
+}
+.cmp-caption.is-visible { opacity: 1; transform: none; }
+.cmp-caption-who {
+  font: 600 10px/1 "Barlow Condensed", "Arial Narrow", sans-serif;
+  letter-spacing: .34em;
+  color: #e8c27a;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .8);
+}
+.cmp-caption-line {
+  font: italic 400 19px/1.25 "Fraunces", Georgia, serif;
+  color: #fbf1de;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, .85), 0 0 2px rgba(0, 0, 0, .9);
+}
+
+/* the rig taking her: a short stamp, like a move name */
+.cmp-stamp {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 31%;
+  text-align: center;
+  font: 700 15px/1 "Barlow Condensed", "Arial Narrow", sans-serif;
+  letter-spacing: .6em;
+  text-indent: .6em;
+  color: #ffd98a;
+  text-shadow: 0 0 14px rgba(255, 170, 60, .55), 0 2px 6px rgba(0, 0, 0, .7);
+  opacity: 0;
+  transform: scale(1.08);
+  transition: opacity .18s ease, transform .5s cubic-bezier(.2, .8, .2, 1);
+  pointer-events: none;
+}
+.cmp-stamp.is-visible { opacity: 1; transform: none; }
+.cmp-hook.is-ready {
+  border-color: #ffd98a;
+  box-shadow: 0 0 0 3px rgba(255, 210, 120, .35), 0 0 22px rgba(255, 190, 80, .6), inset 0 0 18px rgba(255, 202, 95, .3);
+  animation: cmp-ready .7s ease-in-out infinite alternate;
+}
+@keyframes cmp-ready { from { transform: scale(1); } to { transform: scale(1.07); } }
+@media (pointer: fine) { .cmp-action { opacity: .42; } }
+
+.cmp-objective.is-done {
+  font-style: normal;
+  opacity: 1;
+}
+
+.cmp-gate {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 0 24px calc(env(safe-area-inset-bottom, 0px) + 18vh);
+  border: 0;
+  background: linear-gradient(to bottom, rgba(27, 20, 16, 0.15), rgba(27, 20, 16, 0.72));
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cmp-root[data-ready="0"] .cmp-gate {
+  background: #1b1410;
+  cursor: default;
+}
+
+.cmp-gate-name {
+  font-size: 22px;
+  letter-spacing: 0.24em;
+}
+
+.cmp-gate-sub {
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-size: 14px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.cmp-gate-hint {
+  font-size: 13px;
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.cmp-stick {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 116px;
+  height: 116px;
+  margin: -58px 0 0 -58px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 244, 226, 0.35);
+  background: rgba(20, 12, 6, 0.12);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.cmp-stick.is-active {
+  opacity: 1;
+}
+
+.cmp-stick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(255, 244, 226, 0.42);
+  transform: translate(-50%, -50%);
+}
+
+.cmp-perf {
+  position: absolute;
+  right: calc(env(safe-area-inset-right, 0px) + 8px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #d8f5c8;
+  font: 11px/1.35 ui-monospace, "SF Mono", Menlo, monospace;
+  white-space: pre;
+  pointer-events: none;
+  max-width: 62vw;
+  overflow: hidden;
+}
+
+.cmp-error {
+  position: absolute;
+  inset: auto 16px 40% 16px;
+  text-align: center;
+  font-size: 14px;
+}
