@@ -32,7 +32,9 @@ export class Autopilot {
     // world -> camera-relative stick (inverse of PlayerController's mapping)
     const fx = Math.sin(cameraYaw);
     const fz = Math.cos(cameraYaw);
-    return { x: -fz * wx + fx * wz, y: fx * wx + fz * wz };
+    // A representative brisk player line rather than a tool-assisted permanent
+    // full sprint; authored tension beats still exercise the real controller.
+    return { x: (-fz * wx + fx * wz) * 0.45, y: (fx * wx + fz * wz) * 0.45 };
   }
 
   get elapsedSeconds(): number {

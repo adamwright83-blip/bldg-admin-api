@@ -6,10 +6,8 @@ import "./coastal-market-proof.css";
 /**
  * /goldline/coastal-market-proof — isolated three.js experiment.
  *
- * Phase 1 asks one question: can this feel like a real 3D adventure game in
- * the browser? It is not a corridor, not a mission, and it has no business
- * authority: nothing here reads or writes Goldline state, storage or the
- * network beyond its own static assets.
+ * Phase 2 Rook Hunt candidate. This remains an isolated proof with no business
+ * authority: it reads only its static assets and writes no Goldline state.
  */
 type Props = { assetBase: string };
 
@@ -70,12 +68,12 @@ export default function CoastalMarketProofPage({ assetBase }: Props) {
           }}
         >
           <span className="cmp-title-name">THE COASTAL MARKET</span>
-          <span className="cmp-title-tag">PROOF</span>
+          <span className="cmp-title-tag">THE ROOK HUNT</span>
         </div>
       )}
       {begun && !params.shot && (
         <div className={`cmp-objective${arrived ? " is-done" : ""}`}>
-          {arrived ? "You reached the waterfront." : "Reach the waterfront."}
+          {arrived ? "The cage door is open." : "Reach the moving cage · hook what is under load."}
         </div>
       )}
       {error && begun && <div className="cmp-error">Could not load: {error}</div>}
@@ -85,7 +83,7 @@ export default function CoastalMarketProofPage({ assetBase }: Props) {
           <span className="cmp-gate-sub">
             {error ? `Could not load: ${error}` : ready ? "Tap to begin" : `Loading ${Math.round(loaded * 100)}%`}
           </span>
-          {ready && <span className="cmp-gate-hint">Left thumb to walk. Right thumb to look.</span>}
+          {ready && <span className="cmp-gate-hint">Sprint uphill. Jump obstacles. Hold LINE on gold seams.</span>}
         </button>
       )}
     </div>

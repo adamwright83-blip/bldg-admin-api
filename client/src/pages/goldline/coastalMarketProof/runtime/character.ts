@@ -253,7 +253,14 @@ export function deriveBriskWalkIK(root: THREE.Object3D, walk: THREE.AnimationCli
   return clip;
 }
 
-export type LocomotionClips = { idle: THREE.AnimationClip; walk: THREE.AnimationClip };
+export type LocomotionClips = {
+  idle: THREE.AnimationClip;
+  walk: THREE.AnimationClip;
+  jog?: THREE.AnimationClip;
+  sprint?: THREE.AnimationClip;
+  jump?: THREE.AnimationClip;
+  mantle?: THREE.AnimationClip;
+};
 
 /**
  * Blends idle and the brisk walk by speed, lets her step while turning on the
@@ -263,6 +270,10 @@ export class Locomotion {
   readonly mixer: THREE.AnimationMixer;
   private readonly idle: THREE.AnimationAction;
   private readonly walk: THREE.AnimationAction;
+  private readonly jog?: THREE.AnimationAction;
+  private readonly sprint?: THREE.AnimationAction;
+  private readonly jump?: THREE.AnimationAction;
+  private readonly mantle?: THREE.AnimationAction;
   readonly walkGroundSpeed: number;
   private lean = 0;
   private pitch = 0;
@@ -278,22 +289,36 @@ export class Locomotion {
     this.mixer = new THREE.AnimationMixer(root);
     this.idle = this.mixer.clipAction(clips.idle);
     this.walk = this.mixer.clipAction(clips.walk);
+    this.jog = clips.jog ? this.mixer.clipAction(clips.jog) : undefined;
+    this.sprint = clips.sprint ? this.mixer.clipAction(clips.sprint) : undefined;
+    this.jump = clips.jump ? this.mixer.clipAction(clips.jump) : undefined;
+    this.mantle = clips.mantle ? this.mixer.clipAction(clips.mantle) : undefined;
     this.walkGroundSpeed = groundSpeed;
-    for (const a of [this.idle, this.walk]) {
+    for (const a of [this.idle, this.walk, this.jog, this.sprint, this.jump, this.mantle].filter((a): a is THREE.AnimationAction => !!a)) {
       a.play();
       a.setEffectiveWeight(0);
     }
     this.idle.setEffectiveWeight(1);
   }
 
-  update(dt: number, speed: number, angularVelocity: number) {
+  update(dt: number, speed: number, angularVelocity: number, state: "idle" | "jog" | "sprint" | "jump" | "mantle" | "hook" = "jog") {
     const turning = Math.abs(angularVelocity) > 1.2 && speed < 0.5;
     const target = Math.max(smoothstep(0.04, 0.55, speed), turning ? 0.55 : 0);
     this.walkWeight = damp(this.walkWeight, target, 0.09, dt);
     const rate = speed > 0.1 ? speed / this.walkGroundSpeed : turning ? 0.75 : 0.6;
     this.walk.timeScale = clamp(rate, 0.45, 2.2);
-    this.walk.setEffectiveWeight(this.walkWeight);
-    this.idle.setEffectiveWeight(1 - this.walkWeight);
+    const airborne = state === "jump" || state === "hook";
+    const mantling = state === "mantle";
+    const sprinting = state === "sprint";
+    const jogging = state === "jog";
+    this.walk.setEffectiveWeight(!airborne && !mantling && !sprinting && !jogging ? this.walkWeight : 0);
+    this.jog?.setEffectiveWeight(jogging ? 1 : 0);
+    this.sprint?.setEffectiveWeight(sprinting ? 1 : 0);
+    this.jump?.setEffectiveWeight(airborne ? 1 : 0);
+    this.mantle?.setEffectiveWeight(mantling ? 1 : 0);
+    this.idle.setEffectiveWeight(state === "idle" ? 1 : Math.max(0, 1 - this.walkWeight) * (jogging ? 0.12 : 0));
+    if (this.jog) this.jog.timeScale = clamp(speed / 5.3, 0.65, 1.35);
+    if (this.sprint) this.sprint.timeScale = clamp(speed / 8.25, 0.7, 1.25);
     this.mixer.update(dt);
     this.phase = (this.walk.time / this.walk.getClip().duration) % 1;
 

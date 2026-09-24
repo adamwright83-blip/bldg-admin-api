@@ -50,7 +50,7 @@ describe("the proof is isolated", () => {
   });
 
   it("has no business authority: no API, storage, auth or Goldline state", () => {
-    const forbidden = [/\btrpc\b/i, /\/api\//, /localStorage/, /sessionStorage/, /indexedDB/, /document\.cookie/, /useAuth/, /missionComplete|objectiveComplete|receipt/i, /corridor_0\d/, /Narrator|Claire|Rook\b|CONTACT/];
+    const forbidden = [/\btrpc\b/i, /\/api\//, /localStorage/, /sessionStorage/, /indexedDB/, /document\.cookie/, /useAuth/, /missionComplete|objectiveComplete|receipt/i, /corridor_0\d/, /Narrator|Claire|CONTACT/];
     for (const { file, source } of proofSources) {
       for (const pattern of forbidden) {
         expect({ file, hit: pattern.test(source) ? String(pattern) : null }).toEqual({ file, hit: null });
@@ -129,5 +129,16 @@ describe("motion helpers", () => {
     }
     expect(Math.abs(wrapAngle(s.value - (-Math.PI + 0.1)))).toBeLessThan(1e-3);
     expect(max).toBeLessThan(0.21);
+  });
+});
+
+describe("Phase 2 Rook reveal", () => {
+  it("uses the short dispatch-satchel beat without a direct lie", () => {
+    const scene = read(join(HERE, "runtime/phase2World.ts"));
+    expect(scene).toContain("TRAILBLAZER: That's not yours.");
+    expect(scene).toContain("ROOK: It isn't theirs either.");
+    expect(scene).toContain("TRAILBLAZER: Leave it.");
+    expect(scene).toContain("ROOK: I am leaving with it.");
+    expect(scene).not.toMatch(/ROOK:\s*(Yes|No,? I|I was captured)/);
   });
 });

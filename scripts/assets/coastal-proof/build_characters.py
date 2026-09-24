@@ -27,8 +27,14 @@ Q = os.path.join(SRC, "quaternius")
 UAL1 = os.path.join(Q, "Universal Animation Library[Standard]", "Universal Animation Library[Standard]", "Unreal-Godot", "UAL1_Standard.glb")
 UAL2 = os.path.join(Q, "Universal Animation Library 2[Standard]", "Universal Animation Library 2[Standard]", "Unreal-Godot", "UAL2_Standard.glb")
 
-CLIPS_A = ["Idle_Loop", "Walk_Loop", "Idle_Talking_Loop", "Fixing_Kneeling"]
-CLIPS_B = ["Idle_Rail_Loop", "Walk_Carry_Loop", "Idle_FoldArms_Loop"]
+CLIPS_A = [
+    "Idle_Loop", "Walk_Loop", "Idle_Talking_Loop", "Fixing_Kneeling",
+    "Jog_Fwd_Loop", "Sprint_Loop", "Jump_Start", "Jump_Loop", "Jump_Land", "Roll",
+]
+CLIPS_B = [
+    "Idle_Rail_Loop", "Walk_Carry_Loop", "Idle_FoldArms_Loop",
+    "ClimbUp_1m", "NinjaJump_Start", "NinjaJump_Idle_Loop", "NinjaJump_Land",
+]
 
 
 def reset():

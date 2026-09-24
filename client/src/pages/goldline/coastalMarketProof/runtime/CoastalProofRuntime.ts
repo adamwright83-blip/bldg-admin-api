@@ -17,6 +17,7 @@ import { ProofAudio } from "./audio";
 import { Route, splitLevel, type LevelData } from "./level";
 import type { ProofParams } from "./params";
 import { PerfMeter } from "./perf";
+import { Phase2World } from "./phase2World";
 
 /**
  * The Coastal Market proof: one imperative three.js loop, owned by one React
@@ -36,7 +37,7 @@ export type RuntimeHandle = {
 
 declare const __COASTAL_PROOF_BUILD__: string | undefined;
 /** Printed in the ?perf overlay so a screenshot names its build (the preview config stamps the git SHA). */
-export const PROOF_BUILD = typeof __COASTAL_PROOF_BUILD__ !== "undefined" ? __COASTAL_PROOF_BUILD__ : "coastal-proof phase1";
+export const PROOF_BUILD = typeof __COASTAL_PROOF_BUILD__ !== "undefined" ? __COASTAL_PROOF_BUILD__ : "coastal-proof phase2";
 
 type TestApi = {
   ready: boolean;
@@ -61,8 +62,8 @@ export async function createCoastalProof(
   const dprCap = params.dpr ?? (coarse ? 1.6 : 2);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, dprCap));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMapping = THREE.AgXToneMapping;
+  renderer.toneMappingExposure = 1.08;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.info.autoReset = true;
@@ -84,7 +85,7 @@ export async function createCoastalProof(
   const report = () => {
     let sum = 0;
     for (const v of progress.values()) sum += v;
-    callbacks.onLoadProgress?.(sum / 9);
+    callbacks.onLoadProgress?.(sum / 10);
   };
   // Fetch with progress. The claude.ai artifact host does not serve .glb, so
   // stageArtifact.mjs ships each one as `<name>.glb.json` ({ data: base64 });
@@ -162,7 +163,7 @@ export async function createCoastalProof(
       );
     });
   const TEXTURE_SETS = ["rock", "cobble", "stone", "plaster", "wood", "wood_dark", "roof", "sand"];
-  const [levelGltf, data, heroGltf, animsA, skyMeta, propsGltf, townF, townM, animsB] = await Promise.all([
+  const [levelGltf, sourceData, heroGltf, animsA, skyMeta, propsGltf, townF, townM, animsB, rookGltf] = await Promise.all([
     loadGltf("level.glb"),
     fetchJson<LevelData>("level.json"),
     loadGltf("trailblazer.glb"),
@@ -172,7 +173,11 @@ export async function createCoastalProof(
     loadGltf("townsfolk_f.glb"),
     loadGltf("townsfolk_m.glb"),
     loadGltf("anims_b.glb"),
+    loadGltf("rook-runtime.glb"),
   ]);
+  // Phase 2 climbs from the waterfront toward the high market. Reversing the
+  // authored samples preserves the Phase 1 geography while making this a chase.
+  const data: LevelData = { ...sourceData, route: [...sourceData.route].reverse(), segments: [...sourceData.segments].reverse() };
   const [skyTex, waterNormal, shoreTex, ...setTextures] = await Promise.all([
     loadTex("tex/sky.webp", { srgb: true }),
     loadTex("tex/water_normal.webp", { repeat: true }),
@@ -269,6 +274,8 @@ export async function createCoastalProof(
 
   // ---------- Trailblazer (Stage 1: the plain base on the real rig)
   const route = new Route(data);
+  const phase2 = new Phase2World(scene, route, rookGltf);
+  disposers.push(() => phase2.dispose());
   const hero = SkeletonUtils.clone(heroGltf.scene);
   const heroSunVis = { value: 1 };
   hero.traverse(o => {
@@ -320,7 +327,15 @@ export async function createCoastalProof(
   const stride = params.stride ?? 1.4;
   const brisk = new URLSearchParams(window.location.search).get("walkik") === "0" ? deriveBriskWalk(hero, walkClip, stride) : deriveBriskWalkIK(hero, walkClip, stride);
   const groundSpeed = measureGroundSpeed(hero, brisk);
-  const loco = new Locomotion(body, hero, { idle: idleClip, walk: brisk }, groundSpeed);
+  const clipsB = new Map(animsB.animations.map(c => [c.name, c]));
+  const loco = new Locomotion(body, hero, {
+    idle: idleClip,
+    walk: brisk,
+    jog: clipByName.get("Jog_Fwd_Loop"),
+    sprint: clipByName.get("Sprint_Loop"),
+    jump: clipByName.get("Jump_Loop"),
+    mantle: clipsB.get("ClimbUp_1m"),
+  }, groundSpeed);
 
   // QA metric: horizontal speed of whichever foot is planted (lowest), while walking
   const feet = ["ball_l", "ball_r"].map(n => hero.getObjectByName(n)).filter((o): o is THREE.Object3D => !!o);
@@ -364,6 +379,10 @@ export async function createCoastalProof(
   follow.orbit = params.orbit;
   const input = new ProofInput(container);
   disposers.push(() => input.dispose());
+  const caption = document.createElement("div");
+  caption.className = "cmp-caption";
+  container.append(caption);
+  disposers.push(() => caption.remove());
   input.enabled = false;
   const autopilot = params.autowalk ? new Autopilot(route) : null;
   const perf = new PerfMeter(container, renderer, PROOF_BUILD, params.perf);
@@ -395,6 +414,8 @@ export async function createCoastalProof(
   const clock = new THREE.Timer();
   let reachedEnd = false;
   let began = false;
+  let autoJumpIndex = 0;
+  const autoJumps = [58, 118];
   const frame = (t: number) => {
     const workStart = performance.now();
     clock.update(t);
@@ -405,11 +426,16 @@ export async function createCoastalProof(
     }
     input.update(dt, now);
     if (!params.shot) {
-      controller.update(input.move, follow.yaw, dt);
+      const autoJump = !!autopilot && autoJumpIndex < autoJumps.length && controller.progress >= autoJumps[autoJumpIndex];
+      if (autoJump) autoJumpIndex++;
+      controller.update(input.move, follow.yaw, dt, input.consumeJump() || autoJump, false);
       npcs.pushOut(controller.position);
     }
     npcs.update(dt, camera.position);
-    loco.update(dt, controller.speed, controller.angularVelocity);
+    phase2.update(dt, t / 1000, controller, input.lineHeld, !!autopilot);
+    caption.textContent = phase2.state.caption;
+    caption.classList.toggle("is-visible", !!phase2.state.caption);
+    loco.update(dt, controller.speed, controller.angularVelocity, controller.locomotion);
     heroRoot.position.copy(controller.position);
     body.rotation.y = controller.heading;
     follow.update(camState(), params.shot ? { yaw: 0, pitch: 0 } : input.consumeLook(), dt, now);
@@ -459,6 +485,9 @@ export async function createCoastalProof(
       walkSpeed: WALK_SPEED,
       cameraYaw: follow.yaw,
       camera: camera.position.toArray(),
+      locomotion: controller.locomotion,
+      grounded: controller.grounded,
+      phase2: { ...phase2.state },
     }),
     perf: () => perf.snapshot(),
     audio: () => audio.probe(),

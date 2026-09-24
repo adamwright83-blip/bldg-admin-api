@@ -21,6 +21,8 @@ export class ProofInput {
   enabled = true;
   /** Set by the autopilot; when non-null it replaces user movement. */
   override: MoveVector | null = null;
+  lineHeld = false;
+  private jumpQueued = false;
 
   private readonly el: HTMLElement;
   private readonly stick: HTMLDivElement;
@@ -41,6 +43,16 @@ export class ProofInput {
     this.knob.className = "cmp-stick-knob";
     this.stick.appendChild(this.knob);
     el.appendChild(this.stick);
+    const jump = document.createElement("button");
+    jump.className = "cmp-action cmp-jump";
+    jump.textContent = "JUMP";
+    jump.type = "button";
+    const hook = document.createElement("button");
+    hook.className = "cmp-action cmp-hook";
+    hook.textContent = "LINE";
+    hook.type = "button";
+    el.append(jump, hook);
+    this.cleanups.push(() => jump.remove(), () => hook.remove());
 
     const on = <K extends keyof HTMLElementEventMap>(target: HTMLElement | Window, type: K, fn: (e: HTMLElementEventMap[K]) => void, opts?: AddEventListenerOptions) => {
       target.addEventListener(type, fn as EventListener, opts);
@@ -54,6 +66,10 @@ export class ProofInput {
     on(window, "keydown", e => this.onKey(e as KeyboardEvent, true));
     on(window, "keyup", e => this.onKey(e as KeyboardEvent, false));
     on(window, "blur", () => this.keys.clear());
+    on(jump, "pointerdown", e => { this.jumpQueued = true; e.stopPropagation(); e.preventDefault(); });
+    on(hook, "pointerdown", e => { this.lineHeld = true; e.stopPropagation(); e.preventDefault(); });
+    on(hook, "pointerup", e => { this.lineHeld = false; e.stopPropagation(); });
+    on(hook, "pointercancel", () => { this.lineHeld = false; });
   }
 
   private onDown(e: PointerEvent) {
@@ -116,11 +132,13 @@ export class ProofInput {
 
   private onKey(e: KeyboardEvent, down: boolean) {
     const k = e.key.toLowerCase();
-    if (["w", "a", "s", "d", "q", "e", "j", "l", "arrowup", "arrowdown", "arrowleft", "arrowright", "shift"].includes(k)) {
+    if (["w", "a", "s", "d", "q", "e", "j", "l", "arrowup", "arrowdown", "arrowleft", "arrowright", "shift", " "].includes(k)) {
       if (down) this.keys.add(k);
       else this.keys.delete(k);
       if (k.startsWith("arrow")) e.preventDefault();
     }
+    if (k === " " && down && !e.repeat) this.jumpQueued = true;
+    if (k === "e") this.lineHeld = down;
   }
 
   /** Called once per frame before the controller reads `move`. */
@@ -135,7 +153,7 @@ export class ProofInput {
       x = (kx / len) * slow;
       y = (ky / len) * slow;
     }
-    const lookKeys = (this.keys.has("q") || this.keys.has("j") ? 1 : 0) - (this.keys.has("e") || this.keys.has("l") ? 1 : 0);
+    const lookKeys = (this.keys.has("q") || this.keys.has("j") ? 1 : 0) - (this.keys.has("l") ? 1 : 0);
     if (lookKeys) {
       this.lookYaw += lookKeys * 1.9 * dt;
       this.lastLookAt = now;
@@ -162,6 +180,12 @@ export class ProofInput {
     this.lookYaw = 0;
     this.lookPitch = 0;
     return out;
+  }
+
+  consumeJump() {
+    const queued = this.jumpQueued;
+    this.jumpQueued = false;
+    return queued;
   }
 
   dispose() {

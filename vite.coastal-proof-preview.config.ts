@@ -21,7 +21,7 @@ const sha = (() => {
 
 export default defineConfig({
   plugins: [react()],
-  define: { __COASTAL_PROOF_BUILD__: JSON.stringify(`coastal-proof phase1 ${sha}`) },
+  define: { __COASTAL_PROOF_BUILD__: JSON.stringify(`coastal-proof phase2 ${sha}`) },
   root: path.resolve(import.meta.dirname, "preview/coastal-proof"),
   publicDir: path.resolve(import.meta.dirname, "client/public/assets/goldline/coastal-market-three-proof"),
   cacheDir: path.resolve(import.meta.dirname, "tmp/coastal-proof-preview-vite-cache"),

@@ -503,10 +503,25 @@ def render_state(arm, obj, state, dirs, out_dir, res, frames_override=None, prop
     return files
 
 
+def export_static_runtime_glb(path, obj):
+    """Safe fallback: approved normalized mesh and projected material, no fake motion."""
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    bpy.ops.export_scene.gltf(
+        filepath=path, export_format="GLB", use_selection=True, export_yup=True,
+        export_animations=False, export_skins=False, export_materials="EXPORT",
+        export_image_format="WEBP", export_image_quality=85,
+        export_meshopt_compression_enable=True, export_cameras=False, export_lights=False,
+    )
+    print("EXPORTED_STATIC", path, os.path.getsize(path))
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--out", default="")
     ap.add_argument("--states", default="idle,walk")
     ap.add_argument("--dirs", default="front,back,left,right")
     ap.add_argument("--res", type=int, default=384)
@@ -514,10 +529,18 @@ def main():
     ap.add_argument("--blend", default="")
     ap.add_argument("--glb", default=GLB)
     ap.add_argument("--concept", default=CONCEPT)
+    ap.add_argument("--export-static-glb", default="")
     a = ap.parse_args(argv)
     globals()["GLB"], globals()["CONCEPT"] = a.glb, a.concept
-    os.makedirs(a.out, exist_ok=True)
+    if not a.out and not a.export_static_glb:
+        ap.error("one of --out or --export-static-glb is required")
+    if a.out:
+        os.makedirs(a.out, exist_ok=True)
     obj = load_rook()
+    if a.export_static_glb:
+        export_static_runtime_glb(a.export_static_glb, obj)
+        if not a.out:
+            return
     W = compute_weights(obj)
     arm = build_armature(obj, W)
     build_scene(a.res)
