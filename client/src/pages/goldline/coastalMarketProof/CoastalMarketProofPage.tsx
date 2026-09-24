@@ -73,7 +73,7 @@ export default function CoastalMarketProofPage({ assetBase }: Props) {
       )}
       {begun && !params.shot && (
         <div className={`cmp-objective${arrived ? " is-done" : ""}`}>
-          {arrived ? "The cage door is open." : "Reach the moving cage · hook what is under load."}
+          {arrived ? "The cage door is open." : "Follow the cage."}
         </div>
       )}
       {error && begun && <div className="cmp-error">Could not load: {error}</div>}
@@ -83,7 +83,7 @@ export default function CoastalMarketProofPage({ assetBase }: Props) {
           <span className="cmp-gate-sub">
             {error ? `Could not load: ${error}` : ready ? "Tap to begin" : `Loading ${Math.round(loaded * 100)}%`}
           </span>
-          {ready && <span className="cmp-gate-hint">Sprint uphill. Jump obstacles. Hold LINE on gold seams.</span>}
+          {ready && <span className="cmp-gate-hint">Run. Jump. Hold LINE on a loaded hook.</span>}
         </button>
       )}
     </div>

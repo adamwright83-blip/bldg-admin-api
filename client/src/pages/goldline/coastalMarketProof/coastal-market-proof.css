@@ -84,21 +84,59 @@
 .cmp-jump { bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); }
 .cmp-hook { bottom: calc(env(safe-area-inset-bottom, 0px) + 108px); color: #ffd66b; }
 
+/* dialogue: speaker in small gold capitals over the line, cinema-subtitle weight */
 .cmp-caption {
   position: absolute;
-  left: 8%;
-  right: 8%;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  left: 10%;
+  right: 10%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 11%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
   text-align: center;
-  color: #fff2d4;
-  font: 600 17px/1.3 "Barlow Condensed", sans-serif;
-  letter-spacing: .06em;
-  text-shadow: 0 2px 8px #000, 0 0 18px #000;
-  opacity: 0;
   pointer-events: none;
-  transition: opacity .2s ease;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity .25s ease, transform .25s ease;
 }
-.cmp-caption.is-visible { opacity: 1; }
+.cmp-caption.is-visible { opacity: 1; transform: none; }
+.cmp-caption-who {
+  font: 600 10px/1 "Barlow Condensed", "Arial Narrow", sans-serif;
+  letter-spacing: .34em;
+  color: #e8c27a;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .8);
+}
+.cmp-caption-line {
+  font: italic 400 19px/1.25 "Fraunces", Georgia, serif;
+  color: #fbf1de;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, .85), 0 0 2px rgba(0, 0, 0, .9);
+}
+
+/* the rig taking her: a short stamp, like a move name */
+.cmp-stamp {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 31%;
+  text-align: center;
+  font: 700 15px/1 "Barlow Condensed", "Arial Narrow", sans-serif;
+  letter-spacing: .6em;
+  text-indent: .6em;
+  color: #ffd98a;
+  text-shadow: 0 0 14px rgba(255, 170, 60, .55), 0 2px 6px rgba(0, 0, 0, .7);
+  opacity: 0;
+  transform: scale(1.08);
+  transition: opacity .18s ease, transform .5s cubic-bezier(.2, .8, .2, 1);
+  pointer-events: none;
+}
+.cmp-stamp.is-visible { opacity: 1; transform: none; }
+.cmp-hook.is-ready {
+  border-color: #ffd98a;
+  box-shadow: 0 0 0 3px rgba(255, 210, 120, .35), 0 0 22px rgba(255, 190, 80, .6), inset 0 0 18px rgba(255, 202, 95, .3);
+  animation: cmp-ready .7s ease-in-out infinite alternate;
+}
+@keyframes cmp-ready { from { transform: scale(1); } to { transform: scale(1.07); } }
 @media (pointer: fine) { .cmp-action { opacity: .42; } }
 
 .cmp-objective.is-done {

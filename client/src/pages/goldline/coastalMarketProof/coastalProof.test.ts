@@ -142,3 +142,59 @@ describe("Phase 2 Rook reveal", () => {
     expect(scene).not.toMatch(/ROOK:\s*(Yes|No,? I|I was captured)/);
   });
 });
+
+describe("Phase 2 chase set", () => {
+  const level = JSON.parse(read(join(REPO, "client/public/assets/goldline/coastal-market-three-proof/level.json")));
+  const rigs = level.rigs;
+
+  it("keeps the approved controller constants", () => {
+    const src = read(join(HERE, "runtime/controller.ts"));
+    expect(src).toContain("export const WALK_SPEED = 5.3;");
+    expect(src).toContain("export const SPRINT_SPEED = 8.25;");
+    expect(src).toContain("const GRAVITY = 22;");
+    expect(src).toContain("const JUMP_VELOCITY = 8.2;");
+    expect(src).toContain("const MANTLE_HEIGHT = 1.15;");
+  });
+
+  it("uses one tension rule in three places, in chase order, each landing on real floor", () => {
+    expect(rigs.crane.csGrab).toBeLessThan(rigs.crane.csLand);
+    expect(rigs.crane.csLand).toBeLessThan(rigs.boom.csGrab);
+    expect(rigs.boom.csLand).toBeLessThan(rigs.ropeway.csGrab);
+    expect(rigs.ropeway.csGrab).toBeLessThan(rigs.ropeway.csLand);
+    // RELEASE crosses the raised bridge leaves; the leaves span the floor hole
+    const [h0, h1] = rigs.bridge.hole;
+    expect(rigs.boom.csGrab).toBeLessThan(h0);
+    expect(rigs.boom.csLand).toBeGreaterThan(h1);
+    // the hook seats sit a raised hand above the floor at both ends
+    for (const rig of [rigs.crane, rigs.boom]) {
+      expect(rig.hook1[1] - rig.hook0[1]).toBeGreaterThan(-0.5);
+      expect(rig.radius).toBeGreaterThan(3);
+    }
+    expect(rigs.ropeway.heads).toHaveLength(4);
+  });
+
+  it("has mantle obstacles within the climb height and a jumpable gap", () => {
+    for (const ob of rigs.obstacles) {
+      expect(ob.h).toBeGreaterThan(0.48);
+      expect(ob.h).toBeLessThanOrEqual(1.15);
+    }
+    const [g0, g1] = rigs.holes[0];
+    // a jog jump covers ~3.9 m (8.2 m/s up, 22 m/s^2 down, 5.3 m/s along)
+    expect(g1 - g0).toBeLessThan(3.0);
+  });
+
+  it("moves her with rigs, never by teleport", () => {
+    const scene = code(read(join(HERE, "runtime/phase2World.ts")));
+    expect(scene).not.toMatch(/placeAt\(/);
+    expect(scene).not.toMatch(/teleport/i);
+    expect(scene).toMatch(/controller\.hang\(/);
+    expect(scene).toMatch(/controller\.release\(/);
+  });
+
+  it("stages Rook at his canon size next to her", () => {
+    const scene = read(join(HERE, "runtime/phase2World.ts"));
+    expect(scene).toContain("const ROOK_RATIO = 0.62;");
+    const meta = JSON.parse(read(join(REPO, "client/public/assets/goldline/coastal-market-three-proof/rook-runtime.json")));
+    for (const key of ["look", "reach", "lift", "hold", "talk"]) expect(meta.keys).toContain(key);
+  });
+});

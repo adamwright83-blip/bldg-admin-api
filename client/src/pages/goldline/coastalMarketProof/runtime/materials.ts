@@ -45,6 +45,11 @@ const SPECS: Record<string, Spec> = {
   iron: { tint: "#3b3530" },
   foliage: { tint: "#56703a", wind: 1 },
   window: { tint: "#1c1511" },
+  // painted joinery and goods: the hue lives in the vertex colour, the plaster grain gives it a brushed surface
+  paint: { tex: "plaster", tint: "#f4efe6", normalScale: 0.35 },
+  produce: { tint: "#ffffff" },
+  leather: { tex: "wood_dark", tint: "#9a6a48", normalScale: 0.4 },
+  brass: { tint: "#c89a4c" },
 };
 
 export type SunVisSource = "lightmap" | "vertex" | "none";
@@ -113,16 +118,22 @@ function patchLevelShader(shader: THREE.WebGLProgramParametersWithUniforms, sunV
   shader.fragmentShader = fs;
 }
 
-export function createLevelMaterial(name: string, ctx: MaterialContext, far: boolean, geometry: THREE.BufferGeometry): THREE.Material {
+export function createLevelMaterial(name: string, ctx: MaterialContext, far: boolean, geometry: THREE.BufferGeometry, dynamic = false): THREE.Material {
   if (name === "glow") {
-    return withSunFog(new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.56, 0.22).multiplyScalar(1.7) }));
+    return withSunFog(new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.56, 0.22).multiplyScalar(2.4) }));
+  }
+  if (name === "brass") {
+    // polished brass reads by what it reflects: the sky environment does the work
+    const m = new THREE.MeshStandardMaterial({ color: new THREE.Color("#c99a4e"), metalness: 0.9, roughness: 0.32, vertexColors: true, envMapIntensity: 1.3 });
+    return withSunFog(m);
   }
   const spec = SPECS[name] ?? { tint: "#bbbbbb" };
   const set = spec.tex ? ctx.textures.get(spec.tex) : undefined;
-  const lightmapName = far ? undefined : ctx.lightmapOf.get(name);
+  // moving rig parts take no baked light: their sun comes from the dynamic sun ray instead
+  const lightmapName = far || dynamic ? undefined : ctx.lightmapOf.get(name);
   const lightmap = lightmapName ? ctx.lightmaps.get(lightmapName) : undefined;
   const sunVis: SunVisSource = lightmap ? "lightmap" : !far && geometry.getAttribute("_sunvis") ? "vertex" : "none";
-  const wet = !!spec.wet && !far;
+  const wet = !!spec.wet && !far && !dynamic;
   const params = {
     color: new THREE.Color(spec.tint),
     map: set?.albedo ?? null,

@@ -194,8 +194,10 @@ async function main() {
       const { context, page, errors } = await openPage(browser, base, "", PHONE);
       await page.tap(".cmp-gate");
       await page.waitForTimeout(400);
+      // a short keyboard leg: the chase's first portcullis drops across the stair foot at ~24 m,
+      // and the touch leg below needs open route ahead of it
       await page.keyboard.down("w");
-      await page.waitForTimeout(4000);
+      await page.waitForTimeout(1600);
       await page.keyboard.up("w");
       const s = await page.evaluate(() => ({ ...window.__coastalProof.state(), audio: window.__coastalProof.audio() }));
       // real touch: left thumb pushes the floating stick forward, right thumb drags to look
@@ -221,7 +223,7 @@ async function main() {
       const yaw1 = (await page.evaluate(() => window.__coastalProof.state())).cameraYaw;
       const touchWalked = walked.progress - before;
       console.log(JSON.stringify({ keyboardProgress: s.progress, surface: s.surface, audio: s.audio, touchWalkedMetres: touchWalked, touchSpeed: walked.speed, lookYawChange: yaw1 - yaw0, errors }, null, 2));
-      const ok = s.audio.started && s.audio.state === "running" && s.audio.steps > 3 && s.progress > 8 && touchWalked > 2 && Math.abs(yaw1 - yaw0) > 0.3;
+      const ok = s.audio.started && s.audio.state === "running" && s.audio.steps > 3 && s.progress > 5 && touchWalked > 2 && Math.abs(yaw1 - yaw0) > 0.3;
       console.log(ok ? "[gate] OK" : "[gate] FAILED");
       if (!ok) process.exitCode = 1;
       await context.close();

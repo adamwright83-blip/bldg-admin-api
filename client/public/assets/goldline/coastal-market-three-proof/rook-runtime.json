@@ -1,0 +1,57 @@
+{
+ "generator": "scripts/assets/coastal-proof/build_rook_runtime.py",
+ "source": "approved TRELLIS.2 Rook mesh + rook-concept-v1 projection (unchanged), decimated LOD",
+ "tris": 41998,
+ "height": 1.75,
+ "keys": [
+  "breathe_in",
+  "look",
+  "reach",
+  "lift",
+  "hold",
+  "lean_in",
+  "talk"
+ ],
+ "wingTip": {
+  "breathe_in": [
+   0.334,
+   0.7007,
+   -0.0088
+  ],
+  "look": [
+   0.3054,
+   0.6985,
+   -0.0401
+  ],
+  "reach": [
+   0.4679,
+   1.2059,
+   0.3156
+  ],
+  "lift": [
+   0.5309,
+   1.0227,
+   0.3104
+  ],
+  "hold": [
+   0.4355,
+   0.9262,
+   0.4239
+  ],
+  "lean_in": [
+   0.4006,
+   0.8445,
+   0.4799
+  ],
+  "talk": [
+   0.31,
+   0.7,
+   -0.01
+  ],
+  "rest": [
+   0.31,
+   0.7,
+   -0.01
+  ]
+ }
+}

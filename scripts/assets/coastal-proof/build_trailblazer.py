@@ -47,9 +47,9 @@ rng = random.Random(8)
 BUN_RADIUS = float(argv[argv.index("--bun-radius") + 1]) if "--bun-radius" in argv else 0.118
 
 # palette (linear-ish vertex colours)
-CREAM = (0.78, 0.70, 0.55)
-OLIVE = (0.30, 0.31, 0.17)
-OLIVE_DENIM = (0.27, 0.28, 0.16)
+CREAM = (0.60, 0.48, 0.31)
+OLIVE = (0.17, 0.18, 0.09)
+OLIVE_DENIM = (0.17, 0.18, 0.09)
 LEATHER = (0.28, 0.16, 0.08)
 LEATHER_DARK = (0.13, 0.08, 0.05)
 BRASS = (0.62, 0.45, 0.18)
@@ -111,7 +111,7 @@ def snap_boundary(bm, snap):
                 v.co = target
 
 
-def extract(body, name, pred, inflate, color_fn, info, snap=None):
+def extract(body, name, pred, inflate, color_fn, info, snap=None, ident=0):
     """Copy the body faces where pred(centroid, normal, bone) holds; push out by `inflate` metres."""
     me = body.data.copy()
     ob = body.copy()
@@ -134,8 +134,9 @@ def extract(body, name, pred, inflate, color_fn, info, snap=None):
     for f in bm.faces:
         c = f.calc_center_median()
         for loop in f.loops:
-            r, g, b_ = color_fn(c, f.normal, loop.vert.co)
-            loop[col] = (r, g, b_, 1.0)
+            rgb = color_fn(c, f.normal, loop.vert.co)
+            a = (rgb[3] if len(rgb) > 3 else ident) / 16.0
+            loop[col] = (rgb[0], rgb[1], rgb[2], a)
     bm.to_mesh(me)
     bm.free()
     me.materials.clear()
@@ -152,6 +153,10 @@ def shade(base, amount=0.08, p=None, scale=9.0):
 # ---------------------------------------------------------------------------
 # garments
 # ---------------------------------------------------------------------------
+
+# Surface ids for the runtime garment shader (vertex colour alpha = id / 16). The cut and the
+# coverage are the geometry above; the ids only say what each part is made of.
+ID_LINEN, ID_DENIM, ID_LEATHER, ID_BOOT, ID_KNIT, ID_BRACER, ID_BRASS, ID_CLOTH, ID_HAIR, ID_SATCHEL = range(1, 11)
 
 ARM_BONES = {"upperarm_l", "upperarm_r", "lowerarm_l", "lowerarm_r", "hand_l", "hand_r"}
 HEAD_BONES = {"neck_01", "Head"}
@@ -181,16 +186,9 @@ def top_pred(c, n, b):
 
 
 def top_color(c, n, v):
-    if c.z > 1.405 and 0.055 < abs(c.x) < 0.125:
-        return shade(LEATHER, 0.1, v)
-    # lacing along the V edges
-    if c.y < -0.03 and c.z > 1.28:
-        edge = abs(abs(c.x) - (c.z - 1.30) * 0.55)
-        if edge < 0.012:
-            return LEATHER_DARK
-    if abs(n.x) > 0.55:
-        return shade(OLIVE, 0.12, v)
-    return shade(CREAM, 0.07, v, 14)
+    # the olive side panels, the V's leather binding and its eyelets are drawn per pixel by the
+    # runtime garment shader from the bind-pose position (clean seams at any distance)
+    return shade(CREAM, 0.05, v, 14)
 
 
 def shorts_pred(c, n, b):
@@ -229,7 +227,7 @@ def boots_color(c, n, v):
         if z0 <= c.z <= z0 + 0.022:
             return LEATHER_DARK
     if c.z < 0.018:
-        return SOLE
+        return SOLE + (ID_LEATHER,)
     if c.z > 0.37:
         return shade(tuple(x * 1.15 for x in BOOT), 0.1, v)
     return shade(BOOT, 0.12, v, 16)
@@ -250,7 +248,7 @@ def bracer_pred(c, n, b):
 
 def bracer_color(c, n, v):
     rivet = (math.fmod(c.x * 40.0, 1.0) < 0.12) and n.z > 0.5
-    return BRASS if rivet else shade(LEATHER_DARK, 0.15, v, 25)
+    return BRASS + (ID_BRASS,) if rivet else shade(LEATHER_DARK, 0.15, v, 25)
 
 
 # crossbody strap: a band around the plane through HER RIGHT shoulder top and HER LEFT hip
@@ -342,10 +340,12 @@ def rigid_mesh(name, arm, parts, bone_weights_fn):
     for build, color in parts:
         before = set(bm.faces)
         build(bm)
+        rgb = color[:3]
+        a = (color[3] if len(color) > 3 else 0) / 16.0
         for f in bm.faces:
             if f not in before:
                 for loop in f.loops:
-                    loop[col] = (*color, 1.0)
+                    loop[col] = (*rgb, a)
     bm.to_mesh(me)
     bm.free()
     ob = bpy.data.objects.new(name, me)
@@ -480,7 +480,7 @@ def build_tie_and_strands(arm):
     def tie(bm):
         res = bmesh.ops.create_cone(bm, cap_ends=True, segments=10, radius1=0.036, radius2=0.034, depth=0.022)
         bmesh.ops.translate(bm, vec=Vector((0.0, 0.03, 1.748)), verts=res["verts"])
-    parts.append((tie, LEATHER))
+    parts.append((tie, LEATHER + (ID_LEATHER,)))
     # loose face-framing strands: short, tapered, curving in along the cheek (head sheet)
     for side in (-1, 1):
         for k, (dx, length) in enumerate(((0.0, 0.085), (0.011, 0.065))):
@@ -494,7 +494,7 @@ def build_tie_and_strands(arm):
                     vs.append((bm.verts.new(p + Vector((0, -w, 0))), bm.verts.new(p + Vector((0, w, 0)))))
                 for i in range(4):
                     bm.faces.new((vs[i][0], vs[i][1], vs[i + 1][1], vs[i + 1][0]))
-            parts.append((strand, HAIR_BLACK))
+            parts.append((strand, HAIR_BLACK + (ID_HAIR,)))
     return rigid_mesh("TB_HairBits", arm, parts, lambda co: {"Head": 1.0})
 
 
@@ -649,13 +649,13 @@ def main():
     info = face_info(body)
     gm = garments_material()
     pieces = [
-        extract(body, "TB_Top", top_pred, 0.0075, top_color, info, top_snap),
-        extract(body, "TB_Shorts", shorts_pred, 0.0085, shorts_color, info, z_snap([1.035], keep=lambda co: co.z < 0.9)),
-        extract(body, "TB_Belt", belt_pred, 0.016, belt_color, info, z_snap([0.962, 1.022])),
-        extract(body, "TB_Boots", boots_pred, 0.012, boots_color, info, z_snap([0.405])),
-        extract(body, "TB_Socks", socks_pred, 0.0085, socks_color, info, z_snap([0.375, 0.455])),
-        extract(body, "TB_Bracer", bracer_pred, 0.0095, bracer_color, info, x_snap([0.47, 0.625])),
-        extract(body, "TB_Strap", strap_pred, 0.0175, strap_color, info, strap_snap),
+        extract(body, "TB_Top", top_pred, 0.0075, top_color, info, top_snap, ID_LINEN),
+        extract(body, "TB_Shorts", shorts_pred, 0.0085, shorts_color, info, z_snap([1.035], keep=lambda co: co.z < 0.9), ID_DENIM),
+        extract(body, "TB_Belt", belt_pred, 0.016, belt_color, info, z_snap([0.962, 1.022]), ID_LEATHER),
+        extract(body, "TB_Boots", boots_pred, 0.012, boots_color, info, z_snap([0.405]), ID_BOOT),
+        extract(body, "TB_Socks", socks_pred, 0.0085, socks_color, info, z_snap([0.375, 0.455]), ID_KNIT),
+        extract(body, "TB_Bracer", bracer_pred, 0.0095, bracer_color, info, x_snap([0.47, 0.625]), ID_BRACER),
+        extract(body, "TB_Strap", strap_pred, 0.0175, strap_color, info, strap_snap, ID_LEATHER),
     ]
     tattoo = build_tattoo(body, info)
 
@@ -674,9 +674,9 @@ def main():
     print("[trailblazer] hips", hip_l, hip_r)
     sx = (hip_l.x if hip_l else 0.17) + 0.045
     satchel = rigid_mesh("TB_Satchel", arm, [
-        (cube((sx, 0.035, 0.885), (0.07, 0.21, 0.16), bevel=0.012), LEATHER),
-        (cube((sx + 0.012, 0.035, 0.935), (0.058, 0.215, 0.07), bevel=0.008), tuple(c * 0.8 for c in LEATHER)),
-        (cube((sx + 0.04, 0.035, 0.915), (0.012, 0.03, 0.035)), BRASS),
+        (cube((sx, 0.035, 0.885), (0.07, 0.21, 0.16), bevel=0.012), LEATHER + (ID_SATCHEL,)),
+        (cube((sx + 0.012, 0.035, 0.935), (0.058, 0.215, 0.07), bevel=0.008), tuple(c * 0.8 for c in LEATHER) + (ID_SATCHEL,)),
+        (cube((sx + 0.04, 0.035, 0.915), (0.012, 0.03, 0.035)), BRASS + (ID_BRASS,)),
     ], lambda co: {"satchel": 1.0})
     bx = (hip_r.x if hip_r else -0.17) - 0.012
 
@@ -691,15 +691,15 @@ def main():
     a0 = Vector((bx + 0.02, -0.01, 0.985))
     a1 = Vector((bx + 0.07, 0.085, 0.985))
     bandana = rigid_mesh("TB_Bandana", arm, [
-        (cloth_strip(tuple(a0), tuple(a1), 0.31, 8, taper=0.85), RED),
-        (cloth_strip(tuple(a0 + Vector((-0.006, 0.02, -0.01))), tuple(a1 + Vector((-0.004, -0.02, -0.01))), 0.25, 6, taper=0.9), RED_DARK),
+        (cloth_strip(tuple(a0), tuple(a1), 0.31, 8, taper=0.85), RED + (ID_CLOTH,)),
+        (cloth_strip(tuple(a0 + Vector((-0.006, 0.02, -0.01))), tuple(a1 + Vector((-0.004, -0.02, -0.01))), 0.25, 6, taper=0.9), RED_DARK + (ID_CLOTH,)),
     ], bandana_weights)
     # holster-style pouch on the belt at her right hip, forward of the bandana (approved change 1)
     front_r = body_surface(tree, -0.12, 0.95, (0, -1, 0))
     py = (front_r.y if front_r else -0.1) - 0.025
     pouch = rigid_mesh("TB_Pouch", arm, [
-        (cube((-0.135, py + 0.03, 0.935), (0.09, 0.05, 0.11), rot_z=0.35, bevel=0.01), LEATHER),
-        (cube((-0.135, py + 0.005, 0.975), (0.08, 0.02, 0.03), rot_z=0.35), BRASS),
+        (cube((-0.135, py + 0.03, 0.935), (0.09, 0.05, 0.11), rot_z=0.35, bevel=0.01), LEATHER + (ID_SATCHEL,)),
+        (cube((-0.135, py + 0.005, 0.975), (0.08, 0.02, 0.03), rot_z=0.35), BRASS + (ID_BRASS,)),
     ], lambda co: {"pelvis": 1.0})
     # brass buckles: belt front, shoulder straps
     front = body_surface(tree, 0.0, 0.99, (0, -1, 0))
@@ -707,16 +707,16 @@ def main():
     chest_l = body_surface(tree, 0.09, 1.405, (0, -1, 0))
     chest_r = body_surface(tree, -0.09, 1.405, (0, -1, 0))
     buckles = rigid_mesh("TB_Buckles", arm, [
-        (cube((0.0, fy, 0.99), (0.055, 0.012, 0.045)), BRASS),
-        (cube((0.09, (chest_l.y if chest_l else -0.1) - 0.02, 1.405), (0.03, 0.01, 0.028)), BRASS),
-        (cube((-0.09, (chest_r.y if chest_r else -0.1) - 0.02, 1.405), (0.03, 0.01, 0.028)), BRASS),
+        (cube((0.0, fy, 0.99), (0.055, 0.012, 0.045)), BRASS + (ID_BRASS,)),
+        (cube((0.09, (chest_l.y if chest_l else -0.1) - 0.02, 1.405), (0.03, 0.01, 0.028)), BRASS + (ID_BRASS,)),
+        (cube((-0.09, (chest_r.y if chest_r else -0.1) - 0.02, 1.405), (0.03, 0.01, 0.028)), BRASS + (ID_BRASS,)),
     ], lambda co: {"pelvis": 1.0} if co.z < 1.2 else {"spine_03": 1.0})
     # boot tassels (outer side of each boot top)
     tassels = []
     for side, bone in ((1, "calf_l"), (-1, "calf_r")):
         outer = body_surface(tree, side * 0.11, 0.36, (side, 0, 0))
         ox = (outer.x if outer else side * 0.16) + side * 0.02
-        tassels.append((cloth_strip((ox, -0.012, 0.37), (ox, 0.012, 0.37), 0.08, 2, taper=0.5), BOOT))
+        tassels.append((cloth_strip((ox, -0.012, 0.37), (ox, 0.012, 0.37), 0.08, 2, taper=0.5), BOOT + (ID_LEATHER,)))
     tassel_ob = rigid_mesh("TB_Tassels", arm, tassels, lambda co: {"calf_l" if co.x > 0 else "calf_r": 1.0})
     hair = build_hair(arm, tree)
     hairbits = build_tie_and_strands(arm)

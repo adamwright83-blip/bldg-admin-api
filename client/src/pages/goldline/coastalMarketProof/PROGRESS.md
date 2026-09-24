@@ -35,47 +35,108 @@ These are Mac-hosted Chromium emulation measurements, not measurements from a re
 Phase 2 follows `docs/goldline/coastal-market/CODEX_HANDOFF.md` on branch
 `claude/gallant-franklin-uoh3te`. Preserve this branch and its draft PR as the Phase 1 baseline.
 
-## Phase 2 candidate (2026-09-24)
+## Phase 2: the Rook Hunt (2026-09-24)
 
-Branch `codex/coastal-market-phase2`, cut from the Phase 1 baseline. The runtime reverses the
-existing geography so Trailblazer starts at the waterfront and climbs toward the cage. The
-representative harness line completes in 62.8 s.
+Branch `codex/coastal-market-phase2` (draft PR #247, stacked on the Phase 1 branch). Codex built the
+first candidate; Claude took it over and finished the visual/character pass without restarting. The
+runtime plays the Phase 1 geography reversed (pier -> terrace, "chase metres").
 
-### Implemented
+### The corridor, in order
 
-- Jog (5.3 m/s), sprint (8.25 m/s), gravity, jump and automatic mantle up to 1.15 m;
-  exported `Jog_Fwd_Loop`, `Sprint_Loop`, jump, roll and `ClimbUp_1m` from the CC0 packs.
-- One data-driven tension rule with three uses: RIDE pulls her up the loaded crane line,
-  RELEASE swings the guyed jib, and TRANSFER carries her on the ropeway while preserving momentum.
-- One shutdown timeline drives the ropeway chase, shutter wave, counterweight and gorge jib.
-- A corridor-focused terracotta/teal façade kit, deep eaves, balconies, brass/timber crane,
-  ropeway cage/workshop, dispatches, market dressing, AgX tone mapping and Trailblazer contact shadow.
-- Option A reveal: the cage door is open; dispatches, signal lamp, map and satchel show a workshop,
-  not a prison. The four-line exchange is “That's not yours.” / “It isn't theirs either.” /
-  “Leave it.” / “I am leaving with it.” Rook's painted side faces the camera.
+1. **Waterfront.** The pier, the quay apron, stalls and townsfolk. Rook's brass cage sits at the harbour
+   ropeway station; when the chase starts the camera looks past her at it pulling away up the cable.
+   The harbour bell rings (the shutdown) and the portcullis at the stair foot drops.
+2. **Mantle** a toppled cargo stack across the pier (6.8 m).
+3. **RIDE.** Hook the quay crane's line: its counterweight drops, and she is hoisted and slewed up the cliff
+   onto the stair landing (20.5 -> 43.8 m).
+4. **Jump** the boardwalk gap (58.6-60.9 m); the bridge leaves rise ahead.
+5. **RELEASE.** Hook the gorge boom's line: the tie-back lets go, and the boom swings her out over the
+   gorge, past the raised leaves, to the far bridge (69 -> 79.4 m).
+6. **Mantle** an overturned cart in the arch passage (108.5 m) and a stall barricade in the market lane (127 m).
+7. The market gate drops at the lane's end. **TRANSFER:** catch a passing ropeway carrier at the parapet
+   and ride the span up to the terrace (140.8 -> 167.4 m).
+8. **The cage and the workshop.** The cage docks at the terrace and its door opens: a bench, shelves of jars,
+   pigeonholes of letters, charts, and a lamp. Rook takes the sealed dispatch satchel off the station hook
+   in front of her. "That's not yours." / "It isn't theirs either." / "Leave it." / "I am leaving with it."
+
+All three uses are one rule: a line under load becomes her lift. The rig moves a hook along its own
+mechanism. She hangs from it on a simulated pendulum, and on release she flies on the rig's velocity
+onto real floor. Nothing teleports. The shutdown gates are route blockers, and the gaps are real holes
+in the walk collider.
+
+### What changed in this pass
+
+- **Environment.** Codex's per-route box kit, which hovered over the sea, is gone. The level builder
+  now authors every facade:
+  - stone plinths and quoins, arched doors with voussoirs, open shops with lit interiors;
+  - framed windows with sills, lintels and painted shutters, flower boxes;
+  - balconies on corbels, deep eaves with rafter tails and barrel-tile edges, chimneys;
+  - drainpipes, hanging trade signs, striped awnings, damp and grime gradients.
+
+  Around them: market stalls with produce, pottery and baskets, laundry lines, and the chase set's
+  towers and cables. Everything is re-baked, with a third lightmap atlas for the facades.
+- **Lighting and rendering.**
+  - An HDR post stack: MSAA scene target, a dual-filter bloom, tone mapping, then a display-space
+    grade (split tone, S-curve, vignette, grain). The reveal adds letterbox bars.
+  - A soft contact shadow under her that fades with height.
+  - `?fx=0` renders without the post stack.
+  - Fixed a negative first-frame delta that could freeze time-based systems.
+- **Trailblazer.** Same cut and the same coverage; the geometry is untouched. Surface ids now ride in
+  the garment vertex colour. A bind-space garment shader draws:
+  - on the top: the v2 sheet's olive side panels, the leather-bound V with brass eyelets, the leather
+    shoulder straps, and a stitched hem;
+  - on the shorts: olive denim twill with seams, fly and pocket stitching;
+  - elsewhere: leather grain, boot creases, knit ribbing, brass;
+  - per surface: roughness and metalness.
+
+  The sand linen is warmed so it no longer reads white. She also gets:
+  - a sky rim and a sun rim, and warm skin fill;
+  - gaits that blend by speed, played at each clip's measured ground speed;
+  - a climb that raises her root through the clip instead of snapping;
+  - falls off ledges, with a respawn after a fall into the gorge;
+  - hands that reach the actual hook when she hangs.
+- **Rook.**
+  - The approved mesh, decimated to a 42k-tri LOD, with the concept projection as vertex colour. The
+    old export carried TRELLIS's own texture, which is why he read as a camouflage blob.
+  - His own rig, evaluated to morph targets (look, reach, lift, hold, lean, talk, breath).
+  - Staged at canon size, 0.62 × her height, as main's Wayward uses. Codex had him taller than her.
+- **Cameras.**
+  - The opening sighting of the cage.
+  - Fixed crane shots from out over the water for each rig.
+  - The reveal: over her left shoulder into the cage, and a three-quarter close-up on her lines.
+  - Cinematic cameras collide unless their placement is clear by construction.
+- **Controller constants kept:** jog 5.3, sprint 8.25, gravity 22, jump 8.2, mantle 1.15.
 
 ### Final measurement
 
-Mac-hosted Playwright Chromium headless `--use-angle=metal` (Apple M1), 390x844 DPR 3
-mobile+touch, CPU throttle 4x: route 173.8 m, 62.8 s, 60 fps median / 59.2 min,
-3.91 ms mean app-frame CPU / 10.2 ms worst rolling p95, 18.2 ms worst p95 frame interval,
-<=80 draws, <=630k triangles, zero page errors. **This is emulation, not a real phone.**
+Mac-hosted Playwright Chromium headless `--use-angle=metal` (Apple M1), 390x844 DPR 3 mobile+touch,
+**CPU throttle 4x**, autowalk from the pier to the cage door:
 
-The triangle increase is the intact approved Rook mesh. Static architecture is batched and the
-lazy-proof bundle gate still passes; GoldlineGameHome remains 71.3 KB gzip and three.js remains
-reachable only through the proof chunk.
+- 40.2 s to the door;
+- fps median 60, minimum 59.4;
+- app-frame CPU 7.44 ms mean, 12.8 ms worst rolling p95;
+- p95 frame interval 18.7 ms worst;
+- 140 draws or fewer (including 9 post passes), about 438k triangles or fewer;
+- zero page errors.
+
+The continuous film, with the reveal, runs 57.3 s. **This is emulation, not a real phone.**
 
 ### Known limitations
 
-- The fitted Rook rig renders correctly inside Blender, but both decimated and full skinned GLB
-  exports fragmented after import into three.js. The candidate therefore uses the intact,
-  normalized approved mesh as a static runtime GLB and sells Option A with the open workshop,
-  removed satchel, dispatches, painted-side staging and timing. A deforming Rook animation remains
-  an art/export dependency; it is not replaced with a fake hop, flight, mirrored model or transform trick.
-- Performance was measured only in Mac Chromium emulation. No real-phone pass was performed.
-- The current production continuity issue remains deliberately untouched: main shows Rook joined
-  immediately after the Colosseum, while this proof physically introduces him in Coastal Market.
-- This is an isolated proof. Do not merge or deploy it as production progression.
+- **Pacing.** The autowalk plays a fast line: it sprints the straights and never misses a hook. It
+  reaches the door in about 40 s and ends at about 53 s once the reveal has played. A first-time
+  player will be slower, but nobody has measured that.
+- **Rook's LOD.** It is the decimated generated shell. Close up, its fine surface still shows the
+  generation's noise, and his far side is the concept's feather green, as in the approved turntable.
+  His deformation is his rig's, blended linearly between key poses.
+- **Trailblazer's top.** Its outline is the body-region extraction from Phase 1. The seams are now
+  drawn per pixel, but the silhouette edge of the top is still slightly irregular up close.
+- **Performance** was measured only in Mac Chromium emulation. No real-phone pass was performed.
+- **Continuity** is deliberately untouched. Main shows Rook joining right after the Colosseum, while
+  this proof introduces him at the Coastal Market. No production progression, CONTACT authority or
+  Wayward path changes.
+- This is an isolated proof: it reads only its own static assets and writes nothing. Do not merge or
+  deploy it as production progression.
 
 ## How to run
 
@@ -83,7 +144,10 @@ reachable only through the proof chunk.
 /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup --python scripts/assets/coastal-proof/build_level.py -- --bake   # ~1.5-3.5 min
 python3 scripts/assets/coastal-proof/prep_textures.py
 /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup --python scripts/assets/coastal-proof/build_characters.py
+/Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup --python scripts/assets/coastal-proof/build_trailblazer.py
+/Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup --python scripts/assets/coastal-proof/build_rook_runtime.py -- [--preview tmp/rook/p]
 npx vite build --config vite.coastal-proof-preview.config.ts
 node scripts/coastal-proof/proofHarness.mjs shots          # tmp/coastal-proof-captures/*.png
 node scripts/coastal-proof/proofHarness.mjs autowalk --verbose --throttle 4
+node scripts/coastal-proof/proofHarness.mjs film           # the continuous run, with the reveal
 ```

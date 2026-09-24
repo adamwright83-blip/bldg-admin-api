@@ -1,29 +1,42 @@
 import * as THREE from "three";
 import type { Route } from "./level";
 import type { MoveVector } from "./input";
+import type { AutopilotHint } from "./phase2World";
 
 /**
- * ?autowalk=1: steers the real controller along the route spline by feeding
- * the same camera-relative stick vector a thumb would, so timing, collision
- * and camera behaviour are all exercised end to end.
+ * ?autowalk=1: plays the chase with the same camera-relative stick a thumb
+ * would give the real controller, so timing, collision, the rigs and the
+ * camera are all exercised end to end.
+ *
+ * It runs at a player's pace: a jog, a full-tilt sprint on the long straights
+ * (the controller only sprints after holding full tilt), steering to a hook
+ * when one is in reach, waiting at the parapet for a ropeway carrier, and
+ * jumping the boardwalk gap. It stops at the cage door.
  */
+const SPRINTS: [number, number][] = [[1.5, 15], [46, 57], [86, 100], [113, 124], [131, 138]];
+
 export class Autopilot {
   private readonly route: Route;
   startedAt = -1;
   finishedAt = -1;
+  /** chase metres where the run ends (in front of the cage door) */
+  endAt: number;
   private readonly target = new THREE.Vector3();
 
-  constructor(route: Route) {
+  constructor(route: Route, endAt = route.length - 1.2) {
     this.route = route;
+    this.endAt = endAt;
   }
 
-  steer(now: number, position: THREE.Vector3, progress: number, cameraYaw: number): MoveVector | null {
+  steer(now: number, position: THREE.Vector3, progress: number, cameraYaw: number, hint: AutopilotHint | null): { move: MoveVector; jump: boolean } {
     if (this.startedAt < 0) this.startedAt = now;
-    if (progress >= this.route.length - 1.2) {
+    if (progress >= this.endAt) {
       if (this.finishedAt < 0) this.finishedAt = now;
-      return { x: 0, y: 0 };
+      return { move: { x: 0, y: 0 }, jump: false };
     }
-    this.route.at(Math.min(this.route.length, progress + 2.6), this.target);
+    if (hint?.stop) return { move: { x: 0, y: 0 }, jump: false };
+    if (hint?.target) this.target.copy(hint.target);
+    else this.route.at(Math.min(this.route.length, progress + 2.6), this.target);
     const dx = this.target.x - position.x;
     const dz = this.target.z - position.z;
     const len = Math.hypot(dx, dz) || 1;
@@ -32,9 +45,9 @@ export class Autopilot {
     // world -> camera-relative stick (inverse of PlayerController's mapping)
     const fx = Math.sin(cameraYaw);
     const fz = Math.cos(cameraYaw);
-    // A representative brisk player line rather than a tool-assisted permanent
-    // full sprint; authored tension beats still exercise the real controller.
-    return { x: (-fz * wx + fx * wz) * 0.45, y: (fx * wx + fz * wz) * 0.45 };
+    const sprint = SPRINTS.some(([a, b]) => progress >= a && progress < b);
+    const mag = hint?.mag ?? (sprint ? 1 : 0.88);
+    return { move: { x: (-fz * wx + fx * wz) * mag, y: (fx * wx + fz * wz) * mag }, jump: !!hint?.jump };
   }
 
   get elapsedSeconds(): number {

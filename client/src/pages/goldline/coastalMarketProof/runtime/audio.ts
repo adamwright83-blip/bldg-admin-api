@@ -2,8 +2,9 @@ import type * as THREE from "three";
 
 /**
  * One simple environmental mix, synthesized (no audio files): ocean swell,
- * wind that grows with height, the gorge waterfall by distance, and footsteps
- * on stone or wood. It starts from the tap-to-begin gesture.
+ * wind that grows with height, the gorge waterfall by distance, footsteps on
+ * stone or wood, and the chase's mechanical cues (the shutdown bell, gates,
+ * the crane's ratchet, a rope letting go). It starts from the tap-to-begin gesture.
  */
 function noiseBuffer(ctx: AudioContext, seconds: number, kind: "pink" | "brown" | "white"): AudioBuffer {
   const len = Math.floor(ctx.sampleRate * seconds);
@@ -179,6 +180,87 @@ export class ProofAudio {
     osc.stop(now + 0.12);
   }
 
+  cues = 0;
+
+  /** One-shot cue for a chase event (see Phase2World.events). */
+  cue(name: string) {
+    const ctx = this.ctx;
+    if (!ctx || !this.master || !this.white) return;
+    const now = ctx.currentTime;
+    this.cues++;
+    const out = this.master;
+    const tone = (freq: number, dur: number, gain: number, type: OscillatorType = "sine", at = 0, glide = 1) => {
+      const o = ctx.createOscillator();
+      o.type = type;
+      o.frequency.setValueAtTime(freq, now + at);
+      if (glide !== 1) o.frequency.exponentialRampToValueAtTime(freq * glide, now + at + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, now + at);
+      g.gain.exponentialRampToValueAtTime(gain, now + at + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + at + dur);
+      o.connect(g).connect(out);
+      o.start(now + at);
+      o.stop(now + at + dur + 0.05);
+    };
+    const hit = (freq: number, q: number, dur: number, gain: number, at = 0) => {
+      const src = ctx.createBufferSource();
+      src.buffer = this.white;
+      const f = ctx.createBiquadFilter();
+      f.type = "bandpass";
+      f.frequency.value = freq;
+      f.Q.value = q;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(gain, now + at);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + at + dur);
+      src.connect(f).connect(g).connect(out);
+      src.start(now + at, Math.random(), dur + 0.05);
+    };
+    switch (name) {
+      case "bell":
+        // a harbour bell: inharmonic partials, long decay, struck three times
+        for (const at of [0, 1.1, 2.2]) {
+          for (const [ratio, amp] of [[1, 0.16], [2.76, 0.07], [5.4, 0.035], [0.5, 0.08]] as const) tone(392 * ratio, 3.2, amp, "sine", at);
+        }
+        break;
+      case "gate":
+        hit(900, 0.7, 0.35, 0.35);
+        tone(70, 0.5, 0.35, "sine", 0, 0.6);
+        break;
+      case "clank":
+        hit(2400, 3, 0.18, 0.2);
+        tone(160, 0.2, 0.12, "triangle");
+        break;
+      case "winch":
+      case "ratchet":
+        for (let i = 0; i < (name === "winch" ? 16 : 10); i++) hit(3200, 6, 0.04, 0.12, i * 0.075);
+        tone(55, 1.2, 0.18, "sawtooth", 0, 0.8);
+        break;
+      case "snap":
+        hit(3800, 1.2, 0.09, 0.4);
+        hit(700, 1.5, 0.25, 0.2, 0.02);
+        break;
+      case "grab":
+        tone(120, 0.12, 0.25, "sine", 0, 0.6);
+        hit(1500, 2, 0.08, 0.15);
+        break;
+      case "letgo":
+        hit(600, 0.6, 0.45, 0.12);
+        break;
+      case "dock":
+        hit(1200, 2, 0.3, 0.25);
+        tone(90, 0.6, 0.25, "sine", 0, 0.7);
+        break;
+      case "unhook":
+        tone(2640, 0.5, 0.06, "sine");
+        tone(3960, 0.35, 0.03, "sine");
+        break;
+      case "reveal":
+        tone(110, 3.5, 0.06, "sine");
+        tone(165, 3.5, 0.04, "sine", 0.3);
+        break;
+    }
+  }
+
   /** QA: context state and output RMS. */
   probe() {
     let rms = 0;
@@ -187,7 +269,7 @@ export class ProofAudio {
       this.analyser.getFloatTimeDomainData(buf);
       rms = Math.sqrt(buf.reduce((a, b) => a + b * b, 0) / buf.length);
     }
-    return { started: this.started, state: this.ctx?.state ?? "none", rms, steps: this.steps };
+    return { started: this.started, state: this.ctx?.state ?? "none", rms, steps: this.steps, cues: this.cues };
   }
 
   dispose() {

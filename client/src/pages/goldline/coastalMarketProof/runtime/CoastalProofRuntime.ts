@@ -3,7 +3,7 @@ import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js"
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
 import { Autopilot } from "./autopilot";
-import { Locomotion, deriveBriskWalk, deriveBriskWalkIK, measureGroundSpeed } from "./character";
+import { ArmReach, Locomotion, deriveBriskWalk, deriveBriskWalkIK, measureGroundSpeed } from "./character";
 import { PlayerController, WALK_SPEED } from "./controller";
 import { createEnv } from "./env";
 import { createLevelMaterial, patchDynamicSunVis, type MaterialContext } from "./materials";
@@ -17,7 +17,9 @@ import { ProofAudio } from "./audio";
 import { Route, splitLevel, type LevelData } from "./level";
 import type { ProofParams } from "./params";
 import { PerfMeter } from "./perf";
-import { Phase2World } from "./phase2World";
+import { Phase2World, type RookMeta } from "./phase2World";
+import { PostFX } from "./postfx";
+import { patchGarments, patchHeroRim, type HeroLight } from "./garments";
 
 /**
  * The Coastal Market proof: one imperative three.js loop, owned by one React
@@ -58,7 +60,7 @@ export async function createCoastalProof(
 
   // ---------- renderer
   const coarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance", stencil: false });
+  const renderer = new THREE.WebGLRenderer({ antialias: !params.fx, powerPreference: "high-performance", stencil: false });
   const dprCap = params.dpr ?? (coarse ? 1.6 : 2);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, dprCap));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -66,7 +68,8 @@ export async function createCoastalProof(
   renderer.toneMappingExposure = 1.08;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.info.autoReset = true;
+  // frame totals across the scene and post passes; reset once per frame in the loop
+  renderer.info.autoReset = false;
   renderer.domElement.className = "cmp-canvas";
   container.appendChild(renderer.domElement);
   disposers.push(() => {
@@ -77,6 +80,8 @@ export async function createCoastalProof(
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(62, 1, 0.1, 5000);
+  const post = params.fx ? new PostFX(renderer, { msaa: coarse ? 2 : 4 }) : null;
+  if (post) disposers.push(() => post.dispose());
 
   // ---------- assets
   const loader = new GLTFLoader();
@@ -163,7 +168,7 @@ export async function createCoastalProof(
       );
     });
   const TEXTURE_SETS = ["rock", "cobble", "stone", "plaster", "wood", "wood_dark", "roof", "sand"];
-  const [levelGltf, sourceData, heroGltf, animsA, skyMeta, propsGltf, townF, townM, animsB, rookGltf] = await Promise.all([
+  const [levelGltf, sourceData, heroGltf, animsA, skyMeta, propsGltf, townF, townM, animsB, rookGltf, rigsGltf, rookMeta] = await Promise.all([
     loadGltf("level.glb"),
     fetchJson<LevelData>("level.json"),
     loadGltf("trailblazer.glb"),
@@ -174,6 +179,8 @@ export async function createCoastalProof(
     loadGltf("townsfolk_m.glb"),
     loadGltf("anims_b.glb"),
     loadGltf("rook-runtime.glb"),
+    loadGltf("rigs.glb"),
+    fetchJson<RookMeta>("rook-runtime.json"),
   ]);
   // Phase 2 climbs from the waterfront toward the high market. Reversing the
   // authored samples preserves the Phase 1 geography while making this a chase.
@@ -274,10 +281,14 @@ export async function createCoastalProof(
 
   // ---------- Trailblazer (Stage 1: the plain base on the real rig)
   const route = new Route(data);
-  const phase2 = new Phase2World(scene, route, rookGltf);
-  disposers.push(() => phase2.dispose());
   const hero = SkeletonUtils.clone(heroGltf.scene);
   const heroSunVis = { value: 1 };
+  const phase2 = new Phase2World({
+    scene, route, data, rigs: rigsGltf, rook: rookGltf, rookMeta, ctx: matCtx, walk: level.colliders.walk, sunVis: heroSunVis,
+  });
+  disposers.push(() => phase2.dispose());
+  phase2.intro = params.start === null && params.orbit === null;
+  const heroLight: HeroLight = { sunView: { value: new THREE.Vector3() }, sunVis: heroSunVis };
   hero.traverse(o => {
     const m = o as THREE.SkinnedMesh;
     if (!m.isMesh) return;
@@ -296,16 +307,21 @@ export async function createCoastalProof(
       mat.alphaTest = 0.45;
       mat.transparent = false;
       mat.side = THREE.DoubleSide;
-      mat.roughness = 0.55;
+      mat.roughness = 0.42;
+      mat.color.set("#2a1f1a"); // blue-black hair reads as a warm near-black in sunset light
+      patchHeroRim(mat, heroLight);
     } else if (mat.name === "TB_Garments") {
-      mat.roughness = 0.78;
       mat.side = THREE.DoubleSide;
+      patchGarments(mat, heroLight);
     } else if (mat.name.startsWith("MI_Superhero")) {
-      mat.color.set("#f6dcc6"); // warm the pack's light skin toward the v2 sheet
+      mat.color.set("#f2d2b8"); // warm the pack's light skin toward the v2 sheet
+      mat.roughness = 0.58;
+      patchHeroRim(mat, heroLight, true);
     }
     patchDynamicSunVis(mat, heroSunVis);
   });
   const secondary = new SecondaryMotion(hero);
+  const armReach = new ArmReach(hero);
   // one ray per frame toward the sun decides whether she stands in a building's shadow
   const sunRay = new THREE.Ray();
   const updateHeroSun = (dt: number) => {
@@ -375,20 +391,26 @@ export async function createCoastalProof(
 
   // ---------- control
   const controller = new PlayerController(level.colliders, route, data.surfaceByKind);
+  phase2.installBlockers(controller);
   const follow = new FollowCamera(camera, level.colliders.cam, level.colliders.walk);
   follow.orbit = params.orbit;
   const input = new ProofInput(container);
   disposers.push(() => input.dispose());
   const caption = document.createElement("div");
   caption.className = "cmp-caption";
-  container.append(caption);
-  disposers.push(() => caption.remove());
+  const stamp = document.createElement("div");
+  stamp.className = "cmp-stamp";
+  container.append(caption, stamp);
+  disposers.push(() => caption.remove(), () => stamp.remove());
+  const lineButton = container.querySelector(".cmp-hook");
   input.enabled = false;
-  const autopilot = params.autowalk ? new Autopilot(route) : null;
+  // the run ends in front of the cage door
+  const autopilot = params.autowalk ? new Autopilot(route, data.rigs.ropeway.csLand + 1.7) : null;
   const perf = new PerfMeter(container, renderer, PROOF_BUILD, params.perf);
   disposers.push(() => perf.dispose());
 
-  const startS = params.shot ? data.shots[params.shot] ?? 5 : params.start ?? data.shots.overlook ?? 5;
+  // level.json shots are authored on the source route (terrace first); the chase plays it reversed
+  const startS = params.shot ? route.length - (data.shots[params.shot] ?? 5) : params.start ?? 1.2;
   controller.placeAt(startS);
   const camState = () => ({
     position: controller.position,
@@ -402,6 +424,8 @@ export async function createCoastalProof(
     const w = container.clientWidth || window.innerWidth;
     const h = container.clientHeight || window.innerHeight;
     renderer.setSize(w, h, false);
+    const px = renderer.getDrawingBufferSize(new THREE.Vector2());
+    post?.setSize(px.x, px.y);
     follow.setViewport(w, h);
   };
   resize();
@@ -414,32 +438,79 @@ export async function createCoastalProof(
   const clock = new THREE.Timer();
   let reachedEnd = false;
   let began = false;
-  let autoJumpIndex = 0;
-  const autoJumps = [58, 118];
+  const heroHead = new THREE.Vector3();
+  const headBone = hero.getObjectByName("Head");
+  const camQ = new THREE.Quaternion();
+  const shotRay = new THREE.Ray();
+  const camM = new THREE.Matrix4();
+  let lastCaption = "";
   const frame = (t: number) => {
     const workStart = performance.now();
+    renderer.info.reset();
     clock.update(t);
-    const dt = Math.min(clock.getDelta(), 1 / 20);
+    // the first frame's delta can come out negative (rAF timestamp vs the timer's own clock)
+    const dt = THREE.MathUtils.clamp(clock.getDelta(), 0, 1 / 20);
     const now = performance.now();
+    let autoJump = false;
     if (autopilot && began) {
-      input.override = autopilot.steer(now, controller.position, controller.progress, follow.yaw);
+      const steer = autopilot.steer(now, controller.position, controller.progress, follow.yaw, phase2.autopilotHint(controller));
+      input.override = steer.move;
+      autoJump = steer.jump;
     }
     input.update(dt, now);
     if (!params.shot) {
-      const autoJump = !!autopilot && autoJumpIndex < autoJumps.length && controller.progress >= autoJumps[autoJumpIndex];
-      if (autoJump) autoJumpIndex++;
       controller.update(input.move, follow.yaw, dt, input.consumeJump() || autoJump, false);
-      npcs.pushOut(controller.position);
+      if (!controller.hanging) npcs.pushOut(controller.position);
     }
     npcs.update(dt, camera.position);
-    phase2.update(dt, t / 1000, controller, input.lineHeld, !!autopilot);
-    caption.textContent = phase2.state.caption;
+    phase2.update(dt, controller, input.lineHeld, !!autopilot);
+    for (const e of phase2.events) audio.cue(e);
+    if (phase2.state.caption !== lastCaption) {
+      lastCaption = phase2.state.caption;
+      const [who, ...rest] = lastCaption.split(": ");
+      caption.innerHTML = "";
+      if (lastCaption) {
+        const w = document.createElement("span");
+        w.className = "cmp-caption-who";
+        w.textContent = who;
+        const l = document.createElement("span");
+        l.className = "cmp-caption-line";
+        l.textContent = rest.join(": ");
+        caption.append(w, l);
+      }
+    }
     caption.classList.toggle("is-visible", !!phase2.state.caption);
+    stamp.textContent = phase2.state.stamp;
+    stamp.classList.toggle("is-visible", !!phase2.state.stamp);
+    lineButton?.classList.toggle("is-ready", phase2.state.lineReady);
     loco.update(dt, controller.speed, controller.angularVelocity, controller.locomotion);
     heroRoot.position.copy(controller.position);
     body.rotation.y = controller.heading;
+    heroRoot.updateMatrixWorld(true);
+    armReach.apply(phase2.handTarget, controller.heading, phase2.handsUp);
     follow.update(camState(), params.shot ? { yaw: 0, pitch: 0 } : input.consumeLook(), dt, now);
+    // cinematic framing (the opening sighting, the reveal) blends over the gameplay camera
+    headBone?.getWorldPosition(heroHead) ?? heroHead.copy(controller.position).add(new THREE.Vector3(0, 1.6, 0));
+    const shot = params.shot ? null : phase2.cameraDirective(controller, heroHead);
+    const baseFov = camera.fov;
+    if (shot && shot.weight > 0.001) {
+      // cinematic cameras collide too: pull in toward the subject if a wall is in the way
+      shotRay.origin.copy(shot.target);
+      shotRay.direction.subVectors(shot.position, shot.target);
+      const want = shotRay.direction.length();
+      shotRay.direction.normalize();
+      const hit = shot.collide ? level.colliders.cam.raycastFirst(shotRay, THREE.DoubleSide, 0.2, want) : null;
+      if (hit) shot.position.copy(shot.target).addScaledVector(shotRay.direction, Math.max(0.8, hit.distance - 0.35));
+      camera.position.lerp(shot.position, shot.weight);
+      camM.lookAt(camera.position, shot.target, camera.up);
+      camQ.setFromRotationMatrix(camM);
+      camera.quaternion.slerp(camQ, shot.weight);
+      camera.fov = THREE.MathUtils.lerp(baseFov, shot.fov, shot.weight);
+      camera.updateProjectionMatrix();
+    }
+    if (post) post.grade.letterbox = THREE.MathUtils.lerp(post.grade.letterbox, phase2.state.reveal ? 0.085 : 0, Math.min(1, dt * 3));
     env.followShadow(controller.position);
+    heroLight.sunView.value.copy(env.sunDir).transformDirection(camera.matrixWorldInverse);
     windUniforms.uTime.value = t / 1000;
     heroRoot.updateMatrixWorld(true);
     secondary.update(dt, t / 1000, windUniforms.uWind.value);
@@ -449,7 +520,12 @@ export async function createCoastalProof(
     audio.update(camera, controller.position.y, life.waterfallTop, Math.max(0, Math.min(1, (9 - controller.position.y) / 7)));
     heroRoot.updateMatrixWorld(true);
     measureSlip(dt);
-    renderer.render(scene, camera);
+    if (post) post.render(scene, camera, t / 1000);
+    else renderer.render(scene, camera);
+    if (shot && shot.weight > 0.001) {
+      camera.fov = baseFov;
+      camera.updateProjectionMatrix();
+    }
     perf.recordWork(performance.now() - workStart);
     perf.frame(now, renderer);
     if (!reachedEnd && controller.progress > route.length - 3) {
@@ -478,7 +554,8 @@ export async function createCoastalProof(
       kind: route.samples[controller.routeIndex].kind,
       reachedEnd,
       autowalkSeconds: autopilot?.elapsedSeconds ?? null,
-      autowalkFinished: autopilot ? autopilot.finishedAt >= 0 : null,
+      // the run is over when she has reached the cage door and the reveal has played
+      autowalkFinished: autopilot ? autopilot.finishedAt >= 0 && phase2.state.revealTime > 13 : null,
       walkGroundSpeed: groundSpeed,
       // median planted-foot speed (m/s) over the last ~4 s of walking; 0 = no skating
       footSlip: slipSamples.length ? [...slipSamples].sort((a, b) => a - b)[Math.floor(slipSamples.length / 2)] : null,
@@ -529,6 +606,7 @@ export async function createCoastalProof(
     if (began) return;
     began = true;
     input.enabled = !params.shot;
+    if (!params.shot) phase2.begin();
   };
   if (params.noGate) begin(false);
 

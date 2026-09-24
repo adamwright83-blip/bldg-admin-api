@@ -283,6 +283,10 @@ export class Locomotion {
   phase = 0;
   private readonly body: THREE.Object3D;
 
+  /** measured ground speeds (m/s at timeScale 1) of the jog and sprint clips, so their feet plant */
+  private jogSpeed = 5.3;
+  private sprintSpeed = 8.25;
+
   constructor(body: THREE.Object3D, root: THREE.Object3D, clips: LocomotionClips, groundSpeed: number) {
     this.body = body;
     this.body.rotation.order = "YXZ";
@@ -299,9 +303,25 @@ export class Locomotion {
       a.setEffectiveWeight(0);
     }
     this.idle.setEffectiveWeight(1);
+    if (clips.jog) this.jogSpeed = measureGroundSpeed(root, clips.jog);
+    if (clips.sprint) this.sprintSpeed = measureGroundSpeed(root, clips.sprint);
   }
 
+  get clipSpeeds() {
+    return { walk: this.walkGroundSpeed, jog: this.jogSpeed, sprint: this.sprintSpeed };
+  }
+
+  private lastState = "idle";
+
   update(dt: number, speed: number, angularVelocity: number, state: "idle" | "jog" | "sprint" | "jump" | "mantle" | "hook" = "jog") {
+    if (state !== this.lastState) {
+      // one-shot clips start from their first frame when their state begins
+      if (state === "mantle" && this.mantle) {
+        this.mantle.reset();
+        this.mantle.timeScale = 1.08;
+      }
+      this.lastState = state;
+    }
     const turning = Math.abs(angularVelocity) > 1.2 && speed < 0.5;
     const target = Math.max(smoothstep(0.04, 0.55, speed), turning ? 0.55 : 0);
     this.walkWeight = damp(this.walkWeight, target, 0.09, dt);
@@ -309,16 +329,20 @@ export class Locomotion {
     this.walk.timeScale = clamp(rate, 0.45, 2.2);
     const airborne = state === "jump" || state === "hook";
     const mantling = state === "mantle";
-    const sprinting = state === "sprint";
-    const jogging = state === "jog";
-    this.walk.setEffectiveWeight(!airborne && !mantling && !sprinting && !jogging ? this.walkWeight : 0);
-    this.jog?.setEffectiveWeight(jogging ? 1 : 0);
-    this.sprint?.setEffectiveWeight(sprinting ? 1 : 0);
+    const ground = airborne || mantling ? 0 : 1;
+    // gaits blend by speed (the controller's state only says whether she is on the ground)
+    const jogW = this.jog ? smoothstep(2.3, 3.3, speed) : 0;
+    const sprintW = this.sprint ? smoothstep(6.1, 7.4, speed) : 0;
+    const moving = this.walkWeight;
+    this.walk.setEffectiveWeight(ground * moving * (1 - jogW));
+    this.jog?.setEffectiveWeight(ground * moving * jogW * (1 - sprintW));
+    this.sprint?.setEffectiveWeight(ground * moving * jogW * sprintW);
     this.jump?.setEffectiveWeight(airborne ? 1 : 0);
     this.mantle?.setEffectiveWeight(mantling ? 1 : 0);
-    this.idle.setEffectiveWeight(state === "idle" ? 1 : Math.max(0, 1 - this.walkWeight) * (jogging ? 0.12 : 0));
-    if (this.jog) this.jog.timeScale = clamp(speed / 5.3, 0.65, 1.35);
-    if (this.sprint) this.sprint.timeScale = clamp(speed / 8.25, 0.7, 1.25);
+    this.idle.setEffectiveWeight(ground * Math.max(0, 1 - moving));
+    // playback follows actual speed over each clip's measured ground speed, so planted feet stay planted
+    if (this.jog) this.jog.timeScale = clamp(speed / this.jogSpeed, 0.6, 1.6);
+    if (this.sprint) this.sprint.timeScale = clamp(speed / this.sprintSpeed, 0.6, 1.5);
     this.mixer.update(dt);
     this.phase = (this.walk.time / this.walk.getClip().duration) % 1;
 
@@ -329,5 +353,63 @@ export class Locomotion {
     this.pitch = damp(this.pitch, clamp(accel * 0.012, -0.05, 0.06), 0.2, dt);
     this.body.rotation.z = this.lean;
     this.body.rotation.x = this.pitch;
+  }
+}
+
+const aimA = new THREE.Vector3();
+const aimB = new THREE.Vector3();
+const aimC = new THREE.Vector3();
+const qWorld = new THREE.Quaternion();
+const qParent = new THREE.Quaternion();
+const qDelta = new THREE.Quaternion();
+const qOrig = new THREE.Quaternion();
+
+/** Rotate `bone` (by weight w) so the direction to `child` points along `dir` (world). */
+function aimBone(bone: THREE.Object3D, child: THREE.Object3D, dir: THREE.Vector3, w: number) {
+  bone.getWorldPosition(aimA);
+  child.getWorldPosition(aimB);
+  aimC.subVectors(aimB, aimA).normalize();
+  qDelta.setFromUnitVectors(aimC, dir);
+  bone.getWorldQuaternion(qWorld);
+  bone.parent!.getWorldQuaternion(qParent);
+  qOrig.copy(bone.quaternion);
+  bone.quaternion.copy(qParent.invert().multiply(qDelta.multiply(qWorld)));
+  bone.quaternion.copy(qOrig.slerp(bone.quaternion, w));
+  bone.updateMatrixWorld(true);
+}
+
+/**
+ * Her hands on a hook: both arms reach from the shoulders to `target` (world),
+ * layered over whatever clip is playing. There is no hang clip in the CC0
+ * library, so this is the pose; weight 0 leaves the animation untouched.
+ */
+export class ArmReach {
+  private readonly arms: { upper: THREE.Object3D; lower: THREE.Object3D; hand: THREE.Object3D; side: number }[] = [];
+  constructor(root: THREE.Object3D) {
+    for (const [s, side] of [["l", 1], ["r", -1]] as const) {
+      const upper = root.getObjectByName(`upperarm_${s}`);
+      const lower = root.getObjectByName(`lowerarm_${s}`);
+      const hand = root.getObjectByName(`hand_${s}`);
+      if (upper && lower && hand) this.arms.push({ upper, lower, hand, side });
+    }
+  }
+
+  apply(target: THREE.Vector3, facing: number, weight: number) {
+    if (weight <= 0.001) return;
+    const right = new THREE.Vector3(Math.cos(facing), 0, -Math.sin(facing));
+    for (const arm of this.arms) {
+      // each hand takes its own side of the hook
+      const grip = new THREE.Vector3().copy(target).addScaledVector(right, -arm.side * 0.07);
+      const shoulder = arm.upper.getWorldPosition(new THREE.Vector3());
+      const toGrip = grip.clone().sub(shoulder);
+      const reach = toGrip.length();
+      const dir = toGrip.normalize();
+      // straight-armed hang when the hook is at full reach; a bent elbow when it is closer
+      const bend = THREE.MathUtils.clamp(1 - reach / 0.62, 0, 0.8);
+      const elbowDir = dir.clone().addScaledVector(right, -arm.side * 0.35 * bend).normalize();
+      aimBone(arm.upper, arm.lower, elbowDir, weight);
+      const elbow = arm.lower.getWorldPosition(new THREE.Vector3());
+      aimBone(arm.lower, arm.hand, grip.clone().sub(elbow).normalize(), weight);
+    }
   }
 }

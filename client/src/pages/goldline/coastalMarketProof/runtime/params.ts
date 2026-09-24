@@ -9,6 +9,7 @@
  *   ?stride=1.3                  tune the derived brisk walk
  *   ?start=40                    QA: start at this many metres along the route
  *   ?orbit=1.57                  QA: hold the camera this many radians off her back (side views)
+ *   ?fx=0                        skip the post stack (bloom, grade) and render straight to the canvas
  *
  * The claude.ai artifact viewer passes no query string, only a bare hash
  * token, so `#perf`, `#autowalk`, `#overlook`, `#descent` and `#waterfront`
@@ -26,6 +27,7 @@ export type ProofParams = {
   start: number | null;
   noGate: boolean;
   debug: boolean;
+  fx: boolean;
 };
 
 const SHOTS: readonly ShotId[] = ["overlook", "descent", "waterfront"];
@@ -54,5 +56,6 @@ export function readProofParams(search: string, hash = ""): ProofParams {
     start: num("start"),
     noGate: autowalk || shot !== null || q.get("gate") === "0",
     debug: q.get("debug") === "1",
+    fx: q.get("fx") !== "0",
   };
 }

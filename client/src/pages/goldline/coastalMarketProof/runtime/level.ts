@@ -31,6 +31,40 @@ export type LevelData = {
     line?: { a: [number, number]; b: [number, number]; speed: number };
   }[];
   stacks: [number, number, number, number][];
+  chimneys?: [number, number, number][];
+  /** Phase 2 chase set, in chase metres (the runtime plays the route pier -> terrace) */
+  rigs: ChaseRigs;
+  rigParts: {
+    crane_jib: { tip: V3; counterTip: V3 };
+    boom: { tip: V3 };
+    leaf: { tipLocal: V3 };
+    cage: { lamp: V3; rook: V3; doorHinge: V3 };
+  };
+};
+
+type V3 = [number, number, number];
+export type GateRig = { cs: number; pos: V3; fwd: V3; width: number; height: number; block: [number, number] };
+export type SwingRig = {
+  pivot: V3; radius: number; yaw0: number; yaw1: number; hook0: V3; hook1: V3;
+  csGrab: number; csLand: number; grabRadius: number; counterArm?: number; cleat?: V3;
+};
+export type ChaseRigs = {
+  gate1: GateRig;
+  gate3: GateRig;
+  crane: SwingRig;
+  boom: SwingRig;
+  bridge: {
+    leaves: { hinge: V3; dir: V3; length: number; width: number; raised: number; gantryTop: V3; gantryHalf: number }[];
+    hole: [number, number];
+    trigger: number;
+  };
+  ropeway: {
+    heads: V3[]; land: V3[]; offset: number; sags: number[]; hanger: number; speed: number; spacing: number;
+    csGrab: number; grabRadius: number; csLand: number; land_point: V3;
+  };
+  cage: { dock: V3; doorDir: V3; start: V3; size: V3 };
+  obstacles: { cs: number; h: number; d: number }[];
+  holes: [number, number][];
 };
 
 export type RouteSample = { p: THREE.Vector3; w: number; kind: string; s: number; dir: THREE.Vector3 };
