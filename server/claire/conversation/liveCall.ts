@@ -27,7 +27,7 @@ export async function persistOperatorAndClaire(input: {
   claireMetadata?: Record<string, unknown> | null;
 }): Promise<void> {
   await safeClaireLedger(async () => {
-    const persisted = [];
+    const persisted: Array<NonNullable<Awaited<ReturnType<typeof persistSpokenTurn>>>> = [];
     if (input.operatorText?.trim()) {
       const turn = await persistSpokenTurn({
         callSid: input.callSid,
