@@ -406,7 +406,7 @@ function stepOnce(
   // Doors trigger by walking into them — but not while dodging through.
   const door = state.avatar.dodgeMs > 0 ? null : doorAt(state.avatar.feet);
   if (door) {
-    if (doorAccess && !doorAccess.has(door.id)) {
+    if (!door.painted || (doorAccess && !doorAccess.has(door.id))) {
       stepAwayFrom(state, door);
       state.events.push({ type: "door_locked", door: door.id });
       return;
