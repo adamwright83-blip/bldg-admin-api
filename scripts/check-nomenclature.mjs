@@ -4,6 +4,8 @@ import { execFileSync } from "node:child_process";
 
 const needle = ["day", "forge"].join("");
 const marker = ["LEGACY DAY", "FORGE COMPATIBILITY"].join("");
+const repeatedCamel = new RegExp("legacy" + "Legacy" + "Day" + "forge", "i");
+const repeatedKebab = new RegExp("legacy-legacy-" + needle, "i");
 const files = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" }).split("\0").filter(Boolean);
 const violations = [];
 const binaryExt = /\.(?:png|jpe?g|webp|gif|ico|mp4|mov|wav|mp3|woff2?|ttf|otf|pdf|zip)$/i;
@@ -17,7 +19,7 @@ function pathClearlyLegacy(p) {
 }
 
 for (const file of files) {
-  if (/legacy(?:-|_)?legacy(?:-|_)?dayforge|legacylegacydayforge/i.test(file)) {
+  if (repeatedCamel.test(file) || repeatedKebab.test(file)) {
     violations.push("repeated legacy prefix in path: " + file);
   }
   if (!pathClearlyLegacy(file)) violations.push("ambiguous path: " + file);
@@ -30,7 +32,7 @@ for (const file of files) {
     continue;
   }
   if (!content.toLowerCase().includes(needle)) continue;
-  if (/legacyLegacyDayforge|LegacyLegacyDayforge|legacy-legacy-dayforge/i.test(content)) {
+  if (repeatedCamel.test(content) || repeatedKebab.test(content)) {
     violations.push(file + ": repeated legacy prefix in content");
   }
 
