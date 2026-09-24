@@ -22,11 +22,16 @@ import {
 
 const IDLE: SearchInput = { x: 0, y: 0 };
 
-function run(state: SearchArena, ms: number, input: SearchInput = IDLE) {
+function run(
+  state: SearchArena,
+  ms: number,
+  input: SearchInput = IDLE,
+  doorAccess: ReadonlySet<(typeof COLOSSEUM_DOORS)[number]["id"]> | null = null
+) {
   let s = state;
   const events: SearchEvent[] = [];
   for (let t = 0; t < ms; t += 16) {
-    s = stepSearchArena(s, 16, input);
+    s = stepSearchArena(s, 16, input, doorAccess);
     events.push(...s.events);
   }
   return { state: s, events };
@@ -66,7 +71,7 @@ describe("the arena before the shield is a calm place to look around", () => {
   });
 });
 
-describe("six doors, and none of them hide him", () => {
+describe("door access is earned outside the fiction engine", () => {
   it("opens a painted door onto nothing, then sets her back on the floor unharmed", () => {
     const door = COLOSSEUM_DOORS.find(candidate => candidate.id === "III")!;
     const at = place(createSearchArena(), { x: door.threshold.x, y: door.threshold.y + 1 });
@@ -82,15 +87,26 @@ describe("six doors, and none of them hide him", () => {
     expect(doorAt(state.avatar.feet)).toBeNull();
   });
 
-  it("lets her find Door VI, which is debated, not painted, and has nothing behind it", () => {
+  it("refuses a painted door until the gate grants abstract access", () => {
+    const door = COLOSSEUM_DOORS.find(candidate => candidate.id === "II")!;
+    const at = place(createSearchArena(), door.threshold);
+    const locked = stepSearchArena(at, 16, IDLE, new Set());
+    expect(locked.events).toEqual([{ type: "door_locked", door: "II" }]);
+    expect(locked.stage).not.toBe("door");
+    expect(locked.doorsChecked).not.toContain("II");
+
+    const opened = stepSearchArena(at, 16, IDLE, new Set(["II"]));
+    expect(opened.events).toContainEqual({ type: "door_open", door: "II" });
+    expect(doorProgress(opened)?.door.id).toBe("II");
+  });
+
+  it("keeps Door VI lore-only and permanently sealed", () => {
     const six = COLOSSEUM_DOORS.find(candidate => candidate.id === "VI")!;
     const at = place(createSearchArena(), six.threshold);
-    const opened = stepSearchArena(at, 16, IDLE);
-    expect(doorProgress(opened)?.door.id).toBe("VI");
-    const { events, state } = run(opened, SEARCH_TUNING.door.debatedMs + 200);
-    expect(events.map(event => event.type)).toContain("door_empty");
-    expect(events.map(event => event.type)).not.toContain("door_close");
-    expect(state.doorsChecked).toEqual(["VI"]);
+    const locked = stepSearchArena(at, 16, IDLE, new Set(["VI"]));
+    expect(locked.events).toEqual([{ type: "door_locked", door: "VI" }]);
+    expect(doorProgress(locked)).toBeNull();
+    expect(locked.doorsChecked).toEqual([]);
   });
 
   it("does not trigger a door while she dodges through its threshold", () => {
