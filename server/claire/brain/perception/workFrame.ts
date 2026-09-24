@@ -14,7 +14,7 @@ import type {
   WorkDeclarationKind,
   WorkFrameClassifierStatus,
 } from "../contracts/perceivedTurn";
-import { detectConversationControl } from "../../turn/interpretTurn";
+import { detectConversationControl, findIndependentFirstPersonWorkClause } from "../../turn/interpretTurn";
 
 export type WorkFrameHints = {
   explicitActionRequest?: boolean;
@@ -94,9 +94,6 @@ const SUBJECT_CHANGE = new RegExp(
   "i"
 );
 
-const OPERATOR_INTENT =
-  /\b(?:i|we)\s+(?:(?:also|still)\s+)?(?:have\s+to|need\s+to|gotta|got\s+to|must|should|want\s+to|plan\s+to|am\s+going\s+to|'m\s+going\s+to)\s+\w+/i;
-
 const EXTERNAL_FACT =
   /\b(?:owe|owes|owed)\b|\b\$\s?\d|\b\d[\d,]*\s*(?:dollars|bucks|thousand)\b/i;
 
@@ -134,10 +131,9 @@ function strategicContentLabel(text: string): string | null {
 }
 
 function intentionComplement(text: string): string | null {
-  const sentence = text.trim().split(/(?<=[.!?])\s+/)[0] ?? text;
   const match =
     /\b(?:i|we)\s+(?:(?:also|still)\s+)?(?:have\s+to|need\s+to|gotta|got\s+to|must|should|want\s+to|plan\s+to|am\s+going\s+to|'m\s+going\s+to)\s+(.+)/i.exec(
-      sentence
+      text
     );
   if (!match?.[1]) return null;
   const beforeCause = match[1].split(/\b(?:because|since)\b/i)[0] ?? match[1];
@@ -205,13 +201,14 @@ function classifyWorkFrameUnsafe(text: string, hints: WorkFrameHints): WorkFrame
     : ATTENTION_REPAIR.test(trimmed) || detectConversationControl(trimmed)
       ? "attention_repair"
       : "none";
-  const operatorIntentAttested = OPERATOR_INTENT.test(trimmed);
+  const independentIntentClause = findIndependentFirstPersonWorkClause(trimmed);
+  const operatorIntentAttested = Boolean(independentIntentClause);
   const embeddedExternalFact = EXTERNAL_FACT.test(trimmed);
   const explicitMissionWriteRequest = EXPLICIT_MISSION_WRITE.test(trimmed);
   const openFragment = endsWithOpenDesire(trimmed);
   const strategic = STRATEGIC.test(trimmed) || explicitMissionWriteRequest;
   const strategicLabel = strategic ? strategicContentLabel(trimmed) : null;
-  const intentLabel = operatorIntentAttested ? intentionComplement(trimmed) : null;
+  const intentLabel = independentIntentClause ? intentionComplement(independentIntentClause) : null;
   const declaredContentLabel = strategicLabel ?? intentLabel;
   const strategicShape: StrategicShape = !strategic ? "none" : declaredContentLabel ? "content" : "unresolved";
 
