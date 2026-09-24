@@ -72,4 +72,10 @@ export const ENV = {
     process.env.DAYFORGE_DEMO_TENANT_SLUG?.trim() || "sunset-laundry-demo",
   /** World capability: Night Shift authors tomorrow's presentation after LA date roll. Off by default. */
   goldlineNightShiftEnabled: process.env.GOLDLINE_NIGHT_SHIFT === "true",
+  /** Candy Bar V0 orchestrator heartbeat. Off by default — never auto-enable in production. */
+  candyBarEnabled: process.env.CANDY_BAR_ENABLED === "true",
+  candyBarHeartbeatMs: Math.max(
+    5_000,
+    Number.parseInt(process.env.CANDY_BAR_HEARTBEAT_MS ?? "60000", 10) || 60_000
+  ),
 };
