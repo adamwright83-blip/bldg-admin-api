@@ -31,7 +31,7 @@ import { createLevelMaterial, patchDynamicSunVis, type MaterialContext } from ".
 type Beat = "approach" | "shutdown" | "ride" | "release" | "transfer" | "reveal";
 type RigId = "ride" | "release" | "transfer";
 
-export type RookMeta = { height: number; keys: string[]; wingTip: Record<string, [number, number, number]> };
+export type RookMeta = { height: number; keys: string[]; wingTip: Record<string, [number, number, number]>; fallback?: [number, number, number] };
 
 export type CameraDirective = { weight: number; position: THREE.Vector3; target: THREE.Vector3; fov: number; collide: boolean } | null;
 
@@ -408,7 +408,7 @@ export class Phase2World {
     this.cageDoor.position.copy(v3(data.rigParts.cage.doorHinge));
     this.cageDoor.add(part("cage_door"));
     this.cage.add(this.cageDoor);
-    this.cageLamp = new THREE.PointLight(0xffa447, 4.5, 7, 1.6);
+    this.cageLamp = new THREE.PointLight(0xffa447, 2.2, 5, 2);
     this.cageLamp.position.copy(v3(data.rigParts.cage.lamp));
     this.cage.add(this.cageLamp);
     const rw = this.rigs.ropeway;
@@ -438,7 +438,21 @@ export class Phase2World {
         mat.side = THREE.DoubleSide;
         mat.roughness = 0.8;
         mat.metalness = 0;
-        mat.envMapIntensity = 0.7;
+        mat.envMapIntensity = 0.55;
+        // the approved look: the concept painted on where it sees him, its feather green elsewhere,
+        // blended per pixel exactly as project_concept.py's material does
+        const fb = opts.rookMeta!.fallback ?? [0.28, 0.34, 0.12];
+        const fallback = { value: new THREE.Color().setRGB(fb[0], fb[1], fb[2], THREE.SRGBColorSpace) };
+        mat.onBeforeCompile = shader => {
+          shader.uniforms.uFallback = fallback;
+          shader.vertexShader = shader.vertexShader
+            .replace("#include <common>", "#include <common>\nattribute float _projw;\nvarying float vProjW;")
+            .replace("#include <begin_vertex>", "#include <begin_vertex>\nvProjW = _projw;");
+          shader.fragmentShader = shader.fragmentShader
+            .replace("#include <common>", "#include <common>\nuniform vec3 uFallback;\nvarying float vProjW;")
+            .replace("#include <map_fragment>", "#include <map_fragment>\ndiffuseColor.rgb = mix( uFallback, diffuseColor.rgb, clamp( vProjW, 0.0, 1.0 ) );");
+        };
+        mat.customProgramCacheKey = () => "rook-projection";
         if (m.morphTargetInfluences) this.rookMesh = m;
         // the generated shell ships as loose flat-shaded pieces; weld coincident vertices (their
         // colours and morph offsets agree) and smooth the normals so light rolls over his form
@@ -784,7 +798,7 @@ export class Phase2World {
       this.cageDoor.rotation.y = -ease(THREE.MathUtils.clamp((this.cageDockT - 3.0) / 1.6, 0, 1)) * 1.95;
     }
     this.cage.updateMatrixWorld(true);
-    this.cageLamp.intensity = 4.5 + Math.sin(t * 9.0) * 0.2;
+    this.cageLamp.intensity = 2.2 + Math.sin(t * 9.0) * 0.12;
   }
 
   // ---------------------------------------------------------------- the reveal
