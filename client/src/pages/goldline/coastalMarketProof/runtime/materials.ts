@@ -163,5 +163,6 @@ export function patchDynamicSunVis(mat: THREE.Material, uniform: { value: number
         THREE.ShaderChunk.lights_fragment_begin.replace(DIR_LIGHT_LINE, `${DIR_LIGHT_LINE}\n\t\tdirectLight.color *= uDynSunVis;`)
       );
   };
-  mat.customProgramCacheKey = () => "dyn-sunvis";
+  const prevKey = mat.customProgramCacheKey.bind(mat);
+  mat.customProgramCacheKey = () => `${prevKey()}|dyn-sunvis`;
 }

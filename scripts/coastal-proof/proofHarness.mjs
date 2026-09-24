@@ -119,6 +119,16 @@ async function main() {
           await context.close();
         }
       }
+    } else if (mode === "hero") {
+      // Trailblazer from the gameplay camera, mid-walk: behind, behind-left, behind-right, plus side/front
+      const views = [["behind", 0], ["behind-left", -0.62], ["behind-right", 0.62], ["side", -1.57], ["front", 3.14]];
+      for (const [label, orbit] of views) {
+        const { context, page } = await openPage(browser, base, `?autowalk=1&orbit=${orbit}&start=${opt("start", "28")}`, PHONE);
+        await page.waitForTimeout(Number(opt("wait", "3200")));
+        await page.screenshot({ path: join(OUT, `hero-${label}.png`) });
+        console.log(`[hero] ${label}`);
+        await context.close();
+      }
     } else if (mode === "autowalk" || mode === "boot") {
       const device = flag("desktop") ? DESKTOP : PHONE;
       const extra = opt("query", "");

@@ -10,6 +10,7 @@ import { createLevelMaterial, patchDynamicSunVis, type MaterialContext } from ".
 import { createWater } from "./water";
 import { FollowCamera } from "./followCamera";
 import { ProofInput } from "./input";
+import { SecondaryMotion } from "./secondaryMotion";
 import { Route, splitLevel, type LevelData } from "./level";
 import type { ProofParams } from "./params";
 import { PerfMeter } from "./perf";
@@ -158,7 +159,7 @@ export async function createCoastalProof(
   const [levelGltf, data, heroGltf, animsA, skyMeta] = await Promise.all([
     loadGltf("level.glb"),
     fetchJson<LevelData>("level.json"),
-    loadGltf("base_female.glb"),
+    loadGltf("trailblazer.glb"),
     loadGltf("anims_a.glb"),
     fetchJson<{ horizonSun: [number, number, number]; horizonAway: [number, number, number]; zenith: [number, number, number]; skyVFraction: number }>("tex/sky.json"),
   ]);
@@ -251,13 +252,32 @@ export async function createCoastalProof(
   const heroSunVis = { value: 1 };
   hero.traverse(o => {
     const m = o as THREE.SkinnedMesh;
-    if (m.isMesh) {
-      m.castShadow = true;
-      m.receiveShadow = true;
-      m.frustumCulled = false;
-      patchDynamicSunVis(m.material as THREE.Material, heroSunVis);
+    if (!m.isMesh) return;
+    m.castShadow = true;
+    m.receiveShadow = true;
+    m.frustumCulled = false;
+    const mat = m.material as THREE.MeshStandardMaterial;
+    if (mat.name === "TB_Tattoo") {
+      // ink decal just above the skin
+      mat.transparent = true;
+      mat.depthWrite = false;
+      mat.polygonOffset = true;
+      mat.polygonOffsetFactor = -2;
+      m.castShadow = false;
+    } else if (mat.name.startsWith("MI_Hair")) {
+      mat.alphaTest = 0.45;
+      mat.transparent = false;
+      mat.side = THREE.DoubleSide;
+      mat.roughness = 0.55;
+    } else if (mat.name === "TB_Garments") {
+      mat.roughness = 0.78;
+      mat.side = THREE.DoubleSide;
+    } else if (mat.name.startsWith("MI_Superhero")) {
+      mat.color.set("#f6dcc6"); // warm the pack's light skin toward the v2 sheet
     }
+    patchDynamicSunVis(mat, heroSunVis);
   });
+  const secondary = new SecondaryMotion(hero);
   // one ray per frame toward the sun decides whether she stands in a building's shadow
   const sunRay = new THREE.Ray();
   const updateHeroSun = (dt: number) => {
@@ -349,6 +369,8 @@ export async function createCoastalProof(
     follow.update(camState(), params.shot ? { yaw: 0, pitch: 0 } : input.consumeLook(), dt, now);
     env.followShadow(controller.position);
     windUniforms.uTime.value = t / 1000;
+    heroRoot.updateMatrixWorld(true);
+    secondary.update(dt, t / 1000, windUniforms.uWind.value);
     water.update(t / 1000, camera.position);
     updateHeroSun(dt);
     heroRoot.updateMatrixWorld(true);
