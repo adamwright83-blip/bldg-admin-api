@@ -90,7 +90,7 @@ describe("door access is earned outside the fiction engine", () => {
   it("refuses a painted door until the gate grants abstract access", () => {
     const door = COLOSSEUM_DOORS.find(candidate => candidate.id === "II")!;
     const at = place(createSearchArena(), door.threshold);
-    const locked = stepSearchArena(at, 16, IDLE, new Set());
+    const locked = stepSearchArena(at, 16, IDLE, new Set<(typeof COLOSSEUM_DOORS)[number]["id"]>());
     expect(locked.events).toEqual([{ type: "door_locked", door: "II" }]);
     expect(locked.stage).not.toBe("door");
     expect(locked.doorsChecked).not.toContain("II");
