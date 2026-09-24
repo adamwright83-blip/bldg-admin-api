@@ -24,6 +24,22 @@ describe("2026-09-24 Brain V2 regression shapes", () => {
     expect(result.decision.control.activeTaskSets.map(set => set.kind)).not.toContain("action_proposal");
   });
 
+  it.each([
+    "Can you tell me what I should do about Dana Tuesday?",
+    "Do you think I should call Dana Tuesday?",
+  ])("does not treat an embedded first-person phrase as an independent work clause: %s", async rawText => {
+    const result = await runClaireBrainTurn({
+      ...base,
+      rawText,
+    });
+
+    expect(result.decision.perceivedTurn.workDeclarationKind).toBe("none");
+    expect(result.decision.perceivedTurn.operatorIntentAttested).toBe(false);
+    expect(result.decision.actionGrants).toHaveLength(0);
+    expect(result.comparison.actionAuthorityBasis).toBeNull();
+    expect(result.decision.control.activeTaskSets.map(set => set.kind)).not.toContain("action_proposal");
+  });
+
   it("still recognizes a real first-person work declaration", async () => {
     const result = await runClaireBrainTurn({
       ...base,
