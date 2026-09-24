@@ -757,7 +757,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // receipt and authoritative evidence — never by free-form generation. Verification fails
   // closed: a timeout leaves the claim unresolved instead of conceding it.
   const holdingSomething = Boolean(state.pendingBriefing || state.pendingProposal || state.pendingAccountFollowUp);
-  const resolution: ClaimResolution = holdingSomething ? { kind: "none" } : resolveReferencedClaim(state.claimReceipts, utterance, claireOrdinal);
+  let resolution: ClaimResolution = holdingSomething ? { kind: "none" } : resolveReferencedClaim(state.claimReceipts, utterance, claireOrdinal);
   const isKnownJudgment = (receipt: FactualClaimReceipt) => receipt.grounding === "ungrounded" && receipt.assertsFact === false;
   const nonFactual = (receipt: FactualClaimReceipt, reading: ClaimChallengeReading | null) => receipt.grounding === "ungrounded" && (reading?.assertsFact === false || receipt.assertsFact === false);
   const rememberNature = (receipt: FactualClaimReceipt, reading: ClaimChallengeReading | null) => {
@@ -770,6 +770,46 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // four?") is not a challenge to its TRUTH. Prior-claim used to swallow both, plus bare
   // acknowledgements — three of the worst turns in the 2026-09-20 call.
   const priorClaimLane = priorClaimLaneOpen(interpreted);
+
+  /**
+   * A provenance answer can sit between the factual claim and a bare correctness
+   * challenge without minting a new factual receipt of its own. In that exact
+   * one-turn bridge, keep the original receipt as the referent instead of
+   * letting "Are you sure?" fall back into ordinary retrieval.
+   *
+   * This is intentionally narrow: one intervening Claire turn, whose preceding
+   * operator turn was structurally a provenance question. It does not make old
+   * claims sticky across unrelated conversation.
+   */
+  if (
+    priorClaimLane &&
+    !holdingSomething &&
+    resolution.kind === "none" &&
+    interpreted.correctnessChallenge
+  ) {
+    const latestReceipt = (state.claimReceipts ?? []).at(-1);
+    const previousOperatorText = [...(state.history ?? [])]
+      .slice(0, -1)
+      .reverse()
+      .find(entry => entry.speaker === "operator")?.text;
+    const previousWasProvenance = previousOperatorText
+      ? interpretTurn(previousOperatorText).provenanceQuestion
+      : false;
+    const receiptGap = latestReceipt
+      ? claireOrdinal - latestReceipt.claireTurnOrdinal
+      : Number.POSITIVE_INFINITY;
+
+    if (latestReceipt && receiptGap === 2 && previousWasProvenance) {
+      resolution = {
+        kind: "resolved",
+        receipt: latestReceipt,
+        // The immediately preceding Claire turn was provenance for this receipt.
+        // Keep the existing telemetry vocabulary rather than inventing a new truth state.
+        via: "immediately_preceding",
+      };
+    }
+  }
+
   if (priorClaimLane && resolution.kind !== "none" && !interpreted.acknowledgement && (interpreted.correctnessChallenge || !(interpreted.queryRefinement || interpreted.queryParameterChange))) {
     // Deterministic referent (name / number / immediately preceding): the classifier only labels the act.
     const explicit = resolution.kind === "ambiguous" || resolution.via === "explicit_reference";
