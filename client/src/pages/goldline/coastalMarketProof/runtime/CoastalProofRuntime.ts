@@ -314,8 +314,27 @@ export async function createCoastalProof(
       mat.side = THREE.DoubleSide;
       mat.envMapIntensity = 0.35; // cloth and leather, not lacquer: keep the grey sky out of them
       patchGarments(mat, heroLight);
+    } else if (mat.name === "TB_Brows" || mat.name === "TB_Lashes") {
+      // MakeHuman's hair cards: cut out, both faces, no shadow of their own
+      mat.alphaTest = mat.name === "TB_Lashes" ? 0.3 : 0.4;
+      mat.transparent = false;
+      mat.depthWrite = true; // glTF BLEND arrives with depth writes off; cut-out cards must write depth
+      mat.side = THREE.DoubleSide;
+      mat.roughness = 0.6;
+      mat.color.set(mat.name === "TB_Brows" ? "#3a2820" : "#241814");
+      // they lie a millimetre off the skin: a small depth pull keeps them from flickering into it
+      mat.polygonOffset = true;
+      mat.polygonOffsetFactor = -1;
+      mat.polygonOffsetUnits = -2;
+      m.castShadow = false;
+    } else if (mat.name === "TB_Eyes") {
+      // a wet eye: a sharp, small reflection of the sky
+      mat.roughness = 0.06;
+      mat.envMapIntensity = 0.9;
+      m.castShadow = false;
     } else if (mat.name.startsWith("MI_Superhero")) {
-      mat.color.set("#ecccb4"); // warm the pack's light skin toward the v2 sheet
+      // MakeHuman's photographic skin keeps its own tone; the mannequin's flat one is warmed toward the v2 sheet
+      mat.color.set(mat.name.includes("_MH_") ? "#eec4a6" : "#ecccb4");
       patchSkin(mat, heroLight);
     }
     patchDynamicSunVis(mat, heroSunVis);

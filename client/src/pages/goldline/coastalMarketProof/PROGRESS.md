@@ -137,19 +137,45 @@ in the walk collider.
   - Nothing within 0.35 m of the lens is drawn.
   - A dock post that blocked the reveal is gone.
 
+### Trailblazer rebuilt on a MakeHuman body (after review)
+
+Adam's review said the mannequin-faced Trailblazer "looks like shit", and he approved rebuilding her
+on MakeHuman (MPFB2, CC0 assets). She keeps her skeleton, so every clip, the controller, the grips and
+the runtime bindings are unchanged. Her approved garment cut and coverage are the same bind-space
+lines as before, re-cut on the new body, and a side-by-side against the previous build showed no
+added skin.
+
+- **Face.** A photographic CC0 skin, real eyes with irises, and brows and lashes.
+  - The eyes' clear cornea shells drew as blank discs over the irises, so they are dropped.
+  - The brows and lashes were hidden: glTF marks their materials as blended, so they arrived with
+    depth writes off. They are cut-out cards that now write depth.
+- **Head.** Fitting MakeHuman's rig to the mannequin's short head and neck bones had squashed her
+  head to half height. The head and neck now keep their own lengths, and the neck ends on the
+  mannequin's head joint.
+- **Hair.** The bun, tie and strands were placed on the mannequin's bigger head. They are now mapped
+  onto hers from one head's bounds to the other's and kept 4 mm off the scalp.
+- **Garments.**
+  - The pieces are cut from a once-subdivided copy of the body, and the top, strap and shorts
+    overshoot their outline so the per-pixel trim draws the exact line.
+  - The shorts' frayed hem is now a per-pixel fringe; before, it was whole faces that read as blocks.
+- **Boots.** The shaft rings are smoothed along the leg and smooth-shaded, where they used to be a
+  lumpy cast of the calf. The legs inside the boots are deleted, because they still cast shadows
+  through the leather.
+- About 48k triangles for her (was about 39k).
+
 ### Final measurement
 
 Mac-hosted Playwright Chromium headless `--use-angle=metal` (Apple M1), 390x844 DPR 3 mobile+touch,
 **CPU throttle 4x**, autowalk from the pier to the cage door:
 
 - 39.7 s to the door;
-- fps median 60, minimum 59.0;
-- app-frame CPU 5.98 ms mean, 9.8 ms worst rolling p95;
-- 194 draws or fewer (including 9 post passes; each ropeway carrier's hook, toggle and rope are
-  separate draws), about 442k triangles or fewer;
+- fps median 60, minimum 59.6;
+- app-frame CPU 5.96 ms mean, 9.7 ms worst rolling p95;
+- 193 draws or fewer (including 9 post passes; each ropeway carrier's hook, toggle and rope are
+  separate draws), about 488k triangles or fewer (up from 442k: the MakeHuman Trailblazer has about 9k more triangles, and she is drawn in the shadow passes as well as the main one);
 - zero page errors.
 
-The continuous film, with the reveal, runs 57.3 s. **This is emulation, not a real phone.**
+Re-measured after the MakeHuman rebuild. The continuous film, with the reveal, runs 57.4 s. **This is emulation, not a real phone.**
 
 ### Known limitations
 
@@ -159,8 +185,9 @@ The continuous film, with the reveal, runs 57.3 s. **This is emulation, not a re
 - **Rook's LOD.** It is the decimated generated shell. Close up, its fine surface still shows the
   generation's noise, and his far side is the concept's feather green, as in the approved turntable.
   His deformation is his rig's, blended linearly between key poses.
-- **Trailblazer's top.** Its outline is the body-region extraction from Phase 1. The seams are now
-  drawn per pixel, but the silhouette edge of the top is still slightly irregular up close.
+- **Trailblazer's hair** is still the Quaternius low-poly hair pack, fitted to her head. It reads
+  as chunky cards up close, and her face is MakeHuman's default young face with no expression
+  work: it does not blink or emote.
 - **Performance** was measured only in Mac Chromium emulation. No real-phone pass was performed.
 - **Continuity** is deliberately untouched. Main shows Rook joining right after the Colosseum, while
   this proof introduces him at the Coastal Market. No production progression, CONTACT authority or
