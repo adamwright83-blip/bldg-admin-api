@@ -37,10 +37,75 @@ describe("2026-09-24 Brain V2 regression shapes", () => {
     expect(result.comparison.actionAuthorityBasis).toBe("attested_operator_work");
   });
 
-  it("keeps a mixed business question and independent work declaration as two legitimate frames", async () => {
+  it("keeps a mixed business question answerable while independently recognizing the work declaration", async () => {
+    const now = "2026-09-24T18:00:00.000Z";
     const result = await runClaireBrainTurn({
       ...base,
       rawText: "I need to call Dana Tuesday. What were my last five sales?",
+      executive: {
+        retrieve: async request => {
+          if (request.kind !== "business_query") return [];
+          const query = request.query as { metric?: string };
+          return [
+            {
+              id: "business_query:last_five_sales",
+              type: "business_query",
+              source: "runBusinessQuery",
+              provenance: { reader: "runBusinessQuery" },
+              observedAt: now,
+              asOf: now,
+              freshness: {
+                completeness: "complete",
+                loadedSources: ["cleancloud"],
+                failedSources: [],
+              },
+              coverage: { complete: true, gaps: [] },
+              authoritativeFor: ["current_business_truth"],
+              payload: {
+                status: "ok",
+                query,
+                period: { label: "all time", start: "2020-01-01", end: "2026-09-25" },
+                comparisonPeriod: null,
+                coverage: {
+                  completeness: "complete",
+                  loadedSources: ["cleancloud"],
+                  failedSources: [],
+                  unverifiedNativeCount: 0,
+                  unverifiedNativeCents: 0,
+                  overlap: null,
+                  serviceFilterUnclassified: null,
+                  lineage: null,
+                  union: null,
+                },
+                data: {
+                  kind: "orders",
+                  ordering: "latest",
+                  orders: [
+                    {
+                      eventKey: "cc:584",
+                      orderNumber: "584",
+                      date: "2026-09-17",
+                      occurredAt: "2026-09-17T09:34:00.000Z",
+                      cents: 7040,
+                      source: "cleancloud",
+                      businessLine: null,
+                      processor: null,
+                      building: null,
+                      serviceType: null,
+                      summary: "Fluff & Fold",
+                      customerName: "Thomas",
+                      address: null,
+                      ingestedAt: null,
+                    },
+                  ],
+                },
+              } as never,
+              operatorVisible: true,
+            } satisfies EvidenceItem,
+          ];
+        },
+        ctx: { timeZone: "America/Los_Angeles", today: "2026-09-24", surface: "voice" },
+      },
     });
 
     expect(result.decision.perceivedTurn.workDeclarationKind).toBe("ordinary_work");
@@ -49,6 +114,9 @@ describe("2026-09-24 Brain V2 regression shapes", () => {
       expect.arrayContaining(["action_proposal", "business_query"])
     );
     expect(result.decision.actionGrants.map(grant => grant.actionClass)).toContain("propose_day_line");
+    expect(result.decision.responsePlan.segments.some(segment => segment.type === "BusinessFactSegment")).toBe(true);
+    expect(result.decision.responsePlan.segments.some(segment => segment.type === "ActionProposalSegment")).toBe(true);
+    expect(result.decision.conclusions.map(conclusion => conclusion.kind)).not.toContain("business_answer_unavailable");
   });
 
   it("does not manufacture work from a factual correction or exclusion", async () => {
@@ -114,6 +182,95 @@ describe("2026-09-24 Brain V2 regression shapes", () => {
     expect(rechecks.length).toBeGreaterThan(0);
     expect(rechecks.every(request => request.mode === "correctness")).toBe(true);
     expect(result.decision.control.epistemic.priorClaimRechecked).toBe(true);
+  });
+
+  it.each(["Are you sure?", "Check that again.", "Verify those numbers."])(
+    "%s requests correctness verification rather than provenance",
+    async rawText => {
+      const requests: RetrievalRequest[] = [];
+      const now = "2026-09-24T18:00:00.000Z";
+      const result = await runClaireBrainTurn({
+        ...base,
+        rawText,
+        state: {
+          claimReceipts: [
+            {
+              id: "claim-1",
+              claireTurnOrdinal: 1,
+              claimType: "paid_revenue",
+              recheck: { kind: "business_query" },
+            },
+          ],
+        },
+        executive: {
+          retrieve: async request => {
+            requests.push(request);
+            if (request.kind !== "prior_claim_recheck") return [];
+            return [
+              {
+                id: "prior_claim_recheck:claim-1",
+                type: "prior_claim_recheck",
+                source: "runBusinessQuery",
+                provenance: { reader: "runBusinessQuery" },
+                observedAt: now,
+                asOf: now,
+                freshness: null,
+                coverage: { complete: true, gaps: [] },
+                authoritativeFor: ["current_business_truth"],
+                payload: {
+                  recheck: {
+                    receiptId: "claim-1",
+                    resolution: "fresh_query",
+                    outcome: "verified",
+                    evidenceIds: ["business_query:revenue"],
+                  },
+                },
+                operatorVisible: true,
+              } satisfies EvidenceItem,
+            ];
+          },
+          ctx: { timeZone: "America/Los_Angeles", today: "2026-09-24", surface: "voice" },
+        },
+      });
+
+      const rechecks = requests.filter(
+        (request): request is Extract<RetrievalRequest, { kind: "prior_claim_recheck" }> =>
+          request.kind === "prior_claim_recheck"
+      );
+      expect(rechecks.length).toBeGreaterThan(0);
+      expect(rechecks.every(request => request.mode === "correctness")).toBe(true);
+      expect(result.decision.control.epistemic.priorClaimRechecked).toBe(true);
+    }
+  );
+
+  it("does not pretend a non-recheckable receipt was freshly verified", async () => {
+    const requests: RetrievalRequest[] = [];
+    const result = await runClaireBrainTurn({
+      ...base,
+      rawText: "Are you sure?",
+      state: {
+        claimReceipts: [
+          {
+            id: "claim-nonrecheckable",
+            claireTurnOrdinal: 1,
+            claimType: "day_line_state",
+            recheck: { kind: "none" },
+          },
+        ],
+      },
+      executive: {
+        retrieve: async request => {
+          requests.push(request);
+          return [];
+        },
+        ctx: { timeZone: "America/Los_Angeles", today: "2026-09-24", surface: "voice" },
+      },
+    });
+
+    expect(
+      requests.filter(request => request.kind === "prior_claim_recheck")
+    ).toHaveLength(0);
+    expect(result.decision.control.epistemic.priorClaimRechecked).toBe(false);
   });
 
   it("keeps provenance questions receipt-shaped rather than pretending they are fresh verification", async () => {
