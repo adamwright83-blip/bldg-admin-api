@@ -268,11 +268,18 @@ function integrateBusiness(input: {
   const recheck = recheckFrom(evidence);
 
   // A correctness challenge that could not be freshly reread must not be answered
-  // from the old receipt as though it were still true.
-  if (attention.priorClaim === "correctness" && recheck && recheck.resolution !== "fresh_query") {
+  // from the old receipt as though it were still true. Say the limitation explicitly:
+  // silence here sounds like a transport failure, while receipt-only speech sounds verified.
+  if (attention.priorClaim === "correctness" && (!recheck || recheck.resolution !== "fresh_query")) {
     inhibited.push({
       kind: "stale_receipt_as_fresh_proof",
-      detail: `receipt ${recheck.receiptId} could not be rechecked (${recheck.outcome})`,
+      detail: recheck
+        ? `receipt ${recheck.receiptId} could not be rechecked (${recheck.outcome})`
+        : "the challenged claim has no recheckable authoritative reader",
+    });
+    segments.push({
+      type: "ConversationalSegment",
+      text: "I can't freshly verify that claim from an authoritative source.",
     });
   }
 
