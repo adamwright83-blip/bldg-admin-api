@@ -428,6 +428,31 @@ describe("prior-claim truth still holds when the turn is actually a challenge", 
     expect(challenged.speak).toContain(UNVERIFIABLE);
   });
 
+  it("keeps an explicit provenance/correctness challenge ahead of pending Day Line state", async () => {
+    const h = claimHarness();
+    await h.say("Who was my most recent sale?");
+    h.state.pendingBriefing = {
+      createdAt: NOW.getTime(),
+      parsed: {
+        items: [],
+        context: [],
+        questions: [],
+        unparsed: [],
+        source: "deterministic",
+      },
+    };
+
+    const provenance = await h.say("Where did that come from?");
+    expect(provenance.priorClaimRan).toBe(true);
+    expect(provenance.speak).toMatch(/came from|CleanCloud/i);
+    expect(h.state.pendingBriefing).toBeTruthy();
+
+    const challenged = await h.say("Are you sure?");
+    expect(challenged.priorClaimRan).toBe(true);
+    expect(challenged.speak).toMatch(/checks out|CleanCloud|came from/i);
+    expect(h.state.pendingBriefing).toBeTruthy();
+  });
+
   it("writes the ad and verifies the number on one mixed turn", async () => {
     const h = claimHarness();
     await h.say("Who was my most recent sale?");
