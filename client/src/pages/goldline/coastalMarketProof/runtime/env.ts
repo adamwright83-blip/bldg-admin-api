@@ -10,8 +10,8 @@ export const PALETTE = {
   skyZenith: new THREE.Color("#5f7fa6"),
   skyHorizon: new THREE.Color("#f2b98a"),
   skySunGlow: new THREE.Color("#ffd29a"),
-  fogAway: new THREE.Color("#9aa7b7"),
-  fogSun: new THREE.Color("#f3c08f"),
+  fogAway: new THREE.Color("#8796ab"),
+  fogSun: new THREE.Color("#eab27c"),
   hemiSky: new THREE.Color("#a9bcd6"),
   hemiGround: new THREE.Color("#6b5241"),
 };
@@ -119,7 +119,7 @@ export function createEnv(scene: THREE.Scene, sunDirArr: [number, number, number
   const sunDir = new THREE.Vector3(...sunDirArr).normalize();
   fogUniforms.fogSunDir.value.copy(sunDir);
 
-  scene.fog = new THREE.FogExp2(PALETTE.fogAway.getHex(), 0.0042);
+  scene.fog = new THREE.FogExp2(PALETTE.fogAway.getHex(), 0.0021);
 
   const hemi = new THREE.HemisphereLight(PALETTE.hemiSky, PALETTE.hemiGround, 1.05);
   scene.add(hemi);

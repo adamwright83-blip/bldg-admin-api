@@ -15,21 +15,20 @@ export class PerfMeter {
   p95 = 0;
   drawCalls = 0;
   triangles = 0;
-  private readonly el: HTMLDivElement | null;
+  private readonly el: HTMLDivElement;
   private readonly gpu: string;
   private readonly build: string;
   private lastPaint = 0;
 
-  constructor(parent: HTMLElement | null, renderer: THREE.WebGLRenderer, build: string) {
+  constructor(parent: HTMLElement, renderer: THREE.WebGLRenderer, build: string, visible: boolean) {
     const gl = renderer.getContext();
     const ext = gl.getExtension("WEBGL_debug_renderer_info");
     this.gpu = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : String(gl.getParameter(gl.RENDERER));
     this.build = build;
-    this.el = parent ? document.createElement("div") : null;
-    if (this.el && parent) {
-      this.el.className = "cmp-perf";
-      parent.appendChild(this.el);
-    }
+    this.el = document.createElement("div");
+    this.el.className = "cmp-perf";
+    this.el.hidden = !visible;
+    parent.appendChild(this.el);
   }
 
   frame(now: number, renderer: THREE.WebGLRenderer) {
@@ -49,7 +48,7 @@ export class PerfMeter {
     }
     this.drawCalls = renderer.info.render.calls;
     this.triangles = renderer.info.render.triangles;
-    if (this.el && now - this.lastPaint > 250) {
+    if (!this.el.hidden && now - this.lastPaint > 250) {
       this.lastPaint = now;
       const size = renderer.getDrawingBufferSize(bufferSize);
       this.el.textContent =
@@ -75,7 +74,11 @@ export class PerfMeter {
     };
   }
 
+  toggle() {
+    this.el.hidden = !this.el.hidden;
+  }
+
   dispose() {
-    this.el?.remove();
+    this.el.remove();
   }
 }

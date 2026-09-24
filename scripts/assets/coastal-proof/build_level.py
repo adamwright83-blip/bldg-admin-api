@@ -311,43 +311,39 @@ def cloth(g, top_a, top_b, drop, cols=3, rows=6, col=(1, 1, 1, 1), slope_out=Non
 # (x, y, z, width, kind-of-segment-starting-here, zTop of the cliff above)
 SPINE_NODES = [
     (150.0, 20.0, 38.0, 8.0, "ext", 48.0),
-    (118.0, 8.0, 33.0, 8.0, "ext", 46.0),
-    (90.0, 0.8, 30.0, 8.2, "terrace", 46.0),    # route starts here
-    (80.0, 1.5, 30.0, 8.2, "terrace", 50.0),
-    (74.5, 1.3, 30.0, 3.4, "stairs", 54.0),
-    (66.5, -0.8, 27.0, 3.4, "stairs", 60.0),
-    (59.0, -5.5, 24.0, 3.8, "lane", 64.0),
-    (50.0, -11.0, 23.6, 3.8, "lane", 66.0),
-    (40.0, -15.5, 23.2, 4.6, "lane", 68.0),
-    (30.0, -19.0, 22.8, 4.6, "lane", 66.0),
-    (21.0, -21.5, 22.5, 3.3, "arch", 66.0),
-    (12.0, -23.0, 22.3, 3.3, "arch", 64.0),
-    (4.0, -23.5, 22.2, 3.2, "stairs", 62.0),
-    (-5.0, -22.5, 18.6, 3.2, "landing", 60.0),
-    (-10.0, -20.5, 18.6, 3.2, "stairs", 60.0),
-    (-18.0, -16.0, 14.8, 2.8, "bridge", 58.0),
-    (-35.0, -11.5, 14.8, 3.0, "boardwalk", 56.0),
-    (-45.0, -8.0, 13.8, 3.0, "boardwalk", 54.0),
-    (-55.0, -4.5, 12.8, 3.2, "stairs", 50.0),
-    (-63.0, -2.5, 9.5, 3.2, "landing", 46.0),
-    (-67.0, -0.5, 9.5, 3.2, "stairs", 44.0),
-    (-76.0, 2.0, 5.6, 3.2, "stairs", 40.0),
-    (-84.0, 4.0, 2.4, 10.0, "quay", 36.0),      # route leaves the spine here
-    (-97.0, 0.5, 2.3, 7.0, "shore", 34.0),
-    (-107.0, -10.0, 2.2, 6.0, "shore", 36.0),
-    (-114.0, -26.0, 2.2, 6.0, "shore", 38.0),
-    (-128.0, -40.0, 2.4, 6.0, "shore", 42.0),
-    (-150.0, -46.0, 2.6, 6.0, "shore", 44.0),
-    (-185.0, -50.0, 3.0, 6.0, "shore", 46.0),
-    (-230.0, -52.0, 4.0, 6.0, "shore", 50.0),
-    (-280.0, -48.0, 5.0, 6.0, "shore", 52.0),
+    (116.0, 7.0, 33.0, 8.0, "ext", 46.0),
+    (88.0, 0.9, 30.0, 7.5, "terrace", 46.0),    # route starts here
+    (80.5, 1.4, 30.0, 3.6, "stairs", 50.0),
+    (71.0, 0.2, 26.6, 3.4, "stairs", 56.0),
+    (62.5, -3.8, 23.9, 3.8, "lane", 62.0),
+    (48.0, -12.0, 23.4, 4.6, "lane", 66.0),
+    (38.0, -16.5, 22.9, 3.3, "arch", 66.0),
+    (30.0, -19.0, 22.7, 3.3, "arch", 66.0),
+    (23.0, -20.5, 22.5, 3.2, "stairs", 64.0),
+    (14.5, -20.5, 19.0, 3.2, "landing", 62.0),
+    (10.0, -18.8, 19.0, 3.2, "stairs", 60.0),
+    (2.0, -14.5, 15.2, 2.8, "bridge", 58.0),
+    (-13.0, -10.5, 15.2, 3.0, "boardwalk", 56.0),
+    (-24.0, -7.0, 14.0, 3.2, "stairs", 52.0),
+    (-32.0, -4.8, 10.6, 3.2, "landing", 48.0),
+    (-36.0, -3.0, 10.6, 3.2, "stairs", 46.0),
+    (-44.5, -0.5, 7.0, 3.2, "stairs", 43.0),
+    (-54.0, 2.0, 2.4, 10.0, "quay", 38.0),      # route leaves the spine here
+    (-66.0, -1.5, 2.3, 7.0, "shore", 34.0),
+    (-76.0, -11.0, 2.2, 6.0, "shore", 36.0),
+    (-83.0, -27.0, 2.2, 6.0, "shore", 38.0),
+    (-97.0, -41.0, 2.4, 6.0, "shore", 42.0),
+    (-119.0, -47.0, 2.6, 6.0, "shore", 44.0),
+    (-154.0, -51.0, 3.0, 6.0, "shore", 46.0),
+    (-199.0, -53.0, 4.0, 6.0, "shore", 50.0),
+    (-249.0, -50.0, 5.0, 6.0, "shore", 52.0),
 ]
-ROUTE_FIRST = 2
-ROUTE_LAST_ON_SPINE = 22
+ROUTE_FIRST = [i for i, n in enumerate(SPINE_NODES) if n[4] == "terrace"][0]
+ROUTE_LAST_ON_SPINE = [i for i, n in enumerate(SPINE_NODES) if n[4] == "quay"][0]
 # after the quay the route runs straight at the sun: quay apron, then the pier
 PIER_HEADING_DEG = 167.5
 QUAY_APRON_LEN = 8.0
-PIER_LEN = 21.0
+PIER_LEN = 15.0
 
 SURFACE = {
     "terrace": "stone", "stairs": "stone", "lane": "stone", "arch": "stone", "landing": "stone",
@@ -1163,56 +1159,66 @@ def build_waterfall(meta):
 # --------------------------------------------------------------------------
 
 STACKS = [
-    # x, y, radius, height, detail
-    (40, 62, 11, 26, 1), (-18, 88, 14, 40, 1),
-    (-170, 55, 12, 30, 1), (-205, 22, 9, 22, 1), (-150, 112, 16, 46, 1),
-    (-330, 95, 15, 32, 1), (-300, 172, 22, 76, 1), (-385, 30, 18, 56, 1), (-250, 252, 25, 86, 1),
-    (-620, 232, 38, 122, 0), (-560, 62, 30, 92, 0), (-700, 382, 40, 112, 0), (-450, 402, 35, 132, 0),
-    (-1400, 380, 80, 200, 0), (-1250, 120, 70, 160, 0), (-1600, 650, 90, 220, 0), (-1100, 800, 70, 180, 0),
+    # x, y, radius, height, detail: layered out toward the sun (WNW) so they fade in steps
+    (-190, 60, 10, 26, 1), (-232, 8, 8, 18, 1), (-160, 122, 13, 38, 1),
+    (-330, 95, 15, 32, 1), (-360, 192, 21, 68, 1), (-420, 22, 17, 50, 1), (-300, 272, 23, 78, 1),
+    (-60, 185, 15, 44, 1), (22, 245, 19, 58, 1),
+    (-640, 242, 36, 112, 0), (-590, 72, 29, 86, 0), (-720, 392, 38, 104, 0), (-470, 422, 33, 122, 0),
+    (-1400, 380, 80, 200, 0), (-1250, 130, 70, 160, 0), (-1600, 650, 90, 220, 0), (-1100, 800, 70, 180, 0),
 ]
-LIGHTHOUSE_STACK = 5
+LIGHTHOUSE_STACK = 3
 
 
 def sea_stack(g, x, y, radius, height, detail, seed):
-    seg = 14 if detail else 10
-    rings = 9 if detail else 6
+    """Weathered stack: lobed, leaning, with strata ledges, a flared foot and a rounded cap."""
+    seg = 16 if detail else 11
+    rings = 12 if detail else 7
+    lean_a = seed * 2.39
+    lean = Vector((math.cos(lean_a), math.sin(lean_a), 0)) * (radius * (0.25 + 0.35 * ((seed * 7.1) % 1)))
     grid = []
     for r in range(rings + 1):
         t = r / rings
         z = -8 + (height + 8) * t
+        centre = Vector((x, y, z)) + lean * (t ** 1.6)
+        strata = 1.0 + 0.1 * math.floor((t * 4.3 + seed) % 2)
         row = []
         for sidx in range(seg):
             a = 2 * math.pi * sidx / seg
             d = Vector((math.cos(a), math.sin(a), 0))
-            taper = 1.0 - 0.28 * t + 0.25 * (1 - t) ** 3
-            k = 1.0 + 0.32 * noise.noise(Vector((x * 0.01 + d.x * 1.3, y * 0.01 + d.y * 1.3, t * 2.2 + seed)))
-            p = Vector((x, y, z)) + d * (radius * taper * k)
+            taper = 1.0 - 0.32 * t + 0.45 * (1 - t) ** 4 - 0.25 * max(0.0, t - 0.85) / 0.15
+            lobes = 0.42 * noise.noise(Vector((d.x * 1.1 + seed, d.y * 1.1, t * 1.6)))
+            grain = 0.12 * noise.noise(Vector((d.x * 3.7, d.y * 3.7 + seed, t * 6.0)))
+            k = max(0.35, 1.0 + lobes + grain)
+            p = centre + d * (radius * taper * k * strata)
             row.append(g.vert(p))
         grid.append(row)
     for r in range(rings):
-        ao = 0.45 + 0.55 * (r / rings)
+        ao = 0.42 + 0.58 * (r / rings)
         for sidx in range(seg):
             s2 = (sidx + 1) % seg
             g.face([grid[r][sidx], grid[r][s2], grid[r + 1][s2], grid[r + 1][sidx]], col=(ao, ao, ao, 1))
-    top = g.vert(Vector((x, y, height + radius * 0.12)))
+    top_c = Vector((x, y, height)) + lean + Vector((0, 0, radius * 0.18))
+    top = g.vert(top_c)
     for sidx in range(seg):
         s2 = (sidx + 1) % seg
         g.face([grid[rings][sidx], grid[rings][s2], top], col=(1, 1, 1, 1))
-    return height
+    return height, lean
 
 
 def build_far(meta):
     far = geo("far", prefix="FAR")
     fol = geo("foliage", prefix="FAR")
     for i, (x, y, r, h, d) in enumerate(STACKS):
-        top = sea_stack(far, x, y, r, h, d, i * 3.1)
+        top, lean = sea_stack(far, x, y, r, h, d, i * 3.1 + 0.7)
         if d:
             for j in range(3):
                 a = rng.random() * math.tau
-                c = Vector((x + math.cos(a) * r * 0.35, y + math.sin(a) * r * 0.35, top + 1.0))
+                c = Vector((x + lean.x + math.cos(a) * r * 0.3, y + lean.y + math.sin(a) * r * 0.3, top + 1.0))
                 blob(fol, c, r * (0.35 + 0.2 * rng.random()), 0.5, seed=i + j)
     # lighthouse
     x, y, r, h, _ = STACKS[LIGHTHOUSE_STACK]
+    _, lean = sea_stack(Geo("scratch"), x, y, r, h, 1, LIGHTHOUSE_STACK * 3.1 + 0.7)
+    x, y = x + lean.x, y + lean.y
     base = v3(x, y, h - 1.0)
     cylinder(geo("plaster", prefix="FAR"), base, 3.2, 17.0, seg=12, r_top=2.4)
     cylinder(geo("iron", prefix="FAR"), base + Vector((0, 0, 17.0)), 2.9, 0.4, seg=12)
@@ -1233,10 +1239,6 @@ def build_far(meta):
     for a in range(len(grid) - 1):
         for b in range(4):
             far.face([grid[a][b], grid[a + 1][b], grid[a + 1][b + 1], grid[a][b + 1]], col=(0.8, 0.8, 0.8, 1))
-    # distant cliff-top town silhouettes on the far headland
-    for j in range(6):
-        cx, cy = -640 + j * 18, -60 + j * 30
-        box(geo("plaster", prefix="FAR"), v3(cx, cy, 150 - abs(j - 2.5) * 15), (10, 14, 16), fwd=(1, 0.3))
 
 
 # --------------------------------------------------------------------------
@@ -1246,7 +1248,6 @@ def build_far(meta):
 
 def make_material(name):
     m = bpy.data.materials.get(name) or bpy.data.materials.new(name)
-    m.use_nodes = True
     bsdf = m.node_tree.nodes.get("Principled BSDF")
     c = GRAYBOX_COLOR.get(name, (0.8, 0.8, 0.8))
     bsdf.inputs["Base Color"].default_value = (c[0], c[1], c[2], 1.0)
@@ -1327,7 +1328,13 @@ def main():
         },
         "lighthouse": {"lamp": t3(meta["lighthouse"]["lamp"])},
         "crane": {"tip": t3(meta["crane"]["tip"])},
-        "shots": {"overlook": 5.0, "descent": 64.0, "waterfront": round(ROUTE_LEN - 12.0, 1)},
+        "segments": [{"kind": SPINE_NODES[i][4], "s0": round(NODE_S[i] - ROUTE_S0, 2), "s1": round(NODE_S[i + 1] - ROUTE_S0, 2)}
+                     for i in range(ROUTE_FIRST, ROUTE_LAST_ON_SPINE)],
+        "shots": {
+            "overlook": 6.2,
+            "descent": round(NODE_S[BRIDGE_I - 1] - ROUTE_S0 + 2.0, 1),
+            "waterfront": round(ROUTE_LEN - 13.0, 1),
+        },
         "stacks": [[t3((x, y, 0))[0], t3((x, y, 0))[2], r, h] for (x, y, r, h, _) in STACKS],
     }
     with open(os.path.join(OUT_DIR, "level.json"), "w") as f:

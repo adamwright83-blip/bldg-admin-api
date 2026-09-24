@@ -17,6 +17,7 @@ export type LevelData = {
   lighthouse: { lamp: [number, number, number] };
   crane: { tip: [number, number, number] };
   shots: Record<string, number>;
+  segments: { kind: string; s0: number; s1: number }[];
   stacks: [number, number, number, number][];
 };
 

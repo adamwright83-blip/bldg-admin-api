@@ -16,7 +16,7 @@ type Props = { assetBase: string };
 export default function CoastalMarketProofPage({ assetBase }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<RuntimeHandle | null>(null);
-  const params = useMemo(() => readProofParams(window.location.search), []);
+  const params = useMemo(() => readProofParams(window.location.search, window.location.hash), []);
   const [loaded, setLoaded] = useState(0);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +60,15 @@ export default function CoastalMarketProofPage({ assetBase }: Props) {
     <div className="cmp-root" data-ready={ready ? "1" : "0"} data-begun={begun ? "1" : "0"}>
       <div ref={hostRef} className="cmp-host" />
       {!params.shot && (
-        <div className="cmp-title" aria-hidden={!begun}>
+        <div
+          className="cmp-title"
+          aria-hidden={!begun}
+          title="Tap to show frame timing"
+          onPointerDown={e => {
+            e.stopPropagation();
+            handleRef.current?.togglePerf();
+          }}
+        >
           <span className="cmp-title-name">THE COASTAL MARKET</span>
           <span className="cmp-title-tag">PROOF</span>
         </div>

@@ -6,7 +6,13 @@
  *   ?shot=overlook|descent|waterfront   fixed gameplay framing for concept comparisons
  *   ?perf=1                      fps / p95 frame ms / draw calls / triangles overlay
  *   ?dpr=1.5                     override the render pixel-ratio cap
- *   ?stride=1.3&cadence=1.55     tune the derived brisk walk
+ *   ?stride=1.3                  tune the derived brisk walk
+ *   ?start=40                    QA: start at this many metres along the route
+ *   ?orbit=1.57                  QA: hold the camera this many radians off her back (side views)
+ *
+ * The claude.ai artifact viewer passes no query string, only a bare hash
+ * token, so `#perf`, `#autowalk`, `#overlook`, `#descent` and `#waterfront`
+ * work there too.
  */
 export type ShotId = "overlook" | "descent" | "waterfront";
 
@@ -16,15 +22,19 @@ export type ProofParams = {
   perf: boolean;
   dpr: number | null;
   stride: number | null;
-  cadence: number | null;
+  orbit: number | null;
+  start: number | null;
   noGate: boolean;
   debug: boolean;
 };
 
 const SHOTS: readonly ShotId[] = ["overlook", "descent", "waterfront"];
 
-export function readProofParams(search: string): ProofParams {
+export function readProofParams(search: string, hash = ""): ProofParams {
   const q = new URLSearchParams(search);
+  const token = hash.replace(/^#/, "");
+  if (token === "perf" || token === "autowalk") q.set(token, "1");
+  if ((SHOTS as readonly string[]).includes(token)) q.set("shot", token);
   const num = (key: string): number | null => {
     const raw = q.get(key);
     if (raw === null || raw === "") return null;
@@ -40,7 +50,8 @@ export function readProofParams(search: string): ProofParams {
     perf: q.get("perf") === "1",
     dpr: num("dpr"),
     stride: num("stride"),
-    cadence: num("cadence"),
+    orbit: num("orbit"),
+    start: num("start"),
     noGate: autowalk || shot !== null || q.get("gate") === "0",
     debug: q.get("debug") === "1",
   };

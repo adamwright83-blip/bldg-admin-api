@@ -77,7 +77,8 @@ async function openPage(browser, base, query, device, { video } = {}) {
   page.on("pageerror", e => errors.push(String(e)));
   page.on("console", m => {
     // the only external request (web fonts) is aborted on purpose
-    if (m.type() === "error" && !m.text().includes("net::ERR_FAILED")) errors.push(m.text());
+    // artifact builds probe <name>.glb before <name>.glb.json, so a 404 there is expected
+    if (m.type() === "error" && !m.text().includes("net::ERR_FAILED") && !m.text().includes("status of 404")) errors.push(m.text());
   });
   if (THROTTLE > 1) {
     const cdp = await context.newCDPSession(page);
@@ -120,9 +121,10 @@ async function main() {
       }
     } else if (mode === "autowalk" || mode === "boot") {
       const device = flag("desktop") ? DESKTOP : PHONE;
-      const { context, page, errors } = await openPage(browser, base, "?autowalk=1&perf=1", device, { video: flag("video") });
+      const extra = opt("query", "");
+      const { context, page, errors } = await openPage(browser, base, `?autowalk=1&perf=1${extra ? `&${extra}` : ""}`, device, { video: flag("video") });
       const samples = [];
-      const limit = mode === "boot" ? 6 : 180;
+      const limit = mode === "boot" ? 6 : Number(opt("seconds", "180"));
       const started = Date.now();
       for (let t = 0; t < limit; t++) {
         await page.waitForTimeout(1000);
@@ -143,6 +145,8 @@ async function main() {
         finished: last?.autowalkFinished,
         autowalkSeconds: last?.autowalkSeconds,
         wallSeconds: (Date.now() - started) / 1000,
+        walkGroundSpeed: last?.walkGroundSpeed,
+        footSlipMedian: last?.footSlip,
         fpsMin: Math.min(...fps),
         fpsMedian: fps.sort((a, b) => a - b)[Math.floor(fps.length / 2)],
         p95FrameMsWorst: Math.max(...p95),
@@ -151,7 +155,9 @@ async function main() {
         errors,
       };
       console.log(JSON.stringify(summary, null, 2));
+      const video = page.video();
       await context.close();
+      if (video) console.log(`[video] ${await video.path()}`);
       if (mode === "boot") {
         const ok = errors.length === 0 && last && last.progress > 4;
         if (!ok) {

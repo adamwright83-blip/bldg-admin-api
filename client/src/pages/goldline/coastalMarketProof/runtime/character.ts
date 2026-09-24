@@ -12,10 +12,11 @@ import { clamp, damp, smoothstep } from "./motion";
  * clip ground speed, so the planted foot never skates.
  */
 
+// thighs carry the stride; knees and feet follow partly so the swing leg does
+// not high-step; the trunk is left alone (scaling it reads as a waddle)
 const STRIDE_BONES: Record<string, number> = {
-  thigh_l: 1, thigh_r: 1, calf_l: 1, calf_r: 1, foot_l: 0.85, foot_r: 0.85, ball_l: 0.7, ball_r: 0.7,
-  upperarm_l: 0.9, upperarm_r: 0.9, lowerarm_l: 0.7, lowerarm_r: 0.7,
-  pelvis: 0.7, spine_01: 0.6, spine_02: 0.6, spine_03: 0.5,
+  thigh_l: 1, thigh_r: 1, calf_l: 0.45, calf_r: 0.45, foot_l: 0.55, foot_r: 0.55, ball_l: 0.4, ball_r: 0.4,
+  upperarm_l: 0.85, upperarm_r: 0.85, lowerarm_l: 0.5, lowerarm_r: 0.5,
 };
 const FOOT_BONES = ["ball_l", "ball_r", "foot_l", "foot_r"];
 

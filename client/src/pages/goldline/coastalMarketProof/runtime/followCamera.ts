@@ -25,6 +25,8 @@ const PIVOT_HEIGHT = 1.42;
 const tmp = new THREE.Vector3();
 const tmp2 = new THREE.Vector3();
 const ray = new THREE.Ray();
+const side = new THREE.Vector3();
+const ARM_OFFSETS: readonly [number, number][] = [[0, 0], [0.22, 0], [-0.22, 0], [0, 0.18], [0, -0.18]];
 
 export class FollowCamera {
   readonly camera: THREE.PerspectiveCamera;
@@ -38,8 +40,9 @@ export class FollowCamera {
   private armLen = 4.4;
   private portrait = true;
   private readonly cam: MeshBVH;
-  /** extra yaw from a look drag not yet absorbed */
   lastLookAt = -Infinity;
+  /** QA only (?orbit=): hold the arm this far off her heading */
+  orbit: number | null = null;
 
   constructor(camera: THREE.PerspectiveCamera, camCollider: MeshBVH) {
     this.camera = camera;
@@ -51,7 +54,7 @@ export class FollowCamera {
     this.camera.aspect = width / height;
     // portrait: 62 deg vertical; landscape: keep a comparable horizontal read
     this.camera.fov = this.portrait ? 62 : 50;
-    this.dist = this.portrait ? 4.5 : 4.1;
+    this.dist = this.portrait ? 4.9 : 4.3;
     this.camera.updateProjectionMatrix();
   }
 
@@ -73,7 +76,9 @@ export class FollowCamera {
     }
     // --- recenter behind her heading while she walks
     const idle = now - this.lastLookAt > RECENTER_DELAY_MS;
-    if (idle && target.speed > 0.3) {
+    if (this.orbit !== null) {
+      this.yaw = target.heading + this.orbit;
+    } else if (idle && target.speed > 0.3) {
       const k = smoothstep(0.3, 2.0, target.speed);
       this.yaw = dampAngle(this.yaw, target.heading, 1.1 / Math.max(0.25, k), dt);
       this.userPitch = damp(this.userPitch, 0, 1.6, dt);
@@ -107,8 +112,8 @@ export class FollowCamera {
     if (this.camera.position.y < 0.6) this.camera.position.y = 0.6;
 
     // --- aim: ahead of her and above, so she lands in the lower third
-    const aimAhead = this.portrait ? 5.0 : 3.6;
-    const aimUp = this.portrait ? 0.35 : 0.2;
+    const aimAhead = this.portrait ? 5.0 : 3.8;
+    const aimUp = this.portrait ? 0.95 : 0.45;
     const fx = Math.sin(this.yaw);
     const fz = Math.cos(this.yaw);
     const aim = tmp2.copy(origin).add(tmp.set(fx * aimAhead, aimUp - aimAhead * Math.sin(this.pitch) * 0.45, fz * aimAhead));
@@ -117,10 +122,10 @@ export class FollowCamera {
 
   private castArm(origin: THREE.Vector3, dir: THREE.Vector3, len: number): number {
     let best = len;
-    const side = new THREE.Vector3(dir.z, 0, -dir.x).normalize();
-    const offsets: [number, number][] = [[0, 0], [0.22, 0], [-0.22, 0], [0, 0.18], [0, -0.18]];
-    for (const [sx, sy] of offsets) {
-      ray.origin.copy(origin).addScaledVector(side, sx).add(new THREE.Vector3(0, sy, 0));
+    side.set(dir.z, 0, -dir.x).normalize();
+    for (const [sx, sy] of ARM_OFFSETS) {
+      ray.origin.copy(origin).addScaledVector(side, sx);
+      ray.origin.y += sy;
       ray.direction.copy(dir);
       const hit = this.cam.raycastFirst(ray, THREE.DoubleSide, 0, len + 0.3);
       if (hit) best = Math.min(best, Math.max(0.6, hit.distance - 0.3));
