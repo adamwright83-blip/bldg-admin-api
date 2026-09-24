@@ -11,6 +11,7 @@ const markerSentence =
   ": retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.";
 
 const immutableHistoricalPath = p =>
+  p.startsWith(".github/workflows/") ||
   /^drizzle\/004[2-5]_dayforge_/i.test(p) ||
   p === "docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md";
 
@@ -82,6 +83,7 @@ function prependBanner(file, content) {
 }
 
 for (const file of tracked()) {
+  if (file.startsWith(".github/workflows/")) continue;
   if (!isTextFile(file)) continue;
   let content = fs.readFileSync(file, "utf8");
   const original = content;
@@ -124,12 +126,8 @@ for (const file of tracked().filter(p => /^drizzle\/004[2-5]_dayforge_/i.test(p)
   if (!content.includes(marker)) fs.writeFileSync(file, "-- " + markerSentence + "\n" + content);
 }
 
-for (const temp of [
-  ".github/workflows/legacy-nomenclature-inventory.yml",
-  ".github/workflows/legacy-dayforge-migration.yml",
-  "scripts/migrate-retired-product-name.mjs",
-]) {
-  if (fs.existsSync(temp)) fs.rmSync(temp);
+if (fs.existsSync("scripts/migrate-retired-product-name.mjs")) {
+  fs.rmSync("scripts/migrate-retired-product-name.mjs");
 }
 
 console.log(JSON.stringify({ moved: moves.length, replacements: replacementPairs.length }, null, 2));
