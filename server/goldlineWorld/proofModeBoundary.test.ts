@@ -44,7 +44,7 @@ describe("proof mode cannot reach production", () => {
     const { readFileSync } = await import("node:fs");
     const router = readFileSync("server/goldlineWorld/goldlineWorldRouter.ts", "utf8");
     const impl = readFileSync("server/goldlineWorld/goldlineProofWorld.ts", "utf8");
-    expect(router).toContain("resetProofWorld: legacyDayforgeTenantAdminProcedure");
+    expect(router).toContain("resetProofWorld: legacyLegacyDayforgeTenantAdminProcedure");
     expect(impl).toContain("assertProofModeAllowed(\"resetProofWorld\")");
     const seed = readFileSync("scripts/goldline-living-world-proof-seed.ts", "utf8");
     expect(seed).toContain("goldline-living-world-proof-seed");

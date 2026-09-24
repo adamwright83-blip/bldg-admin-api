@@ -1,7 +1,7 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { legacyDayforgeChurnProcedure, router } from "../_core/trpc";
+import { legacyLegacyDayforgeChurnProcedure, router } from "../_core/trpc";
 import {
   ARSENAL_TOOLS,
   type ArsenalToolId,
@@ -37,15 +37,15 @@ export const churnRadarRouter = router({
    * projects into window states. The outreach ribbon expires on a wall clock, so
    * a page left open must be able to dim itself without asking the server again.
    */
-  cityVitality: legacyDayforgeChurnProcedure.query(({ ctx }) =>
+  cityVitality: legacyLegacyDayforgeChurnProcedure.query(({ ctx }) =>
     getLanternCityVitality(ctx.tenantId)
   ),
 
-  profile: legacyDayforgeChurnProcedure.query(({ ctx }) =>
+  profile: legacyLegacyDayforgeChurnProcedure.query(({ ctx }) =>
     getCustomerRecoveryProfile(ctx.tenantId)
   ),
 
-  saveProfile: legacyDayforgeChurnProcedure
+  saveProfile: legacyLegacyDayforgeChurnProcedure
     .input(
       z.object({
         storeName: z.string().trim().min(1).max(255),
@@ -61,11 +61,11 @@ export const churnRadarRouter = router({
       })
     ),
 
-  latestScan: legacyDayforgeChurnProcedure.query(({ ctx }) =>
+  latestScan: legacyLegacyDayforgeChurnProcedure.query(({ ctx }) =>
     getLatestChurnScan(ctx.tenantId)
   ),
 
-  runScan: legacyDayforgeChurnProcedure
+  runScan: legacyLegacyDayforgeChurnProcedure
     .input(z.object({ requestId: uuid }))
     .mutation(({ ctx, input }) =>
       runCustomerChurnScan({
@@ -75,11 +75,11 @@ export const churnRadarRouter = router({
       })
     ),
 
-  interventions: legacyDayforgeChurnProcedure.query(({ ctx }) =>
+  interventions: legacyLegacyDayforgeChurnProcedure.query(({ ctx }) =>
     listRecoveryInterventions(ctx.tenantId)
   ),
 
-  intervention: legacyDayforgeChurnProcedure
+  intervention: legacyLegacyDayforgeChurnProcedure
     .input(z.object({ interventionId: uuid }))
     .query(async ({ ctx, input }) =>
       required(
@@ -91,7 +91,7 @@ export const churnRadarRouter = router({
       )
     ),
 
-  createIntervention: legacyDayforgeChurnProcedure
+  createIntervention: legacyLegacyDayforgeChurnProcedure
     .input(z.object({ snapshotId: uuid, requestId: uuid }))
     .mutation(async ({ ctx, input }) =>
       required(
@@ -104,7 +104,7 @@ export const churnRadarRouter = router({
       )
     ),
 
-  reviseDraft: legacyDayforgeChurnProcedure
+  reviseDraft: legacyLegacyDayforgeChurnProcedure
     .input(
       z.object({
         interventionId: uuid,
@@ -123,7 +123,7 @@ export const churnRadarRouter = router({
       )
     ),
 
-  approveDraft: legacyDayforgeChurnProcedure
+  approveDraft: legacyLegacyDayforgeChurnProcedure
     .input(
       z.object({
         interventionId: uuid,
@@ -144,7 +144,7 @@ export const churnRadarRouter = router({
       })
     ),
 
-  setPermission: legacyDayforgeChurnProcedure
+  setPermission: legacyLegacyDayforgeChurnProcedure
     .input(
       z
         .object({
@@ -181,7 +181,7 @@ export const churnRadarRouter = router({
       })
     ),
 
-  prepareManualContact: legacyDayforgeChurnProcedure
+  prepareManualContact: legacyLegacyDayforgeChurnProcedure
     .input(
       z.object({
         interventionId: uuid,
@@ -198,7 +198,7 @@ export const churnRadarRouter = router({
       })
     ),
 
-  markContacted: legacyDayforgeChurnProcedure
+  markContacted: legacyLegacyDayforgeChurnProcedure
     .input(
       z.object({
         interventionId: uuid,

@@ -64,7 +64,7 @@ Do not build a new agent runtime, tool dispatcher, permission layer, or approval
 - Wayward is the first Road Encounter. Rook is aboard only on the server progression read (`goldlineProgression.get` → `companionRookOwned` earned and true, through the overworld gate's identity guard); anything less fails closed and the outer tether stays sealed.
 
 ## Corrections to earlier notes in this file
-- The claim that drizzle/0067 + 0068 "need hand-written blocks in scripts/migrate.mjs" was wrong. Both files' own header comments say they apply via `applyDayforgeReleaseMigrations` with `DAYFORGE_RELEASE_DB=1` — a deliberately separate, gated path from `scripts/migrate.mjs`. Do not add them there.
+- The claim that drizzle/0067 + 0068 "need hand-written blocks in scripts/migrate.mjs" was wrong. Both files' own header comments say they apply via `applyLegacyDayforgeReleaseMigrations` with `DAYFORGE_RELEASE_DB=1` — a deliberately separate, gated path from `scripts/migrate.mjs`. Do not add them there.
 - The claim that "FirstChapter.tsx is localStorage-only ... persistence.ts sits unused" was wrong. `client/src/pages/GoldlineChapterHost.tsx` already wires `FirstChapter.tsx` to the server via `goldlineChapterState.get/save` and `goldlineChapterEventBinding`, with revision-conflict handling, a 4s sync loop, and graceful fallback to local storage when the server table doesn't exist yet (`state.error` path). The code is done; only applying the migration is outstanding, and that was already correctly recorded as blocked on Adam.
 
 ## Backlog

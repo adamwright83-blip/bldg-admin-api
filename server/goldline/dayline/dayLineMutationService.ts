@@ -9,7 +9,7 @@ import {
 import { getDb } from "../../db";
 import { ensureAdamBoard } from "../../claire/proactive/boardService";
 import { getDayDirectorState } from "../../dayDirector/dayDirectorService";
-import { listDayforgeToday } from "../../legacyDayforgeToday/legacyDayforgeTodayService";
+import { listLegacyDayforgeToday } from "../../legacyLegacyDayforgeToday/legacyLegacyDayforgeTodayService";
 import { getCommercialMission, listCommercialMissions } from "../../commercialMissions/commercialMissionStore";
 import {
   dayLineDisplayTitle,
@@ -57,7 +57,7 @@ export async function listActiveDayLineItems(input: {
       businessDate: input.businessDate,
     }),
     listCommercialMissions({ tenantId: input.tenantId, assignedTo: input.actorId, limit: 250 }),
-    listDayforgeToday({ tenantId: input.tenantId, userId: input.actorId, includeAllAssignees: false }).catch(
+    listLegacyDayforgeToday({ tenantId: input.tenantId, userId: input.actorId, includeAllAssignees: false }).catch(
       () => []
     ),
   ]);

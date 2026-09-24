@@ -4,7 +4,7 @@ import {
   claimMayBePresentedAsVerified,
   claimMayDriveDirectInstruction,
   type LegacyDayforgeCoachingClaim,
-} from "./legacyDayforgeCoaching";
+} from "./legacyLegacyDayforgeCoaching";
 
 function claim(overrides: Partial<LegacyDayforgeCoachingClaim>): LegacyDayforgeCoachingClaim {
   return {

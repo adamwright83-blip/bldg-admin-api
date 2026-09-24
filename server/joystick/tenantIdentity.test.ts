@@ -7,7 +7,7 @@ import { createContext } from "../_core/context";
 import { sdk } from "../_core/sdk";
 import { claireRouter } from "../claire/claireRouter";
 import { claireRelationshipOffboardingRouter } from "../claire/relationshipOffboardingRouter";
-import { resolveDayforgeMembership } from "../saas/tenantAccess";
+import { resolveLegacyDayforgeMembership } from "../saas/tenantAccess";
 import {
   authorizeJoystickClaireDesk,
   claireOperatorScope,
@@ -98,7 +98,7 @@ describe("JOYSTICK tenant identity", () => {
 
   it("denies a missing membership for a non-legacy tenant", async () => {
     expect(
-      await resolveDayforgeMembership({
+      await resolveLegacyDayforgeMembership({
         tenantId: "tenant-missing",
         userOpenId: "dayforge:nobody",
         platformRole: "user",
@@ -162,7 +162,7 @@ describe("JOYSTICK tenant identity", () => {
     ).toEqual({ ok: false, reason: "legacy_password_not_saas" });
     expect(lookup).not.toHaveBeenCalled();
     expect(
-      await resolveDayforgeMembership({
+      await resolveLegacyDayforgeMembership({
         tenantId: "tenant-victim",
         userOpenId: "driver-primary",
         platformRole: "driver",

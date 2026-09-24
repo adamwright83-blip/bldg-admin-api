@@ -38,7 +38,7 @@ export type LegacyDayforgeTodayItem = {
 
 const TERMINAL_STAGES = ["won", "lost"] as const;
 
-export function sortDayforgeTodayItems(
+export function sortLegacyDayforgeTodayItems(
   items: LegacyDayforgeTodayItem[],
   now = new Date()
 ): LegacyDayforgeTodayItem[] {
@@ -62,7 +62,7 @@ export function sortDayforgeTodayItems(
   });
 }
 
-export async function listDayforgeToday(input: {
+export async function listLegacyDayforgeToday(input: {
   tenantId: string;
   userId: string;
   includeAllAssignees?: boolean;
@@ -184,5 +184,5 @@ export async function listDayforgeToday(input: {
       destinationPath: `/commercial-missions?mission=${row.missionId}`,
     });
   }
-  return sortDayforgeTodayItems(items, now);
+  return sortLegacyDayforgeTodayItems(items, now);
 }

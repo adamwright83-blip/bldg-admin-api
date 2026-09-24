@@ -2,11 +2,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   configuredTrustProxy,
-  legacyDayforgeSecurityHeaders,
+  legacyLegacyDayforgeSecurityHeaders,
   evaluateMutationOrigin,
-  isAllowedDayforgeOrigin,
+  isAllowedLegacyDayforgeOrigin,
   resolveTrustedClientIp,
-} from "./legacyDayforgeSecurity";
+} from "./legacyLegacyDayforgeSecurity";
 import { publicProcedure, router } from "../_core/trpc";
 
 const production = { NODE_ENV: "production" } as NodeJS.ProcessEnv;
@@ -21,12 +21,12 @@ describe("DayForge request security", () => {
       ...production,
       DAYFORGE_ALLOWED_ORIGINS: "https://tenant.example.com",
     };
-    expect(isAllowedDayforgeOrigin("https://admin.bldg.chat", env)).toBe(true);
-    expect(isAllowedDayforgeOrigin("https://tenant.example.com", env)).toBe(true);
-    expect(isAllowedDayforgeOrigin("https://tenant.example.com.evil.test", env)).toBe(false);
-    expect(isAllowedDayforgeOrigin("https://admin.bldg.chat@evil.test", env)).toBe(false);
-    expect(isAllowedDayforgeOrigin("https://tenant.example.com/path", env)).toBe(false);
-    expect(isAllowedDayforgeOrigin("http://localhost:5173", env)).toBe(false);
+    expect(isAllowedLegacyDayforgeOrigin("https://admin.bldg.chat", env)).toBe(true);
+    expect(isAllowedLegacyDayforgeOrigin("https://tenant.example.com", env)).toBe(true);
+    expect(isAllowedLegacyDayforgeOrigin("https://tenant.example.com.evil.test", env)).toBe(false);
+    expect(isAllowedLegacyDayforgeOrigin("https://admin.bldg.chat@evil.test", env)).toBe(false);
+    expect(isAllowedLegacyDayforgeOrigin("https://tenant.example.com/path", env)).toBe(false);
+    expect(isAllowedLegacyDayforgeOrigin("http://localhost:5173", env)).toBe(false);
   });
 
   it("requires an allowed Origin for production cookie-authenticated writes", () => {
@@ -125,7 +125,7 @@ describe("DayForge request security", () => {
   it("sets CSP and standard hardening headers", () => {
     const setHeader = vi.fn();
     const next = vi.fn();
-    legacyDayforgeSecurityHeaders({
+    legacyLegacyDayforgeSecurityHeaders({
       ...production,
       VITE_SCHEDULER_URL: "https://scheduler.example.com/team/dayforge",
       VITE_API_URL: "https://api.example.com/v1",
@@ -176,7 +176,7 @@ describe("DayForge request security", () => {
     // world that had no geography in it.
     const setHeader = vi.fn();
     const next = vi.fn();
-    legacyDayforgeSecurityHeaders(production)({} as never, { setHeader } as never, next);
+    legacyLegacyDayforgeSecurityHeaders(production)({} as never, { setHeader } as never, next);
     const csp = setHeader.mock.calls.find(
       call => call[0] === "Content-Security-Policy"
     )?.[1] as string;

@@ -90,7 +90,7 @@ type LegacyDayforgeDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
  * are skipped when their table has not been deployed yet, which allows the
  * policy to precede evidence-upload and provider-diagnostic persistence.
  */
-export class MysqlDayforgeRetentionStore implements LegacyDayforgeRetentionStore {
+export class MysqlLegacyDayforgeRetentionStore implements LegacyDayforgeRetentionStore {
   private readonly availability = new Map<LegacyDayforgeRetentionResource, boolean>();
 
   constructor(
@@ -475,7 +475,7 @@ export type LegacyDayforgeRetentionRun = {
   operationalAuditPreserved: true;
 };
 
-export async function runDayforgeRetention(input: {
+export async function runLegacyDayforgeRetention(input: {
   store: LegacyDayforgeRetentionStore;
   dryRun?: boolean;
   batchLimit?: number;
@@ -536,15 +536,15 @@ export async function runDayforgeRetention(input: {
   };
 }
 
-export async function runDayforgeRetentionWithDatabase(input: {
+export async function runLegacyDayforgeRetentionWithDatabase(input: {
   dryRun?: boolean;
   batchLimit?: number;
   now?: Date;
 }): Promise<LegacyDayforgeRetentionRun> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return runDayforgeRetention({
+  return runLegacyDayforgeRetention({
     ...input,
-    store: new MysqlDayforgeRetentionStore(db),
+    store: new MysqlLegacyDayforgeRetentionStore(db),
   });
 }

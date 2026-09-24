@@ -7,7 +7,7 @@
  * integration tests — skips cleanly without a live MySQL connection.
  *
  * Usage: DAYFORGE_RELEASE_DB=1 DATABASE_URL=... pnpm vitest run --config
- * vitest.integration.config.ts server/legacyDayforgeDemo/demoMissionCode.integration.test.ts
+ * vitest.integration.config.ts server/legacyLegacyDayforgeDemo/demoMissionCode.integration.test.ts
  */
 import { describe, expect, it } from "vitest";
 import { getDb } from "../db";

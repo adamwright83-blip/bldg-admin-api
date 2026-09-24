@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, lt, or, sql, type SQL } from "drizzle-orm";
 import {
   commercialMissions,
   commercialOpportunities,
-  legacyDayforgeAuditEvents,
+  legacyLegacyDayforgeAuditEvents,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
 
@@ -20,10 +20,10 @@ export type LegacyDayforgeTimelineFilter = {
 
 function cursorPredicate(cursor: LegacyDayforgeTimelineCursor): SQL {
   return or(
-    lt(legacyDayforgeAuditEvents.createdAt, cursor.createdAt),
+    lt(legacyLegacyDayforgeAuditEvents.createdAt, cursor.createdAt),
     and(
-      eq(legacyDayforgeAuditEvents.createdAt, cursor.createdAt),
-      lt(legacyDayforgeAuditEvents.id, cursor.id)
+      eq(legacyLegacyDayforgeAuditEvents.createdAt, cursor.createdAt),
+      lt(legacyLegacyDayforgeAuditEvents.id, cursor.id)
     )
   )!;
 }
@@ -36,11 +36,11 @@ function relatedIdPredicate(
   const path = key === "missionId" ? "$.missionId" : "$.accountId";
   return or(
     inArray(
-      sql<string>`JSON_UNQUOTE(JSON_EXTRACT(${legacyDayforgeAuditEvents.beforeJson}, ${path}))`,
+      sql<string>`JSON_UNQUOTE(JSON_EXTRACT(${legacyLegacyDayforgeAuditEvents.beforeJson}, ${path}))`,
       stringIds
     ),
     inArray(
-      sql<string>`JSON_UNQUOTE(JSON_EXTRACT(${legacyDayforgeAuditEvents.afterJson}, ${path}))`,
+      sql<string>`JSON_UNQUOTE(JSON_EXTRACT(${legacyLegacyDayforgeAuditEvents.afterJson}, ${path}))`,
       stringIds
     )
   )!;
@@ -82,7 +82,7 @@ async function missionIdsForAccount(input: {
  * source of truth for their state machines; this is the tenant-scoped history
  * used to correlate a journey across those domains.
  */
-export async function listDayforgeTimeline(input: {
+export async function listLegacyDayforgeTimeline(input: {
   tenantId: string;
   filter?: LegacyDayforgeTimelineFilter;
   cursor?: LegacyDayforgeTimelineCursor;
@@ -92,15 +92,15 @@ export async function listDayforgeTimeline(input: {
   if (!db) return { items: [], nextCursor: null };
 
   const limit = Math.min(Math.max(input.limit ?? 100, 1), 250);
-  const predicates: SQL[] = [eq(legacyDayforgeAuditEvents.tenantId, input.tenantId)];
+  const predicates: SQL[] = [eq(legacyLegacyDayforgeAuditEvents.tenantId, input.tenantId)];
   const filter = input.filter;
 
   if (filter?.missionId !== undefined) {
     predicates.push(
       or(
         and(
-          eq(legacyDayforgeAuditEvents.entityType, "commercial_mission"),
-          eq(legacyDayforgeAuditEvents.entityId, String(filter.missionId))
+          eq(legacyLegacyDayforgeAuditEvents.entityType, "commercial_mission"),
+          eq(legacyLegacyDayforgeAuditEvents.entityId, String(filter.missionId))
         ),
         relatedIdPredicate("missionId", [filter.missionId])
       )!
@@ -113,8 +113,8 @@ export async function listDayforgeTimeline(input: {
       accountId: filter.accountId,
     });
     const accountPredicate = and(
-      eq(legacyDayforgeAuditEvents.entityType, "commercial_account"),
-      eq(legacyDayforgeAuditEvents.entityId, String(filter.accountId))
+      eq(legacyLegacyDayforgeAuditEvents.entityType, "commercial_account"),
+      eq(legacyLegacyDayforgeAuditEvents.entityId, String(filter.accountId))
     )!;
     predicates.push(
       missionIds.length === 0
@@ -126,8 +126,8 @@ export async function listDayforgeTimeline(input: {
             accountPredicate,
             relatedIdPredicate("accountId", [filter.accountId]),
             and(
-              eq(legacyDayforgeAuditEvents.entityType, "commercial_mission"),
-              inArray(legacyDayforgeAuditEvents.entityId, missionIds.map(String))
+              eq(legacyLegacyDayforgeAuditEvents.entityType, "commercial_mission"),
+              inArray(legacyLegacyDayforgeAuditEvents.entityId, missionIds.map(String))
             ),
             relatedIdPredicate("missionId", missionIds)
           )!
@@ -136,16 +136,16 @@ export async function listDayforgeTimeline(input: {
 
   if (filter?.correlationId) {
     predicates.push(
-      eq(legacyDayforgeAuditEvents.correlationId, filter.correlationId)
+      eq(legacyLegacyDayforgeAuditEvents.correlationId, filter.correlationId)
     );
   }
   if (input.cursor) predicates.push(cursorPredicate(input.cursor));
 
   const rows = await db
     .select()
-    .from(legacyDayforgeAuditEvents)
+    .from(legacyLegacyDayforgeAuditEvents)
     .where(and(...predicates))
-    .orderBy(desc(legacyDayforgeAuditEvents.createdAt), desc(legacyDayforgeAuditEvents.id))
+    .orderBy(desc(legacyLegacyDayforgeAuditEvents.createdAt), desc(legacyLegacyDayforgeAuditEvents.id))
     .limit(limit + 1);
   const hasMore = rows.length > limit;
   const items = hasMore ? rows.slice(0, limit) : rows;

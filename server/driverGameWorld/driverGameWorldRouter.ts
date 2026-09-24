@@ -1,7 +1,7 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { legacyDayforgeMissionFieldProcedure, router } from "../_core/trpc";
+import { legacyLegacyDayforgeMissionFieldProcedure, router } from "../_core/trpc";
 import {
   beginDriverRekindle,
   listDriverGameWorld,
@@ -40,13 +40,13 @@ function scoutProvider() {
 }
 
 export const driverGameWorldRouter = router({
-  current: legacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
+  current: legacyLegacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
     listDriverGameWorld({
       tenantId: ctx.tenantId,
       actorId: ctx.user.openId,
     })
   ),
-  progression: legacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
+  progression: legacyLegacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
     projectGoldlineProgressionForIdentity({
       tenantId: ctx.tenantId,
       actorId: ctx.user.openId,
@@ -58,7 +58,7 @@ export const driverGameWorldRouter = router({
    * repeatedly against unchanged evidence never creates a duplicate mutation
    * or a different world outcome.
    */
-  evaluateMutation: legacyDayforgeMissionFieldProcedure
+  evaluateMutation: legacyLegacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -81,7 +81,7 @@ export const driverGameWorldRouter = router({
         businessReferences: node.lossReason ? [node.lossReason] : [],
       });
     }),
-  latestMutation: legacyDayforgeMissionFieldProcedure
+  latestMutation: legacyLegacyDayforgeMissionFieldProcedure
     .input(z.object({ missionId: z.number().int().positive() }))
     .query(({ ctx, input }) =>
       getLatestMutation({
@@ -90,7 +90,7 @@ export const driverGameWorldRouter = router({
         missionId: input.missionId,
       })
     ),
-  beginRekindle: legacyDayforgeMissionFieldProcedure
+  beginRekindle: legacyLegacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -104,13 +104,13 @@ export const driverGameWorldRouter = router({
         missionId: input.missionId,
       })
     ),
-  coldCall: legacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
+  coldCall: legacyLegacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
     getColdCallBurstState({
       tenantId: ctx.tenantId,
       actorId: ctx.user.openId,
     })
   ),
-  createColdCallBatch: legacyDayforgeMissionFieldProcedure
+  createColdCallBatch: legacyLegacyDayforgeMissionFieldProcedure
     .input(z.object({ requestId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       createColdCallBatch({
@@ -119,7 +119,7 @@ export const driverGameWorldRouter = router({
         requestId: input.requestId,
       })
     ),
-  startColdCallTarget: legacyDayforgeMissionFieldProcedure
+  startColdCallTarget: legacyLegacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         batchId: z.string().uuid(),
@@ -143,7 +143,7 @@ export const driverGameWorldRouter = router({
         throw error;
       }
     }),
-  coldCallRollingCall: legacyDayforgeMissionFieldProcedure
+  coldCallRollingCall: legacyLegacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         batchId: z.string().uuid(),
@@ -157,7 +157,7 @@ export const driverGameWorldRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  completeColdCallTarget: legacyDayforgeMissionFieldProcedure
+  completeColdCallTarget: legacyLegacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         batchId: z.string().uuid(),
@@ -181,7 +181,7 @@ export const driverGameWorldRouter = router({
         throw error;
       }
     }),
-  selectColdCallChainTarget: legacyDayforgeMissionFieldProcedure
+  selectColdCallChainTarget: legacyLegacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         batchId: z.string().uuid(),
@@ -195,7 +195,7 @@ export const driverGameWorldRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  breakColdCallCombo: legacyDayforgeMissionFieldProcedure
+  breakColdCallCombo: legacyLegacyDayforgeMissionFieldProcedure
     .input(z.object({ batchId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       breakColdCallCombo({
@@ -204,19 +204,19 @@ export const driverGameWorldRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  scoutCapability: legacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
+  scoutCapability: legacyLegacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
     evaluateExpansionScoutForIdentity({
       tenantId: ctx.tenantId,
       actorId: ctx.user.openId,
     })
   ),
-  latestScoutReport: legacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
+  latestScoutReport: legacyLegacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
     getLatestScoutReport({
       tenantId: ctx.tenantId,
       actorId: ctx.user.openId,
     })
   ),
-  runScout: legacyDayforgeMissionFieldProcedure
+  runScout: legacyLegacyDayforgeMissionFieldProcedure
     .input(z.object({ requestId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       runExpansionScout({

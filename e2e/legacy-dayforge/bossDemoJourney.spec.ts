@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 
 /**
  * Boss demo presentational smoke test. This complements
- * legacyDayforgeBossDemoAcceptance.integration.test.ts, which asserts business
+ * legacyLegacyDayforgeBossDemoAcceptance.integration.test.ts, which asserts business
  * logic; this spec only asserts that the presentational surfaces of the
  * journey render without crashing across desktop and mobile viewports.
  *

@@ -3,14 +3,14 @@ import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  legacyDayforgeReleaseMigrationFilenames,
-  normalizeDayforgeReleaseMigrationSql,
+  legacyLegacyDayforgeReleaseMigrationFilenames,
+  normalizeLegacyDayforgeReleaseMigrationSql,
 } from "./applyReleaseMigrations";
 
 describe("DayForge release migration runner", () => {
   it("selects every root SQL migration in stable filename order", async () => {
     const migrationDirectory = resolve(process.cwd(), "drizzle");
-    const filenames = legacyDayforgeReleaseMigrationFilenames(
+    const filenames = legacyLegacyDayforgeReleaseMigrationFilenames(
       await readdir(migrationDirectory)
     );
     expect(filenames[0]).toMatch(/^0000_/);
@@ -23,7 +23,7 @@ describe("DayForge release migration runner", () => {
     expect(new Set(filenames).size).toBe(filenames.length);
 
     for (const filename of filenames) {
-      const normalized = normalizeDayforgeReleaseMigrationSql(
+      const normalized = normalizeLegacyDayforgeReleaseMigrationSql(
         await readFile(resolve(migrationDirectory, filename), "utf8")
       );
       expect(normalized.trim(), `${filename} must not be empty`).not.toBe("");
@@ -35,7 +35,7 @@ describe("DayForge release migration runner", () => {
 
   it("removes Drizzle breakpoints without removing SQL statements", () => {
     expect(
-      normalizeDayforgeReleaseMigrationSql(
+      normalizeLegacyDayforgeReleaseMigrationSql(
         "CREATE TABLE one (id int);\n--> statement-breakpoint\nCREATE TABLE two (id int);"
       )
     ).toBe("CREATE TABLE one (id int);\n\nCREATE TABLE two (id int);");

@@ -1,12 +1,12 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { and, eq } from "drizzle-orm";
 import {
-  legacyDayforgeSaasEntitlements,
-  legacyDayforgeSaasMemberships,
-  legacyDayforgeSaasSubscriptions,
+  legacyLegacyDayforgeSaasEntitlements,
+  legacyLegacyDayforgeSaasMemberships,
+  legacyLegacyDayforgeSaasSubscriptions,
 } from "../../drizzle/schema";
 import {
-  subscriptionAllowsDayforgeAccess,
+  subscriptionAllowsLegacyDayforgeAccess,
   type LegacyDayforgeEntitlement,
   type SaasTenantMemberRole,
 } from "../../shared/saasTenant";
@@ -31,7 +31,7 @@ function legacyTenantIds(): Set<string> {
   );
 }
 
-export async function resolveDayforgeMembership(input: {
+export async function resolveLegacyDayforgeMembership(input: {
   tenantId: string;
   userOpenId: string;
   platformRole: "admin" | "driver" | "user";
@@ -56,23 +56,23 @@ export async function getActiveTenantMembership(input: {
   if (!db) return null;
   const [membership] = await db
     .select({
-      tenantId: legacyDayforgeSaasMemberships.tenantId,
-      userOpenId: legacyDayforgeSaasMemberships.userOpenId,
-      role: legacyDayforgeSaasMemberships.role,
+      tenantId: legacyLegacyDayforgeSaasMemberships.tenantId,
+      userOpenId: legacyLegacyDayforgeSaasMemberships.userOpenId,
+      role: legacyLegacyDayforgeSaasMemberships.role,
     })
-    .from(legacyDayforgeSaasMemberships)
+    .from(legacyLegacyDayforgeSaasMemberships)
     .where(
       and(
-        eq(legacyDayforgeSaasMemberships.tenantId, input.tenantId),
-        eq(legacyDayforgeSaasMemberships.userOpenId, input.userOpenId),
-        eq(legacyDayforgeSaasMemberships.active, true)
+        eq(legacyLegacyDayforgeSaasMemberships.tenantId, input.tenantId),
+        eq(legacyLegacyDayforgeSaasMemberships.userOpenId, input.userOpenId),
+        eq(legacyLegacyDayforgeSaasMemberships.active, true)
       )
     )
     .limit(1);
   return membership ?? null;
 }
 
-export async function hasDayforgeEntitlement(input: {
+export async function hasLegacyDayforgeEntitlement(input: {
   tenantId: string;
   entitlement: LegacyDayforgeEntitlement;
   now?: Date;
@@ -83,12 +83,12 @@ export async function hasDayforgeEntitlement(input: {
 
   const [subscription] = await db
     .select()
-    .from(legacyDayforgeSaasSubscriptions)
-    .where(eq(legacyDayforgeSaasSubscriptions.tenantId, input.tenantId))
+    .from(legacyLegacyDayforgeSaasSubscriptions)
+    .where(eq(legacyLegacyDayforgeSaasSubscriptions.tenantId, input.tenantId))
     .limit(1);
   if (
     !subscription ||
-    !subscriptionAllowsDayforgeAccess({
+    !subscriptionAllowsLegacyDayforgeAccess({
       status: subscription.status,
       now: input.now,
       graceEndsAt: subscription.graceEndsAt,
@@ -101,11 +101,11 @@ export async function hasDayforgeEntitlement(input: {
   const now = input.now ?? new Date();
   const rows = await db
     .select()
-    .from(legacyDayforgeSaasEntitlements)
+    .from(legacyLegacyDayforgeSaasEntitlements)
     .where(
       and(
-        eq(legacyDayforgeSaasEntitlements.tenantId, input.tenantId),
-        eq(legacyDayforgeSaasEntitlements.entitlementKey, input.entitlement)
+        eq(legacyLegacyDayforgeSaasEntitlements.tenantId, input.tenantId),
+        eq(legacyLegacyDayforgeSaasEntitlements.entitlementKey, input.entitlement)
       )
     );
 

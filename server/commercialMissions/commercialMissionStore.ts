@@ -36,16 +36,16 @@ import {
   syncCommercialPipelineForMissionTransitionWith,
 } from "../commercialPipeline/commercialPipelineCore";
 import {
-  writeDayforgeEventWith,
+  writeLegacyDayforgeEventWith,
   type LegacyDayforgeServerActor,
-} from "../legacyDayforgeEvents/legacyDayforgeEventStore";
+} from "../legacyLegacyDayforgeEvents/legacyLegacyDayforgeEventStore";
 
 type Actor = {
   type: "system" | "operator" | "driver" | "game";
   id: string | null;
 };
 
-function legacyDayforgeActor(actor: Actor): LegacyDayforgeServerActor {
+function legacyLegacyDayforgeActor(actor: Actor): LegacyDayforgeServerActor {
   return {
     type: actor.type === "driver" ? "field" : actor.type,
     id: actor.id,
@@ -670,9 +670,9 @@ export async function createCommercialMission(input: {
       const created = await readCommercialMissionWith(tx, { tenantId: input.tenantId, missionId });
       if (!created) throw new Error("Commercial mission insert did not return a row");
       const projectionCorrelationId = missionProjectionCorrelationId(missionId, input.idempotencyKey);
-      await writeDayforgeEventWith(tx, {
+      await writeLegacyDayforgeEventWith(tx, {
         tenantId: input.tenantId,
-        actor: legacyDayforgeActor(input.actor),
+        actor: legacyLegacyDayforgeActor(input.actor),
         entityType: "commercial_mission",
         entityId: String(missionId),
         eventName: "mission_created",
@@ -696,9 +696,9 @@ export async function createCommercialMission(input: {
         },
       });
       if (created.assignedTo) {
-        await writeDayforgeEventWith(tx, {
+        await writeLegacyDayforgeEventWith(tx, {
           tenantId: input.tenantId,
-          actor: legacyDayforgeActor(input.actor),
+          actor: legacyLegacyDayforgeActor(input.actor),
           entityType: "commercial_mission",
           entityId: String(missionId),
           eventName: "mission_assigned",
@@ -889,9 +889,9 @@ export async function transitionCommercialMissionWith(
       if (!transitioned) throw new Error("Commercial mission transition did not return a row");
       const productEventName = productEventForMissionLifecycle({ eventName, metadata: input.metadata });
       const projectionCorrelationId = missionProjectionCorrelationId(input.missionId, input.idempotencyKey);
-      await writeDayforgeEventWith(tx, {
+      await writeLegacyDayforgeEventWith(tx, {
         tenantId: input.tenantId,
-        actor: legacyDayforgeActor(input.actor),
+        actor: legacyLegacyDayforgeActor(input.actor),
         entityType: "commercial_mission",
         entityId: String(input.missionId),
         eventName,

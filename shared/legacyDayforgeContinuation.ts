@@ -90,14 +90,14 @@ export function validateInternalReturnTo(value: unknown): string | null {
   return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 }
 
-export function defaultDayforgeDestination(): LegacyDayforgeAuthenticatedDestination {
+export function defaultLegacyDayforgeDestination(): LegacyDayforgeAuthenticatedDestination {
   return {
     destination: "/dayforge-today",
     destinationKind: "dayforge_today",
   };
 }
 
-export function resolveDayforgeAuthenticatedDestination(input: {
+export function resolveLegacyDayforgeAuthenticatedDestination(input: {
   missionHandoffPath?: unknown;
   previewSessionId?: unknown;
   returnTo?: unknown;
@@ -114,5 +114,5 @@ export function resolveDayforgeAuthenticatedDestination(input: {
   }
   const returnTo = validateInternalReturnTo(input.returnTo);
   if (returnTo) return { destination: returnTo, destinationKind: "internal_return_to" };
-  return defaultDayforgeDestination();
+  return defaultLegacyDayforgeDestination();
 }

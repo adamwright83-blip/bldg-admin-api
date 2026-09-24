@@ -42,8 +42,8 @@ const builder = readFileSync(
 
 describe("driver mission builder contract", () => {
   it("exposes only field-authorized build and route-list procedures", () => {
-    expect(router).toContain("myBuiltMissions: legacyDayforgeMissionFieldProcedure");
-    expect(router).toContain("buildForDriver: legacyDayforgeMissionFieldProcedure");
+    expect(router).toContain("myBuiltMissions: legacyLegacyDayforgeMissionFieldProcedure");
+    expect(router).toContain("buildForDriver: legacyLegacyDayforgeMissionFieldProcedure");
     expect(router).toContain("driverId: ctx.user.openId");
   });
 

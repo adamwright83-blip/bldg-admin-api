@@ -31,7 +31,7 @@ vi.mock("../saas/tenantAccess", async importOriginal => {
   const actual = await importOriginal<typeof import("../saas/tenantAccess")>();
   return {
     ...actual,
-    resolveDayforgeMembership: access.resolveMembership,
+    resolveLegacyDayforgeMembership: access.resolveMembership,
   };
 });
 

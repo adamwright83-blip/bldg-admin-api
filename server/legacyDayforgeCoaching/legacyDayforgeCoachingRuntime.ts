@@ -10,8 +10,8 @@
 import { ENV } from "../_core/env";
 import { invokeLLM, type InvokeResult } from "../_core/llm";
 import { getCommercialMission } from "../commercialMissions/commercialMissionStore";
-import { createDayforgeCoachingArtifactService, legacyDayforgeCoachingContextHash } from "./legacyDayforgeCoachingArtifactService";
-import { legacyDayforgeCoachingArtifactRepository, getActiveDayforgeCoachingArtifact } from "./legacyDayforgeCoachingArtifactStore";
+import { createLegacyDayforgeCoachingArtifactService, legacyLegacyDayforgeCoachingContextHash } from "./legacyLegacyDayforgeCoachingArtifactService";
+import { legacyLegacyDayforgeCoachingArtifactRepository, getActiveLegacyDayforgeCoachingArtifact } from "./legacyLegacyDayforgeCoachingArtifactStore";
 
 const PROMPT_VERSION = "legacy-dayforge-field-coach-v1";
 const MODEL_SCHEMA = {
@@ -40,7 +40,7 @@ function resultText(result: InvokeResult) {
   return typeof value === "string" ? value : "";
 }
 
-export async function generateDayforgeMissionCoaching(input: {
+export async function generateLegacyDayforgeMissionCoaching(input: {
   tenantId: string; missionId: number; stepId: number | null; requestId: string; actorId: string; refresh?: boolean;
 }) {
   const mission = await getCommercialMission({ tenantId: input.tenantId, missionId: input.missionId });
@@ -53,8 +53,8 @@ export async function generateDayforgeMissionCoaching(input: {
     contact: mission.account.decisionMaker.name ? { name: mission.account.decisionMaker.name, title: mission.account.decisionMaker.title, provenance: mission.account.decisionMaker.source ?? "unknown" } : null,
     unknowns: [!mission.account.decisionMaker.name ? "decision-maker name" : null].filter(Boolean),
   };
-  const contextHash = legacyDayforgeCoachingContextHash(context);
-  const service = createDayforgeCoachingArtifactService({ repository: legacyDayforgeCoachingArtifactRepository });
+  const contextHash = legacyLegacyDayforgeCoachingContextHash(context);
+  const service = createLegacyDayforgeCoachingArtifactService({ repository: legacyLegacyDayforgeCoachingArtifactRepository });
   if (!input.refresh) {
     const reusable = await service.findReusable({ tenantId: input.tenantId, missionId: input.missionId, missionStepId: input.stepId, accountId: mission.account.accountId, provider: "anthropic", modelId: ENV.anthropicModel, promptVersion: PROMPT_VERSION, contextHash });
     if (reusable) return reusable;
@@ -83,4 +83,4 @@ export async function generateDayforgeMissionCoaching(input: {
   return service.save({ tenantId: input.tenantId, missionId: input.missionId, missionStepId: input.stepId, accountId: mission.account.accountId, requestId: input.requestId, requestedBy: input.actorId, provider: "anthropic", modelId: ENV.anthropicModel, promptVersion: PROMPT_VERSION, contextHash, fallbackCategory: mission.account.accountType.includes("hotel") ? "luxury_full_service_hotel" : "other_local_service_business", providerResult, latencyMs: Date.now() - started, inputTokens: usage?.prompt_tokens ?? null, outputTokens: usage?.completion_tokens ?? null });
 }
 
-export { getActiveDayforgeCoachingArtifact };
+export { getActiveLegacyDayforgeCoachingArtifact };

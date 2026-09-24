@@ -90,7 +90,7 @@ export function normalizeSaasEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
-export function subscriptionAllowsDayforgeAccess(
+export function subscriptionAllowsLegacyDayforgeAccess(
   input: SaasSubscriptionStatus | SaasSubscriptionAccessInput
 ): boolean {
   const status = typeof input === "string" ? input : input.status;

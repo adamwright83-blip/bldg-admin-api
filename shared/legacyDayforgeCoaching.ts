@@ -38,7 +38,7 @@ export const DAYFORGE_COACHING_CLAIM_KEYS = [
 export type LegacyDayforgeCoachingClaimKey =
   (typeof DAYFORGE_COACHING_CLAIM_KEYS)[number];
 
-export const legacyDayforgeEvidenceReferenceSchema = z.object({
+export const legacyLegacyDayforgeEvidenceReferenceSchema = z.object({
   id: z.string().trim().min(1).max(191),
   sourceType: z.enum(DAYFORGE_CLAIM_PROVENANCE_TYPES),
   capturedAt: z.string().datetime(),
@@ -54,10 +54,10 @@ export const legacyDayforgeEvidenceReferenceSchema = z.object({
 }).strict();
 
 export type LegacyDayforgeEvidenceReference = z.infer<
-  typeof legacyDayforgeEvidenceReferenceSchema
+  typeof legacyLegacyDayforgeEvidenceReferenceSchema
 >;
 
-export const legacyDayforgeCoachingClaimSchema = z.object({
+export const legacyLegacyDayforgeCoachingClaimSchema = z.object({
   key: z.enum(DAYFORGE_COACHING_CLAIM_KEYS),
   displayValue: z.string().trim().min(1).max(512),
   provenance: z.enum(DAYFORGE_CLAIM_PROVENANCE_TYPES),
@@ -101,7 +101,7 @@ export type LegacyDayforgeEvidenceEnvelope = {
   capturedAt: string;
 };
 
-export const legacyDayforgeCoachingOutputSchema = z.object({
+export const legacyLegacyDayforgeCoachingOutputSchema = z.object({
   recommendedRole: z.string().trim().min(1).max(120),
   roleRationale: z.string().trim().min(1).max(500),
   firstNavigationPoint: z.string().trim().min(1).max(240),
@@ -111,11 +111,11 @@ export const legacyDayforgeCoachingOutputSchema = z.object({
   likelyObjectionCategories: z.array(z.string().trim().min(1).max(120)).max(3),
   doNotClaim: z.array(z.string().trim().min(1).max(300)).max(10),
   unknowns: z.array(z.string().trim().min(1).max(300)).max(10),
-  claims: z.array(legacyDayforgeCoachingClaimSchema).max(30),
+  claims: z.array(legacyLegacyDayforgeCoachingClaimSchema).max(30),
   generatedSummary: z.string().trim().min(1).max(800),
 }).strict();
 
-export const legacyDayforgeModelCoachingOutputSchema = legacyDayforgeCoachingOutputSchema
+export const legacyLegacyDayforgeModelCoachingOutputSchema = legacyLegacyDayforgeCoachingOutputSchema
   .omit({ claims: true })
   .extend({
     claims: z.array(z.object({

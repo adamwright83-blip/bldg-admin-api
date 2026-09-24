@@ -55,7 +55,7 @@ export default function AdminHome({ operatorName = "Admin", path = "/", onNaviga
   const received = trpc.admin.listByStatus.useQuery({ status: "new" }, options);
   const collected = trpc.admin.listByStatus.useQuery({ status: "collected" }, options);
   const processing = trpc.admin.listByStatus.useQuery({ status: "processing" }, options);
-  const todayQueue = trpc.system.legacyDayforgeToday.list.useQuery(undefined, { retry: false, refetchInterval: 30_000 });
+  const todayQueue = trpc.system.legacyLegacyDayforgeToday.list.useQuery(undefined, { retry: false, refetchInterval: 30_000 });
   const towerToday = trpc.system.towerWars.today.useQuery(undefined, options);
   const geographicAtlas = trpc.system.geographicTruth.atlas.useQuery(undefined, { staleTime: 30_000 });
   const customerClusters = useMemo(() => clusterGeographicCustomers((geographicAtlas.data?.customers ?? []) as any), [geographicAtlas.data?.customers]);

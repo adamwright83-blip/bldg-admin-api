@@ -3,7 +3,7 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { commercialFollowUps, orders } from "../../drizzle/schema";
 import { deterministicEstimate, sourcedFact } from "../../shared/businessGame";
 import { getDb } from "../db";
-import { listDayforgeToday } from "../legacyDayforgeToday/legacyDayforgeTodayService";
+import { listLegacyDayforgeToday } from "../legacyLegacyDayforgeToday/legacyLegacyDayforgeTodayService";
 import type { FieldTodayItem, FieldTodayProjection } from "./types";
 import { listRecoveryInterventions, physicalEntityIdsForInterventions } from "../churnRadar/customerChurnService";
 import { listForgeJobs } from "../worldForge/worldForgeService";
@@ -112,7 +112,7 @@ export async function getFieldToday(input: {
   const isFutureDate = date > businessDate(now, timeZone);
   const [orderRows, commercialItems, completedFollowUps, recoveries, forgeJobs, pressure] = await Promise.all([
     db.select().from(orders).where(sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId} AND (${orders.pickupDate} = ${date} OR ${orders.deliveryDate} = ${date})`).orderBy(asc(orders.pickupDate), asc(orders.id)),
-    listDayforgeToday({ tenantId: input.tenantId, userId: input.userId, includeAllAssignees: input.includeAllAssignees }),
+    listLegacyDayforgeToday({ tenantId: input.tenantId, userId: input.userId, includeAllAssignees: input.includeAllAssignees }),
     db.select({
       id: commercialFollowUps.id,
       assignedTo: commercialFollowUps.assignedTo,

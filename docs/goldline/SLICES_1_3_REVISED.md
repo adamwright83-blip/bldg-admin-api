@@ -255,7 +255,7 @@ until whichever answer is chosen is built.
 
 ## 3.2 Correction: Rook is already a shipped product persona
 
-`server/legacyDayforgeCoaching/legacyDayforgeCoachingRuntime.ts` opens its system prompt with
+`server/legacyLegacyDayforgeCoaching/legacyLegacyDayforgeCoachingRuntime.ts` opens its system prompt with
 "You are Rook, a concise field-sales coach." Rook appears on the public LegacyDayforge
 landing page as a calling field-sales coach and a "Rook field handoff" feature, and
 `client/src/pages/LegacyDayforgeLanding.test.ts` asserts the name.

@@ -29,8 +29,8 @@ describe("commercial mission call and activation contract", () => {
   });
 
   it("persists call attempts through field-authorized mission procedures", () => {
-    expect(routerSource).toContain("callAttempts: legacyDayforgeMissionFieldProcedure");
-    expect(routerSource).toContain("logCallAttempt: legacyDayforgeMissionFieldProcedure");
+    expect(routerSource).toContain("callAttempts: legacyLegacyDayforgeMissionFieldProcedure");
+    expect(routerSource).toContain("logCallAttempt: legacyLegacyDayforgeMissionFieldProcedure");
     expect(routerSource).toContain("assertDriverCanReadMission");
   });
 
@@ -42,7 +42,7 @@ describe("commercial mission call and activation contract", () => {
   });
 
   it("activates only an active field user and advances to game ready", () => {
-    expect(activationSource).toContain('eq(legacyDayforgeSaasMemberships.active, true)');
+    expect(activationSource).toContain('eq(legacyLegacyDayforgeSaasMemberships.active, true)');
     expect(activationSource).toContain('eq(users.role, "driver")');
     expect(activationSource).toContain('toStatus: "selected"');
     expect(activationSource).toContain('toStatus: "game_ready"');

@@ -9,9 +9,9 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
 import {
-  legacyDayforgeSaasEntitlements,
-  legacyDayforgeSaasMemberships,
-  legacyDayforgeSaasSubscriptions,
+  legacyLegacyDayforgeSaasEntitlements,
+  legacyLegacyDayforgeSaasMemberships,
+  legacyLegacyDayforgeSaasSubscriptions,
   salesIntelSourceArtifacts,
   salesIntelTeachings,
   salesIntelTranscripts,
@@ -91,27 +91,27 @@ describe.skipIf(!runDatabaseGate)(
           .where(eq(salesIntelSourceArtifacts.id, artifactId));
       }
       await database
-        .delete(legacyDayforgeSaasEntitlements)
-        .where(eq(legacyDayforgeSaasEntitlements.tenantId, tenantId));
+        .delete(legacyLegacyDayforgeSaasEntitlements)
+        .where(eq(legacyLegacyDayforgeSaasEntitlements.tenantId, tenantId));
       await database
-        .delete(legacyDayforgeSaasSubscriptions)
-        .where(eq(legacyDayforgeSaasSubscriptions.tenantId, tenantId));
+        .delete(legacyLegacyDayforgeSaasSubscriptions)
+        .where(eq(legacyLegacyDayforgeSaasSubscriptions.tenantId, tenantId));
       await database
-        .delete(legacyDayforgeSaasMemberships)
-        .where(eq(legacyDayforgeSaasMemberships.tenantId, tenantId));
+        .delete(legacyLegacyDayforgeSaasMemberships)
+        .where(eq(legacyLegacyDayforgeSaasMemberships.tenantId, tenantId));
     });
 
     it("reads persisted reviewed intel through real auth, projection, Goldline, and Stronghold boundaries", async () => {
       const database = await getDb();
       if (!database) throw new Error("Database not available");
       const now = new Date();
-      await database.insert(legacyDayforgeSaasMemberships).values({
+      await database.insert(legacyLegacyDayforgeSaasMemberships).values({
         tenantId,
         userOpenId: actorId,
         role: "field",
         active: true,
       });
-      await database.insert(legacyDayforgeSaasSubscriptions).values({
+      await database.insert(legacyLegacyDayforgeSaasSubscriptions).values({
         tenantId,
         planKey: "integration-test",
         stripeCustomerId: `cus_${randomUUID()}`,
@@ -120,7 +120,7 @@ describe.skipIf(!runDatabaseGate)(
         lastStripeEventId: `evt_${randomUUID()}`,
         lastStripeEventCreatedAt: now,
       });
-      await database.insert(legacyDayforgeSaasEntitlements).values({
+      await database.insert(legacyLegacyDayforgeSaasEntitlements).values({
         tenantId,
         entitlementKey: "dayforge_field",
         source: "manual",

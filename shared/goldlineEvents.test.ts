@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   GOLDLINE_CLIENT_EVENT_NAMES,
   isGoldlineClientEventName,
-  sanitizeDayforgeProductEventProperties,
-} from "./legacyDayforgeEvents";
+  sanitizeLegacyDayforgeProductEventProperties,
+} from "./legacyLegacyDayforgeEvents";
 
 describe("Goldline client event whitelist", () => {
   it("never includes a business-critical event a client could self-report", () => {
@@ -28,7 +28,7 @@ describe("Goldline client event whitelist", () => {
 
 describe("Goldline event property sanitization", () => {
   it("strips any key not on the coarse allowlist", () => {
-    const sanitized = sanitizeDayforgeProductEventProperties(
+    const sanitized = sanitizeLegacyDayforgeProductEventProperties(
       "mission_engaged",
       {
         sessionId: "s-1",
@@ -51,7 +51,7 @@ describe("Goldline event property sanitization", () => {
   });
 
   it("keeps encounter_resolved coarse — archetype and performance only", () => {
-    const sanitized = sanitizeDayforgeProductEventProperties(
+    const sanitized = sanitizeLegacyDayforgeProductEventProperties(
       "encounter_resolved",
       {
         sessionId: "s-2",
@@ -68,7 +68,7 @@ describe("Goldline event property sanitization", () => {
   });
 
   it("keeps verified_capture free of dollar amounts, only a coarse band", () => {
-    const sanitized = sanitizeDayforgeProductEventProperties(
+    const sanitized = sanitizeLegacyDayforgeProductEventProperties(
       "verified_capture",
       {
         sessionId: "s-3",

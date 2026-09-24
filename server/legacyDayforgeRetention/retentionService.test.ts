@@ -7,7 +7,7 @@ import {
   type LegacyDayforgeRetentionResource,
 } from "./retentionPolicy";
 import {
-  runDayforgeRetention,
+  runLegacyDayforgeRetention,
   type LegacyDayforgeRetentionStore,
 } from "./retentionService";
 
@@ -38,7 +38,7 @@ describe("DayForge retention", () => {
     const store = new FakeStore();
     store.counts.set("anonymous_preview_results", 8);
     store.counts.set("anonymous_preview_sessions", 8);
-    const result = await runDayforgeRetention({
+    const result = await runLegacyDayforgeRetention({
       store,
       dryRun: true,
       batchLimit: 10,
@@ -56,9 +56,9 @@ describe("DayForge retention", () => {
   it("is bounded and naturally idempotent across cleanup retries", async () => {
     const store = new FakeStore();
     store.counts.set("product_analytics", 3);
-    const first = await runDayforgeRetention({ store, batchLimit: 2 });
-    const second = await runDayforgeRetention({ store, batchLimit: 2 });
-    const third = await runDayforgeRetention({ store, batchLimit: 2 });
+    const first = await runLegacyDayforgeRetention({ store, batchLimit: 2 });
+    const second = await runLegacyDayforgeRetention({ store, batchLimit: 2 });
+    const third = await runLegacyDayforgeRetention({ store, batchLimit: 2 });
     expect(first.resources.find(row => row.resource === "product_analytics")?.purged).toBe(2);
     expect(second.resources.find(row => row.resource === "product_analytics")?.purged).toBe(1);
     expect(third.totalEligible).toBe(0);

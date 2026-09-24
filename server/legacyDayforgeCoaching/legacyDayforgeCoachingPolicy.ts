@@ -2,15 +2,15 @@
 import {
   DAYFORGE_COACHING_CLAIM_KEYS,
   claimMayDriveDirectInstruction,
-  legacyDayforgeCoachingOutputSchema,
-  legacyDayforgeEvidenceReferenceSchema,
-  legacyDayforgeModelCoachingOutputSchema,
+  legacyLegacyDayforgeCoachingOutputSchema,
+  legacyLegacyDayforgeEvidenceReferenceSchema,
+  legacyLegacyDayforgeModelCoachingOutputSchema,
   type LegacyDayforgeClaimProvenance,
   type LegacyDayforgeCoachingClaim,
   type LegacyDayforgeCoachingClaimKey,
   type LegacyDayforgeCoachingOutput,
   type LegacyDayforgeEvidenceReference,
-} from "@shared/legacyDayforgeCoaching";
+} from "@shared/legacyLegacyDayforgeCoaching";
 
 export const DAYFORGE_COACHING_FALLBACK_CATEGORIES = [
   "luxury_full_service_hotel",
@@ -49,7 +49,7 @@ export type LegacyDayforgeCoachingGroundingEvidence = {
   reference: LegacyDayforgeEvidenceReference;
 };
 
-export type PreparedDayforgeCoachingArtifact = {
+export type PreparedLegacyDayforgeCoachingArtifact = {
   generationStatus: "generated" | "fallback";
   structuredOutput: LegacyDayforgeCoachingOutput;
   evidenceReferences: LegacyDayforgeEvidenceReference[];
@@ -149,7 +149,7 @@ function outputProse(output: LegacyDayforgeCoachingOutput): string[] {
   ];
 }
 
-export function assertDayforgeCoachingOutputIsSafeForStorage(
+export function assertLegacyDayforgeCoachingOutputIsSafeForStorage(
   output: LegacyDayforgeCoachingOutput,
 ): void {
   const unsafe = outputProse(output).find(value =>
@@ -184,10 +184,10 @@ function sourceAllowsDirectInstruction(provenance: LegacyDayforgeClaimProvenance
   ].includes(provenance);
 }
 
-export function sanitizeDayforgeEvidenceReferenceForStorage(
+export function sanitizeLegacyDayforgeEvidenceReferenceForStorage(
   reference: LegacyDayforgeEvidenceReference,
 ): LegacyDayforgeEvidenceReference {
-  const parsed = legacyDayforgeEvidenceReferenceSchema.safeParse(reference);
+  const parsed = legacyLegacyDayforgeEvidenceReferenceSchema.safeParse(reference);
   if (!parsed.success) {
     throw new LegacyDayforgeCoachingPolicyError(
       "invalid_evidence",
@@ -258,7 +258,7 @@ function validatedGroundingEvidence(
         "Coaching evidence display value is outside the allowed bounds",
       );
     }
-    const reference = sanitizeDayforgeEvidenceReferenceForStorage(candidate.reference);
+    const reference = sanitizeLegacyDayforgeEvidenceReferenceForStorage(candidate.reference);
     const previous = byId.get(reference.id);
     if (previous) {
       const same = previous.claimKey === candidate.claimKey &&
@@ -297,12 +297,12 @@ function assertUniqueClaimKeys(
  * Provenance, confidence, grounded state, and direct-instruction safety are all
  * assigned here from server-owned evidence; the model schema cannot set them.
  */
-export function groundDayforgeModelCoachingOutput(input: {
+export function groundLegacyDayforgeModelCoachingOutput(input: {
   rawOutput: unknown;
   evidence: LegacyDayforgeCoachingGroundingEvidence[];
   generatedAt: Date;
-}): PreparedDayforgeCoachingArtifact {
-  const parsed = legacyDayforgeModelCoachingOutputSchema.safeParse(input.rawOutput);
+}): PreparedLegacyDayforgeCoachingArtifact {
+  const parsed = legacyLegacyDayforgeModelCoachingOutputSchema.safeParse(input.rawOutput);
   if (!parsed.success) {
     throw new LegacyDayforgeCoachingPolicyError(
       "invalid_structured_output",
@@ -342,7 +342,7 @@ export function groundDayforgeModelCoachingOutput(input: {
       grounded: true,
     };
   });
-  const initiallyGroundedOutput = legacyDayforgeCoachingOutputSchema.parse({ ...parsed.data, claims });
+  const initiallyGroundedOutput = legacyLegacyDayforgeCoachingOutputSchema.parse({ ...parsed.data, claims });
   for (const directField of DIRECT_FIELD_KEYS) {
     const value = normalizedDisplayValue(directField.read(initiallyGroundedOutput));
     const claim = claims.find(candidate =>
@@ -375,7 +375,7 @@ export function groundDayforgeModelCoachingOutput(input: {
   const unknownLabels = Array.from(new Set(
     suppressedAccountClaimKeys.map(key => CLAIM_LABELS[key] ?? "account detail"),
   ));
-  const output = legacyDayforgeCoachingOutputSchema.parse({
+  const output = legacyLegacyDayforgeCoachingOutputSchema.parse({
     recommendedRole: parsed.data.recommendedRole,
     roleRationale: "This is a practical role to ask for based on the supplied guidance; it is not an account-verified individual.",
     firstNavigationPoint: parsed.data.firstNavigationPoint,
@@ -396,7 +396,7 @@ export function groundDayforgeModelCoachingOutput(input: {
     claims: retainedClaims,
     generatedSummary: `Ask for the ${parsed.data.recommendedRole}. Use the listed first move and fallback without implying that account-specific facts were verified.`,
   });
-  assertDayforgeCoachingOutputIsSafeForStorage(output);
+  assertLegacyDayforgeCoachingOutputIsSafeForStorage(output);
 
   const usedReferenceIds = new Set(
     retainedClaims.flatMap(claim => claim.evidenceReferenceId ? [claim.evidenceReferenceId] : []),
@@ -476,16 +476,16 @@ const FALLBACK_TEMPLATES: Record<LegacyDayforgeCoachingFallbackCategory, Fallbac
   },
 };
 
-export function buildDeterministicDayforgeCoachingFallback(input: {
+export function buildDeterministicLegacyDayforgeCoachingFallback(input: {
   category: LegacyDayforgeCoachingFallbackCategory;
   fallbackCode: LegacyDayforgeCoachingFallbackCode;
   generatedAt: Date;
   failureCode?: string | null;
-}): PreparedDayforgeCoachingArtifact {
+}): PreparedLegacyDayforgeCoachingArtifact {
   const template = FALLBACK_TEMPLATES[input.category];
   const capturedAt = input.generatedAt.toISOString();
   const evidenceId = `legacy-dayforge-fallback-v1:${input.category}`;
-  const reference = legacyDayforgeEvidenceReferenceSchema.parse({
+  const reference = legacyLegacyDayforgeEvidenceReferenceSchema.parse({
     id: evidenceId,
     sourceType: "general_industry_guidance",
     capturedAt,
@@ -513,7 +513,7 @@ export function buildDeterministicDayforgeCoachingFallback(input: {
     safeForDirectInstruction: true,
     grounded: true,
   }));
-  const output = legacyDayforgeCoachingOutputSchema.parse({
+  const output = legacyLegacyDayforgeCoachingOutputSchema.parse({
     recommendedRole: template.role,
     roleRationale: template.rationale,
     firstNavigationPoint: template.firstMove,
@@ -530,7 +530,7 @@ export function buildDeterministicDayforgeCoachingFallback(input: {
     claims,
     generatedSummary: `Ask for the ${template.role}; use the listed first move and fallback without presenting account-specific facts as verified.`,
   });
-  assertDayforgeCoachingOutputIsSafeForStorage(output);
+  assertLegacyDayforgeCoachingOutputIsSafeForStorage(output);
   return {
     generationStatus: "fallback",
     structuredOutput: output,

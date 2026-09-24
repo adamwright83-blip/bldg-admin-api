@@ -7,8 +7,8 @@ import {
   commercialMissionFieldStates,
   commercialMissions,
   commercialVisitOutcomes,
-  legacyDayforgeSaasMemberships,
-  legacyDayforgeSaasTenants,
+  legacyLegacyDayforgeSaasMemberships,
+  legacyLegacyDayforgeSaasTenants,
 } from "../../drizzle/schema";
 import {
   createCommercialMission,
@@ -107,17 +107,17 @@ describe.skipIf(!runDatabaseGate)(
           );
       }
       await db
-        .delete(legacyDayforgeSaasMemberships)
-        .where(eq(legacyDayforgeSaasMemberships.tenantId, tenantId));
+        .delete(legacyLegacyDayforgeSaasMemberships)
+        .where(eq(legacyLegacyDayforgeSaasMemberships.tenantId, tenantId));
       await db
-        .delete(legacyDayforgeSaasTenants)
-        .where(eq(legacyDayforgeSaasTenants.id, tenantId));
+        .delete(legacyLegacyDayforgeSaasTenants)
+        .where(eq(legacyLegacyDayforgeSaasTenants.id, tenantId));
     });
 
     it("real stop -> route start -> visit write -> fresh read -> derived coverage", async () => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      await db.insert(legacyDayforgeSaasTenants).values({
+      await db.insert(legacyLegacyDayforgeSaasTenants).values({
         id: tenantId,
         slug: tenantId,
         businessName: "Route Integration",
@@ -129,7 +129,7 @@ describe.skipIf(!runDatabaseGate)(
         status: "active",
       });
       await db
-        .insert(legacyDayforgeSaasMemberships)
+        .insert(legacyLegacyDayforgeSaasMemberships)
         .values({ tenantId, userOpenId: actorId, role: "field", active: true });
       for (let index = 0; index < 3; index += 1) {
         const mission = await createCommercialMission(missionInput(index));

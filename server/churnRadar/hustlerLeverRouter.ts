@@ -13,13 +13,13 @@
  *
  * WHY IT EXISTS AT ALL
  *
- * `legacyDayforgeChurnProcedure` is scoped to owner/admin/operator. The driver's role
+ * `legacyLegacyDayforgeChurnProcedure` is scoped to owner/admin/operator. The driver's role
  * is `field`, which is excluded — so today a driver can SEE recovery work
  * through `system.field.today` but every action deep-links into an admin
  * console they cannot open. That asymmetry is the whole blocker.
  *
  * The fix is a narrow field-role surface, not a widened admin one. Relaxing
- * `legacyDayforgeChurnProcedure` would hand drivers the entire Churn Radar console
+ * `legacyLegacyDayforgeChurnProcedure` would hand drivers the entire Churn Radar console
  * including scan control and tenant profile settings. This router exposes only
  * the five steps of one mission.
  *
@@ -33,7 +33,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import { legacyLegacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import {
   approveCustomerRecoveryDraft,
   createCustomerRecoveryIntervention,
@@ -73,7 +73,7 @@ export const hustlerLeverRouter = router({
    * that has since been genuinely recovered stops showing as merely contacted.
    * A surface that never calls it shows stale state forever.
    */
-  current: legacyDayforgeTenantMemberProcedure.query(async ({ ctx }) => {
+  current: legacyLegacyDayforgeTenantMemberProcedure.query(async ({ ctx }) => {
     const interventions = await listRecoveryInterventions(ctx.tenantId);
     const open = interventions.filter(item => OPEN_STATUSES.has(item.status));
     return {
@@ -96,7 +96,7 @@ export const hustlerLeverRouter = router({
    * again is resuming, never rerolling — the machine does not change its mind
    * because you looked away.
    */
-  pull: legacyDayforgeTenantMemberProcedure
+  pull: legacyLegacyDayforgeTenantMemberProcedure
     .input(z.object({ pull: z.enum(LEVER_PULLS), requestId: uuid }))
     .mutation(async ({ ctx, input }) => {
       const interventions = await listRecoveryInterventions(ctx.tenantId);
@@ -138,7 +138,7 @@ export const hustlerLeverRouter = router({
     }),
 
   /** MAKE IT HUMAN — the operator's rewrite. */
-  humanize: legacyDayforgeTenantMemberProcedure
+  humanize: legacyLegacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         interventionId: uuid,
@@ -157,7 +157,7 @@ export const hustlerLeverRouter = router({
       )
     ),
 
-  approve: legacyDayforgeTenantMemberProcedure
+  approve: legacyLegacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         interventionId: uuid,
@@ -192,7 +192,7 @@ export const hustlerLeverRouter = router({
    * trip to an admin console to record a fact only the driver holds is how that
    * fact ends up never recorded.
    */
-  recordPermission: legacyDayforgeTenantMemberProcedure
+  recordPermission: legacyLegacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         interventionId: uuid,
@@ -217,7 +217,7 @@ export const hustlerLeverRouter = router({
     ),
 
   /** Hands back an `sms:` URL. Opens the operator's messaging app; sends nothing. */
-  openComposer: legacyDayforgeTenantMemberProcedure
+  openComposer: legacyLegacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         interventionId: uuid,
@@ -243,7 +243,7 @@ export const hustlerLeverRouter = router({
    * do the hard thing within my control today", which an attestation is exactly
    * the right evidence for.
    */
-  confirmSent: legacyDayforgeTenantMemberProcedure
+  confirmSent: legacyLegacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         interventionId: uuid,
@@ -266,7 +266,7 @@ export const hustlerLeverRouter = router({
       })
     ),
 
-  mission: legacyDayforgeTenantMemberProcedure
+  mission: legacyLegacyDayforgeTenantMemberProcedure
     .input(z.object({ interventionId: uuid }))
     .query(async ({ ctx, input }) =>
       required(

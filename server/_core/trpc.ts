@@ -8,12 +8,12 @@ import type {
   SaasTenantMemberRole,
 } from "@shared/saasTenant";
 import {
-  hasDayforgeEntitlement,
-  resolveDayforgeMembership,
+  hasLegacyDayforgeEntitlement,
+  resolveLegacyDayforgeMembership,
   roleAllows,
 } from "../saas/tenantAccess";
 import { authorizeJoystickClaireDesk } from "../joystick/tenantIdentity";
-import { assertTrpcMutationOrigin } from "../legacyDayforgeSecurity/legacyDayforgeSecurity";
+import { assertTrpcMutationOrigin } from "../legacyLegacyDayforgeSecurity/legacyLegacyDayforgeSecurity";
 
 const VENDOR_UNAUTHED_MSG = "Please login to the vendor portal (10003)";
 
@@ -65,7 +65,7 @@ export const adminProcedure = baseProcedure.use(
 
 export const platformProcedure = adminProcedure;
 
-function legacyDayforgeProcedure(input: {
+function legacyLegacyDayforgeProcedure(input: {
   entitlement: LegacyDayforgeEntitlement;
   roles: readonly SaasTenantMemberRole[];
 }) {
@@ -78,7 +78,7 @@ function legacyDayforgeProcedure(input: {
           message: UNAUTHED_ERR_MSG,
         });
       }
-      const membership = await resolveDayforgeMembership({
+      const membership = await resolveLegacyDayforgeMembership({
         tenantId: ctx.tenantId,
         userOpenId: ctx.user.openId,
         platformRole: ctx.user.role,
@@ -87,7 +87,7 @@ function legacyDayforgeProcedure(input: {
         throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
       }
       if (
-        !(await hasDayforgeEntitlement({
+        !(await hasLegacyDayforgeEntitlement({
           tenantId: ctx.tenantId,
           entitlement: input.entitlement,
         }))
@@ -98,13 +98,13 @@ function legacyDayforgeProcedure(input: {
         });
       }
       return next({
-        ctx: { ...ctx, user: ctx.user, legacyDayforgeMembership: membership },
+        ctx: { ...ctx, user: ctx.user, legacyLegacyDayforgeMembership: membership },
       });
     })
   );
 }
 
-function legacyDayforgeTenantProcedureForRoles(
+function legacyLegacyDayforgeTenantProcedureForRoles(
   roles: readonly SaasTenantMemberRole[]
 ) {
   return baseProcedure.use(
@@ -116,7 +116,7 @@ function legacyDayforgeTenantProcedureForRoles(
           message: UNAUTHED_ERR_MSG,
         });
       }
-      const membership = await resolveDayforgeMembership({
+      const membership = await resolveLegacyDayforgeMembership({
         tenantId: ctx.tenantId,
         userOpenId: ctx.user.openId,
         platformRole: ctx.user.role,
@@ -125,7 +125,7 @@ function legacyDayforgeTenantProcedureForRoles(
         throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
       }
       return next({
-        ctx: { ...ctx, user: ctx.user, legacyDayforgeMembership: membership },
+        ctx: { ...ctx, user: ctx.user, legacyLegacyDayforgeMembership: membership },
       });
     })
   );
@@ -133,40 +133,40 @@ function legacyDayforgeTenantProcedureForRoles(
 
 const operatorRoles = ["owner", "admin", "operator"] as const;
 const fieldRoles = ["owner", "admin", "operator", "field"] as const;
-export const legacyDayforgeTenantMemberProcedure =
-  legacyDayforgeTenantProcedureForRoles(fieldRoles);
-export const legacyDayforgeTenantAdminProcedure = legacyDayforgeTenantProcedureForRoles([
+export const legacyLegacyDayforgeTenantMemberProcedure =
+  legacyLegacyDayforgeTenantProcedureForRoles(fieldRoles);
+export const legacyLegacyDayforgeTenantAdminProcedure = legacyLegacyDayforgeTenantProcedureForRoles([
   "owner",
   "admin",
 ]);
-export const legacyDayforgeTenantOperatorProcedure =
-  legacyDayforgeTenantProcedureForRoles(operatorRoles);
+export const legacyLegacyDayforgeTenantOperatorProcedure =
+  legacyLegacyDayforgeTenantProcedureForRoles(operatorRoles);
 
-export const legacyDayforgeTerritoryProcedure = legacyDayforgeProcedure({
+export const legacyLegacyDayforgeTerritoryProcedure = legacyLegacyDayforgeProcedure({
   entitlement: "territory_intelligence",
   roles: operatorRoles,
 });
-export const legacyDayforgeMissionOperatorProcedure = legacyDayforgeProcedure({
+export const legacyLegacyDayforgeMissionOperatorProcedure = legacyLegacyDayforgeProcedure({
   entitlement: "boreslay",
   roles: operatorRoles,
 });
-export const legacyDayforgeMissionFieldProcedure = legacyDayforgeProcedure({
+export const legacyLegacyDayforgeMissionFieldProcedure = legacyLegacyDayforgeProcedure({
   entitlement: "dayforge_field",
   roles: fieldRoles,
 });
-export const legacyDayforgeProposalOperatorProcedure = legacyDayforgeProcedure({
+export const legacyLegacyDayforgeProposalOperatorProcedure = legacyLegacyDayforgeProcedure({
   entitlement: "commercial_pipeline",
   roles: operatorRoles,
 });
-export const legacyDayforgeProposalFieldProcedure = legacyDayforgeProcedure({
+export const legacyLegacyDayforgeProposalFieldProcedure = legacyLegacyDayforgeProcedure({
   entitlement: "commercial_pipeline",
   roles: fieldRoles,
 });
-export const legacyDayforgePipelineProcedure = legacyDayforgeProcedure({
+export const legacyLegacyDayforgePipelineProcedure = legacyLegacyDayforgeProcedure({
   entitlement: "commercial_pipeline",
   roles: operatorRoles,
 });
-export const legacyDayforgeChurnProcedure = legacyDayforgeProcedure({
+export const legacyLegacyDayforgeChurnProcedure = legacyLegacyDayforgeProcedure({
   entitlement: "churn_radar",
   roles: operatorRoles,
 });
@@ -207,7 +207,7 @@ export const joystickClaireDeskProcedure = baseProcedure.use(
 
 /** Desk routes that also require a field-capable membership and the field entitlement. */
 export const joystickClaireDeskFieldProcedure =
-  legacyDayforgeMissionFieldProcedure.use(joystickClaireDeskGuard);
+  legacyLegacyDayforgeMissionFieldProcedure.use(joystickClaireDeskGuard);
 
 export const adminOrDriverProcedure = baseProcedure.use(
   t.middleware(async opts => {

@@ -105,12 +105,12 @@ export const SEED_COMPANIONS: Array<{
       abilityDescription:
         "Drafts and sequences personalized outreach and follow-ups from real known context, without fabricating familiarity or claiming a reply.",
       // Slice 3 §3.2: Rook already ships as the LegacyDayforge field-sales coach
-      // persona (server/legacyDayforgeCoachingRuntime.ts, LegacyDayforgeLanding.tsx).
+      // persona (server/legacyLegacyDayforgeCoachingRuntime.ts, LegacyDayforgeLanding.tsx).
       // Adam confirmed unification over renaming — this IS that Rook,
       // extended with the companion capability above.
       unifiedProductPersona: true,
       productPersonaNote:
-        "Unified with the existing LegacyDayforge coaching persona (server/legacyDayforgeCoaching/legacyDayforgeCoachingRuntime.ts) per Adam's decision, 2026-09-11. Same character, not a rename or a fork.",
+        "Unified with the existing LegacyDayforge coaching persona (server/legacyLegacyDayforgeCoaching/legacyLegacyDayforgeCoachingRuntime.ts) per Adam's decision, 2026-09-11. Same character, not a rename or a fork.",
     },
   },
   {

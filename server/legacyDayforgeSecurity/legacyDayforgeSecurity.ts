@@ -65,7 +65,7 @@ function configuredFrameOrigin(value: string, production: boolean): string | nul
  * remains valid so this guard can be installed globally without stranding an
  * existing admin, driver, vendor, or public-form client.
  */
-export function configuredDayforgeOrigins(
+export function configuredLegacyDayforgeOrigins(
   env: SecurityEnvironment = process.env
 ): ReadonlySet<string> {
   const configured = splitList(env.DAYFORGE_ALLOWED_ORIGINS)
@@ -78,14 +78,14 @@ export function configuredDayforgeOrigins(
   return new Set([...ADMIN_ALLOWED_ORIGINS, ...configured]);
 }
 
-export function isAllowedDayforgeOrigin(
+export function isAllowedLegacyDayforgeOrigin(
   origin: string | undefined,
   env: SecurityEnvironment = process.env
 ): boolean {
   if (!origin) return false;
   const normalized = normalizedOrigin(origin);
   if (!normalized || normalized !== origin) return false;
-  if (configuredDayforgeOrigins(env).has(normalized)) return true;
+  if (configuredLegacyDayforgeOrigins(env).has(normalized)) return true;
   // Keep existing bldg.chat tenant subdomains working. This is deliberately
   // delegated to the central CORS rule rather than trusting suffix-like input.
   if (
@@ -162,7 +162,7 @@ export function evaluateMutationOrigin(input: {
       ? { allowed: false, reason: "missing_origin" }
       : { allowed: true, reason: "development_no_origin" };
   }
-  return isAllowedDayforgeOrigin(origin, env)
+  return isAllowedLegacyDayforgeOrigin(origin, env)
     ? { allowed: true, reason: "allowed_origin" }
     : { allowed: false, reason: "disallowed_origin" };
 }
@@ -196,7 +196,7 @@ export function resolveTrustedClientIp(
   return resolved || "unknown";
 }
 
-export function legacyDayforgeSecurityHeaders(
+export function legacyLegacyDayforgeSecurityHeaders(
   env: SecurityEnvironment = process.env
 ): RequestHandler {
   const configuredFrames = [

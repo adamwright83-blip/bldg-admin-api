@@ -4,7 +4,7 @@ import type express from "express";
 import { z } from "zod";
 import {
   MAX_DAYFORGE_RETENTION_BATCH,
-  runDayforgeRetentionWithDatabase,
+  runLegacyDayforgeRetentionWithDatabase,
 } from "./retentionService";
 
 function header(req: express.Request, name: string): string | undefined {
@@ -48,7 +48,7 @@ const requestSchema = z
   })
   .strict();
 
-export function registerDayforgeRetentionRoute(app: express.Express) {
+export function registerLegacyDayforgeRetentionRoute(app: express.Express) {
   app.post("/api/internal/dayforge/retention/run", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const authorization = authorizeRetentionRequest(req.headers);
@@ -63,7 +63,7 @@ export function registerDayforgeRetentionRoute(app: express.Express) {
       return res.status(400).json({ error: "Invalid retention request" });
     }
     try {
-      const result = await runDayforgeRetentionWithDatabase(parsed.data);
+      const result = await runLegacyDayforgeRetentionWithDatabase(parsed.data);
       return res.status(200).json(result);
     } catch (error) {
       console.error("[DayForgeRetention] cleanup failed", error);

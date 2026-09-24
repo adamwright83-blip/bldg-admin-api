@@ -1,6 +1,6 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
-import { legacyDayforgeTenantOperatorProcedure, router } from "../_core/trpc";
+import { legacyLegacyDayforgeTenantOperatorProcedure, router } from "../_core/trpc";
 import {
   commitAuthoredDayForOperation,
   getAuthoredDayForDate,
@@ -12,17 +12,17 @@ import {
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const nightShiftRouter = router({
-  enabled: legacyDayforgeTenantOperatorProcedure.query(() => ({
+  enabled: legacyLegacyDayforgeTenantOperatorProcedure.query(() => ({
     enabled: isNightShiftEnabled(),
   })),
-  today: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
+  today: legacyLegacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
     getOrAuthorTodayAuthoredDay({
       tenantId: ctx.tenantId,
       operatorId: ctx.user.openId,
       userId: String(ctx.user.id),
     })
   ),
-  forDate: legacyDayforgeTenantOperatorProcedure
+  forDate: legacyLegacyDayforgeTenantOperatorProcedure
     .input(z.object({ businessDate: date }))
     .query(({ ctx, input }) =>
       getAuthoredDayForDate({
@@ -31,7 +31,7 @@ export const nightShiftRouter = router({
         businessDate: input.businessDate,
       })
     ),
-  run: legacyDayforgeTenantOperatorProcedure
+  run: legacyLegacyDayforgeTenantOperatorProcedure
     .input(z.object({ businessDate: date }))
     .mutation(({ ctx, input }) =>
       runNightShiftForBusinessDate({
@@ -41,7 +41,7 @@ export const nightShiftRouter = router({
         businessDate: input.businessDate,
       })
     ),
-  commitForOperation: legacyDayforgeTenantOperatorProcedure
+  commitForOperation: legacyLegacyDayforgeTenantOperatorProcedure
     .input(
       z.object({
         businessDate: date,

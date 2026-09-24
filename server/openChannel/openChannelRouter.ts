@@ -1,6 +1,6 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
-import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import { legacyLegacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import {
   approveOpenChannelMission,
   cancelOpenChannelDraft,
@@ -24,7 +24,7 @@ const editableTask = z.object({
 });
 
 export const openChannelRouter = router({
-  progress: legacyDayforgeTenantMemberProcedure
+  progress: legacyLegacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         businessDate,
@@ -38,7 +38,7 @@ export const openChannelRouter = router({
         driverId: ctx.user.openId,
       })
     ),
-  current: legacyDayforgeTenantMemberProcedure
+  current: legacyLegacyDayforgeTenantMemberProcedure
     .input(z.object({ businessDate }))
     .query(({ ctx, input }) =>
       getCurrentOpenChannelMission({
@@ -47,7 +47,7 @@ export const openChannelRouter = router({
         businessDate: input.businessDate,
       })
     ),
-  generateDraft: legacyDayforgeTenantMemberProcedure
+  generateDraft: legacyLegacyDayforgeTenantMemberProcedure
     .input(
       z
         .object({
@@ -82,7 +82,7 @@ export const openChannelRouter = router({
         driverId: ctx.user.openId,
       })
     ),
-  transcribeBriefing: legacyDayforgeTenantMemberProcedure
+  transcribeBriefing: legacyLegacyDayforgeTenantMemberProcedure
     .input(z.object({ audioDataUrl: z.string().max(18_000_000) }))
     .mutation(({ ctx, input }) =>
       transcribeOpenChannelBriefing({
@@ -91,7 +91,7 @@ export const openChannelRouter = router({
         driverId: ctx.user.openId,
       })
     ),
-  cancelDraft: legacyDayforgeTenantMemberProcedure
+  cancelDraft: legacyLegacyDayforgeTenantMemberProcedure
     .input(z.object({ missionId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       cancelOpenChannelDraft({
@@ -100,7 +100,7 @@ export const openChannelRouter = router({
         driverId: ctx.user.openId,
       })
     ),
-  approve: legacyDayforgeTenantMemberProcedure
+  approve: legacyLegacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         missionId: z.string().uuid(),
@@ -115,7 +115,7 @@ export const openChannelRouter = router({
         driverId: ctx.user.openId,
       })
     ),
-  completeTask: legacyDayforgeTenantMemberProcedure
+  completeTask: legacyLegacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         missionId: z.string().uuid(),

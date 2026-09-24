@@ -4,10 +4,10 @@ import type {
   LegacyDayforgeCoachingClaim,
   LegacyDayforgeCoachingOutput,
   LegacyDayforgeEvidenceReference,
-} from "@shared/legacyDayforgeCoaching";
-import type { LegacyDayforgeCoachingFallbackCode } from "./legacyDayforgeCoachingPolicy";
+} from "@shared/legacyLegacyDayforgeCoaching";
+import type { LegacyDayforgeCoachingFallbackCode } from "./legacyLegacyDayforgeCoachingPolicy";
 
-export type PersistDayforgeCoachingArtifactInput = {
+export type PersistLegacyDayforgeCoachingArtifactInput = {
   tenantId: string;
   missionId: number;
   missionStepId: number | null;
@@ -30,8 +30,8 @@ export type PersistDayforgeCoachingArtifactInput = {
   estimatedCostMicros: number | null;
 };
 
-export type FindReusableDayforgeCoachingArtifactInput = Pick<
-  PersistDayforgeCoachingArtifactInput,
+export type FindReusableLegacyDayforgeCoachingArtifactInput = Pick<
+  PersistLegacyDayforgeCoachingArtifactInput,
   | "tenantId"
   | "missionId"
   | "missionStepId"
@@ -42,8 +42,8 @@ export type FindReusableDayforgeCoachingArtifactInput = Pick<
   | "contextHash"
 >;
 
-export function legacyDayforgeCoachingArtifactCacheKey(
-  input: FindReusableDayforgeCoachingArtifactInput,
+export function legacyLegacyDayforgeCoachingArtifactCacheKey(
+  input: FindReusableLegacyDayforgeCoachingArtifactInput,
 ): string {
   const scopeKey = input.missionStepId === null ? "mission" : `step:${input.missionStepId}`;
   const digest = createHash("sha256").update([
@@ -92,8 +92,8 @@ export type LegacyDayforgeCoachingArtifact = {
 };
 
 export interface LegacyDayforgeCoachingArtifactRepository {
-  persist(input: PersistDayforgeCoachingArtifactInput): Promise<LegacyDayforgeCoachingArtifact>;
+  persist(input: PersistLegacyDayforgeCoachingArtifactInput): Promise<LegacyDayforgeCoachingArtifact>;
   findReusable(
-    input: FindReusableDayforgeCoachingArtifactInput,
+    input: FindReusableLegacyDayforgeCoachingArtifactInput,
   ): Promise<LegacyDayforgeCoachingArtifact | null>;
 }

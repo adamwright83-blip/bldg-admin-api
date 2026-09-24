@@ -12,7 +12,7 @@ export function percentage(numerator: number, denominator: number) {
   return denominator ? Math.round((numerator / denominator) * 100) : 0;
 }
 
-export async function getDayforgeProofDashboard(input: { tenantId: string; start: Date; end: Date }) {
+export async function getLegacyDayforgeProofDashboard(input: { tenantId: string; start: Date; end: Date }) {
   const db = await getDb(); if (!db) throw new Error("Database not available");
   const [events, followUps, pipelines, dispatches, revenue] = await Promise.all([
     db.select().from(commercialMissionEvents).where(and(eq(commercialMissionEvents.tenantId, input.tenantId), gte(commercialMissionEvents.createdAt, input.start), lt(commercialMissionEvents.createdAt, input.end))),

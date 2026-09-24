@@ -6,7 +6,7 @@ const router = readFileSync(new URL("../saas/saasRouter.ts", import.meta.url), "
 const attribution = readFileSync(new URL("../commercialCampaigns/commercialAttributionService.ts", import.meta.url), "utf8");
 describe("third-party DayForge tenant experience", () => {
   it("shows configured/not-configured/manual provider truth", () => {
-    expect(router).toContain("providerStatus: legacyDayforgeTenantMemberProcedure");
+    expect(router).toContain("providerStatus: legacyLegacyDayforgeTenantMemberProcedure");
     expect(router).toContain('connected: false');
     expect(settings).toContain("Provider truth");
   });

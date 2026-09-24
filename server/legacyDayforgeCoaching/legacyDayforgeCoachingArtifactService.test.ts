@@ -1,23 +1,23 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import type { LegacyDayforgeCoachingOutput } from "@shared/legacyDayforgeCoaching";
+import type { LegacyDayforgeCoachingOutput } from "@shared/legacyLegacyDayforgeCoaching";
 import {
-  createDayforgeCoachingArtifactService,
-  legacyDayforgeCoachingContextHash,
-} from "./legacyDayforgeCoachingArtifactService";
+  createLegacyDayforgeCoachingArtifactService,
+  legacyLegacyDayforgeCoachingContextHash,
+} from "./legacyLegacyDayforgeCoachingArtifactService";
 import type {
   LegacyDayforgeCoachingArtifact,
   LegacyDayforgeCoachingArtifactRepository,
-  PersistDayforgeCoachingArtifactInput,
-} from "./legacyDayforgeCoachingArtifactTypes";
-import { legacyDayforgeCoachingArtifactCacheKey } from "./legacyDayforgeCoachingArtifactTypes";
+  PersistLegacyDayforgeCoachingArtifactInput,
+} from "./legacyLegacyDayforgeCoachingArtifactTypes";
+import { legacyLegacyDayforgeCoachingArtifactCacheKey } from "./legacyLegacyDayforgeCoachingArtifactTypes";
 import {
   LegacyDayforgeCoachingPolicyError,
-  buildDeterministicDayforgeCoachingFallback,
-  groundDayforgeModelCoachingOutput,
+  buildDeterministicLegacyDayforgeCoachingFallback,
+  groundLegacyDayforgeModelCoachingOutput,
   type LegacyDayforgeCoachingGroundingEvidence,
-} from "./legacyDayforgeCoachingPolicy";
+} from "./legacyLegacyDayforgeCoachingPolicy";
 
 const NOW = new Date("2026-07-23T18:00:00.000Z");
 
@@ -104,7 +104,7 @@ function modelOutput(extraClaims: Array<{
 }
 
 function artifactFromDraft(
-  draft: PersistDayforgeCoachingArtifactInput,
+  draft: PersistLegacyDayforgeCoachingArtifactInput,
 ): LegacyDayforgeCoachingArtifact {
   return {
     id: randomUUID(),
@@ -147,7 +147,7 @@ describe("DayForge coaching grounding policy", () => {
       displayValue: "Jane Smith",
       reference: reference("provider-contact", "provider_sourced"),
     });
-    const prepared = groundDayforgeModelCoachingOutput({
+    const prepared = groundLegacyDayforgeModelCoachingOutput({
       rawOutput: modelOutput([{
         key: "decision_maker_name",
         displayValue: "Jane Smith",
@@ -178,7 +178,7 @@ describe("DayForge coaching grounding policy", () => {
     raw.roleRationale = "Promise the account twenty percent off because it is approved.";
     raw.discoveryQuestions = ["Can Jane approve our twenty-percent discount?"];
     raw.generatedSummary = "Tell Jane the discount is guaranteed.";
-    const prepared = groundDayforgeModelCoachingOutput({
+    const prepared = groundLegacyDayforgeModelCoachingOutput({
       rawOutput: raw,
       evidence: directEvidence(),
       generatedAt: NOW,
@@ -196,7 +196,7 @@ describe("DayForge coaching grounding policy", () => {
   it("rejects model attempts to set their own verified provenance", () => {
     const raw = modelOutput() as { claims: Array<Record<string, unknown>> };
     raw.claims[0].provenance = "provider_sourced";
-    expect(() => groundDayforgeModelCoachingOutput({
+    expect(() => groundLegacyDayforgeModelCoachingOutput({
       rawOutput: raw,
       evidence: directEvidence(),
       generatedAt: NOW,
@@ -204,7 +204,7 @@ describe("DayForge coaching grounding policy", () => {
   });
 
   it("requires formula provenance and retained inputs for deterministic estimates", () => {
-    expect(() => groundDayforgeModelCoachingOutput({
+    expect(() => groundLegacyDayforgeModelCoachingOutput({
       rawOutput: modelOutput(),
       evidence: [
         ...directEvidence(),
@@ -224,7 +224,7 @@ describe("DayForge coaching grounding policy", () => {
       displayValue: `Type ${index}`,
       reference: reference(`account-type-${index}`, "provider_sourced"),
     }));
-    expect(() => groundDayforgeModelCoachingOutput({
+    expect(() => groundLegacyDayforgeModelCoachingOutput({
       rawOutput: modelOutput(),
       evidence: excessive,
       generatedAt: NOW,
@@ -232,12 +232,12 @@ describe("DayForge coaching grounding policy", () => {
   });
 
   it("builds stable, honest fallback content without account PII", () => {
-    const first = buildDeterministicDayforgeCoachingFallback({
+    const first = buildDeterministicLegacyDayforgeCoachingFallback({
       category: "luxury_full_service_hotel",
       fallbackCode: "provider_timeout",
       generatedAt: NOW,
     });
-    const second = buildDeterministicDayforgeCoachingFallback({
+    const second = buildDeterministicLegacyDayforgeCoachingFallback({
       category: "luxury_full_service_hotel",
       fallbackCode: "provider_timeout",
       generatedAt: new Date("2026-07-24T18:00:00.000Z"),
@@ -258,7 +258,7 @@ describe("DayForge coaching grounding policy", () => {
 
 describe("DayForge coaching artifact service", () => {
   it("stores an honest deterministic fallback for invalid model output", async () => {
-    const drafts: PersistDayforgeCoachingArtifactInput[] = [];
+    const drafts: PersistLegacyDayforgeCoachingArtifactInput[] = [];
     const repository: LegacyDayforgeCoachingArtifactRepository = {
       async findReusable() {
         return null;
@@ -268,7 +268,7 @@ describe("DayForge coaching artifact service", () => {
         return artifactFromDraft(draft);
       },
     };
-    const service = createDayforgeCoachingArtifactService({ repository, now: () => NOW });
+    const service = createLegacyDayforgeCoachingArtifactService({ repository, now: () => NOW });
     const artifact = await service.save({
       tenantId: "tenant-a",
       missionId: 10,
@@ -293,8 +293,8 @@ describe("DayForge coaching artifact service", () => {
   });
 
   it("falls back instead of blocking when evidence is invalid", async () => {
-    const drafts: PersistDayforgeCoachingArtifactInput[] = [];
-    const service = createDayforgeCoachingArtifactService({
+    const drafts: PersistLegacyDayforgeCoachingArtifactInput[] = [];
+    const service = createLegacyDayforgeCoachingArtifactService({
       repository: {
         async findReusable() {
           return null;
@@ -333,10 +333,10 @@ describe("DayForge coaching artifact service", () => {
   });
 
   it("uses canonical key ordering for stable context hashes", () => {
-    expect(legacyDayforgeCoachingContextHash({ account: { id: 1, type: "hotel" }, known: true }))
-      .toBe(legacyDayforgeCoachingContextHash({ known: true, account: { type: "hotel", id: 1 } }));
-    expect(legacyDayforgeCoachingContextHash({ values: [1, 2] }))
-      .not.toBe(legacyDayforgeCoachingContextHash({ values: [2, 1] }));
+    expect(legacyLegacyDayforgeCoachingContextHash({ account: { id: 1, type: "hotel" }, known: true }))
+      .toBe(legacyLegacyDayforgeCoachingContextHash({ known: true, account: { type: "hotel", id: 1 } }));
+    expect(legacyLegacyDayforgeCoachingContextHash({ values: [1, 2] }))
+      .not.toBe(legacyLegacyDayforgeCoachingContextHash({ values: [2, 1] }));
   });
 
   it("uses a content cache key that is stable across artifact versions and changes by model", () => {
@@ -350,15 +350,15 @@ describe("DayForge coaching artifact service", () => {
       promptVersion: "coaching-v1",
       contextHash: "c".repeat(64),
     };
-    expect(legacyDayforgeCoachingArtifactCacheKey(input)).toBe(legacyDayforgeCoachingArtifactCacheKey({ ...input }));
-    expect(legacyDayforgeCoachingArtifactCacheKey(input)).not.toBe(
-      legacyDayforgeCoachingArtifactCacheKey({ ...input, modelId: "next-model" }),
+    expect(legacyLegacyDayforgeCoachingArtifactCacheKey(input)).toBe(legacyLegacyDayforgeCoachingArtifactCacheKey({ ...input }));
+    expect(legacyLegacyDayforgeCoachingArtifactCacheKey(input)).not.toBe(
+      legacyLegacyDayforgeCoachingArtifactCacheKey({ ...input, modelId: "next-model" }),
     );
   });
 
   it("exposes a pre-spend lookup and preserves the cached artifact", async () => {
     let lookedUp = 0;
-    const cachedDraft: PersistDayforgeCoachingArtifactInput = {
+    const cachedDraft: PersistLegacyDayforgeCoachingArtifactInput = {
       tenantId: "tenant-a",
       missionId: 10,
       missionStepId: 20,
@@ -371,7 +371,7 @@ describe("DayForge coaching artifact service", () => {
       promptVersion: "coaching-v1",
       contextHash: "c".repeat(64),
       generatedAt: NOW,
-      structuredOutput: buildDeterministicDayforgeCoachingFallback({
+      structuredOutput: buildDeterministicLegacyDayforgeCoachingFallback({
         category: "luxury_full_service_hotel",
         fallbackCode: "provider_timeout",
         generatedAt: NOW,
@@ -385,7 +385,7 @@ describe("DayForge coaching artifact service", () => {
       estimatedCostMicros: 40,
     };
     const cached = artifactFromDraft(cachedDraft);
-    const service = createDayforgeCoachingArtifactService({
+    const service = createLegacyDayforgeCoachingArtifactService({
       repository: {
         async findReusable(input) {
           lookedUp += 1;

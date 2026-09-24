@@ -7,11 +7,11 @@
  */
 import "dotenv/config";
 import { ENV } from "../server/_core/env";
-import { seedDemoTenant } from "../server/legacyDayforgeDemo/demoTenantSeed";
-import { printDemoUrls } from "./legacyDayforgeDemoUrls";
+import { seedDemoTenant } from "../server/legacyLegacyDayforgeDemo/demoTenantSeed";
+import { printDemoUrls } from "./legacyLegacyDayforgeDemoUrls";
 
 async function main() {
-  if (!ENV.legacyDayforgeDemoEnabled) {
+  if (!ENV.legacyLegacyDayforgeDemoEnabled) {
     console.error(
       "[legacy-dayforge-demo-setup] DAYFORGE_DEMO_ENABLED is not true. Refusing to seed."
     );

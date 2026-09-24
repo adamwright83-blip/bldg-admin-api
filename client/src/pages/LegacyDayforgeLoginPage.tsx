@@ -1,10 +1,10 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { useState, type FormEvent } from "react";
 import "./legacy-dayforge-onboarding.css";
-import { resolveDayforgeAuthenticatedDestination } from "@shared/legacyDayforgeContinuation";
+import { resolveLegacyDayforgeAuthenticatedDestination } from "@shared/legacyLegacyDayforgeContinuation";
 import { PRODUCT_NAME } from "@shared/productIdentity";
 
-function legacyDayforgeApiBase(): string {
+function legacyLegacyDayforgeApiBase(): string {
   if (
     typeof window !== "undefined" &&
     window.location.hostname.toLowerCase() === "admin.bldg.chat"
@@ -35,7 +35,7 @@ export default function LegacyDayforgeLoginPage() {
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch(`${legacyDayforgeApiBase()}/api/dayforge/auth/login`, {
+      const response = await fetch(`${legacyLegacyDayforgeApiBase()}/api/dayforge/auth/login`, {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
@@ -43,7 +43,7 @@ export default function LegacyDayforgeLoginPage() {
       });
       const body = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(body.error || "Sign in failed");
-      const destination = resolveDayforgeAuthenticatedDestination({
+      const destination = resolveLegacyDayforgeAuthenticatedDestination({
         missionHandoffPath: continuation.get("missionHandoff"),
         previewSessionId: continuation.get("preview"),
         returnTo: continuation.get("returnTo"),

@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import {
   emailProviderStatus,
-  getDayforgeProviderStatus,
+  getLegacyDayforgeProviderStatus,
   googleProviderStatus,
   printProviderStatus,
   smsProviderStatus,
@@ -11,7 +11,7 @@ import {
 
 describe("DayForge demo provider status", () => {
   it("reports NOT_CONFIGURED for every provider when no env vars are set", () => {
-    const status = getDayforgeProviderStatus({});
+    const status = getLegacyDayforgeProviderStatus({});
     expect(status.google).toBe("NOT_CONFIGURED");
     expect(status.stripe).toBe("NOT_CONFIGURED");
     expect(status.email).toBe("NOT_CONFIGURED");

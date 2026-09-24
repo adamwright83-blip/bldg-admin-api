@@ -67,8 +67,8 @@ describe("commercial proposal production contract", () => {
   });
 
   it("derives tenant and actor from signed procedures", () => {
-    expect(router).toContain("legacyDayforgeProposalOperatorProcedure");
-    expect(router).toContain("legacyDayforgeProposalFieldProcedure");
+    expect(router).toContain("legacyLegacyDayforgeProposalOperatorProcedure");
+    expect(router).toContain("legacyLegacyDayforgeProposalFieldProcedure");
     expect(router).not.toContain("adminProcedure");
     expect(router).not.toContain("adminOrDriverProcedure");
     expect(router).not.toContain("protectedProcedure");

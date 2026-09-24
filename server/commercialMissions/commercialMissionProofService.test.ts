@@ -313,7 +313,7 @@ describe("commercial mission proof persistence contract", () => {
 
   it("tenant-scopes reads and writes, serializes on the step, and binds request IDs", () => {
     expect(serviceSource).toContain(
-      "eq(legacyDayforgeEvidenceUploads.tenantId, input.tenantId)"
+      "eq(legacyLegacyDayforgeEvidenceUploads.tenantId, input.tenantId)"
     );
     expect(serviceSource).toContain(
       "eq(commercialMissionSteps.tenantId, input.tenantId)"
@@ -324,7 +324,7 @@ describe("commercial mission proof persistence contract", () => {
   });
 
   it("keeps rejected attempts and review changes in the durable audit timeline", () => {
-    expect(serviceSource).toContain("writeDayforgeEventWith(tx");
+    expect(serviceSource).toContain("writeLegacyDayforgeEventWith(tx");
     expect(serviceSource).toContain('eventName: "proof_superseded"');
     expect(serviceSource).toContain('return "proof_overridden"');
     expect(serviceSource).toContain("before: proofAuditSnapshot(proof)");

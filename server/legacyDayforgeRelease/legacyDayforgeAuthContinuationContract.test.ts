@@ -9,7 +9,7 @@ const authRoute = readFileSync(new URL("../saas/saasAuthRoute.ts", import.meta.u
 
 describe("DayForge authenticated entry contract", () => {
   it("uses one resolver and never defaults normal login to the demo controller", () => {
-    expect(login).toContain("resolveDayforgeAuthenticatedDestination");
+    expect(login).toContain("resolveLegacyDayforgeAuthenticatedDestination");
     expect(login).not.toContain('window.location.assign("/julydemo")');
   });
   it("threads preview context through onboarding and activation", () => {

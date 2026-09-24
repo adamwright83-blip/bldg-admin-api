@@ -39,8 +39,8 @@ import { registerPaymentReconciliationRoutes } from "../paymentReconciliationRou
 import { registerMarketplacePaymentInternalRoutes } from "../marketplacePayments/marketplacePaymentInternalRoute";
 import { registerMarketplacePaymentReadRoutes } from "../marketplacePayments/marketplacePaymentReadRoute";
 import { registerMarketplaceStripeWebhookRoutes } from "../marketplacePayments/marketplaceStripeWebhookRoute";
-import { registerDayforgeBillingWebhookRoute } from "../saas/saasBillingWebhookRoute";
-import { registerDayforgeSaasAuthRoute } from "../saas/saasAuthRoute";
+import { registerLegacyDayforgeBillingWebhookRoute } from "../saas/saasBillingWebhookRoute";
+import { registerLegacyDayforgeSaasAuthRoute } from "../saas/saasAuthRoute";
 import { registerMarketplacePaymentDryRunRoutes } from "../marketplacePayments/marketplacePaymentDryRunRoute";
 import { registerLaundryFarmSheetSyncRoutes } from "../laundryFarmSheetSyncRoute";
 import { registerGoldlineDemoRoutes } from "../goldlineOnboarding/demoAccess";
@@ -55,10 +55,10 @@ import {
 } from "../residentPaymentMethods";
 import {
   configuredTrustProxy,
-  legacyDayforgeSecurityHeaders,
+  legacyLegacyDayforgeSecurityHeaders,
   resolveTrustedClientIp,
-} from "../legacyDayforgeSecurity/legacyDayforgeSecurity";
-import { registerDayforgeRetentionRoute } from "../legacyDayforgeRetention/retentionRoute";
+} from "../legacyLegacyDayforgeSecurity/legacyLegacyDayforgeSecurity";
+import { registerLegacyDayforgeRetentionRoute } from "../legacyLegacyDayforgeRetention/retentionRoute";
 import { registerClientFatalRoute } from "../clientFatal/clientFatalRoute";
 import { startAutomaticGeographicReconciliation } from "../geography/geographicReconciliationScheduler";
 import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
@@ -154,7 +154,7 @@ async function startServer() {
 
   const app = express();
   app.set("trust proxy", configuredTrustProxy());
-  app.use(legacyDayforgeSecurityHeaders());
+  app.use(legacyLegacyDayforgeSecurityHeaders());
   const server = createServer(app);
   attachConversationRelayUpgrade(server);
 
@@ -309,7 +309,7 @@ async function startServer() {
   registerMarketplacePaymentInternalRoutes(app);
   registerMarketplacePaymentReadRoutes(app);
   registerMarketplaceStripeWebhookRoutes(app);
-  registerDayforgeBillingWebhookRoute(app);
+  registerLegacyDayforgeBillingWebhookRoute(app);
   registerMarketplacePaymentDryRunRoutes(app);
   registerAgentMailVendorReplyWebhookRoutes(app);
   registerLaundryFarmSheetSyncRoutes(app);
@@ -324,8 +324,8 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  registerDayforgeRetentionRoute(app);
-  registerDayforgeSaasAuthRoute(app);
+  registerLegacyDayforgeRetentionRoute(app);
+  registerLegacyDayforgeSaasAuthRoute(app);
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
 

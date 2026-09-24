@@ -586,7 +586,7 @@ Ran against the final branch HEAD:
   constraint). `goldline-fast-smoke.yml`'s non-DB step is `pnpm check`, run above. I did not
   guess at these gates' pass/fail status — they simply could not be executed here, and none of
   their listed test files (`driverSalesJournalResilience.test.ts`, `armoryEvolution.integration.test.ts`,
-  `legacyDayforgeReleaseJourney.integration.test.ts`, `localTargetRun.test.ts`, `impactSignal.test.ts`,
+  `legacyLegacyDayforgeReleaseJourney.integration.test.ts`, `localTargetRun.test.ts`, `impactSignal.test.ts`,
   `goldlineProgression.test.ts`, `salesIntelTeachingReExtraction.integration.test.ts`) are
   touched by this PR's diff.
 - No test was disabled, weakened, or had its assertion removed to make it pass. Every test

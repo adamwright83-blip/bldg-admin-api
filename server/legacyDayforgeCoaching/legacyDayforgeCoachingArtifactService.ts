@@ -5,19 +5,19 @@ import {
   DAYFORGE_COACHING_FALLBACK_CATEGORIES,
   DAYFORGE_COACHING_FALLBACK_CODES,
   LegacyDayforgeCoachingPolicyError,
-  buildDeterministicDayforgeCoachingFallback,
-  groundDayforgeModelCoachingOutput,
+  buildDeterministicLegacyDayforgeCoachingFallback,
+  groundLegacyDayforgeModelCoachingOutput,
   type LegacyDayforgeCoachingFallbackCategory,
   type LegacyDayforgeCoachingFallbackCode,
   type LegacyDayforgeCoachingGroundingEvidence,
-  type PreparedDayforgeCoachingArtifact,
-} from "./legacyDayforgeCoachingPolicy";
+  type PreparedLegacyDayforgeCoachingArtifact,
+} from "./legacyLegacyDayforgeCoachingPolicy";
 import type {
   LegacyDayforgeCoachingArtifact,
   LegacyDayforgeCoachingArtifactRepository,
-  FindReusableDayforgeCoachingArtifactInput,
-  PersistDayforgeCoachingArtifactInput,
-} from "./legacyDayforgeCoachingArtifactTypes";
+  FindReusableLegacyDayforgeCoachingArtifactInput,
+  PersistLegacyDayforgeCoachingArtifactInput,
+} from "./legacyLegacyDayforgeCoachingArtifactTypes";
 
 const requestSchema = z.object({
   tenantId: z.string().trim().min(1).max(64),
@@ -59,7 +59,7 @@ export type LegacyDayforgeCoachingProviderResult =
       failureCode: string | null;
     };
 
-export type SaveDayforgeCoachingArtifactInput = {
+export type SaveLegacyDayforgeCoachingArtifactInput = {
   tenantId: string;
   missionId: number;
   missionStepId: number | null;
@@ -80,9 +80,9 @@ export type SaveDayforgeCoachingArtifactInput = {
 
 export type LegacyDayforgeCoachingArtifactService = {
   findReusable(
-    input: FindReusableDayforgeCoachingArtifactInput,
+    input: FindReusableLegacyDayforgeCoachingArtifactInput,
   ): Promise<LegacyDayforgeCoachingArtifact | null>;
-  save(input: SaveDayforgeCoachingArtifactInput): Promise<LegacyDayforgeCoachingArtifact>;
+  save(input: SaveLegacyDayforgeCoachingArtifactInput): Promise<LegacyDayforgeCoachingArtifact>;
 };
 
 function controlledPolicyFailureCode(code: LegacyDayforgeCoachingPolicyError["code"]): string {
@@ -93,10 +93,10 @@ function prepareArtifact(input: {
   providerResult: LegacyDayforgeCoachingProviderResult;
   fallbackCategory: LegacyDayforgeCoachingFallbackCategory;
   generatedAt: Date;
-}): PreparedDayforgeCoachingArtifact {
+}): PreparedLegacyDayforgeCoachingArtifact {
   if (input.providerResult.kind === "failure") {
     const failure = providerFailureSchema.parse(input.providerResult);
-    return buildDeterministicDayforgeCoachingFallback({
+    return buildDeterministicLegacyDayforgeCoachingFallback({
       category: input.fallbackCategory,
       fallbackCode: failure.fallbackCode,
       failureCode: failure.failureCode,
@@ -105,7 +105,7 @@ function prepareArtifact(input: {
   }
 
   try {
-    return groundDayforgeModelCoachingOutput({
+    return groundLegacyDayforgeModelCoachingOutput({
       rawOutput: input.providerResult.rawOutput,
       evidence: input.providerResult.evidence,
       generatedAt: input.generatedAt,
@@ -114,7 +114,7 @@ function prepareArtifact(input: {
     if (!(error instanceof LegacyDayforgeCoachingPolicyError)) {
       throw error;
     }
-    return buildDeterministicDayforgeCoachingFallback({
+    return buildDeterministicLegacyDayforgeCoachingFallback({
       category: input.fallbackCategory,
       fallbackCode: error.code,
       failureCode: controlledPolicyFailureCode(error.code),
@@ -123,7 +123,7 @@ function prepareArtifact(input: {
   }
 }
 
-export function legacyDayforgeCoachingContextHash(value: unknown): string {
+export function legacyLegacyDayforgeCoachingContextHash(value: unknown): string {
   const seen = new Set<object>();
   const canonicalize = (candidate: unknown): string => {
     if (candidate === null) return "null";
@@ -152,7 +152,7 @@ export function legacyDayforgeCoachingContextHash(value: unknown): string {
   return createHash("sha256").update(canonicalize(value)).digest("hex");
 }
 
-export function createDayforgeCoachingArtifactService(dependencies: {
+export function createLegacyDayforgeCoachingArtifactService(dependencies: {
   repository: LegacyDayforgeCoachingArtifactRepository;
   now?: () => Date;
 }): LegacyDayforgeCoachingArtifactService {
@@ -196,7 +196,7 @@ export function createDayforgeCoachingArtifactService(dependencies: {
         fallbackCategory: parsed.fallbackCategory,
         generatedAt,
       });
-      const persistence: PersistDayforgeCoachingArtifactInput = {
+      const persistence: PersistLegacyDayforgeCoachingArtifactInput = {
         ...parsed,
         ...prepared,
         generatedAt,

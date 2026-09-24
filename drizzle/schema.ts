@@ -2005,7 +2005,7 @@ export const commercialMissionDispatches = mysqlTable(
   })
 );
 
-export const legacyDayforgeEvidenceUploads = mysqlTable(
+export const legacyLegacyDayforgeEvidenceUploads = mysqlTable(
   "dayforge_evidence_uploads",
   {
     id: varchar("id", { length: 36 }).primaryKey(),
@@ -2059,7 +2059,7 @@ export const legacyDayforgeEvidenceUploads = mysqlTable(
  * close the object-store/SQL commit gap; successful deletion clears the live
  * key but keeps its hash and outcome as an auditable tombstone.
  */
-export const legacyDayforgeEvidenceObjectDeletions = mysqlTable(
+export const legacyLegacyDayforgeEvidenceObjectDeletions = mysqlTable(
   "dayforge_evidence_object_deletions",
   {
     id: varchar("id", { length: 36 }).primaryKey(),
@@ -3171,7 +3171,7 @@ export const commercialMissionFinalRewards = mysqlTable(
   })
 );
 
-export const legacyDayforgeSaasTenants = mysqlTable(
+export const legacyLegacyDayforgeSaasTenants = mysqlTable(
   "dayforge_saas_tenants",
   {
     id: varchar("id", { length: 64 }).primaryKey(),
@@ -3209,7 +3209,7 @@ export const legacyDayforgeSaasTenants = mysqlTable(
   })
 );
 
-export const legacyDayforgeSaasTenantLocations = mysqlTable(
+export const legacyLegacyDayforgeSaasTenantLocations = mysqlTable(
   "dayforge_saas_tenant_locations",
   {
     id: int("id").autoincrement().primaryKey(),
@@ -3246,7 +3246,7 @@ export const legacyDayforgeSaasTenantLocations = mysqlTable(
   })
 );
 
-export const legacyDayforgeSaasTenantDomains = mysqlTable(
+export const legacyLegacyDayforgeSaasTenantDomains = mysqlTable(
   "dayforge_saas_tenant_domains",
   {
     id: int("id").autoincrement().primaryKey(),
@@ -3265,7 +3265,7 @@ export const legacyDayforgeSaasTenantDomains = mysqlTable(
   })
 );
 
-export const legacyDayforgeSaasTenantServices = mysqlTable(
+export const legacyLegacyDayforgeSaasTenantServices = mysqlTable(
   "dayforge_saas_tenant_services",
   {
     id: int("id").autoincrement().primaryKey(),
@@ -3290,7 +3290,7 @@ export const legacyDayforgeSaasTenantServices = mysqlTable(
   })
 );
 
-export const legacyDayforgeSaasTenantInvites = mysqlTable(
+export const legacyLegacyDayforgeSaasTenantInvites = mysqlTable(
   "dayforge_saas_tenant_invites",
   {
     id: varchar("id", { length: 36 }).primaryKey(),
@@ -3319,7 +3319,7 @@ export const legacyDayforgeSaasTenantInvites = mysqlTable(
   })
 );
 
-export const legacyDayforgeSaasMemberships = mysqlTable(
+export const legacyLegacyDayforgeSaasMemberships = mysqlTable(
   "dayforge_saas_memberships",
   {
     id: int("id").autoincrement().primaryKey(),
@@ -3343,7 +3343,7 @@ export const legacyDayforgeSaasMemberships = mysqlTable(
   })
 );
 
-export const legacyDayforgeSaasUserCredentials = mysqlTable(
+export const legacyLegacyDayforgeSaasUserCredentials = mysqlTable(
   "dayforge_saas_user_credentials",
   {
     id: int("id").autoincrement().primaryKey(),
@@ -3366,7 +3366,7 @@ export const legacyDayforgeSaasUserCredentials = mysqlTable(
   })
 );
 
-export const legacyDayforgeSaasOnboardingSessions = mysqlTable(
+export const legacyLegacyDayforgeSaasOnboardingSessions = mysqlTable(
   "dayforge_saas_onboarding_sessions",
   {
     id: varchar("id", { length: 36 }).primaryKey(),
@@ -3426,7 +3426,7 @@ export const legacyDayforgeSaasOnboardingSessions = mysqlTable(
   })
 );
 
-export const legacyDayforgeAuthContinuations = mysqlTable(
+export const legacyLegacyDayforgeAuthContinuations = mysqlTable(
   "dayforge_auth_continuations",
   {
     id: varchar("id", { length: 36 }).primaryKey(),
@@ -3468,7 +3468,7 @@ export const legacyDayforgeAuthContinuations = mysqlTable(
   })
 );
 
-export const legacyDayforgeSaasBillingPlans = mysqlTable(
+export const legacyLegacyDayforgeSaasBillingPlans = mysqlTable(
   "dayforge_saas_billing_plans",
   {
     planKey: varchar("planKey", { length: 96 }).primaryKey(),
@@ -3494,7 +3494,7 @@ export const legacyDayforgeSaasBillingPlans = mysqlTable(
   })
 );
 
-export const legacyDayforgeSaasCheckoutSessions = mysqlTable(
+export const legacyLegacyDayforgeSaasCheckoutSessions = mysqlTable(
   "dayforge_saas_checkout_sessions",
   {
     id: varchar("id", { length: 36 }).primaryKey(),
@@ -3526,7 +3526,7 @@ export const legacyDayforgeSaasCheckoutSessions = mysqlTable(
   })
 );
 
-export const legacyDayforgeSaasSubscriptions = mysqlTable(
+export const legacyLegacyDayforgeSaasSubscriptions = mysqlTable(
   "dayforge_saas_subscriptions",
   {
     id: int("id").autoincrement().primaryKey(),
@@ -3573,7 +3573,7 @@ export const legacyDayforgeSaasSubscriptions = mysqlTable(
   })
 );
 
-export const legacyDayforgeSaasEntitlements = mysqlTable(
+export const legacyLegacyDayforgeSaasEntitlements = mysqlTable(
   "dayforge_saas_entitlements",
   {
     id: int("id").autoincrement().primaryKey(),
@@ -3594,7 +3594,7 @@ export const legacyDayforgeSaasEntitlements = mysqlTable(
   })
 );
 
-export const legacyDayforgeSaasBillingEvents = mysqlTable(
+export const legacyLegacyDayforgeSaasBillingEvents = mysqlTable(
   "dayforge_saas_billing_events",
   {
     id: int("id").autoincrement().primaryKey(),
@@ -3629,7 +3629,7 @@ export const legacyDayforgeSaasBillingEvents = mysqlTable(
   })
 );
 
-export const legacyDayforgeAuditEvents = mysqlTable(
+export const legacyLegacyDayforgeAuditEvents = mysqlTable(
   "dayforge_audit_events",
   {
     id: int("id").autoincrement().primaryKey(),
@@ -3675,7 +3675,7 @@ export const legacyDayforgeAuditEvents = mysqlTable(
  * the domain tables and dayforge_audit_events; this table is an analytics
  * projection containing only allowlisted aggregate properties.
  */
-export const legacyDayforgeProductEvents = mysqlTable(
+export const legacyLegacyDayforgeProductEvents = mysqlTable(
   "dayforge_product_events",
   {
     id: varchar("id", { length: 36 }).primaryKey(),
@@ -3741,7 +3741,7 @@ export const legacyDayforgeProductEvents = mysqlTable(
  * Anonymous public preview state. Only a token hash is stored; raw bearer
  * tokens and raw client IP addresses never enter the database.
  */
-export const legacyDayforgePublicPreviewSessions = mysqlTable(
+export const legacyLegacyDayforgePublicPreviewSessions = mysqlTable(
   "dayforge_public_preview_sessions",
   {
     id: varchar("id", { length: 64 }).primaryKey(),
@@ -3795,7 +3795,7 @@ export const legacyDayforgePublicPreviewSessions = mysqlTable(
 );
 
 /** Durable fixed-window rate counters keyed only by server-generated hashes. */
-export const legacyDayforgeRateLimitBuckets = mysqlTable(
+export const legacyLegacyDayforgeRateLimitBuckets = mysqlTable(
   "dayforge_rate_limit_buckets",
   {
     id: int("id").autoincrement().primaryKey(),
@@ -3826,7 +3826,7 @@ export const legacyDayforgeRateLimitBuckets = mysqlTable(
 );
 
 /** Provider-wide daily usage and circuit-breaker state. */
-export const legacyDayforgeProviderBudgets = mysqlTable(
+export const legacyLegacyDayforgeProviderBudgets = mysqlTable(
   "dayforge_provider_budgets",
   {
     id: int("id").autoincrement().primaryKey(),
@@ -3859,7 +3859,7 @@ export const legacyDayforgeProviderBudgets = mysqlTable(
   })
 );
 
-export const legacyDayforgeSaasImportConnections = mysqlTable(
+export const legacyLegacyDayforgeSaasImportConnections = mysqlTable(
   "dayforge_saas_import_connections",
   {
     id: int("id").autoincrement().primaryKey(),
@@ -3887,7 +3887,7 @@ export const legacyDayforgeSaasImportConnections = mysqlTable(
   })
 );
 
-export const legacyDayforgeSaasImportRuns = mysqlTable(
+export const legacyLegacyDayforgeSaasImportRuns = mysqlTable(
   "dayforge_saas_import_runs",
   {
     id: varchar("id", { length: 36 }).primaryKey(),
@@ -3915,7 +3915,7 @@ export const legacyDayforgeSaasImportRuns = mysqlTable(
   })
 );
 
-export const legacyDayforgeSaasExternalCustomers = mysqlTable(
+export const legacyLegacyDayforgeSaasExternalCustomers = mysqlTable(
   "dayforge_saas_external_customers",
   {
     id: int("id").autoincrement().primaryKey(),
@@ -3941,7 +3941,7 @@ export const legacyDayforgeSaasExternalCustomers = mysqlTable(
   })
 );
 
-export const legacyDayforgeSaasExternalOrders = mysqlTable(
+export const legacyLegacyDayforgeSaasExternalOrders = mysqlTable(
   "dayforge_saas_external_orders",
   {
     id: int("id").autoincrement().primaryKey(),
@@ -3989,9 +3989,9 @@ export type CommercialMissionIrlStepDetailRow =
 export type CommercialMissionDispatchRow =
   typeof commercialMissionDispatches.$inferSelect;
 export type LegacyDayforgeEvidenceUploadRow =
-  typeof legacyDayforgeEvidenceUploads.$inferSelect;
+  typeof legacyLegacyDayforgeEvidenceUploads.$inferSelect;
 export type LegacyDayforgeEvidenceObjectDeletionRow =
-  typeof legacyDayforgeEvidenceObjectDeletions.$inferSelect;
+  typeof legacyLegacyDayforgeEvidenceObjectDeletions.$inferSelect;
 export type CommercialMissionCoachingArtifactRow =
   typeof commercialMissionCoachingArtifacts.$inferSelect;
 export type CommercialCampaignLinkRow =
@@ -4003,7 +4003,7 @@ export type CommercialOrderAcquisitionAttributionRow =
 export type CommercialAttributionCorrectionRow =
   typeof commercialAttributionCorrections.$inferSelect;
 export type LegacyDayforgeAuthContinuationRow =
-  typeof legacyDayforgeAuthContinuations.$inferSelect;
+  typeof legacyLegacyDayforgeAuthContinuations.$inferSelect;
 export type OrderPaymentProjectionRow =
   typeof orderPaymentProjections.$inferSelect;
 export type OrderPaymentEventRow = typeof orderPaymentEvents.$inferSelect;

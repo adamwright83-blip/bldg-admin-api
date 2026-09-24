@@ -1,6 +1,6 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
-import { adminProcedure, legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import { adminProcedure, legacyLegacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import {
   getCampaign,
   listCampaigns,
@@ -49,12 +49,12 @@ const campaignInput = z.object({
 const campaignPatch = campaignInput.partial();
 
 export const campaignLibraryRouter = router({
-  list: legacyDayforgeTenantMemberProcedure
+  list: legacyLegacyDayforgeTenantMemberProcedure
     .input(z.object({ includeDisabled: z.boolean().optional() }))
     .query(({ ctx, input }) =>
       listCampaigns({ tenantId: ctx.tenantId, ...input })
     ),
-  get: legacyDayforgeTenantMemberProcedure
+  get: legacyLegacyDayforgeTenantMemberProcedure
     .input(z.object({ campaignId: z.string() }))
     .query(({ ctx, input }) => getCampaign({ tenantId: ctx.tenantId, ...input })),
   upsert: adminProcedure

@@ -5,7 +5,7 @@ import {
   commercialMissionDispatches,
   commercialMissionPhoneHandoffs,
   commercialMissions,
-  legacyDayforgeSaasMemberships,
+  legacyLegacyDayforgeSaasMemberships,
   type CommercialMissionDispatchRow,
   users,
 } from "../../drizzle/schema";
@@ -474,14 +474,14 @@ function drizzleTransaction(
     },
     async isActiveFieldAssignee(input) {
       const [membership] = await tx
-        .select({ id: legacyDayforgeSaasMemberships.id })
-        .from(legacyDayforgeSaasMemberships)
+        .select({ id: legacyLegacyDayforgeSaasMemberships.id })
+        .from(legacyLegacyDayforgeSaasMemberships)
         .where(
           and(
-            eq(legacyDayforgeSaasMemberships.tenantId, input.tenantId),
-            eq(legacyDayforgeSaasMemberships.userOpenId, input.assignedTo),
-            eq(legacyDayforgeSaasMemberships.role, "field"),
-            eq(legacyDayforgeSaasMemberships.active, true)
+            eq(legacyLegacyDayforgeSaasMemberships.tenantId, input.tenantId),
+            eq(legacyLegacyDayforgeSaasMemberships.userOpenId, input.assignedTo),
+            eq(legacyLegacyDayforgeSaasMemberships.role, "field"),
+            eq(legacyLegacyDayforgeSaasMemberships.active, true)
           )
         )
         .limit(1);

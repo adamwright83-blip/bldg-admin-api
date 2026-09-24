@@ -1,13 +1,13 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { and, eq } from "drizzle-orm";
 import {
-  legacyDayforgeAuditEvents,
-  legacyDayforgeProductEvents,
+  legacyLegacyDayforgeAuditEvents,
+  legacyLegacyDayforgeProductEvents,
 } from "../../drizzle/schema";
 import {
-  sanitizeDayforgeProductEventProperties,
+  sanitizeLegacyDayforgeProductEventProperties,
   type LegacyDayforgeProductEventName,
-} from "@shared/legacyDayforgeEvents";
+} from "@shared/legacyLegacyDayforgeEvents";
 import { getDb } from "../db";
 
 const PRODUCT_ANALYTICS_RETENTION_MS = 400 * 24 * 60 * 60 * 1000;
@@ -65,7 +65,7 @@ function assertIdentifier(label: string, value: string, max: number): string {
   return normalized;
 }
 
-export function legacyDayforgeEventScope(input: {
+export function legacyLegacyDayforgeEventScope(input: {
   tenantId?: string | null;
   anonymousSessionId?: string | null;
   systemScopeId?: string | null;
@@ -84,8 +84,8 @@ export function legacyDayforgeEventScope(input: {
   );
 }
 
-export function buildDayforgeEventRows(input: LegacyDayforgeEventInput) {
-  const scopeKey = legacyDayforgeEventScope(input);
+export function buildLegacyDayforgeEventRows(input: LegacyDayforgeEventInput) {
+  const scopeKey = legacyLegacyDayforgeEventScope(input);
   const tenantId = input.tenantId?.trim() || null;
   const anonymousSessionId = input.anonymousSessionId?.trim() || null;
   const occurredAt = input.occurredAt ?? new Date();
@@ -137,7 +137,7 @@ export function buildDayforgeEventRows(input: LegacyDayforgeEventInput) {
         customerId: input.productEvent.customerId ?? null,
         eventName: input.productEvent.name,
         eventVersion: 1,
-        propertiesJson: sanitizeDayforgeProductEventProperties(
+        propertiesJson: sanitizeLegacyDayforgeProductEventProperties(
           input.productEvent.name,
           input.productEvent.properties ?? {}
         ),
@@ -158,13 +158,13 @@ export function buildDayforgeEventRows(input: LegacyDayforgeEventInput) {
  * actor, source and correlation values derived by trusted server code, never
  * values accepted directly from an API payload.
  */
-export async function writeDayforgeEventWith(
+export async function writeLegacyDayforgeEventWith(
   connection: LegacyDayforgeEventConnection,
   input: LegacyDayforgeEventInput
 ) {
-  const rows = buildDayforgeEventRows(input);
+  const rows = buildLegacyDayforgeEventRows(input);
   await connection
-    .insert(legacyDayforgeAuditEvents)
+    .insert(legacyLegacyDayforgeAuditEvents)
     .values(rows.audit)
     .onDuplicateKeyUpdate({
       // Deliberately immutable: this acquires the unique-key lock without
@@ -173,17 +173,17 @@ export async function writeDayforgeEventWith(
     });
   const persistedAudit = await connection
     .select({
-      id: legacyDayforgeAuditEvents.id,
-      entityType: legacyDayforgeAuditEvents.entityType,
-      entityId: legacyDayforgeAuditEvents.entityId,
-      eventName: legacyDayforgeAuditEvents.eventName,
-      correlationId: legacyDayforgeAuditEvents.correlationId,
+      id: legacyLegacyDayforgeAuditEvents.id,
+      entityType: legacyLegacyDayforgeAuditEvents.entityType,
+      entityId: legacyLegacyDayforgeAuditEvents.entityId,
+      eventName: legacyLegacyDayforgeAuditEvents.eventName,
+      correlationId: legacyLegacyDayforgeAuditEvents.correlationId,
     })
-    .from(legacyDayforgeAuditEvents)
+    .from(legacyLegacyDayforgeAuditEvents)
     .where(
       and(
-        eq(legacyDayforgeAuditEvents.scopeKey, rows.audit.scopeKey),
-        eq(legacyDayforgeAuditEvents.idempotencyKey, rows.audit.idempotencyKey)
+        eq(legacyLegacyDayforgeAuditEvents.scopeKey, rows.audit.scopeKey),
+        eq(legacyLegacyDayforgeAuditEvents.idempotencyKey, rows.audit.idempotencyKey)
       )
     )
     .limit(1);
@@ -202,23 +202,23 @@ export async function writeDayforgeEventWith(
 
   if (rows.product) {
     await connection
-      .insert(legacyDayforgeProductEvents)
+      .insert(legacyLegacyDayforgeProductEvents)
       .values(rows.product)
       .onDuplicateKeyUpdate({
         set: { idempotencyKey: rows.product.idempotencyKey },
       });
     const persistedProduct = await connection
       .select({
-        eventName: legacyDayforgeProductEvents.eventName,
-        entityType: legacyDayforgeProductEvents.entityType,
-        entityId: legacyDayforgeProductEvents.entityId,
-        correlationId: legacyDayforgeProductEvents.correlationId,
+        eventName: legacyLegacyDayforgeProductEvents.eventName,
+        entityType: legacyLegacyDayforgeProductEvents.entityType,
+        entityId: legacyLegacyDayforgeProductEvents.entityId,
+        correlationId: legacyLegacyDayforgeProductEvents.correlationId,
       })
-      .from(legacyDayforgeProductEvents)
+      .from(legacyLegacyDayforgeProductEvents)
       .where(
         and(
-          eq(legacyDayforgeProductEvents.scopeKey, rows.product.scopeKey),
-          eq(legacyDayforgeProductEvents.idempotencyKey, rows.product.idempotencyKey)
+          eq(legacyLegacyDayforgeProductEvents.scopeKey, rows.product.scopeKey),
+          eq(legacyLegacyDayforgeProductEvents.idempotencyKey, rows.product.idempotencyKey)
         )
       )
       .limit(1);
@@ -240,8 +240,8 @@ export async function writeDayforgeEventWith(
   } as const;
 }
 
-export async function writeDayforgeEvent(input: LegacyDayforgeEventInput) {
+export async function writeLegacyDayforgeEvent(input: LegacyDayforgeEventInput) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.transaction(tx => writeDayforgeEventWith(tx, input));
+  return db.transaction(tx => writeLegacyDayforgeEventWith(tx, input));
 }

@@ -2,7 +2,7 @@
 /**
  * Client-facing Goldline gameplay event dispatch.
  *
- * Reuses the existing DayForge event pipeline (`writeDayforgeEvent`) rather
+ * Reuses the existing DayForge event pipeline (`writeLegacyDayforgeEvent`) rather
  * than inventing a second event store. The trust boundary documented on that
  * function — "actor, source and correlation values derived by trusted server
  * code, never values accepted directly from an API payload" — is preserved
@@ -19,18 +19,18 @@
 import { z } from "zod";
 import {
   adminProcedure,
-  legacyDayforgeMissionFieldProcedure,
+  legacyLegacyDayforgeMissionFieldProcedure,
   router,
 } from "../_core/trpc";
 import {
   GOLDLINE_CLIENT_EVENT_NAMES,
-  sanitizeDayforgeProductEventProperties,
-} from "@shared/legacyDayforgeEvents";
-import { writeDayforgeEvent } from "./legacyDayforgeEventStore";
+  sanitizeLegacyDayforgeProductEventProperties,
+} from "@shared/legacyLegacyDayforgeEvents";
+import { writeLegacyDayforgeEvent } from "./legacyLegacyDayforgeEventStore";
 import { getGoldlineEffectivenessSummary } from "./goldlineEffectivenessQueries";
 
 export const goldlineEventRouter = router({
-  record: legacyDayforgeMissionFieldProcedure
+  record: legacyLegacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         sessionId: z.string().uuid(),
@@ -41,11 +41,11 @@ export const goldlineEventRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const sanitized = sanitizeDayforgeProductEventProperties(
+      const sanitized = sanitizeLegacyDayforgeProductEventProperties(
         input.eventName,
         { sessionId: input.sessionId, ...input.properties }
       );
-      await writeDayforgeEvent({
+      await writeLegacyDayforgeEvent({
         tenantId: ctx.tenantId,
         actor: { type: "field", id: ctx.user.openId },
         entityType: input.missionId ? "commercial_mission" : "goldline_session",

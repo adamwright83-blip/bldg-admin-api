@@ -1,7 +1,7 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import { legacyLegacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import { listDormantRescueCandidates } from "./listCandidates";
 import { reconcilePaidOrderConsequencesForOperator } from "./consequenceReconciliation";
 import {
@@ -49,7 +49,7 @@ export function assertAuthoritativeRescueSendEnabled(): void {
 }
 
 export const spiritHumanRescueRouter = router({
-  listCandidates: legacyDayforgeTenantMemberProcedure.query(async ({ ctx }) => {
+  listCandidates: legacyLegacyDayforgeTenantMemberProcedure.query(async ({ ctx }) => {
     try {
       return await listDormantRescueCandidates({ tenantId: tenantOf(ctx) });
     } catch {
@@ -57,14 +57,14 @@ export const spiritHumanRescueRouter = router({
     }
   }),
 
-  listMine: legacyDayforgeTenantMemberProcedure.query(async ({ ctx }) =>
+  listMine: legacyLegacyDayforgeTenantMemberProcedure.query(async ({ ctx }) =>
     listRescueMissions({
       tenantId: tenantOf(ctx),
       operatorUserId: ctx.user.openId,
     })
   ),
 
-  reconcileConsequences: legacyDayforgeTenantMemberProcedure.mutation(async ({ ctx }) => {
+  reconcileConsequences: legacyLegacyDayforgeTenantMemberProcedure.mutation(async ({ ctx }) => {
     try {
       return await reconcilePaidOrderConsequencesForOperator({
         tenantId: tenantOf(ctx),
@@ -75,7 +75,7 @@ export const spiritHumanRescueRouter = router({
     }
   }),
 
-  instantiate: legacyDayforgeTenantMemberProcedure
+  instantiate: legacyLegacyDayforgeTenantMemberProcedure
     .input(z.object({ snapshotCustomerId: z.string().min(1).max(64) }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -92,7 +92,7 @@ export const spiritHumanRescueRouter = router({
       }
     }),
 
-  enter: legacyDayforgeTenantMemberProcedure
+  enter: legacyLegacyDayforgeTenantMemberProcedure
     .input(z.object({ missionId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -106,7 +106,7 @@ export const spiritHumanRescueRouter = router({
       }
     }),
 
-  prepareDraft: legacyDayforgeTenantMemberProcedure
+  prepareDraft: legacyLegacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         missionId: z.string().min(1),
@@ -131,7 +131,7 @@ export const spiritHumanRescueRouter = router({
    * `operatorAuthorizedSend` must be true; approvedByUserId is the signed-in operator.
    * Proof mode refuses this mutation instead of faking provider_accepted truth.
    */
-  approveAndSend: legacyDayforgeTenantMemberProcedure
+  approveAndSend: legacyLegacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         missionId: z.string().min(1),
@@ -155,7 +155,7 @@ export const spiritHumanRescueRouter = router({
       }
     }),
 
-  cancel: legacyDayforgeTenantMemberProcedure
+  cancel: legacyLegacyDayforgeTenantMemberProcedure
     .input(z.object({ missionId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       try {
@@ -169,7 +169,7 @@ export const spiritHumanRescueRouter = router({
       }
     }),
 
-  defer: legacyDayforgeTenantMemberProcedure
+  defer: legacyLegacyDayforgeTenantMemberProcedure
     .input(z.object({ missionId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       try {

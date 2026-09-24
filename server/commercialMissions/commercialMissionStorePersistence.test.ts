@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
   getDb: vi.fn(),
   createCommercialPipelineForMissionWith: vi.fn(async () => 1),
   syncCommercialPipelineForMissionTransitionWith: vi.fn(),
-  writeDayforgeEventWith: vi.fn(async () => undefined),
+  writeLegacyDayforgeEventWith: vi.fn(async () => undefined),
 }));
 
 vi.mock("../db", () => ({ getDb: mocks.getDb }));
@@ -27,8 +27,8 @@ vi.mock("../commercialPipeline/commercialPipelineCore", async importOriginal => 
   createCommercialPipelineForMissionWith: mocks.createCommercialPipelineForMissionWith,
   syncCommercialPipelineForMissionTransitionWith: mocks.syncCommercialPipelineForMissionTransitionWith,
 }));
-vi.mock("../legacyDayforgeEvents/legacyDayforgeEventStore", () => ({
-  writeDayforgeEventWith: mocks.writeDayforgeEventWith,
+vi.mock("../legacyLegacyDayforgeEvents/legacyLegacyDayforgeEventStore", () => ({
+  writeLegacyDayforgeEventWith: mocks.writeLegacyDayforgeEventWith,
 }));
 
 import {

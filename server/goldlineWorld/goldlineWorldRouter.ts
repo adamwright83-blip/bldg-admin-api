@@ -1,10 +1,10 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
 import {
-  legacyDayforgeMissionFieldProcedure,
-  legacyDayforgeTenantAdminProcedure,
-  legacyDayforgeTenantMemberProcedure,
-  legacyDayforgeTenantOperatorProcedure,
+  legacyLegacyDayforgeMissionFieldProcedure,
+  legacyLegacyDayforgeTenantAdminProcedure,
+  legacyLegacyDayforgeTenantMemberProcedure,
+  legacyLegacyDayforgeTenantOperatorProcedure,
   router,
 } from "../_core/trpc";
 import {
@@ -44,13 +44,13 @@ import { resolveProductionExperimentPolicy } from "../../shared/behavioralExperi
 import { assignExperimentalPresentation } from "../behavioralExperiment/assignPresentation";
 
 export const goldlineWorldRouter = router({
-  lanternCityOverview: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
+  lanternCityOverview: legacyLegacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
     getLanternCityOverview({
       tenantId: ctx.tenantId,
       operatorId: ctx.user.openId,
     })
   ),
-  frontierIntelligence: legacyDayforgeTenantMemberProcedure
+  frontierIntelligence: legacyLegacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         territoryId: z.string().trim().min(2).max(80),
@@ -62,13 +62,13 @@ export const goldlineWorldRouter = router({
     .query(({ ctx, input }) =>
       buildFrontierIntelligence({ tenantId: ctx.tenantId, ...input })
     ),
-  economicReceipts: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
+  economicReceipts: legacyLegacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
     listCurrentEconomicReceipts(ctx.tenantId)
   ),
-  cityEntities: legacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
+  cityEntities: legacyLegacyDayforgeTenantOperatorProcedure.query(({ ctx }) =>
     listCityWorldEntities({ tenantId: ctx.tenantId })
   ),
-  unpresentedCelebrations: legacyDayforgeMissionFieldProcedure
+  unpresentedCelebrations: legacyLegacyDayforgeMissionFieldProcedure
     .input(
       z
         .object({ limit: z.number().int().min(1).max(50).default(20) })
@@ -81,7 +81,7 @@ export const goldlineWorldRouter = router({
         limit: input?.limit,
       })
     ),
-  markEvent: legacyDayforgeMissionFieldProcedure
+  markEvent: legacyLegacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         worldEventId: z.string().uuid(),
@@ -95,7 +95,7 @@ export const goldlineWorldRouter = router({
         ...input,
       })
     ),
-  chronicle: legacyDayforgeTenantOperatorProcedure
+  chronicle: legacyLegacyDayforgeTenantOperatorProcedure
     .input(
       z.object({
         physicalEntityId: z.string().uuid(),
@@ -105,7 +105,7 @@ export const goldlineWorldRouter = router({
     .query(({ ctx, input }) =>
       listEntityChronicle({ tenantId: ctx.tenantId, ...input })
     ),
-  forgeJobs: legacyDayforgeTenantAdminProcedure
+  forgeJobs: legacyLegacyDayforgeTenantAdminProcedure
     .input(
       z
         .object({
@@ -116,19 +116,19 @@ export const goldlineWorldRouter = router({
     .query(({ ctx, input }) =>
       listForgeJobs({ tenantId: ctx.tenantId, limit: input?.limit })
     ),
-  forgeReview: legacyDayforgeTenantAdminProcedure
+  forgeReview: legacyLegacyDayforgeTenantAdminProcedure
     .input(z.object({ forgeJobId: z.string().uuid() }))
     .query(({ ctx, input }) =>
       getForgeReview({ tenantId: ctx.tenantId, ...input })
     ),
-  selectWeapon: legacyDayforgeTenantAdminProcedure
+  selectWeapon: legacyLegacyDayforgeTenantAdminProcedure
     .input(
       z.object({ forgeJobId: z.string().uuid(), conceptId: z.string().uuid() })
     )
     .mutation(({ ctx, input }) =>
       selectTowerWeaponConcept({ tenantId: ctx.tenantId, ...input })
     ),
-  rejectForge: legacyDayforgeTenantAdminProcedure
+  rejectForge: legacyLegacyDayforgeTenantAdminProcedure
     .input(
       z.object({
         forgeJobId: z.string().uuid(),
@@ -143,7 +143,7 @@ export const goldlineWorldRouter = router({
         reason: input.reason,
       })
     ),
-  approveAndPublish: legacyDayforgeTenantAdminProcedure
+  approveAndPublish: legacyLegacyDayforgeTenantAdminProcedure
     .input(
       z.object({
         forgeJobId: z.string().uuid(),
@@ -159,7 +159,7 @@ export const goldlineWorldRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  retryForge: legacyDayforgeTenantAdminProcedure
+  retryForge: legacyLegacyDayforgeTenantAdminProcedure
     .input(z.object({ forgeJobId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       queueTowerForgeJob({
@@ -168,7 +168,7 @@ export const goldlineWorldRouter = router({
       });
       return { queued: true } as const;
     }),
-  processForgeNow: legacyDayforgeTenantAdminProcedure
+  processForgeNow: legacyLegacyDayforgeTenantAdminProcedure
     .input(z.object({ forgeJobId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       processTowerForgeJob({
@@ -176,10 +176,10 @@ export const goldlineWorldRouter = router({
         forgeJobId: input.forgeJobId,
       })
     ),
-  territories: legacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
+  territories: legacyLegacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
     listPresentedTerritories({ tenantId: ctx.tenantId })
   ),
-  recordGuardianDefeat: legacyDayforgeTenantMemberProcedure
+  recordGuardianDefeat: legacyLegacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         territoryId: z.string().uuid(),
@@ -228,19 +228,19 @@ export const goldlineWorldRouter = router({
         completedCampaignChapterId: campaignResult.chapterId,
       };
     }),
-  campaign: legacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
+  campaign: legacyLegacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
     getOrMaterializeTodayCampaign({
       tenantId: ctx.tenantId,
       operatorId: ctx.user.openId,
     })
   ),
-  campaigns: legacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
+  campaigns: legacyLegacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
     listOperatorCampaigns({
       tenantId: ctx.tenantId,
       operatorId: ctx.user.openId,
     })
   ),
-  chooseCampaignBranch: legacyDayforgeTenantMemberProcedure
+  chooseCampaignBranch: legacyLegacyDayforgeTenantMemberProcedure
     .input(z.object({ chapterId: z.string().min(1).max(191) }))
     .mutation(({ ctx, input }) =>
       chooseCampaignBranch({
@@ -249,7 +249,7 @@ export const goldlineWorldRouter = router({
         chapterId: input.chapterId,
       })
     ),
-  upsertFictionAssignment: legacyDayforgeTenantMemberProcedure
+  upsertFictionAssignment: legacyLegacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         stableMissionKey: z.string().min(1).max(191),
@@ -264,7 +264,7 @@ export const goldlineWorldRouter = router({
         ...input,
       })
     ),
-  behavioralEventsForSubject: legacyDayforgeTenantMemberProcedure
+  behavioralEventsForSubject: legacyLegacyDayforgeTenantMemberProcedure
     .input(z.object({ correlationId: z.string().min(1).max(191) }))
     .query(async ({ ctx, input }) => {
       const rows = await listBehavioralLedgerEventsForOperatorCorrelation(
@@ -285,7 +285,7 @@ export const goldlineWorldRouter = router({
         })),
       };
     }),
-  experimentalPresentationAssignment: legacyDayforgeTenantMemberProcedure
+  experimentalPresentationAssignment: legacyLegacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         correlationId: z.string().min(1).max(128),
@@ -340,7 +340,7 @@ export const goldlineWorldRouter = router({
         proximalOutcomeWindowMinutes: result.assignment.proximalOutcomeWindowMinutes,
       };
     }),
-  resetProofWorld: legacyDayforgeTenantAdminProcedure.mutation(() =>
+  resetProofWorld: legacyLegacyDayforgeTenantAdminProcedure.mutation(() =>
     resetProofWorldFromApi()
   ),
 });

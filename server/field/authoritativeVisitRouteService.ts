@@ -5,7 +5,7 @@ import {
   commercialMissionEvents,
   commercialMissions,
   commercialVisitOutcomes,
-  legacyDayforgeSaasTenants,
+  legacyLegacyDayforgeSaasTenants,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
@@ -164,9 +164,9 @@ async function tenantBusinessDate(input: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [tenant] = await db
-    .select({ timeZone: legacyDayforgeSaasTenants.timeZone })
-    .from(legacyDayforgeSaasTenants)
-    .where(eq(legacyDayforgeSaasTenants.id, input.tenantId))
+    .select({ timeZone: legacyLegacyDayforgeSaasTenants.timeZone })
+    .from(legacyLegacyDayforgeSaasTenants)
+    .where(eq(legacyLegacyDayforgeSaasTenants.id, input.tenantId))
     .limit(1);
   return businessDate(input.now, tenant?.timeZone ?? "America/Los_Angeles");
 }

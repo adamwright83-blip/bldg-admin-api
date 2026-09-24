@@ -25,7 +25,7 @@ import {
 } from "@shared/customerChurn";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
-import { writeDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
+import { writeLegacyDayforgeEventWith } from "../legacyLegacyDayforgeEvents/legacyLegacyDayforgeEventStore";
 import { appendGoldlineWorldEvent } from "../goldlineWorld/worldEventStore";
 import { findPhysicalEntityIdByAddress } from "../goldlineWorld/entityLookup";
 import {
@@ -406,7 +406,7 @@ export async function runCustomerChurnScan(input: {
         item => (item.score ?? 0) >= 40
       )) {
         const correlationId = `churn-scan:${scanId}`;
-        await writeDayforgeEventWith(tx, {
+        await writeLegacyDayforgeEventWith(tx, {
           tenantId: input.tenantId,
           actor: { type: "system", id: "legacy-dayforge-churn-radar" },
           entityType: "customer_churn_snapshot",
@@ -772,7 +772,7 @@ export async function createCustomerRecoveryIntervention(input: {
         revenueRecoveredCents: 0,
         orderId: snapshot.lastOrderId,
         metadataJson: {
-          legacyDayforgeRecoveryInterventionId: id,
+          legacyLegacyDayforgeRecoveryInterventionId: id,
           churnSnapshotId: snapshot.id,
           score: snapshot.score,
           confidence: snapshot.confidence,
@@ -811,7 +811,7 @@ export async function createCustomerRecoveryIntervention(input: {
         metadataJson: { opsTaskId, churnSnapshotId: snapshot.id, draftId },
       });
       const projectionCorrelationId = `recovery-intervention:${id}:${input.requestId}`;
-      await writeDayforgeEventWith(tx, {
+      await writeLegacyDayforgeEventWith(tx, {
         tenantId: input.tenantId,
         actor: { type: "operator", id: input.actorId },
         entityType: "customer_recovery_intervention",
@@ -1092,7 +1092,7 @@ export async function approveCustomerRecoveryDraft(input: {
         },
       });
       const projectionCorrelationId = `recovery-intervention:${input.interventionId}:${input.requestId}`;
-      await writeDayforgeEventWith(tx, {
+      await writeLegacyDayforgeEventWith(tx, {
         tenantId: input.tenantId,
         actor: { type: "operator", id: input.actorId },
         entityType: "customer_recovery_intervention",
@@ -1647,7 +1647,7 @@ async function markRecoveredWith(
     },
   });
   const projectionCorrelationId = `recovery-intervention:${input.intervention.id}:order:${input.order.id}`;
-  await writeDayforgeEventWith(tx, {
+  await writeLegacyDayforgeEventWith(tx, {
     tenantId: input.tenantId,
     actor: { type: "system", id: "legacy-dayforge-attribution" },
     entityType: "customer_recovery_intervention",
@@ -1663,7 +1663,7 @@ async function markRecoveredWith(
       properties: { attributionConfidence: "paid_order_after_contact" },
     },
   });
-  await writeDayforgeEventWith(tx, {
+  await writeLegacyDayforgeEventWith(tx, {
     tenantId: input.tenantId,
     actor: { type: "system", id: "legacy-dayforge-attribution" },
     entityType: "customer_recovery_intervention",

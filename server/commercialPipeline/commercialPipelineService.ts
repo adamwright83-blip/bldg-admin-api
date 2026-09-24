@@ -33,7 +33,7 @@ import {
   transitionCommercialMissionWith,
 } from "../commercialMissions/commercialMissionStore";
 import { associateArmoryOutcome } from "../armory/armoryEvidenceService";
-import { writeDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
+import { writeLegacyDayforgeEventWith } from "../legacyLegacyDayforgeEvents/legacyLegacyDayforgeEventStore";
 import { getDashboardTimeZone, zonedYmd } from "../dashboardZoned";
 
 type Transaction = Parameters<
@@ -1186,7 +1186,7 @@ export async function attributeCommercialOrder(input: {
       });
       if (paidCents > 0) {
         const projectionCorrelationId = `commercial-pipeline:${pipeline.id}:order:${input.requestId}`;
-        await writeDayforgeEventWith(tx, {
+        await writeLegacyDayforgeEventWith(tx, {
           tenantId: input.tenantId,
           actor: { type: "operator", id: input.actorId },
           entityType: "commercial_pipeline",

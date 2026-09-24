@@ -1,6 +1,6 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { describe, expect, it } from "vitest";
-import { sortDayforgeTodayItems, type LegacyDayforgeTodayItem } from "./legacyDayforgeTodayService";
+import { sortLegacyDayforgeTodayItems, type LegacyDayforgeTodayItem } from "./legacyLegacyDayforgeTodayService";
 
 const base: LegacyDayforgeTodayItem = {
   id: "base", kind: "missing_next_action", urgency: "exception", missionId: 1,
@@ -19,7 +19,7 @@ describe("DayForge Today queue", () => {
       { ...base, id: "overdue", kind: "follow_up" as const, dueAt: "2026-07-23T12:00:00.000Z" },
       { ...base, id: "today", kind: "follow_up" as const, dueAt: "2026-07-24T18:00:00.000Z" },
     ];
-    expect(sortDayforgeTodayItems(items, now).map(item => item.id)).toEqual([
+    expect(sortLegacyDayforgeTodayItems(items, now).map(item => item.id)).toEqual([
       "overdue", "dispatch", "today", "future", "missing",
     ]);
   });
@@ -30,6 +30,6 @@ describe("DayForge Today queue", () => {
       { ...base, id: "a", estimatedValueCents: 100 },
       { ...base, id: "high", estimatedValueCents: 500 },
     ];
-    expect(sortDayforgeTodayItems(items).map(item => item.id)).toEqual(["high", "a", "b"]);
+    expect(sortLegacyDayforgeTodayItems(items).map(item => item.id)).toEqual(["high", "a", "b"]);
   });
 });

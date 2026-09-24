@@ -17,20 +17,20 @@ describe("DayForge SaaS production contract", () => {
 
   it("requires membership and entitlement procedures on every DayForge domain", () => {
     const files = [
-      ["../territory/territoryRouter.ts", "legacyDayforgeTerritoryProcedure"],
+      ["../territory/territoryRouter.ts", "legacyLegacyDayforgeTerritoryProcedure"],
       [
         "../commercialMissions/commercialMissionRouter.ts",
-        "legacyDayforgeMissionFieldProcedure",
+        "legacyLegacyDayforgeMissionFieldProcedure",
       ],
       [
         "../commercialProposals/commercialProposalRouter.ts",
-        "legacyDayforgeProposalFieldProcedure",
+        "legacyLegacyDayforgeProposalFieldProcedure",
       ],
       [
         "../commercialPipeline/commercialPipelineRouter.ts",
-        "legacyDayforgePipelineProcedure",
+        "legacyLegacyDayforgePipelineProcedure",
       ],
-      ["../churnRadar/churnRadarRouter.ts", "legacyDayforgeChurnProcedure"],
+      ["../churnRadar/churnRadarRouter.ts", "legacyLegacyDayforgeChurnProcedure"],
     ] as const;
     for (const [path, procedure] of files) {
       const router = source(path);
@@ -56,7 +56,7 @@ describe("DayForge SaaS production contract", () => {
   it("registers the raw Stripe webhook before the global JSON parser", () => {
     const index = source("../_core/index.ts");
     expect(
-      index.indexOf("registerDayforgeBillingWebhookRoute(app)")
+      index.indexOf("registerLegacyDayforgeBillingWebhookRoute(app)")
     ).toBeLessThan(index.indexOf('app.use(express.json({ limit: "50mb" }))'));
   });
 

@@ -7,7 +7,7 @@
  *   DATABASE_URL=... pnpm legacy-dayforge:demo:verify
  */
 import "dotenv/config";
-import { verifyDemoTenant } from "../server/legacyDayforgeDemo/demoTenantVerify";
+import { verifyDemoTenant } from "../server/legacyLegacyDayforgeDemo/demoTenantVerify";
 
 async function main() {
   const report = await verifyDemoTenant();

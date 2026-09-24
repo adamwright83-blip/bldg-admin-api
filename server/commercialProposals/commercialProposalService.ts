@@ -17,7 +17,7 @@ import {
   readCommercialMissionWith,
   type CommercialMissionTransaction,
 } from "../commercialMissions/commercialMissionStore";
-import { writeDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
+import { writeLegacyDayforgeEventWith } from "../legacyLegacyDayforgeEvents/legacyLegacyDayforgeEventStore";
 
 const PROPOSAL_READY_STATUSES = new Set([
   "phone_ready",
@@ -295,7 +295,7 @@ export async function generateCommercialProposal(input: {
         metadataJson: { version, contentHash: contentHash(snapshot) },
       });
       const projectionCorrelationId = `commercial-proposal:${id}:${input.requestId}`;
-      await writeDayforgeEventWith(tx, {
+      await writeLegacyDayforgeEventWith(tx, {
         tenantId: input.tenantId,
         actor: { type: "operator", id: input.actorId },
         entityType: "commercial_proposal",
@@ -436,7 +436,7 @@ export async function approveCommercialProposal(input: {
         metadataJson: { version: target.version },
       });
       const projectionCorrelationId = `commercial-proposal:${input.proposalId}:${input.requestId}`;
-      await writeDayforgeEventWith(tx, {
+      await writeLegacyDayforgeEventWith(tx, {
         tenantId: input.tenantId,
         actor: { type: "operator", id: input.actorId },
         entityType: "commercial_proposal",

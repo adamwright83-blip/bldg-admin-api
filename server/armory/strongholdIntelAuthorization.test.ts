@@ -9,8 +9,8 @@ const access = vi.hoisted(() => ({
 }));
 
 vi.mock("../saas/tenantAccess", () => ({
-  resolveDayforgeMembership: access.resolveMembership,
-  hasDayforgeEntitlement: access.hasEntitlement,
+  resolveLegacyDayforgeMembership: access.resolveMembership,
+  hasLegacyDayforgeEntitlement: access.hasEntitlement,
   roleAllows: (actual: string, allowed: readonly string[]) =>
     allowed.includes(actual),
 }));

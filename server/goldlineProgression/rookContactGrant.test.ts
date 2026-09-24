@@ -28,8 +28,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../saas/tenantAccess", () => ({
-  resolveDayforgeMembership: access.resolveMembership,
-  hasDayforgeEntitlement: vi.fn(),
+  resolveLegacyDayforgeMembership: access.resolveMembership,
+  hasLegacyDayforgeEntitlement: vi.fn(),
   roleAllows: (actual: string, allowed: readonly string[]) => allowed.includes(actual),
 }));
 vi.mock("../openChannel/day1TenDoorsService", () => ({

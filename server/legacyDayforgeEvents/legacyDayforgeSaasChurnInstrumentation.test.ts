@@ -29,7 +29,7 @@ describe("DayForge SaaS and Churn Radar event projection", () => {
   });
 
   it("writes risk, preparation, approval, and recovery inside transactions", () => {
-    expect(churn.match(/writeDayforgeEventWith\(tx/g)?.length).toBeGreaterThanOrEqual(5);
+    expect(churn.match(/writeLegacyDayforgeEventWith\(tx/g)?.length).toBeGreaterThanOrEqual(5);
     expect(churn).toContain('actor: { type: "system", id: "legacy-dayforge-churn-radar" }');
     expect(churn).toContain('source: "churn_radar_attribution"');
   });
@@ -37,7 +37,7 @@ describe("DayForge SaaS and Churn Radar event projection", () => {
   it("projects signup start and completion without analytics PII", () => {
     expect(saas).toContain('name: "tenant_signup_started"');
     expect(saas).toContain('name: "tenant_signup_completed"');
-    expect(saas.match(/writeDayforgeEventWith\(tx/g)).toHaveLength(2);
+    expect(saas.match(/writeLegacyDayforgeEventWith\(tx/g)).toHaveLength(2);
     expect(saas).toContain('sourcePlacement: "dayforge_onboarding"');
 
     const productBlocks = saas.match(/productEvent: \{[\s\S]*?\n\s+\},/g) ?? [];

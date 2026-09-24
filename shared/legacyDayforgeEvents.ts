@@ -462,7 +462,7 @@ function isSafeProductAnalyticsValue(
  * oversized values are discarded so arbitrary client payloads cannot reach an
  * analytics destination.
  */
-export function sanitizeDayforgeProductEventProperties<
+export function sanitizeLegacyDayforgeProductEventProperties<
   Name extends LegacyDayforgeProductEventName,
 >(
   eventName: Name,
@@ -489,7 +489,7 @@ export function sanitizeDayforgeProductEventProperties<
 }
 
 /** Strict server-boundary validation for callers that must fail closed. */
-export function assertDayforgeProductEventProperties<
+export function assertLegacyDayforgeProductEventProperties<
   Name extends LegacyDayforgeProductEventName,
 >(
   eventName: Name,
@@ -497,7 +497,7 @@ export function assertDayforgeProductEventProperties<
 ): void {
   if (!properties) return;
 
-  const sanitized = sanitizeDayforgeProductEventProperties(
+  const sanitized = sanitizeLegacyDayforgeProductEventProperties(
     eventName,
     properties
   );
@@ -575,7 +575,7 @@ export function isGoldlineClientEventName(
   return (GOLDLINE_CLIENT_EVENT_NAMES as readonly string[]).includes(value);
 }
 
-export function isDayforgeProductEventName(
+export function isLegacyDayforgeProductEventName(
   value: string
 ): value is LegacyDayforgeProductEventName {
   return (DAYFORGE_PRODUCT_EVENT_NAMES as readonly string[]).includes(value);

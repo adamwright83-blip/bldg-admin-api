@@ -30,7 +30,7 @@ const pipeline = readFileSync(
 
 describe("DayForge mission journey instrumentation", () => {
   it("appends audit and product projections inside mission transactions", () => {
-    expect(store).toContain("writeDayforgeEventWith(tx");
+    expect(store).toContain("writeLegacyDayforgeEventWith(tx");
     expect(store).toContain("before: missionAuditSnapshot(current)");
     expect(store).toContain("after: missionAuditSnapshot(transitioned)");
     expect(store).toContain("missionProjectionCorrelationId");
@@ -78,7 +78,7 @@ describe("DayForge mission journey instrumentation", () => {
   });
 
   it("projects proposal creation and approval from their domain transactions", () => {
-    expect(proposals.match(/writeDayforgeEventWith\(tx/g)).toHaveLength(2);
+    expect(proposals.match(/writeLegacyDayforgeEventWith\(tx/g)).toHaveLength(2);
     expect(proposals).toContain('name: "proposal_created"');
     expect(proposals).toContain('name: "proposal_approved"');
   });

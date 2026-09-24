@@ -5,8 +5,8 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   router,
-  legacyDayforgeTenantAdminProcedure,
-  legacyDayforgeTenantOperatorProcedure,
+  legacyLegacyDayforgeTenantAdminProcedure,
+  legacyLegacyDayforgeTenantOperatorProcedure,
 } from "../_core/trpc";
 import { getDb } from "../db";
 import {
@@ -311,7 +311,7 @@ async function runRecordedImport<T>(
 }
 
 export const cleancloudBrowserSyncRouter = router({
-  context: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
+  context: legacyLegacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
     const db = await requireDb();
     const [binding] = await db
       .select()
@@ -372,7 +372,7 @@ export const cleancloudBrowserSyncRouter = router({
       observability,
     };
   }),
-  pair: legacyDayforgeTenantAdminProcedure
+  pair: legacyLegacyDayforgeTenantAdminProcedure
     .input(store.merge(account))
     .mutation(async ({ ctx, input }) => {
       assertAccount(ctx, input);
@@ -403,7 +403,7 @@ export const cleancloudBrowserSyncRouter = router({
         });
       return binding;
     }),
-  receipt: legacyDayforgeTenantOperatorProcedure
+  receipt: legacyLegacyDayforgeTenantOperatorProcedure
     .input(account.extend({ requestId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       assertAccount(ctx, input);
@@ -419,7 +419,7 @@ export const cleancloudBrowserSyncRouter = router({
         );
       return { receipt: receipt?.receiptJson ?? null };
     }),
-  resolve: legacyDayforgeTenantOperatorProcedure
+  resolve: legacyLegacyDayforgeTenantOperatorProcedure
     .input(account.extend({ requestId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       assertAccount(ctx, input);
@@ -466,7 +466,7 @@ export const cleancloudBrowserSyncRouter = router({
         return { receipt };
       });
     }),
-  import: legacyDayforgeTenantOperatorProcedure
+  import: legacyLegacyDayforgeTenantOperatorProcedure
     .input(importInput)
     .mutation(({ ctx, input }) => runRecordedImport(ctx, input, async () => {
       assertAccount(ctx, input);
@@ -611,7 +611,7 @@ export const cleancloudBrowserSyncRouter = router({
       );
     })),
   /** The extension reports failures that happen before an import reaches Goldline. */
-  reportFailure: legacyDayforgeTenantOperatorProcedure
+  reportFailure: legacyLegacyDayforgeTenantOperatorProcedure
     .input(
       account.extend({
         requestId: z.string().uuid().optional(),

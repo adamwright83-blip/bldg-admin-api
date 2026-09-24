@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   DAYFORGE_PRODUCT_EVENT_NAMES,
   DAYFORGE_PRODUCT_EVENT_PROPERTY_KEYS,
-  assertDayforgeProductEventProperties,
-  isDayforgeProductEventName,
-  sanitizeDayforgeProductEventProperties,
-} from "./legacyDayforgeEvents";
+  assertLegacyDayforgeProductEventProperties,
+  isLegacyDayforgeProductEventName,
+  sanitizeLegacyDayforgeProductEventProperties,
+} from "./legacyLegacyDayforgeEvents";
 
 describe("DayForge product event contract", () => {
   it("keeps every locked funnel event in the typed catalog", () => {
@@ -40,7 +40,7 @@ describe("DayForge product event contract", () => {
 
   it("redacts PII, arbitrary client properties, nested data, and invalid values", () => {
     expect(
-      sanitizeDayforgeProductEventProperties("territory_results_loaded", {
+      sanitizeLegacyDayforgeProductEventProperties("territory_results_loaded", {
         resultCount: 4,
         providerKey: "google_places",
         durationMs: 725,
@@ -62,7 +62,7 @@ describe("DayForge product event contract", () => {
 
   it("fails closed when strict validation sees unknown or sensitive keys", () => {
     expect(() =>
-      assertDayforgeProductEventProperties("opportunity_opened", {
+      assertLegacyDayforgeProductEventProperties("opportunity_opened", {
         rank: 1,
         scoreBand: "high",
         decisionMakerName: "Dana R.",
@@ -70,7 +70,7 @@ describe("DayForge product event contract", () => {
     ).toThrow(/decisionMakerName/);
 
     expect(() =>
-      assertDayforgeProductEventProperties("mission_game_completed", {
+      assertLegacyDayforgeProductEventProperties("mission_game_completed", {
         attemptNumber: 1,
         durationMs: { forged: true },
       })
@@ -78,7 +78,7 @@ describe("DayForge product event contract", () => {
   });
 
   it("accepts only known event names", () => {
-    expect(isDayforgeProductEventName("account_won")).toBe(true);
-    expect(isDayforgeProductEventName("contact_exported")).toBe(false);
+    expect(isLegacyDayforgeProductEventName("account_won")).toBe(true);
+    expect(isLegacyDayforgeProductEventName("contact_exported")).toBe(false);
   });
 });

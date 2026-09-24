@@ -2,9 +2,9 @@
 import { and, desc, eq } from "drizzle-orm";
 import {
   commercialMissionEvents,
-  legacyDayforgeSaasMemberships,
-  legacyDayforgeSaasTenantLocations,
-  legacyDayforgeSaasTenants,
+  legacyLegacyDayforgeSaasMemberships,
+  legacyLegacyDayforgeSaasTenantLocations,
+  legacyLegacyDayforgeSaasTenants,
   orderPaymentEvents,
   territoryScanResults,
 } from "../../drizzle/schema";
@@ -42,9 +42,9 @@ export async function getBusinessWorld(input: { tenantId: string; now?: Date }):
   const now = input.now ?? new Date();
   const [assets, tenants, locations, memberships, territoryRows, paymentEvents, missionEvents, capabilityEvaluations] = await Promise.all([
     listCustomerAssets({ tenantId: input.tenantId }),
-    db.select().from(legacyDayforgeSaasTenants).where(eq(legacyDayforgeSaasTenants.id, input.tenantId)).limit(1),
-    db.select().from(legacyDayforgeSaasTenantLocations).where(eq(legacyDayforgeSaasTenantLocations.tenantId, input.tenantId)),
-    db.select().from(legacyDayforgeSaasMemberships).where(and(eq(legacyDayforgeSaasMemberships.tenantId, input.tenantId), eq(legacyDayforgeSaasMemberships.active, true))),
+    db.select().from(legacyLegacyDayforgeSaasTenants).where(eq(legacyLegacyDayforgeSaasTenants.id, input.tenantId)).limit(1),
+    db.select().from(legacyLegacyDayforgeSaasTenantLocations).where(eq(legacyLegacyDayforgeSaasTenantLocations.tenantId, input.tenantId)),
+    db.select().from(legacyLegacyDayforgeSaasMemberships).where(and(eq(legacyLegacyDayforgeSaasMemberships.tenantId, input.tenantId), eq(legacyLegacyDayforgeSaasMemberships.active, true))),
     db.select().from(territoryScanResults).where(eq(territoryScanResults.tenantId, input.tenantId)).orderBy(desc(territoryScanResults.createdAt)).limit(100),
     db.select().from(orderPaymentEvents).where(eq(orderPaymentEvents.tenantId, input.tenantId)).orderBy(desc(orderPaymentEvents.occurredAt)).limit(20),
     db.select().from(commercialMissionEvents).where(eq(commercialMissionEvents.tenantId, input.tenantId)).orderBy(desc(commercialMissionEvents.createdAt)).limit(20),

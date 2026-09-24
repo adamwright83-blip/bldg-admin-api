@@ -1,10 +1,10 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { describe, expect, it } from "vitest";
 import {
-  defaultDayforgeDestination,
-  resolveDayforgeAuthenticatedDestination,
+  defaultLegacyDayforgeDestination,
+  resolveLegacyDayforgeAuthenticatedDestination,
   validateInternalReturnTo,
-} from "./legacyDayforgeContinuation";
+} from "./legacyLegacyDayforgeContinuation";
 
 describe("DayForge internal continuation validation", () => {
   it("preserves a normal application-relative destination", () => {
@@ -50,26 +50,26 @@ describe("DayForge internal continuation validation", () => {
   });
 
   it("uses DayForge Today as the explicit default", () => {
-    expect(defaultDayforgeDestination()).toEqual({
+    expect(defaultLegacyDayforgeDestination()).toEqual({
       destination: "/dayforge-today",
       destinationKind: "dayforge_today",
     });
   });
 
   it("resolves handoff, preview, internal return, then Today in security order", () => {
-    expect(resolveDayforgeAuthenticatedDestination({
+    expect(resolveLegacyDayforgeAuthenticatedDestination({
       missionHandoffPath: "/driver/sales-mission/42?view=brief",
       previewSessionId: "12345678-1234-4123-8123-123456789012",
       returnTo: "/commercial-pipeline",
     }).destinationKind).toBe("secure_mission_handoff");
-    expect(resolveDayforgeAuthenticatedDestination({
+    expect(resolveLegacyDayforgeAuthenticatedDestination({
       previewSessionId: "12345678-1234-4123-8123-123456789012",
       returnTo: "/commercial-pipeline",
     })).toEqual({
       destination: "/territory-preview?resume=12345678-1234-4123-8123-123456789012",
       destinationKind: "preview_continuation",
     });
-    expect(resolveDayforgeAuthenticatedDestination({ returnTo: "/commercial-pipeline" }).destination).toBe("/commercial-pipeline");
-    expect(resolveDayforgeAuthenticatedDestination({ returnTo: "https://evil.example" }).destination).toBe("/dayforge-today");
+    expect(resolveLegacyDayforgeAuthenticatedDestination({ returnTo: "/commercial-pipeline" }).destination).toBe("/commercial-pipeline");
+    expect(resolveLegacyDayforgeAuthenticatedDestination({ returnTo: "https://evil.example" }).destination).toBe("/dayforge-today");
   });
 });

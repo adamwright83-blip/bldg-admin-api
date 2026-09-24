@@ -8,9 +8,9 @@
 import { randomUUID } from "node:crypto";
 import { inArray } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
-import { legacyDayforgeAuditEvents, legacyDayforgeProductEvents } from "../../drizzle/schema";
+import { legacyLegacyDayforgeAuditEvents, legacyLegacyDayforgeProductEvents } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { writeDayforgeEvent } from "./legacyDayforgeEventStore";
+import { writeLegacyDayforgeEvent } from "./legacyLegacyDayforgeEventStore";
 import { getGoldlineEffectivenessSummary } from "./goldlineEffectivenessQueries";
 
 const runDatabaseGate =
@@ -24,11 +24,11 @@ describe.skipIf(!runDatabaseGate)("Goldline gameplay event pipeline", () => {
     const db = await getDb();
     if (!db) return;
     await db
-      .delete(legacyDayforgeProductEvents)
-      .where(inArray(legacyDayforgeProductEvents.correlationId, correlationIds));
+      .delete(legacyLegacyDayforgeProductEvents)
+      .where(inArray(legacyLegacyDayforgeProductEvents.correlationId, correlationIds));
     await db
-      .delete(legacyDayforgeAuditEvents)
-      .where(inArray(legacyDayforgeAuditEvents.correlationId, correlationIds));
+      .delete(legacyLegacyDayforgeAuditEvents)
+      .where(inArray(legacyLegacyDayforgeAuditEvents.correlationId, correlationIds));
   });
 
   async function recordGoldlineEvent(input: {
@@ -39,7 +39,7 @@ describe.skipIf(!runDatabaseGate)("Goldline gameplay event pipeline", () => {
     missionId?: number | null;
     properties: Record<string, string | number | boolean>;
   }) {
-    await writeDayforgeEvent({
+    await writeLegacyDayforgeEvent({
       tenantId: input.tenantId,
       actor: { type: "field", id: "driver-1" },
       entityType: input.missionId ? "commercial_mission" : "goldline_session",
@@ -80,8 +80,8 @@ describe.skipIf(!runDatabaseGate)("Goldline gameplay event pipeline", () => {
     const db = await getDb();
     const rows = await db!
       .select()
-      .from(legacyDayforgeProductEvents)
-      .where(inArray(legacyDayforgeProductEvents.correlationId, [sessionId]));
+      .from(legacyLegacyDayforgeProductEvents)
+      .where(inArray(legacyLegacyDayforgeProductEvents.correlationId, [sessionId]));
     expect(rows).toHaveLength(1);
   });
 
@@ -108,8 +108,8 @@ describe.skipIf(!runDatabaseGate)("Goldline gameplay event pipeline", () => {
     const db = await getDb();
     const rows = await db!
       .select()
-      .from(legacyDayforgeProductEvents)
-      .where(inArray(legacyDayforgeProductEvents.correlationId, [sessionId]));
+      .from(legacyLegacyDayforgeProductEvents)
+      .where(inArray(legacyLegacyDayforgeProductEvents.correlationId, [sessionId]));
     expect(rows).toHaveLength(2);
   });
 

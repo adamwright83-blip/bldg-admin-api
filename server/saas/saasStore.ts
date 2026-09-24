@@ -2,22 +2,22 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { and, count, eq, isNull, lt, or, sql } from "drizzle-orm";
 import {
-  legacyDayforgeSaasBillingEvents,
-  legacyDayforgeSaasBillingPlans,
-  legacyDayforgeSaasCheckoutSessions,
-  legacyDayforgeSaasEntitlements,
-  legacyDayforgeSaasExternalCustomers,
-  legacyDayforgeSaasExternalOrders,
-  legacyDayforgeSaasMemberships,
-  legacyDayforgeSaasImportConnections,
-  legacyDayforgeSaasImportRuns,
-  legacyDayforgeSaasOnboardingSessions,
-  legacyDayforgeSaasSubscriptions,
-  legacyDayforgeSaasTenantInvites,
-  legacyDayforgeSaasTenantLocations,
-  legacyDayforgeSaasTenantServices,
-  legacyDayforgeSaasTenants,
-  legacyDayforgeSaasUserCredentials,
+  legacyLegacyDayforgeSaasBillingEvents,
+  legacyLegacyDayforgeSaasBillingPlans,
+  legacyLegacyDayforgeSaasCheckoutSessions,
+  legacyLegacyDayforgeSaasEntitlements,
+  legacyLegacyDayforgeSaasExternalCustomers,
+  legacyLegacyDayforgeSaasExternalOrders,
+  legacyLegacyDayforgeSaasMemberships,
+  legacyLegacyDayforgeSaasImportConnections,
+  legacyLegacyDayforgeSaasImportRuns,
+  legacyLegacyDayforgeSaasOnboardingSessions,
+  legacyLegacyDayforgeSaasSubscriptions,
+  legacyLegacyDayforgeSaasTenantInvites,
+  legacyLegacyDayforgeSaasTenantLocations,
+  legacyLegacyDayforgeSaasTenantServices,
+  legacyLegacyDayforgeSaasTenants,
+  legacyLegacyDayforgeSaasUserCredentials,
   tenantCommercialProposalProfiles,
   territoryOperatorProfiles,
   users,
@@ -27,7 +27,7 @@ import {
   normalizeSaasEmail,
   normalizeSaasTenantSlug,
   onboardingConfigurationIsOperational,
-  subscriptionAllowsDayforgeAccess,
+  subscriptionAllowsLegacyDayforgeAccess,
   type LegacyDayforgeEntitlement,
   type SaasSubscriptionStatus,
   type SaasTenantMemberRole,
@@ -39,7 +39,7 @@ import type {
 } from "../../shared/tenantImports";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError as duplicateKey } from "../mysqlErrors";
-import { writeDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
+import { writeLegacyDayforgeEventWith } from "../legacyLegacyDayforgeEvents/legacyLegacyDayforgeEventStore";
 
 export type PublicSaasPlan = {
   planKey: string;
@@ -85,7 +85,7 @@ export async function syncConfiguredSaasPlan(): Promise<void> {
       process.env.DAYFORGE_STRIPE_FOUNDING_AVAILABILITY ?? null,
   };
   await db
-    .insert(legacyDayforgeSaasBillingPlans)
+    .insert(legacyLegacyDayforgeSaasBillingPlans)
     .values({
       planKey,
       displayName: process.env.DAYFORGE_STRIPE_PLAN_NAME?.trim() || "DayForge",
@@ -133,8 +133,8 @@ export async function listPublicSaasPlans(): Promise<PublicSaasPlan[]> {
   const now = new Date();
   const rows = await db
     .select()
-    .from(legacyDayforgeSaasBillingPlans)
-    .where(eq(legacyDayforgeSaasBillingPlans.active, true));
+    .from(legacyLegacyDayforgeSaasBillingPlans)
+    .where(eq(legacyLegacyDayforgeSaasBillingPlans.active, true));
   return rows
     .filter(
       row =>
@@ -155,11 +155,11 @@ export async function getActiveSaasPlan(planKey: string) {
   if (!db) throw new Error("Database not available");
   const [plan] = await db
     .select()
-    .from(legacyDayforgeSaasBillingPlans)
+    .from(legacyLegacyDayforgeSaasBillingPlans)
     .where(
       and(
-        eq(legacyDayforgeSaasBillingPlans.planKey, planKey),
-        eq(legacyDayforgeSaasBillingPlans.active, true)
+        eq(legacyLegacyDayforgeSaasBillingPlans.planKey, planKey),
+        eq(legacyLegacyDayforgeSaasBillingPlans.active, true)
       )
     )
     .limit(1);
@@ -183,8 +183,8 @@ export async function assertSaasPlanCanCheckout(planKey: string) {
     if (!db) throw new Error("Database not available");
     const [row] = await db
       .select({ total: count() })
-      .from(legacyDayforgeSaasSubscriptions)
-      .where(eq(legacyDayforgeSaasSubscriptions.planKey, plan.planKey));
+      .from(legacyLegacyDayforgeSaasSubscriptions)
+      .where(eq(legacyLegacyDayforgeSaasSubscriptions.planKey, plan.planKey));
     if (Number(row?.total ?? 0) >= plan.maxSubscriptions) {
       throw new Error("The selected DayForge plan has reached capacity");
     }
@@ -202,8 +202,8 @@ export async function startSaasOnboarding(input: {
   if (!db) throw new Error("Database not available");
   const existing = await db
     .select()
-    .from(legacyDayforgeSaasOnboardingSessions)
-    .where(eq(legacyDayforgeSaasOnboardingSessions.startRequestId, input.requestId))
+    .from(legacyLegacyDayforgeSaasOnboardingSessions)
+    .where(eq(legacyLegacyDayforgeSaasOnboardingSessions.startRequestId, input.requestId))
     .limit(1);
   if (existing[0]) {
     return { session: existing[0], resumeToken: null as string | null };
@@ -214,7 +214,7 @@ export async function startSaasOnboarding(input: {
   if (slug.length < 3) throw new Error("A valid tenant slug is required");
   try {
     await db.transaction(async tx => {
-      await tx.insert(legacyDayforgeSaasOnboardingSessions).values({
+      await tx.insert(legacyLegacyDayforgeSaasOnboardingSessions).values({
         id: sessionId,
         resumeTokenHash: hashSecret(resumeToken),
         businessName: input.businessName.trim(),
@@ -226,7 +226,7 @@ export async function startSaasOnboarding(input: {
         expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
       });
       const correlationId = `saas-onboarding:${sessionId}`;
-      await writeDayforgeEventWith(tx, {
+      await writeLegacyDayforgeEventWith(tx, {
         anonymousSessionId: sessionId,
         actor: { type: "public", id: null },
         entityType: "saas_onboarding_session",
@@ -250,16 +250,16 @@ export async function startSaasOnboarding(input: {
     if (!duplicateKey(error)) throw error;
     const [raceWinner] = await db
       .select()
-      .from(legacyDayforgeSaasOnboardingSessions)
-      .where(eq(legacyDayforgeSaasOnboardingSessions.startRequestId, input.requestId))
+      .from(legacyLegacyDayforgeSaasOnboardingSessions)
+      .where(eq(legacyLegacyDayforgeSaasOnboardingSessions.startRequestId, input.requestId))
       .limit(1);
     if (raceWinner) return { session: raceWinner, resumeToken: null };
     throw error;
   }
   const [session] = await db
     .select()
-    .from(legacyDayforgeSaasOnboardingSessions)
-    .where(eq(legacyDayforgeSaasOnboardingSessions.id, sessionId))
+    .from(legacyLegacyDayforgeSaasOnboardingSessions)
+    .where(eq(legacyLegacyDayforgeSaasOnboardingSessions.id, sessionId))
     .limit(1);
   return { session, resumeToken };
 }
@@ -272,12 +272,12 @@ export async function requireOnboardingSession(input: {
   if (!db) throw new Error("Database not available");
   const [session] = await db
     .select()
-    .from(legacyDayforgeSaasOnboardingSessions)
+    .from(legacyLegacyDayforgeSaasOnboardingSessions)
     .where(
       and(
-        eq(legacyDayforgeSaasOnboardingSessions.id, input.sessionId),
+        eq(legacyLegacyDayforgeSaasOnboardingSessions.id, input.sessionId),
         eq(
-          legacyDayforgeSaasOnboardingSessions.resumeTokenHash,
+          legacyLegacyDayforgeSaasOnboardingSessions.resumeTokenHash,
           hashSecret(input.resumeToken)
         )
       )
@@ -309,7 +309,7 @@ export async function saveOnboardingConfiguration(input: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const result = await db
-    .update(legacyDayforgeSaasOnboardingSessions)
+    .update(legacyLegacyDayforgeSaasOnboardingSessions)
     .set({
       businessName: input.configuration.businessName,
       slug: normalizeSaasTenantSlug(input.configuration.slug),
@@ -320,9 +320,9 @@ export async function saveOnboardingConfiguration(input: {
     })
     .where(
       and(
-        eq(legacyDayforgeSaasOnboardingSessions.id, session.id),
-        eq(legacyDayforgeSaasOnboardingSessions.version, input.expectedVersion),
-        eq(legacyDayforgeSaasOnboardingSessions.status, "draft")
+        eq(legacyLegacyDayforgeSaasOnboardingSessions.id, session.id),
+        eq(legacyLegacyDayforgeSaasOnboardingSessions.version, input.expectedVersion),
+        eq(legacyLegacyDayforgeSaasOnboardingSessions.status, "draft")
       )
     );
   if (affectedRows(result) !== 1) {
@@ -352,7 +352,7 @@ export async function attachCheckoutToOnboarding(input: {
     );
   }
   await db
-    .update(legacyDayforgeSaasOnboardingSessions)
+    .update(legacyLegacyDayforgeSaasOnboardingSessions)
     .set({
       status: "checkout_pending",
       currentStep: "checkout",
@@ -360,15 +360,15 @@ export async function attachCheckoutToOnboarding(input: {
       checkoutRequestId: input.requestId,
       stripeCheckoutSessionId: input.stripeCheckoutSessionId,
     })
-    .where(eq(legacyDayforgeSaasOnboardingSessions.id, session.id));
+    .where(eq(legacyLegacyDayforgeSaasOnboardingSessions.id, session.id));
   await db
-    .update(legacyDayforgeSaasCheckoutSessions)
+    .update(legacyLegacyDayforgeSaasCheckoutSessions)
     .set({
       stripeCheckoutSessionId: input.stripeCheckoutSessionId,
       status: "open",
     })
     .where(
-      eq(legacyDayforgeSaasCheckoutSessions.onboardingSessionId, input.sessionId)
+      eq(legacyLegacyDayforgeSaasCheckoutSessions.onboardingSessionId, input.sessionId)
     );
 }
 
@@ -388,7 +388,7 @@ export async function reserveOnboardingCheckout(input: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const result = await db
-    .update(legacyDayforgeSaasOnboardingSessions)
+    .update(legacyLegacyDayforgeSaasOnboardingSessions)
     .set({
       status: "checkout_pending",
       currentStep: "checkout",
@@ -397,8 +397,8 @@ export async function reserveOnboardingCheckout(input: {
     })
     .where(
       and(
-        eq(legacyDayforgeSaasOnboardingSessions.id, session.id),
-        eq(legacyDayforgeSaasOnboardingSessions.status, "draft")
+        eq(legacyLegacyDayforgeSaasOnboardingSessions.id, session.id),
+        eq(legacyLegacyDayforgeSaasOnboardingSessions.status, "draft")
       )
     );
   if (affectedRows(result) !== 1) {
@@ -420,10 +420,10 @@ export async function reserveSaasCheckoutSlot(input: {
   if (!db) throw new Error("Database not available");
   const [existing] = await db
     .select()
-    .from(legacyDayforgeSaasCheckoutSessions)
+    .from(legacyLegacyDayforgeSaasCheckoutSessions)
     .where(
       eq(
-        legacyDayforgeSaasCheckoutSessions.onboardingSessionId,
+        legacyLegacyDayforgeSaasCheckoutSessions.onboardingSessionId,
         input.onboardingSessionId
       )
     )
@@ -437,7 +437,7 @@ export async function reserveSaasCheckoutSlot(input: {
   const id = randomUUID();
   try {
     await db.transaction(async tx => {
-      await tx.insert(legacyDayforgeSaasCheckoutSessions).values({
+      await tx.insert(legacyLegacyDayforgeSaasCheckoutSessions).values({
         id,
         onboardingSessionId: input.onboardingSessionId,
         planKey: input.planKey,
@@ -446,19 +446,19 @@ export async function reserveSaasCheckoutSlot(input: {
         claimedSlot: true,
       });
       const claim = await tx
-        .update(legacyDayforgeSaasBillingPlans)
+        .update(legacyLegacyDayforgeSaasBillingPlans)
         .set({
-          claimedSubscriptions: sql`${legacyDayforgeSaasBillingPlans.claimedSubscriptions} + 1`,
+          claimedSubscriptions: sql`${legacyLegacyDayforgeSaasBillingPlans.claimedSubscriptions} + 1`,
         })
         .where(
           and(
-            eq(legacyDayforgeSaasBillingPlans.planKey, input.planKey),
-            eq(legacyDayforgeSaasBillingPlans.active, true),
+            eq(legacyLegacyDayforgeSaasBillingPlans.planKey, input.planKey),
+            eq(legacyLegacyDayforgeSaasBillingPlans.active, true),
             or(
-              isNull(legacyDayforgeSaasBillingPlans.maxSubscriptions),
+              isNull(legacyLegacyDayforgeSaasBillingPlans.maxSubscriptions),
               lt(
-                legacyDayforgeSaasBillingPlans.claimedSubscriptions,
-                legacyDayforgeSaasBillingPlans.maxSubscriptions
+                legacyLegacyDayforgeSaasBillingPlans.claimedSubscriptions,
+                legacyLegacyDayforgeSaasBillingPlans.maxSubscriptions
               )
             )
           )
@@ -472,10 +472,10 @@ export async function reserveSaasCheckoutSlot(input: {
   }
   const [reserved] = await db
     .select()
-    .from(legacyDayforgeSaasCheckoutSessions)
+    .from(legacyLegacyDayforgeSaasCheckoutSessions)
     .where(
       eq(
-        legacyDayforgeSaasCheckoutSessions.onboardingSessionId,
+        legacyLegacyDayforgeSaasCheckoutSessions.onboardingSessionId,
         input.onboardingSessionId
       )
     )
@@ -498,7 +498,7 @@ export async function reserveBillingEvent(input: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   try {
-    await db.insert(legacyDayforgeSaasBillingEvents).values({
+    await db.insert(legacyLegacyDayforgeSaasBillingEvents).values({
       stripeEventId: input.stripeEventId,
       eventType: input.eventType,
       livemode: input.livemode,
@@ -513,11 +513,11 @@ export async function reserveBillingEvent(input: {
     if (duplicateKey(error)) {
       const [existing] = await db
         .select({
-          status: legacyDayforgeSaasBillingEvents.status,
-          processingStartedAt: legacyDayforgeSaasBillingEvents.processingStartedAt,
+          status: legacyLegacyDayforgeSaasBillingEvents.status,
+          processingStartedAt: legacyLegacyDayforgeSaasBillingEvents.processingStartedAt,
         })
-        .from(legacyDayforgeSaasBillingEvents)
-        .where(eq(legacyDayforgeSaasBillingEvents.stripeEventId, input.stripeEventId))
+        .from(legacyLegacyDayforgeSaasBillingEvents)
+        .where(eq(legacyLegacyDayforgeSaasBillingEvents.stripeEventId, input.stripeEventId))
         .limit(1);
       const staleBefore = new Date(Date.now() - 5 * 60 * 1000);
       if (
@@ -526,23 +526,23 @@ export async function reserveBillingEvent(input: {
           existing.processingStartedAt < staleBefore)
       ) {
         const retry = await db
-          .update(legacyDayforgeSaasBillingEvents)
+          .update(legacyLegacyDayforgeSaasBillingEvents)
           .set({
             status: "processing",
             errorCode: null,
             processedAt: null,
             processingStartedAt: new Date(),
-            attemptCount: sql`${legacyDayforgeSaasBillingEvents.attemptCount} + 1`,
+            attemptCount: sql`${legacyLegacyDayforgeSaasBillingEvents.attemptCount} + 1`,
           })
           .where(
             and(
-              eq(legacyDayforgeSaasBillingEvents.stripeEventId, input.stripeEventId),
+              eq(legacyLegacyDayforgeSaasBillingEvents.stripeEventId, input.stripeEventId),
               existing.status === "failed"
-                ? eq(legacyDayforgeSaasBillingEvents.status, "failed")
+                ? eq(legacyLegacyDayforgeSaasBillingEvents.status, "failed")
                 : and(
-                    eq(legacyDayforgeSaasBillingEvents.status, "processing"),
+                    eq(legacyLegacyDayforgeSaasBillingEvents.status, "processing"),
                     lt(
-                      legacyDayforgeSaasBillingEvents.processingStartedAt,
+                      legacyLegacyDayforgeSaasBillingEvents.processingStartedAt,
                       staleBefore
                     )
                   )
@@ -564,34 +564,34 @@ export async function expireOnboardingCheckout(
   await db.transaction(async tx => {
     const [checkout] = await tx
       .select()
-      .from(legacyDayforgeSaasCheckoutSessions)
+      .from(legacyLegacyDayforgeSaasCheckoutSessions)
       .where(
         eq(
-          legacyDayforgeSaasCheckoutSessions.stripeCheckoutSessionId,
+          legacyLegacyDayforgeSaasCheckoutSessions.stripeCheckoutSessionId,
           stripeCheckoutSessionId
         )
       )
       .limit(1);
     if (!checkout) return;
     const release = await tx
-      .update(legacyDayforgeSaasCheckoutSessions)
+      .update(legacyLegacyDayforgeSaasCheckoutSessions)
       .set({ status: "expired", claimedSlot: false })
       .where(
         and(
-          eq(legacyDayforgeSaasCheckoutSessions.id, checkout.id),
-          eq(legacyDayforgeSaasCheckoutSessions.claimedSlot, true)
+          eq(legacyLegacyDayforgeSaasCheckoutSessions.id, checkout.id),
+          eq(legacyLegacyDayforgeSaasCheckoutSessions.claimedSlot, true)
         )
       );
     if (affectedRows(release) === 1) {
       await tx
-        .update(legacyDayforgeSaasBillingPlans)
+        .update(legacyLegacyDayforgeSaasBillingPlans)
         .set({
-          claimedSubscriptions: sql`GREATEST(0, ${legacyDayforgeSaasBillingPlans.claimedSubscriptions} - 1)`,
+          claimedSubscriptions: sql`GREATEST(0, ${legacyLegacyDayforgeSaasBillingPlans.claimedSubscriptions} - 1)`,
         })
-        .where(eq(legacyDayforgeSaasBillingPlans.planKey, checkout.planKey));
+        .where(eq(legacyLegacyDayforgeSaasBillingPlans.planKey, checkout.planKey));
     }
     await tx
-      .update(legacyDayforgeSaasOnboardingSessions)
+      .update(legacyLegacyDayforgeSaasOnboardingSessions)
       .set({
         status: "draft",
         currentStep: "checkout",
@@ -601,10 +601,10 @@ export async function expireOnboardingCheckout(
       .where(
         and(
           eq(
-            legacyDayforgeSaasOnboardingSessions.stripeCheckoutSessionId,
+            legacyLegacyDayforgeSaasOnboardingSessions.stripeCheckoutSessionId,
             stripeCheckoutSessionId
           ),
-          eq(legacyDayforgeSaasOnboardingSessions.status, "checkout_pending")
+          eq(legacyLegacyDayforgeSaasOnboardingSessions.status, "checkout_pending")
         )
       );
   });
@@ -619,14 +619,14 @@ export async function finishBillingEvent(input: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db
-    .update(legacyDayforgeSaasBillingEvents)
+    .update(legacyLegacyDayforgeSaasBillingEvents)
     .set({
       status: input.status,
       tenantId: input.tenantId ?? null,
       errorCode: input.errorCode ?? null,
       processedAt: new Date(),
     })
-    .where(eq(legacyDayforgeSaasBillingEvents.stripeEventId, input.stripeEventId));
+    .where(eq(legacyLegacyDayforgeSaasBillingEvents.stripeEventId, input.stripeEventId));
 }
 
 function tenantIdForOnboarding(sessionId: string): string {
@@ -654,8 +654,8 @@ export async function provisionTenantFromSubscription(input: {
   if (!db) throw new Error("Database not available");
   const [session] = await db
     .select()
-    .from(legacyDayforgeSaasOnboardingSessions)
-    .where(eq(legacyDayforgeSaasOnboardingSessions.id, input.onboardingSessionId))
+    .from(legacyLegacyDayforgeSaasOnboardingSessions)
+    .where(eq(legacyLegacyDayforgeSaasOnboardingSessions.id, input.onboardingSessionId))
     .limit(1);
   if (!session)
     throw new Error("Stripe subscription is not linked to onboarding");
@@ -683,8 +683,8 @@ export async function provisionTenantFromSubscription(input: {
           : "delinquent";
   const existingSubscription = await db
     .select()
-    .from(legacyDayforgeSaasSubscriptions)
-    .where(eq(legacyDayforgeSaasSubscriptions.tenantId, tenantId))
+    .from(legacyLegacyDayforgeSaasSubscriptions)
+    .where(eq(legacyLegacyDayforgeSaasSubscriptions.tenantId, tenantId))
     .limit(1);
   if (
     existingSubscription[0]?.lastStripeEventCreatedAt &&
@@ -695,7 +695,7 @@ export async function provisionTenantFromSubscription(input: {
 
   await db.transaction(async tx => {
     await tx
-      .insert(legacyDayforgeSaasTenants)
+      .insert(legacyLegacyDayforgeSaasTenants)
       .values({
         id: tenantId,
         slug: normalizeSaasTenantSlug(configuration.slug),
@@ -722,8 +722,8 @@ export async function provisionTenantFromSubscription(input: {
           contactPhone: configuration.contactPhone,
           website: configuration.website,
           timeZone: configuration.timeZone,
-          status: sql`IF(${legacyDayforgeSaasTenants.billingStateUpdatedAt} IS NULL OR ${legacyDayforgeSaasTenants.billingStateUpdatedAt} <= ${input.eventCreatedAt}, ${tenantStatus}, ${legacyDayforgeSaasTenants.status})`,
-          billingStateUpdatedAt: sql`GREATEST(COALESCE(${legacyDayforgeSaasTenants.billingStateUpdatedAt}, ${input.eventCreatedAt}), ${input.eventCreatedAt})`,
+          status: sql`IF(${legacyLegacyDayforgeSaasTenants.billingStateUpdatedAt} IS NULL OR ${legacyLegacyDayforgeSaasTenants.billingStateUpdatedAt} <= ${input.eventCreatedAt}, ${tenantStatus}, ${legacyLegacyDayforgeSaasTenants.status})`,
+          billingStateUpdatedAt: sql`GREATEST(COALESCE(${legacyLegacyDayforgeSaasTenants.billingStateUpdatedAt}, ${input.eventCreatedAt}), ${input.eventCreatedAt})`,
         },
       });
 
@@ -732,7 +732,7 @@ export async function provisionTenantFromSubscription(input: {
       const locationKey =
         normalizeSaasTenantSlug(location.label) || `location-${index + 1}`;
       await tx
-        .insert(legacyDayforgeSaasTenantLocations)
+        .insert(legacyLegacyDayforgeSaasTenantLocations)
         .values({
           tenantId,
           locationKey,
@@ -770,15 +770,15 @@ export async function provisionTenantFromSubscription(input: {
 
     const locationRows = await tx
       .select()
-      .from(legacyDayforgeSaasTenantLocations)
-      .where(eq(legacyDayforgeSaasTenantLocations.tenantId, tenantId));
+      .from(legacyLegacyDayforgeSaasTenantLocations)
+      .where(eq(legacyLegacyDayforgeSaasTenantLocations.tenantId, tenantId));
     for (const service of configuration.services) {
       const locationId = service.locationKey
         ? (locationRows.find(location => location.label === service.locationKey)
             ?.id ?? 0)
         : 0;
       await tx
-        .insert(legacyDayforgeSaasTenantServices)
+        .insert(legacyLegacyDayforgeSaasTenantServices)
         .values({
           tenantId,
           locationId,
@@ -803,7 +803,7 @@ export async function provisionTenantFromSubscription(input: {
     }
 
     await tx
-      .insert(legacyDayforgeSaasSubscriptions)
+      .insert(legacyLegacyDayforgeSaasSubscriptions)
       .values({
         tenantId,
         planKey: input.planKey,
@@ -823,42 +823,42 @@ export async function provisionTenantFromSubscription(input: {
       })
       .onDuplicateKeyUpdate({
         set: {
-          planKey: sql`IF(${legacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.planKey}, ${legacyDayforgeSaasSubscriptions.planKey})`,
-          stripeCustomerId: sql`IF(${legacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.stripeCustomerId}, ${legacyDayforgeSaasSubscriptions.stripeCustomerId})`,
-          stripeSubscriptionId: sql`IF(${legacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.stripeSubscriptionId}, ${legacyDayforgeSaasSubscriptions.stripeSubscriptionId})`,
-          status: sql`IF(${legacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.status}, ${legacyDayforgeSaasSubscriptions.status})`,
-          cancelAtPeriodEnd: sql`IF(${legacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.cancelAtPeriodEnd}, ${legacyDayforgeSaasSubscriptions.cancelAtPeriodEnd})`,
-          currentPeriodEnd: sql`IF(${legacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.currentPeriodEnd}, ${legacyDayforgeSaasSubscriptions.currentPeriodEnd})`,
-          trialEnd: sql`IF(${legacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.trialEnd}, ${legacyDayforgeSaasSubscriptions.trialEnd})`,
+          planKey: sql`IF(${legacyLegacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.planKey}, ${legacyLegacyDayforgeSaasSubscriptions.planKey})`,
+          stripeCustomerId: sql`IF(${legacyLegacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.stripeCustomerId}, ${legacyLegacyDayforgeSaasSubscriptions.stripeCustomerId})`,
+          stripeSubscriptionId: sql`IF(${legacyLegacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.stripeSubscriptionId}, ${legacyLegacyDayforgeSaasSubscriptions.stripeSubscriptionId})`,
+          status: sql`IF(${legacyLegacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.status}, ${legacyLegacyDayforgeSaasSubscriptions.status})`,
+          cancelAtPeriodEnd: sql`IF(${legacyLegacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.cancelAtPeriodEnd}, ${legacyLegacyDayforgeSaasSubscriptions.cancelAtPeriodEnd})`,
+          currentPeriodEnd: sql`IF(${legacyLegacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.currentPeriodEnd}, ${legacyLegacyDayforgeSaasSubscriptions.currentPeriodEnd})`,
+          trialEnd: sql`IF(${legacyLegacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.trialEnd}, ${legacyLegacyDayforgeSaasSubscriptions.trialEnd})`,
           ...(input.delinquentAt !== undefined
             ? {
-                delinquentAt: sql`IF(${legacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.delinquentAt}, ${legacyDayforgeSaasSubscriptions.delinquentAt})`,
+                delinquentAt: sql`IF(${legacyLegacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.delinquentAt}, ${legacyLegacyDayforgeSaasSubscriptions.delinquentAt})`,
               }
             : {}),
           ...(input.graceEndsAt !== undefined
             ? {
-                graceEndsAt: sql`IF(${legacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.graceEndsAt}, ${legacyDayforgeSaasSubscriptions.graceEndsAt})`,
+                graceEndsAt: sql`IF(${legacyLegacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.graceEndsAt}, ${legacyLegacyDayforgeSaasSubscriptions.graceEndsAt})`,
               }
             : {}),
           ...(input.accessEndsAt !== undefined
             ? {
-                accessEndsAt: sql`IF(${legacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.accessEndsAt}, ${legacyDayforgeSaasSubscriptions.accessEndsAt})`,
+                accessEndsAt: sql`IF(${legacyLegacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.accessEndsAt}, ${legacyLegacyDayforgeSaasSubscriptions.accessEndsAt})`,
               }
             : {}),
           ...(input.lastInvoicePaidAt !== undefined
             ? {
-                lastInvoicePaidAt: sql`IF(${legacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.lastInvoicePaidAt}, ${legacyDayforgeSaasSubscriptions.lastInvoicePaidAt})`,
+                lastInvoicePaidAt: sql`IF(${legacyLegacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.lastInvoicePaidAt}, ${legacyLegacyDayforgeSaasSubscriptions.lastInvoicePaidAt})`,
               }
             : {}),
-          latestInvoiceId: sql`IF(${legacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.latestInvoiceId}, ${legacyDayforgeSaasSubscriptions.latestInvoiceId})`,
-          lastStripeEventId: sql`IF(${legacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.eventId}, ${legacyDayforgeSaasSubscriptions.lastStripeEventId})`,
-          lastStripeEventCreatedAt: sql`GREATEST(${legacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt}, ${input.eventCreatedAt})`,
+          latestInvoiceId: sql`IF(${legacyLegacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.latestInvoiceId}, ${legacyLegacyDayforgeSaasSubscriptions.latestInvoiceId})`,
+          lastStripeEventId: sql`IF(${legacyLegacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt} <= ${input.eventCreatedAt}, ${input.eventId}, ${legacyLegacyDayforgeSaasSubscriptions.lastStripeEventId})`,
+          lastStripeEventCreatedAt: sql`GREATEST(${legacyLegacyDayforgeSaasSubscriptions.lastStripeEventCreatedAt}, ${input.eventCreatedAt})`,
         },
       });
 
     for (const entitlementKey of DAYFORGE_ENTITLEMENTS) {
       await tx
-        .insert(legacyDayforgeSaasEntitlements)
+        .insert(legacyLegacyDayforgeSaasEntitlements)
         .values({
           tenantId,
           entitlementKey,
@@ -949,19 +949,19 @@ export async function provisionTenantFromSubscription(input: {
     }
 
     await tx
-      .update(legacyDayforgeSaasOnboardingSessions)
+      .update(legacyLegacyDayforgeSaasOnboardingSessions)
       .set({
         tenantId,
-        status: sql`IF(${legacyDayforgeSaasOnboardingSessions.status} = 'complete', 'complete', 'provisioned')`,
-        currentStep: sql`IF(${legacyDayforgeSaasOnboardingSessions.status} = 'complete', 'complete', 'owner_activation')`,
+        status: sql`IF(${legacyLegacyDayforgeSaasOnboardingSessions.status} = 'complete', 'complete', 'provisioned')`,
+        currentStep: sql`IF(${legacyLegacyDayforgeSaasOnboardingSessions.status} = 'complete', 'complete', 'owner_activation')`,
         stripeCustomerId: input.stripeCustomerId,
         stripeSubscriptionId: input.stripeSubscriptionId,
       })
-      .where(eq(legacyDayforgeSaasOnboardingSessions.id, session.id));
+      .where(eq(legacyLegacyDayforgeSaasOnboardingSessions.id, session.id));
     await tx
-      .update(legacyDayforgeSaasCheckoutSessions)
+      .update(legacyLegacyDayforgeSaasCheckoutSessions)
       .set({ status: "completed" })
-      .where(eq(legacyDayforgeSaasCheckoutSessions.onboardingSessionId, session.id));
+      .where(eq(legacyLegacyDayforgeSaasCheckoutSessions.onboardingSessionId, session.id));
   });
   return { tenantId, ignoredAsStale: false };
 }
@@ -981,12 +981,12 @@ export async function activateOnboardingOwner(input: {
   const tenantId = session.tenantId;
   const [subscription] = await db
     .select()
-    .from(legacyDayforgeSaasSubscriptions)
-    .where(eq(legacyDayforgeSaasSubscriptions.tenantId, tenantId))
+    .from(legacyLegacyDayforgeSaasSubscriptions)
+    .where(eq(legacyLegacyDayforgeSaasSubscriptions.tenantId, tenantId))
     .limit(1);
   if (
     !subscription ||
-    !subscriptionAllowsDayforgeAccess({
+    !subscriptionAllowsLegacyDayforgeAccess({
       status: subscription.status,
       graceEndsAt: subscription.graceEndsAt,
       accessEndsAt: subscription.accessEndsAt,
@@ -1000,12 +1000,12 @@ export async function activateOnboardingOwner(input: {
     .slice(0, 48)}`;
   await db.transaction(async tx => {
     const claim = await tx
-      .update(legacyDayforgeSaasOnboardingSessions)
+      .update(legacyLegacyDayforgeSaasOnboardingSessions)
       .set({ status: "configuring", currentStep: "owner_activation" })
       .where(
         and(
-          eq(legacyDayforgeSaasOnboardingSessions.id, session.id),
-          eq(legacyDayforgeSaasOnboardingSessions.status, "provisioned")
+          eq(legacyLegacyDayforgeSaasOnboardingSessions.id, session.id),
+          eq(legacyLegacyDayforgeSaasOnboardingSessions.status, "provisioned")
         )
       );
     if (affectedRows(claim) !== 1) {
@@ -1029,7 +1029,7 @@ export async function activateOnboardingOwner(input: {
         },
       });
     await tx
-      .insert(legacyDayforgeSaasMemberships)
+      .insert(legacyLegacyDayforgeSaasMemberships)
       .values({
         tenantId,
         userOpenId: openId,
@@ -1038,7 +1038,7 @@ export async function activateOnboardingOwner(input: {
       })
       .onDuplicateKeyUpdate({ set: { role: "owner", active: true } });
     await tx
-      .insert(legacyDayforgeSaasUserCredentials)
+      .insert(legacyLegacyDayforgeSaasUserCredentials)
       .values({
         tenantId,
         userOpenId: openId,
@@ -1053,19 +1053,19 @@ export async function activateOnboardingOwner(input: {
         },
       });
     await tx
-      .update(legacyDayforgeSaasTenants)
+      .update(legacyLegacyDayforgeSaasTenants)
       .set({
         status: "active",
         onboardingStep: "complete",
         onboardingCompletedAt: new Date(),
       })
-      .where(eq(legacyDayforgeSaasTenants.id, tenantId));
+      .where(eq(legacyLegacyDayforgeSaasTenants.id, tenantId));
     await tx
-      .update(legacyDayforgeSaasOnboardingSessions)
+      .update(legacyLegacyDayforgeSaasOnboardingSessions)
       .set({ status: "complete", currentStep: "complete" })
-      .where(eq(legacyDayforgeSaasOnboardingSessions.id, session.id));
+      .where(eq(legacyLegacyDayforgeSaasOnboardingSessions.id, session.id));
     const correlationId = `saas-onboarding:${session.id}`;
-    await writeDayforgeEventWith(tx, {
+    await writeLegacyDayforgeEventWith(tx, {
       tenantId,
       actor: { type: "owner", id: openId },
       entityType: "saas_tenant",
@@ -1098,7 +1098,7 @@ export async function createTenantInvite(input: {
   if (!db) throw new Error("Database not available");
   const token = randomBytes(32).toString("base64url");
   const id = randomUUID();
-  await db.insert(legacyDayforgeSaasTenantInvites).values({
+  await db.insert(legacyLegacyDayforgeSaasTenantInvites).values({
     id,
     tenantId: input.tenantId,
     emailNormalized: normalizeSaasEmail(input.email),
@@ -1119,11 +1119,11 @@ export async function acceptTenantInvite(input: {
   if (!db) throw new Error("Database not available");
   const [invite] = await db
     .select()
-    .from(legacyDayforgeSaasTenantInvites)
+    .from(legacyLegacyDayforgeSaasTenantInvites)
     .where(
       and(
-        eq(legacyDayforgeSaasTenantInvites.tokenHash, hashSecret(input.token)),
-        eq(legacyDayforgeSaasTenantInvites.status, "pending")
+        eq(legacyLegacyDayforgeSaasTenantInvites.tokenHash, hashSecret(input.token)),
+        eq(legacyLegacyDayforgeSaasTenantInvites.status, "pending")
       )
     )
     .limit(1);
@@ -1137,12 +1137,12 @@ export async function acceptTenantInvite(input: {
   const platformRole = "user" as const;
   await db.transaction(async tx => {
     const claim = await tx
-      .update(legacyDayforgeSaasTenantInvites)
+      .update(legacyLegacyDayforgeSaasTenantInvites)
       .set({ status: "accepted", acceptedAt: new Date() })
       .where(
         and(
-          eq(legacyDayforgeSaasTenantInvites.id, invite.id),
-          eq(legacyDayforgeSaasTenantInvites.status, "pending")
+          eq(legacyLegacyDayforgeSaasTenantInvites.id, invite.id),
+          eq(legacyLegacyDayforgeSaasTenantInvites.status, "pending")
         )
       );
     if (affectedRows(claim) !== 1) {
@@ -1166,7 +1166,7 @@ export async function acceptTenantInvite(input: {
         },
       });
     await tx
-      .insert(legacyDayforgeSaasMemberships)
+      .insert(legacyLegacyDayforgeSaasMemberships)
       .values({
         tenantId: invite.tenantId,
         userOpenId: openId,
@@ -1175,7 +1175,7 @@ export async function acceptTenantInvite(input: {
       })
       .onDuplicateKeyUpdate({ set: { role: invite.role, active: true } });
     await tx
-      .insert(legacyDayforgeSaasUserCredentials)
+      .insert(legacyLegacyDayforgeSaasUserCredentials)
       .values({
         tenantId: invite.tenantId,
         userOpenId: openId,
@@ -1198,15 +1198,15 @@ export async function listTenantMembers(tenantId: string) {
   if (!db) throw new Error("Database not available");
   return db
     .select({
-      openId: legacyDayforgeSaasMemberships.userOpenId,
-      role: legacyDayforgeSaasMemberships.role,
-      active: legacyDayforgeSaasMemberships.active,
+      openId: legacyLegacyDayforgeSaasMemberships.userOpenId,
+      role: legacyLegacyDayforgeSaasMemberships.role,
+      active: legacyLegacyDayforgeSaasMemberships.active,
       name: users.name,
       email: users.email,
     })
-    .from(legacyDayforgeSaasMemberships)
-    .leftJoin(users, eq(users.openId, legacyDayforgeSaasMemberships.userOpenId))
-    .where(eq(legacyDayforgeSaasMemberships.tenantId, tenantId));
+    .from(legacyLegacyDayforgeSaasMemberships)
+    .leftJoin(users, eq(users.openId, legacyLegacyDayforgeSaasMemberships.userOpenId))
+    .where(eq(legacyLegacyDayforgeSaasMemberships.tenantId, tenantId));
 }
 
 export async function getTenantConfiguration(tenantId: string) {
@@ -1214,19 +1214,19 @@ export async function getTenantConfiguration(tenantId: string) {
   if (!db) throw new Error("Database not available");
   const [tenant] = await db
     .select()
-    .from(legacyDayforgeSaasTenants)
-    .where(eq(legacyDayforgeSaasTenants.id, tenantId))
+    .from(legacyLegacyDayforgeSaasTenants)
+    .where(eq(legacyLegacyDayforgeSaasTenants.id, tenantId))
     .limit(1);
   if (!tenant) return null;
   const [locations, services] = await Promise.all([
     db
       .select()
-      .from(legacyDayforgeSaasTenantLocations)
-      .where(eq(legacyDayforgeSaasTenantLocations.tenantId, tenantId)),
+      .from(legacyLegacyDayforgeSaasTenantLocations)
+      .where(eq(legacyLegacyDayforgeSaasTenantLocations.tenantId, tenantId)),
     db
       .select()
-      .from(legacyDayforgeSaasTenantServices)
-      .where(eq(legacyDayforgeSaasTenantServices.tenantId, tenantId)),
+      .from(legacyLegacyDayforgeSaasTenantServices)
+      .where(eq(legacyLegacyDayforgeSaasTenantServices.tenantId, tenantId)),
   ]);
   return { tenant, locations, services };
 }
@@ -1239,7 +1239,7 @@ export async function startTenantImportRun(input: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db
-    .insert(legacyDayforgeSaasImportConnections)
+    .insert(legacyLegacyDayforgeSaasImportConnections)
     .values({
       tenantId: input.tenantId,
       providerKey: input.providerKey,
@@ -1251,17 +1251,17 @@ export async function startTenantImportRun(input: {
     });
   const [connection] = await db
     .select()
-    .from(legacyDayforgeSaasImportConnections)
+    .from(legacyLegacyDayforgeSaasImportConnections)
     .where(
       and(
-        eq(legacyDayforgeSaasImportConnections.tenantId, input.tenantId),
-        eq(legacyDayforgeSaasImportConnections.providerKey, input.providerKey)
+        eq(legacyLegacyDayforgeSaasImportConnections.tenantId, input.tenantId),
+        eq(legacyLegacyDayforgeSaasImportConnections.providerKey, input.providerKey)
       )
     )
     .limit(1);
   if (!connection) throw new Error("Import connection was not created");
   const runId = randomUUID();
-  await db.insert(legacyDayforgeSaasImportRuns).values({
+  await db.insert(legacyLegacyDayforgeSaasImportRuns).values({
     id: runId,
     tenantId: input.tenantId,
     connectionId: connection.id,
@@ -1283,7 +1283,7 @@ export async function finishTenantImportRun(input: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db
-    .update(legacyDayforgeSaasImportRuns)
+    .update(legacyLegacyDayforgeSaasImportRuns)
     .set({
       status: input.status,
       importedCustomers: input.importedCustomers,
@@ -1294,20 +1294,20 @@ export async function finishTenantImportRun(input: {
     })
     .where(
       and(
-        eq(legacyDayforgeSaasImportRuns.tenantId, input.tenantId),
-        eq(legacyDayforgeSaasImportRuns.id, input.runId)
+        eq(legacyLegacyDayforgeSaasImportRuns.tenantId, input.tenantId),
+        eq(legacyLegacyDayforgeSaasImportRuns.id, input.runId)
       )
     );
   await db
-    .update(legacyDayforgeSaasImportConnections)
+    .update(legacyLegacyDayforgeSaasImportConnections)
     .set({
       status: input.status === "failed" ? "error" : "connected",
       lastImportedAt: new Date(),
     })
     .where(
       and(
-        eq(legacyDayforgeSaasImportConnections.tenantId, input.tenantId),
-        eq(legacyDayforgeSaasImportConnections.id, input.connectionId)
+        eq(legacyLegacyDayforgeSaasImportConnections.tenantId, input.tenantId),
+        eq(legacyLegacyDayforgeSaasImportConnections.id, input.connectionId)
       )
     );
 }
@@ -1325,7 +1325,7 @@ export async function persistNormalizedTenantImport(input: {
   await db.transaction(async tx => {
     for (const customer of input.customers) {
       await tx
-        .insert(legacyDayforgeSaasExternalCustomers)
+        .insert(legacyLegacyDayforgeSaasExternalCustomers)
         .values({
           tenantId: input.tenantId,
           connectionId: input.connectionId,
@@ -1351,7 +1351,7 @@ export async function persistNormalizedTenantImport(input: {
     }
     for (const order of input.orders) {
       await tx
-        .insert(legacyDayforgeSaasExternalOrders)
+        .insert(legacyLegacyDayforgeSaasExternalOrders)
         .values({
           tenantId: input.tenantId,
           connectionId: input.connectionId,
@@ -1385,14 +1385,14 @@ export async function getTenantBillingSummary(tenantId: string) {
   if (!db) throw new Error("Database not available");
   const [subscription] = await db
     .select()
-    .from(legacyDayforgeSaasSubscriptions)
-    .where(eq(legacyDayforgeSaasSubscriptions.tenantId, tenantId))
+    .from(legacyLegacyDayforgeSaasSubscriptions)
+    .where(eq(legacyLegacyDayforgeSaasSubscriptions.tenantId, tenantId))
     .limit(1);
   if (!subscription) return null;
   const [plan] = await db
     .select()
-    .from(legacyDayforgeSaasBillingPlans)
-    .where(eq(legacyDayforgeSaasBillingPlans.planKey, subscription.planKey))
+    .from(legacyLegacyDayforgeSaasBillingPlans)
+    .where(eq(legacyLegacyDayforgeSaasBillingPlans.planKey, subscription.planKey))
     .limit(1);
   return {
     planKey: subscription.planKey,
@@ -1410,9 +1410,9 @@ export async function getStripeCustomerForTenant(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [subscription] = await db
-    .select({ stripeCustomerId: legacyDayforgeSaasSubscriptions.stripeCustomerId })
-    .from(legacyDayforgeSaasSubscriptions)
-    .where(eq(legacyDayforgeSaasSubscriptions.tenantId, tenantId))
+    .select({ stripeCustomerId: legacyLegacyDayforgeSaasSubscriptions.stripeCustomerId })
+    .from(legacyLegacyDayforgeSaasSubscriptions)
+    .where(eq(legacyLegacyDayforgeSaasSubscriptions.tenantId, tenantId))
     .limit(1);
   if (!subscription)
     throw new Error("Tenant does not have a DayForge subscription");

@@ -38,7 +38,7 @@ import {
   orders,
   tenantCustomerRecoveryProfiles,
 } from "../../drizzle/schema";
-import { writeDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
+import { writeLegacyDayforgeEventWith } from "../legacyLegacyDayforgeEvents/legacyLegacyDayforgeEventStore";
 import { demoTenantId } from "./demoTenantSeed";
 
 export type DemoResetActor = {
@@ -58,7 +58,7 @@ function assertAdmin(actor: DemoResetActor) {
 }
 
 function assertDemoEnabled() {
-  if (!ENV.legacyDayforgeDemoEnabled) {
+  if (!ENV.legacyLegacyDayforgeDemoEnabled) {
     throw new DemoResetDisabledError(
       "DAYFORGE_DEMO_ENABLED is not true; refusing to reset the demo tenant"
     );
@@ -144,14 +144,14 @@ export async function resetDemoTenant(actor: DemoResetActor): Promise<DemoResetR
 
   const auditResult = await db.transaction(async tx => {
     await purgeDemoTenantMutableState(tx, tenantId);
-    return writeDayforgeEventWith(tx, {
+    return writeLegacyDayforgeEventWith(tx, {
       tenantId,
       actor: { type: "admin", id: actor.id },
       entityType: "dayforge_demo_tenant",
       entityId: tenantId,
       eventName: "dayforge_demo.reset",
       after: { resetAt: resetAt.toISOString() },
-      source: "legacyDayforgeDemo.demoTenantReset",
+      source: "legacyLegacyDayforgeDemo.demoTenantReset",
       correlationId,
       idempotencyKey,
       occurredAt: resetAt,

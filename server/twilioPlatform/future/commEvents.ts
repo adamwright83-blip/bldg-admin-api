@@ -5,7 +5,7 @@ import type { GoldlineCommEvent } from "@shared/twilioFuture";
  * Domain events for Goldline communications.
  *
  * Inspected and left in place:
- * - shared/legacyDayforgeEvents.ts is product analytics and excludes transcript text.
+ * - shared/legacyLegacyDayforgeEvents.ts is product analytics and excludes transcript text.
  * - server/operationsEvents.ts records order pickup and dropoff.
  * - server/agents/agentEvents.ts records agent tool calls.
  * None of those is this bus. Twilio Sync is an optional later transport,

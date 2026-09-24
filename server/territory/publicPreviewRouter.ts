@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
-  legacyDayforgeTerritoryProcedure,
+  legacyLegacyDayforgeTerritoryProcedure,
   publicProcedure,
   router,
 } from "../_core/trpc";
@@ -238,7 +238,7 @@ export const publicTerritoryRouter = router({
       })
     ),
 
-  convertPreview: legacyDayforgeTerritoryProcedure
+  convertPreview: legacyLegacyDayforgeTerritoryProcedure
     .input(
       candidateInput.extend({
         assignedTo: z.string().trim().min(1).max(128).nullable().optional(),

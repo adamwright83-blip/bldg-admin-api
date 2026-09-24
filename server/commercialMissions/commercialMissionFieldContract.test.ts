@@ -74,7 +74,7 @@ describe("DayForge Field production contract", () => {
   it("derives assignment and actor from the signed session", () => {
     expect(router).toContain("assertDriverCanReadMission");
     expect(router).toContain("actorId: ctx.user.openId");
-    expect(router).toContain("actorRole: ctx.legacyDayforgeMembership.role");
+    expect(router).toContain("actorRole: ctx.legacyLegacyDayforgeMembership.role");
     expect(router).not.toContain("actorId: input.actorId");
     expect(router).not.toContain("actorRole: input");
     expect(login).toContain("sharedPasswordLoginSelection(req.body)");

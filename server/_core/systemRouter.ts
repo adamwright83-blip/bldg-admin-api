@@ -14,10 +14,10 @@ import { churnRadarRouter } from "../churnRadar/churnRadarRouter";
 import { hustlerLeverRouter } from "../churnRadar/hustlerLeverRouter";
 import { commercialPipelineRouter } from "../commercialPipeline/commercialPipelineRouter";
 import { saasRouter } from "../saas/saasRouter";
-import { legacyDayforgeDemoRouter } from "../legacyDayforgeDemo/demoTenantRouter";
-import { legacyDayforgeTodayRouter } from "../legacyDayforgeToday/legacyDayforgeTodayRouter";
+import { legacyLegacyDayforgeDemoRouter } from "../legacyLegacyDayforgeDemo/demoTenantRouter";
+import { legacyLegacyDayforgeTodayRouter } from "../legacyLegacyDayforgeToday/legacyLegacyDayforgeTodayRouter";
 import { commercialCampaignRouter } from "../commercialCampaigns/commercialCampaignRouter";
-import { legacyDayforgeProofRouter } from "../legacyDayforgeProof/legacyDayforgeProofRouter";
+import { legacyLegacyDayforgeProofRouter } from "../legacyLegacyDayforgeProof/legacyLegacyDayforgeProofRouter";
 import { customerAssetRouter } from "../customerAssets/customerAssetRouter";
 import { fieldRouter } from "../field/fieldRouter";
 import { businessWorldRouter } from "../businessWorld/businessWorldRouter";
@@ -33,7 +33,7 @@ import { externalOrderRouter } from "../externalOrders/externalOrderRouter";
 import { impactSignalRouter } from "../impactSignals/impactSignalRouter";
 import { driverGameWorldRouter } from "../driverGameWorld/driverGameWorldRouter";
 import { salesIntelRouter } from "../salesIntel/salesIntelRouter";
-import { goldlineEventRouter } from "../legacyDayforgeEvents/goldlineEventRouter";
+import { goldlineEventRouter } from "../legacyLegacyDayforgeEvents/goldlineEventRouter";
 import { dayDirectorRouter } from "../dayDirector/dayDirectorRouter";
 import { weeklyMissionRouter } from "../claire/weeklyMission/weeklyMissionRouter";
 import { nightShiftRouter } from "../nightShift/nightShiftRouter";
@@ -75,10 +75,10 @@ export const systemRouter = router({
   territory: territoryRouter,
   publicTerritory: publicTerritoryRouter,
   saas: saasRouter,
-  legacyDayforgeDemo: legacyDayforgeDemoRouter,
-  legacyDayforgeToday: legacyDayforgeTodayRouter,
+  legacyLegacyDayforgeDemo: legacyLegacyDayforgeDemoRouter,
+  legacyLegacyDayforgeToday: legacyLegacyDayforgeTodayRouter,
   commercialCampaign: commercialCampaignRouter,
-  legacyDayforgeProof: legacyDayforgeProofRouter,
+  legacyLegacyDayforgeProof: legacyLegacyDayforgeProofRouter,
   customerAssets: customerAssetRouter,
   field: fieldRouter,
   businessWorld: businessWorldRouter,
@@ -127,9 +127,9 @@ export const systemRouter = router({
     .query(() => ({
       ok: true,
     })),
-  legacyDayforgeDeployment: publicProcedure.query(() => ({
+  legacyLegacyDayforgeDeployment: publicProcedure.query(() => ({
     ok: true,
-    legacyDayforgeStack: true,
+    legacyLegacyDayforgeStack: true,
     demoEnabled: process.env.DAYFORGE_DEMO_ENABLED === "true",
     commitSha:
       process.env.RAILWAY_GIT_COMMIT_SHA ??

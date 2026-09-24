@@ -1,16 +1,16 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const envState = { legacyDayforgeDemoEnabled: true, legacyDayforgeDemoTenantSlug: "sunset-laundry-demo" };
+const envState = { legacyLegacyDayforgeDemoEnabled: true, legacyLegacyDayforgeDemoTenantSlug: "sunset-laundry-demo" };
 vi.mock("../_core/env", () => ({
   get ENV() {
     return envState;
   },
 }));
 
-const writeDayforgeEventWith = vi.fn(async () => ({ auditEventId: 1 }));
-vi.mock("../legacyDayforgeEvents/legacyDayforgeEventStore", () => ({
-  writeDayforgeEventWith: (...args: unknown[]) => writeDayforgeEventWith(...args),
+const writeLegacyDayforgeEventWith = vi.fn(async () => ({ auditEventId: 1 }));
+vi.mock("../legacyLegacyDayforgeEvents/legacyLegacyDayforgeEventStore", () => ({
+  writeLegacyDayforgeEventWith: (...args: unknown[]) => writeLegacyDayforgeEventWith(...args),
 }));
 
 const eqSpy = vi.fn();
@@ -38,11 +38,11 @@ import { demoTenantId } from "./demoTenantSeed";
 
 describe("resetDemoTenant", () => {
   beforeEach(() => {
-    envState.legacyDayforgeDemoEnabled = true;
+    envState.legacyLegacyDayforgeDemoEnabled = true;
     eqSpy.mockClear();
     deleteMock.mockClear();
     whereMock.mockClear();
-    writeDayforgeEventWith.mockClear();
+    writeLegacyDayforgeEventWith.mockClear();
     getDbMock.mockReset();
     getDbMock.mockResolvedValue({
       transaction: async (fn: (tx: unknown) => unknown) =>
@@ -51,7 +51,7 @@ describe("resetDemoTenant", () => {
   });
 
   it("throws and never touches the database when DAYFORGE_DEMO_ENABLED is not true", async () => {
-    envState.legacyDayforgeDemoEnabled = false;
+    envState.legacyLegacyDayforgeDemoEnabled = false;
     await expect(
       resetDemoTenant({ role: "admin", id: "u1" })
     ).rejects.toBeInstanceOf(DemoResetDisabledError);
@@ -81,8 +81,8 @@ describe("resetDemoTenant", () => {
       expect(arg).toBe(demoTenantId());
     }
 
-    expect(writeDayforgeEventWith).toHaveBeenCalledTimes(1);
-    const [, eventInput] = writeDayforgeEventWith.mock.calls[0] as [
+    expect(writeLegacyDayforgeEventWith).toHaveBeenCalledTimes(1);
+    const [, eventInput] = writeLegacyDayforgeEventWith.mock.calls[0] as [
       unknown,
       { tenantId: string; eventName: string; actor: { type: string; id: string | null } },
     ];

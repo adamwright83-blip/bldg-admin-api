@@ -6,7 +6,7 @@
 -- Additive, tenant-scoped, operator-scoped, restart-safe.
 --
 -- NOT YET APPLIED to any database as of authoring. Apply via
--- applyDayforgeReleaseMigrations with DAYFORGE_RELEASE_DB=1, not scripts/migrate.mjs.
+-- applyLegacyDayforgeReleaseMigrations with DAYFORGE_RELEASE_DB=1, not scripts/migrate.mjs.
 
 CREATE TABLE IF NOT EXISTS `goldline_chapter_states` (
   `id` varchar(36) NOT NULL,

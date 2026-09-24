@@ -281,7 +281,7 @@ describe("current day line ranking projection", () => {
       new URL("../server/goldline/dayline/currentDayLineService.ts", import.meta.url),
       "utf8"
     );
-    expect(service).not.toMatch(/rankCampaigns|selectMissionPlan|sortFieldTimeline|sortDayforgeTodayItems|\.sort\(/);
+    expect(service).not.toMatch(/rankCampaigns|selectMissionPlan|sortFieldTimeline|sortLegacyDayforgeTodayItems|\.sort\(/);
     expect(service).toMatch(/planForDate/);
   });
 });

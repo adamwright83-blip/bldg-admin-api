@@ -14,11 +14,11 @@ import "dotenv/config";
 import { spawn } from "node:child_process";
 import { ENV } from "../server/_core/env";
 import { getDb } from "../server/db";
-import { verifyDemoTenant } from "../server/legacyDayforgeDemo/demoTenantVerify";
-import { resetDemoTenant } from "../server/legacyDayforgeDemo/demoTenantReset";
-import { seedDemoTenant } from "../server/legacyDayforgeDemo/demoTenantSeed";
-import { getDayforgeProviderStatus } from "../server/legacyDayforgeDemo/providerStatus";
-import { printDemoUrls } from "./legacyDayforgeDemoUrls";
+import { verifyDemoTenant } from "../server/legacyLegacyDayforgeDemo/demoTenantVerify";
+import { resetDemoTenant } from "../server/legacyLegacyDayforgeDemo/demoTenantReset";
+import { seedDemoTenant } from "../server/legacyLegacyDayforgeDemo/demoTenantSeed";
+import { getLegacyDayforgeProviderStatus } from "../server/legacyLegacyDayforgeDemo/providerStatus";
+import { printDemoUrls } from "./legacyLegacyDayforgeDemoUrls";
 
 const PORT = process.env.PORT || "3000";
 const BASE_URL = `http://localhost:${PORT}`;
@@ -49,7 +49,7 @@ async function main() {
   if (missingEnv.length > 0) {
     fail(`Missing required env vars: ${missingEnv.join(", ")}. See docs/legacy-dayforge-boss-demo.md.`);
   }
-  if (!ENV.legacyDayforgeDemoEnabled) {
+  if (!ENV.legacyLegacyDayforgeDemoEnabled) {
     fail("DAYFORGE_DEMO_ENABLED is not true. Set DAYFORGE_DEMO_ENABLED=true and re-run.");
   }
 
@@ -108,7 +108,7 @@ async function main() {
     fail(`Smoke check failed: ${BASE_URL}/dayforge-demo did not respond.`);
   }
 
-  const providerStatus = getDayforgeProviderStatus();
+  const providerStatus = getLegacyDayforgeProviderStatus();
 
   console.log("");
   console.log("=========================================");

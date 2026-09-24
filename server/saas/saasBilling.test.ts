@@ -1,6 +1,6 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { afterEach, describe, expect, it } from "vitest";
-import { processDayforgeBillingWebhook } from "./saasBilling";
+import { processLegacyDayforgeBillingWebhook } from "./saasBilling";
 
 const originalWebhookSecret =
   process.env.DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET;
@@ -24,7 +24,7 @@ describe("DayForge Stripe webhook boundary", () => {
       },
     };
     await expect(
-      processDayforgeBillingWebhook({
+      processLegacyDayforgeBillingWebhook({
         rawBody: Buffer.from("{}"),
         signature: "bad",
         stripe: stripe as never,

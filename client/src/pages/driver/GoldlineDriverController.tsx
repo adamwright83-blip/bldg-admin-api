@@ -492,7 +492,7 @@ function LiveGoldlineDriverController({
     undefined,
     { refetchInterval: 30_000, retry: false }
   );
-  const followUpQueue = trpc.system.legacyDayforgeToday.list.useQuery(undefined, {
+  const followUpQueue = trpc.system.legacyLegacyDayforgeToday.list.useQuery(undefined, {
     refetchInterval: 30_000,
     retry: false,
   });
@@ -603,9 +603,9 @@ function LiveGoldlineDriverController({
   const updateFieldChecklist =
     trpc.system.commercialMission.fieldChecklist.useMutation();
   const completeFollowUp =
-    trpc.system.legacyDayforgeToday.completeFollowUp.useMutation();
+    trpc.system.legacyLegacyDayforgeToday.completeFollowUp.useMutation();
   const rescheduleFollowUp =
-    trpc.system.legacyDayforgeToday.rescheduleFollowUp.useMutation();
+    trpc.system.legacyLegacyDayforgeToday.rescheduleFollowUp.useMutation();
   const recordGoldlineEvent = trpc.system.goldlineEvents.record.useMutation();
   const emitGoldlineEvent = useMemo(
     () =>
@@ -1136,7 +1136,7 @@ function LiveGoldlineDriverController({
   async function loadAuthoritativeFollowUp(
     missionId: number
   ): Promise<AuthoritativeFollowUp | null> {
-    const items = await utils.system.legacyDayforgeToday.list.fetch();
+    const items = await utils.system.legacyLegacyDayforgeToday.list.fetch();
     const item = items.find(
       candidate =>
         candidate.kind === "follow_up" &&

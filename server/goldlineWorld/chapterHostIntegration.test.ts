@@ -21,8 +21,8 @@ const access = vi.hoisted(() => ({ resolveMembership: vi.fn(), hasEntitlement: v
 const mocks = vi.hoisted(() => ({ getDb: vi.fn(), getTowerWarsToday: vi.fn() }));
 
 vi.mock("../saas/tenantAccess", () => ({
-  resolveDayforgeMembership: access.resolveMembership,
-  hasDayforgeEntitlement: access.hasEntitlement,
+  resolveLegacyDayforgeMembership: access.resolveMembership,
+  hasLegacyDayforgeEntitlement: access.hasEntitlement,
   roleAllows: (actual: string, allowed: readonly string[]) => allowed.includes(actual),
 }));
 vi.mock("../db", () => ({ getDb: mocks.getDb }));

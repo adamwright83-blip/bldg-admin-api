@@ -3,15 +3,15 @@ import bcrypt from "bcryptjs";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
-  legacyDayforgeTenantAdminProcedure,
-  legacyDayforgeTenantMemberProcedure,
-  legacyDayforgeTenantOperatorProcedure,
+  legacyLegacyDayforgeTenantAdminProcedure,
+  legacyLegacyDayforgeTenantMemberProcedure,
+  legacyLegacyDayforgeTenantOperatorProcedure,
   publicProcedure,
   router,
 } from "../_core/trpc";
 import {
-  createDayforgeBillingPortal,
-  createDayforgeSubscriptionCheckout,
+  createLegacyDayforgeBillingPortal,
+  createLegacyDayforgeSubscriptionCheckout,
 } from "./saasBilling";
 import {
   acceptTenantInvite,
@@ -103,7 +103,7 @@ function publicError(error: unknown): never {
 }
 
 export const saasRouter = router({
-  providerStatus: legacyDayforgeTenantMemberProcedure.query(() => ({
+  providerStatus: legacyLegacyDayforgeTenantMemberProcedure.query(() => ({
     territory: {
       provider: "google_places",
       status:
@@ -219,7 +219,7 @@ export const saasRouter = router({
     )
     .mutation(async ({ input }) => {
       try {
-        return await createDayforgeSubscriptionCheckout(input);
+        return await createLegacyDayforgeSubscriptionCheckout(input);
       } catch (error) {
         publicError(error);
       }
@@ -262,18 +262,18 @@ export const saasRouter = router({
       }
     }),
 
-  me: legacyDayforgeTenantMemberProcedure.query(async ({ ctx }) => ({
+  me: legacyLegacyDayforgeTenantMemberProcedure.query(async ({ ctx }) => ({
     tenantId: ctx.tenantId,
-    membership: ctx.legacyDayforgeMembership,
+    membership: ctx.legacyLegacyDayforgeMembership,
     configuration: await getTenantConfiguration(ctx.tenantId),
     billing: await getTenantBillingSummary(ctx.tenantId),
   })),
 
-  members: legacyDayforgeTenantAdminProcedure.query(({ ctx }) =>
+  members: legacyLegacyDayforgeTenantAdminProcedure.query(({ ctx }) =>
     listTenantMembers(ctx.tenantId)
   ),
 
-  invite: legacyDayforgeTenantAdminProcedure
+  invite: legacyLegacyDayforgeTenantAdminProcedure
     .input(
       z.object({
         email: z.string().trim().email().max(320),
@@ -288,13 +288,13 @@ export const saasRouter = router({
       })
     ),
 
-  billingPortal: legacyDayforgeTenantAdminProcedure
+  billingPortal: legacyLegacyDayforgeTenantAdminProcedure
     .input(z.object({ requestId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
-      createDayforgeBillingPortal({ tenantId: ctx.tenantId, ...input })
+      createLegacyDayforgeBillingPortal({ tenantId: ctx.tenantId, ...input })
     ),
 
-  importCsv: legacyDayforgeTenantOperatorProcedure
+  importCsv: legacyLegacyDayforgeTenantOperatorProcedure
     .input(
       z.object({
         providerKey: z.literal("cleancloud_csv"),

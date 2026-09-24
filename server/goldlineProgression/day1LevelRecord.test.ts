@@ -22,12 +22,12 @@ vi.mock("../openChannel/openChannelService", () => ({
   ensureOpenChannelTables: vi.fn(async () => undefined),
 }));
 vi.mock("../saas/tenantAccess", () => ({
-  resolveDayforgeMembership: vi.fn(async () => ({
+  resolveLegacyDayforgeMembership: vi.fn(async () => ({
     tenantId: "tenant-a",
     userOpenId: "open-7",
     role: "operator",
   })),
-  hasDayforgeEntitlement: vi.fn(async () => true),
+  hasLegacyDayforgeEntitlement: vi.fn(async () => true),
   roleAllows: (actual: string, allowed: readonly string[]) => allowed.includes(actual),
 }));
 

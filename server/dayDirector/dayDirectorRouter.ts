@@ -1,6 +1,6 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
-import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import { legacyLegacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import {
   acceptProposal,
   completeDayDirectorCommitment,
@@ -22,7 +22,7 @@ const proposal = z.object({
   intelligence: z.enum(["anthropic", "manual_fallback"]),
 });
 export const dayDirectorRouter = router({
-  state: legacyDayforgeTenantMemberProcedure
+  state: legacyLegacyDayforgeTenantMemberProcedure
     .input(z.object({ businessDate: date }))
     .query(({ ctx, input }) =>
       getDayDirectorState({
@@ -31,12 +31,12 @@ export const dayDirectorRouter = router({
         ...input,
       })
     ),
-  propose: legacyDayforgeTenantMemberProcedure
+  propose: legacyLegacyDayforgeTenantMemberProcedure
     .input(z.object({ sourceText: z.string().trim().min(1).max(2000) }))
     .mutation(({ ctx, input }) =>
       proposeCommitment({ tenantId: ctx.tenantId, ...input })
     ),
-  accept: legacyDayforgeTenantMemberProcedure
+  accept: legacyLegacyDayforgeTenantMemberProcedure
     .input(z.object({ businessDate: date, proposal }))
     .mutation(({ ctx, input }) =>
       acceptProposal({
@@ -45,7 +45,7 @@ export const dayDirectorRouter = router({
         ...input,
       })
     ),
-  dismiss: legacyDayforgeTenantMemberProcedure
+  dismiss: legacyLegacyDayforgeTenantMemberProcedure
     .input(
       z.object({ businessDate: date, promptKey: z.string().min(1).max(191) })
     )
@@ -57,7 +57,7 @@ export const dayDirectorRouter = router({
         ...input,
       })
     ),
-  complete: legacyDayforgeTenantMemberProcedure
+  complete: legacyLegacyDayforgeTenantMemberProcedure
     .input(z.object({ commitmentId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       completeDayDirectorCommitment({

@@ -56,7 +56,7 @@ describe("Churn Radar production contract", () => {
     expect(service).toContain(
       "activeCustomerKeyHash: snapshot.customerKeyHash"
     );
-    expect(service).toContain("legacyDayforgeRecoveryInterventionId");
+    expect(service).toContain("legacyLegacyDayforgeRecoveryInterventionId");
     expect(service).toContain("opsTaskEvents");
     expect(service).toContain('eventName: "recovery_mission_created"');
   });
@@ -88,7 +88,7 @@ describe("Churn Radar production contract", () => {
   });
 
   it("derives every tenant and actor from the admin session", () => {
-    expect(router).toContain("legacyDayforgeChurnProcedure");
+    expect(router).toContain("legacyLegacyDayforgeChurnProcedure");
     expect(router).not.toContain("adminProcedure");
     expect(router).toContain("tenantId: ctx.tenantId");
     expect(router).toContain("actorId: ctx.user.openId");

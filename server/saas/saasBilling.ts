@@ -18,7 +18,7 @@ import {
 
 const STRIPE_API_VERSION = "2025-03-31.basil" as const;
 
-export function getDayforgeBillingStripe(): Stripe {
+export function getLegacyDayforgeBillingStripe(): Stripe {
   const key = process.env.DAYFORGE_BILLING_STRIPE_SECRET_KEY?.trim();
   if (!key || key.length < 20) {
     throw new Error("DAYFORGE_BILLING_STRIPE_SECRET_KEY is not configured");
@@ -33,14 +33,14 @@ function appUrl(): string {
   );
 }
 
-export async function createDayforgeSubscriptionCheckout(input: {
+export async function createLegacyDayforgeSubscriptionCheckout(input: {
   sessionId: string;
   resumeToken: string;
   planKey: string;
   requestId: string;
 }) {
   const existingOnboarding = await requireOnboardingSession(input);
-  const stripe = getDayforgeBillingStripe();
+  const stripe = getLegacyDayforgeBillingStripe();
   if (existingOnboarding.stripeCheckoutSessionId) {
     if (existingOnboarding.planKey !== input.planKey) {
       throw new Error(
@@ -76,13 +76,13 @@ export async function createDayforgeSubscriptionCheckout(input: {
       success_url: `${appUrl()}/dayforge-onboarding?session=${onboarding.id}&checkout=success`,
       cancel_url: `${appUrl()}/dayforge-onboarding?session=${onboarding.id}&checkout=cancelled`,
       metadata: {
-        legacyDayforgeOnboardingSessionId: onboarding.id,
-        legacyDayforgePlanKey: plan.planKey,
+        legacyLegacyDayforgeOnboardingSessionId: onboarding.id,
+        legacyLegacyDayforgePlanKey: plan.planKey,
       },
       subscription_data: {
         metadata: {
-          legacyDayforgeOnboardingSessionId: onboarding.id,
-          legacyDayforgePlanKey: plan.planKey,
+          legacyLegacyDayforgeOnboardingSessionId: onboarding.id,
+          legacyLegacyDayforgePlanKey: plan.planKey,
         },
         ...(plan.trialDays > 0 ? { trial_period_days: plan.trialDays } : {}),
       },
@@ -99,11 +99,11 @@ export async function createDayforgeSubscriptionCheckout(input: {
   return { id: session.id, url: session.url };
 }
 
-export async function createDayforgeBillingPortal(input: {
+export async function createLegacyDayforgeBillingPortal(input: {
   tenantId: string;
   requestId: string;
 }) {
-  const stripe = getDayforgeBillingStripe();
+  const stripe = getLegacyDayforgeBillingStripe();
   const customer = await getStripeCustomerForTenant(input.tenantId);
   const session = await stripe.billingPortal.sessions.create(
     { customer, return_url: `${appUrl()}/dayforge-settings` },
@@ -147,8 +147,8 @@ async function syncStripeSubscription(input: {
   eventType: string;
 }) {
   const metadata = input.subscription.metadata ?? {};
-  const onboardingSessionId = metadata.legacyDayforgeOnboardingSessionId;
-  const planKey = metadata.legacyDayforgePlanKey;
+  const onboardingSessionId = metadata.legacyLegacyDayforgeOnboardingSessionId;
+  const planKey = metadata.legacyLegacyDayforgePlanKey;
   if (!onboardingSessionId || !planKey) {
     throw new Error("Stripe subscription is missing DayForge metadata");
   }
@@ -240,14 +240,14 @@ export type LegacyDayforgeWebhookResult = {
   stripeEventId?: string;
 };
 
-export async function processDayforgeBillingWebhook(input: {
+export async function processLegacyDayforgeBillingWebhook(input: {
   rawBody: Buffer | string;
   signature: string | string[] | undefined;
   stripe?: Stripe;
 }): Promise<LegacyDayforgeWebhookResult> {
   const secret = process.env.DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET?.trim();
   if (!secret) return { status: "failed", reason: "missing_webhook_secret" };
-  const stripe = input.stripe ?? getDayforgeBillingStripe();
+  const stripe = input.stripe ?? getLegacyDayforgeBillingStripe();
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(

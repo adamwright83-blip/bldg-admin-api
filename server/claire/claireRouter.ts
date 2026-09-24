@@ -12,8 +12,8 @@ import {
 } from "../churnRadar/customerChurnService";
 import {
   adminProcedure,
-  legacyDayforgeChurnProcedure,
-  legacyDayforgeMissionFieldProcedure,
+  legacyLegacyDayforgeChurnProcedure,
+  legacyLegacyDayforgeMissionFieldProcedure,
   joystickClaireDeskFieldProcedure,
   joystickClaireDeskProcedure,
   router,
@@ -193,7 +193,7 @@ export const claireRouter = router({
       });
     }),
 
-  previewWorkday: legacyDayforgeMissionFieldProcedure
+  previewWorkday: legacyLegacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         timeZone: z.string().trim().min(1).max(100).optional(),
@@ -354,7 +354,7 @@ export const claireRouter = router({
       };
     }),
 
-  driveContext: legacyDayforgeMissionFieldProcedure
+  driveContext: legacyLegacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         phase: z.enum(["pre_drive", "post_stop"]),
@@ -368,7 +368,7 @@ export const claireRouter = router({
           tenantId: ctx.tenantId,
           missionId: input.missionId,
           userId: ctx.user.openId,
-          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
+          isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
         });
       }
       return assembleClaireDriveContext({
@@ -380,7 +380,7 @@ export const claireRouter = router({
       });
     }),
 
-  callBeforeDrive: legacyDayforgeMissionFieldProcedure
+  callBeforeDrive: legacyLegacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         timeZone: z.string().trim().min(1).max(100).optional(),
@@ -393,7 +393,7 @@ export const claireRouter = router({
           tenantId: ctx.tenantId,
           missionId: input.missionId,
           userId: ctx.user.openId,
-          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
+          isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
         });
       }
       return startClairePreDriveCall({
@@ -410,7 +410,7 @@ export const claireRouter = router({
       });
     }),
 
-  callAfterStop: legacyDayforgeMissionFieldProcedure
+  callAfterStop: legacyLegacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -418,7 +418,7 @@ export const claireRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const isAdmin = ctx.legacyDayforgeMembership.role !== "field";
+      const isAdmin = ctx.legacyLegacyDayforgeMembership.role !== "field";
       await assertClaireMissionAccess({
         tenantId: ctx.tenantId,
         missionId: input.missionId,
@@ -434,7 +434,7 @@ export const claireRouter = router({
       });
     }),
 
-  scanReactivation: legacyDayforgeChurnProcedure
+  scanReactivation: legacyLegacyDayforgeChurnProcedure
     .input(z.object({ requestId: uuid }))
     .mutation(({ ctx, input }) =>
       runCustomerChurnScan({
@@ -444,7 +444,7 @@ export const claireRouter = router({
       })
     ),
 
-  prepareReactivation: legacyDayforgeChurnProcedure
+  prepareReactivation: legacyLegacyDayforgeChurnProcedure
     .input(z.object({ snapshotId: uuid, requestId: uuid }))
     .mutation(async ({ ctx, input }) => {
       const detail = await createCustomerRecoveryIntervention({
@@ -457,7 +457,7 @@ export const claireRouter = router({
       return { detail, action: recoveryAction(detail) };
     }),
 
-  reactivationStatus: legacyDayforgeChurnProcedure
+  reactivationStatus: legacyLegacyDayforgeChurnProcedure
     .input(z.object({ interventionId: uuid }))
     .query(async ({ ctx, input }) => {
       const all = await listRecoveryInterventions(ctx.tenantId);
@@ -466,7 +466,7 @@ export const claireRouter = router({
       return { detail, action: recoveryAction(detail) };
     }),
 
-  approveReactivation: legacyDayforgeChurnProcedure
+  approveReactivation: legacyLegacyDayforgeChurnProcedure
     .input(
       z.object({
         interventionId: uuid,
@@ -489,7 +489,7 @@ export const claireRouter = router({
       return { detail, action: recoveryAction(detail) };
     }),
 
-  prepareManualReactivation: legacyDayforgeChurnProcedure
+  prepareManualReactivation: legacyLegacyDayforgeChurnProcedure
     .input(z.object({ interventionId: uuid, requestId: uuid }))
     .mutation(async ({ ctx, input }) => {
       const detail = await getRecoveryInterventionDetail({
@@ -515,7 +515,7 @@ export const claireRouter = router({
       };
     }),
 
-  markReactivationContacted: legacyDayforgeChurnProcedure
+  markReactivationContacted: legacyLegacyDayforgeChurnProcedure
     .input(
       z.object({
         interventionId: uuid,
@@ -546,7 +546,7 @@ export const claireRouter = router({
   // ── Claire relationship state (Pass 1) ──────────────────────────
   // Read-only self-view: an operator can see their own standing with
   // Claire. Never exposes another operator's state.
-  relationshipState: legacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
+  relationshipState: legacyLegacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
     getClaireRelationshipState({
       tenantId: ctx.tenantId,
       operatorUserId: ctx.user.openId,
@@ -555,7 +555,7 @@ export const claireRouter = router({
 
   // Bounded, self-scoped shared-history view — never a full transcript
   // dump (Slice 4).
-  relationshipHistory: legacyDayforgeMissionFieldProcedure
+  relationshipHistory: legacyLegacyDayforgeMissionFieldProcedure
     .input(z.object({ limit: z.number().int().min(1).max(20).default(10) }))
     .query(({ ctx, input }) =>
       listClaireRelationshipEvents({
@@ -573,7 +573,7 @@ export const claireRouter = router({
   // here, so this surface can never be used to self-award them.
   // Requires an explicit confirmation literal, matching the debrief-confirm
   // pattern used elsewhere for consequential, human-attested writes.
-  recordRelationshipObservation: legacyDayforgeMissionFieldProcedure
+  recordRelationshipObservation: legacyLegacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         eventType: z.enum(CLAIRE_ATTESTABLE_EVENT_TYPES),
@@ -606,14 +606,14 @@ export const claireRouter = router({
       })
     ),
 
-  analysisInbox: legacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
+  analysisInbox: legacyLegacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
     listClaireAnalysisInbox({
       tenantId: ctx.tenantId,
       operatorUserId: ctx.user.openId,
     })
   ),
 
-  markAnalysisNotificationRead: legacyDayforgeMissionFieldProcedure
+  markAnalysisNotificationRead: legacyLegacyDayforgeMissionFieldProcedure
     .input(z.object({ id: uuid }))
     .mutation(({ ctx, input }) =>
       markClaireAnalysisNotificationRead({
@@ -623,7 +623,7 @@ export const claireRouter = router({
       })
     ),
 
-  callAnalysis: legacyDayforgeMissionFieldProcedure
+  callAnalysis: legacyLegacyDayforgeMissionFieldProcedure
     .input(
       z
         .object({
@@ -638,35 +638,35 @@ export const claireRouter = router({
       getClaireCallAnalysis({
         tenantId: ctx.tenantId,
         operatorUserId: ctx.user.openId,
-        isAdmin: ctx.user.role === "admin" || ctx.legacyDayforgeMembership.role !== "field",
+        isAdmin: ctx.user.role === "admin" || ctx.legacyLegacyDayforgeMembership.role !== "field",
         sessionId: input.sessionId,
         callSid: input.callSid,
       })
     ),
 
-  callAudio: legacyDayforgeMissionFieldProcedure
+  callAudio: legacyLegacyDayforgeMissionFieldProcedure
     .input(z.object({ sessionId: uuid }))
     .query(({ ctx, input }) =>
       getClaireCallAudio({
         tenantId: ctx.tenantId,
         operatorUserId: ctx.user.openId,
-        isAdmin: ctx.user.role === "admin" || ctx.legacyDayforgeMembership.role !== "field",
+        isAdmin: ctx.user.role === "admin" || ctx.legacyLegacyDayforgeMembership.role !== "field",
         sessionId: input.sessionId,
       })
     ),
 
-  markCallReviewed: legacyDayforgeMissionFieldProcedure
+  markCallReviewed: legacyLegacyDayforgeMissionFieldProcedure
     .input(z.object({ sessionId: uuid }))
     .mutation(({ ctx, input }) =>
       markClaireCallReviewed({
         tenantId: ctx.tenantId,
         operatorUserId: ctx.user.openId,
-        isAdmin: ctx.user.role === "admin" || ctx.legacyDayforgeMembership.role !== "field",
+        isAdmin: ctx.user.role === "admin" || ctx.legacyLegacyDayforgeMembership.role !== "field",
         sessionId: input.sessionId,
       })
     ),
 
-  markCallAnalysisWrong: legacyDayforgeMissionFieldProcedure
+  markCallAnalysisWrong: legacyLegacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         sessionId: uuid,
@@ -677,13 +677,13 @@ export const claireRouter = router({
       markClaireCallAnalysisWrong({
         tenantId: ctx.tenantId,
         operatorUserId: ctx.user.openId,
-        isAdmin: ctx.user.role === "admin" || ctx.legacyDayforgeMembership.role !== "field",
+        isAdmin: ctx.user.role === "admin" || ctx.legacyLegacyDayforgeMembership.role !== "field",
         sessionId: input.sessionId,
         note: input.note,
       })
     ),
 
-  capabilities: legacyDayforgeMissionFieldProcedure.query(() => GOLDLINE_CAPABILITY_REGISTRY),
+  capabilities: legacyLegacyDayforgeMissionFieldProcedure.query(() => GOLDLINE_CAPABILITY_REGISTRY),
 
   capabilityGap: joystickClaireDeskFieldProcedure
     .input(z.object({ id: uuid }))

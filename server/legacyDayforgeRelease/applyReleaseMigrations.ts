@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import mysql from "mysql2/promise";
 
-export function legacyDayforgeReleaseMigrationFilenames(
+export function legacyLegacyDayforgeReleaseMigrationFilenames(
   filenames: readonly string[],
   fromPrefix?: string
 ): string[] {
@@ -14,14 +14,14 @@ export function legacyDayforgeReleaseMigrationFilenames(
     .sort((left, right) => left.localeCompare(right));
 }
 
-export function normalizeDayforgeReleaseMigrationSql(sql: string): string {
+export function normalizeLegacyDayforgeReleaseMigrationSql(sql: string): string {
   return sql.replace(
     /[ \t]*--> statement-breakpoint[ \t]*(?:\r?\n)?/g,
     "\n"
   );
 }
 
-export async function applyDayforgeReleaseMigrations(input: {
+export async function applyLegacyDayforgeReleaseMigrations(input: {
   databaseUrl: string;
   migrationDirectory?: string;
   fromPrefix?: string;
@@ -33,7 +33,7 @@ export async function applyDayforgeReleaseMigrations(input: {
   }
   const migrationDirectory =
     input.migrationDirectory ?? resolve(process.cwd(), "drizzle");
-  const filenames = legacyDayforgeReleaseMigrationFilenames(
+  const filenames = legacyLegacyDayforgeReleaseMigrationFilenames(
     await readdir(migrationDirectory),
     input.fromPrefix
   );
@@ -50,7 +50,7 @@ export async function applyDayforgeReleaseMigrations(input: {
   });
   try {
     for (const filename of filenames) {
-      const sql = normalizeDayforgeReleaseMigrationSql(
+      const sql = normalizeLegacyDayforgeReleaseMigrationSql(
         await readFile(resolve(migrationDirectory, filename), "utf8")
       );
       await connection.query(sql);
@@ -66,7 +66,7 @@ async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL?.trim();
   if (!databaseUrl) throw new Error("DATABASE_URL is required");
   const fromPrefix = process.env.DAYFORGE_RELEASE_FROM?.trim();
-  await applyDayforgeReleaseMigrations({ databaseUrl, fromPrefix });
+  await applyLegacyDayforgeReleaseMigrations({ databaseUrl, fromPrefix });
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

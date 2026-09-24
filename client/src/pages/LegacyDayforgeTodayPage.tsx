@@ -42,11 +42,11 @@ function mapsUrl(address: string) {
 export default function LegacyDayforgeTodayPage() {
   const { loading, isAuthenticated } = useAuth();
   const [walkInOpen, setWalkInOpen] = useState(() => new URLSearchParams(location.search).get("walkIn") === "1");
-  const queue = trpc.system.legacyDayforgeToday.list.useQuery(undefined, { enabled: isAuthenticated });
+  const queue = trpc.system.legacyLegacyDayforgeToday.list.useQuery(undefined, { enabled: isAuthenticated });
   const dayLine = trpc.system.currentDayLine.today.useQuery(undefined, { enabled: isAuthenticated, retry: false });
   const tenant = trpc.system.saas.me.useQuery(undefined, { enabled: isAuthenticated, retry: false });
-  const completeFollowUp = trpc.system.legacyDayforgeToday.completeFollowUp.useMutation();
-  const rescheduleFollowUp = trpc.system.legacyDayforgeToday.rescheduleFollowUp.useMutation();
+  const completeFollowUp = trpc.system.legacyLegacyDayforgeToday.completeFollowUp.useMutation();
+  const rescheduleFollowUp = trpc.system.legacyLegacyDayforgeToday.rescheduleFollowUp.useMutation();
   const groups = useMemo(() => ({
     overdue: queue.data?.filter(item => item.urgency === "overdue") ?? [],
     now: queue.data?.filter(item => ["urgent", "today"].includes(item.urgency)) ?? [],

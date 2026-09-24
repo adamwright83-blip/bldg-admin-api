@@ -1,6 +1,6 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
-import { legacyDayforgeTenantOperatorProcedure, router } from "../_core/trpc";
+import { legacyLegacyDayforgeTenantOperatorProcedure, router } from "../_core/trpc";
 import { goldlineChapterFictionStateSchema } from "../../shared/goldlineChapterState";
 import {
   ChapterStateRevisionConflictError,
@@ -11,7 +11,7 @@ import {
 const chapterIdInput = z.object({ chapterId: z.string().min(1).max(64) });
 
 export const chapterStateRouter = router({
-  get: legacyDayforgeTenantOperatorProcedure
+  get: legacyLegacyDayforgeTenantOperatorProcedure
     .input(chapterIdInput)
     .query(async ({ ctx, input }) =>
       getChapterState({
@@ -20,7 +20,7 @@ export const chapterStateRouter = router({
         chapterId: input.chapterId,
       })
     ),
-  save: legacyDayforgeTenantOperatorProcedure
+  save: legacyLegacyDayforgeTenantOperatorProcedure
     .input(
       z.object({
         chapterId: z.string().min(1).max(64),

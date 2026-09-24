@@ -11,23 +11,23 @@ import {
   type CommercialMissionCoachingArtifactRow,
 } from "../../drizzle/schema";
 import {
-  legacyDayforgeCoachingClaimSchema,
-  legacyDayforgeCoachingOutputSchema,
-  legacyDayforgeEvidenceReferenceSchema,
-} from "@shared/legacyDayforgeCoaching";
+  legacyLegacyDayforgeCoachingClaimSchema,
+  legacyLegacyDayforgeCoachingOutputSchema,
+  legacyLegacyDayforgeEvidenceReferenceSchema,
+} from "@shared/legacyLegacyDayforgeCoaching";
 import {
-  assertDayforgeCoachingOutputIsSafeForStorage,
-  sanitizeDayforgeEvidenceReferenceForStorage,
-} from "./legacyDayforgeCoachingPolicy";
+  assertLegacyDayforgeCoachingOutputIsSafeForStorage,
+  sanitizeLegacyDayforgeEvidenceReferenceForStorage,
+} from "./legacyLegacyDayforgeCoachingPolicy";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
 import type {
   LegacyDayforgeCoachingArtifact,
   LegacyDayforgeCoachingArtifactRepository,
-  FindReusableDayforgeCoachingArtifactInput,
-  PersistDayforgeCoachingArtifactInput,
-} from "./legacyDayforgeCoachingArtifactTypes";
-import { legacyDayforgeCoachingArtifactCacheKey } from "./legacyDayforgeCoachingArtifactTypes";
+  FindReusableLegacyDayforgeCoachingArtifactInput,
+  PersistLegacyDayforgeCoachingArtifactInput,
+} from "./legacyLegacyDayforgeCoachingArtifactTypes";
+import { legacyLegacyDayforgeCoachingArtifactCacheKey } from "./legacyLegacyDayforgeCoachingArtifactTypes";
 
 type CoachingTransaction = Parameters<
   Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]
@@ -44,11 +44,11 @@ function iso(value: Date | null): string | null {
 function decodeArtifact(row: CommercialMissionCoachingArtifactRow): LegacyDayforgeCoachingArtifact {
   const output = row.structuredOutputJson === null
     ? null
-    : legacyDayforgeCoachingOutputSchema.parse(row.structuredOutputJson);
-  const evidenceReferences = z.array(legacyDayforgeEvidenceReferenceSchema).parse(
+    : legacyLegacyDayforgeCoachingOutputSchema.parse(row.structuredOutputJson);
+  const evidenceReferences = z.array(legacyLegacyDayforgeEvidenceReferenceSchema).parse(
     row.evidenceReferencesJson ?? [],
   );
-  const claims = z.array(legacyDayforgeCoachingClaimSchema).parse(row.claimsJson ?? []);
+  const claims = z.array(legacyLegacyDayforgeCoachingClaimSchema).parse(row.claimsJson ?? []);
   if (output && JSON.stringify(output.claims) !== JSON.stringify(claims)) {
     throw new Error("Persisted coaching claim projection does not match its structured output");
   }
@@ -86,14 +86,14 @@ function decodeArtifact(row: CommercialMissionCoachingArtifactRow): LegacyDayfor
 }
 
 function validatedPersistencePayload(
-  input: PersistDayforgeCoachingArtifactInput,
-): PersistDayforgeCoachingArtifactInput {
-  const output = legacyDayforgeCoachingOutputSchema.parse(input.structuredOutput);
-  assertDayforgeCoachingOutputIsSafeForStorage(output);
-  const evidenceReferences = z.array(legacyDayforgeEvidenceReferenceSchema)
+  input: PersistLegacyDayforgeCoachingArtifactInput,
+): PersistLegacyDayforgeCoachingArtifactInput {
+  const output = legacyLegacyDayforgeCoachingOutputSchema.parse(input.structuredOutput);
+  assertLegacyDayforgeCoachingOutputIsSafeForStorage(output);
+  const evidenceReferences = z.array(legacyLegacyDayforgeEvidenceReferenceSchema)
     .max(50)
     .parse(input.evidenceReferences)
-    .map(sanitizeDayforgeEvidenceReferenceForStorage);
+    .map(sanitizeLegacyDayforgeEvidenceReferenceForStorage);
   if (input.generationStatus === "generated" && input.fallbackCode !== null) {
     throw new Error("Generated coaching cannot carry a fallback code");
   }
@@ -105,7 +105,7 @@ function validatedPersistencePayload(
 
 function assertReplayMatches(
   row: CommercialMissionCoachingArtifactRow,
-  input: PersistDayforgeCoachingArtifactInput,
+  input: PersistLegacyDayforgeCoachingArtifactInput,
 ): void {
   const matches = row.missionId === input.missionId &&
     row.missionStepId === input.missionStepId &&
@@ -138,7 +138,7 @@ async function findByRequestWith(
 
 async function assertMissionAccountScopeWith(
   tx: CoachingTransaction,
-  input: PersistDayforgeCoachingArtifactInput,
+  input: PersistLegacyDayforgeCoachingArtifactInput,
 ): Promise<void> {
   // The mission row is the serialization lock for artifact versions. It also
   // prevents two concurrent requests from both choosing the same next version.
@@ -196,7 +196,7 @@ async function assertMissionAccountScopeWith(
 
 async function persistWith(
   tx: CoachingTransaction,
-  input: PersistDayforgeCoachingArtifactInput,
+  input: PersistLegacyDayforgeCoachingArtifactInput,
 ): Promise<CommercialMissionCoachingArtifactRow> {
   await assertMissionAccountScopeWith(tx, input);
   const replay = await findByRequestWith(tx, input);
@@ -241,7 +241,7 @@ async function persistWith(
     modelId: input.modelId,
     promptVersion: input.promptVersion,
     contextHash: input.contextHash,
-    cacheKey: legacyDayforgeCoachingArtifactCacheKey(input),
+    cacheKey: legacyLegacyDayforgeCoachingArtifactCacheKey(input),
     requestId: input.requestId,
     version,
     generatedAt: input.generatedAt,
@@ -272,9 +272,9 @@ async function persistWith(
   return created[0];
 }
 
-export const legacyDayforgeCoachingArtifactRepository: LegacyDayforgeCoachingArtifactRepository = {
+export const legacyLegacyDayforgeCoachingArtifactRepository: LegacyDayforgeCoachingArtifactRepository = {
   async findReusable(input) {
-    return findReusableDayforgeCoachingArtifact(input);
+    return findReusableLegacyDayforgeCoachingArtifact(input);
   },
   async persist(input) {
     const db = await getDb();
@@ -293,8 +293,8 @@ export const legacyDayforgeCoachingArtifactRepository: LegacyDayforgeCoachingArt
   },
 };
 
-export async function findReusableDayforgeCoachingArtifact(
-  input: FindReusableDayforgeCoachingArtifactInput,
+export async function findReusableLegacyDayforgeCoachingArtifact(
+  input: FindReusableLegacyDayforgeCoachingArtifactInput,
 ): Promise<LegacyDayforgeCoachingArtifact | null> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -306,7 +306,7 @@ export async function findReusableDayforgeCoachingArtifact(
       eq(commercialMissionCoachingArtifacts.missionId, input.missionId),
       eq(commercialMissionCoachingArtifacts.scopeKey, scopeKeyFor(input.missionStepId)),
       eq(commercialMissionCoachingArtifacts.accountId, input.accountId),
-      eq(commercialMissionCoachingArtifacts.cacheKey, legacyDayforgeCoachingArtifactCacheKey(input)),
+      eq(commercialMissionCoachingArtifacts.cacheKey, legacyLegacyDayforgeCoachingArtifactCacheKey(input)),
       eq(commercialMissionCoachingArtifacts.generationStatus, "generated"),
       eq(commercialMissionCoachingArtifacts.active, true),
     ))
@@ -315,7 +315,7 @@ export async function findReusableDayforgeCoachingArtifact(
   return rows[0] ? decodeArtifact(rows[0]) : null;
 }
 
-export async function getActiveDayforgeCoachingArtifact(input: {
+export async function getActiveLegacyDayforgeCoachingArtifact(input: {
   tenantId: string;
   missionId: number;
   missionStepId: number | null;
@@ -336,7 +336,7 @@ export async function getActiveDayforgeCoachingArtifact(input: {
   return rows[0] ? decodeArtifact(rows[0]) : null;
 }
 
-export async function listDayforgeCoachingArtifactHistory(input: {
+export async function listLegacyDayforgeCoachingArtifactHistory(input: {
   tenantId: string;
   missionId: number;
   missionStepId: number | null;

@@ -36,7 +36,7 @@ export function googleProviderStatus(
 }
 
 /**
- * server/saas/saasBilling.ts `getDayforgeBillingStripe()` reads
+ * server/saas/saasBilling.ts `getLegacyDayforgeBillingStripe()` reads
  * DAYFORGE_BILLING_STRIPE_SECRET_KEY (min length 20) — that's the actual
  * adapter DayForge billing uses, distinct from the legacy marketplace
  * STRIPE_SECRET_KEY. A `sk_test_` key reports TEST, a live key reports LIVE.
@@ -82,7 +82,7 @@ export function printProviderStatus(): PrintState {
   return "BROWSER_PDF_FALLBACK";
 }
 
-export function getDayforgeProviderStatus(
+export function getLegacyDayforgeProviderStatus(
   env: NodeJS.ProcessEnv = process.env
 ): LegacyDayforgeProviderStatus {
   return {
