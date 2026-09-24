@@ -95,7 +95,7 @@ const SUBJECT_CHANGE = new RegExp(
 );
 
 const OPERATOR_INTENT =
-  /\b(?:i|we)\s+(?:have\s+to|need\s+to|gotta|got\s+to|must|should|want\s+to|plan\s+to|am\s+going\s+to|'m\s+going\s+to)\s+\w+/i;
+  /\b(?:i|we)\s+(?:(?:also|still)\s+)?(?:have\s+to|need\s+to|gotta|got\s+to|must|should|want\s+to|plan\s+to|am\s+going\s+to|'m\s+going\s+to)\s+\w+/i;
 
 const EXTERNAL_FACT =
   /\b(?:owe|owes|owed)\b|\b\$\s?\d|\b\d[\d,]*\s*(?:dollars|bucks|thousand)\b/i;
@@ -136,7 +136,7 @@ function strategicContentLabel(text: string): string | null {
 function intentionComplement(text: string): string | null {
   const sentence = text.trim().split(/(?<=[.!?])\s+/)[0] ?? text;
   const match =
-    /\b(?:i|we)\s+(?:have\s+to|need\s+to|gotta|got\s+to|must|should|want\s+to|plan\s+to|am\s+going\s+to|'m\s+going\s+to)\s+(.+)/i.exec(
+    /\b(?:i|we)\s+(?:(?:also|still)\s+)?(?:have\s+to|need\s+to|gotta|got\s+to|must|should|want\s+to|plan\s+to|am\s+going\s+to|'m\s+going\s+to)\s+(.+)/i.exec(
       sentence
     );
   if (!match?.[1]) return null;
