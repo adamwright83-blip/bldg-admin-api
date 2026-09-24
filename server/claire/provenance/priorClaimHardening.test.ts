@@ -63,6 +63,31 @@ describe("1. referent resolution", () => {
     expect(trace?.priorClaim).toMatchObject({ resolvedClaireTurn: 2, resolvedVia: "immediately_preceding", outcome: "unsupported" });
   });
 
+  it("keeps the factual receipt targeted across one provenance-only turn", async () => {
+    const h = harness();
+    await h.say("Who was my most recent sale?");
+
+    // Production shape from 2026-09-24: provenance speech happened between the
+    // business fact and the bare correctness challenge, but that speech did not
+    // mint a new factual receipt. Preserve the original claim as the referent.
+    h.state.history = [
+      ...(h.state.history ?? []),
+      { speaker: "operator", text: "Where did that come from?", at: NOW.getTime() + 1 },
+      { speaker: "claire", text: "It's CleanCloud order 584.", at: NOW.getTime() + 2 },
+    ];
+    h.state.claireTurnCount = 2;
+
+    const { result, trace } = await h.say("Are you sure?");
+    expect(trace?.path).toBe("prior_claim_verification");
+    expect(trace?.priorClaim).toMatchObject({
+      resolvedClaireTurn: 1,
+      resolvedVia: "immediately_preceding",
+      outcome: "verified",
+      resolution: "fresh_query",
+    });
+    expect(result.speak).toMatch(/CleanCloud order 584/);
+  });
+
   it("fails closed when two different claims match the reference equally", async () => {
     const h = harness();
     await h.say("Who was my most recent sale?");
