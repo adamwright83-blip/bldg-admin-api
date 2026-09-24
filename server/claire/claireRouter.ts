@@ -55,6 +55,7 @@ import {
   confirmWorkdayPlan,
   previewWorkdayLoop,
 } from "./workdayPlanService";
+import { loadClaireRookContactResidues } from "./rookContactResidueContext";
 import { observationUtteranceForBrain, runClaireTurn, type ClaireTurnState } from "./turn/claireTurn";
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
 import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
@@ -276,6 +277,10 @@ export const claireRouter = router({
       const stored = await store.load<ClaireTurnState>(key);
       const state: ClaireTurnState =
         stored && stored.tenantId === scope.tenantId && stored.operatorUserId === scope.operatorUserId ? stored.state : {};
+      const rookContactResidues = await loadClaireRookContactResidues({
+        tenantId: scope.tenantId,
+        operatorUserId: scope.operatorUserId,
+      });
       const result = await runClaireTurn(
         {
           tenantId: scope.tenantId,
@@ -287,6 +292,7 @@ export const claireRouter = router({
           conversationKey: key,
           brief: preview.brief,
           context,
+          rookContactResidues,
         },
         {
           confirmPlan: () =>

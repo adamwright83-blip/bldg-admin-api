@@ -82,11 +82,14 @@ function goldlineHas(
 }
 
 function firedBeatIds(snapshot: NarratorSnapshot): Set<string> {
-  return new Set(
-    snapshot.ledger
-      .filter(entry => entry.kind === "FIRED_AUTHORED_BEAT" && entry.beatId)
-      .map(entry => entry.beatId as string)
-  );
+  const ids = new Set<string>();
+  for (const entry of snapshot.ledger) {
+    if (entry.kind === "SOCIAL_RESIDUE") continue;
+    if (entry.kind === "FIRED_AUTHORED_BEAT" && entry.beatId) {
+      ids.add(entry.beatId);
+    }
+  }
+  return ids;
 }
 
 function evaluatePrerequisite(

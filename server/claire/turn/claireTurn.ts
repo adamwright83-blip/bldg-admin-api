@@ -94,6 +94,10 @@ import {
   narratorPromptSectionForClaire,
   type NarrativeClaireSpeechAttachment,
 } from "../narratorPresentationConsumer";
+import {
+  claireRookContactResidueSection,
+  type ClaireRookContactResidueContext,
+} from "../rookContactResidueContext";
 import type { NarrativePresentationPlan } from "../../narratorOs/presentationPlan";
 
 /**
@@ -163,6 +167,11 @@ export type ClaireTurnInput = {
    * state, run eligibility, or decide whether a beat occurred.
    */
   narrativePresentation?: NarrativePresentationPlan | null;
+  /**
+   * Server-loaded Rook CONTACT residues for this tenant and operator.
+   * Omitted residues inject nothing. Eligibility still filters them.
+   */
+  rookContactResidues?: readonly ClaireRookContactResidueContext[];
   /**
    * Slice A (routing audit): when the turn actually began for the operator —
    * for voice, the moment Twilio's webhook arrived, which is the closest
@@ -520,6 +529,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   const narratorPromptSection = narratorPromptSectionForClaire(
     input.narrativePresentation
   );
+  const rookContactResidueSection = claireRookContactResidueSection({
+    tenantId: input.tenantId,
+    operatorUserId: input.operatorUserId,
+    utterance,
+    residues: input.rookContactResidues ?? [],
+  });
   let narratorContextSupplied = false;
   const trace = beginClaireTurnTrace({
     tenantId: input.tenantId,
@@ -1208,6 +1223,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       coveredThisCall: coveredThisCallLines(state.coverage),
       priorClaimNotes: priorClaimNotes(),
       narratorPromptSection,
+      rookContactResidueSection,
       onPersonalTurn: personal => {
         if (personal.endCall) personalEndCall = true;
       },
@@ -1379,6 +1395,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       coveredThisCall: coveredThisCallLines(state.coverage),
       priorClaimNotes: priorClaimNotes(),
       narratorPromptSection,
+      rookContactResidueSection,
       onPersonalTurn: personal => {
         if (personal.endCall) personalEndCall = true;
       },

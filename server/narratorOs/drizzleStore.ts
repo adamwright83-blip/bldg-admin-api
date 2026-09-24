@@ -67,6 +67,7 @@ function ledgerFromRow(
   const payload = (row.payloadJson ?? {}) as {
     evidenceRef?: NarrativeEventLedgerEntry["evidenceRef"];
     persistedVerifiedGoldline?: PersistedVerifiedGoldlineReceipt | null;
+    socialResidue?: NarrativeEventLedgerEntry["socialResidue"];
   };
   return {
     id: row.id,
@@ -81,16 +82,19 @@ function ledgerFromRow(
     occurredAt: row.occurredAt.toISOString(),
     idempotencyKey: row.idempotencyKey,
     persistedVerifiedGoldline: payload.persistedVerifiedGoldline ?? null,
+    socialResidue: payload.socialResidue ?? null,
   };
 }
 
 function ledgerPayloadJson(entry: NarrativeEventLedgerEntry): {
   evidenceRef: NarrativeEventLedgerEntry["evidenceRef"];
   persistedVerifiedGoldline: PersistedVerifiedGoldlineReceipt | null;
+  socialResidue: NarrativeEventLedgerEntry["socialResidue"];
 } {
   return {
     evidenceRef: entry.evidenceRef,
     persistedVerifiedGoldline: entry.persistedVerifiedGoldline ?? null,
+    socialResidue: entry.socialResidue ?? null,
   };
 }
 

@@ -2,13 +2,17 @@ import { readFileSync } from "node:fs";
 import type { SQL } from "drizzle-orm";
 import { MySqlDialect } from "drizzle-orm/mysql-core";
 import { getTableName } from "drizzle-orm/table";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultAuthorityForGoldlineAction } from "../../shared/goldlineActionContract";
 import {
   ROOK_CONTACT_BUSINESS_ASSERTIONS,
   groundRookContactLanguage,
 } from "./rookContactGrounding";
 import { evaluateRookContactTransport } from "./rookContactCallTruth";
+import {
+  ROOK_CONTACT_EXECUTION_FIXTURE_SOURCE,
+  WAYWARD_ROOK_CONTACT_CONSEQUENCE,
+} from "../../shared/rookContact";
 import {
   authorizeRookContactSession,
   prepareRookContactSession,
@@ -151,7 +155,7 @@ function seedReady(db: ReturnType<typeof memoryDb>, patch?: { rook?: boolean; gr
       operatorId: "op-a",
       capabilityId: "capability.rook.contact",
       grantedAt: new Date("2026-09-23T02:00:00.000Z"),
-      grantSource: "wayward.rook_contact_demonstrated",
+      grantSource: ROOK_CONTACT_EXECUTION_FIXTURE_SOURCE,
     });
   }
   db.accounts.push(
@@ -202,6 +206,7 @@ describe("CONTACT execution", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.ROOK_CONTACT_EXECUTION_FIXTURE = "1";
     db = memoryDb();
     mocks.getDb.mockResolvedValue(db);
     mocks.placeCall.mockResolvedValue({ attemptId: 42, repLegCallSid: "CA_operator" });
@@ -213,6 +218,10 @@ describe("CONTACT execution", () => {
     });
   });
 
+  afterEach(() => {
+    delete process.env.ROOK_CONTACT_EXECUTION_FIXTURE;
+  });
+
   it("17. CONTACT not granted does not create an executable session", async () => {
     seedReady(db, { grant: false });
     await expect(
@@ -220,6 +229,36 @@ describe("CONTACT execution", () => {
     ).rejects.toThrow(/not granted/);
     expect(db.sessions).toHaveLength(0);
     expect(mocks.placeCall).not.toHaveBeenCalled();
+  });
+
+  it("a client consequence row does not prepare, even with the execution fixture flag", async () => {
+    seedReady(db, { grant: false });
+    db.grants.push({
+      id: "grant-client",
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      capabilityId: "capability.rook.contact",
+      grantedAt: new Date("2026-09-23T02:00:00.000Z"),
+      grantSource: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
+    });
+    await expect(
+      prepareRookContactSession({ ...actor, accountId: 10, contactId: 20 })
+    ).rejects.toThrow(/not granted/);
+    expect(db.sessions).toHaveLength(0);
+  });
+
+  it("an execution fixture does not prepare when NODE_ENV is production", async () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      seedReady(db);
+      await expect(
+        prepareRookContactSession({ ...actor, accountId: 10, contactId: 20 })
+      ).rejects.toThrow(/not granted/);
+      expect(db.sessions).toHaveLength(0);
+    } finally {
+      process.env.NODE_ENV = previous;
+    }
   });
 
   it("18. Rook not owned cannot use CONTACT", async () => {

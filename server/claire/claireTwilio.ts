@@ -53,6 +53,7 @@ import {
   handleRecordingStatus,
 } from "./conversation/pipeline";
 import { isValidTwilioWebhook } from "./conversation/twilioSignature";
+import { loadClaireRookContactResidues } from "./rookContactResidueContext";
 import {
   runClaireTurn,
   looksUnfinished,
@@ -878,6 +879,10 @@ export function runAuthoritativeClaireVoiceTurn(input: {
           thoughtCompleteness: "complete",
         };
       } else {
+        const rookContactResidues = await loadClaireRookContactResidues({
+          tenantId: conversation.tenantId,
+          operatorUserId: conversation.actorId,
+        });
         result = await runClaireTurn(
           {
             tenantId: conversation.tenantId,
@@ -891,6 +896,7 @@ export function runAuthoritativeClaireVoiceTurn(input: {
             context: conversation.context,
             allowFragmentWait: input.allowFragmentWait,
             turnStartedAtMs: input.webhookReceivedAtMs,
+            rookContactResidues,
           },
           {
             confirmPlan: () =>

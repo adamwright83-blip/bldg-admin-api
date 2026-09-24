@@ -4,8 +4,11 @@
  * Kingdom completion is not written.
  */
 import { getDay1TenDoorsMissionReadOnly } from "../openChannel/day1TenDoorsService";
-import { WAYWARD_ROOK_CONTACT_CONSEQUENCE } from "../../shared/rookContact";
-import { findRookContactGrant, grantRookContactCapability } from "./capabilityGrantStore";
+import { findRookContactGrant } from "./capabilityGrantStore";
+import {
+  findServerAuthoritativeWaywardContactProof,
+  rookContactGrantIsProductionAuthority,
+} from "./rookContactAuthority";
 import { COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE } from "../../shared/colosseumAuthoredFinale";
 import {
   assertLevelColosseumRecordPermitted,
@@ -17,14 +20,6 @@ import {
 } from "./progressionContract";
 import { findDomainProgression, recordAuthoredColosseumFinale } from "./progressionStore";
 import { recordRookFromOutcomes } from "./progressionWrites";
-
-function sameStoredTimestamp(
-  left: Date | null | undefined,
-  right: Date | null | undefined
-): boolean {
-  if (left == null || right == null) return left == null && right == null;
-  return left.getTime() === right.getTime();
-}
 
 async function loadOutcomes(input: { tenantId: string; operatorId: string }): Promise<{
   outcomes: Record<string, unknown> | null;
@@ -58,7 +53,10 @@ async function loadCapability(input: {
     operatorId: input.operatorId,
   });
   if (!found.readable) return { granted: false, readable: false };
-  return { granted: found.grant != null, readable: true };
+  return {
+    granted: rookContactGrantIsProductionAuthority(found.grant),
+    readable: true,
+  };
 }
 
 export async function readGoldlineProgression(input: {
@@ -156,10 +154,11 @@ export async function acknowledgeColosseumAuthoredFinale(input: {
 }
 
 /**
- * Grants capability.rook.contact after companion.rook is already owned.
- * The only accepted consequence is wayward.rook_contact_demonstrated.
- * Does not own Rook, resolve Colosseum, complete Brass Republic, or complete
- * a mission or challenge. Entering Wayward is not this acknowledgement.
+ * Production acknowledgement of Wayward CONTACT. Fails closed.
+ * The client literal wayward.rook_contact_demonstrated is not proof the
+ * authored beat occurred. Owning Rook does not grant CONTACT. This write
+ * does not own Rook, resolve Colosseum, complete Brass Republic, or
+ * complete a mission or challenge.
  */
 export async function acknowledgeWaywardRookContact(input: {
   tenantId: string;
@@ -169,46 +168,13 @@ export async function acknowledgeWaywardRookContact(input: {
 }): Promise<GoldlineProgressionRead> {
   rejectClientProgressionForge(input);
   rejectClientProgressionForge(input.clientPayload);
-  if (input.authoredConsequence !== WAYWARD_ROOK_CONTACT_CONSEQUENCE) {
-    throw new ProgressionNotPermittedError(
-      "capability.rook.contact requires the authored consequence wayward.rook_contact_demonstrated"
-    );
-  }
-  const before = await findDomainProgression({
+  const proof = findServerAuthoritativeWaywardContactProof({
     tenantId: input.tenantId,
     operatorId: input.operatorId,
   });
-  if (!before.readable) {
+  if (!proof.proven) {
     throw new ProgressionNotPermittedError(
-      "companion.rook ownership is uncertain; capability.rook.contact is not granted"
-    );
-  }
-  if (!before.row?.companionRookOwnedAt) {
-    throw new ProgressionNotPermittedError(
-      "capability.rook.contact requires companion.rook; owning Rook is not automatic and this acknowledgement does not own him"
-    );
-  }
-  const levelStamp = before.row.levelColosseumResolvedAt;
-  const rookStamp = before.row.companionRookOwnedAt;
-  const kingdomStamp = before.row.kingdomBrassRepublicCompletedAt;
-  await grantRookContactCapability({
-    tenantId: input.tenantId,
-    operatorId: input.operatorId,
-    grantSource: WAYWARD_ROOK_CONTACT_CONSEQUENCE,
-    grantedAt: new Date(),
-  });
-  const after = await findDomainProgression({
-    tenantId: input.tenantId,
-    operatorId: input.operatorId,
-  });
-  if (
-    !after.readable ||
-    !sameStoredTimestamp(after.row?.levelColosseumResolvedAt, levelStamp) ||
-    !sameStoredTimestamp(after.row?.companionRookOwnedAt, rookStamp) ||
-    !sameStoredTimestamp(after.row?.kingdomBrassRepublicCompletedAt, kingdomStamp)
-  ) {
-    throw new ProgressionNotPermittedError(
-      "capability.rook.contact grant must not change level.colosseum, companion.rook, or kingdom.brass_republic"
+      "capability.rook.contact is not granted. wayward.rook_contact_demonstrated is a client assertion, and no server-authoritative Wayward CONTACT beat is recorded."
     );
   }
   return readGoldlineProgression({

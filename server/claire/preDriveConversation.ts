@@ -280,6 +280,11 @@ export async function answerClairePreDriveFollowUp(
      * function. It is not added to the business fact inventory.
      */
     narratorPromptSection?: string | null;
+    /**
+     * Eligibility-gated Rook CONTACT residue. Character context only.
+     * Not added to the business fact inventory.
+     */
+    rookContactResidueSection?: string | null;
   },
   dependencies: {
     invokeText?: typeof invokeTextLLM;
@@ -425,6 +430,9 @@ export async function answerClairePreDriveFollowUp(
       },
       ...(input.narratorPromptSection
         ? [{ label: "authored_narrative", text: input.narratorPromptSection }]
+        : []),
+      ...(input.rookContactResidueSection
+        ? [{ label: "rook_contact_residue", text: input.rookContactResidueSection }]
         : []),
       { label: "delivery_voice", text: surface === "voice" ? VOICE_NATIVE_ANSWER_GUIDANCE : null },
     ];
