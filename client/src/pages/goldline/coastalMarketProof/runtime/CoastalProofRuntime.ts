@@ -3,7 +3,7 @@ import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js"
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
 import { Autopilot } from "./autopilot";
-import { Locomotion, deriveBriskWalk, measureGroundSpeed } from "./character";
+import { Locomotion, deriveBriskWalk, deriveBriskWalkIK, measureGroundSpeed } from "./character";
 import { PlayerController, WALK_SPEED } from "./controller";
 import { createEnv } from "./env";
 import { createLevelMaterial, patchDynamicSunVis, type MaterialContext } from "./materials";
@@ -315,8 +315,8 @@ export async function createCoastalProof(
   const idleClip = clipByName.get("Idle_Loop");
   const walkClip = clipByName.get("Walk_Loop");
   if (!idleClip || !walkClip) throw new Error("missing locomotion clips");
-  const stride = params.stride ?? 1.3;
-  const brisk = deriveBriskWalk(hero, walkClip, stride);
+  const stride = params.stride ?? 1.4;
+  const brisk = new URLSearchParams(window.location.search).get("walkik") === "0" ? deriveBriskWalk(hero, walkClip, stride) : deriveBriskWalkIK(hero, walkClip, stride);
   const groundSpeed = measureGroundSpeed(hero, brisk);
   const loco = new Locomotion(body, hero, { idle: idleClip, walk: brisk }, groundSpeed);
 

@@ -143,6 +143,116 @@ export function deriveBriskWalk(root: THREE.Object3D, walk: THREE.AnimationClip,
   return clip;
 }
 
+/**
+ * Brisk walk by leg IK instead of rotation scaling: per sample, each foot's
+ * forward offset from the pelvis is stretched by `stride`, the pelvis drops
+ * only where a leg could not reach, and thigh + calf are re-solved in the
+ * original knee plane with the original foot orientation. The planted foot
+ * therefore moves exactly `stride` times as fast relative to the pelvis as in
+ * the source clip, so playback at speed / measured ground speed does not skate.
+ */
+export function deriveBriskWalkIK(root: THREE.Object3D, walk: THREE.AnimationClip, stride: number): THREE.AnimationClip {
+  const get = (n: string) => root.getObjectByName(n);
+  const pelvis = get("pelvis");
+  const legs = (["l", "r"] as const).map(s => ({ s, thigh: get(`thigh_${s}`), calf: get(`calf_${s}`), foot: get(`foot_${s}`), ball: get(`ball_${s}`) }));
+  if (!pelvis || !pelvis.parent || legs.some(l => !l.thigh || !l.calf || !l.foot || !l.ball)) return deriveBriskWalk(root, walk, stride);
+  const N = 48;
+  const times = new Float32Array(N + 1);
+  for (let i = 0; i <= N; i++) times[i] = (walk.duration * i) / N;
+  const out: Record<string, Float32Array> = {};
+  for (const l of legs) for (const b of ["thigh", "calf", "foot"]) out[`${b}_${l.s}`] = new Float32Array((N + 1) * 4);
+  const pelvisOut = new Float32Array((N + 1) * 3);
+  const mixer = new THREE.AnimationMixer(root);
+  const action = mixer.clipAction(walk);
+  action.play();
+  const W = () => new THREE.Vector3();
+  const Q = () => new THREE.Quaternion();
+  const P = W(), H = W(), K = W(), A = W(), B = W(), At = W(), Hn = W(), Kn = W(), u = W(), pole = W(), tmpV = W();
+  const qPel = Q(), qThigh = Q(), qCalf = Q(), qFoot = Q(), qT = Q(), qC = Q(), qLocal = Q(), qInv = Q();
+  let fwd: THREE.Vector3 | null = null;
+  for (let i = 0; i <= N; i++) {
+    action.time = times[i];
+    mixer.update(0);
+    root.updateMatrixWorld(true);
+    pelvis.getWorldPosition(P);
+    pelvis.getWorldQuaternion(qPel);
+    if (!fwd) {
+      // toes point forward: foot -> ball, flattened
+      legs[0].foot!.getWorldPosition(A);
+      legs[0].ball!.getWorldPosition(B);
+      fwd = new THREE.Vector3(B.x - A.x, 0, B.z - A.z).normalize();
+    }
+    // pass 1: how far must the pelvis drop so both stretched feet stay reachable?
+    let drop = 0;
+    const solved: { H: THREE.Vector3; K: THREE.Vector3; A: THREE.Vector3; At: THREE.Vector3; L1: number; L2: number }[] = [];
+    for (const l of legs) {
+      l.thigh!.getWorldPosition(H);
+      l.calf!.getWorldPosition(K);
+      l.foot!.getWorldPosition(A);
+      const L1 = H.distanceTo(K);
+      const L2 = K.distanceTo(A);
+      At.copy(A).addScaledVector(fwd, tmpV.subVectors(A, P).dot(fwd) * (stride - 1));
+      const dh = Math.hypot(At.x - H.x, At.z - H.z);
+      const reach = (L1 + L2) * 0.995;
+      const dv = H.y - At.y;
+      const dvMax = Math.sqrt(Math.max(0, reach * reach - dh * dh));
+      drop = Math.max(drop, dv - dvMax);
+      solved.push({ H: H.clone(), K: K.clone(), A: A.clone(), At: At.clone(), L1, L2 });
+    }
+    drop = Math.max(0, drop);
+    const pNew = P.clone();
+    pNew.y -= drop;
+    pelvis.parent.worldToLocal(pNew);
+    pelvisOut.set([pNew.x, pNew.y, pNew.z], i * 3);
+    // pass 2: two-bone IK per leg
+    legs.forEach((l, li) => {
+      const { H: H0, K: K0, A: A0, At: At0, L1, L2 } = solved[li];
+      Hn.copy(H0);
+      Hn.y -= drop;
+      u.subVectors(At0, Hn);
+      const d = THREE.MathUtils.clamp(u.length(), Math.abs(L1 - L2) + 1e-4, L1 + L2 - 1e-4);
+      u.normalize();
+      const cosA = THREE.MathUtils.clamp((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d), -1, 1);
+      const sinA = Math.sqrt(1 - cosA * cosA);
+      pole.subVectors(K0, H0);
+      pole.addScaledVector(u, -pole.dot(u));
+      if (pole.lengthSq() < 1e-8) pole.copy(fwd!);
+      pole.normalize();
+      Kn.copy(Hn).addScaledVector(u, L1 * cosA).addScaledVector(pole, L1 * sinA);
+      l.thigh!.getWorldQuaternion(qThigh);
+      l.calf!.getWorldQuaternion(qCalf);
+      l.foot!.getWorldQuaternion(qFoot);
+      qT.setFromUnitVectors(tmpV.subVectors(K0, H0).normalize(), W().subVectors(Kn, Hn).normalize());
+      const thighNew = qT.clone().multiply(qThigh);
+      const calfDir = tmpV.subVectors(A0, K0).normalize().applyQuaternion(qT);
+      qC.setFromUnitVectors(calfDir, W().subVectors(At0, Kn).normalize().normalize());
+      const calfNew = qC.clone().multiply(qT).multiply(qCalf);
+      qLocal.copy(qInv.copy(qPel).invert()).multiply(thighNew);
+      out[`thigh_${l.s}`].set([qLocal.x, qLocal.y, qLocal.z, qLocal.w], i * 4);
+      qLocal.copy(qInv.copy(thighNew).invert()).multiply(calfNew);
+      out[`calf_${l.s}`].set([qLocal.x, qLocal.y, qLocal.z, qLocal.w], i * 4);
+      qLocal.copy(qInv.copy(calfNew).invert()).multiply(qFoot);
+      out[`foot_${l.s}`].set([qLocal.x, qLocal.y, qLocal.z, qLocal.w], i * 4);
+    });
+  }
+  action.stop();
+  mixer.uncacheRoot(root);
+  const replaced = new Set([...Object.keys(out).map(n => `${n}.quaternion`), "pelvis.position"]);
+  const clip = walk.clone();
+  clip.name = "Walk_Brisk";
+  clip.tracks = clip.tracks.filter(t => !replaced.has(t.name));
+  for (const [bone, values] of Object.entries(out)) clip.tracks.push(new THREE.QuaternionKeyframeTrack(`${bone}.quaternion`, times, values));
+  clip.tracks.push(new THREE.VectorKeyframeTrack("pelvis.position", times, pelvisOut));
+  // arms swing a little wider to match the longer stride
+  for (const track of clip.tracks) {
+    const bone = boneOf(track);
+    if (/^(upperarm|lowerarm)_/.test(bone) && track instanceof THREE.QuaternionKeyframeTrack) {
+      scaleSwing(track.values as Float32Array, 1 + (stride - 1) * (bone.startsWith("upper") ? 0.85 : 0.5));
+    }
+  }
+  return clip;
+}
+
 export type LocomotionClips = { idle: THREE.AnimationClip; walk: THREE.AnimationClip };
 
 /**
