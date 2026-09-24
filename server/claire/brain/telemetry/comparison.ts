@@ -66,6 +66,11 @@ export type ShadowComparisonRecord = {
   inhibited: string[];
   conclusions: string[];
   actionClasses: string[];
+  /**
+   * Why an action proposal was even eligible. Structural class only; never
+   * operator transcript/content.
+   */
+  actionAuthorityBasis: "explicit_day_line" | "attested_operator_work" | null;
   segmentTypes: string[];
   cognitiveAcknowledgement: string[];
   verificationInvoked: boolean;
@@ -156,6 +161,15 @@ export function comparisonRecordFromDecision(
     inhibited: decision.inhibitedCandidates.map(candidate => candidate.kind),
     conclusions: decision.conclusions.map(conclusion => conclusion.kind),
     actionClasses: decision.actionGrants.map(grant => grant.actionClass),
+    actionAuthorityBasis:
+      decision.actionGrants.length === 0
+        ? null
+        : decision.perceivedTurn.workDeclarationKind === "explicit_day_line"
+          ? "explicit_day_line"
+          : decision.perceivedTurn.workDeclarationKind === "ordinary_work" &&
+              decision.perceivedTurn.operatorIntentAttested
+            ? "attested_operator_work"
+            : null,
     segmentTypes: decision.responsePlan.segments.map(segment => segment.type),
     cognitiveAcknowledgement: decision.responsePlan.segments
       .filter(segment => segment.type === "CognitiveAcknowledgementSegment")
