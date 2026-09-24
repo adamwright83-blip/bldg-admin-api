@@ -173,6 +173,13 @@ def geo(material, prefix="VIS"):
     return GEOS[key]
 
 
+PLANTS = []  # instanced in three.js from props.glb: {"t": fern|shrub|grass, "p": blender xyz, "s": scale, "r": yaw}
+
+
+def plant(kind, p, scale=1.0, yaw=None):
+    PLANTS.append({"t": kind, "p": [p[0], p[1], p[2]], "s": scale, "r": yaw if yaw is not None else rng.random() * math.tau})
+
+
 COL_WALK = Geo("COL_walk")
 COL_WALL = Geo("COL_wall")
 COL_CAM = Geo("COL_cam")
@@ -832,7 +839,10 @@ def building(front_center, n_in, width, height, depth, base_z, lanterns, banners
         box(geo(mat), v3(fc.x + out.x * 0.1, fc.y + out.y * 0.1, top + 0.35), (0.25, width, 0.7), fwd=n_in, col=col)
         if rng.random() < 0.7:
             pc = fc + n_in * 1.0 + t * ((rng.random() - 0.5) * width * 0.6)
-            blob(geo("foliage"), v3(pc.x, pc.y, top + 0.9), 0.9 + rng.random() * 0.6, 0.7, seed=rng.random() * 10, wind=0.35)
+            plant("shrub", (pc.x, pc.y, top + 0.05), 1.1 + rng.random() * 0.6)
+            if rng.random() < 0.5:
+                pe = fc + out * 0.1 + t * ((rng.random() - 0.5) * width * 0.7)
+                plant("fern", (pe.x, pe.y, top + 0.55), 0.9 + rng.random() * 0.4)
     if balcony and height > 5.5:
         bz = base_z + 3.4
         bc = fc + out * 0.7
@@ -1093,8 +1103,10 @@ def build_props(meta):
     meta["banners"].append({"top": [pole.x, pole.y, z + 5.0], "pole": True})
     box(COL_WALL, v3(pole.x, pole.y, z + 1), (0.4, 0.4, 2), fwd=T)
     for j in range(3):
-        pc = ROUTE[8 + j * 5]["p"] + ROUTE[8 + j * 5]["L"] * 3.2
-        blob(geo("foliage"), v3(pc.x, pc.y, z + 0.5), 0.9 + 0.3 * j, 0.8, seed=j, wind=0.4)
+        pc = ROUTE[8 + j * 5]["p"] + ROUTE[8 + j * 5]["L"] * 3.3
+        box(geo("mortar"), v3(pc.x, pc.y, z + 0.25), (1.1, 0.9, 0.5), fwd=ROUTE[8 + j * 5]["T"], wall=True)
+        plant("shrub", (pc.x, pc.y, z + 0.5), 1.2 + 0.25 * j)
+        plant("fern", (pc.x + 0.3, pc.y - 0.2, z + 0.5), 0.9)
     col = ROUTE[14]["p"] + ROUTE[14]["L"] * 3.0
     cylinder(geo("mortar"), v3(col.x, col.y, z), 0.35, 2.6, seg=10)
     box(COL_WALL, v3(col.x, col.y, z + 1), (0.8, 0.8, 2), fwd=T)
@@ -1143,11 +1155,36 @@ def build_props(meta):
         r = ROUTE[k]
         if r["kind"] in ("bridge", "pier", "quay"):
             continue
-        e = r["p"] - r["L"] * (r["w"] / 2 + 0.9)
-        blob(geo("foliage"), v3(e.x, e.y, r["z"] + 0.2), 0.6 + rng.random() * 0.5, 0.75, seed=k, wind=0.5)
-        e2 = r["p"] + r["L"] * (r["w"] / 2 + 0.3)
-        if rng.random() < 0.3:
-            blob(geo("foliage"), v3(e2.x, e2.y, r["z"] + 0.1), 0.4 + rng.random() * 0.3, 0.8, seed=k + 3, wind=0.5)
+        e = r["p"] - r["L"] * (r["w"] / 2 + 0.75)
+        plant("fern" if rng.random() < 0.6 else "shrub", (e.x, e.y, r["z"] - 0.1), 0.9 + rng.random() * 0.5)
+        e2 = r["p"] + r["L"] * (r["w"] / 2 + 0.28)
+        if rng.random() < 0.55:
+            plant("grass", (e2.x, e2.y, r["z"] - 0.02), 0.7 + rng.random() * 0.4)
+        # ferns tucked into the cliff wall above the path
+        if rng.random() < 0.5 and r["kind"] in ("stairs", "landing", "boardwalk"):
+            e3 = r["p"] + r["L"] * (r["w"] / 2 + 1.1)
+            plant("fern", (e3.x, e3.y, r["z"] + 1.6 + rng.random() * 2.0), 0.8 + rng.random() * 0.4)
+    # grass along the quay's land side and the boardwalk
+    for k in range(len(ROUTE) - 60, len(ROUTE) - 30, 4):
+        r = ROUTE[k]
+        e = r["p"] + r["L"] * (r["w"] / 2 + 0.2)
+        plant("grass", (e.x, e.y, r["z"]), 0.8)
+
+
+def build_boats(meta):
+    end = ROUTE[-1]
+    T, L = end["T"], end["L"]
+    moored_skiff = end["p"] - T * 5.0 + L * 3.3
+    moored_sail = end["p"] - T * 12.0 - L * 4.6
+    h = math.degrees(math.atan2(T.y, T.x))
+    meta["boats"] = [
+        {"type": "skiff", "p": [moored_skiff.x, moored_skiff.y], "h": h + 4},
+        {"type": "sailboat", "p": [moored_sail.x, moored_sail.y], "h": h - 176},
+        # drifting in the bay, one out in the glitter path, the pinnace crossing the far water
+        {"type": "sailboat", "circle": {"c": [-232.0, 52.0], "r": 26.0, "speed": 0.7}},
+        {"type": "skiff", "circle": {"c": [-104.0, 34.0], "r": 17.0, "speed": -0.5}},
+        {"type": "ship", "line": {"a": [-395.0, 108.0], "b": [-640.0, 180.0], "speed": 1.4}},
+    ]
 
 
 def build_waterfall(meta):
@@ -1499,6 +1536,7 @@ def main():
     build_settlement(meta)
     build_props(meta)
     build_waterfall(meta)
+    build_boats(meta)
     build_far(meta)
 
     for g in list(GEOS.values()) + [COL_WALK, COL_WALL, COL_CAM]:
@@ -1541,6 +1579,15 @@ def main():
         },
         "lighthouse": {"lamp": t3(meta["lighthouse"]["lamp"])},
         "crane": {"tip": t3(meta["crane"]["tip"])},
+        "plants": [{"t": pl["t"], "p": t3(pl["p"]), "s": round(pl["s"], 2), "r": round(pl["r"], 3)} for pl in PLANTS],
+        # boats: positions in three xz; headings in three yaw (atan2(x, z) convention, radians)
+        "boats": [
+            {**{k: v for k, v in b.items() if k not in ("p", "h", "circle", "line")},
+             **({"p": [b["p"][0], -b["p"][1]], "yaw": math.atan2(math.cos(math.radians(b["h"])), -math.sin(math.radians(b["h"])))} if "p" in b else {}),
+             **({"circle": {"c": [b["circle"]["c"][0], -b["circle"]["c"][1]], "r": b["circle"]["r"], "speed": b["circle"]["speed"]}} if "circle" in b else {}),
+             **({"line": {"a": [b["line"]["a"][0], -b["line"]["a"][1]], "b": [b["line"]["b"][0], -b["line"]["b"][1]], "speed": b["line"]["speed"]}} if "line" in b else {})}
+            for b in meta["boats"]
+        ],
         "segments": [{"kind": SPINE_NODES[i][4], "s0": round(NODE_S[i] - ROUTE_S0, 2), "s1": round(NODE_S[i + 1] - ROUTE_S0, 2)}
                      for i in range(ROUTE_FIRST, ROUTE_LAST_ON_SPINE)],
         "shots": {

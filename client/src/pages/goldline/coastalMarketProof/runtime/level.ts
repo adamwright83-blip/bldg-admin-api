@@ -22,6 +22,14 @@ export type LevelData = {
   lightmaps: Record<string, string>;
   lightmapGroups: Record<string, string[]>;
   shore: { x0: number; y0: number; size: number; texture: string };
+  plants: { t: string; p: [number, number, number]; s: number; r: number }[];
+  boats: {
+    type: string;
+    p?: [number, number];
+    yaw?: number;
+    circle?: { c: [number, number]; r: number; speed: number };
+    line?: { a: [number, number]; b: [number, number]; speed: number };
+  }[];
   stacks: [number, number, number, number][];
 };
 

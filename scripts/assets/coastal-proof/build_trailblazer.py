@@ -807,4 +807,5 @@ def render_views(arm, prefix):
         bpy.ops.render.render(write_still=True)
 
 
-main()
+if __name__ == "__main__":
+    main()

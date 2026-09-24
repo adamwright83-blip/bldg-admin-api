@@ -8,6 +8,8 @@ import { PlayerController, WALK_SPEED } from "./controller";
 import { createEnv } from "./env";
 import { createLevelMaterial, patchDynamicSunVis, type MaterialContext } from "./materials";
 import { createWater } from "./water";
+import { createLife } from "./life";
+import { createNpcs } from "./npcs";
 import { FollowCamera } from "./followCamera";
 import { ProofInput } from "./input";
 import { SecondaryMotion } from "./secondaryMotion";
@@ -78,7 +80,7 @@ export async function createCoastalProof(
   const report = () => {
     let sum = 0;
     for (const v of progress.values()) sum += v;
-    callbacks.onLoadProgress?.(sum / 5);
+    callbacks.onLoadProgress?.(sum / 9);
   };
   // Fetch with progress. The claude.ai artifact host does not serve .glb, so
   // stageArtifact.mjs ships each one as `<name>.glb.json` ({ data: base64 });
@@ -156,12 +158,16 @@ export async function createCoastalProof(
       );
     });
   const TEXTURE_SETS = ["rock", "cobble", "stone", "plaster", "wood", "wood_dark", "roof", "sand"];
-  const [levelGltf, data, heroGltf, animsA, skyMeta] = await Promise.all([
+  const [levelGltf, data, heroGltf, animsA, skyMeta, propsGltf, townF, townM, animsB] = await Promise.all([
     loadGltf("level.glb"),
     fetchJson<LevelData>("level.json"),
     loadGltf("trailblazer.glb"),
     loadGltf("anims_a.glb"),
     fetchJson<{ horizonSun: [number, number, number]; horizonAway: [number, number, number]; zenith: [number, number, number]; skyVFraction: number }>("tex/sky.json"),
+    loadGltf("props.glb"),
+    loadGltf("townsfolk_f.glb"),
+    loadGltf("townsfolk_m.glb"),
+    loadGltf("anims_b.glb"),
   ]);
   const [skyTex, waterNormal, shoreTex, ...setTextures] = await Promise.all([
     loadTex("tex/sky.webp", { srgb: true }),
@@ -235,6 +241,17 @@ export async function createCoastalProof(
   });
   scene.add(water.mesh);
   disposers.push(() => water.dispose());
+
+  const life = createLife({
+    scene,
+    data,
+    props: propsGltf,
+    wind: windUniforms,
+    sunDir: env.sunDir,
+    camCollider: level.colliders.cam,
+    waterNormal,
+  });
+  disposers.push(() => life.dispose());
 
   // sky-lit environment for the characters (the level is lit by hemisphere + baked light)
   const pmrem = new THREE.PMREMGenerator(renderer);
@@ -317,6 +334,16 @@ export async function createCoastalProof(
     feet.forEach((_, i) => footPrev[i].copy(footNow[i]));
   };
 
+  const npcs = createNpcs({
+    scene,
+    route,
+    models: { f: townF, m: townM },
+    clips: [...animsA.animations, ...animsB.animations],
+    sunDir: env.sunDir,
+    camCollider: level.colliders.cam,
+  });
+  disposers.push(() => npcs.dispose());
+
   // ---------- control
   const controller = new PlayerController(level.colliders, route, data.surfaceByKind);
   const follow = new FollowCamera(camera, level.colliders.cam);
@@ -362,7 +389,11 @@ export async function createCoastalProof(
       input.override = autopilot.steer(now, controller.position, controller.progress, follow.yaw);
     }
     input.update(dt, now);
-    if (!params.shot) controller.update(input.move, follow.yaw, dt);
+    if (!params.shot) {
+      controller.update(input.move, follow.yaw, dt);
+      npcs.pushOut(controller.position);
+    }
+    npcs.update(dt, camera.position);
     loco.update(dt, controller.speed, controller.angularVelocity);
     heroRoot.position.copy(controller.position);
     body.rotation.y = controller.heading;
@@ -372,6 +403,7 @@ export async function createCoastalProof(
     heroRoot.updateMatrixWorld(true);
     secondary.update(dt, t / 1000, windUniforms.uWind.value);
     water.update(t / 1000, camera.position);
+    life.update(t / 1000, dt, renderer.domElement.height);
     updateHeroSun(dt);
     heroRoot.updateMatrixWorld(true);
     measureSlip(dt);
