@@ -224,7 +224,15 @@ function classifyWorkFrameUnsafe(text: string, hints: WorkFrameHints): WorkFrame
     workDeclarationKind = "context_narration";
   } else if (hints.explicitActionRequest) {
     workDeclarationKind = "explicit_action";
-  } else if (hints.operatorWorkCommitment) {
+  } else if (
+    hints.operatorWorkCommitment &&
+    operatorIntentAttested &&
+    declaredContentLabel
+  ) {
+    // V1's broad commitment hint may fire on a question-shaped clause such as
+    // "What should I do about Dana Tuesday?". That hint is descriptive only.
+    // Brain V2 grants ordinary-work status only when the utterance independently
+    // contains a first-person declarative intention with an extractable complement.
     workDeclarationKind = "ordinary_work";
   }
 
