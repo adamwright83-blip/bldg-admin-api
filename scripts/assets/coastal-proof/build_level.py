@@ -1220,34 +1220,40 @@ LIGHTHOUSE_STACK = 3
 
 
 def sea_stack(g, x, y, radius, height, detail, seed):
-    """Weathered stack: lobed, leaning, with strata ledges, a flared foot and a rounded cap."""
+    """Weathered stack: columnar, lobed, leaning, with strata ledges and a flared foot. Each one differs."""
+    r = random.Random(int(seed * 1000))
     seg = 16 if detail else 11
-    rings = 12 if detail else 7
-    lean_a = seed * 2.39
-    lean = Vector((math.cos(lean_a), math.sin(lean_a), 0)) * (radius * (0.25 + 0.35 * ((seed * 7.1) % 1)))
+    rings = 14 if detail else 8
+    lean_a = r.random() * math.tau
+    lean = Vector((math.cos(lean_a), math.sin(lean_a), 0)) * (radius * r.uniform(0.1, 0.55))
+    taper_k = r.uniform(0.05, 0.4)
+    lobe_amp = r.uniform(0.22, 0.5)
+    strata_n = r.randint(3, 6)
+    strata_amp = r.uniform(0.06, 0.16)
+    notch_t = r.uniform(0.35, 0.75)
     grid = []
-    for r in range(rings + 1):
-        t = r / rings
+    for ring in range(rings + 1):
+        t = ring / rings
         z = -8 + (height + 8) * t
         centre = Vector((x, y, z)) + lean * (t ** 1.6)
-        strata = 1.0 + 0.1 * math.floor((t * 4.3 + seed) % 2)
+        strata = 1.0 + strata_amp * (1 if math.floor(t * strata_n + seed) % 2 else -0.4)
+        notch = 1.0 - 0.18 * math.exp(-((t - notch_t) / 0.06) ** 2)
         row = []
         for sidx in range(seg):
             a = 2 * math.pi * sidx / seg
             d = Vector((math.cos(a), math.sin(a), 0))
-            taper = 1.0 - 0.32 * t + 0.45 * (1 - t) ** 4 - 0.25 * max(0.0, t - 0.85) / 0.15
-            lobes = 0.42 * noise.noise(Vector((d.x * 1.1 + seed, d.y * 1.1, t * 1.6)))
-            grain = 0.12 * noise.noise(Vector((d.x * 3.7, d.y * 3.7 + seed, t * 6.0)))
-            k = max(0.35, 1.0 + lobes + grain)
-            p = centre + d * (radius * taper * k * strata)
-            row.append(g.vert(p))
+            taper = 1.0 - taper_k * t + 0.5 * (1 - t) ** 5 - 0.35 * max(0.0, t - 0.88) / 0.12
+            lobes = lobe_amp * noise.noise(Vector((d.x * 1.1 + seed, d.y * 1.1, t * 1.4)))
+            grain = 0.1 * noise.noise(Vector((d.x * 3.7, d.y * 3.7 + seed, t * 7.0)))
+            k = max(0.3, 1.0 + lobes + grain)
+            row.append(g.vert(centre + d * (radius * taper * k * strata * notch)))
         grid.append(row)
-    for r in range(rings):
-        ao = 0.42 + 0.58 * (r / rings)
+    for ring in range(rings):
+        ao = 0.4 + 0.6 * (ring / rings)
         for sidx in range(seg):
             s2 = (sidx + 1) % seg
-            g.face([grid[r][sidx], grid[r][s2], grid[r + 1][s2], grid[r + 1][sidx]], col=(ao, ao, ao, 1))
-    top_c = Vector((x, y, height)) + lean + Vector((0, 0, radius * 0.18))
+            g.face([grid[ring][sidx], grid[ring][s2], grid[ring + 1][s2], grid[ring + 1][sidx]], col=(ao, ao, ao, 1))
+    top_c = Vector((x, y, height)) + lean + Vector((0, 0, radius * 0.12))
     top = g.vert(top_c)
     for sidx in range(seg):
         s2 = (sidx + 1) % seg
@@ -1260,11 +1266,13 @@ def build_far(meta):
     fol = geo("foliage", prefix="FAR")
     for i, (x, y, r, h, d) in enumerate(STACKS):
         top, lean = sea_stack(far, x, y, r, h, d, i * 3.1 + 0.7)
-        if d:
-            for j in range(3):
+        if d and rng.random() < 0.65:
+            # scrubby tufts clinging to the top, never a neat hat
+            for j in range(rng.randint(2, 5)):
                 a = rng.random() * math.tau
-                c = Vector((x + lean.x + math.cos(a) * r * 0.3, y + lean.y + math.sin(a) * r * 0.3, top + 1.0))
-                blob(fol, c, r * (0.35 + 0.2 * rng.random()), 0.5, seed=i + j)
+                rr = r * rng.uniform(0.1, 0.45)
+                c = Vector((x + lean.x + math.cos(a) * rr, y + lean.y + math.sin(a) * rr, top + rng.uniform(-1.5, 0.8)))
+                blob(fol, c, r * rng.uniform(0.1, 0.22), 0.45, seed=i + j)
     # lighthouse
     x, y, r, h, _ = STACKS[LIGHTHOUSE_STACK]
     _, lean = sea_stack(Geo("scratch"), x, y, r, h, 1, LIGHTHOUSE_STACK * 3.1 + 0.7)

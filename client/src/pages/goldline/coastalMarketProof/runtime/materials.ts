@@ -105,9 +105,9 @@ function patchLevelShader(shader: THREE.WebGLProgramParametersWithUniforms, sunV
     // wet near the waterline: darker albedo, sharper sun highlight
     fs = fs.replace(
       "#include <color_fragment>",
-      "#include <color_fragment>\nfloat wetness = smoothstep( 3.8, 1.6, vWorldY );\ndiffuseColor.rgb *= mix( 1.0, 0.62, wetness );"
+      "#include <color_fragment>\nfloat wetness = smoothstep( 3.2, 1.4, vWorldY );\ndiffuseColor.rgb *= mix( 1.0, 0.7, wetness );"
     );
-    fs = fs.replace("#include <specularmap_fragment>", "#include <specularmap_fragment>\nspecularStrength = mix( 0.12, 1.0, wetness );");
+    fs = fs.replace("#include <specularmap_fragment>", "#include <specularmap_fragment>\nspecularStrength = mix( 0.06, 0.55, wetness );");
   }
   shader.vertexShader = vs;
   shader.fragmentShader = fs;
@@ -134,7 +134,7 @@ export function createLevelMaterial(name: string, ctx: MaterialContext, far: boo
     side: THREE.DoubleSide,
   };
   const mat = wet
-    ? new THREE.MeshPhongMaterial({ ...params, shininess: 70, specular: new THREE.Color(0.55, 0.45, 0.34) })
+    ? new THREE.MeshPhongMaterial({ ...params, shininess: 90, specular: new THREE.Color(0.5, 0.42, 0.33) })
     : new THREE.MeshLambertMaterial(params);
   if (far) {
     mat.normalMap = null;

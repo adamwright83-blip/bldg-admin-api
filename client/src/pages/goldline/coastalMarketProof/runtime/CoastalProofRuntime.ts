@@ -13,6 +13,7 @@ import { createNpcs } from "./npcs";
 import { FollowCamera } from "./followCamera";
 import { ProofInput } from "./input";
 import { SecondaryMotion } from "./secondaryMotion";
+import { ProofAudio } from "./audio";
 import { Route, splitLevel, type LevelData } from "./level";
 import type { ProofParams } from "./params";
 import { PerfMeter } from "./perf";
@@ -39,6 +40,7 @@ type TestApi = {
   ready: boolean;
   state(): Record<string, unknown>;
   perf(): ReturnType<PerfMeter["snapshot"]>;
+  audio(): ReturnType<ProofAudio["probe"]>;
   teleport(s: number): void;
 };
 
@@ -323,8 +325,15 @@ export async function createCoastalProof(
   const footPrev = feet.map(() => new THREE.Vector3());
   const footNow = feet.map(() => new THREE.Vector3());
   const slipSamples: number[] = [];
+  const footDown = feet.map(() => true);
   const measureSlip = (dt: number) => {
     feet.forEach((f, i) => f.getWorldPosition(footNow[i]));
+    // footsteps on real contact: a foot dropping to the ground while she moves
+    feet.forEach((_, i) => {
+      const low = footNow[i].y - controller.position.y < 0.045;
+      if (low && !footDown[i] && controller.speed > 0.4) audio.footstep(controller.surface, controller.speed / WALK_SPEED);
+      footDown[i] = low;
+    });
     if (controller.speed > 1.0 && dt > 0) {
       const low = footNow[0].y < footNow[1].y ? 0 : 1;
       const d = Math.hypot(footNow[low].x - footPrev[low].x, footNow[low].z - footPrev[low].z) / dt;
@@ -344,9 +353,12 @@ export async function createCoastalProof(
   });
   disposers.push(() => npcs.dispose());
 
+  const audio = new ProofAudio();
+  disposers.push(() => audio.dispose());
+
   // ---------- control
   const controller = new PlayerController(level.colliders, route, data.surfaceByKind);
-  const follow = new FollowCamera(camera, level.colliders.cam);
+  const follow = new FollowCamera(camera, level.colliders.cam, level.colliders.walk);
   follow.orbit = params.orbit;
   const input = new ProofInput(container);
   disposers.push(() => input.dispose());
@@ -405,6 +417,7 @@ export async function createCoastalProof(
     water.update(t / 1000, camera.position);
     life.update(t / 1000, dt, renderer.domElement.height);
     updateHeroSun(dt);
+    audio.update(camera, controller.position.y, life.waterfallTop, Math.max(0, Math.min(1, (9 - controller.position.y) / 7)));
     heroRoot.updateMatrixWorld(true);
     measureSlip(dt);
     renderer.render(scene, camera);
@@ -444,26 +457,50 @@ export async function createCoastalProof(
       camera: camera.position.toArray(),
     }),
     perf: () => perf.snapshot(),
+    audio: () => audio.probe(),
     teleport: (s: number) => {
       controller.placeAt(s);
       follow.snap(camState());
     },
   };
-  if (params.debug) Object.assign(api, { scene, camera, renderer, env });
+  if (params.debug) {
+    Object.assign(api, {
+      scene, camera, renderer, env,
+      // QA: what lies between the camera and her chest
+      pick: () => {
+        const rc = new THREE.Raycaster();
+        const target = controller.position.clone().add(new THREE.Vector3(0, 1.2, 0));
+        rc.set(camera.position, target.clone().sub(camera.position).normalize());
+        rc.far = camera.position.distanceTo(target);
+        return rc
+          .intersectObjects([level.visual, life.group], true)
+          .slice(0, 5)
+          .map(h => ({ name: h.object.name, mat: (h.object as THREE.Mesh).userData.materialName, d: +h.distance.toFixed(2) }));
+      },
+      // QA: where her chest lands on screen (NDC; y -1 is the bottom edge)
+      chestNdc: () => {
+        camera.updateMatrixWorld();
+        const p = controller.position.clone().add(new THREE.Vector3(0, 1.2, 0)).project(camera);
+        return [+p.x.toFixed(3), +p.y.toFixed(3), +p.z.toFixed(3)];
+      },
+    });
+  }
   (window as unknown as { __coastalProof?: TestApi }).__coastalProof = api;
   disposers.push(() => {
     delete (window as unknown as { __coastalProof?: TestApi }).__coastalProof;
   });
 
-  const begin = () => {
+  const begin = (fromGesture: boolean) => {
+    // audio may only start inside the tap-to-begin gesture
+    if (fromGesture) audio.start();
     if (began) return;
     began = true;
     input.enabled = !params.shot;
   };
-  if (params.noGate) begin();
+  if (params.noGate) begin(false);
 
   return {
-    begin,
+    begin: () => begin(true),
     togglePerf: () => perf.toggle(),
     dispose() {
       disposed = true;

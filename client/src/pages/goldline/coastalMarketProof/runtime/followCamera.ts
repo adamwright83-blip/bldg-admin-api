@@ -40,13 +40,16 @@ export class FollowCamera {
   private armLen = 4.4;
   private portrait = true;
   private readonly cam: MeshBVH;
+  /** the walkable floor (stairs ramps included): the arm must not dip into steps behind her */
+  private readonly floor: MeshBVH | null;
   lastLookAt = -Infinity;
   /** QA only (?orbit=): hold the arm this far off her heading */
   orbit: number | null = null;
 
-  constructor(camera: THREE.PerspectiveCamera, camCollider: MeshBVH) {
+  constructor(camera: THREE.PerspectiveCamera, camCollider: MeshBVH, floor: MeshBVH | null = null) {
     this.camera = camera;
     this.cam = camCollider;
+    this.floor = floor;
   }
 
   setViewport(width: number, height: number) {
@@ -110,6 +113,17 @@ export class FollowCamera {
     this.armLen = wanted < this.armLen ? damp(this.armLen, wanted, settle ? 0.001 : 0.04, dt) : damp(this.armLen, wanted, 0.45, dt);
     this.camera.position.copy(origin).addScaledVector(dir, this.armLen);
     if (this.camera.position.y < 0.6) this.camera.position.y = 0.6;
+    // keep clear of the floor under the camera (stairs climbing behind her on a descent)
+    if (this.floor) {
+      ray.origin.copy(this.camera.position);
+      ray.origin.y += 3;
+      ray.direction.set(0, -1, 0);
+      const hit = this.floor.raycastFirst(ray, THREE.DoubleSide, 0, 6);
+      if (hit) {
+        const minY = hit.point.y + 0.9;
+        if (this.camera.position.y < minY) this.camera.position.y = minY;
+      }
+    }
 
     // --- aim: ahead of her and above, so she lands in the lower third
     const aimAhead = this.portrait ? 5.0 : 3.8;
@@ -129,6 +143,8 @@ export class FollowCamera {
       ray.direction.copy(dir);
       const hit = this.cam.raycastFirst(ray, THREE.DoubleSide, 0, len + 0.3);
       if (hit) best = Math.min(best, Math.max(0.6, hit.distance - 0.3));
+      const floorHit = this.floor?.raycastFirst(ray, THREE.DoubleSide, 0, len + 0.3);
+      if (floorHit) best = Math.min(best, Math.max(0.6, floorHit.distance - 0.35));
     }
     return best;
   }

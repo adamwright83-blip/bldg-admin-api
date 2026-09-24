@@ -13,7 +13,7 @@ export const PALETTE = {
   fogAway: new THREE.Color("#8796ab"),
   fogSun: new THREE.Color("#eab27c"),
   hemiSky: new THREE.Color("#a9bcd6"),
-  hemiGround: new THREE.Color("#6b5241"),
+  hemiGround: new THREE.Color("#8a6547"),
 };
 
 export type SkyInfo = {
@@ -63,6 +63,7 @@ void main() {
   float v = asin(clamp(dd.y, -1.0, 1.0)) * RECIPROCAL_PI + 0.5;
   v = (v - uSkyVBottom) / (1.0 - uSkyVBottom);
   vec3 col = texture2D(uSky, vec2(u, v)).rgb * 0.72;
+  col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 1.28); // a richer sunset
   float sd = max(dot(d, uSunDir), 0.0);
   col += uGlow * pow(sd, 10.0) * 0.55;
   col += uSun * (smoothstep(0.99965, 0.99985, sd) * 9.0 + pow(sd, 380.0) * 1.2);
@@ -144,7 +145,7 @@ export function createEnv(scene: THREE.Scene, sunDirArr: [number, number, number
 
   scene.fog = new THREE.FogExp2(away.getHex(), 0.0027);
 
-  const hemi = new THREE.HemisphereLight(srgb(skyInfo.zenith).lerp(PALETTE.hemiSky, 0.4), PALETTE.hemiGround, 1.1);
+  const hemi = new THREE.HemisphereLight(srgb(skyInfo.zenith).lerp(PALETTE.hemiSky, 0.4), PALETTE.hemiGround, 1.25);
   scene.add(hemi);
 
   const sunLight = new THREE.DirectionalLight(PALETTE.sun, 3.1);

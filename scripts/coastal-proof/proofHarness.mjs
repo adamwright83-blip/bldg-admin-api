@@ -119,6 +119,25 @@ async function main() {
           await context.close();
         }
       }
+    } else if (mode === "sightlines") {
+      // every 2 m: settle the gameplay camera and list what blocks the view of her chest
+      const device = flag("desktop") ? DESKTOP : PHONE;
+      const { context, page } = await openPage(browser, base, "?debug=1&gate=0&shot=overlook", device);
+      const len = await page.evaluate(() => window.__coastalProof.state().routeLength);
+      const blocked = [];
+      for (let s = 2; s < len - 1; s += 2) {
+        const { hits, ndc } = await page.evaluate(s => {
+          window.__coastalProof.teleport(s);
+          return { hits: window.__coastalProof.pick(), ndc: window.__coastalProof.chestNdc() };
+        }, s);
+        const solid = hits.filter(h => !["rope", "cloth_red", "cloth_cream", "cloth_blue", "glow", "iron"].includes(h.mat));
+        if (solid.length) blocked.push({ s, hits: solid.map(h => `${h.mat ?? h.name}@${h.d}`).join(",") });
+        // framing: her chest must be on screen, in front of the camera, in the lower half
+        const [x, y, z] = ndc;
+        if (!(z < 1 && Math.abs(x) < 0.6 && y < 0.1 && y > -0.95)) blocked.push({ s, framing: ndc });
+      }
+      console.log(JSON.stringify({ checked: Math.floor((len - 3) / 2), blocked }, null, 1));
+      await context.close();
     } else if (mode === "qa") {
       // ad-hoc views: --queries "start=40&orbit=1.2;start=144" [--desktop]
       const device = flag("desktop") ? DESKTOP : PHONE;
@@ -127,9 +146,48 @@ async function main() {
         await page.waitForTimeout(Number(opt("wait", "2500")));
         const file = join(OUT, `qa-${q.replace(/[^a-z0-9]+/gi, "_")}.png`);
         await page.screenshot({ path: file });
+        if (q.includes("debug=1")) {
+          console.log(JSON.stringify(await page.evaluate(() => ({ cam: window.__coastalProof.state().camera, pos: window.__coastalProof.state().position, pick: window.__coastalProof.pick() }))));
+        }
         console.log(`[qa] ${file}${errors.length ? ` errors: ${errors.join(" | ")}` : ""}`);
         await context.close();
       }
+    } else if (mode === "gate") {
+      // the real player path: tap to begin (audio unlock), walk with the keyboard, read the audio probe
+      const { context, page, errors } = await openPage(browser, base, "", PHONE);
+      await page.tap(".cmp-gate");
+      await page.waitForTimeout(400);
+      await page.keyboard.down("w");
+      await page.waitForTimeout(4000);
+      await page.keyboard.up("w");
+      const s = await page.evaluate(() => ({ ...window.__coastalProof.state(), audio: window.__coastalProof.audio() }));
+      // real touch: left thumb pushes the floating stick forward, right thumb drags to look
+      const cdp = await context.newCDPSession(page);
+      const touch = (type, points) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: points });
+      const before = s.progress;
+      await touch("touchStart", [{ x: 90, y: 700, id: 1 }]);
+      for (let i = 1; i <= 6; i++) {
+        await touch("touchMove", [{ x: 90, y: 700 - i * 10, id: 1 }]);
+        await page.waitForTimeout(16);
+      }
+      await page.waitForTimeout(2500);
+      const walked = await page.evaluate(() => window.__coastalProof.state());
+      await touch("touchEnd", []);
+      await page.waitForTimeout(300);
+      const yaw0 = (await page.evaluate(() => window.__coastalProof.state())).cameraYaw;
+      await touch("touchStart", [{ x: 300, y: 500, id: 2 }]);
+      for (let i = 1; i <= 10; i++) {
+        await touch("touchMove", [{ x: 300 - i * 12, y: 500, id: 2 }]);
+        await page.waitForTimeout(16);
+      }
+      await touch("touchEnd", []);
+      const yaw1 = (await page.evaluate(() => window.__coastalProof.state())).cameraYaw;
+      const touchWalked = walked.progress - before;
+      console.log(JSON.stringify({ keyboardProgress: s.progress, surface: s.surface, audio: s.audio, touchWalkedMetres: touchWalked, touchSpeed: walked.speed, lookYawChange: yaw1 - yaw0, errors }, null, 2));
+      const ok = s.audio.started && s.audio.state === "running" && s.audio.steps > 3 && s.progress > 8 && touchWalked > 2 && Math.abs(yaw1 - yaw0) > 0.3;
+      console.log(ok ? "[gate] OK" : "[gate] FAILED");
+      if (!ok) process.exitCode = 1;
+      await context.close();
     } else if (mode === "hero") {
       // Trailblazer from the gameplay camera, mid-walk: behind, behind-left, behind-right, plus side/front
       const views = [["behind", 0], ["behind-left", -0.62], ["behind-right", 0.62], ["side", -1.57], ["front", 3.14]];
