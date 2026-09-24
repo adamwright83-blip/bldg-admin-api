@@ -29,7 +29,7 @@ jobs:
     env:
       CI: "true"
       DATABASE_URL: mysql://root:root@127.0.0.1:3399/goldline_proof
-      DAYFORGE_RELEASE_DB: "1"
+      # LEGACY DAYFORGE COMPATIBILITY: historical runtime env-var name; not current architecture.\n      DAYFORGE_RELEASE_DB: "1"
       APP_SHARED_API_SECRET: goldline-proof-app-secret-000000000000000000
       JWT_SECRET: goldline-proof-jwt-secret-000000000000000000
       STRIPE_SECRET_KEY: goldline-proof-placeholder-not-used
@@ -51,8 +51,8 @@ jobs:
         run: pnpm check
       - name: Prove production migration path (scripts/migrate.mjs) against a genuinely clean database
         # Deliberately a SEPARATE database on the same disposable MySQL
-        # server, not the job's shared goldline_proof — applyDayforgeReleaseMigrations
-        # (the `pnpm db:dayforge:release` step later in this job) replays
+        # server, not the job's shared goldline_proof — applyLegacyDayforgeReleaseMigrations
+        # (the `pnpm db:legacy-dayforge:release` step later in this job) replays
         # numbered drizzle/*.sql files with plain, non-idempotent
         # CREATE TABLE statements, on the assumption that it is the only
         # thing that will ever bootstrap goldline_proof. Running
@@ -60,7 +60,7 @@ jobs:
         # an earlier CI run: ER_TABLE_EXISTS_ERROR on `users`) breaks that
         # assumption. A dedicated database lets this step prove
         # migrate.mjs bootstraps a truly empty database on its own, without
-        # disturbing the pristine database the dayforge-release path still
+        # disturbing the pristine database the legacy compatibility release path still
         # needs.
         env:
           DATABASE_URL: mysql://root:root@127.0.0.1:3399/goldline_migrate_check
@@ -97,7 +97,7 @@ jobs:
           server/behavioralExperiment/assignPresentation.test.ts
       - name: Prove ops task completion concurrency against real MySQL
         # Targets goldline_migrate_check, not the job's shared goldline_proof:
-        # this step runs before `pnpm db:dayforge:release` (below), which is
+        # this step runs before `pnpm db:legacy-dayforge:release` (below), which is
         # the only thing that ever creates ops_tasks/ops_task_events in
         # goldline_proof. goldline_migrate_check already has a complete,
         # valid schema from the migration-proof step above — a real MySQL
@@ -137,7 +137,7 @@ jobs:
           server/field/fieldTodayService.test.ts
       - name: Prepare deterministic proof world
         run: |
-          pnpm db:dayforge:release
+          pnpm db:legacy-dayforge:release
           pnpm tsx scripts/goldline-living-world-proof-seed.ts
       - name: Build the production application
         run: pnpm build
