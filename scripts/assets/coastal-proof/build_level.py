@@ -1883,13 +1883,7 @@ def build_ropeway():
     # the docked cage is solid; she stands at its open door
     box(COL_WALL, v3(dock.x, dock.y, qz + 1.2), (2.2, 2.6, 2.4), fwd=qF)
     box(COL_CAM, v3(dock.x, dock.y, qz + 1.3), (2.0, 2.4, 2.6), fwd=qF)
-    # dock rails and two posts carrying the spur from the station
-    for side in (-1, 1):
-        q = dock + qL * (side * 1.45) + qF * 1.4
-        cylinder(geo("wood_dark"), v3(q.x, q.y, qz), 0.14, 4.4, seg=6)
-    a = dock + qF * 1.4 + qL * 1.45
-    b = dock + qF * 1.4 - qL * 1.45
-    tube(geo("wood_dark"), [v3(a.x, a.y, qz + 4.3), v3(b.x, b.y, qz + 4.3)], 0.12, 5)
+    # the spur rail from the station to the dock, carried overhead from the station tower
     tube(geo("iron"), [v3(D.x, D.y, heads[3].z), v3(dock.x, dock.y, qz + 4.25)], 0.05, 4)
 
 
@@ -2144,6 +2138,12 @@ def part_hook(name="hook"):
         a = math.pi + math.pi * k / 6
         j.append(Vector((0, 0.1 + math.cos(a) * 0.1, -0.5 + math.sin(a) * 0.12)))
     tube(iron, j, 0.028, 6)
+    # a turned toggle on a rope loop under the hook: what hands actually close on (along local X)
+    tog_z = -0.9
+    cyl_axis(p.g("wood_dark"), (0, 0, tog_z), (1, 0), 0.024, 0.36, seg=8)
+    for sx in (-0.11, 0.11):
+        cyl_axis(p.g("iron"), (sx, 0, tog_z), (1, 0), 0.03, 0.02, seg=8)
+        tube(p.g("rope"), [Vector((sx, 0, tog_z + 0.02)), Vector((0, 0.1, -0.64))], 0.012, 4)
     return p
 
 
@@ -2153,13 +2153,14 @@ def part_carrier(hanger):
     box(iron, (0, 0, -0.08), (0.5, 0.16, 0.16), fwd=(1, 0))
     for x in (-0.18, 0.18):
         cyl_axis(iron, (x, 0, 0.05), (0, 1), 0.09, 0.08, seg=10)
-    # the hook's belly (where her hands go) sits `hanger` below the grip
-    drop = hanger - 0.6
+    # the toggle under the hook (where her hands close) sits `hanger` below the grip; the hook part
+    # is turned a quarter so the toggle runs across the direction of travel
+    drop = hanger - 0.9
     tube(iron, [Vector((0, 0, -0.12)), Vector((0.12, 0, -0.45)), Vector((0.1, 0, -0.8)), Vector((0, 0, -drop))], 0.03, 5)
     h = part_hook()
     for mat, g in h.geos.items():
         for i, face in enumerate(g.faces):
-            pts = [Vector(g.verts[k]) + Vector((0, 0, -drop)) for k in face]
+            pts = [Vector((-g.verts[k][1], g.verts[k][0], g.verts[k][2])) + Vector((0, 0, -drop)) for k in face]
             if len(pts) == 4:
                 p.g(mat).quad(*pts)
             else:

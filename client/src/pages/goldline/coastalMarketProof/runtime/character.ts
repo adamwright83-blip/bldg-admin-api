@@ -383,23 +383,83 @@ function aimBone(bone: THREE.Object3D, child: THREE.Object3D, dir: THREE.Vector3
  * layered over whatever clip is playing. There is no hang clip in the CC0
  * library, so this is the pose; weight 0 leaves the animation untouched.
  */
+type Finger = { bones: THREE.Object3D[]; thumb: boolean };
+
 export class ArmReach {
-  private readonly arms: { upper: THREE.Object3D; lower: THREE.Object3D; hand: THREE.Object3D; side: number }[] = [];
+  private readonly arms: { upper: THREE.Object3D; lower: THREE.Object3D; hand: THREE.Object3D; knuckle: THREE.Object3D; side: number; fingers: Finger[] }[] = [];
+  private readonly root: THREE.Object3D;
   constructor(root: THREE.Object3D) {
+    this.root = root;
     for (const [s, side] of [["l", 1], ["r", -1]] as const) {
       const upper = root.getObjectByName(`upperarm_${s}`);
       const lower = root.getObjectByName(`lowerarm_${s}`);
       const hand = root.getObjectByName(`hand_${s}`);
-      if (upper && lower && hand) this.arms.push({ upper, lower, hand, side });
+      const knuckle = root.getObjectByName(`middle_01_${s}`);
+      const fingers: Finger[] = [];
+      for (const f of ["index", "middle", "ring", "pinky", "thumb"]) {
+        const bones = [1, 2, 3].map(k => root.getObjectByName(`${f}_0${k}_${s}`)).filter((b): b is THREE.Object3D => !!b);
+        if (bones.length) fingers.push({ bones, thumb: f === "thumb" });
+      }
+      if (upper && lower && hand && knuckle) this.arms.push({ upper, lower, hand, knuckle, side, fingers });
     }
+  }
+
+  /** Midpoint of her two sets of knuckles (where a bar sits in a closed grip), world space. */
+  gripPoint(out: THREE.Vector3) {
+    out.set(0, 0, 0);
+    const v = new THREE.Vector3();
+    for (const arm of this.arms) out.add(arm.knuckle.getWorldPosition(v));
+    return out.multiplyScalar(1 / Math.max(1, this.arms.length));
+  }
+
+  /** Close the fingers around a bar: each segment turns toward the palm about the knuckle line. */
+  close(weight: number) {
+    if (weight <= 0.001) return;
+    const hw = new THREE.Vector3();
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    const t = new THREE.Vector3();
+    for (const arm of this.arms) {
+      const index = arm.fingers.find(f => !f.thumb && f.bones[0].name.startsWith("index"));
+      const pinky = arm.fingers.find(f => f.bones[0].name.startsWith("pinky"));
+      const thumb = arm.fingers.find(f => f.thumb);
+      if (!index || !pinky) continue;
+      arm.hand.getWorldPosition(hw);
+      index.bones[0].getWorldPosition(a);
+      pinky.bones[0].getWorldPosition(b);
+      const across = new THREE.Vector3().subVectors(a, b).normalize();
+      const along = new THREE.Vector3().subVectors(arm.knuckle.getWorldPosition(t), hw).normalize();
+      // the palm faces the side the thumb sits on
+      const palm = new THREE.Vector3().crossVectors(along, across).normalize();
+      if (thumb && palm.dot(thumb.bones[0].getWorldPosition(t).sub(hw)) > 0) palm.negate();
+      for (const f of arm.fingers) {
+        if (f.thumb) continue;
+        f.bones.forEach((bone, k) => {
+          const angle = [1.15, 1.35, 0.9][k] * weight;
+          // pick the turn that brings the fingertip toward the palm
+          const q = new THREE.Quaternion().setFromAxisAngle(across, angle);
+          const child = f.bones[k + 1] ?? null;
+          const base = bone.getWorldPosition(new THREE.Vector3());
+          const tipDir = child ? child.getWorldPosition(new THREE.Vector3()).sub(base) : along.clone();
+          const turned = tipDir.clone().applyQuaternion(q);
+          if (turned.dot(palm) < tipDir.dot(palm)) q.setFromAxisAngle(across, -angle);
+          rotateWorld(bone, q);
+        });
+      }
+      if (thumb) {
+        const q = new THREE.Quaternion().setFromAxisAngle(along, 0.5 * weight * arm.side);
+        rotateWorld(thumb.bones[0], q);
+      }
+    }
+    this.root.updateMatrixWorld(true);
   }
 
   apply(target: THREE.Vector3, facing: number, weight: number) {
     if (weight <= 0.001) return;
     const right = new THREE.Vector3(Math.cos(facing), 0, -Math.sin(facing));
     for (const arm of this.arms) {
-      // each hand takes its own side of the hook
-      const grip = new THREE.Vector3().copy(target).addScaledVector(right, -arm.side * 0.07);
+      // each hand takes its own side of the bar, a shoulder-ish width apart
+      const grip = new THREE.Vector3().copy(target).addScaledVector(right, -arm.side * 0.085);
       const shoulder = arm.upper.getWorldPosition(new THREE.Vector3());
       const toGrip = grip.clone().sub(shoulder);
       const reach = toGrip.length();
@@ -412,4 +472,14 @@ export class ArmReach {
       aimBone(arm.lower, arm.hand, grip.clone().sub(elbow).normalize(), weight);
     }
   }
+}
+
+const rwQ = new THREE.Quaternion();
+const rpQ = new THREE.Quaternion();
+/** Apply a world-space rotation to a bone and refresh its subtree. */
+function rotateWorld(bone: THREE.Object3D, q: THREE.Quaternion) {
+  bone.getWorldQuaternion(rwQ);
+  bone.parent!.getWorldQuaternion(rpQ);
+  bone.quaternion.copy(rpQ.invert().multiply(q.clone().multiply(rwQ)));
+  bone.updateMatrixWorld(true);
 }

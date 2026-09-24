@@ -49,12 +49,34 @@ const GARMENT_COLOR = /* glsl */ `
   tbRough = 0.82;
   tbMetal = 0.0;
   vec3 c = vColor.rgb;
+  // Trim each cut piece to its designed outline. The pieces were cut from the body along whole
+  // faces, so their edges are stair-stepped; these are the same lines build_trailblazer.py cuts on
+  // (hem, armholes, the laced V, the shoulder straps, the crossbody band), drawn exactly.
+  if (sid == 1) {
+    float tx = abs(p.x);
+    if (p.y < 1.165 || (tx > 0.145 && p.y > 1.33) || (p.z > 0.03 && p.y > 1.30 && tx < (p.y - 1.30) * 0.55)
+        || (p.y > 1.435 && (tx < 0.055 || tx > 0.125))) discard;
+  }
+  if (sid == 11) {
+    float sd = dot(p - vec3(-0.095, 1.47, 0.0), normalize(vec3(0.505, 0.27, 0.0)));
+    if (abs(sd) > 0.0232) discard;
+    float g = tbNoise(p * 700.0);
+    c = vec3(0.2, 0.1, 0.045) * (0.84 + 0.24 * g * fine);
+    // darker burnished edges and a line of stitching down each side
+    c *= 1.0 - 0.35 * smoothstep(0.018, 0.023, abs(sd));
+    c = mix(c, vec3(0.5, 0.38, 0.2), tbLine(abs(sd) - 0.0165, 0.0006) * tbDash(p.y + p.x, 0.005));
+    tbH += g * 0.00035 * fine;
+    tbRough = 0.66;
+    sid = 0;
+  }
   if (sid == 1) {
     // linen top: olive side panels below the armholes, a leather-bound V with brass eyelets, stitched hem
     float ax = abs(p.x);
-    float panel = smoothstep(0.1095, 0.1125, ax) * (1.0 - smoothstep(1.355, 1.37, p.y));
+    // side panels: the flanks only (not the front of the bust), under the arms, as on the v2 sheet
+    float flank = 1.0 - smoothstep(0.035, 0.05, p.z);
+    float panel = smoothstep(0.112, 0.116, ax) * (1.0 - smoothstep(1.355, 1.37, p.y)) * flank;
     c = mix(c, vec3(0.105, 0.11, 0.055), panel);
-    c *= 1.0 - 0.45 * tbLine(ax - 0.111, 0.0012) * (1.0 - smoothstep(1.355, 1.37, p.y));
+    c *= 1.0 - 0.4 * tbLine(ax - 0.114, 0.0011) * (1.0 - smoothstep(1.355, 1.37, p.y)) * flank;
     if (p.z > 0.02 && p.y > 1.30) {
       float e = ax - (p.y - 1.30) * 0.55;
       float bind = 1.0 - smoothstep(0.0105, 0.0125, e);
@@ -67,8 +89,8 @@ const GARMENT_COLOR = /* glsl */ `
     }
     // leather straps over the shoulder tops (antialiased edges)
     float strap = smoothstep(1.403, 1.407, p.y) * (1.0 - smoothstep(0.034, 0.036, abs(ax - 0.09)));
-    c = mix(c, vec3(0.13, 0.07, 0.035), strap);
-    tbRough = mix(0.93, 0.5, strap);
+    c = mix(c, vec3(0.16, 0.08, 0.035), strap);
+    tbRough = mix(0.93, 0.66, strap);
     // hem: a turned band and a running stitch
     float hem = 1.0 - smoothstep(1.183, 1.186, p.y);
     c *= 1.0 - 0.12 * hem;
@@ -107,13 +129,14 @@ const GARMENT_COLOR = /* glsl */ `
       c = mix(c, vec3(0.52, 0.4, 0.22), st * tbDash(p.x + p.z, 0.005));
     }
     tbH += g * 0.00035 * fine + cr * 0.0004;
-    tbRough = sid == 6 ? 0.55 : 0.5;
+    tbRough = sid == 6 ? 0.6 : 0.64;
   } else if (sid == 4) {
     // boots: grained leather with ankle creases, scuffed toes, a dark welt
     float g = tbNoise(p * 650.0);
     float crease = sin(p.y * 160.0) * (1.0 - smoothstep(0.12, 0.24, abs(p.y - 0.13)));
     c *= 0.84 + 0.22 * g * fine;
-    c = mix(c, c * 1.5, smoothstep(0.1, 0.16, p.z) * (1.0 - smoothstep(0.03, 0.09, p.y)) * 0.6);
+    // a darker, rounder toe box: the boot is cut from the foot, so keep the toes from reading as toes
+    c *= 1.0 - 0.28 * smoothstep(0.08, 0.14, p.z) * (1.0 - smoothstep(0.03, 0.1, p.y));
     c *= 1.0 - 0.5 * (1.0 - smoothstep(0.03, 0.036, p.y));
     tbH += g * 0.0003 * fine + crease * 0.0006;
     tbRough = 0.58;
@@ -180,7 +203,68 @@ export function patchGarments(mat: THREE.MeshStandardMaterial, light: HeroLight)
   mat.customProgramCacheKey = () => `${prevKey()}|tb-garment`;
 }
 
-/** Skin, hair, tattoo: the same rim; skin also gets a little warm light through it. */
+const SKIN = /* glsl */ `
+  {
+    vec3 p = vBind;
+    // inside the boots: never seen, so never drawn (nothing can poke through the leather)
+    if (p.y < 0.39) discard;
+    float foot = length(fwidth(p));
+    float fine = clamp(1.0 - foot * 1200.0, 0.0, 1.0);
+    // uneven living tone: a low mottle, warmer blood at the joints, cheeks and hands
+    float mottle = tbNoise(p * 16.0) * 0.6 + tbNoise(p * 45.0) * 0.4;
+    float ax = abs(p.x);
+    float warm = 0.0;
+    warm += 1.0 - smoothstep(0.0, 0.06, abs(p.y - 0.5));                      // knees
+    warm += (1.0 - smoothstep(0.0, 0.05, abs(p.y - 1.08))) * step(0.22, ax);   // elbows
+    warm += (1.0 - smoothstep(0.86, 0.96, p.y)) * step(0.28, ax);              // hands
+    warm += (1.0 - smoothstep(0.0, 0.03, abs(p.y - 1.62))) * step(0.035, ax) * step(ax, 0.07) * step(0.04, p.z); // cheeks
+    diffuseColor.rgb *= 0.95 + 0.1 * mottle;
+    // under the top's outline the skin wears the linen, so a gap in the cut reads as cloth, not a hole
+    float under = step(1.17, p.y) * step(p.y, 1.43) * step(ax, 0.135)
+                * (1.0 - step(0.03, p.z) * step(1.30, p.y) * step(ax, (p.y - 1.30) * 0.55));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.56, 0.45, 0.29) * (0.9 + 0.1 * mottle), under);
+    // the same for the boots, socks and shorts: skin that pokes through a garment wears it
+    if (p.y < 0.45) diffuseColor.rgb = vec3(0.1, 0.105, 0.05);
+    else if (p.y > 0.86 && p.y < 1.03 && ax < 0.2) diffuseColor.rgb = vec3(0.1, 0.11, 0.055);
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.06, 0.86, 0.8), clamp(warm, 0.0, 1.0) * 0.4);
+    tbBump = (tbNoise(p * 1100.0) - 0.5) * 0.00012 * fine;
+  }
+`;
+
+/** Skin: less plastic. Rougher, a softer sheen, uneven tone, pores, and light scattered through at the terminator. */
+export function patchSkin(mat: THREE.MeshStandardMaterial, light: HeroLight) {
+  mat.roughness = 0.74;
+  mat.envMapIntensity = 0.3;
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (shader, renderer) => {
+    prev.call(mat, shader, renderer);
+    shader.uniforms.uSunView = light.sunView;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", `#include <common>\nvarying vec3 vBind;`)
+      .replace("#include <begin_vertex>", `#include <begin_vertex>\nvBind = position;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", `#include <common>\n${COMMON}\nuniform vec3 uSunView;\nfloat tbBump;`)
+      .replace("#include <color_fragment>", `#include <color_fragment>\n${SKIN}`)
+      .replace(
+        "#include <normal_fragment_maps>",
+        `#include <normal_fragment_maps>\nnormal = tbPerturb(-vViewPosition, normal, vec2(dFdx(tbBump), dFdy(tbBump)) * 60.0, faceDirection);`
+      )
+      .replace(
+        "#include <lights_fragment_end>",
+        `#include <lights_fragment_end>\n${rimChunk(`
+          // light through the skin: the lit side wraps a little past the terminator, reddened
+          float ndl = dot(normal, normalize(uSunView));
+          float wrapped = clamp((ndl + 0.45) / 1.45, 0.0, 1.0) - clamp(ndl, 0.0, 1.0);
+          reflectedLight.directDiffuse += diffuseColor.rgb * vec3(1.0, 0.34, 0.22) * wrapped * 1.4 * uDynSunVis;
+          reflectedLight.indirectDiffuse += diffuseColor.rgb * vec3(0.5, 0.2, 0.13) * 0.12;`
+        )}`
+      );
+  };
+  const prevKey = mat.customProgramCacheKey.bind(mat);
+  mat.customProgramCacheKey = () => `${prevKey()}|tb-skin`;
+}
+
+/** Hair and tattoo: the same rim. */
 export function patchHeroRim(mat: THREE.MeshStandardMaterial, light: HeroLight, skin = false) {
   const prev = mat.onBeforeCompile;
   mat.onBeforeCompile = (shader, renderer) => {

@@ -19,7 +19,7 @@ import type { ProofParams } from "./params";
 import { PerfMeter } from "./perf";
 import { Phase2World, type RookMeta } from "./phase2World";
 import { PostFX } from "./postfx";
-import { patchGarments, patchHeroRim, type HeroLight } from "./garments";
+import { patchGarments, patchHeroRim, patchSkin, type HeroLight } from "./garments";
 
 /**
  * The Coastal Market proof: one imperative three.js loop, owned by one React
@@ -312,11 +312,11 @@ export async function createCoastalProof(
       patchHeroRim(mat, heroLight);
     } else if (mat.name === "TB_Garments") {
       mat.side = THREE.DoubleSide;
+      mat.envMapIntensity = 0.35; // cloth and leather, not lacquer: keep the grey sky out of them
       patchGarments(mat, heroLight);
     } else if (mat.name.startsWith("MI_Superhero")) {
-      mat.color.set("#f2d2b8"); // warm the pack's light skin toward the v2 sheet
-      mat.roughness = 0.58;
-      patchHeroRim(mat, heroLight, true);
+      mat.color.set("#ecccb4"); // warm the pack's light skin toward the v2 sheet
+      patchSkin(mat, heroLight);
     }
     patchDynamicSunVis(mat, heroSunVis);
   });
@@ -442,6 +442,10 @@ export async function createCoastalProof(
   const headBone = hero.getObjectByName("Head");
   const camQ = new THREE.Quaternion();
   const shotRay = new THREE.Ray();
+  const gripTmp = new THREE.Vector3();
+  const swingQ = new THREE.Quaternion();
+  const swingDir = new THREE.Vector3();
+  const downV = new THREE.Vector3(0, -1, 0);
   const camM = new THREE.Matrix4();
   let lastCaption = "";
   const frame = (t: number) => {
@@ -487,7 +491,27 @@ export async function createCoastalProof(
     heroRoot.position.copy(controller.position);
     body.rotation.y = controller.heading;
     heroRoot.updateMatrixWorld(true);
-    armReach.apply(phase2.handTarget, controller.heading, phase2.handsUp);
+    if (controller.hanging) {
+      // A hang: straight arms under the bar, the bar closed in her hands (her knuckles placed
+      // exactly on it), and the swing tilting her whole body about her grip, as a body does.
+      const grip = phase2.handTarget;
+      heroRoot.quaternion.identity();
+      heroRoot.position.copy(grip);
+      heroRoot.position.y -= 2.08;
+      heroRoot.updateMatrixWorld(true);
+      armReach.apply(grip, controller.heading, 1);
+      armReach.close(1);
+      heroRoot.position.sub(armReach.gripPoint(gripTmp).sub(grip));
+      const sw = phase2.swing;
+      swingQ.setFromUnitVectors(downV, swingDir.set(sw.x, -1.9, sw.y).normalize());
+      heroRoot.position.sub(grip).applyQuaternion(swingQ).add(grip);
+      heroRoot.quaternion.copy(swingQ);
+      heroRoot.updateMatrixWorld(true);
+    } else {
+      heroRoot.quaternion.identity();
+      armReach.apply(phase2.handTarget, controller.heading, phase2.handsUp);
+      if (phase2.handsUp > 0.2) armReach.close(phase2.handsUp * 0.4);
+    }
     follow.update(camState(), params.shot ? { yaw: 0, pitch: 0 } : input.consumeLook(), dt, now);
     // cinematic framing (the opening sighting, the reveal) blends over the gameplay camera
     headBone?.getWorldPosition(heroHead) ?? heroHead.copy(controller.position).add(new THREE.Vector3(0, 1.6, 0));
@@ -565,6 +589,9 @@ export async function createCoastalProof(
       locomotion: controller.locomotion,
       grounded: controller.grounded,
       phase2: { ...phase2.state },
+      grip: phase2.handTarget.toArray().map(v => +v.toFixed(3)),
+      knuckles: armReach.gripPoint(new THREE.Vector3()).toArray().map(v => +v.toFixed(3)),
+      hangRoot: heroRoot.position.toArray().map(v => +v.toFixed(3)),
     }),
     perf: () => perf.snapshot(),
     audio: () => audio.probe(),

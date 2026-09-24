@@ -103,6 +103,8 @@ function patchLevelShader(shader: THREE.WebGLProgramParametersWithUniforms, sunV
   vs = vs.replace("#include <fog_vertex>", `#include <fog_vertex>\n${vBody.join("\n")}`);
 
   fs = fs.replace("#include <common>", `#include <common>\n${fDecl.join("\n")}`);
+  // nothing right against the lens: the camera never shows the inside of a lantern or a post
+  fs = fs.replace("#include <clipping_planes_fragment>", "#include <clipping_planes_fragment>\nif ( length( vViewPosition ) < 0.35 ) discard;");
   const sample = sunVis === "lightmap" ? "texture2D( aoMap, vAoMapUv ).g" : sunVis === "vertex" ? "vSunVis" : "1.0";
   const lightsBegin = THREE.ShaderChunk.lights_fragment_begin.replace(DIR_LIGHT_LINE, `${DIR_LIGHT_LINE}\n\t\tdirectLight.color *= bakedSunVis;`);
   fs = fs.replace("#include <lights_fragment_begin>", `float bakedSunVis = ${sample};\n${lightsBegin}`);
@@ -120,7 +122,20 @@ function patchLevelShader(shader: THREE.WebGLProgramParametersWithUniforms, sunV
 
 export function createLevelMaterial(name: string, ctx: MaterialContext, far: boolean, geometry: THREE.BufferGeometry, dynamic = false): THREE.Material {
   if (name === "glow") {
-    return withSunFog(new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.56, 0.22).multiplyScalar(2.4) }));
+    const glow = withSunFog(new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.56, 0.22).multiplyScalar(2.4) }));
+    const prevGlow = glow.onBeforeCompile;
+    glow.onBeforeCompile = (shader, renderer) => {
+      prevGlow.call(glow, shader, renderer);
+      // like the lit materials: a lantern right against the lens is not drawn
+      shader.vertexShader = shader.vertexShader
+        .replace("#include <common>", "#include <common>\nvarying float vLensDist;")
+        .replace("#include <fog_vertex>", "#include <fog_vertex>\nvLensDist = length( mvPosition.xyz );");
+      shader.fragmentShader = shader.fragmentShader
+        .replace("#include <common>", "#include <common>\nvarying float vLensDist;")
+        .replace("#include <clipping_planes_fragment>", "#include <clipping_planes_fragment>\nif ( vLensDist < 0.35 ) discard;");
+    };
+    glow.customProgramCacheKey = () => "glow-near";
+    return glow;
   }
   if (name === "brass") {
     // polished brass reads by what it reflects: the sky environment does the work

@@ -244,6 +244,10 @@ export class Phase2World {
   /** 0..1: how far her arms are raised to a hook (the runtime poses them) */
   handsUp = 0;
   readonly handTarget = new THREE.Vector3();
+  /** her swing on the line (horizontal offset of her body from the grip, metres) */
+  get swing() {
+    return this.pend.off;
+  }
   /** play the opening cage sighting (off for QA starts part-way along the route) */
   intro = true;
   /** one-shot sound cues this frame */
@@ -590,7 +594,8 @@ export class Phase2World {
     line.group.updateMatrixWorld(true);
     const tip = line.part.localToWorld(this.tmp.copy(line.tipLocal));
     const seat = this.lineHook(line, this.tmp2);
-    line.hook.position.set(seat.x, seat.y + 0.6, seat.z);
+    // the hook's toggle (her grip) sits 0.9 below the hook part's origin
+    line.hook.position.set(seat.x, seat.y + 0.9, seat.z);
     line.hook.rotation.y = line.yaw;
     Ropes.set(line.hookRope, tip, line.hook.position);
     if (line.id === "ride") {
@@ -690,7 +695,8 @@ export class Phase2World {
       this.pend.step(seat, step, body);
       this.handTarget.copy(seat);
       this.pend.velocity(this.vel);
-      controller.hang(body, this.vel.lengthSq() > 0.3 ? Math.atan2(this.vel.x, this.vel.z) : controller.heading);
+      // square to the toggle (it runs along the jib/boom), facing the way the swing takes her
+      controller.hang(body, this.squareTo(new THREE.Vector3(Math.cos(line.yaw), 0, -Math.sin(line.yaw)), controller.heading));
       if (u >= 1 && (this.pend.off.length() < 0.45 || a.t > GRAB_DELAY + T + 1.0)) this.finish(controller);
     } else if (a.carrier !== undefined) {
       const c = this.carriers[a.carrier];
@@ -699,10 +705,19 @@ export class Phase2World {
       this.pend.step(seat, step, body);
       this.handTarget.copy(seat);
       this.pend.velocity(this.vel);
-      controller.hang(body, Math.atan2(this.vel.x, this.vel.z));
+      const along = new THREE.Vector3(Math.cos(c.rotation.y), 0, -Math.sin(c.rotation.y));
+      controller.hang(body, this.squareTo(new THREE.Vector3(along.z, 0, -along.x), controller.heading));
       if (c.userData.u >= (a.landU ?? 0) || (!wants && a.t > 0.6)) this.finish(controller);
     }
     if (this.active) this.handsUp = 1;
+  }
+
+  /** The heading square to a grip bar along `axis`, on whichever side is nearer `current`. */
+  private squareTo(axis: THREE.Vector3, current: number) {
+    const h = Math.atan2(axis.z, -axis.x);   // facing = axis turned a quarter
+    const alt = h + Math.PI;
+    const d = (a: number) => Math.abs(Math.atan2(Math.sin(a - current), Math.cos(a - current)));
+    return d(h) <= d(alt) ? h : alt;
   }
 
   private startHang(controller: PlayerController, seat: THREE.Vector3, stamp: string) {
@@ -849,11 +864,11 @@ export class Phase2World {
       const herLine = (r > 3.0 && r < 4.9) || (r > 7.8 && r < 9.6);
       if (herLine) {
         // her face, three-quarter, from beside the cage door: the terrace and the sky behind her
-        d.position.copy(heroHead).addScaledVector(door, -0.95).addScaledVector(side, 0.85);
-        d.position.y = heroHead.y - 0.06;
+        d.position.copy(heroHead).addScaledVector(door, -0.95).addScaledVector(side, -1.7);
+        d.position.y = heroHead.y - 0.1;
         d.target.copy(heroHead).addScaledVector(door, 0.15);
-        d.target.y -= 0.12;
-        d.fov = 44;
+        d.target.y -= 0.3;
+        d.fov = 46;
       } else {
         // over her shoulder into the open cage: her in the foreground, Rook and the workshop beyond
         // (her left shoulder: the side his reaching wing and the satchel are on)

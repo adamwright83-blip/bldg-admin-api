@@ -107,16 +107,46 @@ in the walk collider.
   - Cinematic cameras collide unless their placement is clear by construction.
 - **Controller constants kept:** jog 5.3, sprint 8.25, gravity 22, jump 8.2, mantle 1.15.
 
+### Polish round (after review)
+
+- **Hands on the line.** Every hook carries a turned toggle on a rope loop. While she hangs:
+  - she faces square to the toggle;
+  - both arms reach it, her fingers close around it, and her body is placed so the toggle sits
+    exactly between her knuckles;
+  - the swing tilts her whole body about her grip, as a hanging body swings, rather than sliding
+    her under the hook.
+- **Rook's colour.**
+  - It is no longer per-vertex concept samples, which speckled like camouflage on the generated shell.
+  - Each vertex is named by the concept's hue within what its body region can be: head (beak, lips,
+    hat, goggles), bib, body (feathers, strap), hip bags, legs (leg, claw).
+  - A neighbourhood vote removes the speckle, and unseen vertices take the nearest seen paint.
+  - It is painted in the concept's palette with its smoothed tone.
+  - Runtime welds the shell and smooths its normals.
+- **Trailblazer.**
+  - Her boots are now built as boots: a lofted shaft, a toe box, a sole and heel, strap bands with
+    brass buckles. The old ones were the foot's own surface pushed out, which kept its toes.
+  - The leg inside them is not drawn.
+  - Every cut garment piece is trimmed per pixel to the exact line it was cut on, so the stair-stepped
+    edges are gone.
+  - Skin under a garment's outline takes that garment's colour, so a gap reads as cloth.
+  - Skin is rougher, with a mottled tone, warm joints, pores, and light scattered through at the
+    terminator.
+  - Leather and linen reflect less of the grey sky.
+- **Camera.**
+  - Rig shots cut in and out rather than dragging the lens through scenery.
+  - Nothing within 0.35 m of the lens is drawn.
+  - A dock post that blocked the reveal is gone.
+
 ### Final measurement
 
 Mac-hosted Playwright Chromium headless `--use-angle=metal` (Apple M1), 390x844 DPR 3 mobile+touch,
 **CPU throttle 4x**, autowalk from the pier to the cage door:
 
-- 40.2 s to the door;
-- fps median 60, minimum 59.4;
-- app-frame CPU 7.44 ms mean, 12.8 ms worst rolling p95;
-- p95 frame interval 18.7 ms worst;
-- 140 draws or fewer (including 9 post passes), about 438k triangles or fewer;
+- 39.7 s to the door;
+- fps median 60, minimum 59.0;
+- app-frame CPU 5.98 ms mean, 9.8 ms worst rolling p95;
+- 194 draws or fewer (including 9 post passes; each ropeway carrier's hook, toggle and rope are
+  separate draws), about 442k triangles or fewer;
 - zero page errors.
 
 The continuous film, with the reveal, runs 57.3 s. **This is emulation, not a real phone.**

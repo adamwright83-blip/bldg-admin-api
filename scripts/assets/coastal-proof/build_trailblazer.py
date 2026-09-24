@@ -156,7 +156,7 @@ def shade(base, amount=0.08, p=None, scale=9.0):
 
 # Surface ids for the runtime garment shader (vertex colour alpha = id / 16). The cut and the
 # coverage are the geometry above; the ids only say what each part is made of.
-ID_LINEN, ID_DENIM, ID_LEATHER, ID_BOOT, ID_KNIT, ID_BRACER, ID_BRASS, ID_CLOTH, ID_HAIR, ID_SATCHEL = range(1, 11)
+ID_LINEN, ID_DENIM, ID_LEATHER, ID_BOOT, ID_KNIT, ID_BRACER, ID_BRASS, ID_CLOTH, ID_HAIR, ID_SATCHEL, ID_STRAP = range(1, 12)
 
 ARM_BONES = {"upperarm_l", "upperarm_r", "lowerarm_l", "lowerarm_r", "hand_l", "hand_r"}
 HEAD_BONES = {"neck_01", "Head"}
@@ -397,6 +397,138 @@ def body_surface(tree, x, z, from_dir):
     origin = Vector((x, 0, z)) + Vector(from_dir) * 1.0
     hit = tree.ray_cast(origin, -Vector(from_dir), 2.0)
     return hit[0]
+
+
+# ---------------------------------------------------------------------------
+# boots: built as boots (a lofted shaft, a toe box, a sole and heel, strap bands with buckles),
+# fitted to her legs and feet, instead of the foot's own surface pushed out (which kept its toes)
+# ---------------------------------------------------------------------------
+
+
+def build_boots(arm, body):
+    import numpy as np
+    co = np.array([v.co[:] for v in body.data.vertices])
+    parts = []
+    bone_y = {}
+    for s in ("l", "r"):
+        b = arm.data.bones.get(f"ball_{s}")
+        bone_y[s] = (arm.matrix_world @ b.head_local).y if b else None
+    SEG = 18
+
+    def ring_pts(cx, cy, z, rx, ry):
+        return [Vector((cx + math.cos(2 * math.pi * i / SEG) * rx, cy + math.sin(2 * math.pi * i / SEG) * ry, z)) for i in range(SEG)]
+
+    def loft(rows, closed=True):
+        def build(bm):
+            vs = [[bm.verts.new(p) for p in r] for r in rows]
+            n = len(rows[0])
+            for k in range(len(vs) - 1):
+                for i in range(n if closed else n - 1):
+                    j = (i + 1) % n
+                    bm.faces.new((vs[k][i], vs[k][j], vs[k + 1][j], vs[k + 1][i]))
+        return build
+
+    for side, s in ((1, "l"), (-1, "r")):
+        leg = co[(co[:, 0] * side > 0.02) & (co[:, 2] < 0.47)]
+        print(f"[trailblazer] boot {s}: {len(leg)} leg vertices, z {leg[:, 2].min():.3f}..{leg[:, 2].max():.3f}")
+        # --- shaft: rings fitted to the calf, a leather thickness out, flaring slightly at the top
+        rings = []
+        for h in np.linspace(0.11, 0.405, 13):
+            tol = 0.012
+            sel = leg[np.abs(leg[:, 2] - h) < tol]
+            while len(sel) < 6 and tol < 0.06:
+                tol *= 1.6
+                sel = leg[np.abs(leg[:, 2] - h) < tol]
+            if h < 0.16 and len(sel) > 8:
+                keep = sel[sel[:, 1] > np.median(sel[:, 1]) - 0.03]   # the ankle, not the instep in front of it
+                sel = keep if len(keep) >= 4 else sel
+            cx, cy = float(sel[:, 0].mean()), float(sel[:, 1].mean())
+            rx = float(np.abs(sel[:, 0] - cx).max()) + 0.013
+            ry = float(np.abs(sel[:, 1] - cy).max()) + 0.013
+            flare = 1.0 + 0.1 * max(0.0, (h - 0.34) / 0.065)
+            rings.append((cx, cy, float(h), rx * flare, ry * flare))
+        parts.append((loft([ring_pts(*r) for r in rings]), BOOT + (ID_BOOT,)))
+        # turned-down top edge
+        cx, cy, h, rx, ry = rings[-1]
+        parts.append((loft([ring_pts(cx, cy, h, rx, ry), ring_pts(cx, cy, h + 0.004, rx + 0.006, ry + 0.006),
+                            ring_pts(cx, cy, h - 0.03, rx + 0.007, ry + 0.007)]), tuple(c * 0.85 for c in BOOT) + (ID_BOOT,)))
+        # --- foot: stations from heel to toe, each a rounded arch over the foot, a leather thickness out
+        foot = leg[leg[:, 2] < 0.13]
+        y_heel, y_toe = float(foot[:, 1].max()) + 0.012, float(foot[:, 1].min()) - 0.016
+        stations = []
+        for t in np.linspace(0.0, 1.0, 12):
+            y = y_heel + (y_toe - y_heel) * t
+            sel = foot[np.abs(foot[:, 1] - y) < 0.014]
+            if len(sel) < 3:
+                sel = foot[np.argsort(np.abs(foot[:, 1] - y))[:12]]
+            x0, x1 = float(sel[:, 0].min()), float(sel[:, 0].max())
+            cx = (x0 + x1) / 2
+            hw = (x1 - x0) / 2 + 0.013
+            top = max(0.05, float(sel[:, 2].max()) + 0.014)
+            # round the toe box and the heel
+            if t > 0.8:
+                k = (t - 0.8) / 0.2
+                hw *= 1.0 - 0.45 * k * k
+                top = 0.05 + (top - 0.05) * (1.0 - 0.4 * k)
+            if t < 0.08:
+                hw *= 0.85
+            stations.append((cx, y, hw, top))
+        arch = []
+        for cx, y, hw, top in stations:
+            row = []
+            for i in range(SEG + 1):
+                a = math.pi * i / SEG
+                ca, sa = math.cos(a), math.sin(a)
+                row.append(Vector((cx + math.copysign(abs(ca) ** 0.7, ca) * hw, y, 0.02 + (top - 0.02) * sa ** 0.6)))
+            arch.append(row)
+        parts.append((loft(arch, closed=False), BOOT + (ID_BOOT,)))
+        # caps at the heel and the toe
+        for row in (arch[0], arch[-1]):
+            def cap(bm, row=row):
+                c = sum(row, Vector()) / len(row)
+                ci = bm.verts.new(Vector((c.x, c.y, 0.02 + (c.z - 0.02) * 0.5)))
+                vs = [bm.verts.new(p) for p in row]
+                for i in range(len(vs) - 1):
+                    bm.faces.new((vs[i], vs[i + 1], ci))
+            parts.append((cap, BOOT + (ID_BOOT,)))
+        # sole and heel: a slab under the outline, a little wider
+        outline = [Vector((st[0] - st[2] - 0.006, st[1], 0.0)) for st in stations] + \
+                  [Vector((st[0] + st[2] + 0.006, st[1], 0.0)) for st in reversed(stations)]
+        def slab(bm, outline=outline):
+            lo = [bm.verts.new(p) for p in outline]
+            hi = [bm.verts.new(p + Vector((0, 0, 0.022))) for p in outline]
+            n = len(lo)
+            for i in range(n):
+                j = (i + 1) % n
+                bm.faces.new((lo[i], lo[j], hi[j], hi[i]))
+            bm.faces.new(list(reversed(lo)))
+            bm.faces.new(hi)
+        parts.append((slab, SOLE + (ID_LEATHER,)))
+        hx, hy = stations[1][0], stations[1][1]
+        parts.append((cube((hx, hy - 0.015, 0.018), (stations[1][2] * 2, 0.07, 0.036), bevel=0.004), SOLE + (ID_LEATHER,)))
+        # strap bands with brass buckles on the outer side
+        for zb in (0.14, 0.24, 0.33):
+            r = min(rings, key=lambda q: abs(q[2] - zb))
+            cx, cy, h, rx, ry = r
+            parts.append((loft([ring_pts(cx, cy, zb - 0.011, rx + 0.004, ry + 0.004), ring_pts(cx, cy, zb + 0.011, rx + 0.004, ry + 0.004)]),
+                          LEATHER_DARK + (ID_LEATHER,)))
+            parts.append((cube((cx + side * (rx + 0.008), cy, zb), (0.008, 0.03, 0.03)), BRASS + (ID_BRASS,)))
+
+    def weights(co_, bone_y=bone_y):
+        s = "l" if co_.x > 0 else "r"
+        if co_.z > 0.15:
+            return {f"calf_{s}": 1.0}
+        if co_.z > 0.09 and co_.y > (bone_y[s] or -0.08) + 0.06:
+            k = (co_.z - 0.09) / 0.06
+            return {f"calf_{s}": k, f"foot_{s}": 1.0 - k}
+        by = bone_y[s]
+        if by is not None and co_.y < by - 0.01:
+            return {f"ball_{s}": 1.0}
+        if by is not None and co_.y < by + 0.02:
+            k = (co_.y - (by - 0.01)) / 0.03
+            return {f"foot_{s}": k, f"ball_{s}": 1.0 - k}
+        return {f"foot_{s}": 1.0}
+    return rigid_mesh("TB_BootsBuilt", arm, parts, weights)
 
 
 # ---------------------------------------------------------------------------
@@ -652,10 +784,9 @@ def main():
         extract(body, "TB_Top", top_pred, 0.0075, top_color, info, top_snap, ID_LINEN),
         extract(body, "TB_Shorts", shorts_pred, 0.0085, shorts_color, info, z_snap([1.035], keep=lambda co: co.z < 0.9), ID_DENIM),
         extract(body, "TB_Belt", belt_pred, 0.016, belt_color, info, z_snap([0.962, 1.022]), ID_LEATHER),
-        extract(body, "TB_Boots", boots_pred, 0.012, boots_color, info, z_snap([0.405]), ID_BOOT),
         extract(body, "TB_Socks", socks_pred, 0.0085, socks_color, info, z_snap([0.375, 0.455]), ID_KNIT),
         extract(body, "TB_Bracer", bracer_pred, 0.0095, bracer_color, info, x_snap([0.47, 0.625]), ID_BRACER),
-        extract(body, "TB_Strap", strap_pred, 0.0175, strap_color, info, strap_snap, ID_LEATHER),
+        extract(body, "TB_Strap", strap_pred, 0.0175, strap_color, info, strap_snap, ID_STRAP),
     ]
     tattoo = build_tattoo(body, info)
 
@@ -715,14 +846,15 @@ def main():
     tassels = []
     for side, bone in ((1, "calf_l"), (-1, "calf_r")):
         outer = body_surface(tree, side * 0.11, 0.36, (side, 0, 0))
-        ox = (outer.x if outer else side * 0.16) + side * 0.02
+        ox = (outer.x if outer else side * 0.16) + side * 0.03
         tassels.append((cloth_strip((ox, -0.012, 0.37), (ox, 0.012, 0.37), 0.08, 2, taper=0.5), BOOT + (ID_LEATHER,)))
     tassel_ob = rigid_mesh("TB_Tassels", arm, tassels, lambda co: {"calf_l" if co.x > 0 else "calf_r": 1.0})
+    boots = build_boots(arm, body)
     hair = build_hair(arm, tree)
     hairbits = build_tie_and_strands(arm)
 
     # join garments + rigid accessories into one skinned mesh (one draw call)
-    garments = pieces + [satchel, bandana, pouch, buckles, tassel_ob, hairbits]
+    garments = pieces + [satchel, bandana, pouch, buckles, tassel_ob, boots, hairbits]
     for ob in garments:
         ob.data.materials.clear()
         ob.data.materials.append(gm)

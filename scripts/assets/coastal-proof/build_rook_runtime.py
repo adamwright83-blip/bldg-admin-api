@@ -225,6 +225,124 @@ def finish_load(obj, src, src_tris):
     return obj
 
 
+# The concept's own paint (display sRGB, sampled by eye from rook-concept-v1.png).
+PALETTE = [
+    ("feather", (0.34, 0.49, 0.15)),
+    ("feather_dark", (0.23, 0.35, 0.10)),
+    ("beak_red", (0.80, 0.23, 0.15)),
+    ("white", (0.93, 0.90, 0.85)),
+    ("hat_tan", (0.74, 0.69, 0.50)),
+    ("hat_olive", (0.47, 0.52, 0.30)),
+    ("leather", (0.40, 0.26, 0.15)),
+    ("satchel", (0.77, 0.55, 0.33)),
+    ("brass", (0.80, 0.63, 0.26)),
+    ("leg", (0.40, 0.45, 0.20)),
+    ("claw", (0.82, 0.50, 0.18)),
+    ("glass", (0.20, 0.24, 0.23)),
+]
+P = {name: i for i, (name, _) in enumerate(PALETTE)}
+
+
+def classify(rgb, region):
+    """Name the concept's paint at one vertex from its hue, within what that body region can be."""
+    import colorsys
+    h, sat, val = colorsys.rgb_to_hsv(*[float(x) for x in rgb])
+    hue = h * 360
+    if region == "leg":
+        return P["claw"] if (15 <= hue <= 45 and sat > 0.45 and val > 0.45) else P["leg"]
+    red = (hue < 18 or hue > 340) and sat > 0.4
+    white = sat < 0.2 and val > 0.72
+    brown = 15 <= hue <= 48 and sat > 0.3
+    if region == "bag":
+        if 40 <= hue <= 58 and sat > 0.5 and val > 0.55:
+            return P["brass"]
+        return P["leather"] if val < 0.4 else P["satchel"]
+    if region == "head":
+        if red:
+            return P["beak_red"]
+        if white:
+            return P["white"]
+        if val < 0.2:
+            return P["glass"]
+        if 40 <= hue <= 58 and sat > 0.5 and val > 0.55:
+            return P["brass"]
+        if 30 <= hue <= 75 and sat < 0.45:
+            return P["hat_tan"] if val > 0.55 else P["hat_olive"]
+        if brown:
+            return P["leather"]
+        return P["feather"]
+    # body, wings, tail: feathers, with the strap and satchel where the concept is leather
+    if region == "bib" and (red or white):
+        return P["beak_red"] if red else P["white"]
+    if brown:
+        return P["satchel"] if val > 0.5 else P["leather"]
+    return P["feather_dark"] if val < 0.24 else P["feather"]
+
+
+def paint_regions(co, concept, w, fallback):
+    """Clean painted regions instead of per-vertex concept samples.
+
+    The generated shell is a triangle soup, so neighbouring vertices pick up different concept pixels
+    and different visibility; sampled straight, the colour speckles like camouflage. Each seen vertex
+    is named by the concept's hue within what its body region can be (the head can be beak, lips,
+    hat, goggles; the body feathers, strap or satchel; the legs leg or claw); a neighbourhood vote
+    removes the speckle; unseen vertices take the paint of the nearest seen surface in their region;
+    and a smoothed tone from the concept keeps its painted light and shade."""
+    from mathutils.kdtree import KDTree
+    n = len(co)
+    x, y, z = co[:, 0], co[:, 1], co[:, 2]
+    region = np.full(n, "body", dtype=object)
+    region[(z > 1.08) & (y < -0.02) & (z <= 1.3)] = "bib"
+    region[z > 1.3] = "head"
+    region[(z < 0.5) & (y < 0.12)] = "leg"
+    # the hip bags (the same volumes rook_rig.py gives the satchel bones)
+    region[(np.abs(x) > 0.2) & (z > 0.4) & (z < 0.76) & (y < 0.3)] = "bag"
+    pal = np.array([c for _, c in PALETTE], dtype=np.float32)
+    seen = w > 0.5
+    label = np.zeros(n, np.int32)
+    for i in np.nonzero(seen)[0]:
+        label[i] = classify(concept[i], region[i])
+    for i in np.nonzero(~seen)[0]:
+        label[i] = P["leg"] if region[i] == "leg" else P["satchel"] if region[i] == "bag" else P["feather"]
+    lum = np.array([0.3, 0.55, 0.15], np.float32)
+    tone = np.where(seen, (concept @ lum) / np.maximum(1e-3, pal[label] @ lum), 1.0)
+    idx_seen = np.nonzero(seen)[0]
+    kd_seen = KDTree(len(idx_seen))
+    for j, i in enumerate(idx_seen):
+        kd_seen.insert(co[i], j)
+    kd_seen.balance()
+    # unseen: the nearest seen surface's paint within the same region (the beak's far side is beak)
+    for i in np.nonzero(~seen)[0]:
+        if region[i] == "body":
+            continue
+        for (_, j, dist) in kd_seen.find_n(co[i], 3):
+            k = idx_seen[j]
+            if dist < 0.08 and region[k] == region[i]:
+                label[i] = label[k]
+                break
+    kd = KDTree(n)
+    for i, p in enumerate(co):
+        kd.insert(p, i)
+    kd.balance()
+    new_label = label.copy()
+    new_tone = np.ones(n, np.float32)
+    for i in range(n):
+        # the head's paints are big flat areas in the concept (beak, lips, hat): vote wider there
+        nb = [j for (_, j, _) in kd.find_range(co[i], 0.034 if region[i] == "head" else 0.02)]
+        if not nb:
+            continue
+        new_label[i] = np.bincount(label[nb], minlength=len(PALETTE)).argmax()
+        new_tone[i] = float(np.clip(np.median(tone[nb]), 0.9, 1.1))
+    # a painter's gradient on the feathers: lighter breast, darker back and crown
+    feathers = np.isin(new_label, [P["feather"], P["feather_dark"]])
+    grad = np.clip(1.0 + (-y) * 0.3 - np.maximum(z - 1.0, 0) * 0.15, 0.85, 1.12)
+    new_tone = np.where(feathers, new_tone * grad, new_tone)
+    out = pal[new_label] * new_tone[:, None]
+    counts = {name: int((new_label == k).sum()) for k, (name, _) in enumerate(PALETTE)}
+    print("[rook] painted regions", counts)
+    return np.clip(out, 0, 1)
+
+
 def bake_projection(obj):
     """The projection as per-vertex colour (concept where it sees, the concept's feather green
     elsewhere), exactly the blend project_concept.py's material computes, evaluated at each vertex.
@@ -250,7 +368,10 @@ def bake_projection(obj):
     fx, fy = (x - x0)[:, None], (y - y0)[:, None]
     c = (rgba[y0, x0, :3] * (1 - fx) * (1 - fy) + rgba[y0, x1, :3] * fx * (1 - fy)
          + rgba[y1, x0, :3] * (1 - fx) * fy + rgba[y1, x1, :3] * fx * fy)
-    col = fallback[None, :] * (1 - w[:, None]) + c * w[:, None]
+    co = np.empty(n * 3, dtype=np.float32)
+    me.vertices.foreach_get("co", co)
+    co = co.reshape(n, 3)
+    col = paint_regions(co, c, w, fallback)
     # Image.pixels of an 8-bit PNG are display (sRGB) values; colour attributes are linear
     col = np.where(col <= 0.04045, col / 12.92, ((col + 0.055) / 1.055) ** 2.4)
     ca = me.color_attributes.new("Color", "FLOAT_COLOR", "POINT")
