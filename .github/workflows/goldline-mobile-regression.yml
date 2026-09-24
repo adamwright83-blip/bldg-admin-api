@@ -1,3 +1,4 @@
+# LEGACY DAYFORGE COMPATIBILITY: DAYFORGE_* below are historical runtime env-var literals only; not current architecture.
 name: Goldline mobile regression
 
 on:
