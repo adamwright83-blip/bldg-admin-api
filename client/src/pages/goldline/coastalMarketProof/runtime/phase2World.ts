@@ -3,6 +3,7 @@ import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { MeshBVH } from "three-mesh-bvh";
 import type { PlayerController } from "./controller";
 import type { ChaseRigs, LevelData, Route, SwingRig } from "./level";
+import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { createLevelMaterial, patchDynamicSunVis, type MaterialContext } from "./materials";
 
 /**
@@ -414,7 +415,7 @@ export class Phase2World {
     this.satchel = part("satchel");
     this.dispatchHook = part("dispatch_hook");
     // the dispatch hangs on a hook chained from the door's lintel, where the station loads the cage
-    this.satchel.scale.setScalar(0.72);
+    this.satchel.scale.setScalar(0.95);
     this.dispatchHook.visible = false;
     this.dispatchChain = this.ropes.add(iron, 0.012);
     this.group.add(this.satchel);
@@ -435,6 +436,13 @@ export class Phase2World {
         mat.metalness = 0;
         mat.envMapIntensity = 0.7;
         if (m.morphTargetInfluences) this.rookMesh = m;
+        // the generated shell ships as loose flat-shaded pieces; weld coincident vertices (their
+        // colours and morph offsets agree) and smooth the normals so light rolls over his form
+        m.geometry.deleteAttribute("normal");
+        const welded = mergeVertices(m.geometry, 1e-4);
+        welded.computeVertexNormals();
+        m.geometry.dispose();
+        m.geometry = welded;
       });
       this.cage.add(rook);
       this.rook = rook;
@@ -824,6 +832,8 @@ export class Phase2World {
     this.setRook(pose);
     // the satchel hangs from its strap: on the arm, then in his wing, swinging as it goes
     this.satchel.position.copy(tip ?? this.hookSeat);
+    // in his wing he holds the strap short, so the satchel rides at his chest rather than his knees
+    if (tip) this.satchel.position.y += 0.16 * Math.min(1, (this.state.revealTime - 2.55) / 0.8);
     const swing = this.satchelHeld ? Math.sin(this.state.revealTime * 4.1) * 0.2 * Math.exp(-(this.state.revealTime - 2.55) * 0.55) : 0;
     this.satchel.rotation.set(0, Math.atan2(-door.z, door.x), swing);
   }
@@ -858,10 +868,11 @@ export class Phase2World {
       return d;
     }
     // a rig carrying her: a wide, side-on shot from outside the swing, eased in and out
-    const id = this.active?.id ?? (this.sinceRig < 1.2 ? this.lastRig : null);
+    const id = this.active?.id ?? (this.sinceRig < 0.75 ? this.lastRig : null);
     this.sinceRig += 1 / 60;
-    const wantW = this.active ? 1 : this.sinceRig < 1.2 ? 1 - ease(this.sinceRig / 1.2) : 0;
-    this.rigCamW += (wantW - this.rigCamW) * (this.active ? 0.16 : 0.2);
+    // cut, don't blend: a blend would drag the lens through the cliff and the stalls. The shot holds
+    // until she has landed, then cuts back to the gameplay camera, which has been following her.
+    this.rigCamW = this.active || this.sinceRig < 0.75 ? 1 : 0;
     if (id && this.rigCamW > 0.001) {
       // a fixed crane shot from out over the water, square to the rig's swing, tracking her
       const body = controller.position;
