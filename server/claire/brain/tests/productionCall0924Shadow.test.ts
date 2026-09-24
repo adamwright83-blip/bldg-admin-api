@@ -20,6 +20,7 @@ describe("2026-09-24 Brain V2 regression shapes", () => {
     expect(result.decision.perceivedTurn.businessIntent).toBe("judgment_question");
     expect(result.decision.perceivedTurn.workDeclarationKind).toBe("none");
     expect(result.decision.actionGrants).toHaveLength(0);
+    expect(result.comparison.actionAuthorityBasis).toBeNull();
     expect(result.decision.control.activeTaskSets.map(set => set.kind)).not.toContain("action_proposal");
   });
 
@@ -33,6 +34,7 @@ describe("2026-09-24 Brain V2 regression shapes", () => {
     expect(result.decision.perceivedTurn.operatorIntentAttested).toBe(true);
     expect(result.decision.perceivedTurn.declaredContentLabel).toMatch(/call dana tuesday/i);
     expect(result.decision.actionGrants.map(grant => grant.actionClass)).toContain("propose_day_line");
+    expect(result.comparison.actionAuthorityBasis).toBe("attested_operator_work");
   });
 
   it("keeps a mixed business question and independent work declaration as two legitimate frames", async () => {
