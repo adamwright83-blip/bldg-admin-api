@@ -19,18 +19,18 @@
 import { z } from "zod";
 import {
   adminProcedure,
-  legacyLegacyDayforgeMissionFieldProcedure,
+  legacyDayforgeMissionFieldProcedure,
   router,
 } from "../_core/trpc";
 import {
   GOLDLINE_CLIENT_EVENT_NAMES,
   sanitizeLegacyDayforgeProductEventProperties,
-} from "@shared/legacyLegacyDayforgeEvents";
-import { writeLegacyDayforgeEvent } from "./legacyLegacyDayforgeEventStore";
+} from "@shared/legacyDayforgeEvents";
+import { writeLegacyDayforgeEvent } from "./legacyDayforgeEventStore";
 import { getGoldlineEffectivenessSummary } from "./goldlineEffectivenessQueries";
 
 export const goldlineEventRouter = router({
-  record: legacyLegacyDayforgeMissionFieldProcedure
+  record: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         sessionId: z.string().uuid(),

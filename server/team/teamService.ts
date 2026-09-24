@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, ne } from "drizzle-orm";
 import {
   commercialMissions,
-  legacyLegacyDayforgeSaasMemberships,
+  legacyDayforgeSaasMemberships,
   employeeOperatingProfileEvents,
   employeeOperatingProfiles,
   users,
@@ -20,8 +20,8 @@ function skills(value: unknown): string[] {
 export async function getTeamProjection(input: { tenantId: string }): Promise<TeamProjection> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const memberships = await db.select().from(legacyLegacyDayforgeSaasMemberships).where(and(
-    eq(legacyLegacyDayforgeSaasMemberships.tenantId, input.tenantId), eq(legacyLegacyDayforgeSaasMemberships.active, true), ne(legacyLegacyDayforgeSaasMemberships.role, "owner")
+  const memberships = await db.select().from(legacyDayforgeSaasMemberships).where(and(
+    eq(legacyDayforgeSaasMemberships.tenantId, input.tenantId), eq(legacyDayforgeSaasMemberships.active, true), ne(legacyDayforgeSaasMemberships.role, "owner")
   ));
   const userIds = memberships.map(member => member.userOpenId);
   const [profiles, userRows, missions] = await Promise.all([
@@ -65,7 +65,7 @@ export async function saveEmployeeOperatingProfile(input: { tenantId: string; us
   if (replay) return replay;
   try {
     return await db.transaction(async tx => {
-      const [membership] = await tx.select().from(legacyLegacyDayforgeSaasMemberships).where(and(eq(legacyLegacyDayforgeSaasMemberships.tenantId, input.tenantId), eq(legacyLegacyDayforgeSaasMemberships.userOpenId, input.userOpenId), eq(legacyLegacyDayforgeSaasMemberships.active, true), ne(legacyLegacyDayforgeSaasMemberships.role, "owner"))).limit(1);
+      const [membership] = await tx.select().from(legacyDayforgeSaasMemberships).where(and(eq(legacyDayforgeSaasMemberships.tenantId, input.tenantId), eq(legacyDayforgeSaasMemberships.userOpenId, input.userOpenId), eq(legacyDayforgeSaasMemberships.active, true), ne(legacyDayforgeSaasMemberships.role, "owner"))).limit(1);
       if (!membership) throw new Error("Employee operating profiles require a real active non-owner tenant membership");
       const [existing] = await tx.select().from(employeeOperatingProfiles).where(and(eq(employeeOperatingProfiles.tenantId, input.tenantId), eq(employeeOperatingProfiles.userOpenId, input.userOpenId))).limit(1);
       const profileId = existing?.id ?? randomUUID();

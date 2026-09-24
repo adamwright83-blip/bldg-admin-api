@@ -4,9 +4,9 @@ import bcrypt from "bcryptjs";
 import express from "express";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import {
-  legacyLegacyDayforgeSaasMemberships,
-  legacyLegacyDayforgeSaasTenants,
-  legacyLegacyDayforgeSaasUserCredentials,
+  legacyDayforgeSaasMemberships,
+  legacyDayforgeSaasTenants,
+  legacyDayforgeSaasUserCredentials,
   users,
 } from "../../drizzle/schema";
 import {
@@ -47,39 +47,39 @@ export function registerLegacyDayforgeSaasAuthRoute(app: express.Express) {
       return res.status(503).json({ error: "Authentication is unavailable" });
     const [account] = await db
       .select({
-        tenantId: legacyLegacyDayforgeSaasTenants.id,
-        tenantStatus: legacyLegacyDayforgeSaasTenants.status,
-        userOpenId: legacyLegacyDayforgeSaasUserCredentials.userOpenId,
-        passwordHash: legacyLegacyDayforgeSaasUserCredentials.passwordHash,
-        failedLoginCount: legacyLegacyDayforgeSaasUserCredentials.failedLoginCount,
-        lockedUntil: legacyLegacyDayforgeSaasUserCredentials.lockedUntil,
-        role: legacyLegacyDayforgeSaasMemberships.role,
-        membershipActive: legacyLegacyDayforgeSaasMemberships.active,
+        tenantId: legacyDayforgeSaasTenants.id,
+        tenantStatus: legacyDayforgeSaasTenants.status,
+        userOpenId: legacyDayforgeSaasUserCredentials.userOpenId,
+        passwordHash: legacyDayforgeSaasUserCredentials.passwordHash,
+        failedLoginCount: legacyDayforgeSaasUserCredentials.failedLoginCount,
+        lockedUntil: legacyDayforgeSaasUserCredentials.lockedUntil,
+        role: legacyDayforgeSaasMemberships.role,
+        membershipActive: legacyDayforgeSaasMemberships.active,
         name: users.name,
       })
-      .from(legacyLegacyDayforgeSaasTenants)
+      .from(legacyDayforgeSaasTenants)
       .innerJoin(
-        legacyLegacyDayforgeSaasUserCredentials,
-        eq(legacyLegacyDayforgeSaasUserCredentials.tenantId, legacyLegacyDayforgeSaasTenants.id)
+        legacyDayforgeSaasUserCredentials,
+        eq(legacyDayforgeSaasUserCredentials.tenantId, legacyDayforgeSaasTenants.id)
       )
       .innerJoin(
-        legacyLegacyDayforgeSaasMemberships,
+        legacyDayforgeSaasMemberships,
         and(
-          eq(legacyLegacyDayforgeSaasMemberships.tenantId, legacyLegacyDayforgeSaasTenants.id),
+          eq(legacyDayforgeSaasMemberships.tenantId, legacyDayforgeSaasTenants.id),
           eq(
-            legacyLegacyDayforgeSaasMemberships.userOpenId,
-            legacyLegacyDayforgeSaasUserCredentials.userOpenId
+            legacyDayforgeSaasMemberships.userOpenId,
+            legacyDayforgeSaasUserCredentials.userOpenId
           )
         )
       )
       .innerJoin(
         users,
-        eq(users.openId, legacyLegacyDayforgeSaasUserCredentials.userOpenId)
+        eq(users.openId, legacyDayforgeSaasUserCredentials.userOpenId)
       )
       .where(
         and(
-          eq(legacyLegacyDayforgeSaasTenants.slug, slug),
-          eq(legacyLegacyDayforgeSaasUserCredentials.emailNormalized, email)
+          eq(legacyDayforgeSaasTenants.slug, slug),
+          eq(legacyDayforgeSaasUserCredentials.emailNormalized, email)
         )
       )
       .limit(1);
@@ -102,7 +102,7 @@ export function registerLegacyDayforgeSaasAuthRoute(app: express.Express) {
     if (!valid) {
       const failedLoginCount = account.failedLoginCount + 1;
       await db
-        .update(legacyLegacyDayforgeSaasUserCredentials)
+        .update(legacyDayforgeSaasUserCredentials)
         .set({
           failedLoginCount,
           lockedUntil:
@@ -112,19 +112,19 @@ export function registerLegacyDayforgeSaasAuthRoute(app: express.Express) {
         })
         .where(
           and(
-            eq(legacyLegacyDayforgeSaasUserCredentials.tenantId, account.tenantId),
-            eq(legacyLegacyDayforgeSaasUserCredentials.userOpenId, account.userOpenId)
+            eq(legacyDayforgeSaasUserCredentials.tenantId, account.tenantId),
+            eq(legacyDayforgeSaasUserCredentials.userOpenId, account.userOpenId)
           )
         );
       return genericFailure();
     }
     await db
-      .update(legacyLegacyDayforgeSaasUserCredentials)
+      .update(legacyDayforgeSaasUserCredentials)
       .set({ failedLoginCount: 0, lockedUntil: null })
       .where(
         and(
-          eq(legacyLegacyDayforgeSaasUserCredentials.tenantId, account.tenantId),
-          eq(legacyLegacyDayforgeSaasUserCredentials.userOpenId, account.userOpenId)
+          eq(legacyDayforgeSaasUserCredentials.tenantId, account.tenantId),
+          eq(legacyDayforgeSaasUserCredentials.userOpenId, account.userOpenId)
         )
       );
     const sessionToken = await sdk.createSessionToken(account.userOpenId, {

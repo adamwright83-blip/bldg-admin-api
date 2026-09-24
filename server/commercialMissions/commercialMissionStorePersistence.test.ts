@@ -27,7 +27,7 @@ vi.mock("../commercialPipeline/commercialPipelineCore", async importOriginal => 
   createCommercialPipelineForMissionWith: mocks.createCommercialPipelineForMissionWith,
   syncCommercialPipelineForMissionTransitionWith: mocks.syncCommercialPipelineForMissionTransitionWith,
 }));
-vi.mock("../legacyLegacyDayforgeEvents/legacyLegacyDayforgeEventStore", () => ({
+vi.mock("../legacyDayforgeEvents/legacyDayforgeEventStore", () => ({
   writeLegacyDayforgeEventWith: mocks.writeLegacyDayforgeEventWith,
 }));
 

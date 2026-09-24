@@ -3,21 +3,21 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   buildLegacyDayforgeEventRows,
-  legacyLegacyDayforgeEventScope,
-} from "./legacyLegacyDayforgeEventStore";
+  legacyDayforgeEventScope,
+} from "./legacyDayforgeEventStore";
 
 describe("DayForge event writer", () => {
   it("derives a non-null idempotency scope from server context", () => {
-    expect(legacyLegacyDayforgeEventScope({ tenantId: "tenant_a" })).toBe(
+    expect(legacyDayforgeEventScope({ tenantId: "tenant_a" })).toBe(
       "tenant:tenant_a"
     );
-    expect(legacyLegacyDayforgeEventScope({ anonymousSessionId: "preview_a" })).toBe(
+    expect(legacyDayforgeEventScope({ anonymousSessionId: "preview_a" })).toBe(
       "public:preview_a"
     );
-    expect(legacyLegacyDayforgeEventScope({ systemScopeId: "cleanup" })).toBe(
+    expect(legacyDayforgeEventScope({ systemScopeId: "cleanup" })).toBe(
       "system:cleanup"
     );
-    expect(() => legacyLegacyDayforgeEventScope({})).toThrow(/requires a tenant/i);
+    expect(() => legacyDayforgeEventScope({})).toThrow(/requires a tenant/i);
   });
 
   it("creates immutable audit before/after state and a redacted product row", () => {
@@ -89,13 +89,13 @@ describe("DayForge event writer", () => {
       })
     ).toThrow(/eventName/);
     expect(() =>
-      legacyLegacyDayforgeEventScope({ anonymousSessionId: "x".repeat(65) })
+      legacyDayforgeEventScope({ anonymousSessionId: "x".repeat(65) })
     ).toThrow(/anonymousSessionId/);
   });
 
   it("uses immutable no-op upserts for concurrent idempotent writes", () => {
     const source = readFileSync(
-      new URL("./legacyLegacyDayforgeEventStore.ts", import.meta.url),
+      new URL("./legacyDayforgeEventStore.ts", import.meta.url),
       "utf8"
     );
     expect(source.match(/onDuplicateKeyUpdate/g)).toHaveLength(2);

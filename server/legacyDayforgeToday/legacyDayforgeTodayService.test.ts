@@ -1,6 +1,6 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { describe, expect, it } from "vitest";
-import { sortLegacyDayforgeTodayItems, type LegacyDayforgeTodayItem } from "./legacyLegacyDayforgeTodayService";
+import { sortLegacyDayforgeTodayItems, type LegacyDayforgeTodayItem } from "./legacyDayforgeTodayService";
 
 const base: LegacyDayforgeTodayItem = {
   id: "base", kind: "missing_next_action", urgency: "exception", missionId: 1,

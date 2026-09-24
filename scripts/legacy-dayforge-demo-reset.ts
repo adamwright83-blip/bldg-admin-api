@@ -9,12 +9,12 @@
  */
 import "dotenv/config";
 import { ENV } from "../server/_core/env";
-import { resetDemoTenant } from "../server/legacyLegacyDayforgeDemo/demoTenantReset";
-import { seedDemoTenant } from "../server/legacyLegacyDayforgeDemo/demoTenantSeed";
-import { printDemoUrls } from "./legacyLegacyDayforgeDemoUrls";
+import { resetDemoTenant } from "../server/legacyDayforgeDemo/demoTenantReset";
+import { seedDemoTenant } from "../server/legacyDayforgeDemo/demoTenantSeed";
+import { printDemoUrls } from "./legacyDayforgeDemoUrls";
 
 async function main() {
-  if (!ENV.legacyLegacyDayforgeDemoEnabled) {
+  if (!ENV.legacyDayforgeDemoEnabled) {
     console.error(
       "[legacy-dayforge-demo-reset] DAYFORGE_DEMO_ENABLED is not true. Refusing to reset."
     );

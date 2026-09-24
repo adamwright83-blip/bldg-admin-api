@@ -1,7 +1,7 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { legacyLegacyDayforgeTerritoryProcedure, router } from "../_core/trpc";
+import { legacyDayforgeTerritoryProcedure, router } from "../_core/trpc";
 import { createCommercialMission } from "../commercialMissions/commercialMissionStore";
 import {
   discoverLaundryTerritory,
@@ -52,18 +52,18 @@ function provider() {
 }
 
 export const territoryRouter = router({
-  profile: legacyLegacyDayforgeTerritoryProcedure.query(({ ctx }) =>
+  profile: legacyDayforgeTerritoryProcedure.query(({ ctx }) =>
     getTerritoryOperatorProfile(ctx.tenantId)
   ),
 
-  saveProfile: legacyLegacyDayforgeTerritoryProcedure
+  saveProfile: legacyDayforgeTerritoryProcedure
     .input(profileInput)
     .mutation(async ({ ctx, input }) => {
       await saveTerritoryOperatorProfile({ ...input, tenantId: ctx.tenantId });
       return { ok: true as const };
     }),
 
-  scan: legacyLegacyDayforgeTerritoryProcedure
+  scan: legacyDayforgeTerritoryProcedure
     .input(scanInput)
     .mutation(async ({ ctx, input }) => {
       const operator = await getTerritoryOperatorProfile(ctx.tenantId);
@@ -88,7 +88,7 @@ export const territoryRouter = router({
       return { ...result, ...persisted };
     }),
 
-  createMission: legacyLegacyDayforgeTerritoryProcedure
+  createMission: legacyDayforgeTerritoryProcedure
     .input(
       z.object({
         scanId: z.string().min(8).max(64),

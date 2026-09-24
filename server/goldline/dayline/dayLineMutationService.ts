@@ -9,7 +9,7 @@ import {
 import { getDb } from "../../db";
 import { ensureAdamBoard } from "../../claire/proactive/boardService";
 import { getDayDirectorState } from "../../dayDirector/dayDirectorService";
-import { listLegacyDayforgeToday } from "../../legacyLegacyDayforgeToday/legacyLegacyDayforgeTodayService";
+import { listLegacyDayforgeToday } from "../../legacyDayforgeToday/legacyDayforgeTodayService";
 import { getCommercialMission, listCommercialMissions } from "../../commercialMissions/commercialMissionStore";
 import {
   dayLineDisplayTitle,

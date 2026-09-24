@@ -41,7 +41,7 @@ docker run -d --name goldline-verify-db -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DAT
 Then migrations (this is `db:legacy-dayforge:release`, **never** `db:push`):
 
 ```bash
-DATABASE_URL="mysql://root:root@127.0.0.1:3399/goldline_mobile_gate" DAYFORGE_RELEASE_DB=1 npx tsx server/legacyLegacyDayforgeRelease/applyReleaseMigrations.ts
+DATABASE_URL="mysql://root:root@127.0.0.1:3399/goldline_mobile_gate" DAYFORGE_RELEASE_DB=1 npx tsx server/legacyDayforgeRelease/applyReleaseMigrations.ts
 ```
 
 Build with the harness flag, then run the real server:

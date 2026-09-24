@@ -3,7 +3,7 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { commercialFollowUps, orders } from "../../drizzle/schema";
 import { deterministicEstimate, sourcedFact } from "../../shared/businessGame";
 import { getDb } from "../db";
-import { listLegacyDayforgeToday } from "../legacyLegacyDayforgeToday/legacyLegacyDayforgeTodayService";
+import { listLegacyDayforgeToday } from "../legacyDayforgeToday/legacyDayforgeTodayService";
 import type { FieldTodayItem, FieldTodayProjection } from "./types";
 import { listRecoveryInterventions, physicalEntityIdsForInterventions } from "../churnRadar/customerChurnService";
 import { listForgeJobs } from "../worldForge/worldForgeService";

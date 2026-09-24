@@ -5,14 +5,14 @@ import {
   commercialMissionIrlStepDetails,
   commercialMissionSteps,
   commercialMissions,
-  legacyLegacyDayforgeAuditEvents,
-  legacyLegacyDayforgeEvidenceObjectDeletions,
-  legacyLegacyDayforgeEvidenceUploads,
+  legacyDayforgeAuditEvents,
+  legacyDayforgeEvidenceObjectDeletions,
+  legacyDayforgeEvidenceUploads,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { storageDelete, storageGet, storagePut } from "../storage";
-import { writeLegacyDayforgeEventWith } from "../legacyLegacyDayforgeEvents/legacyLegacyDayforgeEventStore";
-import { DAYFORGE_RETENTION_MATRIX } from "../legacyLegacyDayforgeRetention/retentionPolicy";
+import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
+import { DAYFORGE_RETENTION_MATRIX } from "../legacyDayforgeRetention/retentionPolicy";
 import type { CommercialMissionTransaction } from "./commercialMissionStore";
 
 export const COMMERCIAL_MISSION_PROOF_MAX_BYTES = 10 * 1024 * 1024;
@@ -77,7 +77,7 @@ type MissionStepAccessRow = {
   status: "locked" | "ready" | "active" | "completed" | "skipped";
 };
 
-type ProofRow = typeof legacyLegacyDayforgeEvidenceUploads.$inferSelect;
+type ProofRow = typeof legacyDayforgeEvidenceUploads.$inferSelect;
 
 export type CommercialMissionProofView = {
   id: string;
@@ -440,7 +440,7 @@ async function markProofUploadGuard(input: {
   const guardRequestId = `proof-upload-guard:${input.requestId}`;
   const storageKeyHash = storageKeyDigest(input.storageKey);
   await input.db
-    .insert(legacyLegacyDayforgeEvidenceObjectDeletions)
+    .insert(legacyDayforgeEvidenceObjectDeletions)
     .values({
       id: randomUUID(),
       tenantId: input.tenantId,
@@ -457,11 +457,11 @@ async function markProofUploadGuard(input: {
     .onDuplicateKeyUpdate({ set: { requestId: guardRequestId } });
   const guardRows = await input.db
     .select()
-    .from(legacyLegacyDayforgeEvidenceObjectDeletions)
+    .from(legacyDayforgeEvidenceObjectDeletions)
     .where(
       and(
-        eq(legacyLegacyDayforgeEvidenceObjectDeletions.tenantId, input.tenantId),
-        eq(legacyLegacyDayforgeEvidenceObjectDeletions.requestId, guardRequestId)
+        eq(legacyDayforgeEvidenceObjectDeletions.tenantId, input.tenantId),
+        eq(legacyDayforgeEvidenceObjectDeletions.requestId, guardRequestId)
       )
     )
     .limit(1);
@@ -479,7 +479,7 @@ async function markProofUploadGuard(input: {
     return { id: guard.id, attached: true as const };
   }
   await input.db
-    .update(legacyLegacyDayforgeEvidenceObjectDeletions)
+    .update(legacyDayforgeEvidenceObjectDeletions)
     .set({
       storageKey: input.storageKey,
       reason: "upload_guard",
@@ -491,8 +491,8 @@ async function markProofUploadGuard(input: {
     })
     .where(
       and(
-        eq(legacyLegacyDayforgeEvidenceObjectDeletions.tenantId, input.tenantId),
-        eq(legacyLegacyDayforgeEvidenceObjectDeletions.id, guard.id)
+        eq(legacyDayforgeEvidenceObjectDeletions.tenantId, input.tenantId),
+        eq(legacyDayforgeEvidenceObjectDeletions.id, guard.id)
       )
     );
   return { id: guard.id, attached: false as const };
@@ -506,26 +506,26 @@ async function cleanupOrQueueProofUploadOrphan(input: {
 }) {
   const startedAt = new Date();
   await input.db
-    .update(legacyLegacyDayforgeEvidenceObjectDeletions)
+    .update(legacyDayforgeEvidenceObjectDeletions)
     .set({
       reason: "upload_orphan",
       status: "in_progress",
-      attemptCount: sql`${legacyLegacyDayforgeEvidenceObjectDeletions.attemptCount} + 1`,
+      attemptCount: sql`${legacyDayforgeEvidenceObjectDeletions.attemptCount} + 1`,
       lastAttemptAt: startedAt,
       nextAttemptAt: null,
       updatedAt: startedAt,
     })
     .where(
       and(
-        eq(legacyLegacyDayforgeEvidenceObjectDeletions.tenantId, input.tenantId),
-        eq(legacyLegacyDayforgeEvidenceObjectDeletions.id, input.guardId)
+        eq(legacyDayforgeEvidenceObjectDeletions.tenantId, input.tenantId),
+        eq(legacyDayforgeEvidenceObjectDeletions.id, input.guardId)
       )
     );
   try {
     await storageDelete(input.storageKey);
     const deletedAt = new Date();
     await input.db
-      .update(legacyLegacyDayforgeEvidenceObjectDeletions)
+      .update(legacyDayforgeEvidenceObjectDeletions)
       .set({
         storageKey: null,
         status: "succeeded",
@@ -537,15 +537,15 @@ async function cleanupOrQueueProofUploadOrphan(input: {
       })
       .where(
         and(
-          eq(legacyLegacyDayforgeEvidenceObjectDeletions.tenantId, input.tenantId),
-          eq(legacyLegacyDayforgeEvidenceObjectDeletions.id, input.guardId)
+          eq(legacyDayforgeEvidenceObjectDeletions.tenantId, input.tenantId),
+          eq(legacyDayforgeEvidenceObjectDeletions.id, input.guardId)
         )
       );
   } catch (error) {
     const failure = safeDeletionError(error);
     const failedAt = new Date();
     await input.db
-      .update(legacyLegacyDayforgeEvidenceObjectDeletions)
+      .update(legacyDayforgeEvidenceObjectDeletions)
       .set({
         status: "retry",
         nextAttemptAt: new Date(failedAt.getTime() + ORPHAN_RETRY_DELAY_MS),
@@ -555,8 +555,8 @@ async function cleanupOrQueueProofUploadOrphan(input: {
       })
       .where(
         and(
-          eq(legacyLegacyDayforgeEvidenceObjectDeletions.tenantId, input.tenantId),
-          eq(legacyLegacyDayforgeEvidenceObjectDeletions.id, input.guardId)
+          eq(legacyDayforgeEvidenceObjectDeletions.tenantId, input.tenantId),
+          eq(legacyDayforgeEvidenceObjectDeletions.id, input.guardId)
         )
       );
   }
@@ -610,11 +610,11 @@ async function readProofByRequestWith(
 ) {
   const rows = await tx
     .select()
-    .from(legacyLegacyDayforgeEvidenceUploads)
+    .from(legacyDayforgeEvidenceUploads)
     .where(
       and(
-        eq(legacyLegacyDayforgeEvidenceUploads.tenantId, input.tenantId),
-        eq(legacyLegacyDayforgeEvidenceUploads.requestId, input.requestId)
+        eq(legacyDayforgeEvidenceUploads.tenantId, input.tenantId),
+        eq(legacyDayforgeEvidenceUploads.requestId, input.requestId)
       )
     )
     .limit(1);
@@ -670,17 +670,17 @@ async function prepareSubmissionWith(
   assertCommercialMissionProofSubmissionAccess({ ...input, ...context });
   const latestRows = await tx
     .select()
-    .from(legacyLegacyDayforgeEvidenceUploads)
+    .from(legacyDayforgeEvidenceUploads)
     .where(
       and(
-        eq(legacyLegacyDayforgeEvidenceUploads.tenantId, input.tenantId),
-        eq(legacyLegacyDayforgeEvidenceUploads.missionId, input.missionId),
-        eq(legacyLegacyDayforgeEvidenceUploads.missionStepId, input.missionStepId)
+        eq(legacyDayforgeEvidenceUploads.tenantId, input.tenantId),
+        eq(legacyDayforgeEvidenceUploads.missionId, input.missionId),
+        eq(legacyDayforgeEvidenceUploads.missionStepId, input.missionStepId)
       )
     )
     .orderBy(
-      desc(legacyLegacyDayforgeEvidenceUploads.attemptNumber),
-      desc(legacyLegacyDayforgeEvidenceUploads.submittedAt)
+      desc(legacyDayforgeEvidenceUploads.attemptNumber),
+      desc(legacyDayforgeEvidenceUploads.submittedAt)
     )
     .limit(1);
   return {
@@ -772,7 +772,7 @@ export async function submitCommercialMissionProof(input: {
 
       if (prepared.replay) {
         await tx
-          .update(legacyLegacyDayforgeEvidenceObjectDeletions)
+          .update(legacyDayforgeEvidenceObjectDeletions)
           .set({
             reason: "upload_guard",
             status: "attached",
@@ -783,8 +783,8 @@ export async function submitCommercialMissionProof(input: {
           })
           .where(
             and(
-              eq(legacyLegacyDayforgeEvidenceObjectDeletions.tenantId, input.tenantId),
-              eq(legacyLegacyDayforgeEvidenceObjectDeletions.id, guard.id)
+              eq(legacyDayforgeEvidenceObjectDeletions.tenantId, input.tenantId),
+              eq(legacyDayforgeEvidenceObjectDeletions.id, guard.id)
             )
           );
         return proofView(prepared.replay);
@@ -796,13 +796,13 @@ export async function submitCommercialMissionProof(input: {
 
       if (prepared.latestProof) {
         const superseded = await tx
-          .update(legacyLegacyDayforgeEvidenceUploads)
+          .update(legacyDayforgeEvidenceUploads)
           .set({ reviewStatus: "superseded", updatedAt: now })
           .where(
             and(
-              eq(legacyLegacyDayforgeEvidenceUploads.tenantId, input.tenantId),
-              eq(legacyLegacyDayforgeEvidenceUploads.id, prepared.latestProof.id),
-              eq(legacyLegacyDayforgeEvidenceUploads.reviewStatus, "rejected")
+              eq(legacyDayforgeEvidenceUploads.tenantId, input.tenantId),
+              eq(legacyDayforgeEvidenceUploads.id, prepared.latestProof.id),
+              eq(legacyDayforgeEvidenceUploads.reviewStatus, "rejected")
             )
           );
         if (affectedRows(superseded) !== 1) {
@@ -811,7 +811,7 @@ export async function submitCommercialMissionProof(input: {
       }
 
       await tx
-        .insert(legacyLegacyDayforgeEvidenceUploads)
+        .insert(legacyDayforgeEvidenceUploads)
         .values({
           id: proofId,
           tenantId: input.tenantId,
@@ -876,7 +876,7 @@ export async function submitCommercialMissionProof(input: {
           },
         });
       await tx
-        .update(legacyLegacyDayforgeEvidenceObjectDeletions)
+        .update(legacyDayforgeEvidenceObjectDeletions)
         .set({
           reason: "upload_guard",
           status: "attached",
@@ -887,8 +887,8 @@ export async function submitCommercialMissionProof(input: {
         })
         .where(
           and(
-            eq(legacyLegacyDayforgeEvidenceObjectDeletions.tenantId, input.tenantId),
-            eq(legacyLegacyDayforgeEvidenceObjectDeletions.id, guard.id)
+            eq(legacyDayforgeEvidenceObjectDeletions.tenantId, input.tenantId),
+            eq(legacyDayforgeEvidenceObjectDeletions.id, guard.id)
           )
         );
 
@@ -934,11 +934,11 @@ export async function submitCommercialMissionProof(input: {
     try {
       const committedRows = await db
         .select()
-        .from(legacyLegacyDayforgeEvidenceUploads)
+        .from(legacyDayforgeEvidenceUploads)
         .where(
           and(
-            eq(legacyLegacyDayforgeEvidenceUploads.tenantId, input.tenantId),
-            eq(legacyLegacyDayforgeEvidenceUploads.requestId, requestId)
+            eq(legacyDayforgeEvidenceUploads.tenantId, input.tenantId),
+            eq(legacyDayforgeEvidenceUploads.requestId, requestId)
           )
         )
         .limit(1);
@@ -946,7 +946,7 @@ export async function submitCommercialMissionProof(input: {
       if (committed) {
         assertSubmissionRequestBinding(committed, base);
         await db
-          .update(legacyLegacyDayforgeEvidenceObjectDeletions)
+          .update(legacyDayforgeEvidenceObjectDeletions)
           .set({
             reason: "upload_guard",
             status: "attached",
@@ -955,8 +955,8 @@ export async function submitCommercialMissionProof(input: {
           })
           .where(
             and(
-              eq(legacyLegacyDayforgeEvidenceObjectDeletions.tenantId, input.tenantId),
-              eq(legacyLegacyDayforgeEvidenceObjectDeletions.id, guard.id)
+              eq(legacyDayforgeEvidenceObjectDeletions.tenantId, input.tenantId),
+              eq(legacyDayforgeEvidenceObjectDeletions.id, guard.id)
             )
           );
         return proofView(committed);
@@ -1008,11 +1008,11 @@ export async function reviewCommercialMissionProof(input: {
   return db.transaction(async tx => {
     const initialProofRows = await tx
       .select()
-      .from(legacyLegacyDayforgeEvidenceUploads)
+      .from(legacyDayforgeEvidenceUploads)
       .where(
         and(
-          eq(legacyLegacyDayforgeEvidenceUploads.tenantId, input.tenantId),
-          eq(legacyLegacyDayforgeEvidenceUploads.id, proofId)
+          eq(legacyDayforgeEvidenceUploads.tenantId, input.tenantId),
+          eq(legacyDayforgeEvidenceUploads.id, proofId)
         )
       )
       .limit(1);
@@ -1031,13 +1031,13 @@ export async function reviewCommercialMissionProof(input: {
     if (!context) throw new Error("Commercial mission proof context not found");
     const lockedProofRows = await tx
       .select()
-      .from(legacyLegacyDayforgeEvidenceUploads)
+      .from(legacyDayforgeEvidenceUploads)
       .where(
         and(
-          eq(legacyLegacyDayforgeEvidenceUploads.tenantId, input.tenantId),
-          eq(legacyLegacyDayforgeEvidenceUploads.id, proofId),
-          eq(legacyLegacyDayforgeEvidenceUploads.missionId, initialProof.missionId),
-          eq(legacyLegacyDayforgeEvidenceUploads.missionStepId, initialProof.missionStepId)
+          eq(legacyDayforgeEvidenceUploads.tenantId, input.tenantId),
+          eq(legacyDayforgeEvidenceUploads.id, proofId),
+          eq(legacyDayforgeEvidenceUploads.missionId, initialProof.missionId),
+          eq(legacyDayforgeEvidenceUploads.missionStepId, initialProof.missionStepId)
         )
       )
       .limit(1)
@@ -1049,14 +1049,14 @@ export async function reviewCommercialMissionProof(input: {
     const eventIdempotencyKey = `proof-review:${requestId}`;
     const priorEvents = await tx
       .select({
-        entityId: legacyLegacyDayforgeAuditEvents.entityId,
-        eventName: legacyLegacyDayforgeAuditEvents.eventName,
+        entityId: legacyDayforgeAuditEvents.entityId,
+        eventName: legacyDayforgeAuditEvents.eventName,
       })
-      .from(legacyLegacyDayforgeAuditEvents)
+      .from(legacyDayforgeAuditEvents)
       .where(
         and(
-          eq(legacyLegacyDayforgeAuditEvents.scopeKey, `tenant:${input.tenantId}`),
-          eq(legacyLegacyDayforgeAuditEvents.idempotencyKey, eventIdempotencyKey)
+          eq(legacyDayforgeAuditEvents.scopeKey, `tenant:${input.tenantId}`),
+          eq(legacyDayforgeAuditEvents.idempotencyKey, eventIdempotencyKey)
         )
       )
       .limit(1);
@@ -1078,7 +1078,7 @@ export async function reviewCommercialMissionProof(input: {
     });
     const now = new Date();
     const update = await tx
-      .update(legacyLegacyDayforgeEvidenceUploads)
+      .update(legacyDayforgeEvidenceUploads)
       .set({
         reviewStatus: nextStatus,
         reviewerId: input.actorId,
@@ -1090,9 +1090,9 @@ export async function reviewCommercialMissionProof(input: {
       })
       .where(
         and(
-          eq(legacyLegacyDayforgeEvidenceUploads.tenantId, input.tenantId),
-          eq(legacyLegacyDayforgeEvidenceUploads.id, proof.id),
-          eq(legacyLegacyDayforgeEvidenceUploads.reviewStatus, proof.reviewStatus)
+          eq(legacyDayforgeEvidenceUploads.tenantId, input.tenantId),
+          eq(legacyDayforgeEvidenceUploads.id, proof.id),
+          eq(legacyDayforgeEvidenceUploads.reviewStatus, proof.reviewStatus)
         )
       );
     if (affectedRows(update) !== 1) {
@@ -1192,11 +1192,11 @@ export async function reviewCommercialMissionProof(input: {
 
     const persistedRows = await tx
       .select()
-      .from(legacyLegacyDayforgeEvidenceUploads)
+      .from(legacyDayforgeEvidenceUploads)
       .where(
         and(
-          eq(legacyLegacyDayforgeEvidenceUploads.tenantId, input.tenantId),
-          eq(legacyLegacyDayforgeEvidenceUploads.id, proof.id)
+          eq(legacyDayforgeEvidenceUploads.tenantId, input.tenantId),
+          eq(legacyDayforgeEvidenceUploads.id, proof.id)
         )
       )
       .limit(1);
@@ -1248,16 +1248,16 @@ export async function listCommercialMissionProofs(input: {
   assertCommercialMissionProofReadAccess({ ...input, mission });
   const rows = await db
     .select()
-    .from(legacyLegacyDayforgeEvidenceUploads)
+    .from(legacyDayforgeEvidenceUploads)
     .where(
       and(
-        eq(legacyLegacyDayforgeEvidenceUploads.tenantId, input.tenantId),
-        eq(legacyLegacyDayforgeEvidenceUploads.missionId, input.missionId)
+        eq(legacyDayforgeEvidenceUploads.tenantId, input.tenantId),
+        eq(legacyDayforgeEvidenceUploads.missionId, input.missionId)
       )
     )
     .orderBy(
-      asc(legacyLegacyDayforgeEvidenceUploads.missionStepId),
-      desc(legacyLegacyDayforgeEvidenceUploads.attemptNumber)
+      asc(legacyDayforgeEvidenceUploads.missionStepId),
+      desc(legacyDayforgeEvidenceUploads.attemptNumber)
     );
   return rows.map(proofView);
 }
@@ -1274,11 +1274,11 @@ export async function getCommercialMissionProofAsset(input: {
   if (!db) throw new Error("Database not available");
   const proofRows = await db
     .select()
-    .from(legacyLegacyDayforgeEvidenceUploads)
+    .from(legacyDayforgeEvidenceUploads)
     .where(
       and(
-        eq(legacyLegacyDayforgeEvidenceUploads.tenantId, input.tenantId),
-        eq(legacyLegacyDayforgeEvidenceUploads.id, proofId)
+        eq(legacyDayforgeEvidenceUploads.tenantId, input.tenantId),
+        eq(legacyDayforgeEvidenceUploads.id, proofId)
       )
     )
     .limit(1);

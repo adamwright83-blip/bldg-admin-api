@@ -4,7 +4,7 @@ import {
   defaultLegacyDayforgeDestination,
   resolveLegacyDayforgeAuthenticatedDestination,
   validateInternalReturnTo,
-} from "./legacyLegacyDayforgeContinuation";
+} from "./legacyDayforgeContinuation";
 
 describe("DayForge internal continuation validation", () => {
   it("preserves a normal application-relative destination", () => {

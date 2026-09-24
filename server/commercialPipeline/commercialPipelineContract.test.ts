@@ -118,7 +118,7 @@ describe("DayForge commercial pipeline production contract", () => {
   });
 
   it("derives tenant and actor from the admin session and keeps the UI server-backed", () => {
-    expect(router).toContain("legacyLegacyDayforgePipelineProcedure");
+    expect(router).toContain("legacyDayforgePipelineProcedure");
     expect(router).not.toContain("adminProcedure");
     expect(router).toContain("tenantId: ctx.tenantId");
     expect(router).toContain("actorId: ctx.user.openId");

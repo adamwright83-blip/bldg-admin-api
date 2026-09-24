@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const storePath = new URL("./legacyLegacyDayforgeCoachingArtifactStore.ts", import.meta.url);
+const storePath = new URL("./legacyDayforgeCoachingArtifactStore.ts", import.meta.url);
 const store = readFileSync(storePath, "utf8");
 const schema = readFileSync(new URL("../../drizzle/schema.ts", import.meta.url), "utf8");
 const migration = readFileSync(
@@ -42,7 +42,7 @@ describe("DayForge coaching artifact persistence contract", () => {
   });
 
   it("uses a stable active-content cache without caching provider fallback failures", () => {
-    expect(store).toContain("legacyLegacyDayforgeCoachingArtifactCacheKey(input)");
+    expect(store).toContain("legacyDayforgeCoachingArtifactCacheKey(input)");
     expect(store).toContain('eq(commercialMissionCoachingArtifacts.generationStatus, "generated")');
     expect(store).toContain("eq(commercialMissionCoachingArtifacts.active, true)");
     expect(store).not.toMatch(/cacheKeyFor\([^)]*version/);

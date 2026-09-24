@@ -6,7 +6,7 @@ import {
   assertLegacyDayforgeProductEventProperties,
   isLegacyDayforgeProductEventName,
   sanitizeLegacyDayforgeProductEventProperties,
-} from "./legacyLegacyDayforgeEvents";
+} from "./legacyDayforgeEvents";
 
 describe("DayForge product event contract", () => {
   it("keeps every locked funnel event in the typed catalog", () => {

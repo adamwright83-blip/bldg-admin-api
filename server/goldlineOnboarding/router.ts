@@ -3,7 +3,7 @@ import { importedCustomers, revealWorld, mutateFirstMission } from "./firstMissi
 import { previewCustomerCsv } from "./customerImport";
 import { runTenantImport } from "../saas/tenantImportService";
 import { z } from "zod";
-import { router, legacyLegacyDayforgeTenantMemberProcedure as memberProcedure, legacyLegacyDayforgeTenantOperatorProcedure as procedure } from "../_core/trpc";
+import { router, legacyDayforgeTenantMemberProcedure as memberProcedure, legacyDayforgeTenantOperatorProcedure as procedure } from "../_core/trpc";
 import { answerSession } from "../../shared/goldlineOnboarding";
 import { hasExistingWorld, readSession, saveSession, startSession } from "./store";
 import { interpretAnswers } from "./interpreter";

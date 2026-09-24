@@ -5,7 +5,7 @@ import { CUSTODY_LOCATION_ORDER } from "../../shared/custodyLocations";
 import { cargoVoiceFieldsSchema } from "../../shared/goldlineCargoVoice";
 import {
   router,
-  legacyLegacyDayforgeTenantMemberProcedure as procedure,
+  legacyDayforgeTenantMemberProcedure as procedure,
 } from "../_core/trpc";
 import { transcribeAudio } from "../_core/voiceTranscription";
 import { storageDelete, storageGet, storagePut } from "../storage";

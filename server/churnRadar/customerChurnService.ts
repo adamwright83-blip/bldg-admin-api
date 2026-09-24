@@ -25,7 +25,7 @@ import {
 } from "@shared/customerChurn";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
-import { writeLegacyDayforgeEventWith } from "../legacyLegacyDayforgeEvents/legacyLegacyDayforgeEventStore";
+import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
 import { appendGoldlineWorldEvent } from "../goldlineWorld/worldEventStore";
 import { findPhysicalEntityIdByAddress } from "../goldlineWorld/entityLookup";
 import {
@@ -772,7 +772,7 @@ export async function createCustomerRecoveryIntervention(input: {
         revenueRecoveredCents: 0,
         orderId: snapshot.lastOrderId,
         metadataJson: {
-          legacyLegacyDayforgeRecoveryInterventionId: id,
+          legacyDayforgeRecoveryInterventionId: id,
           churnSnapshotId: snapshot.id,
           score: snapshot.score,
           confidence: snapshot.confidence,

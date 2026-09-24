@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import mysql from "mysql2/promise";
 
-export function legacyLegacyDayforgeReleaseMigrationFilenames(
+export function legacyDayforgeReleaseMigrationFilenames(
   filenames: readonly string[],
   fromPrefix?: string
 ): string[] {
@@ -33,7 +33,7 @@ export async function applyLegacyDayforgeReleaseMigrations(input: {
   }
   const migrationDirectory =
     input.migrationDirectory ?? resolve(process.cwd(), "drizzle");
-  const filenames = legacyLegacyDayforgeReleaseMigrationFilenames(
+  const filenames = legacyDayforgeReleaseMigrationFilenames(
     await readdir(migrationDirectory),
     input.fromPrefix
   );

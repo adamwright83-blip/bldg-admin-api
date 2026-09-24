@@ -2,7 +2,7 @@
 import { trpc } from "@/lib/trpc";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import "./legacy-dayforge-onboarding.css";
-import { validateInternalReturnTo } from "@shared/legacyLegacyDayforgeContinuation";
+import { validateInternalReturnTo } from "@shared/legacyDayforgeContinuation";
 import { PRODUCT_NAME } from "@shared/productIdentity";
 
 type OnboardingCredentials = { sessionId: string; resumeToken: string };

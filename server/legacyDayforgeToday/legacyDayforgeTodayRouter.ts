@@ -1,19 +1,19 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
-import { legacyLegacyDayforgeMissionFieldProcedure, router } from "../_core/trpc";
-import { listLegacyDayforgeToday } from "./legacyLegacyDayforgeTodayService";
+import { legacyDayforgeMissionFieldProcedure, router } from "../_core/trpc";
+import { listLegacyDayforgeToday } from "./legacyDayforgeTodayService";
 import { z } from "zod";
 import { COMMERCIAL_FOLLOW_UP_OUTCOMES } from "@shared/commercialPipeline";
 import { completeCommercialFollowUp, rescheduleCommercialFollowUp } from "../commercialPipeline/commercialPipelineService";
 
-export const legacyLegacyDayforgeTodayRouter = router({
-  list: legacyLegacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
+export const legacyDayforgeTodayRouter = router({
+  list: legacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
     listLegacyDayforgeToday({
       tenantId: ctx.tenantId,
       userId: ctx.user.openId,
-      includeAllAssignees: ctx.legacyLegacyDayforgeMembership.role !== "field",
+      includeAllAssignees: ctx.legacyDayforgeMembership.role !== "field",
     })
   ),
-  completeFollowUp: legacyLegacyDayforgeMissionFieldProcedure
+  completeFollowUp: legacyDayforgeMissionFieldProcedure
     .input(
       z
         .object({
@@ -49,7 +49,7 @@ export const legacyLegacyDayforgeTodayRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  rescheduleFollowUp: legacyLegacyDayforgeMissionFieldProcedure.input(z.object({
+  rescheduleFollowUp: legacyDayforgeMissionFieldProcedure.input(z.object({
     pipelineId: z.number().int().positive(), followUpId: z.string().uuid(), requestId: z.string().uuid(),
     dueAt: z.coerce.date().refine(value => value.getTime() > Date.now(), "New follow-up time must be in the future"),
   })).mutation(({ ctx, input }) => rescheduleCommercialFollowUp({

@@ -4,7 +4,7 @@ import {
   GOLDLINE_CLIENT_EVENT_NAMES,
   isGoldlineClientEventName,
   sanitizeLegacyDayforgeProductEventProperties,
-} from "./legacyLegacyDayforgeEvents";
+} from "./legacyDayforgeEvents";
 
 describe("Goldline client event whitelist", () => {
   it("never includes a business-critical event a client could self-report", () => {

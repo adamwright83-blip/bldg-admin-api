@@ -1,9 +1,9 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import {
-  legacyLegacyDayforgeProviderBudgets,
-  legacyLegacyDayforgePublicPreviewSessions,
-  legacyLegacyDayforgeRateLimitBuckets,
+  legacyDayforgeProviderBudgets,
+  legacyDayforgePublicPreviewSessions,
+  legacyDayforgeRateLimitBuckets,
   territoryScanResults,
   territoryScanSessions,
 } from "../../drizzle/schema";
@@ -11,7 +11,7 @@ import {
   writeLegacyDayforgeEvent,
   writeLegacyDayforgeEventWith,
   type LegacyDayforgeEventInput,
-} from "../legacyLegacyDayforgeEvents/legacyLegacyDayforgeEventStore";
+} from "../legacyDayforgeEvents/legacyDayforgeEventStore";
 import { getDb } from "../db";
 import { createCommercialMission } from "../commercialMissions/commercialMissionStore";
 import type {
@@ -65,7 +65,7 @@ async function consumeBucket(
 ) {
   const window = fixedWindow(input.now, input.windowSeconds);
   await tx
-    .insert(legacyLegacyDayforgeRateLimitBuckets)
+    .insert(legacyDayforgeRateLimitBuckets)
     .values({
       scopeKey: input.scopeKey,
       bucketKey: input.bucketKey,
@@ -80,13 +80,13 @@ async function consumeBucket(
     });
   const rows = await tx
     .select()
-    .from(legacyLegacyDayforgeRateLimitBuckets)
+    .from(legacyDayforgeRateLimitBuckets)
     .where(
       and(
-        eq(legacyLegacyDayforgeRateLimitBuckets.scopeKey, input.scopeKey),
-        eq(legacyLegacyDayforgeRateLimitBuckets.bucketKey, input.bucketKey),
-        eq(legacyLegacyDayforgeRateLimitBuckets.action, input.action),
-        eq(legacyLegacyDayforgeRateLimitBuckets.windowStart, window.windowStart)
+        eq(legacyDayforgeRateLimitBuckets.scopeKey, input.scopeKey),
+        eq(legacyDayforgeRateLimitBuckets.bucketKey, input.bucketKey),
+        eq(legacyDayforgeRateLimitBuckets.action, input.action),
+        eq(legacyDayforgeRateLimitBuckets.windowStart, window.windowStart)
       )
     )
     .limit(1)
@@ -100,9 +100,9 @@ async function consumeBucket(
     );
   }
   await tx
-    .update(legacyLegacyDayforgeRateLimitBuckets)
-    .set({ requestCount: sql`${legacyLegacyDayforgeRateLimitBuckets.requestCount} + 1` })
-    .where(eq(legacyLegacyDayforgeRateLimitBuckets.id, row.id));
+    .update(legacyDayforgeRateLimitBuckets)
+    .set({ requestCount: sql`${legacyDayforgeRateLimitBuckets.requestCount} + 1` })
+    .where(eq(legacyDayforgeRateLimitBuckets.id, row.id));
 }
 
 function utcBudgetDate(now: Date): string {
@@ -125,17 +125,17 @@ async function reserveProviderBudget(
   const operation = "territory_discovery";
   const budgetDate = utcBudgetDate(input.now);
   await tx
-    .insert(legacyLegacyDayforgeProviderBudgets)
+    .insert(legacyDayforgeProviderBudgets)
     .values({ providerName: input.providerName, operation, budgetDate })
     .onDuplicateKeyUpdate({ set: { operation } });
   const rows = await tx
     .select()
-    .from(legacyLegacyDayforgeProviderBudgets)
+    .from(legacyDayforgeProviderBudgets)
     .where(
       and(
-        eq(legacyLegacyDayforgeProviderBudgets.providerName, input.providerName),
-        eq(legacyLegacyDayforgeProviderBudgets.operation, operation),
-        eq(legacyLegacyDayforgeProviderBudgets.budgetDate, budgetDate)
+        eq(legacyDayforgeProviderBudgets.providerName, input.providerName),
+        eq(legacyDayforgeProviderBudgets.operation, operation),
+        eq(legacyDayforgeProviderBudgets.budgetDate, budgetDate)
       )
     )
     .limit(1)
@@ -185,20 +185,20 @@ async function reserveProviderBudget(
     );
   }
   await tx
-    .update(legacyLegacyDayforgeProviderBudgets)
+    .update(legacyDayforgeProviderBudgets)
     .set({
-      requestCount: sql`${legacyLegacyDayforgeProviderBudgets.requestCount} + ${requestUnits}`,
-      estimatedCostMicros: sql`${legacyLegacyDayforgeProviderBudgets.estimatedCostMicros} + ${envPositiveInteger(
+      requestCount: sql`${legacyDayforgeProviderBudgets.requestCount} + ${requestUnits}`,
+      estimatedCostMicros: sql`${legacyDayforgeProviderBudgets.estimatedCostMicros} + ${envPositiveInteger(
         "DAYFORGE_TERRITORY_PROVIDER_ESTIMATED_COST_MICROS",
         50_000
       )}`,
       circuitState: row.circuitState === "open" ? "half_open" : row.circuitState,
     })
-    .where(eq(legacyLegacyDayforgeProviderBudgets.id, row.id));
+    .where(eq(legacyDayforgeProviderBudgets.id, row.id));
 }
 
 function decodeSession(
-  row: typeof legacyLegacyDayforgePublicPreviewSessions.$inferSelect,
+  row: typeof legacyDayforgePublicPreviewSessions.$inferSelect,
   now?: Date
 ): PublicPreviewSession {
   return {
@@ -245,7 +245,7 @@ async function providerSucceeded(
   now: Date
 ) {
   await tx
-    .update(legacyLegacyDayforgeProviderBudgets)
+    .update(legacyDayforgeProviderBudgets)
     .set({
       consecutiveFailureCount: 0,
       circuitState: "closed",
@@ -254,9 +254,9 @@ async function providerSucceeded(
     })
     .where(
       and(
-        eq(legacyLegacyDayforgeProviderBudgets.providerName, providerName),
-        eq(legacyLegacyDayforgeProviderBudgets.operation, "territory_discovery"),
-        eq(legacyLegacyDayforgeProviderBudgets.budgetDate, utcBudgetDate(now))
+        eq(legacyDayforgeProviderBudgets.providerName, providerName),
+        eq(legacyDayforgeProviderBudgets.operation, "territory_discovery"),
+        eq(legacyDayforgeProviderBudgets.budgetDate, utcBudgetDate(now))
       )
     );
 }
@@ -268,12 +268,12 @@ async function providerFailed(
 ) {
   const rows = await tx
     .select()
-    .from(legacyLegacyDayforgeProviderBudgets)
+    .from(legacyDayforgeProviderBudgets)
     .where(
       and(
-        eq(legacyLegacyDayforgeProviderBudgets.providerName, providerName),
-        eq(legacyLegacyDayforgeProviderBudgets.operation, "territory_discovery"),
-        eq(legacyLegacyDayforgeProviderBudgets.budgetDate, utcBudgetDate(now))
+        eq(legacyDayforgeProviderBudgets.providerName, providerName),
+        eq(legacyDayforgeProviderBudgets.operation, "territory_discovery"),
+        eq(legacyDayforgeProviderBudgets.budgetDate, utcBudgetDate(now))
       )
     )
     .limit(1)
@@ -287,7 +287,7 @@ async function providerFailed(
   );
   const open = consecutive >= threshold;
   await tx
-    .update(legacyLegacyDayforgeProviderBudgets)
+    .update(legacyDayforgeProviderBudgets)
     .set({
       failureCount: row.failureCount + 1,
       consecutiveFailureCount: consecutive,
@@ -295,10 +295,10 @@ async function providerFailed(
       circuitOpenedAt: open ? now : row.circuitOpenedAt,
       lastFailureAt: now,
     })
-    .where(eq(legacyLegacyDayforgeProviderBudgets.id, row.id));
+    .where(eq(legacyDayforgeProviderBudgets.id, row.id));
 }
 
-function legacyLegacyDayforgeEventInput(event: PublicPreviewEvent): LegacyDayforgeEventInput {
+function legacyDayforgeEventInput(event: PublicPreviewEvent): LegacyDayforgeEventInput {
   return {
     tenantId: event.tenantId,
     anonymousSessionId: event.anonymousSessionId,
@@ -372,7 +372,7 @@ export const publicPreviewRepository: PublicPreviewRepository = {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
     await db.transaction(async tx => {
-      await tx.insert(legacyLegacyDayforgePublicPreviewSessions).values({
+      await tx.insert(legacyDayforgePublicPreviewSessions).values({
         id: input.sessionId,
         tokenHash: input.tokenHash,
         ipHash: input.ipHash,
@@ -382,7 +382,7 @@ export const publicPreviewRepository: PublicPreviewRepository = {
         expiresAt: input.expiresAt,
         purgeAfter: input.purgeAfter,
       });
-      await writeLegacyDayforgeEventWith(tx, legacyLegacyDayforgeEventInput(input.event));
+      await writeLegacyDayforgeEventWith(tx, legacyDayforgeEventInput(input.event));
     });
   },
 
@@ -391,11 +391,11 @@ export const publicPreviewRepository: PublicPreviewRepository = {
     if (!db) return null;
     const rows = await db
       .select()
-      .from(legacyLegacyDayforgePublicPreviewSessions)
+      .from(legacyDayforgePublicPreviewSessions)
       .where(
         and(
-          eq(legacyLegacyDayforgePublicPreviewSessions.id, sessionId),
-          eq(legacyLegacyDayforgePublicPreviewSessions.tokenHash, tokenHash)
+          eq(legacyDayforgePublicPreviewSessions.id, sessionId),
+          eq(legacyDayforgePublicPreviewSessions.tokenHash, tokenHash)
         )
       )
       .limit(1);
@@ -409,8 +409,8 @@ export const publicPreviewRepository: PublicPreviewRepository = {
     return db.transaction(async tx => {
       const rows = await tx
         .select()
-        .from(legacyLegacyDayforgePublicPreviewSessions)
-        .where(eq(legacyLegacyDayforgePublicPreviewSessions.id, sessionId))
+        .from(legacyDayforgePublicPreviewSessions)
+        .where(eq(legacyDayforgePublicPreviewSessions.id, sessionId))
         .limit(1)
         .for("update");
       const row = rows[0];
@@ -422,15 +422,15 @@ export const publicPreviewRepository: PublicPreviewRepository = {
       }
       await reserveProviderBudget(tx, { providerName, now });
       await tx
-        .update(legacyLegacyDayforgePublicPreviewSessions)
+        .update(legacyDayforgePublicPreviewSessions)
         .set({
           providerName,
           executionStartedAt: row.executionStartedAt ?? now,
           executionLeaseUntil: leaseUntil,
           executionAttemptCount: row.executionAttemptCount + 1,
         })
-        .where(eq(legacyLegacyDayforgePublicPreviewSessions.id, sessionId));
-      await writeLegacyDayforgeEventWith(tx, legacyLegacyDayforgeEventInput(input.event));
+        .where(eq(legacyDayforgePublicPreviewSessions.id, sessionId));
+      await writeLegacyDayforgeEventWith(tx, legacyDayforgeEventInput(input.event));
       return "claimed" as const;
     });
   },
@@ -440,7 +440,7 @@ export const publicPreviewRepository: PublicPreviewRepository = {
     if (!db) throw new Error("Database not available");
     await db.transaction(async tx => {
       const result = await tx
-        .update(legacyLegacyDayforgePublicPreviewSessions)
+        .update(legacyDayforgePublicPreviewSessions)
         .set({
           status: "completed",
           providerName: input.providerName,
@@ -451,15 +451,15 @@ export const publicPreviewRepository: PublicPreviewRepository = {
         })
         .where(
           and(
-            eq(legacyLegacyDayforgePublicPreviewSessions.id, input.sessionId),
-            eq(legacyLegacyDayforgePublicPreviewSessions.status, "running")
+            eq(legacyDayforgePublicPreviewSessions.id, input.sessionId),
+            eq(legacyDayforgePublicPreviewSessions.status, "running")
           )
         );
       if (affectedRows(result) !== 1) {
         throw new Error("Public territory preview completion lost its session claim");
       }
       await providerSucceeded(tx, input.providerName, new Date());
-      await writeLegacyDayforgeEventWith(tx, legacyLegacyDayforgeEventInput(input.event));
+      await writeLegacyDayforgeEventWith(tx, legacyDayforgeEventInput(input.event));
     });
   },
 
@@ -468,7 +468,7 @@ export const publicPreviewRepository: PublicPreviewRepository = {
     if (!db) throw new Error("Database not available");
     await db.transaction(async tx => {
       const result = await tx
-        .update(legacyLegacyDayforgePublicPreviewSessions)
+        .update(legacyDayforgePublicPreviewSessions)
         .set({
           status: "failed",
           providerName: input.providerName,
@@ -477,15 +477,15 @@ export const publicPreviewRepository: PublicPreviewRepository = {
         })
         .where(
           and(
-            eq(legacyLegacyDayforgePublicPreviewSessions.id, input.sessionId),
-            eq(legacyLegacyDayforgePublicPreviewSessions.status, "running")
+            eq(legacyDayforgePublicPreviewSessions.id, input.sessionId),
+            eq(legacyDayforgePublicPreviewSessions.status, "running")
           )
         );
       if (affectedRows(result) !== 1) {
         throw new Error("Public territory preview failure lost its session claim");
       }
       await providerFailed(tx, input.providerName, new Date());
-      await writeLegacyDayforgeEventWith(tx, legacyLegacyDayforgeEventInput(input.event));
+      await writeLegacyDayforgeEventWith(tx, legacyDayforgeEventInput(input.event));
     });
   },
 
@@ -552,15 +552,15 @@ export const publicPreviewRepository: PublicPreviewRepository = {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
     const result = await db
-      .update(legacyLegacyDayforgePublicPreviewSessions)
+      .update(legacyDayforgePublicPreviewSessions)
       .set({
         selectedCandidateKey: candidateKey,
         sampleMissionCreatedAt: sampleMissionCreated ? now : null,
       })
       .where(
         and(
-          eq(legacyLegacyDayforgePublicPreviewSessions.id, sessionId),
-          eq(legacyLegacyDayforgePublicPreviewSessions.status, "completed")
+          eq(legacyDayforgePublicPreviewSessions.id, sessionId),
+          eq(legacyDayforgePublicPreviewSessions.status, "completed")
         )
       );
     return affectedRows(result) === 1;
@@ -572,8 +572,8 @@ export const publicPreviewRepository: PublicPreviewRepository = {
     return db.transaction(async tx => {
       const rows = await tx
         .select()
-        .from(legacyLegacyDayforgePublicPreviewSessions)
-        .where(eq(legacyLegacyDayforgePublicPreviewSessions.id, sessionId))
+        .from(legacyDayforgePublicPreviewSessions)
+        .where(eq(legacyDayforgePublicPreviewSessions.id, sessionId))
         .limit(1)
         .for("update");
       const row = rows[0];
@@ -592,9 +592,9 @@ export const publicPreviewRepository: PublicPreviewRepository = {
         return "not_convertible" as const;
       }
       await tx
-        .update(legacyLegacyDayforgePublicPreviewSessions)
+        .update(legacyDayforgePublicPreviewSessions)
         .set({ status: "converting", convertedTenantId: tenantId })
-        .where(eq(legacyLegacyDayforgePublicPreviewSessions.id, sessionId));
+        .where(eq(legacyDayforgePublicPreviewSessions.id, sessionId));
       return "claimed" as const;
     });
   },
@@ -603,24 +603,24 @@ export const publicPreviewRepository: PublicPreviewRepository = {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
     const result = await db
-      .update(legacyLegacyDayforgePublicPreviewSessions)
+      .update(legacyDayforgePublicPreviewSessions)
       .set({ status: "converted", convertedMissionId: missionId })
       .where(
         and(
-          eq(legacyLegacyDayforgePublicPreviewSessions.id, sessionId),
-          eq(legacyLegacyDayforgePublicPreviewSessions.status, "converting"),
-          eq(legacyLegacyDayforgePublicPreviewSessions.convertedTenantId, tenantId)
+          eq(legacyDayforgePublicPreviewSessions.id, sessionId),
+          eq(legacyDayforgePublicPreviewSessions.status, "converting"),
+          eq(legacyDayforgePublicPreviewSessions.convertedTenantId, tenantId)
         )
       );
     if (affectedRows(result) === 1) return;
     const existing = await db
       .select({
-        tenantId: legacyLegacyDayforgePublicPreviewSessions.convertedTenantId,
-        missionId: legacyLegacyDayforgePublicPreviewSessions.convertedMissionId,
-        status: legacyLegacyDayforgePublicPreviewSessions.status,
+        tenantId: legacyDayforgePublicPreviewSessions.convertedTenantId,
+        missionId: legacyDayforgePublicPreviewSessions.convertedMissionId,
+        status: legacyDayforgePublicPreviewSessions.status,
       })
-      .from(legacyLegacyDayforgePublicPreviewSessions)
-      .where(eq(legacyLegacyDayforgePublicPreviewSessions.id, sessionId))
+      .from(legacyDayforgePublicPreviewSessions)
+      .where(eq(legacyDayforgePublicPreviewSessions.id, sessionId))
       .limit(1);
     if (
       existing[0]?.status !== "converted" ||
@@ -632,7 +632,7 @@ export const publicPreviewRepository: PublicPreviewRepository = {
   },
 
   async appendEvent(event: PublicPreviewEvent) {
-    await writeLegacyDayforgeEvent(legacyLegacyDayforgeEventInput(event));
+    await writeLegacyDayforgeEvent(legacyDayforgeEventInput(event));
   },
 };
 

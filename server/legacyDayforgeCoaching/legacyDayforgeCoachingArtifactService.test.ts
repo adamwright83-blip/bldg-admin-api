@@ -1,23 +1,23 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import type { LegacyDayforgeCoachingOutput } from "@shared/legacyLegacyDayforgeCoaching";
+import type { LegacyDayforgeCoachingOutput } from "@shared/legacyDayforgeCoaching";
 import {
   createLegacyDayforgeCoachingArtifactService,
-  legacyLegacyDayforgeCoachingContextHash,
-} from "./legacyLegacyDayforgeCoachingArtifactService";
+  legacyDayforgeCoachingContextHash,
+} from "./legacyDayforgeCoachingArtifactService";
 import type {
   LegacyDayforgeCoachingArtifact,
   LegacyDayforgeCoachingArtifactRepository,
   PersistLegacyDayforgeCoachingArtifactInput,
-} from "./legacyLegacyDayforgeCoachingArtifactTypes";
-import { legacyLegacyDayforgeCoachingArtifactCacheKey } from "./legacyLegacyDayforgeCoachingArtifactTypes";
+} from "./legacyDayforgeCoachingArtifactTypes";
+import { legacyDayforgeCoachingArtifactCacheKey } from "./legacyDayforgeCoachingArtifactTypes";
 import {
   LegacyDayforgeCoachingPolicyError,
   buildDeterministicLegacyDayforgeCoachingFallback,
   groundLegacyDayforgeModelCoachingOutput,
   type LegacyDayforgeCoachingGroundingEvidence,
-} from "./legacyLegacyDayforgeCoachingPolicy";
+} from "./legacyDayforgeCoachingPolicy";
 
 const NOW = new Date("2026-07-23T18:00:00.000Z");
 
@@ -333,10 +333,10 @@ describe("DayForge coaching artifact service", () => {
   });
 
   it("uses canonical key ordering for stable context hashes", () => {
-    expect(legacyLegacyDayforgeCoachingContextHash({ account: { id: 1, type: "hotel" }, known: true }))
-      .toBe(legacyLegacyDayforgeCoachingContextHash({ known: true, account: { type: "hotel", id: 1 } }));
-    expect(legacyLegacyDayforgeCoachingContextHash({ values: [1, 2] }))
-      .not.toBe(legacyLegacyDayforgeCoachingContextHash({ values: [2, 1] }));
+    expect(legacyDayforgeCoachingContextHash({ account: { id: 1, type: "hotel" }, known: true }))
+      .toBe(legacyDayforgeCoachingContextHash({ known: true, account: { type: "hotel", id: 1 } }));
+    expect(legacyDayforgeCoachingContextHash({ values: [1, 2] }))
+      .not.toBe(legacyDayforgeCoachingContextHash({ values: [2, 1] }));
   });
 
   it("uses a content cache key that is stable across artifact versions and changes by model", () => {
@@ -350,9 +350,9 @@ describe("DayForge coaching artifact service", () => {
       promptVersion: "coaching-v1",
       contextHash: "c".repeat(64),
     };
-    expect(legacyLegacyDayforgeCoachingArtifactCacheKey(input)).toBe(legacyLegacyDayforgeCoachingArtifactCacheKey({ ...input }));
-    expect(legacyLegacyDayforgeCoachingArtifactCacheKey(input)).not.toBe(
-      legacyLegacyDayforgeCoachingArtifactCacheKey({ ...input, modelId: "next-model" }),
+    expect(legacyDayforgeCoachingArtifactCacheKey(input)).toBe(legacyDayforgeCoachingArtifactCacheKey({ ...input }));
+    expect(legacyDayforgeCoachingArtifactCacheKey(input)).not.toBe(
+      legacyDayforgeCoachingArtifactCacheKey({ ...input, modelId: "next-model" }),
     );
   });
 

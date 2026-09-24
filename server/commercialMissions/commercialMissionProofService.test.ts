@@ -313,7 +313,7 @@ describe("commercial mission proof persistence contract", () => {
 
   it("tenant-scopes reads and writes, serializes on the step, and binds request IDs", () => {
     expect(serviceSource).toContain(
-      "eq(legacyLegacyDayforgeEvidenceUploads.tenantId, input.tenantId)"
+      "eq(legacyDayforgeEvidenceUploads.tenantId, input.tenantId)"
     );
     expect(serviceSource).toContain(
       "eq(commercialMissionSteps.tenantId, input.tenantId)"

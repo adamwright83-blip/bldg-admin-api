@@ -53,7 +53,7 @@ pnpm install --frozen-lockfile
 Copy `.env.example` (if present) or create `.env` at the repo root. The
 variables below are the real names the code reads — confirmed against
 `server/_core/env.ts`, `server/territory/googlePlacesTerritoryProvider.ts`,
-`server/legacyLegacyDayforgeDemo/providerStatus.ts`, `server/_core/sms.ts`, and
+`server/legacyDayforgeDemo/providerStatus.ts`, `server/_core/sms.ts`, and
 `server/procurement/agentMailVendorEmailProvider.ts`.
 
 **Demo mode (required to reach the demo control page):**
@@ -89,7 +89,7 @@ variables below are the real names the code reads — confirmed against
   `DAYFORGE_STRIPE_TRIAL_DAYS`, `DAYFORGE_STRIPE_FOUNDING_PLAN`,
   `DAYFORGE_STRIPE_FOUNDING_AVAILABILITY`, `DAYFORGE_STRIPE_MAX_SUBSCRIPTIONS`,
   `DAYFORGE_STRIPE_ENTITLEMENTS`, `DAYFORGE_BILLING_GRACE_DAYS`.
-- `server/legacyLegacyDayforgeDemo/providerStatus.ts` reports the Stripe demo chip by
+- `server/legacyDayforgeDemo/providerStatus.ts` reports the Stripe demo chip by
   checking `DAYFORGE_BILLING_STRIPE_SECRET_KEY` directly (the same variable
   `server/saas/saasBilling.ts` uses for real DayForge billing calls): unset
   or shorter than 20 characters → `NOT_CONFIGURED`, an `sk_live_...` key →
@@ -129,7 +129,7 @@ export DATABASE_URL='mysql://root:root@127.0.0.1:3306/dayforge_demo'
 pnpm db:legacy-dayforge:release
 ```
 
-This runs `server/legacyLegacyDayforgeRelease/applyReleaseMigrations.ts`, which applies
+This runs `server/legacyDayforgeRelease/applyReleaseMigrations.ts`, which applies
 every SQL file in `drizzle/` in filename order (the post-0017 DayForge
 migrations are manually maintained, per `docs/legacy-dayforge-release-gates.md`).
 
@@ -191,7 +191,7 @@ tenant" error mid-demo:
   - Email: `demo-owner@sunsetlaundry.example` (or `demo-field@sunsetlaundry.example`
     for the driver/field role)
   - Password: `SunsetDemo2026!`
-  - (`server/legacyLegacyDayforgeDemo/demoTenantSeed.ts` seeds this password's bcrypt
+  - (`server/legacyDayforgeDemo/demoTenantSeed.ts` seeds this password's bcrypt
     hash into `dayforge_saas_user_credentials` on every `legacy-dayforge:demo:setup`
     / `legacy-dayforge:demo:reset` run; it's a fixed, publicly-documented demo-only
     value, never a production secret.)
@@ -209,7 +209,7 @@ Open `http://localhost:3000/dayforge-demo` (requires
 `VITE_DAYFORGE_DEMO_MODE=true`, `DAYFORGE_DEMO_ENABLED=true`, and an
 authenticated admin session). The provider chip row at the top
 (Google / Stripe / Email / SMS / Print) shows exactly what
-`server/legacyLegacyDayforgeDemo/providerStatus.ts` detects from your current `.env` —
+`server/legacyDayforgeDemo/providerStatus.ts` detects from your current `.env` —
 confirm every chip matches what you intend to demo *before* the room fills
 up. A red/`NOT_CONFIGURED` chip mid-presentation is the single most avoidable
 failure in this runbook.

@@ -8,7 +8,7 @@ import {
   commercialMissionGameRewards,
   commercialMissionPhoneHandoffs,
   commercialOrderAttributions,
-  legacyLegacyDayforgeAuditEvents,
+  legacyDayforgeAuditEvents,
   orders,
 } from "../../drizzle/schema";
 import { createCommercialMission } from "../commercialMissions/commercialMissionStore";
@@ -736,15 +736,15 @@ describe.skipIf(!runDatabaseGate)(
 
         const auditRows = await db
           .select()
-          .from(legacyLegacyDayforgeAuditEvents)
+          .from(legacyDayforgeAuditEvents)
           .where(
             and(
-              eq(legacyLegacyDayforgeAuditEvents.tenantId, tenantId),
-              eq(legacyLegacyDayforgeAuditEvents.entityType, "commercial_mission"),
-              eq(legacyLegacyDayforgeAuditEvents.entityId, String(mission.id))
+              eq(legacyDayforgeAuditEvents.tenantId, tenantId),
+              eq(legacyDayforgeAuditEvents.entityType, "commercial_mission"),
+              eq(legacyDayforgeAuditEvents.entityId, String(mission.id))
             )
           )
-          .orderBy(asc(legacyLegacyDayforgeAuditEvents.createdAt), asc(legacyLegacyDayforgeAuditEvents.id));
+          .orderBy(asc(legacyDayforgeAuditEvents.createdAt), asc(legacyDayforgeAuditEvents.id));
         expect(auditRows.length).toBeGreaterThan(5);
         assertOrderedEventRows(auditRows);
         expect(new Set(auditRows.map(row => row.tenantId))).toEqual(

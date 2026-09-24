@@ -1,8 +1,8 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
 import {
-  legacyLegacyDayforgeMissionFieldProcedure,
-  legacyLegacyDayforgeTenantMemberProcedure,
+  legacyDayforgeMissionFieldProcedure,
+  legacyDayforgeTenantMemberProcedure,
   router,
 } from "../_core/trpc";
 import {
@@ -26,11 +26,11 @@ export const armoryRouter = router({
    * DayForge Field entitlement are resolved server-side. No intel/entity IDs
    * are accepted from the browser, and the admin corpus route remains closed.
    */
-  strongholdIntel: legacyLegacyDayforgeMissionFieldProcedure.query(() =>
+  strongholdIntel: legacyDayforgeMissionFieldProcedure.query(() =>
     getDriverSafeSalesIntel()
   ),
 
-  get: legacyLegacyDayforgeTenantMemberProcedure
+  get: legacyDayforgeTenantMemberProcedure
     .input(
       z
         .object({ accountType: z.string().trim().min(1).max(96).optional() })
@@ -44,7 +44,7 @@ export const armoryRouter = router({
    * Contextual loadout for one encounter. The same archetype on a different
    * channel legitimately returns a different set.
    */
-  weapons: legacyLegacyDayforgeMissionFieldProcedure
+  weapons: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         archetype: z.enum(OBJECTION_ARCHETYPES),
@@ -65,7 +65,7 @@ export const armoryRouter = router({
     ),
 
   /** Records that a weapon was chosen in a real encounter. */
-  recordUsage: legacyLegacyDayforgeMissionFieldProcedure
+  recordUsage: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),

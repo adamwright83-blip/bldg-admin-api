@@ -12,7 +12,7 @@ export default function LegacyDayforgeProofPage() {
   const { loading, isAuthenticated } = useAuth();
   const defaultEnd = new Date(); const defaultStart = new Date(defaultEnd.getTime() - 30 * 86_400_000);
   const [start, setStart] = useState(ymd(defaultStart)); const [end, setEnd] = useState(ymd(defaultEnd));
-  const dashboard = trpc.system.legacyLegacyDayforgeProof.dashboard.useQuery({ start: new Date(`${start}T00:00:00`), end: new Date(`${end}T23:59:59.999`) }, { enabled: isAuthenticated });
+  const dashboard = trpc.system.legacyDayforgeProof.dashboard.useQuery({ start: new Date(`${start}T00:00:00`), end: new Date(`${end}T23:59:59.999`) }, { enabled: isAuthenticated });
   if (loading) return <main className="min-h-screen bg-slate-950 text-white grid place-items-center">Loading proof…</main>;
   if (!isAuthenticated) return <LoginForm role="admin" onSuccess={() => location.reload()} />;
   const data = dashboard.data;

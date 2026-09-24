@@ -196,7 +196,7 @@ export function resolveTrustedClientIp(
   return resolved || "unknown";
 }
 
-export function legacyLegacyDayforgeSecurityHeaders(
+export function legacyDayforgeSecurityHeaders(
   env: SecurityEnvironment = process.env
 ): RequestHandler {
   const configuredFrames = [

@@ -1,10 +1,10 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { useState, type FormEvent } from "react";
 import "./legacy-dayforge-onboarding.css";
-import { resolveLegacyDayforgeAuthenticatedDestination } from "@shared/legacyLegacyDayforgeContinuation";
+import { resolveLegacyDayforgeAuthenticatedDestination } from "@shared/legacyDayforgeContinuation";
 import { PRODUCT_NAME } from "@shared/productIdentity";
 
-function legacyLegacyDayforgeApiBase(): string {
+function legacyDayforgeApiBase(): string {
   if (
     typeof window !== "undefined" &&
     window.location.hostname.toLowerCase() === "admin.bldg.chat"
@@ -35,7 +35,7 @@ export default function LegacyDayforgeLoginPage() {
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch(`${legacyLegacyDayforgeApiBase()}/api/dayforge/auth/login`, {
+      const response = await fetch(`${legacyDayforgeApiBase()}/api/dayforge/auth/login`, {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },

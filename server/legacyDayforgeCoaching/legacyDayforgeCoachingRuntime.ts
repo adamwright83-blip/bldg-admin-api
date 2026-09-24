@@ -10,8 +10,8 @@
 import { ENV } from "../_core/env";
 import { invokeLLM, type InvokeResult } from "../_core/llm";
 import { getCommercialMission } from "../commercialMissions/commercialMissionStore";
-import { createLegacyDayforgeCoachingArtifactService, legacyLegacyDayforgeCoachingContextHash } from "./legacyLegacyDayforgeCoachingArtifactService";
-import { legacyLegacyDayforgeCoachingArtifactRepository, getActiveLegacyDayforgeCoachingArtifact } from "./legacyLegacyDayforgeCoachingArtifactStore";
+import { createLegacyDayforgeCoachingArtifactService, legacyDayforgeCoachingContextHash } from "./legacyDayforgeCoachingArtifactService";
+import { legacyDayforgeCoachingArtifactRepository, getActiveLegacyDayforgeCoachingArtifact } from "./legacyDayforgeCoachingArtifactStore";
 
 const PROMPT_VERSION = "legacy-dayforge-field-coach-v1";
 const MODEL_SCHEMA = {
@@ -53,8 +53,8 @@ export async function generateLegacyDayforgeMissionCoaching(input: {
     contact: mission.account.decisionMaker.name ? { name: mission.account.decisionMaker.name, title: mission.account.decisionMaker.title, provenance: mission.account.decisionMaker.source ?? "unknown" } : null,
     unknowns: [!mission.account.decisionMaker.name ? "decision-maker name" : null].filter(Boolean),
   };
-  const contextHash = legacyLegacyDayforgeCoachingContextHash(context);
-  const service = createLegacyDayforgeCoachingArtifactService({ repository: legacyLegacyDayforgeCoachingArtifactRepository });
+  const contextHash = legacyDayforgeCoachingContextHash(context);
+  const service = createLegacyDayforgeCoachingArtifactService({ repository: legacyDayforgeCoachingArtifactRepository });
   if (!input.refresh) {
     const reusable = await service.findReusable({ tenantId: input.tenantId, missionId: input.missionId, missionStepId: input.stepId, accountId: mission.account.accountId, provider: "anthropic", modelId: ENV.anthropicModel, promptVersion: PROMPT_VERSION, contextHash });
     if (reusable) return reusable;

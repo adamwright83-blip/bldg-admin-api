@@ -10,7 +10,7 @@
 import { z } from "zod";
 import {
   adminProcedure,
-  legacyLegacyDayforgeTenantMemberProcedure,
+  legacyDayforgeTenantMemberProcedure,
   router,
 } from "../_core/trpc";
 import { PLACEMENT_POINTS, TARGET_SOURCE_CLASSES } from "../../shared/campaignRun";
@@ -39,7 +39,7 @@ const targetInput = z.object({
 });
 
 export const campaignRunRouter = router({
-  listPacks: legacyLegacyDayforgeTenantMemberProcedure
+  listPacks: legacyDayforgeTenantMemberProcedure
     .input(z.object({}).optional())
     .query(() =>
       listFictionPacks().map(pack => ({
@@ -50,7 +50,7 @@ export const campaignRunRouter = router({
       }))
     ),
 
-  listMine: legacyLegacyDayforgeTenantMemberProcedure
+  listMine: legacyDayforgeTenantMemberProcedure
     .input(z.object({}).optional())
     .query(({ ctx }) =>
       listOperatorRuns({
@@ -59,13 +59,13 @@ export const campaignRunRouter = router({
       })
     ),
 
-  listRunSlots: legacyLegacyDayforgeTenantMemberProcedure
+  listRunSlots: legacyDayforgeTenantMemberProcedure
     .input(z.object({ campaignRunId: z.string() }))
     .query(({ ctx, input }) =>
       listRunSlots({ tenantId: ctx.tenantId, ...input })
     ),
 
-  listTargets: legacyLegacyDayforgeTenantMemberProcedure
+  listTargets: legacyDayforgeTenantMemberProcedure
     .input(z.object({ targetSetId: z.string() }))
     .query(({ ctx, input }) =>
       listTargets({ tenantId: ctx.tenantId, targetSetId: input.targetSetId })
@@ -104,7 +104,7 @@ export const campaignRunRouter = router({
       })
     ),
 
-  projection: legacyLegacyDayforgeTenantMemberProcedure
+  projection: legacyDayforgeTenantMemberProcedure
     .input(z.object({ campaignRunId: z.string() }))
     .query(({ ctx, input }) =>
       getRunProjection({ tenantId: ctx.tenantId, ...input })
@@ -113,7 +113,7 @@ export const campaignRunRouter = router({
   /* Coordinates are required and checked server-side. A caller cannot declare
    * `device_location`, and cannot choose the timestamp the validity window
    * and cadence are both read from. */
-  recordPresence: legacyLegacyDayforgeTenantMemberProcedure
+  recordPresence: legacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         campaignRunId: z.string(),
@@ -131,7 +131,7 @@ export const campaignRunRouter = router({
       })
     ),
 
-  recordPlacement: legacyLegacyDayforgeTenantMemberProcedure
+  recordPlacement: legacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         campaignRunId: z.string(),
@@ -148,7 +148,7 @@ export const campaignRunRouter = router({
       })
     ),
 
-  replaceTarget: legacyLegacyDayforgeTenantMemberProcedure
+  replaceTarget: legacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         campaignRunId: z.string(),

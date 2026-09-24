@@ -2,11 +2,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   configuredTrustProxy,
-  legacyLegacyDayforgeSecurityHeaders,
+  legacyDayforgeSecurityHeaders,
   evaluateMutationOrigin,
   isAllowedLegacyDayforgeOrigin,
   resolveTrustedClientIp,
-} from "./legacyLegacyDayforgeSecurity";
+} from "./legacyDayforgeSecurity";
 import { publicProcedure, router } from "../_core/trpc";
 
 const production = { NODE_ENV: "production" } as NodeJS.ProcessEnv;
@@ -125,7 +125,7 @@ describe("DayForge request security", () => {
   it("sets CSP and standard hardening headers", () => {
     const setHeader = vi.fn();
     const next = vi.fn();
-    legacyLegacyDayforgeSecurityHeaders({
+    legacyDayforgeSecurityHeaders({
       ...production,
       VITE_SCHEDULER_URL: "https://scheduler.example.com/team/dayforge",
       VITE_API_URL: "https://api.example.com/v1",
@@ -176,7 +176,7 @@ describe("DayForge request security", () => {
     // world that had no geography in it.
     const setHeader = vi.fn();
     const next = vi.fn();
-    legacyLegacyDayforgeSecurityHeaders(production)({} as never, { setHeader } as never, next);
+    legacyDayforgeSecurityHeaders(production)({} as never, { setHeader } as never, next);
     const csp = setHeader.mock.calls.find(
       call => call[0] === "Content-Security-Policy"
     )?.[1] as string;

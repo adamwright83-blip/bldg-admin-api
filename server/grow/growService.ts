@@ -12,7 +12,7 @@ import {
   commercialPipelineRecords,
   customerChurnSnapshots,
   customerRecoveryInterventions,
-  legacyLegacyDayforgeSaasTenantLocations,
+  legacyDayforgeSaasTenantLocations,
 } from "../../drizzle/schema";
 import { deterministicEstimate, sourcedFact, unknownValue } from "../../shared/businessGame";
 import { getDb } from "../db";
@@ -37,7 +37,7 @@ export async function getGrowProjection(input: { tenantId: string; now?: Date })
       .leftJoin(customerRecoveryInterventions, and(eq(customerRecoveryInterventions.tenantId, input.tenantId), eq(customerRecoveryInterventions.customerKeyHash, customerChurnSnapshots.customerKeyHash)))
       .where(and(eq(customerChurnSnapshots.tenantId, input.tenantId), inArray(customerChurnSnapshots.grade, ["medium", "high"])))
       .orderBy(desc(customerChurnSnapshots.createdAt)).limit(100),
-    db.select().from(legacyLegacyDayforgeSaasTenantLocations).where(eq(legacyLegacyDayforgeSaasTenantLocations.tenantId, input.tenantId)),
+    db.select().from(legacyDayforgeSaasTenantLocations).where(eq(legacyDayforgeSaasTenantLocations.tenantId, input.tenantId)),
     db.select().from(businessGameMoveDecisions).where(eq(businessGameMoveDecisions.tenantId, input.tenantId)).orderBy(desc(businessGameMoveDecisions.createdAt)),
   ]);
   const latestDecision = new Map<string, string>();

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   GOLDLINE_CLIENT_EVENT_NAMES,
   sanitizeLegacyDayforgeProductEventProperties,
-} from "./legacyLegacyDayforgeEvents";
+} from "./legacyDayforgeEvents";
 describe("Goldline analytics closure", () => {
   it("allows privacy-safe target start", () => {
     expect(GOLDLINE_CLIENT_EVENT_NAMES).toContain("cold_call_target_started");

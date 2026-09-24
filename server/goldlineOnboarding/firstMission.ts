@@ -1,7 +1,7 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import { legacyLegacyDayforgeSaasExternalCustomers, goldlineWorldEvents } from "../../drizzle/schema";
+import { legacyDayforgeSaasExternalCustomers, goldlineWorldEvents } from "../../drizzle/schema";
 import type { FirstMission, GoldlineOnboardingSession, WorldAnchor } from "../../shared/goldlineOnboarding";
 import { compileLocalWorld } from "../../shared/goldlineLocalWorld";
 import { GUARDIAN_ROSTER_IDS } from "../../shared/goldlineGuardians";
@@ -13,7 +13,7 @@ export function buildFirstMission(session:GoldlineOnboardingSession,checkpoint:W
  const profile=session.interpretation!.profile;
  return {id:`first-${session.id}`,archetype:"TERRITORY_SCOUT",title:`Scout ${checkpoint.label}`,objective:`Visit a publicly accessible spot near ${checkpoint.label}. Look for one concrete next step toward: ${profile.objective90Day.replace(/\s*[.!?]+\s*$/,"")}. Record what you actually observed, including if nothing useful happened.`,avoidance:profile.avoidancePattern,guardianId:GUARDIAN_ROSTER_IDS[stableHash(profile.avoidancePattern)%GUARDIAN_ROSTER_IDS.length],territoryId,checkpoint,status:"active",outcome:null,traversalCompletedAt:null,gameplayCompletedAt:null};
 }
-export async function importedCustomers(tenantId:string){const db=await onboardingDb();return db.select().from(legacyLegacyDayforgeSaasExternalCustomers).where(and(eq(legacyLegacyDayforgeSaasExternalCustomers.tenantId,tenantId),eq(legacyLegacyDayforgeSaasExternalCustomers.providerKey,"goldline_customer_csv")));}
+export async function importedCustomers(tenantId:string){const db=await onboardingDb();return db.select().from(legacyDayforgeSaasExternalCustomers).where(and(eq(legacyDayforgeSaasExternalCustomers.tenantId,tenantId),eq(legacyDayforgeSaasExternalCustomers.providerKey,"goldline_customer_csv")));}
 export async function revealWorld(tenantId:string){
  const session=await readSession(tenantId);if(!session?.interpretation)throw new Error("Interpret your five answers first.");if(session.status==="COMPLETE")return session;
  // The concise geocodable name resolves to one area; the fuller description is

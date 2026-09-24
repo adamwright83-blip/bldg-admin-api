@@ -1,13 +1,13 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { and, eq } from "drizzle-orm";
 import {
-  legacyLegacyDayforgeAuditEvents,
-  legacyLegacyDayforgeProductEvents,
+  legacyDayforgeAuditEvents,
+  legacyDayforgeProductEvents,
 } from "../../drizzle/schema";
 import {
   sanitizeLegacyDayforgeProductEventProperties,
   type LegacyDayforgeProductEventName,
-} from "@shared/legacyLegacyDayforgeEvents";
+} from "@shared/legacyDayforgeEvents";
 import { getDb } from "../db";
 
 const PRODUCT_ANALYTICS_RETENTION_MS = 400 * 24 * 60 * 60 * 1000;
@@ -65,7 +65,7 @@ function assertIdentifier(label: string, value: string, max: number): string {
   return normalized;
 }
 
-export function legacyLegacyDayforgeEventScope(input: {
+export function legacyDayforgeEventScope(input: {
   tenantId?: string | null;
   anonymousSessionId?: string | null;
   systemScopeId?: string | null;
@@ -85,7 +85,7 @@ export function legacyLegacyDayforgeEventScope(input: {
 }
 
 export function buildLegacyDayforgeEventRows(input: LegacyDayforgeEventInput) {
-  const scopeKey = legacyLegacyDayforgeEventScope(input);
+  const scopeKey = legacyDayforgeEventScope(input);
   const tenantId = input.tenantId?.trim() || null;
   const anonymousSessionId = input.anonymousSessionId?.trim() || null;
   const occurredAt = input.occurredAt ?? new Date();
@@ -164,7 +164,7 @@ export async function writeLegacyDayforgeEventWith(
 ) {
   const rows = buildLegacyDayforgeEventRows(input);
   await connection
-    .insert(legacyLegacyDayforgeAuditEvents)
+    .insert(legacyDayforgeAuditEvents)
     .values(rows.audit)
     .onDuplicateKeyUpdate({
       // Deliberately immutable: this acquires the unique-key lock without
@@ -173,17 +173,17 @@ export async function writeLegacyDayforgeEventWith(
     });
   const persistedAudit = await connection
     .select({
-      id: legacyLegacyDayforgeAuditEvents.id,
-      entityType: legacyLegacyDayforgeAuditEvents.entityType,
-      entityId: legacyLegacyDayforgeAuditEvents.entityId,
-      eventName: legacyLegacyDayforgeAuditEvents.eventName,
-      correlationId: legacyLegacyDayforgeAuditEvents.correlationId,
+      id: legacyDayforgeAuditEvents.id,
+      entityType: legacyDayforgeAuditEvents.entityType,
+      entityId: legacyDayforgeAuditEvents.entityId,
+      eventName: legacyDayforgeAuditEvents.eventName,
+      correlationId: legacyDayforgeAuditEvents.correlationId,
     })
-    .from(legacyLegacyDayforgeAuditEvents)
+    .from(legacyDayforgeAuditEvents)
     .where(
       and(
-        eq(legacyLegacyDayforgeAuditEvents.scopeKey, rows.audit.scopeKey),
-        eq(legacyLegacyDayforgeAuditEvents.idempotencyKey, rows.audit.idempotencyKey)
+        eq(legacyDayforgeAuditEvents.scopeKey, rows.audit.scopeKey),
+        eq(legacyDayforgeAuditEvents.idempotencyKey, rows.audit.idempotencyKey)
       )
     )
     .limit(1);
@@ -202,23 +202,23 @@ export async function writeLegacyDayforgeEventWith(
 
   if (rows.product) {
     await connection
-      .insert(legacyLegacyDayforgeProductEvents)
+      .insert(legacyDayforgeProductEvents)
       .values(rows.product)
       .onDuplicateKeyUpdate({
         set: { idempotencyKey: rows.product.idempotencyKey },
       });
     const persistedProduct = await connection
       .select({
-        eventName: legacyLegacyDayforgeProductEvents.eventName,
-        entityType: legacyLegacyDayforgeProductEvents.entityType,
-        entityId: legacyLegacyDayforgeProductEvents.entityId,
-        correlationId: legacyLegacyDayforgeProductEvents.correlationId,
+        eventName: legacyDayforgeProductEvents.eventName,
+        entityType: legacyDayforgeProductEvents.entityType,
+        entityId: legacyDayforgeProductEvents.entityId,
+        correlationId: legacyDayforgeProductEvents.correlationId,
       })
-      .from(legacyLegacyDayforgeProductEvents)
+      .from(legacyDayforgeProductEvents)
       .where(
         and(
-          eq(legacyLegacyDayforgeProductEvents.scopeKey, rows.product.scopeKey),
-          eq(legacyLegacyDayforgeProductEvents.idempotencyKey, rows.product.idempotencyKey)
+          eq(legacyDayforgeProductEvents.scopeKey, rows.product.scopeKey),
+          eq(legacyDayforgeProductEvents.idempotencyKey, rows.product.idempotencyKey)
         )
       )
       .limit(1);

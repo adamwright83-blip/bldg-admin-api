@@ -76,13 +76,13 @@ export async function createLegacyDayforgeSubscriptionCheckout(input: {
       success_url: `${appUrl()}/dayforge-onboarding?session=${onboarding.id}&checkout=success`,
       cancel_url: `${appUrl()}/dayforge-onboarding?session=${onboarding.id}&checkout=cancelled`,
       metadata: {
-        legacyLegacyDayforgeOnboardingSessionId: onboarding.id,
-        legacyLegacyDayforgePlanKey: plan.planKey,
+        legacyDayforgeOnboardingSessionId: onboarding.id,
+        legacyDayforgePlanKey: plan.planKey,
       },
       subscription_data: {
         metadata: {
-          legacyLegacyDayforgeOnboardingSessionId: onboarding.id,
-          legacyLegacyDayforgePlanKey: plan.planKey,
+          legacyDayforgeOnboardingSessionId: onboarding.id,
+          legacyDayforgePlanKey: plan.planKey,
         },
         ...(plan.trialDays > 0 ? { trial_period_days: plan.trialDays } : {}),
       },
@@ -147,8 +147,8 @@ async function syncStripeSubscription(input: {
   eventType: string;
 }) {
   const metadata = input.subscription.metadata ?? {};
-  const onboardingSessionId = metadata.legacyLegacyDayforgeOnboardingSessionId;
-  const planKey = metadata.legacyLegacyDayforgePlanKey;
+  const onboardingSessionId = metadata.legacyDayforgeOnboardingSessionId;
+  const planKey = metadata.legacyDayforgePlanKey;
   if (!onboardingSessionId || !planKey) {
     throw new Error("Stripe subscription is missing DayForge metadata");
   }

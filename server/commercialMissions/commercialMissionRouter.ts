@@ -11,12 +11,12 @@ import {
 } from "@shared/commercialMission";
 import { FIELD_OUTCOME_REASONS } from "@shared/commercialMissionField";
 import {
-  legacyLegacyDayforgeMissionFieldProcedure,
-  legacyLegacyDayforgeMissionOperatorProcedure,
-  legacyLegacyDayforgeTenantAdminProcedure,
+  legacyDayforgeMissionFieldProcedure,
+  legacyDayforgeMissionOperatorProcedure,
+  legacyDayforgeTenantAdminProcedure,
   router,
 } from "../_core/trpc";
-import { listLegacyDayforgeTimeline } from "../legacyLegacyDayforgeEvents/legacyLegacyDayforgeTimeline";
+import { listLegacyDayforgeTimeline } from "../legacyDayforgeEvents/legacyDayforgeTimeline";
 import {
   assertDriverCanReadMission,
   assertDriverTransitionAllowed,
@@ -64,7 +64,7 @@ import {
 import {
   generateLegacyDayforgeMissionCoaching,
   getActiveLegacyDayforgeCoachingArtifact,
-} from "../legacyLegacyDayforgeCoaching/legacyLegacyDayforgeCoachingRuntime";
+} from "../legacyDayforgeCoaching/legacyDayforgeCoachingRuntime";
 import { ProspectLegNotConnectedError } from "@shared/coldCallBurst";
 import {
   COMMERCIAL_MISSION_CALL_OUTCOMES,
@@ -238,17 +238,17 @@ function notFound(): never {
 }
 
 export const commercialMissionRouter = router({
-  mySalesMeter: legacyLegacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
+  mySalesMeter: legacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
     getDriverSalesMeter({ tenantId: ctx.tenantId, driverId: ctx.user.openId })
   ),
-  mySalesJournals: legacyLegacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
+  mySalesJournals: legacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
     listDriverSalesJournals({
       tenantId: ctx.tenantId,
       driverId: ctx.user.openId,
       limit: 14,
     })
   ),
-  saveSalesJournal: legacyLegacyDayforgeMissionFieldProcedure
+  saveSalesJournal: legacyDayforgeMissionFieldProcedure
     .input(
       z
         .object({
@@ -279,7 +279,7 @@ export const commercialMissionRouter = router({
         driverId: ctx.user.openId,
       })
     ),
-  salesJournalsAdmin: legacyLegacyDayforgeTenantAdminProcedure
+  salesJournalsAdmin: legacyDayforgeTenantAdminProcedure
     .input(z.object({ limit: z.number().int().min(1).max(100).default(30) }))
     .query(({ ctx, input }) =>
       listDriverSalesJournals({
@@ -288,16 +288,16 @@ export const commercialMissionRouter = router({
         includeAudio: true,
       })
     ),
-  salesMomentumAdmin: legacyLegacyDayforgeTenantAdminProcedure.query(({ ctx }) =>
+  salesMomentumAdmin: legacyDayforgeTenantAdminProcedure.query(({ ctx }) =>
     getTenantSalesMomentum({ tenantId: ctx.tenantId })
   ),
-  myBuiltMissions: legacyLegacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
+  myBuiltMissions: legacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
     listDriverBuiltMissions({
       tenantId: ctx.tenantId,
       driverId: ctx.user.openId,
     })
   ),
-  archiveDayLineStop: legacyLegacyDayforgeMissionFieldProcedure
+  archiveDayLineStop: legacyDayforgeMissionFieldProcedure
     .input(z.object({ missionId: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
       const mission = await getCommercialMission({
@@ -309,7 +309,7 @@ export const commercialMissionRouter = router({
         assertDriverCanReadMission({
           mission,
           userId: ctx.user.openId,
-          isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
+          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
         });
       } catch (error) {
         throw new TRPCError({
@@ -337,7 +337,7 @@ export const commercialMissionRouter = router({
         },
       });
     }),
-  buildForDriver: legacyLegacyDayforgeMissionFieldProcedure
+  buildForDriver: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionType: z.enum(DRIVER_MISSION_TYPES),
@@ -354,10 +354,10 @@ export const commercialMissionRouter = router({
         driverId: ctx.user.openId,
       })
     ),
-  fieldAssignees: legacyLegacyDayforgeMissionOperatorProcedure.query(({ ctx }) =>
+  fieldAssignees: legacyDayforgeMissionOperatorProcedure.query(({ ctx }) =>
     listCommercialMissionFieldAssignees(ctx.tenantId)
   ),
-  activateForField: legacyLegacyDayforgeMissionOperatorProcedure
+  activateForField: legacyDayforgeMissionOperatorProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -373,7 +373,7 @@ export const commercialMissionRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  callAttempts: legacyLegacyDayforgeMissionFieldProcedure
+  callAttempts: legacyDayforgeMissionFieldProcedure
     .input(z.object({ missionId: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
       const mission = await getCommercialMission({
@@ -384,14 +384,14 @@ export const commercialMissionRouter = router({
       assertDriverCanReadMission({
         mission,
         userId: ctx.user.openId,
-        isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
+        isAdmin: ctx.legacyDayforgeMembership.role !== "field",
       });
       return listCommercialMissionCallAttempts({
         tenantId: ctx.tenantId,
         missionId: input.missionId,
       });
     }),
-  logCallAttempt: legacyLegacyDayforgeMissionFieldProcedure
+  logCallAttempt: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -410,7 +410,7 @@ export const commercialMissionRouter = router({
       assertDriverCanReadMission({
         mission,
         userId: ctx.user.openId,
-        isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
+        isAdmin: ctx.legacyDayforgeMembership.role !== "field",
       });
       let result: Awaited<ReturnType<typeof recordCommercialMissionCallAttempt>>;
       try {
@@ -453,7 +453,7 @@ export const commercialMissionRouter = router({
       });
       return { ...result, worldEvent };
     }),
-  createLuxuryHotelIrlPlan: legacyLegacyDayforgeMissionOperatorProcedure
+  createLuxuryHotelIrlPlan: legacyDayforgeMissionOperatorProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -482,7 +482,7 @@ export const commercialMissionRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  advanceIrlStep: legacyLegacyDayforgeMissionFieldProcedure
+  advanceIrlStep: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -500,7 +500,7 @@ export const commercialMissionRouter = router({
       assertDriverCanReadMission({
         mission,
         userId: ctx.user.openId,
-        isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
+        isAdmin: ctx.legacyDayforgeMembership.role !== "field",
       });
       return advanceCommercialMissionIrlStep({
         ...input,
@@ -508,7 +508,7 @@ export const commercialMissionRouter = router({
         actorId: ctx.user.openId,
       });
     }),
-  submitProof: legacyLegacyDayforgeMissionFieldProcedure
+  submitProof: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -530,23 +530,23 @@ export const commercialMissionRouter = router({
         missionId: input.missionId,
         missionStepId: input.missionStepId,
         actorId: ctx.user.openId,
-        actorRole: ctx.legacyLegacyDayforgeMembership.role,
+        actorRole: ctx.legacyDayforgeMembership.role,
         requestId: input.requestId,
         mimeType: input.mimeType,
         data: Buffer.from(input.dataBase64, "base64"),
       })
     ),
-  proofs: legacyLegacyDayforgeMissionFieldProcedure
+  proofs: legacyDayforgeMissionFieldProcedure
     .input(z.object({ missionId: z.number().int().positive() }))
     .query(({ ctx, input }) =>
       listCommercialMissionProofs({
         ...input,
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,
-        actorRole: ctx.legacyLegacyDayforgeMembership.role,
+        actorRole: ctx.legacyDayforgeMembership.role,
       })
     ),
-  reviewProof: legacyLegacyDayforgeTenantAdminProcedure
+  reviewProof: legacyDayforgeTenantAdminProcedure
     .input(
       z.object({
         proofId: z.string().uuid(),
@@ -560,10 +560,10 @@ export const commercialMissionRouter = router({
         ...input,
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,
-        actorRole: ctx.legacyLegacyDayforgeMembership.role,
+        actorRole: ctx.legacyDayforgeMembership.role,
       })
     ),
-  coaching: legacyLegacyDayforgeMissionFieldProcedure
+  coaching: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -577,7 +577,7 @@ export const commercialMissionRouter = router({
         missionStepId: input.stepId,
       })
     ),
-  generateCoaching: legacyLegacyDayforgeMissionFieldProcedure
+  generateCoaching: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -593,7 +593,7 @@ export const commercialMissionRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  dispatchIrl: legacyLegacyDayforgeMissionOperatorProcedure
+  dispatchIrl: legacyDayforgeMissionOperatorProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -618,14 +618,14 @@ export const commercialMissionRouter = router({
         actorId: ctx.user.openId,
       });
     }),
-  myDispatches: legacyLegacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
+  myDispatches: legacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
     listCommercialMissionDispatches({
       tenantId: ctx.tenantId,
       assignedTo:
-        ctx.legacyLegacyDayforgeMembership.role === "field" ? ctx.user.openId : undefined,
+        ctx.legacyDayforgeMembership.role === "field" ? ctx.user.openId : undefined,
     })
   ),
-  openDispatch: legacyLegacyDayforgeMissionFieldProcedure
+  openDispatch: legacyDayforgeMissionFieldProcedure
     .input(z.object({ dispatchId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       openCommercialMissionDispatch({
@@ -634,7 +634,7 @@ export const commercialMissionRouter = router({
         actorId: ctx.user.openId,
       })
     ),
-  logWalkIn: legacyLegacyDayforgeMissionFieldProcedure
+  logWalkIn: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         idempotencyKey: z.string().trim().min(8).max(191),
@@ -710,7 +710,7 @@ export const commercialMissionRouter = router({
       });
       return { ...result, worldEvent };
     }),
-  timeline: legacyLegacyDayforgeTenantAdminProcedure
+  timeline: legacyDayforgeTenantAdminProcedure
     .input(
       z
         .object({
@@ -740,7 +740,7 @@ export const commercialMissionRouter = router({
       })
     ),
 
-  create: legacyLegacyDayforgeMissionOperatorProcedure
+  create: legacyDayforgeMissionOperatorProcedure
     .input(
       z.object({
         assignedTo: z.string().trim().min(1).max(128).nullable().optional(),
@@ -759,7 +759,7 @@ export const commercialMissionRouter = router({
       })
     ),
 
-  list: legacyLegacyDayforgeMissionOperatorProcedure
+  list: legacyDayforgeMissionOperatorProcedure
     .input(
       z
         .object({ limit: z.number().int().min(1).max(250).default(100) })
@@ -769,7 +769,7 @@ export const commercialMissionRouter = router({
       listCommercialMissions({ tenantId: ctx.tenantId, limit: input.limit })
     ),
 
-  get: legacyLegacyDayforgeMissionFieldProcedure
+  get: legacyDayforgeMissionFieldProcedure
     .input(z.object({ missionId: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
       const mission = await getCommercialMission({
@@ -781,7 +781,7 @@ export const commercialMissionRouter = router({
         assertDriverCanReadMission({
           mission,
           userId: ctx.user.openId,
-          isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
+          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
         });
       } catch (error) {
         throw new TRPCError({
@@ -792,7 +792,7 @@ export const commercialMissionRouter = router({
       return mission;
     }),
 
-  events: legacyLegacyDayforgeMissionFieldProcedure
+  events: legacyDayforgeMissionFieldProcedure
     .input(z.object({ missionId: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
       const mission = await getCommercialMission({
@@ -804,7 +804,7 @@ export const commercialMissionRouter = router({
         assertDriverCanReadMission({
           mission,
           userId: ctx.user.openId,
-          isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
+          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
         });
       } catch (error) {
         throw new TRPCError({
@@ -818,7 +818,7 @@ export const commercialMissionRouter = router({
       });
     }),
 
-  transition: legacyLegacyDayforgeMissionOperatorProcedure
+  transition: legacyDayforgeMissionOperatorProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -836,7 +836,7 @@ export const commercialMissionRouter = router({
       })
     ),
 
-  fieldTransition: legacyLegacyDayforgeMissionFieldProcedure
+  fieldTransition: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -856,9 +856,9 @@ export const commercialMissionRouter = router({
         assertDriverCanReadMission({
           mission,
           userId: ctx.user.openId,
-          isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
+          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
         });
-        if (ctx.legacyLegacyDayforgeMembership.role === "field")
+        if (ctx.legacyDayforgeMembership.role === "field")
           assertDriverTransitionAllowed(input.toStatus);
       } catch (error) {
         throw new TRPCError({
@@ -870,13 +870,13 @@ export const commercialMissionRouter = router({
         ...input,
         tenantId: ctx.tenantId,
         actor: {
-          type: ctx.legacyLegacyDayforgeMembership.role === "field" ? "driver" : "operator",
+          type: ctx.legacyDayforgeMembership.role === "field" ? "driver" : "operator",
           id: ctx.user.openId,
         },
       });
     }),
 
-  gameStart: legacyLegacyDayforgeMissionFieldProcedure
+  gameStart: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -894,7 +894,7 @@ export const commercialMissionRouter = router({
         assertDriverCanReadMission({
           mission,
           userId: ctx.user.openId,
-          isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
+          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
         });
       } catch (error) {
         throw new TRPCError({
@@ -909,7 +909,7 @@ export const commercialMissionRouter = router({
       });
     }),
 
-  gameState: legacyLegacyDayforgeMissionFieldProcedure
+  gameState: legacyDayforgeMissionFieldProcedure
     .input(z.object({ missionId: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
       const mission = await getCommercialMission({
@@ -921,7 +921,7 @@ export const commercialMissionRouter = router({
         assertDriverCanReadMission({
           mission,
           userId: ctx.user.openId,
-          isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
+          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
         });
       } catch (error) {
         throw new TRPCError({
@@ -935,7 +935,7 @@ export const commercialMissionRouter = router({
       });
     }),
 
-  gameAbandon: legacyLegacyDayforgeMissionFieldProcedure
+  gameAbandon: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -956,7 +956,7 @@ export const commercialMissionRouter = router({
         assertDriverCanReadMission({
           mission,
           userId: ctx.user.openId,
-          isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
+          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
         });
       } catch (error) {
         throw new TRPCError({
@@ -971,7 +971,7 @@ export const commercialMissionRouter = router({
       });
     }),
 
-  gameComplete: legacyLegacyDayforgeMissionFieldProcedure
+  gameComplete: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -1000,7 +1000,7 @@ export const commercialMissionRouter = router({
         assertDriverCanReadMission({
           mission,
           userId: ctx.user.openId,
-          isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
+          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
         });
       } catch (error) {
         throw new TRPCError({
@@ -1015,7 +1015,7 @@ export const commercialMissionRouter = router({
       });
     }),
 
-  fieldState: legacyLegacyDayforgeMissionFieldProcedure
+  fieldState: legacyDayforgeMissionFieldProcedure
     .input(z.object({ missionId: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
       const mission = await getCommercialMission({
@@ -1027,7 +1027,7 @@ export const commercialMissionRouter = router({
         assertDriverCanReadMission({
           mission,
           userId: ctx.user.openId,
-          isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
+          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
         });
       } catch (error) {
         throw new TRPCError({
@@ -1041,7 +1041,7 @@ export const commercialMissionRouter = router({
       });
     }),
 
-  fieldStartPreparation: legacyLegacyDayforgeMissionFieldProcedure
+  fieldStartPreparation: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -1059,7 +1059,7 @@ export const commercialMissionRouter = router({
         assertDriverCanReadMission({
           mission,
           userId: ctx.user.openId,
-          isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
+          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
         });
       } catch (error) {
         throw new TRPCError({
@@ -1074,7 +1074,7 @@ export const commercialMissionRouter = router({
       });
     }),
 
-  fieldChecklist: legacyLegacyDayforgeMissionFieldProcedure
+  fieldChecklist: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -1094,7 +1094,7 @@ export const commercialMissionRouter = router({
         assertDriverCanReadMission({
           mission,
           userId: ctx.user.openId,
-          isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
+          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
         });
       } catch (error) {
         throw new TRPCError({
@@ -1109,7 +1109,7 @@ export const commercialMissionRouter = router({
       });
     }),
 
-  fieldDepart: legacyLegacyDayforgeMissionFieldProcedure
+  fieldDepart: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -1128,7 +1128,7 @@ export const commercialMissionRouter = router({
         assertDriverCanReadMission({
           mission,
           userId: ctx.user.openId,
-          isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
+          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
         });
       } catch (error) {
         throw new TRPCError({
@@ -1143,7 +1143,7 @@ export const commercialMissionRouter = router({
       });
     }),
 
-  fieldArrive: legacyLegacyDayforgeMissionFieldProcedure
+  fieldArrive: legacyDayforgeMissionFieldProcedure
     .input(
       z
         .object({
@@ -1183,7 +1183,7 @@ export const commercialMissionRouter = router({
         assertDriverCanReadMission({
           mission,
           userId: ctx.user.openId,
-          isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
+          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
         });
       } catch (error) {
         throw new TRPCError({
@@ -1198,7 +1198,7 @@ export const commercialMissionRouter = router({
       });
     }),
 
-  fieldSaveNotes: legacyLegacyDayforgeMissionFieldProcedure
+  fieldSaveNotes: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -1217,7 +1217,7 @@ export const commercialMissionRouter = router({
         assertDriverCanReadMission({
           mission,
           userId: ctx.user.openId,
-          isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
+          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
         });
       } catch (error) {
         throw new TRPCError({
@@ -1232,7 +1232,7 @@ export const commercialMissionRouter = router({
       });
     }),
 
-  fieldOutcome: legacyLegacyDayforgeMissionFieldProcedure
+  fieldOutcome: legacyDayforgeMissionFieldProcedure
     .input(
       z
         .object({
@@ -1290,7 +1290,7 @@ export const commercialMissionRouter = router({
         assertDriverCanReadMission({
           mission,
           userId: ctx.user.openId,
-          isAdmin: ctx.legacyLegacyDayforgeMembership.role !== "field",
+          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
         });
       } catch (error) {
         throw new TRPCError({
@@ -1305,7 +1305,7 @@ export const commercialMissionRouter = router({
       });
     }),
 
-  createPhoneHandoff: legacyLegacyDayforgeMissionOperatorProcedure
+  createPhoneHandoff: legacyDayforgeMissionOperatorProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -1320,7 +1320,7 @@ export const commercialMissionRouter = router({
       })
     ),
 
-  consumePhoneHandoff: legacyLegacyDayforgeMissionFieldProcedure
+  consumePhoneHandoff: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
@@ -1335,7 +1335,7 @@ export const commercialMissionRouter = router({
       })
     ),
 
-  saveFieldChecklistTemplates: legacyLegacyDayforgeMissionOperatorProcedure
+  saveFieldChecklistTemplates: legacyDayforgeMissionOperatorProcedure
     .input(
       z.object({
         items: z

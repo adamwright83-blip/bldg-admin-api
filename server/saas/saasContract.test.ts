@@ -17,20 +17,20 @@ describe("DayForge SaaS production contract", () => {
 
   it("requires membership and entitlement procedures on every DayForge domain", () => {
     const files = [
-      ["../territory/territoryRouter.ts", "legacyLegacyDayforgeTerritoryProcedure"],
+      ["../territory/territoryRouter.ts", "legacyDayforgeTerritoryProcedure"],
       [
         "../commercialMissions/commercialMissionRouter.ts",
-        "legacyLegacyDayforgeMissionFieldProcedure",
+        "legacyDayforgeMissionFieldProcedure",
       ],
       [
         "../commercialProposals/commercialProposalRouter.ts",
-        "legacyLegacyDayforgeProposalFieldProcedure",
+        "legacyDayforgeProposalFieldProcedure",
       ],
       [
         "../commercialPipeline/commercialPipelineRouter.ts",
-        "legacyLegacyDayforgePipelineProcedure",
+        "legacyDayforgePipelineProcedure",
       ],
-      ["../churnRadar/churnRadarRouter.ts", "legacyLegacyDayforgeChurnProcedure"],
+      ["../churnRadar/churnRadarRouter.ts", "legacyDayforgeChurnProcedure"],
     ] as const;
     for (const [path, procedure] of files) {
       const router = source(path);

@@ -2,15 +2,15 @@
 import {
   DAYFORGE_COACHING_CLAIM_KEYS,
   claimMayDriveDirectInstruction,
-  legacyLegacyDayforgeCoachingOutputSchema,
-  legacyLegacyDayforgeEvidenceReferenceSchema,
-  legacyLegacyDayforgeModelCoachingOutputSchema,
+  legacyDayforgeCoachingOutputSchema,
+  legacyDayforgeEvidenceReferenceSchema,
+  legacyDayforgeModelCoachingOutputSchema,
   type LegacyDayforgeClaimProvenance,
   type LegacyDayforgeCoachingClaim,
   type LegacyDayforgeCoachingClaimKey,
   type LegacyDayforgeCoachingOutput,
   type LegacyDayforgeEvidenceReference,
-} from "@shared/legacyLegacyDayforgeCoaching";
+} from "@shared/legacyDayforgeCoaching";
 
 export const DAYFORGE_COACHING_FALLBACK_CATEGORIES = [
   "luxury_full_service_hotel",
@@ -187,7 +187,7 @@ function sourceAllowsDirectInstruction(provenance: LegacyDayforgeClaimProvenance
 export function sanitizeLegacyDayforgeEvidenceReferenceForStorage(
   reference: LegacyDayforgeEvidenceReference,
 ): LegacyDayforgeEvidenceReference {
-  const parsed = legacyLegacyDayforgeEvidenceReferenceSchema.safeParse(reference);
+  const parsed = legacyDayforgeEvidenceReferenceSchema.safeParse(reference);
   if (!parsed.success) {
     throw new LegacyDayforgeCoachingPolicyError(
       "invalid_evidence",
@@ -302,7 +302,7 @@ export function groundLegacyDayforgeModelCoachingOutput(input: {
   evidence: LegacyDayforgeCoachingGroundingEvidence[];
   generatedAt: Date;
 }): PreparedLegacyDayforgeCoachingArtifact {
-  const parsed = legacyLegacyDayforgeModelCoachingOutputSchema.safeParse(input.rawOutput);
+  const parsed = legacyDayforgeModelCoachingOutputSchema.safeParse(input.rawOutput);
   if (!parsed.success) {
     throw new LegacyDayforgeCoachingPolicyError(
       "invalid_structured_output",
@@ -342,7 +342,7 @@ export function groundLegacyDayforgeModelCoachingOutput(input: {
       grounded: true,
     };
   });
-  const initiallyGroundedOutput = legacyLegacyDayforgeCoachingOutputSchema.parse({ ...parsed.data, claims });
+  const initiallyGroundedOutput = legacyDayforgeCoachingOutputSchema.parse({ ...parsed.data, claims });
   for (const directField of DIRECT_FIELD_KEYS) {
     const value = normalizedDisplayValue(directField.read(initiallyGroundedOutput));
     const claim = claims.find(candidate =>
@@ -375,7 +375,7 @@ export function groundLegacyDayforgeModelCoachingOutput(input: {
   const unknownLabels = Array.from(new Set(
     suppressedAccountClaimKeys.map(key => CLAIM_LABELS[key] ?? "account detail"),
   ));
-  const output = legacyLegacyDayforgeCoachingOutputSchema.parse({
+  const output = legacyDayforgeCoachingOutputSchema.parse({
     recommendedRole: parsed.data.recommendedRole,
     roleRationale: "This is a practical role to ask for based on the supplied guidance; it is not an account-verified individual.",
     firstNavigationPoint: parsed.data.firstNavigationPoint,
@@ -485,7 +485,7 @@ export function buildDeterministicLegacyDayforgeCoachingFallback(input: {
   const template = FALLBACK_TEMPLATES[input.category];
   const capturedAt = input.generatedAt.toISOString();
   const evidenceId = `legacy-dayforge-fallback-v1:${input.category}`;
-  const reference = legacyLegacyDayforgeEvidenceReferenceSchema.parse({
+  const reference = legacyDayforgeEvidenceReferenceSchema.parse({
     id: evidenceId,
     sourceType: "general_industry_guidance",
     capturedAt,
@@ -513,7 +513,7 @@ export function buildDeterministicLegacyDayforgeCoachingFallback(input: {
     safeForDirectInstruction: true,
     grounded: true,
   }));
-  const output = legacyLegacyDayforgeCoachingOutputSchema.parse({
+  const output = legacyDayforgeCoachingOutputSchema.parse({
     recommendedRole: template.role,
     roleRationale: template.rationale,
     firstNavigationPoint: template.firstMove,

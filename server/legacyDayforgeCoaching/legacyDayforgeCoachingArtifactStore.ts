@@ -11,14 +11,14 @@ import {
   type CommercialMissionCoachingArtifactRow,
 } from "../../drizzle/schema";
 import {
-  legacyLegacyDayforgeCoachingClaimSchema,
-  legacyLegacyDayforgeCoachingOutputSchema,
-  legacyLegacyDayforgeEvidenceReferenceSchema,
-} from "@shared/legacyLegacyDayforgeCoaching";
+  legacyDayforgeCoachingClaimSchema,
+  legacyDayforgeCoachingOutputSchema,
+  legacyDayforgeEvidenceReferenceSchema,
+} from "@shared/legacyDayforgeCoaching";
 import {
   assertLegacyDayforgeCoachingOutputIsSafeForStorage,
   sanitizeLegacyDayforgeEvidenceReferenceForStorage,
-} from "./legacyLegacyDayforgeCoachingPolicy";
+} from "./legacyDayforgeCoachingPolicy";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError } from "../mysqlErrors";
 import type {
@@ -26,8 +26,8 @@ import type {
   LegacyDayforgeCoachingArtifactRepository,
   FindReusableLegacyDayforgeCoachingArtifactInput,
   PersistLegacyDayforgeCoachingArtifactInput,
-} from "./legacyLegacyDayforgeCoachingArtifactTypes";
-import { legacyLegacyDayforgeCoachingArtifactCacheKey } from "./legacyLegacyDayforgeCoachingArtifactTypes";
+} from "./legacyDayforgeCoachingArtifactTypes";
+import { legacyDayforgeCoachingArtifactCacheKey } from "./legacyDayforgeCoachingArtifactTypes";
 
 type CoachingTransaction = Parameters<
   Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]
@@ -44,11 +44,11 @@ function iso(value: Date | null): string | null {
 function decodeArtifact(row: CommercialMissionCoachingArtifactRow): LegacyDayforgeCoachingArtifact {
   const output = row.structuredOutputJson === null
     ? null
-    : legacyLegacyDayforgeCoachingOutputSchema.parse(row.structuredOutputJson);
-  const evidenceReferences = z.array(legacyLegacyDayforgeEvidenceReferenceSchema).parse(
+    : legacyDayforgeCoachingOutputSchema.parse(row.structuredOutputJson);
+  const evidenceReferences = z.array(legacyDayforgeEvidenceReferenceSchema).parse(
     row.evidenceReferencesJson ?? [],
   );
-  const claims = z.array(legacyLegacyDayforgeCoachingClaimSchema).parse(row.claimsJson ?? []);
+  const claims = z.array(legacyDayforgeCoachingClaimSchema).parse(row.claimsJson ?? []);
   if (output && JSON.stringify(output.claims) !== JSON.stringify(claims)) {
     throw new Error("Persisted coaching claim projection does not match its structured output");
   }
@@ -88,9 +88,9 @@ function decodeArtifact(row: CommercialMissionCoachingArtifactRow): LegacyDayfor
 function validatedPersistencePayload(
   input: PersistLegacyDayforgeCoachingArtifactInput,
 ): PersistLegacyDayforgeCoachingArtifactInput {
-  const output = legacyLegacyDayforgeCoachingOutputSchema.parse(input.structuredOutput);
+  const output = legacyDayforgeCoachingOutputSchema.parse(input.structuredOutput);
   assertLegacyDayforgeCoachingOutputIsSafeForStorage(output);
-  const evidenceReferences = z.array(legacyLegacyDayforgeEvidenceReferenceSchema)
+  const evidenceReferences = z.array(legacyDayforgeEvidenceReferenceSchema)
     .max(50)
     .parse(input.evidenceReferences)
     .map(sanitizeLegacyDayforgeEvidenceReferenceForStorage);
@@ -241,7 +241,7 @@ async function persistWith(
     modelId: input.modelId,
     promptVersion: input.promptVersion,
     contextHash: input.contextHash,
-    cacheKey: legacyLegacyDayforgeCoachingArtifactCacheKey(input),
+    cacheKey: legacyDayforgeCoachingArtifactCacheKey(input),
     requestId: input.requestId,
     version,
     generatedAt: input.generatedAt,
@@ -272,7 +272,7 @@ async function persistWith(
   return created[0];
 }
 
-export const legacyLegacyDayforgeCoachingArtifactRepository: LegacyDayforgeCoachingArtifactRepository = {
+export const legacyDayforgeCoachingArtifactRepository: LegacyDayforgeCoachingArtifactRepository = {
   async findReusable(input) {
     return findReusableLegacyDayforgeCoachingArtifact(input);
   },
@@ -306,7 +306,7 @@ export async function findReusableLegacyDayforgeCoachingArtifact(
       eq(commercialMissionCoachingArtifacts.missionId, input.missionId),
       eq(commercialMissionCoachingArtifacts.scopeKey, scopeKeyFor(input.missionStepId)),
       eq(commercialMissionCoachingArtifacts.accountId, input.accountId),
-      eq(commercialMissionCoachingArtifacts.cacheKey, legacyLegacyDayforgeCoachingArtifactCacheKey(input)),
+      eq(commercialMissionCoachingArtifacts.cacheKey, legacyDayforgeCoachingArtifactCacheKey(input)),
       eq(commercialMissionCoachingArtifacts.generationStatus, "generated"),
       eq(commercialMissionCoachingArtifacts.active, true),
     ))

@@ -1,7 +1,7 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const envState = { legacyLegacyDayforgeDemoEnabled: true, legacyLegacyDayforgeDemoTenantSlug: "sunset-laundry-demo" };
+const envState = { legacyDayforgeDemoEnabled: true, legacyDayforgeDemoTenantSlug: "sunset-laundry-demo" };
 vi.mock("../_core/env", () => ({
   get ENV() {
     return envState;
@@ -9,7 +9,7 @@ vi.mock("../_core/env", () => ({
 }));
 
 const writeLegacyDayforgeEventWith = vi.fn(async () => ({ auditEventId: 1 }));
-vi.mock("../legacyLegacyDayforgeEvents/legacyLegacyDayforgeEventStore", () => ({
+vi.mock("../legacyDayforgeEvents/legacyDayforgeEventStore", () => ({
   writeLegacyDayforgeEventWith: (...args: unknown[]) => writeLegacyDayforgeEventWith(...args),
 }));
 
@@ -38,7 +38,7 @@ import { demoTenantId } from "./demoTenantSeed";
 
 describe("resetDemoTenant", () => {
   beforeEach(() => {
-    envState.legacyLegacyDayforgeDemoEnabled = true;
+    envState.legacyDayforgeDemoEnabled = true;
     eqSpy.mockClear();
     deleteMock.mockClear();
     whereMock.mockClear();
@@ -51,7 +51,7 @@ describe("resetDemoTenant", () => {
   });
 
   it("throws and never touches the database when DAYFORGE_DEMO_ENABLED is not true", async () => {
-    envState.legacyLegacyDayforgeDemoEnabled = false;
+    envState.legacyDayforgeDemoEnabled = false;
     await expect(
       resetDemoTenant({ role: "admin", id: "u1" })
     ).rejects.toBeInstanceOf(DemoResetDisabledError);

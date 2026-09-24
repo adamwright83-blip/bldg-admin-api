@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const timeline = readFileSync(
-  new URL("./legacyLegacyDayforgeTimeline.ts", import.meta.url),
+  new URL("./legacyDayforgeTimeline.ts", import.meta.url),
   "utf8"
 );
 const router = readFileSync(
@@ -18,7 +18,7 @@ const adminUi = readFileSync(
 describe("DayForge unified timeline contract", () => {
   it("always scopes reads by the authenticated tenant", () => {
     expect(timeline).toContain(
-      "eq(legacyLegacyDayforgeAuditEvents.tenantId, input.tenantId)"
+      "eq(legacyDayforgeAuditEvents.tenantId, input.tenantId)"
     );
     expect(timeline).toContain(
       "eq(commercialOpportunities.tenantId, input.tenantId)"
@@ -35,13 +35,13 @@ describe("DayForge unified timeline contract", () => {
     expect(timeline).toContain('relatedIdPredicate("missionId"');
     expect(timeline).toContain('relatedIdPredicate("accountId"');
     expect(timeline).toContain("JSON_EXTRACT");
-    expect(timeline).toContain("desc(legacyLegacyDayforgeAuditEvents.createdAt)");
-    expect(timeline).toContain("desc(legacyLegacyDayforgeAuditEvents.id)");
+    expect(timeline).toContain("desc(legacyDayforgeAuditEvents.createdAt)");
+    expect(timeline).toContain("desc(legacyDayforgeAuditEvents.id)");
     expect(timeline).toContain("cursorPredicate(input.cursor)");
   });
 
   it("exposes the history only through tenant-admin authorization", () => {
-    expect(router).toContain("timeline: legacyLegacyDayforgeTenantAdminProcedure");
+    expect(router).toContain("timeline: legacyDayforgeTenantAdminProcedure");
     expect(router).toContain("tenantId: ctx.tenantId");
   });
 

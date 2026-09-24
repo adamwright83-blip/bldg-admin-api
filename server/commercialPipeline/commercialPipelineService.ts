@@ -33,7 +33,7 @@ import {
   transitionCommercialMissionWith,
 } from "../commercialMissions/commercialMissionStore";
 import { associateArmoryOutcome } from "../armory/armoryEvidenceService";
-import { writeLegacyDayforgeEventWith } from "../legacyLegacyDayforgeEvents/legacyLegacyDayforgeEventStore";
+import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
 import { getDashboardTimeZone, zonedYmd } from "../dashboardZoned";
 
 type Transaction = Parameters<

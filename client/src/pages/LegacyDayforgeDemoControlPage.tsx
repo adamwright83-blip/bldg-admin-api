@@ -288,7 +288,7 @@ export default function LegacyDayforgeDemoControlPage() {
   const statusQuery = (
     trpc as unknown as {
       system: {
-        legacyLegacyDayforgeDemo: {
+        legacyDayforgeDemo: {
           getStatus: {
             useQuery: (
               input: undefined,
@@ -309,7 +309,7 @@ export default function LegacyDayforgeDemoControlPage() {
         };
       };
     }
-  ).system.legacyLegacyDayforgeDemo.getStatus.useQuery(undefined, {
+  ).system.legacyDayforgeDemo.getStatus.useQuery(undefined, {
     enabled: isAuthenticated && DEMO_MODE_ENABLED,
     refetchInterval: 5000,
   });
@@ -317,7 +317,7 @@ export default function LegacyDayforgeDemoControlPage() {
   const resetMutation = (
     trpc as unknown as {
       system: {
-        legacyLegacyDayforgeDemo: {
+        legacyDayforgeDemo: {
           reset: {
             useMutation: () => {
               mutateAsync: (input?: unknown) => Promise<unknown>;
@@ -327,7 +327,7 @@ export default function LegacyDayforgeDemoControlPage() {
         };
       };
     }
-  ).system.legacyLegacyDayforgeDemo.reset.useMutation();
+  ).system.legacyDayforgeDemo.reset.useMutation();
 
   const status = statusQuery.data;
   const missionId = status?.mission?.id ?? null;

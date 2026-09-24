@@ -2,7 +2,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE } from "../../shared/colosseumAuthoredFinale";
-import { legacyLegacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import { ProgressionForgeError, ProgressionNotPermittedError } from "./progressionContract";
 import { acknowledgeColosseumAuthoredFinale, readGoldlineProgression } from "./progressionService";
 
@@ -16,7 +16,7 @@ import { acknowledgeColosseumAuthoredFinale, readGoldlineProgression } from "./p
  * capability.rook.contact.
  */
 export const progressionRouter = router({
-  get: legacyLegacyDayforgeTenantMemberProcedure
+  get: legacyDayforgeTenantMemberProcedure
     .input(z.object({}).strict())
     .query(({ ctx }) =>
       readGoldlineProgression({
@@ -25,7 +25,7 @@ export const progressionRouter = router({
         capabilityOperatorId: String(ctx.user.id),
       })
     ),
-  acknowledgeColosseumFinale: legacyLegacyDayforgeTenantMemberProcedure
+  acknowledgeColosseumFinale: legacyDayforgeTenantMemberProcedure
     .input(
       z
         .object({

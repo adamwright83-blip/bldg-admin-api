@@ -1,7 +1,7 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { sql, eq, and } from "drizzle-orm";
 import { getDb } from "../db";
-import { legacyLegacyDayforgeSaasTenants, orders } from "../../drizzle/schema";
+import { legacyDayforgeSaasTenants, orders } from "../../drizzle/schema";
 import { getCommercialMissionByIdempotencyKey } from "../commercialMissions/commercialMissionStore";
 import {
   DEMO_MISSION_IDEMPOTENCY_KEY,
@@ -88,9 +88,9 @@ export async function verifyDemoTenant(): Promise<DemoVerifyReport> {
 
   const tenantId = demoTenantId();
   const tenantRows = await db
-    .select({ id: legacyLegacyDayforgeSaasTenants.id, status: legacyLegacyDayforgeSaasTenants.status })
-    .from(legacyLegacyDayforgeSaasTenants)
-    .where(eq(legacyLegacyDayforgeSaasTenants.id, tenantId))
+    .select({ id: legacyDayforgeSaasTenants.id, status: legacyDayforgeSaasTenants.status })
+    .from(legacyDayforgeSaasTenants)
+    .where(eq(legacyDayforgeSaasTenants.id, tenantId))
     .limit(1);
   const tenant = tenantRows[0];
   checks.push({

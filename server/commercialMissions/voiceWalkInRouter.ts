@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { legacyLegacyDayforgeMissionFieldProcedure, router } from "../_core/trpc";
+import { legacyDayforgeMissionFieldProcedure, router } from "../_core/trpc";
 import { invokeLLM } from "../_core/llm";
 import { transcribeAudio } from "../_core/voiceTranscription";
 import { storageGet, storagePut } from "../storage";
@@ -173,15 +173,15 @@ async function resolvePlace(input: { businessName: string; locationHint: string 
 }
 
 export const voiceWalkInRouter = router({
-  calendarStatus: legacyLegacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
+  calendarStatus: legacyDayforgeMissionFieldProcedure.query(({ ctx }) =>
     getGoogleCalendarStatus({ tenantId: ctx.tenantId, userId: ctx.user.openId })
   ),
 
-  calendarConnectUrl: legacyLegacyDayforgeMissionFieldProcedure.mutation(({ ctx }) =>
+  calendarConnectUrl: legacyDayforgeMissionFieldProcedure.mutation(({ ctx }) =>
     createGoogleCalendarConnectUrl({ tenantId: ctx.tenantId, userId: ctx.user.openId })
   ),
 
-  calendarComplete: legacyLegacyDayforgeMissionFieldProcedure
+  calendarComplete: legacyDayforgeMissionFieldProcedure
     .input(z.object({ code: z.string().min(1).max(4096), state: z.string().min(1).max(8192) }))
     .mutation(({ ctx, input }) => completeGoogleCalendarConnection({
       ...input,
@@ -189,7 +189,7 @@ export const voiceWalkInRouter = router({
       expectedUserId: ctx.user.openId,
     })),
 
-  parse: legacyLegacyDayforgeMissionFieldProcedure
+  parse: legacyDayforgeMissionFieldProcedure
     .input(z.object({
       audioDataUrl: z.string().max(16_500_000),
       nowIso: z.string().datetime(),
@@ -258,7 +258,7 @@ export const voiceWalkInRouter = router({
       };
     }),
 
-  save: legacyLegacyDayforgeMissionFieldProcedure
+  save: legacyDayforgeMissionFieldProcedure
     .input(draftSchema.extend({ requestId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       if (input.visitResult === "follow_up" && !input.followUpAt) {

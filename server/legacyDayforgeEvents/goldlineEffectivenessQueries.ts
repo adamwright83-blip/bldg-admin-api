@@ -1,6 +1,6 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { and, eq, gte, sql } from "drizzle-orm";
-import { legacyLegacyDayforgeProductEvents } from "../../drizzle/schema";
+import { legacyDayforgeProductEvents } from "../../drizzle/schema";
 import { getDb } from "../db";
 export type GoldlineEffectivenessSummary = {
   windowDays: number;
@@ -39,12 +39,12 @@ async function countEvent(i: {
   if (!db) throw new Error("Database not available");
   const [row] = await db
     .select({ count: sql<number>`COUNT(*)` })
-    .from(legacyLegacyDayforgeProductEvents)
+    .from(legacyDayforgeProductEvents)
     .where(
       and(
-        eq(legacyLegacyDayforgeProductEvents.tenantId, i.tenantId),
-        eq(legacyLegacyDayforgeProductEvents.eventName, i.eventName),
-        gte(legacyLegacyDayforgeProductEvents.occurredAt, i.since)
+        eq(legacyDayforgeProductEvents.tenantId, i.tenantId),
+        eq(legacyDayforgeProductEvents.eventName, i.eventName),
+        gte(legacyDayforgeProductEvents.occurredAt, i.since)
       )
     );
   return Number(row?.count ?? 0);

@@ -7,7 +7,7 @@ import {
   commercialFollowUps,
   commercialMissions,
   commercialOpportunities,
-  legacyLegacyDayforgeSaasTenantLocations,
+  legacyDayforgeSaasTenantLocations,
 } from "../../drizzle/schema";
 import { deterministicEstimate } from "../../shared/businessGame";
 import { getDb } from "../db";
@@ -223,11 +223,11 @@ export async function getFieldMoves(input: {
 
   const [tenantLocation] = await db
     .select()
-    .from(legacyLegacyDayforgeSaasTenantLocations)
+    .from(legacyDayforgeSaasTenantLocations)
     .where(
       and(
-        eq(legacyLegacyDayforgeSaasTenantLocations.tenantId, input.tenantId),
-        eq(legacyLegacyDayforgeSaasTenantLocations.isPrimary, true)
+        eq(legacyDayforgeSaasTenantLocations.tenantId, input.tenantId),
+        eq(legacyDayforgeSaasTenantLocations.isPrimary, true)
       )
     )
     .limit(1);

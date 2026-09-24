@@ -9,7 +9,7 @@
     "types": ["node", "vitest/globals", "@playwright/test"]
   },
   "include": [
-    "server/legacyLegacyDayforgeRelease/**/*.ts",
+    "server/legacyDayforgeRelease/**/*.ts",
     "server/territory/testSupport/**/*.ts",
     "playwright.legacy-dayforge.config.ts",
     "e2e/legacy-dayforge/**/*.ts"

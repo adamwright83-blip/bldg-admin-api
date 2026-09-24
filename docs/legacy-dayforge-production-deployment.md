@@ -116,7 +116,7 @@ DATABASE_URL="$(railway variables --service bldg-admin-api --kv | grep ^DATABASE
   pnpm legacy-dayforge:migrations:verify
 # Expect this to FAIL before migrating -- that's the correct "not yet applied" signal.
 
-# 3. Apply migrations (uses server/legacyLegacyDayforgeRelease/applyReleaseMigrations.ts,
+# 3. Apply migrations (uses server/legacyDayforgeRelease/applyReleaseMigrations.ts,
 #    applies every drizzle/*.sql file in filename order):
 DATABASE_URL="$(railway variables --service bldg-admin-api --kv | grep ^DATABASE_URL= | cut -d= -f2-)" \
   pnpm db:legacy-dayforge:release
@@ -147,7 +147,7 @@ railway run --service bldg-admin-api pnpm legacy-dayforge:demo:verify
 ```
 
 `legacy-dayforge:demo:setup`/`reset` are tenant-scoped by construction
-(`server/legacyLegacyDayforgeDemo/demoTenantReset.ts` scopes every delete to
+(`server/legacyDayforgeDemo/demoTenantReset.ts` scopes every delete to
 `demoTenantId()`, which is derived from `DAYFORGE_DEMO_TENANT_SLUG`) — they
 cannot touch any other tenant's rows, and refuse to run at all unless
 `DAYFORGE_DEMO_ENABLED=true`.

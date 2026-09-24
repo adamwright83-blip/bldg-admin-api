@@ -5,12 +5,12 @@ import { getDb } from "../db";
 import { ENV } from "../_core/env";
 import {
   commercialMissions,
-  legacyLegacyDayforgeSaasEntitlements,
-  legacyLegacyDayforgeSaasMemberships,
-  legacyLegacyDayforgeSaasSubscriptions,
-  legacyLegacyDayforgeSaasTenantLocations,
-  legacyLegacyDayforgeSaasTenants,
-  legacyLegacyDayforgeSaasUserCredentials,
+  legacyDayforgeSaasEntitlements,
+  legacyDayforgeSaasMemberships,
+  legacyDayforgeSaasSubscriptions,
+  legacyDayforgeSaasTenantLocations,
+  legacyDayforgeSaasTenants,
+  legacyDayforgeSaasUserCredentials,
   orders,
   users,
 } from "../../drizzle/schema";
@@ -40,7 +40,7 @@ export const DEMO_FIELD_EMAIL = "demo-field@sunsetlaundry.example";
 export const DEMO_TENANT_PASSWORD = "SunsetDemo2026!";
 
 export function demoTenantSlug(): string {
-  return ENV.legacyLegacyDayforgeDemoTenantSlug;
+  return ENV.legacyDayforgeDemoTenantSlug;
 }
 
 /** Deterministic tenant id derived from the demo slug so seeding is idempotent across runs. */
@@ -49,7 +49,7 @@ export function demoTenantId(): string {
 }
 
 function assertDemoEnabled() {
-  if (!ENV.legacyLegacyDayforgeDemoEnabled) {
+  if (!ENV.legacyDayforgeDemoEnabled) {
     throw new Error(
       "DAYFORGE_DEMO_ENABLED is not true; refusing to touch the demo tenant"
     );
@@ -63,7 +63,7 @@ async function upsertDemoTenant(): Promise<string> {
   const slug = normalizeSaasTenantSlug(demoTenantSlug());
 
   await db
-    .insert(legacyLegacyDayforgeSaasTenants)
+    .insert(legacyDayforgeSaasTenants)
     .values({
       id: tenantId,
       slug,
@@ -91,7 +91,7 @@ async function upsertDemoTenant(): Promise<string> {
   // Store profile / pricing-capacity config / routes / service radius, reusing
   // the same production onboarding location table.
   await db
-    .insert(legacyLegacyDayforgeSaasTenantLocations)
+    .insert(legacyDayforgeSaasTenantLocations)
     .values({
       tenantId,
       locationKey: "primary",
@@ -161,7 +161,7 @@ async function upsertDemoUsers(tenantId: string): Promise<void> {
     .onDuplicateKeyUpdate({ set: { tenantId, role: "driver" } });
 
   await db
-    .insert(legacyLegacyDayforgeSaasMemberships)
+    .insert(legacyDayforgeSaasMemberships)
     .values({
       tenantId,
       userOpenId: DEMO_OWNER_OPEN_ID,
@@ -171,7 +171,7 @@ async function upsertDemoUsers(tenantId: string): Promise<void> {
     .onDuplicateKeyUpdate({ set: { role: "owner", active: true } });
 
   await db
-    .insert(legacyLegacyDayforgeSaasMemberships)
+    .insert(legacyDayforgeSaasMemberships)
     .values({
       tenantId,
       userOpenId: DEMO_FIELD_OPEN_ID,
@@ -185,7 +185,7 @@ async function upsertDemoUsers(tenantId: string): Promise<void> {
   // logins are unreachable through the actual product UI.
   const passwordHash = await bcrypt.hash(DEMO_TENANT_PASSWORD, 12);
   await db
-    .insert(legacyLegacyDayforgeSaasUserCredentials)
+    .insert(legacyDayforgeSaasUserCredentials)
     .values({
       tenantId,
       userOpenId: DEMO_OWNER_OPEN_ID,
@@ -197,7 +197,7 @@ async function upsertDemoUsers(tenantId: string): Promise<void> {
     });
 
   await db
-    .insert(legacyLegacyDayforgeSaasUserCredentials)
+    .insert(legacyDayforgeSaasUserCredentials)
     .values({
       tenantId,
       userOpenId: DEMO_FIELD_OPEN_ID,
@@ -346,7 +346,7 @@ const DEMO_ENTITLEMENT_KEYS = [
 /**
  * Grants the demo tenant the entitlements every other tenant only gets from
  * a real paid Stripe subscription. This is a SIMULATED billing state, never
- * a live charge — server/legacyLegacyDayforgeDemo/providerStatus.ts independently reports
+ * a live charge — server/legacyDayforgeDemo/providerStatus.ts independently reports
  * Stripe as NOT_CONFIGURED/TEST based on real env vars regardless of this.
  */
 async function ensureDemoEntitlements(tenantId: string): Promise<void> {
@@ -354,7 +354,7 @@ async function ensureDemoEntitlements(tenantId: string): Promise<void> {
   if (!db) throw new Error("Database not available");
 
   await db
-    .insert(legacyLegacyDayforgeSaasSubscriptions)
+    .insert(legacyDayforgeSaasSubscriptions)
     .values({
       tenantId,
       planKey: "demo",
@@ -368,7 +368,7 @@ async function ensureDemoEntitlements(tenantId: string): Promise<void> {
 
   for (const entitlementKey of DEMO_ENTITLEMENT_KEYS) {
     await db
-      .insert(legacyLegacyDayforgeSaasEntitlements)
+      .insert(legacyDayforgeSaasEntitlements)
       .values({
         tenantId,
         entitlementKey,

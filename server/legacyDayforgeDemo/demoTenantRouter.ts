@@ -5,7 +5,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { adminProcedure, router } from "../_core/trpc";
 import { ENV } from "../_core/env";
 import { getDb } from "../db";
-import { legacyLegacyDayforgeAuditEvents } from "../../drizzle/schema";
+import { legacyDayforgeAuditEvents } from "../../drizzle/schema";
 import {
   getCommercialMissionByIdempotencyKey,
 } from "../commercialMissions/commercialMissionStore";
@@ -28,19 +28,19 @@ async function recentDemoAuditEvents(tenantId: string, limit: number) {
   if (!db) return [];
   return db
     .select({
-      id: legacyLegacyDayforgeAuditEvents.id,
-      eventName: legacyLegacyDayforgeAuditEvents.eventName,
-      entityType: legacyLegacyDayforgeAuditEvents.entityType,
-      entityId: legacyLegacyDayforgeAuditEvents.entityId,
-      occurredAt: legacyLegacyDayforgeAuditEvents.createdAt,
+      id: legacyDayforgeAuditEvents.id,
+      eventName: legacyDayforgeAuditEvents.eventName,
+      entityType: legacyDayforgeAuditEvents.entityType,
+      entityId: legacyDayforgeAuditEvents.entityId,
+      occurredAt: legacyDayforgeAuditEvents.createdAt,
     })
-    .from(legacyLegacyDayforgeAuditEvents)
-    .where(and(eq(legacyLegacyDayforgeAuditEvents.tenantId, tenantId)))
-    .orderBy(desc(legacyLegacyDayforgeAuditEvents.createdAt), desc(legacyLegacyDayforgeAuditEvents.id))
+    .from(legacyDayforgeAuditEvents)
+    .where(and(eq(legacyDayforgeAuditEvents.tenantId, tenantId)))
+    .orderBy(desc(legacyDayforgeAuditEvents.createdAt), desc(legacyDayforgeAuditEvents.id))
     .limit(limit);
 }
 
-export const legacyLegacyDayforgeDemoRouter = router({
+export const legacyDayforgeDemoRouter = router({
   // Named `getStatus` (not `status`) to match the demo control page contract.
   getStatus: adminProcedure.query(async () => {
     const tenantId = demoTenantId();
@@ -48,10 +48,10 @@ export const legacyLegacyDayforgeDemoRouter = router({
       tenantId,
       idempotencyKey: DEMO_MISSION_IDEMPOTENCY_KEY,
     });
-    const churnProfile = ENV.legacyLegacyDayforgeDemoEnabled
+    const churnProfile = ENV.legacyDayforgeDemoEnabled
       ? await getCustomerRecoveryProfile(tenantId).catch(() => null)
       : null;
-    const auditEvents = ENV.legacyLegacyDayforgeDemoEnabled
+    const auditEvents = ENV.legacyDayforgeDemoEnabled
       ? await recentDemoAuditEvents(tenantId, 20)
       : [];
     const providerStatus = getLegacyDayforgeProviderStatus();
@@ -60,7 +60,7 @@ export const legacyLegacyDayforgeDemoRouter = router({
     );
 
     return {
-      demoEnabled: ENV.legacyLegacyDayforgeDemoEnabled,
+      demoEnabled: ENV.legacyDayforgeDemoEnabled,
       tenantId,
       tenantSlug: demoTenantSlug(),
       mission: mission
@@ -93,7 +93,7 @@ export const legacyLegacyDayforgeDemoRouter = router({
         entityId: event.entityId,
         occurredAt: event.occurredAt?.toISOString?.() ?? String(event.occurredAt),
       })),
-      releaseGateHealthy: ENV.legacyLegacyDayforgeDemoEnabled ? anyProviderLive : null,
+      releaseGateHealthy: ENV.legacyDayforgeDemoEnabled ? anyProviderLive : null,
     };
   }),
 

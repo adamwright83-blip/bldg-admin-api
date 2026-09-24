@@ -51,7 +51,7 @@ Review and, where appropriate, set these bounded controls:
 - `DAYFORGE_TERRITORY_PROVIDER_CIRCUIT_COOLDOWN_SECONDS`
 - `DAYFORGE_FRAME_ORIGINS`, `DAYFORGE_SCRIPT_ORIGINS`, and `DAYFORGE_CONNECT_ORIGINS` for explicitly approved scheduler, script, and API hosts.
 
-Never set `DAYFORGE_RELEASE_TEST_MODE` in production. After 0043 is live, schedule `POST /api/internal/dayforge/retention/run` in small batches with a dry run first, as documented in `server/legacyLegacyDayforgeRetention/README.md`.
+Never set `DAYFORGE_RELEASE_TEST_MODE` in production. After 0043 is live, schedule `POST /api/internal/dayforge/retention/run` in small batches with a dry run first, as documented in `server/legacyDayforgeRetention/README.md`.
 
 ## PR C invariants
 

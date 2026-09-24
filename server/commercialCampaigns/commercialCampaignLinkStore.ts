@@ -7,7 +7,7 @@ import {
   commercialMissions,
   commercialOpportunities,
   commercialPipelineRecords,
-  legacyLegacyDayforgeSaasMemberships,
+  legacyDayforgeSaasMemberships,
   users,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
@@ -78,13 +78,13 @@ export const commercialCampaignLinkRepository: CommercialCampaignLinkRepository 
       }
 
       const [membership] = await db
-        .select({ id: legacyLegacyDayforgeSaasMemberships.id })
-        .from(legacyLegacyDayforgeSaasMemberships)
+        .select({ id: legacyDayforgeSaasMemberships.id })
+        .from(legacyDayforgeSaasMemberships)
         .where(
           and(
-            eq(legacyLegacyDayforgeSaasMemberships.tenantId, input.tenantId),
-            eq(legacyLegacyDayforgeSaasMemberships.userOpenId, input.salespersonId),
-            eq(legacyLegacyDayforgeSaasMemberships.active, true)
+            eq(legacyDayforgeSaasMemberships.tenantId, input.tenantId),
+            eq(legacyDayforgeSaasMemberships.userOpenId, input.salespersonId),
+            eq(legacyDayforgeSaasMemberships.active, true)
           )
         )
         .limit(1);

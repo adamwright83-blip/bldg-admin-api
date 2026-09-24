@@ -2,7 +2,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { WAYWARD_ROOK_CONTACT_CONSEQUENCE } from "../../shared/rookContact";
-import { legacyLegacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import {
   ProgressionForgeError,
   ProgressionNotPermittedError,
@@ -47,7 +47,7 @@ const sentenceInput = z
  * a transcript approval.
  */
 export const rookContactRouter = router({
-  acknowledge: legacyLegacyDayforgeTenantMemberProcedure
+  acknowledge: legacyDayforgeTenantMemberProcedure
     .input(
       z
         .object({
@@ -66,7 +66,7 @@ export const rookContactRouter = router({
         asTrpc(error);
       }
     }),
-  prepare: legacyLegacyDayforgeTenantMemberProcedure
+  prepare: legacyDayforgeTenantMemberProcedure
     .input(
       z
         .object({
@@ -87,7 +87,7 @@ export const rookContactRouter = router({
         asTrpc(error);
       }
     }),
-  authorize: legacyLegacyDayforgeTenantMemberProcedure
+  authorize: legacyDayforgeTenantMemberProcedure
     .input(
       z
         .object({
@@ -108,7 +108,7 @@ export const rookContactRouter = router({
         asTrpc(error);
       }
     }),
-  start: legacyLegacyDayforgeTenantMemberProcedure
+  start: legacyDayforgeTenantMemberProcedure
     .input(
       z
         .object({
@@ -127,7 +127,7 @@ export const rookContactRouter = router({
         asTrpc(error);
       }
     }),
-  groundDraft: legacyLegacyDayforgeTenantMemberProcedure
+  groundDraft: legacyDayforgeTenantMemberProcedure
     .input(
       z
         .object({

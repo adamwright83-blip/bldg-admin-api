@@ -1,6 +1,6 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
-import { adminProcedure, legacyLegacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import { adminProcedure, legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import {
   earnCompanion,
   getCompanion,
@@ -11,19 +11,19 @@ import {
 } from "./companionService";
 
 export const companionRouter = router({
-  roster: legacyLegacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
+  roster: legacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
     listCompanions({ tenantId: ctx.tenantId })
   ),
-  get: legacyLegacyDayforgeTenantMemberProcedure
+  get: legacyDayforgeTenantMemberProcedure
     .input(z.object({ companionId: z.string() }))
     .query(({ ctx, input }) => getCompanion({ tenantId: ctx.tenantId, ...input })),
   seedDefaults: adminProcedure.mutation(async ({ ctx }) =>
     seedCompanionRoster({ tenantId: ctx.tenantId ?? "default" })
   ),
-  myUnlocks: legacyLegacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
+  myUnlocks: legacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
     listUnlocks({ tenantId: ctx.tenantId, operatorId: String(ctx.user.id) })
   ),
-  isEarned: legacyLegacyDayforgeTenantMemberProcedure
+  isEarned: legacyDayforgeTenantMemberProcedure
     .input(z.object({ companionId: z.string() }))
     .query(({ ctx, input }) =>
       isCompanionEarned({
@@ -32,7 +32,7 @@ export const companionRouter = router({
         ...input,
       })
     ),
-  earn: legacyLegacyDayforgeTenantMemberProcedure
+  earn: legacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         companionId: z.string(),

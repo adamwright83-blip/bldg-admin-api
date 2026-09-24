@@ -68,8 +68,8 @@ export const ENV = {
   revenueReminderOutboundConfigured:
     process.env.REVENUE_REMINDER_OUTBOUND_CONFIGURED === "true",
   /** Boss-demo operational layer: resettable, isolated demo tenant. Off by default. */
-  legacyLegacyDayforgeDemoEnabled: process.env.DAYFORGE_DEMO_ENABLED === "true",
-  legacyLegacyDayforgeDemoTenantSlug:
+  legacyDayforgeDemoEnabled: process.env.DAYFORGE_DEMO_ENABLED === "true",
+  legacyDayforgeDemoTenantSlug:
     process.env.DAYFORGE_DEMO_TENANT_SLUG?.trim() || "sunset-laundry-demo",
   /** World capability: Night Shift authors tomorrow's presentation after LA date roll. Off by default. */
   goldlineNightShiftEnabled: process.env.GOLDLINE_NIGHT_SHIFT === "true",

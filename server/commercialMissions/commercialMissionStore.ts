@@ -38,14 +38,14 @@ import {
 import {
   writeLegacyDayforgeEventWith,
   type LegacyDayforgeServerActor,
-} from "../legacyLegacyDayforgeEvents/legacyLegacyDayforgeEventStore";
+} from "../legacyDayforgeEvents/legacyDayforgeEventStore";
 
 type Actor = {
   type: "system" | "operator" | "driver" | "game";
   id: string | null;
 };
 
-function legacyLegacyDayforgeActor(actor: Actor): LegacyDayforgeServerActor {
+function legacyDayforgeActor(actor: Actor): LegacyDayforgeServerActor {
   return {
     type: actor.type === "driver" ? "field" : actor.type,
     id: actor.id,
@@ -672,7 +672,7 @@ export async function createCommercialMission(input: {
       const projectionCorrelationId = missionProjectionCorrelationId(missionId, input.idempotencyKey);
       await writeLegacyDayforgeEventWith(tx, {
         tenantId: input.tenantId,
-        actor: legacyLegacyDayforgeActor(input.actor),
+        actor: legacyDayforgeActor(input.actor),
         entityType: "commercial_mission",
         entityId: String(missionId),
         eventName: "mission_created",
@@ -698,7 +698,7 @@ export async function createCommercialMission(input: {
       if (created.assignedTo) {
         await writeLegacyDayforgeEventWith(tx, {
           tenantId: input.tenantId,
-          actor: legacyLegacyDayforgeActor(input.actor),
+          actor: legacyDayforgeActor(input.actor),
           entityType: "commercial_mission",
           entityId: String(missionId),
           eventName: "mission_assigned",
@@ -891,7 +891,7 @@ export async function transitionCommercialMissionWith(
       const projectionCorrelationId = missionProjectionCorrelationId(input.missionId, input.idempotencyKey);
       await writeLegacyDayforgeEventWith(tx, {
         tenantId: input.tenantId,
-        actor: legacyLegacyDayforgeActor(input.actor),
+        actor: legacyDayforgeActor(input.actor),
         entityType: "commercial_mission",
         entityId: String(input.missionId),
         eventName,

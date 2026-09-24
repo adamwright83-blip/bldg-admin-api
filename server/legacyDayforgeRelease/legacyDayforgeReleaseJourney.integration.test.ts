@@ -11,8 +11,8 @@ import {
   commercialMissionPhoneHandoffs,
   commercialOrderAttributions,
   commercialPipelineRecords,
-  legacyLegacyDayforgeAuditEvents,
-  legacyLegacyDayforgeProductEvents,
+  legacyDayforgeAuditEvents,
+  legacyDayforgeProductEvents,
   driverGameWorldNodes,
   driverCapabilityUnlocks,
   communicationReceipts,
@@ -931,30 +931,30 @@ describe.skipIf(!runDatabaseGate)("DayForge MySQL release journey", () => {
 
     const auditRows = await db
       .select()
-      .from(legacyLegacyDayforgeAuditEvents)
+      .from(legacyDayforgeAuditEvents)
       .where(
         and(
-          eq(legacyLegacyDayforgeAuditEvents.tenantId, tenantId),
-          eq(legacyLegacyDayforgeAuditEvents.entityType, "commercial_mission"),
-          eq(legacyLegacyDayforgeAuditEvents.entityId, String(mission.id))
+          eq(legacyDayforgeAuditEvents.tenantId, tenantId),
+          eq(legacyDayforgeAuditEvents.entityType, "commercial_mission"),
+          eq(legacyDayforgeAuditEvents.entityId, String(mission.id))
         )
       )
-      .orderBy(asc(legacyLegacyDayforgeAuditEvents.createdAt), asc(legacyLegacyDayforgeAuditEvents.id));
+      .orderBy(asc(legacyDayforgeAuditEvents.createdAt), asc(legacyDayforgeAuditEvents.id));
     expect(auditRows.length).toBeGreaterThan(5);
     assertOrderedEventRows(auditRows);
 
     const productRows = await db
       .select()
-      .from(legacyLegacyDayforgeProductEvents)
+      .from(legacyDayforgeProductEvents)
       .where(
         and(
-          eq(legacyLegacyDayforgeProductEvents.tenantId, tenantId),
-          eq(legacyLegacyDayforgeProductEvents.missionId, mission.id)
+          eq(legacyDayforgeProductEvents.tenantId, tenantId),
+          eq(legacyDayforgeProductEvents.missionId, mission.id)
         )
       )
       .orderBy(
-        asc(legacyLegacyDayforgeProductEvents.occurredAt),
-        asc(legacyLegacyDayforgeProductEvents.createdAt)
+        asc(legacyDayforgeProductEvents.occurredAt),
+        asc(legacyDayforgeProductEvents.createdAt)
       );
     expect(productRows.length).toBeGreaterThan(3);
     for (const productEvent of productRows) {

@@ -8,9 +8,9 @@
 import { randomUUID } from "node:crypto";
 import { inArray } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
-import { legacyLegacyDayforgeAuditEvents, legacyLegacyDayforgeProductEvents } from "../../drizzle/schema";
+import { legacyDayforgeAuditEvents, legacyDayforgeProductEvents } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { writeLegacyDayforgeEvent } from "./legacyLegacyDayforgeEventStore";
+import { writeLegacyDayforgeEvent } from "./legacyDayforgeEventStore";
 import { getGoldlineEffectivenessSummary } from "./goldlineEffectivenessQueries";
 
 const runDatabaseGate =
@@ -24,11 +24,11 @@ describe.skipIf(!runDatabaseGate)("Goldline gameplay event pipeline", () => {
     const db = await getDb();
     if (!db) return;
     await db
-      .delete(legacyLegacyDayforgeProductEvents)
-      .where(inArray(legacyLegacyDayforgeProductEvents.correlationId, correlationIds));
+      .delete(legacyDayforgeProductEvents)
+      .where(inArray(legacyDayforgeProductEvents.correlationId, correlationIds));
     await db
-      .delete(legacyLegacyDayforgeAuditEvents)
-      .where(inArray(legacyLegacyDayforgeAuditEvents.correlationId, correlationIds));
+      .delete(legacyDayforgeAuditEvents)
+      .where(inArray(legacyDayforgeAuditEvents.correlationId, correlationIds));
   });
 
   async function recordGoldlineEvent(input: {
@@ -80,8 +80,8 @@ describe.skipIf(!runDatabaseGate)("Goldline gameplay event pipeline", () => {
     const db = await getDb();
     const rows = await db!
       .select()
-      .from(legacyLegacyDayforgeProductEvents)
-      .where(inArray(legacyLegacyDayforgeProductEvents.correlationId, [sessionId]));
+      .from(legacyDayforgeProductEvents)
+      .where(inArray(legacyDayforgeProductEvents.correlationId, [sessionId]));
     expect(rows).toHaveLength(1);
   });
 
@@ -108,8 +108,8 @@ describe.skipIf(!runDatabaseGate)("Goldline gameplay event pipeline", () => {
     const db = await getDb();
     const rows = await db!
       .select()
-      .from(legacyLegacyDayforgeProductEvents)
-      .where(inArray(legacyLegacyDayforgeProductEvents.correlationId, [sessionId]));
+      .from(legacyDayforgeProductEvents)
+      .where(inArray(legacyDayforgeProductEvents.correlationId, [sessionId]));
     expect(rows).toHaveLength(2);
   });
 

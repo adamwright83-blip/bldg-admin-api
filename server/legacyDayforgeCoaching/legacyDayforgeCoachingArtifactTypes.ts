@@ -4,8 +4,8 @@ import type {
   LegacyDayforgeCoachingClaim,
   LegacyDayforgeCoachingOutput,
   LegacyDayforgeEvidenceReference,
-} from "@shared/legacyLegacyDayforgeCoaching";
-import type { LegacyDayforgeCoachingFallbackCode } from "./legacyLegacyDayforgeCoachingPolicy";
+} from "@shared/legacyDayforgeCoaching";
+import type { LegacyDayforgeCoachingFallbackCode } from "./legacyDayforgeCoachingPolicy";
 
 export type PersistLegacyDayforgeCoachingArtifactInput = {
   tenantId: string;
@@ -42,7 +42,7 @@ export type FindReusableLegacyDayforgeCoachingArtifactInput = Pick<
   | "contextHash"
 >;
 
-export function legacyLegacyDayforgeCoachingArtifactCacheKey(
+export function legacyDayforgeCoachingArtifactCacheKey(
   input: FindReusableLegacyDayforgeCoachingArtifactInput,
 ): string {
   const scopeKey = input.missionStepId === null ? "mission" : `step:${input.missionStepId}`;

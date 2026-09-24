@@ -11,13 +11,13 @@ import {
   type LegacyDayforgeCoachingFallbackCode,
   type LegacyDayforgeCoachingGroundingEvidence,
   type PreparedLegacyDayforgeCoachingArtifact,
-} from "./legacyLegacyDayforgeCoachingPolicy";
+} from "./legacyDayforgeCoachingPolicy";
 import type {
   LegacyDayforgeCoachingArtifact,
   LegacyDayforgeCoachingArtifactRepository,
   FindReusableLegacyDayforgeCoachingArtifactInput,
   PersistLegacyDayforgeCoachingArtifactInput,
-} from "./legacyLegacyDayforgeCoachingArtifactTypes";
+} from "./legacyDayforgeCoachingArtifactTypes";
 
 const requestSchema = z.object({
   tenantId: z.string().trim().min(1).max(64),
@@ -123,7 +123,7 @@ function prepareArtifact(input: {
   }
 }
 
-export function legacyLegacyDayforgeCoachingContextHash(value: unknown): string {
+export function legacyDayforgeCoachingContextHash(value: unknown): string {
   const seen = new Set<object>();
   const canonicalize = (candidate: unknown): string => {
     if (candidate === null) return "null";

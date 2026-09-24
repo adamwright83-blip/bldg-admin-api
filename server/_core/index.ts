@@ -55,10 +55,10 @@ import {
 } from "../residentPaymentMethods";
 import {
   configuredTrustProxy,
-  legacyLegacyDayforgeSecurityHeaders,
+  legacyDayforgeSecurityHeaders,
   resolveTrustedClientIp,
-} from "../legacyLegacyDayforgeSecurity/legacyLegacyDayforgeSecurity";
-import { registerLegacyDayforgeRetentionRoute } from "../legacyLegacyDayforgeRetention/retentionRoute";
+} from "../legacyDayforgeSecurity/legacyDayforgeSecurity";
+import { registerLegacyDayforgeRetentionRoute } from "../legacyDayforgeRetention/retentionRoute";
 import { registerClientFatalRoute } from "../clientFatal/clientFatalRoute";
 import { startAutomaticGeographicReconciliation } from "../geography/geographicReconciliationScheduler";
 import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
@@ -154,7 +154,7 @@ async function startServer() {
 
   const app = express();
   app.set("trust proxy", configuredTrustProxy());
-  app.use(legacyLegacyDayforgeSecurityHeaders());
+  app.use(legacyDayforgeSecurityHeaders());
   const server = createServer(app);
   attachConversationRelayUpgrade(server);
 

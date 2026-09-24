@@ -72,7 +72,7 @@ surfaces under `/admin`.
 
 1. Changed: unified real pickups, deliveries, payment blockers, assigned
    follow-ups, dispatches, and route exceptions into one ordered projection.
-2. Reused: orders and `legacyLegacyDayforgeToday` commercial aggregation.
+2. Reused: orders and `legacyDayforgeToday` commercial aggregation.
 3. Added: `server/field/fieldTodayService.ts`, types/router, and FIELD UI.
 4. Legacy: the static Goldline route/objective list is bypassed.
 5. Migration: none.

@@ -3,14 +3,14 @@ import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  legacyLegacyDayforgeReleaseMigrationFilenames,
+  legacyDayforgeReleaseMigrationFilenames,
   normalizeLegacyDayforgeReleaseMigrationSql,
 } from "./applyReleaseMigrations";
 
 describe("DayForge release migration runner", () => {
   it("selects every root SQL migration in stable filename order", async () => {
     const migrationDirectory = resolve(process.cwd(), "drizzle");
-    const filenames = legacyLegacyDayforgeReleaseMigrationFilenames(
+    const filenames = legacyDayforgeReleaseMigrationFilenames(
       await readdir(migrationDirectory)
     );
     expect(filenames[0]).toMatch(/^0000_/);
