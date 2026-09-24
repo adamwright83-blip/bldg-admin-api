@@ -1,4 +1,5 @@
-import { MemoryCandyBarStore, type CandyBarStore } from "./store";
+import { MysqlCandyBarStore } from "./mysqlStore";
+import type { CandyBarStore } from "./store";
 import { CandyBarOrchestrator } from "./orchestrator";
 import {
   createAnthropicArchitectAdapter,
@@ -22,10 +23,11 @@ let orchSingleton: CandyBarOrchestrator | null = null;
  * - Creative: seam only
  * - GitHub: read-only API observer
  *
- * For deterministic tests, construct CandyBarOrchestrator directly with fakes.
+ * MemoryCandyBarStore is tests-only; runtime never pretends memory is durable.
+ * For deterministic tests, construct CandyBarOrchestrator directly with fakes / MemoryCandyBarStore.
  */
 export function getCandyBarStore(): CandyBarStore {
-  if (!storeSingleton) storeSingleton = new MemoryCandyBarStore();
+  if (!storeSingleton) storeSingleton = new MysqlCandyBarStore();
   return storeSingleton;
 }
 
