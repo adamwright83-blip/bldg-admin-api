@@ -287,6 +287,13 @@ describe("2026-09-24 Brain V2 regression shapes", () => {
       requests.filter(request => request.kind === "prior_claim_recheck")
     ).toHaveLength(0);
     expect(result.decision.control.epistemic.priorClaimRechecked).toBe(false);
+    expect(
+      result.decision.responsePlan.segments.some(
+        segment =>
+          segment.type === "ConversationalSegment" &&
+          /can't freshly verify/i.test(segment.text)
+      )
+    ).toBe(true);
   });
 
   it("keeps provenance questions receipt-shaped rather than pretending they are fresh verification", async () => {
