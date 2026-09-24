@@ -76,8 +76,16 @@ Live DB: **not verified.** `DATABASE_URL` is unset locally. Do not invent verifi
    is the V2 destination and is tested, but production voice still gets completeness
    from V1's `listenOnly`.
 4. **No live database verification.**
-5. **Shadow has never run with the flag on**, so no real comparison telemetry exists.
+5. **2026-09-23 shadow trial.** With the flag on for observation only, V2 inhibited pending-as-intent and did not treat bare "Claire" turns as prior-claim challenges. Comparison telemetry now records V1 turn kind, answer path, action ids, prior-claim, and completeness beside V2's counterfactual completeness, work kind, attention, pending disposition, and disagreement labels. That trial is not a production run of V2 speech.
 6. **Mission understanding has no live write.** There is no canonical speech-to-mission action. Cutover must not invent one.
+
+### Still blocking cutover after the 2026-09-23 trial
+
+- Live voice completeness is still owned by V1. V2 records a counterfactual and does not hold or release the microphone.
+- First-person work can still collide with a business-query reading inside V2 until the shadow plan is the speaker. V1 now keeps that speech out of the prior-claim lane.
+- V2 has no live mutation authority. `mutationAllowed` stays false. The action gateway still refuses production writes.
+- Post-mutation observation and working memory are not yet what V2 speaks from. A receipt V1 just wrote is not a V2 success claim.
+- Cutover remains prohibited. Shadow mode is not production-ready.
 
 Canonical design: `docs/claire-brain-v2.md`
 Detailed handoff: `docs/claire-brain-v2-handoff.md`

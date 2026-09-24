@@ -538,6 +538,31 @@ describe("Twilio recording signature and hangup completion", () => {
       await productionConversationStore().listTurns(session.id)
     ).toHaveLength(1);
   });
+
+  it.each(["failed", "busy", "no-answer", "completed"])(
+    "provider terminal status %s finalizes without a goodbye",
+    async status => {
+      setClaireConversationStoreForTesting(createMemoryClaireConversationStore());
+      const session = await createConversationSession({
+        tenantId: "tenant-1",
+        operatorUserId: "adam",
+        claireConversationId: `conv-${status}`,
+        conversationKind: "pre_drive",
+        recordingEnabled: false,
+        providerCallSid: `CA-${status}`,
+      });
+      await persistSpokenTurn({ callSid: `CA-${status}`, speaker: "OPERATOR", text: "still talking" });
+      await handleCallCompleted({ callSid: `CA-${status}`, callStatus: status });
+      const latest = await productionConversationStore().getSession(session.id);
+      expect(latest?.status).toBe("complete");
+      expect(latest?.endedAt).toBeTruthy();
+      expect(latest?.completionReason).toBe(status === "completed" ? "remote_hangup" : `twilio_${status}`);
+      await handleCallCompleted({ callSid: `CA-${status}`, callStatus: status });
+      const again = await productionConversationStore().getSession(session.id);
+      expect(again?.completionReason).toBe(latest?.completionReason);
+      expect(await productionConversationStore().listTurns(session.id)).toHaveLength(1);
+    }
+  );
 });
 
 describe("Goldline-owned evaluator boundary", () => {

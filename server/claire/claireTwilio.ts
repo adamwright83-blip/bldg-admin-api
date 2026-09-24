@@ -955,6 +955,13 @@ export function runAuthoritativeClaireVoiceTurn(input: {
             // Voice records work either as a commitment turn or as linked action ids.
             mutated: Boolean(result.commitmentTurn) || Boolean(result.actionIds?.length),
             spokeSomething: Boolean(result.speak),
+            turnKind: result.kind,
+            answerPath: result.answerPath ?? null,
+            actionIds: result.actionIds ?? [],
+            priorClaimRan: Boolean(result.priorClaimRan),
+            completeness: observation.completeness,
+            release: result.thoughtCompleteness ?? null,
+            speak: result.speak,
           },
         });
       }

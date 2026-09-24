@@ -15,6 +15,8 @@ export type BriefingTiming =
   | { kind: "after"; start: string; label: string }
   | { kind: "daypart"; label: string };
 
+import type { ObjectiveExecutionType } from "../../../shared/objectiveExecution";
+
 export type BriefingItemKind = "completed" | "new_work";
 
 export type BriefingItem = {
@@ -31,7 +33,14 @@ export type BriefingItem = {
   /** A genuinely important missing detail, phrased as a question. Null when the item is actionable as said. */
   needs: string | null;
   /** Set when this item is already on the Day Line (never add it twice). */
-  existing: { id: string; title: string; source: "day_line" | "campaign" } | null;
+  existing: {
+    id: string;
+    title: string;
+    source: "day_line" | "campaign";
+    executionType?: ObjectiveExecutionType | null;
+  } | null;
+  /** Explicit operator execution type. Absent means unspecified, not Mission. */
+  executionType?: ObjectiveExecutionType | null;
 };
 
 export type ParsedBriefing = {

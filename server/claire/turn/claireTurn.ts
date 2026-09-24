@@ -21,6 +21,7 @@ import { loadConfirmedWorkdayPlan, markWorkdayReconciliation } from "../workdayP
 import { briefingClock, dayMention, parseTiming } from "../briefing/briefingTiming";
 import type { BriefingItem, ParsedBriefing } from "../briefing/briefingTypes";
 import { parseBriefingDeterministically } from "../briefing/deterministicBriefing";
+import { assembleReferencedDayLineWork, confirmExistingDayLineSpeech } from "../briefing/explicitDayLine";
 import { extractBriefingWithModel } from "../briefing/llmBriefing";
 import { briefingAdditions, speakBriefingSummary } from "../briefing/speakBriefing";
 import { reviseBriefing } from "../briefing/reviseBriefing";
@@ -60,7 +61,7 @@ import {
 import { persistClaireTurnTrace } from "../answerPathRecorder";
 import { explicitDayLineRefusal, explicitTrackingRequest } from "../briefing/titleContract";
 import { classifyOpenDialogueAct } from "./dialogueAct";
-import { interpretTurn } from "./interpretTurn";
+import { detectConversationControl, interpretTurn, priorClaimLaneOpen } from "./interpretTurn";
 import { routeActiveWeeklySession } from "../weeklyMission/route";
 import { runBusinessQuery } from "../../analytics/businessQuery";
 import {
@@ -221,6 +222,9 @@ export type ClaireTurnResult = {
    * has no such segment, so production turns leave it unset.
    */
   narrativeSpeech?: NarrativeClaireSpeechAttachment;
+  /** True when this utterance entered prior-claim adjudication. */
+  priorClaimRan?: boolean;
+  answerPath?: string | null;
 };
 
 export type ClaireTurnDeps = {
@@ -339,12 +343,23 @@ export function shouldHoldForContinuation(
   return true;
 }
 
-/** A phone transcript that stops mid-thought ("Desired timing is.", "and then I"). */
+/**
+ * A phone transcript that stops mid-thought ("Desired timing is.", "and then I",
+ * "And after that,"). A trailing comma is an open clause. The last word is a
+ * dangling function word, subordinator, or preposition — not one phrase.
+ */
+const DANGLING_FINAL_WORD =
+  /^(?:is|are|was|were|the|a|an|to|for|and|then|at|with|of|from|my|his|her|their|so|but|because|like|um|uh|need|have|going|which|who|while|after|before|when|if|or)$/i;
+
 export function looksUnfinished(utterance: string): boolean {
   const text = utterance.trim();
-  const words = text.split(/\s+/).filter(Boolean).length;
-  if (words < 2) return false;
-  return /\b(?:is|are|was|were|the|a|an|to|for|and|then|at|with|of|from|my|his|her|their|so|but|because|like|um|uh|need|have|going)\s*[.,]?$/i.test(text);
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length < 2) return false;
+  if (/,\s*$/.test(text)) return true;
+  // A question is a finished act. "Where did that come from?" is not a dangling "from".
+  if (/\?\s*$/.test(text)) return false;
+  const last = text.replace(/[.!?;:]+$/g, "").trim().split(/\s+/).pop()?.toLowerCase() ?? "";
+  return DANGLING_FINAL_WORD.test(last);
 }
 
 /**
@@ -487,15 +502,30 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
 
   let utterance = input.utterance.trim();
   let thoughtCompleteness: NonNullable<ClaireTurnResult["thoughtCompleteness"]> = "complete";
-  if (input.surface === "voice" && input.allowFragmentWait !== false) {
+  if (input.surface === "voice") {
+    const allowWait = input.allowFragmentWait !== false;
     const incoming = utterance;
-    if (incoming) {
+    if (incoming && (allowWait || state.pendingFragment)) {
       state.providerFragments = [...(state.providerFragments ?? []), incoming];
     }
-    const combined = state.pendingFragment ? `${state.pendingFragment} ${utterance}`.trim() : utterance;
+    // An unfinished fragment is not the prefix of a new act. "…static at" plus
+    // "Just add that to the day line" is a new instruction, not the object of "at".
+    // Grammatical continuations ("timing is" + "next Tuesday") still stitch.
+    let held = state.pendingFragment?.trim() ?? "";
+    if (incoming && held && looksUnfinished(held) && (explicitTrackingRequest(incoming) || detectConversationControl(incoming))) {
+      held = "";
+      state.pendingFragment = null;
+      state.fragmentHolds = 0;
+    }
+    const combined = held ? `${held} ${utterance}`.trim() : utterance;
     const holds = state.fragmentHolds ?? 0;
     const awaitingReply = Boolean(state.pendingBriefing || state.pendingProposal || state.pendingAccountFollowUp);
-    if (holds < CONTINUATION_MAX_HOLDS && shouldHoldForContinuation(combined, { awaitingReply })) {
+    const unfinished = Boolean(combined) && looksUnfinished(combined);
+    // Long finished statements still wait out a Gather pause. Clearly incomplete
+    // syntax stays inside the same budget even when the provider marks the prompt final.
+    const graceHold = allowWait && shouldHoldForContinuation(combined, { awaitingReply });
+    const holdIncomplete = unfinished && holds < CONTINUATION_MAX_HOLDS;
+    if (combined && holds < CONTINUATION_MAX_HOLDS && (graceHold || holdIncomplete)) {
       state.pendingFragment = combined;
       state.fragmentHolds = holds + 1;
       return {
@@ -507,17 +537,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       };
     }
     utterance = combined;
-    thoughtCompleteness = holds >= CONTINUATION_MAX_HOLDS ? "forced_flush" : "complete";
+    const budgetSpent = holds >= CONTINUATION_MAX_HOLDS && (unfinished || shouldHoldForContinuation(combined, { awaitingReply }));
+    thoughtCompleteness = !allowWait || budgetSpent ? "forced_flush" : "complete";
     state.pendingFragment = null;
     state.fragmentHolds = 0;
-  } else if (state.pendingFragment) {
-    if (utterance) state.providerFragments = [...(state.providerFragments ?? []), utterance];
-    utterance = `${state.pendingFragment} ${utterance}`.trim();
-    thoughtCompleteness = "forced_flush";
-    state.pendingFragment = null;
-    state.fragmentHolds = 0;
-  } else if (input.surface === "voice" && input.allowFragmentWait === false) {
-    thoughtCompleteness = "forced_flush";
   }
   remember(state, "operator", utterance, nowMs);
   /**
@@ -560,15 +583,24 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   let pendingReceipt: FactualClaimReceipt | null = null;
   let knownAccounts: CoverageAccountRef[] = [];
   let uncertainChallenge: ClaimResolution | null = null;
+  let deferredPriorClaimSpeech: string | null = null;
   type SemanticSlot = { promise: Promise<ClaimChallengeReading | null>; settled: ClaimChallengeReading | null | undefined; classifierMs?: number };
   let semantic: SemanticSlot | null = null;
   const readerReceipt = (answerPath: string, claimType: string, grounding: ClaimGrounding, sources: string[], answerText: string) => {
     pendingReceipt = receiptFromReader({ conversationKey: input.conversationKey, claireTurnOrdinal: claireOrdinal, nowMs, answerText, answerPath, claimType, grounding, sources });
   };
   const finish = (result: ClaireTurnResult): ClaireTurnResult => {
+    const laneOpen = priorClaimLaneOpen(interpretTurn(utterance));
+    let conversational = result.speak;
+    if (!laneOpen && conversational.includes(UNVERIFIABLE_SPEECH)) {
+      conversational = conversational.split(UNVERIFIABLE_SPEECH).join(" ").replace(/\s+/g, " ").trim();
+    }
+    if (laneOpen && deferredPriorClaimSpeech) {
+      conversational = [deferredPriorClaimSpeech, conversational].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+    }
     const inventory = buildClaireVerifiedFactInventory(input.context);
     const speak = assembleGuardedClaireSpeak({
-      conversational: result.speak,
+      conversational,
       inventory,
       localTime: input.context?.clock?.localTime ?? null,
       receiptBackedCommit: result.receiptBackedCommit,
@@ -605,6 +637,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       ...guarded,
       assembledUtterance: utterance,
       thoughtCompleteness,
+      priorClaimRan: Boolean(trace.priorClaim) || trace.path === "prior_claim_verification",
+      answerPath: trace.path ?? null,
       ...(narratorContextSupplied ? { narratorContextSupplied: true as const } : {}),
     };
     return personalEndCall ? { ...withUtterance, endCall: true } : withUtterance;
@@ -735,7 +769,8 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // A refinement of the previous QUERY ("I asked you for the last five... what were the other
   // four?") is not a challenge to its TRUTH. Prior-claim used to swallow both, plus bare
   // acknowledgements — three of the worst turns in the 2026-09-20 call.
-  if (resolution.kind !== "none" && !interpreted.acknowledgement && (interpreted.correctnessChallenge || !(interpreted.queryRefinement || interpreted.queryParameterChange))) {
+  const priorClaimLane = priorClaimLaneOpen(interpreted);
+  if (priorClaimLane && resolution.kind !== "none" && !interpreted.acknowledgement && (interpreted.correctnessChallenge || !(interpreted.queryRefinement || interpreted.queryParameterChange))) {
     // Deterministic referent (name / number / immediately preceding): the classifier only labels the act.
     const explicit = resolution.kind === "ambiguous" || resolution.via === "explicit_reference";
     if (isChallengeCandidate(utterance, explicit)) {
@@ -758,7 +793,11 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       } else if (reading?.probe) {
         const spoken = await adjudicateResolution(effective, "deterministic", classifierMs);
         mark("prior_claim_verification");
-        return finish({ speak: spoken, kind: "answered" });
+        if (interpreted.hasExplicitActionRequest || interpreted.operatorWorkCommitment) {
+          deferredPriorClaimSpeech = spoken;
+        } else {
+          return finish({ speak: spoken, kind: "answered" });
+        }
       } else if (reading === null) {
         // Classifier down: fail closed in BOTH directions. Any model reply on this turn is replaced by the
         // adjudication (see finalizeModelReply), so an outage can neither let a model downgrade a grounded
@@ -768,7 +807,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         if (targets.some(receipt => !isKnownJudgment(receipt))) uncertainChallenge = resolution;
       }
     }
-  } else if ((state.claimReceipts?.length ?? 0) > 0 && utterance.trim().split(/\s+/).length <= SEMANTIC_REFERENT_MAX_WORDS) {
+  } else if (priorClaimLane && (state.claimReceipts?.length ?? 0) > 0 && utterance.trim().split(/\s+/).length <= SEMANTIC_REFERENT_MAX_WORDS) {
     // No name/number/adjacent match. An older claim may still be referenced in other words ("that sale thing you
     // told me earlier…"). Resolve it semantically, IN PARALLEL with normal routing so deterministic answers pay
     // no wait: a deterministic route only honours the result if it has already landed; any model-generated reply
@@ -866,6 +905,16 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   if (state.pendingBriefing && nowMs - state.pendingBriefing.createdAt > PENDING_BRIEFING_TTL_MS) state.pendingBriefing = null;
   if (state.pendingBriefing) {
     const reply = replyDecision(utterance);
+    const bindsPending = reply.decision === "yes" || reply.decision === "no" || explicitDayLineRefusal(utterance);
+    const looksLikeRevision = /^(?:but|except|only|without|minus|and change|change|make)\b/i.test(utterance);
+    const newMatter =
+      !bindsPending &&
+      !looksLikeRevision &&
+      (interpreted.hasExplicitActionRequest ||
+        interpreted.operatorWorkCommitment ||
+        interpreted.conversationControl ||
+        interpreted.correctnessChallenge ||
+        interpreted.provenanceQuestion);
     const revisionText =
       reply.decision === "yes" && /^(?:but|except|only|without|minus|and change|change|make)\b/i.test(reply.remainder)
         ? reply.remainder
@@ -931,6 +980,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       }
       return finish({ speak: "Okay, I won't add any of that.", kind: "briefing_declined" });
     }
+    if (newMatter) {
+      state.pendingBriefing = null;
+      state.pendingReminded = false;
+    }
   }
 
   // Something Claire asked about in the established single-item loop.
@@ -939,7 +992,19 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // The single-item loop classifies with a model; never ask it twice about the same utterance.
   let commitmentTried = false;
   if (state.pendingProposal || state.pendingUpdate || state.pendingFieldCapture || state.pendingEngineeringOffer || state.pendingDayLineChoice || state.clarifyingUtterance) {
-    if ((isShortReply(utterance) && !looksLikeQuestion(utterance)) || replyDecision(utterance).decision !== "other") {
+    const pendingReply = replyDecision(utterance);
+    const pendingIsNew =
+      pendingReply.decision === "other" &&
+      (explicitTrackingRequest(utterance) ||
+        interpreted.conversationControl ||
+        interpreted.correctnessChallenge ||
+        interpreted.provenanceQuestion);
+    if (pendingIsNew) {
+      state.pendingProposal = null;
+      state.pendingUpdate = null;
+      state.clarifyingUtterance = null;
+      state.pendingDayLineChoice = null;
+    } else if ((isShortReply(utterance) && !looksLikeQuestion(utterance)) || pendingReply.decision !== "other") {
       commitmentTried = true;
       const turn = await deps.commitment(
         {
@@ -1020,6 +1085,17 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
   }
   let parsed = parseBriefingDeterministically(utterance, clock);
+  if (explicitTrackingRequest(utterance)) {
+    const prior = (state.history ?? []).filter(entry => entry.speaker === "operator").map(entry => entry.text);
+    const priorOnly = prior.at(-1) === utterance ? prior.slice(0, -1) : prior;
+    const assembled = assembleReferencedDayLineWork({
+      utterance,
+      priorOperatorUtterances: priorOnly,
+      clock,
+      unfinished: looksUnfinished,
+    });
+    if (assembled.length) parsed = { ...parsed, items: assembled, source: "deterministic" };
+  }
   const openAct = classifyOpenDialogueAct(utterance);
   /**
    * The InterpretedTurn seam. A parser finding task-like words is not action intent: a correction,
@@ -1037,6 +1113,60 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       context: [...parsed.context, ...parsed.items.map(item => item.quote)],
       items: [],
     };
+  }
+  const explicitCommitNow =
+    explicitTrackingRequest(utterance) &&
+    parsed.items.length &&
+    interpreted.mayProposeWork &&
+    !(interpreted.hasBusinessQuestion && !interpreted.correctnessChallenge && !interpreted.provenanceQuestion);
+  if (explicitCommitNow) {
+    const dates = Array.from(new Set(parsed.items.map(item => item.businessDate)));
+    const [existing] = await Promise.all([
+      deps.loadExisting({ tenantId: input.tenantId, dayDirectorActorId: input.dayDirectorActorId, dates }).catch(() => []),
+    ]);
+    const reconciled = reconcileBriefing(parsed, existing, null);
+    const openItems = reconciled.items.filter(item => item.kind === "new_work");
+    const creates = openItems.filter(item => !item.existing);
+    const updates = openItems.filter(
+      item => item.existing && item.executionType && item.existing.executionType !== item.executionType
+    );
+    const same = openItems.filter(
+      item => item.existing && (!item.executionType || item.existing.executionType === item.executionType)
+    );
+    state.pendingBriefing = null;
+    state.pendingProposal = null;
+    state.pendingReminded = false;
+    if (!creates.length && !updates.length && same.length) {
+      mark("briefing");
+      return finish({
+        speak: confirmExistingDayLineSpeech(same),
+        kind: "answered",
+        actionIds: same.flatMap(item => (item.existing ? [item.existing.id] : [])),
+      });
+    }
+    const result = await deps.commit(
+      { ...reconciled, items: openItems },
+      {
+        tenantId: input.tenantId,
+        dayDirectorActorId: input.dayDirectorActorId,
+        conversationKey: input.conversationKey,
+        vehicleId: input.operatorUserId,
+      }
+    );
+    mark("briefing");
+    await completeMorningReconciliation();
+    const updateSpeech = (result.receipts ?? [])
+      .filter(receipt => receipt.claimedState === "updated")
+      .map(receipt => `Updated: ${receipt.statement}.`)
+      .join(" ");
+    const createdSpeech = result.added?.length ? speakBriefingCommit(result, today) : "";
+    return finish({
+      speak: "",
+      receiptBackedCommit: [createdSpeech, updateSpeech].filter(Boolean).join(" "),
+      kind: "briefing_saved",
+      actionIds: result.commitmentIds,
+      mutationReceipts: result.receipts ?? [],
+    });
   }
   if (state.pendingProposal && parsed.items.length > 0 && heldProposalTitle) {
     // More work arrived while a single proposal was waiting: fold it into the bundle instead of dropping either.
@@ -1455,6 +1585,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
    * deterministic routes only honour a result that has already landed, so they never wait.
    */
   async function semanticChallengeSpeech(wait: boolean, presentation: "deterministic" | "guard_replacement"): Promise<string | null> {
+    if (!priorClaimLaneOpen(interpretTurn(utterance))) return null;
     if (!semantic) return null;
     const reading = wait ? await semantic.promise : semantic.settled ?? null;
     if (!reading) {

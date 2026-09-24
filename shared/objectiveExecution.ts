@@ -45,6 +45,20 @@ export function isObjectiveExecutionType(value: unknown): value is ObjectiveExec
   return typeof value === "string" && (OBJECTIVE_EXECUTION_TYPES as readonly string[]).includes(value);
 }
 
+/**
+ * The operator named the execution type. Difficulty, emotion, and the word
+ * "ad" are not a type. "today's mission" is a designation, not this classifier.
+ */
+export function explicitOperatorExecutionType(text: string): ObjectiveExecutionType | null {
+  const challenge = /\b(?:as|is)\s+a\s+challenge\b/i.test(text);
+  const mission = /\b(?:as|is)\s+a\s+mission\b/i.test(text) && !/\btoday'?s\s+mission\b/i.test(text);
+  const hybrid = /\bhybrid\s+objective\b/i.test(text);
+  if (hybrid || (challenge && mission)) return "hybrid_objective";
+  if (challenge) return "challenge";
+  if (mission) return "mission";
+  return null;
+}
+
 export function classifyObjectiveExecution(input: ObjectiveExecutionInput): ObjectiveExecutionDecision {
   void input.identifier;
   void input.motion;

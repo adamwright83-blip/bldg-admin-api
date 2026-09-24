@@ -5,6 +5,7 @@
 import type { AttentionPlan } from "../contracts/attention";
 import type { ExecutiveDecision } from "../contracts/executiveDecision";
 import type { PerceivedTurn } from "../contracts/perceivedTurn";
+import { explicitOperatorExecutionType } from "../../../../shared/objectiveExecution";
 
 export type ShadowComparisonRecord = {
   conversationKey: string;
@@ -70,6 +71,19 @@ export type ShadowComparisonRecord = {
   verificationInvoked: boolean;
   callEnd: boolean;
   productionAuthority: false;
+  /** What V2 would have done with completeness. This does not change V1 audio. */
+  counterfactualCompleteness: "complete" | "incomplete" | "forced_flush";
+  proposedActionClass: string | null;
+  proposedExecutionType: string | null;
+  disagreementLabels: string[];
+  v1?: {
+    turnKind: string | null;
+    answerPath: string | null;
+    actionIds: string[];
+    priorClaimRan: boolean;
+    completeness: "complete" | "incomplete" | "forced_flush" | null;
+    release: string | null;
+  };
 };
 
 export function comparisonRecordFromDecision(
@@ -152,5 +166,9 @@ export function comparisonRecordFromDecision(
       decision.retrievals.some(request => request.kind === "prior_claim_recheck"),
     callEnd: decision.callControl.endCall,
     productionAuthority: false,
+    counterfactualCompleteness: decision.perceivedTurn.completeness,
+    proposedActionClass: decision.actionGrants[0]?.actionClass ?? null,
+    proposedExecutionType: explicitOperatorExecutionType(decision.perceivedTurn.assembledText),
+    disagreementLabels: [],
   };
 }

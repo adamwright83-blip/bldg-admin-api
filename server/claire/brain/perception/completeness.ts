@@ -125,3 +125,16 @@ export function assembleThought(input: AssemblyInput): AssemblyResult {
 export function readsAsUnfinished(text: string): boolean {
   return looksUnfinished(text);
 }
+
+/**
+ * What V2 would have called this utterance. Recorded beside V1. It does not
+ * hold, flush, or speak on the live call.
+ */
+export function counterfactualVoiceCompleteness(
+  assembled: string,
+  v1: "complete" | "incomplete" | "forced_flush"
+): "complete" | "incomplete" | "forced_flush" {
+  if (!assembled.trim()) return "incomplete";
+  if (looksUnfinished(assembled) && v1 !== "incomplete") return "incomplete";
+  return v1;
+}

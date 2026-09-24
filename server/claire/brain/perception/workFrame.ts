@@ -14,6 +14,7 @@ import type {
   WorkDeclarationKind,
   WorkFrameClassifierStatus,
 } from "../contracts/perceivedTurn";
+import { detectConversationControl } from "../../turn/interpretTurn";
 
 export type WorkFrameHints = {
   explicitActionRequest?: boolean;
@@ -48,7 +49,7 @@ const STRATEGIC = new RegExp(
 );
 
 const EXPLICIT_DAY_LINE =
-  /\b(?:put|add|log|schedule|track|pencil)\b[\s\S]{0,80}\b(?:on|onto)\s+(?:my\s+|the\s+)?day\s*line\b/i;
+  /\b(?:put|add|log|schedule|track|pencil)\b[\s\S]{0,80}\b(?:on|onto|to)\s+(?:my\s+|the\s+)?day\s*line\b/i;
 
 const EXPLICIT_MISSION_WRITE =
   /\b(?:make|set|mark)\b[\s\S]{0,80}\b(?:today'?s\s+mission|my\s+mission(?:\s+today)?|the\s+mission)\b/i;
@@ -201,7 +202,7 @@ function classifyWorkFrameUnsafe(text: string, hints: WorkFrameHints): WorkFrame
 
   const attentionRepair: AttentionRepairKind = SUBJECT_CHANGE.test(trimmed)
     ? "subject_change"
-    : ATTENTION_REPAIR.test(trimmed)
+    : ATTENTION_REPAIR.test(trimmed) || detectConversationControl(trimmed)
       ? "attention_repair"
       : "none";
   const operatorIntentAttested = OPERATOR_INTENT.test(trimmed);

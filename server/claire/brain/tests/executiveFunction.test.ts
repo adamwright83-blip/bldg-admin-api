@@ -263,7 +263,8 @@ describe("mission and strategic work", () => {
   it("an explicit day line request still proposes, and a mission write is not invented", async () => {
     const line = await brain("Put publishing the ad on my Day Line.");
     expect(line.decision.perceivedTurn.workDeclarationKind).toBe("explicit_day_line");
-    expect(line.decision.actionGrants.map(grant => grant.actionClass)).toEqual(["propose_day_line"]);
+    expect(line.decision.actionGrants.map(grant => grant.actionClass)).toEqual(["commit_day_line"]);
+    expect(line.decision.actionGrants[0]?.constraints.mutationAllowed).toBe(false);
     expect(line.decision.actionGrants[0]?.constraints).toEqual({ mutationAllowed: false, shadowOnly: true });
 
     const mission = await brain("Make publishing the ad today's mission.");
@@ -606,7 +607,8 @@ describe("day line is not a generic action sink", () => {
   it("an explicit day line request still proposes", async () => {
     const result = await classes("Put calling Dana on my Day Line.");
     expect(result.kind).toBe("explicit_day_line");
-    expect(result.grants).toEqual(["propose_day_line"]);
+    expect(result.grants).toEqual(["commit_day_line"]);
+    expect(result.grants).not.toContain("propose_day_line");
   });
 
   it("a first-person ordinary plan still proposes", async () => {

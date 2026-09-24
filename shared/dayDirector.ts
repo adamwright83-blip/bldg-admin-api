@@ -1,3 +1,4 @@
+import type { ObjectiveExecutionType } from "./objectiveExecution";
 import type { DayDirectorCommandMetadata, OperatorMissionMetadata } from "./claireWorkdayCommand";
 
 export type DayDirectorCommitment = {
@@ -17,6 +18,8 @@ export type DayDirectorCommitment = {
   sourceText?: string | null;
   command?: DayDirectorCommandMetadata;
   operatorMission?: OperatorMissionMetadata | null;
+  /** Stored type. Absent means the shared classifier may derive. Null is stored unknown. */
+  executionType?: ObjectiveExecutionType | null;
 };
 
 export type DayDirectorProposal = {
@@ -35,6 +38,7 @@ export type DayDirectorProposal = {
   targetBusinessDate?: string | null;
   command?: DayDirectorCommandMetadata;
   operatorMission?: OperatorMissionMetadata | null;
+  executionType?: ObjectiveExecutionType | null;
   recurrence?: {
     weekday: string;
     windowStart: string | null;
