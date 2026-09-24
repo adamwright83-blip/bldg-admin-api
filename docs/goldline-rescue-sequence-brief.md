@@ -1,3 +1,5 @@
+> **LEGACY DAYFORGE COMPATIBILITY:** Retained historical literals in this file are compatibility/history only; they are not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
+
 # Goldline rescue sequence — master brief (PR #78 → #83)
 
 Written 2026-08-17 against `main` = `370a62d` (PR #77 merged). Author: Fable 5

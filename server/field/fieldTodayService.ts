@@ -1,8 +1,9 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { and, asc, eq, sql } from "drizzle-orm";
 import { commercialFollowUps, orders } from "../../drizzle/schema";
 import { deterministicEstimate, sourcedFact } from "../../shared/businessGame";
 import { getDb } from "../db";
-import { listDayforgeToday } from "../dayforgeToday/dayforgeTodayService";
+import { listLegacyDayforgeToday } from "../legacyDayforgeToday/legacyDayforgeTodayService";
 import type { FieldTodayItem, FieldTodayProjection } from "./types";
 import { listRecoveryInterventions, physicalEntityIdsForInterventions } from "../churnRadar/customerChurnService";
 import { listForgeJobs } from "../worldForge/worldForgeService";
@@ -111,7 +112,7 @@ export async function getFieldToday(input: {
   const isFutureDate = date > businessDate(now, timeZone);
   const [orderRows, commercialItems, completedFollowUps, recoveries, forgeJobs, pressure] = await Promise.all([
     db.select().from(orders).where(sql`COALESCE(${orders.tenantId}, 'default') = ${input.tenantId} AND (${orders.pickupDate} = ${date} OR ${orders.deliveryDate} = ${date})`).orderBy(asc(orders.pickupDate), asc(orders.id)),
-    listDayforgeToday({ tenantId: input.tenantId, userId: input.userId, includeAllAssignees: input.includeAllAssignees }),
+    listLegacyDayforgeToday({ tenantId: input.tenantId, userId: input.userId, includeAllAssignees: input.includeAllAssignees }),
     db.select({
       id: commercialFollowUps.id,
       assignedTo: commercialFollowUps.assignedTo,

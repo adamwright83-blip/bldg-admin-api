@@ -1,5 +1,6 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
-import { dayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import { extractImpactSignals } from "./impactSignalExtraction";
 import {
   confirmImpactSignals,
@@ -37,7 +38,7 @@ export const impactSignalRouter = router({
    * costs money, so it must be an explicit act rather than something a cache
    * refetch can trigger. Writes nothing.
    */
-  propose: dayforgeTenantMemberProcedure
+  propose: legacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         speech: z.string().trim().min(2).max(4000),
@@ -64,7 +65,7 @@ export const impactSignalRouter = router({
    * wire at all, because a typed sentence is never the system observing
    * something itself.
    */
-  confirm: dayforgeTenantMemberProcedure
+  confirm: legacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         businessDate,
@@ -93,7 +94,7 @@ export const impactSignalRouter = router({
       confirmImpactSignals({ ...input, tenantId: ctx.tenantId })
     ),
 
-  list: dayforgeTenantMemberProcedure
+  list: legacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         campaignId: z.string().trim().max(64).nullable().optional(),
@@ -105,18 +106,18 @@ export const impactSignalRouter = router({
     ),
 
   /** The Impact Ledger: counts per class, never collapsed into one score. */
-  ledger: dayforgeTenantMemberProcedure
+  ledger: legacyDayforgeTenantMemberProcedure
     .input(z.object({ campaignId: z.string().trim().max(64).nullable().optional() }))
     .query(({ ctx, input }) =>
       impactLedgerTally({ tenantId: ctx.tenantId, ...input })
     ),
 
-  trackedDefinitions: dayforgeTenantMemberProcedure.query(({ ctx }) =>
+  trackedDefinitions: legacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
     listTrackedDefinitions({ tenantId: ctx.tenantId })
   ),
 
   /** Declares a novel signal worth asking about repeatedly. */
-  track: dayforgeTenantMemberProcedure
+  track: legacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         signalKey: z.string().trim().min(1).max(96),
@@ -137,7 +138,7 @@ export const impactSignalRouter = router({
     ),
 
   /** Promotion is an editorial act, taken by a person. */
-  promote: dayforgeTenantMemberProcedure
+  promote: legacyDayforgeTenantMemberProcedure
     .input(z.object({ signalKey: z.string().trim().min(1).max(96) }))
     .mutation(({ ctx, input }) =>
       promoteTrackedDefinition({ tenantId: ctx.tenantId, signalKey: input.signalKey })

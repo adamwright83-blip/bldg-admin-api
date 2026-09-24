@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
@@ -146,7 +147,7 @@ async function resolveCloneSource(connection: Connection) {
     : ["goldline_proof", "goldline_daylight"];
   for (const schema of candidates) {
     // Fast Goldline smoke creates an empty goldline_proof database before
-    // dayforge-release. That schema exists but has no tables yet — LIKE
+    // legacy-dayforge-release. That schema exists but has no tables yet — LIKE
     // clone from it is not a usable source.
     if (await schemaTableExists(connection, schema, "orders")) return schema;
   }

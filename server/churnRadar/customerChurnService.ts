@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { createHash, randomUUID } from "node:crypto";
 import type { ArsenalToolId } from "../../shared/rekindlingArsenal";
 import { arsenalOutreachEventFields } from "../../shared/rekindlingEvents";
@@ -24,7 +25,7 @@ import {
 } from "@shared/customerChurn";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
-import { writeDayforgeEventWith } from "../dayforgeEvents/dayforgeEventStore";
+import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
 import { appendGoldlineWorldEvent } from "../goldlineWorld/worldEventStore";
 import { findPhysicalEntityIdByAddress } from "../goldlineWorld/entityLookup";
 import {
@@ -405,9 +406,9 @@ export async function runCustomerChurnScan(input: {
         item => (item.score ?? 0) >= 40
       )) {
         const correlationId = `churn-scan:${scanId}`;
-        await writeDayforgeEventWith(tx, {
+        await writeLegacyDayforgeEventWith(tx, {
           tenantId: input.tenantId,
-          actor: { type: "system", id: "dayforge-churn-radar" },
+          actor: { type: "system", id: "legacy-dayforge-churn-radar" },
           entityType: "customer_churn_snapshot",
           entityId: snapshot.id,
           eventName: "churn_risk_detected",
@@ -771,7 +772,7 @@ export async function createCustomerRecoveryIntervention(input: {
         revenueRecoveredCents: 0,
         orderId: snapshot.lastOrderId,
         metadataJson: {
-          dayforgeRecoveryInterventionId: id,
+          legacyDayforgeRecoveryInterventionId: id,
           churnSnapshotId: snapshot.id,
           score: snapshot.score,
           confidence: snapshot.confidence,
@@ -810,7 +811,7 @@ export async function createCustomerRecoveryIntervention(input: {
         metadataJson: { opsTaskId, churnSnapshotId: snapshot.id, draftId },
       });
       const projectionCorrelationId = `recovery-intervention:${id}:${input.requestId}`;
-      await writeDayforgeEventWith(tx, {
+      await writeLegacyDayforgeEventWith(tx, {
         tenantId: input.tenantId,
         actor: { type: "operator", id: input.actorId },
         entityType: "customer_recovery_intervention",
@@ -836,7 +837,7 @@ export async function createCustomerRecoveryIntervention(input: {
         taskId: opsTaskId,
         eventType: "agent_suggested",
         actorType: "system",
-        actorId: "dayforge-churn-radar",
+        actorId: "legacy-dayforge-churn-radar",
         afterJson: { recoveryInterventionId: id, draftId },
         note: "Churn Radar created a fact-grounded draft. No outreach sent.",
       });
@@ -1091,7 +1092,7 @@ export async function approveCustomerRecoveryDraft(input: {
         },
       });
       const projectionCorrelationId = `recovery-intervention:${input.interventionId}:${input.requestId}`;
-      await writeDayforgeEventWith(tx, {
+      await writeLegacyDayforgeEventWith(tx, {
         tenantId: input.tenantId,
         actor: { type: "operator", id: input.actorId },
         entityType: "customer_recovery_intervention",
@@ -1624,7 +1625,7 @@ async function markRecoveredWith(
       status: "completed",
       revenueRecoveredCents: recoveredRevenueCents,
       completedAt: recoveredAt,
-      completedBy: "dayforge-attribution",
+      completedBy: "legacy-dayforge-attribution",
       outcome: `Recovered by paid order ${input.order.id}`,
     })
     .where(
@@ -1637,7 +1638,7 @@ async function markRecoveredWith(
     tenantId: input.tenantId,
     interventionId: input.intervention.id,
     eventName: "revenue_recovered",
-    actorId: "dayforge-attribution",
+    actorId: "legacy-dayforge-attribution",
     idempotencyKey: `recovery-order:${input.intervention.id}:${input.order.id}`,
     metadataJson: {
       orderId: input.order.id,
@@ -1646,9 +1647,9 @@ async function markRecoveredWith(
     },
   });
   const projectionCorrelationId = `recovery-intervention:${input.intervention.id}:order:${input.order.id}`;
-  await writeDayforgeEventWith(tx, {
+  await writeLegacyDayforgeEventWith(tx, {
     tenantId: input.tenantId,
-    actor: { type: "system", id: "dayforge-attribution" },
+    actor: { type: "system", id: "legacy-dayforge-attribution" },
     entityType: "customer_recovery_intervention",
     entityId: input.intervention.id,
     eventName: "customer_returned",
@@ -1662,9 +1663,9 @@ async function markRecoveredWith(
       properties: { attributionConfidence: "paid_order_after_contact" },
     },
   });
-  await writeDayforgeEventWith(tx, {
+  await writeLegacyDayforgeEventWith(tx, {
     tenantId: input.tenantId,
-    actor: { type: "system", id: "dayforge-attribution" },
+    actor: { type: "system", id: "legacy-dayforge-attribution" },
     entityType: "customer_recovery_intervention",
     entityId: input.intervention.id,
     eventName: "recovered_revenue_realized",
@@ -1686,7 +1687,7 @@ async function markRecoveredWith(
     taskId: input.intervention.opsTaskId,
     eventType: "revenue_recovered",
     actorType: "system",
-    actorId: "dayforge-attribution",
+    actorId: "legacy-dayforge-attribution",
     afterJson: { orderId: input.order.id, recoveredRevenueCents },
     note: "A subsequent paid order was attributed to this recovery mission.",
   });

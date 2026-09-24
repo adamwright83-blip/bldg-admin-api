@@ -1,5 +1,6 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import type { CommercialMission } from "@shared/commercialMission";
-import type { DayforgeProductEventName } from "@shared/dayforgeEvents";
+import type { LegacyDayforgeProductEventName } from "@shared/legacyDayforgeEvents";
 import type { TerritoryBusinessProvider } from "./territoryDiscovery";
 import {
   discoverLaundryTerritory,
@@ -45,7 +46,7 @@ export type PublicPreviewAttribution = {
 };
 
 export type PublicPreviewEvent = {
-  eventName: DayforgeProductEventName;
+  eventName: LegacyDayforgeProductEventName;
   scopeKey: string;
   tenantId: string | null;
   anonymousSessionId: string | null;
@@ -208,7 +209,7 @@ function estimatedValueBand(cents: number): string {
 }
 
 function event(input: {
-  eventName: DayforgeProductEventName;
+  eventName: LegacyDayforgeProductEventName;
   sessionId: string;
   tenantId?: string | null;
   actorId?: string | null;

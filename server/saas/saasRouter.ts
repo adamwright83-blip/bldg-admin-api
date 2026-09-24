@@ -1,16 +1,17 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import bcrypt from "bcryptjs";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
-  dayforgeTenantAdminProcedure,
-  dayforgeTenantMemberProcedure,
-  dayforgeTenantOperatorProcedure,
+  legacyDayforgeTenantAdminProcedure,
+  legacyDayforgeTenantMemberProcedure,
+  legacyDayforgeTenantOperatorProcedure,
   publicProcedure,
   router,
 } from "../_core/trpc";
 import {
-  createDayforgeBillingPortal,
-  createDayforgeSubscriptionCheckout,
+  createLegacyDayforgeBillingPortal,
+  createLegacyDayforgeSubscriptionCheckout,
 } from "./saasBilling";
 import {
   acceptTenantInvite,
@@ -102,7 +103,7 @@ function publicError(error: unknown): never {
 }
 
 export const saasRouter = router({
-  providerStatus: dayforgeTenantMemberProcedure.query(() => ({
+  providerStatus: legacyDayforgeTenantMemberProcedure.query(() => ({
     territory: {
       provider: "google_places",
       status:
@@ -218,7 +219,7 @@ export const saasRouter = router({
     )
     .mutation(async ({ input }) => {
       try {
-        return await createDayforgeSubscriptionCheckout(input);
+        return await createLegacyDayforgeSubscriptionCheckout(input);
       } catch (error) {
         publicError(error);
       }
@@ -261,18 +262,18 @@ export const saasRouter = router({
       }
     }),
 
-  me: dayforgeTenantMemberProcedure.query(async ({ ctx }) => ({
+  me: legacyDayforgeTenantMemberProcedure.query(async ({ ctx }) => ({
     tenantId: ctx.tenantId,
-    membership: ctx.dayforgeMembership,
+    membership: ctx.legacyDayforgeMembership,
     configuration: await getTenantConfiguration(ctx.tenantId),
     billing: await getTenantBillingSummary(ctx.tenantId),
   })),
 
-  members: dayforgeTenantAdminProcedure.query(({ ctx }) =>
+  members: legacyDayforgeTenantAdminProcedure.query(({ ctx }) =>
     listTenantMembers(ctx.tenantId)
   ),
 
-  invite: dayforgeTenantAdminProcedure
+  invite: legacyDayforgeTenantAdminProcedure
     .input(
       z.object({
         email: z.string().trim().email().max(320),
@@ -287,13 +288,13 @@ export const saasRouter = router({
       })
     ),
 
-  billingPortal: dayforgeTenantAdminProcedure
+  billingPortal: legacyDayforgeTenantAdminProcedure
     .input(z.object({ requestId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
-      createDayforgeBillingPortal({ tenantId: ctx.tenantId, ...input })
+      createLegacyDayforgeBillingPortal({ tenantId: ctx.tenantId, ...input })
     ),
 
-  importCsv: dayforgeTenantOperatorProcedure
+  importCsv: legacyDayforgeTenantOperatorProcedure
     .input(
       z.object({
         providerKey: z.literal("cleancloud_csv"),

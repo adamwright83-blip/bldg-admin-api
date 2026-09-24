@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "dayforge-visual-check",
+      "name": "legacy-dayforge-visual-check",
       "runtimeExecutable": "bash",
       "runtimeArgs": [
         "scripts/dev-with-release-env.sh"

@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -55,7 +56,7 @@ describe("Churn Radar production contract", () => {
     expect(service).toContain(
       "activeCustomerKeyHash: snapshot.customerKeyHash"
     );
-    expect(service).toContain("dayforgeRecoveryInterventionId");
+    expect(service).toContain("legacyDayforgeRecoveryInterventionId");
     expect(service).toContain("opsTaskEvents");
     expect(service).toContain('eventName: "recovery_mission_created"');
   });
@@ -87,7 +88,7 @@ describe("Churn Radar production contract", () => {
   });
 
   it("derives every tenant and actor from the admin session", () => {
-    expect(router).toContain("dayforgeChurnProcedure");
+    expect(router).toContain("legacyDayforgeChurnProcedure");
     expect(router).not.toContain("adminProcedure");
     expect(router).toContain("tenantId: ctx.tenantId");
     expect(router).toContain("actorId: ctx.user.openId");

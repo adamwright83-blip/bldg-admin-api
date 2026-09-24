@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { afterEach, describe, expect, it } from "vitest";
 import {
   assertProofModeAllowed,
@@ -43,7 +44,7 @@ describe("proof mode cannot reach production", () => {
     const { readFileSync } = await import("node:fs");
     const router = readFileSync("server/goldlineWorld/goldlineWorldRouter.ts", "utf8");
     const impl = readFileSync("server/goldlineWorld/goldlineProofWorld.ts", "utf8");
-    expect(router).toContain("resetProofWorld: dayforgeTenantAdminProcedure");
+    expect(router).toContain("resetProofWorld: legacyDayforgeTenantAdminProcedure");
     expect(impl).toContain("assertProofModeAllowed(\"resetProofWorld\")");
     const seed = readFileSync("scripts/goldline-living-world-proof-seed.ts", "utf8");
     expect(seed).toContain("goldline-living-world-proof-seed");

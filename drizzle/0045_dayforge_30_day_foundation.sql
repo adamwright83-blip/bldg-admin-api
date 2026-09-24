@@ -1,3 +1,4 @@
+-- LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
 ALTER TABLE `commercial_account_contacts`
   ADD COLUMN `relationshipType` enum('decision_maker','gatekeeper','champion','concierge','front_desk','security','operations','other','unknown') NOT NULL DEFAULT 'unknown' AFTER `phone`,
   ADD COLUMN `preferredChannel` enum('email','sms','phone','unknown') NOT NULL DEFAULT 'unknown' AFTER `relationshipType`,

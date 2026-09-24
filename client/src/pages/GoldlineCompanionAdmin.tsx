@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { Link } from "wouter";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -50,7 +51,7 @@ export default function GoldlineCompanionAdmin() {
               {companion.name}
               {companion.unifiedProductPersona && (
                 <span style={{ fontSize: 11, color: "#888", marginLeft: 8 }}>
-                  (unified with shipped Dayforge coach persona)
+                  (unified with shipped LegacyDayforge coach persona)
                 </span>
               )}
             </div>

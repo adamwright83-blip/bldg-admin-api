@@ -1,3 +1,5 @@
+> **LEGACY DAYFORGE COMPATIBILITY:** Retained historical literals in this file are compatibility/history only; they are not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
+
 **This document constrains future Goldline work. Current production/main outranks prose.**
 
 # Kingdom 2 companion evaluation
@@ -42,7 +44,7 @@ familiarity, inventing a recipient, or claiming a message was read.
 
 Rook is `companion.rook`. He is not Claire and not a DayForge field coach. CONTACT (`capability.rook.contact`) is the player-facing mechanic. `rook.outreach_drafting` is the implementation capability id, not the Companion. Owning the Companion does not grant that capability unless an explicit authored rule and a permission rule both say the grant follows ownership.
 
-`server/dayforgeCoaching/dayforgeCoachingRuntime.ts` and the public Dayforge landing are `legacy.dayforge`. They reuse the name. The seeded `unifiedProductPersona` flag still records an older unification; it does not make Rook a DayForge coach.
+`server/legacyDayforgeCoaching/legacyDayforgeCoachingRuntime.ts` and the public LegacyDayforge landing are `legacy.dayforge`. They reuse the name. The seeded `unifiedProductPersona` flag still records an older unification; it does not make Rook a DayForge coach.
 
 ## Colosseum level resolution and Rook's party
 

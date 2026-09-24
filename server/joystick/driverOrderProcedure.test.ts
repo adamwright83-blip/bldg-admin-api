@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TrpcContext } from "../_core/context";
 import type { User } from "../../drizzle/schema";
@@ -30,7 +31,7 @@ vi.mock("../saas/tenantAccess", async importOriginal => {
   const actual = await importOriginal<typeof import("../saas/tenantAccess")>();
   return {
     ...actual,
-    resolveDayforgeMembership: access.resolveMembership,
+    resolveLegacyDayforgeMembership: access.resolveMembership,
   };
 });
 

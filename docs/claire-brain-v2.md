@@ -1,3 +1,5 @@
+> **LEGACY DAYFORGE COMPATIBILITY:** Retained historical literals in this file are compatibility/history only; they are not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
+
 # Claire Brain V2
 
 Canonical architecture for replacing Claire’s **cognitive control plane**.
@@ -139,7 +141,7 @@ Wraps, does not reimplement:
 - `server/claire/knowledge/operationsKnowledge.ts`
 - `server/claire/knowledge/openOrdersKnowledge.ts`
 - `server/claire/knowledge/encyclopediaAgent.ts` (retrieval only)
-- Field Today / Dayforge commercial joins
+- Field Today / LegacyDayforge commercial joins
 - PR #192 `sourceVisibility` provenance filter (to be ported)
 
 ### Episodic Memory

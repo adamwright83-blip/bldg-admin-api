@@ -1,7 +1,8 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 /**
  * Registers goldline-sw.js scoped to /driver only — it never intercepts
  * requests for the rest of this multi-product host (admin dashboard,
- * Dayforge, etc.). Safe to call multiple times; the browser no-ops a
+ * LegacyDayforge, etc.). Safe to call multiple times; the browser no-ops a
  * re-registration of the same script+scope.
  */
 export function registerGoldlineServiceWorker(): void {

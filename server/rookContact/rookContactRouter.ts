@@ -1,7 +1,8 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { WAYWARD_ROOK_CONTACT_CONSEQUENCE } from "../../shared/rookContact";
-import { dayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import {
   ProgressionForgeError,
   ProgressionNotPermittedError,
@@ -46,7 +47,7 @@ const sentenceInput = z
  * a transcript approval.
  */
 export const rookContactRouter = router({
-  acknowledge: dayforgeTenantMemberProcedure
+  acknowledge: legacyDayforgeTenantMemberProcedure
     .input(
       z
         .object({
@@ -65,7 +66,7 @@ export const rookContactRouter = router({
         asTrpc(error);
       }
     }),
-  prepare: dayforgeTenantMemberProcedure
+  prepare: legacyDayforgeTenantMemberProcedure
     .input(
       z
         .object({
@@ -86,7 +87,7 @@ export const rookContactRouter = router({
         asTrpc(error);
       }
     }),
-  authorize: dayforgeTenantMemberProcedure
+  authorize: legacyDayforgeTenantMemberProcedure
     .input(
       z
         .object({
@@ -107,7 +108,7 @@ export const rookContactRouter = router({
         asTrpc(error);
       }
     }),
-  start: dayforgeTenantMemberProcedure
+  start: legacyDayforgeTenantMemberProcedure
     .input(
       z
         .object({
@@ -126,7 +127,7 @@ export const rookContactRouter = router({
         asTrpc(error);
       }
     }),
-  groundDraft: dayforgeTenantMemberProcedure
+  groundDraft: legacyDayforgeTenantMemberProcedure
     .input(
       z
         .object({

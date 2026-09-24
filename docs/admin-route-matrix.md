@@ -1,3 +1,5 @@
+> **LEGACY DAYFORGE COMPATIBILITY:** Retained historical literals in this file are compatibility/history only; they are not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
+
 # Admin route matrix
 
 Baseline audited against `main` at `76dc9d56afd3573ee0dea40032fe448350f12cbb` on 2026-08-28. Query strings are preserved by the shared host; paths marked compatibility remain registered and are not exposed in the primary Admin navigation.
@@ -22,7 +24,7 @@ Baseline audited against `main` at `76dc9d56afd3573ee0dea40032fe448350f12cbb` on
 | `/growth` | route redirect | Laundry Butler Admin | Growth | Lantern City | Add redirect | Redirect to `/growth/lantern-city` |
 | `/growth/lantern-city` | `LanternCityAtlas` | Laundry Butler Admin | Growth | Lantern City | Add | Selected customer is local UI state; no fabricated marker location |
 | `/growth/tower-wars` | `TowerWars` | Laundry Butler Admin | Growth | Tower Wars | Add | Real property aggregate drives possession, score, and damage |
-| `/commercial-pipeline` | `CommercialPipelinePage` | Dayforge / Laundry Butler growth | Growth | Commercial Pipeline | Preserve / wrap | Existing pipeline IDs and in-page state survive |
+| `/commercial-pipeline` | `CommercialPipelinePage` | LegacyDayforge / Laundry Butler growth | Growth | Commercial Pipeline | Preserve / wrap | Existing pipeline IDs and in-page state survive |
 | `/churn-radar` | `ChurnRadarPage` | Laundry Butler growth | Growth | Churn / Winback | Preserve / wrap | Existing intervention workflow survives |
 | `/growth/driver-intelligence` | `DriverIntelligenceOverview` | Laundry Butler Admin | Growth | Driver Intelligence | Add | Overview is the nested default |
 | `/growth/driver-intelligence/overlook` | `DriverIntelligenceOverview` | Laundry Butler Admin | Growth | Overlook — Scout | Add | Truthful capability status only |
@@ -34,8 +36,8 @@ Baseline audited against `main` at `76dc9d56afd3573ee0dea40032fe448350f12cbb` on
 | `/growth/driver-intelligence/ledger-room` | `DriverIntelligenceOverview` | Laundry Butler Admin | Growth | Ledger Room — Action Detail | Add | Links to existing evidence views |
 | `/growth/buildings` | `GrowthBuildingsPage` | Laundry Butler Admin | Growth | Buildings | Add | Uses customer building aggregates |
 | `/growth/offers` | `GrowthOffersPage` | Laundry Butler Admin | Growth | Offers | Add | Links to existing proposal configuration; no fake offer state |
-| `/commercial-missions` | `CommercialMissionAdmin` | Dayforge growth | Growth | Commercial Pipeline utility | Preserve compatibility | Standalone deep link remains valid |
-| `/commercial-proposal-settings` | `CommercialProposalSettings` | Dayforge growth | Growth | Offers utility | Preserve compatibility | Standalone deep link remains valid |
+| `/commercial-missions` | `CommercialMissionAdmin` | LegacyDayforge growth | Growth | Commercial Pipeline utility | Preserve compatibility | Standalone deep link remains valid |
+| `/commercial-proposal-settings` | `CommercialProposalSettings` | LegacyDayforge growth | Growth | Offers utility | Preserve compatibility | Standalone deep link remains valid |
 | `/money` | `MoneyControlRoom` | Laundry Butler Admin | Money | Overview | Add / preserve | Direct refresh selects Money |
 | `/payment-reconciliation` | `AdminTabPanels` → Payment Reconciliation | Laundry Butler Admin | Money | Reconciliation | Preserve / wrap | Preserve query string |
 | `/pnl` | `TruePnlCockpitPage` | Laundry Butler Admin | Money | True P&L | Preserve dedicated fullscreen behavior | Existing demo query string survives |

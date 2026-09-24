@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -15,7 +16,7 @@ const landing = readFileSync(
   "utf8"
 );
 const landingAnalytics = readFileSync(
-  new URL("./dayforge-flagship/analytics.ts", import.meta.url),
+  new URL("./legacy-dayforge-flagship/analytics.ts", import.meta.url),
   "utf8"
 );
 
@@ -49,7 +50,7 @@ describe("DayForge public territory preview UI contract", () => {
   it("keeps the map and list selectable and exposes release selectors", () => {
     expect(page).toContain("Opportunity map");
     expect(page).toContain("onSelect={selectOpportunity}");
-    expect(page).toContain('data-testid="dayforge-territory-preview"');
+    expect(page).toContain('data-testid="legacy-dayforge-territory-preview"');
     expect(page).toContain('data-testid="territory-preview-results"');
     expect(page).toContain('data-testid="territory-sample-mission"');
   });

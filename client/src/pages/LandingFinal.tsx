@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { useEffect, useRef, useState, type RefObject } from "react";
 import {
   ArrowRight,
@@ -18,14 +19,14 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import missionArt from "@/assets/dayforge-flagship/victory-account.jpg";
-import fieldVisit from "/dayforgeflagship/owner-field-visit.jpg";
+import missionArt from "@/assets/legacy-dayforge-flagship/victory-account.jpg";
+import fieldVisit from "/legacy-dayforge-flagship/owner-field-visit.jpg";
 import {
   getFlagshipAnalytics,
   trackCtaClick,
   type CtaSource,
-} from "./dayforge-flagship/analytics";
-import DayforgeFlagship from "./dayforge-flagship/DayforgeFlagship";
+} from "./legacy-dayforge-flagship/analytics";
+import LegacyDayforgeFlagship from "./legacy-dayforge-flagship/LegacyDayforgeFlagship";
 import "./landing-final.css";
 
 const FALLBACK_EMAIL = "adam@bldg.chat";
@@ -749,5 +750,5 @@ export default function LandingFinal() {
     return () => query.removeEventListener("change", update);
   }, []);
 
-  return isMobile ? <DayforgeFlagship /> : <LandingFinalDesktop />;
+  return isMobile ? <LegacyDayforgeFlagship /> : <LandingFinalDesktop />;
 }

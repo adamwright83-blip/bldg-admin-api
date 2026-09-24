@@ -1,5 +1,6 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
-import { dayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import {
   getOrCreateDay1TenDoorsMission,
   recordDay1TenDoorsEvidence,
@@ -13,13 +14,13 @@ const evidenceSource = z.enum([
 ]);
 
 export const day1TenDoorsRouter = router({
-  current: dayforgeTenantMemberProcedure.query(({ ctx }) =>
+  current: legacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
     getOrCreateDay1TenDoorsMission({
       tenantId: ctx.tenantId,
       driverId: ctx.user.openId,
     })
   ),
-  recordEvidence: dayforgeTenantMemberProcedure
+  recordEvidence: legacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         missionId: z.string().uuid(),
@@ -49,7 +50,7 @@ export const day1TenDoorsRouter = router({
         driverId: ctx.user.openId,
       })
     ),
-  recordOutcome: dayforgeTenantMemberProcedure
+  recordOutcome: legacyDayforgeTenantMemberProcedure
     .input(
       z
         .object({

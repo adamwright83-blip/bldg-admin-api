@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { and, eq, inArray, lte } from "drizzle-orm";
 import {
   commercialAccountContacts,
@@ -6,7 +7,7 @@ import {
   commercialFollowUps,
   commercialMissions,
   commercialOpportunities,
-  dayforgeSaasTenantLocations,
+  legacyDayforgeSaasTenantLocations,
 } from "../../drizzle/schema";
 import { deterministicEstimate } from "../../shared/businessGame";
 import { getDb } from "../db";
@@ -222,11 +223,11 @@ export async function getFieldMoves(input: {
 
   const [tenantLocation] = await db
     .select()
-    .from(dayforgeSaasTenantLocations)
+    .from(legacyDayforgeSaasTenantLocations)
     .where(
       and(
-        eq(dayforgeSaasTenantLocations.tenantId, input.tenantId),
-        eq(dayforgeSaasTenantLocations.isPrimary, true)
+        eq(legacyDayforgeSaasTenantLocations.tenantId, input.tenantId),
+        eq(legacyDayforgeSaasTenantLocations.isPrimary, true)
       )
     )
     .limit(1);

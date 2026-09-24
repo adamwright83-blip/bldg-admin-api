@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { joystickClaireDeskFieldProcedure, router } from "../_core/trpc";
 import { loadClaireRelationshipHistory } from "./character/relationshipHistory";
 import { composeClaireRelationshipClosing } from "./character/relationshipOffboarding";

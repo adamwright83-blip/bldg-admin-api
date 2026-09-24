@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import {
@@ -347,10 +348,10 @@ async function convertWonAccountWith(
       status: "verbal_yes",
       approvedAnnualValueCents: null,
       evidenceReference: null,
-      recordedBy: input.actor.id ?? "dayforge-pipeline",
+      recordedBy: input.actor.id ?? "legacy-dayforge-pipeline",
     })
     .onDuplicateKeyUpdate({
-      set: { recordedBy: input.actor.id ?? "dayforge-pipeline" },
+      set: { recordedBy: input.actor.id ?? "legacy-dayforge-pipeline" },
     });
 
   for (const location of locations) {
@@ -525,7 +526,7 @@ export async function syncCommercialPipelineForMissionTransitionWith(
         note: String(input.metadata.notes ?? "Follow up on commercial visit"),
         assignedTo: input.mission.assignedTo,
         requestId: input.metadata.requestId,
-        createdBy: input.actor.id ?? "dayforge-pipeline",
+        createdBy: input.actor.id ?? "legacy-dayforge-pipeline",
       })
       .onDuplicateKeyUpdate({
         set: { dueAt: new Date(input.metadata.followUpAt) },

@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import type { SQL } from "drizzle-orm";
 import { MySqlDialect } from "drizzle-orm/mysql-core";
@@ -14,8 +15,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../saas/tenantAccess", () => ({
-  resolveDayforgeMembership: access.resolveMembership,
-  hasDayforgeEntitlement: vi.fn(),
+  resolveLegacyDayforgeMembership: access.resolveMembership,
+  hasLegacyDayforgeEntitlement: vi.fn(),
   roleAllows: (actual: string, allowed: readonly string[]) => allowed.includes(actual),
 }));
 vi.mock("../openChannel/day1TenDoorsService", () => ({

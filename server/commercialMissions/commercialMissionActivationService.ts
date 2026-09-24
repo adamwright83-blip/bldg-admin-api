@@ -1,8 +1,9 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { and, eq, inArray } from "drizzle-orm";
 import {
   commercialMissionEvents,
   commercialMissions,
-  dayforgeSaasMemberships,
+  legacyDayforgeSaasMemberships,
   opsTasks,
   users,
 } from "../../drizzle/schema";
@@ -25,13 +26,13 @@ export async function listCommercialMissionFieldAssignees(
   if (!db) throw new Error("Database not available");
   const [memberships, drivers] = await Promise.all([
     db
-      .select({ openId: dayforgeSaasMemberships.userOpenId })
-      .from(dayforgeSaasMemberships)
+      .select({ openId: legacyDayforgeSaasMemberships.userOpenId })
+      .from(legacyDayforgeSaasMemberships)
       .where(
         and(
-          eq(dayforgeSaasMemberships.tenantId, tenantId),
-          inArray(dayforgeSaasMemberships.role, ["owner", "admin", "operator", "field"]),
-          eq(dayforgeSaasMemberships.active, true)
+          eq(legacyDayforgeSaasMemberships.tenantId, tenantId),
+          inArray(legacyDayforgeSaasMemberships.role, ["owner", "admin", "operator", "field"]),
+          eq(legacyDayforgeSaasMemberships.active, true)
         )
       ),
     db
@@ -108,14 +109,14 @@ export async function activateCommercialMissionForField(input: {
     }
 
     const [membership] = await tx
-      .select({ openId: dayforgeSaasMemberships.userOpenId })
-      .from(dayforgeSaasMemberships)
+      .select({ openId: legacyDayforgeSaasMemberships.userOpenId })
+      .from(legacyDayforgeSaasMemberships)
       .where(
         and(
-          eq(dayforgeSaasMemberships.tenantId, input.tenantId),
-          eq(dayforgeSaasMemberships.userOpenId, input.assignedTo),
-          eq(dayforgeSaasMemberships.role, "field"),
-          eq(dayforgeSaasMemberships.active, true)
+          eq(legacyDayforgeSaasMemberships.tenantId, input.tenantId),
+          eq(legacyDayforgeSaasMemberships.userOpenId, input.assignedTo),
+          eq(legacyDayforgeSaasMemberships.role, "field"),
+          eq(legacyDayforgeSaasMemberships.active, true)
         )
       )
       .limit(1);

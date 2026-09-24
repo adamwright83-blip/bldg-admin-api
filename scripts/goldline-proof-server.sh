@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
 #
 # Serves the built application against the disposable proof database used to
 # browser-prove the Goldline living world (flows A-J).

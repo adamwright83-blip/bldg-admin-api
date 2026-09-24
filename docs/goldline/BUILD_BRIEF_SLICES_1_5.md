@@ -1,3 +1,5 @@
+> **LEGACY DAYFORGE COMPATIBILITY:** Retained historical literals in this file are compatibility/history only; they are not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
+
 # Goldline build brief — Slices 1 through 5
 
 **Replaces the original five-slice prompt in full.** Slice 4's detail lives in
@@ -295,7 +297,7 @@ earned until this is answered.
 
 ## 3.2 Rook is a Companion
 
-`companion.rook` is the first Companion. Rook is not Claire and not a DayForge field coach. `server/dayforgeCoaching/dayforgeCoachingRuntime.ts` and the public Dayforge landing are `legacy.dayforge` surfaces that reuse the name. They are not Rook's identity.
+`companion.rook` is the first Companion. Rook is not Claire and not a DayForge field coach. `server/legacyDayforgeCoaching/legacyDayforgeCoachingRuntime.ts` and the public LegacyDayforge landing are `legacy.dayforge` surfaces that reuse the name. They are not Rook's identity.
 
 CONTACT (`capability.rook.contact`) is the player-facing mechanic. `rook.outreach_drafting` is the implementation capability id, not the Companion. Owning the Companion does not grant the capability unless an explicit authored rule and a permission rule both say the grant follows ownership.
 

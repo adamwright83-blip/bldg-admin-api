@@ -1,9 +1,10 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { and, desc, eq } from "drizzle-orm";
 import {
   commercialMissionEvents,
-  dayforgeSaasMemberships,
-  dayforgeSaasTenantLocations,
-  dayforgeSaasTenants,
+  legacyDayforgeSaasMemberships,
+  legacyDayforgeSaasTenantLocations,
+  legacyDayforgeSaasTenants,
   orderPaymentEvents,
   territoryScanResults,
 } from "../../drizzle/schema";
@@ -41,9 +42,9 @@ export async function getBusinessWorld(input: { tenantId: string; now?: Date }):
   const now = input.now ?? new Date();
   const [assets, tenants, locations, memberships, territoryRows, paymentEvents, missionEvents, capabilityEvaluations] = await Promise.all([
     listCustomerAssets({ tenantId: input.tenantId }),
-    db.select().from(dayforgeSaasTenants).where(eq(dayforgeSaasTenants.id, input.tenantId)).limit(1),
-    db.select().from(dayforgeSaasTenantLocations).where(eq(dayforgeSaasTenantLocations.tenantId, input.tenantId)),
-    db.select().from(dayforgeSaasMemberships).where(and(eq(dayforgeSaasMemberships.tenantId, input.tenantId), eq(dayforgeSaasMemberships.active, true))),
+    db.select().from(legacyDayforgeSaasTenants).where(eq(legacyDayforgeSaasTenants.id, input.tenantId)).limit(1),
+    db.select().from(legacyDayforgeSaasTenantLocations).where(eq(legacyDayforgeSaasTenantLocations.tenantId, input.tenantId)),
+    db.select().from(legacyDayforgeSaasMemberships).where(and(eq(legacyDayforgeSaasMemberships.tenantId, input.tenantId), eq(legacyDayforgeSaasMemberships.active, true))),
     db.select().from(territoryScanResults).where(eq(territoryScanResults.tenantId, input.tenantId)).orderBy(desc(territoryScanResults.createdAt)).limit(100),
     db.select().from(orderPaymentEvents).where(eq(orderPaymentEvents.tenantId, input.tenantId)).orderBy(desc(orderPaymentEvents.occurredAt)).limit(20),
     db.select().from(commercialMissionEvents).where(eq(commercialMissionEvents.tenantId, input.tenantId)).orderBy(desc(commercialMissionEvents.createdAt)).limit(20),

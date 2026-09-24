@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 /**
  * Production schema authority for this API.
  *
@@ -6,7 +7,7 @@
  *
  * This file does not execute `drizzle/*.sql`. A numbered drizzle migration
  * is not on the production boot path until an idempotent copy is applied
- * here. `applyDayforgeReleaseMigrations` (`DAYFORGE_RELEASE_DB=1`) replays
+ * here. `applyLegacyDayforgeReleaseMigrations` (`DAYFORGE_RELEASE_DB=1`) replays
  * numbered drizzle files for proof databases only. It is not production boot,
  * and it must not be pointed at a database this file has already bootstrapped:
  * those files use non-idempotent CREATE TABLE.

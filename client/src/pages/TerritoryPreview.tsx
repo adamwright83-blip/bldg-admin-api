@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { trpc } from "@/lib/trpc";
 import { PRODUCT_NAME } from "@shared/productIdentity";
 import {
@@ -682,7 +683,7 @@ export default function TerritoryPreview() {
 
   if (credentials && showMission && sampleMission && selectedOpportunity) {
     return (
-      <main className="tp-root" data-testid="dayforge-territory-preview">
+      <main className="tp-root" data-testid="legacy-dayforge-territory-preview">
         <header className="tp-nav">
           <a
             href="/landingfinal"
@@ -717,7 +718,7 @@ export default function TerritoryPreview() {
     actionError;
 
   return (
-    <main className="tp-root" data-testid="dayforge-territory-preview">
+    <main className="tp-root" data-testid="legacy-dayforge-territory-preview">
       <header className="tp-nav">
         <a
           href="/landingfinal"

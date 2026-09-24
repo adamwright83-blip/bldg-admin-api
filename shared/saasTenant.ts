@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 export const DAYFORGE_ENTITLEMENTS = [
   "dayforge_core",
   "territory_intelligence",
@@ -7,7 +8,7 @@ export const DAYFORGE_ENTITLEMENTS = [
   "churn_radar",
 ] as const;
 
-export type DayforgeEntitlement = (typeof DAYFORGE_ENTITLEMENTS)[number];
+export type LegacyDayforgeEntitlement = (typeof DAYFORGE_ENTITLEMENTS)[number];
 
 export const SAAS_SUBSCRIPTION_STATUSES = [
   "none",
@@ -89,7 +90,7 @@ export function normalizeSaasEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
-export function subscriptionAllowsDayforgeAccess(
+export function subscriptionAllowsLegacyDayforgeAccess(
   input: SaasSubscriptionStatus | SaasSubscriptionAccessInput
 ): boolean {
   const status = typeof input === "string" ? input : input.status;

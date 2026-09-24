@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, RefreshCw, TrendingUp, Users } from "lucide-react";
 import type { Order } from "@shared/types";
@@ -54,7 +55,7 @@ export default function AdminHome({ operatorName = "Admin", path = "/", onNaviga
   const received = trpc.admin.listByStatus.useQuery({ status: "new" }, options);
   const collected = trpc.admin.listByStatus.useQuery({ status: "collected" }, options);
   const processing = trpc.admin.listByStatus.useQuery({ status: "processing" }, options);
-  const todayQueue = trpc.system.dayforgeToday.list.useQuery(undefined, { retry: false, refetchInterval: 30_000 });
+  const todayQueue = trpc.system.legacyDayforgeToday.list.useQuery(undefined, { retry: false, refetchInterval: 30_000 });
   const towerToday = trpc.system.towerWars.today.useQuery(undefined, options);
   const geographicAtlas = trpc.system.geographicTruth.atlas.useQuery(undefined, { staleTime: 30_000 });
   const customerClusters = useMemo(() => clusterGeographicCustomers((geographicAtlas.data?.customers ?? []) as any), [geographicAtlas.data?.customers]);

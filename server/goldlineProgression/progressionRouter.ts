@@ -1,7 +1,8 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE } from "../../shared/colosseumAuthoredFinale";
-import { dayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import { ProgressionForgeError, ProgressionNotPermittedError } from "./progressionContract";
 import { acknowledgeColosseumAuthoredFinale, readGoldlineProgression } from "./progressionService";
 
@@ -15,7 +16,7 @@ import { acknowledgeColosseumAuthoredFinale, readGoldlineProgression } from "./p
  * capability.rook.contact.
  */
 export const progressionRouter = router({
-  get: dayforgeTenantMemberProcedure
+  get: legacyDayforgeTenantMemberProcedure
     .input(z.object({}).strict())
     .query(({ ctx }) =>
       readGoldlineProgression({
@@ -24,7 +25,7 @@ export const progressionRouter = router({
         capabilityOperatorId: String(ctx.user.id),
       })
     ),
-  acknowledgeColosseumFinale: dayforgeTenantMemberProcedure
+  acknowledgeColosseumFinale: legacyDayforgeTenantMemberProcedure
     .input(
       z
         .object({

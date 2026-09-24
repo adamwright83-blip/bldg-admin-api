@@ -1,6 +1,7 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { dayforgeTenantMemberProcedure, router } from "../../_core/trpc";
+import { legacyDayforgeTenantMemberProcedure, router } from "../../_core/trpc";
 import { dayDirectorActorId } from "../../dayDirector/dayDirectorActor";
 import {
   adjustWeeklyMission,
@@ -28,19 +29,19 @@ function scope(ctx: { tenantId: string; user: { openId: string; id?: unknown } }
 }
 
 export const weeklyMissionRouter = router({
-  picture: dayforgeTenantMemberProcedure.input(z.object({ timeZone })).query(({ ctx, input }) =>
+  picture: legacyDayforgeTenantMemberProcedure.input(z.object({ timeZone })).query(({ ctx, input }) =>
     loadWeeklyMissionPicture(scope(ctx, input.timeZone))
   ),
-  begin: dayforgeTenantMemberProcedure
+  begin: legacyDayforgeTenantMemberProcedure
     .input(z.object({ timeZone }))
     .mutation(({ ctx, input }) => beginWeeklyMission(scope(ctx, input.timeZone))),
-  decline: dayforgeTenantMemberProcedure
+  decline: legacyDayforgeTenantMemberProcedure
     .input(z.object({ timeZone }))
     .mutation(({ ctx, input }) => declineWeeklyMission(scope(ctx, input.timeZone))),
-  adjust: dayforgeTenantMemberProcedure
+  adjust: legacyDayforgeTenantMemberProcedure
     .input(z.object({ timeZone }))
     .mutation(({ ctx, input }) => adjustWeeklyMission(scope(ctx, input.timeZone))),
-  reply: dayforgeTenantMemberProcedure
+  reply: legacyDayforgeTenantMemberProcedure
     .input(z.object({ timeZone, utterance: z.string().trim().min(1).max(2000) }))
     .mutation(({ ctx, input }) => replyWeeklyMission(scope(ctx, input.timeZone), input.utterance)),
 });

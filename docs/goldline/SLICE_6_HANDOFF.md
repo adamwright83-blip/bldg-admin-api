@@ -1,3 +1,5 @@
+> **LEGACY DAYFORGE COMPATIBILITY:** Retained historical literals in this file are compatibility/history only; they are not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
+
 **This document constrains future Goldline work. Current production/main outranks prose. Do not rebuild systems that already satisfy these laws.**
 
 # SLICE 6 HANDOFF — Claire relationship / safe longitudinal history

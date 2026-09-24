@@ -1,3 +1,4 @@
+# LEGACY DAYFORGE COMPATIBILITY: DAYFORGE_* below are historical runtime env-var literals only; not current architecture.
 name: Goldline mobile regression
 
 on:
@@ -19,7 +20,7 @@ on:
       - "server/salesIntel/driverSafeSalesIntel*"
       - "server/field/**"
       - "server/goldlineWorld/**"
-      - "server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts"
+      - "server/legacyDayforgeRelease/legacyDayforgeReleaseJourney.integration.test.ts"
       - "server/openChannel/**"
       - "server/impactSignals/**"
       - "shared/localTargetRun.ts"
@@ -108,7 +109,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Apply repository migrations to disposable MySQL
-        run: pnpm db:dayforge:release
+        run: pnpm db:legacy-dayforge:release
       - name: Build production application once
         run: VITE_GOLDLINE_TEST_HARNESS=1 pnpm build
       - name: Enforce Goldline bundle budget
@@ -172,8 +173,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: mobile-dayforge-release
-            command: pnpm vitest run --config vitest.integration.config.ts server/dayforgeRelease/dayforgeReleaseJourney.integration.test.ts
+          - name: mobile-legacy-compatibility-release
+            command: pnpm vitest run --config vitest.integration.config.ts server/legacyDayforgeRelease/legacyDayforgeReleaseJourney.integration.test.ts
           - name: mobile-armory
             command: pnpm vitest run --config vitest.integration.config.ts server/armory/armoryEvolution.integration.test.ts
           - name: mobile-sales-intel
@@ -208,7 +209,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Apply repository migrations to isolated MySQL
-        run: pnpm db:dayforge:release
+        run: pnpm db:legacy-dayforge:release
       - name: Run lane
         run: ${{ matrix.command }}
 
@@ -295,7 +296,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Apply repository migrations to isolated MySQL
-        run: pnpm db:dayforge:release
+        run: pnpm db:legacy-dayforge:release
       - name: Restore shared production build
         uses: actions/download-artifact@v4
         with:
@@ -356,7 +357,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Apply repository migrations to isolated MySQL
-        run: pnpm db:dayforge:release
+        run: pnpm db:legacy-dayforge:release
       - name: Restore shared production build
         uses: actions/download-artifact@v4
         with:

@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -41,8 +42,8 @@ const builder = readFileSync(
 
 describe("driver mission builder contract", () => {
   it("exposes only field-authorized build and route-list procedures", () => {
-    expect(router).toContain("myBuiltMissions: dayforgeMissionFieldProcedure");
-    expect(router).toContain("buildForDriver: dayforgeMissionFieldProcedure");
+    expect(router).toContain("myBuiltMissions: legacyDayforgeMissionFieldProcedure");
+    expect(router).toContain("buildForDriver: legacyDayforgeMissionFieldProcedure");
     expect(router).toContain("driverId: ctx.user.openId");
   });
 
