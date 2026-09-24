@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -6,8 +7,8 @@ import {
   commercialMissionFieldStates,
   commercialMissions,
   commercialVisitOutcomes,
-  dayforgeSaasMemberships,
-  dayforgeSaasTenants,
+  legacyDayforgeSaasMemberships,
+  legacyDayforgeSaasTenants,
 } from "../../drizzle/schema";
 import {
   createCommercialMission,
@@ -106,17 +107,17 @@ describe.skipIf(!runDatabaseGate)(
           );
       }
       await db
-        .delete(dayforgeSaasMemberships)
-        .where(eq(dayforgeSaasMemberships.tenantId, tenantId));
+        .delete(legacyDayforgeSaasMemberships)
+        .where(eq(legacyDayforgeSaasMemberships.tenantId, tenantId));
       await db
-        .delete(dayforgeSaasTenants)
-        .where(eq(dayforgeSaasTenants.id, tenantId));
+        .delete(legacyDayforgeSaasTenants)
+        .where(eq(legacyDayforgeSaasTenants.id, tenantId));
     });
 
     it("real stop -> route start -> visit write -> fresh read -> derived coverage", async () => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      await db.insert(dayforgeSaasTenants).values({
+      await db.insert(legacyDayforgeSaasTenants).values({
         id: tenantId,
         slug: tenantId,
         businessName: "Route Integration",
@@ -128,7 +129,7 @@ describe.skipIf(!runDatabaseGate)(
         status: "active",
       });
       await db
-        .insert(dayforgeSaasMemberships)
+        .insert(legacyDayforgeSaasMemberships)
         .values({ tenantId, userOpenId: actorId, role: "field", active: true });
       for (let index = 0; index < 3; index += 1) {
         const mission = await createCommercialMission(missionInput(index));

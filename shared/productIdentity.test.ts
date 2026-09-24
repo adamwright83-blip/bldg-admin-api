@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -42,12 +43,12 @@ describe("JOYSTICK product identity", () => {
 
     for (const file of [
       ["client", "src", "product", "ProductShell.tsx"],
-      ["client", "src", "pages", "DayforgeOnboardingPage.tsx"],
-      ["client", "src", "pages", "DayforgeLoginPage.tsx"],
-      ["client", "src", "pages", "DayforgeInvitePage.tsx"],
-      ["client", "src", "pages", "DayforgeSettingsPage.tsx"],
-      ["client", "src", "pages", "DayforgeTodayPage.tsx"],
-      ["client", "src", "pages", "DayforgeProofPage.tsx"],
+      ["client", "src", "pages", "LegacyDayforgeOnboardingPage.tsx"],
+      ["client", "src", "pages", "LegacyDayforgeLoginPage.tsx"],
+      ["client", "src", "pages", "LegacyDayforgeInvitePage.tsx"],
+      ["client", "src", "pages", "LegacyDayforgeSettingsPage.tsx"],
+      ["client", "src", "pages", "LegacyDayforgeTodayPage.tsx"],
+      ["client", "src", "pages", "LegacyDayforgeProofPage.tsx"],
       ["client", "src", "components", "goldline", "onboarding", "GoldlineOnboarding.tsx"],
       ["client", "src", "components", "goldline", "onboarding", "DemoAccess.tsx"],
       ["client", "src", "components", "goldline", "onboarding", "DesignPartnerWorld.tsx"],
@@ -68,7 +69,7 @@ describe("JOYSTICK product identity", () => {
       ["client", "src", "pages", "goldline", "GoldlineHome.tsx"],
       ["client", "src", "pages", "goldline", "ColosseumStageView.tsx"],
       ["client", "src", "pages", "goldline", "ColosseumLoading.tsx"],
-      ["client", "src", "pages", "DayforgeLanding.tsx"],
+      ["client", "src", "pages", "LegacyDayforgeLanding.tsx"],
       ["client", "src", "pages", "BoreslayLanding.tsx"],
       ["client", "src", "pages", "TerritoryPreview.tsx"],
     ]) {
@@ -93,16 +94,16 @@ describe("JOYSTICK product identity", () => {
     expect(read("client", "src", "pages", "BoreslayLanding.tsx")).not.toContain(
       "LegacyProductNotice"
     );
-    expect(read("client", "src", "pages", "DayforgeLanding.tsx")).not.toContain(
+    expect(read("client", "src", "pages", "LegacyDayforgeLanding.tsx")).not.toContain(
       "LegacyProductNotice"
     );
-    expect(read("client", "src", "pages", "DayforgeLanding.tsx")).toContain(
+    expect(read("client", "src", "pages", "LegacyDayforgeLanding.tsx")).toContain(
       "document.title = PRODUCT_NAME"
     );
     expect(read("client", "src", "pages", "BoreslayLanding.tsx")).toContain(
       "document.title = PRODUCT_NAME"
     );
-    expect(read("client", "src", "pages", "DayforgeLanding.tsx")).toContain(
+    expect(read("client", "src", "pages", "LegacyDayforgeLanding.tsx")).toContain(
       "DayForge turns nearby laundry opportunities into playable"
     );
     expect(read("client", "src", "pages", "BoreslayLanding.tsx")).toContain(

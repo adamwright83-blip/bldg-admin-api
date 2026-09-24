@@ -1,4 +1,5 @@
 #!/bin/bash
+# LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
 export NODE_ENV=development
 export DATABASE_URL='mysql://root:root@127.0.0.1:3306/dayforge_release'
 export STRIPE_SECRET_KEY='sk_test_placeholder_for_local_release_gate_only'

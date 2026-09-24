@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { createHash } from "node:crypto";
 import Stripe from "stripe";
 import type { SaasSubscriptionStatus } from "../../shared/saasTenant";
@@ -75,13 +76,13 @@ export async function createDayforgeSubscriptionCheckout(input: {
       success_url: `${appUrl()}/dayforge-onboarding?session=${onboarding.id}&checkout=success`,
       cancel_url: `${appUrl()}/dayforge-onboarding?session=${onboarding.id}&checkout=cancelled`,
       metadata: {
-        dayforgeOnboardingSessionId: onboarding.id,
-        dayforgePlanKey: plan.planKey,
+        legacyDayforgeOnboardingSessionId: onboarding.id,
+        legacyDayforgePlanKey: plan.planKey,
       },
       subscription_data: {
         metadata: {
-          dayforgeOnboardingSessionId: onboarding.id,
-          dayforgePlanKey: plan.planKey,
+          legacyDayforgeOnboardingSessionId: onboarding.id,
+          legacyDayforgePlanKey: plan.planKey,
         },
         ...(plan.trialDays > 0 ? { trial_period_days: plan.trialDays } : {}),
       },
@@ -146,8 +147,8 @@ async function syncStripeSubscription(input: {
   eventType: string;
 }) {
   const metadata = input.subscription.metadata ?? {};
-  const onboardingSessionId = metadata.dayforgeOnboardingSessionId;
-  const planKey = metadata.dayforgePlanKey;
+  const onboardingSessionId = metadata.legacyDayforgeOnboardingSessionId;
+  const planKey = metadata.legacyDayforgePlanKey;
   if (!onboardingSessionId || !planKey) {
     throw new Error("Stripe subscription is missing DayForge metadata");
   }
@@ -233,7 +234,7 @@ async function subscriptionForEvent(
   return null;
 }
 
-export type DayforgeWebhookResult = {
+export type LegacyDayforgeWebhookResult = {
   status: "processed" | "ignored" | "failed";
   reason?: string;
   stripeEventId?: string;
@@ -243,7 +244,7 @@ export async function processDayforgeBillingWebhook(input: {
   rawBody: Buffer | string;
   signature: string | string[] | undefined;
   stripe?: Stripe;
-}): Promise<DayforgeWebhookResult> {
+}): Promise<LegacyDayforgeWebhookResult> {
   const secret = process.env.DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET?.trim();
   if (!secret) return { status: "failed", reason: "missing_webhook_secret" };
   const stripe = input.stripe ?? getDayforgeBillingStripe();

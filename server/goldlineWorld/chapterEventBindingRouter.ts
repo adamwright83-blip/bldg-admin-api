@@ -1,5 +1,6 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
-import { dayforgeTenantOperatorProcedure, router } from "../_core/trpc";
+import { legacyDayforgeTenantOperatorProcedure, router } from "../_core/trpc";
 import { getTowerWarsToday } from "../towerWars/towerWarsService";
 import {
   armChapterEventBinding,
@@ -13,12 +14,12 @@ const bindingInput = z.object({
 });
 
 export const chapterEventBindingRouter = router({
-  get: dayforgeTenantOperatorProcedure
+  get: legacyDayforgeTenantOperatorProcedure
     .input(bindingInput)
     .query(({ ctx, input }) =>
       getChapterEventBinding({ tenantId: ctx.tenantId, chapterId: input.chapterId, buildingId: input.buildingId })
     ),
-  arm: dayforgeTenantOperatorProcedure
+  arm: legacyDayforgeTenantOperatorProcedure
     .input(bindingInput)
     .mutation(({ ctx, input }) =>
       armChapterEventBinding({ tenantId: ctx.tenantId, chapterId: input.chapterId, buildingId: input.buildingId })
@@ -27,7 +28,7 @@ export const chapterEventBindingRouter = router({
    * Safe to call on every load, including after the player was offline: it
    * re-fetches today's real canonical ledger and reconciles at most once.
    */
-  reconcile: dayforgeTenantOperatorProcedure
+  reconcile: legacyDayforgeTenantOperatorProcedure
     .input(bindingInput)
     .mutation(async ({ ctx, input }) => {
       const today = await getTowerWarsToday({ tenantId: ctx.tenantId });

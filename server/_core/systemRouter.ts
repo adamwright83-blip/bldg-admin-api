@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { goldlineCargoRouter } from "../goldlineCargo/cargoRouter";
 import { goldlineOnboardingRouter } from "../goldlineOnboarding/router";
 import { z } from "zod";
@@ -13,10 +14,10 @@ import { churnRadarRouter } from "../churnRadar/churnRadarRouter";
 import { hustlerLeverRouter } from "../churnRadar/hustlerLeverRouter";
 import { commercialPipelineRouter } from "../commercialPipeline/commercialPipelineRouter";
 import { saasRouter } from "../saas/saasRouter";
-import { dayforgeDemoRouter } from "../dayforgeDemo/demoTenantRouter";
-import { dayforgeTodayRouter } from "../dayforgeToday/dayforgeTodayRouter";
+import { legacyDayforgeDemoRouter } from "../legacyDayforgeDemo/demoTenantRouter";
+import { legacyDayforgeTodayRouter } from "../legacyDayforgeToday/legacyDayforgeTodayRouter";
 import { commercialCampaignRouter } from "../commercialCampaigns/commercialCampaignRouter";
-import { dayforgeProofRouter } from "../dayforgeProof/dayforgeProofRouter";
+import { legacyDayforgeProofRouter } from "../legacyDayforgeProof/legacyDayforgeProofRouter";
 import { customerAssetRouter } from "../customerAssets/customerAssetRouter";
 import { fieldRouter } from "../field/fieldRouter";
 import { businessWorldRouter } from "../businessWorld/businessWorldRouter";
@@ -32,7 +33,7 @@ import { externalOrderRouter } from "../externalOrders/externalOrderRouter";
 import { impactSignalRouter } from "../impactSignals/impactSignalRouter";
 import { driverGameWorldRouter } from "../driverGameWorld/driverGameWorldRouter";
 import { salesIntelRouter } from "../salesIntel/salesIntelRouter";
-import { goldlineEventRouter } from "../dayforgeEvents/goldlineEventRouter";
+import { goldlineEventRouter } from "../legacyDayforgeEvents/goldlineEventRouter";
 import { dayDirectorRouter } from "../dayDirector/dayDirectorRouter";
 import { weeklyMissionRouter } from "../claire/weeklyMission/weeklyMissionRouter";
 import { nightShiftRouter } from "../nightShift/nightShiftRouter";
@@ -74,10 +75,10 @@ export const systemRouter = router({
   territory: territoryRouter,
   publicTerritory: publicTerritoryRouter,
   saas: saasRouter,
-  dayforgeDemo: dayforgeDemoRouter,
-  dayforgeToday: dayforgeTodayRouter,
+  legacyDayforgeDemo: legacyDayforgeDemoRouter,
+  legacyDayforgeToday: legacyDayforgeTodayRouter,
   commercialCampaign: commercialCampaignRouter,
-  dayforgeProof: dayforgeProofRouter,
+  legacyDayforgeProof: legacyDayforgeProofRouter,
   customerAssets: customerAssetRouter,
   field: fieldRouter,
   businessWorld: businessWorldRouter,
@@ -126,9 +127,9 @@ export const systemRouter = router({
     .query(() => ({
       ok: true,
     })),
-  dayforgeDeployment: publicProcedure.query(() => ({
+  legacyDayforgeDeployment: publicProcedure.query(() => ({
     ok: true,
-    dayforgeStack: true,
+    legacyDayforgeStack: true,
     demoEnabled: process.env.DAYFORGE_DEMO_ENABLED === "true",
     commitSha:
       process.env.RAILWAY_GIT_COMMIT_SHA ??

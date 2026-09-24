@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 /**
  * Proves the "backfill a verified channel id onto an existing registry row"
  * path end-to-end against real MySQL: a source registered by @handle URL

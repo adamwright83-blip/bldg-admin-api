@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -34,7 +35,7 @@ describe("driver sales motivation contract", () => {
     expect(livingWorldMigration).toContain("DROP INDEX `uq_driver_sales_journal_tenant_driver_date`");
     expect(service).toContain('processingStatus: "captured"');
     expect(router).toContain("saveSalesJournal");
-    expect(router).toContain("salesJournalsAdmin: dayforgeTenantAdminProcedure");
+    expect(router).toContain("salesJournalsAdmin: legacyDayforgeTenantAdminProcedure");
     expect(admin).toContain("Driver journals");
     expect(admin).toContain("<audio controls");
     expect(router).toContain("salesMomentumAdmin");

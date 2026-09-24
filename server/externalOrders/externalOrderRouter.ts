@@ -1,5 +1,6 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { z } from "zod";
-import { dayforgeTenantMemberProcedure, router } from "../_core/trpc";
+import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import { extractExternalDayFromScreenshots } from "./externalOrderExtraction";
 import {
   completeExternalOrder,
@@ -37,7 +38,7 @@ export const externalOrderRouter = router({
    * query — it calls a vision model and costs money, so it must be an explicit
    * act, never something a cache refetch can trigger. It writes nothing.
    */
-  extractFromScreenshots: dayforgeTenantMemberProcedure
+  extractFromScreenshots: legacyDayforgeTenantMemberProcedure
     .input(z.object({ images: z.array(dataUrl).min(1).max(6) }))
     .mutation(({ ctx, input }) =>
       extractExternalDayFromScreenshots({ ...input, tenantId: ctx.tenantId })
@@ -48,7 +49,7 @@ export const externalOrderRouter = router({
    * review screen, so any correction they made is what lands — the model's
    * original reading is never written.
    */
-  confirmImport: dayforgeTenantMemberProcedure
+  confirmImport: legacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         batchId: z.string().uuid(),
@@ -61,7 +62,7 @@ export const externalOrderRouter = router({
     ),
 
   /** One hand-entered job — the text/call/DM path. */
-  createManual: dayforgeTenantMemberProcedure
+  createManual: legacyDayforgeTenantMemberProcedure
     .input(
       extractedJob.extend({
         sourceSystem: z.enum(EXTERNAL_SOURCE_SYSTEMS),
@@ -72,7 +73,7 @@ export const externalOrderRouter = router({
       createManualExternalOrder({ ...input, tenantId: ctx.tenantId })
     ),
 
-  list: dayforgeTenantMemberProcedure
+  list: legacyDayforgeTenantMemberProcedure
     .input(z.object({ scheduledDate: businessDate.optional() }))
     .query(({ ctx, input }) =>
       listExternalOrders({ tenantId: ctx.tenantId, ...input })
@@ -82,14 +83,14 @@ export const externalOrderRouter = router({
    * The physical work happened. Leaves reconciliation at `update_required`,
    * because this app cannot tell CleanCloud anything.
    */
-  complete: dayforgeTenantMemberProcedure
+  complete: legacyDayforgeTenantMemberProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       completeExternalOrder({ tenantId: ctx.tenantId, id: input.id })
     ),
 
   /** The operator states they updated CleanCloud. Not a verification. */
-  reconcile: dayforgeTenantMemberProcedure
+  reconcile: legacyDayforgeTenantMemberProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       reconcileExternalOrder({ tenantId: ctx.tenantId, id: input.id })

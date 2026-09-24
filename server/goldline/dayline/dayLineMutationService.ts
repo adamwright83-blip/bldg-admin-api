@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { and, eq } from "drizzle-orm";
 import {
   commercialFollowUps,
@@ -8,7 +9,7 @@ import {
 import { getDb } from "../../db";
 import { ensureAdamBoard } from "../../claire/proactive/boardService";
 import { getDayDirectorState } from "../../dayDirector/dayDirectorService";
-import { listDayforgeToday } from "../../dayforgeToday/dayforgeTodayService";
+import { listDayforgeToday } from "../../legacyDayforgeToday/legacyDayforgeTodayService";
 import { getCommercialMission, listCommercialMissions } from "../../commercialMissions/commercialMissionStore";
 import {
   dayLineDisplayTitle,

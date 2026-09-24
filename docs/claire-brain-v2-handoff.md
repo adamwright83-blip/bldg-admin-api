@@ -1,3 +1,5 @@
+> **LEGACY DAYFORGE COMPATIBILITY:** Retained historical literals in this file are compatibility/history only; they are not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
+
 # Claire Brain V2 Handoff
 
 This file is for the next coding agent. Do not rely on any Cursor chat. If you cloned the repo, checked out `cursor/claire-brain-v2`, and read `server/claire/brain/STATUS.md`, `docs/claire-brain-v2.md`, this file, and draft PR https://github.com/adamwright83-blip/bldg-admin-api/pull/193, you have the full state.
@@ -123,7 +125,7 @@ pnpm check
 
 Last focused brain run: **25 files, 325 passed, 0 todo, 0 failed.**
 Full repository suite: **760 files, 7809 passed, 7 skipped, 0 failed.**
-Dayforge release gate: **175 files, 1979 passed.** `pnpm check`, `pnpm check:dayforge:release`, and `pnpm build` green.
+LegacyDayforge release gate: **175 files, 1979 passed.** `pnpm check`, `pnpm check:legacy-dayforge:release`, and `pnpm build` green.
 
 ## Known incomplete / honest gates
 

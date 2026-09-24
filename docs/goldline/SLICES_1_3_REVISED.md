@@ -1,3 +1,5 @@
+> **LEGACY DAYFORGE COMPATIBILITY:** Retained historical literals in this file are compatibility/history only; they are not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
+
 # Slices 1–3 — revised against the code on `main`
 
 **Status:** specification. Slice 1 not started. Slices 2 and 3 partially satisfied by
@@ -253,10 +255,10 @@ until whichever answer is chosen is built.
 
 ## 3.2 Correction: Rook is already a shipped product persona
 
-`server/dayforgeCoaching/dayforgeCoachingRuntime.ts` opens its system prompt with
-"You are Rook, a concise field-sales coach." Rook appears on the public Dayforge
+`server/legacyDayforgeCoaching/legacyDayforgeCoachingRuntime.ts` opens its system prompt with
+"You are Rook, a concise field-sales coach." Rook appears on the public LegacyDayforge
 landing page as a calling field-sales coach and a "Rook field handoff" feature, and
-`client/src/pages/DayforgeLanding.test.ts` asserts the name.
+`client/src/pages/LegacyLegacyDayforgeLanding.test.ts` asserts the name.
 
 If Slice 3 assigns Rook as the Kingdom 2 companion, the product contains two
 different Rooks.
@@ -326,7 +328,7 @@ Stated plainly, because none of them are an agent's to make.
    Already recorded in `docs/GOLDLINE-TASKS.md`.
 2. **Companion model scope (§3.1).** Build the companion system in Slice 3, or record
    the assignment and defer? Slice 5's tap-for-help depends on the answer.
-3. **Rook (§3.2).** Unify the Goldline companion with the shipped Dayforge coach, or
+3. **Rook (§3.2).** Unify the Goldline companion with the shipped LegacyDayforge coach, or
    rename one of them.
 4. **Greystar snapshot amendment (§2.1).** Confirm the five/ten restatement before it
    is written into the protected document.

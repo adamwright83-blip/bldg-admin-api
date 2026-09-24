@@ -1,3 +1,5 @@
+> **LEGACY DAYFORGE COMPATIBILITY:** Retained historical literals in this file are compatibility/history only; they are not current architecture. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
+
 # Claire Intelligence Repair — PR1 Handoff (living doc, final for this pass)
 
 Branch: `codex/claire-intelligence-pr1-conversation`.
@@ -575,16 +577,16 @@ Ran against the final branch HEAD:
   `npm run check` against the branch's own committed HEAD before these working-tree changes
   (`git stash` / `git stash pop`): same 47 errors, same files, before any of this pass's edits.
   Not introduced by, not fixed by, and unrelated to this PR.
-- Repo CI workflows actually present (`.github/workflows/`): `dayforge-release.yml`,
+- Repo CI workflows actually present (`.github/workflows/`): `legacy-dayforge-release.yml`,
   `goldline-fast-smoke.yml`, `goldline-mobile-regression.yml`,
   `lantern-city-territory-mosaic.yml`, `sales-intel-teaching-review.yml`. All of them require
-  either a live MySQL instance (`pnpm db:dayforge:release`), Playwright/Chromium + Python image
+  either a live MySQL instance (`pnpm db:legacy-dayforge:release`), Playwright/Chromium + Python image
   rendering, or an integration-test DB config — none are runnable in this sandboxed
   environment (per this repo's own documented "no database in local build environment"
   constraint). `goldline-fast-smoke.yml`'s non-DB step is `pnpm check`, run above. I did not
   guess at these gates' pass/fail status — they simply could not be executed here, and none of
   their listed test files (`driverSalesJournalResilience.test.ts`, `armoryEvolution.integration.test.ts`,
-  `dayforgeReleaseJourney.integration.test.ts`, `localTargetRun.test.ts`, `impactSignal.test.ts`,
+  `legacyDayforgeReleaseJourney.integration.test.ts`, `localTargetRun.test.ts`, `impactSignal.test.ts`,
   `goldlineProgression.test.ts`, `salesIntelTeachingReExtraction.integration.test.ts`) are
   touched by this PR's diff.
 - No test was disabled, weakened, or had its assertion removed to make it pass. Every test

@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { roleAllows } from "./tenantAccess";
@@ -16,20 +17,20 @@ describe("DayForge SaaS production contract", () => {
 
   it("requires membership and entitlement procedures on every DayForge domain", () => {
     const files = [
-      ["../territory/territoryRouter.ts", "dayforgeTerritoryProcedure"],
+      ["../territory/territoryRouter.ts", "legacyDayforgeTerritoryProcedure"],
       [
         "../commercialMissions/commercialMissionRouter.ts",
-        "dayforgeMissionFieldProcedure",
+        "legacyDayforgeMissionFieldProcedure",
       ],
       [
         "../commercialProposals/commercialProposalRouter.ts",
-        "dayforgeProposalFieldProcedure",
+        "legacyDayforgeProposalFieldProcedure",
       ],
       [
         "../commercialPipeline/commercialPipelineRouter.ts",
-        "dayforgePipelineProcedure",
+        "legacyDayforgePipelineProcedure",
       ],
-      ["../churnRadar/churnRadarRouter.ts", "dayforgeChurnProcedure"],
+      ["../churnRadar/churnRadarRouter.ts", "legacyDayforgeChurnProcedure"],
     ] as const;
     for (const [path, procedure] of files) {
       const router = source(path);

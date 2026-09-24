@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 /**
  * Slice 45 — proves the real-outcome learning loop through the ACTUAL
  * production APIs, not by calling associateArmoryOutcome directly (that

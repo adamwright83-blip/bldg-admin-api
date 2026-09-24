@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { sharedPasswordLoginSelection } from "../joystick/tenantIdentity";
@@ -73,7 +74,7 @@ describe("DayForge Field production contract", () => {
   it("derives assignment and actor from the signed session", () => {
     expect(router).toContain("assertDriverCanReadMission");
     expect(router).toContain("actorId: ctx.user.openId");
-    expect(router).toContain("actorRole: ctx.dayforgeMembership.role");
+    expect(router).toContain("actorRole: ctx.legacyDayforgeMembership.role");
     expect(router).not.toContain("actorId: input.actorId");
     expect(router).not.toContain("actorRole: input");
     expect(login).toContain("sharedPasswordLoginSelection(req.body)");

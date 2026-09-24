@@ -1,3 +1,4 @@
+-- LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md.
 -- DayForge PR I: privacy-safe analytics, resumable public preview, durable
 -- abuse controls, provider budgets, and explicit retention markers.
 

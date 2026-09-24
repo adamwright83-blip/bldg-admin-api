@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 /**
  * Campaign Run router. docs/goldline/FICTION_PACKS.md section 2.
  *
@@ -9,7 +10,7 @@
 import { z } from "zod";
 import {
   adminProcedure,
-  dayforgeTenantMemberProcedure,
+  legacyDayforgeTenantMemberProcedure,
   router,
 } from "../_core/trpc";
 import { PLACEMENT_POINTS, TARGET_SOURCE_CLASSES } from "../../shared/campaignRun";
@@ -38,7 +39,7 @@ const targetInput = z.object({
 });
 
 export const campaignRunRouter = router({
-  listPacks: dayforgeTenantMemberProcedure
+  listPacks: legacyDayforgeTenantMemberProcedure
     .input(z.object({}).optional())
     .query(() =>
       listFictionPacks().map(pack => ({
@@ -49,7 +50,7 @@ export const campaignRunRouter = router({
       }))
     ),
 
-  listMine: dayforgeTenantMemberProcedure
+  listMine: legacyDayforgeTenantMemberProcedure
     .input(z.object({}).optional())
     .query(({ ctx }) =>
       listOperatorRuns({
@@ -58,13 +59,13 @@ export const campaignRunRouter = router({
       })
     ),
 
-  listRunSlots: dayforgeTenantMemberProcedure
+  listRunSlots: legacyDayforgeTenantMemberProcedure
     .input(z.object({ campaignRunId: z.string() }))
     .query(({ ctx, input }) =>
       listRunSlots({ tenantId: ctx.tenantId, ...input })
     ),
 
-  listTargets: dayforgeTenantMemberProcedure
+  listTargets: legacyDayforgeTenantMemberProcedure
     .input(z.object({ targetSetId: z.string() }))
     .query(({ ctx, input }) =>
       listTargets({ tenantId: ctx.tenantId, targetSetId: input.targetSetId })
@@ -103,7 +104,7 @@ export const campaignRunRouter = router({
       })
     ),
 
-  projection: dayforgeTenantMemberProcedure
+  projection: legacyDayforgeTenantMemberProcedure
     .input(z.object({ campaignRunId: z.string() }))
     .query(({ ctx, input }) =>
       getRunProjection({ tenantId: ctx.tenantId, ...input })
@@ -112,7 +113,7 @@ export const campaignRunRouter = router({
   /* Coordinates are required and checked server-side. A caller cannot declare
    * `device_location`, and cannot choose the timestamp the validity window
    * and cadence are both read from. */
-  recordPresence: dayforgeTenantMemberProcedure
+  recordPresence: legacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         campaignRunId: z.string(),
@@ -130,7 +131,7 @@ export const campaignRunRouter = router({
       })
     ),
 
-  recordPlacement: dayforgeTenantMemberProcedure
+  recordPlacement: legacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         campaignRunId: z.string(),
@@ -147,7 +148,7 @@ export const campaignRunRouter = router({
       })
     ),
 
-  replaceTarget: dayforgeTenantMemberProcedure
+  replaceTarget: legacyDayforgeTenantMemberProcedure
     .input(
       z.object({
         campaignRunId: z.string(),

@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import {
@@ -32,7 +33,7 @@ import {
   transitionCommercialMissionWith,
 } from "../commercialMissions/commercialMissionStore";
 import { associateArmoryOutcome } from "../armory/armoryEvidenceService";
-import { writeDayforgeEventWith } from "../dayforgeEvents/dayforgeEventStore";
+import { writeDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
 import { getDashboardTimeZone, zonedYmd } from "../dashboardZoned";
 
 type Transaction = Parameters<

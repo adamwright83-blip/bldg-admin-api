@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 /**
  * Slice 3 — the seven-companion roster, transcribed verbatim from
  * docs/goldline/REALITY_BRIDGE.md §4-10. This is the protected contract as
@@ -103,13 +104,13 @@ export const SEED_COMPANIONS: Array<{
       abilityId: "rook.outreach_drafting",
       abilityDescription:
         "Drafts and sequences personalized outreach and follow-ups from real known context, without fabricating familiarity or claiming a reply.",
-      // Slice 3 §3.2: Rook already ships as the Dayforge field-sales coach
-      // persona (server/dayforgeCoachingRuntime.ts, DayforgeLanding.tsx).
+      // Slice 3 §3.2: Rook already ships as the LegacyDayforge field-sales coach
+      // persona (server/legacyDayforgeCoachingRuntime.ts, LegacyDayforgeLanding.tsx).
       // Adam confirmed unification over renaming — this IS that Rook,
       // extended with the companion capability above.
       unifiedProductPersona: true,
       productPersonaNote:
-        "Unified with the existing Dayforge coaching persona (server/dayforgeCoaching/dayforgeCoachingRuntime.ts) per Adam's decision, 2026-09-11. Same character, not a rename or a fork.",
+        "Unified with the existing LegacyDayforge coaching persona (server/legacyDayforgeCoaching/legacyDayforgeCoachingRuntime.ts) per Adam's decision, 2026-09-11. Same character, not a rename or a fork.",
     },
   },
   {

@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { createHash } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import {
@@ -36,15 +37,15 @@ import {
 } from "../commercialPipeline/commercialPipelineCore";
 import {
   writeDayforgeEventWith,
-  type DayforgeServerActor,
-} from "../dayforgeEvents/dayforgeEventStore";
+  type LegacyDayforgeServerActor,
+} from "../legacyDayforgeEvents/legacyDayforgeEventStore";
 
 type Actor = {
   type: "system" | "operator" | "driver" | "game";
   id: string | null;
 };
 
-function dayforgeActor(actor: Actor): DayforgeServerActor {
+function legacyDayforgeActor(actor: Actor): LegacyDayforgeServerActor {
   return {
     type: actor.type === "driver" ? "field" : actor.type,
     id: actor.id,
@@ -535,7 +536,7 @@ export async function createCommercialMission(input: {
         title: `Commercial opportunity · ${input.account.name}`,
         description: input.brief.laundryOpportunity,
         source: "agent_suggested",
-        createdBy: input.actor.id ?? "dayforge-radar",
+        createdBy: input.actor.id ?? "legacy-dayforge-radar",
         assignedTo: input.assignedTo ?? null,
         status: "open",
         priority: input.opportunity.estimateConfidence === "high" ? "high" : "normal",
@@ -562,7 +563,7 @@ export async function createCommercialMission(input: {
         accountSnapshotJson: accountSnapshot,
         opportunitySnapshotJson: opportunitySnapshot,
         missionBriefJson: input.brief,
-        createdBy: input.actor.id ?? "dayforge-radar",
+        createdBy: input.actor.id ?? "legacy-dayforge-radar",
       });
       const missionId = Number(missionInsert[0].insertId);
       const code = formatMissionCode(missionId);
@@ -671,7 +672,7 @@ export async function createCommercialMission(input: {
       const projectionCorrelationId = missionProjectionCorrelationId(missionId, input.idempotencyKey);
       await writeDayforgeEventWith(tx, {
         tenantId: input.tenantId,
-        actor: dayforgeActor(input.actor),
+        actor: legacyDayforgeActor(input.actor),
         entityType: "commercial_mission",
         entityId: String(missionId),
         eventName: "mission_created",
@@ -697,7 +698,7 @@ export async function createCommercialMission(input: {
       if (created.assignedTo) {
         await writeDayforgeEventWith(tx, {
           tenantId: input.tenantId,
-          actor: dayforgeActor(input.actor),
+          actor: legacyDayforgeActor(input.actor),
           entityType: "commercial_mission",
           entityId: String(missionId),
           eventName: "mission_assigned",
@@ -890,7 +891,7 @@ export async function transitionCommercialMissionWith(
       const projectionCorrelationId = missionProjectionCorrelationId(input.missionId, input.idempotencyKey);
       await writeDayforgeEventWith(tx, {
         tenantId: input.tenantId,
-        actor: dayforgeActor(input.actor),
+        actor: legacyDayforgeActor(input.actor),
         entityType: "commercial_mission",
         entityId: String(input.missionId),
         eventName,

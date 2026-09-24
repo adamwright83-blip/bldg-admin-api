@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type { Request } from "express";
@@ -219,7 +220,7 @@ describe("JOYSTICK tenant identity", () => {
       "utf8"
     );
     const dayforge = readFileSync(
-      new URL("../../client/src/pages/DayforgeLoginPage.tsx", import.meta.url),
+      new URL("../../client/src/pages/LegacyLegacyDayforgeLoginPage.tsx", import.meta.url),
       "utf8"
     );
     const claire = readFileSync(

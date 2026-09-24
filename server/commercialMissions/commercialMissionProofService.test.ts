@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
@@ -223,7 +224,7 @@ describe("commercial mission proof upload policy", () => {
       mimeType: "image/webp",
     });
     expect(key).toMatch(
-      /^dayforge-evidence\/[0-9a-f]{24}\/41\/73\/[0-9a-f-]+-[0-9a-f]{16}\.webp$/
+      /^legacy-dayforge-evidence\/[0-9a-f]{24}\/41\/73\/[0-9a-f-]+-[0-9a-f]{16}\.webp$/
     );
     expect(key).not.toContain("private-tenant-name");
     expect(key).not.toMatch(/^(?:data|blob|https?|file):/);
@@ -312,7 +313,7 @@ describe("commercial mission proof persistence contract", () => {
 
   it("tenant-scopes reads and writes, serializes on the step, and binds request IDs", () => {
     expect(serviceSource).toContain(
-      "eq(dayforgeEvidenceUploads.tenantId, input.tenantId)"
+      "eq(legacyDayforgeEvidenceUploads.tenantId, input.tenantId)"
     );
     expect(serviceSource).toContain(
       "eq(commercialMissionSteps.tenantId, input.tenantId)"

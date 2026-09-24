@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -491,7 +492,7 @@ function LiveGoldlineDriverController({
     undefined,
     { refetchInterval: 30_000, retry: false }
   );
-  const followUpQueue = trpc.system.dayforgeToday.list.useQuery(undefined, {
+  const followUpQueue = trpc.system.legacyDayforgeToday.list.useQuery(undefined, {
     refetchInterval: 30_000,
     retry: false,
   });
@@ -602,9 +603,9 @@ function LiveGoldlineDriverController({
   const updateFieldChecklist =
     trpc.system.commercialMission.fieldChecklist.useMutation();
   const completeFollowUp =
-    trpc.system.dayforgeToday.completeFollowUp.useMutation();
+    trpc.system.legacyDayforgeToday.completeFollowUp.useMutation();
   const rescheduleFollowUp =
-    trpc.system.dayforgeToday.rescheduleFollowUp.useMutation();
+    trpc.system.legacyDayforgeToday.rescheduleFollowUp.useMutation();
   const recordGoldlineEvent = trpc.system.goldlineEvents.record.useMutation();
   const emitGoldlineEvent = useMemo(
     () =>
@@ -1135,7 +1136,7 @@ function LiveGoldlineDriverController({
   async function loadAuthoritativeFollowUp(
     missionId: number
   ): Promise<AuthoritativeFollowUp | null> {
-    const items = await utils.system.dayforgeToday.list.fetch();
+    const items = await utils.system.legacyDayforgeToday.list.fetch();
     const item = items.find(
       candidate =>
         candidate.kind === "follow_up" &&

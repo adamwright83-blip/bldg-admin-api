@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 if (process.env.NODE_ENV !== "production") {
   await import("dotenv/config");
 }
@@ -54,10 +55,10 @@ import {
 } from "../residentPaymentMethods";
 import {
   configuredTrustProxy,
-  dayforgeSecurityHeaders,
+  legacyDayforgeSecurityHeaders,
   resolveTrustedClientIp,
-} from "../dayforgeSecurity/dayforgeSecurity";
-import { registerDayforgeRetentionRoute } from "../dayforgeRetention/retentionRoute";
+} from "../legacyDayforgeSecurity/legacyDayforgeSecurity";
+import { registerDayforgeRetentionRoute } from "../legacyDayforgeRetention/retentionRoute";
 import { registerClientFatalRoute } from "../clientFatal/clientFatalRoute";
 import { startAutomaticGeographicReconciliation } from "../geography/geographicReconciliationScheduler";
 import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
@@ -153,7 +154,7 @@ async function startServer() {
 
   const app = express();
   app.set("trust proxy", configuredTrustProxy());
-  app.use(dayforgeSecurityHeaders());
+  app.use(legacyDayforgeSecurityHeaders());
   const server = createServer(app);
   attachConversationRelayUpgrade(server);
 

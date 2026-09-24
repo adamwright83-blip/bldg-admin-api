@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -55,7 +56,7 @@ describe("CodexLFinal landing contract", () => {
     expect(mainSource).not.toContain("codexlfinal");
     expect(appSource).not.toContain("codexlfinal");
     expect(pageSource).not.toContain("LandingFinal");
-    expect(pageSource).not.toContain("DayforgeLanding");
+    expect(pageSource).not.toContain("LegacyDayforgeLanding");
     expect(pageSource).not.toContain("BoreslayLanding");
   });
 

@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, gt, ne } from "drizzle-orm";
 import {
@@ -16,7 +17,7 @@ import {
   readCommercialMissionWith,
   type CommercialMissionTransaction,
 } from "../commercialMissions/commercialMissionStore";
-import { writeDayforgeEventWith } from "../dayforgeEvents/dayforgeEventStore";
+import { writeDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
 
 const PROPOSAL_READY_STATUSES = new Set([
   "phone_ready",

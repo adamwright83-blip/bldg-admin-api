@@ -1,8 +1,9 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { importedCustomers, revealWorld, mutateFirstMission } from "./firstMission";
 import { previewCustomerCsv } from "./customerImport";
 import { runTenantImport } from "../saas/tenantImportService";
 import { z } from "zod";
-import { router, dayforgeTenantMemberProcedure as memberProcedure, dayforgeTenantOperatorProcedure as procedure } from "../_core/trpc";
+import { router, legacyDayforgeTenantMemberProcedure as memberProcedure, legacyDayforgeTenantOperatorProcedure as procedure } from "../_core/trpc";
 import { answerSession } from "../../shared/goldlineOnboarding";
 import { hasExistingWorld, readSession, saveSession, startSession } from "./store";
 import { interpretAnswers } from "./interpreter";
