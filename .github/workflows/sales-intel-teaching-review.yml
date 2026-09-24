@@ -40,7 +40,7 @@ jobs:
       CI: "true"
       NODE_ENV: test
       DATABASE_URL: mysql://root:root@127.0.0.1:3306/sales_intel_review
-      DAYFORGE_RELEASE_DB: "1"
+      # LEGACY DAYFORGE COMPATIBILITY: historical runtime env-var name; not current architecture.\n      DAYFORGE_RELEASE_DB: "1"
       APP_SHARED_API_SECRET: sales-intel-review-app-secret-000000000000000000
       JWT_SECRET: sales-intel-review-jwt-secret-000000000000000000
       STRIPE_SECRET_KEY: sales-intel-review-placeholder-not-used
@@ -64,7 +64,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Apply repository migrations to disposable MySQL
-        run: pnpm db:dayforge:release
+        run: pnpm db:legacy-dayforge:release
 
       - name: Prove generalized trainer material stays human-gated
         run: >-
