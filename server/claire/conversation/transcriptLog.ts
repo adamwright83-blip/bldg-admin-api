@@ -2,7 +2,11 @@ import { and, desc, eq } from "drizzle-orm";
 import { claireConversationSessions } from "../../../drizzle/schema";
 import { getDb } from "../../db";
 import { productionConversationStore } from "./ledgerService";
-import { POST_CALL_TRANSCRIPT_SOURCE, type ConversationSession } from "./types";
+import {
+  POST_CALL_TRANSCRIPT_SOURCE,
+  type ConversationSession,
+  type ConversationTurn,
+} from "./types";
 
 const LOG_PREFIX = "[ClaireTranscript]";
 const POST_CALL_CHUNK_SIZE = 3500;
@@ -69,6 +73,40 @@ function chunks(text: string): string[] {
     result.push(text.slice(offset, offset + POST_CALL_CHUNK_SIZE));
   }
   return result;
+}
+
+/**
+ * Mirrors one newly persisted live turn immediately. Conversation Relay can
+ * remain in-progress for the entire socket lifetime, so waiting for a call
+ * completion callback makes its transcript invisible to Railway inspection.
+ *
+ * The same explicit tenant/operator scope gate and redaction policy as the
+ * full-session mirror apply here. Provider ids and providerMetadata are never
+ * logged.
+ */
+export async function emitClaireTranscriptTurnLog(
+  turn: Pick<ConversationTurn, "sessionId" | "ordinal" | "speaker" | "text" | "occurredAt">,
+  reason = "live_turn_persisted"
+): Promise<void> {
+  try {
+    const store = productionConversationStore();
+    const session = await store.getSession(turn.sessionId);
+    if (!session || !transcriptLoggingAllowed(session)) return;
+    transcriptLog({
+      event: "claire_transcript_turn",
+      reason,
+      sessionId: session.id,
+      claireConversationId: session.claireConversationId,
+      tenantId: session.tenantId,
+      operatorUserId: session.operatorUserId,
+      ordinal: turn.ordinal,
+      speaker: turn.speaker,
+      text: turn.text,
+      occurredAt: turn.occurredAt,
+    });
+  } catch (error) {
+    transcriptWarn(`live turn emit failed for session ${turn.sessionId}`, error);
+  }
 }
 
 /**
