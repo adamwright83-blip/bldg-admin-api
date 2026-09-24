@@ -17,6 +17,9 @@ function pathClearlyLegacy(p) {
 }
 
 for (const file of files) {
+  if (/legacy(?:-|_)?legacy(?:-|_)?dayforge|legacylegacydayforge/i.test(file)) {
+    violations.push("repeated legacy prefix in path: " + file);
+  }
   if (!pathClearlyLegacy(file)) violations.push("ambiguous path: " + file);
   if (binaryExt.test(file)) continue;
 
@@ -27,6 +30,9 @@ for (const file of files) {
     continue;
   }
   if (!content.toLowerCase().includes(needle)) continue;
+  if (/legacyLegacyDayforge|LegacyLegacyDayforge|legacy-legacy-dayforge/i.test(content)) {
+    violations.push(file + ": repeated legacy prefix in content");
+  }
 
   const hasMarker = content.includes(marker);
   const lines = content.split(/\r?\n/);
