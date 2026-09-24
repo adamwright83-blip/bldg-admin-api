@@ -5,7 +5,9 @@ import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
 import { Autopilot } from "./autopilot";
 import { Locomotion, deriveBriskWalk, measureGroundSpeed } from "./character";
 import { PlayerController, WALK_SPEED } from "./controller";
-import { createEnv, withSunFog } from "./env";
+import { createEnv } from "./env";
+import { createLevelMaterial, patchDynamicSunVis, type MaterialContext } from "./materials";
+import { createWater } from "./water";
 import { FollowCamera } from "./followCamera";
 import { ProofInput } from "./input";
 import { Route, splitLevel, type LevelData } from "./level";
@@ -28,7 +30,7 @@ export type RuntimeHandle = {
   dispose(): void;
 };
 
-export const PROOF_BUILD = "coastal-proof stage1";
+export const PROOF_BUILD = "coastal-proof stage2";
 
 type TestApi = {
   ready: boolean;
@@ -125,36 +127,83 @@ export async function createCoastalProof(
     }
     progress.set(file, 1);
     report();
+    if (!bytes) throw new Error(`${file} not found`);
     return loader.parseAsync(bytes, assetBase);
   };
-  const levelDataP = fetch(assetBase + "level.json").then(r => {
-    if (!r.ok) throw new Error(`level.json ${r.status}`);
-    progress.set("level.json", 1);
-    return r.json() as Promise<LevelData>;
-  });
-  const [levelGltf, data, heroGltf, animsA] = await Promise.all([
+  const fetchJson = async <T,>(file: string): Promise<T> => {
+    const r = await fetch(assetBase + file);
+    if (!r.ok) throw new Error(`${file} ${r.status}`);
+    progress.set(file, 1);
+    return (await r.json()) as T;
+  };
+  const texLoader = new THREE.TextureLoader();
+  const maxAniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  const loadTex = (file: string, opts: { srgb?: boolean; repeat?: boolean; flipY?: boolean; aniso?: number } = {}) =>
+    new Promise<THREE.Texture>((resolve, reject) => {
+      texLoader.load(
+        assetBase + file,
+        t => {
+          t.colorSpace = opts.srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+          if (opts.repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+          if (opts.flipY === false) t.flipY = false;
+          t.anisotropy = opts.aniso ?? 1;
+          t.needsUpdate = true;
+          resolve(t);
+        },
+        undefined,
+        () => reject(new Error(`${file} failed to load`))
+      );
+    });
+  const TEXTURE_SETS = ["rock", "cobble", "stone", "plaster", "wood", "wood_dark", "roof", "sand"];
+  const [levelGltf, data, heroGltf, animsA, skyMeta] = await Promise.all([
     loadGltf("level.glb"),
-    levelDataP,
+    fetchJson<LevelData>("level.json"),
     loadGltf("base_female.glb"),
     loadGltf("anims_a.glb"),
+    fetchJson<{ horizonSun: [number, number, number]; horizonAway: [number, number, number]; zenith: [number, number, number]; skyVFraction: number }>("tex/sky.json"),
   ]);
+  const [skyTex, waterNormal, shoreTex, ...setTextures] = await Promise.all([
+    loadTex("tex/sky.webp", { srgb: true }),
+    loadTex("tex/water_normal.webp", { repeat: true }),
+    loadTex(data.shore.texture),
+    ...TEXTURE_SETS.flatMap(name => [
+      loadTex(`tex/${name}_albedo.webp`, { srgb: true, repeat: true, aniso: maxAniso }),
+      loadTex(`tex/${name}_normal.webp`, { repeat: true, aniso: maxAniso }),
+    ]),
+  ]);
+  const lightmapEntries = await Promise.all(
+    Object.entries(data.lightmaps ?? {}).map(async ([name, file]) => {
+      const t = await loadTex(file, { flipY: false });
+      t.channel = 1;
+      return [name, t] as const;
+    })
+  );
   if (disposed) throw new Error("disposed during load");
+  const textures: THREE.Texture[] = [skyTex, waterNormal, shoreTex, ...setTextures, ...lightmapEntries.map(([, t]) => t)];
+  disposers.push(() => textures.forEach(t => t.dispose()));
 
   // ---------- world
-  const env = createEnv(scene, data.sunDirection);
+  const env = createEnv(scene, data.sunDirection, {
+    texture: skyTex,
+    vBottom: 1 - skyMeta.skyVFraction,
+    horizonSun: skyMeta.horizonSun,
+    horizonAway: skyMeta.horizonAway,
+    zenith: skyMeta.zenith,
+  });
   disposers.push(() => env.dispose());
+  const windUniforms = { uTime: { value: 0 }, uWind: { value: new THREE.Vector3(0.16, 0.02, -0.07) } };
+  const matCtx: MaterialContext = {
+    textures: new Map(TEXTURE_SETS.map((name, i) => [name, { albedo: setTextures[i * 2], normal: setTextures[i * 2 + 1] }])),
+    lightmaps: new Map(lightmapEntries),
+    lightmapOf: new Map(Object.entries(data.lightmapGroups ?? {}).flatMap(([lm, mats]) => mats.map(m => [m, lm] as [string, string]))),
+    windUniforms,
+  };
   const level = splitLevel(levelGltf);
   const materials: THREE.Material[] = [];
   for (const [name, meshes] of level.meshesByMaterial) {
     for (const mesh of meshes) {
-      const src = mesh.material as THREE.MeshStandardMaterial;
-      let mat: THREE.Material;
-      if (name === "glow") {
-        mat = withSunFog(new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.72, 0.38).multiplyScalar(2.4) }));
-      } else {
-        mat = withSunFog(new THREE.MeshLambertMaterial({ color: src.color.clone(), vertexColors: true, side: THREE.DoubleSide }));
-      }
-      src.dispose();
+      (mesh.material as THREE.Material).dispose();
+      const mat = createLevelMaterial(name, matCtx, !!mesh.userData.far, mesh.geometry);
       mesh.material = mat;
       materials.push(mat);
       mesh.receiveShadow = !mesh.userData.far;
@@ -174,24 +223,49 @@ export async function createCoastalProof(
     level.colliders.camMesh.geometry.dispose();
   });
 
-  // Stage 1 placeholder sea (Stage 2 replaces it)
-  const seaMat = withSunFog(new THREE.MeshLambertMaterial({ color: "#2f5d6e" }));
-  const sea = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000).rotateX(-Math.PI / 2), seaMat);
-  sea.receiveShadow = true;
-  scene.add(sea);
-  materials.push(seaMat);
+  const water = createWater({
+    normalMap: waterNormal,
+    sky: skyTex,
+    skyVBottom: 1 - skyMeta.skyVFraction,
+    shore: shoreTex,
+    shoreRect: [data.shore.x0, data.shore.y0, data.shore.size],
+    sunDir: env.sunDir,
+    sunColor: new THREE.Color(1.0, 0.7, 0.42),
+  });
+  scene.add(water.mesh);
+  disposers.push(() => water.dispose());
+
+  // sky-lit environment for the characters (the level is lit by hemisphere + baked light)
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envScene = new THREE.Scene();
+  envScene.add(env.sky.clone());
+  const envRT = pmrem.fromScene(envScene, 0, 0.1, 100);
+  scene.environment = envRT.texture;
+  scene.environmentIntensity = 0.55;
+  pmrem.dispose();
+  disposers.push(() => envRT.dispose());
 
   // ---------- Trailblazer (Stage 1: the plain base on the real rig)
   const route = new Route(data);
   const hero = SkeletonUtils.clone(heroGltf.scene);
+  const heroSunVis = { value: 1 };
   hero.traverse(o => {
     const m = o as THREE.SkinnedMesh;
     if (m.isMesh) {
       m.castShadow = true;
       m.receiveShadow = true;
       m.frustumCulled = false;
+      patchDynamicSunVis(m.material as THREE.Material, heroSunVis);
     }
   });
+  // one ray per frame toward the sun decides whether she stands in a building's shadow
+  const sunRay = new THREE.Ray();
+  const updateHeroSun = (dt: number) => {
+    sunRay.origin.copy(controller.position).add(new THREE.Vector3(0, 1.25, 0));
+    sunRay.direction.copy(env.sunDir);
+    const hit = level.colliders.cam.raycastFirst(sunRay, THREE.DoubleSide, 0.3, 300);
+    heroSunVis.value += ((hit ? 0.0 : 1.0) - heroSunVis.value) * Math.min(1, dt * 6);
+  };
   const body = new THREE.Group();
   body.add(hero);
   const heroRoot = new THREE.Group();
@@ -274,6 +348,9 @@ export async function createCoastalProof(
     body.rotation.y = controller.heading;
     follow.update(camState(), params.shot ? { yaw: 0, pitch: 0 } : input.consumeLook(), dt, now);
     env.followShadow(controller.position);
+    windUniforms.uTime.value = t / 1000;
+    water.update(t / 1000, camera.position);
+    updateHeroSun(dt);
     heroRoot.updateMatrixWorld(true);
     measureSlip(dt);
     renderer.render(scene, camera);
@@ -318,6 +395,7 @@ export async function createCoastalProof(
       follow.snap(camState());
     },
   };
+  if (params.debug) Object.assign(api, { scene, camera, renderer, env });
   (window as unknown as { __coastalProof?: TestApi }).__coastalProof = api;
   disposers.push(() => {
     delete (window as unknown as { __coastalProof?: TestApi }).__coastalProof;

@@ -16,6 +16,18 @@ export const PALETTE = {
   hemiGround: new THREE.Color("#6b5241"),
 };
 
+export type SkyInfo = {
+  texture: THREE.Texture;
+  vBottom: number;
+  horizonSun: [number, number, number];
+  horizonAway: [number, number, number];
+  zenith: [number, number, number];
+};
+
+export function fogUniformsRef() {
+  return fogUniforms;
+}
+
 export type Env = {
   sunLight: THREE.DirectionalLight;
   hemi: THREE.HemisphereLight;
@@ -36,22 +48,26 @@ void main() {
 }`;
 
 const SKY_FRAG = /* glsl */ `
+#include <common>
 uniform vec3 uSunDir;
-uniform vec3 uZenith;
-uniform vec3 uHorizon;
-uniform vec3 uGlow;
 uniform vec3 uSun;
+uniform vec3 uGlow;
+uniform sampler2D uSky;
+uniform float uSkyVBottom;
+uniform vec3 uHaze;
 varying vec3 vDir;
 void main() {
   vec3 d = normalize(vDir);
-  float h = clamp(d.y, -0.2, 1.0);
-  float t = pow(max(h, 0.0), 0.45);
-  vec3 col = mix(uHorizon, uZenith, t);
+  vec3 dd = normalize(vec3(d.x, max(d.y, 0.0), d.z));
+  float u = atan(dd.z, dd.x) * RECIPROCAL_PI2 + 0.5;
+  float v = asin(clamp(dd.y, -1.0, 1.0)) * RECIPROCAL_PI + 0.5;
+  v = (v - uSkyVBottom) / (1.0 - uSkyVBottom);
+  vec3 col = texture2D(uSky, vec2(u, v)).rgb * 0.72;
   float sd = max(dot(d, uSunDir), 0.0);
-  col = mix(col, uGlow, pow(sd, 6.0) * 0.75 * (1.0 - t * 0.6));
-  col += uSun * (pow(sd, 900.0) * 6.0 + pow(sd, 90.0) * 0.5);
-  // below the horizon: sea haze colour
-  col = mix(col, uHorizon * 0.85, smoothstep(0.02, -0.12, d.y));
+  col += uGlow * pow(sd, 10.0) * 0.55;
+  col += uSun * (smoothstep(0.99965, 0.99985, sd) * 9.0 + pow(sd, 380.0) * 1.2);
+  // sea haze at and below the horizon
+  col = mix(col, uHaze, smoothstep(0.06, -0.02, d.y));
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -114,17 +130,24 @@ function patchFogChunks() {
 #endif`;
 }
 
-export function createEnv(scene: THREE.Scene, sunDirArr: [number, number, number]): Env {
+// sky.json colours are display (sRGB) values sampled from sky.webp
+const srgb = (c: [number, number, number]) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
+
+export function createEnv(scene: THREE.Scene, sunDirArr: [number, number, number], skyInfo: SkyInfo): Env {
   patchFogChunks();
   const sunDir = new THREE.Vector3(...sunDirArr).normalize();
   fogUniforms.fogSunDir.value.copy(sunDir);
+  // haze: the sky's own horizon colours, a little deeper so distance reads as layers
+  const away = srgb(skyInfo.horizonAway).multiplyScalar(0.62).lerp(new THREE.Color("#5f7189"), 0.35);
+  const toward = srgb(skyInfo.horizonSun).multiplyScalar(0.75).lerp(PALETTE.sun, 0.5);
+  fogUniforms.fogSunColor.value.copy(toward);
 
-  scene.fog = new THREE.FogExp2(PALETTE.fogAway.getHex(), 0.0021);
+  scene.fog = new THREE.FogExp2(away.getHex(), 0.0027);
 
-  const hemi = new THREE.HemisphereLight(PALETTE.hemiSky, PALETTE.hemiGround, 1.05);
+  const hemi = new THREE.HemisphereLight(srgb(skyInfo.zenith).lerp(PALETTE.hemiSky, 0.4), PALETTE.hemiGround, 1.1);
   scene.add(hemi);
 
-  const sunLight = new THREE.DirectionalLight(PALETTE.sun, 2.6);
+  const sunLight = new THREE.DirectionalLight(PALETTE.sun, 3.1);
   sunLight.castShadow = true;
   sunLight.shadow.mapSize.set(1024, 1024);
   const sc = sunLight.shadow.camera;
@@ -144,10 +167,11 @@ export function createEnv(scene: THREE.Scene, sunDirArr: [number, number, number
     fragmentShader: SKY_FRAG,
     uniforms: {
       uSunDir: { value: sunDir },
-      uZenith: { value: PALETTE.skyZenith },
-      uHorizon: { value: PALETTE.skyHorizon },
-      uGlow: { value: PALETTE.skySunGlow },
-      uSun: { value: new THREE.Color(1.0, 0.85, 0.6) },
+      uGlow: { value: new THREE.Color(1.0, 0.55, 0.22) },
+      uSun: { value: new THREE.Color(1.0, 0.86, 0.62) },
+      uSky: { value: skyInfo.texture },
+      uSkyVBottom: { value: skyInfo.vBottom },
+      uHaze: { value: away.clone().lerp(toward, 0.25) },
     },
     side: THREE.BackSide,
     depthWrite: false,

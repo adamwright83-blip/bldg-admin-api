@@ -18,6 +18,10 @@ export type LevelData = {
   crane: { tip: [number, number, number] };
   shots: Record<string, number>;
   segments: { kind: string; s0: number; s1: number }[];
+  baked: boolean;
+  lightmaps: Record<string, string>;
+  lightmapGroups: Record<string, string[]>;
+  shore: { x0: number; y0: number; size: number; texture: string };
   stacks: [number, number, number, number][];
 };
 

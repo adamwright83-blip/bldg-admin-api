@@ -35,12 +35,25 @@ OUT_DIR = os.path.join(REPO, "client", "public", "assets", "goldline", "coastal-
 
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 BLEND_OUT = argv[argv.index("--blend") + 1] if "--blend" in argv else None
+BAKE = "--bake" in argv
+BAKE_SAMPLES = int(argv[argv.index("--samples") + 1]) if "--samples" in argv else 48
+LM_SIZE = int(argv[argv.index("--lm") + 1]) if "--lm" in argv else 2048
+
+# Lightmap atlases: R = ambient occlusion, G = sun visibility (baked shadow).
+# Small props are too thin for an atlas; they carry a per-vertex _SUNVIS instead.
+LIGHTMAP_GROUPS = {
+    "lm_cliff": ["VIS_rock"],
+    "lm_town": ["VIS_cobble", "VIS_step", "VIS_mortar", "VIS_plaster", "VIS_plaster_warm", "VIS_quay", "VIS_roof",
+                "VIS_wood", "VIS_wood_dark", "VIS_sand"],
+}
+VERTEX_SUN_OBJECTS = ["VIS_rope", "VIS_cloth_red", "VIS_cloth_cream", "VIS_cloth_blue", "VIS_iron", "VIS_foliage",
+                      "VIS_window", "VIS_glow"]
 
 rng = random.Random(1717)
 noise.seed_set(4242)
 
-SUN_AZIMUTH_DEG = 168.0
-SUN_ELEVATION_DEG = 7.5
+SUN_AZIMUTH_DEG = 162.0   # keep in step with prep_textures.py
+SUN_ELEVATION_DEG = 13.0
 
 # --------------------------------------------------------------------------
 # small vector helpers (xy plane)
@@ -341,7 +354,7 @@ SPINE_NODES = [
 ROUTE_FIRST = [i for i, n in enumerate(SPINE_NODES) if n[4] == "terrace"][0]
 ROUTE_LAST_ON_SPINE = [i for i, n in enumerate(SPINE_NODES) if n[4] == "quay"][0]
 # after the quay the route runs straight at the sun: quay apron, then the pier
-PIER_HEADING_DEG = 167.5
+PIER_HEADING_DEG = 163.0
 QUAY_APRON_LEN = 8.0
 PIER_LEN = 15.0
 
@@ -1283,6 +1296,198 @@ def to_object(g):
     return ob
 
 
+def sun_vector():
+    az, el = math.radians(SUN_AZIMUTH_DEG), math.radians(SUN_ELEVATION_DEG)
+    return Vector((math.cos(az) * math.cos(el), math.sin(az) * math.cos(el), math.sin(el)))
+
+
+def setup_cycles():
+    scene = bpy.context.scene
+    scene.render.engine = "CYCLES"
+    try:
+        prefs = bpy.context.preferences.addons["cycles"].preferences
+        prefs.compute_device_type = "METAL"
+        prefs.get_devices()
+        for d in prefs.devices:
+            d.use = True
+        scene.cycles.device = "GPU"
+    except Exception as err:  # CPU is fine, just slower
+        print("[bake] GPU unavailable:", err)
+    scene.cycles.samples = BAKE_SAMPLES
+    scene.cycles.use_denoising = False
+    world = bpy.data.worlds.new("bake_world")
+    scene.world = world
+    world.light_settings.distance = 3.5  # AO reach in metres
+    sun = bpy.data.lights.new("bake_sun", "SUN")
+    sun.angle = math.radians(1.6)
+    sun.energy = 3.0
+    so = bpy.data.objects.new("bake_sun", sun)
+    so.rotation_euler = sun_vector().to_track_quat("Z", "Y").to_euler()
+    scene.collection.objects.link(so)
+    for ob in scene.objects:
+        if ob.name.startswith(("COL_", "FAR_")):
+            ob.hide_render = True
+
+
+def unwrap_group(obs):
+    for ob in bpy.data.objects:
+        ob.select_set(False)
+    for ob in obs:
+        lm = ob.data.uv_layers.get("LM") or ob.data.uv_layers.new(name="LM")
+        ob.data.uv_layers.active = lm
+        ob.data.uv_layers["UVMap"].active_render = True
+        ob.select_set(True)
+    bpy.context.view_layer.objects.active = obs[0]
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.smart_project(angle_limit=math.radians(58), island_margin=0.0, area_weight=0.0, correct_aspect=True,
+                             scale_to_bounds=False)
+    bpy.ops.uv.average_islands_scale()
+    bpy.ops.uv.pack_islands(margin=0.003, rotate=True)
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def bake_group(name, obs):
+    import numpy as np
+    unwrap_group(obs)
+    images = {}
+    for kind in ("AO", "SHADOW"):
+        img = bpy.data.images.new(f"{name}_{kind}", LM_SIZE, LM_SIZE, alpha=False, float_buffer=True)
+        images[kind] = img
+        for ob in obs:
+            for mat in ob.data.materials:
+                nt = mat.node_tree
+                node = nt.nodes.get("bake_target") or nt.nodes.new("ShaderNodeTexImage")
+                node.name = "bake_target"
+                node.image = img
+                nt.nodes.active = node
+        for o in bpy.data.objects:
+            o.select_set(o in obs)
+        bpy.context.view_layer.objects.active = obs[0]
+        t0 = __import__("time").time()
+        bpy.ops.object.bake(type=kind, margin=6, margin_type="EXTEND", uv_layer="LM", use_clear=True)
+        print(f"[bake] {name} {kind} {LM_SIZE}px {BAKE_SAMPLES} spp in {__import__('time').time() - t0:.1f}s")
+    ao = np.array(images["AO"].pixels[:], dtype=np.float32).reshape(LM_SIZE, LM_SIZE, 4)
+    sh = np.array(images["SHADOW"].pixels[:], dtype=np.float32).reshape(LM_SIZE, LM_SIZE, 4)
+    rgb = np.zeros((LM_SIZE, LM_SIZE, 3), np.float32)
+    rgb[..., 0] = ao[..., 0]
+    rgb[..., 1] = sh[..., 0]
+    return np.clip(rgb, 0, 1)  # rows bottom-up, as Blender stores them
+
+
+def save_lightmap(name, rgb):
+    """WebP straight from Blender; glTF-style UVs mean the runtime samples it with flipY off."""
+    import numpy as np
+    path = os.path.join(OUT_DIR, "tex", f"{name}.webp")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    img = bpy.data.images.new(name + "_out", rgb.shape[1], rgb.shape[0], alpha=False)
+    flat = np.concatenate([rgb.astype(np.float32), np.ones(rgb.shape[:2] + (1,), np.float32)], axis=-1)
+    img.pixels.foreach_set(flat.ravel())
+    img.filepath_raw = path
+    img.file_format = "WEBP"
+    scene = bpy.context.scene
+    scene.render.image_settings.file_format = "WEBP"
+    scene.render.image_settings.quality = 88
+    img.save_render(path, scene=scene)
+    print(f"[bake] wrote {os.path.relpath(path, REPO)} ({os.path.getsize(path) // 1024} KB)")
+
+
+def vertex_sun_visibility():
+    """_SUNVIS per vertex for thin props: one ray toward the sun against everything visible."""
+    from mathutils.bvhtree import BVHTree
+    verts, polys = [], []
+    for ob in bpy.data.objects:
+        if ob.type != "MESH" or ob.name.startswith(("COL_", "FAR_")) or ob.name in VERTEX_SUN_OBJECTS:
+            continue
+        base = len(verts)
+        verts.extend([tuple(v.co) for v in ob.data.vertices])
+        polys.extend([tuple(base + i for i in p.vertices) for p in ob.data.polygons])
+    tree = BVHTree.FromPolygons(verts, polys, epsilon=0.0)
+    sun = sun_vector()
+    for name in VERTEX_SUN_OBJECTS:
+        ob = bpy.data.objects.get(name)
+        if not ob:
+            continue
+        vals = []
+        for v in ob.data.vertices:
+            hit = tree.ray_cast(v.co + sun * 0.08, sun, 400.0)
+            vals.append(0.0 if hit[0] is not None else 1.0)
+        attr = ob.data.attributes.get("_SUNVIS") or ob.data.attributes.new("_SUNVIS", "FLOAT", "POINT")
+        attr.data.foreach_set("value", vals)
+        print(f"[bake] {name}: {sum(vals) / max(1, len(vals)):.2f} of {len(vals)} verts sunlit")
+
+
+def bake_all():
+    setup_cycles()
+    for name, obj_names in LIGHTMAP_GROUPS.items():
+        obs = [bpy.data.objects[n] for n in obj_names if n in bpy.data.objects]
+        if obs:
+            save_lightmap(name, bake_group(name, obs))
+    vertex_sun_visibility()
+    # the bake target nodes are not wired into the BSDF, so the glTF export ignores them
+
+
+
+SHORE_RECT = (-320.0, -80.0, 520.0)  # x0, y0, size (Blender metres); covers the coast and near stacks
+SHORE_PX = 512
+SHORE_REACH_M = 22.0
+
+
+def build_shore_mask():
+    """Top-down shallow-water mask: 1 at the waterline, fading to 0 SHORE_REACH_M out to sea.
+
+    Ray-cast straight down onto everything (level + stacks); land is anything above -0.6 m.
+    The water shader uses it for shallows, foam and the depth tint.
+    """
+    import numpy as np
+    from mathutils.bvhtree import BVHTree
+    verts, polys = [], []
+    for ob in bpy.data.objects:
+        if ob.type != "MESH" or ob.name.startswith("COL_"):
+            continue
+        base = len(verts)
+        verts.extend([tuple(v.co) for v in ob.data.vertices])
+        polys.extend([tuple(base + i for i in p.vertices) for p in ob.data.polygons])
+    tree = BVHTree.FromPolygons(verts, polys, epsilon=0.0)
+    x0, y0, size = SHORE_RECT
+    px = size / SHORE_PX
+    land = np.zeros((SHORE_PX, SHORE_PX), bool)
+    down = Vector((0, 0, -1))
+    for j in range(SHORE_PX):
+        y = y0 + (j + 0.5) * px
+        for i in range(SHORE_PX):
+            hit = tree.ray_cast(Vector((x0 + (i + 0.5) * px, y, 400.0)), down, 800.0)
+            if hit[0] is not None and hit[0].z > -0.6:
+                land[j, i] = True
+    # distance to land by repeated dilation (in pixels, 8-connected, good enough for a soft ramp)
+    reach = int(SHORE_REACH_M / px) + 1
+    dist = np.full(land.shape, reach, np.float32)
+    front = land.copy()
+    dist[land] = 0
+    for step in range(1, reach):
+        grown = front.copy()
+        grown[1:, :] |= front[:-1, :]
+        grown[:-1, :] |= front[1:, :]
+        grown[:, 1:] |= front[:, :-1]
+        grown[:, :-1] |= front[:, 1:]
+        newly = grown & ~front
+        dist[newly] = step
+        front = grown
+    val = np.clip(1.0 - dist / reach, 0, 1) ** 1.5
+    val[land] = 1.0
+    # store rows bottom-up (Blender image convention) so v = (y - y0) / size
+    img = bpy.data.images.new("shore", SHORE_PX, SHORE_PX, alpha=False)
+    rgba = np.stack([val, land.astype(np.float32), np.zeros_like(val), np.ones_like(val)], -1)
+    img.pixels.foreach_set(rgba.astype(np.float32).ravel())
+    path = os.path.join(OUT_DIR, "tex", "shore.webp")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    scene = bpy.context.scene
+    scene.render.image_settings.file_format = "WEBP"
+    scene.render.image_settings.quality = 90
+    img.save_render(path, scene=scene)
+    print(f"[level] shore mask {SHORE_PX}px over {size:.0f} m -> {os.path.relpath(path, REPO)}")
+
+
 def main():
     for ob in list(bpy.data.objects):
         bpy.data.objects.remove(ob)
@@ -1298,6 +1503,9 @@ def main():
 
     for g in list(GEOS.values()) + [COL_WALK, COL_WALL, COL_CAM]:
         to_object(g)
+    if BAKE:
+        bake_all()
+    build_shore_mask()
 
     os.makedirs(OUT_DIR, exist_ok=True)
 
@@ -1318,6 +1526,11 @@ def main():
         "surfaceByKind": SURFACE,
         "route": route_out,
         "sunDirection": t3(sun_dir_blender),
+        "baked": BAKE,
+        # three xz rect of tex/shore.webp: x from x0, z from -(y0 + size) .. -y0; v runs with blender y
+        "shore": {"x0": SHORE_RECT[0], "y0": SHORE_RECT[1], "size": SHORE_RECT[2], "texture": "tex/shore.webp"},
+        "lightmaps": {name: f"tex/{name}.webp" for name in LIGHTMAP_GROUPS} if BAKE else {},
+        "lightmapGroups": {name: [n.replace("VIS_", "") for n in obs] for name, obs in LIGHTMAP_GROUPS.items()} if BAKE else {},
         "lanterns": [t3(p) for p in meta["lanterns"]],
         "banners": [{**b, "top": t3(b["top"])} for b in meta["banners"]],
         "waterfall": {
