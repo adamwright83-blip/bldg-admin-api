@@ -30,6 +30,7 @@ describe("Colosseum five-site campaign", () => {
     expect(projected.totalCount).toBe(5);
     expect(projected.progressLabel).toBe("TARGET 1 OF 5");
     expect(projected.targets.some(target => target.id === COLOSSEUM_VILLAIN_TARGET_ID)).toBe(true);
+    expect(COLOSSEUM_VILLAIN_TARGET_ID).toBe(COLOSSEUM_TARGET_IDS[4]);
   });
 
   it("ignores outcomes outside the five-site boss campaign", () => {
