@@ -272,7 +272,7 @@ const EXCLUSION =
  * one ("What sales happen before Thomas? ... don't tell me about Thomas").
  */
 const WORK_VERB =
-  /\b(?:deliver|deliveries|drop\s*off|dropping\s*off|pick\s*up|picking\s*up|pickup|collect|return|returning|visit|visiting|stop\s+by|swing\s+by|go|going|go\s+to|head\s+to|drive\s+to|driving|call|calling|phone|text|texting|email|emailing|message|meet|meeting|hit|hitting|deposit|install|drop|run|deliver|quote|pitch|walk|knock|follow\s+up|invoice|bill|wash|fold|launder|do|doing|make|making|create|creating|process|processing|post|posting|publish|publishing|design|designing|draft|drafting|build|building|write|writing|finish|finishing|prepare|preparing)\b/i;
+  /\b(?:deliver|deliveries|drop\s*off|dropping\s*off|pick\s*up|picking\s*up|pickup|collect|return|returning|visit|visiting|stop\s+by|swing\s+by|go\s+to|head\s+to|drive\s+to|driving|call|calling|phone|text|texting|email|emailing|message|meet|meeting|hit|hitting|deposit|install|drop|run|deliver|quote|pitch|walk|knock|follow\s+up|invoice|bill|wash|fold|launder|do|doing|make|making|create|creating|process|processing|design|designing|draft|drafting|build|building|write|writing|finish|finishing|prepare|preparing)\b/i;
 
 /**
  * The operator describing THEIR OWN work — either committing to it in first person ("I need to
@@ -324,7 +324,7 @@ function isQuestionWorkClause(clause: string): boolean {
 export function findIndependentFirstPersonWorkClause(text: string): string | null {
   for (const clause of independentWorkClauses(text)) {
     if (isQuestionWorkClause(clause)) continue;
-    if (FIRST_PERSON_COMMITMENT.test(clause) && WORK_VERB.test(clause)) return clause;
+    if (FIRST_PERSON_COMMITMENT.test(clause)) return clause;
   }
   return null;
 }
@@ -341,7 +341,9 @@ function hasWorkClause(text: string): boolean {
 }
 
 export function detectOperatorWorkCommitment(text: string): boolean {
-  return Boolean(findIndependentFirstPersonWorkClause(text)) || hasWorkClause(text);
+  const firstPersonClause = findIndependentFirstPersonWorkClause(text);
+  if (firstPersonClause && WORK_VERB.test(firstPersonClause)) return true;
+  return hasWorkClause(text);
 }
 
 /** A bare acknowledgement closes a beat. It is not a question, a challenge, or work. */
