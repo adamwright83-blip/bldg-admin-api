@@ -96,6 +96,18 @@ enabling it changes how Claire treats an operator on a bad day. Adam's call, not
 
 Read `docs/JOYSTICK_SYSTEM_MAP.md` first, then `docs/GOLDLINE-TASKS.md`, then `docs/goldline/BUILD_BRIEF_SLICES_1_5.md`.
 
+### Retired-name semantic hygiene
+
+The historical product name DayForge is **never current architecture vocabulary**. Its only meaning is `legacy.dayforge`.
+Before introducing or preserving that literal, read `docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md`.
+
+- Current product: `product.joystick`.
+- Today's prioritized work list: `plan.day_line`.
+- Retained compatibility code must be structurally named `legacy/dayforge`, `legacyDayforge*`, or `legacy_dayforge_*`.
+- Historical external literals may remain only when compatibility requires the exact value, and they must sit behind an explicitly named legacy seam.
+- Do not create a new bare DayForge filename, symbol, module, CI label, or documentation concept.
+- Do not weaken the repository nomenclature guard to make a violation pass.
+
 Docs whose headers say "This document constrains future Goldline work" are binding —
 `docs/goldline/REALITY_BRIDGE.md`,
 `docs/goldline/BEHAVIORAL_SCIENCE_FOUNDATION.md` and
