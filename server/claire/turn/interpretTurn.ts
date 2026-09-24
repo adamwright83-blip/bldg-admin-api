@@ -286,12 +286,48 @@ const WORK_VERB =
  */
 const FIRST_PERSON_COMMITMENT = new RegExp(
   [
-    String.raw`\b(?:i|we)\s+(?:need\s+to|have\s+to|gotta|got\s+to|must|should|will|'ll|plan\s+to|want\s+to|am\s+going\s+to|'m\s+going\s+to|'re\s+going\s+to)\s+\w+`,
+    String.raw`\b(?:i|we)\s+(?:(?:also|still)\s+)?(?:need\s+to|have\s+to|gotta|got\s+to|must|should|will|'ll|plan\s+to|want\s+to|am\s+going\s+to|'m\s+going\s+to|'re\s+going\s+to)\s+\w+`,
     String.raw`\b(?:i'm|i\s+am|we're|we\s+are)\s+\w+ing\b`,
     String.raw`\b(?:tomorrow|today|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b[^.!?]{0,40}\b(?:i|we)\s+(?:'m|am|'ll|will|have|need|got)\b`,
   ].join("|"),
   "i"
 );
+
+const QUESTION_CLAUSE_HEAD =
+  /^(?:what|what's|whats|who|who's|which|when|where|why|how|do|does|did|is|are|was|were|can|could|would|will|should|have|has|tell\s+me|remind\s+me)\b/i;
+
+/**
+ * Split only at boundaries that can carry independent speech acts. This keeps a work object such
+ * as "Dana and Thomas" together while separating "I need to call Dana, and what were my sales?".
+ */
+function independentWorkClauses(text: string): string[] {
+  return text
+    .split(/(?<=[.!?])\s+|\n+|;\s*|\s+[—–-]\s+|,\s+(?=(?:and|but|also|then)\s+)/i)
+    .flatMap(part =>
+      part.split(
+        /\s+(?=(?:and|but)\s+(?:what|what's|whats|who|who's|which|when|where|why|how|do|does|did|is|are|was|were|can|could|would|will|should|have|has)\b)/i
+      )
+    )
+    .map(clause => clause.replace(/^(?:and|but|also|then)\s+/i, "").trim())
+    .filter(Boolean);
+}
+
+function isQuestionWorkClause(clause: string): boolean {
+  return /\?\s*$/.test(clause) || QUESTION_CLAUSE_HEAD.test(clause);
+}
+
+/**
+ * A first-person work declaration must exist as its own declarative clause. An embedded phrase
+ * such as "Can you tell me what I should do about Dana?" is not authority just because it contains
+ * the words "I should do".
+ */
+export function findIndependentFirstPersonWorkClause(text: string): string | null {
+  for (const clause of independentWorkClauses(text)) {
+    if (isQuestionWorkClause(clause)) continue;
+    if (FIRST_PERSON_COMMITMENT.test(clause) && WORK_VERB.test(clause)) return clause;
+  }
+  return null;
+}
 
 /**
  * A clause that is NOT a question and contains a real work verb. Position is deliberately not the
@@ -301,18 +337,11 @@ const FIRST_PERSON_COMMITMENT = new RegExp(
  * Claire, not work), so it cannot mint a task under any phrasing.
  */
 function hasWorkClause(text: string): boolean {
-  return text
-    .split(/(?<=[.!?])\s+|\n+/)
-    .some(sentence => {
-      const clause = sentence.trim();
-      if (!clause || /\?\s*$/.test(clause)) return false;
-      return WORK_VERB.test(clause);
-    });
+  return independentWorkClauses(text).some(clause => !isQuestionWorkClause(clause) && WORK_VERB.test(clause));
 }
 
 export function detectOperatorWorkCommitment(text: string): boolean {
-  if (FIRST_PERSON_COMMITMENT.test(text) && WORK_VERB.test(text)) return true;
-  return hasWorkClause(text);
+  return Boolean(findIndependentFirstPersonWorkClause(text)) || hasWorkClause(text);
 }
 
 /** A bare acknowledgement closes a beat. It is not a question, a challenge, or work. */
