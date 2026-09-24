@@ -284,8 +284,9 @@ export async function decideTurn(
     if (mayPropose) {
       control.actionRisk = "proposal_only";
       const title = proposedWorkTitle(perceived);
+      const explicitCommit = perceived.workDeclarationKind === "explicit_day_line";
       const grant = mintActionGrant({
-        actionClass: "propose_day_line",
+        actionClass: explicitCommit ? "commit_day_line" : "propose_day_line",
         scope: title ? { titles: [title] } : {},
         authorityBasis: perceived.explicitActionRequest
           ? "current_turn_explicit_request"

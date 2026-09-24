@@ -40,6 +40,14 @@ export type ShadowInspectorRecord = {
   disagreements: ShadowObservation["disagreements"];
   candidateEndCall: boolean;
   candidateActionClasses: string[];
+  counterfactualCompleteness: ShadowObservation["comparison"]["counterfactualCompleteness"];
+  proposedActionClass: string | null;
+  proposedExecutionType: string | null;
+  disagreementLabels: string[];
+  v1TurnKind: string | null;
+  v1AnswerPath: string | null;
+  v1PriorClaimRan: boolean;
+  v1Completeness: string | null;
 };
 
 export function shadowObservationInspectorRecord(
@@ -67,6 +75,14 @@ export function shadowObservationInspectorRecord(
     disagreements: observation.disagreements,
     candidateEndCall: observation.candidateEndCall,
     candidateActionClasses: observation.candidateActionClasses,
+    counterfactualCompleteness: observation.comparison.counterfactualCompleteness,
+    proposedActionClass: observation.comparison.proposedActionClass,
+    proposedExecutionType: observation.comparison.proposedExecutionType,
+    disagreementLabels: observation.comparison.disagreementLabels,
+    v1TurnKind: observation.comparison.v1?.turnKind ?? null,
+    v1AnswerPath: observation.comparison.v1?.answerPath ?? null,
+    v1PriorClaimRan: observation.comparison.v1?.priorClaimRan ?? false,
+    v1Completeness: observation.comparison.v1?.completeness ?? null,
   };
 }
 

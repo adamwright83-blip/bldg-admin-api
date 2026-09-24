@@ -5,6 +5,7 @@
 import type { AttentionPlan } from "../contracts/attention";
 import type { ExecutiveDecision } from "../contracts/executiveDecision";
 import type { PerceivedTurn } from "../contracts/perceivedTurn";
+import { explicitOperatorExecutionType } from "../../../../shared/objectiveExecution";
 
 export type ShadowComparisonRecord = {
   conversationKey: string;
@@ -65,11 +66,29 @@ export type ShadowComparisonRecord = {
   inhibited: string[];
   conclusions: string[];
   actionClasses: string[];
+  /**
+   * Why an action proposal was even eligible. Structural class only; never
+   * operator transcript/content.
+   */
+  actionAuthorityBasis: "explicit_day_line" | "attested_operator_work" | null;
   segmentTypes: string[];
   cognitiveAcknowledgement: string[];
   verificationInvoked: boolean;
   callEnd: boolean;
   productionAuthority: false;
+  /** What V2 would have done with completeness. This does not change V1 audio. */
+  counterfactualCompleteness: "complete" | "incomplete" | "forced_flush";
+  proposedActionClass: string | null;
+  proposedExecutionType: string | null;
+  disagreementLabels: string[];
+  v1?: {
+    turnKind: string | null;
+    answerPath: string | null;
+    actionIds: string[];
+    priorClaimRan: boolean;
+    completeness: "complete" | "incomplete" | "forced_flush" | null;
+    release: string | null;
+  };
 };
 
 export function comparisonRecordFromDecision(
@@ -142,6 +161,15 @@ export function comparisonRecordFromDecision(
     inhibited: decision.inhibitedCandidates.map(candidate => candidate.kind),
     conclusions: decision.conclusions.map(conclusion => conclusion.kind),
     actionClasses: decision.actionGrants.map(grant => grant.actionClass),
+    actionAuthorityBasis:
+      decision.actionGrants.length === 0
+        ? null
+        : decision.perceivedTurn.workDeclarationKind === "explicit_day_line"
+          ? "explicit_day_line"
+          : decision.perceivedTurn.workDeclarationKind === "ordinary_work" &&
+              decision.perceivedTurn.operatorIntentAttested
+            ? "attested_operator_work"
+            : null,
     segmentTypes: decision.responsePlan.segments.map(segment => segment.type),
     cognitiveAcknowledgement: decision.responsePlan.segments
       .filter(segment => segment.type === "CognitiveAcknowledgementSegment")
@@ -152,5 +180,9 @@ export function comparisonRecordFromDecision(
       decision.retrievals.some(request => request.kind === "prior_claim_recheck"),
     callEnd: decision.callControl.endCall,
     productionAuthority: false,
+    counterfactualCompleteness: decision.perceivedTurn.completeness,
+    proposedActionClass: decision.actionGrants[0]?.actionClass ?? null,
+    proposedExecutionType: explicitOperatorExecutionType(decision.perceivedTurn.assembledText),
+    disagreementLabels: [],
   };
 }

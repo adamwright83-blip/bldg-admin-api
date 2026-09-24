@@ -220,6 +220,13 @@ describe("Relay authoritative voice turn", () => {
     expect(result.listenOnly).toBe(false);
     expect(result.speak).toBe("The Louise is quiet.");
     expect(result.gatherTwiml).not.toContain("listenOnly");
+    expect(hoisted.persistOperatorAndClaire).toHaveBeenCalledWith(
+      expect.objectContaining({
+        claireConversationId: CONVERSATION_ID,
+        operatorText: "What's up at the Louise?",
+        claireText: "The Louise is quiet.",
+      })
+    );
   });
 
   it("queues the persisted opening once and does not append it again", async () => {

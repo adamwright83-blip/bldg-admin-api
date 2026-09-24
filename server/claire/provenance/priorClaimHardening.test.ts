@@ -94,7 +94,10 @@ describe("2. retrieved evidence is not a verified model reply", () => {
     const { h, first } = await synth("Thomas, $70.40. He has ordered 14 times, so I'd lead with a loyalty offer.");
     expect(first.trace?.claimReceipt?.grounding).toBe("synthesized");
     const { result, trace } = await h.say("Did he really order 14 times?");
-    expect(trace?.priorClaim?.outcome).toBe("unsupported");
+    expect(trace?.priorClaim).toMatchObject({
+      outcome: "unsupported",
+      resolution: "fresh_query",
+    });
     expect(result.speak).not.toMatch(/checks out|still holds/);
     expect(result.speak).toBe("I didn't have enough to state that as fact.");
   });
