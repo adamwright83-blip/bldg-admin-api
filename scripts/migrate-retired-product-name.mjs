@@ -18,10 +18,11 @@ const immutableHistoricalPath = p =>
 function renamedPath(p) {
   if (!/dayforge/i.test(p) || immutableHistoricalPath(p)) return p;
   return p
-    .replace(/dayforgeflagship/g, "legacy-dayforge-flagship")
+    .replace(/dayforgeflagship/g, "__RETIRED_FLAGSHIP__")
     .replace(/Dayforge/g, "LegacyDayforge")
     .replace(/dayforge(?=[A-Z])/g, "legacyDayforge")
-    .replace(/dayforge/g, "legacy-dayforge");
+    .replace(/dayforge/g, "legacy-dayforge")
+    .replace(/__RETIRED_FLAGSHIP__/g, "legacy-dayforge-flagship");
 }
 
 const before = tracked();
