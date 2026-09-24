@@ -90,7 +90,7 @@ git switch -c legacy-dayforge-cumulative-integration origin/claude/dayforge-boss
 git diff origin/main...HEAD --stat   # confirm this is the full cumulative diff
 gh pr create --base main --head legacy-dayforge-cumulative-integration \
   --title "DayForge: cumulative production integration (PRs #11-#20)" \
-  --body "Cumulative integration of the full DayForge stack. See PR #20 and docs/legacy-legacy-legacy-dayforge-production-deployment.md for context."
+  --body "Cumulative integration of the full DayForge stack. See PR #20 and docs/legacy-dayforge-production-deployment.md for context."
 ```
 
 Either way: **do not merge PR #20 alone.** Its base is PR #19's branch, not
@@ -197,7 +197,7 @@ own review, not a rider on a boss-demo branch.
   the prior deployment, or `git revert` the merge commit and let auto-deploy
   redeploy the reverted state.
 - **Database:** migrations 0035–0044 are additive (new tables/columns per
-  `docs/legacy-legacy-legacy-dayforge-release-gates.md`'s own convention) — they do not need to
+  `docs/legacy-dayforge-release-gates.md`'s own convention) — they do not need to
   be rolled back to revert the application. If a specific migration must be
   reverted, restore from the pre-migration backup taken in step 1 above;
   there is no automated down-migration tooling in this repo.

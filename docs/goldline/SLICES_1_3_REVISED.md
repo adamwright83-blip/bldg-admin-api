@@ -258,7 +258,7 @@ until whichever answer is chosen is built.
 `server/legacyDayforgeCoaching/legacyDayforgeCoachingRuntime.ts` opens its system prompt with
 "You are Rook, a concise field-sales coach." Rook appears on the public LegacyDayforge
 landing page as a calling field-sales coach and a "Rook field handoff" feature, and
-`client/src/pages/LegacyLegacyDayforgeLanding.test.ts` asserts the name.
+`client/src/pages/LegacyDayforgeLanding.test.ts` asserts the name.
 
 If Slice 3 assigns Rook as the Kingdom 2 companion, the product contains two
 different Rooks.

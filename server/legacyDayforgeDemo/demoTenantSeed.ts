@@ -32,7 +32,7 @@ export const DEMO_CHURN_CUSTOMER_NAME = "Sarah Johnson";
 export const DEMO_OWNER_EMAIL = "demo-owner@sunsetlaundry.example";
 export const DEMO_FIELD_EMAIL = "demo-field@sunsetlaundry.example";
 /**
- * Fixed, publicly-documented boss-demo password (docs/legacy-legacy-legacy-dayforge-boss-demo.md).
+ * Fixed, publicly-documented boss-demo password (docs/legacy-dayforge-boss-demo.md).
  * This only ever unlocks the DAYFORGE_DEMO_ENABLED-gated demo tenant's owner
  * and field logins via /dayforge-login — never a production tenant — so a
  * well-known value here is intentional, not a leaked secret.

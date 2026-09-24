@@ -34,14 +34,14 @@ import rallyScreenshot from "@/assets/boreslay-rally/p5-final-browser-proof.png"
 import { LoginForm } from "@/components/LoginForm";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import "./legacy-legacy-dayforge-demo-control.css";
+import "./legacy-dayforge-demo-control.css";
 
 const DEMO_MODE_ENABLED =
   String(import.meta.env.VITE_DAYFORGE_DEMO_MODE ?? "").toLowerCase() ===
   "true";
 
 const TERRITORY_MAP_ASSET =
-  "/assets/legacy-legacy-dayforge-final/july-demo-territory-map.svg";
+  "/assets/legacy-dayforge-final/july-demo-territory-map.svg";
 
 const PROVIDER_ORDER = ["google", "stripe", "email", "sms", "print"] as const;
 

@@ -3,7 +3,7 @@
  * Shared "what to open next" printer for the boss-demo CLI scripts. This is
  * an ENGINEERING tool for local development/debugging — the boss-facing
  * presentation URL is the deployed production domain
- * (https://admin.bldg.chat/julydemo, see docs/legacy-legacy-legacy-dayforge-boss-demo.md), never
+ * (https://admin.bldg.chat/julydemo, see docs/legacy-dayforge-boss-demo.md), never
  * this localhost output. The app is one unified Express + Vite-middleware
  * server (see server/_core/index.ts, default PORT=3000) — there is no
  * separate frontend origin/port in dev or prod.
@@ -13,7 +13,7 @@ const BASE_URL = `http://localhost:${PORT}`;
 
 export function printDemoUrls(missionId: number | string): void {
   console.log("Local engineering URLs (not for presenting to the room —");
-  console.log("see docs/legacy-legacy-legacy-dayforge-boss-demo.md for the deployed presentation URL):");
+  console.log("see docs/legacy-dayforge-boss-demo.md for the deployed presentation URL):");
   console.log(`  Demo control:    ${BASE_URL}/julydemo`);
   console.log(`  Landing:         ${BASE_URL}/dayforge`);
   console.log(`  Territory:       ${BASE_URL}/territory-preview`);

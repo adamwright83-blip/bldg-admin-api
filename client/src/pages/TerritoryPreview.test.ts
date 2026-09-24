@@ -16,7 +16,7 @@ const landing = readFileSync(
   "utf8"
 );
 const landingAnalytics = readFileSync(
-  new URL("./legacy-legacy-dayforge-flagship/analytics.ts", import.meta.url),
+  new URL("./legacy-dayforge-flagship/analytics.ts", import.meta.url),
   "utf8"
 );
 

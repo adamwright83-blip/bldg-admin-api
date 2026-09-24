@@ -37,10 +37,10 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import bossTheDrain from "@/assets/legacy-legacy-dayforge-flagship/boss-the-drain.jpg";
-import founderTwoWorlds from "@/assets/legacy-legacy-dayforge-flagship/founder-two-worlds-v2.jpg";
-import printedLeaveBehind from "@/assets/legacy-legacy-dayforge-flagship/printed-leave-behind.jpg";
-import victoryAccount from "@/assets/legacy-legacy-dayforge-flagship/victory-account.jpg";
+import bossTheDrain from "@/assets/legacy-dayforge-flagship/boss-the-drain.jpg";
+import founderTwoWorlds from "@/assets/legacy-dayforge-flagship/founder-two-worlds-v2.jpg";
+import printedLeaveBehind from "@/assets/legacy-dayforge-flagship/printed-leave-behind.jpg";
+import victoryAccount from "@/assets/legacy-dayforge-flagship/victory-account.jpg";
 import {
   getFlagshipAnalytics,
   trackCtaClick,
@@ -53,11 +53,11 @@ import {
   QUIET_CUSTOMERS,
   SAGE_ACCOUNTS,
 } from "./content";
-import "./legacy-legacy-legacy-dayforge-flagship.css";
+import "./legacy-dayforge-flagship.css";
 
 const FALLBACK_EMAIL = "adam@bldg.chat";
 const API_BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
-const OWNER_FIELD_VISIT = "/legacy-legacy-dayforge-flagship/owner-field-visit.jpg";
+const OWNER_FIELD_VISIT = "/legacy-dayforge-flagship/owner-field-visit.jpg";
 
 function LegacyDayforgeMark() {
   return (

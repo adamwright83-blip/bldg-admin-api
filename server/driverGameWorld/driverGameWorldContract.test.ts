@@ -15,7 +15,7 @@ const game = readFileSync(
   "utf8"
 );
 const migrationVerifier = readFileSync(
-  new URL("../../scripts/legacy-legacy-legacy-dayforge-migrations-verify.ts", import.meta.url),
+  new URL("../../scripts/legacy-dayforge-migrations-verify.ts", import.meta.url),
   "utf8"
 );
 

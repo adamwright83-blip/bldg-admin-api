@@ -220,7 +220,7 @@ describe("JOYSTICK tenant identity", () => {
       "utf8"
     );
     const dayforge = readFileSync(
-      new URL("../../client/src/pages/LegacyLegacyDayforgeLoginPage.tsx", import.meta.url),
+      new URL("../../client/src/pages/LegacyDayforgeLoginPage.tsx", import.meta.url),
       "utf8"
     );
     const claire = readFileSync(

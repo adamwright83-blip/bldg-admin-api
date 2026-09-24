@@ -6,15 +6,15 @@ This is a presentation runbook, not a feature spec. It assumes the DayForge
 product itself — mission persistence, territory scoring, BORESLAY, Field,
 proposals, Churn Radar, pipeline/revenue, tenant onboarding + Stripe billing,
 and security — is already built (PRs #11-#19; see
-`docs/legacy-legacy-legacy-dayforge-feature-inventory.md`, `docs/legacy-legacy-legacy-dayforge-production-rollout.md`,
-`docs/legacy-legacy-legacy-dayforge-release-gates.md`, `docs/legacy-legacy-legacy-dayforge-saas-onboarding-billing.md`).
+`docs/legacy-dayforge-feature-inventory.md`, `docs/legacy-dayforge-production-rollout.md`,
+`docs/legacy-dayforge-release-gates.md`, `docs/legacy-dayforge-saas-onboarding-billing.md`).
 
 ## Presenter-facing URL
 
 **The intended URL is `https://admin.bldg.chat/julydemo`.** As of this
 writing that is not yet live — `admin.bldg.chat` currently serves a
 static-only Vercel deployment with no backend attached to it at all (see
-`docs/legacy-legacy-legacy-dayforge-production-deployment.md` for the full investigation and the
+`docs/legacy-dayforge-production-deployment.md` for the full investigation and the
 exact remaining steps: merging the DayForge stack to `main`, running
 migrations against production, and wiring `admin.bldg.chat` to a backend).
 
@@ -61,7 +61,7 @@ variables below are the real names the code reads — confirmed against
 - `DAYFORGE_DEMO_ENABLED=true` — server-side demo gate (`server/_core/env.ts`).
 - `DAYFORGE_DEMO_TENANT_SLUG` — optional; defaults to `sunset-laundry-demo`.
 - `VITE_DAYFORGE_DEMO_MODE=true` — client-side gate for `/dayforge-demo`
-  (`client/src/pages/LegacyLegacyDayforgeDemoControlPage.tsx`). Without this the control
+  (`client/src/pages/LegacyDayforgeDemoControlPage.tsx`). Without this the control
   page shows "Demo mode is off" and nothing else.
 
 **Core app:**
@@ -131,7 +131,7 @@ pnpm db:legacy-dayforge:release
 
 This runs `server/legacyDayforgeRelease/applyReleaseMigrations.ts`, which applies
 every SQL file in `drizzle/` in filename order (the post-0017 DayForge
-migrations are manually maintained, per `docs/legacy-legacy-legacy-dayforge-release-gates.md`).
+migrations are manually maintained, per `docs/legacy-dayforge-release-gates.md`).
 
 ### 6. Demo tenant setup/reset/verify
 
@@ -218,7 +218,7 @@ failure in this runbook.
 
 - A recent Chromium-based browser (Chrome/Edge) or Safari. The release gate's
   own browser story runs on desktop and mobile Chromium
-  (`docs/legacy-legacy-legacy-dayforge-release-gates.md`).
+  (`docs/legacy-dayforge-release-gates.md`).
 - Pop-ups must be allowed for the demo origin — the proposal collateral step
   opens the browser's native Print/Save-as-PDF dialog in a new context, and
   Churn Radar's SMS step opens the OS-native SMS composer.
@@ -250,7 +250,7 @@ Stop there if the room is short on time — this is the spine of the product.
 ## Fifteen-minute demo
 
 Full walkthrough. This matches the checklist rendered on `/dayforge-demo`
-exactly (`CHECKLIST` in `client/src/pages/LegacyLegacyDayforgeDemoControlPage.tsx`), so
+exactly (`CHECKLIST` in `client/src/pages/LegacyDayforgeDemoControlPage.tsx`), so
 you can drive from that control page and just click "Open" on each row.
 
 1. **Landing page** — `/dayforge`. Framing: this is a persisted-mission,

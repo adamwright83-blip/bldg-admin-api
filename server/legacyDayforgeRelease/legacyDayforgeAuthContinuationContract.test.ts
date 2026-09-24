@@ -2,8 +2,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const login = readFileSync(new URL("../../client/src/pages/LegacyLegacyDayforgeLoginPage.tsx", import.meta.url), "utf8");
-const onboarding = readFileSync(new URL("../../client/src/pages/LegacyLegacyDayforgeOnboardingPage.tsx", import.meta.url), "utf8");
+const login = readFileSync(new URL("../../client/src/pages/LegacyDayforgeLoginPage.tsx", import.meta.url), "utf8");
+const onboarding = readFileSync(new URL("../../client/src/pages/LegacyDayforgeOnboardingPage.tsx", import.meta.url), "utf8");
 const preview = readFileSync(new URL("../../client/src/pages/TerritoryPreview.tsx", import.meta.url), "utf8");
 const authRoute = readFileSync(new URL("../saas/saasAuthRoute.ts", import.meta.url), "utf8");
 

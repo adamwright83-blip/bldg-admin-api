@@ -34,7 +34,7 @@ export function getFlagshipAnalytics(): Promise<PostHog | null> {
           disable_conversations: true,
           person_profiles: "never",
         },
-        "legacy-legacy-dayforge-flagship"
+        "legacy-dayforge-flagship"
       )
     )
     .catch(() => null);

@@ -19,14 +19,14 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import missionArt from "@/assets/legacy-legacy-dayforge-flagship/victory-account.jpg";
-import fieldVisit from "/legacy-legacy-dayforge-flagship/owner-field-visit.jpg";
+import missionArt from "@/assets/legacy-dayforge-flagship/victory-account.jpg";
+import fieldVisit from "/legacy-dayforge-flagship/owner-field-visit.jpg";
 import {
   getFlagshipAnalytics,
   trackCtaClick,
   type CtaSource,
-} from "./legacy-legacy-dayforge-flagship/analytics";
-import LegacyDayforgeFlagship from "./legacy-legacy-dayforge-flagship/LegacyDayforgeFlagship";
+} from "./legacy-dayforge-flagship/analytics";
+import LegacyDayforgeFlagship from "./legacy-dayforge-flagship/LegacyDayforgeFlagship";
 import "./landing-final.css";
 
 const FALLBACK_EMAIL = "adam@bldg.chat";

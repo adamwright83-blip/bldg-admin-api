@@ -31,8 +31,8 @@ import bankShot from "../assets/boreslay-rally/p3-browser-proof.png";
 import strikeShot from "../assets/boreslay-rally/p5-final-browser-proof.png";
 import buttBash from "../assets/boreslay-rally/concept-v2-showpiece.png";
 import fieldDoor from "../assets/codex-l-final/owner-westview-entry.jpg";
-import victoryArt from "../assets/legacy-legacy-dayforge-flagship/victory-account.jpg";
-import "./legacy-legacy-dayforge-landing.css";
+import victoryArt from "../assets/legacy-dayforge-flagship/victory-account.jpg";
+import "./legacy-dayforge-landing.css";
 
 const TERRITORY_PATH = "/territory-preview";
 const GAME_PATH = "/boreslay-rally";

@@ -35,10 +35,10 @@ export default defineConfig({
           "client",
           "codexlfinal.html"
         ),
-        legacy-legacy-dayforge-flagship: path.resolve(
+        legacy-dayforge-flagship: path.resolve(
           import.meta.dirname,
           "client",
-          "legacy-legacy-legacy-dayforge-flagship.html"
+          "legacy-dayforge-flagship.html"
         ),
       },
     },

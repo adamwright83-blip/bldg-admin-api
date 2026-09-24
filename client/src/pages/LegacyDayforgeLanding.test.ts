@@ -8,7 +8,7 @@ const pageSource = fs.readFileSync(
   "utf8"
 );
 const cssSource = fs.readFileSync(
-  path.resolve(import.meta.dirname, "legacy-legacy-dayforge-landing.css"),
+  path.resolve(import.meta.dirname, "legacy-dayforge-landing.css"),
   "utf8"
 );
 const appSource = fs.readFileSync(

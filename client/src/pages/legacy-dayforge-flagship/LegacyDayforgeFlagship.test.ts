@@ -8,7 +8,7 @@ const component = readFileSync(
   "utf8"
 );
 const styles = readFileSync(
-  path.resolve(import.meta.dirname, "legacy-legacy-legacy-dayforge-flagship.css"),
+  path.resolve(import.meta.dirname, "legacy-dayforge-flagship.css"),
   "utf8"
 );
 const analytics = readFileSync(
@@ -20,11 +20,11 @@ const content = readFileSync(
   "utf8"
 );
 const entry = readFileSync(
-  path.resolve(import.meta.dirname, "..", "..", "legacy-legacy-legacy-dayforge-flagship-main.tsx"),
+  path.resolve(import.meta.dirname, "..", "..", "legacy-dayforge-flagship-main.tsx"),
   "utf8"
 );
 const html = readFileSync(
-  path.resolve(import.meta.dirname, "..", "..", "..", "legacy-legacy-legacy-dayforge-flagship.html"),
+  path.resolve(import.meta.dirname, "..", "..", "..", "legacy-dayforge-flagship.html"),
   "utf8"
 );
 const vite = readFileSync(
@@ -40,15 +40,15 @@ describe("DayForge flagship contract", () => {
   it("ships as an isolated route and entry", () => {
     expect(entry).toContain("GoldlineHome");
     expect(entry).not.toContain("./App");
-    expect(html).toContain('src="/src/legacy-legacy-legacy-dayforge-flagship-main.tsx"');
-    expect(vite).toContain("legacy-legacy-dayforge-flagship: path.resolve(");
-    expect(vercel).toContain('"source": "/legacy-legacy-dayforge-flagship"');
-    expect(vercel).toContain('"destination": "/legacy-legacy-legacy-dayforge-flagship.html"');
+    expect(html).toContain('src="/src/legacy-dayforge-flagship-main.tsx"');
+    expect(vite).toContain("legacy-dayforge-flagship: path.resolve(");
+    expect(vercel).toContain('"source": "/legacy-dayforge-flagship"');
+    expect(vercel).toContain('"destination": "/legacy-dayforge-flagship.html"');
   });
 
   it("publishes flagship canonical and X share metadata", () => {
-    expect(html).toContain("https://admin.bldg.chat/legacy-legacy-dayforge-flagship");
-    expect(html).toContain("/legacy-legacy-dayforge-flagship/og.jpg");
+    expect(html).toContain("https://admin.bldg.chat/legacy-dayforge-flagship");
+    expect(html).toContain("/legacy-dayforge-flagship/og.jpg");
     expect(html).toContain('name="twitter:card" content="summary_large_image"');
   });
 
@@ -133,7 +133,7 @@ describe("DayForge flagship contract", () => {
   });
 
   it("uses only independent flagship concept assets", () => {
-    expect(component).toContain("@/assets/legacy-legacy-dayforge-flagship/");
+    expect(component).toContain("@/assets/legacy-dayforge-flagship/");
     expect(component).not.toContain("codex-l-final");
     expect(component).not.toContain("LandingFinal");
     expect(component).not.toContain("boreslay-rally");

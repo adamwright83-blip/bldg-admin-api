@@ -1,7 +1,7 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-const settings = readFileSync(new URL("../../client/src/pages/LegacyLegacyDayforgeSettingsPage.tsx", import.meta.url), "utf8");
+const settings = readFileSync(new URL("../../client/src/pages/LegacyDayforgeSettingsPage.tsx", import.meta.url), "utf8");
 const router = readFileSync(new URL("../saas/saasRouter.ts", import.meta.url), "utf8");
 const attribution = readFileSync(new URL("../commercialCampaigns/commercialAttributionService.ts", import.meta.url), "utf8");
 describe("third-party DayForge tenant experience", () => {

@@ -13,7 +13,7 @@ This document tracks the additive migration and configuration order for the stac
 5. **PR E — proposals and collateral:** after 0035 and 0038, apply `drizzle/0039_commercial_proposals.sql` before operators configure proposal profiles or generate collateral. PR E adds no environment variable. Configure each tenant's proposal profile in DayForge before allowing that tenant to generate a proposal.
 6. **PR F — Churn Radar:** after the existing tenant order tables and ops-task migrations, apply `drizzle/0040_customer_churn_recovery.sql` before running a tenant scan or creating a recovery mission. PR F adds no environment variable and does not enable automated outbound messaging.
 7. **PR G — revenue pipeline and account conversion:** after 0035-0040, apply `drizzle/0041_commercial_pipeline_conversion.sql` before creating another commercial mission. PR G adds no environment variable. It backfills stable account identity on future mission writes, projects every mission transition into one pipeline, and creates the commercial customer graph only when the canonical mission is won.
-8. **PR H — SaaS onboarding and billing:** after 0035-0041, apply `drizzle/0042_dayforge_saas_onboarding_billing.sql` before opening self-service onboarding or tenant product access. Configure the namespaced Stripe variables in `docs/legacy-legacy-legacy-dayforge-saas-onboarding-billing.md`, register the signed billing webhook, and verify a complete Stripe test-mode lifecycle before live mode. Do not reuse resident-payment Stripe customers, events, or ledger state.
+8. **PR H — SaaS onboarding and billing:** after 0035-0041, apply `drizzle/0042_dayforge_saas_onboarding_billing.sql` before opening self-service onboarding or tenant product access. Configure the namespaced Stripe variables in `docs/legacy-dayforge-saas-onboarding-billing.md`, register the signed billing webhook, and verify a complete Stripe test-mode lifecycle before live mode. Do not reuse resident-payment Stripe customers, events, or ledger state.
 9. **PR I — public journey, analytics, and release gates:** after 0035-0042, apply `drizzle/0043_dayforge_analytics_release.sql` and then `drizzle/0044_dayforge_release_order_compatibility.sql` before linking public calls to action to `/territory-preview`. The compatibility migration safely converges historical order-routing columns that previously existed only in pushed schemas. Configure the preview credentials, provider key, exact browser origins, proxy trust, and retention secret below. The deterministic provider is CI-only and cannot be selected in production.
 
 These migrations are additive and are not assumed to run automatically in Railway. Application rollout must be gated until the required tables exist.
@@ -27,7 +27,7 @@ Required:
 - `DAYFORGE_BILLING_APP_URL`
 - `DAYFORGE_STRIPE_PRICE_ID`
 
-Configure the plan, trial, founding-plan capacity, entitlement, and grace-period variables documented in `docs/legacy-legacy-legacy-dayforge-saas-onboarding-billing.md`. Keep `DAYFORGE_LEGACY_TENANT_IDS` only during the explicit migration window; new tenants fail closed without persisted membership, subscription, and entitlement truth.
+Configure the plan, trial, founding-plan capacity, entitlement, and grace-period variables documented in `docs/legacy-dayforge-saas-onboarding-billing.md`. Keep `DAYFORGE_LEGACY_TENANT_IDS` only during the explicit migration window; new tenants fail closed without persisted membership, subscription, and entitlement truth.
 
 ## PR I production configuration
 

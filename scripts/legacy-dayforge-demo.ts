@@ -7,7 +7,7 @@
  * Usage:
  *   pnpm legacy-dayforge:demo
  *
- * Required env (see .env / docs/legacy-legacy-legacy-dayforge-boss-demo.md):
+ * Required env (see .env / docs/legacy-dayforge-boss-demo.md):
  *   DATABASE_URL, JWT_SECRET, ADMIN_PASSWORD, DAYFORGE_DEMO_ENABLED=true
  */
 import "dotenv/config";
@@ -47,7 +47,7 @@ async function main() {
   const requiredEnv = ["DATABASE_URL", "JWT_SECRET", "ADMIN_PASSWORD"];
   const missingEnv = requiredEnv.filter(name => !process.env[name]?.trim());
   if (missingEnv.length > 0) {
-    fail(`Missing required env vars: ${missingEnv.join(", ")}. See docs/legacy-legacy-legacy-dayforge-boss-demo.md.`);
+    fail(`Missing required env vars: ${missingEnv.join(", ")}. See docs/legacy-dayforge-boss-demo.md.`);
   }
   if (!ENV.legacyDayforgeDemoEnabled) {
     fail("DAYFORGE_DEMO_ENABLED is not true. Set DAYFORGE_DEMO_ENABLED=true and re-run.");
@@ -60,7 +60,7 @@ async function main() {
   console.log("[legacy-dayforge-demo] 3/7 Verifying migrations 0035-0044...");
   const { execFileSync } = await import("node:child_process");
   try {
-    execFileSync("npx", ["tsx", "scripts/legacy-legacy-legacy-dayforge-migrations-verify.ts"], {
+    execFileSync("npx", ["tsx", "scripts/legacy-dayforge-migrations-verify.ts"], {
       stdio: "inherit",
       env: process.env,
     });

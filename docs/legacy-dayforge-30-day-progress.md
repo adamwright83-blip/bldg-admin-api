@@ -99,7 +99,7 @@ Authenticated destinations resolve in this intentional order:
 - Preview identity and selection survive login or onboarding without placing the preview bearer token in a URL. Validated context survives Stripe return and owner activation in the originating browser session.
 - External, protocol-relative, script/data, encoded-separator, control-character, secret-bearing, looping, and demo return paths fail closed.
 - Tenant state and active membership are checked server-side before session issuance; redirect context cannot choose a tenant or grant a role.
-- Shipped behavior, exclusions, scenarios, and rollback are documented in `docs/legacy-legacy-legacy-dayforge-auth-behavior.md`.
+- Shipped behavior, exclusions, scenarios, and rollback are documented in `docs/legacy-dayforge-auth-behavior.md`.
 
 ## Phase 4 implementation evidence (core)
 
@@ -118,7 +118,7 @@ Authenticated destinations resolve in this intentional order:
 - Explicit order campaign wins order-specific credit; original first touch remains immutable. Same-identity/same-property unsourced orders can inherit recurring credit without an invented expiration window.
 - Generic, unpaid, pending-pre-win, ambiguous, conflicting, cancelled, fully refunded, and unsupported partial-refund cases do not overstate realized revenue.
 - Existing `commercial_order_attributions` remains the realized-revenue ledger and the manual order-ID path remains the recovery tool. Reversals create durable correction history and never alter customer charges.
-- Shipped rules and realistic before/after scenarios are documented in `docs/legacy-legacy-legacy-dayforge-attribution-behavior.md`.
+- Shipped rules and realistic before/after scenarios are documented in `docs/legacy-dayforge-attribution-behavior.md`.
 
 ## Phase 6 implementation evidence
 
@@ -140,7 +140,7 @@ Authenticated destinations resolve in this intentional order:
 - `shared/commercialMission.ts`, `shared/commercialPipeline.ts`, `shared/commercialProposal.ts`, `shared/legacyDayforgeCoaching.ts`, and `shared/legacyDayforgeContinuation.ts` — shared contracts and validation.
 - `server/commercialMissions/*`, `server/commercialCampaigns/*`, and `server/legacyDayforgeCoaching/*` — canonical persistence and service foundations.
 - `server/legacyDayforgeRetention/retentionService.ts`, `server/storage.ts`, and `server/_core/sms.ts` — private proof lifecycle and dispatch adapters.
-- `scripts/legacy-legacy-legacy-dayforge-migrations-verify.ts` and focused migration/service/contract tests — compatibility and behavior gates.
+- `scripts/legacy-dayforge-migrations-verify.ts` and focused migration/service/contract tests — compatibility and behavior gates.
 - Existing commercial opportunity surfaces now distinguish unknown estimates rather than manufacturing zero-value certainty.
 
 ## Migrations added
@@ -174,7 +174,7 @@ Codex ran out of budget after the phase 0–7 commits above, with phase 8 (full 
 - `pnpm test:legacy-dayforge:release:e2e` — all 8 Playwright checks pass (desktop + mobile), including the 2 persistence-dependent checks Codex could not run. The real blocker was two missing env vars (`DAYFORGE_PUBLIC_PREVIEW_TOKEN_SECRET`, `DAYFORGE_PUBLIC_PREVIEW_FINGERPRINT_SECRET`, both ≥32 chars) — Codex's environment lacked these in addition to the reported `ECONNREFUSED` on MySQL.
 - `pnpm test:legacy-dayforge:release` (151 tests), `pnpm run check:legacy-dayforge:release`, `pnpm build` — all still pass after the fix below.
 - Repo-wide `pnpm run check` and `pnpm test` — re-verified Codex's claim line-by-line: every repo-wide typecheck error and all 5 failing repo-wide tests were cross-referenced against `git diff fc6d70c HEAD --name-only` and confirmed to sit outside every file V3 touched (except one untouched line in `server/routers.ts`, confirmed unchanged from baseline). Claim holds.
-- Auth (`docs/legacy-legacy-legacy-dayforge-auth-behavior.md`) and attribution (`docs/legacy-legacy-legacy-dayforge-attribution-behavior.md`) behavior docs were read in full and cross-checked against the actual implementation (`shared/legacyDayforgeContinuation.ts`, `server/commercialCampaigns/commercialAttributionService.ts`) rather than trusted as written. Both match their documented behavior — the destination-priority resolver and the paid/cancelled/refund revenue-realization logic are real, not aspirational.
+- Auth (`docs/legacy-dayforge-auth-behavior.md`) and attribution (`docs/legacy-dayforge-attribution-behavior.md`) behavior docs were read in full and cross-checked against the actual implementation (`shared/legacyDayforgeContinuation.ts`, `server/commercialCampaigns/commercialAttributionService.ts`) rather than trusted as written. Both match their documented behavior — the destination-priority resolver and the paid/cancelled/refund revenue-realization logic are real, not aspirational.
 
 **Critical bug found and fixed via live browser testing (not caught by any existing gate):**
 Logging a real walk-in through the UI created the mission correctly, but silently never created the follow-up, never transitioned mission status to `follow_up`, and never updated the pipeline stage — the exact "no silent dead leads" invariant this feature exists to guarantee was being violated on every single submission. Root cause: `commercialWalkInMissionInput` passes the frontend's `idempotencyKey` (`walk-in:<requestId>`) straight through to `createCommercialMission`, which persists that literal string as its own `mission_created` event's idempotency key. `logCommercialWalkIn`'s own dedup guard then checked for an existing event using that *same* string, always found the `mission_created` row that had just been written moments earlier, and returned early — skipping the status update, pipeline update, and follow-up insert on every call, not just retries. This was invisible to Codex's own gates because the only existing test (`commercialWalkInService.test.ts`) exercises the pure input-mapping function, never the transaction itself.
