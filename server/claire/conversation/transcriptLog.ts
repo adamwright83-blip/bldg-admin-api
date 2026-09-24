@@ -66,6 +66,26 @@ function transcriptWarn(message: string, error: unknown): void {
   console.warn(LOG_PREFIX, message, error instanceof Error ? error.message : String(error));
 }
 
+/**
+ * Runtime logs are an inspection surface, not the authoritative transcript.
+ * Strip obvious provider/auth material and phone-number-shaped content before
+ * anything leaves the durable conversation ledger for Railway logs.
+ */
+export function redactClaireTranscriptText(text: string): string {
+  return text
+    .replace(
+      /(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}\b/g,
+      "[REDACTED_PHONE]"
+    )
+    .replace(/\b(?:AC|CA|RE)[0-9a-f]{32}\b/gi, "[REDACTED_PROVIDER_ID]")
+    .replace(/\bsk-(?:proj-)?[A-Za-z0-9_-]{16,}\b/g, "[REDACTED_SECRET]")
+    .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{12,}\b/gi, "[REDACTED_AUTH]")
+    .replace(
+      /https?:\/\/[^\s]*twilio[^\s]*(?:recordings?|recording)[^\s]*/gi,
+      "[REDACTED_RECORDING_URL]"
+    );
+}
+
 function chunks(text: string): string[] {
   if (!text) return [];
   const result: string[] = [];
@@ -101,7 +121,7 @@ export async function emitClaireTranscriptTurnLog(
       operatorUserId: session.operatorUserId,
       ordinal: turn.ordinal,
       speaker: turn.speaker,
-      text: turn.text,
+      text: redactClaireTranscriptText(turn.text),
       occurredAt: turn.occurredAt,
     });
   } catch (error) {
@@ -158,7 +178,7 @@ export async function emitClaireTranscriptLog(
           operatorUserId: session.operatorUserId,
           ordinal: turn.ordinal,
           speaker: turn.speaker,
-          text: turn.text,
+          text: redactClaireTranscriptText(turn.text),
           occurredAt: turn.occurredAt,
         });
       }
@@ -170,7 +190,7 @@ export async function emitClaireTranscriptLog(
         POST_CALL_TRANSCRIPT_SOURCE
       );
       if (transcript?.text) {
-        const parts = chunks(transcript.text);
+        const parts = chunks(redactClaireTranscriptText(transcript.text));
         for (let index = 0; index < parts.length; index += 1) {
           transcriptLog({
             event: "claire_post_call_transcript_chunk",
