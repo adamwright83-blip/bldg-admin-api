@@ -11,6 +11,7 @@ import {
 import {
   emitClaireTranscriptLog,
   parseTranscriptLogScopes,
+  redactClaireTranscriptText,
   transcriptLogBackfillCount,
   transcriptLoggingAllowed,
 } from "./transcriptLog";
@@ -28,6 +29,23 @@ afterEach(() => {
 });
 
 describe("Claire transcript Railway log mirror", () => {
+  it("redacts phone, provider, recording, and auth-shaped content before runtime logging", () => {
+    const raw =
+      "Call 323-555-1212. CA0123456789abcdef0123456789abcdef " +
+      "sk-proj-0123456789abcdefghijklmnop Bearer abcdefghijklmnopqrstuvwxyz " +
+      "https://api.twilio.com/2010-04-01/Accounts/AC123/Recordings/RE123";
+    const safe = redactClaireTranscriptText(raw);
+
+    expect(safe).toContain("[REDACTED_PHONE]");
+    expect(safe).toContain("[REDACTED_PROVIDER_ID]");
+    expect(safe).toContain("[REDACTED_SECRET]");
+    expect(safe).toContain("[REDACTED_AUTH]");
+    expect(safe).toContain("[REDACTED_RECORDING_URL]");
+    expect(safe).not.toContain("323-555-1212");
+    expect(safe).not.toContain("sk-proj-0123456789abcdefghijklmnop");
+    expect(safe).not.toContain("api.twilio.com");
+  });
+
   it("bounds boot backfill count to a safe recent window", () => {
     expect(transcriptLogBackfillCount("2")).toBe(2);
     expect(transcriptLogBackfillCount("0")).toBe(1);
