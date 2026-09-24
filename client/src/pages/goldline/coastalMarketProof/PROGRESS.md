@@ -6,7 +6,7 @@ Resume here if a session is cut off. Branch `claude/coastal-market-three-proof`,
 
 ## Stage
 
-**Stages 1-4 first pass done**: route + camera, water + light, wind + boats + waterfall, six townspeople. Trailblazer dressed to the v2 sheet. Next: audio, polish, final measurement, draft PR.
+**Phase 1 baseline complete**: route + camera, water + light, wind + boats + waterfall, six townspeople, synthesized audio, and dressed Trailblazer. Final emulation profiles and main-thread work metrics are recorded below. Draft PR is the immutable baseline for Phase 2; do not merge it.
 
 ## Measured
 
@@ -18,6 +18,11 @@ Every number is emulation, never a phone.
 | 2026-09-23 | Autowalk, graybox | Playwright Chromium headless `--use-angle=metal` (Apple M1), 390x844 DPR 3 mobile+touch, CPU 1x, render DPR 1.6 | Full route 213.3 m walked end to end in 99.2 s at 2.1 m/s; fps median 60 (vsync), min 55; p95 frame 18.3 ms; 28-33 draws; ~84k tris. |
 | 2026-09-23 | Autowalk, Stage 2 (textures, baked AO + sun shadow, water, sky) | same, **CPU throttle 4x** | Route 173.8 m in 83.8 s; fps median 60, min 31.5 (one sample); p95 worst 18.2 ms; <=32 draws; ~79k tris; planted-foot slip median 0.17 m/s at 2.1 m/s. |
 | 2026-09-23 | Autowalk, Stages 3+4 (plants, 5 boats, waterfall, glows, 6 NPCs, dressed Trailblazer) | same, CPU throttle 4x | 81.5 s; fps median 60, min 54; p95 worst 18.1 ms; <=68 draws; <=217k tris. |
+| 2026-09-24 | Final autowalk, phone profile | Playwright Chromium headless `--use-angle=metal` (Apple M1), 390x844 DPR 3 mobile+touch, **CPU throttle 6x** | Route 173.8 m completed in 81.5 s; fps median 60, min 59.8; app-frame CPU 5.66 ms mean / 10.2 ms worst p95; p95 frame interval worst 18.5 ms; <=69 draws; <=222k tris; no page errors. |
+| 2026-09-24 | Final autowalk, phone profile | Same phone emulation, **CPU throttle 1x** | Route completed in 79.6 s; fps median 60, min 59; app-frame CPU 2.94 ms mean / 4.0 ms worst p95; p95 frame interval worst 17.9 ms; <=68 draws; <=222k tris; no page errors. |
+| 2026-09-24 | Final autowalk, desktop profile | Playwright Chromium headless `--use-angle=metal` (Apple M1), 1280x800 DPR 1, **CPU throttle 1x** | Route completed in 79.6 s; fps median 60, min 59.9; app-frame CPU 2.94 ms mean / 4.0 ms worst p95; p95 frame interval worst 18.0 ms; <=69 draws; <=222k tris; no page errors. |
+
+These are Mac-hosted Chromium emulation measurements, not measurements from a real phone.
 
 ## Published
 
@@ -27,10 +32,8 @@ Every number is emulation, never a phone.
 
 ## Next
 
-1. Audio: ocean/wind bed, footsteps (stone/wood), waterfall, market murmur - synthesized, no files.
-2. Polish: sky near the sun, quay stone reads as mud, lane fill light, stack silhouettes.
-3. Foot slip 0.16 m/s from the stride-scaled walk: IK-based stride derivation if time allows.
-4. Final: tsc, unit tests, pnpm build + budget, republish the artifact, walkthrough capture, draft PR.
+Phase 2 follows `docs/goldline/coastal-market/CODEX_HANDOFF.md` on branch
+`claude/gallant-franklin-uoh3te`. Preserve this branch and its draft PR as the Phase 1 baseline.
 
 ## How to run
 
