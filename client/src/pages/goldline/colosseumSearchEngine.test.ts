@@ -95,7 +95,7 @@ describe("door access is earned outside the fiction engine", () => {
     expect(locked.stage).not.toBe("door");
     expect(locked.doorsChecked).not.toContain("II");
 
-    const opened = stepSearchArena(at, 16, IDLE, new Set(["II"]));
+    const opened = stepSearchArena(at, 16, IDLE, new Set<(typeof COLOSSEUM_DOORS)[number]["id"]>(["II"]));
     expect(opened.events).toContainEqual({ type: "door_open", door: "II" });
     expect(doorProgress(opened)?.door.id).toBe("II");
   });
@@ -103,7 +103,7 @@ describe("door access is earned outside the fiction engine", () => {
   it("keeps Door VI lore-only and permanently sealed", () => {
     const six = COLOSSEUM_DOORS.find(candidate => candidate.id === "VI")!;
     const at = place(createSearchArena(), six.threshold);
-    const locked = stepSearchArena(at, 16, IDLE, new Set(["VI"]));
+    const locked = stepSearchArena(at, 16, IDLE, new Set<(typeof COLOSSEUM_DOORS)[number]["id"]>(["VI"]));
     expect(locked.events).toEqual([{ type: "door_locked", door: "VI" }]);
     expect(doorProgress(locked)).toBeNull();
     expect(locked.doorsChecked).toEqual([]);
