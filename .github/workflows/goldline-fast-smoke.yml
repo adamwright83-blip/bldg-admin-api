@@ -29,7 +29,8 @@ jobs:
     env:
       CI: "true"
       DATABASE_URL: mysql://root:root@127.0.0.1:3399/goldline_proof
-      # LEGACY DAYFORGE COMPATIBILITY: historical runtime env-var name; not current architecture.\n      DAYFORGE_RELEASE_DB: "1"
+      # LEGACY DAYFORGE COMPATIBILITY: historical runtime env-var name; not current architecture.
+      DAYFORGE_RELEASE_DB: "1"
       APP_SHARED_API_SECRET: goldline-proof-app-secret-000000000000000000
       JWT_SECRET: goldline-proof-jwt-secret-000000000000000000
       STRIPE_SECRET_KEY: goldline-proof-placeholder-not-used
