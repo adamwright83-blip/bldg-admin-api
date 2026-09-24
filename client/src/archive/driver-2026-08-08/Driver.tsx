@@ -7,7 +7,7 @@ import { DriverPrepMechanic } from "@/components/driver/DriverPrepMechanic";
 import { ResidentFollowupAlert } from "@/components/admin/ResidentFollowupAlert";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
+import { WalkInCapture } from "@/components/legacy-dayforge/WalkInCapture";
 
 function getLocalYmd(date = new Date()): string {
   return [
