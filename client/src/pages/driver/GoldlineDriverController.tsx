@@ -8,7 +8,7 @@ import { QuickNewOrderSheet } from "@/components/driver/QuickNewOrderSheet";
 import { AddExternalWorkSheet } from "@/components/driver/AddExternalWorkSheet";
 import { LogSignalSheet } from "@/components/driver/LogSignalSheet";
 import { SalesJournalSheet } from "@/components/driver/SalesMomentum";
-import { WalkInCapture } from "@/components/dayforge/WalkInCapture";
+import { WalkInCapture } from "@/components/legacy-dayforge/WalkInCapture";
 import GoldlineHome, {
   type ArrivedOperatorStop,
 } from "../goldline/GoldlineHome";
