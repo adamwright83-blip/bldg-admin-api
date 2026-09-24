@@ -141,6 +141,11 @@ export type ClaireTurnState = PendingProposalState &
     proactiveMorning?: boolean;
     /** Factual-claim receipts for this conversation (durable with the rest of the turn state). */
     claimReceipts?: FactualClaimReceipt[];
+    /**
+     * The receipt most recently adjudicated as a prior claim. This preserves the referent across
+     * a provenance answer so a following bare "Are you sure?" still challenges the same claim.
+     */
+    priorClaimFocusId?: string | null;
     /** Count of Claire's spoken turns, so a receipt can name the turn that produced it. */
     claireTurnCount?: number;
     /** A pending item is surfaced at most once; Claire does not nag on every later answer. */
@@ -757,7 +762,20 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   // receipt and authoritative evidence — never by free-form generation. Verification fails
   // closed: a timeout leaves the claim unresolved instead of conceding it.
   const holdingSomething = Boolean(state.pendingBriefing || state.pendingProposal || state.pendingAccountFollowUp);
-  const resolution: ClaimResolution = holdingSomething ? { kind: "none" } : resolveReferencedClaim(state.claimReceipts, utterance, claireOrdinal);
+  const explicitPriorClaimProbe = interpreted.correctnessChallenge || interpreted.provenanceQuestion;
+  const directResolution: ClaimResolution =
+    holdingSomething && !explicitPriorClaimProbe
+      ? { kind: "none" }
+      : resolveReferencedClaim(state.claimReceipts, utterance, claireOrdinal);
+  const focusedReceipt =
+    explicitPriorClaimProbe &&
+    directResolution.kind === "none" &&
+    state.priorClaimFocusId
+      ? (state.claimReceipts ?? []).find(receipt => receipt.id === state.priorClaimFocusId) ?? null
+      : null;
+  const resolution: ClaimResolution = focusedReceipt
+    ? { kind: "resolved", receipt: focusedReceipt, via: "explicit_reference" }
+    : directResolution;
   const isKnownJudgment = (receipt: FactualClaimReceipt) => receipt.grounding === "ungrounded" && receipt.assertsFact === false;
   const nonFactual = (receipt: FactualClaimReceipt, reading: ClaimChallengeReading | null) => receipt.grounding === "ungrounded" && (reading?.assertsFact === false || receipt.assertsFact === false);
   const rememberNature = (receipt: FactualClaimReceipt, reading: ClaimChallengeReading | null) => {
@@ -1646,6 +1664,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     classifierMs: number | null
   ): Promise<string> {
     if (resolution.kind === "ambiguous") {
+      state.priorClaimFocusId = null;
       const first = resolution.candidates[0]!;
       trace.priorClaim = {
         receiptId: resolution.candidates.map(candidate => candidate.id).join(","),
@@ -1668,6 +1687,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       // Nature unknown (was this a fact or advice?) and no classifier to say: do not call it "unsupported".
       return speakUnresolved(presentation, classifierMs);
     }
+    state.priorClaimFocusId = resolution.receipt.id;
     const verification = await verifyPriorClaim(resolution.receipt, {
       rerun: query => deps.rerunBusinessQuery(input.tenantId, query),
       budgetMs: deps.priorClaimBudgetMs,
