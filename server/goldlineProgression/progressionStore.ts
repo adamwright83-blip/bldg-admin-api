@@ -165,27 +165,6 @@ export async function recordAuthoredColosseumFinale(input: {
   }
 }
 
-/**
- * Coastal Market stealing/catch beat: the one production writer for
- * companion.rook. Colosseum must already be durably resolved.
- */
-export async function recordAuthoredCoastalMarketRookCatch(input: {
-  tenantId: string;
-  operatorId: string;
-  at: Date;
-}): Promise<void> {
-  const existing = await findDomainProgression(input);
-  if (!existing.readable || !existing.row?.levelColosseumResolvedAt) {
-    throw new Error("Coastal Market Rook catch requires server-recorded level.colosseum");
-  }
-  if (existing.row.companionRookOwnedAt) return;
-  await setCompanionRookOwnedAt({
-    tenantId: input.tenantId,
-    operatorId: input.operatorId,
-    ownedAt: input.at,
-  });
-}
-
 /** Sets Rook only after the level timestamp exists, and only while Rook is null. */
 export async function beginCoastalMarketRookHunt(input: {
   tenantId: string;
