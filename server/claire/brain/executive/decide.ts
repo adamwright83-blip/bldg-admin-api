@@ -159,6 +159,7 @@ export async function decideTurn(
   deps: ExecutiveDeps = defaultExecutiveDeps
 ): Promise<ExecutiveDecision> {
   const nowMs = deps.nowMs?.() ?? Date.now();
+  const productionAuthority = deps.productionAuthority === true;
   const control: ExecutiveControlState = initialControlState();
   const inhibited: InhibitedCandidate[] = [];
 
