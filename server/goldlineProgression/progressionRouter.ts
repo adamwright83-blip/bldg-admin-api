@@ -14,13 +14,10 @@ import {
 } from "./progressionService";
 
 /**
- * Progression read, plus one acknowledgement of the authored Clockhead finale.
- * The input is the literal clockhead_finale.rook_joined_the_party. It refuses
- * resolved, rookOwned, kingdomComplete, levelColosseumResolved, and
- * companionRookOwned. Tenancy and operator id come from the session.
- * A satisfied binding records level.colosseum and then companion.rook.
- * It does not complete kingdom.brass_republic and does not grant
- * capability.rook.contact.
+ * Progression read plus narrow authored acknowledgements.
+ * Clockhead records level.colosseum and reveals Rook without owning him.
+ * Coastal Market owns Rook only after a server-started hunt run completes.
+ * Wayward CONTACT is granted only after its server-started authored gate completes.
  */
 export const progressionRouter = router({
   get: legacyDayforgeTenantMemberProcedure
@@ -57,6 +54,7 @@ export const progressionRouter = router({
         }
         throw error;
       }
+    }),
   beginCoastalRookHunt: legacyDayforgeTenantMemberProcedure
     .input(z.object({}).strict())
     .mutation(({ ctx }) =>
@@ -91,5 +89,4 @@ export const progressionRouter = router({
         runId: input.runId,
       })
     ),
-    }),
 });
