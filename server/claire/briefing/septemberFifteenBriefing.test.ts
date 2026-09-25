@@ -443,9 +443,10 @@ describe("September 25 production regression — held day schedule", () => {
       deps
     );
 
-    const heldTitles = state.pendingBriefing?.parsed.items.map(item => item.title) ?? [];
+    const heldItems = state.pendingBriefing?.parsed.items ?? [];
+    const heldTitles = heldItems.map(item => item.title);
     expect(heldTitles).toContain("Process Rebecca and Ashley");
-    expect(heldTitles.some(title => /Ashley.*order|order.*Ashley/i.test(title))).toBe(true);
+    expect(heldItems.some(item => /drop off Ashley's order/i.test(item.quote))).toBe(true);
     expect(heldTitles.length).toBeGreaterThanOrEqual(9);
 
     const saved = await turn(state, "Yes.", deps);
