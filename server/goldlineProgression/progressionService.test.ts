@@ -342,17 +342,7 @@ describe("goldline domain progression persistence", () => {
 
   it("keeps a second read earned after the client cache is absent", async () => {
     mocks.readMission.mockResolvedValue({ outcomes: five() });
-    await recordLevelFromOutcomes({
-      tenantId: "tenant-a",
-      operatorId: "op-a",
-      outcomes: five(),
-      outcomesAvailable: true,
-    });
-    await recordCompanionRookOwned({
-      tenantId: "tenant-a",
-      operatorId: "op-a",
-      authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
-    });
+    await ownRookThroughCoastal();
     const fresh = await readGoldlineProgression({
       tenantId: "tenant-a",
       operatorId: "op-a",
