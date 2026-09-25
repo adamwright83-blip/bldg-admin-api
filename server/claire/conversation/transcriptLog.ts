@@ -9,7 +9,6 @@ import {
 } from "./types";
 
 const LOG_PREFIX = "[ClaireTranscript]";
-const POST_CALL_CHUNK_SIZE = 3500;
 const MAX_BOOT_BACKFILL_COUNT = 5;
 
 export function transcriptLogBackfillCount(
@@ -84,15 +83,6 @@ export function redactClaireTranscriptText(text: string): string {
       /https?:\/\/[^\s]*twilio[^\s]*(?:recordings?|recording)[^\s]*/gi,
       "[REDACTED_RECORDING_URL]"
     );
-}
-
-function chunks(text: string): string[] {
-  if (!text) return [];
-  const result: string[] = [];
-  for (let offset = 0; offset < text.length; offset += POST_CALL_CHUNK_SIZE) {
-    result.push(text.slice(offset, offset + POST_CALL_CHUNK_SIZE));
-  }
-  return result;
 }
 
 /**
