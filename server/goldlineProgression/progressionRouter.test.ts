@@ -68,6 +68,10 @@ describe("goldlineProgression router", () => {
     expect(Object.keys(progressionRouter._def.procedures)).toEqual([
       "get",
       "acknowledgeColosseumFinale",
+      "beginCoastalRookHunt",
+      "completeCoastalRookCatch",
+      "beginWaywardContactGate",
+      "completeWaywardContactGate",
     ]);
     const caller = progressionRouter.createCaller(context("tenant-a", 7));
     const read = await caller.get({});
