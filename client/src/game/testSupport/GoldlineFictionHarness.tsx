@@ -259,6 +259,7 @@ function fixtureVisitContext(
         ]
       : [],
     visitOutcome: null,
+    parkingLotClerkObservation: null,
     proposal: started
       ? {
           id: "fixture-proposal",
@@ -1009,6 +1010,8 @@ export default function GoldlineFictionHarness() {
         visitStatusRef.current.set(missionId, "arrived");
         return contextFor(missionId);
       },
+      recordParkingLotClerkObservation: async ({ missionId }) =>
+        contextFor(missionId),
       loadFollowUp: async () => null,
       completeFollowUp: async () => undefined,
       rescheduleFollowUp: async () => undefined,
