@@ -5,7 +5,6 @@
  * here. Kingdom completion is not written here.
  */
 import {
-  assertCompanionRookRecordPermitted,
   assertLevelColosseumRecordPermitted,
   ProgressionNotPermittedError,
   rejectClientProgressionForge,
@@ -13,7 +12,6 @@ import {
 import {
   findDomainProgression,
   insertLevelColosseumResolved,
-  setCompanionRookOwnedAt,
   setLevelColosseumResolvedAt,
 } from "./progressionStore";
 
@@ -53,23 +51,10 @@ export async function recordRookFromOutcomes(input: {
   outcomesAvailable: boolean;
   authoredConsequence?: unknown;
   clientPayload?: unknown;
-}): Promise<void> {
+}): Promise<never> {
   rejectClientProgressionForge(input);
   rejectClientProgressionForge(input.clientPayload);
-  const existing = await findDomainProgression(input);
-  if (!existing.readable) unreadable();
-  assertCompanionRookRecordPermitted({
-    outcomes: input.outcomes,
-    outcomesAvailable: input.outcomesAvailable,
-    levelColosseumResolvedAt: existing.row?.levelColosseumResolvedAt ?? null,
-    authoredConsequence: input.authoredConsequence,
-    clientPayload: input.clientPayload,
-  });
-  if (existing.row?.companionRookOwnedAt) return;
-  await setCompanionRookOwnedAt({ ...input, ownedAt: new Date() });
-  const written = await findDomainProgression(input);
-  if (!written.readable) unreadable();
-  if (!written.row?.companionRookOwnedAt) {
-    throw new ProgressionNotPermittedError("companion.rook was not recorded for this operator");
-  }
+  throw new ProgressionNotPermittedError(
+    "companion.rook has one production authority: the server-started Coastal Market stealing/catch beat"
+  );
 }
