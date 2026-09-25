@@ -473,7 +473,7 @@ export async function decideTurn(
     responseSegments: segments,
     actionGrants,
     callControl,
-    productionAuthority: false,
+    productionAuthority,
     workingMemoryUpdate,
   };
   assertGovernedDecision(decision);
