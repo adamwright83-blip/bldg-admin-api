@@ -113,6 +113,16 @@ export type GoldlineDayPlanProps = {
   missionPlan?: MissionPlanOutcome | null;
   /** Today's prioritized line, already ordered by Mission Director. */
   currentDayLine?: CurrentDayLine | null;
+  /** Locked-week readiness whose existing completeByDate is today. Read-only. */
+  weeklyReadiness?: Array<{
+    text: string;
+    kind: string;
+    neededForDate: string;
+    completeByDate: string;
+    status: "open" | "ready" | "blocked";
+    missionTitle: string;
+    provenance: "weekly_intent_readiness";
+  }>;
   /** Slice 5 §5.4: shown when Kingdom 2 has unlocked (Kingdom 1 complete). */
   onEnterChapter?: () => void;
   /** Compact Campaign Run identity on the Day Line, when a run exists. */
@@ -394,6 +404,28 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
         ) : null}
         {props.currentDayLine ? (
           <CurrentDayLineBlock line={props.currentDayLine} />
+        ) : null}
+        {props.weeklyReadiness?.length ? (
+          <section
+            className="gdp-weekly-readiness"
+            data-testid="weekly-readiness-due-today"
+            aria-label="Readiness due today"
+          >
+            <p><strong>Ready for what's next</strong></p>
+            <ul>
+              {props.weeklyReadiness.map(item => (
+                <li
+                  key={`${item.neededForDate}:${item.text}`}
+                  data-readiness-status={item.status}
+                >
+                  <b>{item.text}</b>
+                  <small>
+                    {item.status.toUpperCase()} · for {item.missionTitle}
+                  </small>
+                </li>
+              ))}
+            </ul>
+          </section>
         ) : null}
         {props.onEnterChapter ? (
           <button

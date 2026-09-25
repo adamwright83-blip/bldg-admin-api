@@ -3,6 +3,8 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { legacyDayforgeTenantMemberProcedure, router } from "../../_core/trpc";
 import { dayDirectorActorId } from "../../dayDirector/dayDirectorActor";
+import { remainingWeekHorizon } from "../../../shared/weeklyMissionReadiness";
+import { loadDailyCommandWithWeeklyIntent } from "./dailyCommandIntent";
 import {
   adjustWeeklyMission,
   beginWeeklyMission,
@@ -29,6 +31,29 @@ function scope(ctx: { tenantId: string; user: { openId: string; id?: unknown } }
 }
 
 export const weeklyMissionRouter = router({
+  dailyReadiness: legacyDayforgeTenantMemberProcedure
+    .input(
+      z.object({
+        businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        timeZone,
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const horizon = remainingWeekHorizon({
+        businessDate: input.businessDate,
+        localTime: "12:00",
+      });
+      const command = await loadDailyCommandWithWeeklyIntent({
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+        operatorUserId: ctx.user.openId,
+        dayDirectorActorId: dayDirectorActorId(ctx),
+        businessDate: input.businessDate,
+        timeZone: input.timeZone,
+        weekStart: horizon.weekStart,
+      });
+      return command.weeklyIntentReadiness ?? [];
+    }),
   picture: legacyDayforgeTenantMemberProcedure.input(z.object({ timeZone })).query(({ ctx, input }) =>
     loadWeeklyMissionPicture(scope(ctx, input.timeZone))
   ),

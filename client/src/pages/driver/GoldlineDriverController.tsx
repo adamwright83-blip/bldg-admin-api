@@ -388,6 +388,13 @@ function LiveGoldlineDriverController({
     refetchInterval: 60_000,
     retry: false,
   });
+  const weeklyReadiness = trpc.system.weeklyMission.dailyReadiness.useQuery(
+    {
+      businessDate: selectedDate,
+      timeZone: "America/Los_Angeles",
+    },
+    { refetchInterval: 60_000, retry: false }
+  );
   const campaignRuns = trpc.system.campaignRuns.listMine.useQuery(undefined, {
     staleTime: 15_000,
     retry: false,
@@ -1447,6 +1454,7 @@ function LiveGoldlineDriverController({
         }
         missionPlan={missionDirectorPlan.data?.outcome ?? null}
         currentDayLine={dayLineForSelectedDate(currentDayLine.data, selectedDate)}
+        weeklyReadiness={weeklyReadiness.data ?? []}
         onEnterChapter={
           kingdomTwoUnlocked
             ? () => {
