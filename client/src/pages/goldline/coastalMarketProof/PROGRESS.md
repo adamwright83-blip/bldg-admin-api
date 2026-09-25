@@ -205,6 +205,13 @@ to the previous builds; this outfit is his own choice.
   - Only the autopilot, which walks to one exact spot under the rope, ever caught one.
   - The reach is now 3.3 m, from the grab point up to the gate. By keyboard, standing against the
     portcullis on the far side: the old code never caught in 15 s, the fixed code catches within 1.5 s.
+- **The crane (RIDE) had the same flaw, and the boom (RELEASE) is covered too.**
+  - The crane's hook waits about 3.4 m short of the first gate. A player who walks up to the gate,
+    where "HOLD LINE AT THE HOOK" appears, has it behind her and out of reach (grab radius 2.2 m).
+  - From the grab point up to the gate (and up to the bridge gap for the boom), the reach is now 4.6 m.
+  - The ride itself already swings around the gate's left side, over the parapet.
+  - Tested by keyboard from the obstacle, standing centre, left and right. The old code never caught
+    the crane hook. The new code catches the crane, boom and ropeway 3/3 each.
 
 ### Final measurement
 

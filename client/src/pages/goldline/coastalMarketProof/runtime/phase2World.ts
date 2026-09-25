@@ -658,11 +658,17 @@ export class Phase2World {
         const line = this.lines[key];
         const seat = this.lineHook(line, this.tmp2);
         const d = Math.hypot(seat.x - hands.x, seat.z - hands.z);
-        if (d < line.rig.grabRadius + 1.2) {
+        // Each hook waits a few metres short of what stops her (the crane's hook before the first gate,
+        // the boom's before the bridge gap), so a player who walks up to the obstacle, where the hint
+        // appears, has the hook behind her and out of reach. From there she reaches back for it.
+        const s = controller.progress;
+        const stop = key === "ride" ? this.rigs.gate1.block[1] : this.rigs.bridge.hole[0] + 0.5;
+        const reach = line.rig.grabRadius + (s > line.rig.csGrab - 2 && s < stop ? 2.4 : 0);
+        if (d < reach + 1.2) {
           this.handTarget.copy(seat);
-          this.handsUp = Math.max(this.handsUp, THREE.MathUtils.clamp(1 - (d - line.rig.grabRadius) / 1.2, 0, 1) * 0.4);
+          this.handsUp = Math.max(this.handsUp, THREE.MathUtils.clamp(1 - (d - reach) / 1.2, 0, 1) * 0.4);
         }
-        if (d < line.rig.grabRadius && Math.abs(seat.y - hands.y) < 1.2) {
+        if (d < reach && Math.abs(seat.y - hands.y) < 1.6) {
           this.state.lineReady = true;
           if (wants) {
             this.active = { id: key, t: 0 };
