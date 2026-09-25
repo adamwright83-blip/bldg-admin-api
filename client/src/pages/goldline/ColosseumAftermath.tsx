@@ -22,12 +22,11 @@ import type { DuelStats } from "./clockheadDuelEngine";
  *   quiet            the arena goes still.
  *   the line         one of his handless dials crackles: someone has been on
  *                    the Republic's clocks the whole time. Rook.
- *   the party        ROOK JOINED THE PARTY, and his mechanic, CONTACT.
+ *   the lead         Rook is out there; the Coastal Market hunt is next.
  *
- * It can reach the outside world only through `onContinue`, from the party
- * card — the finale's single `onDefeated` path. Recording Rook (same-device
- * fantasy continuity, stages/goldlineParty.ts) is the controller's job at that
- * boundary, never this.
+ * It can reach the outside world only through `onContinue`, from the reveal
+ * card — the finale's single `onDefeated` path. This component records no
+ * companion ownership and grants no CONTACT capability.
  */
 
 export type AftermathBeat = "stamp" | "quiet" | "radio" | "party";
@@ -226,7 +225,7 @@ export function ColosseumAftermath({
       }
       if (party) {
         once("party", () => {
-          audio.play("companion_join");
+          audio.play("radio_chirp");
           arcadeFeedback();
         });
       }
