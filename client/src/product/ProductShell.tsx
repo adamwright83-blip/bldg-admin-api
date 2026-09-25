@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { LoginForm } from "@/components/LoginForm";
 import { trpc } from "@/lib/trpc";
@@ -40,8 +40,7 @@ export default function ProductShell() {
           {canUseHq ? <Link href="/product/hq" className={isHq ? "active" : ""}>HQ</Link> : null}
         </nav>
         <div className="cc-top-actions">
-          <Link href="/new-order" className="cc-button primary"><Plus size={16} /> New laundry order</Link>
-          <Link href="/admin" className="cc-button">Legacy operations</Link>
+          <Link href="/dayforge-settings" className="cc-button">Account</Link>
         </div>
       </header>
       <div className="cc-shell-body">{location === "/product/unload" ? <UnloadView /> : location === "/product/hunt" ? <HuntView /> : isField ? <FieldHome /> : <HqHome />}</div>
