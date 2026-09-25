@@ -68,8 +68,8 @@ function transcriptWarn(message: string, error: unknown): void {
 
 /**
  * Runtime logs are an inspection surface, not the authoritative transcript.
- * Strip obvious provider/auth material and phone-number-shaped content before
- * anything leaves the durable conversation ledger for Railway logs.
+ * Kept only for legacy callers/tests that need redaction before non-log display.
+ * Infrastructure transcript logging itself is metadata-only.
  */
 export function redactClaireTranscriptText(text: string): string {
   return text
@@ -96,13 +96,12 @@ function chunks(text: string): string[] {
 }
 
 /**
- * Mirrors one newly persisted live turn immediately. Conversation Relay can
- * remain in-progress for the entire socket lifetime, so waiting for a call
- * completion callback makes its transcript invisible to Railway inspection.
+ * Emits metadata for one newly persisted live turn. Conversation Relay can
+ * remain in-progress for the entire socket lifetime, so timing/ordinal metadata
+ * is useful for Railway inspection without copying transcript bodies.
  *
- * The same explicit tenant/operator scope gate and redaction policy as the
- * full-session mirror apply here. Provider ids and providerMetadata are never
- * logged.
+ * The same explicit tenant/operator scope gate applies here. Transcript text,
+ * provider ids and providerMetadata are never logged.
  */
 export async function emitClaireTranscriptTurnLog(
   turn: Pick<ConversationTurn, "sessionId" | "ordinal" | "speaker" | "text" | "occurredAt">,
@@ -121,7 +120,7 @@ export async function emitClaireTranscriptTurnLog(
       operatorUserId: session.operatorUserId,
       ordinal: turn.ordinal,
       speaker: turn.speaker,
-      text: redactClaireTranscriptText(turn.text),
+      textLength: turn.text.length,
       occurredAt: turn.occurredAt,
     });
   } catch (error) {
@@ -137,8 +136,9 @@ export async function emitClaireTranscriptTurnLog(
  * This is therefore a narrow, configuration-gated read mirror — not a second
  * transcript store and not a public API.
  *
- * Deliberately omitted from logs: provider call SID, recording SID/URL,
- * provider metadata, phone numbers, auth material, and environment secrets.
+ * Deliberately omitted from logs: transcript bodies, provider call SID,
+ * recording SID/URL, provider metadata, phone numbers, auth material, and
+ * environment secrets.
  */
 export async function emitClaireTranscriptLog(
   sessionId: string,
@@ -178,7 +178,7 @@ export async function emitClaireTranscriptLog(
           operatorUserId: session.operatorUserId,
           ordinal: turn.ordinal,
           speaker: turn.speaker,
-          text: redactClaireTranscriptText(turn.text),
+          textLength: turn.text.length,
           occurredAt: turn.occurredAt,
         });
       }
@@ -190,20 +190,16 @@ export async function emitClaireTranscriptLog(
         POST_CALL_TRANSCRIPT_SOURCE
       );
       if (transcript?.text) {
-        const parts = chunks(redactClaireTranscriptText(transcript.text));
-        for (let index = 0; index < parts.length; index += 1) {
-          transcriptLog({
-            event: "claire_post_call_transcript_chunk",
-            reason: options.reason ?? "unspecified",
-            sessionId: session.id,
-            claireConversationId: session.claireConversationId,
-            tenantId: session.tenantId,
-            operatorUserId: session.operatorUserId,
-            chunkIndex: index,
-            chunkCount: parts.length,
-            text: parts[index],
-          });
-        }
+        transcriptLog({
+          event: "claire_post_call_transcript_summary",
+          reason: options.reason ?? "unspecified",
+          sessionId: session.id,
+          claireConversationId: session.claireConversationId,
+          tenantId: session.tenantId,
+          operatorUserId: session.operatorUserId,
+          textLength: transcript.text.length,
+          source: POST_CALL_TRANSCRIPT_SOURCE,
+        });
       }
     }
   } catch (error) {
