@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ClaireTurnResult } from "../../turn/claireTurn";
+import type { BusinessMemoryDeps } from "../businessMemory/adapter";
 import {
   runClaireBrainV2LiveTurn,
   isClaireBrainV2LiveEnabled,
@@ -8,6 +9,35 @@ import {
 
 const ON = { CLAIRE_BRAIN_V2_LIVE: "1" } as unknown as NodeJS.ProcessEnv;
 const OFF = {} as unknown as NodeJS.ProcessEnv;
+
+
+const hermeticBusiness: BusinessMemoryDeps = {
+  runQuery: async () => ({}) as never,
+  listAccounts: async () => [],
+  listContacts: async () => [],
+  loadHistory: async ({ account }) =>
+    ({
+      account,
+      missions: [],
+      events: [],
+      fieldVisits: [],
+      outcomes: [],
+      followUps: [],
+      pipelineStage: null,
+      pipelineId: null,
+      contacts: [],
+      dayLineMentions: [],
+      conversationMentions: [],
+    }) as never,
+  loadOpenOrders: async () => [],
+  loadOperations: async ({ businessDate }) => ({
+    businessDate,
+    open: [],
+    completed: [],
+    routeAvailable: true,
+  }),
+  verifyClaim: async () => ({}) as never,
+};
 
 const live = {
   tenantId: "default",
@@ -43,6 +73,7 @@ function input(
     surface: "voice" as const,
     conversationKey: "claire-call:live-cutover",
     live,
+    liveDeps: { business: hermeticBusiness },
     executeLegacyAdapter: vi.fn(async () => adapterResult()),
     ...over,
   };
