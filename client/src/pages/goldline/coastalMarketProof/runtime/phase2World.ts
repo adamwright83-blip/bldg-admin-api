@@ -745,7 +745,9 @@ export class Phase2World {
       this.pend.velocity(this.vel);
       const along = new THREE.Vector3(Math.cos(c.rotation.y), 0, -Math.sin(c.rotation.y));
       controller.hang(body, this.squareTo(new THREE.Vector3(along.z, 0, -along.x), controller.heading));
-      if (c.userData.u >= (a.landU ?? 0) || (!wants && a.t > 0.6)) this.finish(controller);
+      // once caught, the carrier takes her all the way to the terrace (letting go of LINE mid-span used to
+      // drop her short of the gate, which made the ropeway impossible to pass)
+      if (c.userData.u >= (a.landU ?? 0)) this.finish(controller);
     }
     if (this.active) this.handsUp = 1;
   }
