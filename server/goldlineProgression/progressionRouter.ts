@@ -4,7 +4,14 @@ import { z } from "zod";
 import { COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE } from "../../shared/colosseumAuthoredFinale";
 import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import { ProgressionForgeError, ProgressionNotPermittedError } from "./progressionContract";
-import { acknowledgeColosseumAuthoredFinale, readGoldlineProgression } from "./progressionService";
+import {
+  acknowledgeColosseumAuthoredFinale,
+  beginCoastalMarketRookHunt,
+  beginWaywardContactGate,
+  completeCoastalMarketRookCatch,
+  completeWaywardContactGate,
+  readGoldlineProgression,
+} from "./progressionService";
 
 /**
  * Progression read, plus one acknowledgement of the authored Clockhead finale.
@@ -50,5 +57,39 @@ export const progressionRouter = router({
         }
         throw error;
       }
+  beginCoastalRookHunt: legacyDayforgeTenantMemberProcedure
+    .input(z.object({}).strict())
+    .mutation(({ ctx }) =>
+      beginCoastalMarketRookHunt({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+      })
+    ),
+  completeCoastalRookCatch: legacyDayforgeTenantMemberProcedure
+    .input(z.object({ runId: z.string().uuid() }).strict())
+    .mutation(({ ctx, input }) =>
+      completeCoastalMarketRookCatch({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        runId: input.runId,
+      })
+    ),
+  beginWaywardContactGate: legacyDayforgeTenantMemberProcedure
+    .input(z.object({}).strict())
+    .mutation(({ ctx }) =>
+      beginWaywardContactGate({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+      })
+    ),
+  completeWaywardContactGate: legacyDayforgeTenantMemberProcedure
+    .input(z.object({ runId: z.string().uuid() }).strict())
+    .mutation(({ ctx, input }) =>
+      completeWaywardContactGate({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        runId: input.runId,
+      })
+    ),
     }),
 });
