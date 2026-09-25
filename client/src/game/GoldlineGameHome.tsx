@@ -4288,7 +4288,7 @@ export default function GoldlineGameHome(props: GoldlineGameHomeProps) {
           mission={props.openChannelMission}
           gap={openChannelGap}
           shouldAutoIgnite={
-            !action &&
+            !presentedAction &&
             !activeMission &&
             !nextOrderObjective &&
             !preparedObjective &&
