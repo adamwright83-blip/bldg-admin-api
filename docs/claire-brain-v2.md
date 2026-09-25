@@ -6,7 +6,7 @@ Canonical architecture for replacing Claire’s **cognitive control plane**.
 
 This document constrains Brain V2 work. Implementation lives under `server/claire/brain/`. Live status lives in `server/claire/brain/STATUS.md`. Session handoff lives in `docs/claire-brain-v2-handoff.md`.
 
-**Production cutover is prohibited until explicit authorization.**
+**Adam explicitly authorized the guarded production cutover on 2026-09-25. Stage C is operator-scoped and flag-gated; this is not blanket authority for every V2 lane.**
 
 ---
 
@@ -67,9 +67,9 @@ Keep the body. Replace the control plane.
 | Day Director / briefing commit / follow-up commit | Action services interpreting raw speech |
 | Twilio / TTS / transcript log | PR #192’s string-then-label ResponsePlan |
 
-V1 (`runClaireTurn`) remains the only system allowed to speak or mutate until a later, authorized cutover.
+Stage C keeps the existing body while moving selected decisions to V2. `runClaireBrainV2LiveTurn` runs before the legacy adapter on guarded live lanes. V1 services remain reusable organs/adapters and fallback for lanes V2 does not yet own; they are retired only in Phase J.
 
-V2 (`runClaireBrainTurn`) is a **new entrypoint** alongside V1. It starts in **shadow mode**: same completed utterance, no live speech, no mutations.
+`runClaireBrainTurn` remains shadow by default. `CLAIRE_BRAIN_V2_LIVE=1` explicitly enables the operator-scoped guarded path.
 
 ---
 
@@ -535,8 +535,10 @@ mints no grant. It is not a Day Line proposal.
 
 The work-frame classifier returns `classified`, `unknown`, or `failed`. Unknown and failed
 hold. They do not propose Day Line and they do not change the strategic frame. Model text is
-not authority. Only `executive/grants.ts` mints branded grants. Every grant remains
-`mutationAllowed: false` and `shadowOnly: true`. `productionAuthority` stays false.
+not authority. Only `executive/grants.ts` mints branded grants. Shadow grants remain
+`mutationAllowed: false` and `shadowOnly: true`. On the explicitly enabled Stage C path,
+the executive may mint `mutationAllowed: true, shadowOnly: false` grants for live lanes
+it owns; the Action Gateway is the only execution boundary.
 
 Shadow comparison records the work-frame kind, attention repair, operator-intent and
 external-fact flags, classifier status, suppressed slots, whether verification ran, and
@@ -546,8 +548,9 @@ ResponsePlan uses `CognitiveAcknowledgementSegment` with `durableWrite: false`. 
 cannot carry a grant. Its wording may confirm understanding. It must not claim the work was
 locked, committed, added, logged, saved, or made today’s mission.
 
-This slice does not cut V2 over. V1 still speaks and mutates. Do not enable
-`CLAIRE_BRAIN_V2_SHADOW` from this change. Do not set `BRAIN_V2_PRODUCTION_AUTHORITY`.
+Stage C was explicitly authorized on 2026-09-25. The current guarded scope is Day Line
+work lifecycle plus call control. Existing V1 code may still execute the proven mutation,
+character, or persistence organ behind a V2 grant, and remains fallback for unsupported lanes.
 
 ---
 
@@ -593,153 +596,79 @@ PR #192 `sourceVisibility.ts` is the investigation to port, minus actor-name heu
 | “I gotta go.” / “I need to run.” | call end **if** executive issues a grant |
 | “Dana hasn’t replied, but I gotta go.” | optional scoped segment + `CallControlSegment(endCall=true)` |
 
-No regex outside Executive Function may hang up independently. Today Twilio still does, in V1 only.
+Call end is a V2 executive decision on the guarded live path. Legacy transport behavior remains only as fallback outside that path until Phase J retirement.
 
 ---
 
-## 18. V1 versus V2
+## 18. V1 versus V2 during Stage C
 
 ```mermaid
 flowchart LR
-  transport[Twilio / desk] --> v1[runClaireTurn V1 live]
-  transport --> shadow[runClaireBrainTurn V2 shadow]
-  v1 --> liveSpeak[Live speech / mutations]
-  shadow --> telemetry[Comparison telemetry]
-  shadow -.->|no| liveSpeak
+  transport[Twilio / desk] --> live[V2 guarded live orchestrator]
+  live --> executive[V2 Executive Function]
+  executive -->|owned lane + branded grant| gateway[Action Gateway]
+  gateway --> organ[existing proven V1 organ / adapter]
+  executive -->|unsupported lane| fallback[V1 fallback]
+  organ --> response[live response / mutation]
+  fallback --> response
 ```
 
-| | V1 | V2 |
-|---|---|---|
-| Entry | `runClaireTurn()` | `runClaireBrainTurn()` |
-| Speaks to operator | yes, until cutover | no, until authorized |
-| Mutates | yes, until cutover | never in shadow |
-| Role | production | comparison + future mind |
+V2 is executive authority only for guarded lanes it currently owns. Reusing V1 mutation, character, transport, or persistence code underneath does not make those organs a second executive. Unsupported lanes remain on V1 until they receive V2 adapters.
 
-Do not rename `runClaireTurn`. Do not build V2 by growing it.
+Current guarded live lanes: Day Line work proposal / confirmation lifecycle and executive call control.
+
+The guarded path is enabled only when `CLAIRE_BRAIN_V2_LIVE=1` and `isAuthorizedProductionOperator` accepts the tenant/operator.
 
 ---
 
 ## 19. Shadow mode
 
-For authorized-operator turns, after V1 completes (or in parallel on the completed utterance + frozen working-memory snapshot):
-
-1. V2 perceives, retrieves, decides, plans, renders a **candidate**
-2. V2 cannot mutate, cannot affect live response, cannot call the operator, cannot create Day Line work
-3. Persist a safe comparison record: perceived intent, compartments, evidence ids (not secrets), executive decision, action authority, response plan types, call control
-4. Do not log DB credentials, API keys, Twilio credentials, phone numbers, passwords, tokens, or environment values
-
-Shadow wiring into Twilio/desk is a later phase. Until then `runClaireBrainTurn` exists and tests call it; production entrypoints do not.
-
----
-
----
-
-## 19a. Authority lifecycle (binding)
-
-Brain V2 moves through four stages. Each has a different, explicit rule about what
-production may import and what V2 may do. Do not blur them.
-
-### A. Construction isolation — COMPLETE
-
-Production files do not import Brain V2 at all. V2 exists only under
-`server/claire/brain/` and is reachable only from its own tests.
-
-### B. Shadow observation — CURRENT
-
-Production V1 paths may emit a **one-way observation** into Brain V2. This supersedes
-stage A's blanket import prohibition, and only for read-only observation.
-
-```
-                     ┌──→ Brain V2 observer
-                     │       ↓
-REAL TURN → V1 ──────┤    telemetry only
-            │        │
-            ↓        X  NO RETURN PATH
-       live response
-       live mutations
-       live call control
-```
-
-The permanent invariant of this stage:
+Shadow remains a separate one-way validation instrument:
 
 ```
 BRAIN V2 MAY OBSERVE A COMPLETED V1 TURN.
 BRAIN V2 MAY NEVER AFFECT THAT TURN.
 ```
 
-Binding rules:
-
-1. **V1 completes first.** V1's authoritative result must already exist before
-   observation is launched. The two minds never race, and results are never combined
-   or selected between.
-2. **V2 return values are ignored.** No V2 value may determine V1 speech, mutation,
-   pending state, call control, response kind, action ids, receipts, TwiML, or the
-   HTTP response. There is no fallback from V1 to V2.
-3. **Fire-and-forget.** Observation may not delay the user-facing response. V2 is
-   never awaited on the response-critical path.
-4. **No mutable V1 state.** V2 receives a frozen copy via `readOnlyWorkingMemorySource`,
-   never the live `ClaireTurnState` object V1 continues to own.
-5. **Zero action authority.** `productionAuthority` stays false, `mutationAllowed`
-   stays false, and the Action Gateway keeps refusing execution.
-6. **Zero speech authority.** Candidate speech is telemetry. It never reaches the desk
-   client, Twilio, or TTS.
-7. **Zero call-control authority.** V2 records `candidateEndCall` for comparison only.
-   V1 remains the sole live call-control authority.
-8. **Default off.** With `CLAIRE_BRAIN_V2_SHADOW` absent or false there is no V2
-   execution, no added model calls, no added DB reads, and no behavioural difference.
-9. **Shadow fails open to V1.** A V2 failure leaves V1 completely unaffected. This is
-   the opposite of the fail-closed rule that governs business truth *inside* V2, and
-   the distinction is deliberate: V2's own truth rules must fail closed, while V2's
-   infrastructure must never impair V1.
-10. **Safe telemetry only.** Persist cognition, not content: perceived summary,
-    attention lanes, retrieval classes, evidence ids/types/provenance classes,
-    inhibited candidates, decision summary, segment types, candidate action classes,
-    candidate call control, and the comparison against V1. Never credentials, secrets,
-    phone numbers, provider ids, raw provider payloads, or environment values. Do not
-    duplicate raw transcript text — the conversation ledger already owns it.
-
-Both surfaces are wired: `claireTwilio.ts` (voice) and `claireRouter.ts` (desk).
-`server/claire/brain/tests/shadowWiring.test.ts` asserts the absence of a return path.
-
-### B.1 What shadow observation actually does now
-
-The observer injects a read-only `ExecutiveDeps`, so an enabled shadow turn genuinely
-retrieves through all four compartments: Business, Episodic, Self and Goals.
-
-Two of those have write-capable siblings, and an observer must reach neither:
-
-| Compartment | Observer uses | Must NEVER use | Because |
-|---|---|---|---|
-| Self | `readPersonalProgressionContext` | `loadPersonalProgressionContext` | it releases expired reservations — a write |
-| Goals | `loadObligations` | `ensureAdamBoard` | it CREATES obligations — it makes work |
-| Personal decline | `selectDialogueLine` | the personal reveal path | it generates and CONSUMES an entitlement |
-
-The read-only progression view may therefore show a reservation that has already
-expired. That is the correct trade: a slightly stale read is harmless; a write from an
-observer is not.
-
-Brain V2 keeps its OWN working memory during shadow (`shadow/shadowMemory.ts`), keyed by
-conversation and separate from V1 state. The executive records what a turn RESOLVED and
-what it actually PRESENTED — a member counts as presented only when Claire named it — so
-a later "the other four" continues that same result instead of re-querying. The store
-holds cognitive state only: no transcript, no operator words, no durable write path.
-
-### C. Guarded cutover — NOT AUTHORIZED
-
-Brain V2 gains selected authority only after explicit authorization, against the
-criteria in §20.
-
-### D. Retirement — LATER
-
-The V1 control plane is removed only after V2 proves itself in stage C.
+A shadow decision has `productionAuthority: false`; its action grants are `mutationAllowed: false, shadowOnly: true`; candidate speech and call control are telemetry only. The old observer is skipped for the authorized operator while guarded live mode is enabled so V2 is not run twice.
 
 ---
 
+## 19a. Authority lifecycle (binding)
+
+### A. Construction isolation — COMPLETE
+
+Historical phase. V2 existed only in tests.
+
+### B. Shadow observation — COMPLETE
+
+Historical validation phase. Production emitted one-way observations after V1 completed. Those observations could never affect speech, mutation, pending state, or call control.
+
+### C. Guarded cutover — CURRENT
+
+Explicitly authorized by Adam on 2026-09-25.
+
+Binding rules:
+
+1. `CLAIRE_BRAIN_V2_LIVE` is default-off and operator-scoped.
+2. Executive Function decides whether a live owned-lane action receives authority.
+3. Live mutation requires a branded grant with `mutationAllowed: true, shadowOnly: false`.
+4. The Action Gateway executes; adapters do not reinterpret operator speech.
+5. Existing V1 implementation may be reused as a mutation / character / persistence adapter behind the gateway.
+6. Unsupported lanes fail open to the existing production path.
+7. A V2 failure must not fabricate success or business truth.
+8. The shadow observer remains permanently one-way and non-authoritative.
+
+### D. Retirement — LATER
+
+Retire remaining V1 control-plane decisions only after each lane has a proven V2 adapter and Stage C field evidence.
+
+---
 ## 20. Cutover criteria
 
 V2 is **not** ready because types compile, unit tests pass, fixtures answer, or the model “sounds better.”
 
-Before production cutover, all of the following:
+For expanding Stage C to additional lanes and ultimately retiring V1, preserve all of the following:
 
 - no subsystem outside Executive Function may select a top-level intent/route
 - no mutation without `ExecutiveActionGrant`
@@ -757,7 +686,7 @@ Before production cutover, all of the following:
 - no unresolved substantive P1/P2 review findings
 - **explicit authorization to cut over**
 
-Then Phase I: guarded operator-only cutover. Then Phase J: retire the old control plane.
+Stage C guarded operator cutover is current. Phase J retires the old control plane only after the remaining lanes are proven.
 
 ---
 
@@ -773,7 +702,7 @@ Then Phase I: guarded operator-only cutover. Then Phase J: retire the old contro
 | F | Action gateway + compartment adapters | done | none |
 | G | Character renderer | boundary + governed phrasing seam done; voice NOT attached | none |
 | H | Regression / adversarial corpus | done (130 brain tests, 0 todo) | none |
-| I | Shadow mode on real turns + guarded cutover | wired on both surfaces, default OFF, with live read-only retrieval | read-only comparison, then **only after authorization** |
+| I | Shadow mode on real turns + guarded cutover | **current Stage C** | operator-scoped live authority for owned lanes; one-way shadow remains available |
 | J | Retire old control plane | not started | after V2 proves itself |
 
 ### Retrieval safety invariant
@@ -865,4 +794,4 @@ Do not broaden transcript logging beyond `default:adam-admin`.
 | `classifyVoiceWorkStatement` as interpreter | retire; executor remains |
 | PR #192 `runClaireTurn` growth | do not merge as destination |
 
-The first Brain V2 PR has **zero production behavioral authority**.
+Early Brain V2 construction PRs had zero production behavioral authority. Stage C now has explicit, operator-scoped authority only on the live lanes documented above.
