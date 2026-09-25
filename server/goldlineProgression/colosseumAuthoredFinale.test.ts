@@ -29,6 +29,10 @@ vi.mock("../db", () => ({ getDb: mocks.getDb }));
 
 import { progressionRouter } from "./progressionRouter";
 import { acknowledgeColosseumAuthoredFinale } from "./progressionService";
+import {
+  beginCoastalMarketRookHunt,
+  recordAuthoredCoastalMarketRookCatch,
+} from "./progressionStore";
 
 const TARGETS = [...(colosseumLeadHuntDefinition()?.targetIds ?? [])];
 const five = () => Object.fromEntries(TARGETS.map(id => [id, "pitched"]));
@@ -205,6 +209,47 @@ describe("authored Clockhead finale acknowledgement", () => {
     expect(clearedLocalStorage.companionRookOwned.value).toBe(false);
     expect(clearedLocalStorage.kingdomBrassRepublicCompleted.value).toBe(false);
     expect(clearedLocalStorage.capabilityRookContact.granted).toBe(false);
+  });
+
+  it("owns Rook only after the server-started Coastal Market catch beat", async () => {
+    const caller = progressionRouter.createCaller(context("tenant-a", 7));
+    const revealed = await caller.acknowledgeColosseumFinale(finale);
+    expect(revealed.levelColosseumResolved.value).toBe(true);
+    expect(revealed.companionRookOwned.value).toBe(false);
+
+    const runId = "33333333-3333-4333-8333-333333333333";
+    await beginCoastalMarketRookHunt({
+      tenantId: "tenant-a",
+      operatorId: "open-7",
+      runId,
+      startedAt: new Date("2026-09-25T10:00:00.000Z"),
+    });
+    await expect(
+      recordAuthoredCoastalMarketRookCatch({
+        tenantId: "tenant-a",
+        operatorId: "open-7",
+        runId: "44444444-4444-4444-8444-444444444444",
+        at: new Date("2026-09-25T10:00:06.000Z"),
+      })
+    ).rejects.toThrow(/server-started hunt run/);
+
+    await recordAuthoredCoastalMarketRookCatch({
+      tenantId: "tenant-a",
+      operatorId: "open-7",
+      runId,
+      at: new Date("2026-09-25T10:00:06.000Z"),
+    });
+    const owned = await caller.get({});
+    expect(owned.companionRookOwned).toEqual({ status: "earned", value: true });
+    expect(db.rows.filter(row => row.companionRookOwnedAt)).toHaveLength(1);
+
+    await recordAuthoredCoastalMarketRookCatch({
+      tenantId: "tenant-a",
+      operatorId: "open-7",
+      runId,
+      at: new Date("2026-09-25T10:00:07.000Z"),
+    });
+    expect(db.rows.filter(row => row.companionRookOwnedAt)).toHaveLength(1);
   });
 
   it("does not let another tenant or operator inherit the Colosseum resolution", async () => {
