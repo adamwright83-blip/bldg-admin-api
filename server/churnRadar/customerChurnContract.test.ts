@@ -88,7 +88,7 @@ describe("Churn Radar production contract", () => {
   it("attributes only a later processor-backed paid order as recovered revenue", () => {
     expect(service).toContain("refreshCustomerRecoveryAttribution");
     expect(service).toContain("eq(orders.paid, true)");
-    expect(service).toContain("nativeOrderToTruth(order)?.paid === true");
+    expect(service).toContain("filter(hasNativePaymentAuthority)");
     expect(service).toContain('eventName: "revenue_recovered"');
     expect(service).toContain("recoveredRevenueCents");
   });
