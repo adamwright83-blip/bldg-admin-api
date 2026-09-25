@@ -286,8 +286,8 @@ export const claireRouter = router({
         tenantId: scope.tenantId,
         operatorUserId: scope.operatorUserId,
       });
-      const runLegacyAdapter = () =>
-        runClaireTurn(
+      const runLegacyAdapter = async () =>
+        await runClaireTurn(
           {
             tenantId: scope.tenantId,
             operatorUserId: scope.operatorUserId,
