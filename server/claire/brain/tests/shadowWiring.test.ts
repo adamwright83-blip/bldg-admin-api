@@ -1,15 +1,9 @@
 /**
- * Architectural tests for the Phase I shadow wiring.
+ * Architectural tests for the shadow observer after the guarded V2 cutover began.
  *
- * The permanent invariant:
- *
- *   BRAIN V2 MAY OBSERVE A COMPLETED V1 TURN.
- *   BRAIN V2 MAY NEVER AFFECT THAT TURN.
- *
- * These tests assert the ABSENCE of a return path, which is the property that is easy
- * to lose accidentally during a later edit. They read the production call sites as text
- * on purpose: a future change that starts awaiting V2, or that feeds a V2 value into a
- * V1 decision, should fail here rather than in someone's phone call.
+ * The shadow path is still permanently one-way. A separate, explicit live orchestrator
+ * may now run before V1 for the authorized operator; that does not give the shadow
+ * observer a return path.
  */
 
 import { readFileSync } from "node:fs";
@@ -44,47 +38,38 @@ describe("both surfaces observe, and only observe", () => {
     expect(ROUTER).toMatch(/observeShadowTurnDetached\(/);
   });
 
-  it("neither surface awaits Brain V2 on the response-critical path", () => {
+  it("the shadow observer is still never awaited or assigned", () => {
     expect(TWILIO).not.toMatch(/await\s+observeShadowTurn/);
     expect(ROUTER).not.toMatch(/await\s+observeShadowTurn/);
-    expect(TWILIO).not.toMatch(/await\s+runClaireBrainTurn/);
-    expect(ROUTER).not.toMatch(/await\s+runClaireBrainTurn/);
-  });
-
-  it("neither surface assigns a Brain V2 result to anything", () => {
-    // No `const x = observeShadowTurn...` — the return value must be unusable.
     expect(TWILIO).not.toMatch(/=\s*observeShadowTurn/);
     expect(ROUTER).not.toMatch(/=\s*observeShadowTurn/);
   });
 
-  it("neither surface references a V2 candidate as a live value", () => {
-    for (const source of [TWILIO, ROUTER]) {
-      expect(source).not.toMatch(/candidateSpeak/);
-      expect(source).not.toMatch(/candidateEndCall/);
-      expect(source).not.toMatch(/productionAuthority/);
-    }
-  });
-
-  it("the live production entrypoint is still runClaireTurn, not the brain", () => {
+  it("the guarded live orchestrator is distinct from the shadow observer", () => {
+    expect(TWILIO).toMatch(/await runClaireBrainV2LiveTurn\(/);
+    expect(ROUTER).toMatch(/await runClaireBrainV2LiveTurn\(/);
     expect(TWILIO).toMatch(/await runClaireTurn\(/);
     expect(ROUTER).toMatch(/await runClaireTurn\(/);
-    expect(TWILIO).not.toMatch(/runClaireBrainTurn/);
-    expect(ROUTER).not.toMatch(/runClaireBrainTurn/);
   });
 
-  it("observation happens after V1's authoritative result exists", () => {
-    // The V1 call must textually precede the observation on both surfaces.
-    expect(TWILIO.indexOf("await runClaireTurn(")).toBeLessThan(TWILIO.indexOf("observeShadowTurnDetached("));
-    expect(ROUTER.indexOf("await runClaireTurn(")).toBeLessThan(ROUTER.indexOf("observeShadowTurnDetached("));
+  it("shadow observation still happens only after the legacy adapter result exists", () => {
+    expect(TWILIO.indexOf("await runClaireTurn(")).toBeLessThan(
+      TWILIO.indexOf("observeShadowTurnDetached(")
+    );
+    expect(ROUTER.indexOf("await runClaireTurn(")).toBeLessThan(
+      ROUTER.indexOf("observeShadowTurnDetached(")
+    );
   });
+
 
   it("a held voice fragment is not a V2 reasoning turn", async () => {
     // Transport skips observation on listen-only holds. Direct observer still
     // treats an explicit incomplete label as a half-turn with no retrieval.
     expect(TWILIO).toMatch(/observationUtteranceForBrain\(/);
-    expect(TWILIO).toMatch(/if \(observation\.observe\)/);
+    expect(TWILIO).toMatch(/observation\.observe/);
     expect(TWILIO).toMatch(/assembledText:\s*observation\.assembledText/);
     expect(ROUTER).toMatch(/observationUtteranceForBrain\(/);
+    expect(ROUTER).toMatch(/observation\.observe/);
     expect(ROUTER).toMatch(/assembledText:\s*observation\.assembledText/);
 
     const held = await observe(
