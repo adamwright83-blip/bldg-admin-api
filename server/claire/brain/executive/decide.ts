@@ -326,31 +326,6 @@ export async function decideTurn(
       actionGrants.push(grant);
     }
 
-    if (attention.pendingDisposition === "reject" || attention.pendingDisposition === "revise") {
-      const identity =
-        memory.pendingBriefing?.identity ??
-        memory.pendingProposal?.identity ??
-        memory.pendingAccountFollowUp?.identity;
-      if (identity) {
-        control.actionRisk = "proposal_only";
-        actionGrants.push(
-          mintActionGrant({
-            actionClass:
-              attention.pendingDisposition === "reject"
-                ? "cancel_pending"
-                : "revise_pending",
-            scope: { identity },
-            authorityBasis: "pending_lifecycle",
-            sourceTurnAssembledText: perceived.assembledText,
-            expiresAtMs: nowMs + 15 * 60_000,
-            constraints: {
-              mutationAllowed: productionAuthority,
-              shadowOnly: !productionAuthority,
-            },
-          })
-        );
-      }
-    }
 
     const frameUpdate = nextStrategicFrame({ perceived, memory, nowMs });
     if (frameUpdate) {
