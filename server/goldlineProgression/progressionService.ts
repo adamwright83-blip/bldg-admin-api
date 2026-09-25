@@ -32,7 +32,6 @@ import {
   recordAuthoredColosseumFinale,
   recordWaywardContactGateCompleted,
 } from "./progressionStore";
-import { recordRookFromOutcomes } from "./progressionWrites";
 
 async function loadOutcomes(input: { tenantId: string; operatorId: string }): Promise<{
   outcomes: Record<string, unknown> | null;
@@ -116,14 +115,12 @@ export async function recordCompanionRookOwned(input: {
   capabilityOperatorId?: string | null;
   authoredConsequence?: unknown;
   clientPayload?: unknown;
-}): Promise<GoldlineProgressionRead> {
-  const outcomes = await loadOutcomes(input);
-  await recordRookFromOutcomes({ ...input, ...outcomes });
-  return readGoldlineProgression({
-    tenantId: input.tenantId,
-    operatorId: input.operatorId,
-    capabilityOperatorId: input.capabilityOperatorId ?? null,
-  });
+}): Promise<never> {
+  rejectClientProgressionForge(input);
+  rejectClientProgressionForge(input.clientPayload);
+  throw new ProgressionNotPermittedError(
+    "companion.rook has one production authority: the server-started Coastal Market stealing/catch beat"
+  );
 }
 
 /**
