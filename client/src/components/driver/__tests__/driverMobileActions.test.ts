@@ -19,7 +19,7 @@ const fieldHomeSource = readFileSync(
   "utf8"
 );
 const walkInSource = readFileSync(
-  new URL("../../dayforge/WalkInCapture.tsx", import.meta.url),
+  new URL("../../legacy-dayforge/WalkInCapture.tsx", import.meta.url),
   "utf8"
 );
 const globalCss = readFileSync(

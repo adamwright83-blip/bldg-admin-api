@@ -41,8 +41,8 @@ describe("DayForge flagship contract", () => {
     expect(entry).toContain("GoldlineHome");
     expect(entry).not.toContain("./App");
     expect(html).toContain('src="/src/legacy-dayforge-flagship-main.tsx"');
-    expect(vite).toContain("legacy-dayforge-flagship: path.resolve(");
-    expect(vercel).toContain('"source": "/legacy-dayforge-flagship"');
+    expect(vite).toContain('"legacy-dayforge-flagship": path.resolve(');
+    expect(vercel).toContain('"source": "/dayforgeflagship"');
     expect(vercel).toContain('"destination": "/legacy-dayforge-flagship.html"');
   });
 
