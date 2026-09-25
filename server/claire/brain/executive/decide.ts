@@ -299,7 +299,10 @@ export async function decideTurn(
           : "current_turn_operator_commitment",
         sourceTurnAssembledText: perceived.assembledText,
         expiresAtMs: nowMs + 15 * 60_000,
-        constraints: { mutationAllowed: false, shadowOnly: true },
+        constraints: {
+          mutationAllowed: productionAuthority,
+          shadowOnly: !productionAuthority,
+        },
       });
       actionGrants.push(grant);
       segments.push({ type: "ActionProposalSegment", text: proposalText(title), grant });
