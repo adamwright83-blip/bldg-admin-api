@@ -110,8 +110,16 @@ const WeekBrochure = lazy(() => import("../goldline/week/WeekBrochure"));
 const WaywardTetheredDeck = lazy(
   () => import("../goldline/stages/WaywardTetheredDeck")
 );
+const CoastalMarketProofPage = lazy(
+  () => import("../goldline/coastalMarketProof/CoastalMarketProofPage")
+);
 
-type DriverScene = "game" | "overworld" | "colosseum" | "wayward";
+type DriverScene =
+  | "game"
+  | "overworld"
+  | "colosseum"
+  | "coastal-market"
+  | "wayward";
 
 /**
  * The real day opens first. This scene is used when the operator explicitly
@@ -214,6 +222,9 @@ function LiveGoldlineDriverController({
   const [selectedDate, setSelectedDate] = useState(() => getLocalYmd());
   const [driverScene, setDriverScene] =
     useState<DriverScene>(initialDriverScene);
+  const [coastalRunId, setCoastalRunId] = useState<string | null>(null);
+  const [waywardContactRunId, setWaywardContactRunId] =
+    useState<string | null>(null);
   const [stageReturnScene, setStageReturnScene] =
     useState<"overworld">("overworld");
   /** The day briefing, opened over Overland without leaving it. */
@@ -537,6 +548,14 @@ function LiveGoldlineDriverController({
     trpc.system.day1TenDoors.recordOutcome.useMutation();
   const acknowledgeColosseumFinale =
     trpc.system.goldlineProgression.acknowledgeColosseumFinale.useMutation();
+  const beginCoastalRookHunt =
+    trpc.system.goldlineProgression.beginCoastalRookHunt.useMutation();
+  const completeCoastalRookCatch =
+    trpc.system.goldlineProgression.completeCoastalRookCatch.useMutation();
+  const beginWaywardContactGate =
+    trpc.system.goldlineProgression.beginWaywardContactGate.useMutation();
+  const completeWaywardContactGate =
+    trpc.system.goldlineProgression.completeWaywardContactGate.useMutation();
   function advanceCachedProgress(kind: "pickup" | "delivery" | "mission") {
     utils.system.openChannel.progress.setData(progressInput, current => {
       if (!current) return current;
@@ -1692,7 +1711,31 @@ function LiveGoldlineDriverController({
             setStageReturnScene("overworld");
             setDriverScene("colosseum");
           }}
-          onEnterWayward={() => setDriverScene("wayward")}
+          onEnterCoastalMarket={() => {
+            void beginCoastalRookHunt.mutateAsync({}).then(result => {
+              setCoastalRunId(result.runId);
+              setDriverScene("coastal-market");
+            }).catch(error => {
+              toast.error(
+                error instanceof Error ? error.message : "Could not begin the Rook hunt."
+              );
+            });
+          }}
+          onEnterWayward={() => {
+            if (progressionForOverworld?.capabilityRookContact?.granted) {
+              setWaywardContactRunId(null);
+              setDriverScene("wayward");
+              return;
+            }
+            void beginWaywardContactGate.mutateAsync({}).then(result => {
+              setWaywardContactRunId(result.runId);
+              setDriverScene("wayward");
+            }).catch(error => {
+              toast.error(
+                error instanceof Error ? error.message : "Could not begin the Wayward CONTACT gate."
+              );
+            });
+          }}
           onResolveOrder={handleResolveOrder}
           onOpenDayBriefing={() => setDayBriefingOpen(true)}
           suppressCampaignChrome={dayBriefingOpen}
@@ -1700,6 +1743,30 @@ function LiveGoldlineDriverController({
         />
         {returnToDay}
       </>
+    );
+  }
+
+  if (driverScene === "coastal-market") {
+    return (
+      <Suspense fallback={<div style={{ minHeight: "100dvh", background: "#1b1410" }} />}>
+        {returnToDay}
+        <CoastalMarketProofPage
+          assetBase="/assets/goldline/coastal-market-three-proof/"
+          onRookCaught={() => {
+            if (!coastalRunId || completeCoastalRookCatch.isPending) return;
+            void completeCoastalRookCatch.mutateAsync({ runId: coastalRunId }).then(() => {
+              joinParty(identity.data?.openId ?? null, "rook");
+              setCoastalRunId(null);
+              void utils.system.goldlineProgression.get.invalidate();
+              setDriverScene("overworld");
+            }).catch(error => {
+              toast.error(
+                error instanceof Error ? error.message : "Rook ownership was not recorded."
+              );
+            });
+          }}
+        />
+      </Suspense>
     );
   }
 
@@ -1716,6 +1783,20 @@ function LiveGoldlineDriverController({
           rookSource={{
             kind: "server",
             companionRookOwned: progressionForOverworld?.companionRookOwned,
+          }}
+          onContactGateComplete={() => {
+            if (!waywardContactRunId || completeWaywardContactGate.isPending) return;
+            void completeWaywardContactGate
+              .mutateAsync({ runId: waywardContactRunId })
+              .then(() => {
+                setWaywardContactRunId(null);
+                void utils.system.goldlineProgression.get.invalidate();
+              })
+              .catch(error => {
+                toast.error(
+                  error instanceof Error ? error.message : "CONTACT was not recorded."
+                );
+              });
           }}
           onReturn={() => {
             setDriverScene("overworld");
@@ -1760,14 +1841,13 @@ function LiveGoldlineDriverController({
               { authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE },
               {
                 onSuccess: () => {
-                  // Cache only after the server records level.colosseum and companion.rook.
-                  // localStorage is not the ownership write.
-                  joinParty(identity.data?.openId ?? null, "rook");
+                  // Colosseum now records level.colosseum only. Rook is revealed
+                  // here, then durably owned only after the Coastal Market catch.
                   void utils.system.goldlineProgression.get.invalidate();
                 },
                 onError: () => {
                   toast.error(
-                    "Rook was not recorded. Enter the Colosseum again to acknowledge the finale."
+                    "The Colosseum finale was not recorded. Enter it again to acknowledge the reveal."
                   );
                 },
               }
