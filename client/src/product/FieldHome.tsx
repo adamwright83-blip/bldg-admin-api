@@ -38,7 +38,7 @@ export default function FieldHome() {
           <div className="cc-move-meta"><span>{move.expectedDurationMinutes + (move.travelMinutes ?? 0)} min</span><span>{money(move.expectedValue.value?.lowCents)}–{money(move.expectedValue.value?.highCents)}</span><span>{move.confidence}</span></div>
           {move.missionId && move.missionVersion ? <button className="cc-button primary" style={{marginTop:12}} disabled={accept.isPending} onClick={async()=>{await accept.mutateAsync({moveId:move.id,missionId:move.missionId!,expectedVersion:move.missionVersion!,requestId:crypto.randomUUID()}); window.location.assign(move.destinationPath)}}>Accept move <ArrowRight size={14}/></button> : null}
         </article>) : <div className="cc-empty"><AlertTriangle size={22} style={{margin:"0 auto 8px"}} /><strong>{moves.data?.reason.replace(/_/g," ") ?? "NO MOVE"}</strong><p>FIELD is allowed to recommend nothing when the evidence or route does not justify a move.</p></div>}
-        <div style={{padding:16,display:"grid",gap:8}}><Link href="/product/hunt" className="cc-button primary" style={{width:"100%"}}>Enter HUNT</Link><Link href="/product/unload" className="cc-button" style={{width:"100%"}}>Unload the Day</Link><Link href="/new-order" className="cc-button" style={{width:"100%"}}>Create laundry / dry-cleaning order</Link></div>
+        <div style={{padding:16,display:"grid",gap:8}}><Link href="/product/hunt" className="cc-button primary" style={{width:"100%"}}>Enter HUNT</Link><Link href="/product/unload" className="cc-button" style={{width:"100%"}}>Unload the Day</Link></div>
       </aside>
     </div>
   </section>;

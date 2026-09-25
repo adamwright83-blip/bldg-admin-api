@@ -199,6 +199,27 @@ function AdminAuthGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+const SAAS_CUSTOMER_SAFE_PATHS = [
+  "/product",
+  "/dayforge-settings",
+  "/billing",
+  "/dayforge-invite",
+  "/dayforge-login",
+  "/dayforge-onboarding",
+  "/onboarding",
+  "/goldline/start",
+  "/receipt/",
+] as const;
+
+function isSaasCustomerSafePath(pathname: string): boolean {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  return SAAS_CUSTOMER_SAFE_PATHS.some(prefix =>
+    prefix.endsWith("/")
+      ? pathname.startsWith(prefix)
+      : path === prefix || path.startsWith(`${prefix}/`)
+  );
+}
+
 const LOCAL_ADMIN_PATHS = new Set([
   "/gumballpals",
   "/admin",
@@ -486,6 +507,7 @@ function Router() {
   const hostname =
     typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
   const { tenant } = useTenant();
+  const { user } = useAuth();
   const isBoreslayHost =
     hostname === "boreslay.com" || hostname === "www.boreslay.com";
   // api.bldg.chat is the real, working backend for this app (Railway); the
@@ -502,6 +524,19 @@ function Router() {
   const vendorSlug = isVendorHost
     ? hostname.replace(".ops.bldg.chat", "")
     : null;
+
+  // Commercial SaaS members are intentionally confined to the supported
+  // JOYSTICK surface. Historical Admin/BLDG routes remain available to
+  // platform admins, but a tenant member cannot wander into them and rely on
+  // backend 403s as the product boundary.
+  if (
+    user?.role === "user" &&
+    !isDriverHost &&
+    !isVendorHost &&
+    !isSaasCustomerSafePath(window.location.pathname)
+  ) {
+    return <Redirect to="/product" />;
+  }
 
   // The proof route is answered before host routing so no host redirect or
   // auth gate swallows it, and so it never enters the Goldline route graph.
