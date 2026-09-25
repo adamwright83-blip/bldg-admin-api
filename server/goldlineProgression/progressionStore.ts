@@ -110,63 +110,56 @@ export async function setLevelColosseumResolvedAt(input: {
 }
 
 /**
- * Authored finale: level.colosseum resolved, then companion.rook owned.
- * One transaction. Existing timestamps stay. kingdom.brass_republic is not written.
+ * Authored Clockhead finale: records level.colosseum only.
+ * Rook is revealed on the line here, but durable companion ownership is
+ * intentionally deferred to the Coastal Market stealing/catch beat.
  */
 export async function recordAuthoredColosseumFinale(input: {
   tenantId: string;
   operatorId: string;
   at: Date;
 }): Promise<void> {
-  const db = await requireDb();
-  const identity = and(
-    eq(goldlineDomainProgression.tenantId, input.tenantId),
-    eq(goldlineDomainProgression.operatorId, input.operatorId)
-  );
-  await db.transaction(async tx => {
-    const [existing] = await tx
-      .select({
-        levelColosseumResolvedAt: goldlineDomainProgression.levelColosseumResolvedAt,
-        companionRookOwnedAt: goldlineDomainProgression.companionRookOwnedAt,
-      })
-      .from(goldlineDomainProgression)
-      .where(identity)
-      .limit(1);
-    if (!existing) {
-      try {
-        await tx.insert(goldlineDomainProgression).values({
-          id: randomUUID(),
-          tenantId: input.tenantId,
-          operatorId: input.operatorId,
-          levelColosseumResolvedAt: input.at,
-          companionRookOwnedAt: input.at,
-          kingdomBrassRepublicCompletedAt: null,
-          overworldUnlocksJson: {},
-        });
-        return;
-      } catch (error) {
-        if (isMysqlMissingTableError(error)) {
-          const missing = new Error("goldline_domain_progression is not present");
-          missing.name = "ProgressionSchemaBlockedError";
-          throw missing;
-        }
-        if (!isMysqlDuplicateKeyError(error)) throw error;
-      }
-    }
-    await tx
-      .update(goldlineDomainProgression)
-      .set({ levelColosseumResolvedAt: input.at })
-      .where(and(identity, isNull(goldlineDomainProgression.levelColosseumResolvedAt)));
-    await tx
-      .update(goldlineDomainProgression)
-      .set({ companionRookOwnedAt: input.at })
-      .where(
-        and(
-          identity,
-          isNotNull(goldlineDomainProgression.levelColosseumResolvedAt),
-          isNull(goldlineDomainProgression.companionRookOwnedAt)
-        )
-      );
+  const existing = await findDomainProgression(input);
+  if (!existing.readable) {
+    const missing = new Error("goldline_domain_progression is not readable");
+    missing.name = "ProgressionSchemaBlockedError";
+    throw missing;
+  }
+  if (!existing.row) {
+    await insertLevelColosseumResolved({
+      tenantId: input.tenantId,
+      operatorId: input.operatorId,
+      resolvedAt: input.at,
+    });
+    return;
+  }
+  if (!existing.row.levelColosseumResolvedAt) {
+    await setLevelColosseumResolvedAt({
+      tenantId: input.tenantId,
+      operatorId: input.operatorId,
+      resolvedAt: input.at,
+    });
+  }
+}
+
+/**
+ * Coastal Market stealing/catch beat: the one production writer for
+ * companion.rook. Colosseum must already be durably resolved.
+ */
+export async function recordAuthoredCoastalMarketRookCatch(input: {
+  tenantId: string;
+  operatorId: string;
+  at: Date;
+}): Promise<void> {
+  const existing = await findDomainProgression(input);
+  if (!existing.readable || !existing.row?.levelColosseumResolvedAt) {
+    throw new Error("Coastal Market Rook catch requires server-recorded level.colosseum");
+  }
+  if (existing.row.companionRookOwnedAt) return;
+  await setCompanionRookOwnedAt({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    ownedAt: input.at,
   });
 }
 
