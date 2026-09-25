@@ -19,6 +19,10 @@ import {
 } from "./progressionService";
 import { acknowledgeColosseumAuthoredFinale } from "./progressionService";
 import { recordLevelFromOutcomes } from "./progressionWrites";
+import {
+  beginCoastalMarketRookHunt,
+  recordAuthoredCoastalMarketRookCatch,
+} from "./progressionStore";
 
 const access = vi.hoisted(() => ({ resolveMembership: vi.fn() }));
 const mocks = vi.hoisted(() => ({
@@ -205,6 +209,19 @@ async function ownRook(tenantId = "tenant-a", operatorId = "op-a") {
     tenantId,
     operatorId,
     authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+  });
+  const runId = "11111111-1111-4111-8111-111111111111";
+  await beginCoastalMarketRookHunt({
+    tenantId,
+    operatorId,
+    runId,
+    startedAt: new Date("2026-09-25T08:00:00.000Z"),
+  });
+  await recordAuthoredCoastalMarketRookCatch({
+    tenantId,
+    operatorId,
+    runId,
+    at: new Date("2026-09-25T08:00:06.000Z"),
   });
 }
 
