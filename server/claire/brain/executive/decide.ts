@@ -72,6 +72,11 @@ export type ExecutiveDeps = {
   retrieve: RetrievalRunner;
   ctx: IntegrationContext;
   nowMs?: () => number;
+  /**
+   * Production authority is explicit and injected by the live cutover
+   * orchestrator. Ordinary calls and every shadow observer remain false.
+   */
+  productionAuthority?: boolean;
 };
 
 /** Retrieves nothing. Honest default: we have not looked, so we must not assert. */
@@ -154,6 +159,7 @@ export async function decideTurn(
   deps: ExecutiveDeps = defaultExecutiveDeps
 ): Promise<ExecutiveDecision> {
   const nowMs = deps.nowMs?.() ?? Date.now();
+  const productionAuthority = deps.productionAuthority === true;
   const control: ExecutiveControlState = initialControlState();
   const inhibited: InhibitedCandidate[] = [];
 
@@ -293,7 +299,10 @@ export async function decideTurn(
           : "current_turn_operator_commitment",
         sourceTurnAssembledText: perceived.assembledText,
         expiresAtMs: nowMs + 15 * 60_000,
-        constraints: { mutationAllowed: false, shadowOnly: true },
+        constraints: {
+          mutationAllowed: productionAuthority,
+          shadowOnly: !productionAuthority,
+        },
       });
       actionGrants.push(grant);
       segments.push({ type: "ActionProposalSegment", text: proposalText(title), grant });
@@ -309,10 +318,14 @@ export async function decideTurn(
         authorityBasis: "pending_lifecycle",
         sourceTurnAssembledText: perceived.assembledText,
         expiresAtMs: nowMs + 15 * 60_000,
-        constraints: { mutationAllowed: false, shadowOnly: true },
+        constraints: {
+          mutationAllowed: productionAuthority,
+          shadowOnly: !productionAuthority,
+        },
       });
       actionGrants.push(grant);
     }
+
 
     const frameUpdate = nextStrategicFrame({ perceived, memory, nowMs });
     if (frameUpdate) {
@@ -461,7 +474,7 @@ export async function decideTurn(
     responseSegments: segments,
     actionGrants,
     callControl,
-    productionAuthority: false,
+    productionAuthority,
     workingMemoryUpdate,
   };
   assertGovernedDecision(decision);

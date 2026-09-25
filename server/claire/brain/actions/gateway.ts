@@ -1,6 +1,9 @@
 /**
- * Action gateway. Execute grants. Do not interpret speech.
- * Live mutations are impossible while Brain V2 has no production authority.
+ * Brain V2 action gateway.
+ *
+ * The executive grants authority. The gateway executes that grant through an
+ * injected production adapter; it never interprets speech and never invents
+ * scope. Shadow grants remain inert.
  */
 
 import type { ExecutiveActionGrant } from "../contracts/grants";
@@ -13,18 +16,55 @@ export class ActionGatewayError extends Error {
   }
 }
 
-export type ActionGatewayResult = {
-  executed: false;
-  reason: string;
-};
+export type LiveActionExecutor<T = unknown> = (
+  grant: ExecutiveActionGrant
+) => Promise<T>;
 
-export async function executeGrantedAction(grant: unknown): Promise<ActionGatewayResult> {
+export type ActionGatewayResult<T = unknown> =
+  | {
+      executed: false;
+      reason: "shadow_only";
+    }
+  | {
+      executed: true;
+      actionClass: ExecutiveActionGrant["actionClass"];
+      result: T;
+    };
+
+export async function executeGrantedAction<T = unknown>(
+  grant: unknown,
+  options: {
+    execute?: LiveActionExecutor<T>;
+  } = {}
+): Promise<ActionGatewayResult<T>> {
   if (!isExecutiveActionGrant(grant)) {
-    throw new ActionGatewayError("bypass Executive Function: action mutation requires a branded ExecutiveActionGrant");
+    throw new ActionGatewayError(
+      "bypass Executive Function: action mutation requires a branded ExecutiveActionGrant"
+    );
   }
+
   const typed: ExecutiveActionGrant = grant;
-  if (!typed.constraints.shadowOnly || typed.constraints.mutationAllowed) {
-    throw new ActionGatewayError("Brain V2 action gateway refuses live mutations until authorized cutover");
+
+  if (typed.constraints.shadowOnly) {
+    if (typed.constraints.mutationAllowed) {
+      throw new ActionGatewayError("shadow grant may not carry mutation authority");
+    }
+    return { executed: false, reason: "shadow_only" };
   }
-  return { executed: false, reason: "shadow_only" };
+
+  if (!typed.constraints.mutationAllowed) {
+    throw new ActionGatewayError("live grant is missing mutation authority");
+  }
+
+  if (!options.execute) {
+    throw new ActionGatewayError(
+      "Action Gateway refuses live mutations: live Brain V2 action grant requires an injected production executor"
+    );
+  }
+
+  return {
+    executed: true,
+    actionClass: typed.actionClass,
+    result: await options.execute(typed),
+  };
 }

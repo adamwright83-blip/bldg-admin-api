@@ -60,6 +60,10 @@ import { loadClaireRookContactResidues } from "./rookContactResidueContext";
 import { observationUtteranceForBrain, runClaireTurn, type ClaireTurnState } from "./turn/claireTurn";
 import { observeShadowTurnDetached } from "./brain/shadow/observeShadowTurn";
 import { readOnlyWorkingMemorySource } from "./brain/shadow/v1Snapshot";
+import {
+  isClaireBrainV2LiveEnabled,
+  runClaireBrainV2LiveTurn,
+} from "./brain/live/runClaireBrainV2LiveTurn";
 import { claireConversationStateStore } from "./turn/conversationStateStore";
 import { claireEncyclopediaFor } from "./turn/claireTurnWiring";
 import {
@@ -282,30 +286,61 @@ export const claireRouter = router({
         tenantId: scope.tenantId,
         operatorUserId: scope.operatorUserId,
       });
-      const result = await runClaireTurn(
-        {
+      const runLegacyAdapter = async () =>
+        await runClaireTurn(
+          {
+            tenantId: scope.tenantId,
+            operatorUserId: scope.operatorUserId,
+            dayDirectorActorId: actorId,
+            surface: "text",
+            utterance: input.utterance,
+            state,
+            conversationKey: key,
+            brief: preview.brief,
+            context,
+            rookContactResidues,
+          },
+          {
+            confirmPlan: () =>
+              confirmWorkdayPlan({
+                tenantId: scope.tenantId,
+                actorId,
+                businessDate:
+                  context.clock?.tomorrowBusinessDate ?? context.businessDate,
+                items: assembleTomorrowCandidates(context),
+              }).then(() => undefined),
+            encyclopedia: claireEncyclopediaFor({
+              dayDirectorActorId: actorId,
+            }),
+          }
+        );
+
+      const liveV2 = await runClaireBrainV2LiveTurn({
+        rawText: input.utterance,
+        assembledText: input.utterance,
+        state: readOnlyWorkingMemorySource(state),
+        tenantId: scope.tenantId,
+        operatorUserId: scope.operatorUserId,
+        surface: "text",
+        conversationKey: key,
+        live: {
           tenantId: scope.tenantId,
           operatorUserId: scope.operatorUserId,
+          conversationId: input.conversationId ?? "desk",
           dayDirectorActorId: actorId,
+          timeZone: input.timeZone ?? "America/Los_Angeles",
+          businessDate:
+            context.businessDate ?? new Date().toISOString().slice(0, 10),
           surface: "text",
-          utterance: input.utterance,
-          state,
-          conversationKey: key,
-          brief: preview.brief,
-          context,
-          rookContactResidues,
+          priorClaimReceipts: state.claimReceipts ?? [],
         },
-        {
-          confirmPlan: () =>
-            confirmWorkdayPlan({
-              tenantId: scope.tenantId,
-              actorId,
-              businessDate: context.clock?.tomorrowBusinessDate ?? context.businessDate,
-              items: assembleTomorrowCandidates(context),
-            }).then(() => undefined),
-          encyclopedia: claireEncyclopediaFor({ dayDirectorActorId: actorId }),
-        }
-      );
+        executeLegacyAdapter: async () => runLegacyAdapter(),
+      });
+
+      const brainV2LiveHandled = liveV2.active;
+      const result = liveV2.active
+        ? liveV2.adapterResult ?? (await runLegacyAdapter())
+        : await runLegacyAdapter();
       await store.save(key, { tenantId: scope.tenantId, operatorUserId: scope.operatorUserId, surface: "text" }, state, DESK_CONVERSATION_TTL_MS);
 
       /**
@@ -315,7 +350,14 @@ export const claireRouter = router({
        * copy of state rather than the live object. The reply below is V1's alone.
        */
       const observation = observationUtteranceForBrain(result);
-      if (observation.observe) {
+      if (
+        observation.observe &&
+        !brainV2LiveHandled &&
+        !isClaireBrainV2LiveEnabled({
+          tenantId: scope.tenantId,
+          operatorUserId: scope.operatorUserId,
+        })
+      ) {
         observeShadowTurnDetached({
           rawText: observation.assembledText,
           assembledText: observation.assembledText,

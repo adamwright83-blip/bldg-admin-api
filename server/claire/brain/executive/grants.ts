@@ -37,8 +37,10 @@ export function isNarrativeRevealGrant(value: unknown): value is NarrativeReveal
 }
 
 export function mintActionGrant(draft: ActionGrantDraft): ExecutiveActionGrant {
-  if (draft.constraints.shadowOnly === false && draft.constraints.mutationAllowed) {
-    throw new Error("Brain V2 cannot mint a live mutation grant while productionAuthority is false");
+  // Exactly one authority mode is legal. Shadow grants can never mutate; live
+  // grants must be executable only through the Action Gateway.
+  if (draft.constraints.shadowOnly === draft.constraints.mutationAllowed) {
+    throw new Error("Brain V2 action grant must be either shadow-only or live-mutation authority");
   }
   return Object.freeze({
     [EXECUTIVE_ACTION_GRANT_BRAND]: true as const,

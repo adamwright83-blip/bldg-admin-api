@@ -711,8 +711,12 @@ describe("operator mission director and playable projection", () => {
     expect(compute).toMatch(/applyWeeklyIntentToCommand/);
     expect(compute).not.toMatch(/saveWeeklyIntent|projectRecurrenceForDate/);
     const voice = readFileSync(new URL("./claireTwilio.ts", import.meta.url), "utf8");
-    expect(voice.indexOf("executeOperatorMissionCommand")).toBeGreaterThan(0);
-    expect(voice.indexOf("executeOperatorMissionCommand")).toBeLessThan(voice.indexOf("result = await runClaireTurn("));
+    const missionCommandIndex = voice.indexOf("executeOperatorMissionCommand");
+    expect(missionCommandIndex).toBeGreaterThan(0);
+    // Explicit mission commands remain a specialized canonical write path and
+    // must execute before either the guarded V2 executive or its legacy action adapter.
+    expect(missionCommandIndex).toBeLessThan(voice.indexOf("const runLegacyAdapter"));
+    expect(missionCommandIndex).toBeLessThan(voice.indexOf("runClaireBrainV2LiveTurn("));
     expect(voice).toMatch(/function startVoiceTurn[\s\S]*runAuthoritativeClaireVoiceTurn/);
     expect(voice).toMatch(/function runRelayAuthoritativeTurn[\s\S]*runAuthoritativeClaireVoiceTurn/);
     expect(source).not.toMatch(/from ["'][^"']*brain\//);
