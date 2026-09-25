@@ -4,6 +4,7 @@ import {
   commercialAccountLocations,
   commercialAccounts,
   commercialFollowUps,
+  commercialMissionEvents,
   commercialMissions,
   commercialPipelineRecords,
   driverGameWorldNodes,
@@ -13,6 +14,10 @@ import {
   type DriverGameWorldNode,
 } from "../../shared/driverGameWorld";
 import type { CommercialMissionStatus } from "../../shared/commercialMission";
+import {
+  PARKING_LOT_CLERK_EVENT_NAME,
+  PARKING_LOT_CLERK_PROVENANCE,
+} from "../../shared/commercialMissionField";
 import { getDb } from "../db";
 
 let tableReady: Promise<void> | null = null;
@@ -67,6 +72,8 @@ export async function listDriverGameWorld(input: {
       savedDiscoveryState: driverGameWorldNodes.discoveryState,
       savedVersion: driverGameWorldNodes.version,
       savedResolvedAt: driverGameWorldNodes.lastResolvedAt,
+      clerkActorId: commercialMissionEvents.actorId,
+      clerkCreatedAt: commercialMissionEvents.createdAt,
     })
     .from(commercialMissions)
     .innerJoin(
@@ -100,6 +107,14 @@ export async function listDriverGameWorld(input: {
         eq(commercialFollowUps.tenantId, commercialMissions.tenantId),
         eq(commercialFollowUps.missionId, commercialMissions.id),
         eq(commercialFollowUps.status, "open")
+      )
+    )
+    .leftJoin(
+      commercialMissionEvents,
+      and(
+        eq(commercialMissionEvents.tenantId, commercialMissions.tenantId),
+        eq(commercialMissionEvents.missionId, commercialMissions.id),
+        eq(commercialMissionEvents.eventName, PARKING_LOT_CLERK_EVENT_NAME)
       )
     )
     .leftJoin(
@@ -165,6 +180,16 @@ export async function listDriverGameWorld(input: {
         (row.locationId ? `location_${row.locationId}` : "fortress_gate"),
       resolvedAt:
         (row.savedResolvedAt ?? row.missionCompletedAt)?.toISOString() ?? null,
+      realVisitReaction:
+        row.clerkActorId && row.clerkCreatedAt
+          ? {
+              kind: "completed_visit_trace",
+              missionId: row.missionId,
+              provenance: PARKING_LOT_CLERK_PROVENANCE,
+              reportedBy: row.clerkActorId,
+              reportedAt: row.clerkCreatedAt.toISOString(),
+            }
+          : null,
     });
   }
   return Array.from(byMission.values());

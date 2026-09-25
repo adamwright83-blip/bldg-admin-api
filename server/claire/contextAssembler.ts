@@ -104,6 +104,12 @@ export type ClaireDriveContext = {
       followUpAt: string | null;
       decisionMakerStatus: string;
     };
+    operatorReportedObservation: null | {
+      text: string;
+      provenance: "operator_reported";
+      reportedBy: string;
+      reportedAt: string;
+    };
   };
   /**
    * The same MissionSalesBrief the FIELD BRIEF surface renders (Claire
@@ -393,6 +399,14 @@ export async function assembleClaireDriveContext(input: {
                 missionState.visitOutcome.decisionMakerStatus,
             }
           : null,
+        operatorReportedObservation: missionState.parkingLotClerkObservation
+          ? {
+              text: missionState.parkingLotClerkObservation.text,
+              provenance: missionState.parkingLotClerkObservation.provenance,
+              reportedBy: missionState.parkingLotClerkObservation.reportedBy,
+              reportedAt: missionState.parkingLotClerkObservation.reportedAt,
+            }
+          : null,
       }
     : null;
 
@@ -454,6 +468,7 @@ export async function assembleClaireDriveContext(input: {
           address: mission.address,
           field: mission.field,
           visitOutcome: mission.visitOutcome,
+          operatorReportedObservation: mission.operatorReportedObservation,
         }
       : null,
     clock,

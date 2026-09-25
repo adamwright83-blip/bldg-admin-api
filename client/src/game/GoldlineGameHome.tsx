@@ -616,6 +616,14 @@ function MissionFork(props: {
               <span>
                 <small>{mission.state.replaceAll("_", " ")}</small>
                 <b>{mission.name}</b>
+                {mission.realVisitReaction ? (
+                  <small
+                    data-testid={`real-visit-reaction-${mission.missionId}`}
+                    title="Operator-reported visit debrief; not independent business verification."
+                  >
+                    FIELD TRACE · OPERATOR-REPORTED
+                  </small>
+                ) : null}
                 <em>{moneyBandLabel(mission)}</em>
               </span>
               <span>

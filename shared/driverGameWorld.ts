@@ -35,6 +35,14 @@ export type DriverGameWorldNode = {
   isHistorical: boolean;
   regionKey: string;
   resolvedAt: string | null;
+  /** Read-only authored reaction to the same completed real visit. */
+  realVisitReaction: null | {
+    kind: "completed_visit_trace";
+    missionId: number;
+    provenance: "operator_reported";
+    reportedBy: string;
+    reportedAt: string;
+  };
 };
 
 export function gameWorldControlPercent(nodes: DriverGameWorldNode[]): number {

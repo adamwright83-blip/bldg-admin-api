@@ -61,6 +61,10 @@ export default function CommercialMissionAdmin() {
     { missionId: selectedId ?? 0 },
     { enabled: isAuthenticated && selectedId !== null, retry: false },
   );
+  const fieldState = trpc.system.commercialMission.fieldState.useQuery(
+    { missionId: selectedId ?? 1 },
+    { enabled: isAuthenticated && selectedId !== null, retry: false },
+  );
   const proposal = trpc.system.commercialProposal.forMission.useQuery(
     { missionId: selectedId ?? 1 },
     { enabled: isAuthenticated && selectedId !== null, retry: false },
@@ -199,6 +203,26 @@ export default function CommercialMissionAdmin() {
                       }} className="rounded-lg bg-orange-500 px-3 py-2 text-xs font-black text-white disabled:opacity-40">{activateForField.isPending ? "ACTIVATING…" : selected.status === "game_ready" ? "UPDATE ASSIGNEE" : "ASSIGN + UNLOCK GAME"}</button> : <span className="text-xs text-slate-400">Assigned to {selected.assignedTo ?? "nobody"}</span>}
                       {activationMessage ? <span role="status" className="text-xs text-slate-300">{activationMessage}</span> : null}
                     </div>
+                    {fieldState.data?.parkingLotClerkObservation ? (
+                      <div
+                        className="grid gap-2 rounded-xl border border-sky-300/25 bg-sky-400/5 p-3 text-left"
+                        data-testid="admin-parking-lot-clerk-observation"
+                      >
+                        <small className="font-bold uppercase tracking-wider text-sky-300">
+                          Field debrief · operator-reported
+                        </small>
+                        <p className="text-sm text-slate-200">
+                          {fieldState.data.parkingLotClerkObservation.text}
+                        </p>
+                        <span className="text-[10px] text-slate-400">
+                          Mission {fieldState.data.parkingLotClerkObservation.missionId} · reported by{" "}
+                          {fieldState.data.parkingLotClerkObservation.reportedBy}
+                        </span>
+                        <span className="text-[10px] text-slate-500">
+                          This is operator testimony, not independent approval, booking, payment, or sale verification.
+                        </span>
+                      </div>
+                    ) : null}
                     <div className="grid gap-2 rounded-xl border border-white/10 bg-black/20 p-3 text-left">
                       <small className="font-bold uppercase tracking-wider text-slate-500">Collateral</small>
                       {proposal.data ? (

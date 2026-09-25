@@ -141,6 +141,48 @@ describe("mission source dedup", () => {
     expect(entriesForMission[0].key).toBe("mission:501");
   });
 
+  it("projects one real stop and its authored field trace with the same mission identity", () => {
+    const mission = {
+      id: 612,
+      status: "follow_up",
+      account: {
+        name: "Greystar fixture",
+        address: "612 Goldline Way",
+        decisionMaker: { phone: null },
+      },
+      opportunity: {
+        estimatedAnnualValueCents: null,
+        estimateConfidence: "low",
+      },
+      expiresAt: null,
+    } as never;
+    const worldNode = {
+      missionId: 612,
+      entityType: "commercial_mission",
+      entityId: "612",
+      visualState: "contested",
+      realVisitReaction: {
+        kind: "completed_visit_trace",
+        missionId: 612,
+        provenance: "operator_reported",
+        reportedBy: "operator-a",
+        reportedAt: "2026-09-25T09:00:00.000Z",
+      },
+    } as never;
+
+    const [projected] = projectPlayableMissions({
+      missions: [mission],
+      worldNodes: [worldNode],
+    });
+
+    expect(projected.missionId).toBe(612);
+    expect(projected.key).toBe("mission:612");
+    expect(projected.realVisitReaction).toMatchObject({
+      missionId: 612,
+      provenance: "operator_reported",
+    });
+  });
+
   it("keeps a move without a materialized mission when it is a distinct entity", () => {
     const move = {
       id: "move-2",
