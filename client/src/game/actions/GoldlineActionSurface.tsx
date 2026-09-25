@@ -83,6 +83,7 @@ function VisitSurface(
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
+  const [clerkText, setClerkText] = useState("");
   const [outcome, setOutcome] =
     useState<VisitOutcomeRequest["outcome"]>("no_decision");
   const [followUpAt, setFollowUpAt] = useState("");
@@ -380,13 +381,60 @@ function VisitSurface(
                       outcome === "follow_up" || followUpRequested,
                     reason: outcome === "lost" ? "other" : undefined,
                   }),
-                true
+                false
               )
             }
           >
             RECORD VISIT RESULT
           </button>
         </div>
+      ) : null}
+      {context?.visitOutcome && !context.parkingLotClerkObservation ? (
+        <div
+          className="visit-outcome-fields"
+          data-testid="parking-lot-clerk-prompt"
+        >
+          <p className="action-field-prep-note">
+            PARKING-LOT CLERK · OPERATOR-REPORTED
+          </p>
+          <label>
+            WHAT DID THEY ACTUALLY SAY?
+            <textarea
+              data-testid="parking-lot-clerk-text"
+              rows={4}
+              value={clerkText}
+              placeholder="Nobody home. Left a card. She said call next week."
+              onChange={event => setClerkText(event.target.value)}
+            />
+          </label>
+          <p className="action-field-prep-note">
+            This preserves your report about the completed visit. It is not
+            independent verification of what another person said, and it does
+            not create a sale, booking, approval, or other business outcome.
+          </p>
+          <button
+            data-testid="parking-lot-clerk-save"
+            disabled={busy || !clerkText.trim()}
+            onClick={() =>
+              void write(
+                () =>
+                  props.services.recordParkingLotClerkObservation({
+                    missionId: props.action.missionId!,
+                    requestId: props.requestId,
+                    text: clerkText,
+                  }),
+                true
+              )
+            }
+          >
+            SAVE WHAT THEY SAID
+          </button>
+        </div>
+      ) : null}
+      {context?.parkingLotClerkObservation ? (
+        <p data-testid="parking-lot-clerk-recorded" className="action-field-prep-note">
+          Clerk note recorded as operator-reported testimony.
+        </p>
       ) : null}
       {error ? <p role="alert">{error}</p> : null}
     </SurfaceFrame>
