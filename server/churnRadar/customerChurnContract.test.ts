@@ -49,6 +49,9 @@ describe("Churn Radar production contract", () => {
       "No structured unresolved-issue source is configured"
     );
     expect(service).toContain("activeOrderCount");
+    expect(service).toContain("churnScanBookCoverage");
+    expect(service).toContain('scanSource: "native_orders_only"');
+    expect(service).toContain("loadBusinessSourceCoverage");
   });
 
   it("creates an existing stale-customer ops mission rather than a detached alert", () => {
@@ -76,8 +79,10 @@ describe("Churn Radar production contract", () => {
     expect(service).not.toContain("sendSMS(");
     expect(service).toContain("assertGroundedWinBackMessage(input.message)");
     expect(client).toContain(
-      "DayForge opens your SMS composer. It never auto-sends"
+      "JOYSTICK opens your SMS composer. It never auto-sends"
     );
+    expect(client).not.toContain("DAYFORGE CHURN RADAR");
+    expect(client).toContain("Known native-order signals only.");
   });
 
   it("attributes only a later paid order as recovered revenue", () => {
