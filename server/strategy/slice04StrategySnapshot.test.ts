@@ -88,19 +88,29 @@ describe("Slice 4: Strategy Snapshot (Bounded, Versioned, with Provenance)", () 
   });
 
   it("guardrail.G12.stale_data_and_uncertainties_surfaced_in_unresolved", async () => {
-    // Inject a stale CleanCloud sync (e.g. 48h old > 36h threshold)
-    const fortyEightHoursAgo = new Date(Date.now() - 48 * 3600000).toISOString();
+    // Inject the canonical coverage decision; Strategy must not invent a local clock.
     const snapshot = await buildStrategySnapshot(tenantA, {
-      sourceFreshnessOverride: {
-        cleanCloudLastSyncIso: fortyEightHoursAgo,
-      },
+      sourceCoverageOverride: {
+        checkedAt: "2026-09-24T18:00:00.000Z",
+        sources: [
+          {
+            sourceId: "cleancloud",
+            includedInCombinedBook: true,
+            status: "stale",
+            lastSuccessfulAssimilationAt: "2026-09-22T18:00:00.000Z",
+            reason: "Gumball checkpoint is overdue",
+          },
+        ],
+      } as any,
     });
 
     expect(snapshot.staleness["cleanCloud"]).toBeDefined();
     expect(snapshot.staleness["cleanCloud"].isStale).toBe(true);
-    expect(snapshot.staleness["cleanCloud"].warning).toContain("threshold");
+    expect(snapshot.staleness["cleanCloud"].warning).toContain(
+      "Canonical CleanCloud coverage is stale"
+    );
 
-    // Unresolved section must reflect the stale sync
+    // Unresolved section must reflect canonical stale coverage.
     const staleIssue = snapshot.payload.unresolved.find(u => u.source === "CleanCloud POS");
     expect(staleIssue).toBeDefined();
     expect(staleIssue?.issue).toContain("stale");

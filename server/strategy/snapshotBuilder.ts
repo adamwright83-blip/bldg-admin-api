@@ -6,6 +6,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "../db";
+import {
+  loadBusinessSourceCoverage,
+  type BusinessSourceCoverageSnapshot,
+} from "../analytics/sourceCoverage";
 import { strategySnapshots } from "../../drizzle/schema";
 import { getActiveMacroGoal } from "../claire/macroGoalService";
 import {
@@ -82,10 +86,8 @@ export type SnapshotBuildOptions = {
   referenceBusinessDate?: string;
   activeCustomersCount?: number;
   operatorUserId?: string;
-  sourceFreshnessOverride?: {
-    cleanCloudLastSyncIso?: string;
-    gumballpalsLastSyncIso?: string;
-  };
+  /** Injected in tests. Production uses the canonical source-coverage authority. */
+  sourceCoverageOverride?: BusinessSourceCoverageSnapshot;
   /** Injected in tests. Production uses loadStrategyCustomerAggregates. */
   customerAggregateLoad?: CustomerAggregateLoad;
   customerAggregates?: AdminCustomerAggregateDbRow[];
@@ -131,6 +133,9 @@ export async function buildStrategySnapshot(
     period: { startYmd: thirtyDaysAgoYmd, endYmd: todayYmd },
     now,
   });
+  const sourceCoverage =
+    options.sourceCoverageOverride ??
+    (await loadBusinessSourceCoverage({ tenantId, now }));
 
   const activeCount = options.activeCustomersCount ?? activeCustomerData.count;
   const activeTrend = activeCustomerData.trend;
@@ -333,20 +338,27 @@ export async function buildStrategySnapshot(
   const unresolved: Array<{ source: string; issue: string; severity: "warning" | "error" }> = [];
   const staleness: Record<string, StalenessRecord> = {};
 
-  // Check CleanCloud sync freshness
-  const cleanCloudLastSync = options.sourceFreshnessOverride?.cleanCloudLastSyncIso ?? computedAt;
-  const cleanCloudAgeHours = (now.getTime() - new Date(cleanCloudLastSync).getTime()) / 3600000;
-  const cleanCloudIsStale = cleanCloudAgeHours > 36;
+  // Strategy does not invent its own CleanCloud clock. The canonical B1 source-
+  // coverage contract decides freshness and whether the combined book is current.
+  const cleanCloudCoverage = sourceCoverage.sources.find(
+    source => source.sourceId === "cleancloud"
+  );
+  const cleanCloudHeld = Boolean(cleanCloudCoverage?.includedInCombinedBook);
+  const cleanCloudStatus = cleanCloudCoverage?.status ?? "unavailable";
+  const cleanCloudBlocked = cleanCloudHeld && cleanCloudStatus !== "fresh";
   staleness["cleanCloud"] = {
     source: "CleanCloud POS Sync",
-    lastUpdatedAt: cleanCloudLastSync,
-    isStale: cleanCloudIsStale,
-    warning: cleanCloudIsStale ? `CleanCloud POS sync is ${Math.round(cleanCloudAgeHours)}h old (> 36h threshold)` : undefined,
+    lastUpdatedAt:
+      cleanCloudCoverage?.lastSuccessfulAssimilationAt ?? sourceCoverage.checkedAt,
+    isStale: cleanCloudStatus === "stale",
+    warning: cleanCloudBlocked
+      ? `Canonical CleanCloud coverage is ${cleanCloudStatus}: ${cleanCloudCoverage?.reason ?? "coverage unavailable"}`
+      : undefined,
   };
-  if (cleanCloudIsStale) {
+  if (cleanCloudBlocked) {
     unresolved.push({
       source: "CleanCloud POS",
-      issue: `External POS sync data is stale (${Math.round(cleanCloudAgeHours)} hours old).`,
+      issue: `Canonical source coverage is ${cleanCloudStatus}; known records remain readable but the customer book is not exhaustive/current. ${cleanCloudCoverage?.reason ?? ""}`.trim(),
       severity: "warning",
     });
   }

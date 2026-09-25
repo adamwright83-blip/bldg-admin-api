@@ -67,6 +67,7 @@ describe("loadStrategyCustomerAggregates", () => {
         buildingSlug: "opusla",
         bldgUserId: null,
         paid: true,
+        stripePaymentIntentId: "pi_test_live_amanda",
         total: "40.00",
       },
     ];

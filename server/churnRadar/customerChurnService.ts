@@ -24,6 +24,7 @@ import {
   type CustomerHistoryObservation,
 } from "@shared/customerChurn";
 import { getDb } from "../db";
+import { hasNativePaymentAuthority } from "../geography/customerOrderTruth";
 import {
   loadBusinessSourceCoverage,
   type BusinessSourceCoverageSnapshot,
@@ -1783,17 +1784,19 @@ export async function refreshCustomerRecoveryAttribution(tenantId: string) {
       ...contacted.map(item => item.contactedAt?.getTime() ?? Date.now())
     )
   );
-  const paidOrders = await db
-    .select()
-    .from(orders)
-    .where(
-      and(
-        sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`,
-        eq(orders.paid, true),
-        gt(orders.createdAt, earliest)
+  const paidOrders = (
+    await db
+      .select()
+      .from(orders)
+      .where(
+        and(
+          sql`COALESCE(${orders.tenantId}, 'default') = ${tenantId}`,
+          eq(orders.paid, true),
+          gt(orders.createdAt, earliest)
+        )
       )
-    )
-    .orderBy(orders.createdAt, orders.id);
+      .orderBy(orders.createdAt, orders.id)
+  ).filter(hasNativePaymentAuthority);
   let recovered = 0;
   for (const intervention of contacted) {
     const match = paidOrders.find(
