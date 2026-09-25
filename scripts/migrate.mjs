@@ -398,6 +398,38 @@ for (const [sql, label] of cols) {
   await run(sql, label);
 }
 
+// Required current order shape used by the sellable tenant product.
+for (const [columnName, definition] of [
+  ["heldRawRequestText", "text NULL AFTER specialInstructions"],
+  ["heldCleanedRequestText", "text NULL AFTER heldRawRequestText"],
+  ["heldServiceSummary", "text NULL AFTER heldCleanedRequestText"],
+  ["heldRequestedPickupWindow", "varchar(255) NULL AFTER heldServiceSummary"],
+  ["heldRequestedReturnBy", "varchar(255) NULL AFTER heldRequestedPickupWindow"],
+  ["heldSource", "varchar(64) NULL AFTER heldRequestedReturnBy"],
+  ["heldMetadataJson", "json NULL AFTER heldSource"],
+  ["residentClientRequestId", "varchar(191) NULL AFTER heldMetadataJson"],
+  ["paidAt", "timestamp NULL AFTER paid"],
+  ["manualRiskFlag", "boolean NOT NULL DEFAULT false AFTER stripeConnectedAccountIdSnapshot"],
+]) {
+  await ensureRequiredColumn(
+    "orders",
+    columnName,
+    `ALTER TABLE orders ADD COLUMN \`${columnName}\` ${definition}`
+  );
+}
+await runRequired(
+  `ALTER TABLE orders MODIFY COLUMN status
+     enum('new','intake-pending','collected','processing','ready','delivered','cancelled')
+     NOT NULL DEFAULT 'new'`,
+  "orders.status current enum"
+);
+await ensureRequiredIndex(
+  "orders",
+  "orders_resident_client_request_id_unq",
+  ["residentClientRequestId"],
+  `ALTER TABLE orders ADD UNIQUE KEY orders_resident_client_request_id_unq (residentClientRequestId)`
+);
+
 // ── vendors table (Phase 1) ───────────────────────────────────────
 await run(
   `
@@ -964,6 +996,75 @@ await assertRequiredColumns("goldline_campaign_instances", [
   "inputFingerprint",
   "chaptersJson",
   "classification",
+]);
+
+// Required commercial mission/customer product foundations.
+await applyHistoricalCreateTables(
+  "../drizzle/0035_commercial_mission_spine.sql",
+  "Commercial mission spine"
+);
+await ensureRequiredColumn(
+  "commercial_accounts",
+  "identityKey",
+  "ALTER TABLE commercial_accounts ADD COLUMN identityKey varchar(64) NULL AFTER tenantId"
+);
+await ensureRequiredIndex(
+  "commercial_accounts",
+  "uq_commercial_accounts_tenant_identity",
+  ["tenantId", "identityKey"],
+  "ALTER TABLE commercial_accounts ADD UNIQUE KEY uq_commercial_accounts_tenant_identity (tenantId, identityKey)"
+);
+await ensureRequiredColumn(
+  "commercial_account_locations",
+  "locationKey",
+  "ALTER TABLE commercial_account_locations ADD COLUMN locationKey varchar(64) NULL AFTER accountId"
+);
+await runRequired(
+  "ALTER TABLE commercial_account_locations MODIFY COLUMN latitude decimal(10,7) NULL, MODIFY COLUMN longitude decimal(10,7) NULL",
+  "commercial locations nullable coordinates"
+);
+await ensureRequiredIndex(
+  "commercial_account_locations",
+  "uq_commercial_locations_tenant_account_key",
+  ["tenantId", "accountId", "locationKey"],
+  "ALTER TABLE commercial_account_locations ADD UNIQUE KEY uq_commercial_locations_tenant_account_key (tenantId, accountId, locationKey)"
+);
+await ensureRequiredColumn(
+  "commercial_account_contacts",
+  "contactKey",
+  "ALTER TABLE commercial_account_contacts ADD COLUMN contactKey varchar(64) NULL AFTER accountId"
+);
+for (const [columnName, definition] of [
+  ["relationshipType", "enum('decision_maker','gatekeeper','champion','concierge','front_desk','security','operations','other','unknown') NOT NULL DEFAULT 'unknown' AFTER phone"],
+  ["preferredChannel", "enum('email','sms','phone','unknown') NOT NULL DEFAULT 'unknown' AFTER relationshipType"],
+  ["source", "varchar(96) NOT NULL DEFAULT 'unknown' AFTER preferredChannel"],
+  ["notes", "text NULL AFTER sourcedAt"],
+]) {
+  await ensureRequiredColumn(
+    "commercial_account_contacts",
+    columnName,
+    `ALTER TABLE commercial_account_contacts ADD COLUMN \`${columnName}\` ${definition}`
+  );
+}
+await ensureRequiredIndex(
+  "commercial_account_contacts",
+  "uq_commercial_contacts_tenant_account_key",
+  ["tenantId", "accountId", "contactKey"],
+  "ALTER TABLE commercial_account_contacts ADD UNIQUE KEY uq_commercial_contacts_tenant_account_key (tenantId, accountId, contactKey)"
+);
+await runRequired(
+  "ALTER TABLE commercial_opportunities MODIFY COLUMN estimatedAnnualValueCents int NULL",
+  "commercial opportunity nullable estimate"
+);
+await applyHistoricalCreateTables(
+  "../drizzle/0041_commercial_pipeline_conversion.sql",
+  "Commercial pipeline foundation"
+);
+await assertRequiredColumns("commercial_mission_events", [
+  "id", "tenantId", "missionId", "idempotencyKey"
+]);
+await assertRequiredColumns("commercial_pipeline_records", [
+  "id", "tenantId", "accountId", "opportunityId", "missionId", "stage"
 ]);
 
 // Required SaaS foundations. Historical numbered migrations are not executed
