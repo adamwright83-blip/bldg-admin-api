@@ -372,6 +372,12 @@ test("VISIT requires preparation, departure, arrival, and an authoritative outco
     .fill("Real field visit produced a signed result.");
   await page.getByRole("button", { name: "RECORD VISIT RESULT" }).click();
 
+  await expect(page.getByTestId("parking-lot-clerk-prompt")).toBeVisible();
+  await page
+    .getByTestId("parking-lot-clerk-text")
+    .fill("Decision maker signed; I reported exactly what happened.");
+  await page.getByTestId("parking-lot-clerk-save").click();
+
   await expectControlRestored(page, listenersBefore);
   const proof = await fixtureProof(page);
   expect(proof.writes.map(write => write.kind)).toEqual([
@@ -379,6 +385,7 @@ test("VISIT requires preparation, departure, arrival, and an authoritative outco
     "FIELD_DEPART",
     "FIELD_ARRIVE",
     "FIELD_OUTCOME",
+    "PARKING_LOT_CLERK",
   ]);
   expect(proof.refetches).toBeGreaterThanOrEqual(5);
   expect(proof.projectedState).toBe("captured");

@@ -231,7 +231,9 @@ type FixtureVisitStatus = "phone_ready" | "preparing" | "en_route" | "arrived";
 function fixtureVisitContext(
   missionId: number,
   status: FixtureVisitStatus,
-  checklistCompleted: boolean
+  checklistCompleted: boolean,
+  visitOutcome: GoldlineVisitContext["visitOutcome"] = null,
+  parkingLotClerkObservation: GoldlineVisitContext["parkingLotClerkObservation"] = null
 ): GoldlineVisitContext {
   const started = status !== "phone_ready";
   return {
@@ -258,8 +260,8 @@ function fixtureVisitContext(
           },
         ]
       : [],
-    visitOutcome: null,
-    parkingLotClerkObservation: null,
+    visitOutcome,
+    parkingLotClerkObservation,
     proposal: started
       ? {
           id: "fixture-proposal",
@@ -923,6 +925,12 @@ export default function GoldlineFictionHarness() {
   );
 
   const visitStatusRef = useRef<Map<number, FixtureVisitStatus>>(new Map());
+  const visitOutcomeRef = useRef<
+    Map<number, GoldlineVisitContext["visitOutcome"]>
+  >(new Map());
+  const clerkObservationRef = useRef<
+    Map<number, GoldlineVisitContext["parkingLotClerkObservation"]>
+  >(new Map());
   // Mirrors production's genuinely-incomplete-until-completed field prep —
   // starts false the moment a mission enters "preparing" (see
   // startVisitPreparation below), and only becomes true once the in-game
@@ -933,7 +941,13 @@ export default function GoldlineFictionHarness() {
     const status = visitStatusRef.current.get(missionId) ?? "phone_ready";
     const checklistCompleted =
       checklistCompletedRef.current.get(missionId) ?? false;
-    return fixtureVisitContext(missionId, status, checklistCompleted);
+    return fixtureVisitContext(
+      missionId,
+      status,
+      checklistCompleted,
+      visitOutcomeRef.current.get(missionId) ?? null,
+      clerkObservationRef.current.get(missionId) ?? null
+    );
   }
 
   // Records a genuine pickup/delivery completion by removing the resolved
@@ -999,7 +1013,7 @@ export default function GoldlineFictionHarness() {
         visitStatusRef.current.set(missionId, "arrived");
         return contextFor(missionId);
       },
-      recordVisitOutcome: async ({ missionId }) => {
+      recordVisitOutcome: async ({ missionId, outcome, followUpAt }) => {
         // Real coverage is server-derived — this fixture simulates the exact
         // canonical write path a route-stop visit reuses (identical services
         // interface `GoldlineActionSurface` already uses for the spotlighted
@@ -1008,10 +1022,22 @@ export default function GoldlineFictionHarness() {
         // route coverage is genuinely re-derived from that table.
         setCoveredCount(count => Math.min(ROUTE_STOP_COUNT, count + 1));
         visitStatusRef.current.set(missionId, "arrived");
+        visitOutcomeRef.current.set(missionId, {
+          outcome,
+          followUpAt: followUpAt?.toISOString() ?? null,
+        });
         return contextFor(missionId);
       },
-      recordParkingLotClerkObservation: async ({ missionId }) =>
-        contextFor(missionId),
+      recordParkingLotClerkObservation: async ({ missionId, text }) => {
+        clerkObservationRef.current.set(missionId, {
+          missionId,
+          text,
+          provenance: "operator_reported",
+          reportedBy: "goldline-e2e",
+          reportedAt: "2026-08-13T16:20:00.000Z",
+        });
+        return contextFor(missionId);
+      },
       loadFollowUp: async () => null,
       completeFollowUp: async () => undefined,
       rescheduleFollowUp: async () => undefined,
