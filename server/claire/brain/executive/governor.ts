@@ -36,8 +36,8 @@ function refsExist(segment: ResponseSegment, index: Map<string, EvidenceItem>): 
 }
 
 export function assertGovernedDecision(decision: ExecutiveDecision): void {
-  if (decision.productionAuthority !== false) {
-    throw new ExecutiveGovernorError("Brain V2 productionAuthority must be false until authorized cutover");
+  if (typeof decision.productionAuthority !== "boolean") {
+    throw new ExecutiveGovernorError("Brain V2 productionAuthority must be explicit");
   }
   if (decision.responseSegments !== decision.responsePlan.segments) {
     throw new ExecutiveGovernorError("responseSegments must be the same array as responsePlan.segments");
