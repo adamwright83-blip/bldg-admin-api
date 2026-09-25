@@ -4297,3 +4297,23 @@
   letter-spacing: .03em;
   color: #314047;
 }
+
+
+/* Slice 6: a thin residue, not a badge, score, or completion signal. */
+.world-echo-filament {
+  display: block;
+  width: min(9rem, 100%);
+  height: 1px;
+  background: currentColor;
+  opacity: 0.36;
+  box-shadow: 0 0 7px currentColor;
+  transform-origin: left center;
+  animation: world-echo-breathe 2.8s ease-in-out infinite;
+}
+@keyframes world-echo-breathe {
+  0%, 100% { transform: scaleX(0.72); opacity: 0.24; }
+  50% { transform: scaleX(1); opacity: 0.42; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .world-echo-filament { animation: none; }
+}

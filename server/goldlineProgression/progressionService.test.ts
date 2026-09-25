@@ -16,7 +16,6 @@ vi.mock("../companions/companionService", () => ({
 }));
 vi.mock("../db", () => ({ getDb: mocks.getDb }));
 
-import { COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE } from "../../shared/colosseumAuthoredFinale";
 import { colosseumLeadHuntDefinition } from "./colosseumKingdomBinding";
 import { ProgressionNotPermittedError } from "./progressionContract";
 import {
@@ -25,6 +24,10 @@ import {
   recordKingdomBrassRepublicCompleted,
 } from "./progressionService";
 import { recordLevelFromOutcomes } from "./progressionWrites";
+import {
+  beginCoastalMarketRookHunt,
+  recordAuthoredCoastalMarketRookCatch,
+} from "./progressionStore";
 
 const TARGETS = [...(colosseumLeadHuntDefinition()?.targetIds ?? [])];
 const five = () => Object.fromEntries(TARGETS.map(id => [id, "pitched"]));
@@ -87,8 +90,31 @@ function memoryDb() {
         },
       }),
     }),
+    transaction: async <T>(fn: (tx: typeof db) => Promise<T>) => fn(db),
   };
   return db;
+}
+
+async function ownRookThroughCoastal() {
+  await recordLevelFromOutcomes({
+    tenantId: "tenant-a",
+    operatorId: "op-a",
+    outcomes: five(),
+    outcomesAvailable: true,
+  });
+  const runId = "55555555-5555-4555-8555-555555555555";
+  await beginCoastalMarketRookHunt({
+    tenantId: "tenant-a",
+    operatorId: "op-a",
+    runId,
+    startedAt: new Date("2026-09-25T08:00:00.000Z"),
+  });
+  await recordAuthoredCoastalMarketRookCatch({
+    tenantId: "tenant-a",
+    operatorId: "op-a",
+    runId,
+    at: new Date("2026-09-25T08:00:06.000Z"),
+  });
 }
 
 describe("goldline domain progression persistence", () => {
@@ -188,12 +214,8 @@ describe("goldline domain progression persistence", () => {
     expect(other.levelColosseumResolved.value).toBe(false);
   });
 
-  it("records Rook as a separate idempotent write and still does not complete the Kingdom", async () => {
+  it("retires the legacy Rook writer and owns Rook only through Coastal Market", async () => {
     mocks.readMission.mockResolvedValue({ outcomes: five() });
-    await expect(recordCompanionRookOwned({ tenantId: "tenant-a", operatorId: "op-a" })).rejects.toBeInstanceOf(
-      ProgressionNotPermittedError
-    );
-    expect(db.rows).toHaveLength(0);
 
     await recordLevelFromOutcomes({
       tenantId: "tenant-a",
@@ -201,34 +223,39 @@ describe("goldline domain progression persistence", () => {
       outcomes: five(),
       outcomesAvailable: true,
     });
-    await expect(recordCompanionRookOwned({ tenantId: "tenant-a", operatorId: "op-a" })).rejects.toThrow(
-      /authored Clockhead finale/
-    );
+    await expect(
+      recordCompanionRookOwned({
+        tenantId: "tenant-a",
+        operatorId: "op-a",
+      })
+    ).rejects.toThrow(/one production authority/);
     expect(db.rows[0]?.companionRookOwnedAt).toBeNull();
-    expect(db.rows[0]?.kingdomBrassRepublicCompletedAt).toBeNull();
 
-    const owned = await recordCompanionRookOwned({
+    const runId = "66666666-6666-4666-8666-666666666666";
+    await beginCoastalMarketRookHunt({
       tenantId: "tenant-a",
       operatorId: "op-a",
-      authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+      runId,
+      startedAt: new Date("2026-09-25T08:00:00.000Z"),
     });
-    const stamp = db.rows[0]?.companionRookOwnedAt;
-    const again = await recordCompanionRookOwned({
+    await recordAuthoredCoastalMarketRookCatch({
       tenantId: "tenant-a",
       operatorId: "op-a",
-      authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
+      runId,
+      at: new Date("2026-09-25T08:00:06.000Z"),
+    });
+
+    const owned = await readGoldlineProgression({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      capabilityOperatorId: null,
     });
     expect(owned.levelColosseumResolved.value).toBe(true);
     expect(owned.companionRookOwned).toEqual({ status: "earned", value: true });
     expect(owned.kingdomBrassRepublicCompleted.value).toBe(false);
     expect(owned.capabilityRookContact.granted).toBe(false);
-    expect(owned.capabilityRookContact.grantsCompanionOwnership).toBe(false);
     expect(owned.overworldUnlocks.flags.postRook).toBe(true);
-    expect(again.companionRookOwned.value).toBe(true);
     expect(db.rows).toHaveLength(1);
-    expect(db.rows[0]?.kingdomBrassRepublicCompletedAt).toBeNull();
-    expect(stamp).toBeInstanceOf(Date);
-    expect(db.rows[0]?.companionRookOwnedAt).toBe(stamp);
   });
 
   it("does not let another tenant's Rook row satisfy this operator", async () => {
@@ -239,11 +266,7 @@ describe("goldline domain progression persistence", () => {
       outcomes: five(),
       outcomesAvailable: true,
     });
-    await recordCompanionRookOwned({
-      tenantId: "tenant-a",
-      operatorId: "op-a",
-      authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
-    });
+    await ownRookThroughCoastal();
     const other = await readGoldlineProgression({
       tenantId: "tenant-a",
       operatorId: "op-b",
@@ -291,7 +314,6 @@ describe("goldline domain progression persistence", () => {
       recordCompanionRookOwned({
         tenantId: "tenant-a",
         operatorId: "op-a",
-        authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
         clientPayload: { rookOwned: true },
       })
     ).rejects.toThrow(/rookOwned/);
@@ -299,7 +321,6 @@ describe("goldline domain progression persistence", () => {
       recordCompanionRookOwned({
         tenantId: "tenant-a",
         operatorId: "op-a",
-        authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
         rookOwned: true,
       } as never)
     ).rejects.toThrow(/rookOwned/);
@@ -321,17 +342,7 @@ describe("goldline domain progression persistence", () => {
 
   it("keeps a second read earned after the client cache is absent", async () => {
     mocks.readMission.mockResolvedValue({ outcomes: five() });
-    await recordLevelFromOutcomes({
-      tenantId: "tenant-a",
-      operatorId: "op-a",
-      outcomes: five(),
-      outcomesAvailable: true,
-    });
-    await recordCompanionRookOwned({
-      tenantId: "tenant-a",
-      operatorId: "op-a",
-      authoredConsequence: COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
-    });
+    await ownRookThroughCoastal();
     const fresh = await readGoldlineProgression({
       tenantId: "tenant-a",
       operatorId: "op-a",

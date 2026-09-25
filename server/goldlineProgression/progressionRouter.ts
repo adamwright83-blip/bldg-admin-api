@@ -4,16 +4,20 @@ import { z } from "zod";
 import { COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE } from "../../shared/colosseumAuthoredFinale";
 import { legacyDayforgeTenantMemberProcedure, router } from "../_core/trpc";
 import { ProgressionForgeError, ProgressionNotPermittedError } from "./progressionContract";
-import { acknowledgeColosseumAuthoredFinale, readGoldlineProgression } from "./progressionService";
+import {
+  acknowledgeColosseumAuthoredFinale,
+  beginCoastalMarketRookHunt,
+  beginWaywardContactGate,
+  completeCoastalMarketRookCatch,
+  completeWaywardContactGate,
+  readGoldlineProgression,
+} from "./progressionService";
 
 /**
- * Progression read, plus one acknowledgement of the authored Clockhead finale.
- * The input is the literal clockhead_finale.rook_joined_the_party. It refuses
- * resolved, rookOwned, kingdomComplete, levelColosseumResolved, and
- * companionRookOwned. Tenancy and operator id come from the session.
- * A satisfied binding records level.colosseum and then companion.rook.
- * It does not complete kingdom.brass_republic and does not grant
- * capability.rook.contact.
+ * Progression read plus narrow authored acknowledgements.
+ * Clockhead records level.colosseum and reveals Rook without owning him.
+ * Coastal Market owns Rook only after a server-started hunt run completes.
+ * Wayward CONTACT is granted only after its server-started authored gate completes.
  */
 export const progressionRouter = router({
   get: legacyDayforgeTenantMemberProcedure
@@ -51,4 +55,38 @@ export const progressionRouter = router({
         throw error;
       }
     }),
+  beginCoastalRookHunt: legacyDayforgeTenantMemberProcedure
+    .input(z.object({}).strict())
+    .mutation(({ ctx }) =>
+      beginCoastalMarketRookHunt({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+      })
+    ),
+  completeCoastalRookCatch: legacyDayforgeTenantMemberProcedure
+    .input(z.object({ runId: z.string().uuid() }).strict())
+    .mutation(({ ctx, input }) =>
+      completeCoastalMarketRookCatch({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        runId: input.runId,
+      })
+    ),
+  beginWaywardContactGate: legacyDayforgeTenantMemberProcedure
+    .input(z.object({}).strict())
+    .mutation(({ ctx }) =>
+      beginWaywardContactGate({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+      })
+    ),
+  completeWaywardContactGate: legacyDayforgeTenantMemberProcedure
+    .input(z.object({ runId: z.string().uuid() }).strict())
+    .mutation(({ ctx, input }) =>
+      completeWaywardContactGate({
+        tenantId: ctx.tenantId,
+        operatorId: ctx.user.openId,
+        runId: input.runId,
+      })
+    ),
 });

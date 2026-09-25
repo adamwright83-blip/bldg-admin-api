@@ -1,15 +1,21 @@
 /**
  * Tenant/operator progression. Reads do not insert rows. The authored
- * Clockhead finale records level.colosseum and then companion.rook.
+ * Clockhead finale records level.colosseum and reveals Rook. Durable Rook
+ * ownership is recorded only by the Coastal Market stealing/catch beat.
  * Kingdom completion is not written.
  */
+import { randomUUID } from "node:crypto";
 import { getDay1TenDoorsMissionReadOnly } from "../openChannel/day1TenDoorsService";
-import { findRookContactGrant } from "./capabilityGrantStore";
+import {
+  findRookContactGrant,
+  grantRookContactCapability,
+} from "./capabilityGrantStore";
 import {
   findServerAuthoritativeWaywardContactProof,
   rookContactGrantIsProductionAuthority,
 } from "./rookContactAuthority";
 import { COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE } from "../../shared/colosseumAuthoredFinale";
+import { ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE } from "../../shared/rookContact";
 import {
   assertLevelColosseumRecordPermitted,
   attemptRecordKingdomBrassRepublicCompleted,
@@ -18,8 +24,14 @@ import {
   rejectClientProgressionForge,
   type GoldlineProgressionRead,
 } from "./progressionContract";
-import { findDomainProgression, recordAuthoredColosseumFinale } from "./progressionStore";
-import { recordRookFromOutcomes } from "./progressionWrites";
+import {
+  beginCoastalMarketRookHunt as beginCoastalMarketRookHuntReceipt,
+  beginWaywardContactGate as beginWaywardContactGateReceipt,
+  findDomainProgression,
+  recordAuthoredCoastalMarketRookCatch,
+  recordAuthoredColosseumFinale,
+  recordWaywardContactGateCompleted,
+} from "./progressionStore";
 
 async function loadOutcomes(input: { tenantId: string; operatorId: string }): Promise<{
   outcomes: Record<string, unknown> | null;
@@ -92,10 +104,10 @@ export async function readGoldlineProgression(input: {
 }
 
 /**
- * Separate authored write for companion.rook. Requires the level timestamp
- * already stored for this tenant and operator and the Clockhead finale's
- * authored consequence. Idempotent. Does not complete the Kingdom and does
- * not grant capability.rook.contact. Five visits are not this write.
+ * Separate compatibility write for companion.rook. It now requires the
+ * Coastal Market authored catch consequence; the Clockhead consequence can
+ * no longer own Rook. The live route uses the server-started Coastal run
+ * below so arbitrary client consequence text is not production authority.
  */
 export async function recordCompanionRookOwned(input: {
   tenantId: string;
@@ -103,23 +115,18 @@ export async function recordCompanionRookOwned(input: {
   capabilityOperatorId?: string | null;
   authoredConsequence?: unknown;
   clientPayload?: unknown;
-}): Promise<GoldlineProgressionRead> {
-  const outcomes = await loadOutcomes(input);
-  await recordRookFromOutcomes({ ...input, ...outcomes });
-  return readGoldlineProgression({
-    tenantId: input.tenantId,
-    operatorId: input.operatorId,
-    capabilityOperatorId: input.capabilityOperatorId ?? null,
-  });
+}): Promise<never> {
+  rejectClientProgressionForge(input);
+  rejectClientProgressionForge(input.clientPayload);
+  throw new ProgressionNotPermittedError(
+    "companion.rook has one production authority: the server-started Coastal Market stealing/catch beat"
+  );
 }
 
 /**
  * Production acknowledgement of the authored Clockhead finale.
- * Tenant and operator come from the session. The exact consequence is
- * checked, then kingdom_binding.level.colosseum is re-read. An unsatisfied
- * binding writes nothing. A satisfied binding records level.colosseum and
- * then companion.rook in one transaction. This is the only production
- * caller that writes levelColosseumResolvedAt.
+ * Tenant and operator come from the session. A satisfied binding records
+ * level.colosseum only. Rook is heard/revealed here but is not durably owned.
  */
 export async function acknowledgeColosseumAuthoredFinale(input: {
   tenantId: string;
@@ -132,7 +139,7 @@ export async function acknowledgeColosseumAuthoredFinale(input: {
   rejectClientProgressionForge(input.clientPayload);
   if (input.authoredConsequence !== COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE) {
     throw new ProgressionNotPermittedError(
-      "level.colosseum and companion.rook require the authored Clockhead finale clockhead_finale.rook_joined_the_party"
+      "level.colosseum requires the authored Clockhead reveal clockhead_finale.rook_revealed_on_the_line"
     );
   }
   const outcomes = await loadOutcomes(input);
@@ -153,6 +160,85 @@ export async function acknowledgeColosseumAuthoredFinale(input: {
   });
 }
 
+export async function beginCoastalMarketRookHunt(input: {
+  tenantId: string;
+  operatorId: string;
+}): Promise<{ runId: string }> {
+  const runId = randomUUID();
+  await beginCoastalMarketRookHuntReceipt({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    runId,
+    startedAt: new Date(),
+  });
+  return { runId };
+}
+
+export async function completeCoastalMarketRookCatch(input: {
+  tenantId: string;
+  operatorId: string;
+  runId: string;
+}): Promise<GoldlineProgressionRead> {
+  await recordAuthoredCoastalMarketRookCatch({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    runId: input.runId,
+    at: new Date(),
+  });
+  return readGoldlineProgression({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    capabilityOperatorId: null,
+  });
+}
+
+export async function beginWaywardContactGate(input: {
+  tenantId: string;
+  operatorId: string;
+}): Promise<{ runId: string }> {
+  const runId = randomUUID();
+  await beginWaywardContactGateReceipt({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    runId,
+    startedAt: new Date(),
+  });
+  return { runId };
+}
+
+export async function completeWaywardContactGate(input: {
+  tenantId: string;
+  operatorId: string;
+  runId: string;
+}): Promise<GoldlineProgressionRead> {
+  await recordWaywardContactGateCompleted({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    runId: input.runId,
+    at: new Date(),
+  });
+  const proof = await findServerAuthoritativeWaywardContactProof({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+  });
+  if (!proof.proven) {
+    throw new ProgressionNotPermittedError(
+      "Wayward CONTACT gate was not durably recorded"
+    );
+  }
+  await grantRookContactCapability({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    grantSource: ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE,
+    grantedAt: new Date(),
+  });
+  return readGoldlineProgression({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+    capabilityOperatorId: null,
+  });
+}
+
 /**
  * Production acknowledgement of Wayward CONTACT. Fails closed.
  * The client literal wayward.rook_contact_demonstrated is not proof the
@@ -168,7 +254,7 @@ export async function acknowledgeWaywardRookContact(input: {
 }): Promise<GoldlineProgressionRead> {
   rejectClientProgressionForge(input);
   rejectClientProgressionForge(input.clientPayload);
-  const proof = findServerAuthoritativeWaywardContactProof({
+  const proof = await findServerAuthoritativeWaywardContactProof({
     tenantId: input.tenantId,
     operatorId: input.operatorId,
   });

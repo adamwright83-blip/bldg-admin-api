@@ -5,8 +5,9 @@ import { Spring, wrapAngle } from "./runtime/motion";
 import { readProofParams } from "./runtime/params";
 
 /**
- * The Coastal Market proof is an isolated experiment. These checks keep it
- * that way: lazy behind its own route, no business authority, not a corridor,
+ * The Coastal Market runtime remains isolated from business authority even
+ * when mounted by the live progression route: it emits an authored completion
+ * callback upward, stays lazy, is not a corridor,
  * and a route that is actually the 60-90 second walk it claims to be.
  */
 const HERE = __dirname;
@@ -26,14 +27,18 @@ const proofSources = walk(HERE)
   .map(file => ({ file: relative(HERE, file), source: code(read(file)) }));
 
 describe("the proof is isolated", () => {
-  it("is reached only through a lazy import in App.tsx", () => {
+  it("is lazy in both the preview route and the live Driver progression mount", () => {
     const app = read(join(CLIENT_SRC, "App.tsx"));
     expect(app).toMatch(/lazy\(\s*\(\)\s*=>\s*import\("\.\/pages\/goldline\/coastalMarketProof\/CoastalMarketProofPage"\)\s*\)/);
     expect(app).not.toMatch(/^import .*coastalMarketProof/m);
+    const controller = read(join(CLIENT_SRC, "pages/driver/GoldlineDriverController.tsx"));
+    expect(controller).toMatch(/lazy\(\s*\(\)\s*=>\s*import\("\.\.\/goldline\/coastalMarketProof\/CoastalMarketProofPage"\)\s*\)/);
     const importers = walk(CLIENT_SRC)
       .filter(f => /\.(ts|tsx)$/.test(f) && !f.startsWith(HERE) && !f.endsWith("App.tsx"))
       .filter(f => /coastalMarketProof/.test(read(f)));
-    expect(importers).toEqual([]);
+    expect(importers.map(file => relative(CLIENT_SRC, file))).toEqual([
+      "pages/driver/GoldlineDriverController.tsx",
+    ]);
   });
 
   it("imports nothing from the rest of the app", () => {

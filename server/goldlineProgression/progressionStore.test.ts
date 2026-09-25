@@ -6,8 +6,10 @@ const mocks = vi.hoisted(() => ({ getDb: vi.fn() }));
 vi.mock("../db", () => ({ getDb: mocks.getDb }));
 
 import {
+  beginCoastalMarketRookHunt,
   findDomainProgression,
   insertLevelColosseumResolved,
+  recordAuthoredCoastalMarketRookCatch,
   setCompanionRookOwnedAt,
   setLevelColosseumResolvedAt,
 } from "./progressionStore";
@@ -77,6 +79,7 @@ function capturingDb(rows: Row[]) {
         },
       }),
     }),
+    transaction: async <T>(fn: (tx: typeof db) => Promise<T>) => fn(db),
   };
   return db;
 }
@@ -128,37 +131,41 @@ describe("goldline_domain_progression writes", () => {
     expect(db.predicates[0]?.set).toEqual({ levelColosseumResolvedAt: new Date("2026-09-23T00:00:00Z") });
   });
 
-  it("sets Rook only when the level timestamp exists and Rook is still null", async () => {
+  it("fails closed the legacy Rook setter and writes ownership only from a completed Coastal run", async () => {
     rows.push({
       id: "row-1",
       tenantId: "tenant-a",
       operatorId: "op-a",
-      levelColosseumResolvedAt: null,
+      levelColosseumResolvedAt: new Date("2026-09-01T00:00:00Z"),
       companionRookOwnedAt: null,
       kingdomBrassRepublicCompletedAt: null,
       overworldUnlocksJson: {},
     });
-    const ownedAt = new Date("2026-09-23T00:00:00Z");
-    await setCompanionRookOwnedAt({ tenantId: "tenant-a", operatorId: "op-a", ownedAt });
+
+    await expect(
+      setCompanionRookOwnedAt({
+        tenantId: "tenant-a",
+        operatorId: "op-a",
+        ownedAt: new Date("2026-09-23T00:00:00Z"),
+      })
+    ).rejects.toThrow(/only be written by recordAuthoredCoastalMarketRookCatch/);
     expect(rows[0]?.companionRookOwnedAt).toBeNull();
 
-    rows[0]!.levelColosseumResolvedAt = new Date("2026-09-01T00:00:00Z");
-    await setCompanionRookOwnedAt({ tenantId: "tenant-a", operatorId: "op-a", ownedAt });
-    expect(rows[0]?.companionRookOwnedAt).toBe(ownedAt);
-    await setCompanionRookOwnedAt({
+    const runId = "77777777-7777-4777-8777-777777777777";
+    await beginCoastalMarketRookHunt({
       tenantId: "tenant-a",
       operatorId: "op-a",
-      ownedAt: new Date("2026-10-01T00:00:00Z"),
+      runId,
+      startedAt: new Date("2026-09-23T00:00:00Z"),
     });
-    expect(rows[0]?.companionRookOwnedAt).toBe(ownedAt);
+    await recordAuthoredCoastalMarketRookCatch({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      runId,
+      at: new Date("2026-09-23T00:00:06Z"),
+    });
+    expect(rows[0]?.companionRookOwnedAt).toEqual(new Date("2026-09-23T00:00:06Z"));
     expect(rows[0]?.kingdomBrassRepublicCompletedAt).toBeNull();
-
-    const db = await mocks.getDb();
-    expect(db.predicates[0]?.sql).toContain("`levelColosseumResolvedAt` is not null");
-    expect(db.predicates[0]?.sql).toContain("`companionRookOwnedAt` is null");
-    expect(db.predicates[0]?.sql).not.toContain("kingdomBrassRepublicCompletedAt");
-    expect(db.predicates[0]?.set).toEqual({ companionRookOwnedAt: ownedAt });
-    expect(db.predicates.every((predicate: { set?: Record<string, unknown> }) => !("kingdomBrassRepublicCompletedAt" in (predicate.set ?? {})))).toBe(true);
   });
 
   it("inserts an unearned Rook and Kingdom and swallows only a duplicate key", async () => {

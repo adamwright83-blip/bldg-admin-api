@@ -721,8 +721,11 @@ describe("Day 1 does not resolve level.colosseum", () => {
     expect(day1).not.toMatch(
       /recordLevelFromOutcomes|recordColosseumLevelFromCommittedEvidence|recordLevelColosseumResolved|setLevelColosseumResolvedAt|insertLevelColosseumResolved|recordAuthoredColosseumFinale|levelColosseumResolvedAt/
     );
-    expect(router.match(/\.mutation\(/g) ?? []).toHaveLength(1);
     expect(router).toMatch(/acknowledgeColosseumFinale/);
+    expect(router).toMatch(/beginCoastalRookHunt/);
+    expect(router).toMatch(/completeCoastalRookCatch/);
+    expect(router).toMatch(/beginWaywardContactGate/);
+    expect(router).toMatch(/completeWaywardContactGate/);
     expect(router).not.toMatch(/recordLevelFromOutcomes|setLevelColosseumResolvedAt|insertLevelColosseumResolved/);
     const callers = serverSources(join(process.cwd(), "server")).filter(path => {
       if (path.endsWith(`${join("goldlineProgression", "progressionWrites.ts")}`)) return false;

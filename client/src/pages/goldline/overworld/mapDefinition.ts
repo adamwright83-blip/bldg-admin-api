@@ -313,13 +313,13 @@ export const GOLDLINE_OVERWORLD_MAP: OverworldMapDefinition = {
       action: "inspect",
     },
     {
-      id: "oasis-market",
-      name: "OASIS MARKET",
-      subtitle: "Resources & Tools",
+      id: "coastal-market-hunt",
+      name: "THE COASTAL MARKET",
+      subtitle: "The Rook Hunt",
       point: { x: 704, y: 950 },
       approachRadius: 78,
       entranceRadius: 45,
-      action: "inspect",
+      action: "enter",
     },
     {
       id: "heavenstalk",

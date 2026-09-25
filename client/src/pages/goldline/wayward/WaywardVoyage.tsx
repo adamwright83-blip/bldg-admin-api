@@ -22,6 +22,7 @@ export default function WaywardVoyage({
   cacheCollected,
   exposeTestApi = false,
   onProgress,
+  onContactGateComplete,
   onReturn,
 }: {
   rookAboard: boolean;
@@ -29,6 +30,7 @@ export default function WaywardVoyage({
   cacheCollected: boolean;
   exposeTestApi?: boolean;
   onProgress: (patch: WaywardProgressPatch) => void;
+  onContactGateComplete?: () => void;
   onReturn: () => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -45,6 +47,9 @@ export default function WaywardVoyage({
   const [endCard, setEndCard] = useState(false);
   const progressRef = useRef(onProgress);
   progressRef.current = onProgress;
+  const contactGateRef = useRef(onContactGateComplete);
+  contactGateRef.current = onContactGateComplete;
+  const previousBeatRef = useRef<WaywardBeat | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -62,7 +67,14 @@ export default function WaywardVoyage({
       events: {
         onReady: () => !cancelled && setReady(true),
         onCaption: next => !cancelled && setCaption(next),
-        onBeat: next => !cancelled && setBeat(next),
+        onBeat: next => {
+          if (cancelled) return;
+          if (previousBeatRef.current === "parley" && next === "clamp") {
+            contactGateRef.current?.();
+          }
+          previousBeatRef.current = next;
+          setBeat(next);
+        },
         onProgress: patch => progressRef.current(patch),
         onSailing: () => {
           if (cancelled) return;

@@ -29,6 +29,8 @@ import { patchGarments, patchHeroRim, patchSkin, type HeroLight } from "./garmen
 export type RuntimeCallbacks = {
   onLoadProgress?: (fraction: number) => void;
   onReachWaterfront?: () => void;
+  /** Fires once after the authored stealing/catch reveal has actually played. */
+  onRookCaught?: () => void;
 };
 
 export type RuntimeHandle = {
@@ -448,6 +450,7 @@ export async function createCoastalProof(
   const downV = new THREE.Vector3(0, -1, 0);
   const camM = new THREE.Matrix4();
   let lastCaption = "";
+  let rookCaughtReported = false;
   const frame = (t: number) => {
     const workStart = performance.now();
     renderer.info.reset();
@@ -468,6 +471,14 @@ export async function createCoastalProof(
     }
     npcs.update(dt, camera.position);
     phase2.update(dt, controller, input.lineHeld, !!autopilot);
+    if (
+      !rookCaughtReported &&
+      phase2.state.reveal &&
+      phase2.state.revealTime >= 12.4
+    ) {
+      rookCaughtReported = true;
+      callbacks.onRookCaught?.();
+    }
     for (const e of phase2.events) audio.cue(e);
     if (phase2.state.caption !== lastCaption) {
       lastCaption = phase2.state.caption;

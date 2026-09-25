@@ -4,8 +4,10 @@ import { GOLDLINE_OVERWORLD_MAP } from "./mapDefinition";
 import {
   COLOSSEUM_DESTINATION_ID,
   COLOSSEUM_PATH_DESTINATION_IDS,
+  COASTAL_MARKET_DESTINATION_ID,
   POST_ROOK_DESTINATION_ID,
   activeDestinationIds,
+  coastalMarketHuntOpen,
   destinationPresented,
   overworldDestinationStates,
   postRookContentOpen,
@@ -103,6 +105,7 @@ describe("overworld progression gate", () => {
     const states = overworldDestinationStates(read(), destinationIds);
     expect(states[COLOSSEUM_DESTINATION_ID]).toBe("active");
     for (const id of COLOSSEUM_PATH_DESTINATION_IDS) expect(states[id]).toBe("active");
+    expect(states[COASTAL_MARKET_DESTINATION_ID]).toBe("dormant");
     expect(states[POST_ROOK_DESTINATION_ID]).toBe("dormant");
     const enterable = GOLDLINE_OVERWORLD_MAP.destinations.filter(
       destination => destination.action === "enter" && states[destination.id] === "active"
@@ -145,11 +148,31 @@ describe("overworld progression gate", () => {
     expect(states[POST_ROOK_DESTINATION_ID]).toBe("dormant");
     expect(states["training-grounds"]).toBe("dormant");
     expect(states["relic-vault"]).toBe("dormant");
-    expect(states["oasis-market"]).toBe("dormant");
+    expect(states[COASTAL_MARKET_DESTINATION_ID]).toBe("dormant");
     expect(states["dry-cleaner-hunt"]).toBe("dormant");
     expect(states["heavenstalk"]).toBe("dormant");
     expect(states["treehollow"]).toBe("dormant");
     expect(states["treehollow-linehook"]).toBe("dormant");
+  });
+
+  it("opens Coastal Market after Colosseum and closes it once Rook is owned", () => {
+    const hunt = read({
+      levelColosseumResolved: earnedTrue,
+      companionRookOwned: { status: "unearned", value: false },
+    });
+    expect(coastalMarketHuntOpen(hunt)).toBe(true);
+    const huntStates = overworldDestinationStates(hunt, destinationIds);
+    expect(huntStates[COASTAL_MARKET_DESTINATION_ID]).toBe("active");
+    expect(huntStates[POST_ROOK_DESTINATION_ID]).toBe("dormant");
+
+    const owned = read({
+      levelColosseumResolved: earnedTrue,
+      companionRookOwned: earnedTrue,
+    });
+    expect(coastalMarketHuntOpen(owned)).toBe(false);
+    const ownedStates = overworldDestinationStates(owned, destinationIds);
+    expect(ownedStates[COASTAL_MARKET_DESTINATION_ID]).toBe("dormant");
+    expect(ownedStates[POST_ROOK_DESTINATION_ID]).toBe("active");
   });
 
   it("opens exactly one new possibility after both server flags are true", () => {

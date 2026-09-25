@@ -219,6 +219,12 @@ Detailed factual UI can still exist where necessary, but Sable remains a charact
 
 Rook is socially fearless and cannot directly lie.
 
+### Progression boundary
+
+Clockhead may reveal Rook without owning him. The Coastal Market stealing/catch beat
+durably owns `companion.rook`. The Wayward inspector/parley gate separately grants
+CONTACT. Client presentation state and localStorage are never authority for either.
+
 ### After Rook is available
 
 Goldline can help the player communicate.

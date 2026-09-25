@@ -5,7 +5,9 @@
  * or a null timestamp is unearned. localStorage is not an input.
  * kingdom.brass_republic is a separate column and is not written here.
  */
-import { COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE } from "../../shared/colosseumAuthoredFinale";
+import {
+  COASTAL_MARKET_ROOK_CATCH_CONSEQUENCE,
+} from "../../shared/colosseumAuthoredFinale";
 import { overworldPostRookOpen } from "../../shared/goldlineDomainProgression";
 import {
   COLOSSEUM_KINGDOM_BINDING_FUNCTION,
@@ -266,10 +268,8 @@ export function assertLevelColosseumRecordPermitted(input: {
 }
 
 /**
- * Rook is a separate write. Five visits and a resolved level do not own him.
- * The Clockhead finale's authored consequence is required, the level timestamp
- * must already be stored for this tenant and operator, and the binding remains
- * required. A client rookOwned flag is rejected and is not evidence.
+ * Rook is a separate write. Colosseum only reveals him.
+ * Durable ownership belongs to the Coastal Market stealing/catch beat.
  */
 export function assertCompanionRookRecordPermitted(input: {
   outcomes: Record<string, unknown> | null;
@@ -280,9 +280,9 @@ export function assertCompanionRookRecordPermitted(input: {
 }): void {
   rejectClientProgressionForge(input);
   rejectClientProgressionForge(input.clientPayload);
-  if (input.authoredConsequence !== COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE) {
+  if (input.authoredConsequence !== COASTAL_MARKET_ROOK_CATCH_CONSEQUENCE) {
     throw new ProgressionNotPermittedError(
-      "companion.rook requires the authored Clockhead finale; recorded visits and level.colosseum do not own Rook"
+      "companion.rook requires the authored Coastal Market stealing/catch beat; Colosseum only reveals Rook"
     );
   }
   assertBindingAllowsAuthoredResolution(input.outcomes, input.outcomesAvailable);

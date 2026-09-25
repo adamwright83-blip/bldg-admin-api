@@ -43,6 +43,21 @@ export type PlayableMission = {
   realizedRevenueCents: number;
   unlockedPath: string | null;
   lossReason: string | null;
+  realVisitReaction?: {
+    kind: "completed_visit_trace";
+    missionId: number;
+    provenance: "operator_reported";
+    reportedBy: string;
+    reportedAt: string;
+  } | null;
+  unresolvedEcho?: {
+    kind: "unresolved_field_trace";
+    missionId: number;
+    source: "parking_lot_clerk_observation";
+    provenance: "operator_reported";
+    sourceReference: string;
+    reportedAt: string;
+  } | null;
 };
 
 export type ArcadeResolution = "hit" | "miss" | "breached" | null;

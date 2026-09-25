@@ -2,7 +2,7 @@
  * Reads and writes goldline_domain_progression. Does not create the table
  * and does not insert a row for an operator who has not crossed a write.
  */
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { goldlineDomainProgression } from "../../drizzle/schema";
 import { getDb } from "../db";
@@ -12,6 +12,20 @@ export type DomainProgressionRow = {
   levelColosseumResolvedAt: Date | null;
   companionRookOwnedAt: Date | null;
   kingdomBrassRepublicCompletedAt: Date | null;
+  overworldUnlocksJson: unknown;
+};
+
+export type AuthoredProgressionReceipts = {
+  coastalMarketHunt?: {
+    runId: string;
+    startedAt: string;
+    caughtAt?: string;
+  };
+  waywardContactGate?: {
+    runId: string;
+    startedAt: string;
+    completedAt?: string;
+  };
 };
 
 export type DomainProgressionLookup =
@@ -22,12 +36,20 @@ function toRow(row: {
   levelColosseumResolvedAt: Date | null;
   companionRookOwnedAt: Date | null;
   kingdomBrassRepublicCompletedAt: Date | null;
+  overworldUnlocksJson: unknown;
 }): DomainProgressionRow {
   return {
     levelColosseumResolvedAt: row.levelColosseumResolvedAt,
     companionRookOwnedAt: row.companionRookOwnedAt,
     kingdomBrassRepublicCompletedAt: row.kingdomBrassRepublicCompletedAt,
+    overworldUnlocksJson: row.overworldUnlocksJson,
   };
+}
+
+function receipts(value: unknown): AuthoredProgressionReceipts {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as AuthoredProgressionReceipts)
+    : {};
 }
 
 export async function findDomainProgression(input: {
@@ -42,6 +64,7 @@ export async function findDomainProgression(input: {
         levelColosseumResolvedAt: goldlineDomainProgression.levelColosseumResolvedAt,
         companionRookOwnedAt: goldlineDomainProgression.companionRookOwnedAt,
         kingdomBrassRepublicCompletedAt: goldlineDomainProgression.kingdomBrassRepublicCompletedAt,
+        overworldUnlocksJson: goldlineDomainProgression.overworldUnlocksJson,
       })
       .from(goldlineDomainProgression)
       .where(
@@ -110,82 +133,206 @@ export async function setLevelColosseumResolvedAt(input: {
 }
 
 /**
- * Authored finale: level.colosseum resolved, then companion.rook owned.
- * One transaction. Existing timestamps stay. kingdom.brass_republic is not written.
+ * Authored Clockhead finale: records level.colosseum only.
+ * Rook is revealed on the line here, but durable companion ownership is
+ * intentionally deferred to the Coastal Market stealing/catch beat.
  */
 export async function recordAuthoredColosseumFinale(input: {
   tenantId: string;
   operatorId: string;
   at: Date;
 }): Promise<void> {
+  const existing = await findDomainProgression(input);
+  if (!existing.readable) {
+    const missing = new Error("goldline_domain_progression is not readable");
+    missing.name = "ProgressionSchemaBlockedError";
+    throw missing;
+  }
+  if (!existing.row) {
+    await insertLevelColosseumResolved({
+      tenantId: input.tenantId,
+      operatorId: input.operatorId,
+      resolvedAt: input.at,
+    });
+    return;
+  }
+  if (!existing.row.levelColosseumResolvedAt) {
+    await setLevelColosseumResolvedAt({
+      tenantId: input.tenantId,
+      operatorId: input.operatorId,
+      resolvedAt: input.at,
+    });
+  }
+}
+
+/** Starts the authored Coastal Market hunt without granting ownership. */
+export async function beginCoastalMarketRookHunt(input: {
+  tenantId: string;
+  operatorId: string;
+  runId: string;
+  startedAt: Date;
+}): Promise<void> {
+  const existing = await findDomainProgression(input);
+  if (!existing.readable || !existing.row?.levelColosseumResolvedAt) {
+    throw new Error("Coastal Market requires server-recorded level.colosseum");
+  }
+  if (existing.row.companionRookOwnedAt) return;
+  const db = await requireDb();
+  const current = receipts(existing.row.overworldUnlocksJson);
+  await db
+    .update(goldlineDomainProgression)
+    .set({
+      overworldUnlocksJson: {
+        ...current,
+        coastalMarketHunt: {
+          runId: input.runId,
+          startedAt: input.startedAt.toISOString(),
+        },
+      },
+    })
+    .where(
+      and(
+        eq(goldlineDomainProgression.tenantId, input.tenantId),
+        eq(goldlineDomainProgression.operatorId, input.operatorId)
+      )
+    );
+}
+
+export async function recordAuthoredCoastalMarketRookCatch(input: {
+  tenantId: string;
+  operatorId: string;
+  runId: string;
+  at: Date;
+}): Promise<void> {
+  const existing = await findDomainProgression(input);
+  if (!existing.readable || !existing.row?.levelColosseumResolvedAt) {
+    throw new Error("Coastal Market Rook catch requires server-recorded level.colosseum");
+  }
+  if (existing.row.companionRookOwnedAt) return;
+  const current = receipts(existing.row.overworldUnlocksJson);
+  const hunt = current.coastalMarketHunt;
+  if (!hunt || hunt.runId !== input.runId) {
+    throw new Error("Coastal Market Rook catch requires the server-started hunt run");
+  }
+  const startedAt = Date.parse(hunt.startedAt);
+  if (!Number.isFinite(startedAt) || input.at.getTime() - startedAt < 5_000) {
+    throw new Error("Coastal Market Rook catch cannot precede the authored hunt");
+  }
   const db = await requireDb();
   const identity = and(
     eq(goldlineDomainProgression.tenantId, input.tenantId),
     eq(goldlineDomainProgression.operatorId, input.operatorId)
   );
   await db.transaction(async tx => {
-    const [existing] = await tx
-      .select({
-        levelColosseumResolvedAt: goldlineDomainProgression.levelColosseumResolvedAt,
-        companionRookOwnedAt: goldlineDomainProgression.companionRookOwnedAt,
-      })
-      .from(goldlineDomainProgression)
-      .where(identity)
-      .limit(1);
-    if (!existing) {
-      try {
-        await tx.insert(goldlineDomainProgression).values({
-          id: randomUUID(),
-          tenantId: input.tenantId,
-          operatorId: input.operatorId,
-          levelColosseumResolvedAt: input.at,
-          companionRookOwnedAt: input.at,
-          kingdomBrassRepublicCompletedAt: null,
-          overworldUnlocksJson: {},
-        });
-        return;
-      } catch (error) {
-        if (isMysqlMissingTableError(error)) {
-          const missing = new Error("goldline_domain_progression is not present");
-          missing.name = "ProgressionSchemaBlockedError";
-          throw missing;
-        }
-        if (!isMysqlDuplicateKeyError(error)) throw error;
-      }
-    }
-    await tx
-      .update(goldlineDomainProgression)
-      .set({ levelColosseumResolvedAt: input.at })
-      .where(and(identity, isNull(goldlineDomainProgression.levelColosseumResolvedAt)));
     await tx
       .update(goldlineDomainProgression)
       .set({ companionRookOwnedAt: input.at })
-      .where(
-        and(
-          identity,
-          isNotNull(goldlineDomainProgression.levelColosseumResolvedAt),
-          isNull(goldlineDomainProgression.companionRookOwnedAt)
-        )
-      );
+      .where(and(identity, isNull(goldlineDomainProgression.companionRookOwnedAt)));
+    await tx
+      .update(goldlineDomainProgression)
+      .set({
+        overworldUnlocksJson: {
+          ...current,
+          coastalMarketHunt: {
+            ...hunt,
+            caughtAt: input.at.toISOString(),
+          },
+        },
+      })
+      .where(identity);
   });
 }
 
-/** Sets Rook only after the level timestamp exists, and only while Rook is null. */
-export async function setCompanionRookOwnedAt(input: {
+export async function beginWaywardContactGate(input: {
   tenantId: string;
   operatorId: string;
-  ownedAt: Date;
+  runId: string;
+  startedAt: Date;
 }): Promise<void> {
+  const existing = await findDomainProgression(input);
+  if (!existing.readable || !existing.row?.companionRookOwnedAt) {
+    throw new Error("Wayward CONTACT gate requires durable companion.rook ownership");
+  }
   const db = await requireDb();
+  const current = receipts(existing.row.overworldUnlocksJson);
   await db
     .update(goldlineDomainProgression)
-    .set({ companionRookOwnedAt: input.ownedAt })
+    .set({
+      overworldUnlocksJson: {
+        ...current,
+        waywardContactGate: {
+          runId: input.runId,
+          startedAt: input.startedAt.toISOString(),
+        },
+      },
+    })
     .where(
       and(
         eq(goldlineDomainProgression.tenantId, input.tenantId),
-        eq(goldlineDomainProgression.operatorId, input.operatorId),
-        isNotNull(goldlineDomainProgression.levelColosseumResolvedAt),
-        isNull(goldlineDomainProgression.companionRookOwnedAt)
+        eq(goldlineDomainProgression.operatorId, input.operatorId)
       )
     );
+}
+
+export async function recordWaywardContactGateCompleted(input: {
+  tenantId: string;
+  operatorId: string;
+  runId: string;
+  at: Date;
+}): Promise<void> {
+  const existing = await findDomainProgression(input);
+  if (!existing.readable || !existing.row?.companionRookOwnedAt) {
+    throw new Error("Wayward CONTACT gate requires durable companion.rook ownership");
+  }
+  const current = receipts(existing.row.overworldUnlocksJson);
+  const gate = current.waywardContactGate;
+  if (!gate || gate.runId !== input.runId) {
+    throw new Error("Wayward CONTACT completion requires the server-started gate run");
+  }
+  const startedAt = Date.parse(gate.startedAt);
+  if (!Number.isFinite(startedAt) || input.at.getTime() - startedAt < 5_000) {
+    throw new Error("Wayward CONTACT completion cannot precede the authored gate");
+  }
+  const db = await requireDb();
+  await db
+    .update(goldlineDomainProgression)
+    .set({
+      overworldUnlocksJson: {
+        ...current,
+        waywardContactGate: {
+          ...gate,
+          completedAt: input.at.toISOString(),
+        },
+      },
+    })
+    .where(
+      and(
+        eq(goldlineDomainProgression.tenantId, input.tenantId),
+        eq(goldlineDomainProgression.operatorId, input.operatorId)
+      )
+    );
+}
+
+export async function hasServerAuthoritativeWaywardContactGate(input: {
+  tenantId: string;
+  operatorId: string;
+}): Promise<boolean> {
+  const existing = await findDomainProgression(input);
+  if (!existing.readable || !existing.row) return false;
+  const gate = receipts(existing.row.overworldUnlocksJson).waywardContactGate;
+  return Boolean(gate?.runId && gate.completedAt);
+}
+
+/**
+ * Retained only as a fail-closed compatibility export for old imports.
+ * It is deliberately incapable of writing companion.rook.
+ */
+export async function setCompanionRookOwnedAt(_input: {
+  tenantId: string;
+  operatorId: string;
+  ownedAt: Date;
+}): Promise<never> {
+  throw new Error(
+    "companion.rook may only be written by recordAuthoredCoastalMarketRookCatch"
+  );
 }

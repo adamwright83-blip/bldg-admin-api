@@ -20,11 +20,13 @@ export default function WaywardTetheredDeck({
   playerIdentity,
   fixture = false,
   rookSource,
+  onContactGateComplete,
   onReturn,
 }: {
   playerIdentity: string | null;
   fixture?: boolean;
   rookSource?: WaywardRookSource | null;
+  onContactGateComplete?: () => void;
   onReturn: () => void;
 }) {
   const params = useMemo(() => (fixture ? new URLSearchParams(window.location.search) : null), [fixture]);
@@ -70,6 +72,7 @@ export default function WaywardTetheredDeck({
         cacheCollected={progress.cacheCollected}
         exposeTestApi={fixture || import.meta.env.DEV}
         onProgress={onProgress}
+        onContactGateComplete={onContactGateComplete}
         onReturn={onReturn}
       />
     </Suspense>
