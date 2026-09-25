@@ -2,7 +2,7 @@
  * Reads and writes goldline_domain_progression. Does not create the table
  * and does not insert a row for an operator who has not crossed a write.
  */
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { goldlineDomainProgression } from "../../drizzle/schema";
 import { getDb } from "../db";
@@ -165,7 +165,7 @@ export async function recordAuthoredColosseumFinale(input: {
   }
 }
 
-/** Sets Rook only after the level timestamp exists, and only while Rook is null. */
+/** Starts the authored Coastal Market hunt without granting ownership. */
 export async function beginCoastalMarketRookHunt(input: {
   tenantId: string;
   operatorId: string;
@@ -323,6 +323,10 @@ export async function hasServerAuthoritativeWaywardContactGate(input: {
   return Boolean(gate?.runId && gate.completedAt);
 }
 
+/**
+ * Retained only as a fail-closed compatibility export for old imports.
+ * It is deliberately incapable of writing companion.rook.
+ */
 export async function setCompanionRookOwnedAt(_input: {
   tenantId: string;
   operatorId: string;
@@ -331,17 +335,4 @@ export async function setCompanionRookOwnedAt(_input: {
   throw new Error(
     "companion.rook may only be written by recordAuthoredCoastalMarketRookCatch"
   );
-}): Promise<void> {
-  const db = await requireDb();
-  await db
-    .update(goldlineDomainProgression)
-    .set({ companionRookOwnedAt: input.ownedAt })
-    .where(
-      and(
-        eq(goldlineDomainProgression.tenantId, input.tenantId),
-        eq(goldlineDomainProgression.operatorId, input.operatorId),
-        isNotNull(goldlineDomainProgression.levelColosseumResolvedAt),
-        isNull(goldlineDomainProgression.companionRookOwnedAt)
-      )
-    );
 }
