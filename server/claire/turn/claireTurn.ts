@@ -998,7 +998,13 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       }
       return finish({ speak: "Okay, I won't add any of that.", kind: "briefing_declined" });
     }
-    if (newMatter) {
+    // Additional dictated work extends the held bundle. Clearing the pending
+    // briefing here used to make earlier schedule items disappear turn by turn:
+    // Claire could read the full list back conversationally, then persist only
+    // the newest fragment when the operator finally said yes.
+    const additionalWork =
+      interpreted.hasExplicitActionRequest || interpreted.operatorWorkCommitment;
+    if (newMatter && !additionalWork) {
       state.pendingBriefing = null;
       state.pendingReminded = false;
     }
