@@ -323,10 +323,14 @@ export async function hasServerAuthoritativeWaywardContactGate(input: {
   return Boolean(gate?.runId && gate.completedAt);
 }
 
-export async function setCompanionRookOwnedAt(input: {
+export async function setCompanionRookOwnedAt(_input: {
   tenantId: string;
   operatorId: string;
   ownedAt: Date;
+}): Promise<never> {
+  throw new Error(
+    "companion.rook may only be written by recordAuthoredCoastalMarketRookCatch"
+  );
 }): Promise<void> {
   const db = await requireDb();
   await db
