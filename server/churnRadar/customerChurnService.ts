@@ -24,7 +24,7 @@ import {
   type CustomerHistoryObservation,
 } from "@shared/customerChurn";
 import { getDb } from "../db";
-import { nativeOrderToTruth } from "../geography/customerOrderTruth";
+import { hasNativePaymentAuthority } from "../geography/customerOrderTruth";
 import {
   loadBusinessSourceCoverage,
   type BusinessSourceCoverageSnapshot,
@@ -1796,7 +1796,7 @@ export async function refreshCustomerRecoveryAttribution(tenantId: string) {
         )
       )
       .orderBy(orders.createdAt, orders.id)
-  ).filter(order => nativeOrderToTruth(order)?.paid === true);
+  ).filter(hasNativePaymentAuthority);
   let recovered = 0;
   for (const intervention of contacted) {
     const match = paidOrders.find(
