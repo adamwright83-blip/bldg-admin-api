@@ -15,12 +15,14 @@ import { colosseumLeadHuntDefinition } from "./colosseumKingdomBinding";
 import { ProgressionNotPermittedError } from "./progressionContract";
 import {
   acknowledgeWaywardRookContact,
+  completeWaywardContactGate,
   readGoldlineProgression,
 } from "./progressionService";
 import { acknowledgeColosseumAuthoredFinale } from "./progressionService";
 import { recordLevelFromOutcomes } from "./progressionWrites";
 import {
   beginCoastalMarketRookHunt,
+  beginWaywardContactGate,
   recordAuthoredCoastalMarketRookCatch,
 } from "./progressionStore";
 
@@ -575,6 +577,46 @@ describe("capability.rook.contact grant", () => {
     expect(db.challenges[0]?.status).toBe("open");
     const store = readFileSync(new URL("./capabilityGrantStore.ts", import.meta.url), "utf8");
     expect(store).not.toMatch(/levelColosseumResolvedAt|companionRookOwnedAt|kingdomBrassRepublicCompletedAt/);
+  });
+
+  it("grants CONTACT only after the server-started authored Wayward gate completes", async () => {
+    await ownRook();
+    const runId = "22222222-2222-4222-8222-222222222222";
+    await beginWaywardContactGate({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      runId,
+      startedAt: new Date("2026-09-25T09:00:00.000Z"),
+    });
+
+    const granted = await completeWaywardContactGate({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      runId,
+    });
+
+    expect(granted.companionRookOwned.value).toBe(true);
+    expect(granted.capabilityRookContact).toMatchObject({
+      granted: true,
+      readable: true,
+      status: "granted",
+      grantsCompanionOwnership: false,
+    });
+    expect(db.grants).toHaveLength(1);
+    expect(db.grants[0]).toMatchObject({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      capabilityId: ROOK_CONTACT_CAPABILITY_ID,
+      grantSource: "wayward.server_authoritative_contact_gate",
+    });
+
+    const again = await completeWaywardContactGate({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      runId,
+    });
+    expect(again.capabilityRookContact.granted).toBe(true);
+    expect(db.grants).toHaveLength(1);
   });
 
   it("keeps an unreadable grant table uncertain and does not fall back to companion unlocks", async () => {
