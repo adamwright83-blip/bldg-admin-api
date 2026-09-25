@@ -165,6 +165,12 @@ function isPaidFlag(value: boolean | number | null | undefined): boolean {
   return value === true || value === 1;
 }
 
+export function hasNativePaymentAuthority(
+  row: Pick<NativeOrderLike, "paid" | "stripePaymentIntentId">
+): boolean {
+  return isPaidFlag(row.paid) && Boolean(row.stripePaymentIntentId?.trim());
+}
+
 export function nativeOrderToTruth(
   row: NativeOrderLike,
   options?: { includeCancelled?: boolean }
@@ -193,7 +199,7 @@ export function nativeOrderToTruth(
     // a native "paid" checkbox alone is not economic proof. Historical/manual
     // paid rows without a Stripe PaymentIntent remain customer/order records,
     // but they cannot become paying-customer progression or paid-book truth.
-    paid: isPaidFlag(row.paid) && Boolean(row.stripePaymentIntentId?.trim()),
+    paid: hasNativePaymentAuthority(row),
     totalCents: dollarsToCents(row.total),
     cancelled,
     recognizedAt: createdAt,
