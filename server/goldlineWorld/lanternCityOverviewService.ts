@@ -235,7 +235,7 @@ function returned(customer: Customer | undefined, startedAt: string) {
 
 export function projectLanternCityOverview(input: {
   atlas: Atlas;
-  paidRevenueThisWeek: number;
+  paidRevenueThisWeek: number | null;
   campaign: Campaign;
   resolvedCampaignTerritory?: {
     campaignTerritoryDefinitionId: string | null;
@@ -493,7 +493,9 @@ export function projectLanternCityOverview(input: {
       paidRevenueThisWeek: input.paidRevenueThisWeek,
       dormant: { numerator: dark, denominator: input.atlas.customers.length },
       revenueProvenance:
-        "Paid admin-app orders by paidAt, Monday through business date",
+        input.paidRevenueThisWeek === null
+          ? "Exact paid revenue unavailable: canonical source coverage or payment evidence is incomplete for Monday through business date"
+          : "Canonical paid revenue, Monday through business date",
     },
     featuredOperation: {
       id:
@@ -711,7 +713,7 @@ export async function getLanternCityOverview(input: {
     campaign,
     operation,
     resolvedCampaignTerritory: resolved,
-    paidRevenueThisWeek: revenue.totalRevenue,
+    paidRevenueThisWeek: revenue.statedExactRevenue,
     territoryStates,
   });
 
