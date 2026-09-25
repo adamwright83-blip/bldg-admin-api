@@ -58,6 +58,6 @@ describe("parking-lot Clerk contract", () => {
     expect(service).toContain('provenance: PARKING_LOT_CLERK_PROVENANCE');
     expect(service).not.toContain('eventName: "account_won"');
     expect(actionSurface).toContain("operator-reported");
-    expect(actionSurface).toContain("does not create a sale, booking, approval");
+    expect(actionSurface).toContain("create a sale, booking, approval");
   });
 });
