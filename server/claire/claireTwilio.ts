@@ -889,8 +889,8 @@ export function runAuthoritativeClaireVoiceTurn(input: {
           operatorUserId: conversation.actorId,
         });
 
-        const runLegacyAdapter = () =>
-          runClaireTurn(
+        const runLegacyAdapter = async () =>
+          await runClaireTurn(
             {
               tenantId: conversation.tenantId,
               operatorUserId: conversation.actorId,
