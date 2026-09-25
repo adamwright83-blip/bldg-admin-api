@@ -600,6 +600,8 @@ function LiveGoldlineDriverController({
   const arriveVisit = trpc.system.commercialMission.fieldArrive.useMutation();
   const recordVisitOutcome =
     trpc.system.commercialMission.fieldOutcome.useMutation();
+  const recordParkingLotClerk =
+    trpc.system.commercialMission.fieldParkingLotClerk.useMutation();
   const updateFieldChecklist =
     trpc.system.commercialMission.fieldChecklist.useMutation();
   const completeFollowUp =
@@ -1122,18 +1124,17 @@ function LiveGoldlineDriverController({
       expectedFieldVersion: current.field.version,
     });
     if (!next) throw new Error("Visit result was not persisted");
-    // Claire conversational debrief is the primary capture path. The Field
-    // Journal remains available as fallback/review; it is not required here.
-    setDebrief({
-      missionId: input.missionId,
-      buildingName:
-        builtMissions.data?.find(mission => mission.id === input.missionId)
-          ?.account.name ?? "Your field visit",
-    });
-    // Parking-lot clerk: ask while the conversation is still fresh. This is
-    // operator-reported memory attached to the verified visit, never provider
-    // verification or an invented outcome.
-    setJournalOpen(true);
+    // Do not open the generic Field Journal here. The action surface reads the
+    // durable field state and shows the Parking-Lot Clerk only when the visit
+    // outcome exists and no Clerk observation has been recorded yet.
+    return next;
+  }
+
+  async function recordParkingLotClerkAction(
+    input: Parameters<GoldlineActionServices["recordParkingLotClerkObservation"]>[0]
+  ): Promise<GoldlineVisitContext> {
+    const next = await recordParkingLotClerk.mutateAsync(input);
+    if (!next) throw new Error("Parking-lot Clerk observation was not persisted");
     return next;
   }
 
@@ -1222,6 +1223,7 @@ function LiveGoldlineDriverController({
     departVisit: departVisitAction,
     arriveVisit: arriveVisitAction,
     recordVisitOutcome: recordVisitAction,
+    recordParkingLotClerkObservation: recordParkingLotClerkAction,
     loadFollowUp: loadAuthoritativeFollowUp,
     completeFollowUp: completeFollowUpAction,
     rescheduleFollowUp: rescheduleFollowUpAction,
