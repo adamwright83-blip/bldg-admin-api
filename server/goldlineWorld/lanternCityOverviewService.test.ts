@@ -176,6 +176,27 @@ describe("Lantern City truthful overview", () => {
       denominator: 14,
     });
     expect(result.scoreboard.paidRevenueThisWeek).toBe(1250);
+    expect(result.scoreboard.revenueProvenance).toBe(
+      "Canonical paid revenue, Monday through business date"
+    );
+  });
+
+  it("withholds an exact revenue score when canonical coverage cannot state one", () => {
+    const result = projectLanternCityOverview({
+      atlas: {
+        tenantId: "tenant",
+        businessDate: "2026-09-08",
+        timeZone: "America/Los_Angeles",
+        customers: [customer("Rebecca", "dark", 70)],
+        pursued: [],
+      } as any,
+      paidRevenueThisWeek: null,
+      campaign: { campaign: { chapters: [], currentChapterId: null } } as any,
+    });
+    expect(result.scoreboard.paidRevenueThisWeek).toBeNull();
+    expect(result.scoreboard.revenueProvenance).toMatch(
+      /Exact paid revenue unavailable/
+    );
   });
   it("is deterministic and lets a fixed chapter preempt recovery drama", () => {
     const base = fixture();
