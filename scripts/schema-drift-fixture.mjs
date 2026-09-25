@@ -15,6 +15,18 @@ if (!databaseName.includes("schema_release")) {
   );
 }
 
+const [indexRows] = await conn.execute(
+  `SELECT COUNT(*) AS count FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'driver_sales_journals'
+      AND INDEX_NAME = 'idx_driver_sales_journal_tenant_mission'`
+);
+if (Number(indexRows[0]?.count ?? 0) > 0) {
+  await conn.execute(
+    "ALTER TABLE driver_sales_journals DROP INDEX idx_driver_sales_journal_tenant_mission"
+  );
+}
+
 const [columnRows] = await conn.execute(
   `SELECT COUNT(*) AS count FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE()
