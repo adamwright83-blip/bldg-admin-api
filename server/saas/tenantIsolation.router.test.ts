@@ -1,11 +1,18 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import mysql from "mysql2/promise";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { saasRouter } from "./saasRouter";
 import { customerAssetRouter } from "../customerAssets/customerAssetRouter";
 import { commercialMissionRouter } from "../commercialMissions/commercialMissionRouter";
 import { createContext } from "../_core/context";
 import { sdk } from "../_core/sdk";
+
+vi.mock("../_core/sdk", () => ({
+  sdk: {
+    authenticateRequest: vi.fn(),
+    authenticateSessionToken: vi.fn(),
+  },
+}));
 
 const enabled = process.env.SAAS_TENANT_ISOLATION_EXAM === "1";
 const suite = enabled ? describe : describe.skip;
@@ -114,8 +121,7 @@ suite("hostile SaaS tenant router boundary", () => {
   });
 
   it("binds SaaS membership to its persisted tenant even when request headers claim another tenant", async () => {
-    const spy = sdk.authenticateRequest as unknown as { mockResolvedValue(value: unknown): void };
-    spy.mockResolvedValue({
+    vi.mocked(sdk.authenticateRequest).mockResolvedValue({
       id: 91001,
       openId: A.openId,
       role: "user",
@@ -148,8 +154,12 @@ suite("hostile SaaS tenant router boundary", () => {
     const bSaas = saasRouter.createCaller(callerContext(B));
     expect((await aSaas.me()).tenantId).toBe(A.tenantId);
     expect((await bSaas.me()).tenantId).toBe(B.tenantId);
-    expect((await aSaas.members()).every(row => row.tenantId === A.tenantId)).toBe(true);
-    expect((await bSaas.members()).every(row => row.tenantId === B.tenantId)).toBe(true);
+    const aMembers = await aSaas.members();
+    const bMembers = await bSaas.members();
+    expect(aMembers.map(row => row.openId)).toEqual([A.openId]);
+    expect(bMembers.map(row => row.openId)).toEqual([B.openId]);
+    expect(aMembers.some(row => row.openId === B.openId)).toBe(false);
+    expect(bMembers.some(row => row.openId === A.openId)).toBe(false);
   });
 
   it("customer assets cannot be read across tenant boundaries", async () => {
