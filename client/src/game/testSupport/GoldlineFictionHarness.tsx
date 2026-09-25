@@ -346,6 +346,8 @@ function historicalNode(): DriverGameWorldNode {
     isTodayActive: false,
     isHistorical: true,
     regionKey: "fortress_gate",
+    realVisitReaction: null,
+    unresolvedEcho: null,
     resolvedAt: "2026-08-01T00:00:00.000Z",
   };
 }
