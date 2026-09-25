@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import mysql from "mysql2/promise";
 
 if (process.env.SCHEMA_DRIFT_FIXTURE_OK !== "1") {
