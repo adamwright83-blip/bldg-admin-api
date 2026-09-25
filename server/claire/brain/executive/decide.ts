@@ -72,6 +72,11 @@ export type ExecutiveDeps = {
   retrieve: RetrievalRunner;
   ctx: IntegrationContext;
   nowMs?: () => number;
+  /**
+   * Production authority is explicit and injected by the live cutover
+   * orchestrator. Ordinary calls and every shadow observer remain false.
+   */
+  productionAuthority?: boolean;
 };
 
 /** Retrieves nothing. Honest default: we have not looked, so we must not assert. */
