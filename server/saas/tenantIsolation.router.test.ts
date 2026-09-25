@@ -1,5 +1,5 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
-import mysql from "mysql2/promise";
+import mysql, { type Connection } from "mysql2/promise";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { saasRouter } from "./saasRouter";
 import { customerAssetRouter } from "../customerAssets/customerAssetRouter";
@@ -49,7 +49,7 @@ function callerContext(input: typeof A) {
   } as never;
 }
 
-async function insertTenant(conn: mysql.Connection, input: typeof A) {
+async function insertTenant(conn: Connection, input: typeof A) {
   await conn.execute(
     `INSERT INTO dayforge_saas_tenants
       (id,slug,businessName,brandName,primaryColor,contactName,contactEmail,timeZone,status)
