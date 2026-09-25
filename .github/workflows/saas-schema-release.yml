@@ -86,6 +86,11 @@ jobs:
       - name: Run SaaS production contract
         run: pnpm vitest run server/saas/saasContract.test.ts
 
+      - name: Run hostile two-tenant router exam
+        env:
+          SAAS_TENANT_ISOLATION_EXAM: "1"
+        run: pnpm vitest run server/saas/tenantIsolation.router.test.ts
+
       - name: Boot exact production start command
         run: |
           pnpm start > /tmp/joystick-saas-schema-release.log 2>&1 &
