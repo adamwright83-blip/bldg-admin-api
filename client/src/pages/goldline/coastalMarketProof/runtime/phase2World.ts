@@ -671,7 +671,11 @@ export class Phase2World {
           }
         }
       }
-      if (!this.active && !this.used.has("transfer") && Math.abs(controller.progress - rw(this).csGrab) < 6) {
+      // The carriers pass over the parapet, not over the path: a player who stops where the hint appears
+      // (the closed gate) stands 2-2.5 m off the handle's line. Reach for a passing carrier from anywhere
+      // between the grab point and that gate; only the autopilot used to stand close enough.
+      const TRANSFER_REACH = rw(this).grabRadius + 1.4;
+      if (!this.active && !this.used.has("transfer") && controller.progress > rw(this).csGrab - 6 && controller.progress < this.rigs.gate3.cs + 1) {
         let best = -1;
         let bd = Infinity;
         const hanger = rw(this).hanger;
@@ -683,11 +687,11 @@ export class Phase2World {
             best = i;
           }
         });
-        if (best >= 0 && bd < rw(this).grabRadius + 2.5) {
+        if (best >= 0 && bd < TRANSFER_REACH + 2.5) {
           this.handTarget.copy(this.carriers[best].position).y -= hanger;
           this.handsUp = Math.max(this.handsUp, 0.4);
         }
-        if (best >= 0 && bd < rw(this).grabRadius) {
+        if (best >= 0 && bd < TRANSFER_REACH) {
           this.state.lineReady = true;
           if (wants) {
             const seat = this.tmp2.copy(this.carriers[best].position);

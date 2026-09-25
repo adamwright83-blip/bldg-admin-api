@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { GLTFLoader, type GLTF, type GLTFParser } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
 import { VRMLoaderPlugin, VRMUtils, type VRM } from "@pixiv/three-vrm";
@@ -86,10 +86,20 @@ export async function createCoastalProof(
   if (post) disposers.push(() => post.dispose());
 
   // ---------- assets
+  // Textures packed inside a GLB are decoded from blob: URLs. three.js fetches those URLs (an
+  // ImageBitmapLoader) on most browsers, and a strict Content-Security-Policy connect-src (the
+  // claude.ai artifact host has one) blocks the fetch: every embedded texture silently fails and a
+  // model renders white. An <img> may load blob: under img-src, so decode through TextureLoader.
+  const imgTextures = (parser: GLTFParser) => {
+    parser.textureLoader = new THREE.TextureLoader(parser.options.manager);
+    return { name: "coastal_img_textures" };
+  };
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
+  loader.register(imgTextures);
   // Trailblazer's VRoid body is a VRM: the same GLB container, read with pixiv's VRM plugin
   const vrmLoader = new GLTFLoader();
+  vrmLoader.register(imgTextures);
   vrmLoader.register(parser => new VRMLoaderPlugin(parser));
   // ?hero=legacy shows the previous Blender-built Trailblazer instead
   const legacyHero = new URLSearchParams(window.location.search).get("hero") === "legacy";

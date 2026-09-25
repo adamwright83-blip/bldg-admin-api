@@ -187,6 +187,25 @@ to the previous builds; this outfit is his own choice.
   - Merging her 16 materials at VRoid export would win more back.
 - **Now out of style.** Rook and the environment are still the previous realistic style.
 
+### Two fixes from Adam's play of the artifact (2026-09-25)
+
+- **The white "ghost" Trailblazer, and every texture packed inside a model file, in the artifact.**
+  - The cause: three.js decodes textures embedded in a GLB by fetching their `blob:` URLs. The artifact
+    page's Content-Security-Policy (`connect-src`) blocks that fetch, so every embedded texture failed
+    silently there. Trailblazer came out white and bloomed in the sun.
+  - It had been happening all along: Rook's concept paint, the townsfolk and the earlier Trailblazer
+    builds were hit the same way.
+  - Reproduced locally by serving the staged artifact under a similar policy: the old build logs 127
+    blocked fetches and a white Trailblazer. The fix is to decode embedded images through an `<img>`
+    (`TextureLoader`), which that policy allows for `blob:`. With it, no fetch is blocked and she is
+    fully textured.
+- **The ropeway transfer could not be caught by a player.**
+  - The carriers pass over the parapet, not over the path. The hint ("HOLD LINE AS A CARRIER PASSES")
+    appears at the closed gate, where the handle passes 2–2.5 m from her reach (the grab accepted 1.9).
+  - Only the autopilot, which walks to one exact spot under the rope, ever caught one.
+  - The reach is now 3.3 m, from the grab point up to the gate. By keyboard, standing against the
+    portcullis on the far side: the old code never caught in 15 s, the fixed code catches within 1.5 s.
+
 ### Final measurement
 
 Mac-hosted Playwright Chromium headless `--use-angle=metal` (Apple M1), 390x844 DPR 3 mobile+touch,
