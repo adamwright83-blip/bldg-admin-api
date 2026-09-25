@@ -213,6 +213,42 @@ const ensureRequiredIndex = async (
   }
 };
 
+const applyHistoricalStandaloneIndexes = async (relativePath, label) => {
+  for (const statement of await readSqlStatements(relativePath)) {
+    const match = statement.match(
+      /^CREATE\s+INDEX\s+`?([A-Za-z0-9_]+)`?\s+ON\s+`?([A-Za-z0-9_]+)`?\s*\(([^)]+)\)$/i
+    );
+    if (!match) continue;
+    const [, indexName, tableName, rawColumns] = match;
+    const expectedColumns = rawColumns
+      .split(",")
+      .map(value => value.trim().replace(/^`|`$/g, ""));
+    const current = await getIndexColumns(tableName, indexName);
+    if (current.length) {
+      if (
+        current.length !== expectedColumns.length ||
+        !current.every((column, index) => column === expectedColumns[index])
+      ) {
+        throw new Error(
+          `Historical index ${tableName}.${indexName} has wrong columns: ${current.join(", ")}; expected: ${expectedColumns.join(", ")}`
+        );
+      }
+      console.log("→ already exists, skipping:", `${tableName}.${indexName}`);
+      continue;
+    }
+    await runRequired(statement, `${label}: ${tableName}.${indexName}`);
+    const verified = await getIndexColumns(tableName, indexName);
+    if (
+      verified.length !== expectedColumns.length ||
+      !verified.every((column, index) => column === expectedColumns[index])
+    ) {
+      throw new Error(
+        `Historical index ${tableName}.${indexName} was not created correctly`
+      );
+    }
+  }
+};
+
 // ── users table ──────────────────────────────────────────────────
 await run(
   `
@@ -937,9 +973,17 @@ await applyHistoricalCreateTables(
   "../drizzle/0024_cleancloud_external_ingestion.sql",
   "CleanCloud import foundation"
 );
+await applyHistoricalStandaloneIndexes(
+  "../drizzle/0024_cleancloud_external_ingestion.sql",
+  "CleanCloud import foundation indexes"
+);
 await applyHistoricalCreateTables(
   "../drizzle/0029_cleancloud_paid_reconciliation.sql",
   "CleanCloud paid-order foundation"
+);
+await applyHistoricalStandaloneIndexes(
+  "../drizzle/0029_cleancloud_paid_reconciliation.sql",
+  "CleanCloud paid-order foundation indexes"
 );
 await ensureRequiredColumn(
   "cleancloud_import_batches",
@@ -977,6 +1021,21 @@ await applyHistoricalCreateTables(
   "../drizzle/0043_dayforge_analytics_release.sql",
   "SaaS analytics/release foundation"
 );
+await runRequired(
+  `ALTER TABLE dayforge_audit_events
+     MODIFY COLUMN actorType enum('public','owner','admin','operator','field','game','stripe','system') NOT NULL`,
+  "dayforge_audit_events.actorType game-capable enum"
+);
+await assertEnumContainsValues("dayforge_audit_events", "actorType", [
+  "public",
+  "owner",
+  "admin",
+  "operator",
+  "field",
+  "game",
+  "stripe",
+  "system",
+]);
 await assertRequiredColumns("dayforge_saas_tenants", [
   "id",
   "slug",
