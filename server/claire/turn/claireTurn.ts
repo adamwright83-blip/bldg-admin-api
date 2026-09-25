@@ -1216,9 +1216,43 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     }
     const earlier = [...(state.pendingBriefing?.parsed.items ?? []), ...carried];
     const combinedItems = [...earlier];
+
+    const heldActionKey = (title: string): string => {
+      const words = title.toLowerCase().replace(/[^a-z0-9' ]/g, " ").trim().split(/\s+/);
+      if (words[0] === "pick" && words[1] === "up") return "pickup";
+      if (words[0] === "drop" && words[1] === "off") return "dropoff";
+      return words[0] ?? "";
+    };
+    const sameHeldWork = (existing: BriefingItem, candidate: BriefingItem): boolean => {
+      if (existing.businessDate !== candidate.businessDate) return false;
+      // Shared people/place are not enough to make two jobs identical. The live
+      // 2026-09-25 call had an OPUS/Ashley meet-and-towel stop plus a separate
+      // nighttime OPUS/Ashley delivery; the old fuzzy matcher collapsed them.
+      if (heldActionKey(existing.title) !== heldActionKey(candidate.title)) return false;
+      if (
+        existing.timing.kind !== "none" &&
+        candidate.timing.kind !== "none" &&
+        existing.timing.label !== candidate.timing.label
+      ) {
+        return false;
+      }
+      return Boolean(
+        matchExistingWork(candidate, [
+          {
+            id: "x",
+            title: existing.title,
+            businessDate: existing.businessDate,
+            status: "open",
+          },
+        ])
+      );
+    };
+
     for (const item of parsed.items) {
-      // Only something said on an earlier turn can be a repeat; items in one utterance are distinct by construction.
-      const duplicate = earlier.find(existing => existing.businessDate === item.businessDate && matchExistingWork(item, [{ id: "x", title: existing.title, businessDate: existing.businessDate, status: "open" }]));
+      // Only something said on an earlier turn can be a repeat; items in one
+      // utterance are distinct by construction. Held-list dedupe is stricter
+      // than Day Line matching because false collapse loses real scheduled work.
+      const duplicate = earlier.find(existing => sameHeldWork(existing, item));
       if (duplicate) {
         if (item.timing.kind !== "none") duplicate.timing = item.timing;
         continue;
