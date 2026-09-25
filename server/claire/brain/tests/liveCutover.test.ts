@@ -3,6 +3,7 @@ import type { ClaireTurnResult } from "../../turn/claireTurn";
 import {
   runClaireBrainV2LiveTurn,
   isClaireBrainV2LiveEnabled,
+  type ClaireBrainV2LiveInput,
 } from "../live/runClaireBrainV2LiveTurn";
 
 const ON = { CLAIRE_BRAIN_V2_LIVE: "1" } as unknown as NodeJS.ProcessEnv;
@@ -30,7 +31,9 @@ function adapterResult(
   };
 }
 
-function input(over: Record<string, unknown> = {}) {
+function input(
+  over: Partial<ClaireBrainV2LiveInput> = {}
+): ClaireBrainV2LiveInput {
   return {
     rawText: "I need to call Dana Tuesday.",
     assembledText: "I need to call Dana Tuesday.",
