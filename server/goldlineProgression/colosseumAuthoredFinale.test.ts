@@ -179,37 +179,35 @@ describe("authored Clockhead finale acknowledgement", () => {
     expect(read.kingdomBrassRepublicCompleted.value).toBe(false);
   });
 
-  it("persists Level and Rook from a satisfied binding, and a repeat keeps both timestamps", async () => {
+  it("persists the level but does not own Rook, and a repeat keeps that boundary", async () => {
     const caller = progressionRouter.createCaller(context("tenant-a", 7));
     const owned = await caller.acknowledgeColosseumFinale(finale);
     const levelStamp = db.rows[0]?.levelColosseumResolvedAt;
-    const rookStamp = db.rows[0]?.companionRookOwnedAt;
     const again = await caller.acknowledgeColosseumFinale(finale);
     expect(owned.operatorId).toBe("open-7");
     expect(owned.tenantId).toBe("tenant-a");
-    expect(owned.companionRookOwned).toEqual({ status: "earned", value: true });
+    expect(owned.companionRookOwned).toEqual({ status: "unearned", value: false });
     expect(owned.levelColosseumResolved.value).toBe(true);
     expect(owned.kingdomBrassRepublicCompleted.value).toBe(false);
     expect(owned.kingdomBrassRepublicCompleted.impliedByLevelColosseum).toBe(false);
     expect(owned.capabilityRookContact.granted).toBe(false);
     expect(owned.capabilityRookContact.grantsCompanionOwnership).toBe(false);
-    expect(again.companionRookOwned.value).toBe(true);
+    expect(again.companionRookOwned.value).toBe(false);
     expect(again.levelColosseumResolved.value).toBe(true);
     expect(levelStamp).toBeInstanceOf(Date);
-    expect(rookStamp).toBeInstanceOf(Date);
     expect(db.rows[0]?.levelColosseumResolvedAt).toBe(levelStamp);
-    expect(db.rows[0]?.companionRookOwnedAt).toBe(rookStamp);
+    expect(db.rows[0]?.companionRookOwnedAt).toBeNull();
     expect(db.rows[0]?.kingdomBrassRepublicCompletedAt).toBeNull();
     expect(db.rows).toHaveLength(1);
 
     const clearedLocalStorage = await caller.get({});
     expect(clearedLocalStorage.localStorage).toBe("cache_and_present_only");
-    expect(clearedLocalStorage.companionRookOwned.value).toBe(true);
+    expect(clearedLocalStorage.companionRookOwned.value).toBe(false);
     expect(clearedLocalStorage.kingdomBrassRepublicCompleted.value).toBe(false);
     expect(clearedLocalStorage.capabilityRookContact.granted).toBe(false);
   });
 
-  it("does not let another tenant or another operator inherit Rook", async () => {
+  it("does not let another tenant or operator inherit the Colosseum resolution", async () => {
     const owner = progressionRouter.createCaller(context("tenant-a", 7));
     await owner.acknowledgeColosseumFinale(finale);
 
@@ -226,18 +224,16 @@ describe("authored Clockhead finale acknowledgement", () => {
     await expect(otherOperator.acknowledgeColosseumFinale(finale)).rejects.toThrow();
 
     const stillOwned = await owner.get({});
-    expect(stillOwned.companionRookOwned.value).toBe(true);
+    expect(stillOwned.companionRookOwned.value).toBe(false);
     expect(stillOwned.levelColosseumResolved.value).toBe(true);
     expect(stillOwned.kingdomBrassRepublicCompleted.value).toBe(false);
-    expect(db.rows.filter(row => row.companionRookOwnedAt)).toEqual([
-      expect.objectContaining({ tenantId: "tenant-a", operatorId: "open-7" }),
-    ]);
+    expect(db.rows.filter(row => row.companionRookOwnedAt)).toEqual([]);
     expect(db.rows.filter(row => row.levelColosseumResolvedAt)).toEqual([
       expect.objectContaining({ tenantId: "tenant-a", operatorId: "open-7" }),
     ]);
   });
 
-  it("keeps Day 1 from recording Rook and does not grant CONTACT from ownership", () => {
+  it("keeps Day 1 and the Colosseum finale from recording Rook ownership or CONTACT", () => {
     const day1 = readFileSync(new URL("../openChannel/day1TenDoorsService.ts", import.meta.url), "utf8");
     const service = readFileSync(new URL("./progressionService.ts", import.meta.url), "utf8");
     expect(day1).not.toMatch(
