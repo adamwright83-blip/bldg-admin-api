@@ -1,5 +1,8 @@
 import type { CommercialMissionStatus } from "../../../../shared/commercialMission";
-import type { FieldOutcomeReason } from "../../../../shared/commercialMissionField";
+import type {
+  FieldOutcomeReason,
+  ParkingLotClerkObservation,
+} from "../../../../shared/commercialMissionField";
 import type { ScoutReport } from "../../../../shared/expansionScout";
 import type { DriverGameWorldNode } from "../../../../shared/driverGameWorld";
 import type { RealActionRequest } from "../encounters/RealActionBridge";
@@ -25,6 +28,7 @@ export type GoldlineVisitContext = {
     outcome: "follow_up" | "won" | "lost" | "no_contact" | "no_decision";
     followUpAt: string | null;
   } | null;
+  parkingLotClerkObservation: ParkingLotClerkObservation | null;
   proposal: { id: string; status: string; validThrough: string } | null;
   navigationUrl: string | null;
 };
@@ -73,6 +77,11 @@ export type GoldlineActionServices = {
   recordVisitOutcome: (
     input: VisitOutcomeRequest
   ) => Promise<GoldlineVisitContext>;
+  recordParkingLotClerkObservation: (input: {
+    missionId: number;
+    requestId: string;
+    text: string;
+  }) => Promise<GoldlineVisitContext>;
   loadFollowUp: (missionId: number) => Promise<AuthoritativeFollowUp | null>;
   completeFollowUp: (input: {
     followUp: AuthoritativeFollowUp;
