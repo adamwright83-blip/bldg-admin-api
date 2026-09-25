@@ -105,6 +105,27 @@ describe("DayForge SaaS production contract", () => {
     );
   });
 
+
+  it("quarantines commercial SaaS members from legacy product routes", () => {
+    const app = source("../../client/src/App.tsx");
+    const shell = source("../../client/src/product/ProductShell.tsx");
+    const field = source("../../client/src/product/FieldHome.tsx");
+
+    expect(app).toContain("isSaasCustomerSafePath");
+    expect(app).toContain('user?.role === "user"');
+    expect(app).toContain('<Redirect to="/product" />');
+    expect(shell).not.toContain("Legacy operations");
+    expect(shell).not.toContain('href="/admin"');
+    expect(shell).not.toContain('href="/new-order"');
+    expect(field).not.toContain('href="/new-order"');
+  });
+
+  it("authorizes Strategy through tenant membership rather than platform admin", () => {
+    const strategy = source("../strategy/strategyRouter.ts");
+    expect(strategy).toContain("legacyDayforgeTenantOperatorProcedure");
+    expect(strategy).not.toMatch(/\badminProcedure\b/);
+  });
+
   it("does not grant SaaS members the platform admin or driver role", () => {
     const store = source("./saasStore.ts");
     const auth = source("./saasAuthRoute.ts");
