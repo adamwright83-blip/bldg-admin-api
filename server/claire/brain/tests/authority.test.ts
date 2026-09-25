@@ -48,25 +48,24 @@ describe("Brain V2 production isolation", () => {
   });
 
   /**
-   * Phase I changed this invariant deliberately. Production V1 paths may now emit a
-   * ONE-WAY shadow observation, so a bare "must not import the brain" assertion is no
-   * longer the rule. The rule is narrower and stronger: they may import the observer
-   * and the snapshot boundary, and NOTHING else from the brain.
+   * Stage C deliberately adds one guarded production entrypoint. Transport may import
+   * that orchestrator plus the permanent one-way shadow observer/snapshot boundary,
+   * but it still may not reach Executive internals or mint grants itself.
    */
-  it("Twilio and the desk router import only the shadow observer, never the decision path", () => {
+  it("Twilio and the desk router import only the guarded live orchestrator plus shadow boundary", () => {
     const twilio = readFileSync(path.join(process.cwd(), "server/claire/claireTwilio.ts"), "utf8");
     const router = readFileSync(path.join(process.cwd(), "server/claire/claireRouter.ts"), "utf8");
 
     for (const source of [twilio, router]) {
       const brainImports = source.match(/from "\.\/brain\/[^"]+"/g) ?? [];
       expect(brainImports.sort()).toEqual([
+        'from "./brain/live/runClaireBrainV2LiveTurn"',
         'from "./brain/shadow/observeShadowTurn"',
         'from "./brain/shadow/v1Snapshot"',
       ]);
-      // The decision entrypoint and its authority types stay out of production.
-      expect(source).not.toMatch(/runClaireBrainTurn/);
-      expect(source).not.toMatch(/decideTurn/);
-      expect(source).not.toMatch(/mintActionGrant|ExecutiveActionGrant|assertGovernedDecision/);
+      expect(source).not.toMatch(/from "\.\/brain\/executive\//);
+      expect(source).not.toMatch(/from "\.\/brain\/contracts\/grants"/);
+      expect(source).not.toMatch(/mintActionGrant|assertGovernedDecision/);
     }
   });
 
@@ -108,17 +107,18 @@ describe("authority bypasses fail", () => {
     await expect(executeGrantedAction(fake)).rejects.toBeInstanceOf(ActionGatewayError);
   });
 
-  it("action gateway refuses live mutation even with a branded grant that claims mutationAllowed", async () => {
-    expect(() =>
-      mintActionGrant({
-        actionClass: "commit_day_line",
-        scope: {},
-        authorityBasis: "current_turn_explicit_request",
-        sourceTurnAssembledText: "add it",
-        expiresAtMs: Date.now() + 1000,
-        constraints: { mutationAllowed: true, shadowOnly: false },
-      })
-    ).toThrow(/live mutation grant/);
+  it("a branded live grant still cannot mutate without an injected production executor", async () => {
+    const grant = mintActionGrant({
+      actionClass: "commit_day_line",
+      scope: {},
+      authorityBasis: "current_turn_explicit_request",
+      sourceTurnAssembledText: "add it",
+      expiresAtMs: Date.now() + 1000,
+      constraints: { mutationAllowed: true, shadowOnly: false },
+    });
+    await expect(executeGrantedAction(grant)).rejects.toThrow(
+      /requires an injected production executor/
+    );
   });
 
   it("governor rejects a grant object missing the brand", () => {
