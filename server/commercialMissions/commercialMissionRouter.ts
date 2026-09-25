@@ -40,7 +40,9 @@ import {
   createCommercialMissionPhoneHandoff,
   departCommercialMissionField,
   getCommercialMissionFieldState,
+  getParkingLotClerkObservation,
   recordCommercialMissionVisitOutcome,
+  recordParkingLotClerkObservation,
   saveCommercialMissionFieldNotes,
   saveTenantFieldChecklistTemplates,
   startCommercialMissionFieldPreparation,
@@ -1041,6 +1043,32 @@ export const commercialMissionRouter = router({
       });
     }),
 
+  parkingLotClerkObservation: legacyDayforgeMissionFieldProcedure
+    .input(z.object({ missionId: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+      if (!mission) return notFound();
+      try {
+        assertDriverCanReadMission({
+          mission,
+          userId: ctx.user.openId,
+          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: (error as Error).message,
+        });
+      }
+      return getParkingLotClerkObservation({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+    }),
+
   fieldStartPreparation: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
@@ -1299,6 +1327,42 @@ export const commercialMissionRouter = router({
         });
       }
       return recordCommercialMissionVisitOutcome({
+        ...input,
+        tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
+      });
+    }),
+
+  fieldParkingLotClerk: legacyDayforgeMissionFieldProcedure
+    .input(
+      z.object({
+        missionId: z.number().int().positive(),
+        requestId: z.string().uuid(),
+        text: z
+          .string()
+          .max(20_000)
+          .refine(value => value.trim().length > 0, "Observation is required"),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+      if (!mission) return notFound();
+      try {
+        assertDriverCanReadMission({
+          mission,
+          userId: ctx.user.openId,
+          isAdmin: ctx.legacyDayforgeMembership.role !== "field",
+        });
+      } catch (error) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: (error as Error).message,
+        });
+      }
+      return recordParkingLotClerkObservation({
         ...input,
         tenantId: ctx.tenantId,
         actorId: ctx.user.openId,
