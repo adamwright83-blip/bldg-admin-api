@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS `driver_sales_journals` (
   `driverId` varchar(128) NOT NULL,
   `journalDate` varchar(10) NOT NULL,
   `clientRequestId` varchar(36) NULL,
+  `debriefMissionId` int NULL,
   `audioStorageKey` varchar(512) NULL,
   `audioMimeType` varchar(96) NULL,
   `rawTranscript` text NULL,
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS `driver_sales_journals` (
   `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_driver_sales_journal_tenant_request` (`tenantId`,`clientRequestId`),
+  KEY `idx_driver_sales_journal_tenant_mission` (`tenantId`,`debriefMissionId`,`createdAt`),
   KEY `idx_driver_sales_journal_processing` (`tenantId`,`processingStatus`,`createdAt`),
   KEY `idx_driver_sales_journal_driver_date` (`tenantId`,`driverId`,`journalDate`,`createdAt`),
   KEY `idx_driver_sales_journal_tenant_created` (`tenantId`,`createdAt`)

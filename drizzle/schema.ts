@@ -2209,6 +2209,7 @@ export const driverSalesJournals = mysqlTable(
     driverId: varchar("driverId", { length: 128 }).notNull(),
     journalDate: varchar("journalDate", { length: 10 }).notNull(),
     clientRequestId: varchar("clientRequestId", { length: 36 }),
+    debriefMissionId: int("debriefMissionId"),
     audioStorageKey: varchar("audioStorageKey", { length: 512 }),
     audioMimeType: varchar("audioMimeType", { length: 96 }),
     rawTranscript: text("rawTranscript"),
@@ -2247,6 +2248,11 @@ export const driverSalesJournals = mysqlTable(
       table.tenantId,
       table.driverId,
       table.journalDate,
+      table.createdAt
+    ),
+    tenantMissionIdx: index("idx_driver_sales_journal_tenant_mission").on(
+      table.tenantId,
+      table.debriefMissionId,
       table.createdAt
     ),
     tenantProcessingIdx: index("idx_driver_sales_journal_processing").on(

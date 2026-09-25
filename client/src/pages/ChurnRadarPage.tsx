@@ -171,7 +171,7 @@ export default function ChurnRadarPage() {
         <header className="cr-header">
           <div>
             <span className="cr-kicker">
-              <Radar /> DAYFORGE CHURN RADAR
+              <Radar /> JOYSTICK CHURN RADAR
             </span>
             <h1>Catch the silence before it becomes churn.</h1>
             <p>
@@ -196,12 +196,30 @@ export default function ChurnRadarPage() {
           </div>
         ) : null}
 
+        {scan.data?.coverage && !scan.data.coverage.wholeBookCurrent ? (
+          <div className="cr-alert is-error" role="status" data-testid="churn-book-coverage-warning">
+            <AlertTriangle />
+            <span>
+              <b>Known native-order signals only.</b>{" "}
+              {scan.data.coverage.reason}
+            </span>
+          </div>
+        ) : scan.data?.coverage?.wholeBookCurrent ? (
+          <div className="cr-alert" role="status" data-testid="churn-book-coverage-current">
+            <BadgeCheck />
+            <span>
+              <b>Current held customer book.</b>{" "}
+              {scan.data.coverage.reason}
+            </span>
+          </div>
+        ) : null}
+
         <section className="cr-profile">
           <div>
             <span className="cr-section-label">RECOVERY IDENTITY</span>
             <b>Who is checking in?</b>
             <small>
-              Persisted tenant facts only. DayForge supplies no demo operator.
+              Persisted tenant facts only. JOYSTICK supplies no demo operator.
             </small>
           </div>
           <label>
@@ -250,9 +268,9 @@ export default function ChurnRadarPage() {
 
         <section className="cr-metrics">
           <article>
-            <small>REAL ORDERS SCANNED</small>
+            <small>NATIVE ORDERS SCANNED</small>
             <b>{scan.data?.sourceOrderCount ?? 0}</b>
-            <span>Tenant-scoped orders table</span>
+            <span>Laundry Butler order history only</span>
           </article>
           <article>
             <small>CUSTOMERS SCORED</small>
@@ -277,7 +295,7 @@ export default function ChurnRadarPage() {
                 await runScan.mutateAsync({ requestId: crypto.randomUUID() });
                 setSelectedSnapshotId(null);
                 await scan.refetch();
-                setNotice("Fresh tenant order history scored");
+                setNotice("Native-order history scored. Coverage status updated.");
               })
             }
           >
@@ -314,7 +332,7 @@ export default function ChurnRadarPage() {
             {scan.data && atRiskCustomers.length === 0 ? (
               <div className="cr-empty">
                 <BadgeCheck />
-                <b>No current churn alerts</b>
+                <b>No native-order churn alerts in this scan</b>
                 <p>
                   Customers with active orders are automatically suppressed.
                 </p>
@@ -417,7 +435,7 @@ export default function ChurnRadarPage() {
                       <span className="cr-section-label">NEXT BEST ACTION</span>
                       <h3>Turn this alert into a recovery mission.</h3>
                       <p>
-                        DayForge will create a real stale-customer ops task and
+                        JOYSTICK will create a real stale-customer ops task and
                         a grounded draft. It will not contact anyone.
                       </p>
                     </div>
@@ -650,7 +668,7 @@ export default function ChurnRadarPage() {
                           HUMAN SEND GATE
                         </span>
                         <h4>
-                          DayForge opens your SMS composer. It never auto-sends.
+                          JOYSTICK opens your SMS composer. It never auto-sends.
                         </h4>
                         <p>
                           Approved content + current documented opt-in are both
@@ -676,7 +694,7 @@ export default function ChurnRadarPage() {
                             });
                             window.location.href = contact.smsUrl;
                             setNotice(
-                              `Composer opened for ${contact.phoneMasked}; DayForge did not send it`
+                              `Composer opened for ${contact.phoneMasked}; JOYSTICK did not send it`
                             );
                           })
                         }
@@ -721,9 +739,11 @@ export default function ChurnRadarPage() {
         <footer className="cr-footer">
           <ShieldCheck />
           <p>
-            Churn Radar uses completed tenant order records, labels calculations
+            Churn Radar scores native completed-order records, labels calculations
             and estimates, suppresses customers with active orders, and reports
-            missing evidence instead of inventing it.
+            missing evidence instead of inventing it. When CleanCloud is held,
+            this native-only scoring lane is labeled incomplete rather than
+            pretending to be the whole customer book.
           </p>
         </footer>
       </div>

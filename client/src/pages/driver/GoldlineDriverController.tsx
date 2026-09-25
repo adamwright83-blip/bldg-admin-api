@@ -1130,6 +1130,10 @@ function LiveGoldlineDriverController({
         builtMissions.data?.find(mission => mission.id === input.missionId)
           ?.account.name ?? "Your field visit",
     });
+    // Parking-lot clerk: ask while the conversation is still fresh. This is
+    // operator-reported memory attached to the verified visit, never provider
+    // verification or an invented outcome.
+    setJournalOpen(true);
     return next;
   }
 
