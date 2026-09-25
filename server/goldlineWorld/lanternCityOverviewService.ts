@@ -713,7 +713,7 @@ export async function getLanternCityOverview(input: {
     campaign,
     operation,
     resolvedCampaignTerritory: resolved,
-    paidRevenueThisWeek: revenue.statedExactRevenue,
+    paidRevenueThisWeek: revenue.statedExactRevenue ?? null,
     territoryStates,
   });
 
