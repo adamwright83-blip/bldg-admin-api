@@ -1,62 +1,63 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const migration = readFileSync(
-  new URL("../../drizzle/0097_driver_sales_journal_debrief_mission.sql", import.meta.url),
-  "utf8"
-);
-const schema = readFileSync(
-  new URL("../../drizzle/schema.ts", import.meta.url),
-  "utf8"
-);
 const service = readFileSync(
-  new URL("./driverSalesMotivationService.ts", import.meta.url),
+  new URL("./commercialMissionFieldService.ts", import.meta.url),
+  "utf8"
+);
+const router = readFileSync(
+  new URL("./commercialMissionRouter.ts", import.meta.url),
   "utf8"
 );
 const controller = readFileSync(
   new URL("../../client/src/pages/driver/GoldlineDriverController.tsx", import.meta.url),
   "utf8"
 );
-const journal = readFileSync(
-  new URL("../../client/src/components/driver/SalesMomentum.tsx", import.meta.url),
+const actionSurface = readFileSync(
+  new URL("../../client/src/game/actions/GoldlineActionSurface.tsx", import.meta.url),
   "utf8"
 );
 
-describe("parking-lot debrief contract", () => {
-  it("stores a durable mission link on the raw journal", () => {
-    expect(migration).toContain("debriefMissionId");
-    expect(migration).toContain("idx_driver_sales_journal_tenant_mission");
-    expect(schema).toContain('debriefMissionId: int("debriefMissionId")');
-    expect(service).toContain("debriefMissionId: input.debriefMissionId ?? null");
+describe("parking-lot Clerk contract", () => {
+  it("reuses the commercial mission event stream instead of creating another visit identity", () => {
+    expect(service).toContain("commercialMissionEvents");
+    expect(service).toContain("PARKING_LOT_CLERK_EVENT_NAME");
+    expect(service).toContain("missionId: input.missionId");
+    expect(service).toContain("PARKING_LOT_CLERK_PROVENANCE");
+    expect(service).not.toContain("parking_lot_clerk_id");
+    expect(service).not.toContain("clerkMissionId");
   });
 
-  it("accepts a mission-linked debrief only after this operator recorded that visit", () => {
-    expect(service).toContain("eq(commercialVisitOutcomes.missionId, input.debriefMissionId)");
-    expect(service).toContain("eq(commercialVisitOutcomes.recordedBy, input.driverId)");
-    expect(service).toContain("The debrief requires your recorded field visit.");
+  it("accepts testimony only after persisted arrival and visit outcome", () => {
+    expect(service).toContain("fieldRows[0]?.arrivedAt");
+    expect(service).toContain("Parking-lot Clerk requires the persisted real visit arrival.");
+    expect(service).toContain("Parking-lot Clerk requires the persisted real visit outcome.");
+    expect(service).toContain("outcome.recordedBy !== input.actorId");
   });
 
-  it("opens immediately after the authoritative visit result persists", () => {
+  it("derives the prompt from durable field state instead of opening a generic journal after mutation", () => {
+    expect(actionSurface).toContain("context?.visitOutcome && !context.parkingLotClerkObservation");
+    expect(actionSurface).toContain("WHAT DID THEY ACTUALLY SAY?");
+    expect(actionSurface).toContain("recordParkingLotClerkObservation");
     const outcomeIndex = controller.indexOf("recordVisitOutcome.mutateAsync");
-    const debriefIndex = controller.indexOf("setDebrief({", outcomeIndex);
-    const openIndex = controller.indexOf("setJournalOpen(true);", debriefIndex);
+    const nextFunction = controller.indexOf("async function recordParkingLotClerkAction", outcomeIndex);
+    const intervening = controller.slice(outcomeIndex, nextFunction);
     expect(outcomeIndex).toBeGreaterThan(-1);
-    expect(debriefIndex).toBeGreaterThan(outcomeIndex);
-    expect(openIndex).toBeGreaterThan(debriefIndex);
+    expect(intervening).not.toContain("setJournalOpen(true)");
   });
 
-  it("asks one concrete Claire question and labels the answer as reported memory", () => {
-    expect(journal).toContain("CLAIRE · PARKING-LOT DEBRIEF");
-    expect(journal).toContain("What did they actually say?");
-    expect(journal).toContain("operator-reported memory");
-    expect(journal).toContain("they are not independently verified");
-    expect(journal).toContain("Save what they said");
+  it("exposes one typed read and one field write using signed-session ownership", () => {
+    expect(router).toContain("parkingLotClerkObservation:");
+    expect(router).toContain("fieldParkingLotClerk:");
+    expect(router).toContain("getParkingLotClerkObservation");
+    expect(router).toContain("actorId: ctx.user.openId");
+    expect(router).not.toContain("actorId: input.actorId");
   });
 
-  it("keeps the world event truth class attested rather than verified", () => {
-    expect(service).toContain('eventType: "field_journal_saved"');
-    expect(service).toContain('provenanceClass: "operator_reported"');
-    expect(service).toContain('verificationClass: "ATTESTED"');
-    expect(service).toContain("debriefMissionId: input.debriefMissionId ?? null");
+  it("keeps testimony operator-reported and does not manufacture business outcomes", () => {
+    expect(service).toContain('provenance: PARKING_LOT_CLERK_PROVENANCE');
+    expect(service).not.toContain('eventName: "account_won"');
+    expect(actionSurface).toContain("operator-reported");
+    expect(actionSurface).toContain("does not create a sale, booking, approval");
   });
 });
