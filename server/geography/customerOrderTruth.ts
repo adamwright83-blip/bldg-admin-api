@@ -30,6 +30,11 @@ export type NativeOrderLike = {
   buildingSlug: string | null;
   bldgUserId: number | null;
   paid?: boolean | number | null;
+  /**
+   * Native payment authority. A paid flag without processor evidence is not
+   * enough to assert a paid customer/order outcome.
+   */
+  stripePaymentIntentId?: string | null;
   total?: string | number | null;
 };
 
@@ -184,7 +189,11 @@ export function nativeOrderToTruth(
     cleancloudCustomerId: null,
     buildingResolutionStatus: row.buildingSlug?.trim() ? "resolved" : null,
     allowNameComposite: true,
-    paid: isPaidFlag(row.paid),
+    // Keep customer/order truth aligned with the canonical revenue authority:
+    // a native "paid" checkbox alone is not economic proof. Historical/manual
+    // paid rows without a Stripe PaymentIntent remain customer/order records,
+    // but they cannot become paying-customer progression or paid-book truth.
+    paid: isPaidFlag(row.paid) && Boolean(row.stripePaymentIntentId?.trim()),
     totalCents: dollarsToCents(row.total),
     cancelled,
     recognizedAt: createdAt,
@@ -369,6 +378,7 @@ export const NATIVE_ORDER_TRUTH_COLUMNS = {
   buildingSlug: orders.buildingSlug,
   bldgUserId: orders.bldgUserId,
   paid: orders.paid,
+  stripePaymentIntentId: orders.stripePaymentIntentId,
   total: orders.total,
 } as const;
 
