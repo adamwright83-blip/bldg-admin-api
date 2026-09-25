@@ -34,6 +34,7 @@ type FixtureWrite = {
     | "FIELD_DEPART"
     | "FIELD_ARRIVE"
     | "FIELD_OUTCOME"
+    | "PARKING_LOT_CLERK"
     | "FOLLOW_UP_COMPLETE"
     | "FOLLOW_UP_RESCHEDULE"
     | "RECOVER";
@@ -193,7 +194,9 @@ function worldNode(
 
 function visitContext(
   status: GoldlineVisitContext["mission"]["status"],
-  version: number
+  version: number,
+  visitOutcome: GoldlineVisitContext["visitOutcome"] = null,
+  parkingLotClerkObservation: GoldlineVisitContext["parkingLotClerkObservation"] = null
 ): GoldlineVisitContext {
   const hasField = status !== "phone_ready";
   return {
@@ -224,7 +227,9 @@ function visitContext(
         ]
       : [],
     visitOutcome:
-      status === "won" ? { outcome: "won", followUpAt: null } : null,
+      visitOutcome ??
+      (status === "won" ? { outcome: "won", followUpAt: null } : null),
+    parkingLotClerkObservation,
     proposal: hasField
       ? {
           id: "fixture-proposal",
@@ -352,7 +357,14 @@ export default function GoldlineBusinessLoopHarness(props: {
         });
         const missionStatus =
           missionStatusForFieldVisitOutcome(input.outcome) ?? visit.current.mission.status;
-        visit.current = visitContext(missionStatus, 6);
+        visit.current = visitContext(
+          missionStatus,
+          6,
+          {
+            outcome: input.outcome,
+            followUpAt: input.followUpAt?.toISOString() ?? null,
+          }
+        );
         stageTruth({
           missionStatus,
           visualState:
@@ -368,6 +380,24 @@ export default function GoldlineBusinessLoopHarness(props: {
           unlockedPath: null,
           isHistorical: input.outcome !== "follow_up",
         });
+        return visit.current;
+      },
+      recordParkingLotClerkObservation: async input => {
+        recordWrite({
+          kind: "PARKING_LOT_CLERK",
+          missionId: input.missionId,
+          requestId: input.requestId,
+        });
+        visit.current = {
+          ...visit.current,
+          parkingLotClerkObservation: {
+            missionId: input.missionId,
+            text: input.text,
+            provenance: "operator_reported",
+            reportedBy: "goldline-e2e",
+            reportedAt: "2026-08-12T08:35:00.000Z",
+          },
+        };
         return visit.current;
       },
       loadFollowUp: async () =>
