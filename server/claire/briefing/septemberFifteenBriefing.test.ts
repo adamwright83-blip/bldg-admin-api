@@ -14,6 +14,7 @@ import type { BriefingItem, ParsedBriefing } from "./briefingTypes";
 import { parseBriefingDeterministically } from "./deterministicBriefing";
 import { validateModelBriefing } from "./llmBriefing";
 import { briefingAdditions, speakBriefingSummary } from "./speakBriefing";
+import { reviseBriefing } from "./reviseBriefing";
 
 /**
  * PRODUCTION REGRESSION — Tuesday September 15, 2026, 9:38 AM.
@@ -373,6 +374,90 @@ async function speakThenFlush(state: ClaireTurnState, fragments: string[], deps:
   state.fragmentHolds = 0;
   return turn(state, pending, deps, "voice", false);
 }
+
+
+
+describe("September 25 production regression — held day schedule", () => {
+  it("delivery language never removes matching held work", () => {
+    const held = parseBriefingDeterministically(
+      "I have to process Rebecca and Ashley.",
+      clock
+    );
+    expect(held.items.map(item => item.title)).toContain("Process Rebecca and Ashley");
+
+    const revised = reviseBriefing(
+      held,
+      "Then I have to drive to Opus LA at night to drop off Ashley's order.",
+      clock
+    );
+
+    expect(revised.changes).toEqual([]);
+    expect(revised.parsed.items.map(item => item.title)).toContain("Process Rebecca and Ashley");
+  });
+
+  it("additional dictated work extends the held briefing until one final yes saves the whole bundle", async () => {
+    const deps = turnDeps();
+    const initial = parseBriefingDeterministically(
+      "At 9:30 AM I have to pick up from the dry cleaner, and at 10 AM I have to pick up Rebecca.",
+      clock
+    );
+    expect(initial.items).toHaveLength(2);
+
+    const state: ClaireTurnState = {
+      pendingBriefing: { parsed: initial, createdAt: NOW.getTime() },
+    };
+
+    await turn(
+      state,
+      "At 10:30 AM, I have to meet Ashley at OPUS LA while I drop off Jim's towels.",
+      deps
+    );
+    await turn(
+      state,
+      "At 11:15 AM I have to drop off two dry cleaning orders at Century Park East, and at noon I have to drop off Todd in Beverly Hills.",
+      deps
+    );
+    await turn(
+      state,
+      "At 12:45 PM I have to drop off Malcolm in Koreatown, and then I have to drive to Lugos, and then I have to process Rebecca and Ashley.",
+      deps
+    );
+
+    const beforeNightRun = state.pendingBriefing?.parsed.items.map(item => item.title) ?? [];
+    expect(beforeNightRun).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/dry cleaner/i),
+        expect.stringMatching(/Rebecca/i),
+        expect.stringMatching(/Ashley.*OPUS|OPUS.*Ashley/i),
+        expect.stringMatching(/Century Park East/i),
+        expect.stringMatching(/Todd/i),
+        expect.stringMatching(/Malcolm/i),
+        expect.stringMatching(/Lugos/i),
+        expect.stringMatching(/Process Rebecca and Ashley/i),
+      ])
+    );
+
+    await turn(
+      state,
+      "Then I have to drive to Opus LA at night to drop off Ashley's order.",
+      deps
+    );
+
+    const heldItems = state.pendingBriefing?.parsed.items ?? [];
+    const heldTitles = heldItems.map(item => item.title);
+    expect(heldTitles).toContain("Process Rebecca and Ashley");
+    expect(heldItems.some(item => /drop off Ashley's order/i.test(item.quote))).toBe(true);
+    expect(heldTitles.length).toBeGreaterThanOrEqual(9);
+
+    const saved = await turn(state, "Yes.", deps);
+    expect(saved.kind).toBe("briefing_saved");
+    expect(deps.commit).toHaveBeenCalledTimes(1);
+    const committed = (deps.commit as ReturnType<typeof vi.fn>).mock.calls[0]![0] as ParsedBriefing;
+    expect(committed.items.map(item => item.title)).toEqual(expect.arrayContaining(heldTitles));
+    expect(committed.items.length).toBe(heldTitles.length);
+    expect(state.pendingBriefing).toBeNull();
+  });
+});
 
 describe("the September 15 call, replayed through Claire", () => {
   it("one spoken briefing → one summary → one yes → everything saved", async () => {
