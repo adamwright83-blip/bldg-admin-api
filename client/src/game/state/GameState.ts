@@ -50,6 +50,14 @@ export type PlayableMission = {
     reportedBy: string;
     reportedAt: string;
   } | null;
+  unresolvedEcho?: {
+    kind: "unresolved_field_trace";
+    missionId: number;
+    source: "parking_lot_clerk_observation";
+    provenance: "operator_reported";
+    sourceReference: string;
+    reportedAt: string;
+  } | null;
 };
 
 export type ArcadeResolution = "hit" | "miss" | "breached" | null;

@@ -3,6 +3,7 @@ import {
   coolingLabel,
   gameWorldControlPercent,
   visualStateForBusinessStatus,
+  unresolvedEchoForVisit,
 } from "../../../../shared/driverGameWorld";
 import { equipAnchorAbilities } from "./EncounterProjection";
 import {
@@ -77,6 +78,47 @@ describe("driver game truth projection", () => {
       provenance: "foundation",
       sourceReference: "armory:foundation:anchor:no-risk-trial",
     });
+  });
+});
+
+describe("world echoes derive from unresolved real state", () => {
+  it("keeps an operator-reported field trace unresolved until authoritative state resolves", () => {
+    expect(
+      unresolvedEchoForVisit({
+        missionId: 612,
+        missionStatus: "visit_completed",
+        clerkReportedAt: "2026-09-25T09:00:00.000Z",
+      })
+    ).toMatchObject({
+      missionId: 612,
+      provenance: "operator_reported",
+      source: "parking_lot_clerk_observation",
+    });
+
+    expect(
+      unresolvedEchoForVisit({
+        missionId: 612,
+        missionStatus: "won",
+        clerkReportedAt: "2026-09-25T09:00:00.000Z",
+      })
+    ).toBeNull();
+    expect(
+      unresolvedEchoForVisit({
+        missionId: 612,
+        missionStatus: "lost",
+        clerkReportedAt: "2026-09-25T09:00:00.000Z",
+      })
+    ).toBeNull();
+  });
+
+  it("does not invent an Echo without its durable real source", () => {
+    expect(
+      unresolvedEchoForVisit({
+        missionId: 612,
+        missionStatus: "visit_completed",
+        clerkReportedAt: null,
+      })
+    ).toBeNull();
   });
 });
 
@@ -168,6 +210,11 @@ describe("mission source dedup", () => {
         reportedBy: "operator-a",
         reportedAt: "2026-09-25T09:00:00.000Z",
       },
+      unresolvedEcho: unresolvedEchoForVisit({
+        missionId: 612,
+        missionStatus: "follow_up",
+        clerkReportedAt: "2026-09-25T09:00:00.000Z",
+      }),
     } as never;
 
     const [projected] = projectPlayableMissions({
@@ -179,6 +226,11 @@ describe("mission source dedup", () => {
     expect(projected.key).toBe("mission:612");
     expect(projected.realVisitReaction).toMatchObject({
       missionId: 612,
+      provenance: "operator_reported",
+    });
+    expect(projected.unresolvedEcho).toMatchObject({
+      missionId: 612,
+      source: "parking_lot_clerk_observation",
       provenance: "operator_reported",
     });
   });

@@ -624,6 +624,14 @@ function MissionFork(props: {
                     FIELD TRACE · OPERATOR-REPORTED
                   </small>
                 ) : null}
+                {mission.unresolvedEcho ? (
+                  <i
+                    className="world-echo-filament"
+                    data-testid={`world-echo-${mission.missionId}`}
+                    title="Unresolved real-world thread; clears only when authoritative business state changes."
+                    aria-label="Unresolved real-world thread"
+                  />
+                ) : null}
                 <em>{moneyBandLabel(mission)}</em>
               </span>
               <span>

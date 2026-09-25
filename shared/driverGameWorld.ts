@@ -43,7 +43,32 @@ export type DriverGameWorldNode = {
     reportedBy: string;
     reportedAt: string;
   };
+  unresolvedEcho: null | {
+    kind: "unresolved_field_trace";
+    missionId: number;
+    source: "parking_lot_clerk_observation";
+    provenance: "operator_reported";
+    sourceReference: string;
+    reportedAt: string;
+  };
 };
+
+export function unresolvedEchoForVisit(input: {
+  missionId: number;
+  missionStatus: CommercialMissionStatus;
+  clerkReportedAt: string | null;
+}): DriverGameWorldNode["unresolvedEcho"] {
+  if (!input.clerkReportedAt) return null;
+  if (input.missionStatus === "won" || input.missionStatus === "lost") return null;
+  return {
+    kind: "unresolved_field_trace",
+    missionId: input.missionId,
+    source: "parking_lot_clerk_observation",
+    provenance: "operator_reported",
+    sourceReference: `commercial_mission:${input.missionId}:parking_lot_clerk_observation`,
+    reportedAt: input.clerkReportedAt,
+  };
+}
 
 export function gameWorldControlPercent(nodes: DriverGameWorldNode[]): number {
   // Game progression only: captured nodes / non-closed pursued nodes.

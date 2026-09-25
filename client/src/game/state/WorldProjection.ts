@@ -90,6 +90,7 @@ export function projectMissionTruth(input: {
       unlockedPath: node?.unlockedPath ?? null,
       lossReason: node?.lossReason ?? null,
       realVisitReaction: node?.realVisitReaction ?? null,
+      unresolvedEcho: node?.unresolvedEcho ?? null,
     } satisfies PlayableMission;
   });
   for (const move of moves) {

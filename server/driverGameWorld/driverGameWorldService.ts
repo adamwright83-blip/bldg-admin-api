@@ -10,6 +10,7 @@ import {
   driverGameWorldNodes,
 } from "../../drizzle/schema";
 import {
+  unresolvedEchoForVisit,
   visualStateForBusinessStatus,
   type DriverGameWorldNode,
 } from "../../shared/driverGameWorld";
@@ -190,6 +191,11 @@ export async function listDriverGameWorld(input: {
               reportedAt: row.clerkCreatedAt.toISOString(),
             }
           : null,
+      unresolvedEcho: unresolvedEchoForVisit({
+        missionId: row.missionId,
+        missionStatus: row.missionStatus as CommercialMissionStatus,
+        clerkReportedAt: row.clerkCreatedAt?.toISOString() ?? null,
+      }),
     });
   }
   return Array.from(byMission.values());
