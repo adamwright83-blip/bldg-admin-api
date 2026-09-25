@@ -15,6 +15,7 @@ import {
   liveExecutiveDeps,
   type ShadowRetrievalContext,
 } from "../shadow/observeShadowTurn";
+import type { LiveRetrievalDeps } from "../executive/decide";
 import {
   runClaireBrainTurn,
   type ClaireBrainTurnResult,
@@ -30,6 +31,8 @@ export type ClaireBrainV2LiveInput = {
   surface: "voice" | "text";
   conversationKey: string;
   live: ShadowRetrievalContext;
+  /** Optional hermetic readers for tests; production uses the existing live readers. */
+  liveDeps?: LiveRetrievalDeps;
   /**
    * Existing proven production action path. V2 grants permission; this adapter
    * performs the requested state/business mutation and returns its receipt-backed
@@ -117,7 +120,7 @@ export async function runClaireBrainV2LiveTurn(
       surface: input.surface,
       conversationKey: input.conversationKey,
       executive: {
-        ...liveExecutiveDeps(input.live),
+        ...liveExecutiveDeps(input.live, input.liveDeps),
         productionAuthority: true,
       },
       productionAuthority: true,
