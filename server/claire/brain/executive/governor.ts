@@ -178,8 +178,12 @@ export function assertGovernedDecision(decision: ExecutiveDecision): void {
     if (!isExecutiveActionGrant(grant)) {
       throw new ExecutiveGovernorError("unbranded object listed as an action grant");
     }
-    if (!grant.constraints.shadowOnly) {
-      throw new ExecutiveGovernorError("live action grants are prohibited while Brain V2 has no production authority");
+    if (decision.productionAuthority) {
+      if (grant.constraints.shadowOnly || !grant.constraints.mutationAllowed) {
+        throw new ExecutiveGovernorError("live Brain V2 decisions require live mutation grants");
+      }
+    } else if (!grant.constraints.shadowOnly || grant.constraints.mutationAllowed) {
+      throw new ExecutiveGovernorError("shadow Brain V2 decisions require shadow-only grants");
     }
   }
 }
