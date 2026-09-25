@@ -376,21 +376,21 @@ export function ColosseumAftermath({
         <CompanionUnlockReveal
           id="rook"
           className="cd-party"
-          kicker="COMPANION"
-          title="ROOK JOINED THE PARTY"
-          subtitle="ROOK VENN · TALKS TO EVERYONE · OWES HALF OF THEM"
-          actionLabel="Take the Wayward route"
+          kicker="UNLICENSED SIGNAL"
+          title="ROOK IS OUT THERE"
+          subtitle="THE VOICE IN THE CLOCKS · FOLLOW THE LEAD"
+          actionLabel="Hunt him at the Coastal Market"
           onAction={onContinue}
         >
           <div className="cd-party-ability">
-            <b>{ROOK.mechanic}</b>
-            <span>{ROOK.mechanicSummary}</span>
+            <b>ROOK ON THE LINE</b>
+            <span>Clockhead is down. The voice in the clocks points toward the Coastal Market.</span>
             <q>I&rsquo;d knock again.</q>
           </div>
           <p className="cd-party-caution">
             Since the Sunder his voice fails on a direct lie. That doesn&rsquo;t mean he tells you everything.
           </p>
-          <p className="cd-truth">The Wayward route is unlocked. This victory records no visit, sale, or revenue.</p>
+          <p className="cd-truth">The Coastal Market hunt is next. Rook is not yet your companion, and this victory records no visit, sale, or revenue.</p>
         </CompanionUnlockReveal>
       )}
     </>
