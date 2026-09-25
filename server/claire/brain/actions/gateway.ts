@@ -58,7 +58,7 @@ export async function executeGrantedAction<T = unknown>(
 
   if (!options.execute) {
     throw new ActionGatewayError(
-      "Action Gateway refuses live mutations without an injected production executor"
+      "live Brain V2 action grant requires an injected production executor"
     );
   }
 
