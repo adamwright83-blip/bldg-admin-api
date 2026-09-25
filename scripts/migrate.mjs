@@ -116,6 +116,103 @@ const applyIdempotentSqlFile = async (relativePath, label) => {
   }
 };
 
+const readSqlStatements = async relativePath => {
+  const sql = await readFile(new URL(relativePath, import.meta.url), "utf8");
+  return sql
+    .replace(/^\s*--.*$/gm, "")
+    .split(";")
+    .map(value => value.trim())
+    .filter(Boolean);
+};
+
+const applyHistoricalCreateTables = async (relativePath, label) => {
+  for (const original of await readSqlStatements(relativePath)) {
+    if (!/^CREATE\s+TABLE\s+/i.test(original)) continue;
+    const statement = original.replace(
+      /^CREATE\s+TABLE\s+/i,
+      "CREATE TABLE IF NOT EXISTS "
+    );
+    await runRequired(statement, label);
+  }
+};
+
+const requiredColumnExists = async (tableName, columnName) => {
+  const [rows] = await conn.execute(
+    `SELECT COUNT(*) AS count
+       FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND COLUMN_NAME = ?`,
+    [tableName, columnName]
+  );
+  return Number(rows[0]?.count ?? 0) > 0;
+};
+
+const ensureRequiredColumn = async (
+  tableName,
+  columnName,
+  alterSql,
+  label = `${tableName}.${columnName}`
+) => {
+  if (await requiredColumnExists(tableName, columnName)) {
+    console.log("→ already exists, skipping:", label);
+    return;
+  }
+  await runRequired(alterSql, label);
+  if (!(await requiredColumnExists(tableName, columnName))) {
+    throw new Error(`Required column ${tableName}.${columnName} was not created`);
+  }
+};
+
+const getIndexColumns = async (tableName, indexName) => {
+  const [rows] = await conn.execute(
+    `SELECT COLUMN_NAME
+       FROM information_schema.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND INDEX_NAME = ?
+      ORDER BY SEQ_IN_INDEX`,
+    [tableName, indexName]
+  );
+  return rows.map(row => row.COLUMN_NAME);
+};
+
+const dropIndexIfExists = async (tableName, indexName) => {
+  const current = await getIndexColumns(tableName, indexName);
+  if (!current.length) return;
+  await runRequired(
+    `ALTER TABLE \`${tableName}\` DROP INDEX \`${indexName}\``,
+    `${tableName}: drop ${indexName}`
+  );
+};
+
+const ensureRequiredIndex = async (
+  tableName,
+  indexName,
+  expectedColumns,
+  alterSql
+) => {
+  const current = await getIndexColumns(tableName, indexName);
+  if (
+    current.length === expectedColumns.length &&
+    current.every((column, index) => column === expectedColumns[index])
+  ) {
+    console.log("→ already exists, skipping:", `${tableName}.${indexName}`);
+    return;
+  }
+  if (current.length) await dropIndexIfExists(tableName, indexName);
+  await runRequired(alterSql, `${tableName}.${indexName}`);
+  const verified = await getIndexColumns(tableName, indexName);
+  if (
+    verified.length !== expectedColumns.length ||
+    !verified.every((column, index) => column === expectedColumns[index])
+  ) {
+    throw new Error(
+      `Required index ${tableName}.${indexName} has wrong columns: ${verified.join(", ")}`
+    );
+  }
+};
+
 // ── users table ──────────────────────────────────────────────────
 await run(
   `
@@ -833,6 +930,105 @@ await assertRequiredColumns("goldline_campaign_instances", [
   "classification",
 ]);
 
+// Required SaaS foundations. Historical numbered migrations are not executed
+// by production boot, so build their CREATE TABLE statements idempotently here.
+// No business rows are seeded and existing production tables are left in place.
+await applyHistoricalCreateTables(
+  "../drizzle/0024_cleancloud_external_ingestion.sql",
+  "CleanCloud import foundation"
+);
+await applyHistoricalCreateTables(
+  "../drizzle/0029_cleancloud_paid_reconciliation.sql",
+  "CleanCloud paid-order foundation"
+);
+await ensureRequiredColumn(
+  "cleancloud_import_batches",
+  "tenantId",
+  `ALTER TABLE cleancloud_import_batches
+     ADD COLUMN tenantId varchar(64) NOT NULL DEFAULT 'default' AFTER id`
+);
+await assertRequiredColumns("cleancloud_import_batches", [
+  "id",
+  "tenantId",
+  "source",
+  "sourceFileName",
+  "importStatus",
+]);
+await assertRequiredColumns("cleancloud_paid_orders", [
+  "id",
+  "tenantId",
+  "cleancloudOrderId",
+  "sourceReportType",
+]);
+await ensureRequiredIndex(
+  "cleancloud_paid_orders",
+  "uq_cleancloud_paid_order_report",
+  ["tenantId", "cleancloudOrderId", "sourceReportType"],
+  `ALTER TABLE cleancloud_paid_orders
+     ADD UNIQUE KEY uq_cleancloud_paid_order_report
+       (tenantId, cleancloudOrderId, sourceReportType)`
+);
+
+await applyHistoricalCreateTables(
+  "../drizzle/0042_dayforge_saas_onboarding_billing.sql",
+  "SaaS tenant/onboarding/billing foundation"
+);
+await applyHistoricalCreateTables(
+  "../drizzle/0043_dayforge_analytics_release.sql",
+  "SaaS analytics/release foundation"
+);
+await assertRequiredColumns("dayforge_saas_tenants", [
+  "id",
+  "slug",
+  "businessName",
+  "status",
+]);
+await assertRequiredColumns("dayforge_saas_memberships", [
+  "tenantId",
+  "userOpenId",
+  "role",
+  "active",
+]);
+await assertRequiredColumns("dayforge_saas_onboarding_sessions", [
+  "id",
+  "resumeTokenHash",
+  "ownerEmail",
+  "status",
+  "tenantId",
+]);
+await assertRequiredColumns("dayforge_saas_subscriptions", [
+  "tenantId",
+  "planKey",
+  "stripeSubscriptionId",
+  "status",
+  "lastStripeEventId",
+]);
+await assertRequiredColumns("dayforge_saas_entitlements", [
+  "tenantId",
+  "entitlementKey",
+  "enabled",
+]);
+await assertRequiredColumns("dayforge_saas_import_connections", [
+  "id",
+  "tenantId",
+  "providerKey",
+  "status",
+]);
+await assertRequiredColumns("dayforge_saas_external_customers", [
+  "id",
+  "tenantId",
+  "connectionId",
+  "externalId",
+  "factsJson",
+]);
+await assertRequiredColumns("dayforge_saas_external_orders", [
+  "id",
+  "tenantId",
+  "connectionId",
+  "externalId",
+  "factsJson",
+]);
+
 // Required, additive Gumballpals schema. Fail startup rather than accept imports
 // against a partially provisioned database.
 const gumballSql = await readFile(
@@ -886,6 +1082,30 @@ await assertRequiredColumns("goldline_tower_impacts", [
   "id",
   "tenantId",
   "payload",
+]);
+
+await applyHistoricalCreateTables(
+  "../drizzle/0058_impact_signals.sql",
+  "Goldline impact signals"
+);
+await assertRequiredColumns("impact_signals", [
+  "id",
+  "tenantId",
+  "businessDate",
+  "signalKey",
+  "label",
+  "value",
+  "impactClass",
+  "provenance",
+  "capturedAt",
+]);
+await assertRequiredColumns("tracked_signal_definitions", [
+  "id",
+  "tenantId",
+  "signalKey",
+  "label",
+  "valueType",
+  "impactClass",
 ]);
 const cargoSql = await readFile(
   new URL("../server/goldlineCargo/schema.sql", import.meta.url),
@@ -954,36 +1174,86 @@ for (const statement of driverSalesSql
   .map(value => value.trim())
   .filter(Boolean))
   await runRequired(statement, "Driver sales motivation");
-// Best-effort upgrade for a driver_sales_journals table already at the
-// pre-0061 (0047-only) shape: CREATE TABLE IF NOT EXISTS above is a no-op
-// on an existing table, so the newer columns need adding explicitly.
-await run(
-  `ALTER TABLE driver_sales_journals DROP INDEX uq_driver_sales_journal_tenant_driver_date`,
-  "driver_sales_journals: drop legacy daily-uniqueness index"
+// Upgrade an existing pre-final driver_sales_journals table one field at a
+// time. The former compound best-effort ALTER could hit one duplicate column,
+// abort the entire statement, log the error, and still allow "Migration
+// complete." That is exactly how debriefMissionId stayed missing in production.
+for (const [columnName, definition] of [
+  ["clientRequestId", "varchar(36) NULL AFTER journalDate"],
+  ["debriefMissionId", "int NULL AFTER clientRequestId"],
+  ["rawTranscript", "text NULL AFTER audioMimeType"],
+  ["captureLatitude", "decimal(10,7) NULL AFTER journalPoints"],
+  ["captureLongitude", "decimal(10,7) NULL AFTER captureLatitude"],
+  ["captureAccuracyMeters", "decimal(10,2) NULL AFTER captureLongitude"],
+  ["locationCapturedAt", "timestamp NULL AFTER captureAccuracyMeters"],
+  [
+    "locationContemporaneous",
+    "boolean NOT NULL DEFAULT false AFTER locationCapturedAt",
+  ],
+  ["processingError", "varchar(512) NULL AFTER locationContemporaneous"],
+  ["processingAttempts", "int NOT NULL DEFAULT 0 AFTER processingError"],
+  ["processedAt", "timestamp NULL AFTER processingAttempts"],
+]) {
+  await ensureRequiredColumn(
+    "driver_sales_journals",
+    columnName,
+    `ALTER TABLE driver_sales_journals ADD COLUMN ${columnName} ${definition}`
+  );
+}
+
+await dropIndexIfExists(
+  "driver_sales_journals",
+  "uq_driver_sales_journal_tenant_driver_date"
 );
-await run(
+await ensureRequiredIndex(
+  "driver_sales_journals",
+  "uq_driver_sales_journal_tenant_request",
+  ["tenantId", "clientRequestId"],
   `ALTER TABLE driver_sales_journals
-    ADD COLUMN clientRequestId varchar(36) NULL AFTER journalDate,
-    ADD COLUMN rawTranscript text NULL AFTER audioMimeType,
-    ADD COLUMN captureLatitude decimal(10,7) NULL AFTER journalPoints,
-    ADD COLUMN captureLongitude decimal(10,7) NULL AFTER captureLatitude,
-    ADD COLUMN captureAccuracyMeters decimal(10,2) NULL AFTER captureLongitude,
-    ADD COLUMN locationCapturedAt timestamp NULL AFTER captureAccuracyMeters,
-    ADD COLUMN locationContemporaneous boolean NOT NULL DEFAULT false AFTER locationCapturedAt,
-    ADD COLUMN processingError varchar(512) NULL AFTER locationContemporaneous,
-    ADD COLUMN processingAttempts int NOT NULL DEFAULT 0 AFTER processingError,
-    ADD COLUMN processedAt timestamp NULL AFTER processingAttempts,
-    ADD UNIQUE KEY uq_driver_sales_journal_tenant_request (tenantId,clientRequestId),
-    ADD KEY idx_driver_sales_journal_processing (tenantId,processingStatus,createdAt),
-    ADD KEY idx_driver_sales_journal_driver_date (tenantId,driverId,journalDate,createdAt)`,
-  "driver_sales_journals: 0061 columns"
+     ADD UNIQUE KEY uq_driver_sales_journal_tenant_request
+       (tenantId, clientRequestId)`
+);
+await ensureRequiredIndex(
+  "driver_sales_journals",
+  "idx_driver_sales_journal_tenant_mission",
+  ["tenantId", "debriefMissionId", "createdAt"],
+  `ALTER TABLE driver_sales_journals
+     ADD KEY idx_driver_sales_journal_tenant_mission
+       (tenantId, debriefMissionId, createdAt)`
+);
+await ensureRequiredIndex(
+  "driver_sales_journals",
+  "idx_driver_sales_journal_processing",
+  ["tenantId", "processingStatus", "createdAt"],
+  `ALTER TABLE driver_sales_journals
+     ADD KEY idx_driver_sales_journal_processing
+       (tenantId, processingStatus, createdAt)`
+);
+await ensureRequiredIndex(
+  "driver_sales_journals",
+  "idx_driver_sales_journal_driver_date",
+  ["tenantId", "driverId", "journalDate", "createdAt"],
+  `ALTER TABLE driver_sales_journals
+     ADD KEY idx_driver_sales_journal_driver_date
+       (tenantId, driverId, journalDate, createdAt)`
+);
+await ensureRequiredIndex(
+  "driver_sales_journals",
+  "idx_driver_sales_journal_tenant_created",
+  ["tenantId", "createdAt"],
+  `ALTER TABLE driver_sales_journals
+     ADD KEY idx_driver_sales_journal_tenant_created
+       (tenantId, createdAt)`
 );
 await assertRequiredColumns("driver_sales_journals", [
   "id",
   "tenantId",
   "driverId",
   "journalDate",
+  "clientRequestId",
+  "debriefMissionId",
   "processingStatus",
+  "createdAt",
 ]);
 
 await runRequired(
