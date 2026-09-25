@@ -88,7 +88,7 @@ export async function runClaireBrainTurn(input: ClaireBrainTurnInput): Promise<C
     if (!input.productionAuthority && result.executed) {
       throw new Error("Brain V2 shadow runner must not execute mutations");
     }
-    mutations.push(result);
+    if (result.executed) mutations.push(result);
   }
 
   return {
