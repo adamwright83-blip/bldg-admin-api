@@ -83,6 +83,20 @@ describe("DayForge SaaS production contract", () => {
     expect(source("./saasStore.ts")).toContain("claimedSubscriptions} + 1");
   });
 
+  it("keeps required SaaS schema on the production boot path", () => {
+    const migration = source("../../scripts/migrate.mjs");
+    expect(migration).toContain("0042_dayforge_saas_onboarding_billing.sql");
+    expect(migration).toContain("0058_impact_signals.sql");
+    expect(migration).toContain('"debriefMissionId"');
+    expect(migration).toContain("ensureRequiredColumn");
+    expect(migration).toContain("ensureRequiredIndex");
+
+    const workflow = source("../../.github/workflows/saas-schema-release.yml");
+    expect(workflow).toContain("node scripts/schema-drift-fixture.mjs");
+    expect(workflow).toContain("pnpm saas:schema:release-exam");
+    expect(workflow).toContain("pnpm start");
+  });
+
   it("enforces the tenant role matrix", () => {
     expect(roleAllows("owner", ["owner", "admin"])).toBe(true);
     expect(roleAllows("operator", ["owner", "admin"])).toBe(false);
