@@ -1,11 +1,11 @@
 /**
  * Production authority for capability.rook.contact.
  *
- * Wayward voyage progress lives in same-device localStorage
- * (client/src/pages/goldline/stages/waywardProgress.ts). The Colosseum
- * binding re-reads open-channel outcomes; nothing equivalent records the
- * authored Wayward CONTACT beat. A client consequence string is not that
- * proof. Until a server-authoritative beat exists, production fails closed.
+ * Ordinary Wayward presentation progress still lives in same-device localStorage,
+ * but CONTACT authority does not. The exact authored inspector/parley gate is
+ * recorded in the existing server progression row using a server-started run.
+ * A client consequence string, localStorage flag, or Rook ownership alone is
+ * not proof.
  */
 import {
   ROOK_CONTACT_EXECUTION_FIXTURE_SOURCE,
@@ -42,7 +42,7 @@ export async function findServerAuthoritativeWaywardContactProof(input: {
       };
 }
 
-/** No registered source is production authority today. */
+/** Only the durable server Wayward gate grant source is production authority. */
 export function rookContactGrantIsProductionAuthority(
   grant: { grantSource: string } | null
 ): boolean {
