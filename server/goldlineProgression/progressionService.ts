@@ -14,10 +14,7 @@ import {
   findServerAuthoritativeWaywardContactProof,
   rookContactGrantIsProductionAuthority,
 } from "./rookContactAuthority";
-import {
-  COASTAL_MARKET_ROOK_CATCH_CONSEQUENCE,
-  COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE,
-} from "../../shared/colosseumAuthoredFinale";
+import { COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE } from "../../shared/colosseumAuthoredFinale";
 import { ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE } from "../../shared/rookContact";
 import {
   assertLevelColosseumRecordPermitted,
