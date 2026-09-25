@@ -37,7 +37,9 @@ export function reviseBriefing(
   const changes: string[] = [];
   const mentioned = (text: string) => items.filter(item => distinctive(`${item.title} ${item.people.join(" ")} ${item.place ?? ""}`).some(token => new RegExp(`\\b${token}\\b`).test(text)));
 
-  const removal = /\b(?:drop|skip|remove|take off|leave off|forget(?: about)?|scratch|without|except|don'?t add|no need for|not)\s+(?:the\s+)?([^,.;]+)/i.exec(utterance);
+  // "drop X" may mean remove X from the held list, but "drop off X" is
+  // ordinary delivery language and must never delete a matching work item.
+  const removal = /\b(?:drop(?!\s+off\b)|skip|remove|take off|leave off|forget(?: about)?|scratch|without|except|don'?t add|no need for|not)\s+(?:the\s+)?([^,.;]+)/i.exec(utterance);
   if (removal) {
     const targets = mentioned(removal[1]!.toLowerCase());
     if (targets.length === 1) {
