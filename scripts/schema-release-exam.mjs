@@ -36,6 +36,90 @@ for (const tableName of requiredTables) {
   }
 }
 
+const assertIndex = async (tableName, indexName, expectedColumns) => {
+  const [rows] = await conn.execute(
+    `SELECT COLUMN_NAME
+       FROM information_schema.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND INDEX_NAME = ?
+      ORDER BY SEQ_IN_INDEX`,
+    [tableName, indexName]
+  );
+  const actual = rows.map(row => row.COLUMN_NAME);
+  if (actual.join(",") !== expectedColumns.join(",")) {
+    throw new Error(
+      `Required index ${tableName}.${indexName} is wrong: ${actual.join(",") || "<missing>"}; expected: ${expectedColumns.join(",")}`
+    );
+  }
+};
+
+const [auditEnumRows] = await conn.execute(
+  `SELECT COLUMN_TYPE
+     FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'dayforge_audit_events'
+      AND COLUMN_NAME = 'actorType'`
+);
+const auditEnum = String(auditEnumRows[0]?.COLUMN_TYPE ?? "");
+for (const value of ["public", "owner", "admin", "operator", "field", "game", "stripe", "system"]) {
+  if (!auditEnum.includes(`'${value}'`)) {
+    throw new Error(
+      `dayforge_audit_events.actorType is missing enum value ${value}: ${auditEnum || "<missing>"}`
+    );
+  }
+}
+
+await assertIndex("cleancloud_legacy_orders", "idx_cleancloud_legacy_orders_batch", [
+  "importBatchId",
+]);
+await assertIndex(
+  "cleancloud_legacy_orders",
+  "idx_cleancloud_legacy_orders_customer_order",
+  ["customerName", "orderDateUtc", "orderTotalCents"]
+);
+await assertIndex("cleancloud_legacy_orders", "idx_cleancloud_legacy_orders_building", [
+  "buildingName",
+  "tower",
+]);
+await assertIndex("cleancloud_paid_orders", "idx_cleancloud_paid_orders_batch", [
+  "importBatchId",
+]);
+await assertIndex("cleancloud_paid_orders", "idx_cleancloud_paid_orders_payment_date", [
+  "paymentDateUtc",
+]);
+await assertIndex("cleancloud_paid_orders", "idx_cleancloud_paid_orders_paid_date", [
+  "paidDateUtc",
+]);
+await assertIndex("cleancloud_paid_orders", "idx_cleancloud_paid_orders_customer", [
+  "cleancloudCustomerId",
+  "customerName",
+]);
+await assertIndex("cleancloud_paid_orders", "idx_cleancloud_paid_orders_building", [
+  "buildingSlug",
+  "tower",
+]);
+await assertIndex(
+  "payment_reconciliation_matches",
+  "idx_payment_reconciliation_source_date",
+  ["processor", "processorSourceType", "processorSourceId", "localBusinessDate"]
+);
+await assertIndex(
+  "payment_reconciliation_matches",
+  "idx_payment_reconciliation_status",
+  ["matchStatus"]
+);
+await assertIndex(
+  "payment_reconciliation_matches",
+  "idx_payment_reconciliation_customer",
+  ["cleancloudCustomerId", "customerName"]
+);
+await assertIndex(
+  "payment_reconciliation_matches",
+  "idx_payment_reconciliation_building",
+  ["buildingSlug", "tower"]
+);
+
 const [debriefColumns] = await conn.execute(
   `SELECT COLUMN_NAME
      FROM information_schema.COLUMNS
