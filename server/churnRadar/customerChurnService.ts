@@ -24,6 +24,10 @@ import {
   type CustomerHistoryObservation,
 } from "@shared/customerChurn";
 import { getDb } from "../db";
+import {
+  loadBusinessSourceCoverage,
+  type BusinessSourceCoverageSnapshot,
+} from "../analytics/sourceCoverage";
 import { isMysqlDuplicateKeyError as isDuplicateKeyError } from "../mysqlErrors";
 import { writeLegacyDayforgeEventWith } from "../legacyDayforgeEvents/legacyDayforgeEventStore";
 import { appendGoldlineWorldEvent } from "../goldlineWorld/worldEventStore";
@@ -157,6 +161,62 @@ function evidenceForScore(
   ];
 }
 
+export type ChurnScanBookCoverage = {
+  scanSource: "native_orders_only";
+  wholeBookCurrent: boolean;
+  claim: "current_native_book" | "known_native_candidates";
+  bookStatus: BusinessSourceCoverageSnapshot["book"]["status"] | null;
+  cleanCloudHeld: boolean | null;
+  cleanCloudStatus:
+    | BusinessSourceCoverageSnapshot["sources"][number]["status"]
+    | "not_held"
+    | null;
+  blockingSources: BusinessSourceCoverageSnapshot["blockingSources"];
+  reason: string;
+};
+
+export function churnScanBookCoverage(
+  snapshot: BusinessSourceCoverageSnapshot | null
+): ChurnScanBookCoverage {
+  if (!snapshot) {
+    return {
+      scanSource: "native_orders_only",
+      wholeBookCurrent: false,
+      claim: "known_native_candidates",
+      bookStatus: null,
+      cleanCloudHeld: null,
+      cleanCloudStatus: null,
+      blockingSources: [],
+      reason:
+        "Customer-book coverage could not be read. This native-order scan is not the full customer book.",
+    };
+  }
+  const cleancloud = snapshot.sources.find(source => source.sourceId === "cleancloud");
+  const cleanCloudHeld = Boolean(cleancloud?.includedInCombinedBook);
+  const wholeBookCurrent =
+    snapshot.book.exhaustiveCurrent &&
+    snapshot.book.current &&
+    !cleanCloudHeld;
+  return {
+    scanSource: "native_orders_only",
+    wholeBookCurrent,
+    claim: wholeBookCurrent ? "current_native_book" : "known_native_candidates",
+    bookStatus: snapshot.book.status,
+    cleanCloudHeld,
+    cleanCloudStatus: cleancloud
+      ? cleancloud.includedInCombinedBook
+        ? cleancloud.status
+        : "not_held"
+      : null,
+    blockingSources: snapshot.blockingSources.map(source => ({ ...source })),
+    reason: wholeBookCurrent
+      ? "Laundry Butler is the only held customer source, and the canonical book is current."
+      : cleanCloudHeld
+        ? `This scan scores native Laundry Butler history only. CleanCloud is held (${cleancloud?.status ?? "unknown"}), so this queue is not the full customer book.`
+        : "The canonical customer book is not proven current. Native-order signals are known candidates only.",
+  };
+}
+
 function snapshotResponse(row: typeof customerChurnSnapshots.$inferSelect) {
   return {
     id: row.id,
@@ -255,7 +315,7 @@ export async function getChurnScanResult(input: {
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const [scans, snapshots] = await Promise.all([
+  const [scans, snapshots, coverageSnapshot] = await Promise.all([
     db
       .select()
       .from(customerChurnScans)
@@ -276,6 +336,13 @@ export async function getChurnScanResult(input: {
         )
       )
       .orderBy(desc(customerChurnSnapshots.score)),
+    loadBusinessSourceCoverage({ tenantId: input.tenantId }).catch(error => {
+      console.warn(
+        "[ChurnRadar] canonical customer-book coverage unavailable",
+        error instanceof Error ? error.message : error
+      );
+      return null;
+    }),
   ]);
   const scan = scans[0];
   if (!scan) return null;
@@ -287,6 +354,7 @@ export async function getChurnScanResult(input: {
     atRiskCount: scan.atRiskCount,
     errorMessage: scan.errorMessage,
     computedAt: scan.computedAt?.toISOString() ?? null,
+    coverage: churnScanBookCoverage(coverageSnapshot),
     customers: snapshots.map(snapshotResponse),
   };
 }
@@ -334,8 +402,11 @@ export async function runCustomerChurnScan(input: {
   }
 
   try {
-    // Native `orders` only. CleanCloud paid history is intentionally out of
-    // scope here (service/weight/recovery semantics). Next sidebench item.
+    // Native `orders` only. This scorer needs native service/weight/recovery
+    // semantics, so it is deliberately NOT the canonical whole-customer-book
+    // queue. getChurnScanResult attaches B1 coverage and the client must label
+    // this as known native candidates whenever CleanCloud is held or coverage
+    // is not current.
     const sourceRows = await db
       .select()
       .from(orders)
