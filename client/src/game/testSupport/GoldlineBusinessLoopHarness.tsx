@@ -188,6 +188,8 @@ function worldNode(
       truth.visualState === "recovery_active"
         ? "gold_side_entrance"
         : "fortress_gate",
+    realVisitReaction: null,
+    unresolvedEcho: null,
     resolvedAt: truth.isHistorical ? "2026-08-12T00:00:00.000Z" : null,
   };
 }
