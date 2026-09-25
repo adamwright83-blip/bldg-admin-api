@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type MutableRefObject, type R
 import { getAudioManager } from "@/game/audio/AudioManager";
 import { arcadeFeedback, combatRevealFeedback } from "@/game/audio/haptics";
 import { CompanionUnlockReveal } from "@/components/driver/CompanionUnlockReveal";
-import { PARTY_COMPANIONS } from "./stages/goldlineParty";
 import {
   AFTERMATH_TIMING,
   ROOK_ON_THE_LINE,
@@ -43,7 +42,6 @@ type View = {
   retyped: number;
 };
 
-const ROOK = PARTY_COMPANIONS.rook;
 
 export function formatClock(ms: number): string {
   const seconds = Math.max(0, Math.round(ms / 1000));
