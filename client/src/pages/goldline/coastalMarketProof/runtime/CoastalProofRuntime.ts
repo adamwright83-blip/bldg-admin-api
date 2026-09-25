@@ -475,8 +475,13 @@ export async function createCoastalProof(
   caption.className = "cmp-caption";
   const stamp = document.createElement("div");
   stamp.className = "cmp-stamp";
-  container.append(caption, stamp);
-  disposers.push(() => caption.remove(), () => stamp.remove());
+  // the proof's last frame: Rook is away down the line with the satchel
+  const endCard = document.createElement("div");
+  endCard.className = "cmp-endcard";
+  endCard.innerHTML = `<span class="cmp-endcard-title">THE ROOK HUNT</span><span class="cmp-endcard-sub">To be continued</span>`;
+  container.append(caption, stamp, endCard);
+  disposers.push(() => caption.remove(), () => stamp.remove(), () => endCard.remove());
+  let endCardShown = false;
   const lineButton = container.querySelector(".cmp-hook");
   input.enabled = false;
   // the run ends in front of the cage door
@@ -560,6 +565,11 @@ export async function createCoastalProof(
       }
     }
     caption.classList.toggle("is-visible", !!phase2.state.caption);
+    if (phase2.state.endCard && !endCardShown) {
+      endCardShown = true;
+      endCard.classList.add("is-visible");
+      audio.cue("endcard");
+    }
     stamp.textContent = phase2.state.stamp;
     stamp.classList.toggle("is-visible", !!phase2.state.stamp);
     lineButton?.classList.toggle("is-ready", phase2.state.lineReady);
@@ -662,7 +672,7 @@ export async function createCoastalProof(
       reachedEnd,
       autowalkSeconds: autopilot?.elapsedSeconds ?? null,
       // the run is over when she has reached the cage door and the reveal has played
-      autowalkFinished: autopilot ? autopilot.finishedAt >= 0 && phase2.state.revealTime > 13 : null,
+      autowalkFinished: autopilot ? autopilot.finishedAt >= 0 && phase2.state.revealTime > 21 : null,
       walkGroundSpeed: groundSpeed,
       // median planted-foot speed (m/s) over the last ~4 s of walking; 0 = no skating
       footSlip: slipSamples.length ? [...slipSamples].sort((a, b) => a - b)[Math.floor(slipSamples.length / 2)] : null,

@@ -43,7 +43,16 @@ const RIDE_TIME = 3.4;
 const RELEASE_TIME = 2.35;
 const GRAB_DELAY = 0.3;     // the brake / tie-back lets go a beat after she takes the weight
 const TRAILBLAZER_HEIGHT = 1.775;
-const ROOK_RATIO = 0.62;    // Rook's height relative to Trailblazer's, as main's Wayward stages him
+const ROOK_RATIO = 0.62;
+const UP = new THREE.Vector3(0, 1, 0);
+// the escape, on the reveal clock (his last line ends at 12.4)
+const ESCAPE_AT = 12.5;      // he gathers
+const LEAP_AT = 13.2;        // he leaps for the return rope
+const LEAP_TIME = 0.95;
+const STRAP_DROP = 0.32;     // the satchel hangs this far under the rope
+const END_CARD_AFTER = 5.6;  // seconds down the line before the title card
+const RIDE_SHOT_AT = 0.6;    // seconds down the line: cut to the camera riding the line with him
+const RIDE_SHOT_TIME = 3.4;  // then the lens stops riding and lets him go    // Rook's height relative to Trailblazer's, as main's Wayward stages him
 
 const up = new THREE.Vector3(0, 1, 0);
 const v3 = (a: [number, number, number]) => new THREE.Vector3(a[0], a[1], a[2]);
@@ -135,6 +144,8 @@ class RopewayPath {
   readonly length: number;
   /** loop parameter where the haul rope reaches the terrace station's bullwheel */
   readonly haulEnd: number;
+  /** loop parameter where the return rope leaves the terrace bullwheel, downhill toward the harbour */
+  readonly returnStart: number;
   constructor(rw: ChaseRigs["ropeway"]) {
     const heads = rw.heads.map(v3);
     const land = rw.land.map(v3);
@@ -171,6 +182,7 @@ class RopewayPath {
     }
     this.length = s + this.pts[this.pts.length - 1].distanceTo(this.pts[0]);
     this.haulEnd = this.cum[haulEndIndex];
+    this.returnStart = this.cum[haulEndIndex + 10];
   }
 
   at(u: number, out: THREE.Vector3, tangent?: THREE.Vector3) {
@@ -233,6 +245,8 @@ export class Phase2World {
     tensionUse: 0,
     reveal: false,
     revealTime: 0,
+    /** Rook has gone down the line with the satchel: show the title card */
+    endCard: false,
     caption: "",
     speaker: "",
     stamp: "",
@@ -289,6 +303,10 @@ export class Phase2World {
   private readonly dispatchChain: THREE.Mesh;
   private readonly dispatchHook: THREE.Object3D;
   private satchelHeld = false;
+  // the escape: Rook hooks the satchel strap over the return rope and rides it down to the harbour
+  private escape: { stage: "leap" | "zip"; t: number; u: number; v: number; from: THREE.Vector3; q0: THREE.Quaternion; camU?: number } | null = null;
+  private readonly escQ = new THREE.Quaternion();
+  private readonly escAxis = new THREE.Vector3();
   private readonly hookSeat = new THREE.Vector3();
   private readonly tmp = new THREE.Vector3();
   private readonly tmp2 = new THREE.Vector3();
@@ -567,6 +585,11 @@ export class Phase2World {
       c.userData.u = ((u % this.ropeway.length) + this.ropeway.length) % this.ropeway.length;
       const du = Math.abs(c.userData.u - this.cageU);
       c.visible = this.cageDockT >= 0 || Math.min(du, this.ropeway.length - du) > 7;
+      // Rook overtakes the carriers on the return rope: none may be where he is
+      if (this.escape) {
+        const de = Math.abs(c.userData.u - (((this.escape.u % this.ropeway.length) + this.ropeway.length) % this.ropeway.length));
+        if (Math.min(de, this.ropeway.length - de) < 7) c.visible = false;
+      }
     }
     this.placeCage(dt);
 
@@ -884,13 +907,99 @@ export class Phase2World {
       this.state.caption = line ? line[2] : "";
       this.state.speaker = line ? line[2].split(":")[0] : "";
     }
+    if (this.state.reveal && this.state.revealTime > ESCAPE_AT) tip = this.updateEscape(dt, pose, controller);
     this.setRook(pose);
+    if (this.escape) return; // he has left the cage: updateEscape carries the satchel
     // the satchel hangs from its strap: on the arm, then in his wing, swinging as it goes
     this.satchel.position.copy(tip ?? this.hookSeat);
     // in his wing he holds the strap short, so the satchel rides at his chest rather than his knees
     if (tip) this.satchel.position.y += 0.16 * Math.min(1, (this.state.revealTime - 2.55) / 0.8);
     const swing = this.satchelHeld ? Math.sin(this.state.revealTime * 4.1) * 0.2 * Math.exp(-(this.state.revealTime - 2.55) * 0.55) : 0;
     this.satchel.rotation.set(0, Math.atan2(-door.z, door.x), swing);
+  }
+
+  /**
+   * "I am leaving with it." And he does: a crouch, a leap from the cage up to the ropeway's return rope,
+   * the satchel strap thrown over it, and a ride down the line over the whole market toward the harbour,
+   * hanging from the strap and looking back at her. She reaches after him; the line is out of reach.
+   * Returns the satchel position while he still holds it in his wing.
+   */
+  private updateEscape(dt: number, pose: Record<string, number>, controller: PlayerController | null): THREE.Vector3 | null {
+    const rook = this.rook!;
+    const r = this.state.revealTime;
+    const k = (a: number, c: number) => THREE.MathUtils.clamp((r - a) / (c - a), 0, 1);
+    // gather: he drops into a crouch and looks up at the rope
+    const gather = ease(k(ESCAPE_AT, ESCAPE_AT + 0.6));
+    Object.assign(pose, { lean_in: 0.7 * gather, look: 0.6 * gather, hold: 1 - gather * 0.5, lift: 0 });
+    const rw = this.ropeway;
+    if (!this.escape && r >= LEAP_AT) {
+      // off the cage floor and into the scene, so the cage no longer carries him
+      this.group.attach(rook);
+      this.escape = { stage: "leap", t: 0, u: rw.returnStart + 2.5, v: 1.5, from: rook.position.clone(), q0: rook.quaternion.clone() };
+      this.events.push("leap");
+    }
+    const e = this.escape;
+    if (!e) return this.rookTip(pose, this.tmp);
+    e.t += dt;
+    // where the strap goes over the rope, and which way is downhill there
+    const cable = rw.at(e.u, this.tmp2, this.tmpT);
+    const downhill = this.tmpT;
+    // he faces back uphill, at her, while the line takes him away
+    const back = this.escAxis.set(-downhill.x, 0, -downhill.z).normalize();
+    const door = v3(this.rigs.cage.doorDir);
+    const turn = Math.atan2(back.x, back.z) - Math.atan2(door.x, door.z);
+    if (e.stage === "leap") {
+      const u = Math.min(1, e.t / LEAP_TIME);
+      Object.assign(pose, { lean_in: 0.7 * (1 - u), look: 0.3, hold: 0.5 * (1 - u), lift: ease(u) });
+      // he turns in the air to face her; his wing (the satchel) goes to the rope: solve where his body
+      // must be for that, then arc there
+      this.escQ.setFromAxisAngle(UP, turn * ease(u));
+      rook.quaternion.copy(this.escQ).multiply(e.q0);
+      const tipOffset = this.tipOffset(pose);
+      const target = this.tmp.copy(cable);
+      target.y -= STRAP_DROP;
+      target.sub(tipOffset);
+      rook.position.copy(e.from).lerp(target, ease(u));
+      rook.position.y += Math.sin(u * Math.PI) * 1.1;
+      rook.updateMatrixWorld(true);
+      this.satchel.position.copy(this.rookTip(pose, new THREE.Vector3()));
+      if (u >= 1) {
+        e.stage = "zip";
+        e.t = 0;
+        this.events.push("grab", "zip");
+      }
+    } else {
+      Object.assign(pose, { lean_in: 0, look: 0.35, hold: 0, lift: 1 });
+      // gravity takes him down the line: slow off the bullwheel, then fast
+      e.v = Math.min(17, e.v + 4.2 * dt);
+      e.u += e.v * dt;
+      const sway = Math.sin(e.t * 3.1) * 0.16 * Math.exp(-e.t * 0.25) - Math.min(0.25, e.v * 0.012);
+      this.escQ.setFromAxisAngle(UP, turn);
+      rook.quaternion.copy(this.escQ).multiply(e.q0);
+      rook.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(this.escAxis.set(downhill.z, 0, -downhill.x).normalize(), sway));
+      const tipOffset = this.tipOffset(pose);
+      this.satchel.position.copy(cable).y -= STRAP_DROP;
+      rook.position.copy(this.satchel.position).sub(tipOffset);
+      this.satchel.rotation.set(0, Math.atan2(-downhill.z, downhill.x), sway);
+      if (e.t > END_CARD_AFTER) this.state.endCard = true;
+    }
+    rook.updateMatrixWorld(true);
+    // she reaches after him as he goes, then her arm falls
+    if (controller) {
+      const toRook = this.tmp.copy(rook.position).sub(controller.position);
+      controller.faceToward(Math.atan2(toRook.x, toRook.z), dt);
+      const reach = (e.stage === "leap" ? ease(Math.min(1, e.t / 0.4)) : Math.max(0, 1 - e.t / 1.6)) * 0.75;
+      this.handTarget.copy(rook.position).y += 1.0;
+      this.handsUp = Math.max(this.handsUp, reach);
+    }
+    return null;
+  }
+
+  /** his wing tip relative to his origin, for a pose, in world axes */
+  private tipOffset(pose: Record<string, number>) {
+    const rook = this.rook!;
+    rook.updateMatrixWorld(true);
+    return this.rookTip(pose, new THREE.Vector3()).sub(rook.getWorldPosition(new THREE.Vector3()));
   }
 
   /** Cinematic framing for the opening sighting and the reveal; null = the gameplay camera. */
@@ -902,6 +1011,42 @@ export class Phase2World {
       const door = v3(this.rigs.cage.doorDir);
       const side = new THREE.Vector3(-door.z, 0, door.x);
       const herLine = (r > 3.0 && r < 4.9) || (r > 7.8 && r < 9.6);
+      const esc = this.escape;
+      if (esc?.stage === "zip" && esc.t >= RIDE_SHOT_AT) {
+        // riding the line with him: a few metres uphill of him, just above the rope, looking down it at
+        // him (he faces back up at us), the market sliding past below and the harbour beyond. Then the
+        // lens stops riding and lets him go: it hangs where it is and turns to keep him, tightening as he
+        // shrinks toward the harbour
+        const rw = this.ropeway;
+        if (esc.t >= RIDE_SHOT_AT + RIDE_SHOT_TIME) esc.camU ??= esc.u - 5.2;
+        rw.at(esc.camU ?? esc.u - 5.2, d.position, this.tmpT);
+        // letting go, the lens also rises and drifts off the line: the towers stand on the rope, and a
+        // lens left on it would lose him behind the next tower head
+        const off = esc.camU === undefined ? 0 : ease(THREE.MathUtils.clamp((esc.t - RIDE_SHOT_AT - RIDE_SHOT_TIME) / 1.6, 0, 1));
+        d.position.y += 1.35 + 3.4 * off;
+        d.position.addScaledVector(this.tmp2.set(this.tmpT.z, 0, -this.tmpT.x).normalize(), 0.7 + 6.5 * off);
+        this.rook.getWorldPosition(d.target).y += 0.45;
+        d.fov = THREE.MathUtils.lerp(50, 20, THREE.MathUtils.clamp((d.position.distanceTo(d.target) - 6) / 70, 0, 1));
+        d.weight = 1;
+        d.collide = false; // the rope runs clear of the town; a collision probe from him would drop the lens into it
+        return d;
+      }
+      if (r >= LEAP_AT) {
+        // from behind her, over her shoulder, on him as he leaps for the line
+        const rook = this.rook.getWorldPosition(new THREE.Vector3());
+        const away = this.tmp2.set(rook.x - heroHead.x, 0, rook.z - heroHead.z);
+        const dist = away.length();
+        away.normalize();
+        const right = new THREE.Vector3(away.z, 0, -away.x);
+        d.position.copy(heroHead).addScaledVector(away, -2.3).addScaledVector(right, -0.75);
+        d.position.y = heroHead.y + 0.25;
+        d.target.copy(rook).y += 0.7;
+        d.target.lerp(heroHead, THREE.MathUtils.clamp(1 - dist / 6, 0, 0.35));
+        d.fov = 52;
+        d.weight = 1;
+        d.collide = true; // he is close: the probe keeps the lens out of the cage
+        return d;
+      }
       if (herLine) {
         // her face, three-quarter, from beside the cage door: the terrace and the sky behind her
         d.position.copy(heroHead).addScaledVector(door, -0.95).addScaledVector(side, -1.7);

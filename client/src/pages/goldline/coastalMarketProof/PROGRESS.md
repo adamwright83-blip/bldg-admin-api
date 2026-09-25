@@ -213,6 +213,19 @@ to the previous builds; this outfit is his own choice.
   - Tested by keyboard from the obstacle, standing centre, left and right. The old code never caught
     the crane hook. The new code catches the crane, boom and ropeway 3/3 each.
 
+### The ending: Rook gets away (2026-09-25)
+
+The reveal used to stop after "I am leaving with it." Now he does:
+- He gathers in a crouch and leaps from the cage onto the ropeway's downhill return rope.
+- He throws the satchel strap over it and rides the line down over the whole market toward the
+  harbour, hanging from the strap and looking back at her. She reaches after him.
+- **Shots:** over her shoulder for the leap, then a camera riding the line with him. Then it lets go:
+  it stays put, rises and drifts off the line, so the towers never hide him, and tightens its lens as
+  he shrinks toward the harbour.
+- **The last frame:** a title card, "THE ROOK HUNT", "To be continued", with a low sting.
+- **Other details:** carriers on the return rope near him are hidden so he never passes through one.
+  The four reveal lines are unchanged. The autowalk film now runs through the ending (about 65 s).
+
 ### Final measurement
 
 Mac-hosted Playwright Chromium headless `--use-angle=metal` (Apple M1), 390x844 DPR 3 mobile+touch,
