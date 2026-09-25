@@ -163,6 +163,30 @@ added skin.
   through the leather.
 - About 48k triangles for her (was about 39k).
 
+### Trailblazer as a VRoid character (2026-09-25, Adam's direction)
+
+Adam rejected the MakeHuman Trailblazer and chose VRoid Studio and an anime look. He picked the
+sample (pixiv's AvatarSample_X) and her outfit while it was built: a black tank top, olive short
+shorts, a belt with pouches and a thigh holster, no socks, brown lace-up boots, and a high ponytail.
+**This outfit replaces the v2 sheet's outfit at his direction.** The v2 cut and coverage rule applied
+to the previous builds; this outfit is his own choice.
+
+- **How she moves.** The game still animates the Quaternius rig exactly as before: locomotion, mantle,
+  the hang, the arm IK, the grips. That rig is now invisible. `runtime/vrmHero.ts` copies its pose onto
+  the VRM's humanoid every frame. Both rigs are bound in a T-pose facing +Z, so each bone's rotation
+  away from bind carries over directly.
+- **What the VRM adds.** Its own MToon toon shading, its spring bones (the ponytail swings) and a blink.
+- **Grips.** Her arms are shorter than the rig's, so while she hangs she is lifted until her own
+  knuckles close on the toggle.
+- **Cost.** VRoid exports 16 skinned meshes, each with its own 107-bone skeleton, so
+  `VRMUtils.combineSkeletons` gives them one shared skeleton; that halved her frame cost.
+- **Comparing.** `?hero=legacy` still shows the previous Trailblazer.
+- **Measured.** Same session, 4× throttle, full autowalk. **This is emulation, not a phone.**
+  - VRoid hero: 16.0 ms mean CPU, 57–59 fps median, 218 draws.
+  - Legacy hero: 8.4 ms mean CPU, 60 fps, 193 draws.
+  - Merging her 16 materials at VRoid export would win more back.
+- **Now out of style.** Rook and the environment are still the previous realistic style.
+
 ### Final measurement
 
 Mac-hosted Playwright Chromium headless `--use-angle=metal` (Apple M1), 390x844 DPR 3 mobile+touch,

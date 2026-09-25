@@ -3,6 +3,7 @@ import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Spring, wrapAngle } from "./runtime/motion";
 import { readProofParams } from "./runtime/params";
+import { vrmBoneMap } from "./runtime/vrmHero";
 
 /**
  * The Coastal Market proof is an isolated experiment. These checks keep it
@@ -37,7 +38,7 @@ describe("the proof is isolated", () => {
   });
 
   it("imports nothing from the rest of the app", () => {
-    const packages = /^(three|three-mesh-bvh|react)$|^three\/examples\/jsm\//;
+    const packages = /^(three|three-mesh-bvh|react|@pixiv\/three-vrm)$|^three\/examples\/jsm\//;
     for (const { file, source } of proofSources) {
       for (const m of source.matchAll(/(?:from|import)\s+"([^"]+)"/g)) {
         const spec = m[1];
@@ -196,5 +197,20 @@ describe("Phase 2 chase set", () => {
     expect(scene).toContain("const ROOK_RATIO = 0.62;");
     const meta = JSON.parse(read(join(REPO, "client/public/assets/goldline/coastal-market-three-proof/rook-runtime.json")));
     for (const key of ["look", "reach", "lift", "hold", "talk"]) expect(meta.keys).toContain(key);
+  });
+});
+
+describe("Trailblazer's VRM wears the rig's pose", () => {
+  it("maps every rig bone that animates her body onto a distinct VRM humanoid bone", () => {
+    const map = vrmBoneMap();
+    const vrmNames = map.map(([, v]) => v);
+    expect(new Set(vrmNames).size).toBe(vrmNames.length);
+    // hips first: the retarget uses the first entry as the root that carries translation
+    expect(map[0]).toEqual(["pelvis", "hips"]);
+    for (const required of ["spine", "chest", "neck", "head", "leftUpperArm", "rightHand", "leftUpperLeg", "rightFoot", "leftMiddleProximal", "rightMiddleProximal"]) {
+      expect(vrmNames).toContain(required);
+    }
+    // 6 on the spine; per side 8 limb bones, the thumb and four fingers of three joints each
+    expect(map.length).toBe(6 + 2 * (8 + 3 + 4 * 3));
   });
 });

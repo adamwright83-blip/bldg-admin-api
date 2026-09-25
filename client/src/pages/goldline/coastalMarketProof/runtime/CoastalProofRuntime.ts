@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
+import { VRMLoaderPlugin, VRMUtils, type VRM } from "@pixiv/three-vrm";
 import { Autopilot } from "./autopilot";
 import { ArmReach, Locomotion, deriveBriskWalk, deriveBriskWalkIK, measureGroundSpeed } from "./character";
 import { PlayerController, WALK_SPEED } from "./controller";
@@ -20,6 +21,7 @@ import { PerfMeter } from "./perf";
 import { Phase2World, type RookMeta } from "./phase2World";
 import { PostFX } from "./postfx";
 import { patchGarments, patchHeroRim, patchSkin, type HeroLight } from "./garments";
+import { VrmHero } from "./vrmHero";
 
 /**
  * The Coastal Market proof: one imperative three.js loop, owned by one React
@@ -86,6 +88,11 @@ export async function createCoastalProof(
   // ---------- assets
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
+  // Trailblazer's VRoid body is a VRM: the same GLB container, read with pixiv's VRM plugin
+  const vrmLoader = new GLTFLoader();
+  vrmLoader.register(parser => new VRMLoaderPlugin(parser));
+  // ?hero=legacy shows the previous Blender-built Trailblazer instead
+  const legacyHero = new URLSearchParams(window.location.search).get("hero") === "legacy";
   const progress = new Map<string, number>();
   const report = () => {
     let sum = 0;
@@ -124,7 +131,7 @@ export async function createCoastalProof(
     }
     return out.buffer;
   };
-  const loadGltf = async (file: string): Promise<GLTF> => {
+  const loadGltf = async (file: string, using: GLTFLoader = loader): Promise<GLTF> => {
     progress.set(file, 0);
     let bytes = await fetchBytes(assetBase + file, file).catch(() => null);
     // a host may answer a missing file with an HTML page; only a real GLB starts with "glTF"
@@ -141,7 +148,7 @@ export async function createCoastalProof(
     progress.set(file, 1);
     report();
     if (!bytes) throw new Error(`${file} not found`);
-    return loader.parseAsync(bytes, assetBase);
+    return using.parseAsync(bytes, assetBase);
   };
   const fetchJson = async <T,>(file: string): Promise<T> => {
     const r = await fetch(assetBase + file);
@@ -168,7 +175,7 @@ export async function createCoastalProof(
       );
     });
   const TEXTURE_SETS = ["rock", "cobble", "stone", "plaster", "wood", "wood_dark", "roof", "sand"];
-  const [levelGltf, sourceData, heroGltf, animsA, skyMeta, propsGltf, townF, townM, animsB, rookGltf, rigsGltf, rookMeta] = await Promise.all([
+  const [levelGltf, sourceData, heroGltf, animsA, skyMeta, propsGltf, townF, townM, animsB, rookGltf, rigsGltf, rookMeta, vrmGltf] = await Promise.all([
     loadGltf("level.glb"),
     fetchJson<LevelData>("level.json"),
     loadGltf("trailblazer.glb"),
@@ -181,6 +188,7 @@ export async function createCoastalProof(
     loadGltf("rook-runtime.glb"),
     loadGltf("rigs.glb"),
     fetchJson<RookMeta>("rook-runtime.json"),
+    legacyHero ? Promise.resolve(null) : loadGltf("trailblazer-vrm.glb", vrmLoader),
   ]);
   // Phase 2 climbs from the waterfront toward the high market. Reversing the
   // authored samples preserves the Phase 1 geography while making this a chase.
@@ -339,6 +347,43 @@ export async function createCoastalProof(
     }
     patchDynamicSunVis(mat, heroSunVis);
   });
+  // Trailblazer as drawn: the VRoid character, posed from the (now invisible) rig every frame
+  let vrmHero: VrmHero | null = null;
+  const vrm = (vrmGltf?.userData.vrm as VRM | undefined) ?? null;
+  if (vrm) {
+    VRMUtils.removeUnnecessaryVertices(vrm.scene);
+    // VRoid exports 16 skinned meshes, each with its own copy of the 107-bone skeleton: three.js would
+    // recompute every copy each frame (the bulk of her cost). One shared skeleton is computed once.
+    VRMUtils.combineSkeletons(vrm.scene);
+    let source: THREE.SkinnedMesh | null = null;
+    hero.traverse(o => {
+      const m = o as THREE.SkinnedMesh;
+      if (!m.isSkinnedMesh) return;
+      if (!source || m.name === "TB_Body") source = m;
+      m.visible = false;
+    });
+    if (!source) throw new Error("no rig mesh to drive Trailblazer's VRM");
+    vrmHero = new VrmHero(vrm, source, hero);
+    vrm.scene.traverse(o => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      // only her body, hair and outfit cast shadow; the face's small parts (eyes, brows, lashes) need not
+      const mats = Array.isArray(m.material) ? m.material : [m.material];
+      m.castShadow = mats.some(mt => /Body|Hair_00|CLOTH|Shoes|Tops|Onepiece/.test(mt.name));
+      m.receiveShadow = true;
+      m.frustumCulled = false;
+      // the ponytail leaves her nape bare, where VRoid paints the scalp a light hair-base brown that
+      // reads as a hole in her hair from behind: darken it to her hair
+      for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
+        const toon = mat as THREE.Material & { color?: THREE.Color; shadeColorFactor?: THREE.Color };
+        if (mat.name.includes("HairBack")) {
+          toon.color?.multiplyScalar(0.32);
+          toon.shadeColorFactor?.multiplyScalar(0.32);
+        }
+      }
+    });
+    disposers.push(() => VRMUtils.deepDispose(vrm.scene));
+  }
   const secondary = new SecondaryMotion(hero);
   const armReach = new ArmReach(hero);
   // one ray per frame toward the sun decides whether she stands in a building's shadow
@@ -351,6 +396,7 @@ export async function createCoastalProof(
   };
   const body = new THREE.Group();
   body.add(hero);
+  if (vrm) scene.add(vrm.scene);
   const heroRoot = new THREE.Group();
   heroRoot.add(body);
   scene.add(heroRoot);
@@ -462,6 +508,7 @@ export async function createCoastalProof(
   const camQ = new THREE.Quaternion();
   const shotRay = new THREE.Ray();
   const gripTmp = new THREE.Vector3();
+  const gripTmp2 = new THREE.Vector3();
   const swingQ = new THREE.Quaternion();
   const swingDir = new THREE.Vector3();
   const downV = new THREE.Vector3(0, -1, 0);
@@ -562,6 +609,13 @@ export async function createCoastalProof(
     updateHeroSun(dt);
     audio.update(camera, controller.position.y, life.waterfallTop, Math.max(0, Math.min(1, (9 - controller.position.y) / 7)));
     heroRoot.updateMatrixWorld(true);
+    if (vrmHero) {
+      vrmHero.update(dt);
+      if (controller.hanging) {
+        // the VRoid body's arms are shorter than the rig's: lift her so her own knuckles close on the bar
+        vrmHero.shift(gripTmp.copy(phase2.handTarget).sub(vrmHero.gripPoint(gripTmp2)));
+      }
+    }
     measureSlip(dt);
     if (post) post.render(scene, camera, t / 1000);
     else renderer.render(scene, camera);
@@ -609,7 +663,7 @@ export async function createCoastalProof(
       grounded: controller.grounded,
       phase2: { ...phase2.state },
       grip: phase2.handTarget.toArray().map(v => +v.toFixed(3)),
-      knuckles: armReach.gripPoint(new THREE.Vector3()).toArray().map(v => +v.toFixed(3)),
+      knuckles: (vrmHero ? vrmHero.gripPoint(new THREE.Vector3()) : armReach.gripPoint(new THREE.Vector3())).toArray().map(v => +v.toFixed(3)),
       hangRoot: heroRoot.position.toArray().map(v => +v.toFixed(3)),
     }),
     perf: () => perf.snapshot(),
