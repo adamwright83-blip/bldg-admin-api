@@ -1,0 +1,120 @@
+name: SaaS schema release gate
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: saas-schema-release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  schema-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3411:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      CI: "true"
+      NODE_ENV: production
+      PORT: "4199"
+      DATABASE_URL: mysql://root:root@127.0.0.1:3411/joystick_schema_release
+      APP_SHARED_API_SECRET: schema-release-app-secret-000000000000000000
+      JWT_SECRET: schema-release-jwt-secret-000000000000000000
+      STRIPE_SECRET_KEY: schema-release-placeholder-not-used
+      DRIVER_PASSWORD: schema-release-driver-pass
+      DRIVER_OPEN_ID: schema-release-driver
+      ADMIN_PASSWORD: schema-release-admin-pass
+      GOLDLINE_PROOF_MODE: "1"
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - name: Type-check
+        run: pnpm check
+      - name: Build production application
+        run: pnpm build
+
+      - name: Create genuinely empty release database
+        run: |
+          node -e "
+            const mysql = require('mysql2/promise');
+            (async () => {
+              const conn = await mysql.createConnection('mysql://root:root@127.0.0.1:3411/');
+              await conn.query('DROP DATABASE IF EXISTS joystick_schema_release');
+              await conn.query('CREATE DATABASE joystick_schema_release');
+              await conn.end();
+            })().catch(err => { console.error(err); process.exit(1); });
+          "
+
+      - name: Bootstrap exact production migration path
+        run: node scripts/migrate.mjs
+
+      - name: Reproduce known production drift on disposable database only
+        env:
+          SCHEMA_DRIFT_FIXTURE_OK: "1"
+        run: node scripts/schema-drift-fixture.mjs
+
+      - name: Prove migration repairs drift
+        run: node scripts/migrate.mjs
+
+      - name: Prove migration idempotency
+        run: node scripts/migrate.mjs
+
+      - name: Exercise synthetic tenant persistence and rollback
+        run: pnpm saas:schema:release-exam
+
+      - name: Run SaaS production contract
+        run: pnpm vitest run server/saas/saasContract.test.ts
+
+      - name: Boot exact production start command
+        run: |
+          pnpm start > /tmp/joystick-saas-schema-release.log 2>&1 &
+          echo $! > /tmp/joystick-saas-schema-release.pid
+          for _ in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:4199/api/leads/submit > /dev/null; then
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/joystick-saas-schema-release.pid)" 2>/dev/null; then
+              cat /tmp/joystick-saas-schema-release.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat /tmp/joystick-saas-schema-release.log
+          exit 1
+
+      - name: Stop production-start proof server
+        if: always()
+        run: |
+          if [ -f /tmp/joystick-saas-schema-release.pid ]; then
+            kill "$(cat /tmp/joystick-saas-schema-release.pid)" 2>/dev/null || true
+          fi
+
+      - name: Upload boot log on failure
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: joystick-saas-schema-release-log
+          path: /tmp/joystick-saas-schema-release.log
+          if-no-files-found: ignore
+          retention-days: 7
