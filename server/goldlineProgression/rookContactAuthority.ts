@@ -10,8 +10,10 @@
 import {
   ROOK_CONTACT_EXECUTION_FIXTURE_SOURCE,
   ROOK_CONTACT_ISOLATED_PREVIEW_GRANT_SOURCE,
+  ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE,
   WAYWARD_ROOK_CONTACT_CONSEQUENCE,
 } from "../../shared/rookContact";
+import { hasServerAuthoritativeWaywardContactGate } from "./progressionStore";
 import { grantRookContactCapability } from "./capabilityGrantStore";
 import { ProgressionNotPermittedError } from "./progressionContract";
 
@@ -20,19 +22,24 @@ export {
   ROOK_CONTACT_ISOLATED_PREVIEW_GRANT_SOURCE,
 };
 
-export type ServerAuthoritativeWaywardContactProof = {
-  proven: false;
-  reason: "no_server_authoritative_wayward_contact_beat";
-};
+export type ServerAuthoritativeWaywardContactProof =
+  | { proven: true; source: typeof ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE }
+  | {
+      proven: false;
+      reason: "no_server_authoritative_wayward_contact_beat";
+    };
 
-export function findServerAuthoritativeWaywardContactProof(_input: {
+export async function findServerAuthoritativeWaywardContactProof(input: {
   tenantId: string;
   operatorId: string;
-}): ServerAuthoritativeWaywardContactProof {
-  return {
-    proven: false,
-    reason: "no_server_authoritative_wayward_contact_beat",
-  };
+}): Promise<ServerAuthoritativeWaywardContactProof> {
+  const proven = await hasServerAuthoritativeWaywardContactGate(input);
+  return proven
+    ? { proven: true, source: ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE }
+    : {
+        proven: false,
+        reason: "no_server_authoritative_wayward_contact_beat",
+      };
 }
 
 /** No registered source is production authority today. */
@@ -43,7 +50,7 @@ export function rookContactGrantIsProductionAuthority(
   if (grant.grantSource === WAYWARD_ROOK_CONTACT_CONSEQUENCE) return false;
   if (grant.grantSource === ROOK_CONTACT_ISOLATED_PREVIEW_GRANT_SOURCE) return false;
   if (grant.grantSource === ROOK_CONTACT_EXECUTION_FIXTURE_SOURCE) return false;
-  return false;
+  return grant.grantSource === ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE;
 }
 
 /**
