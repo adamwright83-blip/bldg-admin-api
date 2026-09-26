@@ -7,12 +7,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { COLOSSEUM_AUTHORED_FINALE_CONSEQUENCE } from "../../shared/colosseumAuthoredFinale";
 import {
   ROOK_CONTACT_CAPABILITY_ID,
+  ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE,
   WAYWARD_ROOK_CONTACT_CONSEQUENCE,
 } from "../../shared/rookContact";
 import type { TrpcContext } from "../_core/context";
 import { rookContactRouter } from "../rookContact/rookContactRouter";
+import { prepareRookContactSession } from "../rookContact/rookContactService";
 import { colosseumLeadHuntDefinition } from "./colosseumKingdomBinding";
+import { grantRookContactCapability } from "./capabilityGrantStore";
 import { ProgressionNotPermittedError } from "./progressionContract";
+import { progressionRouter } from "./progressionRouter";
 import {
   acknowledgeWaywardRookContact,
   completeWaywardContactGate,
@@ -617,6 +621,107 @@ describe("capability.rook.contact grant", () => {
     });
     expect(again.capabilityRookContact.granted).toBe(true);
     expect(db.grants).toHaveLength(1);
+  });
+
+
+  it("rejects a production-looking grant row when the durable Wayward gate proof is absent", async () => {
+    await ownRook();
+    db.grants.push({
+      id: "forged-production-looking-grant",
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      capabilityId: ROOK_CONTACT_CAPABILITY_ID,
+      grantedAt: new Date("2026-09-25T09:30:00.000Z"),
+      grantSource: ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE,
+    });
+
+    const read = await readGoldlineProgression({
+      tenantId: "tenant-a",
+      operatorId: "op-a",
+      capabilityOperatorId: null,
+    });
+    expect(read.capabilityRookContact).toMatchObject({
+      granted: false,
+      readable: true,
+      status: "ungranted",
+    });
+
+    await expect(
+      prepareRookContactSession({
+        tenantId: "tenant-a",
+        operatorId: "op-a",
+        accountId: 10,
+        contactId: 20,
+      })
+    ).rejects.toThrow(/no matching durable Wayward CONTACT gate proof/);
+  });
+
+  it("refuses direct server grant writes before the Wayward gate proof exists", async () => {
+    await ownRook();
+    await expect(
+      grantRookContactCapability({
+        tenantId: "tenant-a",
+        operatorId: "op-a",
+        grantSource: ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE,
+        grantedAt: new Date("2026-09-25T09:30:00.000Z"),
+      })
+    ).rejects.toThrow(/requires the durable server-authored Wayward CONTACT gate/);
+    expect(db.grants).toHaveLength(0);
+
+    db.progression[0]!.overworldUnlocksJson = {
+      waywardContactGate: {
+        runId: "33333333-3333-4333-8333-333333333333",
+        startedAt: "2026-09-25T09:00:00.000Z",
+        completedAt: "2026-09-25T09:00:01.000Z",
+      },
+    };
+    await expect(
+      grantRookContactCapability({
+        tenantId: "tenant-a",
+        operatorId: "op-a",
+        grantSource: ROOK_CONTACT_WAYWARD_GATE_GRANT_SOURCE,
+        grantedAt: new Date("2026-09-25T09:30:00.000Z"),
+      })
+    ).rejects.toThrow(/requires the durable server-authored Wayward CONTACT gate/);
+    expect(db.grants).toHaveLength(0);
+  });
+
+  it("hostile direct API calls cannot skip the server-started Wayward gate", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-09-25T10:00:00.000Z"));
+      await ownRook("tenant-a", "open-7");
+      const caller = progressionRouter.createCaller(context("tenant-a", 7));
+
+      await expect(
+        caller.completeWaywardContactGate({
+          runId: "44444444-4444-4444-8444-444444444444",
+        })
+      ).rejects.toThrow(/server-started gate run/);
+
+      await expect(
+        caller.completeWaywardContactGate({
+          runId: "44444444-4444-4444-8444-444444444444",
+          contactGranted: true,
+          tenantId: "tenant-b",
+          operatorId: "open-8",
+          localStorage: { contactGranted: true },
+        } as never)
+      ).rejects.toThrow();
+
+      const begun = await caller.beginWaywardContactGate({});
+      await expect(
+        caller.completeWaywardContactGate({ runId: begun.runId })
+      ).rejects.toThrow(/cannot precede the authored gate/);
+      expect(db.grants).toHaveLength(0);
+
+      vi.advanceTimersByTime(6_000);
+      const completed = await caller.completeWaywardContactGate({ runId: begun.runId });
+      expect(completed.capabilityRookContact.granted).toBe(true);
+      expect(db.grants).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps an unreadable grant table uncertain and does not fall back to companion unlocks", async () => {
