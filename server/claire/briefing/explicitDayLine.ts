@@ -12,13 +12,15 @@ import { compressTitle } from "./titleContract";
 import type { BriefingClock, BriefingItem } from "./briefingTypes";
 
 const ACTION =
-  /\b(?:drive|driving|process|processing|do|doing|make|making|create|creating|post|posting|design|designing|call|calling|pick|drop|deliver|visit|wash|fold)\b/i;
+  /\b(?:drive|driving|process|processing|do|doing|make|making|create|creating|post|posting|design|designing|call|calling|email|e-mail|text|message|send|follow\s*up|chase|schedule|book|check|quote|estimate|invoice|order|buy|research|review|finish|repair|install|pick|drop|deliver|visit|wash|fold)\b/i;
 
 const DIRECTIVE =
   /\b(?:add|put|place|log|save|track)\b|\b(?:make sure|be sure)\b/i;
 
 export function refersToPriorWork(utterance: string): boolean {
-  return /\b(?:all that|all of that|everything(?: i (?:said|told you))?|what i told you|what i said)\b/i.test(utterance);
+  return /\b(?:all that|all of that|everything(?: i (?:said|told you))?|what i told you|what i said|(?:all\s+)?(?:that|the)\s+stuff|the stuff|those things|the things i (?:said|mentioned|told you)|everything we just talked about)\b/i.test(
+    utterance
+  );
 }
 
 function clausesOf(text: string): string[] {
