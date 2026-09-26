@@ -91,13 +91,13 @@ const context = {
 } as ClaireDriveContext;
 
 describe("Rook CONTACT authority repair", () => {
-  it("fails closed because Wayward has no server-authoritative CONTACT beat", () => {
-    expect(
+  it("fails closed because Wayward has no server-authoritative CONTACT beat", async () => {
+    await expect(
       findServerAuthoritativeWaywardContactProof({
         tenantId: "tenant-a",
         operatorId: "op-a",
       })
-    ).toEqual({
+    ).resolves.toEqual({
       proven: false,
       reason: "no_server_authoritative_wayward_contact_beat",
     });
