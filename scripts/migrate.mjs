@@ -398,6 +398,66 @@ for (const [sql, label] of cols) {
   await run(sql, label);
 }
 
+// Required current orders shape used by the customer SaaS projections. These
+// are additive upgrades for databases created before HELD/resident idempotency
+// and payment-time fields were introduced.
+for (const [columnName, definition] of [
+  ["heldRawRequestText", "text NULL AFTER specialInstructions"],
+  ["heldCleanedRequestText", "text NULL AFTER heldRawRequestText"],
+  ["heldServiceSummary", "text NULL AFTER heldCleanedRequestText"],
+  ["heldRequestedPickupWindow", "varchar(255) NULL AFTER heldServiceSummary"],
+  ["heldRequestedReturnBy", "varchar(255) NULL AFTER heldRequestedPickupWindow"],
+  ["heldSource", "varchar(64) NULL AFTER heldRequestedReturnBy"],
+  ["heldMetadataJson", "json NULL AFTER heldSource"],
+  ["residentClientRequestId", "varchar(191) NULL AFTER heldMetadataJson"],
+  ["paidAt", "timestamp NULL AFTER paid"],
+  ["manualRiskFlag", "boolean NOT NULL DEFAULT false AFTER stripeConnectedAccountIdSnapshot"],
+]) {
+  await ensureRequiredColumn(
+    "orders",
+    columnName,
+    `ALTER TABLE orders ADD COLUMN ${columnName} ${definition}`
+  );
+}
+await runRequired(
+  `ALTER TABLE orders
+     MODIFY COLUMN status
+       enum('new','intake-pending','collected','processing','ready','delivered','cancelled')
+       NOT NULL DEFAULT 'new'`,
+  "orders.status current enum"
+);
+await assertEnumContainsValues("orders", "status", [
+  "new",
+  "intake-pending",
+  "collected",
+  "processing",
+  "ready",
+  "delivered",
+  "cancelled",
+]);
+await ensureRequiredIndex(
+  "orders",
+  "orders_resident_client_request_id_unq",
+  ["residentClientRequestId"],
+  `ALTER TABLE orders
+     ADD UNIQUE KEY orders_resident_client_request_id_unq (residentClientRequestId)`
+);
+await assertRequiredColumns("orders", [
+  "id",
+  "tenantId",
+  "heldRawRequestText",
+  "heldCleanedRequestText",
+  "heldServiceSummary",
+  "heldRequestedPickupWindow",
+  "heldRequestedReturnBy",
+  "heldSource",
+  "heldMetadataJson",
+  "residentClientRequestId",
+  "paidAt",
+  "manualRiskFlag",
+]);
+
+
 // ── vendors table (Phase 1) ───────────────────────────────────────
 await run(
   `
@@ -3295,6 +3355,94 @@ await runRequired(
   )`,
   "CREATE TABLE goldline_domain_capability_grants"
 );
+// Customer SaaS team operating profiles. The Team router has no runtime
+// CREATE fallback, so these tables are required on every clean production boot.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS employee_operating_profiles (
+    id varchar(36) NOT NULL PRIMARY KEY,
+    tenantId varchar(64) NOT NULL,
+    userOpenId varchar(64) NOT NULL,
+    displayName varchar(255) NOT NULL,
+    employmentStatus enum('active','leave','ended') NOT NULL DEFAULT 'active',
+    skillsJson json NOT NULL,
+    weeklyCapacityUnits int NULL,
+    createdBy varchar(128) NOT NULL,
+    updatedBy varchar(128) NOT NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_employee_operating_profiles_tenant_user (tenantId,userOpenId),
+    KEY idx_employee_operating_profiles_tenant_status (tenantId,employmentStatus)
+  )`,
+  "CREATE TABLE employee_operating_profiles"
+);
+await assertRequiredColumns("employee_operating_profiles", [
+  "id",
+  "tenantId",
+  "userOpenId",
+  "displayName",
+  "employmentStatus",
+  "skillsJson",
+  "weeklyCapacityUnits",
+  "createdBy",
+  "updatedBy",
+  "createdAt",
+  "updatedAt",
+]);
+await ensureRequiredIndex(
+  "employee_operating_profiles",
+  "uq_employee_operating_profiles_tenant_user",
+  ["tenantId", "userOpenId"],
+  `ALTER TABLE employee_operating_profiles
+     ADD UNIQUE KEY uq_employee_operating_profiles_tenant_user (tenantId,userOpenId)`
+);
+await ensureRequiredIndex(
+  "employee_operating_profiles",
+  "idx_employee_operating_profiles_tenant_status",
+  ["tenantId", "employmentStatus"],
+  `ALTER TABLE employee_operating_profiles
+     ADD KEY idx_employee_operating_profiles_tenant_status (tenantId,employmentStatus)`
+);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS employee_operating_profile_events (
+    id varchar(36) NOT NULL PRIMARY KEY,
+    tenantId varchar(64) NOT NULL,
+    profileId varchar(36) NOT NULL,
+    eventType varchar(64) NOT NULL,
+    actorId varchar(128) NOT NULL,
+    requestId varchar(36) NOT NULL,
+    metadataJson json NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_employee_profile_events_tenant_request (tenantId,requestId),
+    KEY idx_employee_profile_events_tenant_profile (tenantId,profileId,createdAt)
+  )`,
+  "CREATE TABLE employee_operating_profile_events"
+);
+await assertRequiredColumns("employee_operating_profile_events", [
+  "id",
+  "tenantId",
+  "profileId",
+  "eventType",
+  "actorId",
+  "requestId",
+  "metadataJson",
+  "createdAt",
+]);
+await ensureRequiredIndex(
+  "employee_operating_profile_events",
+  "uq_employee_profile_events_tenant_request",
+  ["tenantId", "requestId"],
+  `ALTER TABLE employee_operating_profile_events
+     ADD UNIQUE KEY uq_employee_profile_events_tenant_request (tenantId,requestId)`
+);
+await ensureRequiredIndex(
+  "employee_operating_profile_events",
+  "idx_employee_profile_events_tenant_profile",
+  ["tenantId", "profileId", "createdAt"],
+  `ALTER TABLE employee_operating_profile_events
+     ADD KEY idx_employee_profile_events_tenant_profile (tenantId,profileId,createdAt)`
+);
+
 await assertRequiredColumns("goldline_domain_capability_grants", [
   "tenantId",
   "operatorId",
