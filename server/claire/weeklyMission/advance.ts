@@ -243,6 +243,10 @@ function capturePrimary(
     day.uncertainty = "Stood down for today.";
     return;
   }
+  if (isCurrentRemnant && remnantRetentionReference(utterance, day.weekday)) {
+    day.uncertainty = "Name the one thing you want to keep for today.";
+    return;
+  }
   if (day.disposition === "stand_down") return;
   const text = utterance.replace(/\s+/g, " ").trim().slice(0, 255);
   day.primary = {
