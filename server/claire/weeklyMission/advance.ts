@@ -23,6 +23,7 @@ import {
   type WeeklyAct,
   type WeeklyDayDraft,
   type WeeklyDraft,
+  type WeeklyExecutionCandidateContract,
 } from "../../../shared/weeklyMissionReadiness";
 import { deriveInternalHypothesis, type WeeklyDossier } from "./dossier";
 import { acceptPlanningDecision, applyPlanningDecision } from "./planningDecision";
@@ -124,14 +125,14 @@ export async function advanceWeeklySession(
     session.substantiveQuestions += 1;
     revised = true;
   } else if (utterance && (session.lastQuestionKind === "primary" || session.lastQuestionKind === "blocking") && session.lastQuestionDate) {
-    capturePrimary(session, utterance, input.dossier);
+    capturePrimary(session, utterance, input.dossier.growthCandidates);
     session.substantiveQuestions += 1;
     revised = true;
   } else if (utterance && session.lastQuestionKind === null && session.substantiveQuestions === 0) {
     const target = session.draft.days.find(day => day.disposition === "primary" && !day.primary);
     if (target) session.lastQuestionDate = target.businessDate;
     session.lastQuestionKind = "primary";
-    capturePrimary(session, utterance, input.dossier);
+    capturePrimary(session, utterance, input.dossier.growthCandidates);
     session.substantiveQuestions += 1;
     revised = true;
   }
@@ -227,72 +228,30 @@ function captureReadiness(session: WeeklyPlanningSession, utterance: string, dos
 function capturePrimary(
   session: WeeklyPlanningSession,
   utterance: string,
-  dossier: WeeklyDossier
+  candidates?: readonly WeeklyExecutionCandidateContract[]
 ): void {
-  const date =
-    session.lastQuestionDate ??
-    session.draft.days.find(day => !day.primary && day.disposition === "primary")?.businessDate;
+  const today = session.draft.days[0];
+  const namedSkip = /\bskip\s+(monday|tuesday|wednesday|thursday|friday|today)\b/i.exec(utterance);
+  if (namedSkip && today && session.lastQuestionDate === today.businessDate) {
+    const word = namedSkip[1]!.toLowerCase();
+    if (word === "today" || word === today.weekday.toLowerCase()) {
+      today.disposition = "stand_down";
+      today.primary = null;
+      today.uncertainty = "Stood down for today.";
+      return;
+    }
+  }
+  const date = session.lastQuestionDate ?? session.draft.days.find(day => !day.primary && day.disposition === "primary")?.businessDate;
   const day = session.draft.days.find(item => item.businessDate === date);
-  if (!day) return;
-  const isCurrentRemnant =
-    dossier.horizon.todayIsRemnant &&
-    day.businessDate === dossier.horizon.businessDate;
-  if (isCurrentRemnant && remnantStandDown(utterance, day.weekday)) {
-    day.disposition = "stand_down";
-    day.primary = null;
-    day.uncertainty = "Stood down for today.";
-    return;
-  }
-  if (isCurrentRemnant && remnantRetentionReference(utterance, day.weekday)) {
-    day.uncertainty = "Name the one thing you want to keep for today.";
-    return;
-  }
-  if (day.disposition === "stand_down") return;
+  if (!day || day.disposition === "stand_down") return;
   const text = utterance.replace(/\s+/g, " ").trim().slice(0, 255);
   day.primary = {
     text,
     source: "operator_stated",
     existingCommitmentId: null,
-    executionType: resolveWeeklyExecutionType({
-      text,
-      candidates: dossier.growthCandidates,
-    }),
+    executionType: resolveWeeklyExecutionType({ text, candidates }),
   };
   day.uncertainty = null;
-}
-
-function remnantStandDown(
-  utterance: string,
-  weekday: WeeklyDayDraft["weekday"]
-): boolean {
-  const text = utterance
-    .trim()
-    .toLowerCase()
-    .replace(/[.!?]+$/g, "")
-    .replace(/\s+/g, " ");
-  const day = weekday.toLowerCase();
-  const dayWord = "(?:today|" + day + ")";
-  return new RegExp(
-    "^(?:skip(?: " + dayWord + ")?|stand down|stand " + dayWord +
-      " down|leave " + dayWord +
-      " (?:open|alone)|nothing(?: " + dayWord +
-      ")?|none(?: " + dayWord + ")?|not today)$"
-  ).test(text);
-}
-
-function remnantRetentionReference(
-  utterance: string,
-  weekday: WeeklyDayDraft["weekday"]
-): boolean {
-  const text = utterance
-    .trim()
-    .toLowerCase()
-    .replace(/[.!?]+$/g, "")
-    .replace(/\s+/g, " ");
-  const day = weekday.toLowerCase();
-  return new RegExp(
-    "^(?:keep (?:it|that|today|" + day + ")|keep it (?:today|on " + day + ")|use it today|run it today)$"
-  ).test(text);
 }
 
 function nextQuestion(session: WeeklyPlanningSession, dossier: WeeklyDossier): string | null {
@@ -338,20 +297,15 @@ function askPrimary(day: WeeklyDayDraft, dossier: WeeklyDossier): string {
   const known = dossier.facts.filter(
     fact => fact.businessDate === day.businessDate && fact.scheduleLabel
   );
-  if (
-    dossier.horizon.todayIsRemnant &&
-    day.businessDate === dossier.horizon.businessDate
-  ) {
+  if (dossier.horizon.todayIsRemnant && day.businessDate === dossier.horizon.businessDate) {
     const later = dossier.horizon.remainingDates
       .filter(date => date !== day.businessDate)
       .map(date => weekdayName(date));
     const knownLine = known.length
-      ? ` ${day.weekday} already has ${known
-          .map(fact => `${fact.title} (${fact.scheduleLabel})`)
-          .join(", ")}.`
+      ? ` ${day.weekday} already has ${known.map(fact => `${fact.title} (${fact.scheduleLabel})`).join(", ")}.`
       : "";
-    const tail = later.length ? ` and build ${later.join(", ")}` : "";
-    return `${day.weekday} is already underway, so I won\'t pretend it\'s a clean slate.${knownLine} Keep one thin primary for what\'s left today, or stand ${day.weekday} down${tail}?`;
+    const tail = later.length ? ` We still need ${later.join(", ")}.` : "";
+    return `${day.weekday}\'s already underway; I won\'t treat it like a fresh day.${knownLine}${tail} If there\'s one thing worth keeping for what\'s left today, tell me. Otherwise say "skip ${day.weekday}."`;
   }
   if (known.length) {
     const listed = known.map(fact => `${fact.title} (${fact.scheduleLabel})`).join(", ");
