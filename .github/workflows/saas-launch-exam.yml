@@ -1,0 +1,93 @@
+name: JOYSTICK SaaS launch exam
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fresh-customer-exam:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3416:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      CI: "true"
+      NODE_ENV: test
+      APP_SHARED_API_SECRET: launch-exam-app-secret-000000000000000000
+      JWT_SECRET: launch-exam-jwt-secret-000000000000000000
+      STRIPE_SECRET_KEY: launch-exam-placeholder-not-used
+      DAYFORGE_BILLING_STRIPE_SECRET_KEY: sk_test_launch_exam_placeholder_000000000000
+      DAYFORGE_BILLING_STRIPE_WEBHOOK_SECRET: whsec_launch_exam_placeholder
+      DRIVER_PASSWORD: launch-exam-driver
+      DRIVER_OPEN_ID: launch-exam-driver
+      ADMIN_PASSWORD: launch-exam-admin
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Type-check launch candidate
+        run: pnpm check
+      - name: Product and SaaS contract
+        run: pnpm vitest run server/saas/saasContract.test.ts
+      - name: Create disposable launch databases
+        run: |
+          node - <<'NODE'
+          const mysql = require('mysql2/promise');
+          (async () => {
+            const conn = await mysql.createConnection('mysql://root:root@127.0.0.1:3416/');
+            for (const name of [
+              'joystick_launch_hostile',
+              'joystick_billing_lifecycle',
+              'joystick_saas_cogs',
+              'joystick_tenant_lifecycle',
+            ]) {
+              await conn.query(`DROP DATABASE IF EXISTS \`${name}\``);
+              await conn.query(`CREATE DATABASE \`${name}\``);
+            }
+            await conn.end();
+          })().catch(err => { console.error(err); process.exit(1); });
+          NODE
+      - name: Hostile tenant boundary
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3416/joystick_launch_hostile
+        run: |
+          node scripts/migrate.mjs
+          pnpm vitest run --config vitest.integration.config.ts server/saas/hostileTenant.integration.test.ts
+      - name: Fresh signup and billing lifecycle
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3416/joystick_billing_lifecycle
+          SAAS_BILLING_LIFECYCLE_EXAM: "1"
+        run: |
+          node scripts/migrate.mjs
+          pnpm vitest run --config vitest.integration.config.ts server/saas/saasBilling.lifecycle.integration.test.ts
+      - name: Plan-aware tenant COGS
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3416/joystick_saas_cogs
+          SAAS_COGS_EXAM: "1"
+        run: |
+          node scripts/migrate.mjs
+          pnpm vitest run --config vitest.integration.config.ts server/saas/tenantCogs.integration.test.ts
+      - name: Export and safe deletion lifecycle
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3416/joystick_tenant_lifecycle
+          SAAS_TENANT_LIFECYCLE_EXAM: "1"
+        run: |
+          node scripts/migrate.mjs
+          pnpm vitest run --config vitest.integration.config.ts server/saas/tenantLifecycle.integration.test.ts
