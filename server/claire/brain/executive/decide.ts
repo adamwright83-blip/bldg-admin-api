@@ -286,7 +286,10 @@ export async function decideTurn(
 
     // ── Authority ───────────────────────────────────────────────────────────
     // Work-frame classification informs this choice. It does not mint the grant.
-    const mayPropose = dayLineCandidate(perceived) && attention.pendingDisposition !== "reject";
+    const mayPropose =
+      dayLineCandidate(perceived) &&
+      attention.pendingDisposition !== "reject" &&
+      attention.pendingDisposition !== "confirm";
     if (mayPropose) {
       control.actionRisk = "proposal_only";
       const title = proposedWorkTitle(perceived);
