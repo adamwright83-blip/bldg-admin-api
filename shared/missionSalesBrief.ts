@@ -32,10 +32,10 @@ export type MissionSalesBriefIntelReference = {
   title: string;
   rationale: string;
   /** Reviewed source teaching content. Recommendations may adapt this, never promote it to business truth. */
-  principle: string;
-  whenToUse: string[];
-  whenNotToUse: string[];
-  exampleLanguage: string[];
+  principle?: string;
+  whenToUse?: string[];
+  whenNotToUse?: string[];
+  exampleLanguage?: string[];
 };
 
 export type MissionSalesBriefRecommendedApproach = {
