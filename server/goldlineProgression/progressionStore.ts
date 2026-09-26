@@ -255,6 +255,9 @@ export async function beginWaywardContactGate(input: {
   }
   const db = await requireDb();
   const current = receipts(existing.row.overworldUnlocksJson);
+  if (current.waywardContactGate?.completedAt) {
+    throw new Error("Wayward CONTACT gate is already durably completed");
+  }
   await db
     .update(goldlineDomainProgression)
     .set({
