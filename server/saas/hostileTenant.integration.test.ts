@@ -2,9 +2,18 @@
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { businessDateInZone } from "../../shared/currentDayLine";
+import { churnRadarRouter } from "../churnRadar/churnRadarRouter";
+import { claireRouter } from "../claire/claireRouter";
+import { createConversationSession } from "../claire/conversation/ledgerService";
+import { commercialMissionRouter } from "../commercialMissions/commercialMissionRouter";
+import { commercialPipelineRouter } from "../commercialPipeline/commercialPipelineRouter";
 import { customerAssetRouter } from "../customerAssets/customerAssetRouter";
+import { getDashboardTimeZone } from "../dashboardZoned";
+import { currentDayLineRouter } from "../goldline/dayline/currentDayLineRouter";
 import { teamRouter } from "../team/teamRouter";
 import { saasRouter } from "./saasRouter";
+import { deleteTenantData, planTenantDeletion } from "./tenantLifecycle";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeMysql = databaseUrl ? describe : describe.skip;
@@ -17,14 +26,22 @@ describeMysql("JOYSTICK hostile two-tenant router boundary", () => {
   const ownerB = `dayforge:owner-b-${suffix}`;
   const workerA = `dayforge:worker-a-${suffix}`;
   const workerB = `dayforge:worker-b-${suffix}`;
+  const ownerNumericIdA = 910001;
+  const ownerNumericIdB = 910002;
   let db: mysql.Connection;
+  let missionAId = 0;
+  let missionBId = 0;
+  let pipelineAId = 0;
+  let pipelineBId = 0;
+  let claireSessionAId = "";
+  let claireSessionBId = "";
 
   const ctx = (tenantId: string, openId: string) =>
     ({
       req: { headers: { host: "admin.bldg.chat" }, protocol: "https" },
       res: {},
       user: {
-        id: tenantId === tenantA ? 910001 : 910002,
+        id: tenantId === tenantA ? ownerNumericIdA : ownerNumericIdB,
         openId,
         role: "user",
         tenantId,
@@ -38,6 +55,43 @@ describeMysql("JOYSTICK hostile two-tenant router boundary", () => {
       vendorSession: null,
       tenantId,
     }) as never;
+
+  const missionInput = (label: string, assignedTo: string) => ({
+    assignedTo,
+    account: {
+      providerName: null,
+      providerAccountId: null,
+      name: `${label} Prospect`,
+      accountType: "apartment",
+      website: null,
+      address: `100 ${label} Avenue`,
+      latitude: null,
+      longitude: null,
+      locationCount: 1,
+      decisionMaker: {
+        name: null,
+        title: null,
+      },
+    },
+    opportunity: {
+      estimatedAnnualValueCents: 120000,
+      estimateConfidence: "medium" as const,
+      score: 60,
+      primarySignal: `${label} test opportunity`,
+      reasons: ["hostile tenant isolation test"],
+      risks: [],
+      evidence: [],
+    },
+    brief: {
+      laundryOpportunity: `${label} laundry opportunity`,
+      salesAngle: "Tenant-isolated test angle",
+      openingLine: "Tenant-isolated test opener",
+      discoveryQuestions: [],
+      objections: [],
+    },
+    steps: [],
+    idempotencyKey: `hostile-mission-${label.toLowerCase().replace(/\s+/g, "-")}-${suffix}`,
+  });
 
   beforeAll(async () => {
     db = await mysql.createConnection(databaseUrl!);
@@ -63,6 +117,19 @@ describeMysql("JOYSTICK hostile two-tenant router boundary", () => {
           [tenantId, openId, role]
         );
       }
+      for (const entitlement of [
+        "boreslay",
+        "dayforge_field",
+        "commercial_pipeline",
+        "churn_radar",
+      ]) {
+        await db.execute(
+          `INSERT INTO dayforge_saas_entitlements
+            (tenantId,entitlementKey,source,enabled)
+           VALUES (?,?,'manual',true)`,
+          [tenantId, entitlement]
+        );
+      }
       await db.execute(
         `INSERT INTO orders
           (tenantId,serviceType,pickupDate,pickupTimeWindow,address,firstName,lastName,phone,status,total,paid)
@@ -70,19 +137,130 @@ describeMysql("JOYSTICK hostile two-tenant router boundary", () => {
         [tenantId, label, "Customer", tenantId === tenantA ? "3105550101" : "3105550202"]
       );
     }
+
+    const missionCallerA = commercialMissionRouter.createCaller(ctx(tenantA, ownerA));
+    const missionCallerB = commercialMissionRouter.createCaller(ctx(tenantB, ownerB));
+    const [missionA, missionB] = await Promise.all([
+      missionCallerA.create(missionInput("Tenant A", ownerA)),
+      missionCallerB.create(missionInput("Tenant B", ownerB)),
+    ]);
+    missionAId = missionA.id;
+    missionBId = missionB.id;
+
+    const pipelineCallerA = commercialPipelineRouter.createCaller(ctx(tenantA, ownerA));
+    const pipelineCallerB = commercialPipelineRouter.createCaller(ctx(tenantB, ownerB));
+    const [pipelinesA, pipelinesB] = await Promise.all([
+      pipelineCallerA.list(),
+      pipelineCallerB.list(),
+    ]);
+    pipelineAId = pipelinesA.find(row => row.mission.id === missionAId)?.id ?? 0;
+    pipelineBId = pipelinesB.find(row => row.mission.id === missionBId)?.id ?? 0;
+    if (!pipelineAId || !pipelineBId) {
+      throw new Error("Synthetic commercial pipeline was not created");
+    }
+
+    const businessDate = businessDateInZone(new Date(), getDashboardTimeZone());
+    const nowIso = new Date().toISOString();
+    for (const [tenantId, actorId, label] of [
+      [tenantA, String(ownerNumericIdA), "Tenant A"],
+      [tenantB, String(ownerNumericIdB), "Tenant B"],
+    ] as const) {
+      const commitmentId = randomUUID();
+      await db.execute(
+        `INSERT INTO day_director_commitments
+          (id,tenantId,actorId,businessDate,idempotencyKey,title,kind,provenance,status,sourceText,metadataJson)
+         VALUES (?,?,?,?,?,?, 'growth','manual','open',?,?)`,
+        [
+          commitmentId,
+          tenantId,
+          actorId,
+          businessDate,
+          `hostile-dayline-${tenantId}`,
+          `${label} Primary`,
+          `${label} explicit primary work`,
+          JSON.stringify({
+            command: {
+              role: "primary",
+              designatedBy: "operator",
+              designatedAt: nowIso,
+              demotedAt: null,
+              demotedReason: null,
+              promisedTo: null,
+              promisedDeadline: null,
+              identityUnknown: false,
+              cargoLink: null,
+              recurrenceRuleId: null,
+              constraints: {
+                windowStart: null,
+                windowEnd: null,
+                scheduleLabel: null,
+              },
+            },
+            operatorMission: {
+              version: 1,
+              source: "operator_explicit",
+              scope: "today_only",
+              completionCondition: `Complete ${label} primary work`,
+              verification: "operator_reported",
+              operatorMissionKey: `hostile-${tenantId}`,
+              requestedAt: nowIso,
+              weeklyIntentDisplacement: true,
+              sourceCommandRef: `hostile:${tenantId}`,
+              evidenceQuote: `make ${label} primary`,
+              businessDate,
+            },
+          }),
+        ]
+      );
+
+      await db.execute(
+        `INSERT INTO customer_churn_scans
+          (id,tenantId,requestId,status,sourceOrderCount,customerCount,atRiskCount,computedAt,createdBy)
+         VALUES (?,?,?,'completed',?,?,?,CURRENT_TIMESTAMP,?)`,
+        [
+          randomUUID(),
+          tenantId,
+          randomUUID(),
+          tenantId === tenantA ? 11 : 22,
+          tenantId === tenantA ? 3 : 5,
+          tenantId === tenantA ? 1 : 2,
+          actorId,
+        ]
+      );
+    }
+
+    const [sessionA, sessionB] = await Promise.all([
+      createConversationSession({
+        tenantId: tenantA,
+        operatorUserId: ownerA,
+        claireConversationId: randomUUID(),
+        conversationKind: "hostile_tenant_exam",
+        recordingEnabled: false,
+      }),
+      createConversationSession({
+        tenantId: tenantB,
+        operatorUserId: ownerB,
+        claireConversationId: randomUUID(),
+        conversationKind: "hostile_tenant_exam",
+        recordingEnabled: false,
+      }),
+    ]);
+    claireSessionAId = sessionA.id;
+    claireSessionBId = sessionB.id;
   });
 
   afterAll(async () => {
-    if (!db) return;
+    if (db) await db.end();
     for (const tenantId of [tenantA, tenantB]) {
-      await db.execute("DELETE FROM employee_operating_profile_events WHERE tenantId = ?", [tenantId]);
-      await db.execute("DELETE FROM employee_operating_profiles WHERE tenantId = ?", [tenantId]);
-      await db.execute("DELETE FROM orders WHERE tenantId = ?", [tenantId]);
-      await db.execute("DELETE FROM dayforge_saas_memberships WHERE tenantId = ?", [tenantId]);
-      await db.execute("DELETE FROM users WHERE tenantId = ?", [tenantId]);
-      await db.execute("DELETE FROM dayforge_saas_tenants WHERE id = ?", [tenantId]);
+      const plan = await planTenantDeletion(tenantId);
+      if (plan.totalRows > 0) {
+        await deleteTenantData({
+          tenantId,
+          expectedTotalRows: plan.totalRows,
+          confirmation: tenantId,
+        });
+      }
     }
-    await db.end();
   });
 
   it("real customer router lists only the authenticated tenant's customers", async () => {
@@ -150,5 +328,75 @@ describeMysql("JOYSTICK hostile two-tenant router boundary", () => {
     expect(meA.configuration?.tenant.id).toBe(tenantA);
     expect(meB.tenantId).toBe(tenantB);
     expect(meB.configuration?.tenant.id).toBe(tenantB);
+  });
+
+  it("commercial mission routers isolate reads and reject cross-tenant mission mutation", async () => {
+    const a = commercialMissionRouter.createCaller(ctx(tenantA, ownerA));
+    const b = commercialMissionRouter.createCaller(ctx(tenantB, ownerB));
+    const [missionsA, missionsB] = await Promise.all([
+      a.list({ limit: 100 }),
+      b.list({ limit: 100 }),
+    ]);
+    expect(missionsA.some(row => row.id === missionAId)).toBe(true);
+    expect(missionsA.some(row => row.id === missionBId)).toBe(false);
+    expect(missionsB.some(row => row.id === missionBId)).toBe(true);
+    expect(missionsB.some(row => row.id === missionAId)).toBe(false);
+
+    await expect(a.get({ missionId: missionBId })).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+    await expect(
+      a.transition({
+        missionId: missionBId,
+        expectedVersion: 1,
+        toStatus: "selected",
+        idempotencyKey: `hostile-cross-mission-${suffix}`,
+      })
+    ).rejects.toThrow();
+  });
+
+  it("commercial pipeline routers isolate lists and cross-tenant detail ids", async () => {
+    const a = commercialPipelineRouter.createCaller(ctx(tenantA, ownerA));
+    const b = commercialPipelineRouter.createCaller(ctx(tenantB, ownerB));
+    const [rowsA, rowsB] = await Promise.all([a.list(), b.list()]);
+    expect(rowsA.some(row => row.id === pipelineAId)).toBe(true);
+    expect(rowsA.some(row => row.id === pipelineBId)).toBe(false);
+    expect(rowsB.some(row => row.id === pipelineBId)).toBe(true);
+    expect(rowsB.some(row => row.id === pipelineAId)).toBe(false);
+    expect(await a.detail({ pipelineId: pipelineBId })).toBeNull();
+    expect(await b.detail({ pipelineId: pipelineAId })).toBeNull();
+  });
+
+  it("churn radar reads only the authenticated tenant's latest scan", async () => {
+    const a = churnRadarRouter.createCaller(ctx(tenantA, ownerA));
+    const b = churnRadarRouter.createCaller(ctx(tenantB, ownerB));
+    const [scanA, scanB] = await Promise.all([a.latestScan(), b.latestScan()]);
+    expect(scanA?.sourceOrderCount).toBe(11);
+    expect(scanB?.sourceOrderCount).toBe(22);
+    expect(scanA?.sourceOrderCount).not.toBe(scanB?.sourceOrderCount);
+  });
+
+  it("Day Line designation is tenant-scoped through the actual router", async () => {
+    const a = currentDayLineRouter.createCaller(ctx(tenantA, ownerA));
+    const b = currentDayLineRouter.createCaller(ctx(tenantB, ownerB));
+    const [lineA, lineB] = await Promise.all([a.today(), b.today()]);
+    expect(lineA.designated?.title).toBe("Tenant A Primary");
+    expect(lineB.designated?.title).toBe("Tenant B Primary");
+    expect(lineA.designated?.title).not.toBe(lineB.designated?.title);
+  });
+
+  it("Claire call analysis rejects another tenant's conversation session id", async () => {
+    const a = claireRouter.createCaller(ctx(tenantA, ownerA));
+    const b = claireRouter.createCaller(ctx(tenantB, ownerB));
+    const ownA = await a.callAnalysis({ sessionId: claireSessionAId });
+    const ownB = await b.callAnalysis({ sessionId: claireSessionBId });
+    expect(ownA.session.id).toBe(claireSessionAId);
+    expect(ownB.session.id).toBe(claireSessionBId);
+    await expect(
+      a.callAnalysis({ sessionId: claireSessionBId })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(
+      b.callAnalysis({ sessionId: claireSessionAId })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });
