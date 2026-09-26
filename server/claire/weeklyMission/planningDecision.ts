@@ -104,21 +104,25 @@ export function acceptPlanningDecision(
   if (!uncertainties) return null;
   const focusUncertainty = typeof record.focusUncertainty === "string" ? record.focusUncertainty.trim().slice(0, 240) : null;
   if (focusUncertainty && !namesAreGrounded(focusUncertainty, hypothesisText)) return null;
+  const operatorEvidence = [input.utterance, ...input.session.operatorEvidence];
   const operatorCommitments = [
-    input.utterance,
-    ...input.session.operatorEvidence,
+    ...operatorEvidence,
     ...input.session.draft.days
       .filter(day => day.primary?.source === "operator_stated")
       .map(day => day.primary?.text ?? ""),
   ]
     .join(" ")
     .toLowerCase();
+  const remnantExplicitlyRetained = operatorEvidence.some(line =>
+    explicitlyRetainsRemnant(line, input.dossier.horizon.weekday)
+  );
   const draftDays = parseDraftDays(
     record.draftDays,
     input.dossier,
     commitments,
     input.session.draft,
-    operatorCommitments
+    operatorCommitments,
+    remnantExplicitlyRetained
   );
   if (draftDays === undefined) return null;
 
@@ -236,7 +240,8 @@ function parseDraftDays(
   dossier: WeeklyDossier,
   corpus: string,
   draft: WeeklyDraft,
-  operatorCorpus: string
+  operatorCorpus: string,
+  remnantExplicitlyRetained: boolean
 ): WeeklyDraftDayPatch[] | null | undefined {
   if (value == null) return null;
   if (!Array.isArray(value)) return undefined;
@@ -258,7 +263,8 @@ function parseDraftDays(
         !existing?.primary?.text;
       if (
         isUnclaimedCurrentRemnant &&
-        !operatorCorpus.includes(primaryText.toLowerCase())
+        !operatorCorpus.includes(primaryText.toLowerCase()) &&
+        !remnantExplicitlyRetained
       ) {
         return undefined;
       }
@@ -281,6 +287,18 @@ function parseDraftDays(
     days.push(patch);
   }
   return days;
+}
+
+function explicitlyRetainsRemnant(utterance: string, weekday: string): boolean {
+  const text = utterance
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?]+$/g, "")
+    .replace(/\s+/g, " ");
+  const day = weekday.toLowerCase();
+  return new RegExp(
+    "^(?:keep (?:it|that|today|" + day + ")|keep it (?:today|on " + day + ")|use it today|run it today)$"
+  ).test(text);
 }
 
 function guardSpeech(speech: string, dossier: WeeklyDossier): string {
