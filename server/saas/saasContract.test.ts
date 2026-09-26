@@ -133,4 +133,19 @@ describe("DayForge SaaS production contract", () => {
     expect(auth).toContain('role: "user"');
     expect(auth).not.toMatch(/role:\s*platformRole/);
   });
+
+  it("keeps commercial Claire voice behind an explicit tenant entitlement", () => {
+    const shared = source("../../shared/saasTenant.ts");
+    const trpc = source("../_core/trpc.ts");
+    const claire = source("../claire/claireRouter.ts");
+    const twilio = source("../claire/claireTwilio.ts");
+    expect(shared).toContain('"claire_voice"');
+    expect(trpc).toContain("legacyDayforgeClaireVoiceProcedure");
+    expect(trpc).toContain('entitlement: "claire_voice"');
+    expect(claire).toContain("callBeforeDrive: legacyDayforgeClaireVoiceProcedure");
+    expect(claire).toContain("callAfterStop: legacyDayforgeClaireVoiceProcedure");
+    expect(twilio).not.toContain("Adam. Claire here.");
+    expect(twilio).toContain("Claire here.");
+  });
+
 });
