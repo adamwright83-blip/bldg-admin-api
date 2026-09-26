@@ -41,7 +41,6 @@ export default function ProductShell() {
         </nav>
         <div className="cc-top-actions">
           <Link href="/new-order" className="cc-button primary"><Plus size={16} /> New laundry order</Link>
-          <Link href="/admin" className="cc-button">Legacy operations</Link>
         </div>
       </header>
       <div className="cc-shell-body">{location === "/product/unload" ? <UnloadView /> : location === "/product/hunt" ? <HuntView /> : isField ? <FieldHome /> : <HqHome />}</div>
