@@ -38,9 +38,10 @@ export async function createLegacyDayforgeSubscriptionCheckout(input: {
   resumeToken: string;
   planKey: string;
   requestId: string;
+  stripe?: Stripe;
 }) {
   const existingOnboarding = await requireOnboardingSession(input);
-  const stripe = getLegacyDayforgeBillingStripe();
+  const stripe = input.stripe ?? getLegacyDayforgeBillingStripe();
   if (existingOnboarding.stripeCheckoutSessionId) {
     if (existingOnboarding.planKey !== input.planKey) {
       throw new Error(
