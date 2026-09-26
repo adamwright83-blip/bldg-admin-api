@@ -3355,6 +3355,96 @@ await runRequired(
   )`,
   "CREATE TABLE goldline_domain_capability_grants"
 );
+// Required commercial relationship/mission spine. Customer Assets and Team
+// project these tables even when a new tenant has no commercial rows yet, so a
+// clean SaaS database must contain the empty canonical structures.
+await applyHistoricalCreateTables(
+  "../drizzle/0035_commercial_mission_spine.sql",
+  "commercial mission spine"
+);
+await applyHistoricalStandaloneIndexes(
+  "../drizzle/0035_commercial_mission_spine.sql",
+  "commercial mission spine indexes"
+);
+await ensureRequiredColumn(
+  "commercial_accounts",
+  "identityKey",
+  "ALTER TABLE commercial_accounts ADD COLUMN identityKey varchar(64) NULL AFTER tenantId"
+);
+await ensureRequiredIndex(
+  "commercial_accounts",
+  "uq_commercial_accounts_tenant_identity",
+  ["tenantId", "identityKey"],
+  "ALTER TABLE commercial_accounts ADD UNIQUE KEY uq_commercial_accounts_tenant_identity (tenantId,identityKey)"
+);
+await ensureRequiredColumn(
+  "commercial_account_locations",
+  "locationKey",
+  "ALTER TABLE commercial_account_locations ADD COLUMN locationKey varchar(64) NULL AFTER accountId"
+);
+await ensureRequiredIndex(
+  "commercial_account_locations",
+  "uq_commercial_locations_tenant_account_key",
+  ["tenantId", "accountId", "locationKey"],
+  "ALTER TABLE commercial_account_locations ADD UNIQUE KEY uq_commercial_locations_tenant_account_key (tenantId,accountId,locationKey)"
+);
+await runRequired(
+  "ALTER TABLE commercial_account_locations MODIFY COLUMN latitude decimal(10,7) NULL, MODIFY COLUMN longitude decimal(10,7) NULL",
+  "commercial account location coordinates nullable"
+);
+
+await ensureRequiredColumn(
+  "commercial_account_contacts",
+  "contactKey",
+  "ALTER TABLE commercial_account_contacts ADD COLUMN contactKey varchar(64) NULL AFTER accountId"
+);
+for (const [columnName, definition] of [
+  ["relationshipType", "enum('decision_maker','gatekeeper','champion','concierge','front_desk','security','operations','other','unknown') NOT NULL DEFAULT 'unknown'"],
+  ["preferredChannel", "enum('email','sms','phone','unknown') NOT NULL DEFAULT 'unknown'"],
+  ["source", "varchar(96) NOT NULL DEFAULT 'unknown'"],
+  ["notes", "text NULL"],
+]) {
+  await ensureRequiredColumn(
+    "commercial_account_contacts",
+    columnName,
+    `ALTER TABLE commercial_account_contacts ADD COLUMN ${columnName} ${definition}`
+  );
+}
+await ensureRequiredIndex(
+  "commercial_account_contacts",
+  "uq_commercial_contacts_tenant_account_key",
+  ["tenantId", "accountId", "contactKey"],
+  "ALTER TABLE commercial_account_contacts ADD UNIQUE KEY uq_commercial_contacts_tenant_account_key (tenantId,accountId,contactKey)"
+);
+await runRequired(
+  "ALTER TABLE commercial_opportunities MODIFY COLUMN estimatedAnnualValueCents int NULL",
+  "commercial opportunity estimated value nullable"
+);
+
+await applyHistoricalCreateTables(
+  "../drizzle/0041_commercial_pipeline_conversion.sql",
+  "commercial pipeline conversion"
+);
+await applyHistoricalStandaloneIndexes(
+  "../drizzle/0041_commercial_pipeline_conversion.sql",
+  "commercial pipeline conversion indexes"
+);
+await runRequired(
+  "ALTER TABLE commercial_pipeline_records MODIFY COLUMN estimatedContractValueCents int NULL",
+  "commercial pipeline estimated value nullable"
+);
+for (const [tableName, columns] of [
+  ["commercial_accounts", ["id", "tenantId", "identityKey", "name", "accountType"]],
+  ["commercial_account_locations", ["id", "tenantId", "accountId", "locationKey", "latitude", "longitude"]],
+  ["commercial_account_contacts", ["id", "tenantId", "accountId", "contactKey", "relationshipType", "preferredChannel", "source", "notes"]],
+  ["commercial_opportunities", ["id", "tenantId", "accountId", "estimatedAnnualValueCents"]],
+  ["commercial_missions", ["id", "tenantId", "assignedTo", "status", "missionBriefJson"]],
+  ["commercial_pipeline_records", ["id", "tenantId", "accountId", "opportunityId", "missionId", "stage", "estimatedContractValueCents"]],
+  ["commercial_follow_ups", ["id", "tenantId", "pipelineId", "missionId", "status", "dueAt"]],
+]) {
+  await assertRequiredColumns(tableName, columns);
+}
+
 // Customer SaaS team operating profiles. The Team router has no runtime
 // CREATE fallback, so these tables are required on every clean production boot.
 await runRequired(
