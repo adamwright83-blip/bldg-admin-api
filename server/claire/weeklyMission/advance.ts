@@ -273,12 +273,28 @@ function remnantStandDown(
   const day = weekday.toLowerCase();
   const dayWord = "(?:today|" + day + ")";
   return new RegExp(
-    "^(?:skip(?: " + dayWord + ")?|stand " + dayWord +
+    "^(?:skip(?: " + dayWord + ")?|stand down|stand " + dayWord +
       " down|leave " + dayWord +
       " (?:open|alone)|nothing(?: " + dayWord +
       ")?|none(?: " + dayWord + ")?|not today)$"
   ).test(text);
 }
+
+function remnantRetentionReference(
+  utterance: string,
+  weekday: WeeklyDayDraft["weekday"]
+): boolean {
+  const text = utterance
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?]+$/g, "")
+    .replace(/\s+/g, " ");
+  const day = weekday.toLowerCase();
+  return new RegExp(
+    "^(?:keep (?:it|that|today|" + day + ")|keep it (?:today|on " + day + ")|use it today|run it today)$"
+  ).test(text);
+}
+
 function nextQuestion(session: WeeklyPlanningSession, dossier: WeeklyDossier): string | null {
   const empty = session.draft.days.find(day => day.disposition === "primary" && !day.primary);
   const readiness = session.draft.days.find(
