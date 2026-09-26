@@ -283,7 +283,35 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/product/team",
 ]);
 
+const SAAS_CUSTOMER_PATH_PREFIXES = [
+  "/product",
+  "/onboarding",
+  "/goldline/start",
+  "/dayforge-settings",
+  "/dayforge-invite",
+  "/billing",
+  "/driver",
+  "/commercial-proposal/",
+  "/receipt/",
+  "/boreslay",
+  "/dayforge",
+  "/landingfinal",
+  "/territory-preview",
+] as const;
+
+export function isSaasCustomerPath(pathname: string): boolean {
+  const normalized = pathname.replace(/\/+$/, "") || "/";
+  return SAAS_CUSTOMER_PATH_PREFIXES.some(prefix =>
+    prefix.endsWith("/") ? normalized.startsWith(prefix) : normalized === prefix || normalized.startsWith(`${prefix}/`)
+  );
+}
+
 function AdminHostRouter() {
+  const { user, loading: authLoading, isAuthenticated } = useAuth();
+  if (authLoading) return <div style={{ minHeight: "100vh", background: "#fff" }} />;
+  if (isAuthenticated && user?.role !== "admin" && !isSaasCustomerPath(window.location.pathname)) {
+    return <Redirect to="/product" />;
+  }
   return (
     <Switch>
       {/* admin.bldg.chat/onboarding is the first-run Goldline onboarding.
