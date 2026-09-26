@@ -318,9 +318,23 @@ export async function hasServerAuthoritativeWaywardContactGate(input: {
   operatorId: string;
 }): Promise<boolean> {
   const existing = await findDomainProgression(input);
-  if (!existing.readable || !existing.row) return false;
+  if (!existing.readable || !existing.row?.companionRookOwnedAt) return false;
   const gate = receipts(existing.row.overworldUnlocksJson).waywardContactGate;
-  return Boolean(gate?.runId && gate.completedAt);
+  if (
+    typeof gate?.runId !== "string" ||
+    !gate.runId ||
+    typeof gate.startedAt !== "string" ||
+    typeof gate.completedAt !== "string"
+  ) {
+    return false;
+  }
+  const startedAt = Date.parse(gate.startedAt);
+  const completedAt = Date.parse(gate.completedAt);
+  return (
+    Number.isFinite(startedAt) &&
+    Number.isFinite(completedAt) &&
+    completedAt - startedAt >= 5_000
+  );
 }
 
 /**
