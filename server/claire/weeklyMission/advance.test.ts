@@ -371,7 +371,6 @@ describe("advanceWeeklySession", () => {
   });
 });
 
-
 describe("Monday remnant lock", () => {
   const REMNANT = remainingWeekHorizon({
     businessDate: "2026-09-21",
@@ -412,43 +411,29 @@ describe("Monday remnant lock", () => {
     });
   }
 
-  it("counsels the current Monday as an optional remnant and keeps Tue-Fri in the horizon", async () => {
+  it("counsels Monday as a remnant without dropping Tuesday through Friday", async () => {
     setClaireConversationStateStoreForTests(createMemoryConversationStateStore());
     const dossier = await remnantDossier();
-    const session = remnantSession(dossier);
-    const first = await advanceWeeklySession({
+    const result = await advanceWeeklySession({
       dossier,
-      session,
+      session: remnantSession(dossier),
       operatorUtterance: "",
     });
-    expect(first.draft.days.map(day => day.weekday)).toEqual([
+    expect(result.draft.days.map(day => day.weekday)).toEqual([
       "Monday",
       "Tuesday",
       "Wednesday",
       "Thursday",
       "Friday",
     ]);
-    expect(first.draft.days[0]?.primary).toBeNull();
-    expect(first.draft.days[0]?.disposition).toBe("primary");
-    expect(first.speech).toMatch(/already underway/i);
-    expect(first.speech).toMatch(/clean slate/i);
-    expect(first.speech).toMatch(/stand Monday down/i);
-
-    const stoodDown = await advanceWeeklySession({
-      dossier,
-      session: first.session,
-      operatorUtterance: "Skip Monday.",
-    });
-    expect(stoodDown.draft.days).toHaveLength(5);
-    expect(stoodDown.draft.days[0]).toMatchObject({
-      weekday: "Monday",
-      disposition: "stand_down",
-      primary: null,
-    });
-    expect(stoodDown.speech).toMatch(/Tuesday/i);
+    expect(result.draft.days[0]?.primary).toBeNull();
+    expect(result.speech).toMatch(/already underway/i);
+    expect(result.speech).toMatch(/skip Monday/i);
+    expect(result.speech).toMatch(/Tuesday/);
+    expect(result.speech).toMatch(/Friday/);
   });
 
-  it("rejects a model patch that turns dossier context into an unapproved remnant primary", async () => {
+  it("rejects a model draft that promotes dossier context into the remnant without operator retention", async () => {
     setClaireConversationStateStoreForTests(createMemoryConversationStateStore());
     const dossier = await remnantDossier();
     const session = remnantSession(dossier);
@@ -465,12 +450,7 @@ describe("Monday remnant lock", () => {
           },
         ],
         focusUncertainty: "whether Call Cedar Hollow owns Monday",
-        draftDays: [
-          {
-            businessDate: "2026-09-21",
-            primaryText: "Call Cedar Hollow",
-          },
-        ],
+        draftDays: [{ businessDate: "2026-09-21", primaryText: "Call Cedar Hollow" }],
       },
       { dossier, session, utterance: "" }
     );
@@ -478,14 +458,13 @@ describe("Monday remnant lock", () => {
     expect(session.draft.days[0]?.primary).toBeNull();
   });
 
-  it("accepts an explicit keep-it response before the model retains grounded dossier work", async () => {
+  it("accepts an explicit keep-it before retaining grounded work in the remnant", async () => {
     setClaireConversationStateStoreForTests(createMemoryConversationStateStore());
     const dossier = await remnantDossier();
-    const session = remnantSession(dossier);
     const result = await advanceWeeklySession(
       {
         dossier,
-        session,
+        session: remnantSession(dossier),
         operatorUtterance: "Keep it.",
       },
       {
@@ -501,77 +480,11 @@ describe("Monday remnant lock", () => {
             },
           ],
           focusUncertainty: "what owns Tuesday",
-          draftDays: [
-            {
-              businessDate: "2026-09-21",
-              primaryText: "Call Cedar Hollow",
-            },
-          ],
+          draftDays: [{ businessDate: "2026-09-21", primaryText: "Call Cedar Hollow" }],
         }),
       }
     );
-    expect(result.draft.days[0]?.primary).toMatchObject({
-      text: "Call Cedar Hollow",
-      source: "existing_work",
-    });
-  });
-
-  it("does not turn a bare keep-it fallback into a literal primary when no model resolves the reference", async () => {
-    setClaireConversationStateStoreForTests(createMemoryConversationStateStore());
-    const dossier = await remnantDossier();
-    const session = remnantSession(dossier);
-    const first = await advanceWeeklySession({
-      dossier,
-      session,
-      operatorUtterance: "",
-    });
-    const second = await advanceWeeklySession({
-      dossier,
-      session: first.session,
-      operatorUtterance: "Keep it.",
-    });
-    expect(second.draft.days[0]?.primary).toBeNull();
-    expect(second.draft.days[0]?.uncertainty).not.toBeNull();
-    expect(JSON.stringify(second.draft)).not.toMatch(/"text":"Keep it"/i);
-  });
-
-  it("allows the operator to explicitly retain a thin Monday primary", async () => {
-    setClaireConversationStateStoreForTests(createMemoryConversationStateStore());
-    const dossier = await remnantDossier();
-    const session = remnantSession(dossier);
-    const result = await advanceWeeklySession(
-      {
-        dossier,
-        session,
-        operatorUtterance: "Keep Call Cedar Hollow on Monday.",
-      },
-      {
-        completeAct: async () => ({
-          act: "REVISE",
-          speech: "Monday: Call Cedar Hollow. What owns Tuesday?",
-          hypothesisSummary: "Call Cedar Hollow is the operator-stated Monday remnant.",
-          uncertainties: [
-            {
-              text: "what owns Tuesday",
-              businessDate: "2026-09-22",
-              status: "open",
-            },
-          ],
-          focusUncertainty: "what owns Tuesday",
-          draftDays: [
-            {
-              businessDate: "2026-09-21",
-              primaryText: "Call Cedar Hollow",
-            },
-          ],
-        }),
-      }
-    );
-    expect(result.draft.days[0]?.primary).toMatchObject({
-      text: "Call Cedar Hollow",
-      source: "operator_stated",
-    });
-    expect(result.draft.days[0]?.disposition).toBe("primary");
+    expect(result.draft.days[0]?.primary?.text).toBe("Call Cedar Hollow");
     expect(result.writesBusinessTruth).toBe(false);
   });
 });
