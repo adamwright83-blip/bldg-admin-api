@@ -37,14 +37,14 @@ describe("H — existing Claire conversational loop remains intact", () => {
     expect(xml).toContain('bargeIn="true"');
     expect(xml).toContain('speechModel="experimental_conversations"');
     expect(xml.indexOf("<Gather")).toBeLessThan(
-      xml.indexOf("Adam. Claire here.")
+      xml.indexOf("Claire here.")
     );
-    expect(xml.indexOf("Adam. Claire here.")).toBeLessThan(
+    expect(xml.indexOf("Claire here.")).toBeLessThan(
       xml.indexOf("</Gather>")
     );
     expect(xml).toContain("/api/claire/twilio/pre-drive?token=signed-token");
     expect(spokenClaireText("Your next stop is The Wilshire. Ask how laundry works today.", true)).toBe(
-      "Adam. Claire here. Your next stop is The Wilshire. Ask how laundry works today."
+      "Claire here. Your next stop is The Wilshire. Ask how laundry works today."
     );
   });
 
@@ -54,7 +54,7 @@ describe("H — existing Claire conversational loop remains intact", () => {
       token: "signed-token",
     });
 
-    expect(xml).not.toContain("Adam. Claire here.");
+    expect(xml).not.toContain("Claire here.");
     expect(xml.indexOf("<Gather")).toBeLessThan(
       xml.indexOf("The context names the building")
     );
