@@ -154,6 +154,10 @@ export const legacyDayforgeMissionFieldProcedure = legacyDayforgeProcedure({
   entitlement: "dayforge_field",
   roles: fieldRoles,
 });
+export const legacyDayforgeClaireVoiceProcedure = legacyDayforgeProcedure({
+  entitlement: "claire_voice",
+  roles: fieldRoles,
+});
 export const legacyDayforgeProposalOperatorProcedure = legacyDayforgeProcedure({
   entitlement: "commercial_pipeline",
   roles: operatorRoles,
