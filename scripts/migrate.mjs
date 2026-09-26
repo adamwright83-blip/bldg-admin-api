@@ -3699,6 +3699,94 @@ await ensureRequiredIndex(
      ADD KEY idx_commercial_irl_step_details_tenant_mission (tenantId,missionId,missionStepId)`
 );
 
+// Commercial mission dispatches are part of Day Line ranking and have no
+// acceptable runtime-create fallback. Keep production boot authoritative.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS commercial_mission_dispatches (
+    id varchar(36) NOT NULL PRIMARY KEY,
+    tenantId varchar(64) NOT NULL,
+    missionId int NOT NULL,
+    assignedTo varchar(128) NOT NULL,
+    handoffId varchar(36) NULL,
+    dispatchPolicy enum('manual','on_game_complete') NOT NULL DEFAULT 'manual',
+    channel enum('in_app','sms') NOT NULL,
+    status enum('queued','sent','failed','opened','not_configured','cancelled') NOT NULL DEFAULT 'queued',
+    destinationPath varchar(1024) NOT NULL,
+    queuedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    sentAt timestamp NULL,
+    failedAt timestamp NULL,
+    openedAt timestamp NULL,
+    providerMessageId varchar(255) NULL,
+    failureReason text NULL,
+    requestId varchar(36) NOT NULL,
+    createdBy varchar(128) NOT NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_commercial_dispatches_tenant_request_channel (tenantId,requestId,channel),
+    KEY idx_commercial_dispatches_tenant_mission (tenantId,missionId,createdAt),
+    KEY idx_commercial_dispatches_tenant_assignee_status (tenantId,assignedTo,status,createdAt)
+  )`,
+  "CREATE TABLE commercial_mission_dispatches"
+);
+await assertRequiredColumns("commercial_mission_dispatches", [
+  "id",
+  "tenantId",
+  "missionId",
+  "assignedTo",
+  "handoffId",
+  "dispatchPolicy",
+  "channel",
+  "status",
+  "destinationPath",
+  "queuedAt",
+  "sentAt",
+  "failedAt",
+  "openedAt",
+  "providerMessageId",
+  "failureReason",
+  "requestId",
+  "createdBy",
+  "createdAt",
+  "updatedAt",
+]);
+await ensureRequiredIndex(
+  "commercial_mission_dispatches",
+  "uq_commercial_dispatches_tenant_request_channel",
+  ["tenantId", "requestId", "channel"],
+  `ALTER TABLE commercial_mission_dispatches
+     ADD UNIQUE KEY uq_commercial_dispatches_tenant_request_channel (tenantId,requestId,channel)`
+);
+await ensureRequiredIndex(
+  "commercial_mission_dispatches",
+  "idx_commercial_dispatches_tenant_mission",
+  ["tenantId", "missionId", "createdAt"],
+  `ALTER TABLE commercial_mission_dispatches
+     ADD KEY idx_commercial_dispatches_tenant_mission (tenantId,missionId,createdAt)`
+);
+await ensureRequiredIndex(
+  "commercial_mission_dispatches",
+  "idx_commercial_dispatches_tenant_assignee_status",
+  ["tenantId", "assignedTo", "status", "createdAt"],
+  `ALTER TABLE commercial_mission_dispatches
+     ADD KEY idx_commercial_dispatches_tenant_assignee_status (tenantId,assignedTo,status,createdAt)`
+);
+await assertEnumContainsValues("commercial_mission_dispatches", "dispatchPolicy", [
+  "manual",
+  "on_game_complete",
+]);
+await assertEnumContainsValues("commercial_mission_dispatches", "channel", [
+  "in_app",
+  "sms",
+]);
+await assertEnumContainsValues("commercial_mission_dispatches", "status", [
+  "queued",
+  "sent",
+  "failed",
+  "opened",
+  "not_configured",
+  "cancelled",
+]);
+
 // Customer SaaS team operating profiles. The Team router has no runtime
 // CREATE fallback, so these tables are required on every clean production boot.
 await runRequired(
