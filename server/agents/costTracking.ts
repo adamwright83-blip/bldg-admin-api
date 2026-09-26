@@ -1,9 +1,10 @@
 import { getTenantAiUsage, incrementTenantAiUsage } from "../db";
 import { logAgentEvent } from "./agentEvents";
 import type { AgentContext } from "./permissions";
-
-const DEFAULT_WARNING_LIMIT_CENTS = Number(process.env.AI_WARNING_LIMIT_CENTS ?? 5000);
-const DEFAULT_HARD_LIMIT_CENTS = Number(process.env.AI_HARD_LIMIT_CENTS ?? 10000);
+import {
+  recordTenantProviderCost,
+  resolveTenantUsagePolicy,
+} from "../saas/tenantCogs";
 
 export function estimateModelCostCents(inputTokens: number, outputTokens: number): number {
   const inputPerMillionCents = Number(process.env.AI_INPUT_CENTS_PER_MILLION ?? 300);
@@ -12,9 +13,12 @@ export function estimateModelCostCents(inputTokens: number, outputTokens: number
 }
 
 export async function getTenantAiLimitState(tenantId = "default") {
-  const usage = await getTenantAiUsage(tenantId);
-  const warningLimitCents = usage?.warningLimitCents ?? DEFAULT_WARNING_LIMIT_CENTS;
-  const hardLimitCents = usage?.hardLimitCents ?? DEFAULT_HARD_LIMIT_CENTS;
+  const [usage, policy] = await Promise.all([
+    getTenantAiUsage(tenantId),
+    resolveTenantUsagePolicy(tenantId),
+  ]);
+  const warningLimitCents = policy.ai.warningCents ?? 0;
+  const hardLimitCents = policy.ai.hardCents ?? Number.MAX_SAFE_INTEGER;
   const estimatedCostCents = usage?.estimatedCostCents ?? 0;
   return {
     usage,
@@ -42,14 +46,27 @@ export async function trackModelUsage(input: {
 }) {
   const tenantId = input.tenantId ?? input.agentContext?.tenantId ?? "default";
   const estimatedCostCents = estimateModelCostCents(input.inputTokens, input.outputTokens);
-  const usage = await incrementTenantAiUsage({
-    tenantId,
-    inputTokens: input.inputTokens,
-    outputTokens: input.outputTokens,
-    estimatedCostCents,
-    warningLimitCents: DEFAULT_WARNING_LIMIT_CENTS,
-    hardLimitCents: DEFAULT_HARD_LIMIT_CENTS,
-  });
+  const policy = await resolveTenantUsagePolicy(tenantId);
+  const warningLimitCents = policy.ai.warningCents ?? 0;
+  const hardLimitCents = policy.ai.hardCents ?? Number.MAX_SAFE_INTEGER;
+  const [usage] = await Promise.all([
+    incrementTenantAiUsage({
+      tenantId,
+      inputTokens: input.inputTokens,
+      outputTokens: input.outputTokens,
+      estimatedCostCents,
+      warningLimitCents,
+      hardLimitCents,
+    }),
+    recordTenantProviderCost({
+      tenantId,
+      provider: "anthropic",
+      category: "llm",
+      usageUnit: "tokens",
+      usageQuantity: input.inputTokens + input.outputTokens,
+      estimatedCostCents,
+    }),
+  ]);
 
   if (usage && usage.estimatedCostCents >= usage.warningLimitCents) {
     await logAgentEvent({

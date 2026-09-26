@@ -4349,6 +4349,39 @@ export const tenantAiUsage = mysqlTable(
 export type TenantAiUsage = typeof tenantAiUsage.$inferSelect;
 export type InsertTenantAiUsage = typeof tenantAiUsage.$inferInsert;
 
+export const tenantProviderUsage = mysqlTable(
+  "tenant_provider_usage",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    month: varchar("month", { length: 7 }).notNull(),
+    provider: varchar("provider", { length: 64 }).notNull(),
+    category: varchar("category", { length: 64 }).notNull(),
+    usageUnit: varchar("usageUnit", { length: 32 }).notNull(),
+    usageQuantity: int("usageQuantity").default(0).notNull(),
+    estimatedCostCents: int("estimatedCostCents").default(0).notNull(),
+    requestCount: int("requestCount").default(0).notNull(),
+    warningLimitCents: int("warningLimitCents"),
+    hardLimitCents: int("hardLimitCents"),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => ({
+    uqTenantProviderMonth: uniqueIndex("uq_tenant_provider_usage").on(
+      table.tenantId,
+      table.month,
+      table.provider,
+      table.category
+    ),
+    tenantMonthIdx: index("idx_tenant_provider_usage_tenant_month").on(
+      table.tenantId,
+      table.month
+    ),
+  })
+);
+
+export type TenantProviderUsage = typeof tenantProviderUsage.$inferSelect;
+export type InsertTenantProviderUsage = typeof tenantProviderUsage.$inferInsert;
+
 export const vendorProfiles = mysqlTable("vendor_profiles", {
   id: int("id").autoincrement().primaryKey(),
   tenantId: varchar("tenantId", { length: 64 }).notNull().default("default"),
