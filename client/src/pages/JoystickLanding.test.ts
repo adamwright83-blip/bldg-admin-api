@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: route literal retained for the existing tenant-provisioning endpoint; customer-facing product is JOYSTICK. */
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
