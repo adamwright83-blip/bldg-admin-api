@@ -3637,6 +3637,68 @@ for (const [tableName, columns] of [
   await assertRequiredColumns(tableName, columns);
 }
 
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS commercial_mission_irl_step_details (
+    id int AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    tenantId varchar(64) NOT NULL,
+    missionId int NOT NULL,
+    missionStepId int NOT NULL,
+    stepType enum(
+      'generic','wardrobe_review','route_stop','collateral_pickup',
+      'purchase_stop','sales_training','field_visit','debrief'
+    ) NOT NULL DEFAULT 'generic',
+    status enum(
+      'locked','ready','active','awaiting_review','rejected',
+      'completed','skipped','cancelled'
+    ) NOT NULL DEFAULT 'locked',
+    instructionText text NULL,
+    revealPolicy enum('sequential','immediate','admin_only') NOT NULL DEFAULT 'sequential',
+    destinationName varchar(255) NULL,
+    destinationAddress varchar(512) NULL,
+    destinationLatitude decimal(10,7) NULL,
+    destinationLongitude decimal(10,7) NULL,
+    mapsUrl varchar(2048) NULL,
+    countdownDurationSeconds int NULL,
+    startedAt timestamp NULL,
+    deadlineAt timestamp NULL,
+    proofRequirement enum('none','confirmation','photo','photo_optional') NOT NULL DEFAULT 'none',
+    referenceImageUrl varchar(2048) NULL,
+    instructionVideoUrl varchar(2048) NULL,
+    pinnedCoachingArtifactId varchar(36) NULL,
+    verificationState enum('not_required','pending','approved','rejected','overridden') NOT NULL DEFAULT 'not_required',
+    proofAssetId varchar(36) NULL,
+    reviewedBy varchar(128) NULL,
+    reviewedAt timestamp NULL,
+    rejectionReason text NULL,
+    fulfillmentMode enum('not_applicable','live_provider','staged_demo','manual_fulfillment') NOT NULL DEFAULT 'not_applicable',
+    metadataJson json NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_commercial_irl_step_details_tenant_step (tenantId,missionStepId),
+    KEY idx_commercial_irl_step_details_tenant_mission (tenantId,missionId,missionStepId)
+  )`,
+  "CREATE TABLE commercial_mission_irl_step_details"
+);
+await assertRequiredColumns("commercial_mission_irl_step_details", [
+  "id", "tenantId", "missionId", "missionStepId", "stepType", "status",
+  "instructionText", "revealPolicy", "proofRequirement", "verificationState",
+  "fulfillmentMode", "metadataJson", "createdAt", "updatedAt",
+]);
+await ensureRequiredIndex(
+  "commercial_mission_irl_step_details",
+  "uq_commercial_irl_step_details_tenant_step",
+  ["tenantId", "missionStepId"],
+  `ALTER TABLE commercial_mission_irl_step_details
+     ADD UNIQUE KEY uq_commercial_irl_step_details_tenant_step (tenantId,missionStepId)`
+);
+await ensureRequiredIndex(
+  "commercial_mission_irl_step_details",
+  "idx_commercial_irl_step_details_tenant_mission",
+  ["tenantId", "missionId", "missionStepId"],
+  `ALTER TABLE commercial_mission_irl_step_details
+     ADD KEY idx_commercial_irl_step_details_tenant_mission (tenantId,missionId,missionStepId)`
+);
+
 // Customer SaaS team operating profiles. The Team router has no runtime
 // CREATE fallback, so these tables are required on every clean production boot.
 await runRequired(
