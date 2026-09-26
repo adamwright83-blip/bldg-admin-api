@@ -7,6 +7,11 @@ import superjson from "superjson";
 import App from "./App";
 import { canRedirectToLoginUrl, getLoginUrl } from "./const";
 import { apiBase } from "./lib/apiBase";
+import {
+  consumeClaireExplicitTap,
+  isClaireCallBeforeDriveRequest,
+  recordClaireExplicitTap,
+} from "./lib/claireExplicitCallGuard";
 import "./index.css";
 
 const queryClient = new QueryClient();
@@ -49,6 +54,24 @@ queryClient.getMutationCache().subscribe(event => {
   }
 });
 
+// Claire is allowed to place an outbound phone call only when a real, trusted
+// click just occurred on her diegetic world tool. The intent is single-use:
+// browser/network replays, stale mutations after a deploy, programmatic .click()
+// calls, and background retries cannot dial Adam again without another tap.
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "click",
+    event => {
+      if (!event.isTrusted) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (!target.closest(".gdp-claire-tool")) return;
+      recordClaireExplicitTap(window.sessionStorage);
+    },
+    true
+  );
+}
+
 // admin.bldg.chat uses the same-origin Vercel /api proxy so login cookies and
 // browser requests stay first-party. Other deployments may use VITE_API_URL.
 const TRPC_BASE_URL = `${apiBase()}/api/trpc`;
@@ -70,6 +93,17 @@ const trpcClient = trpc.createClient({
         return {};
       },
       fetch(input, init) {
+        if (
+          isClaireCallBeforeDriveRequest(input, init) &&
+          !consumeClaireExplicitTap(window.sessionStorage)
+        ) {
+          console.warn(
+            "[Claire] Blocked outbound call without a fresh explicit Claire tap."
+          );
+          return Promise.reject(
+            new Error("Claire calls require a fresh tap on Claire.")
+          );
+        }
         return globalThis.fetch(input, {
           ...(init ?? {}),
           credentials: "include",
