@@ -1088,6 +1088,64 @@ await assertRequiredColumns("dayforge_saas_external_orders", [
   "factsJson",
 ]);
 
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS tenant_ai_usage (
+    id int AUTO_INCREMENT PRIMARY KEY,
+    tenantId varchar(64) NOT NULL DEFAULT 'default',
+    month varchar(7) NOT NULL,
+    inputTokens int NOT NULL DEFAULT 0,
+    outputTokens int NOT NULL DEFAULT 0,
+    estimatedCostCents int NOT NULL DEFAULT 0,
+    requestCount int NOT NULL DEFAULT 0,
+    warningLimitCents int NOT NULL DEFAULT 5000,
+    hardLimitCents int NOT NULL DEFAULT 10000,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_tenant_ai_usage_tenant_month (tenantId, month)
+  )`,
+  "CREATE TABLE tenant_ai_usage"
+);
+await assertRequiredColumns("tenant_ai_usage", [
+  "tenantId",
+  "month",
+  "inputTokens",
+  "outputTokens",
+  "estimatedCostCents",
+  "warningLimitCents",
+  "hardLimitCents",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS tenant_provider_usage (
+    id int AUTO_INCREMENT PRIMARY KEY,
+    tenantId varchar(64) NOT NULL,
+    month varchar(7) NOT NULL,
+    provider varchar(64) NOT NULL,
+    category varchar(64) NOT NULL,
+    usageUnit varchar(32) NOT NULL,
+    usageQuantity int NOT NULL DEFAULT 0,
+    estimatedCostCents int NOT NULL DEFAULT 0,
+    requestCount int NOT NULL DEFAULT 0,
+    warningLimitCents int NULL,
+    hardLimitCents int NULL,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_tenant_provider_usage (tenantId, month, provider, category),
+    KEY idx_tenant_provider_usage_tenant_month (tenantId, month)
+  )`,
+  "CREATE TABLE tenant_provider_usage"
+);
+await assertRequiredColumns("tenant_provider_usage", [
+  "tenantId",
+  "month",
+  "provider",
+  "category",
+  "usageUnit",
+  "usageQuantity",
+  "estimatedCostCents",
+  "requestCount",
+  "warningLimitCents",
+  "hardLimitCents",
+]);
+
 // Required, additive Gumballpals schema. Fail startup rather than accept imports
 // against a partially provisioned database.
 const gumballSql = await readFile(
