@@ -77,6 +77,16 @@ export function selectSalesIntelWithAudit(input: {
           category: best.teaching.category,
           title: best.teaching.title,
           rationale: `Matched the mission's situation (category: ${best.teaching.category}).`,
+          principle: best.teaching.principle,
+          whenToUse: Array.isArray(best.teaching.whenToUse)
+            ? best.teaching.whenToUse
+            : [],
+          whenNotToUse: Array.isArray(best.teaching.whenNotToUse)
+            ? best.teaching.whenNotToUse
+            : [],
+          exampleLanguage: Array.isArray(best.teaching.exampleLanguage)
+            ? best.teaching.exampleLanguage.map(phrase => phrase.text)
+            : [],
         }
       : null,
     considered,

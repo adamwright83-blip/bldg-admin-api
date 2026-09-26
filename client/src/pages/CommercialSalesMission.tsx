@@ -956,65 +956,57 @@ export default function CommercialSalesMission() {
                 title="Walk in with the opener ready."
                 body="Confirm what you learn. Do not treat estimates as facts."
               />
-              <div className="csm-script">
-                <small>OPENING LINE</small>
-                <blockquote>“{mission.brief.openingLine}”</blockquote>
-                <small>BEST ANGLE</small>
-                <p>{mission.brief.salesAngle}</p>
-              </div>
-              <div className="csm-question-list">
-                <h3>DISCOVERY QUESTIONS</h3>
-                {mission.brief.discoveryQuestions.map(question => (
-                  <p key={question}>{question}</p>
-                ))}
-              </div>
               {salesBriefQuery.data ? (
-                <div className="csm-script" data-brief-id={salesBriefQuery.data.briefId} data-brief-version={salesBriefQuery.data.version}>
-                  <small>FIELD BRIEF v{salesBriefQuery.data.version}</small>
+                <div
+                  className="csm-script"
+                  data-brief-id={salesBriefQuery.data.briefId}
+                  data-brief-version={salesBriefQuery.data.version}
+                >
+                  <small>FIELD INTEL · v{salesBriefQuery.data.version}</small>
                   <h3>{salesBriefQuery.data.primaryObjective}</h3>
-                  {salesBriefQuery.data.known.length ? (
-                    <div className="csm-question-list">
-                      <h3>KNOWN</h3>
-                      {salesBriefQuery.data.known.map(fact => (
-                        <p key={fact}>{fact}</p>
-                      ))}
-                    </div>
+                  {salesBriefQuery.data.recommendedOpening ? (
+                    <>
+                      <small>SAY</small>
+                      <blockquote>“{salesBriefQuery.data.recommendedOpening}”</blockquote>
+                    </>
                   ) : null}
-                  {salesBriefQuery.data.keyUnknown ? (
+                  {salesBriefQuery.data.ask[0] ? (
                     <div className="csm-question-list">
-                      <h3>UNKNOWN</h3>
+                      <h3>ASK</h3>
+                      <p>{salesBriefQuery.data.ask[0]}</p>
+                    </div>
+                  ) : salesBriefQuery.data.actionsToTake[0] ? (
+                    <div className="csm-question-list">
+                      <h3>DO</h3>
+                      <p>{salesBriefQuery.data.actionsToTake[0]}</p>
+                    </div>
+                  ) : salesBriefQuery.data.keyUnknown ? (
+                    <div className="csm-question-list">
+                      <h3>FIND OUT</h3>
                       <p>{salesBriefQuery.data.keyUnknown}</p>
                     </div>
                   ) : null}
-                  {salesBriefQuery.data.ask.length ? (
-                    <div className="csm-question-list">
-                      <h3>ASK</h3>
-                      {salesBriefQuery.data.ask.map(question => (
-                        <p key={question}>{question}</p>
-                      ))}
-                    </div>
-                  ) : null}
-                  {salesBriefQuery.data.avoid.length ? (
-                    <div className="csm-question-list">
-                      <h3>DO NOT REPEAT</h3>
-                      {salesBriefQuery.data.avoid.map(item => (
-                        <p key={item}>{item}</p>
-                      ))}
-                    </div>
-                  ) : null}
-                  {salesBriefQuery.data.previousRelevantOutcome ? (
-                    <div className="csm-question-list">
-                      <h3>PRIOR OUTCOME</h3>
-                      <p>{salesBriefQuery.data.previousRelevantOutcome}</p>
-                    </div>
-                  ) : null}
-                  {salesBriefQuery.data.frameworkId ? (
-                    <p>
-                      <small>Framework: {salesBriefQuery.data.frameworkId}</small>
-                    </p>
-                  ) : null}
+                  <div className="csm-question-list">
+                    <h3>WIN</h3>
+                    <p>{salesBriefQuery.data.successDefinition}</p>
+                  </div>
                 </div>
-              ) : null}
+              ) : (
+                <>
+                  <div className="csm-script">
+                    <small>OPENING LINE</small>
+                    <blockquote>“{mission.brief.openingLine}”</blockquote>
+                    <small>BEST ANGLE</small>
+                    <p>{mission.brief.salesAngle}</p>
+                  </div>
+                  <div className="csm-question-list">
+                    <h3>DISCOVERY QUESTIONS</h3>
+                    {mission.brief.discoveryQuestions.slice(0, 2).map(question => (
+                      <p key={question}>{question}</p>
+                    ))}
+                  </div>
+                </>
+              )}
               <label className="csm-notes">
                 <span>VISIT NOTES</span>
                 <textarea
