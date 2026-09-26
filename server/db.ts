@@ -1162,9 +1162,9 @@ export async function incrementTenantAiUsage(input: {
         estimatedCostCents: sql`${tenantAiUsage.estimatedCostCents} + ${input.estimatedCostCents}`,
         requestCount: sql`${tenantAiUsage.requestCount} + 1`,
         warningLimitCents:
-          input.warningLimitCents ?? tenantAiUsage.warningLimitCents,
+          input.warningLimitCents ?? sql`${tenantAiUsage.warningLimitCents}`,
         hardLimitCents:
-          input.hardLimitCents ?? tenantAiUsage.hardLimitCents,
+          input.hardLimitCents ?? sql`${tenantAiUsage.hardLimitCents}`,
         updatedAt: new Date(),
       },
     });
@@ -1216,9 +1216,11 @@ export async function incrementTenantProviderUsage(input: {
         )}`,
         requestCount: sql`${tenantProviderUsage.requestCount} + 1`,
         warningLimitCents:
-          input.warningLimitCents ?? tenantProviderUsage.warningLimitCents,
+          input.warningLimitCents ??
+          sql`${tenantProviderUsage.warningLimitCents}`,
         hardLimitCents:
-          input.hardLimitCents ?? tenantProviderUsage.hardLimitCents,
+          input.hardLimitCents ??
+          sql`${tenantProviderUsage.hardLimitCents}`,
         updatedAt: new Date(),
       },
     });
