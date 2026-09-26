@@ -13,6 +13,7 @@ import {
 import {
   adminProcedure,
   legacyDayforgeChurnProcedure,
+  legacyDayforgeClaireVoiceProcedure,
   legacyDayforgeMissionFieldProcedure,
   joystickClaireDeskFieldProcedure,
   joystickClaireDeskProcedure,
@@ -422,7 +423,7 @@ export const claireRouter = router({
       });
     }),
 
-  callBeforeDrive: legacyDayforgeMissionFieldProcedure
+  callBeforeDrive: legacyDayforgeClaireVoiceProcedure
     .input(
       z.object({
         timeZone: z.string().trim().min(1).max(100).optional(),
@@ -452,7 +453,7 @@ export const claireRouter = router({
       });
     }),
 
-  callAfterStop: legacyDayforgeMissionFieldProcedure
+  callAfterStop: legacyDayforgeClaireVoiceProcedure
     .input(
       z.object({
         missionId: z.number().int().positive(),
