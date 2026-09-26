@@ -1026,6 +1026,94 @@ await assertRequiredColumns("goldline_campaign_instances", [
   "classification",
 ]);
 
+// Required commercial foundations for a genuinely fresh tenant database.
+// These historical CREATE TABLE statements are made idempotent here because
+// production boot does not execute drizzle/*.sql directly.
+await applyHistoricalCreateTables(
+  "../drizzle/0035_commercial_mission_spine.sql",
+  "Commercial mission foundation"
+);
+await applyHistoricalCreateTables(
+  "../drizzle/0041_commercial_pipeline_conversion.sql",
+  "Commercial pipeline foundation"
+);
+for (const [tableName, columnName, alterSql] of [
+  [
+    "commercial_accounts",
+    "identityKey",
+    "ALTER TABLE commercial_accounts ADD COLUMN identityKey varchar(64) NULL AFTER tenantId",
+  ],
+  [
+    "commercial_account_locations",
+    "locationKey",
+    "ALTER TABLE commercial_account_locations ADD COLUMN locationKey varchar(64) NULL AFTER accountId",
+  ],
+  [
+    "commercial_account_contacts",
+    "contactKey",
+    "ALTER TABLE commercial_account_contacts ADD COLUMN contactKey varchar(64) NULL AFTER accountId",
+  ],
+  [
+    "commercial_account_contacts",
+    "relationshipType",
+    "ALTER TABLE commercial_account_contacts ADD COLUMN relationshipType enum('decision_maker','gatekeeper','champion','concierge','front_desk','security','operations','other','unknown') NOT NULL DEFAULT 'unknown' AFTER phone",
+  ],
+  [
+    "commercial_account_contacts",
+    "preferredChannel",
+    "ALTER TABLE commercial_account_contacts ADD COLUMN preferredChannel enum('email','sms','phone','unknown') NOT NULL DEFAULT 'unknown' AFTER relationshipType",
+  ],
+  [
+    "commercial_account_contacts",
+    "source",
+    "ALTER TABLE commercial_account_contacts ADD COLUMN source varchar(96) NOT NULL DEFAULT 'unknown' AFTER preferredChannel",
+  ],
+  [
+    "commercial_account_contacts",
+    "notes",
+    "ALTER TABLE commercial_account_contacts ADD COLUMN notes text NULL AFTER sourcedAt",
+  ],
+]) {
+  await ensureRequiredColumn(tableName, columnName, alterSql);
+}
+await ensureRequiredIndex(
+  "commercial_accounts",
+  "uq_commercial_accounts_tenant_identity",
+  ["tenantId", "identityKey"],
+  "ALTER TABLE commercial_accounts ADD UNIQUE KEY uq_commercial_accounts_tenant_identity (tenantId, identityKey)"
+);
+await ensureRequiredIndex(
+  "commercial_account_locations",
+  "uq_commercial_locations_tenant_account_key",
+  ["tenantId", "accountId", "locationKey"],
+  "ALTER TABLE commercial_account_locations ADD UNIQUE KEY uq_commercial_locations_tenant_account_key (tenantId, accountId, locationKey)"
+);
+await ensureRequiredIndex(
+  "commercial_account_contacts",
+  "uq_commercial_contacts_tenant_account_key",
+  ["tenantId", "accountId", "contactKey"],
+  "ALTER TABLE commercial_account_contacts ADD UNIQUE KEY uq_commercial_contacts_tenant_account_key (tenantId, accountId, contactKey)"
+);
+await assertRequiredColumns("commercial_accounts", [
+  "id", "tenantId", "identityKey", "name", "accountType",
+]);
+await assertRequiredColumns("commercial_account_locations", [
+  "id", "tenantId", "accountId", "locationKey", "address", "isPrimary",
+]);
+await assertRequiredColumns("commercial_account_contacts", [
+  "id", "tenantId", "accountId", "contactKey", "relationshipType",
+  "preferredChannel", "source", "notes",
+]);
+await assertRequiredColumns("commercial_opportunities", [
+  "id", "tenantId", "accountId", "score", "grade",
+]);
+await assertRequiredColumns("commercial_missions", [
+  "id", "tenantId", "assignedTo", "code", "status",
+]);
+await assertRequiredColumns("commercial_pipeline_records", [
+  "id", "tenantId", "accountId", "opportunityId", "missionId", "stage",
+]);
+
 // Required SaaS foundations. Historical numbered migrations are not executed
 // by production boot, so build their CREATE TABLE statements idempotently here.
 // No business rows are seeded and existing production tables are left in place.
