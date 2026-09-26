@@ -112,4 +112,20 @@ describe("DayForge SaaS production contract", () => {
     expect(auth).toContain('role: "user"');
     expect(auth).not.toMatch(/role:\s*platformRole/);
   });
+
+  it("keeps paid SaaS members inside the supported product surface", () => {
+    const app = source("../../client/src/App.tsx");
+    const shell = source("../../client/src/product/ProductShell.tsx");
+    expect(app).toContain("SAAS_CUSTOMER_PATH_PREFIXES");
+    expect(app).toContain('user?.role === "user"');
+    expect(app).toContain('return <Redirect to="/product" />');
+    expect(shell).not.toContain("Legacy operations");
+    expect(shell).not.toContain('href="/admin"');
+  });
+
+  it("authorizes Strategy by tenant membership instead of platform admin", () => {
+    const strategy = source("../strategy/strategyRouter.ts");
+    expect(strategy).toContain("legacyDayforgeTenantOperatorProcedure");
+    expect(strategy).not.toMatch(/\badminProcedure\b/);
+  });
 });
