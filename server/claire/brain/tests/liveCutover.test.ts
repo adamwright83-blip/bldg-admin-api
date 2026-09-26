@@ -152,6 +152,32 @@ describe("Brain V2 live cutover", () => {
     expect(result.adapterResult?.kind).toBe("briefing_saved");
   });
 
+  it("treats an explicit add-all command as the pending briefing confirmation, not a second proposal", async () => {
+    const executeLegacyAdapter = vi.fn(async () =>
+      adapterResult("briefing_saved")
+    );
+    const result = await runClaireBrainV2LiveTurn(
+      input({
+        rawText: "Add all that to the Day Line.",
+        assembledText: "Add all that to the Day Line.",
+        state: {
+          pendingBriefing: {
+            parsed: { items: [{ title: "Call Todd" }, { title: "Pick up Rebecca" }] },
+            createdAt: 1,
+          },
+        },
+        executeLegacyAdapter,
+      }),
+      { env: ON }
+    );
+
+    expect(result.active).toBe(true);
+    if (!result.active) return;
+    expect(result.actionClasses).toEqual(["commit_briefing"]);
+    expect(executeLegacyAdapter).toHaveBeenCalledTimes(1);
+    expect(result.adapterResult?.kind).toBe("briefing_saved");
+  });
+
   it("owns call control without manufacturing a business mutation", async () => {
     const executeLegacyAdapter = vi.fn(async () => adapterResult("answered"));
     const result = await runClaireBrainV2LiveTurn(
