@@ -1,6 +1,6 @@
 import "./joystick-landing.css";
 
-const START_PATH = "/onboarding";
+const START_PATH = "/dayforge-onboarding";
 
 export default function JoystickLanding() {
   return (
