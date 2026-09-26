@@ -93,6 +93,22 @@ describe("weekly mission card", () => {
     expect(card.cta).toBe("adjust");
   });
 
+
+  it("does not emphasize Start for a stood-down current remnant even if stale primary text exists", () => {
+    const stoodDown = lockedDay("Stale Monday mission");
+    stoodDown.disposition = "stand_down";
+    const card = buildWeeklyMissionCard({
+      status: "LOCKED",
+      weekStart: AFTERNOON.weekStart,
+      horizon: AFTERNOON,
+      declined: false,
+      days: [stoodDown],
+    });
+    expect(AFTERNOON.remainingDates[0]).toBe("2026-09-21");
+    expect(card.days[0]?.status).toBe("Stood down");
+    expect(card.emphasizeTodayStart).toBe(false);
+  });
+
   it("does not pitch a weekend with no remaining weekdays", () => {
     const card = buildWeeklyMissionCard({
       status: "UNPLANNED",
