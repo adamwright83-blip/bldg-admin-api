@@ -470,7 +470,7 @@ describe("Monday remnant lock", () => {
       {
         completeAct: async () => ({
           act: "REVISE",
-          speech: "For Monday: Call Cedar Hollow. What owns Tuesday?",
+          speech: "Monday: Call Cedar Hollow. What owns Tuesday?",
           hypothesisSummary: "Call Cedar Hollow is the retained Monday remnant.",
           uncertainties: [
             {
