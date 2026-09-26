@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db";
+import { isLegacyDayforgeTenant } from "../saas/tenantAccess";
 import type { GoldlineOnboardingSession } from "../../shared/goldlineOnboarding";
 export async function onboardingDb() { const db = await getDb(); if (!db) throw new Error("Database not available"); return db; }
 export function resultRows(result: unknown): any[] { return (result as any)[0] ?? []; }
@@ -22,6 +23,11 @@ export async function readSession(tenantId: string): Promise<GoldlineOnboardingS
  * "this signal is unavailable", and the remaining signal still decides.
  */
 export async function hasExistingWorld(tenantId: string) {
+ // Laundry Butler / Laundry Farm are established first-party tenants. A public
+ // fresh-customer onboarding flow must never be allowed to write a new Goldline
+ // onboarding session or imported customer book into either one just because a
+ // canonical-world signal table happens to be empty.
+ if (isLegacyDayforgeTenant(tenantId)) return true;
  const db = await onboardingDb();
  for (const table of ["physical_entities", "goldline_territory_definitions"]) {
   try {
