@@ -136,6 +136,12 @@ jobs:
           server/goldlineWorld/futurePressureService.test.ts
           server/field/fieldOpportunityService.test.ts
           server/field/fieldTodayService.test.ts
+      - name: Prove Rook CONTACT authority boundary
+        run: >-
+          pnpm vitest run
+          server/goldlineProgression/rookContactGrant.test.ts
+          server/rookContact/rookContactAuthorityRepair.test.ts
+          client/src/pages/goldline/wayward/waywardTruth.test.ts
       - name: Prepare deterministic proof world
         run: |
           pnpm db:legacy-dayforge:release
