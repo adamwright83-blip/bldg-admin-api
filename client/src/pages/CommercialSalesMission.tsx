@@ -956,18 +956,6 @@ export default function CommercialSalesMission() {
                 title="Walk in with the opener ready."
                 body="Confirm what you learn. Do not treat estimates as facts."
               />
-              <div className="csm-script">
-                <small>OPENING LINE</small>
-                <blockquote>“{mission.brief.openingLine}”</blockquote>
-                <small>BEST ANGLE</small>
-                <p>{mission.brief.salesAngle}</p>
-              </div>
-              <div className="csm-question-list">
-                <h3>DISCOVERY QUESTIONS</h3>
-                {mission.brief.discoveryQuestions.map(question => (
-                  <p key={question}>{question}</p>
-                ))}
-              </div>
               {salesBriefQuery.data ? (
                 <div
                   className="csm-script"
@@ -1003,7 +991,22 @@ export default function CommercialSalesMission() {
                     <p>{salesBriefQuery.data.successDefinition}</p>
                   </div>
                 </div>
-              ) : null}
+              ) : (
+                <>
+                  <div className="csm-script">
+                    <small>OPENING LINE</small>
+                    <blockquote>“{mission.brief.openingLine}”</blockquote>
+                    <small>BEST ANGLE</small>
+                    <p>{mission.brief.salesAngle}</p>
+                  </div>
+                  <div className="csm-question-list">
+                    <h3>DISCOVERY QUESTIONS</h3>
+                    {mission.brief.discoveryQuestions.slice(0, 2).map(question => (
+                      <p key={question}>{question}</p>
+                    ))}
+                  </div>
+                </>
+              )}
               <label className="csm-notes">
                 <span>VISIT NOTES</span>
                 <textarea
