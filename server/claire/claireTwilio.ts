@@ -396,7 +396,7 @@ function validTwilioRequest(req: Request): boolean {
 }
 
 export function spokenClaireText(text: string, opening = false): string {
-  return opening ? `Adam. Claire here. ${text}` : text;
+  return opening ? `Claire here. ${text}` : text;
 }
 
 /**
