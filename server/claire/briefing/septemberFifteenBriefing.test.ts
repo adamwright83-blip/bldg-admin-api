@@ -473,6 +473,32 @@ describe("the September 15 call, replayed through Claire", () => {
     expect(state.pendingBriefing).toBeNull();
   });
 
+  it.each([
+    "Add all that to the Day Line.",
+    "Add all of that to the Day Line.",
+    "Add the stuff to the Day Line.",
+    "Put all that on the Day Line.",
+    "Just save everything to the Day Line.",
+  ])("an explicit bundle command commits the held Day Line list: %s", async utterance => {
+    const deps = turnDeps();
+    const state: ClaireTurnState = {};
+    const proposed = await turn(
+      state,
+      "I need to call Todd, pick up Rebecca, and drop off the OPUS towels.",
+      deps
+    );
+    expect(proposed.kind).toBe("briefing_proposed");
+    expect(state.pendingBriefing?.parsed.items.length).toBeGreaterThanOrEqual(2);
+
+    const saved = await turn(state, utterance, deps);
+    expect(deps.commit).toHaveBeenCalledTimes(1);
+    expect(saved.kind).toBe("briefing_saved");
+    expect(saved.actionIds?.length).toBeGreaterThan(0);
+    expect(saved.mutationReceipts?.length).toBeGreaterThan(0);
+    expect(saved.speak).toMatch(/Done\./);
+    expect(state.pendingBriefing).toBeNull();
+  });
+
   it("the three fragments the phone delivered stitch into one briefing instead of answering mid-thought", async () => {
     const deps = turnDeps();
     const state: ClaireTurnState = {};
