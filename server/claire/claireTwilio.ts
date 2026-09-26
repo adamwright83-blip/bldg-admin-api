@@ -109,8 +109,8 @@ const CONTINUE_PATH = "/api/claire/twilio/pre-drive/continue";
 export const CLAIRE_INBOUND_VOICE_PATH = "/api/claire/twilio/inbound";
 export const CLAIRE_RECORDING_STATUS_PATH = "/api/claire/twilio/recording-status";
 export const CLAIRE_CALL_STATUS_PATH = "/api/claire/twilio/call-status";
-/** Spoken on inbound pickup only. Outbound still opens with the generated briefing. */
-export const CLAIRE_INBOUND_GREETING = "Hey Adam. What's up?";
+/** Spoken on inbound pickup only. Outbound still opens with the generated briefing. Keep this tenant-neutral: SaaS operators share this route. */
+export const CLAIRE_INBOUND_GREETING = "Claire here. What's up?";
 /** Polly stays as the fail-open fallback when xAI TTS is disabled or unconfigured. */
 const CLAIRE_VOICE = "Polly.Ruth-Generative";
 const PRE_DRIVE_CONVERSATION_TTL_MS = 45 * 60 * 1_000;

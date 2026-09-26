@@ -15,6 +15,7 @@ import { CLAIRE_AMD_PATH } from "./amdVoicemail";
 import {
   claireVoiceCallCreateOptions,
   CLAIRE_CALL_STATUS_PATH,
+  CLAIRE_INBOUND_GREETING,
   CLAIRE_RECORDING_STATUS_PATH,
   preDriveConversationTwiML,
   registerClaireRoutes,
@@ -23,6 +24,11 @@ import {
 import { isClaireVoiceRecordingEnabled } from "./conversation/consent";
 
 describe("H — existing Claire conversational loop remains intact", () => {
+  it("keeps the inbound greeting tenant-neutral", () => {
+    expect(CLAIRE_INBOUND_GREETING).toBe("Claire here. What's up?");
+    expect(CLAIRE_INBOUND_GREETING).not.toMatch(/\bAdam\b/i);
+  });
+
   it("uses a conversational voice and gathers barge-in speech around the opening", () => {
     const xml = preDriveConversationTwiML({
       text: "Your next stop is The Wilshire. Ask how laundry works today.",
