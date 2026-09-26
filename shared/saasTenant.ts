@@ -6,6 +6,7 @@ export const DAYFORGE_ENTITLEMENTS = [
   "dayforge_field",
   "commercial_pipeline",
   "churn_radar",
+  "claire_voice",
 ] as const;
 
 export type LegacyDayforgeEntitlement = (typeof DAYFORGE_ENTITLEMENTS)[number];
