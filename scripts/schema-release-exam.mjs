@@ -22,6 +22,7 @@ const requiredTables = [
   "impact_signals",
   "tracked_signal_definitions",
   "driver_sales_journals",
+  "commercial_mission_irl_step_details",
 ];
 
 for (const tableName of requiredTables) {
@@ -118,6 +119,17 @@ await assertIndex(
   "payment_reconciliation_matches",
   "idx_payment_reconciliation_building",
   ["buildingSlug", "tower"]
+);
+
+await assertIndex(
+  "commercial_mission_irl_step_details",
+  "uq_commercial_irl_step_details_tenant_step",
+  ["tenantId", "missionStepId"]
+);
+await assertIndex(
+  "commercial_mission_irl_step_details",
+  "idx_commercial_irl_step_details_tenant_mission",
+  ["tenantId", "missionId", "missionStepId"]
 );
 
 const [debriefColumns] = await conn.execute(
