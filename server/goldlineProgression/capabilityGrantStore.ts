@@ -15,7 +15,8 @@ import {
 } from "../../shared/rookContact";
 import { getDb } from "../db";
 import { isMysqlDuplicateKeyError, isMysqlMissingTableError } from "../mysqlErrors";
-import { ProgressionSchemaBlockedError } from "./progressionContract";
+import { ProgressionNotPermittedError, ProgressionSchemaBlockedError } from "./progressionContract";
+import { hasServerAuthoritativeWaywardContactGate } from "./progressionStore";
 
 export type RookContactGrant = {
   capabilityId: typeof ROOK_CONTACT_CAPABILITY_ID;
@@ -101,6 +102,17 @@ export async function grantRookContactCapability(input: {
     throw new Error(
       "capability.rook.contact preview grant is not production authority"
     );
+  }
+  if (productionWayward) {
+    const proven = await hasServerAuthoritativeWaywardContactGate({
+      tenantId: input.tenantId,
+      operatorId: input.operatorId,
+    });
+    if (!proven) {
+      throw new ProgressionNotPermittedError(
+        "capability.rook.contact requires the durable server-authored Wayward CONTACT gate before a grant row may be written"
+      );
+    }
   }
   const existing = await findRookContactGrant(input);
   if (!existing.readable) {

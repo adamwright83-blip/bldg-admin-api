@@ -255,6 +255,9 @@ export async function beginWaywardContactGate(input: {
   }
   const db = await requireDb();
   const current = receipts(existing.row.overworldUnlocksJson);
+  if (current.waywardContactGate?.completedAt) {
+    throw new Error("Wayward CONTACT gate is already durably completed");
+  }
   await db
     .update(goldlineDomainProgression)
     .set({
@@ -318,9 +321,29 @@ export async function hasServerAuthoritativeWaywardContactGate(input: {
   operatorId: string;
 }): Promise<boolean> {
   const existing = await findDomainProgression(input);
-  if (!existing.readable || !existing.row) return false;
+  if (
+    !existing.readable ||
+    !existing.row?.levelColosseumResolvedAt ||
+    !existing.row.companionRookOwnedAt
+  ) {
+    return false;
+  }
   const gate = receipts(existing.row.overworldUnlocksJson).waywardContactGate;
-  return Boolean(gate?.runId && gate.completedAt);
+  if (
+    typeof gate?.runId !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(gate.runId) ||
+    typeof gate.startedAt !== "string" ||
+    typeof gate.completedAt !== "string"
+  ) {
+    return false;
+  }
+  const startedAt = Date.parse(gate.startedAt);
+  const completedAt = Date.parse(gate.completedAt);
+  return (
+    Number.isFinite(startedAt) &&
+    Number.isFinite(completedAt) &&
+    completedAt - startedAt >= 5_000
+  );
 }
 
 /**

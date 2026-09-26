@@ -65,8 +65,15 @@ async function loadCapability(input: {
     operatorId: input.operatorId,
   });
   if (!found.readable) return { granted: false, readable: false };
+  if (!rookContactGrantIsProductionAuthority(found.grant)) {
+    return { granted: false, readable: true };
+  }
+  const proof = await findServerAuthoritativeWaywardContactProof({
+    tenantId: input.tenantId,
+    operatorId: input.operatorId,
+  });
   return {
-    granted: rookContactGrantIsProductionAuthority(found.grant),
+    granted: proof.proven,
     readable: true,
   };
 }
