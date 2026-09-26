@@ -140,6 +140,8 @@ describe("commitWeeklyPlan", () => {
     });
     expect(lockBindApplies(open, "Lock it")).toBe(false);
     open.phase = "proposal";
+    expect(lockBindApplies(open, "")).toBe(false);
+    expect(lockBindApplies(open, "   ")).toBe(false);
     expect(lockBindApplies(open, "Lock it.")).toBe(true);
     expect(lockBindApplies(open, "Looks good")).toBe(true);
     expect(lockBindApplies(open, "No, Tuesday won't work. Thursday.")).toBe(false);
