@@ -213,7 +213,7 @@ suite("JOYSTICK configurable SaaS billing lifecycle", () => {
       [sessionId]
     );
     tenantId = String(sessions[0]?.tenantId ?? "");
-    expect(tenantId).toMatch(/^dayforge-/);
+    expect(tenantId).toMatch(/^df_[0-9a-f]{24}$/);
 
     const [tenants] = await db.execute<mysql.RowDataPacket[]>(
       "SELECT COUNT(*) AS count FROM dayforge_saas_tenants WHERE id = ?",

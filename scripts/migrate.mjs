@@ -398,6 +398,66 @@ for (const [sql, label] of cols) {
   await run(sql, label);
 }
 
+// Required current orders shape used by the customer SaaS projections. These
+// are additive upgrades for databases created before HELD/resident idempotency
+// and payment-time fields were introduced.
+for (const [columnName, definition] of [
+  ["heldRawRequestText", "text NULL AFTER specialInstructions"],
+  ["heldCleanedRequestText", "text NULL AFTER heldRawRequestText"],
+  ["heldServiceSummary", "text NULL AFTER heldCleanedRequestText"],
+  ["heldRequestedPickupWindow", "varchar(255) NULL AFTER heldServiceSummary"],
+  ["heldRequestedReturnBy", "varchar(255) NULL AFTER heldRequestedPickupWindow"],
+  ["heldSource", "varchar(64) NULL AFTER heldRequestedReturnBy"],
+  ["heldMetadataJson", "json NULL AFTER heldSource"],
+  ["residentClientRequestId", "varchar(191) NULL AFTER heldMetadataJson"],
+  ["paidAt", "timestamp NULL AFTER paid"],
+  ["manualRiskFlag", "boolean NOT NULL DEFAULT false"],
+]) {
+  await ensureRequiredColumn(
+    "orders",
+    columnName,
+    `ALTER TABLE orders ADD COLUMN ${columnName} ${definition}`
+  );
+}
+await runRequired(
+  `ALTER TABLE orders
+     MODIFY COLUMN status
+       enum('new','intake-pending','collected','processing','ready','delivered','cancelled')
+       NOT NULL DEFAULT 'new'`,
+  "orders.status current enum"
+);
+await assertEnumContainsValues("orders", "status", [
+  "new",
+  "intake-pending",
+  "collected",
+  "processing",
+  "ready",
+  "delivered",
+  "cancelled",
+]);
+await ensureRequiredIndex(
+  "orders",
+  "orders_resident_client_request_id_unq",
+  ["residentClientRequestId"],
+  `ALTER TABLE orders
+     ADD UNIQUE KEY orders_resident_client_request_id_unq (residentClientRequestId)`
+);
+await assertRequiredColumns("orders", [
+  "id",
+  "tenantId",
+  "heldRawRequestText",
+  "heldCleanedRequestText",
+  "heldServiceSummary",
+  "heldRequestedPickupWindow",
+  "heldRequestedReturnBy",
+  "heldSource",
+  "heldMetadataJson",
+  "residentClientRequestId",
+  "paidAt",
+  "manualRiskFlag",
+]);
+
+
 // ── vendors table (Phase 1) ───────────────────────────────────────
 await run(
   `
@@ -966,6 +1026,94 @@ await assertRequiredColumns("goldline_campaign_instances", [
   "classification",
 ]);
 
+// Required commercial foundations for a genuinely fresh tenant database.
+// These historical CREATE TABLE statements are made idempotent here because
+// production boot does not execute drizzle/*.sql directly.
+await applyHistoricalCreateTables(
+  "../drizzle/0035_commercial_mission_spine.sql",
+  "Commercial mission foundation"
+);
+await applyHistoricalCreateTables(
+  "../drizzle/0041_commercial_pipeline_conversion.sql",
+  "Commercial pipeline foundation"
+);
+for (const [tableName, columnName, alterSql] of [
+  [
+    "commercial_accounts",
+    "identityKey",
+    "ALTER TABLE commercial_accounts ADD COLUMN identityKey varchar(64) NULL AFTER tenantId",
+  ],
+  [
+    "commercial_account_locations",
+    "locationKey",
+    "ALTER TABLE commercial_account_locations ADD COLUMN locationKey varchar(64) NULL AFTER accountId",
+  ],
+  [
+    "commercial_account_contacts",
+    "contactKey",
+    "ALTER TABLE commercial_account_contacts ADD COLUMN contactKey varchar(64) NULL AFTER accountId",
+  ],
+  [
+    "commercial_account_contacts",
+    "relationshipType",
+    "ALTER TABLE commercial_account_contacts ADD COLUMN relationshipType enum('decision_maker','gatekeeper','champion','concierge','front_desk','security','operations','other','unknown') NOT NULL DEFAULT 'unknown' AFTER phone",
+  ],
+  [
+    "commercial_account_contacts",
+    "preferredChannel",
+    "ALTER TABLE commercial_account_contacts ADD COLUMN preferredChannel enum('email','sms','phone','unknown') NOT NULL DEFAULT 'unknown' AFTER relationshipType",
+  ],
+  [
+    "commercial_account_contacts",
+    "source",
+    "ALTER TABLE commercial_account_contacts ADD COLUMN source varchar(96) NOT NULL DEFAULT 'unknown' AFTER preferredChannel",
+  ],
+  [
+    "commercial_account_contacts",
+    "notes",
+    "ALTER TABLE commercial_account_contacts ADD COLUMN notes text NULL AFTER sourcedAt",
+  ],
+]) {
+  await ensureRequiredColumn(tableName, columnName, alterSql);
+}
+await ensureRequiredIndex(
+  "commercial_accounts",
+  "uq_commercial_accounts_tenant_identity",
+  ["tenantId", "identityKey"],
+  "ALTER TABLE commercial_accounts ADD UNIQUE KEY uq_commercial_accounts_tenant_identity (tenantId, identityKey)"
+);
+await ensureRequiredIndex(
+  "commercial_account_locations",
+  "uq_commercial_locations_tenant_account_key",
+  ["tenantId", "accountId", "locationKey"],
+  "ALTER TABLE commercial_account_locations ADD UNIQUE KEY uq_commercial_locations_tenant_account_key (tenantId, accountId, locationKey)"
+);
+await ensureRequiredIndex(
+  "commercial_account_contacts",
+  "uq_commercial_contacts_tenant_account_key",
+  ["tenantId", "accountId", "contactKey"],
+  "ALTER TABLE commercial_account_contacts ADD UNIQUE KEY uq_commercial_contacts_tenant_account_key (tenantId, accountId, contactKey)"
+);
+await assertRequiredColumns("commercial_accounts", [
+  "id", "tenantId", "identityKey", "name", "accountType",
+]);
+await assertRequiredColumns("commercial_account_locations", [
+  "id", "tenantId", "accountId", "locationKey", "address", "isPrimary",
+]);
+await assertRequiredColumns("commercial_account_contacts", [
+  "id", "tenantId", "accountId", "contactKey", "relationshipType",
+  "preferredChannel", "source", "notes",
+]);
+await assertRequiredColumns("commercial_opportunities", [
+  "id", "tenantId", "accountId", "score", "grade",
+]);
+await assertRequiredColumns("commercial_missions", [
+  "id", "tenantId", "assignedTo", "code", "status",
+]);
+await assertRequiredColumns("commercial_pipeline_records", [
+  "id", "tenantId", "accountId", "opportunityId", "missionId", "stage",
+]);
+
 // Required SaaS foundations. Historical numbered migrations are not executed
 // by production boot, so build their CREATE TABLE statements idempotently here.
 // No business rows are seeded and existing production tables are left in place.
@@ -1048,12 +1196,24 @@ await assertRequiredColumns("dayforge_saas_memberships", [
   "role",
   "active",
 ]);
+await ensureRequiredColumn(
+  "dayforge_saas_onboarding_sessions",
+  "authContinuationId",
+  "ALTER TABLE dayforge_saas_onboarding_sessions ADD COLUMN authContinuationId varchar(36) NULL AFTER stripeSubscriptionId"
+);
+await ensureRequiredIndex(
+  "dayforge_saas_onboarding_sessions",
+  "idx_dayforge_saas_onboarding_continuation",
+  ["authContinuationId"],
+  "ALTER TABLE dayforge_saas_onboarding_sessions ADD KEY idx_dayforge_saas_onboarding_continuation (authContinuationId)"
+);
 await assertRequiredColumns("dayforge_saas_onboarding_sessions", [
   "id",
   "resumeTokenHash",
   "ownerEmail",
   "status",
   "tenantId",
+  "authContinuationId",
 ]);
 await assertRequiredColumns("dayforge_saas_subscriptions", [
   "tenantId",
@@ -3295,6 +3455,276 @@ await runRequired(
   )`,
   "CREATE TABLE goldline_domain_capability_grants"
 );
+// Canonical order payment truth used by Customer Assets. These tables are
+// part of current application schema but have no standalone numbered migration,
+// so production bootstrap owns their additive creation.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS order_payment_projections (
+    id varchar(36) NOT NULL PRIMARY KEY,
+    tenantId varchar(64) NOT NULL,
+    orderId int NOT NULL,
+    provider varchar(64) NOT NULL,
+    providerPaymentId varchar(255) NULL,
+    currency varchar(3) NOT NULL,
+    state enum('unpaid','paid','partially_refunded','refunded','cancelled','review_required') NOT NULL,
+    capturedCents int NULL,
+    refundedCents int NULL,
+    netPaidCents int NULL,
+    paidAt timestamp NULL,
+    providerUpdatedAt timestamp NULL,
+    lastReconciledAt timestamp NOT NULL,
+    version int NOT NULL DEFAULT 1,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_order_payment_projections_tenant_order (tenantId,orderId),
+    KEY idx_order_payment_projections_provider_payment (provider,providerPaymentId)
+  )`,
+  "CREATE TABLE order_payment_projections"
+);
+await assertRequiredColumns("order_payment_projections", [
+  "id",
+  "tenantId",
+  "orderId",
+  "provider",
+  "currency",
+  "state",
+  "netPaidCents",
+  "lastReconciledAt",
+  "version",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS order_payment_events (
+    id varchar(36) NOT NULL PRIMARY KEY,
+    tenantId varchar(64) NOT NULL,
+    orderId int NOT NULL,
+    provider varchar(64) NOT NULL,
+    providerEventId varchar(255) NULL,
+    eventType varchar(96) NOT NULL,
+    currency varchar(3) NULL,
+    capturedCents int NULL,
+    refundedCents int NULL,
+    netPaidCents int NULL,
+    payloadDigest varchar(64) NULL,
+    occurredAt timestamp NOT NULL,
+    requestId varchar(191) NOT NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_order_payment_events_provider_event (provider,providerEventId),
+    UNIQUE KEY uq_order_payment_events_tenant_request (tenantId,requestId),
+    KEY idx_order_payment_events_tenant_order (tenantId,orderId,occurredAt)
+  )`,
+  "CREATE TABLE order_payment_events"
+);
+await assertRequiredColumns("order_payment_events", [
+  "id",
+  "tenantId",
+  "orderId",
+  "provider",
+  "eventType",
+  "occurredAt",
+  "requestId",
+]);
+
+// Required churn/recovery foundations. Customer Assets reads the latest
+// churn/recovery state even for tenants with no current scan results.
+await applyHistoricalCreateTables(
+  "../drizzle/0040_customer_churn_recovery.sql",
+  "customer churn and recovery foundation"
+);
+await applyHistoricalStandaloneIndexes(
+  "../drizzle/0040_customer_churn_recovery.sql",
+  "customer churn and recovery indexes"
+);
+for (const [tableName, columns] of [
+  ["tenant_customer_recovery_profiles", ["tenantId", "storeName", "senderName"]],
+  ["customer_churn_scans", ["id", "tenantId", "requestId", "status"]],
+  ["customer_churn_snapshots", ["id", "tenantId", "scanId", "customerKeyHash", "score", "grade", "createdAt"]],
+  ["customer_contact_permissions", ["id", "tenantId", "customerKeyHash", "status"]],
+  ["customer_recovery_interventions", ["id", "tenantId", "customerKeyHash", "status", "updatedAt"]],
+  ["customer_recovery_drafts", ["id", "tenantId", "interventionId", "version", "status"]],
+  ["customer_recovery_events", ["id", "tenantId", "interventionId", "eventName"]],
+]) {
+  await assertRequiredColumns(tableName, columns);
+}
+
+// Required commercial relationship/mission spine. Customer Assets and Team
+// project these tables even when a new tenant has no commercial rows yet, so a
+// clean SaaS database must contain the empty canonical structures.
+await applyHistoricalCreateTables(
+  "../drizzle/0035_commercial_mission_spine.sql",
+  "commercial mission spine"
+);
+await applyHistoricalStandaloneIndexes(
+  "../drizzle/0035_commercial_mission_spine.sql",
+  "commercial mission spine indexes"
+);
+await ensureRequiredColumn(
+  "commercial_accounts",
+  "identityKey",
+  "ALTER TABLE commercial_accounts ADD COLUMN identityKey varchar(64) NULL AFTER tenantId"
+);
+await ensureRequiredIndex(
+  "commercial_accounts",
+  "uq_commercial_accounts_tenant_identity",
+  ["tenantId", "identityKey"],
+  "ALTER TABLE commercial_accounts ADD UNIQUE KEY uq_commercial_accounts_tenant_identity (tenantId,identityKey)"
+);
+await ensureRequiredColumn(
+  "commercial_account_locations",
+  "locationKey",
+  "ALTER TABLE commercial_account_locations ADD COLUMN locationKey varchar(64) NULL AFTER accountId"
+);
+await ensureRequiredIndex(
+  "commercial_account_locations",
+  "uq_commercial_locations_tenant_account_key",
+  ["tenantId", "accountId", "locationKey"],
+  "ALTER TABLE commercial_account_locations ADD UNIQUE KEY uq_commercial_locations_tenant_account_key (tenantId,accountId,locationKey)"
+);
+await runRequired(
+  "ALTER TABLE commercial_account_locations MODIFY COLUMN latitude decimal(10,7) NULL, MODIFY COLUMN longitude decimal(10,7) NULL",
+  "commercial account location coordinates nullable"
+);
+
+await ensureRequiredColumn(
+  "commercial_account_contacts",
+  "contactKey",
+  "ALTER TABLE commercial_account_contacts ADD COLUMN contactKey varchar(64) NULL AFTER accountId"
+);
+for (const [columnName, definition] of [
+  ["relationshipType", "enum('decision_maker','gatekeeper','champion','concierge','front_desk','security','operations','other','unknown') NOT NULL DEFAULT 'unknown'"],
+  ["preferredChannel", "enum('email','sms','phone','unknown') NOT NULL DEFAULT 'unknown'"],
+  ["source", "varchar(96) NOT NULL DEFAULT 'unknown'"],
+  ["notes", "text NULL"],
+]) {
+  await ensureRequiredColumn(
+    "commercial_account_contacts",
+    columnName,
+    `ALTER TABLE commercial_account_contacts ADD COLUMN ${columnName} ${definition}`
+  );
+}
+await ensureRequiredIndex(
+  "commercial_account_contacts",
+  "uq_commercial_contacts_tenant_account_key",
+  ["tenantId", "accountId", "contactKey"],
+  "ALTER TABLE commercial_account_contacts ADD UNIQUE KEY uq_commercial_contacts_tenant_account_key (tenantId,accountId,contactKey)"
+);
+await runRequired(
+  "ALTER TABLE commercial_opportunities MODIFY COLUMN estimatedAnnualValueCents int NULL",
+  "commercial opportunity estimated value nullable"
+);
+
+await applyHistoricalCreateTables(
+  "../drizzle/0041_commercial_pipeline_conversion.sql",
+  "commercial pipeline conversion"
+);
+await applyHistoricalStandaloneIndexes(
+  "../drizzle/0041_commercial_pipeline_conversion.sql",
+  "commercial pipeline conversion indexes"
+);
+await runRequired(
+  "ALTER TABLE commercial_pipeline_records MODIFY COLUMN estimatedContractValueCents int NULL",
+  "commercial pipeline estimated value nullable"
+);
+for (const [tableName, columns] of [
+  ["commercial_accounts", ["id", "tenantId", "identityKey", "name", "accountType"]],
+  ["commercial_account_locations", ["id", "tenantId", "accountId", "locationKey", "latitude", "longitude"]],
+  ["commercial_account_contacts", ["id", "tenantId", "accountId", "contactKey", "relationshipType", "preferredChannel", "source", "notes"]],
+  ["commercial_opportunities", ["id", "tenantId", "accountId", "estimatedAnnualValueCents"]],
+  ["commercial_missions", ["id", "tenantId", "assignedTo", "status", "missionBriefJson"]],
+  ["commercial_pipeline_records", ["id", "tenantId", "accountId", "opportunityId", "missionId", "stage", "estimatedContractValueCents"]],
+  ["commercial_follow_ups", ["id", "tenantId", "pipelineId", "missionId", "status", "dueAt"]],
+]) {
+  await assertRequiredColumns(tableName, columns);
+}
+
+// Customer SaaS team operating profiles. The Team router has no runtime
+// CREATE fallback, so these tables are required on every clean production boot.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS employee_operating_profiles (
+    id varchar(36) NOT NULL PRIMARY KEY,
+    tenantId varchar(64) NOT NULL,
+    userOpenId varchar(64) NOT NULL,
+    displayName varchar(255) NOT NULL,
+    employmentStatus enum('active','leave','ended') NOT NULL DEFAULT 'active',
+    skillsJson json NOT NULL,
+    weeklyCapacityUnits int NULL,
+    createdBy varchar(128) NOT NULL,
+    updatedBy varchar(128) NOT NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_employee_operating_profiles_tenant_user (tenantId,userOpenId),
+    KEY idx_employee_operating_profiles_tenant_status (tenantId,employmentStatus)
+  )`,
+  "CREATE TABLE employee_operating_profiles"
+);
+await assertRequiredColumns("employee_operating_profiles", [
+  "id",
+  "tenantId",
+  "userOpenId",
+  "displayName",
+  "employmentStatus",
+  "skillsJson",
+  "weeklyCapacityUnits",
+  "createdBy",
+  "updatedBy",
+  "createdAt",
+  "updatedAt",
+]);
+await ensureRequiredIndex(
+  "employee_operating_profiles",
+  "uq_employee_operating_profiles_tenant_user",
+  ["tenantId", "userOpenId"],
+  `ALTER TABLE employee_operating_profiles
+     ADD UNIQUE KEY uq_employee_operating_profiles_tenant_user (tenantId,userOpenId)`
+);
+await ensureRequiredIndex(
+  "employee_operating_profiles",
+  "idx_employee_operating_profiles_tenant_status",
+  ["tenantId", "employmentStatus"],
+  `ALTER TABLE employee_operating_profiles
+     ADD KEY idx_employee_operating_profiles_tenant_status (tenantId,employmentStatus)`
+);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS employee_operating_profile_events (
+    id varchar(36) NOT NULL PRIMARY KEY,
+    tenantId varchar(64) NOT NULL,
+    profileId varchar(36) NOT NULL,
+    eventType varchar(64) NOT NULL,
+    actorId varchar(128) NOT NULL,
+    requestId varchar(36) NOT NULL,
+    metadataJson json NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_employee_profile_events_tenant_request (tenantId,requestId),
+    KEY idx_employee_profile_events_tenant_profile (tenantId,profileId,createdAt)
+  )`,
+  "CREATE TABLE employee_operating_profile_events"
+);
+await assertRequiredColumns("employee_operating_profile_events", [
+  "id",
+  "tenantId",
+  "profileId",
+  "eventType",
+  "actorId",
+  "requestId",
+  "metadataJson",
+  "createdAt",
+]);
+await ensureRequiredIndex(
+  "employee_operating_profile_events",
+  "uq_employee_profile_events_tenant_request",
+  ["tenantId", "requestId"],
+  `ALTER TABLE employee_operating_profile_events
+     ADD UNIQUE KEY uq_employee_profile_events_tenant_request (tenantId,requestId)`
+);
+await ensureRequiredIndex(
+  "employee_operating_profile_events",
+  "idx_employee_profile_events_tenant_profile",
+  ["tenantId", "profileId", "createdAt"],
+  `ALTER TABLE employee_operating_profile_events
+     ADD KEY idx_employee_profile_events_tenant_profile (tenantId,profileId,createdAt)`
+);
+
 await assertRequiredColumns("goldline_domain_capability_grants", [
   "tenantId",
   "operatorId",
