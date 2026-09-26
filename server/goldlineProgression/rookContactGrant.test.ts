@@ -719,6 +719,16 @@ describe("capability.rook.contact grant", () => {
       const completed = await caller.completeWaywardContactGate({ runId: begun.runId });
       expect(completed.capabilityRookContact.granted).toBe(true);
       expect(db.grants).toHaveLength(1);
+
+      await expect(caller.beginWaywardContactGate({})).rejects.toThrow(
+        /already durably completed/
+      );
+      const afterRestartAttempt = await readGoldlineProgression({
+        tenantId: "tenant-a",
+        operatorId: "open-7",
+        capabilityOperatorId: "7",
+      });
+      expect(afterRestartAttempt.capabilityRookContact.granted).toBe(true);
     } finally {
       vi.useRealTimers();
     }
