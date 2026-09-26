@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: route literal retained for the existing tenant-provisioning endpoint; customer-facing product is JOYSTICK. */
 import "./joystick-landing.css";
 
 const START_PATH = "/dayforge-onboarding";
