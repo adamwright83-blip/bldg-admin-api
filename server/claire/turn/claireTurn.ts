@@ -59,7 +59,7 @@ import {
   type ClaireTurnTrace,
 } from "../answerPathTelemetry";
 import { persistClaireTurnTrace } from "../answerPathRecorder";
-import { explicitDayLineRefusal, explicitTrackingRequest } from "../briefing/titleContract";
+import { explicitDayLineRefusal, explicitPendingDayLineCommit, explicitTrackingRequest } from "../briefing/titleContract";
 import { classifyOpenDialogueAct } from "./dialogueAct";
 import { detectConversationControl, interpretTurn, priorClaimLaneOpen } from "./interpretTurn";
 import { routeActiveWeeklySession } from "../weeklyMission/route";
@@ -923,7 +923,12 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
   if (state.pendingBriefing && nowMs - state.pendingBriefing.createdAt > PENDING_BRIEFING_TTL_MS) state.pendingBriefing = null;
   if (state.pendingBriefing) {
     const reply = replyDecision(utterance);
-    const bindsPending = reply.decision === "yes" || reply.decision === "no" || explicitDayLineRefusal(utterance);
+    const explicitPendingCommit = explicitPendingDayLineCommit(utterance);
+    const bindsPending =
+      reply.decision === "yes" ||
+      reply.decision === "no" ||
+      explicitDayLineRefusal(utterance) ||
+      explicitPendingCommit;
     const looksLikeRevision = /^(?:but|except|only|without|minus|and change|change|make)\b/i.test(utterance);
     const newMatter =
       !bindsPending &&
@@ -936,7 +941,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
     const revisionText =
       reply.decision === "yes" && /^(?:but|except|only|without|minus|and change|change|make)\b/i.test(reply.remainder)
         ? reply.remainder
-        : reply.decision === "other"
+        : reply.decision === "other" && !explicitPendingCommit
           ? utterance
           : null;
     if (revisionText) {
@@ -952,7 +957,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
         });
       }
     }
-    if (reply.decision === "yes" && !revisionText) {
+    if ((reply.decision === "yes" || explicitPendingCommit) && !revisionText) {
       const pending = state.pendingBriefing.parsed;
       state.pendingBriefing = null;
       const result = await deps.commit(pending, {
@@ -965,7 +970,10 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       await completeMorningReconciliation();
       const commitSpeak = speakBriefingCommit(result, today);
       const receipts = result.receipts ?? [];
-      if (reply.remainder) {
+      // A referential bundle authorization is one complete command. Some older
+      // confirmation parsing can leave "to the Day Line" as a remainder; replaying
+      // that fragment after the save can route back through Day Line logic and write twice.
+      if (reply.remainder && !explicitPendingCommit) {
         const more = await runClaireTurn({ ...input, utterance: reply.remainder, state, allowFragmentWait: false }, overrides);
         return finish({
           speak: more.speak,

@@ -12,13 +12,15 @@ import { compressTitle } from "./titleContract";
 import type { BriefingClock, BriefingItem } from "./briefingTypes";
 
 const ACTION =
-  /\b(?:drive|driving|process|processing|do|doing|make|making|create|creating|post|posting|design|designing|call|calling|pick|drop|deliver|visit|wash|fold)\b/i;
+  /\b(?:drive|driving|process|processing|do|doing|make|making|create|creating|post|posting|design|designing|call|calling|email|e-mail|text|message|send|follow\s*up|chase|schedule|book|check|quote|estimate|invoice|order|buy|research|review|finish|repair|install|pick|drop|deliver|visit|wash|fold)\b/i;
 
 const DIRECTIVE =
   /\b(?:add|put|place|log|save|track)\b|\b(?:make sure|be sure)\b/i;
 
 export function refersToPriorWork(utterance: string): boolean {
-  return /\b(?:all that|all of that|everything(?: i (?:said|told you))?|what i told you|what i said)\b/i.test(utterance);
+  return /\b(?:all that|all of that|everything(?: i (?:said|told you))?|what i told you|what i said|(?:all\s+)?(?:that|the)\s+stuff|the stuff|those things|the things i (?:said|mentioned|told you)|everything we just talked about)\b/i.test(
+    utterance
+  );
 }
 
 function clausesOf(text: string): string[] {
@@ -33,10 +35,10 @@ function clausesOf(text: string): string[] {
 
 function isDirectiveOnly(text: string): boolean {
   const stripped = text
-    .replace(/\b(?:just\s+)?add (?:all that|all of that|everything|what i told you|what i said)\b[^.]{0,48}\b(?:to|on|onto)\s+(?:the\s+|my\s+)?day\s*line\b/gi, " ")
+    .replace(/\b(?:just\s+)?add (?:all that|all of that|everything|what i told you|what i said|(?:all\s+)?(?:that|the)\s+stuff|the stuff|those things|the things i (?:said|mentioned|told you)|everything we just talked about)\b[^.]{0,48}\b(?:to|on|onto)\s+(?:the\s+|my\s+)?day\s*line\b/gi, " ")
     .replace(/\b(?:put|add|place|log|save|track)\b/gi, " ")
     .replace(/\b(?:on|onto|to)\s+(?:the\s+|my\s+)?day\s*line\b/gi, " ")
-    .replace(/\b(?:what i told you|what i said|all that|all of that)\b/gi, " ")
+    .replace(/\b(?:what i told you|what i said|all that|all of that|(?:all\s+)?(?:that|the)\s+stuff|the stuff|those things|the things i (?:said|mentioned|told you)|everything we just talked about)\b/gi, " ")
     .replace(/\b(?:i want you to\s+)+/gi, " ")
     .replace(/\b(?:make sure|be sure)(?: that)?(?: you)?\b/gi, " ")
     .replace(/\b(?:as|is)\s+a\s+(?:challenge|mission)\b/gi, " ")
@@ -57,7 +59,7 @@ function workQuote(clause: string, unfinished: (text: string) => boolean): strin
     .replace(/\b(?:make sure|be sure)(?: that)?(?: you)?\b/gi, " ")
     .replace(/\b(?:just\s+)?(?:add|put|place|log|save|track)\b/gi, " ")
     .replace(/\b(?:on|onto|to)\s+(?:the\s+|my\s+)?day\s*line\b/gi, " ")
-    .replace(/\b(?:what i told you|what i said|all that|all of that|everything(?: i (?:said|told you))?)\b/gi, " ")
+    .replace(/\b(?:what i told you|what i said|all that|all of that|everything(?: i (?:said|told you))?|(?:all\s+)?(?:that|the)\s+stuff|the stuff|those things|the things i (?:said|mentioned|told you)|everything we just talked about)\b/gi, " ")
     .replace(/\b(?:as|is)\s+a\s+(?:challenge|mission)\b/gi, " ")
     .replace(/^(?:(?:that|and|you|to|just)\s+)+/i, "")
     .replace(/\s+/g, " ")

@@ -64,6 +64,36 @@ export type ClaireBrainV2LiveResult =
       handled: true;
     };
 
+const UNPROVEN_DAY_LINE_WRITE_SPEECH =
+  "I understood the Day Line request, but I don't have a write receipt, so I can't confirm a change. Tell me the items again.";
+
+function hasDayLineWriteEvidence(result: ClaireTurnResult): boolean {
+  return Boolean(result.actionIds?.length || result.mutationReceipts?.length);
+}
+
+function guardCommittedDayLineResult(
+  grant: ExecutiveActionGrant,
+  result: ClaireTurnResult
+): ClaireTurnResult {
+  if (grant.actionClass !== "commit_day_line") return result;
+  if (hasDayLineWriteEvidence(result)) return result;
+
+  // A truthful explicit-commit failure already carries its own receipt-backed
+  // failure sentence ("nothing saved", "nothing new needed saving"). Keep it.
+  if (result.kind === "briefing_saved" && result.receiptBackedCommit) return result;
+
+  // Live V2 may grant the write, but the legacy organ still has to return
+  // durable evidence that something was written (or already existed). Never
+  // allow a conversational acknowledgement to masquerade as a successful write.
+  return {
+    ...result,
+    speak: UNPROVEN_DAY_LINE_WRITE_SPEECH,
+    receiptBackedCommit: undefined,
+    mutationReceipts: undefined,
+    actionIds: [],
+  };
+}
+
 function enabled(env: NodeJS.ProcessEnv): boolean {
   const flag = env.CLAIRE_BRAIN_V2_LIVE;
   return flag === "1" || flag?.toLowerCase() === "true";
@@ -105,7 +135,8 @@ export async function runClaireBrainV2LiveTurn(
     // One semantic operator turn can mint more than one grant. The underlying
     // legacy adapter must still run at most once.
     adapterPromise ??= input.executeLegacyAdapter(grant);
-    adapterResult = await adapterPromise;
+    const rawAdapterResult = await adapterPromise;
+    adapterResult = guardCommittedDayLineResult(grant, rawAdapterResult);
     return adapterResult;
   };
 
