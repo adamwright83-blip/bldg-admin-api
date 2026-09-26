@@ -58,6 +58,7 @@ jobs:
               'joystick_billing_lifecycle',
               'joystick_saas_cogs',
               'joystick_tenant_lifecycle',
+              'joystick_launch_two_tenants',
             ]) {
               await conn.query(`DROP DATABASE IF EXISTS \`${name}\``);
               await conn.query(`CREATE DATABASE \`${name}\``);
@@ -92,3 +93,11 @@ jobs:
         run: |
           node scripts/migrate.mjs
           pnpm vitest run --config vitest.integration.config.ts server/saas/tenantLifecycle.integration.test.ts
+
+      - name: Two fresh paying tenants coexist safely
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3416/joystick_launch_two_tenants
+          SAAS_LAUNCH_EXAM: "1"
+        run: |
+          node scripts/migrate.mjs
+          pnpm vitest run --config vitest.integration.config.ts server/saas/saasLaunchExam.integration.test.ts
