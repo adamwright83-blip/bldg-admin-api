@@ -62,6 +62,8 @@ import { registerLegacyDayforgeRetentionRoute } from "../legacyDayforgeRetention
 import { registerClientFatalRoute } from "../clientFatal/clientFatalRoute";
 import { startAutomaticGeographicReconciliation } from "../geography/geographicReconciliationScheduler";
 import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
+import { startCandyBarHeartbeat } from "../candyBar/heartbeat";
+import { getCandyBarOrchestrator } from "../candyBar/runtime";
 import { startEconomicOutboxDrainer } from "../cleancloudBrowserSync/worldOutbox";
 
 const warnedUnknownTenantHosts = new Set<string>();
@@ -813,6 +815,8 @@ async function startServer() {
     if (process.env.NODE_ENV === "production") {
       startAutomaticGeographicReconciliation();
       startNightShiftScheduler();
+      // Candy Bar heartbeat is off unless CANDY_BAR_ENABLED=true (never auto-enable).
+      startCandyBarHeartbeat({ orchestrator: getCandyBarOrchestrator() });
       void import("../claire/conversation/transcriptLog")
         .then(({ emitLatestConfiguredClaireTranscripts }) =>
           emitLatestConfiguredClaireTranscripts()
