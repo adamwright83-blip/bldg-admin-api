@@ -61,6 +61,12 @@ export function planAttention(input: {
     if (explicitRefusalStands(perceived, change) && pendingBind !== "revise") {
       pendingDisposition = "reject";
       rationale.push("explicit refusal stands even when the turn also repairs attention");
+    } else if (pendingBind === "yes") {
+      // Explicit authorization of the item already being held wins over the
+      // generic task-switch classifier. "Add all that to the Day Line" is the
+      // answer to the pending proposal, not a new unrelated task.
+      pendingDisposition = "confirm";
+      rationale.push("pending binds explicit authorization");
     } else if (change === "task_switch" || change === "set_shift" || change === "query_requery") {
       pendingDisposition = "supersede";
       rationale.push("the operator moved to a different task; pending is set aside, not applied");
@@ -71,8 +77,9 @@ export function planAttention(input: {
       pendingDisposition = "revise";
       rationale.push("pending binds a revision");
     } else if (
-      pendingBind === "yes" ||
-      (perceived.acknowledgement && !perceived.hasBusinessQuestion && !perceived.priorQueryReference)
+      perceived.acknowledgement &&
+      !perceived.hasBusinessQuestion &&
+      !perceived.priorQueryReference
     ) {
       pendingDisposition = "confirm";
       rationale.push("pending binds an acknowledgement");
