@@ -411,7 +411,7 @@ for (const [columnName, definition] of [
   ["heldMetadataJson", "json NULL AFTER heldSource"],
   ["residentClientRequestId", "varchar(191) NULL AFTER heldMetadataJson"],
   ["paidAt", "timestamp NULL AFTER paid"],
-  ["manualRiskFlag", "boolean NOT NULL DEFAULT false AFTER stripeConnectedAccountIdSnapshot"],
+  ["manualRiskFlag", "boolean NOT NULL DEFAULT false"],
 ]) {
   await ensureRequiredColumn(
     "orders",
