@@ -47,7 +47,14 @@ export function buildWeeklyMissionCard(input: {
   const remaining = input.horizon.remainingDates.length > 0;
   const unplannedPitch = input.status === "UNPLANNED" && !input.declined && remaining;
   const days = input.status === "LOCKED" ? input.days.map(day => dayCard(day, input.horizon.businessDate)) : [];
-  const emphasizeTodayStart = days.some(day => day.isToday && day.primary);
+  const emphasizeTodayStart =
+    input.status === "LOCKED" &&
+    input.days.some(
+      day =>
+        day.businessDate === input.horizon.businessDate &&
+        day.disposition === "primary" &&
+        Boolean(day.primary?.text.trim())
+    );
   return {
     status: input.status,
     weekStart: input.weekStart,
