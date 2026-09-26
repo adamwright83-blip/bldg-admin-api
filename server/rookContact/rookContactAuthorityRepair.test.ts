@@ -163,7 +163,15 @@ describe("Rook CONTACT authority repair", () => {
       resolve(process.cwd(), "server/rookContact/rookContactRouter.ts"),
       "utf8"
     );
-    expect(router).not.toMatch(/recordIsolatedPreviewRookContactGrant|ROOK_CONTACT_EXECUTION_FIXTURE/);
+    const progressionRouter = readFileSync(
+      resolve(process.cwd(), "server/goldlineProgression/progressionRouter.ts"),
+      "utf8"
+    );
+    for (const source of [router, progressionRouter]) {
+      expect(source).not.toMatch(
+        /recordIsolatedPreviewRookContactGrant|grantRookContactCapability|ROOK_CONTACT_EXECUTION_FIXTURE/
+      );
+    }
     const authority = readFileSync(
       resolve(process.cwd(), "server/goldlineProgression/rookContactAuthority.ts"),
       "utf8"
