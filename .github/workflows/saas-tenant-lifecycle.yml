@@ -56,4 +56,4 @@ jobs:
       - name: Bootstrap production schema
         run: node scripts/migrate.mjs
       - name: Prove export delete and protected-tenant safeguards
-        run: pnpm vitest run server/saas/tenantLifecycle.integration.test.ts
+        run: pnpm vitest run --config vitest.integration.config.ts server/saas/tenantLifecycle.integration.test.ts
