@@ -97,6 +97,25 @@ describe("DayForge SaaS production contract", () => {
     expect(workflow).toContain("pnpm start");
   });
 
+  it("keeps the customer product quarantined from legacy operations", () => {
+    const shell = source("../../client/src/product/ProductShell.tsx");
+    const app = source("../../client/src/App.tsx");
+    const strategy = source("../strategy/strategyRouter.ts");
+    const transcriptLog = source("../claire/conversation/transcriptLog.ts");
+    const claireTwilio = source("../claire/claireTwilio.ts");
+
+    expect(shell).not.toContain("Legacy operations");
+    expect(shell).not.toContain('href="/admin"');
+    expect(app).toContain("isSaasCustomerPath");
+    expect(app).toContain('<Redirect to="/product" />');
+    expect(strategy).toContain("legacyDayforgeTenantOperatorProcedure");
+    expect(strategy).not.toContain("adminProcedure");
+    expect(transcriptLog).not.toContain("text: redactClaireTranscriptText(turn.text)");
+    expect(transcriptLog).toContain("textLength: turn.text.length");
+    expect(transcriptLog).toContain("claire_post_call_transcript_metadata");
+    expect(claireTwilio).not.toContain("Hey Adam. What's up?");
+  });
+
   it("enforces the tenant role matrix", () => {
     expect(roleAllows("owner", ["owner", "admin"])).toBe(true);
     expect(roleAllows("operator", ["owner", "admin"])).toBe(false);
