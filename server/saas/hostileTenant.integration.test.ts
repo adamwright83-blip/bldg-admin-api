@@ -279,11 +279,27 @@ describeMysql("JOYSTICK hostile two-tenant router boundary", () => {
     const a = customerAssetRouter.createCaller(ctx(tenantA, ownerA));
     const b = customerAssetRouter.createCaller(ctx(tenantB, ownerB));
     const [assetsA, assetsB] = await Promise.all([a.list(), b.list()]);
-    expect(assetsA).toHaveLength(1);
-    expect(assetsB).toHaveLength(1);
-    expect(assetsA[0]?.displayName).toContain("Tenant A");
-    expect(assetsB[0]?.displayName).toContain("Tenant B");
-    expect(assetsA[0]?.id).not.toBe(assetsB[0]?.id);
+    const residentialA = assetsA.find(
+      asset => asset.kind === "residential" && asset.displayName === "Tenant A Customer"
+    );
+    const residentialB = assetsB.find(
+      asset => asset.kind === "residential" && asset.displayName === "Tenant B Customer"
+    );
+    const commercialA = assetsA.find(
+      asset => asset.kind === "commercial" && asset.displayName === "Tenant A Prospect"
+    );
+    const commercialB = assetsB.find(
+      asset => asset.kind === "commercial" && asset.displayName === "Tenant B Prospect"
+    );
+
+    expect(residentialA).toBeDefined();
+    expect(residentialB).toBeDefined();
+    expect(commercialA).toBeDefined();
+    expect(commercialB).toBeDefined();
+    expect(assetsA.some(asset => asset.displayName.startsWith("Tenant B"))).toBe(false);
+    expect(assetsB.some(asset => asset.displayName.startsWith("Tenant A"))).toBe(false);
+    expect(residentialA?.id).not.toBe(residentialB?.id);
+    expect(commercialA?.id).not.toBe(commercialB?.id);
   });
 
   it("rejects a cross-tenant customer object id through the actual router", async () => {
