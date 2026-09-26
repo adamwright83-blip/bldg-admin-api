@@ -297,7 +297,11 @@ function askPrimary(day: WeeklyDayDraft, dossier: WeeklyDossier): string {
   const known = dossier.facts.filter(
     fact => fact.businessDate === day.businessDate && fact.scheduleLabel
   );
-  if (dossier.horizon.todayIsRemnant && day.businessDate === dossier.horizon.businessDate) {
+  if (
+    dossier.horizon.todayIsRemnant &&
+    dossier.horizon.weekday === "Monday" &&
+    day.businessDate === dossier.horizon.businessDate
+  ) {
     const later = dossier.horizon.remainingDates
       .filter(date => date !== day.businessDate)
       .map(date => weekdayName(date));
