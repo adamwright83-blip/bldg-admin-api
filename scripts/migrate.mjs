@@ -1196,12 +1196,24 @@ await assertRequiredColumns("dayforge_saas_memberships", [
   "role",
   "active",
 ]);
+await ensureRequiredColumn(
+  "dayforge_saas_onboarding_sessions",
+  "authContinuationId",
+  "ALTER TABLE dayforge_saas_onboarding_sessions ADD COLUMN authContinuationId varchar(36) NULL AFTER stripeSubscriptionId"
+);
+await ensureRequiredIndex(
+  "dayforge_saas_onboarding_sessions",
+  "idx_dayforge_saas_onboarding_continuation",
+  ["authContinuationId"],
+  "ALTER TABLE dayforge_saas_onboarding_sessions ADD KEY idx_dayforge_saas_onboarding_continuation (authContinuationId)"
+);
 await assertRequiredColumns("dayforge_saas_onboarding_sessions", [
   "id",
   "resumeTokenHash",
   "ownerEmail",
   "status",
   "tenantId",
+  "authContinuationId",
 ]);
 await assertRequiredColumns("dayforge_saas_subscriptions", [
   "tenantId",
