@@ -37,6 +37,7 @@ jobs:
       DRIVER_OPEN_ID: schema-release-driver
       ADMIN_PASSWORD: schema-release-admin-pass
       GOLDLINE_PROOF_MODE: "1"
+      SAAS_HOSTILE_TENANT_DB_TEST: "1"
 
     steps:
       - uses: actions/checkout@v7
@@ -85,6 +86,9 @@ jobs:
 
       - name: Run SaaS production contract
         run: pnpm vitest run server/saas/saasContract.test.ts
+
+      - name: Prove hostile tenant isolation through real routers
+        run: pnpm vitest run server/saas/hostileTenant.integration.test.ts
 
       - name: Boot exact production start command
         run: |
