@@ -1,4 +1,4 @@
-# JOYSTICK SaaS launch operations
+<!-- LEGACY DAYFORGE COMPATIBILITY: retired internal names below are compatibility identifiers only; customer-facing product is JOYSTICK. -->\n# JOYSTICK SaaS launch operations
 
 This is the production activation handoff after the code-side SaaS commercialization gates are green.
 
