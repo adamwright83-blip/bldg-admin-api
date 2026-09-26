@@ -104,7 +104,22 @@ export function acceptPlanningDecision(
   if (!uncertainties) return null;
   const focusUncertainty = typeof record.focusUncertainty === "string" ? record.focusUncertainty.trim().slice(0, 240) : null;
   if (focusUncertainty && !namesAreGrounded(focusUncertainty, hypothesisText)) return null;
-  const draftDays = parseDraftDays(record.draftDays, input.dossier, commitments);
+  const operatorCommitments = [
+    input.utterance,
+    ...input.session.operatorEvidence,
+    ...input.session.draft.days
+      .filter(day => day.primary?.source === "operator_stated")
+      .map(day => day.primary?.text ?? ""),
+  ]
+    .join(" ")
+    .toLowerCase();
+  const draftDays = parseDraftDays(
+    record.draftDays,
+    input.dossier,
+    commitments,
+    input.session.draft,
+    operatorCommitments
+  );
   if (draftDays === undefined) return null;
 
   let resolvedAct = act as WeeklyAct;
@@ -219,7 +234,9 @@ function parseUncertainties(
 function parseDraftDays(
   value: unknown,
   dossier: WeeklyDossier,
-  corpus: string
+  corpus: string,
+  draft: WeeklyDraft,
+  operatorCorpus: string
 ): WeeklyDraftDayPatch[] | null | undefined {
   if (value == null) return null;
   if (!Array.isArray(value)) return undefined;
@@ -234,6 +251,17 @@ function parseDraftDays(
     if (typeof record.primaryText === "string" && record.primaryText.trim()) {
       const primaryText = record.primaryText.trim().slice(0, 255);
       if (!corpus.includes(primaryText.toLowerCase())) return undefined;
+      const existing = draft.days.find(day => day.businessDate === businessDate);
+      const isUnclaimedCurrentRemnant =
+        dossier.horizon.todayIsRemnant &&
+        businessDate === dossier.horizon.businessDate &&
+        !existing?.primary?.text;
+      if (
+        isUnclaimedCurrentRemnant &&
+        !operatorCorpus.includes(primaryText.toLowerCase())
+      ) {
+        return undefined;
+      }
       patch.primaryText = primaryText;
     }
     if (record.readiness != null) {
