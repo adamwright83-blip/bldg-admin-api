@@ -23,6 +23,7 @@ const requiredTables = [
   "tracked_signal_definitions",
   "driver_sales_journals",
   "commercial_mission_irl_step_details",
+  "commercial_mission_dispatches",
 ];
 
 for (const tableName of requiredTables) {
@@ -52,6 +53,25 @@ const assertIndex = async (tableName, indexName, expectedColumns) => {
     throw new Error(
       `Required index ${tableName}.${indexName} is wrong: ${actual.join(",") || "<missing>"}; expected: ${expectedColumns.join(",")}`
     );
+  }
+};
+
+const assertEnumValues = async (tableName, columnName, expectedValues) => {
+  const [rows] = await conn.execute(
+    `SELECT COLUMN_TYPE
+       FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND COLUMN_NAME = ?`,
+    [tableName, columnName]
+  );
+  const columnType = String(rows[0]?.COLUMN_TYPE ?? "");
+  for (const value of expectedValues) {
+    if (!columnType.includes(`'${value}'`)) {
+      throw new Error(
+        `Required enum ${tableName}.${columnName} is missing value ${value}: ${columnType || "<missing>"}`
+      );
+    }
   }
 };
 
@@ -131,6 +151,38 @@ await assertIndex(
   "idx_commercial_irl_step_details_tenant_mission",
   ["tenantId", "missionId", "missionStepId"]
 );
+
+await assertIndex(
+  "commercial_mission_dispatches",
+  "uq_commercial_dispatches_tenant_request_channel",
+  ["tenantId", "requestId", "channel"]
+);
+await assertIndex(
+  "commercial_mission_dispatches",
+  "idx_commercial_dispatches_tenant_mission",
+  ["tenantId", "missionId", "createdAt"]
+);
+await assertIndex(
+  "commercial_mission_dispatches",
+  "idx_commercial_dispatches_tenant_assignee_status",
+  ["tenantId", "assignedTo", "status", "createdAt"]
+);
+await assertEnumValues("commercial_mission_dispatches", "dispatchPolicy", [
+  "manual",
+  "on_game_complete",
+]);
+await assertEnumValues("commercial_mission_dispatches", "channel", [
+  "in_app",
+  "sms",
+]);
+await assertEnumValues("commercial_mission_dispatches", "status", [
+  "queued",
+  "sent",
+  "failed",
+  "opened",
+  "not_configured",
+  "cancelled",
+]);
 
 const [debriefColumns] = await conn.execute(
   `SELECT COLUMN_NAME
