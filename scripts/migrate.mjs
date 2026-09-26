@@ -3443,6 +3443,76 @@ await runRequired(
   )`,
   "CREATE TABLE goldline_domain_capability_grants"
 );
+// Canonical order payment truth used by Customer Assets. These tables are
+// part of current application schema but have no standalone numbered migration,
+// so production bootstrap owns their additive creation.
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS order_payment_projections (
+    id varchar(36) NOT NULL PRIMARY KEY,
+    tenantId varchar(64) NOT NULL,
+    orderId int NOT NULL,
+    provider varchar(64) NOT NULL,
+    providerPaymentId varchar(255) NULL,
+    currency varchar(3) NOT NULL,
+    state enum('unpaid','paid','partially_refunded','refunded','cancelled','review_required') NOT NULL,
+    capturedCents int NULL,
+    refundedCents int NULL,
+    netPaidCents int NULL,
+    paidAt timestamp NULL,
+    providerUpdatedAt timestamp NULL,
+    lastReconciledAt timestamp NOT NULL,
+    version int NOT NULL DEFAULT 1,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_order_payment_projections_tenant_order (tenantId,orderId),
+    KEY idx_order_payment_projections_provider_payment (provider,providerPaymentId)
+  )`,
+  "CREATE TABLE order_payment_projections"
+);
+await assertRequiredColumns("order_payment_projections", [
+  "id",
+  "tenantId",
+  "orderId",
+  "provider",
+  "currency",
+  "state",
+  "netPaidCents",
+  "lastReconciledAt",
+  "version",
+]);
+
+await runRequired(
+  `CREATE TABLE IF NOT EXISTS order_payment_events (
+    id varchar(36) NOT NULL PRIMARY KEY,
+    tenantId varchar(64) NOT NULL,
+    orderId int NOT NULL,
+    provider varchar(64) NOT NULL,
+    providerEventId varchar(255) NULL,
+    eventType varchar(96) NOT NULL,
+    currency varchar(3) NULL,
+    capturedCents int NULL,
+    refundedCents int NULL,
+    netPaidCents int NULL,
+    payloadDigest varchar(64) NULL,
+    occurredAt timestamp NOT NULL,
+    requestId varchar(191) NOT NULL,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_order_payment_events_provider_event (provider,providerEventId),
+    UNIQUE KEY uq_order_payment_events_tenant_request (tenantId,requestId),
+    KEY idx_order_payment_events_tenant_order (tenantId,orderId,occurredAt)
+  )`,
+  "CREATE TABLE order_payment_events"
+);
+await assertRequiredColumns("order_payment_events", [
+  "id",
+  "tenantId",
+  "orderId",
+  "provider",
+  "eventType",
+  "occurredAt",
+  "requestId",
+]);
+
 // Required churn/recovery foundations. Customer Assets reads the latest
 // churn/recovery state even for tenants with no current scan results.
 await applyHistoricalCreateTables(
