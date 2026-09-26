@@ -3443,6 +3443,28 @@ await runRequired(
   )`,
   "CREATE TABLE goldline_domain_capability_grants"
 );
+// Required churn/recovery foundations. Customer Assets reads the latest
+// churn/recovery state even for tenants with no current scan results.
+await applyHistoricalCreateTables(
+  "../drizzle/0040_customer_churn_recovery.sql",
+  "customer churn and recovery foundation"
+);
+await applyHistoricalStandaloneIndexes(
+  "../drizzle/0040_customer_churn_recovery.sql",
+  "customer churn and recovery indexes"
+);
+for (const [tableName, columns] of [
+  ["tenant_customer_recovery_profiles", ["tenantId", "storeName", "senderName"]],
+  ["customer_churn_scans", ["id", "tenantId", "requestId", "status"]],
+  ["customer_churn_snapshots", ["id", "tenantId", "scanId", "customerKeyHash", "score", "grade", "createdAt"]],
+  ["customer_contact_permissions", ["id", "tenantId", "customerKeyHash", "status"]],
+  ["customer_recovery_interventions", ["id", "tenantId", "customerKeyHash", "status", "updatedAt"]],
+  ["customer_recovery_drafts", ["id", "tenantId", "interventionId", "version", "status"]],
+  ["customer_recovery_events", ["id", "tenantId", "interventionId", "eventName"]],
+]) {
+  await assertRequiredColumns(tableName, columns);
+}
+
 // Required commercial relationship/mission spine. Customer Assets and Team
 // project these tables even when a new tenant has no commercial rows yet, so a
 // clean SaaS database must contain the empty canonical structures.
