@@ -151,10 +151,11 @@ describeMysql("JOYSTICK hostile two-tenant router boundary", () => {
 
     const missionCallerA = commercialMissionRouter.createCaller(ctx(tenantA, ownerA));
     const missionCallerB = commercialMissionRouter.createCaller(ctx(tenantB, ownerB));
-    const [missionA, missionB] = await Promise.all([
-      missionCallerA.create(missionInput("Tenant A", ownerA)),
-      missionCallerB.create(missionInput("Tenant B", ownerB)),
-    ]);
+    // Commercial mission creation opens transactions that touch shared auto-increment
+    // indexes. Run the two tenant fixtures sequentially so this isolation exam tests
+    // authorization rather than occasionally losing to a MySQL lock-order deadlock.
+    const missionA = await missionCallerA.create(missionInput("Tenant A", ownerA));
+    const missionB = await missionCallerB.create(missionInput("Tenant B", ownerB));
     missionAId = missionA.id;
     missionBId = missionB.id;
 
