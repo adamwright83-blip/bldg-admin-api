@@ -205,6 +205,10 @@
       "destination": "/index.html"
     },
     {
+      "source": "/joystick",
+      "destination": "/index.html"
+    },
+    {
       "source": "/commercial-missions",
       "destination": "/index.html"
     },
