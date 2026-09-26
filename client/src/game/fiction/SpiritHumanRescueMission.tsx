@@ -14,10 +14,10 @@ import {
   type PressureEvent,
   type PressureState,
 } from "../../../../shared/spiritHumanPressure";
-import crusherPng from "@/assets/l4/crusher.png";
-import captivePng from "@/assets/l4/man.png";
-import environmentPng from "@/assets/l4/center_grit_bg_1920.png";
-import playerMarkPng from "@/assets/l4/you_are_here_badge.png";
+import captivePng from "@/assets/spirit-human/core/captive.png";
+import environmentPng from "@/assets/spirit-human/core/environment.webp";
+import playerMarkPng from "@/assets/spirit-human/core/playerMark.png";
+import threatPng from "@/assets/spirit-human/core/threat.png";
 import "./SpiritHumanRescueMission.css";
 
 const PRESSURE_STORAGE_PREFIX = "goldline:spirit-human-pressure:v1:";
@@ -267,13 +267,24 @@ export default function SpiritHumanRescueMissionHost(props: {
     >
       <img className="shr-environment" src={environmentPng} alt="" />
       <img
-        className="shr-crusher"
-        src={crusherPng}
+        className="shr-threat"
+        src={threatPng}
         alt=""
-        style={{ transform: `translateY(${phase === "rescue" ? -12 : threatY}%)` }}
+        data-testid="spirit-human-threat"
+        style={{ transform: `translate(-50%, ${phase === "rescue" ? -12 : threatY}%)` }}
       />
-      <img className="shr-captive" src={captivePng} alt="" />
-      <img className="shr-player" src={playerMarkPng} alt="" />
+      <img
+        className="shr-captive"
+        src={captivePng}
+        alt=""
+        data-testid="spirit-human-captive"
+      />
+      <img
+        className="shr-player"
+        src={playerMarkPng}
+        alt=""
+        data-testid="spirit-human-player-marker"
+      />
 
       <header className="shr-hud">
         <small>JOYSTICK MISSION</small>
@@ -288,8 +299,6 @@ export default function SpiritHumanRescueMissionHost(props: {
           CLOSE
         </button>
       </header>
-
-      <p className="shr-provisional">Provisional Level 4 mechanical art — not final rescue plates.</p>
 
       {props.isDriving ? (
         <div className="shr-panel" data-testid="spirit-human-driving-safe">
