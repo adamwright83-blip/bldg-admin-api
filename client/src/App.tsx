@@ -283,6 +283,21 @@ const LOCAL_ADMIN_PATHS = new Set([
   "/product/team",
 ]);
 
+const SAAS_CUSTOMER_PATH_PREFIXES = [
+  "/product",
+  "/onboarding",
+  "/goldline/start",
+  "/dayforge-settings",
+  "/dayforge-invite",
+  "/billing",
+] as const;
+
+function isSaasCustomerPath(pathname: string): boolean {
+  return SAAS_CUSTOMER_PATH_PREFIXES.some(
+    prefix => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+}
+
 function AdminHostRouter() {
   return (
     <Switch>
@@ -486,6 +501,7 @@ function Router() {
   const hostname =
     typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
   const { tenant } = useTenant();
+  const { user } = useAuth();
   const isBoreslayHost =
     hostname === "boreslay.com" || hostname === "www.boreslay.com";
   // api.bldg.chat is the real, working backend for this app (Railway); the
@@ -553,6 +569,18 @@ function Router() {
 
   if (isBoreslayHost) {
     return <BoreslayLandingRoute />;
+  }
+
+  // Paid SaaS members are ordinary platform users whose authority comes from
+  // tenant membership. Keep them inside the explicitly supported customer
+  // surface even if they manually type a historical admin URL. Platform
+  // admins retain the legacy/internal shell for Laundry Farm operations.
+  if (
+    isAdminHost &&
+    user?.role === "user" &&
+    !isSaasCustomerPath(window.location.pathname)
+  ) {
+    return <Redirect to="/product" />;
   }
 
   if (isAdminHost || isLocalAdminPath) {
