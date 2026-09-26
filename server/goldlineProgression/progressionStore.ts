@@ -334,17 +334,11 @@ export async function hasServerAuthoritativeWaywardContactGate(input: {
   ) {
     return false;
   }
-  const levelAt = existing.row.levelColosseumResolvedAt.getTime();
-  const rookAt = existing.row.companionRookOwnedAt.getTime();
   const startedAt = Date.parse(gate.startedAt);
   const completedAt = Date.parse(gate.completedAt);
   return (
-    Number.isFinite(levelAt) &&
-    Number.isFinite(rookAt) &&
     Number.isFinite(startedAt) &&
     Number.isFinite(completedAt) &&
-    levelAt <= rookAt &&
-    rookAt <= startedAt &&
     completedAt - startedAt >= 5_000
   );
 }
