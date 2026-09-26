@@ -35,10 +35,10 @@ function clausesOf(text: string): string[] {
 
 function isDirectiveOnly(text: string): boolean {
   const stripped = text
-    .replace(/\b(?:just\s+)?add (?:all that|all of that|everything|what i told you|what i said)\b[^.]{0,48}\b(?:to|on|onto)\s+(?:the\s+|my\s+)?day\s*line\b/gi, " ")
+    .replace(/\b(?:just\s+)?add (?:all that|all of that|everything|what i told you|what i said|(?:all\s+)?(?:that|the)\s+stuff|the stuff|those things|the things i (?:said|mentioned|told you)|everything we just talked about)\b[^.]{0,48}\b(?:to|on|onto)\s+(?:the\s+|my\s+)?day\s*line\b/gi, " ")
     .replace(/\b(?:put|add|place|log|save|track)\b/gi, " ")
     .replace(/\b(?:on|onto|to)\s+(?:the\s+|my\s+)?day\s*line\b/gi, " ")
-    .replace(/\b(?:what i told you|what i said|all that|all of that)\b/gi, " ")
+    .replace(/\b(?:what i told you|what i said|all that|all of that|(?:all\s+)?(?:that|the)\s+stuff|the stuff|those things|the things i (?:said|mentioned|told you)|everything we just talked about)\b/gi, " ")
     .replace(/\b(?:i want you to\s+)+/gi, " ")
     .replace(/\b(?:make sure|be sure)(?: that)?(?: you)?\b/gi, " ")
     .replace(/\b(?:as|is)\s+a\s+(?:challenge|mission)\b/gi, " ")
@@ -59,7 +59,7 @@ function workQuote(clause: string, unfinished: (text: string) => boolean): strin
     .replace(/\b(?:make sure|be sure)(?: that)?(?: you)?\b/gi, " ")
     .replace(/\b(?:just\s+)?(?:add|put|place|log|save|track)\b/gi, " ")
     .replace(/\b(?:on|onto|to)\s+(?:the\s+|my\s+)?day\s*line\b/gi, " ")
-    .replace(/\b(?:what i told you|what i said|all that|all of that|everything(?: i (?:said|told you))?)\b/gi, " ")
+    .replace(/\b(?:what i told you|what i said|all that|all of that|everything(?: i (?:said|told you))?|(?:all\s+)?(?:that|the)\s+stuff|the stuff|those things|the things i (?:said|mentioned|told you)|everything we just talked about)\b/gi, " ")
     .replace(/\b(?:as|is)\s+a\s+(?:challenge|mission)\b/gi, " ")
     .replace(/^(?:(?:that|and|you|to|just)\s+)+/i, "")
     .replace(/\s+/g, " ")
