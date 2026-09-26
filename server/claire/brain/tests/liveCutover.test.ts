@@ -126,6 +126,62 @@ describe("Brain V2 live cutover", () => {
     expect(result.adapterResult?.kind).toBe("briefing_proposed");
   });
 
+  it("never lets an explicit Day Line command claim success without a write receipt", async () => {
+    const executeLegacyAdapter = vi.fn(async () => ({
+      speak: "Done. I added it.",
+      kind: "answered" as const,
+      assembledUtterance: "Add the stuff to the Day Line.",
+      thoughtCompleteness: "complete" as const,
+      actionIds: [],
+    }));
+    const result = await runClaireBrainV2LiveTurn(
+      input({
+        rawText: "Add the stuff to the Day Line.",
+        assembledText: "Add the stuff to the Day Line.",
+        state: {},
+        executeLegacyAdapter,
+      }),
+      { env: ON }
+    );
+
+    expect(result.active).toBe(true);
+    if (!result.active) return;
+    expect(result.actionClasses).toContain("commit_day_line");
+    expect(executeLegacyAdapter).toHaveBeenCalledTimes(1);
+    expect(result.adapterResult?.actionIds).toEqual([]);
+    expect(result.adapterResult?.speak).toMatch(/don't have a write receipt/i);
+    expect(result.adapterResult?.speak).not.toMatch(/\bDone\b|\badded\b/i);
+  });
+
+  it("keeps a receipt-backed explicit Day Line commit intact", async () => {
+    const executeLegacyAdapter = vi.fn(async () => ({
+      speak: "Done. 2 on today's line.",
+      kind: "briefing_saved" as const,
+      assembledUtterance: "Add the stuff to the Day Line.",
+      thoughtCompleteness: "complete" as const,
+      actionIds: ["c1", "c2"],
+      mutationReceipts: [
+        { claimedState: "created" as const, entityId: "c1", statement: "Added Call permit office to the Day Line" },
+        { claimedState: "created" as const, entityId: "c2", statement: "Added Send estimate to the Day Line" },
+      ],
+    }));
+    const result = await runClaireBrainV2LiveTurn(
+      input({
+        rawText: "Add the stuff to the Day Line.",
+        assembledText: "Add the stuff to the Day Line.",
+        state: {},
+        executeLegacyAdapter,
+      }),
+      { env: ON }
+    );
+
+    expect(result.active).toBe(true);
+    if (!result.active) return;
+    expect(result.actionClasses).toContain("commit_day_line");
+    expect(result.adapterResult?.actionIds).toEqual(["c1", "c2"]);
+    expect(result.adapterResult?.speak).toBe("Done. 2 on today's line.");
+  });
+
   it("binds a bare yes to the pre-turn pending briefing before the adapter clears it", async () => {
     const executeLegacyAdapter = vi.fn(async () =>
       adapterResult("briefing_saved")
