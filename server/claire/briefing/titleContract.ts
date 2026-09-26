@@ -98,6 +98,18 @@ export function explicitTrackingRequest(utterance: string): boolean {
   return EXPLICIT_TRACKING.test(utterance);
 }
 
+/**
+ * A direct authorization to persist the list Claire is already holding.
+ * This is intentionally referential: without a pending item upstream, these
+ * words authorize nothing by themselves.
+ */
+const PENDING_DAY_LINE_COMMIT =
+  /^(?:(?:yes|yeah|yep|yup|sure|okay|ok|please|go ahead)[,\s]+)?(?:just\s+)?(?:add|put|place|log|track|save|write)\s+(?:all\s+(?:of\s+)?(?:that|it|them|those|this|these)|everything|(?:the\s+)?(?:stuff|list|items)|that|it|them|those|this|these)(?:\s+all)?(?:\s+(?:on|onto|to|in)\s+(?:(?:my|the)\s+)?day\s*line)?[.!?]*$/i;
+
+export function explicitPendingDayLineCommit(utterance: string): boolean {
+  return PENDING_DAY_LINE_COMMIT.test(utterance.trim());
+}
+
 export function explicitDayLineRefusal(utterance: string): boolean {
   return /\b(?:don'?t|do not|no need to|i don'?t need)\b[^.!?]{0,40}\b(?:day ?line|the list|on (?:the|my) (?:list|plan))\b/i.test(
     utterance
