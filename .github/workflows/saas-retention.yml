@@ -1,0 +1,37 @@
+name: SaaS retention scheduler
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Count eligible rows without deleting"
+        required: false
+        default: true
+        type: boolean
+  schedule:
+    - cron: "17 11 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: joystick-saas-retention
+  cancel-in-progress: false
+
+jobs:
+  retention:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JOYSTICK_RETENTION_ENABLED: ${{ vars.JOYSTICK_RETENTION_ENABLED }}
+      JOYSTICK_RETENTION_URL: ${{ secrets.JOYSTICK_RETENTION_URL }}
+      JOYSTICK_RETENTION_SECRET: ${{ secrets.JOYSTICK_RETENTION_SECRET }}
+      JOYSTICK_RETENTION_BATCH_LIMIT: ${{ vars.JOYSTICK_RETENTION_BATCH_LIMIT }}
+      JOYSTICK_RETENTION_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Run bounded retention batch
+        run: node scripts/run-saas-retention.mjs
