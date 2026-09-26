@@ -318,21 +318,33 @@ export async function hasServerAuthoritativeWaywardContactGate(input: {
   operatorId: string;
 }): Promise<boolean> {
   const existing = await findDomainProgression(input);
-  if (!existing.readable || !existing.row?.companionRookOwnedAt) return false;
+  if (
+    !existing.readable ||
+    !existing.row?.levelColosseumResolvedAt ||
+    !existing.row.companionRookOwnedAt
+  ) {
+    return false;
+  }
   const gate = receipts(existing.row.overworldUnlocksJson).waywardContactGate;
   if (
     typeof gate?.runId !== "string" ||
-    !gate.runId ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(gate.runId) ||
     typeof gate.startedAt !== "string" ||
     typeof gate.completedAt !== "string"
   ) {
     return false;
   }
+  const levelAt = existing.row.levelColosseumResolvedAt.getTime();
+  const rookAt = existing.row.companionRookOwnedAt.getTime();
   const startedAt = Date.parse(gate.startedAt);
   const completedAt = Date.parse(gate.completedAt);
   return (
+    Number.isFinite(levelAt) &&
+    Number.isFinite(rookAt) &&
     Number.isFinite(startedAt) &&
     Number.isFinite(completedAt) &&
+    levelAt <= rookAt &&
+    rookAt <= startedAt &&
     completedAt - startedAt >= 5_000
   );
 }
