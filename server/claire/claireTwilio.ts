@@ -969,6 +969,10 @@ export function runAuthoritativeClaireVoiceTurn(input: {
             conversationKey: callStateKey(conversationId),
             actionClasses: liveV2.actionClasses,
             endCall: liveV2.result.candidateEndCall,
+            adapterKind: liveV2.adapterResult?.kind ?? null,
+            actionIdCount: liveV2.adapterResult?.actionIds?.length ?? 0,
+            mutationReceiptCount: liveV2.adapterResult?.mutationReceipts?.length ?? 0,
+            receiptBackedCommit: Boolean(liveV2.adapterResult?.receiptBackedCommit),
           });
         } else {
           result = await runLegacyAdapter();
