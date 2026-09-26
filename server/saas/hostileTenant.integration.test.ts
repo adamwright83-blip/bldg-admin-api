@@ -117,6 +117,17 @@ describeMysql("JOYSTICK hostile two-tenant router boundary", () => {
           [tenantId, openId, role]
         );
       }
+      await db.execute(
+        `INSERT INTO dayforge_saas_subscriptions
+          (tenantId,planKey,stripeCustomerId,stripeSubscriptionId,status,lastStripeEventId,lastStripeEventCreatedAt)
+         VALUES (?, 'hostile-test-plan', ?, ?, 'active', ?, CURRENT_TIMESTAMP)`,
+        [
+          tenantId,
+          `cus_${tenantId}`,
+          `sub_${tenantId}`,
+          `evt_${tenantId}`,
+        ]
+      );
       for (const entitlement of [
         "boreslay",
         "dayforge_field",
