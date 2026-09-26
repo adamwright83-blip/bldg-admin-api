@@ -123,6 +123,7 @@ export async function completeWeeklyActWithClaire(input: {
             "You already did the homework. The private hypothesis is already on the session. Test the highest-value uncertainty.",
             "Do not walk the weekdays in order. Do not ask what the dossier already knows. One question.",
             "Do not open with 'What is the one mission for <weekday>?' when the dossier already has facts.",
+            "The current weekday is a remnant, not a pristine future day. Never assign its primary from dossier context alone; only retain it when the operator explicitly names it, otherwise ask whether to keep a thin primary or stand today down.",
             "Say you have enough only when every remaining day has a primary or an explicit stand-down. Never claim the week is locked.",
             "Do not invent buildings, names, addresses, approvals, windows, or customers.",
             "growthCandidates are unconfirmed options. They are not the week.",
