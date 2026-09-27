@@ -257,12 +257,23 @@ export async function buildDriverMissions(input: {
     const opportunity = selected[index]!;
     const reusable = reusableByProviderId.get(opportunity.providerAccountId);
     if (reusable) {
+      const recovered =
+        reusable.status === "candidate" || reusable.status === "selected"
+          ? await activateCommercialMissionForField({
+              tenantId: input.tenantId,
+              missionId: reusable.id,
+              expectedVersion: reusable.version,
+              assignedTo: input.driverId,
+              actorId: input.driverId,
+              requestId: randomUUID(),
+            })
+          : reusable;
       await ensureApprovedBuilderProposal({
         tenantId: input.tenantId,
-        mission: reusable,
+        mission: recovered,
         actorId: input.driverId,
       });
-      created.push(reusable);
+      created.push(recovered);
       continue;
     }
 
