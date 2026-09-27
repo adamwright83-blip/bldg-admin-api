@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { CommercialMission } from "@shared/commercialMission";
 import { getTerritoryOperatorProfile } from "../territory/territoryStore";
 import { GooglePlacesTerritoryProvider } from "../territory/googlePlacesTerritoryProvider";
-import { rankTerritoryCandidates } from "../territory/territoryDiscovery";
+import {
+  distanceMiles,
+  rankTerritoryCandidates,
+} from "../territory/territoryDiscovery";
 import {
   createCommercialMission,
   listCommercialMissions,
@@ -117,34 +120,33 @@ export async function buildDriverMissions(input: {
     turnaroundCompatibleByDefault: true,
     pickupDaysCompatibleByDefault: true,
   };
-  // The Driver builder targets the exact property the operator entered.
-  // Nearby category discovery belongs to territory prospecting, not this flow.
-  const discovery = await discoverLaundryTerritory({
-    addressOrBusiness: input.searchNear,
-    provider: provider(),
-    operator,
-    categories: [input.searchNear],
-    limit: 5,
-  });
-  const preferredAccountType: Record<DriverMissionVenue, string> = {
-    luxury_living: "property_management",
-    hotels: "hotel",
-    fitness_wellness: "gym",
-    salons_spas: "salon_spa",
-  };
-  const exactOpportunity = discovery.opportunities
-    .filter(opportunity => opportunity.distanceMiles <= 0.25)
-    .sort((a, b) => {
-      const aPreferred =
-        a.account.accountType === preferredAccountType[input.venueType] ? 0 : 1;
-      const bPreferred =
-        b.account.accountType === preferredAccountType[input.venueType] ? 0 : 1;
-      return aPreferred - bPreferred || a.distanceMiles - b.distanceMiles;
-    })[0];
-  if (!exactOpportunity) {
+  // The Driver builder targets the exact Google Place the operator entered.
+  // Nearby discovery is a separate prospecting behavior and must never silently
+  // replace a specifically requested property.
+  const places = provider();
+  const center = await places.geocode(input.searchNear);
+  const exactCandidate = await places.searchExactBusiness(input.searchNear);
+  if (!exactCandidate) {
     throw new Error(
       "Could not identify that exact property. Enter the property name and full street address."
     );
+  }
+  const resolvedDistanceMiles = distanceMiles(center, exactCandidate);
+  if (resolvedDistanceMiles > 0.5) {
+    throw new Error(
+      `Google Places resolved "${exactCandidate.name}" ${resolvedDistanceMiles.toFixed(
+        1
+      )} miles from the address you entered. Refine the property name and street address.`
+    );
+  }
+  const [exactOpportunity] = rankTerritoryCandidates({
+    center,
+    candidates: [exactCandidate],
+    operator,
+    limit: 1,
+  });
+  if (!exactOpportunity) {
+    throw new Error("The selected property could not be converted into a sales mission");
   }
   if (input.missionType === "cold_call" && !exactOpportunity.account.phone) {
     throw new Error("That exact property does not have a public phone number.");
