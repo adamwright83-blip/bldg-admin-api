@@ -37,7 +37,8 @@ const world = createLanternWorld($("stage"), {
     if (!m) return;
     $("mTitle").textContent = m.title;
     $("mBody").textContent = m.body;
-    $("mKind").textContent = m.kind === "run" ? "Door-hanger run" : "Uncharted";
+    $("mKind").textContent = m.kind === "run" ? "Door-hanger run" : "Uncharted neighbourhood";
+    $("mGo").textContent = m.kind === "run" ? "Show me the run" : "Show me";
     $("mDistWrap").hidden = m.kind === "run";
     $("mDoors").textContent = `~${m.doors.toLocaleString()}`;
     $("mDist").textContent = `${m.miles.toFixed(1)} mi`;
@@ -58,4 +59,11 @@ const world = createLanternWorld($("stage"), {
 let selected: string | null = null;
 ($("lClose") as HTMLButtonElement).onclick = () => { selected = null; $("lantern").hidden = true; $("mission").hidden = false; };
 world.setLanterns(SAMPLE);
+$("nCust").textContent = String(SAMPLE.length);
+document.querySelectorAll<HTMLButtonElement>(".dock button").forEach(b => b.onclick = () => {
+  const n = $("note");
+  n.textContent = `${b.dataset.go} opens in the Joystick app. This preview uses sample customers.`;
+  n.hidden = false;
+  setTimeout(() => (n.hidden = true), 2600);
+});
 (window as unknown as { __w: typeof world }).__w = world;

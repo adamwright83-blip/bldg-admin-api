@@ -54,8 +54,30 @@ const day = (iso?: string) => {
   return Number.isNaN(+d) ? "—" : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 };
 
+const Icon = {
+  order: (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
+      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" fill="none" />
+    </svg>
+  ),
+  people: (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
+      <circle cx="9" cy="8" r="3.4" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path d="M2.8 19.5c.6-3.4 3.2-5.3 6.2-5.3s5.6 1.9 6.2 5.3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="17" cy="9" r="2.6" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path d="M16.4 14.3c2.6.1 4.3 1.8 4.8 4.6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  ),
+  box: (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
+      <path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z M3.5 7.5 12 12l8.5-4.5M12 12v9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+    </svg>
+  ),
+};
+
 export default function LanternCityV7({
   onOpenCustomer,
+  onNavigate,
 }: {
   onOpenCustomer: (phone: string) => void;
   onNavigate?: (path: string) => void;
@@ -182,8 +204,9 @@ export default function LanternCityV7({
         <section className={styles.card} aria-label="Uncharted land">
           <div className={styles.who}>
             <i />
-            {mission.kind === "run" ? "Door-hanger run" : "Uncharted"}
+            Next move
           </div>
+          <div className={styles.kind}>{mission.kind === "run" ? "Door-hanger run" : "Uncharted neighbourhood"}</div>
           <h2>{mission.title}</h2>
           <p>{mission.body}</p>
           <div className={styles.meta}>
@@ -198,7 +221,7 @@ export default function LanternCityV7({
           </div>
           <div className={styles.row}>
             <button type="button" className={styles.go} onClick={() => world.current?.focusPoint(mission.x, mission.z, mission.radius ? mission.radius * 4 : 1600)}>
-              Show me
+              {mission.kind === "run" ? "Show me the run" : "Show me"}
             </button>
           </div>
         </section>
@@ -207,11 +230,30 @@ export default function LanternCityV7({
       {stats && stats.outside > 0 ? (
         <div className={styles.outside}>{stats.outside} customer location{stats.outside === 1 ? "" : "s"} outside the map</div>
       ) : null}
-      <div className={styles.hint}>
-        Drag to pan · pinch or scroll to zoom · tap a lantern
-        <br />
-        Map data © OpenStreetMap contributors · Neighbourhoods: Mapping L.A.
-      </div>
+      {/* the three things you do from here, one clear dock */}
+      <nav className={styles.dock} aria-label="Actions">
+        <button type="button" className={styles.primary} onClick={() => onNavigate?.("/new-order")}>
+          {Icon.order}
+          <span>New order</span>
+        </button>
+        <button type="button" onClick={() => onNavigate?.("/customers")}>
+          {Icon.people}
+          <span>Customers</span>
+          <b className={styles.count}>{customers.length}</b>
+        </button>
+        <button type="button" onClick={() => onNavigate?.("/operations")}>
+          {Icon.box}
+          <span>Active orders</span>
+        </button>
+      </nav>
+
+      {/* what you are looking at */}
+      <aside className={styles.legend} aria-label="Map key">
+        <div><i className={styles.kLantern} /> A customer. Hover for details.</div>
+        <div><i className={styles.kRun} /> Door-hanger run. One more customer lights the neighbourhood.</div>
+        <div><i className={styles.kFog} /> Uncharted. Win a first customer to break it open.</div>
+        <small>Map data © OpenStreetMap contributors · Neighbourhoods: Mapping L.A.</small>
+      </aside>
       {!ready && !failed ? <div className={styles.loading}>Lifting the fog…</div> : null}
       {failed ? <div className={styles.loading}>Lantern City could not load its map. Reload to try again.</div> : null}
     </div>

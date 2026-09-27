@@ -1466,6 +1466,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       }));
       halo.position.set(g.x, ground(g.x, g.z) + 1.6, g.z);
       halo.userData.halo = true;
+      if (!mesh && g.members.length === 1) halo.userData.keys = keys;
       lanternGroup.add(halo);
       for (const m of g.members) placedLanterns.push({ input: m.l, x: g.x, z: g.z, b: g.b, mesh, halo });
     }
@@ -1659,11 +1660,30 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     ray.setFromCamera(ndc, camera);
     events.onSelect?.(pickKeys(e));
   }
+  const pv = new THREE.Vector3();
   function pickKeys(e: PointerEvent): string[] | null {
     const r = renderer.domElement.getBoundingClientRect();
-    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    // nearest lantern on screen: every customer's light is an easy target at any zoom
+    let best: string[] | null = null, bd = 30;
+    for (const o of lanternGroup.children) {
+      if (!o.userData.keys) continue;
+      if (o.userData.orb) pv.copy(o.position);
+      else {
+        const pl = placedLanterns.find(p => (o.userData.keys as string[]).includes(p.input.key));
+        if (!pl) continue;
+        pv.set(pl.x, ground(pl.x, pl.z) + (pl.b ? pl.b.h * 1.2 : 8), pl.z);
+      }
+      pv.project(camera);
+      if (pv.z > 1) continue;
+      const sx = ((pv.x + 1) / 2) * r.width, sy = ((1 - pv.y) / 2) * r.height;
+      const d = Math.hypot(sx - mx, sy - my);
+      if (d < bd) { bd = d; best = o.userData.keys as string[]; }
+    }
+    if (best) return best;
+    ndc.set((mx / r.width) * 2 - 1, -(my / r.height) * 2 + 1);
     ray.setFromCamera(ndc, camera);
-    const hits = ray.intersectObjects(lanternGroup.children.filter(o => !o.userData.halo), true);
+    const hits = ray.intersectObjects(lanternGroup.children.filter(o => !o.userData.halo || o.userData.keys), true);
     for (const h of hits) {
       let o: THREE.Object3D | null = h.object;
       while (o && !o.userData.keys) o = o.parent;

@@ -110,7 +110,7 @@
 .card {
   position: absolute;
   left: 24px;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  top: calc(env(safe-area-inset-top, 0px) + 112px);
   width: min(360px, calc(100% - 48px));
   box-sizing: border-box;
   background: var(--card);
@@ -272,6 +272,7 @@
   text-transform: uppercase;
 }
 .hint {
+  display: none;
   position: absolute;
   right: 24px;
   bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
@@ -308,6 +309,7 @@
   }
   .card {
     left: 16px;
+    top: auto;
     bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
     width: calc(100% - 32px);
   }
@@ -325,5 +327,137 @@
   .sample {
     top: calc(env(safe-area-inset-top, 0px) + 128px);
     white-space: nowrap;
+  }
+}
+
+/* ------------------------------------------------------------------ the action dock */
+.dock {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  padding: 8px;
+  background: rgba(251, 251, 250, 0.94);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: 0 14px 40px rgba(20, 26, 40, 0.2);
+}
+.dock button {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 54px;
+  padding: 0 20px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font: 700 18px/1 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.dock button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(20, 26, 40, 0.16);
+}
+.dock button svg {
+  color: var(--ink2);
+}
+.dock .primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+  padding: 0 26px;
+}
+.dock .primary svg {
+  color: var(--gold);
+}
+.count {
+  font: 700 14px/1 "Barlow Condensed", sans-serif;
+  background: var(--gold);
+  color: #3a2600;
+  border-radius: 999px;
+  padding: 4px 8px;
+  letter-spacing: 0.04em;
+}
+.kind {
+  margin-top: 6px;
+  font: 600 12px/1 "Barlow Condensed", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink2);
+}
+/* ------------------------------------------------------------------ the key */
+.legend {
+  position: absolute;
+  right: 24px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  width: 250px;
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  background: rgba(251, 251, 250, 0.94);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(20, 26, 40, 0.12);
+  font-size: 13px;
+  color: var(--ink2);
+}
+.legend div {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+.legend i {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+.legend small {
+  font-size: 10px;
+  color: #8a909b;
+  margin-top: 2px;
+}
+.kLantern {
+  background: #ffb020;
+  box-shadow: 0 0 10px 3px rgba(255, 176, 32, 0.8);
+}
+.kRun {
+  background: #fff;
+  border: 2px solid #ffc84d;
+  border-radius: 50% !important;
+}
+.kFog {
+  background: #f3f4f6;
+  border: 1px solid #d6d9de;
+}
+@media (max-width: 1100px) {
+  .legend {
+    display: none;
+  }
+}
+@media (max-width: 640px) {
+  .dock {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    width: calc(100% - 32px);
+    justify-content: space-between;
+    box-sizing: border-box;
+  }
+  .dock button {
+    height: 46px;
+    padding: 0 12px;
+    font-size: 14px;
+  }
+  .dock button span {
+    display: none;
+  }
+  .card {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 84px);
   }
 }
