@@ -27,7 +27,10 @@ import {
   transitionCommercialMissionWith,
 } from "./commercialMissionStore";
 import { awardDriverSalesPoints } from "./driverSalesMotivationService";
-import { reactToCompletedCommercialVisit } from "./commercialMissionFieldReaction";
+import {
+  getPersistedCommercialVisitReaction,
+  reactToCompletedCommercialVisit,
+} from "./commercialMissionFieldReaction";
 
 function affectedRows(result: unknown): number {
   return Number(
@@ -191,6 +194,7 @@ export async function getCommercialMissionFieldState(input: {
   ]);
   const state = states[0] ?? null;
   const outcome = outcomes[0] ?? null;
+  const reaction = await getPersistedCommercialVisitReaction(input);
   return {
     mission,
     field: state
@@ -216,6 +220,7 @@ export async function getCommercialMissionFieldState(input: {
       completedAt: asIso(item.completedAt),
     })),
     parkingLotClerkObservation: decodeParkingLotClerkObservation(clerkEvents[0]),
+    reaction,
     visitOutcome: outcome
       ? {
           id: outcome.id,
