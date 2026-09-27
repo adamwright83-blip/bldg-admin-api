@@ -23,7 +23,7 @@ test.describe("Lantern City V6 route and retained workflows", () => {
   }) => {
     const errors: string[] = [];
     page.on("pageerror", e => errors.push(String(e)));
-    await page.goto("/growth/lantern-city");
+    await page.goto("/growth/lantern-city?scene=v6");
     await expect(page.locator('[data-lantern-city="v6"]')).toBeVisible();
     await expect(page.locator("[data-scene-world]")).toBeVisible();
     await expect
@@ -46,7 +46,7 @@ test.describe("Lantern City V6 route and retained workflows", () => {
   test("customer selection opens the real inspector and returns to the city", async ({
     page,
   }) => {
-    await page.goto("/growth/lantern-city");
+    await page.goto("/growth/lantern-city?scene=v6");
     const target = page.locator('[data-scene-object="lantern"]').first();
     await expect(target).toBeVisible();
     await target.click();
@@ -66,7 +66,7 @@ test.describe("Lantern City V6 route and retained workflows", () => {
     const errors: string[] = [];
     page.on("pageerror", e => errors.push(String(e)));
     for (const id of ["opus_la", "century_park_east"]) {
-      await page.goto("/growth/lantern-city");
+      await page.goto("/growth/lantern-city?scene=v6");
       await page.locator(`[data-scene-id="${id}"]`).click();
       if (id === "opus_la") {
         await expect(page).toHaveURL(/\/growth\/opus-la-inspection/);
@@ -84,7 +84,7 @@ test.describe("Lantern City V6 route and retained workflows", () => {
     page,
   }) => {
     for (const id of ["opus_la", "century_park_east"]) {
-      await page.goto("/growth/lantern-city");
+      await page.goto("/growth/lantern-city?scene=v6");
       const light = page.locator(
         `[data-scene-id="${id}"] [data-scene-target="light"]`
       );
@@ -104,7 +104,7 @@ test.describe("Lantern City V6 route and retained workflows", () => {
       await expect(page).toHaveURL(/\/growth\/lantern-city/);
       await expect(page).not.toHaveURL(/tower-wars/);
 
-      await page.goto("/growth/lantern-city");
+      await page.goto("/growth/lantern-city?scene=v6");
       await page
         .locator(`[data-scene-id="${id}"] [data-scene-target="tower"]`)
         .click();
@@ -115,6 +115,14 @@ test.describe("Lantern City V6 route and retained workflows", () => {
       await expect(page).toHaveURL(new RegExp(`tower-wars\\?building=${id}`));
       await expect(page.locator(".tw-arena")).toBeVisible();
     }
+  });
+  test("the Lantern City route opens the V7 fog-of-war board", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", e => errors.push(String(e)));
+    await page.goto("/growth/lantern-city");
+    await expect(page.locator('[data-lantern-city="v7"]')).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('[data-lantern-city="v7"] canvas')).toBeVisible({ timeout: 30_000 });
+    expect(errors).toEqual([]);
   });
   test("legacy scene=v5 query still opens the live V6 city", async ({ page }) => {
     await page.goto("/growth/lantern-city?scene=v5");

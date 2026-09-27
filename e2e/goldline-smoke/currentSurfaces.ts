@@ -2,8 +2,8 @@ import { expect, type Page } from "@playwright/test";
 
 /** Operator-demo command center: WorldGeographySurface + Home lanterns. */
 export const WORLD_HOME = "/demo";
-/** Live Lantern City: V6 composed scene. */
-export const LANTERN_CITY_V6 = "/growth/lantern-city";
+/** The V6 composed Lantern City (the default route now serves V7; V6 stays reachable here). */
+export const LANTERN_CITY_V6 = "/growth/lantern-city?scene=v6";
 
 export async function dismissDriverOnboarding(page: Page) {
   await page.addInitScript(() => {

@@ -111,10 +111,37 @@ for n, rs in rings.items():
                     canals.append({"a": n, "b": key, "p": run})
                 run, key = [], nb[j]
             run.append(tuple(ring[j]))
+def meander(pts, amp=26.0, wave=460.0, seed=0.0):
+    """A lazy-river wiggle along the path, tapered to zero at both ends so canals still meet."""
+    pts = [np.array(p, dtype=float) for p in pts]
+    # resample every 8 m
+    dense = [pts[0]]
+    for a, b in zip(pts, pts[1:]):
+        n = max(1, int(np.linalg.norm(b - a) / 8.0))
+        dense += [a + (b - a) * k / n for k in range(1, n + 1)]
+    s = [0.0]
+    for a, b in zip(dense, dense[1:]):
+        s.append(s[-1] + float(np.linalg.norm(b - a)))
+    L = s[-1]
+    out = []
+    for i, p in enumerate(dense):
+        a, b = dense[max(0, i - 2)], dense[min(len(dense) - 1, i + 2)]
+        t = b - a
+        t /= (np.linalg.norm(t) or 1.0)
+        nrm = np.array([-t[1], t[0]])
+        taper = min(1.0, s[i] / 180.0, (L - s[i]) / 180.0)
+        taper = taper * taper * (3 - 2 * taper)
+        w = amp * taper * (math.sin(2 * math.pi * s[i] / wave + seed) + 0.35 * math.sin(2 * math.pi * s[i] / (wave * 0.43) + seed * 1.7))
+        out.append(tuple(p + nrm * w))
+    return out
+
+
 out = []
-for c in canals:
+for k, c in enumerate(canals):
     pts = rdp(c["p"], 4.0)
     pts = chaikin(pts, 3)
+    pts = meander(pts, seed=k * 1.37)
+    pts = chaikin(rdp(pts, 1.5), 2)
     out.append({"a": c["a"], "b": c["b"], "p": [[round(x, 1), round(z, 1)] for x, z in pts]})
 total = sum(sum(math.dist(p, q) for p, q in zip(c["p"], c["p"][1:])) for c in out)
 json.dump({"canals": out}, open(os.path.join(WORLD, "canals.json"), "w"), separators=(",", ":"))

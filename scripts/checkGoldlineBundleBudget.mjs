@@ -51,12 +51,15 @@ for (const check of CHECKS) {
 /*
  * three.js isolation. The file-size checks above cannot see the import graph,
  * so this walks it: three.js builds carry the `__THREE__` marker, and every
- * built chunk that contains it must belong to the lazy Coastal Market proof
- * graph. Neither the app entry nor GoldlineGameHome may reach it through
- * static imports, and index.html may not preload it.
+ * built chunk that contains it must belong to a lazy 3D page's graph (the
+ * Coastal Market proof, or Lantern City, which only loads when opened).
+ * Neither the app entry nor GoldlineGameHome may reach it through static
+ * imports, and index.html may not preload it.
  */
 const THREE_MARKER = "__THREE__";
 const PROOF_PREFIX = "CoastalMarketProofPage";
+// other lazy pages allowed to carry three.js (each must itself be reached only by dynamic import)
+const LAZY_3D_PREFIXES = ["LanternCityV7"];
 const jsFiles = readdirSync(ASSET_DIR).filter(file => file.endsWith(".js"));
 const source = new Map(jsFiles.map(file => [file, readFileSync(resolve(ASSET_DIR, file), "utf8")]));
 const staticImportsOf = file => {
@@ -84,6 +87,10 @@ const isolationFailures = [];
 if (!proofEntry) isolationFailures.push(`no built '${PROOF_PREFIX}*.js' chunk found`);
 if (withThree.length === 0) isolationFailures.push(`no chunk carries '${THREE_MARKER}' (is the proof still built?)`);
 const proofGraph = proofEntry ? staticClosure(proofEntry) : new Set();
+for (const prefix of LAZY_3D_PREFIXES) {
+  const entry = jsFiles.find(file => file.startsWith(prefix));
+  if (entry) for (const file of staticClosure(entry)) proofGraph.add(file);
+}
 for (const file of withThree) {
   if (!proofGraph.has(file)) isolationFailures.push(`${file} contains three.js but is outside the proof graph`);
   for (const [other] of source) {

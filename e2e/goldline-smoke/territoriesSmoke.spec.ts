@@ -161,7 +161,7 @@ test.describe("Goldline territories smoke", () => {
   });
   test("compiler publishes a stable real-member territory", async ({ page }) => {
     await signIn(page, "admin");
-    await page.goto("/growth/lantern-city");
+    await page.goto("/growth/lantern-city?scene=v6");
     await expectLanternCityV6(page);
     const list = await readTerritories(page);
     expect(list.length).toBeGreaterThan(0);
@@ -181,7 +181,7 @@ test.describe("Goldline territories smoke", () => {
     page,
   }) => {
     await signIn(page, "admin");
-    await page.goto("/growth/lantern-city");
+    await page.goto("/growth/lantern-city?scene=v6");
     await expectLanternCityV6(page);
 
     const before = (await readTerritories(page))[0]?.state;
@@ -223,7 +223,7 @@ test.describe("Goldline territories smoke", () => {
   test("a real Field Journal visit opens only that member's aperture", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop", "mutates the proof world once");
     await signIn(page, "admin");
-    await page.goto("/growth/lantern-city");
+    await page.goto("/growth/lantern-city?scene=v6");
     const before =
       (await readTerritories(page)).find(item =>
         item.definition.members.some(member => member.physicalEntityId === HUNT_ONE)
@@ -257,7 +257,7 @@ test.describe("Goldline territories smoke", () => {
     expect(othersStillClosed).toBe(true);
 
     await signIn(page, "admin");
-    await page.goto("/growth/lantern-city");
+    await page.goto("/growth/lantern-city?scene=v6");
     await expectLanternCityV6(page);
     expect(after.state.completedMemberIds).toContain(targetId);
   });
@@ -267,7 +267,7 @@ test.describe("Goldline territories smoke", () => {
   }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop", "mutates the proof world once");
     await signIn(page, "admin");
-    await page.goto("/growth/lantern-city");
+    await page.goto("/growth/lantern-city?scene=v6");
     const territory = (await readTerritories(page)).find(item => !item.state.cleared);
     expect(territory).toBeTruthy();
     const entitiesBefore = await readEntities(page);
@@ -310,7 +310,7 @@ test.describe("Goldline territories smoke", () => {
   }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop", "mutates the proof world once");
     await signIn(page, "admin");
-    await page.goto("/growth/lantern-city");
+    await page.goto("/growth/lantern-city?scene=v6");
     let territory = (await readTerritories(page)).find(item => !item.state.cleared);
     expect(territory).toBeTruthy();
     const entities = await readEntities(page);

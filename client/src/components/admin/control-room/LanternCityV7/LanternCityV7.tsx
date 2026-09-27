@@ -114,7 +114,7 @@ export default function LanternCityV7({
   const sel = selected ? byKey.get(selected) : undefined;
 
   return (
-    <div className={styles.scene}>
+    <div className={styles.scene} data-lantern-city="v7">
       <div ref={host} className={styles.stage} aria-label="Lantern City map" />
       <div className={styles.frame} aria-hidden />
       <header className={styles.top}>
@@ -179,24 +179,22 @@ export default function LanternCityV7({
         <section className={styles.card} aria-label="Uncharted land">
           <div className={styles.who}>
             <i />
-            Uncharted
+            {mission.kind === "run" ? "Door-hanger run" : "Uncharted"}
           </div>
           <h2>{mission.title}</h2>
-          <p>
-            {mission.hood
-              ? `Win one building ${mission.where} and all of ${mission.hood} comes out of the fog.`
-              : "Win one building here and the neighbourhood comes out of the fog."}
-          </p>
+          <p>{mission.body}</p>
           <div className={styles.meta}>
             <div>
               <b>~{mission.doors.toLocaleString()}</b> <span>doors to win</span>
             </div>
-            <div>
-              <b>{mission.miles.toFixed(1)} mi</b> <span>from your light</span>
-            </div>
+            {mission.kind === "uncharted" ? (
+              <div>
+                <b>{mission.miles.toFixed(1)} mi</b> <span>from your light</span>
+              </div>
+            ) : null}
           </div>
           <div className={styles.row}>
-            <button type="button" className={styles.go} onClick={() => world.current?.focusPoint(mission.x, mission.z)}>
+            <button type="button" className={styles.go} onClick={() => world.current?.focusPoint(mission.x, mission.z, mission.radius ? mission.radius * 4 : 1600)}>
               Show me
             </button>
           </div>

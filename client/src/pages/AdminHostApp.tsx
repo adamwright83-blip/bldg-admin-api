@@ -35,7 +35,8 @@ import {
 } from "@/components/admin/control-room/ControlRoomSections";
 import LanternCityAtlas from "@/components/admin/control-room/LanternCityAtlas";
 import LanternCityScene from "@/components/admin/control-room/LanternCitySceneV6/LanternCityScene";
-import LanternCityV7 from "@/components/admin/control-room/LanternCityV7/LanternCityV7";
+// three.js stays out of the main bundle: Lantern City loads when it is opened
+const LanternCityV7 = lazy(() => import("@/components/admin/control-room/LanternCityV7/LanternCityV7"));
 import DriverIntelligenceOverview from "@/components/admin/control-room/DriverIntelligenceOverview";
 import { TowerWars } from "@/components/admin/control-room/TowerWars";
 import { OpusLaInspection } from "@/components/admin/control-room/OpusLaInspection";
@@ -382,7 +383,9 @@ export default function AdminHostApp() {
         {!isWorldHome && isControlRoomSection ? <WorldDayPhaseIndicator /> : null}
         <section className="gl-persistent-world" hidden={!isWorldHome} aria-label="Lantern City world home">
           {isLanternCity && !["v5", "v6"].includes(new URLSearchParams(window.location.search).get("scene") ?? "") ? (
-            <LanternCityV7 onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />
+            <Suspense fallback={<div className="cr-route-loading">Lifting the fog…</div>}>
+              <LanternCityV7 onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />
+            </Suspense>
           ) : isLanternCity && new URLSearchParams(window.location.search).get("scene") === "v6" ? (
             <LanternCityScene onOpenCustomer={phone => setProfilePhone(phone)} onNavigate={nextPath => navigate(nextPath)} />
           ) : (

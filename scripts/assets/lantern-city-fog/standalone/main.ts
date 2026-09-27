@@ -30,10 +30,12 @@ const world = createLanternWorld($("stage"), {
   onMission: m => {
     if (!m) return;
     $("mTitle").textContent = m.title;
-    $("mBody").textContent = m.hood ? `Win one building ${m.where} and all of ${m.hood} comes out of the fog.` : "Win one building here and the neighbourhood comes out of the fog.";
+    $("mBody").textContent = m.body;
+    $("mKind").textContent = m.kind === "run" ? "Door-hanger run" : "Uncharted";
+    $("mDistWrap").hidden = m.kind === "run";
     $("mDoors").textContent = `~${m.doors.toLocaleString()}`;
     $("mDist").textContent = `${m.miles.toFixed(1)} mi`;
-    ($("mGo") as HTMLButtonElement).onclick = () => world.focusPoint(m.x, m.z);
+    ($("mGo") as HTMLButtonElement).onclick = () => world.focusPoint(m.x, m.z, m.radius ? m.radius * 4 : 1600);
     if (!selected) $("mission").hidden = false;
   },
   onSelect: key => {

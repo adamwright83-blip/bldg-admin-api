@@ -32,7 +32,7 @@ export type LanternInput = {
   dark: number;
 };
 export type WorldStats = { lanterns: number; outside: number; chartedPct: number; doorsInLight: number };
-export type Mission = { title: string; hood: string; where: string; doors: number; buildings: number; miles: number; x: number; z: number };
+export type Mission = { kind: "run" | "uncharted"; title: string; body: string; hood: string; where: string; doors: number; buildings: number; miles: number; x: number; z: number; radius: number };
 export type WorldEvents = {
   onReady?: () => void;
   onStats?: (s: WorldStats) => void;
@@ -100,6 +100,7 @@ const COMMON = /* glsl */ `
     if (uv.x < 0. || uv.y < 0. || uv.x > 1. || uv.y > 1.) return 255.;
     return texture2D(uCanal, uv).r * 255.; }
   float sdMask(vec2 xz) { return texture2D(uMask, (xz - uRect.xy) / (uRect.zw - uRect.xy)).r; }
+  float terrMask(vec2 xz) { return texture2D(uMask, (xz - uRect.xy) / (uRect.zw - uRect.xy)).g; }
   float served(vec2 xz) { return texture2D(uServe, (xz - uRect.xy) / (uRect.zw - uRect.xy)).r; }
   float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
   float vn(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3. - 2. * f);
@@ -132,6 +133,9 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   controls.minPolarAngle = 0.3;
   controls.maxPolarAngle = 1.15;
   controls.screenSpacePanning = false;
+  // north stays up: the map can tilt and zoom, never spin
+  controls.minAzimuthAngle = 0;
+  controls.maxAzimuthAngle = 0;
   const SUN = new THREE.Vector3(-0.55, 0.62, -0.56).normalize();
 
   const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, samples: 4 }));
@@ -176,6 +180,12 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   let KIT: Kit;
   let ground = (_x: number, _z: number) => 0;
   let sdField = (_x: number, _z: number) => 1e4;
+  const terrField = (x: number, z: number) => {
+    if (!maskData) return 1e4;
+    const i = Math.max(0, Math.min(MW - 1, Math.round((x - rect.x0) / (rect.x1 - rect.x0) * (MW - 1))));
+    const j = Math.max(0, Math.min(MH - 1, Math.round((z - rect.z0) / (rect.z1 - rect.z0) * (MH - 1))));
+    return maskData[(j * MW + i) * 2 + 1];
+  };
   const uniforms: Record<string, THREE.IUniform> = {
     uMask: { value: null }, uServe: { value: null }, uCanal: { value: null }, uRect: { value: new THREE.Vector4() }, uBounds: { value: new THREE.Vector4() },
     uSun: { value: SUN }, uTime: { value: 0 },
@@ -192,8 +202,10 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   let rect = { x0: 0, z0: 0, x1: 1, z1: 1 };
   let servedAt = (_x: number, _z: number) => false;
   let canalAt = (_x: number, _z: number) => 255;
-  const CANAL = 15;     // half-width of the water, metres
-  const COPE = 2.2;     // width of the stone coping along each bank
+  const CANAL = 34;     // half-width of the water, metres (lazy-river wide)
+  const COPE = 3.0;     // width of the stone promenade along each bank
+  const CLEARING = 55;  // one customer's lantern clears this far around it (about two houses)
+  const RUN_DOORS = 180; // a door-hanger run: the gold line encloses the nearest this many doors
   let CANALS: [number, number][][] = [];
   let framed = false;
 
@@ -260,15 +272,15 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       const tx = fx - i, tz = fz - j, v = (a: number, b: number) => cdata[(b * cc.width + a) * 4];
       return (v(i, j) * (1 - tx) + v(i + 1, j) * tx) * (1 - tz) + (v(i, j + 1) * (1 - tx) + v(i + 1, j + 1) * tx) * tz;
     };
-    maskData = new Float32Array(MW * MH).fill(900);
-    maskTex = new THREE.DataTexture(maskData, MW, MH, THREE.RedFormat, THREE.FloatType);
+    maskData = new Float32Array(MW * MH * 2).fill(900);
+    maskTex = new THREE.DataTexture(maskData, MW, MH, THREE.RGFormat, THREE.FloatType);
     maskTex.magFilter = maskTex.minFilter = THREE.LinearFilter;
     maskTex.needsUpdate = true;
     uniforms.uMask.value = maskTex;
     sdField = (x, z) => {
       const fx = (x - rect.x0) / (rect.x1 - rect.x0) * (MW - 1), fz = (z - rect.z0) / (rect.z1 - rect.z0) * (MH - 1);
       const i = Math.max(0, Math.min(MW - 2, Math.floor(fx))), j = Math.max(0, Math.min(MH - 2, Math.floor(fz)));
-      const tx = fx - i, tz = fz - j, m = (a: number, b: number) => maskData[b * MW + a];
+      const tx = fx - i, tz = fz - j, m = (a: number, b: number) => maskData[(b * MW + a) * 2];
       return (m(i, j) * (1 - tx) + m(i + 1, j) * tx) * (1 - tz) + (m(i, j + 1) * (1 - tx) + m(i + 1, j + 1) * tx) * tz;
     };
     buildTerrain();
@@ -277,6 +289,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     buildKitGeometry();
     buildCanals();
     buildLandmarks();
+    buildLabels();
     if (disposed) return;
     applyLanterns();
     events.onReady?.();
@@ -318,7 +331,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     }
     return d;
   }
-  function rebuildMask(hoods: Set<string>) {
+  function rebuildMask(hoods: Set<string>, clearings: { x: number; z: number; r: number }[], runs: { x: number; z: number; r: number }[]) {
     const cv = document.createElement("canvas");
     cv.width = MW; cv.height = MH;
     const g = cv.getContext("2d")!;
@@ -351,7 +364,23 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     const inside = new Uint8Array(MW * MH), outside = new Uint8Array(MW * MH);
     for (let i = 0; i < MW * MH; i++) { const on = raw[i] === 1 || toNotDil[i] > CLOSE; inside[i] = on ? 1 : 0; outside[i] = on ? 0 : 1; }
     const toInside = chamfer(inside, MW, MH, cell), toOutside = chamfer(outside, MW, MH, cell);
-    for (let i = 0; i < MW * MH; i++) maskData[i] = inside[i] ? -Math.min(400, toOutside[i]) : Math.min(900, toInside[i]);
+    for (let i = 0; i < MW * MH; i++) {
+      maskData[i * 2] = inside[i] ? -Math.min(400, toOutside[i]) : Math.min(900, toInside[i]);
+      maskData[i * 2 + 1] = 900;
+    }
+    // a lone customer: a clean clearing around the lantern, and a door-hanger territory past it
+    const stamp = (c: { x: number; z: number; r: number }, ch: number, reach: number) => {
+      const cellZ = (rect.z1 - rect.z0) / (MH - 1);
+      const i0 = Math.max(0, Math.floor((c.x - c.r - reach - rect.x0) / cell)), i1 = Math.min(MW - 1, Math.ceil((c.x + c.r + reach - rect.x0) / cell));
+      const j0 = Math.max(0, Math.floor((c.z - c.r - reach - rect.z0) / cellZ)), j1 = Math.min(MH - 1, Math.ceil((c.z + c.r + reach - rect.z0) / cellZ));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const x = rect.x0 + cell * i, z = rect.z0 + cellZ * j;
+        const k = (j * MW + i) * 2 + ch;
+        maskData[k] = Math.min(maskData[k], Math.hypot(x - c.x, z - c.z) - c.r);
+      }
+    };
+    for (const c of clearings) stamp(c, 0, 400);
+    for (const r of runs) stamp(r, 1, 300);
     maskTex.needsUpdate = true;
   }
 
@@ -384,9 +413,15 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     scene.add(new THREE.Mesh(g, landMaterial(/* glsl */ `
       uniform vec3 uCol;
       void main() {
-        if (served(vW.xz) < .5 || sdMask(vW.xz) > 40. || canalD(vW.xz) < ${CANAL + 1}.) discard;
+        float sd = sdMask(vW.xz), tr = terrMask(vW.xz);
+        if (served(vW.xz) < .5 || canalD(vW.xz) < ${CANAL + 1}. || (sd > 40. && tr > 4.)) discard;
         float l = .55 + .45 * max(dot(normalize(vN), uSun), 0.);
         vec3 c = uCol * l * 1.3 * (.9 + .2 * fbm(vW.xz * .02));
+        vec3 snow = vec3(.9, .91, .93) * (.82 + .18 * l);
+        c = mix(c, snow, smoothstep(0., 40., sd));
+        // the gold line around a door-hanger run
+        float line = 1. - smoothstep(0., max(3.5, fwidth(tr) * 2.2), abs(tr));
+        c = mix(c, vec3(1., .74, .3) * 2.4, line * step(0., sd));
         gl_FragColor = vec4(c, 1.);
         #include <fog_fragment>
       }`, { uCol: { value: DUSK_GROUND } })));
@@ -462,6 +497,8 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
           float rise = cv * cv * (3. - 2. * cv);
           float billow = fbm(p * .006 + uTime * .004) * 34. + fbm(p * .021 - uTime * .006) * 12.;
           float h = mix(.85, 30. + billow * 1.9, rise);
+          float inRun = 1. - smoothstep(-60., 0., terrMask(p));
+          h *= mix(1., .3, inRun);
           return body * h - (1. - body) * 30.;
         }
         void main() {
@@ -490,6 +527,10 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
           if (sv < .35) discard;
           float sd = sdMask(vW.xz);
           if (sd < 14.) discard;
+          float trF = terrMask(vW.xz);
+          float inRun = 1. - smoothstep(-40., 0., trF);
+          // over a door-hanger run the fog is torn into drifting patches
+          if (inRun > .01 && fbm(vW.xz * .011 + vec2(uTime * .012, uTime * .007)) < .5 + .08 * (1. - inRun)) discard;
           vec3 n = normalize(vN);
           float lam = max(dot(n, uSun), 0.);
           vec3 plaster = vec3(.97, .965, .955) * (.66 + .36 * lam) * (.9 + .1 * (.5 + .5 * n.y));
@@ -499,7 +540,10 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
           vec2 v = vor(vW.xz / 58. + fbm(vW.xz * .012) * 1.6);
           float crack = (1. - smoothstep(0., .03 + .05 * band, v.y)) * band * step(0., sd);
           float rim = (1. - smoothstep(0., 8., abs(sd - 3.))) * .5;
-          vec3 c = mix(plaster, vec3(1., .72, .28) * 1.5, clamp(crack * 1.2 + rim, 0., 1.));
+          float runCrack = (1. - smoothstep(0., .05, v.y)) * inRun;
+          float runLine = 1. - smoothstep(0., max(4., fwidth(trF) * 2.2), abs(trF));
+          vec3 c = mix(plaster, vec3(1., .72, .28) * 1.5, clamp(crack * 1.2 + rim + runCrack * .9, 0., 1.));
+          c = mix(c, vec3(1., .74, .3) * 2.4, runLine);
           // the edge of the served world: a gold rule where the neighbourhoods end
           float cdF = canalD(vW.xz);
           if (cdF < ${(CANAL + COPE).toFixed(1)} + .2) discard;
@@ -516,7 +560,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   }
 
   // ----------------------------------------------------------------- canals: sunken water between stone walls
-  const WATER_DROP = 2.8;    // water surface below the street
+  const WATER_DROP = 3.2;    // water surface below the street
   const COPE_H = 0.5;        // coping stands this far above the street
   function smoothGroundAlong(pts: [number, number][]) {
     const g = pts.map(p => ground(p[0], p[1]));
@@ -561,7 +605,8 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
           // coursed stone: rows every 0.55 m, joints offset row to row, darker and wet near the water
           float row = floor(vUV.y / .55);
           vec2 cell = vec2(fract((vUV.x + row * .9) / 1.6), fract(vUV.y / .55));
-          float joint = step(cell.x, .04) + step(cell.y, .08);
+          float fade = 1. - smoothstep(.02, .12, fwidth(vUV.x) / 1.6);
+          float joint = (step(cell.x, .04) + step(cell.y, .08)) * fade;
           stone *= (.86 + .14 * h21(vec2(floor((vUV.x + row * .9) / 1.6), row))) * (1. - .35 * min(joint, 1.));
           stone *= mix(.55, 1., smoothstep(.0, 1.1, vUV.y));
           stone = mix(stone, vec3(.18, .26, .26), (1. - smoothstep(.05, .45, vUV.y)) * .7);` : kind === "cope" ? `
@@ -581,11 +626,13 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     const wp: number[] = [], wa: number[] = [], wi: number[] = [];           // water
     const sp: number[] = [], sn: number[] = [], su: number[] = [], si: number[] = [];   // walls
     const cp: number[] = [], cn: number[] = [], cu: number[] = [], ci: number[] = [];   // coping
-    const quad = (P: number[], N: number[], U: number[], I: number[], v: number[][], n: number[], uv: number[][]) => {
+    // per-vertex normals, so a curving wall shades smoothly instead of in facets
+    const quad = (P: number[], N: number[], U: number[], I: number[], v: number[][], n: number[] | number[][], uv: number[][]) => {
       const b = P.length / 3;
-      for (let k = 0; k < 4; k++) { P.push(...v[k]); N.push(...n); U.push(...uv[k]); }
+      for (let k = 0; k < 4; k++) { P.push(...v[k]); N.push(...(Array.isArray(n[0]) ? (n as number[][])[k] : (n as number[]))); U.push(...uv[k]); }
       I.push(b, b + 1, b + 2, b, b + 2, b + 3);
     };
+    const smooth1 = (arr: number[], r: number) => arr.map((_, i) => { let s0 = 0, n0 = 0; for (let k = -r; k <= r; k++) { const j = i + k; if (j >= 0 && j < arr.length) { s0 += arr[j]; n0++; } } return s0 / n0; });
     CANALS.forEach((raw, ci_) => {
       const pts = resample(raw, 5);
       // ground on each bank, just outside the coping
@@ -597,7 +644,12 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
         for (const r of [CANAL - 2, CANAL + 1, CANAL + COPE + 1.5]) hmax = Math.max(hmax, ground(p[0] - dz * side * r, p[1] + dx * side * r));
         return hmax;
       };
-      const gl = pts.map((_, q) => bank(q, 1)), gr = pts.map((_, q) => bank(q, -1));
+      const gl = smooth1(pts.map((_, q) => bank(q, 1)), 3), gr = smooth1(pts.map((_, q) => bank(q, -1)), 3);
+      const nrm = pts.map((_, q) => {
+        const nx_ = pts[Math.min(q + 1, pts.length - 1)], pv = pts[Math.max(q - 1, 0)];
+        const dx = nx_[0] - pv[0], dz = nx_[1] - pv[1], L = Math.hypot(dx, dz) || 1;
+        return [-dz / L, dx / L];
+      });
       const lowBank = pts.map((_, q) => Math.min(gl[q], gr[q]));
       const g = lowBank.map((_, i) => { let s0 = 0, n0 = 0; for (let k = -6; k <= 6; k++) { const j = i + k; if (j >= 0 && j < lowBank.length) { s0 += lowBank[j]; n0++; } } return s0 / n0; });
       let along = 0;
@@ -615,29 +667,29 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
         if (q) { const b = wp.length / 3 - 4; wi.push(b, b + 1, b + 2, b + 1, b + 3, b + 2); }
         if (!q) continue;
         const p0 = pts[q - 1], a0 = along - Math.hypot(p[0] - p0[0], p[1] - p0[1]);
-        let dx0 = p[0] - p0[0], dz0 = p[1] - p0[1];
-        const L0 = Math.hypot(dx0, dz0) || 1; dx0 /= L0; dz0 /= L0;
-        const lx = -dz0, lz = dx0;
+        const [n0x, n0z] = nrm[q - 1], [n1x, n1z] = nrm[q];
         for (const side of [-1, 1]) {
           const sideG = side > 0 ? gl : gr;
           const y0 = sideG[q - 1], y1 = sideG[q];
-          const e0x = p0[0] + lx * side * CANAL, e0z = p0[1] + lz * side * CANAL, e1x = p[0] + lx * side * CANAL, e1z = p[1] + lz * side * CANAL;
+          const at = (pp: [number, number], nx0: number, nz0: number, r: number) => [pp[0] + nx0 * side * r, pp[1] + nz0 * side * r];
+          const [e0x, e0z] = at(p0, n0x, n0z, CANAL), [e1x, e1z] = at(p, n1x, n1z, CANAL);
           const top0 = y0 + COPE_H, top1 = y1 + COPE_H, bot0 = g[q - 1] - WATER_DROP - 0.4, bot1 = g[q] - WATER_DROP - 0.4;
-          const nIn = [-lx * side, 0, -lz * side];            // the wall faces the water
+          const in0 = [-n0x * side, 0, -n0z * side], in1 = [-n1x * side, 0, -n1z * side];   // the wall faces the water
           const h0 = top0 - bot0, h1 = top1 - bot1;
           const v = side > 0
             ? [[e0x, bot0, e0z], [e1x, bot1, e1z], [e1x, top1, e1z], [e0x, top0, e0z]]
             : [[e1x, bot1, e1z], [e0x, bot0, e0z], [e0x, top0, e0z], [e1x, top1, e1z]];
+          const nv = side > 0 ? [in0, in1, in1, in0] : [in1, in0, in0, in1];
           const uv = side > 0 ? [[a0, 0], [along, 0], [along, h1], [a0, h0]] : [[along, 0], [a0, 0], [a0, h0], [along, h1]];
-          quad(sp, sn, su, si, v, nIn, uv);
-          // coping: a flat slab on top, and its outer face down to the street
-          const o0x = p0[0] + lx * side * (CANAL + COPE), o0z = p0[1] + lz * side * (CANAL + COPE), o1x = p[0] + lx * side * (CANAL + COPE), o1z = p[1] + lz * side * (CANAL + COPE);
+          quad(sp, sn, su, si, v, nv, uv);
+          // the promenade: a flat slab on top, and its outer face down past the street
+          const [o0x, o0z] = at(p0, n0x, n0z, CANAL + COPE), [o1x, o1z] = at(p, n1x, n1z, CANAL + COPE);
           const vt = side > 0 ? [[e0x, top0, e0z], [e1x, top1, e1z], [o1x, top1, o1z], [o0x, top0, o0z]] : [[e1x, top1, e1z], [e0x, top0, e0z], [o0x, top0, o0z], [o1x, top1, o1z]];
           quad(cp, cn, cu, ci, vt, [0, 1, 0], [[a0, 0], [along, 0], [along, 1], [a0, 1]]);
-          // the outer face reaches down past the real ground so a slope never leaves a gap
           const f0 = Math.min(y0, ground(o0x, o0z)) - 1.2, f1 = Math.min(y1, ground(o1x, o1z)) - 1.2;
           const vo = side > 0 ? [[o0x, top0, o0z], [o1x, top1, o1z], [o1x, f1, o1z], [o0x, f0, o0z]] : [[o1x, top1, o1z], [o0x, top0, o0z], [o0x, f0, o0z], [o1x, f1, o1z]];
-          quad(cp, cn, cu, ci, vo, [lx * side, 0, lz * side], [[a0, 0], [along, 0], [along, 1], [a0, 1]]);
+          const out0 = [n0x * side, 0, n0z * side], out1 = [n1x * side, 0, n1z * side];
+          quad(cp, cn, cu, ci, vo, side > 0 ? [out0, out1, out1, out0] : [out1, out0, out0, out1], [[a0, 0], [along, 0], [along, 1], [a0, 1]]);
         }
       }
     });
@@ -657,6 +709,14 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
         }`,
       fragmentShader: COMMON + /* glsl */ `
         varying vec2 vWater; varying vec3 vW;
+        vec2 vorW(vec2 p) {
+          vec2 n = floor(p), f = fract(p); float d1 = 8., d2 = 8.;
+          for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+            vec2 g = vec2(i, j); vec2 o = .5 + .45 * sin(vec2(h21(n + g), h21(n + g + 17.3)) * 6.2831);
+            float d = length(g + o - f); if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+          }
+          return vec2(d1, d2 - d1);
+        }
         ${FOG_F}
         void main() {
           if (served(vW.xz) < .5) discard;
@@ -670,23 +730,26 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
           vec3 n = normalize(vec3((h0 - hx) * 1.6, 1., (h0 - hz) * 1.6));
           vec3 V = normalize(cameraPosition - vW);
           float across = abs(vWater.y);
-          // deep teal in the channel, lighter over the shallow edges
-          vec3 deep = vec3(.03, .19, .22), shallow = vec3(.09, .34, .35);
-          vec3 base = mix(deep, shallow, smoothstep(.35, 1., across));
-          // the dusk sky in the water, strongest at grazing angles
+          // lit from below like an L.A. pool at night: bright aqua, turquoise at the shallows
+          vec3 deep = vec3(.02, .26, .4), shallow = vec3(.1, .56, .64);
+          vec3 base = mix(deep, shallow, smoothstep(.25, 1., across));
           float fres = pow(1. - max(dot(n, V), 0.), 4.);
-          vec3 sky = mix(vec3(.62, .7, .86), vec3(1., .88, .72), .3);
-          vec3 c = mix(base, sky, .14 + .6 * fres);
-          // soft caustic shimmer
-          c += vec3(.1, .2, .18) * smoothstep(.55, .8, fbm(p * .35 + vec2(t * .2, -t * .15))) * .35;
-          // the low sun glinting off the ripples
+          vec3 c = mix(base, vec3(.7, .86, .95), .08 + .45 * fres);
+          // caustics: the bright net of light a pool throws on its own floor
+          vec2 cp = p / 9. + n.xz * 1.4;
+          vec2 v1 = vorW(cp + vec2(t * .25, t * .18)), v2 = vorW(cp * 1.7 - vec2(t * .2, -t * .3));
+          float caus = (1. - smoothstep(0., .09, v1.y)) * .6 + (1. - smoothstep(0., .07, v2.y)) * .4;
+          c += vec3(.45, .95, 1.) * caus * .26;
+          // sun and lamp glints, and twinkling sparkle on the ripples
           vec3 R = reflect(-uSun, n);
-          c += vec3(1., .82, .52) * pow(max(dot(R, V), 0.), 90.) * 1.6;
-          // a wet dark line and a lace of foam where the water meets the walls
-          float edge = smoothstep(.86, .99, across);
-          c = mix(c, vec3(.03, .08, .1), edge * .5);
-          float foam = smoothstep(.93, .975, across) * smoothstep(.45, .7, fbm(p * .9 + vec2(t * .3, 0.)));
-          c = mix(c, vec3(.85, .92, .93), foam * .55);
+          c += vec3(1., .92, .75) * pow(max(dot(R, V), 0.), 140.) * 2.2;
+          float tw = step(.997, h21(floor(p * 1.1) + floor(t * 3.))) * smoothstep(.75, .95, h0);
+          c += vec3(1.) * tw * 1.3;
+          // lighter lip and white lace where the water meets the walls
+          float edge = smoothstep(.84, .98, across);
+          c = mix(c, vec3(.55, .92, .95), edge * .45);
+          float foam = smoothstep(.93, .985, across) * smoothstep(.4, .7, fbm(p * .7 + vec2(t * .35, 0.)));
+          c = mix(c, vec3(.95, 1., 1.), foam * .7);
           float fogged = smoothstep(${glf(CANAL + COPE + 30)}, ${glf(CANAL + COPE + 70)}, sdMask(vW.xz));
           c = mix(c, mix(vec3(.62, .76, .8), vec3(.86, .9, .92), fres), fogged * .75);
           gl_FragColor = vec4(c, 1.);
@@ -744,10 +807,11 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
           bridgesAt.push([mx, mz]);
           let dx = c[0] - a[0], dz = c[1] - a[1];
           const L = Math.hypot(dx, dz);
-          if (L < 6 || L > 90) continue;
+          if (L < 6 || L > 190) continue;
           dx /= L; dz /= L;
           const sx = -dz, sz = dx;
-          const n = 14, ya = ground(a[0], a[1]) + 0.9, yc = ground(c[0], c[1]) + 0.9, rise = Math.min(2.6, L * 0.07);
+          const n = 24, ya = ground(a[0], a[1]) + 0.9, yc = ground(c[0], c[1]) + 0.9, rise = Math.min(4.5, L * 0.05);
+          const arches = Math.max(1, Math.round(L / 26));
           const at = (u: number) => [a[0] + dx * L * u, ya + (yc - ya) * u + rise * Math.sin(Math.PI * u), a[1] + dz * L * u] as const;
           for (let i = 0; i < n; i++) {
             const u0 = i / n, u1 = (i + 1) / n, [x0, y0, z0] = at(u0), [x1, y1, z1] = at(u1);
@@ -762,7 +826,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
               box([[ex0 - sx * side * .45, y0 + 1.1, ez0 - sz * side * .45], [ex1 - sx * side * .45, y1 + 1.1, ez1 - sz * side * .45], [ex1, y1 + 1.1, ez1], [ex0, y0 + 1.1, ez0]], [0, 1, 0], [[0, 0], [1, 0], [1, 1], [0, 1]]);
               const arch0 = y0 - 0.9 - (1 - Math.sin(Math.PI * u0)) * 0.0, arch1 = y1 - 0.9;
               const floor0 = ground(ex0, ez0) - WATER_DROP, floor1 = ground(ex1, ez1) - WATER_DROP;
-              const hole0 = Math.sin(Math.PI * u0), hole1 = Math.sin(Math.PI * u1);
+              const hole0 = Math.abs(Math.sin(Math.PI * u0 * arches)), hole1 = Math.abs(Math.sin(Math.PI * u1 * arches));
               // the fascia follows the arch: full height at the abutments, a thin band over the span
               const b0 = arch0 - (arch0 - floor0) * (1 - Math.pow(hole0, 0.35)), b1 = arch1 - (arch1 - floor1) * (1 - Math.pow(hole1, 0.35));
               box([[ex0, b0, ez0], [ex1, b1, ez1], [ex1, y1, ez1], [ex0, y0, ez0]], outN, [[u0 * L, 0], [u1 * L, 0], [u1 * L, y1 - b1], [u0 * L, y0 - b0]]);
@@ -795,11 +859,11 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     for (const raw of CANALS) {
       const pts = resample(raw, 30);
       for (let q = 1; q < pts.length - 1; q++) {
-        if (rnd() > 0.42) continue;
+        if (rnd() > 0.6) continue;
         const a = pts[q - 1], c = pts[q + 1];
         const dx = c[0] - a[0], dz = c[1] - a[1], L = Math.hypot(dx, dz) || 1;
         const side = rnd() < 0.5 ? -1 : 1;
-        const x = pts[q][0] - (dz / L) * side * (CANAL - 3.2), z = pts[q][1] + (dx / L) * side * (CANAL - 3.2);
+        const x = pts[q][0] - (dz / L) * side * (CANAL - 4.5), z = pts[q][1] + (dx / L) * side * (CANAL - 4.5);
         spots.push({ x, z, yaw: Math.atan2(dx, dz), y: ground(pts[q][0], pts[q][1]) - WATER_DROP, r: rnd() });
       }
     }
@@ -822,9 +886,9 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
         varying vec3 vN; varying vec3 vW; varying float vSeed;
         ${FOG_F}
         void main() {
-          if (sdMask(vW.xz) > ${glf(CANAL + COPE + 40)}) discard;
+          if (sdMask(vW.xz) > ${glf(CANAL + COPE + 40)} && terrMask(vW.xz) > 0.) discard;
           vec3 n = normalize(vN); float lam = max(dot(n, uSun), 0.);
-          vec3 paint = vSeed < .33 ? vec3(.86, .84, .8) : vSeed < .66 ? vec3(.12, .38, .42) : vec3(.55, .36, .22);
+          vec3 paint = vSeed < .25 ? vec3(.92, .9, .86) : vSeed < .5 ? vec3(.95, .45, .35) : vSeed < .75 ? vec3(.98, .8, .3) : vec3(.2, .55, .6);
           ${cabinPart ? "paint = vec3(.8, .78, .74);" : "paint = mix(paint, vec3(.08, .1, .12), step(vW.y, " + "0.) * 0.);"}
           vec3 c = paint * (.45 + .62 * lam);
           c = mix(c, c * vec3(.72, .78, .95), .35);
@@ -1036,7 +1100,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       const x0 = M.bounds[0] + ti * M.tile, z0 = M.bounds[1] + tj * M.tile;
       let lit = false;
       for (let a = 0; a <= 4 && !lit; a++) for (let b = 0; b <= 4 && !lit; b++) {
-        if (sdField(x0 + (M.tile * a) / 4, z0 + (M.tile * b) / 4) < 160) lit = true;
+        if (sdField(x0 + (M.tile * a) / 4, z0 + (M.tile * b) / 4) < 160 || terrField(x0 + (M.tile * a) / 4, z0 + (M.tile * b) / 4) < 60) lit = true;
       }
       if (lit && have.has(`${ti}_${tj}`)) want.add(`${ti}_${tj}`);
     }
@@ -1087,11 +1151,12 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       }
     }
     t.group.add(flatMesh(pos, idx, along, /* glsl */ `
-      void main() { if (served(vW.xz) < .5 || sdMask(vW.xz) > 30.) discard;
+      void main() { float sdR = sdMask(vW.xz); if (served(vW.xz) < .5 || (sdR > 30. && terrMask(vW.xz) > 0.)) discard;
         vec3 c = vec3(.36, .40, .5);
         float lamp = 1. - smoothstep(0., 2.2, abs(mod(vAlong, 38.) - 19.));
         c += vec3(.55, .6, .7) * lamp * .35;
         if (canalD(vW.xz) < ${(CANAL + COPE).toFixed(1)}) discard;
+        c = mix(c, vec3(.8, .82, .86), smoothstep(0., 30., sdR));
         gl_FragColor = vec4(c, 1.);
         #include <fog_fragment>
       }`, true, across));
@@ -1116,7 +1181,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     if (t.kit) { t.group.remove(t.kit); t.kit.traverse(o => (o as THREE.Mesh).geometry?.dispose()); t.kit = null; }
     if (t.box) { t.group.remove(t.box); t.box.geometry.dispose(); t.box = null; }
     const lit = lanternBuildingIds();
-    const near = t.bldgs.filter(b => !lit.has(b.i) && !hidden.has(b.i) && sdField(b.cx, b.cz) < 150 && !b.p.some(q => canalAt(q[0], q[1]) < CANAL + COPE + 3));
+    const near = t.bldgs.filter(b => !lit.has(b.i) && !hidden.has(b.i) && (sdField(b.cx, b.cz) < 150 || terrField(b.cx, b.cz) < 20) && !b.p.some(q => canalAt(q[0], q[1]) < CANAL + COPE + 3));
     const nearest = roadNear(t);
     t.kit = kitInstances(near.map(b => placeKit(b, nearest)), false);
     t.box = boxMesh(near);
@@ -1158,9 +1223,10 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       fragmentShader: COMMON + /* glsl */ `
         uniform vec3 uCol; varying vec3 vN; varying vec3 vW;
         ${FOG_F}
-        void main() { if (sdMask(vW.xz) > 6. || served(vW.xz) < .5) discard;
+        void main() { float sdT = sdMask(vW.xz); if ((sdT > 6. && terrMask(vW.xz) > 0.) || served(vW.xz) < .5) discard;
           float lam = max(dot(normalize(vN), uSun), 0.);
-          gl_FragColor = vec4(uCol * (.55 + .7 * lam) * (.8 + .4 * h21(floor(vW.xz))), 1.);
+          vec3 col = uCol * (.55 + .7 * lam) * (.8 + .4 * h21(floor(vW.xz)));
+          gl_FragColor = vec4(mix(col, vec3(.92, .93, .95) * (.8 + .25 * lam), smoothstep(0., 30., sdT)), 1.);
           #include <fog_fragment>
         }`,
     });
@@ -1180,7 +1246,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     const blocked = (x: number, z: number) => { const i = Math.floor((x - x0) / PX), j = Math.floor((z - z0) / PX); if (i < 1 || j < 1 || i >= cw - 1 || j >= cw - 1) return true; return occ[(j * cw + i) * 4 + 3] > 0 || occ[(j * cw + i + 1) * 4 + 3] > 0; };
     let seed = (hash2(t.cx | 0, t.cz | 0) * 2147483646 + 1) | 0;
     const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    const trees: number[][] = [], palms: number[][] = [];
+    const trees: number[][] = [], palms: number[][] = [], hedges: number[][] = [];
     const rp = t.roadPts;
     for (let k = 0; k < rp.length - 2; k += 2) {
       const dx = rp[k + 2] - rp[k], dz = rp[k + 3] - rp[k + 1], L = Math.hypot(dx, dz);
@@ -1188,7 +1254,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       for (const side of [-1, 1]) {
         if (rnd() < 0.5) continue;
         const x = rp[k] - (dz / L) * 8 * side, z = rp[k + 1] + (dx / L) * 8 * side;
-        if (blocked(x, z) || sdField(x, z) > 60 || canalAt(x, z) < CANAL + COPE + 4) continue;
+        if (blocked(x, z) || (sdField(x, z) > 60 && terrField(x, z) > 0) || canalAt(x, z) < CANAL + COPE + 4) continue;
         (rnd() < 0.18 ? palms : trees).push([x, z, rnd()]);
       }
     }
@@ -1199,20 +1265,23 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
         const a = path[q], c = path[q + 1], L = Math.hypot(c[0] - a[0], c[1] - a[1]);
         if (L < 0.01) continue;
         const nx0 = -(c[1] - a[1]) / L, nz0 = (c[0] - a[0]) / L;
-        for (let d0 = (24 - acc) % 24; d0 < L; d0 += 24) {
+        for (let d0 = (16 - acc) % 16; d0 < L; d0 += 16) {
           const bx = a[0] + (c[0] - a[0]) * d0 / L, bz = a[1] + (c[1] - a[1]) * d0 / L;
           if (bx < x0 + 20 || bx > x0 + 20 + M.tile || bz < z0 + 20 || bz > z0 + 20 + M.tile) continue;
           for (const side of [-1, 1]) {
             const x = bx + nx0 * side * (CANAL + COPE + 3.2), z = bz + nz0 * side * (CANAL + COPE + 3.2);
-            if (sdField(x, z) < 40 && !blocked(x, z) && canalAt(x, z) > CANAL + COPE + 1.5) palms.push([x, z, rnd()]);
+            if ((sdField(x, z) < 40 || terrField(x, z) < 0) && !blocked(x, z) && canalAt(x, z) > CANAL + COPE + 1.5) palms.push([x, z, rnd()]);
+            // a low hedge between the palms, right at the promenade edge
+            const hx = bx + nx0 * side * (CANAL + COPE + 1.2) + (c[0] - a[0]) / L * 8, hz = bz + nz0 * side * (CANAL + COPE + 1.2) + (c[1] - a[1]) / L * 8;
+            if ((sdField(hx, hz) < 40 || terrField(hx, hz) < 0) && canalAt(hx, hz) > CANAL + COPE + 0.4) hedges.push([hx, hz, rnd()]);
           }
         }
-        acc = (acc + L) % 24;
+        acc = (acc + L) % 16;
       }
     }
     for (let k = 0; k < 1400; k++) {
       const x = x0 + 20 + rnd() * M.tile, z = z0 + 20 + rnd() * M.tile;
-      if (!blocked(x, z) && sdField(x, z) < 60 && servedAt(x, z) && canalAt(x, z) > CANAL + COPE + 4) trees.push([x, z, rnd()]);
+      if (!blocked(x, z) && (sdField(x, z) < 60 || terrField(x, z) < 0) && servedAt(x, z) && canalAt(x, z) > CANAL + COPE + 4) trees.push([x, z, rnd()]);
     }
     const grp = new THREE.Group();
     grp.name = "trees";
@@ -1226,8 +1295,10 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       V.set(x, y, z); Sc.set(1, h, 1); Q.identity(); pt.setMatrixAt(k, Mx.compose(V, Q, Sc));
       V.set(x, y + h + 1.2, z); Sc.set(4.2, 2.4, 4.2); Q.setFromAxisAngle(UP, r * 6.28); pc.setMatrixAt(k, Mx.compose(V, Q, Sc));
     });
-    for (const m of [tm, pt, pc]) m.computeBoundingSphere();
-    grp.add(tm, pt, pc);
+    const hm = new THREE.InstancedMesh(treeCanopy, TREE_MATS.canopy, hedges.length);
+    hedges.forEach(([x, z, r], k) => { V.set(x, ground(x, z) + 1.3, z); Sc.set(2.6 + r, 1.3, 2.6 + r); Q.setFromAxisAngle(UP, r * 6.28); hm.setMatrixAt(k, Mx.compose(V, Q, Sc)); });
+    for (const m of [tm, pt, pc, hm]) m.computeBoundingSphere();
+    grp.add(tm, pt, pc, hm);
     return grp;
   }
 
@@ -1305,15 +1376,38 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     return 0.22;
   }
   let lastRegionsKey = "";
+  let hoodCounts = new Map<string, { buildings: number; customers: number }>();
+  let runs: { key: string; hood: string; label: string; x: number; z: number; r: number }[] = [];
+  // the radius that holds the nearest RUN_DOORS doors around a point (from the real unit counts)
+  function runRadius(x: number, z: number) {
+    const D = M.doors, cells: [number, number][] = [];
+    const ci = Math.floor((x - M.bounds[0]) / D.cell), cj = Math.floor((z - M.bounds[1]) / D.cell);
+    for (let j = cj - 8; j <= cj + 8; j++) for (let i = ci - 8; i <= ci + 8; i++) {
+      if (i < 0 || j < 0 || i >= D.nx || j >= D.nz) continue;
+      const cx = M.bounds[0] + (i + 0.5) * D.cell, cz = M.bounds[1] + (j + 0.5) * D.cell;
+      cells.push([Math.hypot(cx - x, cz - z), D.v[j * D.nx + i]]);
+    }
+    cells.sort((a, b) => a[0] - b[0]);
+    let acc = 0;
+    for (const [d, v] of cells) { acc += v; if (acc >= RUN_DOORS) return Math.max(140, Math.min(650, d + D.cell * 0.5)); }
+    return 650;
+  }
   function applyLanterns() {
     if (!M) return;
     // regions from where lanterns are, even before their tile loads
     const inside = lanterns.map(l => ({ l, ...ll(l.latitude, l.longitude) })).filter(p => servedAt(p.x, p.z));
-    const hoods = new Set(inside.map(p => hoodAt(p.x, p.z)).filter((n): n is string => !!n));
-    const rk = [...hoods].sort().join(";");
+    // 0 customer buildings: fog. 1: a clearing around the lantern and a door-hanger territory.
+    // 2 or more anywhere in the neighbourhood: the whole neighbourhood is charted.
+    const perHood = new Map<string, typeof inside>();
+    for (const p of inside) { const h = hoodAt(p.x, p.z); if (h) { if (!perHood.has(h)) perHood.set(h, []); perHood.get(h)!.push(p); } }
+    hoodCounts = new Map([...perHood].map(([h, ps]) => [h, { buildings: ps.length, customers: ps.reduce((s0, q) => s0 + q.l.total, 0) }]));
+    const hoods = new Set([...perHood].filter(([, ps]) => ps.length >= 2).map(([h]) => h));
+    const singles = [...perHood].filter(([, ps]) => ps.length === 1).map(([h, ps]) => ({ hood: h, ...ps[0] }));
+    runs = singles.map(sg => ({ key: sg.l.key, hood: sg.hood, label: sg.l.label, x: sg.x, z: sg.z, r: runRadius(sg.x, sg.z) }));
+    const rk = [...hoods].sort().join(";") + "|" + runs.map(r => `${r.x | 0},${r.z | 0}`).join(";");
     if (rk !== lastRegionsKey) {
       lastRegionsKey = rk;
-      rebuildMask(hoods);
+      rebuildMask(hoods, singles.map(sg => ({ x: sg.x, z: sg.z, r: CLEARING })), runs);
       for (const key of wantedTiles()) if (!tiles.has(key)) void loadTile(key);
     }
     // lantern meshes
@@ -1330,12 +1424,14 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
         mesh.userData.key = p.l.key;
         lanternGroup.add(mesh);
       }
-      const r = 70 + Math.sqrt(Math.max(p.l.total, 1)) * 18;
+      const alone = runs.some(r0 => r0.key === p.l.key);
+      const r = (70 + Math.sqrt(Math.max(p.l.total, 1)) * 18) * (alone ? 1.6 : 1);
       const halo = new THREE.Mesh(new THREE.CircleGeometry(r, 40).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
         transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uA: { value: k } },
         vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
         fragmentShader: `uniform float uA; varying vec2 vUv; void main(){ float d = length(vUv - .5) * 2.; float a = pow(1. - clamp(d,0.,1.), 1.8) * .75 * uA; gl_FragColor = vec4(vec3(1., .66, .25) * a, a); }`,
       }));
+      if (alone) (halo.material as THREE.ShaderMaterial).uniforms.uA.value = Math.min(1.6, k * 1.5);
       const cx = b?.cx ?? p.x, cz = b?.cz ?? p.z;
       halo.position.set(cx, ground(cx, cz) + 1.6, cz);
       halo.userData.key = p.l.key;
@@ -1352,6 +1448,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       }
     }
     if (!framed && placedLanterns.length) frameHome();
+    refreshLabels();
     reportStats();
   }
   function frameHome() {
@@ -1359,14 +1456,15 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     // open on the whole board: every lantern in view
     let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
     for (const l of placedLanterns) { x0 = Math.min(x0, l.x); x1 = Math.max(x1, l.x); z0 = Math.min(z0, l.z); z1 = Math.max(z1, l.z); }
+    // the whole board, north up, every neighbourhood in view
+    x0 = Math.min(x0, M.bounds[0]); x1 = Math.max(x1, M.bounds[2]);
+    z0 = Math.min(z0, M.bounds[1]); z1 = Math.max(z1, M.bounds[3]);
     const aspect = Math.max(0.4, container.clientWidth / Math.max(1, container.clientHeight));
-    const portrait = aspect < 1;
-    // on a phone the board turns so its long east-west run goes up the screen
-    const ex = (portrait ? z1 - z0 : x1 - x0) + 2200, ez = (portrait ? x1 - x0 : z1 - z0) + 2200;
-    const dist = Math.min(controls.maxDistance, Math.max(2600, (Math.max(ex / aspect, ez) / (2 * Math.tan((13 * Math.PI) / 180))) * (portrait ? 0.92 : 0.78)));
-    frame((x0 + x1) / 2, (z0 + z1) / 2, dist, portrait ? -Math.PI / 2 - 0.25 : -0.3);
+    const ex = x1 - x0 + 600, ez = z1 - z0 + 600;
+    const dist = Math.min(controls.maxDistance, Math.max(2600, (Math.max(ex / aspect, ez * 1.35) / (2 * Math.tan((13 * Math.PI) / 180))) * 1.02));
+    frame((x0 + x1) / 2, (z0 + z1) / 2 + ez * 0.1, dist, 0);
   }
-  function frame(x: number, z: number, dist: number, yaw = -0.3, pitch = 0.95) {
+  function frame(x: number, z: number, dist: number, yaw = 0, pitch = 0.95) {
     const ty = ground(x, z);
     controls.target.set(x, ty, z);
     camera.position.set(x + Math.sin(yaw) * Math.sin(pitch) * dist, ty + Math.cos(pitch) * dist, z + Math.cos(yaw) * Math.sin(pitch) * dist);
@@ -1400,6 +1498,12 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   }
   function pickMission(): Mission | null {
     if (!placedLanterns.length) return null;
+    if (runs.length) {
+      const r = runs.slice().sort((a, b) => a.r - b.r)[0];
+      const addr = r.label.split(",")[0];
+      return { kind: "run", title: `Door-hanger run · ${r.hood}`, body: `~${RUN_DOORS} doors inside the gold line around ${addr}. Win a second building and all of ${r.hood} comes out of the fog.`,
+        hood: r.hood, where: addr, doors: RUN_DOORS, buildings: 0, miles: 0, x: r.x, z: r.z, radius: r.r };
+    }
     const D = M.doors;
     let best: { x: number; z: number; s: number; doors: number } | null = null;
     for (let j = 1; j < D.nz - 1; j++) for (let i = 1; i < D.nx - 1; i++) {
@@ -1434,7 +1538,83 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       }
     }
     const rounded = Math.max(5, Math.round((doors || best.doors) / 50) * 50);
-    return { title: hood ? `Uncharted: ${hood}` : `Uncharted: ${where}`, hood, where, doors: rounded, buildings: 0, miles: nearest / 1609, x: best.x, z: best.z };
+    return { kind: "uncharted", title: hood ? `Uncharted: ${hood}` : `Uncharted: ${where}`,
+      body: hood ? `Nobody's knocked yet. Your first building ${where} breaks the fog open in ${hood}.` : "Nobody's knocked yet.",
+      hood, where, doors: rounded, buildings: 0, miles: nearest / 1609, x: best.x, z: best.z, radius: 0 };
+  }
+
+  // ----------------------------------------------------------------- neighbourhood labels
+  const labelLayer = document.createElement("div");
+  labelLayer.style.cssText = "position:absolute;inset:0;pointer-events:none;overflow:hidden;";
+  container.appendChild(labelLayer);
+  let labels: { name: string; x: number; z: number; el: HTMLDivElement; count: HTMLSpanElement; state: HTMLSpanElement }[] = [];
+  function labelPoint(ring: [number, number][]) {
+    // the interior point farthest from the outline, so the label sits squarely inside
+    let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+    for (const [x, z] of ring) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+    let best: [number, number] = [(x0 + x1) / 2, (z0 + z1) / 2], bd = -1;
+    for (let a = 1; a < 24; a++) for (let b = 1; b < 24; b++) {
+      const x = x0 + (x1 - x0) * a / 24, z = z0 + (z1 - z0) * b / 24;
+      if (!pointInRing(x, z, ring)) continue;
+      let d = 1e9;
+      for (let k = 0; k < ring.length; k++) {
+        const p = ring[k], q = ring[(k + 1) % ring.length], ex = q[0] - p[0], ez = q[1] - p[1];
+        const t = Math.max(0, Math.min(1, ((x - p[0]) * ex + (z - p[1]) * ez) / (ex * ex + ez * ez || 1)));
+        d = Math.min(d, Math.hypot(x - p[0] - ex * t, z - p[1] - ez * t));
+      }
+      if (d > bd) { bd = d; best = [x, z]; }
+    }
+    return best;
+  }
+  function buildLabels() {
+    const biggest = new Map<string, [number, number][]>();
+    const area = (r: [number, number][]) => { let a = 0; for (let k = 0; k < r.length; k++) { const p = r[k], q = r[(k + 1) % r.length]; a += p[0] * q[1] - q[0] * p[1]; } return Math.abs(a / 2); };
+    for (const o of M.outline) { const cur = biggest.get(o.n); if (!cur || area(o.p) > area(cur)) biggest.set(o.n, o.p); }
+    for (const [name, ring] of biggest) {
+      const [x, z] = labelPoint(ring);
+      const el = document.createElement("div");
+      el.style.cssText = "position:absolute;left:0;top:0;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:3px;white-space:nowrap;transition:opacity .2s;";
+      const nm = document.createElement("div");
+      nm.textContent = name.toUpperCase();
+      nm.style.cssText = "font:700 15px/1 'Barlow Condensed',system-ui,sans-serif;letter-spacing:.14em;color:#0b0f14;background:rgba(251,251,250,.92);border:1px solid #dcdfe4;border-radius:8px;padding:6px 10px 5px;box-shadow:0 4px 14px rgba(20,26,40,.18);";
+      const sub = document.createElement("div");
+      sub.style.cssText = "display:flex;gap:6px;align-items:center;font:600 12px/1 'Barlow Condensed',system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;";
+      const count = document.createElement("span");
+      const state = document.createElement("span");
+      sub.append(count, state);
+      el.append(nm, sub);
+      labelLayer.appendChild(el);
+      labels.push({ name, x, z, el, count, state });
+    }
+  }
+  function refreshLabels() {
+    for (const L of labels) {
+      const c = hoodCounts.get(L.name);
+      const b = c?.buildings ?? 0;
+      const pill = (bg: string, fg: string) => `background:${bg};color:${fg};border-radius:999px;padding:4px 8px;`;
+      if (!b) {
+        L.count.textContent = "Uncharted";
+        L.count.style.cssText = pill("rgba(255,255,255,.85)", "#6b7280") + "border:1px solid #dcdfe4;";
+        L.state.textContent = "";
+        L.state.style.cssText = "display:none";
+      } else {
+        L.count.textContent = `${c!.customers} customer${c!.customers === 1 ? "" : "s"}`;
+        L.count.style.cssText = pill("#0b0f14", "#ffc84d");
+        L.state.textContent = b === 1 ? "Door-hanger run" : "Charted";
+        L.state.style.cssText = b === 1 ? pill("#ffc84d", "#3a2600") : pill("rgba(255,255,255,.9)", "#0b0f14") + "border:1px solid #dcdfe4;";
+      }
+    }
+  }
+  const lv = new THREE.Vector3();
+  function placeLabels() {
+    const w = container.clientWidth, h = container.clientHeight;
+    const far = camera.position.distanceTo(controls.target);
+    for (const L of labels) {
+      lv.set(L.x, ground(L.x, L.z) + 90, L.z).project(camera);
+      const vis = lv.z < 1 && Math.abs(lv.x) < 1.1 && Math.abs(lv.y) < 1.1;
+      L.el.style.opacity = vis ? "1" : "0";
+      if (vis) L.el.style.transform = `translate(${((lv.x + 1) / 2) * w}px, ${((1 - lv.y) / 2) * h}px) translate(-50%,-50%) scale(${far < 2500 ? 0.9 : 1})`;
+    }
   }
 
   // ----------------------------------------------------------------- picking
@@ -1482,11 +1662,11 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     (scene.fog as THREE.Fog).far = cd * 3.2;
     camera.far = cd * 4 + 2000;
     // from far out the pools of light grow so every lantern still reads on the board
-    const hs = Math.min(6, Math.max(1, cd / 2600));
+    const hs = Math.min(11, Math.max(1, cd / 2200));
     for (const o of lanternGroup.children) if (o.userData.halo) o.scale.setScalar(hs);
     camera.updateProjectionMatrix();
     for (const l of landmarks) l.mesh.rotation.y = Math.atan2(camera.position.x - l.x, camera.position.z - l.z);
-    if (M) updateLod();
+    if (M) { updateLod(); placeLabels(); }
     composer.render();
     raf = requestAnimationFrame(tick);
   }
@@ -1535,6 +1715,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       composer.dispose();
       renderer.dispose();
       renderer.domElement.remove();
+      labelLayer.remove();
     },
   };
 }
