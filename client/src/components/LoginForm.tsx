@@ -6,7 +6,7 @@ import { apiBase } from "@/lib/apiBase";
 type Props = {
   role?: "admin" | "driver";
   /**
-   * membership: workspace slug, email, and password. Same account as Admin.
+   * membership: email and password; tenant is resolved server-side. Same account as Admin.
    * legacy-shared-password: isolated DRIVER_PASSWORD / ADMIN_PASSWORD form.
    * Driver defaults to membership. Admin keeps the shared password form.
    */
