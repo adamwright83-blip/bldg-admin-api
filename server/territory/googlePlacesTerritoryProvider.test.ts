@@ -170,4 +170,160 @@ describe("GooglePlacesTerritoryProvider", () => {
     expect(target).toBeNull();
   });
 
+  it("returns Google Places predictions while the operator is still typing", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toContain("/v1/places:autocomplete");
+      const headers = new Headers(init?.headers);
+      expect(headers.get("X-Goog-Api-Key")).toBe("places-secret");
+      const request = JSON.parse(String(init?.body));
+      expect(request.input).toBe("4455 Los Fel");
+      return new Response(
+        JSON.stringify({
+          suggestions: [
+            {
+              placePrediction: {
+                place: "places/los-feliz-towers",
+                placeId: "los-feliz-towers",
+                text: {
+                  text: "Los Feliz Towers, 4455 Los Feliz Blvd, Los Angeles, CA, USA",
+                },
+                structuredFormat: {
+                  mainText: { text: "Los Feliz Towers" },
+                  secondaryText: {
+                    text: "4455 Los Feliz Blvd, Los Angeles, CA, USA",
+                  },
+                },
+                types: ["apartment_complex", "establishment"],
+              },
+            },
+          ],
+        }),
+        { status: 200 }
+      );
+    });
+
+    const results = await new GooglePlacesTerritoryProvider(
+      { placesApiKey: "places-secret", geocodingApiKey: "geocoding-secret" },
+      fetcher as typeof fetch
+    ).autocompleteBusinesses("4455 Los Fel");
+
+    expect(results).toEqual([
+      {
+        placeId: "los-feliz-towers",
+        name: "Los Feliz Towers",
+        address: "4455 Los Feliz Blvd, Los Angeles, CA, USA",
+        text: "Los Feliz Towers, 4455 Los Feliz Blvd, Los Angeles, CA, USA",
+        types: ["apartment_complex", "establishment"],
+      },
+    ]);
+  });
+
+  it("accepts a named building returned as a premise when selected by Place ID", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toContain("/v1/places/los-feliz-towers");
+      return new Response(
+        JSON.stringify({
+          id: "los-feliz-towers",
+          displayName: { text: "Los Feliz Towers" },
+          formattedAddress:
+            "4455 Los Feliz Blvd, Los Angeles, CA 90027, USA",
+          location: { latitude: 34.1126, longitude: -118.287 },
+          types: ["premise"],
+          googleMapsUri: "https://maps.example/los-feliz-towers",
+        }),
+        { status: 200 }
+      );
+    });
+
+    const target = await new GooglePlacesTerritoryProvider(
+      { placesApiKey: "places-secret", geocodingApiKey: "geocoding-secret" },
+      fetcher as typeof fetch
+    ).resolveBusinessByPlaceId("los-feliz-towers");
+
+    expect(target).toMatchObject({
+      providerId: "los-feliz-towers",
+      name: "Los Feliz Towers",
+      formattedAddress: "4455 Los Feliz Blvd, Los Angeles, CA 90027, USA",
+    });
+  });
+
+  it("promotes an address prediction to the named property at that exact address", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/v1/places/address-4455")) {
+        return new Response(
+          JSON.stringify({
+            id: "address-4455",
+            displayName: { text: "4455 Los Feliz Blvd" },
+            formattedAddress:
+              "4455 Los Feliz Blvd, Los Angeles, CA 90027, USA",
+            location: { latitude: 34.1126, longitude: -118.287 },
+            types: ["street_address"],
+          }),
+          { status: 200 }
+        );
+      }
+      expect(url).toContain("/v1/places:searchText");
+      return new Response(
+        JSON.stringify({
+          places: [
+            {
+              id: "nearby-wrong",
+              displayName: { text: "Nearby Wrong Building" },
+              formattedAddress:
+                "4450 Los Feliz Blvd, Los Angeles, CA 90027, USA",
+              location: { latitude: 34.1129, longitude: -118.2865 },
+              types: ["apartment_complex", "establishment"],
+            },
+            {
+              id: "los-feliz-towers",
+              displayName: { text: "Los Feliz Towers" },
+              formattedAddress:
+                "4455 Los Feliz Boulevard, Los Angeles, CA 90027, USA",
+              location: { latitude: 34.1126, longitude: -118.287 },
+              types: ["premise"],
+            },
+          ],
+        }),
+        { status: 200 }
+      );
+    });
+
+    const target = await new GooglePlacesTerritoryProvider(
+      { placesApiKey: "places-secret", geocodingApiKey: "geocoding-secret" },
+      fetcher as typeof fetch
+    ).resolveBusinessByPlaceId("address-4455");
+
+    expect(target?.providerId).toBe("los-feliz-towers");
+    expect(target?.name).toBe("Los Feliz Towers");
+  });
+
+  it("matches a common extra business-name suffix instead of rejecting the property", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          suggestions: [],
+          places: [
+            {
+              id: "los-feliz-towers",
+              displayName: { text: "Los Feliz Towers Apartments" },
+              formattedAddress:
+                "4455 Los Feliz Blvd, Los Angeles, CA 90027, USA",
+              location: { latitude: 34.1126, longitude: -118.287 },
+              types: ["apartment_complex", "establishment"],
+            },
+          ],
+        }),
+        { status: 200 }
+      )
+    );
+
+    const target = await new GooglePlacesTerritoryProvider(
+      { placesApiKey: "places-secret", geocodingApiKey: "geocoding-secret" },
+      fetcher as typeof fetch
+    ).resolveBusiness("Los Feliz Towers");
+
+    expect(target?.providerId).toBe("los-feliz-towers");
+  });
+
 });
