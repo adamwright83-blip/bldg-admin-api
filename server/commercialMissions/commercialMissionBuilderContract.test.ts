@@ -1,9 +1,14 @@
 /* LEGACY DAYFORGE COMPATIBILITY: retained historical literal only; not current architecture. Canonical product is JOYSTICK and today's work surface is Day Line. See docs/legacy/LEGACY_DAYFORGE_COMPATIBILITY.md. */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { canTransitionCommercialMission } from "../../shared/commercialMissionLifecycle";
 
 const service = readFileSync(
   new URL("./commercialMissionBuilderService.ts", import.meta.url),
+  "utf8"
+);
+const proposalService = readFileSync(
+  new URL("../commercialProposals/commercialProposalService.ts", import.meta.url),
   "utf8"
 );
 const activation = readFileSync(
@@ -59,6 +64,30 @@ describe("driver mission builder contract", () => {
     expect(activation).toContain('"field"');
     expect(activation.match(/ACTIVE_FIELD_MEMBERSHIP_ROLES/g)?.length).toBeGreaterThanOrEqual(3);
     expect(activation).toContain("eq(legacyDayforgeSaasMemberships.active, true)");
+  });
+
+  it("keeps the complete built-mission acceptance chain internally compatible", () => {
+    expect(proposalService).toMatch(
+      /PROPOSAL_READY_STATUSES[\s\S]*"game_ready"/
+    );
+    expect(service).toContain("ensureApprovedBuilderProposal");
+    expect(service).toContain("reusableByProviderId");
+    expect(service).toContain("getLatestCommercialProposalForMission");
+
+    const path = [
+      ["candidate", "selected"],
+      ["selected", "game_ready"],
+      ["game_ready", "game_active"],
+      ["game_active", "game_completed"],
+      ["game_completed", "phone_ready"],
+      ["phone_ready", "preparing"],
+      ["preparing", "en_route"],
+      ["en_route", "arrived"],
+      ["arrived", "visit_completed"],
+    ] as const;
+    for (const [from, to] of path) {
+      expect(canTransitionCommercialMission(from, to)).toBe(true);
+    }
   });
 
   it("deduplicates active venues and requires public phones for call missions", () => {
