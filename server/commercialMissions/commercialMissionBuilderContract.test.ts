@@ -69,7 +69,8 @@ describe("driver mission builder contract", () => {
   it("treats the Driver target field as one exact property, not a nearby search center", () => {
     expect(service).toContain("searchExactBusiness(input.searchNear)");
     expect(service).toContain("candidates: [exactCandidate]");
-    expect(service).toContain("const selected = eligible.slice(0, 1)");
+    expect(service).toContain("return [reusable]");
+    expect(service).toContain("const opportunity = exactOpportunity");
     expect(service).not.toContain("discoverLaundryTerritory({");
   });
 
@@ -97,20 +98,17 @@ describe("driver mission builder contract", () => {
     }
   });
 
-  it("treats the entered property as the exact mission target, never a nearby search center", () => {
-    expect(service).toContain("categories: [input.searchNear]");
-    expect(service).toContain("distanceMiles <= 0.25");
-    expect(service).toContain("preferredAccountType");
-    expect(service).toContain('luxury_living: "property_management"');
-    expect(service).toContain("const opportunity = exactOpportunity");
-    expect(service).toContain("return [reusable]");
+  it("rejects a mismatched Places result instead of substituting a nearby property", () => {
+    expect(service).toContain("resolvedDistanceMiles > 0.5");
+    expect(service).toContain('Google Places resolved "');
+    expect(service).toContain("Refine the property name and street address");
     expect(service).not.toContain("eligible.slice(0, input.count)");
   });
 
   it("deduplicates active venues and requires public phones for call missions", () => {
     expect(service).toContain("const conflicting = activeMissions.find");
     expect(service).toContain(
-      'input.missionType !== "cold_call" || Boolean(opportunity.account.phone)'
+      'input.missionType === "cold_call" && !exactOpportunity.account.phone'
     );
     expect(service).toContain("activateCommercialMissionForField");
     expect(service).toContain("generateCommercialProposal");
