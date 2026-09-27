@@ -40,7 +40,7 @@ export const DRIVER_MISSION_TARGET_MODES = [
 ] as const;
 export type DriverMissionTargetMode = (typeof DRIVER_MISSION_TARGET_MODES)[number];
 
-type DriverMissionPlacesProvider = TerritoryBusinessProvider & {
+export type DriverMissionPlacesProvider = TerritoryBusinessProvider & {
   resolveBusiness(query: string): Promise<TerritoryBusinessCandidate | null>;
 };
 
