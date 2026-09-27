@@ -1,3 +1,5 @@
+import { and, eq } from "drizzle-orm";
+import { commercialMissionEvents } from "../../drizzle/schema";
 import {
   evaluateCommercialMissionLocationCheckIn,
 } from "@shared/commercialMissionField";
@@ -19,10 +21,12 @@ import {
   preparePlayerPresentationForOccurrence,
 } from "../narratorOs/presentationStore";
 import type { PlayerPresentationPayload } from "../narratorOs/playerPresentation";
+import { getDb } from "../db";
 
 type CompletedCommercialVisitState = {
   mission: {
     id: number;
+    status: string;
     account: {
       accountId: number;
       providerAccountId?: string | null;
@@ -55,6 +59,101 @@ export type CommercialVisitReactionResult = {
     | "operator_attested";
   readonly errors: readonly string[];
 };
+
+const COMMERCIAL_VISIT_REACTION_EVENT_NAME =
+  "field_narrator_reaction_prepared";
+
+function decodePersistedReaction(
+  metadata: unknown
+): CommercialVisitReactionResult | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return null;
+  }
+  const row = metadata as Record<string, unknown>;
+  if (
+    (row.locationAuthority !== "property_radius_verified" &&
+      row.locationAuthority !== "operator_attested") ||
+    (row.playerPayload !== null &&
+      (typeof row.playerPayload !== "object" ||
+        Array.isArray(row.playerPayload)))
+  ) {
+    return null;
+  }
+  return {
+    worldEventId:
+      typeof row.worldEventId === "string" ? row.worldEventId : null,
+    narratorReceiptId:
+      typeof row.narratorReceiptId === "string"
+        ? row.narratorReceiptId
+        : null,
+    narratorBeatId:
+      typeof row.narratorBeatId === "string" ? row.narratorBeatId : null,
+    playerPayload:
+      row.playerPayload === null
+        ? null
+        : (row.playerPayload as PlayerPresentationPayload),
+    locationAuthority: row.locationAuthority,
+    errors: Array.isArray(row.errors)
+      ? row.errors.filter((value): value is string => typeof value === "string")
+      : [],
+  };
+}
+
+export async function getPersistedCommercialVisitReaction(input: {
+  tenantId: string;
+  missionId: number;
+}): Promise<CommercialVisitReactionResult | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({ metadataJson: commercialMissionEvents.metadataJson })
+    .from(commercialMissionEvents)
+    .where(
+      and(
+        eq(commercialMissionEvents.tenantId, input.tenantId),
+        eq(commercialMissionEvents.missionId, input.missionId),
+        eq(
+          commercialMissionEvents.eventName,
+          COMMERCIAL_VISIT_REACTION_EVENT_NAME
+        )
+      )
+    )
+    .limit(1);
+  return decodePersistedReaction(rows[0]?.metadataJson);
+}
+
+async function persistCommercialVisitReaction(input: {
+  tenantId: string;
+  operatorUserId: string;
+  missionId: number;
+  missionStatus: string;
+  visitOutcomeId: number;
+  reaction: CommercialVisitReactionResult;
+}): Promise<CommercialVisitReactionResult> {
+  const db = await getDb();
+  if (!db) return input.reaction;
+  const idempotencyKey = `field-narrator-reaction:${input.visitOutcomeId}`;
+  await db
+    .insert(commercialMissionEvents)
+    .values({
+      tenantId: input.tenantId,
+      missionId: input.missionId,
+      eventName: COMMERCIAL_VISIT_REACTION_EVENT_NAME,
+      fromStatus: input.missionStatus,
+      toStatus: input.missionStatus,
+      actorType: "driver",
+      actorId: input.operatorUserId,
+      idempotencyKey,
+      metadataJson: input.reaction,
+    })
+    .onDuplicateKeyUpdate({ set: { idempotencyKey } });
+  return (
+    (await getPersistedCommercialVisitReaction({
+      tenantId: input.tenantId,
+      missionId: input.missionId,
+    })) ?? input.reaction
+  );
+}
 
 function verifiedLocationEvidence(state: CompletedCommercialVisitState) {
   const field = state.field;
@@ -104,6 +203,10 @@ export async function reactToCompletedCommercialVisit(input: {
     };
   }
 
+  const persistedReaction = await getPersistedCommercialVisitReaction({
+    tenantId: input.tenantId,
+    missionId: input.state.mission.id,
+  });
   const verifiedLocation = verifiedLocationEvidence(input.state);
   const locationAuthority = verifiedLocation
     ? ("property_radius_verified" as const)
@@ -160,6 +263,13 @@ export async function reactToCompletedCommercialVisit(input: {
       playerPayload: null,
       locationAuthority,
       errors,
+    };
+  }
+
+  if (persistedReaction) {
+    return {
+      ...persistedReaction,
+      worldEventId: worldEventId ?? persistedReaction.worldEventId,
     };
   }
 
@@ -224,7 +334,7 @@ export async function reactToCompletedCommercialVisit(input: {
         });
       }
     }
-    return {
+    const reaction: CommercialVisitReactionResult = {
       worldEventId,
       narratorReceiptId: receipt.receiptId,
       narratorBeatId: advance.presentation?.beatId ?? null,
@@ -232,6 +342,15 @@ export async function reactToCompletedCommercialVisit(input: {
       locationAuthority,
       errors,
     };
+    if (!reaction.playerPayload || !advance.presentation) return reaction;
+    return persistCommercialVisitReaction({
+      tenantId: input.tenantId,
+      operatorUserId: input.operatorUserId,
+      missionId: input.state.mission.id,
+      missionStatus: input.state.mission.status,
+      visitOutcomeId: outcome.id,
+      reaction,
+    });
   } catch (error) {
     errors.push(
       `narrator:${error instanceof Error ? error.message : String(error)}`
