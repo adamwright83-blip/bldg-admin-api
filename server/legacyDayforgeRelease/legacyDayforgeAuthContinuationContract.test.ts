@@ -18,8 +18,9 @@ describe("DayForge authenticated entry contract", () => {
     expect(onboarding).toContain('query.set("preview"');
   });
   it("requires active tenant membership before issuing a session", () => {
-    expect(authRoute).toContain("!account.membershipActive");
-    expect(authRoute).toContain('account.tenantStatus === "suspended"');
-    expect(authRoute).toContain('account.tenantStatus === "canceled"');
+    expect(authRoute).toContain("candidate.membershipActive");
+    expect(authRoute).toContain('candidate.tenantStatus !== "suspended"');
+    expect(authRoute).toContain('candidate.tenantStatus !== "canceled"');
+    expect(authRoute).toContain("eligibleAccounts");
   });
 });
