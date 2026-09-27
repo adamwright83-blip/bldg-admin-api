@@ -19,6 +19,13 @@ import { sounds } from "./driverSounds";
 type MissionType = "cold_call" | "in_person";
 type VenueType = "luxury_living" | "hotels" | "fitness_wellness" | "salons_spas";
 type TargetMode = "exact_property" | "nearby_discovery";
+type PlaceSuggestion = {
+  placeId: string;
+  name: string;
+  address: string;
+  text: string;
+  types: string[];
+};
 
 const VENUES = [
   {
@@ -45,12 +52,46 @@ export function BuildMissionSheet({
   const [missionType, setMissionType] = useState<MissionType | null>(null);
   const [targetMode, setTargetMode] = useState<TargetMode>("exact_property");
   const [searchNearValue, setSearchNearValue] = useState(searchNear);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [selectedPlace, setSelectedPlace] = useState<PlaceSuggestion | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const build = trpc.system.commercialMission.buildForDriver.useMutation();
+  const placeSuggestions = trpc.system.commercialMission.placeSuggestions.useQuery(
+    { query: debouncedSearch },
+    {
+      enabled:
+        open &&
+        targetMode === "exact_property" &&
+        !selectedPlace &&
+        debouncedSearch.trim().length >= 2,
+      staleTime: 30_000,
+      retry: 1,
+    }
+  );
 
   useEffect(() => {
-    if (open) setSearchNearValue(searchNear);
+    if (open) {
+      setSearchNearValue(searchNear);
+      setSelectedPlace(null);
+    }
   }, [open, searchNear]);
+
+  useEffect(() => {
+    if (
+      !open ||
+      targetMode !== "exact_property" ||
+      selectedPlace ||
+      searchNearValue.trim().length < 2
+    ) {
+      setDebouncedSearch("");
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(searchNearValue.trim());
+    }, 220);
+    return () => window.clearTimeout(timeout);
+  }, [open, searchNearValue, selectedPlace, targetMode]);
 
   function close() {
     if (build.isPending) return;
@@ -75,6 +116,9 @@ export function BuildMissionSheet({
         venueType,
         targetMode,
         searchNear: searchNearValue.trim(),
+        ...(targetMode === "exact_property" && selectedPlace
+          ? { placeId: selectedPlace.placeId }
+          : {}),
         requestId: crypto.randomUUID(),
         count: targetMode === "exact_property" ? 1 : 3,
       });
@@ -144,7 +188,10 @@ export function BuildMissionSheet({
               >
                 <button
                   type="button"
-                  onClick={() => setTargetMode("exact_property")}
+                  onClick={() => {
+                    setTargetMode("exact_property");
+                    setSelectedPlace(null);
+                  }}
                   aria-pressed={targetMode === "exact_property"}
                   className={`min-h-[72px] rounded-[14px] border px-3 py-3 text-left text-[14px] font-black leading-tight ${
                     targetMode === "exact_property"
@@ -156,7 +203,10 @@ export function BuildMissionSheet({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setTargetMode("nearby_discovery")}
+                  onClick={() => {
+                    setTargetMode("nearby_discovery");
+                    setSelectedPlace(null);
+                  }}
                   aria-pressed={targetMode === "nearby_discovery"}
                   className={`min-h-[72px] rounded-[14px] border px-3 py-3 text-left text-[14px] font-black leading-tight ${
                     targetMode === "nearby_discovery"
@@ -167,24 +217,101 @@ export function BuildMissionSheet({
                   Find prospects near this location
                 </button>
               </div>
-              <label className="mb-4 block">
-                <span className="mb-2 block text-[13px] font-black uppercase tracking-[.16em] text-white/55">
-                  {targetMode === "exact_property" ? "Property" : "Search center"}
-                </span>
-                <input
-                  ref={searchInputRef}
-                  value={searchNearValue}
-                  onChange={event => setSearchNearValue(event.target.value)}
-                  placeholder={
-                    targetMode === "exact_property"
-                      ? "Property name + city or exact street address"
-                      : "Address or neighborhood to search around"
-                  }
-                  disabled={build.isPending}
-                  className="w-full rounded-[14px] border border-white/15 bg-white/10 px-4 py-4 text-[17px] font-semibold text-white outline-none placeholder:text-white/35 focus:border-violet-300/60"
-                  aria-label="Mission search location"
-                />
-              </label>
+              <div className="mb-4">
+                <label className="block">
+                  <span className="mb-2 block text-[13px] font-black uppercase tracking-[.16em] text-white/55">
+                    {targetMode === "exact_property" ? "Property" : "Search center"}
+                  </span>
+                  <input
+                    ref={searchInputRef}
+                    value={searchNearValue}
+                    onChange={event => {
+                      setSearchNearValue(event.target.value);
+                      setSelectedPlace(null);
+                    }}
+                    placeholder={
+                      targetMode === "exact_property"
+                        ? "Start typing a property name or street address"
+                        : "Address or neighborhood to search around"
+                    }
+                    disabled={build.isPending}
+                    autoComplete="off"
+                    className="w-full rounded-[14px] border border-white/15 bg-white/10 px-4 py-4 text-[17px] font-semibold text-white outline-none placeholder:text-white/35 focus:border-violet-300/60"
+                    aria-label="Mission search location"
+                    aria-autocomplete={targetMode === "exact_property" ? "list" : undefined}
+                    aria-expanded={
+                      targetMode === "exact_property" &&
+                      !selectedPlace &&
+                      Boolean(placeSuggestions.data?.length)
+                    }
+                  />
+                </label>
+
+                {targetMode === "exact_property" && selectedPlace ? (
+                  <div className="mt-2 rounded-[12px] border border-violet-300/35 bg-violet-300/10 px-4 py-3">
+                    <div className="text-[15px] font-black text-white">
+                      {selectedPlace.name}
+                    </div>
+                    {selectedPlace.address ? (
+                      <div className="mt-1 text-[13px] font-semibold leading-snug text-white/60">
+                        {selectedPlace.address}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {targetMode === "exact_property" &&
+                !selectedPlace &&
+                searchNearValue.trim().length >= 2 ? (
+                  <div
+                    className="mt-2 overflow-hidden rounded-[14px] border border-white/15 bg-[#182235] shadow-[0_18px_38px_rgba(0,0,0,.35)]"
+                    role="listbox"
+                    aria-label="Google Places property suggestions"
+                  >
+                    {placeSuggestions.isFetching ? (
+                      <div className="flex items-center gap-2 px-4 py-3 text-[14px] font-semibold text-white/60">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Finding the property…
+                      </div>
+                    ) : placeSuggestions.data?.length ? (
+                      <>
+                        {(placeSuggestions.data as PlaceSuggestion[]).map(suggestion => (
+                          <button
+                            key={suggestion.placeId}
+                            type="button"
+                            role="option"
+                            aria-selected="false"
+                            onClick={() => {
+                              setSelectedPlace(suggestion);
+                              setSearchNearValue(suggestion.text);
+                              setDebouncedSearch("");
+                              sounds.press();
+                              haptics.impact();
+                            }}
+                            className="block w-full border-b border-white/10 px-4 py-3 text-left last:border-b-0 active:bg-violet-300/15"
+                          >
+                            <span className="block text-[15px] font-black text-white">
+                              {suggestion.name}
+                            </span>
+                            {suggestion.address ? (
+                              <span className="mt-1 block text-[13px] font-semibold leading-snug text-white/55">
+                                {suggestion.address}
+                              </span>
+                            ) : null}
+                          </button>
+                        ))}
+                        <div className="px-4 py-2 text-right text-[10px] font-bold uppercase tracking-[.08em] text-white/35">
+                          Powered by Google
+                        </div>
+                      </>
+                    ) : debouncedSearch ? (
+                      <div className="px-4 py-3 text-[13px] font-semibold text-white/45">
+                        No Google Places matches yet. Keep typing or enter the full property.
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
               {build.isPending ? (
                 <div className="flex min-h-[300px] flex-col items-center justify-center text-center">
                   <Loader2 className="h-10 w-10 animate-spin text-violet-300" />

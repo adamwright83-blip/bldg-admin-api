@@ -50,6 +50,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Type-check
         run: pnpm check
+      - name: Prove exact property Google Places targeting
+        run: >-
+          pnpm vitest run
+          server/territory/googlePlacesTerritoryProvider.test.ts
+          server/commercialMissions/commercialMissionTargetResolution.test.ts
       - name: Prove production migration path (scripts/migrate.mjs) against a genuinely clean database
         # Deliberately a SEPARATE database on the same disposable MySQL
         # server, not the job's shared goldline_proof — applyLegacyDayforgeReleaseMigrations
