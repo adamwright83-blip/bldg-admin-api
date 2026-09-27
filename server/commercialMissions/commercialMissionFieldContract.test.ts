@@ -76,7 +76,7 @@ describe("DayForge Field production contract", () => {
     expect(service).toContain("propertyLatitude: mission.account.latitude");
     expect(service).toContain("propertyLongitude: mission.account.longitude");
     expect(service).toContain('locationAuthority = "property_radius_verified"');
-    expect(service).toContain('locationAuthority: "property_radius_verified"');
+    expect(service).toContain("locationAuthority,");
     expect(service).toContain("Move within");
     expect(router).toContain(
       "Location check-in requires latitude, longitude, and accuracy"
