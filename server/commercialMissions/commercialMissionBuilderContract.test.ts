@@ -6,6 +6,10 @@ const service = readFileSync(
   new URL("./commercialMissionBuilderService.ts", import.meta.url),
   "utf8"
 );
+const activation = readFileSync(
+  new URL("./commercialMissionActivationService.ts", import.meta.url),
+  "utf8"
+);
 const router = readFileSync(
   new URL("./commercialMissionRouter.ts", import.meta.url),
   "utf8"
@@ -45,6 +49,16 @@ describe("driver mission builder contract", () => {
     expect(router).toContain("myBuiltMissions: legacyDayforgeMissionFieldProcedure");
     expect(router).toContain("buildForDriver: legacyDayforgeMissionFieldProcedure");
     expect(router).toContain("driverId: ctx.user.openId");
+  });
+
+  it("keeps activation eligibility aligned with the field-assignee list", () => {
+    expect(activation).toContain("ACTIVE_FIELD_MEMBERSHIP_ROLES");
+    expect(activation).toContain('"owner"');
+    expect(activation).toContain('"admin"');
+    expect(activation).toContain('"operator"');
+    expect(activation).toContain('"field"');
+    expect(activation.match(/ACTIVE_FIELD_MEMBERSHIP_ROLES/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(activation).toContain("eq(legacyDayforgeSaasMemberships.active, true)");
   });
 
   it("deduplicates active venues and requires public phones for call missions", () => {
