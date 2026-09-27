@@ -87,7 +87,13 @@ export function dedupeTerritoryCandidates(candidates: TerritoryBusinessCandidate
 }
 function prospectType(categories: string[]): LaundryProspectType {
   const value = categories.map(normalize).join(" ");
-  if (value.includes("property management") || value.includes("apartment")) return "property_management";
+  if (
+    value.includes("property management") ||
+    value.includes("apartment") ||
+    value.includes("condominium") ||
+    value.includes("residential building") ||
+    value.includes("housing complex")
+  ) return "property_management";
   if (value.includes("hotel") || value.includes("motel") || value.includes("lodging")) return "hotel";
   if (value.includes("gym") || value.includes("fitness")) return "gym";
   if (value.includes("salon") || value.includes("spa")) return "salon_spa";
