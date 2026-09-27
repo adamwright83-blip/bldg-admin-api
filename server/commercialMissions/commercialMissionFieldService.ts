@@ -27,6 +27,7 @@ import {
   transitionCommercialMissionWith,
 } from "./commercialMissionStore";
 import { awardDriverSalesPoints } from "./driverSalesMotivationService";
+import { reactToCompletedCommercialVisit } from "./commercialMissionFieldReaction";
 
 function affectedRows(result: unknown): number {
   return Number(
@@ -947,7 +948,12 @@ export async function recordCommercialMissionVisitOutcome(input: {
       pilotRequested: input.pilotRequested,
     },
   });
-  return state;
+  const reaction = await reactToCompletedCommercialVisit({
+    tenantId: input.tenantId,
+    operatorUserId: input.actorId,
+    state,
+  });
+  return { ...state, reaction };
 }
 
 export async function createCommercialMissionPhoneHandoff(input: {
