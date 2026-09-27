@@ -222,21 +222,31 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: mobile-authoritative-call-followup
+          - name: mobile-authoritative-call
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/authoritativeBusinessChains.spec.ts
-              --grep 'CALL drives|FOLLOW_UP only'
+              --grep 'CALL drives'
           - name: mobile-authoritative-visit
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/authoritativeBusinessChains.spec.ts
               --grep 'VISIT requires'
-          - name: mobile-authoritative-recover-lifecycle
+          - name: mobile-authoritative-followup
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/authoritativeBusinessChains.spec.ts
-              --grep 'RECOVER becomes|five mount cycles'
+              --grep 'FOLLOW_UP only'
+          - name: mobile-authoritative-recover
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
+              e2e/goldline/authoritativeBusinessChains.spec.ts
+              --grep 'RECOVER becomes'
+          - name: mobile-authoritative-lifecycle
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
+              e2e/goldline/authoritativeBusinessChains.spec.ts
+              --grep 'five mount cycles'
           - name: mobile-driver-shell-and-pixel
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
@@ -246,42 +256,69 @@ jobs:
               e2e/goldline/driverHomeWorldComposition.spec.ts
               e2e/goldline/mobileTypographyFloor.spec.ts
               e2e/goldline/pixel9Layout.spec.ts
-          - name: mobile-day-entry-overland
+          - name: mobile-day-entry-core
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/dynamic-reroute.spec.ts
               e2e/goldline/emptyDayTruth.spec.ts
               e2e/goldline/firstThirtySeconds.spec.ts
+          - name: mobile-overland-ignition
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/overlandEntry.spec.ts
               e2e/goldline/realDayIgnition.spec.ts
           - name: mobile-expandable-world
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/expandableWorld.spec.ts
-          - name: mobile-immersion
+          - name: mobile-immersion-fiction
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/immersion-gate.spec.ts
-          - name: mobile-inhabited-adventure-a
+              --grep 'NEUTRALIZE|no intermediate|REAL-WORK-WINS|TWO-CLOCK'
+          - name: mobile-immersion-visit
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
+              e2e/goldline/immersion-gate.spec.ts
+              --grep 'CASE A|CASE B|CASE C|route table'
+          - name: mobile-immersion-orders
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
+              e2e/goldline/immersion-gate.spec.ts
+              --grep 'GENUINE PICKUP|GENUINE PAID DELIVERY|PAYMENT-BLOCKED|MISSING REQUIRED LOCATION'
+          - name: mobile-inhabited-ambient-preview
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/inhabitedAdventure.spec.ts
-              --grep 'six ambient|CI preview|Anchor|Gatekeeper'
+              --grep 'six ambient|CI preview'
+          - name: mobile-inhabited-anchor-gatekeeper
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
+              e2e/goldline/inhabitedAdventure.spec.ts
+              --grep 'Anchor|Gatekeeper'
           - name: mobile-inhabited-ghost
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/inhabitedAdventure.spec.ts
               --grep 'Ghost'
-          - name: mobile-inhabited-staller-motion
+          - name: mobile-inhabited-staller
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/inhabitedAdventure.spec.ts
-              --grep 'Staller|reduced motion'
-          - name: mobile-reality-route
+              --grep 'Staller'
+          - name: mobile-inhabited-reduced-motion
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
+              e2e/goldline/inhabitedAdventure.spec.ts
+              --grep 'reduced motion'
+          - name: mobile-reality-pickup-progression
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/pickupDeliveryWorldObjective.spec.ts
               e2e/goldline/realityProgression.spec.ts
+          - name: mobile-route-wayward
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/today-route-persistence.spec.ts
               e2e/goldline/waywardStage.spec.ts
     services:
