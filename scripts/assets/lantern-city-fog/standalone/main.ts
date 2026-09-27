@@ -4,19 +4,25 @@
  */
 import { createLanternWorld, type LanternInput } from "../../../../client/src/components/admin/control-room/LanternCityV7/lanternWorld";
 
-const SAMPLE: LanternInput[] = ([
-  [34.0906, -118.2766, "Silver Lake", 6, 5, 1, 0],
-  [34.0851, -118.2703, "Silver Lake", 2, 1, 1, 0],
-  [34.0985, -118.3265, "Hollywood", 5, 4, 0, 1],
-  [34.1012, -118.3389, "Hollywood", 3, 3, 0, 0],
-  [34.059, -118.4145, "Century Park East", 7, 6, 1, 0],
-  [34.0612, -118.3009, "OPUS LA", 8, 6, 1, 1],
-  [34.0578, -118.2963, "Koreatown", 2, 2, 0, 0],
-  [34.088, -118.298, "East Hollywood", 3, 2, 0, 1],
-  [34.1052, -118.2885, "Los Feliz", 4, 3, 1, 0],
-] as const).map(([latitude, longitude, label, total, active, dimming, dark], i) => ({
-  key: `sample-${i}`, latitude, longitude, label, total, active, dimming, dark,
-}));
+// sample customers, each their own lantern (placeholders: the app lights the real ones)
+const SPOTS: [number, number, number][] = [
+  [34.0906, -118.2766, 5], [34.0851, -118.2703, 3], [34.0985, -118.3265, 4], [34.1012, -118.3389, 3],
+  [34.059, -118.4145, 1], [34.0612, -118.3009, 3], [34.0578, -118.2963, 2], [34.088, -118.298, 1], [34.1052, -118.2885, 1],
+];
+let seed = 11;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const SAMPLE: LanternInput[] = [];
+for (const [lat, lng, count] of SPOTS) {
+  for (let i = 0; i < count; i++) {
+    const n = SAMPLE.length + 1, st = rnd();
+    SAMPLE.push({
+      key: `sample-${n - 1}`, latitude: lat + (rnd() - 0.5) * 0.004, longitude: lng + (rnd() - 0.5) * 0.005,
+      label: `Sample address ${n}`, name: `Sample Customer ${n}`,
+      spendCents: Math.round((60 + rnd() * 4800) * 100), lastOrderAt: new Date(Date.now() - rnd() * 60 * 86400000).toISOString(),
+      total: 1, active: st < 0.7 ? 1 : 0, dimming: st >= 0.7 && st < 0.9 ? 1 : 0, dark: st >= 0.9 ? 1 : 0,
+    });
+  }
+}
 
 const $ = (id: string) => document.getElementById(id)!;
 const world = createLanternWorld($("stage"), {
@@ -38,14 +44,14 @@ const world = createLanternWorld($("stage"), {
     ($("mGo") as HTMLButtonElement).onclick = () => world.focusPoint(m.x, m.z, m.radius ? m.radius * 4 : 1600);
     if (!selected) $("mission").hidden = false;
   },
-  onSelect: key => {
-    selected = key;
-    const l = SAMPLE.find(s => s.key === key);
-    $("lantern").hidden = !l;
-    $("mission").hidden = !!l;
-    if (!l) return;
-    $("lTitle").textContent = l.label;
-    $("lBody").textContent = `${l.total} customers · ${l.active} active${l.dimming ? ` · ${l.dimming} dimming` : ""}${l.dark ? ` · ${l.dark} gone dark` : ""}`;
+  onSelect: keys => {
+    selected = keys ? keys[0] : null;
+    const ls = (keys ?? []).map(k => SAMPLE.find(x => x.key === k)).filter((x): x is LanternInput => !!x);
+    $("lantern").hidden = !ls.length;
+    $("mission").hidden = !!ls.length;
+    if (!ls.length) return;
+    $("lTitle").textContent = ls.length === 1 ? ls[0].name! : `${ls.length} customers here`;
+    $("lBody").textContent = ls.map(l => `${l.name} · $${Math.round((l.spendCents ?? 0) / 100).toLocaleString()} lifetime · last order ${new Date(l.lastOrderAt!).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`).join("\n");
   },
   onError: () => { $("loading").textContent = "Lantern City could not load its map. Reload to try again."; },
 }, { assetBase: "assets" });

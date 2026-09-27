@@ -1,10 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
-import {
-  clusterGeographicCustomers,
-  type CustomerLocationCluster,
-  type GeographicCustomer,
-} from "../customerGeography";
+import type { GeographicCustomer } from "../customerGeography";
 import {
   createLanternWorld,
   type LanternInput,
@@ -20,40 +16,43 @@ import styles from "./lantern-city-v7.module.css";
  * Real customers come from the same geographic truth the old scene used.
  */
 
-// Dev-only: the local visual-test build has no database, so it shows a handful of sample
-// buildings instead of an empty board. Never used in a production build.
-const DEV_SAMPLE: CustomerLocationCluster[] = import.meta.env.DEV
-  ? [
-      [34.0906, -118.2766, "Sample · Silver Lake", 6, 5, 1, 0],
-      [34.0975, -118.2915, "Sample · East Hollywood", 3, 2, 0, 1],
-      [34.1052, -118.2885, "Sample · Los Feliz", 4, 3, 1, 0],
-      [34.0985, -118.3265, "Sample · Hollywood", 5, 4, 0, 1],
-      [34.0874, -118.3697, "Sample · West Hollywood", 3, 1, 2, 0],
-      [34.0654, -118.4006, "Sample · Beverly Hills", 2, 2, 0, 0],
-      [34.0590, -118.4145, "Sample · Century City", 7, 6, 1, 0],
-      [34.0612, -118.3009, "Sample · Koreatown", 8, 6, 1, 1],
-      [34.0905, -118.3432, "Sample · La Brea", 4, 3, 1, 0],
-    ].map(([latitude, longitude, label, total, active, dimming, dark], i) => ({
-      key: `dev-sample-${i}`,
-      latitude: latitude as number,
-      longitude: longitude as number,
-      x: 0,
-      y: 0,
-      outsideAtlas: false,
-      canonicalAddress: label as string,
-      customers: [],
-      total: total as number,
-      active: active as number,
-      dimming: dimming as number,
-      dark: dark as number,
-    }))
-  : [];
-
-function clusterLabel(c: CustomerLocationCluster) {
-  const addr = c.canonicalAddress?.split(",")[0];
-  if (addr) return addr;
-  return c.total === 1 ? c.customers[0]?.displayName ?? "1 customer" : `${c.total} customers`;
+// Dev-only: the local visual-test build has no database, so it shows sample customers instead of
+// an empty board. Never used in a production build.
+function devSampleCustomers(): GeographicCustomer[] {
+  if (!import.meta.env.DEV) return [];
+  const spots: [number, number, number][] = [
+    [34.0906, -118.2766, 5], [34.0851, -118.2703, 3], [34.0985, -118.3265, 4], [34.1012, -118.3389, 2],
+    [34.059, -118.4145, 1], [34.0612, -118.3009, 3], [34.0578, -118.2963, 2], [34.088, -118.298, 1], [34.1052, -118.2885, 1],
+    [34.0874, -118.3697, 1], [34.0654, -118.4006, 1],
+  ];
+  let n = 0, seed = 11;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const out: GeographicCustomer[] = [];
+  for (const [lat, lng, count] of spots) {
+    for (let i = 0; i < count; i++) {
+      n++;
+      const state = rnd() < 0.7 ? "active" : rnd() < 0.6 ? "dimming" : "dark";
+      out.push({
+        identityKey: `dev-sample-${n}`,
+        displayName: `Sample Customer ${n}`,
+        phone: null,
+        totalOrders: 1 + Math.floor(rnd() * 30),
+        totalSpendCents: Math.round((60 + rnd() * 4800) * 100),
+        lastOrderAt: new Date(Date.now() - rnd() * 60 * 86400000).toISOString(),
+        cadence: { state, daysSinceLastOrder: Math.floor(rnd() * 60) },
+        location: { latitude: lat + (rnd() - 0.5) * 0.004, longitude: lng + (rnd() - 0.5) * 0.005, x: 0, y: 0, outOfBounds: false, canonicalAddress: `Sample address ${n}` },
+      });
+    }
+  }
+  return out;
 }
+
+const money = (c?: number) => (c == null ? "—" : `$${(c / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`);
+const day = (iso?: string) => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(+d) ? "—" : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+};
 
 export default function LanternCityV7({
   onOpenCustomer,
@@ -67,15 +66,16 @@ export default function LanternCityV7({
   const [failed, setFailed] = useState(false);
   const [stats, setStats] = useState<WorldStats | null>(null);
   const [mission, setMission] = useState<Mission | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[] | null>(null);
 
   const atlas = trpc.system.geographicTruth.atlas.useQuery(undefined, { staleTime: 60_000, retry: 1 });
   const usingSample = import.meta.env.DEV && atlas.isError;
-  const clusters = useMemo<CustomerLocationCluster[]>(() => {
-    if (usingSample) return DEV_SAMPLE;
-    return clusterGeographicCustomers((atlas.data?.customers ?? []) as GeographicCustomer[]);
+  // every customer is their own lantern
+  const customers = useMemo<GeographicCustomer[]>(() => {
+    if (usingSample) return devSampleCustomers();
+    return ((atlas.data?.customers ?? []) as GeographicCustomer[]).filter(c => c.location);
   }, [atlas.data, usingSample]);
-  const byKey = useMemo(() => new Map(clusters.map(c => [c.key, c])), [clusters]);
+  const byKey = useMemo(() => new Map(customers.map(c => [c.identityKey, c])), [customers]);
 
   useEffect(() => {
     if (!host.current) return;
@@ -98,20 +98,23 @@ export default function LanternCityV7({
   }, []);
 
   useEffect(() => {
-    const inputs: LanternInput[] = clusters.map(c => ({
-      key: c.key,
-      latitude: c.latitude,
-      longitude: c.longitude,
-      label: clusterLabel(c),
-      total: c.total,
-      active: c.active,
-      dimming: c.dimming,
-      dark: c.dark,
+    const inputs: LanternInput[] = customers.map(c => ({
+      key: c.identityKey,
+      latitude: c.location!.latitude,
+      longitude: c.location!.longitude,
+      label: c.location!.canonicalAddress ?? "",
+      name: c.displayName,
+      spendCents: c.totalSpendCents,
+      lastOrderAt: c.lastOrderAt,
+      total: 1,
+      active: c.cadence.state === "active" ? 1 : 0,
+      dimming: c.cadence.state === "dimming" ? 1 : 0,
+      dark: c.cadence.state === "dark" ? 1 : 0,
     }));
     world.current?.setLanterns(inputs);
-  }, [clusters, ready]);
+  }, [customers, ready]);
 
-  const sel = selected ? byKey.get(selected) : undefined;
+  const sel = (selected ?? []).map(k => byKey.get(k)).filter((c): c is GeographicCustomer => !!c);
 
   return (
     <div className={styles.scene} data-lantern-city="v7">
@@ -144,23 +147,23 @@ export default function LanternCityV7({
 
       {usingSample ? <div className={styles.sample}>Sample lanterns · dev build, no database</div> : null}
 
-      {sel ? (
+      {sel.length ? (
         <section className={styles.card} aria-label="Lantern">
           <div className={styles.who}>
             <i />
-            Lantern
+            {sel[0].location?.canonicalAddress?.split(",")[0] ?? "Lantern"}
           </div>
-          <h2>{clusterLabel(sel)}</h2>
-          <p>
-            {sel.total} customer{sel.total === 1 ? "" : "s"} · {sel.active} active
-            {sel.dimming ? ` · ${sel.dimming} dimming` : ""}
-            {sel.dark ? ` · ${sel.dark} gone dark` : ""}
-          </p>
           <ul className={styles.people}>
-            {sel.customers.slice(0, 8).map(c => (
+            {sel.map(c => (
               <li key={c.identityKey}>
                 <span className={styles[c.cadence.state]} />
-                <span className={styles.name}>{c.displayName}</span>
+                <span className={styles.name}>
+                  <b>{c.displayName}</b>
+                  <br />
+                  <small>
+                    {money(c.totalSpendCents)} lifetime · {c.totalOrders ?? 0} orders · last {day(c.lastOrderAt)}
+                  </small>
+                </span>
                 {c.phone ? (
                   <button type="button" onClick={() => onOpenCustomer(c.phone!)}>
                     Open

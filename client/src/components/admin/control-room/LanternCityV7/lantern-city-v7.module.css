@@ -179,6 +179,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.people .name b {
+  font: 700 15px/1.2 "Barlow Condensed", sans-serif;
+}
+.people .name small {
+  color: var(--ink2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.people {
+  max-height: 320px;
+}
 .people button {
   border: 1px solid var(--line);
   background: transparent;

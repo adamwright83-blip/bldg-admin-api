@@ -21,11 +21,15 @@ import { CANONICAL_BUILDING_GEOGRAPHY } from "@shared/canonicalGeography";
 
 const DEFAULT_BASE = "/assets/goldline/lantern-city";
 
+/** One customer: every customer is their own lantern. */
 export type LanternInput = {
   key: string;
   latitude: number;
   longitude: number;
-  label: string;
+  label: string;           // address
+  name?: string;
+  spendCents?: number;
+  lastOrderAt?: string;
   total: number;
   active: number;
   dimming: number;
@@ -37,7 +41,7 @@ export type WorldEvents = {
   onReady?: () => void;
   onStats?: (s: WorldStats) => void;
   onMission?: (m: Mission | null) => void;
-  onSelect?: (key: string | null) => void;
+  onSelect?: (keys: string[] | null) => void;
   onError?: (e: unknown) => void;
 };
 
@@ -1376,6 +1380,11 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     return 0.22;
   }
   let lastRegionsKey = "";
+  const ORB_GEO = new THREE.IcosahedronGeometry(2.6, 2);
+  function orbMaterial(k: number) {
+    // HDR gold so the bloom makes each customer's lantern glow
+    return new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.72, 0.3).multiplyScalar(1 + 2.6 * k), toneMapped: true });
+  }
   let hoodCounts = new Map<string, { buildings: number; customers: number }>();
   let runs: { key: string; hood: string; label: string; x: number; z: number; r: number }[] = [];
   // the radius that holds the nearest RUN_DOORS doors around a point (from the real unit counts)
@@ -1400,8 +1409,8 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     // 2 or more anywhere in the neighbourhood: the whole neighbourhood is charted.
     const perHood = new Map<string, typeof inside>();
     for (const p of inside) { const h = hoodAt(p.x, p.z); if (h) { if (!perHood.has(h)) perHood.set(h, []); perHood.get(h)!.push(p); } }
-    hoodCounts = new Map([...perHood].map(([h, ps]) => [h, { buildings: ps.length, customers: ps.reduce((s0, q) => s0 + q.l.total, 0) }]));
-    const hoods = new Set([...perHood].filter(([, ps]) => ps.length >= 2).map(([h]) => h));
+    hoodCounts = new Map([...perHood].map(([h, ps]) => [h, { buildings: ps.length, customers: ps.length }]));
+    const hoods = new Set([...perHood].filter(([, ps]) => ps.length >= 2).map(([h]) => h));   // 2+ customers
     const singles = [...perHood].filter(([, ps]) => ps.length === 1).map(([h, ps]) => ({ hood: h, ...ps[0] }));
     runs = singles.map(sg => ({ key: sg.l.key, hood: sg.hood, label: sg.l.label, x: sg.x, z: sg.z, r: runRadius(sg.x, sg.z) }));
     const rk = [...hoods].sort().join(";") + "|" + runs.map(r => `${r.x | 0},${r.z | 0}`).join(";");
@@ -1410,35 +1419,56 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       rebuildMask(hoods, singles.map(sg => ({ x: sg.x, z: sg.z, r: CLEARING })), runs);
       for (const key of wantedTiles()) if (!tiles.has(key)) void loadTile(key);
     }
-    // lantern meshes
-    for (const pl of placedLanterns) { if (pl.mesh) lanternGroup.remove(pl.mesh); lanternGroup.remove(pl.halo); }
+    // lantern meshes: each customer lights their building; a building with several customers also
+    // carries one floating lantern per customer above its roof, so every customer can be hovered
+    for (const o of [...lanternGroup.children]) lanternGroup.remove(o);
     const prevIds = lanternBuildingIds();
-    placedLanterns = inside.map(p => {
+    const groups = new Map<string, { b: Bldg | null; x: number; z: number; members: typeof inside }>();
+    for (const p of inside) {
       const b = findBuilding(p.x, p.z);
-      const k = brightness(p.l);
+      const gk = b ? `b${b.i}` : `p${Math.round(p.x / 10)},${Math.round(p.z / 10)}`;
+      if (!groups.has(gk)) groups.set(gk, { b, x: b?.cx ?? p.x, z: b?.cz ?? p.z, members: [] });
+      groups.get(gk)!.members.push(p);
+    }
+    placedLanterns = [];
+    for (const g of groups.values()) {
+      const keys = g.members.map(m => m.l.key);
+      const k = Math.max(...g.members.map(m => brightness(m.l)));
       let mesh: THREE.Object3D | null = null;
-      const tile = tiles.get(tileKeyAt(p.x, p.z));
-      if (b && tile && !hidden.has(b.i)) {
-        mesh = kitInstances([placeKit(b, roadNear(tile))], true);
+      const tile = tiles.get(tileKeyAt(g.x, g.z));
+      let roofY = ground(g.x, g.z) + 14;
+      if (g.b && tile && !hidden.has(g.b.i)) {
+        const placed = placeKit(g.b, roadNear(tile));
+        mesh = kitInstances([placed], true);
         mesh.traverse(o => { const mm = (o as THREE.Mesh).material as THREE.ShaderMaterial | undefined; if (mm?.uniforms?.uLit) mm.uniforms.uLit.value = k; });
-        mesh.userData.key = p.l.key;
+        mesh.userData.keys = keys;
         lanternGroup.add(mesh);
+        roofY = ground(g.x, g.z) + g.b.h * (kitClass(g.b, 1) === "house" ? 1.75 : 1.6);
       }
-      const alone = runs.some(r0 => r0.key === p.l.key);
-      const r = (70 + Math.sqrt(Math.max(p.l.total, 1)) * 18) * (alone ? 1.6 : 1);
+      if (g.members.length > 1 || !mesh) {
+        // floating lanterns, one per customer, in a small grid above the roof
+        const n = g.members.length, cols = Math.ceil(Math.sqrt(n)), gap = 7;
+        g.members.forEach((m, i) => {
+          const orb = new THREE.Mesh(ORB_GEO, orbMaterial(brightness(m.l)));
+          const cx = (i % cols - (cols - 1) / 2) * gap, cz = (Math.floor(i / cols) - (Math.ceil(n / cols) - 1) / 2) * gap;
+          orb.position.set(g.x + cx, roofY + 9 + (i % 2) * 1.5, g.z + cz);
+          orb.userData.keys = [m.l.key];
+          orb.userData.orb = true;
+          lanternGroup.add(orb);
+        });
+      }
+      const alone = runs.some(r0 => keys.includes(r0.key));
+      const r = (60 + Math.sqrt(g.members.length) * 22) * (alone ? 1.6 : 1);
       const halo = new THREE.Mesh(new THREE.CircleGeometry(r, 40).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
-        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uA: { value: k } },
+        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uA: { value: alone ? Math.min(1.6, k * 1.5) : k } },
         vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
         fragmentShader: `uniform float uA; varying vec2 vUv; void main(){ float d = length(vUv - .5) * 2.; float a = pow(1. - clamp(d,0.,1.), 1.8) * .75 * uA; gl_FragColor = vec4(vec3(1., .66, .25) * a, a); }`,
       }));
-      if (alone) (halo.material as THREE.ShaderMaterial).uniforms.uA.value = Math.min(1.6, k * 1.5);
-      const cx = b?.cx ?? p.x, cz = b?.cz ?? p.z;
-      halo.position.set(cx, ground(cx, cz) + 1.6, cz);
-      halo.userData.key = p.l.key;
+      halo.position.set(g.x, ground(g.x, g.z) + 1.6, g.z);
       halo.userData.halo = true;
       lanternGroup.add(halo);
-      return { input: p.l, x: cx, z: cz, b, mesh, halo };
-    });
+      for (const m of g.members) placedLanterns.push({ input: m.l, x: g.x, z: g.z, b: g.b, mesh, halo });
+    }
     // a building that just became a lantern must leave the dim city
     const nowIds = lanternBuildingIds();
     const changed = [...prevIds].filter(i => !nowIds.has(i)).concat([...nowIds].filter(i => !prevIds.has(i)));
@@ -1627,15 +1657,58 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     const r = renderer.domElement.getBoundingClientRect();
     ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, camera);
-    const hits = ray.intersectObjects(lanternGroup.children, true);
-    let key: string | null = null;
+    events.onSelect?.(pickKeys(e));
+  }
+  function pickKeys(e: PointerEvent): string[] | null {
+    const r = renderer.domElement.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const hits = ray.intersectObjects(lanternGroup.children.filter(o => !o.userData.halo), true);
     for (const h of hits) {
       let o: THREE.Object3D | null = h.object;
-      while (o && !o.userData.key) o = o.parent;
-      if (o) { key = o.userData.key; break; }
+      while (o && !o.userData.keys) o = o.parent;
+      if (o) return o.userData.keys as string[];
     }
-    events.onSelect?.(key);
+    return null;
   }
+  // hover: the customer's name, lifetime spend and last order, right at the house
+  const tip = document.createElement("div");
+  tip.style.cssText = "position:absolute;left:0;top:0;pointer-events:none;opacity:0;transition:opacity .12s;background:rgba(251,251,250,.97);border:1px solid #dcdfe4;border-radius:12px;box-shadow:0 10px 28px rgba(20,26,40,.22);padding:10px 12px;min-width:190px;max-width:280px;font:500 13px/1.35 Barlow,system-ui,sans-serif;color:#0b0f14;z-index:3;";
+  container.appendChild(tip);
+  const money = (c?: number) => (c == null ? "—" : `$${(c / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`);
+  const day = (iso?: string) => { if (!iso) return "—"; const d = new Date(iso); return isNaN(+d) ? "—" : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); };
+  const dot = (l: LanternInput) => (l.active ? "#ffb020" : l.dimming ? "#d99a4a" : "#8a8f99");
+  function tipHtml(keys: string[]) {
+    const ls = keys.map(k => lanterns.find(l => l.key === k)).filter((l): l is LanternInput => !!l);
+    if (!ls.length) return "";
+    const row = (l: LanternInput) => `<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;">
+      <span style="width:9px;height:9px;border-radius:50%;margin-top:4px;flex:none;background:${dot(l)};box-shadow:0 0 6px ${dot(l)}"></span>
+      <div><div style="font:700 15px/1.15 'Barlow Condensed',system-ui,sans-serif;letter-spacing:.02em">${esc(l.name ?? "Customer")}</div>
+      <div style="color:#4a5160;font-variant-numeric:tabular-nums">${money(l.spendCents)} lifetime · last order ${day(l.lastOrderAt)}</div></div></div>`;
+    const head = `<div style="font:600 11px/1 'Barlow Condensed',system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#9a6400;margin-bottom:4px">${esc((ls[0].label || "").split(",")[0])}</div>`;
+    return head + ls.slice(0, 6).map(row).join("") + (ls.length > 6 ? `<div style="color:#4a5160;padding-top:2px">+ ${ls.length - 6} more — click to see all</div>` : "");
+  }
+  const esc = (t: string) => t.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+  let hoverKeys = "", moveQueued: PointerEvent | null = null;
+  function onMove(e: PointerEvent) {
+    if (e.buttons) { tip.style.opacity = "0"; hoverKeys = ""; return; }
+    if (!moveQueued) requestAnimationFrame(() => {
+      const ev = moveQueued!;
+      moveQueued = null;
+      const keys = pickKeys(ev);
+      const r = container.getBoundingClientRect();
+      if (!keys) { tip.style.opacity = "0"; hoverKeys = ""; renderer.domElement.style.cursor = ""; return; }
+      const id = keys.join("|");
+      if (id !== hoverKeys) { tip.innerHTML = tipHtml(keys); hoverKeys = id; }
+      renderer.domElement.style.cursor = "pointer";
+      const x = Math.min(ev.clientX - r.left + 16, r.width - 300), y = Math.max(12, ev.clientY - r.top - 16);
+      tip.style.transform = `translate(${x}px, ${y}px)`;
+      tip.style.opacity = "1";
+    });
+    moveQueued = e;
+  }
+  renderer.domElement.addEventListener("pointermove", onMove);
+  renderer.domElement.addEventListener("pointerleave", () => { tip.style.opacity = "0"; hoverKeys = ""; });
   renderer.domElement.addEventListener("pointerdown", onDown);
   renderer.domElement.addEventListener("pointerup", onUp);
 
@@ -1663,7 +1736,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     camera.far = cd * 4 + 2000;
     // from far out the pools of light grow so every lantern still reads on the board
     const hs = Math.min(11, Math.max(1, cd / 2200));
-    for (const o of lanternGroup.children) if (o.userData.halo) o.scale.setScalar(hs);
+    for (const o of lanternGroup.children) { if (o.userData.halo) o.scale.setScalar(hs); else if (o.userData.orb) o.scale.setScalar(Math.max(1, hs * 0.7)); }
     camera.updateProjectionMatrix();
     for (const l of landmarks) l.mesh.rotation.y = Math.atan2(camera.position.x - l.x, camera.position.z - l.z);
     if (M) { updateLod(); placeLabels(); }
@@ -1690,7 +1763,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       return placedLanterns.map(p => p.input.key);
     },
     focus(key: string, dist = 900) {
-      const l = placedLanterns.find(p => p.input.key === key);
+      const l = placedLanterns.find(p => p.input.key === key) ?? placedLanterns[Number(key.replace(/\D/g, "")) || 0];
       if (l) flyTo(l.x, l.z, dist);
     },
     focusPoint(x: number, z: number, dist = 1600) {
@@ -1705,6 +1778,8 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       ro.disconnect();
       renderer.domElement.removeEventListener("pointerdown", onDown);
       renderer.domElement.removeEventListener("pointerup", onUp);
+      renderer.domElement.removeEventListener("pointermove", onMove);
+      tip.remove();
       controls.dispose();
       scene.traverse(o => {
         const m = o as THREE.Mesh;
