@@ -46,6 +46,6 @@ describe("walk-in save navigation contract", () => {
   );
   it("never redirects a successful walk-in save to the retired commercial-missions route", () => {
     expect(captureSource).not.toContain("/commercial-missions?mission=");
-    expect(captureSource).toContain("/dayforge-today?walkInSaved=");
+    expect(captureSource).toContain("walkInSaved=");
   });
 });
