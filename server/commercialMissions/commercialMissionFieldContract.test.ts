@@ -15,6 +15,10 @@ const router = readFileSync(
   new URL("./commercialMissionRouter.ts", import.meta.url),
   "utf8"
 );
+const reaction = readFileSync(
+  new URL("./commercialMissionFieldReaction.ts", import.meta.url),
+  "utf8"
+);
 const client = readFileSync(
   new URL("../../client/src/pages/CommercialSalesMission.tsx", import.meta.url),
   "utf8"
@@ -81,6 +85,18 @@ describe("DayForge Field production contract", () => {
     expect(router).toContain(
       "Location check-in requires latitude, longitude, and accuracy"
     );
+  });
+
+  it("persists the authored visit reaction and restores it through fieldState after refresh", () => {
+    expect(reaction).toContain("field_narrator_reaction_prepared");
+    expect(reaction).toContain("persistCommercialVisitReaction");
+    expect(reaction).toContain("getPersistedCommercialVisitReaction");
+    expect(service).toContain(
+      "const reaction = await getPersistedCommercialVisitReaction(input)"
+    );
+    expect(service).toContain("reaction,");
+    expect(client).toContain("state?.reaction?.playerPayload");
+    expect(client).toContain('data-testid="commercial-narrator-reaction"');
   });
 
   it("derives assignment and actor from the signed session", () => {
