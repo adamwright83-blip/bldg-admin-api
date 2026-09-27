@@ -71,6 +71,18 @@ describe("DayForge Field production contract", () => {
     );
   });
 
+  it("verifies location arrival against the persisted property instead of trusting client coordinates", () => {
+    expect(service).toContain("evaluateCommercialMissionLocationCheckIn");
+    expect(service).toContain("propertyLatitude: mission.account.latitude");
+    expect(service).toContain("propertyLongitude: mission.account.longitude");
+    expect(service).toContain('locationAuthority = "property_radius_verified"');
+    expect(service).toContain('locationAuthority: "property_radius_verified"');
+    expect(service).toContain("Move within");
+    expect(router).toContain(
+      "Location check-in requires latitude, longitude, and accuracy"
+    );
+  });
+
   it("derives assignment and actor from the signed session", () => {
     expect(router).toContain("assertDriverCanReadMission");
     expect(router).toContain("actorId: ctx.user.openId");
