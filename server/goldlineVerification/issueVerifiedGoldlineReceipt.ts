@@ -4,8 +4,8 @@
  * Lives at the Goldline verification boundary, not inside Narrator
  * eligibility. Narrator cannot self-issue. A structurally constructible
  * mutation record is not authority. Issuance requires a branded producer
- * capability. The production capability list is empty: production minting
- * is currently impossible.
+ * capability. Production minting is possible only through a capability
+ * explicitly minted for a registered, bounded producer.
  */
 import type { VerifiedGoldlineEvidenceRef } from "../../shared/narratorOs/contracts";
 import { goldlineReceiptIdFromAuthoritativeIdentity } from "../narratorOs/goldlineReceiptIdentity";
