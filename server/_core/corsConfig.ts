@@ -32,7 +32,7 @@ export const ADMIN_ALLOWED_HEADERS = [
 ];
 
 function configuredAdminOrigins(): string[] {
-  const configured = (process.env.DAYFORGE_ALLOWED_ORIGINS ?? "")
+  const configured = (process.env.JOYSTICK_ALLOWED_ORIGINS ?? "")
     .split(",")
     .map(value => value.trim())
     .filter(Boolean);
