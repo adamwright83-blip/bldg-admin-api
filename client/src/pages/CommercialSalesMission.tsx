@@ -1159,6 +1159,17 @@ export default function CommercialSalesMission() {
                   <CircleDollarSign /> {annualValue} estimated contract value
                 </strong>
               ) : null}
+              {outcomeMutation.data?.reaction.playerPayload ? (
+                <div
+                  data-testid="commercial-narrator-reaction"
+                  className="mb-4 rounded-2xl border border-white/20 bg-white/10 p-4"
+                >
+                  <small>NARRATOR</small>
+                  <b className="mt-1 block text-xl">
+                    {outcomeMutation.data.reaction.playerPayload.title}
+                  </b>
+                </div>
+              ) : null}
               <div className="csm-summary">
                 <small>REALIZED REVENUE</small>
                 <b>$0 until a paid order is attributed</b>
