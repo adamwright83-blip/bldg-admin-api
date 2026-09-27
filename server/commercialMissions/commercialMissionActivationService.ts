@@ -19,6 +19,13 @@ export type CommercialMissionFieldAssignee = {
   source: "membership" | "legacy_driver";
 };
 
+const ACTIVE_FIELD_MEMBERSHIP_ROLES = [
+  "owner",
+  "admin",
+  "operator",
+  "field",
+] as const;
+
 export async function listCommercialMissionFieldAssignees(
   tenantId: string
 ): Promise<CommercialMissionFieldAssignee[]> {
@@ -31,7 +38,7 @@ export async function listCommercialMissionFieldAssignees(
       .where(
         and(
           eq(legacyDayforgeSaasMemberships.tenantId, tenantId),
-          inArray(legacyDayforgeSaasMemberships.role, ["owner", "admin", "operator", "field"]),
+          inArray(legacyDayforgeSaasMemberships.role, ACTIVE_FIELD_MEMBERSHIP_ROLES),
           eq(legacyDayforgeSaasMemberships.active, true)
         )
       ),
@@ -115,7 +122,10 @@ export async function activateCommercialMissionForField(input: {
         and(
           eq(legacyDayforgeSaasMemberships.tenantId, input.tenantId),
           eq(legacyDayforgeSaasMemberships.userOpenId, input.assignedTo),
-          eq(legacyDayforgeSaasMemberships.role, "field"),
+          inArray(
+            legacyDayforgeSaasMemberships.role,
+            ACTIVE_FIELD_MEMBERSHIP_ROLES
+          ),
           eq(legacyDayforgeSaasMemberships.active, true)
         )
       )
