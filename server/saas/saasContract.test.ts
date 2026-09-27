@@ -126,6 +126,24 @@ describe("DayForge SaaS production contract", () => {
     expect(strategy).not.toMatch(/\badminProcedure\b/);
   });
 
+  it("uses normal email/password sign-in and resolves tenant server-side", () => {
+    const login = source("../../client/src/components/LoginForm.tsx");
+    const alternateLogin = source("../../client/src/pages/LegacyDayforgeLoginPage.tsx");
+    const auth = source("./saasAuthRoute.ts");
+    const cors = source("../_core/corsConfig.ts");
+
+    expect(login).toContain("JSON.stringify({ email, password })");
+    expect(login).not.toContain("Workspace slug");
+    expect(login).not.toContain("!slug");
+    expect(alternateLogin).toContain("JSON.stringify({ email, password })");
+    expect(alternateLogin).not.toContain("Workspace slug");
+    expect(auth).toContain("legacyDayforgeSaasUserCredentials.emailNormalized");
+    expect(auth).toContain("const matches = passwordMatches");
+    expect(auth).toContain("Multiple accounts use this email");
+    expect(cors).toContain("DAYFORGE_ALLOWED_ORIGINS");
+    expect(cors).toContain("RAILWAY_PUBLIC_DOMAIN");
+  });
+
   it("does not grant SaaS members the platform admin or driver role", () => {
     const store = source("./saasStore.ts");
     const auth = source("./saasAuthRoute.ts");
