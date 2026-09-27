@@ -17,6 +17,10 @@ test.describe("driver home playable-world composition", () => {
     await expect(page.locator(".gdp-summary")).toBeHidden();
     await expect(page.locator(".gdp-chapter-invite")).toBeHidden();
 
+    // BUILD MISSION must remain reachable on the live Day Line even though
+    // the old dashboard menu is deliberately hidden on phone.
+    await expect(page.getByTestId("build-mission-cta")).toBeVisible();
+
     const shellBox = await shell.boundingBox();
     expect(shellBox).not.toBeNull();
     expect(shellBox!.width).toBeGreaterThanOrEqual(PHONE.width * 0.98);
