@@ -48,6 +48,21 @@ const builder = readFileSync(
   ),
   "utf8"
 );
+const fieldPage = readFileSync(
+  new URL("../../client/src/pages/CommercialSalesMission.tsx", import.meta.url),
+  "utf8"
+);
+const rally = readFileSync(
+  new URL(
+    "../../client/src/components/boreslay-rally/RallyDemo.tsx",
+    import.meta.url
+  ),
+  "utf8"
+);
+const appRouter = readFileSync(
+  new URL("../../client/src/App.tsx", import.meta.url),
+  "utf8"
+);
 
 describe("driver mission builder contract", () => {
   it("exposes only field-authorized build and route-list procedures", () => {
@@ -90,13 +105,37 @@ describe("driver mission builder contract", () => {
     }
   });
 
-  it("treats a street address as one exact property instead of three nearby venues", () => {
+  it("treats a street address as one exact property and never degrades it into nearby discovery", () => {
     expect(service).toContain("looksLikeSpecificStreetAddress");
     expect(service).toContain("resolveBusiness(input.searchNear)");
+    expect(service).toContain("exactAddressQuery && !exactTarget");
+    expect(service).toContain("nearby properties were not added");
     expect(service).toContain('targetMode: exactTarget ? "exact_property" : "nearby_discovery"');
     expect(service).toMatch(/exactTarget \? 1 : input\.count/);
     expect(builder).toContain("Target property or area");
-    expect(builder).toMatch(/count: \/\^\\s\*\\d\{1,6\}/);
+    expect(builder).toMatch(/count: \/\\b\\d\{1,6\}/);
+  });
+
+  it("connects every player-facing handoff in the complete in-person sales-stop journey", () => {
+    expect(driverController).toContain("commercialMissionEntryPath");
+    expect(driverController).toContain("window.location.assign");
+    expect(rally).toContain("commercialMission.gameStart");
+    expect(rally).toContain("commercialMission.gameComplete");
+    expect(rally).toContain(`href={\`/driver/sales-mission/\${missionId}\`}`);
+    expect(fieldPage).toContain('mission.status === "phone_ready"');
+    expect(fieldPage).toContain("fieldStartPreparation");
+    expect(fieldPage).toContain("fieldChecklist");
+    expect(fieldPage).toContain("fieldDepart");
+    expect(fieldPage).toContain("fieldArrive");
+    expect(fieldPage).toContain("fieldOutcome");
+    expect(fieldPage).toContain('mission.status === "arrived"');
+    expect(fieldPage).toContain('submitOutcome("follow_up")');
+    expect(fieldPage).toContain('submitOutcome("won")');
+    expect(fieldPage).toContain('submitOutcome("lost")');
+    expect(fieldPage).toContain("/boreslay-rally?missionId=");
+    expect(appRouter).toContain('path === "/boreslay-rally"');
+    expect(appRouter).toContain('path.startsWith("/driver/sales-mission/")');
+    expect(appRouter).toContain('path.startsWith("/commercial-proposal/")');
   });
 
   it("deduplicates active venues and requires public phones for call missions", () => {
