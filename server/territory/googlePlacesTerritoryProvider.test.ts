@@ -61,7 +61,7 @@ describe("GooglePlacesTerritoryProvider", () => {
           {
             id: "los-feliz-towers",
             displayName: { text: "Los Feliz Towers" },
-            formattedAddress: "4455 Los Feliz Boulevard, Los Angeles, CA 90027, USA",
+            formattedAddress: "4455 Los Feliz Boulevard #107, Los Angeles, CA 90027, USA",
             location: { latitude: 34.112, longitude: -118.287 },
             types: ["apartment_complex"],
           },
@@ -77,7 +77,7 @@ describe("GooglePlacesTerritoryProvider", () => {
     expect(result).toMatchObject({
       providerId: "los-feliz-towers",
       name: "Los Feliz Towers",
-      formattedAddress: "4455 Los Feliz Boulevard, Los Angeles, CA 90027, USA",
+      formattedAddress: "4455 Los Feliz Boulevard #107, Los Angeles, CA 90027, USA",
     });
   });
 
