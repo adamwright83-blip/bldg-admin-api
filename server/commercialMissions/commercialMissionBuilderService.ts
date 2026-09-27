@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { CommercialMission } from "@shared/commercialMission";
 import { getTerritoryOperatorProfile } from "../territory/territoryStore";
 import { GooglePlacesTerritoryProvider } from "../territory/googlePlacesTerritoryProvider";
-import { discoverLaundryTerritory } from "../territory/territoryDiscovery";
+import {
+  discoverLaundryTerritory,
+  rankTerritoryCandidate,
+} from "../territory/territoryDiscovery";
 import {
   createCommercialMission,
   listCommercialMissions,
@@ -104,6 +107,10 @@ async function ensureApprovedBuilderProposal(input: {
   });
 }
 
+function looksLikeSpecificStreetAddress(value: string) {
+  return /^\s*\d{1,6}\s+\S+/i.test(value.trim());
+}
+
 export async function buildDriverMissions(input: {
   tenantId: string;
   driverId: string;
@@ -128,13 +135,31 @@ export async function buildDriverMissions(input: {
     turnaroundCompatibleByDefault: true,
     pickupDaysCompatibleByDefault: true,
   };
-  const discovery = await discoverLaundryTerritory({
-    addressOrBusiness: input.searchNear,
-    provider: provider(),
-    operator,
-    categories: SEARCH_CATEGORIES[input.venueType],
-    limit: 20,
-  });
+  const places = provider();
+  const exactTarget = looksLikeSpecificStreetAddress(input.searchNear)
+    ? await places.resolveBusiness(input.searchNear)
+    : null;
+  const discovery = exactTarget
+    ? {
+        opportunities: [
+          rankTerritoryCandidate({
+            candidate: exactTarget,
+            center: {
+              lat: exactTarget.lat,
+              lng: exactTarget.lng,
+              formattedAddress: exactTarget.formattedAddress,
+            },
+            operator,
+          }),
+        ],
+      }
+    : await discoverLaundryTerritory({
+        addressOrBusiness: input.searchNear,
+        provider: places,
+        operator,
+        categories: SEARCH_CATEGORIES[input.venueType],
+        limit: 20,
+      });
   const existing = await listCommercialMissions({ tenantId: input.tenantId, limit: 250 });
   const activeMissions = existing.filter(
     mission => !["won", "lost"].includes(mission.status)
@@ -171,7 +196,10 @@ export async function buildDriverMissions(input: {
   }
 
   const created: CommercialMission[] = [];
-  const selected = eligible.slice(0, input.count);
+  const selected = eligible.slice(
+    0,
+    exactTarget ? 1 : input.count
+  );
   for (let index = 0; index < selected.length; index += 1) {
     const opportunity = selected[index]!;
     const reusable = reusableByProviderId.get(opportunity.providerAccountId);
@@ -229,6 +257,8 @@ export async function buildDriverMissions(input: {
             venueType: input.venueType,
             builtBy: input.driverId,
             requestId: input.requestId,
+            targetMode: exactTarget ? "exact_property" : "nearby_discovery",
+            targetQuery: input.searchNear,
           },
           {
             source: "driver_sales_diamond",

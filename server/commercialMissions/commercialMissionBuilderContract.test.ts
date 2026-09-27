@@ -90,6 +90,15 @@ describe("driver mission builder contract", () => {
     }
   });
 
+  it("treats a street address as one exact property instead of three nearby venues", () => {
+    expect(service).toContain("looksLikeSpecificStreetAddress");
+    expect(service).toContain("resolveBusiness(input.searchNear)");
+    expect(service).toContain('targetMode: exactTarget ? "exact_property" : "nearby_discovery"');
+    expect(service).toMatch(/exactTarget \? 1 : input\.count/);
+    expect(builder).toContain("Target property or area");
+    expect(builder).toMatch(/count: \/\^\\s\*\\d\{1,6\}/);
+  });
+
   it("deduplicates active venues and requires public phones for call missions", () => {
     expect(service).toContain("activeProviderIds");
     expect(service).toContain(
