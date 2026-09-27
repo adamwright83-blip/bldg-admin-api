@@ -12,6 +12,7 @@ import {
   approveCommercialProposal,
   generateCommercialProposal,
   getCommercialProposalProfile,
+  getLatestCommercialProposalForMission,
 } from "../commercialProposals/commercialProposalService";
 import { selectMissionDiamond } from "./driverSalesMotivationService";
 
@@ -76,6 +77,33 @@ export async function listDriverBuiltMissions(input: {
   );
 }
 
+async function ensureApprovedBuilderProposal(input: {
+  tenantId: string;
+  mission: CommercialMission;
+  actorId: string;
+}) {
+  const approved = await getLatestCommercialProposalForMission({
+    tenantId: input.tenantId,
+    missionId: input.mission.id,
+    approvedOnly: true,
+  });
+  if (approved) return approved;
+
+  const proposal = await generateCommercialProposal({
+    tenantId: input.tenantId,
+    missionId: input.mission.id,
+    actorId: input.actorId,
+    requestId: randomUUID(),
+  });
+  return approveCommercialProposal({
+    tenantId: input.tenantId,
+    missionId: input.mission.id,
+    proposalId: proposal.id,
+    actorId: input.actorId,
+    requestId: randomUUID(),
+  });
+}
+
 export async function buildDriverMissions(input: {
   tenantId: string;
   driverId: string;
@@ -108,17 +136,32 @@ export async function buildDriverMissions(input: {
     limit: 20,
   });
   const existing = await listCommercialMissions({ tenantId: input.tenantId, limit: 250 });
+  const activeMissions = existing.filter(
+    mission => !["won", "lost"].includes(mission.status)
+  );
   const activeProviderIds = new Set(
-    existing
-      .filter(mission => !["won", "lost"].includes(mission.status))
+    activeMissions
       .map(mission => mission.account.providerAccountId)
       .filter((value): value is string => Boolean(value))
   );
-  const eligible = discovery.opportunities.filter(
-    opportunity =>
+  const reusableByProviderId = new Map(
+    activeMissions
+      .filter(
+        mission =>
+          mission.assignedTo === input.driverId &&
+          driverMissionBuilderMode(mission) === input.missionType &&
+          Boolean(mission.account.providerAccountId)
+      )
+      .map(mission => [mission.account.providerAccountId as string, mission])
+  );
+  const eligible = discovery.opportunities.filter(opportunity => {
+    const reusable = reusableByProviderId.get(opportunity.providerAccountId);
+    if (reusable) return true;
+    return (
       !activeProviderIds.has(opportunity.providerAccountId) &&
       (input.missionType !== "cold_call" || Boolean(opportunity.account.phone))
-  );
+    );
+  });
   if (!eligible.length) {
     throw new Error(
       input.missionType === "cold_call"
@@ -131,6 +174,17 @@ export async function buildDriverMissions(input: {
   const selected = eligible.slice(0, input.count);
   for (let index = 0; index < selected.length; index += 1) {
     const opportunity = selected[index]!;
+    const reusable = reusableByProviderId.get(opportunity.providerAccountId);
+    if (reusable) {
+      await ensureApprovedBuilderProposal({
+        tenantId: input.tenantId,
+        mission: reusable,
+        actorId: input.driverId,
+      });
+      created.push(reusable);
+      continue;
+    }
+
     const diamond = await selectMissionDiamond({
       tenantId: input.tenantId,
       driverId: input.driverId,
@@ -217,18 +271,10 @@ export async function buildDriverMissions(input: {
         actorId: input.driverId,
         requestId: randomUUID(),
       });
-    const proposal = await generateCommercialProposal({
+    await ensureApprovedBuilderProposal({
       tenantId: input.tenantId,
-      missionId: activated.id,
+      mission: activated,
       actorId: input.driverId,
-      requestId: randomUUID(),
-    });
-    await approveCommercialProposal({
-      tenantId: input.tenantId,
-      missionId: activated.id,
-      proposalId: proposal.id,
-      actorId: input.driverId,
-      requestId: randomUUID(),
     });
     created.push(activated);
   }
