@@ -309,6 +309,14 @@ function openChannelStop(
   };
 }
 
+export function commercialMissionEntryPath(
+  mission: Pick<CommercialMission, "id" | "status">
+): string {
+  return mission.status === "game_ready" || mission.status === "game_active"
+    ? `/boreslay-rally?missionId=${mission.id}`
+    : `/driver/sales-mission/${mission.id}`;
+}
+
 function commercialStop(
   mission: CommercialMission,
   ready: boolean
