@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { CommercialMission } from "@shared/commercialMission";
 import { getTerritoryOperatorProfile } from "../territory/territoryStore";
 import { GooglePlacesTerritoryProvider } from "../territory/googlePlacesTerritoryProvider";
-import { discoverLaundryTerritory } from "../territory/territoryDiscovery";
+import { rankTerritoryCandidates } from "../territory/territoryDiscovery";
 import {
   createCommercialMission,
   listCommercialMissions,
