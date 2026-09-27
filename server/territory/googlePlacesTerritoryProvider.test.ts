@@ -2,16 +2,32 @@ import { describe, expect, it, vi } from "vitest";
 import { GooglePlacesTerritoryProvider } from "./googlePlacesTerritoryProvider";
 
 describe("GooglePlacesTerritoryProvider", () => {
-  it("geocodes without exposing the server key in the result", async () => {
-    const fetcher = vi.fn(async () => new Response(JSON.stringify({ status: "OK", results: [{ formatted_address: "922 N Alvarado St, Los Angeles, CA", geometry: { location: { lat: 34.07, lng: -118.25 } } }] }), { status: 200 }));
-    const result = await new GooglePlacesTerritoryProvider("server-secret", fetcher as typeof fetch).geocode("Sunset Laundry");
+  it("uses the dedicated geocoding key without exposing it in the result", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      expect(url.searchParams.get("key")).toBe("geocoding-secret");
+      expect(url.searchParams.get("key")).not.toBe("places-secret");
+      return new Response(JSON.stringify({ status: "OK", results: [{ formatted_address: "922 N Alvarado St, Los Angeles, CA", geometry: { location: { lat: 34.07, lng: -118.25 } } }] }), { status: 200 });
+    });
+    const result = await new GooglePlacesTerritoryProvider(
+      { placesApiKey: "places-secret", geocodingApiKey: "geocoding-secret" },
+      fetcher as typeof fetch
+    ).geocode("Sunset Laundry");
     expect(result.formattedAddress).toContain("Los Angeles");
-    expect(JSON.stringify(result)).not.toContain("server-secret");
+    expect(JSON.stringify(result)).not.toContain("geocoding-secret");
   });
 
-  it("normalizes Places API facts with capture time and source URL", async () => {
-    const fetcher = vi.fn(async () => new Response(JSON.stringify({ places: [{ id: "place-1", displayName: { text: "Harbor Hotel" }, formattedAddress: "1 Main St", location: { latitude: 34.1, longitude: -118.2 }, types: ["hotel"], websiteUri: "https://hotel.example", googleMapsUri: "https://maps.example/place-1" }] }), { status: 200 }));
-    const results = await new GooglePlacesTerritoryProvider("server-secret", fetcher as typeof fetch).searchBusinesses({ center: { lat: 34, lng: -118, formattedAddress: "LA" }, radiusMiles: 3, categories: ["hotel"], limit: 10 });
+  it("uses the dedicated Places key and normalizes Places API facts", async () => {
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.get("X-Goog-Api-Key")).toBe("places-secret");
+      expect(headers.get("X-Goog-Api-Key")).not.toBe("geocoding-secret");
+      return new Response(JSON.stringify({ places: [{ id: "place-1", displayName: { text: "Harbor Hotel" }, formattedAddress: "1 Main St", location: { latitude: 34.1, longitude: -118.2 }, types: ["hotel"], websiteUri: "https://hotel.example", googleMapsUri: "https://maps.example/place-1" }] }), { status: 200 });
+    });
+    const results = await new GooglePlacesTerritoryProvider(
+      { placesApiKey: "places-secret", geocodingApiKey: "geocoding-secret" },
+      fetcher as typeof fetch
+    ).searchBusinesses({ center: { lat: 34, lng: -118, formattedAddress: "LA" }, radiusMiles: 3, categories: ["hotel"], limit: 10 });
     expect(results[0]).toMatchObject({ providerId: "place-1", providerName: "google_places", name: "Harbor Hotel", providerUrl: "https://maps.example/place-1" });
     expect(results[0]?.sourceCapturedAt).toMatch(/^\d{4}-/);
   });
