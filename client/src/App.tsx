@@ -568,6 +568,14 @@ function Router() {
   // engineering-request pages are operator follow-through from that line.
   if (isDriverHost) {
     const path = window.location.pathname;
+    // The sales-stop journey must stay on the Driver host from Day Line,
+    // through the game unlock, into field execution and printable collateral.
+    if (path === "/boreslay-rally") return <RallyDemoRoute />;
+    if (path.startsWith("/driver/sales-mission/"))
+      return <CommercialSalesMissionRoute />;
+    if (path.startsWith("/commercial-proposal/"))
+      return <CommercialProposalPrintRoute />;
+
     // Isolated shared-password entrance. Not linked from the membership form.
     if (path === "/legacy-driver-login") {
       return (
