@@ -113,13 +113,17 @@ const WaywardTetheredDeck = lazy(
 const CoastalMarketProofPage = lazy(
   () => import("../goldline/coastalMarketProof/CoastalMarketProofPage")
 );
+// Kingdom Two's chapter (THE LAST VALET). Mounted as a scene: driver.bldg.chat serves only "/",
+// so a link to the admin-only /goldline-chapter route bounced players straight back home.
+const GoldlineChapterHost = lazy(() => import("../GoldlineChapterHost"));
 
 type DriverScene =
   | "game"
   | "overworld"
   | "colosseum"
   | "coastal-market"
-  | "wayward";
+  | "wayward"
+  | "chapter";
 
 /**
  * The real day opens first. This scene is used when the operator explicitly
@@ -441,7 +445,7 @@ function LiveGoldlineDriverController({
   const rescueOfferAvailable =
     Boolean(activeRescueMission) || (rescueCandidates.data?.length ?? 0) > 0;
   // Slice 5 §5.4: Kingdom 2 unlocks after Kingdom 1 (the Greystar hunt) is
-  // complete, and leads to /goldline-chapter access, per Adam's decision.
+  // complete, and opens its chapter (the "chapter" scene), per Adam's decision.
   const goldlineKingdoms = trpc.system.goldlineKingdoms.list.useQuery(
     undefined,
     {
@@ -1477,7 +1481,8 @@ function LiveGoldlineDriverController({
         onEnterChapter={
           kingdomTwoUnlocked
             ? () => {
-                window.location.href = "/goldline-chapter";
+                setDayBriefingOpen(false);
+                setDriverScene("chapter");
               }
             : undefined
         }
@@ -1743,6 +1748,15 @@ function LiveGoldlineDriverController({
         />
         {returnToDay}
       </>
+    );
+  }
+
+  if (driverScene === "chapter") {
+    return (
+      <Suspense fallback={<div style={{ minHeight: "100dvh", background: "#f3ecdf" }} />}>
+        {returnToDay}
+        <GoldlineChapterHost />
+      </Suspense>
     );
   }
 

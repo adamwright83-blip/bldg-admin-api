@@ -16,7 +16,7 @@
  * does not resolve `level.colosseum`, own `companion.rook`, or complete
  * the Kingdom. Those flags are the read in `server/goldlineProgression/`.
  */
-import { getOrCreateDay1TenDoorsMission } from "../openChannel/day1TenDoorsService";
+import { getDay1TenDoorsMissionReadOnly } from "../openChannel/day1TenDoorsService";
 import { colosseumKingdomBindingSatisfied } from "../goldlineProgression/colosseumKingdomBinding";
 import { getKingdom, listKingdoms, setKingdomStatus } from "./kingdomService";
 import type { GoldlineKingdom } from "./kingdomTypes";
@@ -38,17 +38,19 @@ function isColosseumComplete(outcomes: Record<string, unknown>): boolean {
  */
 export async function deriveKingdomStatuses(input: {
   tenantId: string;
+  /** The signed-in user's openId: the key Day 1 outcomes are recorded under (day1TenDoorsRouter). */
   operatorId: string;
 }): Promise<GoldlineKingdom[]> {
   const kingdom1 = await getKingdom({ tenantId: input.tenantId, kingdomId: "kingdom-1-colosseum" });
   const kingdom2 = await getKingdom({ tenantId: input.tenantId, kingdomId: "kingdom-2-the-last-valet" });
   if (kingdom1 && kingdom1.lanternCityStatus !== "complete") {
     try {
-      const mission = await getOrCreateDay1TenDoorsMission({
+      // Read only: listing Kingdoms must never create a mission row as a side effect.
+      const mission = await getDay1TenDoorsMissionReadOnly({
         tenantId: input.tenantId,
         driverId: input.operatorId,
       });
-      if (isColosseumComplete(mission.outcomes)) {
+      if (mission && isColosseumComplete(mission.outcomes)) {
         await setKingdomStatus({
           tenantId: input.tenantId,
           kingdomId: "kingdom-1-colosseum",
