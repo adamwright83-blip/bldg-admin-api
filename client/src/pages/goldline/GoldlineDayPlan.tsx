@@ -38,6 +38,7 @@ import { DriverVehicleDrawer } from "@/components/goldline/DriverVehicleDrawer";
 import { DriverStopChapter } from "@/components/goldline/DriverStopChapter";
 import { LanternRun } from "@/components/goldline/LanternRun";
 import { GoldlineGameNav } from "./GoldlineGameNav";
+import { BuildMissionSheet } from "@/components/driver/BuildMissionSheet";
 import "./goldline-day-plan.css";
 
 function CurrentDayLineBlock({ line }: { line: CurrentDayLine }) {
@@ -259,6 +260,7 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
   const [activeStop, setActiveStop] = useState<DayPlanStop | null>(null);
   const [playing, setPlaying] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [buildMissionOpen, setBuildMissionOpen] = useState(false);
   const [truthText, setTruthText] = useState("");
   const [proposal, setProposal] = useState<DayDirectorProposal | null>(null);
   const [directorBusy, setDirectorBusy] = useState(false);
@@ -348,6 +350,18 @@ export default function GoldlineDayPlan(props: GoldlineDayPlanProps) {
       className={`gdp-shell${forcedMobileViewport ? " gdp-shell--forced-mobile" : ""}`}
       style={{ "--gdp-world": `url(${world})` } as React.CSSProperties}
     >
+      <button
+        type="button"
+        className="gdp-build-mission-cta"
+        onClick={() => setBuildMissionOpen(true)}
+        data-testid="build-mission-cta"
+      >
+        BUILD MISSION
+      </button>
+      <BuildMissionSheet
+        open={buildMissionOpen}
+        onOpenChange={setBuildMissionOpen}
+      />
       <header className="gdp-header">
         <div className="gdp-brand">
           <Compass />
