@@ -73,6 +73,10 @@ describe("driver mission builder contract", () => {
     expect(service).toContain("ensureApprovedBuilderProposal");
     expect(service).toContain("reusableByProviderId");
     expect(service).toContain("getLatestCommercialProposalForMission");
+    expect(service).toContain('reusable.status === "candidate" || reusable.status === "selected"');
+    expect(service).toMatch(
+      /reusable\.status === "candidate"[\s\S]*activateCommercialMissionForField[\s\S]*mission: recovered/
+    );
 
     const path = [
       ["candidate", "selected"],
