@@ -6,14 +6,14 @@ import { createLanternWorld, type LanternInput } from "../../../../client/src/co
 
 const SAMPLE: LanternInput[] = ([
   [34.0906, -118.2766, "Silver Lake", 6, 5, 1, 0],
-  [34.0975, -118.2915, "East Hollywood", 3, 2, 0, 1],
-  [34.1052, -118.2885, "Los Feliz", 4, 3, 1, 0],
+  [34.0851, -118.2703, "Silver Lake", 2, 1, 1, 0],
   [34.0985, -118.3265, "Hollywood", 5, 4, 0, 1],
-  [34.0874, -118.3697, "West Hollywood", 3, 1, 2, 0],
-  [34.0654, -118.4006, "Beverly Hills", 2, 2, 0, 0],
+  [34.1012, -118.3389, "Hollywood", 3, 3, 0, 0],
   [34.059, -118.4145, "Century Park East", 7, 6, 1, 0],
   [34.0612, -118.3009, "OPUS LA", 8, 6, 1, 1],
-  [34.0905, -118.3432, "La Brea", 4, 3, 1, 0],
+  [34.0578, -118.2963, "Koreatown", 2, 2, 0, 0],
+  [34.088, -118.298, "East Hollywood", 3, 2, 0, 1],
+  [34.1052, -118.2885, "Los Feliz", 4, 3, 1, 0],
 ] as const).map(([latitude, longitude, label, total, active, dimming, dark], i) => ({
   key: `sample-${i}`, latitude, longitude, label, total, active, dimming, dark,
 }));
@@ -30,6 +30,7 @@ const world = createLanternWorld($("stage"), {
   onMission: m => {
     if (!m) return;
     $("mTitle").textContent = m.title;
+    $("mBody").textContent = m.hood ? `Win one building ${m.where} and all of ${m.hood} comes out of the fog.` : "Win one building here and the neighbourhood comes out of the fog.";
     $("mDoors").textContent = `~${m.doors.toLocaleString()}`;
     $("mDist").textContent = `${m.miles.toFixed(1)} mi`;
     ($("mGo") as HTMLButtonElement).onclick = () => world.focusPoint(m.x, m.z);
@@ -49,3 +50,4 @@ const world = createLanternWorld($("stage"), {
 let selected: string | null = null;
 ($("lClose") as HTMLButtonElement).onclick = () => { selected = null; $("lantern").hidden = true; $("mission").hidden = false; };
 world.setLanterns(SAMPLE);
+(window as unknown as { __w: typeof world }).__w = world;

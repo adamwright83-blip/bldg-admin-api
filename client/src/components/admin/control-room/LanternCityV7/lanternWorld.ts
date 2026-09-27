@@ -32,7 +32,7 @@ export type LanternInput = {
   dark: number;
 };
 export type WorldStats = { lanterns: number; outside: number; chartedPct: number; doorsInLight: number };
-export type Mission = { title: string; doors: number; buildings: number; miles: number; x: number; z: number };
+export type Mission = { title: string; hood: string; where: string; doors: number; buildings: number; miles: number; x: number; z: number };
 export type WorldEvents = {
   onReady?: () => void;
   onStats?: (s: WorldStats) => void;
@@ -48,7 +48,7 @@ type Manifest = {
   bounds: [number, number, number, number];
   tile: number;
   tiles: [number, number, number][];
-  outline: { n: string; p: [number, number][] }[];
+  outline: { n: string; served?: boolean; p: [number, number][] }[];
   mask: { cell: number; w: number; h: number };
   terrain: { cell: number; nx: number; nz: number; base: number; h: number[] };
   water: [number, number][][];
@@ -90,6 +90,8 @@ function fbm(x: number, y: number) {
   return s;
 }
 const ease = (t: number) => { const k = Math.max(0, Math.min(1, t)); return k * k * (3 - 2 * k); };
+// a number as a GLSL float literal
+const glf = (v: number) => (Number.isInteger(v) ? `${v}.` : `${v}`);
 const hexv = (c: THREE.Color) => `${c.r.toFixed(3)}, ${c.g.toFixed(3)}, ${c.b.toFixed(3)}`;
 
 const COMMON = /* glsl */ `
@@ -185,21 +187,25 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   scene.add(lanternGroup);
   let maskData: Float32Array;
   let maskTex: THREE.DataTexture;
-  const MW = 1024;
+  const MW = 2048;
   let MH = 512;
   let rect = { x0: 0, z0: 0, x1: 1, z1: 1 };
   let servedAt = (_x: number, _z: number) => false;
   let canalAt = (_x: number, _z: number) => 255;
-  const CANAL = 13;     // half-width of the water, metres
+  const CANAL = 15;     // half-width of the water, metres
+  const COPE = 2.2;     // width of the stone coping along each bank
+  let CANALS: [number, number][][] = [];
   let framed = false;
 
   const ll = (lat: number, lon: number) => ({ x: (lon - M.origin[1]) * M.kx, z: -(lat - M.origin[0]) * M.kz });
 
   async function load() {
-    const [m, k] = await Promise.all([
+    const [m, k, cn] = await Promise.all([
       fetch(`${WORLD_BASE}/world/manifest.json`).then(r => r.json()),
       fetch(`${WORLD_BASE}/kit.json`).then(r => r.json()),
+      fetch(`${WORLD_BASE}/world/canals.json`).then(r => r.json()),
     ]);
+    CANALS = (cn.canals as { p: [number, number][] }[]).map(c => c.p);
     M = m;
     KIT = k;
     const T = M.terrain;
@@ -247,7 +253,8 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     uniforms.uCanal.value = canalTex;
     uniforms.uBounds.value.set(M.bounds[0], M.bounds[1], M.bounds[2], M.bounds[3]);
     canalAt = (x, z) => {
-      const fx = (x - M.bounds[0]) / (M.bounds[2] - M.bounds[0]) * cc.width, fz = (z - M.bounds[1]) / (M.bounds[3] - M.bounds[1]) * cc.height;
+      // texel centres sit at (i + 0.5), as the GPU samples them
+      const fx = (x - M.bounds[0]) / (M.bounds[2] - M.bounds[0]) * cc.width - 0.5, fz = (z - M.bounds[1]) / (M.bounds[3] - M.bounds[1]) * cc.height - 0.5;
       const i = Math.floor(fx), j = Math.floor(fz);
       if (i < 0 || j < 0 || i >= cc.width - 1 || j >= cc.height - 1) return 255;
       const tx = fx - i, tz = fz - j, v = (a: number, b: number) => cdata[(b * cc.width + a) * 4];
@@ -268,6 +275,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     buildFlats();
     buildFog();
     buildKitGeometry();
+    buildCanals();
     buildLandmarks();
     if (disposed) return;
     applyLanterns();
@@ -276,28 +284,74 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
 
   // ----------------------------------------------------------------- reveal field
   let warp: Float32Array | null = null;
-  function rebuildMask(regions: { x: number; z: number; r: number }[]) {
-    if (!warp) {
-      warp = new Float32Array(MW * MH);
-      for (let j = 0; j < MH; j++) for (let i = 0; i < MW; i++) {
-        const x = rect.x0 + (rect.x1 - rect.x0) * i / (MW - 1), z = rect.z0 + (rect.z1 - rect.z0) * j / (MH - 1);
-        warp[j * MW + i] = (fbm(x * 0.0065 + 11, z * 0.0065 - 7) - 0.5) * 120;
+  // One customer in a neighbourhood charts the whole neighbourhood. The field is signed metres to
+  // the edge of charted land (negative inside), from a distance transform of the charted mask.
+  function hoodAt(x: number, z: number): string | null {
+    for (const o of M.outline) if (pointInRing(x, z, o.p)) return o.n;
+    return null;
+  }
+  function chamfer(src: Uint8Array, w: number, h: number, cell: number) {
+    // distance (metres) from every pixel to the nearest pixel where src is 1; two-pass 8-neighbour chamfer
+    const INF = 1e9, d = new Float32Array(w * h), D = cell, DD = cell * Math.SQRT2;
+    for (let i = 0; i < w * h; i++) d[i] = src[i] ? 0 : INF;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      let v = d[i];
+      if (x > 0) v = Math.min(v, d[i - 1] + D);
+      if (y > 0) {
+        v = Math.min(v, d[i - w] + D);
+        if (x > 0) v = Math.min(v, d[i - w - 1] + DD);
+        if (x < w - 1) v = Math.min(v, d[i - w + 1] + DD);
       }
+      d[i] = v;
     }
-    // per-region stamp: only the texels near each region are touched
-    maskData.fill(900);
-    const cellX = (rect.x1 - rect.x0) / (MW - 1), cellZ = (rect.z1 - rect.z0) / (MH - 1);
-    for (const r of regions) {
-      const reach = r.r + 700;
-      const i0 = Math.max(0, Math.floor((r.x - reach - rect.x0) / cellX)), i1 = Math.min(MW - 1, Math.ceil((r.x + reach - rect.x0) / cellX));
-      const j0 = Math.max(0, Math.floor((r.z - reach - rect.z0) / cellZ)), j1 = Math.min(MH - 1, Math.ceil((r.z + reach - rect.z0) / cellZ));
-      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
-        const x = rect.x0 + cellX * i, z = rect.z0 + cellZ * j;
-        const sd = Math.hypot(x - r.x, z - r.z) - r.r + warp[j * MW + i];
-        const k = j * MW + i;
-        if (sd < maskData[k]) maskData[k] = Math.max(-400, sd);
+    for (let y = h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--) {
+      const i = y * w + x;
+      let v = d[i];
+      if (x < w - 1) v = Math.min(v, d[i + 1] + D);
+      if (y < h - 1) {
+        v = Math.min(v, d[i + w] + D);
+        if (x < w - 1) v = Math.min(v, d[i + w + 1] + DD);
+        if (x > 0) v = Math.min(v, d[i + w - 1] + DD);
       }
+      d[i] = v;
     }
+    return d;
+  }
+  function rebuildMask(hoods: Set<string>) {
+    const cv = document.createElement("canvas");
+    cv.width = MW; cv.height = MH;
+    const g = cv.getContext("2d")!;
+    g.fillStyle = "#000"; g.fillRect(0, 0, MW, MH);
+    g.fillStyle = "#fff";
+    const px = (x: number) => (x - rect.x0) / (rect.x1 - rect.x0) * (MW - 1);
+    const pz = (z: number) => (z - rect.z0) / (rect.z1 - rect.z0) * (MH - 1);
+    for (const o of M.outline) {
+      if (!hoods.has(o.n)) continue;
+      g.beginPath();
+      o.p.forEach((q, k) => (k ? g.lineTo(px(q[0]), pz(q[1])) : g.moveTo(px(q[0]), pz(q[1]))));
+      g.closePath();
+      g.fill();
+      // close the hairline seams between neighbouring charted outlines (the canals run there)
+      g.lineWidth = 4;
+      g.strokeStyle = "#fff";
+      g.stroke();
+    }
+    const img = g.getImageData(0, 0, MW, MH).data;
+    const cell = (rect.x1 - rect.x0) / (MW - 1);
+    // close slivers between charted outlines (the boundary data leaves no-man's-land up to ~80 m wide
+    // between some neighbours): dilate then erode by the same amount, so outer edges don't move
+    const raw = new Uint8Array(MW * MH);
+    for (let i = 0; i < MW * MH; i++) raw[i] = img[i * 4] > 127 ? 1 : 0;
+    const CLOSE = 90;
+    const toRaw = chamfer(raw, MW, MH, cell);
+    const notDil = new Uint8Array(MW * MH);
+    for (let i = 0; i < MW * MH; i++) notDil[i] = toRaw[i] <= CLOSE ? 0 : 1;
+    const toNotDil = chamfer(notDil, MW, MH, cell);
+    const inside = new Uint8Array(MW * MH), outside = new Uint8Array(MW * MH);
+    for (let i = 0; i < MW * MH; i++) { const on = raw[i] === 1 || toNotDil[i] > CLOSE; inside[i] = on ? 1 : 0; outside[i] = on ? 0 : 1; }
+    const toInside = chamfer(inside, MW, MH, cell), toOutside = chamfer(outside, MW, MH, cell);
+    for (let i = 0; i < MW * MH; i++) maskData[i] = inside[i] ? -Math.min(400, toOutside[i]) : Math.min(900, toInside[i]);
     maskTex.needsUpdate = true;
   }
 
@@ -330,21 +384,9 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     scene.add(new THREE.Mesh(g, landMaterial(/* glsl */ `
       uniform vec3 uCol;
       void main() {
-        if (served(vW.xz) < .5) discard;
-        float sd = sdMask(vW.xz);
-        float cd = canalD(vW.xz);
-        bool fogged = sd > 40.;
-        if (fogged && cd > ${CANAL + 6}.) discard;
+        if (served(vW.xz) < .5 || sdMask(vW.xz) > 40. || canalD(vW.xz) < ${CANAL + 1}.) discard;
         float l = .55 + .45 * max(dot(normalize(vN), uSun), 0.);
         vec3 c = uCol * l * 1.3 * (.9 + .2 * fbm(vW.xz * .02));
-        // Venice-style canal: teal water with moving ripples, pale stone banks
-        float ripple = fbm(vW.xz * .07 + vec2(uTime * .06, -uTime * .04));
-        vec3 water = mix(vec3(.05, .24, .3), vec3(.16, .44, .5), .3 + .5 * ripple);
-        water += vec3(1., .82, .5) * smoothstep(.74, .82, fbm(vW.xz * .12 + uTime * .1)) * .3;
-        vec3 bank = vec3(.62, .6, .58) * l;
-        if (fogged) { water = mix(water, vec3(.62, .78, .82), .55); bank = vec3(.9, .9, .88); }
-        c = mix(c, bank, 1. - smoothstep(${CANAL + 3}., ${CANAL + 4}.5, cd));
-        c = mix(c, water, 1. - smoothstep(${CANAL}., ${CANAL + 1}.2, cd));
         gl_FragColor = vec4(c, 1.);
         #include <fog_fragment>
       }`, { uCol: { value: DUSK_GROUND } })));
@@ -402,7 +444,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   }
   let fogMesh: THREE.Mesh;
   function buildFog() {
-    const S = 520, Sz = Math.round(S * (rect.z1 - rect.z0) / (rect.x1 - rect.x0));
+    const S = 900, Sz = Math.round(S * (rect.z1 - rect.z0) / (rect.x1 - rect.x0));
     const g = new THREE.PlaneGeometry(rect.x1 - rect.x0, rect.z1 - rect.z0, S, Sz).rotateX(-Math.PI / 2).translate((rect.x0 + rect.x1) / 2, 0, (rect.z0 + rect.z1) / 2);
     const gh = new Float32Array(g.attributes.position.count);
     for (let k = 0; k < gh.length; k++) gh[k] = ground(g.attributes.position.getX(k), g.attributes.position.getZ(k));
@@ -414,9 +456,13 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
         ${FOG_V}
         float lift(vec2 p) {
           float sd = sdMask(p);
-          float body = smoothstep(-10., 90., sd) * smoothstep(.0, .6, served(p)) * smoothstep(${CANAL + 2}., ${CANAL + 34}., canalD(p));
+          float body = smoothstep(18., 110., sd) * smoothstep(.0, .6, served(p));
+          // beside a canal the fog lies flat at the coping, then swells smoothly away from the water
+          float cv = smoothstep(${(CANAL + COPE).toFixed(1)}, ${CANAL + 130}., canalD(p));
+          float rise = cv * cv * (3. - 2. * cv);
           float billow = fbm(p * .006 + uTime * .004) * 34. + fbm(p * .021 - uTime * .006) * 12.;
-          return body * (30. + billow * 1.9) - (1. - body) * 30.;
+          float h = mix(.85, 30. + billow * 1.9, rise);
+          return body * h - (1. - body) * 30.;
         }
         void main() {
           vec3 p = position;
@@ -443,7 +489,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
           float sv = served(vW.xz);
           if (sv < .35) discard;
           float sd = sdMask(vW.xz);
-          if (sd < -12.) discard;
+          if (sd < 14.) discard;
           vec3 n = normalize(vN);
           float lam = max(dot(n, uSun), 0.);
           vec3 plaster = vec3(.97, .965, .955) * (.66 + .36 * lam) * (.9 + .1 * (.5 + .5 * n.y));
@@ -456,7 +502,8 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
           vec3 c = mix(plaster, vec3(1., .72, .28) * 1.5, clamp(crack * 1.2 + rim, 0., 1.));
           // the edge of the served world: a gold rule where the neighbourhoods end
           float cdF = canalD(vW.xz);
-          c = mix(c, vec3(1., .74, .32) * 1.3, (1. - smoothstep(${CANAL + 2}., ${CANAL + 10}., cdF)) * .75);
+          if (cdF < ${(CANAL + COPE).toFixed(1)} + .2) discard;
+          c = mix(c, vec3(1., .74, .32) * 1.3, (1. - smoothstep(${(CANAL + COPE).toFixed(1)} + .5, ${(CANAL + COPE).toFixed(1)} + 5., cdF)) * .6);
           float edge = 1. - smoothstep(.35, .55, sv);
           c = mix(c, vec3(1., .74, .32) * 1.2, edge * .8);
           gl_FragColor = vec4(c, smoothstep(.35, .45, sv));
@@ -466,6 +513,335 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     fogMesh = new THREE.Mesh(g, m);
     fogMesh.renderOrder = 2;
     scene.add(fogMesh);
+  }
+
+  // ----------------------------------------------------------------- canals: sunken water between stone walls
+  const WATER_DROP = 2.8;    // water surface below the street
+  const COPE_H = 0.5;        // coping stands this far above the street
+  function smoothGroundAlong(pts: [number, number][]) {
+    const g = pts.map(p => ground(p[0], p[1]));
+    const out = g.slice();
+    for (let i = 0; i < g.length; i++) {
+      let s = 0, n = 0;
+      for (let k = -6; k <= 6; k++) { const j = i + k; if (j >= 0 && j < g.length) { s += g[j]; n++; } }
+      out[i] = s / n;
+    }
+    return out;
+  }
+  function resample(path: [number, number][], step: number) {
+    const out: [number, number][] = [path[0]];
+    for (let q = 0; q < path.length - 1; q++) {
+      const a = path[q], c = path[q + 1], L = Math.hypot(c[0] - a[0], c[1] - a[1]), n = Math.max(1, Math.ceil(L / step));
+      for (let k = 1; k <= n; k++) out.push([a[0] + (c[0] - a[0]) * k / n, a[1] + (c[1] - a[1]) * k / n]);
+    }
+    return out;
+  }
+  function stoneShader(kind: "wall" | "cope" | "bridge") {
+    return new THREE.ShaderMaterial({
+      uniforms: { ...uniforms, ...fogChunk }, fog: true,
+      vertexShader: /* glsl */ `
+        attribute vec2 aUV; varying vec2 vUV; varying vec3 vN; varying vec3 vW;
+        ${FOG_V}
+        void main() { vUV = aUV; vN = normal; vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz;
+          vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: COMMON + /* glsl */ `
+        varying vec2 vUV; varying vec3 vN; varying vec3 vW;
+        ${FOG_F}
+        void main() {
+          if (served(vW.xz) < .5) discard;
+          ${kind === "wall" ? `if (canalD(vW.xz) < ${CANAL}. - 3.) discard;` : kind === "cope" ? `if (canalD(vW.xz) < ${CANAL}. - 1.5) discard;` : ""}
+          vec3 n = normalize(vN);
+          float lam = max(dot(n, uSun), 0.);
+          float sky = .5 + .5 * n.y;
+          float fogged = smoothstep(${glf(CANAL + COPE + 30)}, ${glf(CANAL + COPE + 70)}, sdMask(vW.xz));
+          vec3 stone = vec3(.74, .7, .64);
+          ${kind === "wall" ? `
+          // coursed stone: rows every 0.55 m, joints offset row to row, darker and wet near the water
+          float row = floor(vUV.y / .55);
+          vec2 cell = vec2(fract((vUV.x + row * .9) / 1.6), fract(vUV.y / .55));
+          float joint = step(cell.x, .04) + step(cell.y, .08);
+          stone *= (.86 + .14 * h21(vec2(floor((vUV.x + row * .9) / 1.6), row))) * (1. - .35 * min(joint, 1.));
+          stone *= mix(.55, 1., smoothstep(.0, 1.1, vUV.y));
+          stone = mix(stone, vec3(.18, .26, .26), (1. - smoothstep(.05, .45, vUV.y)) * .7);` : kind === "cope" ? `
+          float slab = step(fract(vUV.x / 2.4), .03);
+          stone = vec3(.7, .66, .6) * (1. - .25 * slab) * (.92 + .08 * h21(vec2(floor(vUV.x / 2.4), 3.)));` : `
+          float course = step(fract(vUV.y / .5), .07) + step(fract(vUV.x / 1.3 + floor(vUV.y / .5) * .5), .04);
+          stone = vec3(.66, .62, .57) * (1. - .22 * min(course, 1.));`}
+          vec3 lit = stone * (.42 + .6 * lam) * (.85 + .15 * sky);
+          lit = mix(lit, lit * vec3(.72, .78, .95), .35);            // dusk
+          vec3 plaster = vec3(.93, .93, .92) * (.8 + .22 * lam);
+          gl_FragColor = vec4(mix(lit, plaster, fogged), 1.);
+          #include <fog_fragment>
+        }`,
+    });
+  }
+  function buildCanals() {
+    const wp: number[] = [], wa: number[] = [], wi: number[] = [];           // water
+    const sp: number[] = [], sn: number[] = [], su: number[] = [], si: number[] = [];   // walls
+    const cp: number[] = [], cn: number[] = [], cu: number[] = [], ci: number[] = [];   // coping
+    const quad = (P: number[], N: number[], U: number[], I: number[], v: number[][], n: number[], uv: number[][]) => {
+      const b = P.length / 3;
+      for (let k = 0; k < 4; k++) { P.push(...v[k]); N.push(...n); U.push(...uv[k]); }
+      I.push(b, b + 1, b + 2, b, b + 2, b + 3);
+    };
+    CANALS.forEach((raw, ci_) => {
+      const pts = resample(raw, 5);
+      // ground on each bank, just outside the coping
+      const bank = (q: number, side: number) => {
+        const p = pts[q], nx_ = pts[Math.min(q + 1, pts.length - 1)], pv = pts[Math.max(q - 1, 0)];
+        let dx = nx_[0] - pv[0], dz = nx_[1] - pv[1];
+        const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
+        let hmax = -1e9;
+        for (const r of [CANAL - 2, CANAL + 1, CANAL + COPE + 1.5]) hmax = Math.max(hmax, ground(p[0] - dz * side * r, p[1] + dx * side * r));
+        return hmax;
+      };
+      const gl = pts.map((_, q) => bank(q, 1)), gr = pts.map((_, q) => bank(q, -1));
+      const lowBank = pts.map((_, q) => Math.min(gl[q], gr[q]));
+      const g = lowBank.map((_, i) => { let s0 = 0, n0 = 0; for (let k = -6; k <= 6; k++) { const j = i + k; if (j >= 0 && j < lowBank.length) { s0 += lowBank[j]; n0++; } } return s0 / n0; });
+      let along = 0;
+      const eps = (ci_ % 7) * 0.012;
+      for (let q = 0; q < pts.length; q++) {
+        const p = pts[q], nx_ = pts[Math.min(q + 1, pts.length - 1)], pv = pts[Math.max(q - 1, 0)];
+        let dx = nx_[0] - pv[0], dz = nx_[1] - pv[1];
+        const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
+        const ox = -dz, oz = dx;   // left normal
+        if (q) along += Math.hypot(p[0] - pts[q - 1][0], p[1] - pts[q - 1][1]);
+        const yw = g[q] - WATER_DROP + eps;
+        const W_ = CANAL + 0.4;
+        wp.push(p[0] + ox * W_, yw, p[1] + oz * W_, p[0] - ox * W_, yw, p[1] - oz * W_);
+        wa.push(along, -1, along, 1);
+        if (q) { const b = wp.length / 3 - 4; wi.push(b, b + 1, b + 2, b + 1, b + 3, b + 2); }
+        if (!q) continue;
+        const p0 = pts[q - 1], a0 = along - Math.hypot(p[0] - p0[0], p[1] - p0[1]);
+        let dx0 = p[0] - p0[0], dz0 = p[1] - p0[1];
+        const L0 = Math.hypot(dx0, dz0) || 1; dx0 /= L0; dz0 /= L0;
+        const lx = -dz0, lz = dx0;
+        for (const side of [-1, 1]) {
+          const sideG = side > 0 ? gl : gr;
+          const y0 = sideG[q - 1], y1 = sideG[q];
+          const e0x = p0[0] + lx * side * CANAL, e0z = p0[1] + lz * side * CANAL, e1x = p[0] + lx * side * CANAL, e1z = p[1] + lz * side * CANAL;
+          const top0 = y0 + COPE_H, top1 = y1 + COPE_H, bot0 = g[q - 1] - WATER_DROP - 0.4, bot1 = g[q] - WATER_DROP - 0.4;
+          const nIn = [-lx * side, 0, -lz * side];            // the wall faces the water
+          const h0 = top0 - bot0, h1 = top1 - bot1;
+          const v = side > 0
+            ? [[e0x, bot0, e0z], [e1x, bot1, e1z], [e1x, top1, e1z], [e0x, top0, e0z]]
+            : [[e1x, bot1, e1z], [e0x, bot0, e0z], [e0x, top0, e0z], [e1x, top1, e1z]];
+          const uv = side > 0 ? [[a0, 0], [along, 0], [along, h1], [a0, h0]] : [[along, 0], [a0, 0], [a0, h0], [along, h1]];
+          quad(sp, sn, su, si, v, nIn, uv);
+          // coping: a flat slab on top, and its outer face down to the street
+          const o0x = p0[0] + lx * side * (CANAL + COPE), o0z = p0[1] + lz * side * (CANAL + COPE), o1x = p[0] + lx * side * (CANAL + COPE), o1z = p[1] + lz * side * (CANAL + COPE);
+          const vt = side > 0 ? [[e0x, top0, e0z], [e1x, top1, e1z], [o1x, top1, o1z], [o0x, top0, o0z]] : [[e1x, top1, e1z], [e0x, top0, e0z], [o0x, top0, o0z], [o1x, top1, o1z]];
+          quad(cp, cn, cu, ci, vt, [0, 1, 0], [[a0, 0], [along, 0], [along, 1], [a0, 1]]);
+          // the outer face reaches down past the real ground so a slope never leaves a gap
+          const f0 = Math.min(y0, ground(o0x, o0z)) - 1.2, f1 = Math.min(y1, ground(o1x, o1z)) - 1.2;
+          const vo = side > 0 ? [[o0x, top0, o0z], [o1x, top1, o1z], [o1x, f1, o1z], [o0x, f0, o0z]] : [[o1x, top1, o1z], [o0x, top0, o0z], [o0x, f0, o0z], [o1x, f1, o1z]];
+          quad(cp, cn, cu, ci, vo, [lx * side, 0, lz * side], [[a0, 0], [along, 0], [along, 1], [a0, 1]]);
+        }
+      }
+    });
+    // water
+    const wg = new THREE.BufferGeometry();
+    wg.setAttribute("position", new THREE.Float32BufferAttribute(wp, 3));
+    wg.setAttribute("aWater", new THREE.Float32BufferAttribute(wa, 2));
+    wg.setIndex(wi);
+    const water = new THREE.ShaderMaterial({
+      uniforms: { ...uniforms, ...fogChunk }, fog: true,
+      vertexShader: /* glsl */ `
+        attribute vec2 aWater; varying vec2 vWater; varying vec3 vW;
+        ${FOG_V}
+        void main() { vWater = aWater; vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz;
+          vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: COMMON + /* glsl */ `
+        varying vec2 vWater; varying vec3 vW;
+        ${FOG_F}
+        void main() {
+          if (served(vW.xz) < .5) discard;
+          float t = uTime;
+          vec2 p = vW.xz;
+          // small wind ripples: two drifting noise layers give the surface normal
+          float e = .6;
+          float h0 = fbm(p * .16 + vec2(t * .09, t * .05)) + .5 * fbm(p * .45 - vec2(t * .12, -t * .08));
+          float hx = fbm((p + vec2(e, 0.)) * .16 + vec2(t * .09, t * .05)) + .5 * fbm((p + vec2(e, 0.)) * .45 - vec2(t * .12, -t * .08));
+          float hz = fbm((p + vec2(0., e)) * .16 + vec2(t * .09, t * .05)) + .5 * fbm((p + vec2(0., e)) * .45 - vec2(t * .12, -t * .08));
+          vec3 n = normalize(vec3((h0 - hx) * 1.6, 1., (h0 - hz) * 1.6));
+          vec3 V = normalize(cameraPosition - vW);
+          float across = abs(vWater.y);
+          // deep teal in the channel, lighter over the shallow edges
+          vec3 deep = vec3(.03, .19, .22), shallow = vec3(.09, .34, .35);
+          vec3 base = mix(deep, shallow, smoothstep(.35, 1., across));
+          // the dusk sky in the water, strongest at grazing angles
+          float fres = pow(1. - max(dot(n, V), 0.), 4.);
+          vec3 sky = mix(vec3(.62, .7, .86), vec3(1., .88, .72), .3);
+          vec3 c = mix(base, sky, .14 + .6 * fres);
+          // soft caustic shimmer
+          c += vec3(.1, .2, .18) * smoothstep(.55, .8, fbm(p * .35 + vec2(t * .2, -t * .15))) * .35;
+          // the low sun glinting off the ripples
+          vec3 R = reflect(-uSun, n);
+          c += vec3(1., .82, .52) * pow(max(dot(R, V), 0.), 90.) * 1.6;
+          // a wet dark line and a lace of foam where the water meets the walls
+          float edge = smoothstep(.86, .99, across);
+          c = mix(c, vec3(.03, .08, .1), edge * .5);
+          float foam = smoothstep(.93, .975, across) * smoothstep(.45, .7, fbm(p * .9 + vec2(t * .3, 0.)));
+          c = mix(c, vec3(.85, .92, .93), foam * .55);
+          float fogged = smoothstep(${glf(CANAL + COPE + 30)}, ${glf(CANAL + COPE + 70)}, sdMask(vW.xz));
+          c = mix(c, mix(vec3(.62, .76, .8), vec3(.86, .9, .92), fres), fogged * .75);
+          gl_FragColor = vec4(c, 1.);
+          #include <fog_fragment>
+        }`,
+    });
+    water.side = THREE.DoubleSide;
+    scene.add(new THREE.Mesh(wg, water));
+    const walls = new THREE.BufferGeometry();
+    walls.setAttribute("position", new THREE.Float32BufferAttribute(sp, 3));
+    walls.setAttribute("normal", new THREE.Float32BufferAttribute(sn, 3));
+    walls.setAttribute("aUV", new THREE.Float32BufferAttribute(su, 2));
+    walls.setIndex(si);
+    const wm = new THREE.Mesh(walls, stoneShader("wall"));
+    wm.material.side = THREE.DoubleSide;
+    scene.add(wm);
+    const cope = new THREE.BufferGeometry();
+    cope.setAttribute("position", new THREE.Float32BufferAttribute(cp, 3));
+    cope.setAttribute("normal", new THREE.Float32BufferAttribute(cn, 3));
+    cope.setAttribute("aUV", new THREE.Float32BufferAttribute(cu, 2));
+    cope.setIndex(ci);
+    const cm = new THREE.Mesh(cope, stoneShader("cope"));
+    cm.material.side = THREE.DoubleSide;
+    scene.add(cm);
+    buildBoats();
+  }
+
+  // arched stone bridges where streets cross the canals
+  const bridgeMat = () => { const m = stoneShader("bridge"); m.side = THREE.DoubleSide; return m; };
+  let BRIDGE_MAT: THREE.ShaderMaterial | null = null;
+  const bridgesAt: [number, number][] = [];
+  function buildBridges(data: TileData, ox: number, oz: number) {
+    BRIDGE_MAT ??= bridgeMat();
+    const W: Record<string, number> = { motorway: 20, trunk: 16, primary: 15, secondary: 12, tertiary: 10, residential: 7, unclassified: 7, living_street: 6 };
+    const P: number[] = [], N: number[] = [], U: number[] = [], I: number[] = [];
+    const box = (corners: number[][], n: number[], uv: number[][]) => {
+      const b = P.length / 3;
+      for (let k = 0; k < 4; k++) { P.push(...corners[k]); N.push(...n); U.push(...uv[k]); }
+      I.push(b, b + 1, b + 2, b, b + 2, b + 3);
+    };
+    for (const [k, , flat] of data.r) {
+      const hw = (W[k] || 6) / 2 + 1.2;
+      const raw: [number, number][] = [];
+      for (let q = 0; q < flat.length; q += 2) raw.push([ox + flat[q] / 10, oz + flat[q + 1] / 10]);
+      const pts = resample(raw, 1.5);
+      let inside = -1;
+      for (let q = 0; q <= pts.length; q++) {
+        const wet = q < pts.length && canalAt(pts[q][0], pts[q][1]) < CANAL + COPE;
+        if (wet && inside < 0) inside = q;
+        if (!wet && inside >= 0) {
+          const a = pts[Math.max(0, inside - 2)], c = pts[Math.min(pts.length - 1, q + 1)];
+          inside = -1;
+          const mx = (a[0] + c[0]) / 2, mz = (a[1] + c[1]) / 2;
+          if (bridgesAt.some(b => Math.hypot(b[0] - mx, b[1] - mz) < 14) || sdField(mx, mz) > CANAL + COPE + 40) continue;
+          bridgesAt.push([mx, mz]);
+          let dx = c[0] - a[0], dz = c[1] - a[1];
+          const L = Math.hypot(dx, dz);
+          if (L < 6 || L > 90) continue;
+          dx /= L; dz /= L;
+          const sx = -dz, sz = dx;
+          const n = 14, ya = ground(a[0], a[1]) + 0.9, yc = ground(c[0], c[1]) + 0.9, rise = Math.min(2.6, L * 0.07);
+          const at = (u: number) => [a[0] + dx * L * u, ya + (yc - ya) * u + rise * Math.sin(Math.PI * u), a[1] + dz * L * u] as const;
+          for (let i = 0; i < n; i++) {
+            const u0 = i / n, u1 = (i + 1) / n, [x0, y0, z0] = at(u0), [x1, y1, z1] = at(u1);
+            // deck
+            box([[x0 - sx * hw, y0, z0 - sz * hw], [x0 + sx * hw, y0, z0 + sz * hw], [x1 + sx * hw, y1, z1 + sz * hw], [x1 - sx * hw, y1, z1 - sz * hw]], [0, 1, 0],
+              [[u0 * L, 0], [u0 * L, hw * 2], [u1 * L, hw * 2], [u1 * L, 0]]);
+            // parapets, and the arched fascia below each edge down to the water
+            for (const side of [-1, 1]) {
+              const ex0 = x0 + sx * hw * side, ez0 = z0 + sz * hw * side, ex1 = x1 + sx * hw * side, ez1 = z1 + sz * hw * side;
+              const outN = [sx * side, 0, sz * side];
+              box([[ex0, y0, ez0], [ex1, y1, ez1], [ex1, y1 + 1.1, ez1], [ex0, y0 + 1.1, ez0]], outN, [[u0 * L, 0], [u1 * L, 0], [u1 * L, 1.1], [u0 * L, 1.1]]);
+              box([[ex0 - sx * side * .45, y0 + 1.1, ez0 - sz * side * .45], [ex1 - sx * side * .45, y1 + 1.1, ez1 - sz * side * .45], [ex1, y1 + 1.1, ez1], [ex0, y0 + 1.1, ez0]], [0, 1, 0], [[0, 0], [1, 0], [1, 1], [0, 1]]);
+              const arch0 = y0 - 0.9 - (1 - Math.sin(Math.PI * u0)) * 0.0, arch1 = y1 - 0.9;
+              const floor0 = ground(ex0, ez0) - WATER_DROP, floor1 = ground(ex1, ez1) - WATER_DROP;
+              const hole0 = Math.sin(Math.PI * u0), hole1 = Math.sin(Math.PI * u1);
+              // the fascia follows the arch: full height at the abutments, a thin band over the span
+              const b0 = arch0 - (arch0 - floor0) * (1 - Math.pow(hole0, 0.35)), b1 = arch1 - (arch1 - floor1) * (1 - Math.pow(hole1, 0.35));
+              box([[ex0, b0, ez0], [ex1, b1, ez1], [ex1, y1, ez1], [ex0, y0, ez0]], outN, [[u0 * L, 0], [u1 * L, 0], [u1 * L, y1 - b1], [u0 * L, y0 - b0]]);
+            }
+          }
+        }
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(P, 3));
+    g.setAttribute("normal", new THREE.Float32BufferAttribute(N, 3));
+    g.setAttribute("aUV", new THREE.Float32BufferAttribute(U, 2));
+    g.setIndex(I);
+    return new THREE.Mesh(g, BRIDGE_MAT);
+  }
+
+  // moored boats along the canal walls, rocking a little
+  function buildBoats() {
+    const hull = (() => {
+      const sh = new THREE.Shape();
+      sh.moveTo(0, -3.4); sh.quadraticCurveTo(1.25, -1.6, 1.15, 1.6); sh.lineTo(0.9, 3); sh.lineTo(-0.9, 3); sh.lineTo(-1.15, 1.6); sh.quadraticCurveTo(-1.25, -1.6, 0, -3.4);
+      const g = new THREE.ExtrudeGeometry(sh, { depth: 0.9, bevelEnabled: true, bevelThickness: 0.12, bevelSize: 0.1, bevelSegments: 2 });
+      g.rotateX(-Math.PI / 2);
+      return g;
+    })();
+    const cabin = new THREE.BoxGeometry(1.5, 0.8, 1.9).translate(0, 1.25, 0.6);
+    const spots: { x: number; z: number; yaw: number; y: number; r: number }[] = [];
+    let seed = 77;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (const raw of CANALS) {
+      const pts = resample(raw, 30);
+      for (let q = 1; q < pts.length - 1; q++) {
+        if (rnd() > 0.42) continue;
+        const a = pts[q - 1], c = pts[q + 1];
+        const dx = c[0] - a[0], dz = c[1] - a[1], L = Math.hypot(dx, dz) || 1;
+        const side = rnd() < 0.5 ? -1 : 1;
+        const x = pts[q][0] - (dz / L) * side * (CANAL - 3.2), z = pts[q][1] + (dx / L) * side * (CANAL - 3.2);
+        spots.push({ x, z, yaw: Math.atan2(dx, dz), y: ground(pts[q][0], pts[q][1]) - WATER_DROP, r: rnd() });
+      }
+    }
+    const mat = (cabinPart: boolean) => new THREE.ShaderMaterial({
+      uniforms: { ...uniforms, ...fogChunk }, fog: true,
+      vertexShader: /* glsl */ `
+        uniform float uTime; varying vec3 vN; varying vec3 vW; varying float vSeed;
+        ${FOG_V}
+        void main() {
+          vSeed = fract(instanceMatrix[3].x * .137 + instanceMatrix[3].z * .311);
+          vN = normalize(mat3(instanceMatrix) * normal);
+          vec3 p = position;
+          float rock = sin(uTime * 1.3 + vSeed * 20.) * .05;
+          p.y += p.x * rock + sin(uTime * .9 + vSeed * 9.) * .06;
+          vec4 w = modelMatrix * instanceMatrix * vec4(p, 1.); vW = w.xyz;
+          vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: COMMON + /* glsl */ `
+        varying vec3 vN; varying vec3 vW; varying float vSeed;
+        ${FOG_F}
+        void main() {
+          if (sdMask(vW.xz) > ${glf(CANAL + COPE + 40)}) discard;
+          vec3 n = normalize(vN); float lam = max(dot(n, uSun), 0.);
+          vec3 paint = vSeed < .33 ? vec3(.86, .84, .8) : vSeed < .66 ? vec3(.12, .38, .42) : vec3(.55, .36, .22);
+          ${cabinPart ? "paint = vec3(.8, .78, .74);" : "paint = mix(paint, vec3(.08, .1, .12), step(vW.y, " + "0.) * 0.);"}
+          vec3 c = paint * (.45 + .62 * lam);
+          c = mix(c, c * vec3(.72, .78, .95), .35);
+          gl_FragColor = vec4(c, 1.);
+          #include <fog_fragment>
+        }`,
+    });
+    const hm = new THREE.InstancedMesh(hull, mat(false), spots.length);
+    const cm = new THREE.InstancedMesh(cabin, mat(true), spots.length);
+    const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), One = new THREE.Vector3(1, 1, 1), UP = new THREE.Vector3(0, 1, 0);
+    spots.forEach((s, i) => {
+      Q.setFromAxisAngle(UP, s.yaw);
+      V.set(s.x, s.y - 0.35, s.z);
+      hm.setMatrixAt(i, M4.compose(V, Q, One));
+      cm.setMatrixAt(i, s.r < 0.55 ? M4.compose(V, Q, One) : M4.makeScale(0, 0, 0));
+    });
+    for (const m of [hm, cm]) { m.computeBoundingSphere(); scene.add(m); }
   }
 
   // ----------------------------------------------------------------- kit
@@ -702,8 +1078,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
         let dx = nx_[0] - pv[0], dz = nx_[1] - pv[1];
         const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
         if (q) s += Math.hypot(p[0] - pts[q - 1][0], p[1] - pts[q - 1][1]);
-        const over = 1 - ease((canalAt(p[0], p[1]) - (CANAL + 2)) / 14);
-        const y = ground(p[0], p[1]) + 0.9 + 3.4 * over;
+        const y = ground(p[0], p[1]) + 0.9;
         pos.push(p[0] - dz * w, y, p[1] + dx * w, p[0] + dz * w, y, p[1] - dx * w);
         along.push(s, s);
         across.push(-1, 1);
@@ -716,14 +1091,11 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
         vec3 c = vec3(.36, .40, .5);
         float lamp = 1. - smoothstep(0., 2.2, abs(mod(vAlong, 38.) - 19.));
         c += vec3(.55, .6, .7) * lamp * .35;
-        // over a canal the road becomes a stone bridge with dark rails
-        float br = 1. - smoothstep(${CANAL + 2}., ${CANAL + 4}., canalD(vW.xz));
-        vec3 deck = vec3(.66, .64, .6) * (.9 + .1 * fbm(vW.xz * .3));
-        deck = mix(deck, vec3(.2, .22, .27), smoothstep(.8, .9, abs(vAcross)));
-        c = mix(c, deck, br);
+        if (canalD(vW.xz) < ${(CANAL + COPE).toFixed(1)}) discard;
         gl_FragColor = vec4(c, 1.);
         #include <fog_fragment>
       }`, true, across));
+    t.group.add(buildBridges(data, ox, oz));
     t.state = "ready";
     scene.add(t.group);
     rebuildTile(t);
@@ -744,7 +1116,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     if (t.kit) { t.group.remove(t.kit); t.kit.traverse(o => (o as THREE.Mesh).geometry?.dispose()); t.kit = null; }
     if (t.box) { t.group.remove(t.box); t.box.geometry.dispose(); t.box = null; }
     const lit = lanternBuildingIds();
-    const near = t.bldgs.filter(b => !lit.has(b.i) && !hidden.has(b.i) && sdField(b.cx, b.cz) < 150 && !b.p.some(q => canalAt(q[0], q[1]) < CANAL + 3));
+    const near = t.bldgs.filter(b => !lit.has(b.i) && !hidden.has(b.i) && sdField(b.cx, b.cz) < 150 && !b.p.some(q => canalAt(q[0], q[1]) < CANAL + COPE + 3));
     const nearest = roadNear(t);
     t.kit = kitInstances(near.map(b => placeKit(b, nearest)), false);
     t.box = boxMesh(near);
@@ -816,13 +1188,31 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       for (const side of [-1, 1]) {
         if (rnd() < 0.5) continue;
         const x = rp[k] - (dz / L) * 8 * side, z = rp[k + 1] + (dx / L) * 8 * side;
-        if (blocked(x, z) || sdField(x, z) > 60 || canalAt(x, z) < CANAL + 5) continue;
+        if (blocked(x, z) || sdField(x, z) > 60 || canalAt(x, z) < CANAL + COPE + 4) continue;
         (rnd() < 0.18 ? palms : trees).push([x, z, rnd()]);
+      }
+    }
+    // a promenade of palms along every canal bank
+    for (const path of CANALS) {
+      let acc = 0;
+      for (let q = 0; q < path.length - 1; q++) {
+        const a = path[q], c = path[q + 1], L = Math.hypot(c[0] - a[0], c[1] - a[1]);
+        if (L < 0.01) continue;
+        const nx0 = -(c[1] - a[1]) / L, nz0 = (c[0] - a[0]) / L;
+        for (let d0 = (24 - acc) % 24; d0 < L; d0 += 24) {
+          const bx = a[0] + (c[0] - a[0]) * d0 / L, bz = a[1] + (c[1] - a[1]) * d0 / L;
+          if (bx < x0 + 20 || bx > x0 + 20 + M.tile || bz < z0 + 20 || bz > z0 + 20 + M.tile) continue;
+          for (const side of [-1, 1]) {
+            const x = bx + nx0 * side * (CANAL + COPE + 3.2), z = bz + nz0 * side * (CANAL + COPE + 3.2);
+            if (sdField(x, z) < 40 && !blocked(x, z) && canalAt(x, z) > CANAL + COPE + 1.5) palms.push([x, z, rnd()]);
+          }
+        }
+        acc = (acc + L) % 24;
       }
     }
     for (let k = 0; k < 1400; k++) {
       const x = x0 + 20 + rnd() * M.tile, z = z0 + 20 + rnd() * M.tile;
-      if (!blocked(x, z) && sdField(x, z) < 60 && servedAt(x, z) && canalAt(x, z) > CANAL + 5) trees.push([x, z, rnd()]);
+      if (!blocked(x, z) && sdField(x, z) < 60 && servedAt(x, z) && canalAt(x, z) > CANAL + COPE + 4) trees.push([x, z, rnd()]);
     }
     const grp = new THREE.Group();
     grp.name = "trees";
@@ -919,11 +1309,11 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     if (!M) return;
     // regions from where lanterns are, even before their tile loads
     const inside = lanterns.map(l => ({ l, ...ll(l.latitude, l.longitude) })).filter(p => servedAt(p.x, p.z));
-    const regions = inside.map(p => ({ x: p.x, z: p.z, r: 220 + Math.min(p.l.total, 24) * 6 }));
-    const rk = regions.map(r => `${r.x | 0},${r.z | 0},${r.r | 0}`).join(";");
+    const hoods = new Set(inside.map(p => hoodAt(p.x, p.z)).filter((n): n is string => !!n));
+    const rk = [...hoods].sort().join(";");
     if (rk !== lastRegionsKey) {
       lastRegionsKey = rk;
-      rebuildMask(regions);
+      rebuildMask(hoods);
       for (const key of wantedTiles()) if (!tiles.has(key)) void loadTile(key);
     }
     // lantern meshes
@@ -1015,10 +1405,10 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     for (let j = 1; j < D.nz - 1; j++) for (let i = 1; i < D.nx - 1; i++) {
       const x = M.bounds[0] + (i + 0.5) * D.cell, z = M.bounds[1] + (j + 0.5) * D.cell;
       const sd = sdField(x, z);
-      if (sd < 90 || sd > 520 || !servedAt(x, z)) continue;
+      if (sd < 60 || sd > 900 || !servedAt(x, z)) continue;
       let doors = 0;
       for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) doors += D.v[(j + b) * D.nx + i + a];
-      const s = doors / (1 + sd / 400);
+      const s = doors / (1 + sd / 600);
       if (!best || s > best.s) best = { x, z, s, doors };
     }
     if (!best) return null;
@@ -1034,8 +1424,17 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     const where = named.length >= 2 ? `near ${short(named[0][0])} & ${short(named[1][0])}` : named.length ? `near ${short(named[0][0])}` : "past your light";
     let nearest = 1e9;
     for (const l of placedLanterns) nearest = Math.min(nearest, Math.hypot(l.x - best.x, l.z - best.z));
-    const rounded = Math.max(5, Math.round(best.doors / 5) * 5);
-    return { title: `Uncharted: ${where}`, doors: rounded, buildings: 0, miles: nearest / 1609, x: best.x, z: best.z };
+    // a whole neighbourhood comes out of the fog, so count its doors, not a block's
+    const hood = hoodAt(best.x, best.z) ?? "";
+    let doors = 0;
+    if (hood) {
+      for (let j = 0; j < D.nz; j++) for (let i = 0; i < D.nx; i++) {
+        const x = M.bounds[0] + (i + 0.5) * D.cell, z = M.bounds[1] + (j + 0.5) * D.cell;
+        if (D.v[j * D.nx + i] && hoodAt(x, z) === hood) doors += D.v[j * D.nx + i];
+      }
+    }
+    const rounded = Math.max(5, Math.round((doors || best.doors) / 50) * 50);
+    return { title: hood ? `Uncharted: ${hood}` : `Uncharted: ${where}`, hood, where, doors: rounded, buildings: 0, miles: nearest / 1609, x: best.x, z: best.z };
   }
 
   // ----------------------------------------------------------------- picking
@@ -1099,6 +1498,9 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       lanterns = next;
       applyLanterns();
     },
+    probe(x: number, z: number) {
+      return { sd: Math.round(sdField(x, z)), canal: Math.round(canalAt(x, z) * 10) / 10, ground: Math.round(ground(x, z) * 10) / 10, served: servedAt(x, z), hood: hoodAt(x, z) };
+    },
     debug() {
       return placedLanterns.map(p => ({ key: p.input.key, b: p.b ? { i: p.b.i, h: p.b.h, t: p.b.t, cx: Math.round(p.b.cx), cz: Math.round(p.b.cz) } : null,
         mesh: !!p.mesh, meshes: p.mesh ? p.mesh.children.length : 0, x: Math.round(p.x), z: Math.round(p.z),
@@ -1111,8 +1513,8 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       const l = placedLanterns.find(p => p.input.key === key);
       if (l) flyTo(l.x, l.z, dist);
     },
-    focusPoint(x: number, z: number) {
-      flyTo(x, z, 1600);
+    focusPoint(x: number, z: number, dist = 1600) {
+      flyTo(x, z, dist);
     },
     attribution() {
       return M?.attribution ?? "";

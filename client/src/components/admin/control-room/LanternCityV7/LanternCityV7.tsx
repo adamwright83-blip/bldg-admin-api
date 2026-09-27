@@ -182,10 +182,14 @@ export default function LanternCityV7({
             Uncharted
           </div>
           <h2>{mission.title}</h2>
-          <p>Nobody has knocked here yet. Win one building and the block comes out of the fog.</p>
+          <p>
+            {mission.hood
+              ? `Win one building ${mission.where} and all of ${mission.hood} comes out of the fog.`
+              : "Win one building here and the neighbourhood comes out of the fog."}
+          </p>
           <div className={styles.meta}>
             <div>
-              <b>~{mission.doors.toLocaleString()}</b> <span>doors</span>
+              <b>~{mission.doors.toLocaleString()}</b> <span>doors to win</span>
             </div>
             <div>
               <b>{mission.miles.toFixed(1)} mi</b> <span>from your light</span>
