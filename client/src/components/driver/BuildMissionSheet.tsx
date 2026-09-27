@@ -15,6 +15,7 @@ import { trpc } from "@/lib/trpc";
 import { haptics } from "./driverHaptics";
 import { sounds } from "./driverSounds";
 
+// Mission builder production deploy marker: venue validation is live.
 type MissionType = "cold_call" | "in_person";
 type VenueType = "luxury_living" | "hotels" | "fitness_wellness" | "salons_spas";
 
