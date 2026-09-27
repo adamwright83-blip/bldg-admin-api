@@ -73,6 +73,10 @@ describe("driver mission builder contract", () => {
     expect(service).toContain("ensureApprovedBuilderProposal");
     expect(service).toContain("reusableByProviderId");
     expect(service).toContain("getLatestCommercialProposalForMission");
+    expect(service).toContain('reusable.status === "candidate" || reusable.status === "selected"');
+    expect(service).toMatch(
+      /reusable\.status === "candidate"[\s\S]*activateCommercialMissionForField[\s\S]*mission: recovered/
+    );
 
     const path = [
       ["candidate", "selected"],
@@ -88,6 +92,19 @@ describe("driver mission builder contract", () => {
     for (const [from, to] of path) {
       expect(canTransitionCommercialMission(from, to)).toBe(true);
     }
+  });
+
+  it("separates exact-property targeting from explicit nearby discovery", () => {
+    expect(router).toContain("DRIVER_MISSION_TARGET_MODES");
+    expect(router).toContain('targetMode: z.enum(DRIVER_MISSION_TARGET_MODES)');
+    expect(service).toContain('input.targetMode === "exact_property"');
+    expect(service).toContain("resolveBusiness(input.searchNear)");
+    expect(service).toContain("Could not identify this property");
+    expect(service).toContain('targetMode: input.targetMode');
+    expect(service).toMatch(/input\.targetMode === "exact_property" \? 1 : input\.count/);
+    expect(builder).toContain("Create mission for this property");
+    expect(builder).toContain("Find prospects near this location");
+    expect(builder).toContain('targetMode === "exact_property" ? 1 : 3');
   });
 
   it("deduplicates active venues and requires public phones for call missions", () => {
@@ -112,6 +129,8 @@ describe("driver mission builder contract", () => {
     expect(commandCenter).toContain("orders.map");
     expect(commandCenter).toContain("Sales missions");
     expect(commandCenter).toContain("Build mission");
+    expect(goldline).toContain("missionId: mission.id");
+    expect(goldline).toContain(`destinationPath: \`/driver/sales-mission/\${mission.id}\``);
   });
 
   it("asks for mission type then venue and never claims automated outreach", () => {

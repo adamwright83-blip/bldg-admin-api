@@ -79,6 +79,7 @@ import {
 } from "./commercialMissionActivationService";
 import {
   buildDriverMissions,
+  DRIVER_MISSION_TARGET_MODES,
   DRIVER_MISSION_TYPES,
   DRIVER_MISSION_VENUES,
   listDriverBuiltMissions,
@@ -344,6 +345,7 @@ export const commercialMissionRouter = router({
       z.object({
         missionType: z.enum(DRIVER_MISSION_TYPES),
         venueType: z.enum(DRIVER_MISSION_VENUES),
+        targetMode: z.enum(DRIVER_MISSION_TARGET_MODES).default("exact_property"),
         searchNear: z.string().trim().min(5).max(512),
         requestId: z.string().uuid(),
         count: z.number().int().min(1).max(5).default(3),

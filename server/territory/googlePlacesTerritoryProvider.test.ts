@@ -31,4 +31,143 @@ describe("GooglePlacesTerritoryProvider", () => {
     expect(results[0]).toMatchObject({ providerId: "place-1", providerName: "google_places", name: "Harbor Hotel", providerUrl: "https://maps.example/place-1" });
     expect(results[0]?.sourceCapturedAt).toMatch(/^\d{4}-/);
   });
+
+  it("selects the exact street-address property instead of a nearby result", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/geocode/json")) {
+        return new Response(
+          JSON.stringify({
+            status: "OK",
+            results: [
+              {
+                formatted_address:
+                  "4455 Los Feliz Blvd, Los Angeles, CA 90027, USA",
+                geometry: { location: { lat: 34.1126, lng: -118.287 } },
+              },
+            ],
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          places: [
+            {
+              id: "places/grand-residences",
+              displayName: { text: "The Grand Residences" },
+              formattedAddress:
+                "4450 Los Feliz Blvd, Los Angeles, CA 90027, USA",
+              location: { latitude: 34.1129, longitude: -118.2865 },
+              types: ["apartment_complex", "establishment"],
+            },
+            {
+              id: "places/los-feliz-towers",
+              displayName: { text: "Los Feliz Towers" },
+              formattedAddress:
+                "4455 Los Feliz Blvd, Los Angeles, CA 90027, USA",
+              location: { latitude: 34.1126, longitude: -118.287 },
+              types: ["apartment_complex", "establishment"],
+            },
+          ],
+        }),
+        { status: 200 }
+      );
+    });
+
+    const target = await new GooglePlacesTerritoryProvider(
+      { placesApiKey: "places-secret", geocodingApiKey: "geocoding-secret" },
+      fetcher as typeof fetch
+    ).resolveBusiness("4455 Los Feliz Blvd, Los Angeles, CA 90027");
+
+    expect(target?.providerId).toBe("places/los-feliz-towers");
+    expect(target?.name).toBe("Los Feliz Towers");
+  });
+
+  it("resolves an exact place name plus city by matching the place name", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          places: [
+            {
+              id: "places/jardine",
+              displayName: { text: "Jardine Hollywood" },
+              formattedAddress:
+                "6390 De Longpre Ave, Los Angeles, CA 90028, USA",
+              location: { latitude: 34.096, longitude: -118.329 },
+              types: ["apartment_complex", "establishment"],
+            },
+            {
+              id: "places/los-feliz-towers",
+              displayName: { text: "Los Feliz Towers" },
+              formattedAddress:
+                "4455 Los Feliz Blvd, Los Angeles, CA 90027, USA",
+              location: { latitude: 34.1126, longitude: -118.287 },
+              types: ["apartment_complex", "establishment"],
+            },
+          ],
+        }),
+        { status: 200 }
+      )
+    );
+
+    const target = await new GooglePlacesTerritoryProvider(
+      { placesApiKey: "places-secret", geocodingApiKey: "geocoding-secret" },
+      fetcher as typeof fetch
+    ).resolveBusiness("Los Feliz Towers, Los Angeles");
+
+    expect(target?.providerId).toBe("places/los-feliz-towers");
+  });
+
+  it("returns null instead of substituting a nearby venue when the exact address has no property", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/geocode/json")) {
+        return new Response(
+          JSON.stringify({
+            status: "OK",
+            results: [
+              {
+                formatted_address:
+                  "4455 Imaginary Blvd, Los Angeles, CA 90027, USA",
+                geometry: { location: { lat: 34.11, lng: -118.28 } },
+              },
+            ],
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          places: [
+            {
+              id: "places/bare-address",
+              displayName: { text: "4455 Imaginary Blvd" },
+              formattedAddress:
+                "4455 Imaginary Blvd, Los Angeles, CA 90027, USA",
+              location: { latitude: 34.11, longitude: -118.28 },
+              types: ["street_address"],
+            },
+            {
+              id: "places/nearby-property",
+              displayName: { text: "Nearby Property" },
+              formattedAddress:
+                "4459 Imaginary Blvd, Los Angeles, CA 90027, USA",
+              location: { latitude: 34.1103, longitude: -118.2802 },
+              types: ["apartment_complex", "establishment"],
+            },
+          ],
+        }),
+        { status: 200 }
+      );
+    });
+
+    const target = await new GooglePlacesTerritoryProvider(
+      { placesApiKey: "places-secret", geocodingApiKey: "geocoding-secret" },
+      fetcher as typeof fetch
+    ).resolveBusiness("4455 Imaginary Blvd, Los Angeles, CA 90027");
+
+    expect(target).toBeNull();
+  });
+
 });

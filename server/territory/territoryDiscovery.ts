@@ -85,7 +85,7 @@ export function dedupeTerritoryCandidates(candidates: TerritoryBusinessCandidate
     if (seen.has(key)) return false; seen.add(key); return true;
   });
 }
-function prospectType(categories: string[]): LaundryProspectType {
+export function prospectType(categories: string[]): LaundryProspectType {
   const value = categories.map(normalize).join(" ");
   if (value.includes("property management") || value.includes("apartment")) return "property_management";
   if (value.includes("hotel") || value.includes("motel") || value.includes("lodging")) return "hotel";
@@ -104,6 +104,126 @@ function nearRoute(candidate: TerritoryBusinessCandidate, points: Array<{ lat: n
   return points.some(point => distanceMiles(candidate, point) <= 0.75);
 }
 
+export function rankTerritoryCandidate(input: {
+  candidate: TerritoryBusinessCandidate;
+  center: GeoPoint;
+  operator: LaundryTerritoryOperatorContext;
+}): RankedTerritoryOpportunity {
+  const { candidate, center, operator } = input;
+  const type = prospectType(candidate.categories);
+  const distance = distanceMiles(center, candidate);
+  const weeklyPounds = estimatedWeeklyPounds(candidate, type);
+  const locationCount = Math.max(1, candidate.locationCount ?? 1);
+  const signalStrength = Math.min(
+    100,
+    30 +
+      (candidate.recentlyOpened ? 35 : 0) +
+      (candidate.growthSignal ? 25 : 0) +
+      (locationCount > 1 ? 10 : 0)
+  );
+  const score = scoreLaundryOpportunity({
+    accountName: candidate.name,
+    demand: {
+      prospectType: type,
+      locationCount,
+      roomCount: candidate.roomCount,
+      estimatedWeeklyPounds: weeklyPounds,
+      likelyOrdersPerMonth: type === "hotel" || type === "gym" ? 8 : 4,
+      hasRecurringTextileDemand: type !== "other",
+      signalStrength,
+    },
+    operatorFit: {
+      commercialWashFoldEnabled: operator.commercialWashFoldEnabled,
+      serviceRadiusMiles: operator.serviceRadiusMiles,
+      distanceMiles: distance,
+      availableWeeklyCapacityPounds: operator.availableWeeklyCapacityPounds,
+      estimatedWeeklyPounds: weeklyPounds,
+      routePassesNearby: nearRoute(candidate, operator.routePoints),
+      turnaroundCompatible: operator.turnaroundCompatibleByDefault,
+      pickupDaysCompatible: operator.pickupDaysCompatibleByDefault,
+    },
+    salesFit: {
+      decisionMakerIdentified: Boolean(candidate.decisionMakerName),
+      contactMethodAvailable: Boolean(candidate.phone || candidate.website),
+      existingProviderKnown: false,
+      recentGrowthSignal: Boolean(
+        candidate.recentlyOpened || candidate.growthSignal
+      ),
+    },
+    averagePricePerPoundCents: operator.averagePricePerPoundCents,
+  });
+  const primarySignal =
+    candidate.growthSignal ??
+    (candidate.recentlyOpened
+      ? "Newly opened in the service area"
+      : locationCount > 1
+        ? `${locationCount} locations detected`
+        : "Commercial laundry demand detected nearby");
+  const capturedAt = candidate.sourceCapturedAt;
+  const evidence: TerritoryEvidence[] = [
+    {
+      field: "business_identity",
+      value: {
+        name: candidate.name,
+        address: candidate.formattedAddress,
+        categories: candidate.categories,
+      },
+      classification: "sourced_fact",
+      sourceName: candidate.providerName,
+      sourceUrl: candidate.providerUrl,
+      capturedAt,
+      confidence: "high",
+    },
+    {
+      field: "operator_capacity",
+      value: {
+        availableWeeklyCapacityPounds: operator.availableWeeklyCapacityPounds,
+        averagePricePerPoundCents: operator.averagePricePerPoundCents,
+      },
+      classification: "operator_input",
+      sourceName: "DayForge tenant configuration",
+      sourceUrl: null,
+      capturedAt: new Date().toISOString(),
+      confidence: "high",
+    },
+    {
+      field: "estimated_laundry_demand",
+      value: {
+        weeklyPounds,
+        estimatedAnnualValueCents: score.estimatedAnnualValueCents,
+      },
+      classification: "deterministic_estimate",
+      sourceName: "DayForge laundry scoring v1",
+      sourceUrl: null,
+      capturedAt: new Date().toISOString(),
+      confidence: score.grade,
+    },
+  ];
+  return {
+    candidateKey: `${candidate.providerName}:${candidate.providerId}`,
+    providerName: candidate.providerName,
+    providerAccountId: candidate.providerId,
+    account: {
+      name: candidate.name,
+      accountType: type,
+      address: candidate.formattedAddress,
+      latitude: candidate.lat,
+      longitude: candidate.lng,
+      locationCount,
+      decisionMaker: {
+        name: candidate.decisionMakerName ?? null,
+        title: candidate.decisionMakerTitle ?? null,
+      },
+      website: candidate.website ?? null,
+      phone: candidate.phone ?? null,
+    },
+    score,
+    primarySignal,
+    distanceMiles: Math.round(distance * 10) / 10,
+    evidence,
+  };
+}
+
 export async function discoverLaundryTerritory(input: {
   addressOrBusiness: string;
   provider: TerritoryBusinessProvider;
@@ -114,33 +234,12 @@ export async function discoverLaundryTerritory(input: {
   const center = await input.provider.geocode(input.addressOrBusiness);
   const candidates = await input.provider.searchBusinesses({ center, radiusMiles: input.operator.serviceRadiusMiles, categories: input.categories?.length ? input.categories : TERRITORY_SEARCH_CATEGORIES, limit: Math.max(20, input.limit ?? 20) });
   const deduped = dedupeTerritoryCandidates(candidates);
-  const opportunities = deduped.map(candidate => {
-    const type = prospectType(candidate.categories);
-    const distance = distanceMiles(center, candidate);
-    const weeklyPounds = estimatedWeeklyPounds(candidate, type);
-    const locationCount = Math.max(1, candidate.locationCount ?? 1);
-    const signalStrength = Math.min(100, 30 + (candidate.recentlyOpened ? 35 : 0) + (candidate.growthSignal ? 25 : 0) + (locationCount > 1 ? 10 : 0));
-    const score = scoreLaundryOpportunity({
-      accountName: candidate.name,
-      demand: { prospectType: type, locationCount, roomCount: candidate.roomCount, estimatedWeeklyPounds: weeklyPounds, likelyOrdersPerMonth: type === "hotel" || type === "gym" ? 8 : 4, hasRecurringTextileDemand: type !== "other", signalStrength },
-      operatorFit: { commercialWashFoldEnabled: input.operator.commercialWashFoldEnabled, serviceRadiusMiles: input.operator.serviceRadiusMiles, distanceMiles: distance, availableWeeklyCapacityPounds: input.operator.availableWeeklyCapacityPounds, estimatedWeeklyPounds: weeklyPounds, routePassesNearby: nearRoute(candidate, input.operator.routePoints), turnaroundCompatible: input.operator.turnaroundCompatibleByDefault, pickupDaysCompatible: input.operator.pickupDaysCompatibleByDefault },
-      salesFit: { decisionMakerIdentified: Boolean(candidate.decisionMakerName), contactMethodAvailable: Boolean(candidate.phone || candidate.website), existingProviderKnown: false, recentGrowthSignal: Boolean(candidate.recentlyOpened || candidate.growthSignal) },
-      averagePricePerPoundCents: input.operator.averagePricePerPoundCents,
-    });
-    const primarySignal = candidate.growthSignal ?? (candidate.recentlyOpened ? "Newly opened in the service area" : locationCount > 1 ? `${locationCount} locations detected` : "Commercial laundry demand detected nearby");
-    const capturedAt = candidate.sourceCapturedAt;
-    const evidence: TerritoryEvidence[] = [
-      { field: "business_identity", value: { name: candidate.name, address: candidate.formattedAddress, categories: candidate.categories }, classification: "sourced_fact", sourceName: candidate.providerName, sourceUrl: candidate.providerUrl, capturedAt, confidence: "high" },
-      { field: "operator_capacity", value: { availableWeeklyCapacityPounds: input.operator.availableWeeklyCapacityPounds, averagePricePerPoundCents: input.operator.averagePricePerPoundCents }, classification: "operator_input", sourceName: "DayForge tenant configuration", sourceUrl: null, capturedAt: new Date().toISOString(), confidence: "high" },
-      { field: "estimated_laundry_demand", value: { weeklyPounds, estimatedAnnualValueCents: score.estimatedAnnualValueCents }, classification: "deterministic_estimate", sourceName: "DayForge laundry scoring v1", sourceUrl: null, capturedAt: new Date().toISOString(), confidence: score.grade },
-    ];
-    return {
-      candidateKey: `${candidate.providerName}:${candidate.providerId}`,
-      providerName: candidate.providerName,
-      providerAccountId: candidate.providerId,
-      account: { name: candidate.name, accountType: type, address: candidate.formattedAddress, latitude: candidate.lat, longitude: candidate.lng, locationCount, decisionMaker: { name: candidate.decisionMakerName ?? null, title: candidate.decisionMakerTitle ?? null }, website: candidate.website ?? null, phone: candidate.phone ?? null },
-      score, primarySignal, distanceMiles: Math.round(distance * 10) / 10, evidence,
-    } satisfies RankedTerritoryOpportunity;
-  }).sort((a, b) => b.score.score - a.score.score || b.score.estimatedAnnualValueCents - a.score.estimatedAnnualValueCents);
+  const opportunities = deduped
+    .map(candidate => rankTerritoryCandidate({ candidate, center, operator: input.operator }))
+    .sort(
+      (a, b) =>
+        b.score.score - a.score.score ||
+        b.score.estimatedAnnualValueCents - a.score.estimatedAnnualValueCents
+    );
   return { providerName: input.provider.name, center, providerCandidateCount: candidates.length, dedupedCandidateCount: deduped.length, opportunities: opportunities.slice(0, input.limit ?? 20) };
 }

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { chooseWalkInPlace } from "./voiceWalkInRouter";
 import type { NormalizedPlaceCandidate } from "../procurement/googlePlacesDiscoveryConnector";
@@ -34,5 +35,17 @@ describe("chooseWalkInPlace", () => {
 
   it("returns no candidate honestly when Places returns nothing", () => {
     expect(chooseWalkInPlace("The Louise", [])).toEqual({ candidate: null, confidence: "none" });
+  });
+});
+
+
+describe("walk-in save navigation contract", () => {
+  const captureSource = readFileSync(
+    new URL("../../client/src/components/legacy-dayforge/WalkInCapture.tsx", import.meta.url),
+    "utf8"
+  );
+  it("never redirects a successful walk-in save to the retired commercial-missions route", () => {
+    expect(captureSource).not.toContain("/commercial-missions?mission=");
+    expect(captureSource).toContain("walkInSaved=");
   });
 });
