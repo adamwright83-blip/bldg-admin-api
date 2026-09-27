@@ -19,7 +19,7 @@ import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { CANONICAL_BUILDING_GEOGRAPHY } from "@shared/canonicalGeography";
 
-export const WORLD_BASE = "/assets/goldline/lantern-city/v7";
+const DEFAULT_BASE = "/assets/goldline/lantern-city";
 
 export type LanternInput = {
   key: string;
@@ -107,7 +107,10 @@ const COMMON = /* glsl */ `
 const FOG_V = /* glsl */ `#include <fog_pars_vertex>`;
 const FOG_F = /* glsl */ `#include <fog_pars_fragment>`;
 
-export function createLanternWorld(container: HTMLElement, events: WorldEvents = {}) {
+export function createLanternWorld(container: HTMLElement, events: WorldEvents = {}, opts: { assetBase?: string } = {}) {
+  // assetBase holds v7/ (world + kit) and v4/ (tower art); the app serves it from /assets/goldline/lantern-city
+  const ASSETS = opts.assetBase ?? DEFAULT_BASE;
+  const WORLD_BASE = `${ASSETS}/v7`;
   let disposed = false;
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -840,8 +843,8 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
 
   // ----------------------------------------------------------------- landmarks (2D art on a camera-facing card for now)
   const LANDMARKS = [
-    { id: "opus_la" as const, src: "/assets/goldline/lantern-city/v4/tower-opus-la.png", h: 210 },
-    { id: "century_park_east" as const, src: "/assets/goldline/lantern-city/v4/tower-century-park-east.png", h: 290 },
+    { id: "opus_la" as const, src: `${ASSETS}/v4/tower-opus-la.png`, h: 210 },
+    { id: "century_park_east" as const, src: `${ASSETS}/v4/tower-century-park-east.png`, h: 290 },
   ];
   const hidden = new Set<number>();            // footprints the landmark art replaces
   const landmarks: { mesh: THREE.Mesh; x: number; z: number }[] = [];
