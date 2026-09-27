@@ -115,6 +115,8 @@ export default function CommercialSalesMission() {
     trpc.system.commercialMission.fieldSaveNotes.useMutation();
   const outcomeMutation =
     trpc.system.commercialMission.fieldOutcome.useMutation();
+  const clerkMutation =
+    trpc.system.commercialMission.fieldParkingLotClerk.useMutation();
   const handoffMutation =
     trpc.system.commercialMission.consumePhoneHandoff.useMutation();
   const irlStepMutation =
@@ -151,6 +153,7 @@ export default function CommercialSalesMission() {
   const [followUpRequested, setFollowUpRequested] = useState(false);
   const [followUpAt, setFollowUpAt] = useState("");
   const [reason, setReason] = useState<FieldOutcomeReason>("other");
+  const [clerkText, setClerkText] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const consumedHandoffRef = useRef(false);
 
@@ -249,6 +252,7 @@ export default function CommercialSalesMission() {
     arriveMutation.isPending ||
     notesMutation.isPending ||
     outcomeMutation.isPending ||
+    clerkMutation.isPending ||
     callAttemptMutation.isPending;
   const stageIndex = mission
     ? ((
@@ -1180,6 +1184,40 @@ export default function CommercialSalesMission() {
                 <small>VISIT NOTES</small>
                 <b>{state.visitOutcome?.notes || "No notes recorded"}</b>
               </div>
+              {state.parkingLotClerkObservation ? (
+                <div className="csm-summary" data-testid="parking-lot-clerk-saved">
+                  <small>PARKING LOT CLERK · SAVED</small>
+                  <b>{state.parkingLotClerkObservation.text}</b>
+                </div>
+              ) : (
+                <div className="csm-summary" data-testid="parking-lot-clerk-prompt">
+                  <small>PARKING LOT CLERK</small>
+                  <b>What actually happened inside?</b>
+                  <textarea
+                    data-testid="parking-lot-clerk-text"
+                    value={clerkText}
+                    onChange={event => setClerkText(event.target.value)}
+                    rows={4}
+                    placeholder="Record the concrete observation you want carried forward…"
+                  />
+                  <ActionButton
+                    disabled={busy || !clerkText.trim()}
+                    onClick={() =>
+                      void mutate(
+                        () =>
+                          clerkMutation.mutateAsync({
+                            missionId,
+                            requestId: requestId(),
+                            text: clerkText.trim(),
+                          }),
+                        adoptState
+                      )
+                    }
+                  >
+                    SAVE FIELD OBSERVATION
+                  </ActionButton>
+                </div>
+              )}
               <a className="csm-action" href="/driver">
                 Back to Goldline
               </a>
