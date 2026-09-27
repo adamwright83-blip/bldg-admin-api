@@ -128,6 +128,8 @@ describe("driver mission builder contract", () => {
     expect(fieldPage).toContain("fieldDepart");
     expect(fieldPage).toContain("fieldArrive");
     expect(fieldPage).toContain("fieldOutcome");
+    expect(fieldPage).toContain("fieldParkingLotClerk");
+    expect(fieldPage).toContain("parking-lot-clerk-prompt");
     expect(fieldPage).toContain('mission.status === "arrived"');
     expect(fieldPage).toContain('submitOutcome("follow_up")');
     expect(fieldPage).toContain('submitOutcome("won")');
