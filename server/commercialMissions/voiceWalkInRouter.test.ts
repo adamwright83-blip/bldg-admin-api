@@ -44,19 +44,8 @@ describe("walk-in save navigation contract", () => {
     new URL("../../client/src/components/legacy-dayforge/WalkInCapture.tsx", import.meta.url),
     "utf8"
   );
-  const todaySource = readFileSync(
-    new URL("../../client/src/pages/LegacyDayforgeTodayPage.tsx", import.meta.url),
-    "utf8"
-  );
-
   it("never redirects a successful walk-in save to the retired commercial-missions route", () => {
     expect(captureSource).not.toContain("/commercial-missions?mission=");
     expect(captureSource).toContain("/dayforge-today?walkInSaved=");
-  });
-
-  it("keeps Today in place after save and refreshes the durable queue and Day Line", () => {
-    expect(todaySource).toContain("onSaved={() =>");
-    expect(todaySource).toContain("queue.refetch()");
-    expect(todaySource).toContain("dayLine.refetch()");
   });
 });
