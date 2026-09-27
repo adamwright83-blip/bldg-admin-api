@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Building2,
@@ -42,6 +42,7 @@ export function BuildMissionSheet({
   const utils = trpc.useUtils();
   const [missionType, setMissionType] = useState<MissionType | null>(null);
   const [searchNearValue, setSearchNearValue] = useState(searchNear);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const build = trpc.system.commercialMission.buildForDriver.useMutation();
 
   useEffect(() => {
@@ -55,7 +56,14 @@ export function BuildMissionSheet({
   }
 
   async function chooseVenue(venueType: VenueType) {
-    if (!missionType || searchNearValue.trim().length < 5) return;
+    if (!missionType) return;
+    if (searchNearValue.trim().length < 5) {
+      sounds.overrideFail();
+      haptics.error();
+      toast.error("Enter the property name or street address first.");
+      searchInputRef.current?.focus();
+      return;
+    }
     sounds.press();
     haptics.impact();
     try {
@@ -128,6 +136,7 @@ export function BuildMissionSheet({
                   Search near
                 </span>
                 <input
+                  ref={searchInputRef}
                   value={searchNearValue}
                   onChange={event => setSearchNearValue(event.target.value)}
                   placeholder="Property name or street address"
