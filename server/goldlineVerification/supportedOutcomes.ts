@@ -1,8 +1,9 @@
 /**
  * Outcome IDs that COMPLETE Narrator eligibility currently knows how to read.
  * Issuance still requires a real authoritative producer. Slice E inventory
- * found none that are trustworthy enough to attach. An empty producer
- * registry is a successful inventory, not a prompt to synthesize evidence.
+ * accepts only explicitly registered authoritative producers. The first
+ * production producer is the commercial field-visit adapter, and it is
+ * restricted to a server-validated physical first visit.
  */
 export const SUPPORTED_PRODUCTION_GOLDLINE_OUTCOME_IDS = [
   "physical_first_visit",
@@ -31,11 +32,9 @@ export function isSupportedProductionGoldlineOutcomeId(
 }
 
 /**
- * Closed production producer registry. Empty on purpose: none of the
- * COMPLETE-mission outcomes currently have a trustworthy producer. Do not
- * put a name here to complete the table. A future producer is an explicit
- * code change here (namespace + allowed outcomes + evidence classes) plus
- * a named capability constant minted in producerCapability.ts.
+ * Closed production producer registry. Entries here are not evidence by
+ * themselves. Each one also needs a dedicated adapter that proves its source
+ * mutation and receives only the matching capability from producerCapability.
  */
 export type ProductionGoldlineProducerDefinition = {
   readonly producerNamespace: string;
@@ -47,4 +46,10 @@ export type ProductionGoldlineProducerDefinition = {
 };
 
 export const REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS: readonly ProductionGoldlineProducerDefinition[] =
-  [];
+  [
+    Object.freeze({
+      producerNamespace: "commercial_mission_field_visit_v1",
+      allowedOutcomeIds: ["physical_first_visit"] as const,
+      allowedEvidenceClasses: ["operator_attested"] as const,
+    }),
+  ];

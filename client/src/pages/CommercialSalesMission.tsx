@@ -156,6 +156,10 @@ export default function CommercialSalesMission() {
 
   const state = stateQuery.data;
   const mission = state?.mission;
+  const playerReaction =
+    outcomeMutation.data?.reaction.playerPayload ??
+    state?.reaction?.playerPayload ??
+    null;
   const builderMetadata = mission?.opportunity.evidence?.find(
     item => item.source === "driver_mission_builder"
   );
@@ -1158,6 +1162,17 @@ export default function CommercialSalesMission() {
                 <strong>
                   <CircleDollarSign /> {annualValue} estimated contract value
                 </strong>
+              ) : null}
+              {playerReaction ? (
+                <div
+                  data-testid="commercial-narrator-reaction"
+                  className="mb-4 rounded-2xl border border-white/20 bg-white/10 p-4"
+                >
+                  <small>NARRATOR</small>
+                  <b className="mt-1 block text-xl">
+                    {playerReaction.title}
+                  </b>
+                </div>
               ) : null}
               <div className="csm-summary">
                 <small>REALIZED REVENUE</small>

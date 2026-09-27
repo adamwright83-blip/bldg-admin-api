@@ -1194,11 +1194,14 @@ export const commercialMissionRouter = router({
         .superRefine((value, ctx) => {
           if (
             value.checkInMethod === "location" &&
-            (value.latitude === undefined || value.longitude === undefined)
+            (value.latitude === undefined ||
+              value.longitude === undefined ||
+              value.locationAccuracyMeters === undefined)
           ) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
-              message: "Location check-in requires latitude and longitude",
+              message:
+                "Location check-in requires latitude, longitude, and accuracy",
             });
           }
         })

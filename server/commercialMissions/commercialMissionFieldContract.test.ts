@@ -15,6 +15,10 @@ const router = readFileSync(
   new URL("./commercialMissionRouter.ts", import.meta.url),
   "utf8"
 );
+const reaction = readFileSync(
+  new URL("./commercialMissionFieldReaction.ts", import.meta.url),
+  "utf8"
+);
 const client = readFileSync(
   new URL("../../client/src/pages/CommercialSalesMission.tsx", import.meta.url),
   "utf8"
@@ -69,6 +73,30 @@ describe("DayForge Field production contract", () => {
     expect(service).toContain(
       "Approve a current proposal before departing for the visit"
     );
+  });
+
+  it("verifies location arrival against the persisted property instead of trusting client coordinates", () => {
+    expect(service).toContain("evaluateCommercialMissionLocationCheckIn");
+    expect(service).toContain("propertyLatitude: mission.account.latitude");
+    expect(service).toContain("propertyLongitude: mission.account.longitude");
+    expect(service).toContain('locationAuthority = "property_radius_verified"');
+    expect(service).toContain("locationAuthority,");
+    expect(service).toContain("Move within");
+    expect(router).toContain(
+      "Location check-in requires latitude, longitude, and accuracy"
+    );
+  });
+
+  it("persists the authored visit reaction and restores it through fieldState after refresh", () => {
+    expect(reaction).toContain("field_narrator_reaction_prepared");
+    expect(reaction).toContain("persistCommercialVisitReaction");
+    expect(reaction).toContain("getPersistedCommercialVisitReaction");
+    expect(service).toContain(
+      "const reaction = await getPersistedCommercialVisitReaction(input)"
+    );
+    expect(service).toContain("reaction,");
+    expect(client).toContain("state?.reaction?.playerPayload");
+    expect(client).toContain('data-testid="commercial-narrator-reaction"');
   });
 
   it("derives assignment and actor from the signed session", () => {

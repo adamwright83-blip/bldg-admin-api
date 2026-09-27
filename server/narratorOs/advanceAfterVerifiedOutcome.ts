@@ -19,8 +19,8 @@ import type { VerifiedGoldlineReceipt } from "./verifiedGoldlineReceipt";
  * truth. A Narrator failure is returned to the caller and is not a
  * business rollback.
  *
- * Production producers stay empty. This function is dormant until a
- * trustworthy producer is wired by an explicit later change.
+ * Production producers remain outside Narrator. This function activates
+ * only when a legitimate receipt arrives from an authorized Goldline producer.
  */
 export type AdvanceNarratorAfterVerifiedOutcomeResult = {
   readonly advanced: boolean;

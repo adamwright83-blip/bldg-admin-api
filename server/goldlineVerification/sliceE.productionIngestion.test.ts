@@ -88,6 +88,13 @@ import {
 } from "../narratorOs/livedBio";
 
 const scope = { tenantId: "t-e", operatorUserId: "op-e" };
+const EXPECTED_PRODUCTION_PRODUCERS = [
+  {
+    producerNamespace: "commercial_mission_field_visit_v1",
+    allowedOutcomeIds: ["physical_first_visit"],
+    allowedEvidenceClasses: ["operator_attested"],
+  },
+];
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, "../..");
 
@@ -260,7 +267,9 @@ describe("Narrator OS Slice E — production verified Goldline ingestion", () =>
       }
       expect(src).not.toMatch(/from ["'].*goldlineVerification/);
     }
-    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual([]);
+    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual(
+      EXPECTED_PRODUCTION_PRODUCERS
+    );
     expect(
       "PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES" in producerCapabilityModule
     ).toBe(false);
@@ -747,8 +756,10 @@ function drizzleShapedGoldlineRow(
 }
 
 describe("Narrator OS Slice E — authority, identity, and conflicting replay", () => {
-  it("1. empty production registry cannot mint any supported VERIFIED receipt", () => {
-    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual([]);
+  it("1. registered producer cannot be forged or obtained by name", () => {
+    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual(
+      EXPECTED_PRODUCTION_PRODUCERS
+    );
     expect(
       "PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES" in producerCapabilityModule
     ).toBe(false);
@@ -825,7 +836,9 @@ describe("Narrator OS Slice E — authority, identity, and conflicting replay", 
       mutation: mutation({ sourceEventId: "test-only-src" }),
     });
     expect(isVerifiedGoldlineReceipt(receipt)).toBe(true);
-    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual([]);
+    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual(
+      EXPECTED_PRODUCTION_PRODUCERS
+    );
     expect(
       "PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES" in producerCapabilityModule
     ).toBe(false);
@@ -863,7 +876,9 @@ describe("Narrator OS Slice E — authority, identity, and conflicting replay", 
         mutation: mutation(),
       })
     ).toThrow(UntrustedGoldlineIssuanceError);
-    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual([]);
+    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual(
+      EXPECTED_PRODUCTION_PRODUCERS
+    );
   });
 
   it("4. same sourceEventId / same tenant / different operator does not collide", () => {
@@ -1121,8 +1136,10 @@ describe("Narrator OS Slice E — authority, identity, and conflicting replay", 
     ).toContain(BEAT_IDS.M03);
   });
 
-  it("14. zero live business mutation producers remain wired", () => {
-    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual([]);
+  it("14. only the dedicated commercial field reaction may cross the production verification boundary", () => {
+    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual(
+      EXPECTED_PRODUCTION_PRODUCERS
+    );
     expect(
       "PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES" in producerCapabilityModule
     ).toBe(false);
@@ -1145,7 +1162,25 @@ describe("Narrator OS Slice E — authority, identity, and conflicting replay", 
     }
     for (const file of files) {
       const src = readFileSync(file, "utf8");
-      expect(src).not.toMatch(/goldlineVerification/);
+      const isCommercialFieldReaction = file.endsWith(
+        "commercialMissionFieldReaction.ts"
+      );
+      const isCommercialFieldService = file.endsWith(
+        "commercialMissionFieldService.ts"
+      );
+      if (isCommercialFieldReaction) {
+        expect(src).toMatch(
+          /goldlineVerification\/commercialFieldVisitProducer/
+        );
+        expect(src).toMatch(
+          /goldlineVerification\/ingestVerifiedGoldlineOutcome/
+        );
+      } else if (isCommercialFieldService) {
+        expect(src).toMatch(/commercialMissionFieldReaction/);
+        expect(src).not.toMatch(/goldlineVerification/);
+      } else {
+        expect(src).not.toMatch(/goldlineVerification/);
+      }
       expect(src).not.toMatch(/claimTestGoldlineProducerCapability/);
       expect(src).not.toMatch(/GOLDLINE_PRODUCER_CAPABILITY_BRAND/);
     }
@@ -1442,11 +1477,15 @@ describe("Narrator OS Slice E — unforgeable receipt membership and hidden prod
       mutation: mutation({ sourceEventId: "test-gate" }),
     });
     expect(isUpstreamIssuedVerifiedGoldlineReceipt(receipt)).toBe(true);
-    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual([]);
+    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual(
+      EXPECTED_PRODUCTION_PRODUCERS
+    );
   });
 
-  it("7. production producer registry remains empty", () => {
-    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual([]);
+  it("7. production producer registry contains only the bounded field-visit producer", () => {
+    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual(
+      EXPECTED_PRODUCTION_PRODUCERS
+    );
     expect(
       "PRODUCTION_GOLDLINE_PRODUCER_CAPABILITIES" in producerCapabilityModule
     ).toBe(false);

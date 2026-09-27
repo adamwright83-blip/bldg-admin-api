@@ -10,7 +10,9 @@ import {
   tenantFieldChecklistTemplates,
 } from "../../drizzle/schema";
 import {
+  COMMERCIAL_MISSION_LOCATION_CHECK_IN_RADIUS_METERS,
   DEFAULT_FIELD_CHECKLIST,
+  evaluateCommercialMissionLocationCheckIn,
   PARKING_LOT_CLERK_EVENT_NAME,
   PARKING_LOT_CLERK_PROVENANCE,
   navigationUrl,
@@ -25,6 +27,10 @@ import {
   transitionCommercialMissionWith,
 } from "./commercialMissionStore";
 import { awardDriverSalesPoints } from "./driverSalesMotivationService";
+import {
+  getPersistedCommercialVisitReaction,
+  reactToCompletedCommercialVisit,
+} from "./commercialMissionFieldReaction";
 
 function affectedRows(result: unknown): number {
   return Number(
@@ -188,6 +194,7 @@ export async function getCommercialMissionFieldState(input: {
   ]);
   const state = states[0] ?? null;
   const outcome = outcomes[0] ?? null;
+  const reaction = await getPersistedCommercialVisitReaction(input);
   return {
     mission,
     field: state
@@ -213,6 +220,7 @@ export async function getCommercialMissionFieldState(input: {
       completedAt: asIso(item.completedAt),
     })),
     parkingLotClerkObservation: decodeParkingLotClerkObservation(clerkEvents[0]),
+    reaction,
     visitOutcome: outcome
       ? {
           id: outcome.id,
@@ -668,6 +676,50 @@ export async function arriveCommercialMissionField(input: {
       )
       .limit(1);
     if (replay[0]) return;
+    const mission = await readCommercialMissionWith(tx, input);
+    if (!mission) throw new Error("Commercial mission not found");
+    if (mission.status !== "en_route")
+      throw new Error(`Field arrival cannot be recorded from ${mission.status}`);
+
+    let propertyDistanceMeters: number | null = null;
+    let locationAuthority: "property_radius_verified" | "operator_attested" =
+      "operator_attested";
+    if (input.checkInMethod === "location") {
+      if (
+        input.latitude === undefined ||
+        input.longitude === undefined ||
+        input.locationAccuracyMeters === undefined
+      ) {
+        throw new Error(
+          "Location check-in requires latitude, longitude, and accuracy."
+        );
+      }
+      const decision = evaluateCommercialMissionLocationCheckIn({
+        propertyLatitude: mission.account.latitude,
+        propertyLongitude: mission.account.longitude,
+        latitude: input.latitude,
+        longitude: input.longitude,
+        accuracyMeters: input.locationAccuracyMeters,
+      });
+      if (!decision.accepted) {
+        if (decision.reason === "missing_property_coordinates") {
+          throw new Error(
+            "This property has no authoritative coordinates. Use manual check-in; it will remain operator-attested."
+          );
+        }
+        if (decision.reason === "poor_accuracy") {
+          throw new Error(
+            "Location accuracy is too weak to verify property arrival. Move closer or use manual check-in."
+          );
+        }
+        throw new Error(
+          `Location check-in is ${Math.round(decision.distanceMeters ?? 0)}m from the property. Move within ${COMMERCIAL_MISSION_LOCATION_CHECK_IN_RADIUS_METERS}m or use manual check-in.`
+        );
+      }
+      propertyDistanceMeters = decision.distanceMeters;
+      locationAuthority = "property_radius_verified";
+    }
+
     const fieldUpdate = await tx
       .update(commercialMissionFieldStates)
       .set({
@@ -698,6 +750,9 @@ export async function arriveCommercialMissionField(input: {
       metadata: {
         checkInMethod: input.checkInMethod,
         locationEvidenceRecorded: input.checkInMethod === "location",
+        locationAuthority,
+        propertyDistanceMeters,
+        locationAccuracyMeters: input.locationAccuracyMeters ?? null,
       },
     });
   });
@@ -898,7 +953,12 @@ export async function recordCommercialMissionVisitOutcome(input: {
       pilotRequested: input.pilotRequested,
     },
   });
-  return state;
+  const reaction = await reactToCompletedCommercialVisit({
+    tenantId: input.tenantId,
+    operatorUserId: input.actorId,
+    state,
+  });
+  return { ...state, reaction };
 }
 
 export async function createCommercialMissionPhoneHandoff(input: {
