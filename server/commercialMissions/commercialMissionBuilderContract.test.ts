@@ -71,7 +71,7 @@ describe("driver mission builder contract", () => {
       /PROPOSAL_READY_STATUSES[\s\S]*"game_ready"/
     );
     expect(service).toContain("ensureApprovedBuilderProposal");
-    expect(service).toContain("reusableByProviderId");
+    expect(service).toContain("const reusable = activeMissions.find");
     expect(service).toContain("getLatestCommercialProposalForMission");
 
     const path = [
@@ -99,7 +99,7 @@ describe("driver mission builder contract", () => {
   });
 
   it("deduplicates active venues and requires public phones for call missions", () => {
-    expect(service).toContain("activeProviderIds");
+    expect(service).toContain("const conflicting = activeMissions.find");
     expect(service).toContain(
       'input.missionType !== "cold_call" || Boolean(opportunity.account.phone)'
     );
