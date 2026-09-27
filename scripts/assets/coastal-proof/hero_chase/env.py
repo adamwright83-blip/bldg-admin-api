@@ -535,7 +535,7 @@ def render_settings(res=(1080, 1920), samples=32, preview=False):
     sc.render.film_transparent = False
     sc.render.use_motion_blur = not preview
     if hasattr(sc.render, "motion_blur_shutter"):
-        sc.render.motion_blur_shutter = 0.5
+        sc.render.motion_blur_shutter = 0.28
 
 
 def compositor(bloom=0.5, vignette=0.3):

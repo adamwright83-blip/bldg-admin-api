@@ -647,6 +647,112 @@ def build_greenery(sh, lv, d0=4.0, d1=84.0):
     print(f"[hero] greenery: {k} plantings")
 
 
+def build_window_boxes(sh, lv, d0=3.0, d1=86.0):
+    """Planter boxes under the street-facing windows, spilling flowers and ferns: breaks up the
+    plain facades where the camera sees them."""
+    coll = collection("hero_green")
+    win = bpy.data.objects.get("VIS_window")
+    if not win:
+        return 0
+    mw = win.matrix_world
+    pts = []
+    for poly in win.data.polygons:
+        c = mw @ poly.center
+        n = (mw.to_3x3() @ poly.normal).normalized()
+        pts.append((c, n))
+    # cluster panes into windows
+    clusters = []
+    for c, n in pts:
+        for cl in clusters:
+            if (cl["c"] - c).length < 0.9:
+                cl["pts"].append(c)
+                break
+        else:
+            clusters.append({"c": c.copy(), "n": n, "pts": [c]})
+    wood = bpy.data.materials.get("hero_wood_dark")
+    blooms = [env.simple_material(f"hero_bloom{i}", col, rough=0.5) for i, col in enumerate(
+        [(0.75, 0.06, 0.12, 1), (0.95, 0.55, 0.08, 1), (0.92, 0.85, 0.75, 1), (0.55, 0.12, 0.45, 1)])]
+    leaf = env.simple_material("hero_leaf", (0.12, 0.26, 0.06, 1), rough=0.6)
+    fern = bpy.data.objects.get("hero_protos") and None
+    k = 0
+    bm_box, bm_leaf = bmesh.new(), bmesh.new()
+    bm_bloom = [bmesh.new() for _ in blooms]
+    for cl in clusters:
+        c = sum(cl["pts"], Vector()) / len(cl["pts"])
+        # which chase distance faces this window
+        best, bd = None, 1e9
+        for dd in range(int(d0 * 2), int(d1 * 2)):
+            p, tq, land, w = sh.at(dd * 0.5)
+            dist = (p.xy - c.xy).length
+            if dist < bd:
+                bd, best = dist, dd * 0.5
+        p, tq, land, w = sh.at(best)
+        rel = c - p
+        if not (0.5 < rel.dot(land) < 10 and 1.1 < c.z - p.z < 9.0):
+            continue
+        if cl["n"].dot(-land) < 0.4:
+            continue
+        zb = min(q.z for q in cl["pts"]) - 0.06
+        base = Vector((c.x, c.y, zb)) - land * 0.22
+        R = rot_frame(tq, land).to_3x3()
+        width = max(0.7, min(1.4, max((q - c).dot(tq) for q in cl["pts"]) * 2 + 0.25))
+        box(bm_box, base - Vector((0, 0, 0.09)), (width, 0.26, 0.18), R)
+        # foliage mound and flower heads
+        for i in range(int(width * 10)):
+            q = base + tq * ((rng.random() - 0.5) * width * 0.9) - land * ((rng.random() - 0.5) * 0.2) + Vector((0, 0, 0.02 + rng.random() * 0.08))
+            bmesh.ops.create_icosphere(bm_leaf, subdivisions=1, radius=0.07 + rng.random() * 0.05, matrix=Matrix.Translation(q))
+            if rng.random() < 0.8:
+                qb = q + Vector((0, 0, 0.04)) - land * 0.03
+                bmesh.ops.create_icosphere(bm_bloom[rng.randrange(len(blooms))], subdivisions=1, radius=0.035 + rng.random() * 0.02,
+                                           matrix=Matrix.Translation(qb))
+        # a few trailing strands over the front edge
+        for i in range(3):
+            q = base + tq * ((rng.random() - 0.5) * width * 0.8) - land * 0.14
+            for j in range(4):
+                bmesh.ops.create_icosphere(bm_leaf, subdivisions=1, radius=0.045, matrix=Matrix.Translation(q - Vector((0, 0, 0.08 * j)) - land * 0.02 * j))
+        k += 1
+    mesh_obj("hero_windowboxes", bm_box, wood, coll)
+    mesh_obj("hero_windowbox_leaves", bm_leaf, leaf, coll, smooth=True)
+    for i, bmb in enumerate(bm_bloom):
+        mesh_obj(f"hero_windowbox_blooms{i}", bmb, blooms[i], coll, smooth=True)
+    print(f"[hero] window boxes: {k}")
+    return k
+
+
+def build_bunting(sh, lv, ds, height=5.4):
+    """Strings of triangular pennants across the road: colour and motion high in frame."""
+    coll = collection("hero_bunting")
+    cols = [(0.62, 0.08, 0.06, 1), (0.9, 0.82, 0.62, 1), (0.08, 0.3, 0.32, 1), (0.85, 0.5, 0.08, 1)]
+    mats = [env.cloth_material(f"hero_pennant{i}", base=c, translucent=0.5) for i, c in enumerate(cols)]
+    out = []
+    for n_, d in enumerate(ds):
+        p, tq, land, w = sh.at(d)
+        hit = lv.toward(p + Vector((0, 0, 1.5)), land, 12.0)
+        front = hit if hit is not None else p + land * (w / 2 + 0.3)
+        a = Vector((front.x, front.y, p.z + height))
+        b = p - land * (w / 2 - 0.2)
+        b.z = p.z + height - 0.5
+        sag = 0.45
+        pts = [a.lerp(b, t) - Vector((0, 0, sag * 4 * t * (1 - t))) for t in [i / 24 for i in range(25)]]
+        rope(f"hero_bunting{n_}_line", pts, 0.006, coll)
+        bms = [bmesh.new() for _ in mats]
+        L = (b - a).length
+        nflags = int(L / 0.42)
+        for i in range(nflags):
+            t0 = (i + 0.1) / nflags
+            t1 = (i + 0.9) / nflags
+            q0 = a.lerp(b, t0) - Vector((0, 0, sag * 4 * t0 * (1 - t0)))
+            q1 = a.lerp(b, t1) - Vector((0, 0, sag * 4 * t1 * (1 - t1)))
+            tip = (q0 + q1) / 2 - Vector((0, 0, 0.36))
+            bm = bms[i % len(mats)]
+            vs = [bm.verts.new(q0), bm.verts.new(q1), bm.verts.new(tip)]
+            bm.faces.new(vs)
+        for i, bm in enumerate(bms):
+            ob = mesh_obj(f"hero_bunting{n_}_{i}", bm, mats[i], coll)
+            out.append(ob)
+    return out
+
+
 def build_all(sh, lv, frames):
     env.rope_material("hero_rope")
     kerb = build_promenade(sh)
@@ -668,5 +774,7 @@ def build_all(sh, lv, frames):
     barrels = build_barrels(sh, 27.0, "hero_barrels", lv)
     ship = build_ship(sh)
     build_greenery(sh, lv)
+    build_window_boxes(sh, lv)
+    build_bunting(sh, lv, [66.5, 49.0, 33.5, 27.5])
     return {"kerb": kerb, "bollards": bollards, "awnings": awn, "signs": signs, "lanterns": lanterns,
             "laundry": laundry1, "stall": stall, "barrels": barrels, "ship": ship}

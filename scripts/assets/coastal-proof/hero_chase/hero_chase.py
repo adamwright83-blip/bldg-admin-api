@@ -529,7 +529,20 @@ for f in FRAMES:
             rk_root.keyframe_insert("location", frame=f)
 
 # cloth: wind, Rook's feet on the awnings, Trailblazer through the sheets
-wind = fx.wind_field(road(80.0, -8.0, 3.0), (sh.at(60.0)[2] + Vector((0, 0, 0.1))).normalized(), strength=5.5, noise=2.6)
+# the breeze runs down the street toward the quay: through the laundry, not along it
+_tq76 = sh.at(76.0)[1]
+wind = fx.wind_field(road(82.0, 0.0, 3.2), (_tq76 + Vector((0, 0, 0.12))).normalized(), strength=34.0, noise=6.0)
+bpy.ops.object.effector_add(type="TURBULENCE", location=road(76.0, 0.0, 3.0))
+turb = bpy.context.object
+turb.field.strength = 14.0
+turb.field.size = 0.9
+turb.field.flow = 0.0
+# let the cloth settle in the wind before the first frame
+for o in bpy.data.objects:
+    for md in getattr(o, "modifiers", []):
+        if md.type == "CLOTH":
+            md.point_cache.frame_start = -48
+            md.settings.air_damping = 0.6
 feet = fx.collider_sphere("hero_rook_feet", 0.2)
 for f in FRAMES:
     t = C.frame_time(f)
@@ -552,7 +565,12 @@ if NO_SIM:
 cam = bpy.data.objects.new("hero_cam", bpy.data.cameras.new("hero_cam"))
 common.link(cam)
 sc.camera = cam
-cam.data.sensor_fit = "AUTO"
+# 16:9 keeps the 9:16 framing's vertical view and simply sees more to each side
+if RES[0] > RES[1]:
+    cam.data.sensor_fit = "VERTICAL"
+    cam.data.sensor_height = 36.0
+else:
+    cam.data.sensor_fit = "AUTO"
 cam.data.clip_start = 0.08
 cam.data.dof.use_dof = True
 cam.data.dof.aperture_fstop = 2.2
@@ -617,15 +635,25 @@ REVEAL_CAM = road(7.2, -2.3, 1.45)
 
 
 def rig_top(t):
-    # telephoto on him at the top against the backlit sails; after the salute the lens tilts down
-    # and opens out to find her on the quay edge beneath him, looking up
-    k = smooth(T_TOP + 2.5, T_TOP + 4.6, t)
-    p = REVEAL_CAM + Vector((0, 0, 0.35 * k))
+    # telephoto on him at the top against the backlit sails: the salute and the laugh
     rook_h = TOP + Vector((0, 0, 0.62))
-    tgt = rook_h.lerp(rook_h.lerp(tb_pos(t) + Vector((0, 0, 0.6)), 0.52), k)
-    lens = 85.0 + (22.0 - 85.0) * k
-    fp = rook_h.lerp(tb_pos(t) + Vector((0, 0, 1.4)), smooth(T_TOP + 3.0, T_TOP + 4.2, t) * 0.5)
-    return p, tgt, lens, fp
+    return REVEAL_CAM, rook_h, 85.0, rook_h
+
+
+def rig_two_shot(t):
+    # the last beat: low over her shoulder, her big in the foreground looking up, him small and
+    # untouchable at the top of the mast; a slow push in
+    k = smooth(T_TOP + 2.9, 18.5, t)
+    her = tb_pos(t)
+    up = TOP - her
+    up.z = 0
+    up.normalize()
+    side = Vector((up.y, -up.x, 0))
+    p = her - up * (1.6 - 0.25 * k) + side * 0.6 + Vector((0, 0, 0.55))
+    tgt = (her + Vector((0, 0, 1.2))).lerp(TOP + Vector((0, 0, 0.6)), 0.22)
+    rack = smooth(T_TOP + 3.4, T_TOP + 4.4, t)
+    fp = (her + Vector((0, 0, 1.45))).lerp(TOP + Vector((0, 0, 0.6)), rack)
+    return p, tgt, 22.0, fp
 
 
 SCHEDULE = [   # (start, rig, blend seconds)
@@ -637,6 +665,7 @@ SCHEDULE = [   # (start, rig, blend seconds)
     (9.05, rig_rope, 0.5),
     (10.2, rig_ship, 0.7),
     (T_TOP - 0.35, rig_top, 0.8),
+    (T_TOP + 2.8, rig_two_shot, 0.0),
 ]
 
 
@@ -661,8 +690,10 @@ vct = Vector()
 for f in FRAMES:
     t = C.frame_time(f)
     p, tg, lens, fp = camera_at(t)
-    if cp is None:
+    cut = any(bl == 0.0 and ts > 0 and ts <= t < ts + 1.0 / FPS for ts, _, bl in SCHEDULE)
+    if cp is None or cut:
         cp, ct = p.copy(), tg.copy()
+        vcp, vct = Vector(), Vector()
     stiff = 60.0 if t < 1.0 else 90.0
     dt = 1.0 / FPS
     for _ in range(4):
@@ -683,6 +714,33 @@ for f in FRAMES:
     cam.data.keyframe_insert("lens", frame=f)
     cam.data.dof.keyframe_insert("focus_distance", frame=f)
 log("camera keyed")
+
+# ====================================================================== events for the sound design
+import json as _json
+events = {"fps": FPS, "duration": C.DURATION, "footsteps": [], "rook_hops": [], "rook_lands": [],
+          "awning": [1.74, 3.2], "sign_kick": 4.5, "slide": [4.45, 5.25], "crate": 5.95,
+          "gulls": [6.25, T_TOP + 0.15], "rope_surf": [9.36, 9.96], "swipe": 9.5, "skid": [9.85, 11.0],
+          "salute": T_TOP + 0.7, "laundry_burst": 1.35, "top": T_TOP,
+          "cuts": [ts for ts, _, bl in SCHEDULE if bl == 0.0 and ts > 0]}
+for t0, t1, kind, data in R.segs:
+    if kind == "hop":
+        events["rook_hops"].append(round(t0, 3))
+        events["rook_lands"].append(round(t1, 3))
+feet_bones = [tb_arm.pose.bones["J_Bip_L_ToeBase"], tb_arm.pose.bones["J_Bip_R_Foot"]]
+low = [True, True]
+for f in FRAMES:
+    sc.frame_set(f)
+    t = C.frame_time(f)
+    for i, fb in enumerate(feet_bones):
+        z = (tb_arm.matrix_world @ fb.head).z - tb_pos(t).z
+        down = z < (0.07 if i == 0 else 0.13)
+        if down and not low[i] and tb.speed(t) > 1.0 and not (4.45 <= t < 5.3):
+            events["footsteps"].append(round(t, 3))
+        low[i] = down
+os.makedirs(OUT, exist_ok=True)
+with open(os.path.join(OUT, "events.json"), "w") as fh:
+    _json.dump(events, fh, indent=1)
+log("events", len(events["footsteps"]), "footsteps,", len(events["rook_hops"]), "hops")
 
 # ====================================================================== sims, render
 env.render_settings(res=RES, samples=SAMPLES, preview=PREVIEW)
