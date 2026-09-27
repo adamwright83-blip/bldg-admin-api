@@ -38,10 +38,18 @@ const SEARCH_CATEGORIES: Record<DriverMissionVenue, string[]> = {
 };
 
 function provider() {
-  const apiKey =
-    process.env.GOOGLE_MAPS_API_KEY ?? process.env.GOOGLE_PLACES_API_KEY ?? "";
-  if (!apiKey) throw new Error("Google Places is not configured for mission building");
-  return new GooglePlacesTerritoryProvider(apiKey);
+  const placesApiKey = process.env.GOOGLE_PLACES_API_KEY ?? "";
+  const geocodingApiKey = process.env.GOOGLE_GEOCODING_API_KEY ?? "";
+  if (!placesApiKey) {
+    throw new Error("Google Places is not configured for mission building");
+  }
+  if (!geocodingApiKey) {
+    throw new Error("Google Geocoding is not configured for mission building");
+  }
+  return new GooglePlacesTerritoryProvider({
+    placesApiKey,
+    geocodingApiKey,
+  });
 }
 
 function builderMetadata(mission: CommercialMission) {
