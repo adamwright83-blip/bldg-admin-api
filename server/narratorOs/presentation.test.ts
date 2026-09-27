@@ -550,7 +550,13 @@ describe("Narrator OS slice H — presentation boundary", () => {
     expect(boom.narrationFailed).toBe(true);
     expect(boom.presentation).toBeNull();
     expect((await store.load(scope))?.ledger).toEqual([]);
-    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual([]);
+    expect(REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS).toEqual([
+      {
+        producerNamespace: "commercial_mission_field_visit_v1",
+        allowedOutcomeIds: ["physical_first_visit"],
+        allowedEvidenceClasses: ["operator_attested"],
+      },
+    ]);
   });
 
   it("identifies its own committed occurrence when a same-beat row is committed beside it", async () => {
