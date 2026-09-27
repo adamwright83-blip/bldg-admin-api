@@ -115,7 +115,31 @@ export default function Driver() {
 
 function AuthenticatedDriver() {
   const [sideQuestOpen, setSideQuestOpen] = useState(false);
+  const [publicBootstrapFailed, setPublicBootstrapFailed] = useState(false);
   const { loading: authLoading, isAuthenticated } = useAuth();
+  const publicDriverHost =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "bldg-admin-api-production.up.railway.app" ||
+      window.location.hostname === "driver.bldg.chat");
+
+  useEffect(() => {
+    if (authLoading || isAuthenticated || !publicDriverHost || publicBootstrapFailed) return;
+    let cancelled = false;
+    void fetch("/api/auth/public-driver", {
+      method: "POST",
+      credentials: "include",
+    })
+      .then(async response => {
+        if (!response.ok) throw new Error("Public driver bootstrap unavailable");
+        if (!cancelled) window.location.reload();
+      })
+      .catch(() => {
+        if (!cancelled) setPublicBootstrapFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAuthenticated, publicDriverHost, publicBootstrapFailed]);
   const firstWorld=trpc.system.goldlineOnboarding.state.useQuery(undefined,{enabled:isAuthenticated,retry:false});
   const firstMission = firstWorld.data?.session?.status === "COMPLETE" ? firstWorld.data.session.mission : null;
   const firstSparkAvailable = Boolean(firstMission && !firstMission.gameplayCompletedAt);
@@ -141,6 +165,13 @@ function AuthenticatedDriver() {
   }
 
   if (!isAuthenticated) {
+    if (publicDriverHost && !publicBootstrapFailed) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-white">
+          <Loader2 className="h-8 w-8 animate-spin text-black/30" />
+        </div>
+      );
+    }
     return (
       <LoginForm
         role="driver"
