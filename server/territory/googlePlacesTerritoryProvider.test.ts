@@ -31,4 +31,85 @@ describe("GooglePlacesTerritoryProvider", () => {
     expect(results[0]).toMatchObject({ providerId: "place-1", providerName: "google_places", name: "Harbor Hotel", providerUrl: "https://maps.example/place-1" });
     expect(results[0]?.sourceCapturedAt).toMatch(/^\d{4}-/);
   });
+  it("resolves the business at the exact entered street address instead of the first nearby result", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/geocode/json")) {
+        return new Response(JSON.stringify({
+          status: "OK",
+          results: [{
+            formatted_address: "4455 Los Feliz Blvd, Los Angeles, CA 90027, USA",
+            geometry: { location: { lat: 34.112, lng: -118.287 } },
+          }],
+        }), { status: 200 });
+      }
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      expect(body.textQuery).toContain("4455 Los Feliz Blvd");
+      expect(body.locationBias.circle.center).toEqual({
+        latitude: 34.112,
+        longitude: -118.287,
+      });
+      return new Response(JSON.stringify({
+        places: [
+          {
+            id: "nearby-1",
+            displayName: { text: "The Grand Residences" },
+            formattedAddress: "4175 Los Feliz Blvd, Los Angeles, CA 90027, USA",
+            location: { latitude: 34.111, longitude: -118.285 },
+            types: ["apartment_complex"],
+          },
+          {
+            id: "los-feliz-towers",
+            displayName: { text: "Los Feliz Towers" },
+            formattedAddress: "4455 Los Feliz Boulevard, Los Angeles, CA 90027, USA",
+            location: { latitude: 34.112, longitude: -118.287 },
+            types: ["apartment_complex"],
+          },
+        ],
+      }), { status: 200 });
+    });
+
+    const result = await new GooglePlacesTerritoryProvider(
+      { placesApiKey: "places-secret", geocodingApiKey: "geocoding-secret" },
+      fetcher as typeof fetch
+    ).resolveBusiness("4455 Los Feliz Blvd, Los Angeles, CA 90027");
+
+    expect(result).toMatchObject({
+      providerId: "los-feliz-towers",
+      name: "Los Feliz Towers",
+      formattedAddress: "4455 Los Feliz Boulevard, Los Angeles, CA 90027, USA",
+    });
+  });
+
+  it("returns no property when Places only finds neighbors of an exact street address", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/geocode/json")) {
+        return new Response(JSON.stringify({
+          status: "OK",
+          results: [{
+            formatted_address: "4455 Los Feliz Blvd, Los Angeles, CA 90027, USA",
+            geometry: { location: { lat: 34.112, lng: -118.287 } },
+          }],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        places: [{
+          id: "nearby-only",
+          displayName: { text: "Jardine Hollywood" },
+          formattedAddress: "6390 De Longpre Ave, Los Angeles, CA 90028, USA",
+          location: { latitude: 34.097, longitude: -118.327 },
+          types: ["apartment_complex"],
+        }],
+      }), { status: 200 });
+    });
+
+    const result = await new GooglePlacesTerritoryProvider(
+      { placesApiKey: "places-secret", geocodingApiKey: "geocoding-secret" },
+      fetcher as typeof fetch
+    ).resolveBusiness("4455 Los Feliz Blvd, Los Angeles, CA 90027");
+
+    expect(result).toBeNull();
+  });
+
 });
