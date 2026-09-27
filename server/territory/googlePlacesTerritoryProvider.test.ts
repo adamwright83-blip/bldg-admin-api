@@ -2,6 +2,38 @@ import { describe, expect, it, vi } from "vitest";
 import { GooglePlacesTerritoryProvider } from "./googlePlacesTerritoryProvider";
 
 describe("GooglePlacesTerritoryProvider", () => {
+  it("returns the exact first Google Place for a property/address query", async () => {
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      expect(body).toEqual({
+        textQuery: "Los Feliz Towers 4455 Los Feliz Blvd",
+        maxResultCount: 1,
+      });
+      return new Response(
+        JSON.stringify({
+          places: [
+            {
+              id: "los-feliz-towers",
+              displayName: { text: "Los Feliz Towers" },
+              formattedAddress: "4455 Los Feliz Blvd, Los Angeles, CA 90027",
+              location: { latitude: 34.112, longitude: -118.287 },
+              types: ["apartment_complex"],
+              googleMapsUri: "https://maps.example/los-feliz-towers",
+            },
+          ],
+        }),
+        { status: 200 }
+      );
+    });
+    const result = await new GooglePlacesTerritoryProvider(
+      { placesApiKey: "places-secret", geocodingApiKey: "geo-secret" },
+      fetcher as typeof fetch
+    ).searchExactBusiness("Los Feliz Towers 4455 Los Feliz Blvd");
+    expect(result?.providerId).toBe("los-feliz-towers");
+    expect(result?.name).toBe("Los Feliz Towers");
+    expect(result?.formattedAddress).toContain("4455 Los Feliz Blvd");
+  });
+
   it("uses the dedicated geocoding key without exposing it in the result", async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input));
