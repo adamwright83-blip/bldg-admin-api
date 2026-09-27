@@ -386,6 +386,21 @@ export default function CommercialSalesMission() {
         ) : null}
 
         <section className="csm-screen">
+          {mission.status === "game_ready" || mission.status === "game_active" ? (
+            <>
+              <SectionHeader
+                eyebrow="MISSION UNLOCK"
+                title="Win the chapter before the field visit."
+                body="This sales stop is real. BORESLAY is the authored gate that unlocks mission preparation."
+              />
+              <a
+                className="csm-action"
+                href={`/boreslay-rally?missionId=${mission.id}`}
+              >
+                OPEN BORESLAY
+              </a>
+            </>
+          ) : null}
           {activeIrlStep ? (
             <article
               className={`mb-5 overflow-hidden rounded-3xl border border-orange-300/30 p-5 text-white shadow-2xl ${activeIrlStep.type === "wardrobe_review" ? "bg-gradient-to-br from-fuchsia-950 via-slate-950 to-orange-950" : activeIrlStep.type === "collateral_pickup" ? "bg-gradient-to-br from-orange-950 via-slate-950 to-amber-950" : activeIrlStep.type === "purchase_stop" ? "bg-gradient-to-br from-emerald-950 via-slate-950 to-cyan-950" : activeIrlStep.type === "sales_training" ? "bg-gradient-to-br from-indigo-950 via-slate-950 to-purple-950" : activeIrlStep.type === "field_visit" ? "bg-gradient-to-br from-sky-950 via-slate-950 to-amber-950" : "bg-gradient-to-br from-slate-900 to-orange-950"}`}
