@@ -264,9 +264,28 @@ def build(events, out_path, tail=3.2):
         for b in range(7):
             sfx.add(g + rng.uniform(0, 0.8), gull_call(rng.integers(1, 3)), gain=rng.uniform(0.07, 0.14), pan=rng.uniform(-0.9, 0.9))
             sfx.add(g + rng.uniform(0, 0.5), flutter(0.3), gain=0.12, pan=rng.uniform(-0.9, 0.9))
-    r0, r1 = events["rope_surf"]
-    sfx.add(r0, zip_line(r1 - r0 + 0.15), gain=0.6, pan=0.2)
-    sfx.add(events["swipe"], whoosh(0.3, 500, 3500), gain=0.4, pan=-0.2)
+    if "rope_surf" in events:
+        r0, r1 = events["rope_surf"]
+        sfx.add(r0, zip_line(r1 - r0 + 0.15), gain=0.6, pan=0.2)
+    if "swipe" in events:
+        sfx.add(events["swipe"], whoosh(0.3, 500, 3500), gain=0.4, pan=-0.2)
+    if "steal" in events:
+        # the snatch: a dive, a flutter at her hip, the compass chain
+        sfx.add(events["steal"] - 0.45, whoosh(0.5, 300, 3200), gain=0.35, pan=-0.3)
+        sfx.add(events["steal"], flutter(0.3), gain=0.35)
+        sfx.add(events["steal"] + 0.02, chain_rattle(0.4), gain=0.45)
+    if "plant" in events:
+        # the vault: the pole bites the stones, a long rising air, the world slows and booms at the top
+        sfx.add(events["plant"], wood_knock(110), gain=0.7)
+        sfx.add(events["plant"] + 0.02, crate_hit(), gain=0.25)
+        a0, a1 = events["slow"]
+        sfx.add(events["plant"] + 0.05, whoosh(a0 - events["plant"] + 0.3, 150, 2200), gain=0.45)
+        sfx.add(a0, boom(), gain=0.45)
+        sfx.add(a0 + 0.1, whoosh(a1 - a0, 120, 900, rise=False), gain=0.35)
+        sfx.add(events["apex"] + 0.05, flutter(0.45), gain=0.4, pan=0.2)
+        sfx.add(events["land"], footstep(1.8), gain=0.6)
+        sfx.add(events["land"] + 0.05, lp(noise(int(0.3 * SR)), 400) * env(int(0.3 * SR), 0.002, 0.08), gain=0.6)
+        sfx.add(events["roll"], scrape(0.7), gain=0.35)
     sfx.add(events["skid"][0], scrape(1.0), gain=0.5)
     sfx.add(events["salute"], bell(), gain=0.35, pan=0.15)
 
@@ -276,7 +295,12 @@ def build(events, out_path, tail=3.2):
     end_music = events["salute"] - 0.1
     b = 0
     tb = 0.35
+    slow = events.get("slow", [-1, -1])
     while tb < end_music:
+        if slow[0] - 0.1 <= tb < slow[1] + 0.2:
+            tb += beat
+            b += 1
+            continue
         bar_pos = b % 8
         build = min(1.0, tb / end_music + 0.3)
         if bar_pos in (0, 3, 6):
