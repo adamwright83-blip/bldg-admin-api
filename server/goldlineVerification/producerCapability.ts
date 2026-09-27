@@ -4,8 +4,8 @@
  * A structurally constructible mutation record is not authority. Issuance
  * requires a capability object that this module itself minted into the
  * private authorized set. Production capabilities are created only from
- * REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS. That list is empty: there is
- * currently no production authority token.
+ * REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS. Production authority is closed
+ * and narrowly scoped to explicitly registered adapters.
  *
  * Importing the brand symbol, supplying a producer name, or constructing a
  * lookalike object does not confer membership. There is no lookup-by-name
