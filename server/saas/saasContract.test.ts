@@ -140,7 +140,7 @@ describe("DayForge SaaS production contract", () => {
     expect(auth).toContain("legacyDayforgeSaasUserCredentials.emailNormalized");
     expect(auth).toContain("const matches = passwordMatches");
     expect(auth).toContain("Multiple accounts use this email");
-    expect(cors).toContain("DAYFORGE_ALLOWED_ORIGINS");
+    expect(cors).toContain("JOYSTICK_ALLOWED_ORIGINS");
     expect(cors).toContain("RAILWAY_PUBLIC_DOMAIN");
   });
 
