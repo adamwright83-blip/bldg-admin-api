@@ -75,7 +75,7 @@ function guardCommittedDayLineResult(
   grant: ExecutiveActionGrant,
   result: ClaireTurnResult
 ): ClaireTurnResult {
-  if (grant.actionClass !== "commit_day_line") return result;
+  if (grant.actionClass !== "commit_day_line" && grant.actionClass !== "commit_briefing") return result;
   if (hasDayLineWriteEvidence(result)) return result;
 
   // A truthful explicit-commit failure already carries its own receipt-backed

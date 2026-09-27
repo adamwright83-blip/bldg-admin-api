@@ -210,6 +210,41 @@ describe("Brain V2 live cutover", () => {
     expect(result.adapterResult?.kind).toBe("briefing_saved");
   });
 
+  it("blocks unverified success speech for pending briefing commits", async () => {
+    const executeLegacyAdapter = vi.fn(async () => ({
+      speak: "Done. I added everything.",
+      kind: "briefing_saved" as const,
+      assembledUtterance: "Add all that to the Day Line.",
+      thoughtCompleteness: "complete" as const,
+      actionIds: [],
+      mutationReceipts: [],
+    }));
+    const result = await runClaireBrainV2LiveTurn(
+      input({
+        rawText: "Add all that to the Day Line.",
+        assembledText: "Add all that to the Day Line.",
+        state: {
+          pendingBriefing: {
+            parsed: { items: [{ title: "Call Todd" }, { title: "Pick up Rebecca" }] },
+            createdAt: 1,
+          },
+        },
+        executeLegacyAdapter,
+      }),
+      { env: ON }
+    );
+
+    expect(result.active).toBe(true);
+    if (!result.active) return;
+    expect(result.actionClasses).toEqual(["commit_briefing"]);
+    expect(executeLegacyAdapter).toHaveBeenCalledTimes(1);
+    expect(result.adapterResult?.actionIds).toEqual([]);
+    expect(result.adapterResult?.mutationReceipts).toBeUndefined();
+    expect(result.adapterResult?.receiptBackedCommit).toBeUndefined();
+    expect(result.adapterResult?.speak).toMatch(/don't have a write receipt/i);
+    expect(result.adapterResult?.speak).not.toMatch(/\bDone\b|\badded\b/i);
+  });
+
   it("treats an explicit add-all command as the pending briefing confirmation, not a second proposal", async () => {
     const executeLegacyAdapter = vi.fn(async () =>
       adapterResult("briefing_saved")
