@@ -23,6 +23,31 @@ type GooglePlace = {
   googleMapsUri?: string;
 };
 
+function normalizedStreetSignature(value: string): string | null {
+  const street = value
+    .split(",")[0]!
+    .toLowerCase()
+    .replace(/(?:\s+#\s*\w+|\s+\b(?:apt|apartment|unit|suite|ste)\b\s*#?\s*\w+).*$/i, "")
+    .replace(/\b(boulevard)\b/g, "blvd")
+    .replace(/\b(avenue)\b/g, "ave")
+    .replace(/\b(street)\b/g, "st")
+    .replace(/\b(road)\b/g, "rd")
+    .replace(/\b(drive)\b/g, "dr")
+    .replace(/\b(lane)\b/g, "ln")
+    .replace(/\b(place)\b/g, "pl")
+    .replace(/\b(court)\b/g, "ct")
+    .replace(/\b(terrace)\b/g, "ter")
+    .replace(/\b(highway)\b/g, "hwy")
+    .replace(/\b(north)\b/g, "n")
+    .replace(/\b(south)\b/g, "s")
+    .replace(/\b(east)\b/g, "e")
+    .replace(/\b(west)\b/g, "w")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return /^\d{1,6}\s+\S+/.test(street) ? street : null;
+}
+
 export class GooglePlacesTerritoryProvider
   implements TerritoryBusinessProvider
 {
@@ -65,6 +90,15 @@ export class GooglePlacesTerritoryProvider
   }
 
   async resolveBusiness(query: string): Promise<TerritoryBusinessCandidate | null> {
+    const textQuery = query.trim();
+    if (!textQuery) return null;
+
+    // An address is a target, not a search center. Anchor the request with
+    // geocoding, then accept only a Places result at that same street address.
+    const geocoded = await this.geocode(textQuery);
+    const expectedStreet = normalizedStreetSignature(geocoded.formattedAddress);
+    if (!expectedStreet) return null;
+
     const capturedAt = new Date().toISOString();
     const response = await this.fetcher(
       "https://places.googleapis.com/v1/places:searchText",
@@ -77,8 +111,17 @@ export class GooglePlacesTerritoryProvider
             "places.id,places.displayName,places.formattedAddress,places.location,places.types,places.websiteUri,places.nationalPhoneNumber,places.googleMapsUri",
         },
         body: JSON.stringify({
-          textQuery: query,
-          maxResultCount: 5,
+          textQuery,
+          maxResultCount: 10,
+          locationBias: {
+            circle: {
+              center: {
+                latitude: geocoded.lat,
+                longitude: geocoded.lng,
+              },
+              radius: 500,
+            },
+          },
         }),
         signal: AbortSignal.timeout(12_000),
       }
@@ -94,6 +137,7 @@ export class GooglePlacesTerritoryProvider
         item.id &&
         item.displayName?.text &&
         item.formattedAddress &&
+        normalizedStreetSignature(item.formattedAddress) === expectedStreet &&
         item.location?.latitude != null &&
         item.location.longitude != null
     );

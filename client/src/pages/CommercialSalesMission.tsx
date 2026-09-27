@@ -115,6 +115,8 @@ export default function CommercialSalesMission() {
     trpc.system.commercialMission.fieldSaveNotes.useMutation();
   const outcomeMutation =
     trpc.system.commercialMission.fieldOutcome.useMutation();
+  const clerkMutation =
+    trpc.system.commercialMission.fieldParkingLotClerk.useMutation();
   const handoffMutation =
     trpc.system.commercialMission.consumePhoneHandoff.useMutation();
   const irlStepMutation =
@@ -151,6 +153,7 @@ export default function CommercialSalesMission() {
   const [followUpRequested, setFollowUpRequested] = useState(false);
   const [followUpAt, setFollowUpAt] = useState("");
   const [reason, setReason] = useState<FieldOutcomeReason>("other");
+  const [clerkText, setClerkText] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const consumedHandoffRef = useRef(false);
 
@@ -249,6 +252,7 @@ export default function CommercialSalesMission() {
     arriveMutation.isPending ||
     notesMutation.isPending ||
     outcomeMutation.isPending ||
+    clerkMutation.isPending ||
     callAttemptMutation.isPending;
   const stageIndex = mission
     ? ((
@@ -330,7 +334,7 @@ export default function CommercialSalesMission() {
     );
   };
 
-  const submitOutcome = (outcome: "follow_up" | "won" | "lost") =>
+  const submitOutcome = (outcome: "follow_up" | "won" | "lost" | "no_contact" | "no_decision") =>
     void mutate(
       () =>
         outcomeMutation.mutateAsync({
@@ -386,6 +390,21 @@ export default function CommercialSalesMission() {
         ) : null}
 
         <section className="csm-screen">
+          {mission.status === "game_ready" || mission.status === "game_active" ? (
+            <>
+              <SectionHeader
+                eyebrow="MISSION UNLOCK"
+                title="Win the chapter before the field visit."
+                body="This sales stop is real. BORESLAY is the authored gate that unlocks mission preparation."
+              />
+              <a
+                className="csm-action"
+                href={`/boreslay-rally?missionId=${mission.id}`}
+              >
+                OPEN BORESLAY
+              </a>
+            </>
+          ) : null}
           {activeIrlStep ? (
             <article
               className={`mb-5 overflow-hidden rounded-3xl border border-orange-300/30 p-5 text-white shadow-2xl ${activeIrlStep.type === "wardrobe_review" ? "bg-gradient-to-br from-fuchsia-950 via-slate-950 to-orange-950" : activeIrlStep.type === "collateral_pickup" ? "bg-gradient-to-br from-orange-950 via-slate-950 to-amber-950" : activeIrlStep.type === "purchase_stop" ? "bg-gradient-to-br from-emerald-950 via-slate-950 to-cyan-950" : activeIrlStep.type === "sales_training" ? "bg-gradient-to-br from-indigo-950 via-slate-950 to-purple-950" : activeIrlStep.type === "field_visit" ? "bg-gradient-to-br from-sky-950 via-slate-950 to-amber-950" : "bg-gradient-to-br from-slate-900 to-orange-950"}`}
@@ -1130,6 +1149,20 @@ export default function CommercialSalesMission() {
                 <ActionButton
                   secondary
                   disabled={busy || !notes.trim()}
+                  onClick={() => submitOutcome("no_decision")}
+                >
+                  No decision yet
+                </ActionButton>
+                <ActionButton
+                  secondary
+                  disabled={busy || !notes.trim()}
+                  onClick={() => submitOutcome("no_contact")}
+                >
+                  No contact
+                </ActionButton>
+                <ActionButton
+                  secondary
+                  disabled={busy || !notes.trim()}
                   onClick={() => submitOutcome("lost")}
                 >
                   Not a fit
@@ -1138,7 +1171,7 @@ export default function CommercialSalesMission() {
             </>
           ) : null}
 
-          {["follow_up", "won", "lost"].includes(mission.status) ? (
+          {["visit_completed", "follow_up", "won", "lost"].includes(mission.status) ? (
             <div
               className={`csm-complete${mission.status === "won" ? " is-won" : ""}`}
             >
@@ -1151,7 +1184,9 @@ export default function CommercialSalesMission() {
                   ? "Account won."
                   : mission.status === "follow_up"
                     ? "Follow-up recorded."
-                    : "Mission learned from."}
+                    : mission.status === "visit_completed"
+                      ? "Visit recorded."
+                      : "Mission learned from."}
               </h1>
               <p>{mission.account.name}</p>
               {mission.status === "won" ? (
@@ -1165,6 +1200,40 @@ export default function CommercialSalesMission() {
                 <small>VISIT NOTES</small>
                 <b>{state.visitOutcome?.notes || "No notes recorded"}</b>
               </div>
+              {state.parkingLotClerkObservation ? (
+                <div className="csm-summary" data-testid="parking-lot-clerk-saved">
+                  <small>PARKING LOT CLERK · SAVED</small>
+                  <b>{state.parkingLotClerkObservation.text}</b>
+                </div>
+              ) : (
+                <div className="csm-summary" data-testid="parking-lot-clerk-prompt">
+                  <small>PARKING LOT CLERK</small>
+                  <b>What actually happened inside?</b>
+                  <textarea
+                    data-testid="parking-lot-clerk-text"
+                    value={clerkText}
+                    onChange={event => setClerkText(event.target.value)}
+                    rows={4}
+                    placeholder="Record the concrete observation you want carried forward…"
+                  />
+                  <ActionButton
+                    disabled={busy || !clerkText.trim()}
+                    onClick={() =>
+                      void mutate(
+                        () =>
+                          clerkMutation.mutateAsync({
+                            missionId,
+                            requestId: requestId(),
+                            text: clerkText.trim(),
+                          }),
+                        adoptState
+                      )
+                    }
+                  >
+                    SAVE FIELD OBSERVATION
+                  </ActionButton>
+                </div>
+              )}
               <a className="csm-action" href="/driver">
                 Back to Goldline
               </a>

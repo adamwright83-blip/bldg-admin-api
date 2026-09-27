@@ -142,6 +142,11 @@ jobs:
               client/src/game/state/MissionDirector.test.ts
               client/src/game/state/worldMemory.test.ts
               client/src/game/session/checkpointStorage.test.ts
+              client/src/pages/driver/goldlineDayPlanModel.test.ts
+              server/territory/googlePlacesTerritoryProvider.test.ts
+              server/commercialMissions/commercialMissionBuilderContract.test.ts
+              server/commercialMissions/commercialMissionGameContract.test.ts
+              server/commercialMissions/commercialMissionFieldContract.test.ts
               shared/goldlineProgression.test.ts
           - name: mobile-android-journal
             command: >-

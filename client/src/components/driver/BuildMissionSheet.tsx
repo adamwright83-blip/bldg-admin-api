@@ -73,7 +73,7 @@ export function BuildMissionSheet({
         venueType,
         searchNear: searchNearValue.trim(),
         requestId: crypto.randomUUID(),
-        count: /^\s*\d{1,6}\s+\S+/.test(searchNearValue.trim()) ? 1 : 3,
+        count: /\b\d{1,6}\s+[A-Za-z0-9]/.test(searchNearValue.trim()) ? 1 : 3,
       });
       await utils.system.commercialMission.myBuiltMissions.invalidate();
       sounds.missionAssign();

@@ -4,6 +4,7 @@ import type { CommercialMission } from "@shared/commercialMission";
 import type { ExternalOperationalOrder } from "@shared/externalOperationalOrder";
 import {
   buildDayPlanProjection,
+  commercialMissionEntryPath,
   liveObjectivesFromFieldToday,
 } from "./goldlineDayPlanModel";
 
@@ -55,6 +56,35 @@ const greystar = (status: CommercialMission["status"]) =>
     completedAt: null,
     expiresAt: null,
   }) as CommercialMission;
+
+
+describe("commercial sales-stop entry", () => {
+  it("sends a freshly built game-ready mission through BORESLAY before field work", () => {
+    expect(commercialMissionEntryPath(greystar("game_ready"))).toBe(
+      "/boreslay-rally?missionId=6"
+    );
+    expect(commercialMissionEntryPath(greystar("game_active"))).toBe(
+      "/boreslay-rally?missionId=6"
+    );
+  });
+
+  it("sends the unlocked mission into the field workflow", () => {
+    for (const status of [
+      "phone_ready",
+      "preparing",
+      "en_route",
+      "arrived",
+      "visit_completed",
+      "follow_up",
+      "won",
+      "lost",
+    ] as CommercialMission["status"][]) {
+      expect(commercialMissionEntryPath(greystar(status))).toBe(
+        "/driver/sales-mission/6"
+      );
+    }
+  });
+});
 
 describe("authoritative Goldline Day Plan projection", () => {
   it("merges native, confirmed external, and approved briefing tasks while preserving provenance", () => {
