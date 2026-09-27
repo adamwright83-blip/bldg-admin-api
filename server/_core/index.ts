@@ -36,6 +36,7 @@ import { registerGoogleProxyRoutes } from "../google/googleProxyRoutes";
 import { registerCleanCloudImportRoutes } from "../cleancloudImportRoute";
 import { registerClearentImportRoutes } from "../clearentImportRoute";
 import { registerPaymentReconciliationRoutes } from "../paymentReconciliationRoute";
+import { registerGooglePlacesLookupDiagnosticRoute } from "../googlePlacesLookupDiagnosticRoute";
 import { registerMarketplacePaymentInternalRoutes } from "../marketplacePayments/marketplacePaymentInternalRoute";
 import { registerMarketplacePaymentReadRoutes } from "../marketplacePayments/marketplacePaymentReadRoute";
 import { registerMarketplaceStripeWebhookRoutes } from "../marketplacePayments/marketplaceStripeWebhookRoute";
@@ -306,6 +307,7 @@ async function startServer() {
   registerCleanCloudImportRoutes(app);
   registerClearentImportRoutes(app);
   registerPaymentReconciliationRoutes(app);
+  registerGooglePlacesLookupDiagnosticRoute(app);
   registerMarketplacePaymentInternalRoutes(app);
   registerMarketplacePaymentReadRoutes(app);
   registerMarketplaceStripeWebhookRoutes(app);
