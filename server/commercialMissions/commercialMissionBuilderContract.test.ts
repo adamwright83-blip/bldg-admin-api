@@ -133,6 +133,8 @@ describe("driver mission builder contract", () => {
     expect(fieldPage).toContain('mission.status === "arrived"');
     expect(fieldPage).toContain('submitOutcome("follow_up")');
     expect(fieldPage).toContain('submitOutcome("won")');
+    expect(fieldPage).toContain('submitOutcome("no_decision")');
+    expect(fieldPage).toContain('submitOutcome("no_contact")');
     expect(fieldPage).toContain('submitOutcome("lost")');
     expect(fieldPage).toContain("/boreslay-rally?missionId=");
     expect(appRouter).toContain('path === "/boreslay-rally"');
