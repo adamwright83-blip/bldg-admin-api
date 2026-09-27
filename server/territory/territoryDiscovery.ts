@@ -117,7 +117,7 @@ export function rankTerritoryCandidates(input: {
   operator: LaundryTerritoryOperatorContext;
   limit?: number;
 }): RankedTerritoryOpportunity[] {
-  const deduped = dedupeTerritoryCandidates(input.input.candidates);
+  const deduped = dedupeTerritoryCandidates(input.candidates);
   return deduped.map(candidate => {
     const type = prospectType(candidate.categories);
     const distance = distanceMiles(input.center, candidate);
