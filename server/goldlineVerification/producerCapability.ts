@@ -110,6 +110,22 @@ export function authorizeTestGoldlineProducerCapability(input: {
  * Future producers must be named here and handed to a dedicated adapter,
  * never exported as a generic array/map/lookup.
  */
+let commercialFieldVisitCapability: GoldlineProducerCapability | null = null;
 for (const definition of REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS) {
-  mintGoldlineProducerCapability(definition);
+  const capability = mintGoldlineProducerCapability(definition);
+  if (definition.producerNamespace === "commercial_mission_field_visit_v1") {
+    commercialFieldVisitCapability = capability;
+  }
+}
+
+/**
+ * Dedicated handoff to the commercial field-visit receipt adapter.
+ * This is deliberately not a namespace lookup and is not re-exported from
+ * Narrator or any production barrel.
+ */
+export function commercialFieldVisitProducerCapability(): GoldlineProducerCapability {
+  if (!commercialFieldVisitCapability) {
+    throw new Error("Commercial field-visit Goldline producer is not registered");
+  }
+  return commercialFieldVisitCapability;
 }
