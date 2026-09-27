@@ -4,8 +4,8 @@
  * A structurally constructible mutation record is not authority. Issuance
  * requires a capability object that this module itself minted into the
  * private authorized set. Production capabilities are created only from
- * REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS. That list is empty: there is
- * currently no production authority token.
+ * REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS. Production authority is closed
+ * and narrowly scoped to explicitly registered adapters.
  *
  * Importing the brand symbol, supplying a producer name, or constructing a
  * lookalike object does not confer membership. There is no lookup-by-name
@@ -110,6 +110,22 @@ export function authorizeTestGoldlineProducerCapability(input: {
  * Future producers must be named here and handed to a dedicated adapter,
  * never exported as a generic array/map/lookup.
  */
+let commercialFieldVisitCapability: GoldlineProducerCapability | null = null;
 for (const definition of REGISTERED_PRODUCTION_GOLDLINE_PRODUCERS) {
-  mintGoldlineProducerCapability(definition);
+  const capability = mintGoldlineProducerCapability(definition);
+  if (definition.producerNamespace === "commercial_mission_field_visit_v1") {
+    commercialFieldVisitCapability = capability;
+  }
+}
+
+/**
+ * Dedicated handoff to the commercial field-visit receipt adapter.
+ * This is deliberately not a namespace lookup and is not re-exported from
+ * Narrator or any production barrel.
+ */
+export function commercialFieldVisitProducerCapability(): GoldlineProducerCapability {
+  if (!commercialFieldVisitCapability) {
+    throw new Error("Commercial field-visit Goldline producer is not registered");
+  }
+  return commercialFieldVisitCapability;
 }
