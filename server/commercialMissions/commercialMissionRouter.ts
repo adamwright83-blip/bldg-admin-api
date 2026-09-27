@@ -78,6 +78,7 @@ import {
   listCommercialMissionFieldAssignees,
 } from "./commercialMissionActivationService";
 import {
+  autocompleteDriverMissionPlaces,
   buildDriverMissions,
   DRIVER_MISSION_TARGET_MODES,
   DRIVER_MISSION_TYPES,
@@ -340,6 +341,18 @@ export const commercialMissionRouter = router({
         },
       });
     }),
+  placeSuggestions: legacyDayforgeMissionFieldProcedure
+    .input(
+      z.object({
+        query: z.string().trim().min(2).max(200),
+      })
+    )
+    .query(({ input }) =>
+      autocompleteDriverMissionPlaces({
+        query: input.query,
+        limit: 6,
+      })
+    ),
   buildForDriver: legacyDayforgeMissionFieldProcedure
     .input(
       z.object({
@@ -347,6 +360,7 @@ export const commercialMissionRouter = router({
         venueType: z.enum(DRIVER_MISSION_VENUES),
         targetMode: z.enum(DRIVER_MISSION_TARGET_MODES).default("exact_property"),
         searchNear: z.string().trim().min(5).max(512),
+        placeId: z.string().trim().min(1).max(256).optional(),
         requestId: z.string().uuid(),
         count: z.number().int().min(1).max(5).default(3),
       })
