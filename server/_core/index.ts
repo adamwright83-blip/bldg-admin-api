@@ -60,6 +60,7 @@ import {
 } from "../legacyDayforgeSecurity/legacyDayforgeSecurity";
 import { registerLegacyDayforgeRetentionRoute } from "../legacyDayforgeRetention/retentionRoute";
 import { registerClientFatalRoute } from "../clientFatal/clientFatalRoute";
+import { registerPlacesLookupDiagnosticRoute } from "../territory/placesLookupDiagnosticRoute";
 import { startAutomaticGeographicReconciliation } from "../geography/geographicReconciliationScheduler";
 import { startNightShiftScheduler } from "../nightShift/nightShiftScheduler";
 import { startEconomicOutboxDrainer } from "../cleancloudBrowserSync/worldOutbox";
@@ -320,6 +321,7 @@ async function startServer() {
   // Fatal UI reports use their own small parser so a crash report cannot
   // ride the 50mb upload limit or echo internals back to the client.
   registerClientFatalRoute(app);
+  registerPlacesLookupDiagnosticRoute(app);
 
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
