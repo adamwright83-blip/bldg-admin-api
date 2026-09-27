@@ -27,17 +27,6 @@ export const DRIVER_MISSION_VENUES = [
 ] as const;
 export type DriverMissionVenue = (typeof DRIVER_MISSION_VENUES)[number];
 
-const SEARCH_CATEGORIES: Record<DriverMissionVenue, string[]> = {
-  luxury_living: [
-    "luxury apartment building",
-    "high rise apartment building",
-    "property management company",
-  ],
-  hotels: ["luxury hotel", "boutique hotel"],
-  fitness_wellness: ["luxury gym", "fitness club", "wellness center"],
-  salons_spas: ["salon", "day spa", "med spa"],
-};
-
 function provider() {
   const placesApiKey = process.env.GOOGLE_PLACES_API_KEY ?? "";
   const geocodingApiKey = process.env.GOOGLE_GEOCODING_API_KEY ?? "";
