@@ -108,7 +108,7 @@ async function ensureApprovedBuilderProposal(input: {
 }
 
 function looksLikeSpecificStreetAddress(value: string) {
-  return /^\s*\d{1,6}\s+\S+/i.test(value.trim());
+  return /\b\d{1,6}\s+[A-Za-z0-9]/.test(value);
 }
 
 export async function buildDriverMissions(input: {
@@ -136,9 +136,15 @@ export async function buildDriverMissions(input: {
     pickupDaysCompatibleByDefault: true,
   };
   const places = provider();
-  const exactTarget = looksLikeSpecificStreetAddress(input.searchNear)
+  const exactAddressQuery = looksLikeSpecificStreetAddress(input.searchNear);
+  const exactTarget = exactAddressQuery
     ? await places.resolveBusiness(input.searchNear)
     : null;
+  if (exactAddressQuery && !exactTarget) {
+    throw new Error(
+      "Could not identify a property at that exact street address. Verify the address or include the property name; nearby properties were not added."
+    );
+  }
   const discovery = exactTarget
     ? {
         opportunities: [
