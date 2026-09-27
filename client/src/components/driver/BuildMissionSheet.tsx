@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Building2,
@@ -33,15 +33,20 @@ const VENUES = [
 export function BuildMissionSheet({
   open,
   onOpenChange,
-  searchNear,
+  searchNear = "",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  searchNear: string;
+  searchNear?: string;
 }) {
   const utils = trpc.useUtils();
   const [missionType, setMissionType] = useState<MissionType | null>(null);
+  const [searchNearValue, setSearchNearValue] = useState(searchNear);
   const build = trpc.system.commercialMission.buildForDriver.useMutation();
+
+  useEffect(() => {
+    if (open) setSearchNearValue(searchNear);
+  }, [open, searchNear]);
 
   function close() {
     if (build.isPending) return;
@@ -50,14 +55,14 @@ export function BuildMissionSheet({
   }
 
   async function chooseVenue(venueType: VenueType) {
-    if (!missionType) return;
+    if (!missionType || searchNearValue.trim().length < 5) return;
     sounds.press();
     haptics.impact();
     try {
       const missions = await build.mutateAsync({
         missionType,
         venueType,
-        searchNear,
+        searchNear: searchNearValue.trim(),
         requestId: crypto.randomUUID(),
         count: 3,
       });
@@ -103,7 +108,7 @@ export function BuildMissionSheet({
                   {missionType ? "Pick a venue" : "Build a mission"}
                 </h2>
                 <p className="mt-3 text-[clamp(15px,2.1vw,21px)] font-medium text-white/60">
-                  Searching near {searchNear}
+                  Target a property or area
                 </p>
               </div>
               <button
@@ -118,6 +123,19 @@ export function BuildMissionSheet({
             </div>
 
             <div className="p-[clamp(16px,3vw,30px)] pb-[calc(env(safe-area-inset-bottom)+clamp(20px,3vw,30px))]">
+              <label className="mb-4 block">
+                <span className="mb-2 block text-[13px] font-black uppercase tracking-[.16em] text-white/55">
+                  Search near
+                </span>
+                <input
+                  value={searchNearValue}
+                  onChange={event => setSearchNearValue(event.target.value)}
+                  placeholder="Property name or street address"
+                  disabled={build.isPending}
+                  className="w-full rounded-[14px] border border-white/15 bg-white/10 px-4 py-4 text-[17px] font-semibold text-white outline-none placeholder:text-white/35 focus:border-violet-300/60"
+                  aria-label="Mission search location"
+                />
+              </label>
               {build.isPending ? (
                 <div className="flex min-h-[300px] flex-col items-center justify-center text-center">
                   <Loader2 className="h-10 w-10 animate-spin text-violet-300" />
