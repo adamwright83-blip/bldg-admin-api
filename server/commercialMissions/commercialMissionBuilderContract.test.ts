@@ -66,12 +66,20 @@ describe("driver mission builder contract", () => {
     expect(activation).toContain("eq(legacyDayforgeSaasMemberships.active, true)");
   });
 
+  it("treats the Driver target field as one exact property, not a nearby search center", () => {
+    expect(service).toContain("searchExactBusiness(input.searchNear)");
+    expect(service).toContain("candidates: [exactCandidate]");
+    expect(service).toContain("return [reusable]");
+    expect(service).toContain("const opportunity = exactOpportunity");
+    expect(service).not.toContain("discoverLaundryTerritory({");
+  });
+
   it("keeps the complete built-mission acceptance chain internally compatible", () => {
     expect(proposalService).toMatch(
       /PROPOSAL_READY_STATUSES[\s\S]*"game_ready"/
     );
     expect(service).toContain("ensureApprovedBuilderProposal");
-    expect(service).toContain("reusableByProviderId");
+    expect(service).toContain("const reusable = activeMissions.find");
     expect(service).toContain("getLatestCommercialProposalForMission");
 
     const path = [
@@ -90,10 +98,17 @@ describe("driver mission builder contract", () => {
     }
   });
 
+  it("rejects a mismatched Places result instead of substituting a nearby property", () => {
+    expect(service).toContain("resolvedDistanceMiles > 0.5");
+    expect(service).toContain('Google Places resolved "');
+    expect(service).toContain("Refine the property name and street address");
+    expect(service).not.toContain("eligible.slice(0, input.count)");
+  });
+
   it("deduplicates active venues and requires public phones for call missions", () => {
-    expect(service).toContain("activeProviderIds");
+    expect(service).toContain("const conflicting = activeMissions.find");
     expect(service).toContain(
-      'input.missionType !== "cold_call" || Boolean(opportunity.account.phone)'
+      'input.missionType === "cold_call" && !exactOpportunity.account.phone'
     );
     expect(service).toContain("activateCommercialMissionForField");
     expect(service).toContain("generateCommercialProposal");

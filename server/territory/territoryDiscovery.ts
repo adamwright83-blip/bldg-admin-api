@@ -87,7 +87,13 @@ export function dedupeTerritoryCandidates(candidates: TerritoryBusinessCandidate
 }
 function prospectType(categories: string[]): LaundryProspectType {
   const value = categories.map(normalize).join(" ");
-  if (value.includes("property management") || value.includes("apartment")) return "property_management";
+  if (
+    value.includes("property management") ||
+    value.includes("apartment") ||
+    value.includes("condominium") ||
+    value.includes("residential building") ||
+    value.includes("housing complex")
+  ) return "property_management";
   if (value.includes("hotel") || value.includes("motel") || value.includes("lodging")) return "hotel";
   if (value.includes("gym") || value.includes("fitness")) return "gym";
   if (value.includes("salon") || value.includes("spa")) return "salon_spa";
@@ -104,19 +110,17 @@ function nearRoute(candidate: TerritoryBusinessCandidate, points: Array<{ lat: n
   return points.some(point => distanceMiles(candidate, point) <= 0.75);
 }
 
-export async function discoverLaundryTerritory(input: {
-  addressOrBusiness: string;
-  provider: TerritoryBusinessProvider;
+
+export function rankTerritoryCandidates(input: {
+  center: GeoPoint;
+  candidates: TerritoryBusinessCandidate[];
   operator: LaundryTerritoryOperatorContext;
-  categories?: string[];
   limit?: number;
-}): Promise<TerritoryDiscoveryResult> {
-  const center = await input.provider.geocode(input.addressOrBusiness);
-  const candidates = await input.provider.searchBusinesses({ center, radiusMiles: input.operator.serviceRadiusMiles, categories: input.categories?.length ? input.categories : TERRITORY_SEARCH_CATEGORIES, limit: Math.max(20, input.limit ?? 20) });
-  const deduped = dedupeTerritoryCandidates(candidates);
-  const opportunities = deduped.map(candidate => {
+}): RankedTerritoryOpportunity[] {
+  const deduped = dedupeTerritoryCandidates(input.candidates);
+  return deduped.map(candidate => {
     const type = prospectType(candidate.categories);
-    const distance = distanceMiles(center, candidate);
+    const distance = distanceMiles(input.center, candidate);
     const weeklyPounds = estimatedWeeklyPounds(candidate, type);
     const locationCount = Math.max(1, candidate.locationCount ?? 1);
     const signalStrength = Math.min(100, 30 + (candidate.recentlyOpened ? 35 : 0) + (candidate.growthSignal ? 25 : 0) + (locationCount > 1 ? 10 : 0));
@@ -141,6 +145,25 @@ export async function discoverLaundryTerritory(input: {
       account: { name: candidate.name, accountType: type, address: candidate.formattedAddress, latitude: candidate.lat, longitude: candidate.lng, locationCount, decisionMaker: { name: candidate.decisionMakerName ?? null, title: candidate.decisionMakerTitle ?? null }, website: candidate.website ?? null, phone: candidate.phone ?? null },
       score, primarySignal, distanceMiles: Math.round(distance * 10) / 10, evidence,
     } satisfies RankedTerritoryOpportunity;
-  }).sort((a, b) => b.score.score - a.score.score || b.score.estimatedAnnualValueCents - a.score.estimatedAnnualValueCents);
-  return { providerName: input.provider.name, center, providerCandidateCount: candidates.length, dedupedCandidateCount: deduped.length, opportunities: opportunities.slice(0, input.limit ?? 20) };
+  }).sort((a, b) => b.score.score - a.score.score || b.score.estimatedAnnualValueCents - a.score.estimatedAnnualValueCents).slice(0, input.limit ?? 20);
+
+}
+
+export async function discoverLaundryTerritory(input: {
+  addressOrBusiness: string;
+  provider: TerritoryBusinessProvider;
+  operator: LaundryTerritoryOperatorContext;
+  categories?: string[];
+  limit?: number;
+}): Promise<TerritoryDiscoveryResult> {
+  const center = await input.provider.geocode(input.addressOrBusiness);
+  const candidates = await input.provider.searchBusinesses({ center, radiusMiles: input.operator.serviceRadiusMiles, categories: input.categories?.length ? input.categories : TERRITORY_SEARCH_CATEGORIES, limit: Math.max(20, input.limit ?? 20) });
+  const opportunities = rankTerritoryCandidates({
+    center,
+    candidates,
+    operator: input.operator,
+    limit: input.limit,
+  });
+  const dedupedCandidateCount = dedupeTerritoryCandidates(candidates).length;
+  return { providerName: input.provider.name, center, providerCandidateCount: candidates.length, dedupedCandidateCount, opportunities };
 }

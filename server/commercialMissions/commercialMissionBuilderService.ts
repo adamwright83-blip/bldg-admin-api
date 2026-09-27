@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { CommercialMission } from "@shared/commercialMission";
 import { getTerritoryOperatorProfile } from "../territory/territoryStore";
 import { GooglePlacesTerritoryProvider } from "../territory/googlePlacesTerritoryProvider";
-import { discoverLaundryTerritory } from "../territory/territoryDiscovery";
+import {
+  distanceMiles,
+  rankTerritoryCandidates,
+} from "../territory/territoryDiscovery";
 import {
   createCommercialMission,
   listCommercialMissions,
@@ -26,17 +29,6 @@ export const DRIVER_MISSION_VENUES = [
   "salons_spas",
 ] as const;
 export type DriverMissionVenue = (typeof DRIVER_MISSION_VENUES)[number];
-
-const SEARCH_CATEGORIES: Record<DriverMissionVenue, string[]> = {
-  luxury_living: [
-    "luxury apartment building",
-    "high rise apartment building",
-    "property management company",
-  ],
-  hotels: ["luxury hotel", "boutique hotel"],
-  fitness_wellness: ["luxury gym", "fitness club", "wellness center"],
-  salons_spas: ["salon", "day spa", "med spa"],
-};
 
 function provider() {
   const placesApiKey = process.env.GOOGLE_PLACES_API_KEY ?? "";
@@ -128,63 +120,71 @@ export async function buildDriverMissions(input: {
     turnaroundCompatibleByDefault: true,
     pickupDaysCompatibleByDefault: true,
   };
-  const discovery = await discoverLaundryTerritory({
-    addressOrBusiness: input.searchNear,
-    provider: provider(),
+  // The Driver builder targets the exact Google Place the operator entered.
+  // Nearby discovery is a separate prospecting behavior and must never silently
+  // replace a specifically requested property.
+  const places = provider();
+  const center = await places.geocode(input.searchNear);
+  const exactCandidate = await places.searchExactBusiness(input.searchNear);
+  if (!exactCandidate) {
+    throw new Error(
+      "Could not identify that exact property. Enter the property name and full street address."
+    );
+  }
+  const resolvedDistanceMiles = distanceMiles(center, exactCandidate);
+  if (resolvedDistanceMiles > 0.5) {
+    throw new Error(
+      `Google Places resolved "${exactCandidate.name}" ${resolvedDistanceMiles.toFixed(
+        1
+      )} miles from the address you entered. Refine the property name and street address.`
+    );
+  }
+  const [exactOpportunity] = rankTerritoryCandidates({
+    center,
+    candidates: [exactCandidate],
     operator,
-    categories: SEARCH_CATEGORIES[input.venueType],
-    limit: 20,
+    limit: 1,
   });
+  if (!exactOpportunity) {
+    throw new Error("The selected property could not be converted into a sales mission");
+  }
+  if (input.missionType === "cold_call" && !exactOpportunity.account.phone) {
+    throw new Error("That exact property does not have a public phone number.");
+  }
   const existing = await listCommercialMissions({ tenantId: input.tenantId, limit: 250 });
   const activeMissions = existing.filter(
     mission => !["won", "lost"].includes(mission.status)
   );
-  const activeProviderIds = new Set(
-    activeMissions
-      .map(mission => mission.account.providerAccountId)
-      .filter((value): value is string => Boolean(value))
+  const reusable = activeMissions.find(
+    mission =>
+      mission.assignedTo === input.driverId &&
+      driverMissionBuilderMode(mission) === input.missionType &&
+      mission.account.providerAccountId === exactOpportunity.providerAccountId
   );
-  const reusableByProviderId = new Map(
-    activeMissions
-      .filter(
-        mission =>
-          mission.assignedTo === input.driverId &&
-          driverMissionBuilderMode(mission) === input.missionType &&
-          Boolean(mission.account.providerAccountId)
-      )
-      .map(mission => [mission.account.providerAccountId as string, mission])
+  const conflicting = activeMissions.find(
+    mission =>
+      mission.account.providerAccountId === exactOpportunity.providerAccountId &&
+      mission.id !== reusable?.id
   );
-  const eligible = discovery.opportunities.filter(opportunity => {
-    const reusable = reusableByProviderId.get(opportunity.providerAccountId);
-    if (reusable) return true;
-    return (
-      !activeProviderIds.has(opportunity.providerAccountId) &&
-      (input.missionType !== "cold_call" || Boolean(opportunity.account.phone))
-    );
-  });
-  if (!eligible.length) {
+  if (conflicting) {
     throw new Error(
-      input.missionType === "cold_call"
-        ? "No new venues with public phone numbers were found near this route"
-        : "No new venues were found near this route"
+      `${exactOpportunity.account.name} already has an active sales mission.`
     );
   }
 
-  const created: CommercialMission[] = [];
-  const selected = eligible.slice(0, input.count);
-  for (let index = 0; index < selected.length; index += 1) {
-    const opportunity = selected[index]!;
-    const reusable = reusableByProviderId.get(opportunity.providerAccountId);
-    if (reusable) {
-      await ensureApprovedBuilderProposal({
-        tenantId: input.tenantId,
-        mission: reusable,
-        actorId: input.driverId,
-      });
-      created.push(reusable);
-      continue;
-    }
+  if (reusable) {
+    await ensureApprovedBuilderProposal({
+      tenantId: input.tenantId,
+      mission: reusable,
+      actorId: input.driverId,
+    });
+    return [reusable];
+  }
 
+  const created: CommercialMission[] = [];
+  const opportunity = exactOpportunity;
+  const index = 0;
+  {
     const diamond = await selectMissionDiamond({
       tenantId: input.tenantId,
       driverId: input.driverId,

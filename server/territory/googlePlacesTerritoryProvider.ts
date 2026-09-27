@@ -64,6 +64,49 @@ export class GooglePlacesTerritoryProvider
     };
   }
 
+  async searchExactBusiness(query: string): Promise<TerritoryBusinessCandidate | null> {
+    const response = await this.fetcher(
+      "https://places.googleapis.com/v1/places:searchText",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": this.placesApiKey,
+          "X-Goog-FieldMask":
+            "places.id,places.displayName,places.formattedAddress,places.location,places.types,places.websiteUri,places.nationalPhoneNumber,places.googleMapsUri",
+        },
+        body: JSON.stringify({ textQuery: query, maxResultCount: 1 }),
+        signal: AbortSignal.timeout(12_000),
+      }
+    );
+    if (!response.ok) {
+      throw new Error(`Google Places exact lookup failed with HTTP ${response.status}`);
+    }
+    const place = ((await response.json()) as { places?: GooglePlace[] }).places?.[0];
+    if (
+      !place?.id ||
+      !place.displayName?.text ||
+      !place.formattedAddress ||
+      place.location?.latitude == null ||
+      place.location.longitude == null
+    ) {
+      return null;
+    }
+    return {
+      providerId: place.id,
+      providerName: this.name,
+      providerUrl: place.googleMapsUri ?? null,
+      sourceCapturedAt: new Date().toISOString(),
+      name: place.displayName.text,
+      formattedAddress: place.formattedAddress,
+      lat: place.location.latitude,
+      lng: place.location.longitude,
+      categories: place.types ?? [],
+      website: place.websiteUri ?? null,
+      phone: place.nationalPhoneNumber ?? null,
+    };
+  }
+
   async searchBusinesses(input: {
     center: GeoPoint;
     radiusMiles: number;

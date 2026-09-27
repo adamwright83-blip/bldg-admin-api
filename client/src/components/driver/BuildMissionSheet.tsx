@@ -73,13 +73,13 @@ export function BuildMissionSheet({
         venueType,
         searchNear: searchNearValue.trim(),
         requestId: crypto.randomUUID(),
-        count: 3,
+        count: 1,
       });
       await utils.system.commercialMission.myBuiltMissions.invalidate();
       sounds.missionAssign();
       haptics.slam();
       toast.success(
-        `${missions.length} ${missionType === "cold_call" ? "cold-call" : "in-person"} ${missions.length === 1 ? "mission" : "missions"} added to your route.`
+        `${missions[0]?.account.name ?? "Property"} added to your route.`
       );
       setMissionType(null);
       onOpenChange(false);
@@ -117,7 +117,7 @@ export function BuildMissionSheet({
                   {missionType ? "Pick a venue" : "Build a mission"}
                 </h2>
                 <p className="mt-3 text-[clamp(15px,2.1vw,21px)] font-medium text-white/60">
-                  Target a property or area
+                  Target one exact property
                 </p>
               </div>
               <button
@@ -134,7 +134,7 @@ export function BuildMissionSheet({
             <div className="p-[clamp(16px,3vw,30px)] pb-[calc(env(safe-area-inset-bottom)+clamp(20px,3vw,30px))]">
               <label className="mb-4 block">
                 <span className="mb-2 block text-[13px] font-black uppercase tracking-[.16em] text-white/55">
-                  Search near
+                  Property or address
                 </span>
                 <input
                   ref={searchInputRef}
@@ -143,7 +143,7 @@ export function BuildMissionSheet({
                   placeholder="Property name or street address"
                   disabled={build.isPending}
                   className="w-full rounded-[14px] border border-white/15 bg-white/10 px-4 py-4 text-[17px] font-semibold text-white outline-none placeholder:text-white/35 focus:border-violet-300/60"
-                  aria-label="Mission search location"
+                  aria-label="Mission target property"
                 />
               </label>
               {build.isPending ? (
@@ -151,7 +151,7 @@ export function BuildMissionSheet({
                   <Loader2 className="h-10 w-10 animate-spin text-violet-300" />
                   <p className="mt-5 text-[22px] font-black">Building your route…</p>
                   <p className="mt-2 max-w-[300px] text-[15px] leading-relaxed text-white/55">
-                    Finding new venues, removing duplicates, and assigning the best three to you.
+                    Resolving this exact property and building one mission.
                   </p>
                 </div>
               ) : !missionType ? (
