@@ -93,6 +93,8 @@ describe("driver mission builder contract", () => {
   it("treats the entered property as the exact mission target, never a nearby search center", () => {
     expect(service).toContain("categories: [input.searchNear]");
     expect(service).toContain("distanceMiles <= 0.25");
+    expect(service).toContain("preferredAccountType");
+    expect(service).toContain('luxury_living: "property_management"');
     expect(service).toContain("const opportunity = exactOpportunity");
     expect(service).toContain("return [reusable]");
     expect(service).not.toContain("eligible.slice(0, input.count)");
