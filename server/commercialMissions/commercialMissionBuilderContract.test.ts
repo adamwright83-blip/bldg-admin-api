@@ -66,6 +66,13 @@ describe("driver mission builder contract", () => {
     expect(activation).toContain("eq(legacyDayforgeSaasMemberships.active, true)");
   });
 
+  it("treats the Driver target field as one exact property, not a nearby search center", () => {
+    expect(service).toContain("searchExactBusiness(input.searchNear)");
+    expect(service).toContain("candidates: [exactCandidate]");
+    expect(service).toContain("const selected = eligible.slice(0, 1)");
+    expect(service).not.toContain("discoverLaundryTerritory({");
+  });
+
   it("keeps the complete built-mission acceptance chain internally compatible", () => {
     expect(proposalService).toMatch(
       /PROPOSAL_READY_STATUSES[\s\S]*"game_ready"/
