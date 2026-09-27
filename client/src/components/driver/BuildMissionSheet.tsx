@@ -18,6 +18,7 @@ import { sounds } from "./driverSounds";
 // Mission builder production deploy marker: venue validation is live.
 type MissionType = "cold_call" | "in_person";
 type VenueType = "luxury_living" | "hotels" | "fitness_wellness" | "salons_spas";
+type TargetMode = "exact_property" | "nearby_discovery";
 
 const VENUES = [
   {
@@ -42,6 +43,7 @@ export function BuildMissionSheet({
 }) {
   const utils = trpc.useUtils();
   const [missionType, setMissionType] = useState<MissionType | null>(null);
+  const [targetMode, setTargetMode] = useState<TargetMode>("exact_property");
   const [searchNearValue, setSearchNearValue] = useState(searchNear);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const build = trpc.system.commercialMission.buildForDriver.useMutation();
@@ -71,9 +73,10 @@ export function BuildMissionSheet({
       const missions = await build.mutateAsync({
         missionType,
         venueType,
+        targetMode,
         searchNear: searchNearValue.trim(),
         requestId: crypto.randomUUID(),
-        count: /^\s*\d{1,6}\s+\S+/.test(searchNearValue.trim()) ? 1 : 3,
+        count: targetMode === "exact_property" ? 1 : 3,
       });
       await utils.system.commercialMission.myBuiltMissions.invalidate();
       sounds.missionAssign();
@@ -117,7 +120,9 @@ export function BuildMissionSheet({
                   {missionType ? "Pick a venue" : "Build a mission"}
                 </h2>
                 <p className="mt-3 text-[clamp(15px,2.1vw,21px)] font-medium text-white/60">
-                  Target a property or area
+                  {targetMode === "exact_property"
+                    ? "Create one mission for a specific property"
+                    : "Discover prospects around a location"}
                 </p>
               </div>
               <button
@@ -132,15 +137,49 @@ export function BuildMissionSheet({
             </div>
 
             <div className="p-[clamp(16px,3vw,30px)] pb-[calc(env(safe-area-inset-bottom)+clamp(20px,3vw,30px))]">
+              <div
+                className="mb-4 grid grid-cols-2 gap-2"
+                role="group"
+                aria-label="Mission target mode"
+              >
+                <button
+                  type="button"
+                  onClick={() => setTargetMode("exact_property")}
+                  aria-pressed={targetMode === "exact_property"}
+                  className={`min-h-[72px] rounded-[14px] border px-3 py-3 text-left text-[14px] font-black leading-tight ${
+                    targetMode === "exact_property"
+                      ? "border-violet-300 bg-violet-300/20 text-white"
+                      : "border-white/15 bg-white/[.05] text-white/65"
+                  }`}
+                >
+                  Create mission for this property
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTargetMode("nearby_discovery")}
+                  aria-pressed={targetMode === "nearby_discovery"}
+                  className={`min-h-[72px] rounded-[14px] border px-3 py-3 text-left text-[14px] font-black leading-tight ${
+                    targetMode === "nearby_discovery"
+                      ? "border-violet-300 bg-violet-300/20 text-white"
+                      : "border-white/15 bg-white/[.05] text-white/65"
+                  }`}
+                >
+                  Find prospects near this location
+                </button>
+              </div>
               <label className="mb-4 block">
                 <span className="mb-2 block text-[13px] font-black uppercase tracking-[.16em] text-white/55">
-                  Target property or area
+                  {targetMode === "exact_property" ? "Property" : "Search center"}
                 </span>
                 <input
                   ref={searchInputRef}
                   value={searchNearValue}
                   onChange={event => setSearchNearValue(event.target.value)}
-                  placeholder="Property name or street address"
+                  placeholder={
+                    targetMode === "exact_property"
+                      ? "Property name + city or exact street address"
+                      : "Address or neighborhood to search around"
+                  }
                   disabled={build.isPending}
                   className="w-full rounded-[14px] border border-white/15 bg-white/10 px-4 py-4 text-[17px] font-semibold text-white outline-none placeholder:text-white/35 focus:border-violet-300/60"
                   aria-label="Mission search location"
@@ -151,7 +190,9 @@ export function BuildMissionSheet({
                   <Loader2 className="h-10 w-10 animate-spin text-violet-300" />
                   <p className="mt-5 text-[22px] font-black">Building your route…</p>
                   <p className="mt-2 max-w-[300px] text-[15px] leading-relaxed text-white/55">
-                    Resolving the property you entered. Broad area searches may return nearby options.
+                    {targetMode === "exact_property"
+                      ? "Resolving one exact property. If it cannot be identified, nothing nearby will be substituted."
+                      : "Finding nearby prospects around the location you chose."}
                   </p>
                 </div>
               ) : !missionType ? (
