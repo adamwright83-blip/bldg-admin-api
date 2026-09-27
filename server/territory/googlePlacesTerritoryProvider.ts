@@ -27,6 +27,7 @@ function normalizedStreetSignature(value: string): string | null {
   const street = value
     .split(",")[0]!
     .toLowerCase()
+    .replace(/(?:\s+#\s*\w+|\s+\b(?:apt|apartment|unit|suite|ste)\b\s*#?\s*\w+).*$/i, "")
     .replace(/\b(boulevard)\b/g, "blvd")
     .replace(/\b(avenue)\b/g, "ave")
     .replace(/\b(street)\b/g, "st")
