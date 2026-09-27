@@ -225,7 +225,11 @@ export function WalkInCapture(props: {
         toast.success("Visit saved.");
       }
       props.onSaved?.(result);
-      if (!props.onSaved) window.location.assign(`/commercial-missions?mission=${result.missionId}`);
+      if (!props.onSaved) {
+        window.location.assign(
+          `/dayforge-today?walkInSaved=${encodeURIComponent(String(result.missionId))}`
+        );
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not save the visit.");
     }
