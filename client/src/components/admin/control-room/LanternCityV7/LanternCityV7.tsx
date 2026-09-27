@@ -32,6 +32,7 @@ const DEV_SAMPLE: CustomerLocationCluster[] = import.meta.env.DEV
       [34.0654, -118.4006, "Sample · Beverly Hills", 2, 2, 0, 0],
       [34.0590, -118.4145, "Sample · Century City", 7, 6, 1, 0],
       [34.0612, -118.3009, "Sample · Koreatown", 8, 6, 1, 1],
+      [34.0905, -118.3432, "Sample · La Brea", 4, 3, 1, 0],
     ].map(([latitude, longitude, label, total, active, dimming, dark], i) => ({
       key: `dev-sample-${i}`,
       latitude: latitude as number,

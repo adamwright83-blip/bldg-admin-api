@@ -17,6 +17,7 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { CANONICAL_BUILDING_GEOGRAPHY } from "@shared/canonicalGeography";
 
 export const WORLD_BASE = "/assets/goldline/lantern-city/v7";
 
@@ -92,7 +93,10 @@ const ease = (t: number) => { const k = Math.max(0, Math.min(1, t)); return k * 
 const hexv = (c: THREE.Color) => `${c.r.toFixed(3)}, ${c.g.toFixed(3)}, ${c.b.toFixed(3)}`;
 
 const COMMON = /* glsl */ `
-  uniform sampler2D uMask; uniform sampler2D uServe; uniform vec4 uRect; uniform vec3 uSun; uniform float uTime;
+  uniform sampler2D uMask; uniform sampler2D uServe; uniform sampler2D uCanal; uniform vec4 uRect; uniform vec4 uBounds; uniform vec3 uSun; uniform float uTime;
+  float canalD(vec2 xz) { vec2 uv = (xz - uBounds.xy) / (uBounds.zw - uBounds.xy);
+    if (uv.x < 0. || uv.y < 0. || uv.x > 1. || uv.y > 1.) return 255.;
+    return texture2D(uCanal, uv).r * 255.; }
   float sdMask(vec2 xz) { return texture2D(uMask, (xz - uRect.xy) / (uRect.zw - uRect.xy)).r; }
   float served(vec2 xz) { return texture2D(uServe, (xz - uRect.xy) / (uRect.zw - uRect.xy)).r; }
   float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -168,7 +172,8 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   let ground = (_x: number, _z: number) => 0;
   let sdField = (_x: number, _z: number) => 1e4;
   const uniforms: Record<string, THREE.IUniform> = {
-    uMask: { value: null }, uServe: { value: null }, uRect: { value: new THREE.Vector4() }, uSun: { value: SUN }, uTime: { value: 0 },
+    uMask: { value: null }, uServe: { value: null }, uCanal: { value: null }, uRect: { value: new THREE.Vector4() }, uBounds: { value: new THREE.Vector4() },
+    uSun: { value: SUN }, uTime: { value: 0 },
   };
   const fogChunk = { fogColor: { value: PAPER }, fogNear: { value: 5200 }, fogFar: { value: 13000 } };
   let lanterns: LanternInput[] = [];
@@ -181,6 +186,8 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
   let MH = 512;
   let rect = { x0: 0, z0: 0, x1: 1, z1: 1 };
   let servedAt = (_x: number, _z: number) => false;
+  let canalAt = (_x: number, _z: number) => 255;
+  const CANAL = 13;     // half-width of the water, metres
   let framed = false;
 
   const ll = (lat: number, lon: number) => ({ x: (lon - M.origin[1]) * M.kx, z: -(lat - M.origin[0]) * M.kz });
@@ -224,6 +231,25 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       const i = Math.floor(px(x)), j = Math.floor(pz(z));
       return i >= 0 && j >= 0 && i < MW && j < MH && sdata[(j * MW + i) * 4] > 127;
     };
+    // canals between neighbourhoods: a distance field (metres) on the world grid
+    const canalImg = await new Promise<HTMLImageElement>((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = `${WORLD_BASE}/world/canal.png`; });
+    const cc = document.createElement("canvas");
+    cc.width = canalImg.width; cc.height = canalImg.height;
+    const cctx = cc.getContext("2d")!;
+    cctx.drawImage(canalImg, 0, 0);
+    const cdata = cctx.getImageData(0, 0, cc.width, cc.height).data;
+    const canalTex = new THREE.CanvasTexture(cc);
+    canalTex.flipY = false;
+    canalTex.minFilter = canalTex.magFilter = THREE.LinearFilter;
+    uniforms.uCanal.value = canalTex;
+    uniforms.uBounds.value.set(M.bounds[0], M.bounds[1], M.bounds[2], M.bounds[3]);
+    canalAt = (x, z) => {
+      const fx = (x - M.bounds[0]) / (M.bounds[2] - M.bounds[0]) * cc.width, fz = (z - M.bounds[1]) / (M.bounds[3] - M.bounds[1]) * cc.height;
+      const i = Math.floor(fx), j = Math.floor(fz);
+      if (i < 0 || j < 0 || i >= cc.width - 1 || j >= cc.height - 1) return 255;
+      const tx = fx - i, tz = fz - j, v = (a: number, b: number) => cdata[(b * cc.width + a) * 4];
+      return (v(i, j) * (1 - tx) + v(i + 1, j) * tx) * (1 - tz) + (v(i, j + 1) * (1 - tx) + v(i + 1, j + 1) * tx) * tz;
+    };
     maskData = new Float32Array(MW * MH).fill(900);
     maskTex = new THREE.DataTexture(maskData, MW, MH, THREE.RedFormat, THREE.FloatType);
     maskTex.magFilter = maskTex.minFilter = THREE.LinearFilter;
@@ -239,6 +265,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     buildFlats();
     buildFog();
     buildKitGeometry();
+    buildLandmarks();
     if (disposed) return;
     applyLanterns();
     events.onReady?.();
@@ -276,14 +303,14 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     return new THREE.ShaderMaterial({
       uniforms: { ...uniforms, ...fogChunk, ...extra }, fog: true,
       vertexShader: /* glsl */ `
-        varying vec3 vN; varying vec3 vW; attribute float aAlong; varying float vAlong; ${vertexExtra}
+        varying vec3 vN; varying vec3 vW; attribute float aAlong; varying float vAlong; attribute float aAcross; varying float vAcross; ${vertexExtra}
         ${FOG_V}
-        void main() { vN = normal; vAlong = aAlong; vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz;
+        void main() { vN = normal; vAlong = aAlong; vAcross = aAcross; vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz;
           vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
           #include <fog_vertex>
         }`,
       fragmentShader: COMMON + /* glsl */ `
-        varying vec3 vN; varying vec3 vW; varying float vAlong;
+        varying vec3 vN; varying vec3 vW; varying float vAlong; varying float vAcross;
         ${FOG_F}
         ` + frag,
     });
@@ -296,17 +323,32 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     for (let k = 0; k < pos.count; k++) pos.setY(k, ground(pos.getX(k), pos.getZ(k)));
     g.computeVertexNormals();
     g.setAttribute("aAlong", new THREE.BufferAttribute(new Float32Array(pos.count), 1));
+    g.setAttribute("aAcross", new THREE.BufferAttribute(new Float32Array(pos.count), 1));
     scene.add(new THREE.Mesh(g, landMaterial(/* glsl */ `
       uniform vec3 uCol;
       void main() {
-        if (served(vW.xz) < .5 || sdMask(vW.xz) > 40.) discard;
+        if (served(vW.xz) < .5) discard;
+        float sd = sdMask(vW.xz);
+        float cd = canalD(vW.xz);
+        bool fogged = sd > 40.;
+        if (fogged && cd > ${CANAL + 6}.) discard;
         float l = .55 + .45 * max(dot(normalize(vN), uSun), 0.);
-        gl_FragColor = vec4(uCol * l * 1.3 * (.9 + .2 * fbm(vW.xz * .02)), 1.);
+        vec3 c = uCol * l * 1.3 * (.9 + .2 * fbm(vW.xz * .02));
+        // Venice-style canal: teal water with moving ripples, pale stone banks
+        float ripple = fbm(vW.xz * .07 + vec2(uTime * .06, -uTime * .04));
+        vec3 water = mix(vec3(.05, .24, .3), vec3(.16, .44, .5), .3 + .5 * ripple);
+        water += vec3(1., .82, .5) * smoothstep(.74, .82, fbm(vW.xz * .12 + uTime * .1)) * .3;
+        vec3 bank = vec3(.62, .6, .58) * l;
+        if (fogged) { water = mix(water, vec3(.62, .78, .82), .55); bank = vec3(.9, .9, .88); }
+        c = mix(c, bank, 1. - smoothstep(${CANAL + 3}., ${CANAL + 4}.5, cd));
+        c = mix(c, water, 1. - smoothstep(${CANAL}., ${CANAL + 1}.2, cd));
+        gl_FragColor = vec4(c, 1.);
         #include <fog_fragment>
       }`, { uCol: { value: DUSK_GROUND } })));
   }
-  function flatMesh(pos: number[], idx: number[], along: number[] | null, frag: string, offset = true) {
+  function flatMesh(pos: number[], idx: number[], along: number[] | null, frag: string, offset = true, across: number[] | null = null) {
     const g = new THREE.BufferGeometry();
+    g.setAttribute("aAcross", new THREE.Float32BufferAttribute(across ?? new Array(pos.length / 3).fill(0), 1));
     g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
     g.setAttribute("normal", new THREE.Float32BufferAttribute(new Float32Array(pos.length).map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
     g.setAttribute("aAlong", new THREE.Float32BufferAttribute(along ?? new Array(pos.length / 3).fill(0), 1));
@@ -369,7 +411,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
         ${FOG_V}
         float lift(vec2 p) {
           float sd = sdMask(p);
-          float body = smoothstep(-10., 90., sd) * smoothstep(.0, .6, served(p));
+          float body = smoothstep(-10., 90., sd) * smoothstep(.0, .6, served(p)) * smoothstep(${CANAL + 2}., ${CANAL + 34}., canalD(p));
           float billow = fbm(p * .006 + uTime * .004) * 34. + fbm(p * .021 - uTime * .006) * 12.;
           return body * (30. + billow * 1.9) - (1. - body) * 30.;
         }
@@ -410,6 +452,8 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
           float rim = (1. - smoothstep(0., 8., abs(sd - 3.))) * .5;
           vec3 c = mix(plaster, vec3(1., .72, .28) * 1.5, clamp(crack * 1.2 + rim, 0., 1.));
           // the edge of the served world: a gold rule where the neighbourhoods end
+          float cdF = canalD(vW.xz);
+          c = mix(c, vec3(1., .74, .32) * 1.3, (1. - smoothstep(${CANAL + 2}., ${CANAL + 10}., cdF)) * .75);
           float edge = 1. - smoothstep(.35, .55, sv);
           c = mix(c, vec3(1., .74, .32) * 1.2, edge * .8);
           gl_FragColor = vec4(c, smoothstep(.35, .45, sv));
@@ -636,9 +680,10 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       t.bldgs.push({ i: bid++, p, cx, cz, h: rec[1] / 10, u: rec[2], t: rec[3], name: rec[4] });
     }
     t.idMax = bid - 1;
+    for (const b of t.bldgs) if (nearLandmark(b.cx, b.cz)) hidden.add(b.i);
     // roads: ribbons, with soft cool street lamps
     const W: Record<string, number> = { motorway: 20, trunk: 16, primary: 15, secondary: 12, tertiary: 10, residential: 7, unclassified: 7, living_street: 6 };
-    const pos: number[] = [], idx: number[] = [], along: number[] = [];
+    const pos: number[] = [], idx: number[] = [], along: number[] = [], across: number[] = [];
     for (const [k, , flat] of data.r) {
       const w = (W[k] || 6) / 2, pts: [number, number][] = [];
       const raw: [number, number][] = [];
@@ -654,9 +699,11 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
         let dx = nx_[0] - pv[0], dz = nx_[1] - pv[1];
         const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
         if (q) s += Math.hypot(p[0] - pts[q - 1][0], p[1] - pts[q - 1][1]);
-        const y = ground(p[0], p[1]) + 0.9;
+        const over = 1 - ease((canalAt(p[0], p[1]) - (CANAL + 2)) / 14);
+        const y = ground(p[0], p[1]) + 0.9 + 3.4 * over;
         pos.push(p[0] - dz * w, y, p[1] + dx * w, p[0] + dz * w, y, p[1] - dx * w);
         along.push(s, s);
+        across.push(-1, 1);
         if (q) { const b = pos.length / 3 - 4; idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2); }
         if (q % 2 === 0) t.roadPts.push(p[0], p[1]);
       }
@@ -666,9 +713,14 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
         vec3 c = vec3(.36, .40, .5);
         float lamp = 1. - smoothstep(0., 2.2, abs(mod(vAlong, 38.) - 19.));
         c += vec3(.55, .6, .7) * lamp * .35;
+        // over a canal the road becomes a stone bridge with dark rails
+        float br = 1. - smoothstep(${CANAL + 2}., ${CANAL + 4}., canalD(vW.xz));
+        vec3 deck = vec3(.66, .64, .6) * (.9 + .1 * fbm(vW.xz * .3));
+        deck = mix(deck, vec3(.2, .22, .27), smoothstep(.8, .9, abs(vAcross)));
+        c = mix(c, deck, br);
         gl_FragColor = vec4(c, 1.);
         #include <fog_fragment>
-      }`));
+      }`, true, across));
     t.state = "ready";
     scene.add(t.group);
     rebuildTile(t);
@@ -689,7 +741,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     if (t.kit) { t.group.remove(t.kit); t.kit.traverse(o => (o as THREE.Mesh).geometry?.dispose()); t.kit = null; }
     if (t.box) { t.group.remove(t.box); t.box.geometry.dispose(); t.box = null; }
     const lit = lanternBuildingIds();
-    const near = t.bldgs.filter(b => !lit.has(b.i) && sdField(b.cx, b.cz) < 150);
+    const near = t.bldgs.filter(b => !lit.has(b.i) && !hidden.has(b.i) && sdField(b.cx, b.cz) < 150 && !b.p.some(q => canalAt(q[0], q[1]) < CANAL + 3));
     const nearest = roadNear(t);
     t.kit = kitInstances(near.map(b => placeKit(b, nearest)), false);
     t.box = boxMesh(near);
@@ -761,13 +813,13 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       for (const side of [-1, 1]) {
         if (rnd() < 0.5) continue;
         const x = rp[k] - (dz / L) * 8 * side, z = rp[k + 1] + (dx / L) * 8 * side;
-        if (blocked(x, z) || sdField(x, z) > 60) continue;
+        if (blocked(x, z) || sdField(x, z) > 60 || canalAt(x, z) < CANAL + 5) continue;
         (rnd() < 0.18 ? palms : trees).push([x, z, rnd()]);
       }
     }
     for (let k = 0; k < 1400; k++) {
       const x = x0 + 20 + rnd() * M.tile, z = z0 + 20 + rnd() * M.tile;
-      if (!blocked(x, z) && sdField(x, z) < 60 && servedAt(x, z)) trees.push([x, z, rnd()]);
+      if (!blocked(x, z) && sdField(x, z) < 60 && servedAt(x, z) && canalAt(x, z) > CANAL + 5) trees.push([x, z, rnd()]);
     }
     const grp = new THREE.Group();
     grp.name = "trees";
@@ -784,6 +836,54 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     for (const m of [tm, pt, pc]) m.computeBoundingSphere();
     grp.add(tm, pt, pc);
     return grp;
+  }
+
+  // ----------------------------------------------------------------- landmarks (2D art on a camera-facing card for now)
+  const LANDMARKS = [
+    { id: "opus_la" as const, src: "/assets/goldline/lantern-city/v4/tower-opus-la.png", h: 210 },
+    { id: "century_park_east" as const, src: "/assets/goldline/lantern-city/v4/tower-century-park-east.png", h: 290 },
+  ];
+  const hidden = new Set<number>();            // footprints the landmark art replaces
+  const landmarks: { mesh: THREE.Mesh; x: number; z: number }[] = [];
+  function buildLandmarks() {
+    for (const L of LANDMARKS) {
+      const geo = CANONICAL_BUILDING_GEOGRAPHY[L.id];
+      const { x, z } = ll(geo.latitude, geo.longitude);
+      const tex = new THREE.TextureLoader().load(L.src, t => {
+        const a = t.image.width / t.image.height;
+        mesh.geometry.dispose();
+        mesh.geometry = new THREE.PlaneGeometry(L.h * a, L.h).translate(0, L.h / 2, 0);
+      });
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const m = new THREE.ShaderMaterial({
+        uniforms: { ...uniforms, ...fogChunk, uMap: { value: tex }, uC: { value: new THREE.Vector2(x, z) } }, fog: true, transparent: false,
+        vertexShader: /* glsl */ `varying vec2 vUv;
+          ${FOG_V}
+          void main() { vUv = uv; vec4 mvPosition = modelViewMatrix * vec4(position, 1.); gl_Position = projectionMatrix * mvPosition;
+            #include <fog_vertex>
+          }`,
+        fragmentShader: COMMON + /* glsl */ `uniform sampler2D uMap; uniform vec2 uC; varying vec2 vUv;
+          ${FOG_F}
+          void main() {
+            vec4 t = texture2D(uMap, vUv);
+            if (t.a < .5) discard;
+            float sd = sdMask(uC);
+            // charted: the art as painted; under the fog: a pale plaster silhouette rising out of it
+            float L = dot(t.rgb, vec3(.3, .59, .11));
+            vec3 ghost = vec3(.9, .91, .93) * (.75 + .3 * L);
+            gl_FragColor = vec4(mix(t.rgb * 1.08, ghost, smoothstep(0., 40., sd)), 1.);
+            #include <fog_fragment>
+          }`,
+      });
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(L.h * 0.69, L.h).translate(0, L.h / 2, 0), m);
+      mesh.position.set(x, ground(x, z) - 2, z);
+      mesh.renderOrder = 3;
+      scene.add(mesh);
+      landmarks.push({ mesh, x, z });
+    }
+  }
+  function nearLandmark(x: number, z: number) {
+    return landmarks.some(l => Math.hypot(l.x - x, l.z - z) < 55);
   }
 
   // ----------------------------------------------------------------- lanterns
@@ -831,7 +931,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       const k = brightness(p.l);
       let mesh: THREE.Object3D | null = null;
       const tile = tiles.get(tileKeyAt(p.x, p.z));
-      if (b && tile) {
+      if (b && tile && !hidden.has(b.i)) {
         mesh = kitInstances([placeKit(b, roadNear(tile))], true);
         mesh.traverse(o => { const mm = (o as THREE.Mesh).material as THREE.ShaderMaterial | undefined; if (mm?.uniforms?.uLit) mm.uniforms.uLit.value = k; });
         mesh.userData.key = p.l.key;
@@ -983,6 +1083,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     const hs = Math.min(6, Math.max(1, cd / 2600));
     for (const o of lanternGroup.children) if (o.userData.halo) o.scale.setScalar(hs);
     camera.updateProjectionMatrix();
+    for (const l of landmarks) l.mesh.rotation.y = Math.atan2(camera.position.x - l.x, camera.position.z - l.z);
     if (M) updateLod();
     composer.render();
     raf = requestAnimationFrame(tick);

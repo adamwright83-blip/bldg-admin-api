@@ -211,6 +211,7 @@ for (kind, _), el in elements.items():
         u = int(float(u)) if u and u.replace(".", "", 1).isdigit() else 0
         ty = t["building"] if t["building"] in TYPES else "other"
         buildings.append({"ring": ring, "cx": cx, "cz": cz, "h": max(2.5, min(h, 220.0)), "e": ele, "u": u, "t": TYPES.index(ty),
+                          "ain": t.get("lacounty:ain", ""), "area": abs(a),
                           "name": t.get("name", ""), "addr": (t.get("addr:housenumber", "") + " " + t.get("addr:street", "")).strip()})
     elif "highway" in t:
         if any(inside(x, z, near) for x, z in pts):
@@ -221,6 +222,17 @@ for (kind, _), el in elements.items():
     elif "leisure" in t:
         if any(inside(x, z, near) for x, z in pts):
             parks.append(pts[:-1])
+# LA County tags every building on a parcel with the parcel's total units (each Park La Brea tower
+# says 770): count a parcel's units once, on its largest building
+by_parcel = {}
+for b in buildings:
+    if b["ain"] and b["u"]:
+        by_parcel.setdefault(b["ain"], []).append(b)
+for group in by_parcel.values():
+    keep = max(group, key=lambda b: b["area"])
+    for b in group:
+        if b is not keep:
+            b["u"] = 0
 print(len(buildings), "buildings", len(roads), "roads", len(water), "water", len(parks), "parks")
 
 # ---------------------------------------------------------------- terrain from building elevations
