@@ -217,15 +217,26 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     needs: mobile-build-and-schema
-    timeout-minutes: 12
+    timeout-minutes: 5
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: mobile-authoritative-business
+          - name: mobile-authoritative-call-followup
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/authoritativeBusinessChains.spec.ts
+              --grep 'CALL drives|FOLLOW_UP only'
+          - name: mobile-authoritative-visit
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
+              e2e/goldline/authoritativeBusinessChains.spec.ts
+              --grep 'VISIT requires'
+          - name: mobile-authoritative-recover-lifecycle
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
+              e2e/goldline/authoritativeBusinessChains.spec.ts
+              --grep 'RECOVER becomes|five mount cycles'
           - name: mobile-driver-shell-and-pixel
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
@@ -256,11 +267,16 @@ jobs:
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/inhabitedAdventure.spec.ts
               --grep 'six ambient|CI preview|Anchor|Gatekeeper'
-          - name: mobile-inhabited-adventure-b
+          - name: mobile-inhabited-ghost
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
               e2e/goldline/inhabitedAdventure.spec.ts
-              --grep 'Ghost|Staller|reduced motion'
+              --grep 'Ghost'
+          - name: mobile-inhabited-staller-motion
+            command: >-
+              pnpm exec playwright test --config playwright.goldline.config.ts
+              e2e/goldline/inhabitedAdventure.spec.ts
+              --grep 'Staller|reduced motion'
           - name: mobile-reality-route
             command: >-
               pnpm exec playwright test --config playwright.goldline.config.ts
