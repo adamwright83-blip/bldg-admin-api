@@ -42,6 +42,9 @@ export type DriverMissionTargetMode = (typeof DRIVER_MISSION_TARGET_MODES)[numbe
 
 export type DriverMissionPlacesProvider = TerritoryBusinessProvider & {
   resolveBusiness(query: string): Promise<TerritoryBusinessCandidate | null>;
+  resolveBusinessByPlaceId?(
+    placeId: string
+  ): Promise<TerritoryBusinessCandidate | null>;
 };
 
 const SEARCH_CATEGORIES: Record<DriverMissionVenue, string[]> = {
@@ -68,6 +71,13 @@ function provider() {
     placesApiKey,
     geocodingApiKey,
   });
+}
+
+export async function autocompleteDriverMissionPlaces(input: {
+  query: string;
+  limit?: number;
+}) {
+  return provider().autocompleteBusinesses(input.query, input.limit ?? 6);
 }
 
 function builderMetadata(mission: CommercialMission) {
@@ -124,6 +134,7 @@ async function ensureApprovedBuilderProposal(input: {
 export async function resolveDriverMissionTargets(input: {
   targetMode: DriverMissionTargetMode;
   searchNear: string;
+  placeId?: string | null;
   venueType: DriverMissionVenue;
   count: number;
   operator: LaundryTerritoryOperatorContext;
@@ -133,7 +144,10 @@ export async function resolveDriverMissionTargets(input: {
   exactTarget: TerritoryBusinessCandidate | null;
 }> {
   if (input.targetMode === "exact_property") {
-    const exactTarget = await input.places.resolveBusiness(input.searchNear);
+    const exactTarget =
+      input.placeId && input.places.resolveBusinessByPlaceId
+        ? await input.places.resolveBusinessByPlaceId(input.placeId)
+        : await input.places.resolveBusiness(input.searchNear);
     if (!exactTarget) {
       throw new Error(
         "Could not identify this property. Check the exact property name or address, or choose Find prospects near this location."
@@ -175,6 +189,7 @@ export async function buildDriverMissions(input: {
   venueType: DriverMissionVenue;
   targetMode: DriverMissionTargetMode;
   searchNear: string;
+  placeId?: string;
   requestId: string;
   count: number;
 }) {
@@ -197,6 +212,7 @@ export async function buildDriverMissions(input: {
   const { opportunities, exactTarget } = await resolveDriverMissionTargets({
     targetMode: input.targetMode,
     searchNear: input.searchNear,
+    placeId: input.placeId,
     venueType: input.venueType,
     count: input.count,
     operator,
@@ -323,6 +339,7 @@ export async function buildDriverMissions(input: {
             requestId: input.requestId,
             targetMode: input.targetMode,
             targetQuery: input.searchNear,
+            ...(input.placeId ? { targetPlaceId: input.placeId } : {}),
           },
           {
             source: "driver_sales_diamond",
