@@ -73,7 +73,7 @@ export function BuildMissionSheet({
         venueType,
         searchNear: searchNearValue.trim(),
         requestId: crypto.randomUUID(),
-        count: 3,
+        count: /^\s*\d{1,6}\s+\S+/.test(searchNearValue.trim()) ? 1 : 3,
       });
       await utils.system.commercialMission.myBuiltMissions.invalidate();
       sounds.missionAssign();
@@ -134,7 +134,7 @@ export function BuildMissionSheet({
             <div className="p-[clamp(16px,3vw,30px)] pb-[calc(env(safe-area-inset-bottom)+clamp(20px,3vw,30px))]">
               <label className="mb-4 block">
                 <span className="mb-2 block text-[13px] font-black uppercase tracking-[.16em] text-white/55">
-                  Search near
+                  Target property or area
                 </span>
                 <input
                   ref={searchInputRef}
@@ -151,7 +151,7 @@ export function BuildMissionSheet({
                   <Loader2 className="h-10 w-10 animate-spin text-violet-300" />
                   <p className="mt-5 text-[22px] font-black">Building your route…</p>
                   <p className="mt-2 max-w-[300px] text-[15px] leading-relaxed text-white/55">
-                    Finding new venues, removing duplicates, and assigning the best three to you.
+                    Resolving the property you entered. Broad area searches may return nearby options.
                   </p>
                 </div>
               ) : !missionType ? (
