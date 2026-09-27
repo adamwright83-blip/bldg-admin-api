@@ -43,6 +43,7 @@ import type {
 } from "../../game/actions/actionServices";
 import type { AuthoritativeFollowUp } from "../../game/actions/actionRegistry";
 import {
+  commercialMissionEntryPath,
   liveObjectivesFromFieldToday,
   type DayPlanStop,
 } from "./goldlineDayPlanModel";
@@ -1529,7 +1530,14 @@ function LiveGoldlineDriverController({
         onEnterWorld={trackedStopId => {
           const commercialId = trackedStopId?.match(/^commercial-(\d+)/)?.[1];
           if (commercialId) {
-            window.location.assign(`/driver/sales-mission/${commercialId}`);
+            const mission = builtMissions.data?.find(
+              item => item.id === Number(commercialId)
+            );
+            window.location.assign(
+              mission
+                ? commercialMissionEntryPath(mission)
+                : `/driver/sales-mission/${commercialId}`
+            );
             return;
           }
           setActiveAdventureObjectiveId(
