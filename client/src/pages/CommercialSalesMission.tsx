@@ -334,7 +334,7 @@ export default function CommercialSalesMission() {
     );
   };
 
-  const submitOutcome = (outcome: "follow_up" | "won" | "lost") =>
+  const submitOutcome = (outcome: "follow_up" | "won" | "lost" | "no_contact" | "no_decision") =>
     void mutate(
       () =>
         outcomeMutation.mutateAsync({
@@ -1149,6 +1149,20 @@ export default function CommercialSalesMission() {
                 <ActionButton
                   secondary
                   disabled={busy || !notes.trim()}
+                  onClick={() => submitOutcome("no_decision")}
+                >
+                  No decision yet
+                </ActionButton>
+                <ActionButton
+                  secondary
+                  disabled={busy || !notes.trim()}
+                  onClick={() => submitOutcome("no_contact")}
+                >
+                  No contact
+                </ActionButton>
+                <ActionButton
+                  secondary
+                  disabled={busy || !notes.trim()}
                   onClick={() => submitOutcome("lost")}
                 >
                   Not a fit
@@ -1157,7 +1171,7 @@ export default function CommercialSalesMission() {
             </>
           ) : null}
 
-          {["follow_up", "won", "lost"].includes(mission.status) ? (
+          {["visit_completed", "follow_up", "won", "lost"].includes(mission.status) ? (
             <div
               className={`csm-complete${mission.status === "won" ? " is-won" : ""}`}
             >
@@ -1170,7 +1184,9 @@ export default function CommercialSalesMission() {
                   ? "Account won."
                   : mission.status === "follow_up"
                     ? "Follow-up recorded."
-                    : "Mission learned from."}
+                    : mission.status === "visit_completed"
+                      ? "Visit recorded."
+                      : "Mission learned from."}
               </h1>
               <p>{mission.account.name}</p>
               {mission.status === "won" ? (
