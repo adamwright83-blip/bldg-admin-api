@@ -126,9 +126,21 @@ export async function buildDriverMissions(input: {
     categories: [input.searchNear],
     limit: 5,
   });
+  const preferredAccountType: Record<DriverMissionVenue, string> = {
+    luxury_living: "property_management",
+    hotels: "hotel",
+    fitness_wellness: "gym",
+    salons_spas: "salon_spa",
+  };
   const exactOpportunity = discovery.opportunities
     .filter(opportunity => opportunity.distanceMiles <= 0.25)
-    .sort((a, b) => a.distanceMiles - b.distanceMiles)[0];
+    .sort((a, b) => {
+      const aPreferred =
+        a.account.accountType === preferredAccountType[input.venueType] ? 0 : 1;
+      const bPreferred =
+        b.account.accountType === preferredAccountType[input.venueType] ? 0 : 1;
+      return aPreferred - bPreferred || a.distanceMiles - b.distanceMiles;
+    })[0];
   if (!exactOpportunity) {
     throw new Error(
       "Could not identify that exact property. Enter the property name and full street address."
