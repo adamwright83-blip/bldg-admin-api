@@ -180,6 +180,7 @@ export function projectDashboardWitness(
   let comparisonTo: string | null = null;
   let comparisonSalesCents: number | null = null;
   let comparisonRevenueCents: number | null = null;
+  let comparisonOrders: number | null = null;
   const comparisonText = input.comparisonText?.trim() || null;
   if (comparisonText) {
     const comparison = parseProvenPeriod(comparisonText);
@@ -193,6 +194,9 @@ export function projectDashboardWitness(
     if (typeof comparisonRevenue !== "string") return comparisonRevenue;
     comparisonSalesCents = moneyToCents(comparisonSales);
     comparisonRevenueCents = moneyToCents(comparisonRevenue);
+    const parsedComparisonOrders = optionalInteger(input.fields, "Comparison Orders");
+    if (parsedComparisonOrders && typeof parsedComparisonOrders === "object") return parsedComparisonOrders;
+    comparisonOrders = parsedComparisonOrders;
     if (comparisonSalesCents === null || comparisonRevenueCents === null) {
       return { ok: false, reason: "A comparison total was not an unambiguous number." };
     }
@@ -202,8 +206,6 @@ export function projectDashboardWitness(
 
   const newCustomers = optionalInteger(input.fields, "New Customers");
   if (newCustomers && typeof newCustomers === "object") return newCustomers;
-  const comparisonOrders = optionalInteger(input.fields, "Comparison Orders");
-  if (comparisonOrders && typeof comparisonOrders === "object") return comparisonOrders;
 
   const actualHash = sha256Bytes(input.screenshotBytes);
   if (!/^[a-f0-9]{64}$/.test(input.screenshotSha256) || actualHash !== input.screenshotSha256) {
