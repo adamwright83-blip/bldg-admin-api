@@ -1,3 +1,4 @@
+/* LEGACY DAYFORGE COMPATIBILITY: this test intentionally verifies the retained legacy entitlement boundary; canonical product is JOYSTICK. */
 import { describe, expect, it } from "vitest";
 import {
   PERSISTENT_OPERATOR_ENTITLEMENT,
