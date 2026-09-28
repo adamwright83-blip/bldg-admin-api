@@ -105,4 +105,5 @@ test("permissions are scoped; broad screenshot access is optional, never require
   assert.equal(manifest.externally_connectable, undefined);
   const ui = await readFile(new URL("./sync.js", import.meta.url), "utf8");
   assert.ok(!ui.includes("innerHTML"));
+  assert.match(ui, /origins: \[\.\.\.HOSTS, \.\.\.DASHBOARD_CAPTURE_ORIGINS\]/);
 });
