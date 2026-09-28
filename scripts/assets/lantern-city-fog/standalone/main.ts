@@ -66,4 +66,5 @@ document.querySelectorAll<HTMLButtonElement>(".dock button").forEach(b => b.oncl
   n.hidden = false;
   setTimeout(() => (n.hidden = true), 2600);
 });
-(window as unknown as { __w: typeof world }).__w = world;
+(window as unknown as { __w: typeof world; __sample: LanternInput[] }).__w = world;
+(window as unknown as { __sample: LanternInput[] }).__sample = SAMPLE;

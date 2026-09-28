@@ -468,6 +468,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     for (const c of clearings) stamp(c, 0, 400);
     for (const r of runs) stamp(r, 1, 300);
     maskTex.needsUpdate = true;
+    updatePuffs();
   }
 
   // ----------------------------------------------------------------- terrain, flats, fog
@@ -582,7 +583,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
           float cv = smoothstep(${(CANAL + COPE).toFixed(1)}, ${CANAL + 130}., canalD(p));
           float rise = cv * cv * (3. - 2. * cv);
           float billow = fbm(p * .006 + uTime * .004) * 34. + fbm(p * .021 - uTime * .006) * 12.;
-          float h = mix(.85, 30. + billow * 1.9, rise);
+          float h = mix(.85, 16. + billow * 1.1, rise);
           float inRun = 1. - smoothstep(-60., 0., terrMask(p));
           h *= mix(1., .3, inRun);
           return body * h - (1. - body) * 30.;
@@ -643,6 +644,141 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     fogMesh = skipInk(new THREE.Mesh(g, m)) as THREE.Mesh;
     fogMesh.renderOrder = 2;
     scene.add(fogMesh);
+    buildPuffs();
+  }
+
+  // ----------------------------------------------------------------- the cloud sea
+  // Unearned land sits under a sea of cartoon cumulus: thousands of cel-shaded, ink-outlined puffs
+  // on a jittered grid over the served area. A puff over charted land collapses, so winning a
+  // customer opens a hole in the clouds; over a door-hanger run the sea is torn into islands.
+  const PUFF_STEP = 72;
+  let puffs: THREE.InstancedMesh | null = null;
+  let puffSpots: Float32Array = new Float32Array(0);   // x, z, radius, seed
+  // animation: each puff eases from its current size to its target; a collapsing puff first swells
+  // and glows gold, then pops, so a win rolls a wave of light through the cloud sea
+  let puffCur = new Float32Array(0), puffFrom = new Float32Array(0), puffTo = new Float32Array(0), puffT = new Float32Array(0), puffDelay = new Float32Array(0);
+  let puffGlow: THREE.InstancedBufferAttribute | null = null;
+  let puffAnimating = false;
+  function buildPuffs() {
+    const spots: number[] = [];
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let z = rect.z0; z < rect.z1; z += PUFF_STEP) for (let x = rect.x0; x < rect.x1; x += PUFF_STEP) {
+      const px = x + (rnd() - 0.5) * PUFF_STEP * 0.9, pz = z + (rnd() - 0.5) * PUFF_STEP * 0.9;
+      if (!servedAt(px, pz) || canalAt(px, pz) < CANAL + COPE + 30) continue;
+      spots.push(px, pz, 30 + rnd() * 26, rnd());
+    }
+    puffSpots = new Float32Array(spots);
+    // one cumulus: a big dome, shoulders either side, a crown on top, and a flat, shaded base
+    const lobeC = (r: number, x: number, y: number, z: number) => {
+      const g = mergeVertices(new THREE.IcosahedronGeometry(r, 2).deleteAttribute("uv").deleteAttribute("normal"));
+      return g.translate(x, y, z);
+    };
+    const geo = mergeVertices(mergeGeometries([
+      lobeC(1, 0, 0.05, 0), lobeC(0.72, 0.78, -0.08, 0.12), lobeC(0.66, -0.74, -0.1, -0.1),
+      lobeC(0.58, 0.18, 0.52, -0.08), lobeC(0.5, -0.3, 0.02, 0.62), lobeC(0.46, 0.34, -0.04, -0.6),
+    ])!);
+    const pp = geo.attributes.position;
+    for (let k = 0; k < pp.count; k++) { const y = pp.getY(k); if (y < -0.18) pp.setY(k, -0.18 + (y + 0.18) * 0.22); }
+    geo.computeVertexNormals();
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { ...uniforms, ...fogChunk }, fog: true,
+      vertexShader: /* glsl */ `
+        attribute float aGlow; varying vec3 vN; varying vec3 vW; varying float vH; varying float vGlow;
+        ${FOG_V}
+        void main() { vN = normalize(mat3(instanceMatrix) * normal); vH = position.y; vGlow = aGlow;
+          vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.); vW = w.xyz;
+          vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: COMMON + /* glsl */ `
+        varying vec3 vN; varying vec3 vW; varying float vH; varying float vGlow;
+        ${FOG_F}
+        void main() {
+          vec3 n = normalize(vN);
+          float lam = dot(n, uSun);
+          // three cel bands: sunlit white, lilac mid-tone, blue-violet shade; bellies go cooler
+          float band = smoothstep(-.12, -.06, lam) * .45 + smoothstep(.34, .4, lam) * .55;
+          vec3 shade = vec3(.6, .63, .82), mid = vec3(.84, .83, .93), lit = vec3(1., .98, .95);
+          vec3 c = mix(shade, mid, smoothstep(0., .45, band));
+          c = mix(c, lit, smoothstep(.5, 1., band));
+          c = mix(c, shade * .92, smoothstep(0., -.7, vH) * .5);
+          // a thin warm sunset rim on the edges facing the sun, and gold light leaking from below
+          vec3 V = normalize(cameraPosition - vW);
+          float rim = pow(1. - max(dot(n, V), 0.), 3.) * max(lam, 0.);
+          c += vec3(1., .72, .42) * smoothstep(.25, .35, rim) * .35;
+          float sd = sdMask(vW.xz);
+          c = mix(c, vec3(1., .78, .42) * 1.25, (1. - smoothstep(0., 120., sd)) * smoothstep(-.2, -.9, vH) * .6);
+          c = mix(c, vec3(1., .74, .34) * 2.2, vGlow);
+          gl_FragColor = vec4(c, 1.);
+          #include <fog_fragment>
+        }`,
+    });
+    const n = puffSpots.length / 4;
+    puffCur = new Float32Array(n); puffFrom = new Float32Array(n); puffTo = new Float32Array(n); puffT = new Float32Array(n).fill(1); puffDelay = new Float32Array(n);
+    puffGlow = new THREE.InstancedBufferAttribute(new Float32Array(n), 1);
+    geo.setAttribute("aGlow", puffGlow);
+    puffs = new THREE.InstancedMesh(geo, mat, n);
+    puffs.frustumCulled = false;
+    puffs.renderOrder = 3;
+    scene.add(puffs);
+    updatePuffs(true);
+  }
+  /** size every puff from the reveal field: charted land collapses, the frontier thins, runs tear */
+  function updatePuffs(immediate = false) {
+    if (!puffs || !M) return;
+    for (let k = 0; k < puffSpots.length / 4; k++) {
+      const x = puffSpots[k * 4], z = puffSpots[k * 4 + 1], r0 = puffSpots[k * 4 + 2], sd0 = puffSpots[k * 4 + 3];
+      const sd = sdField(x, z), tr = terrField(x, z);
+      let r = r0 * THREE.MathUtils.smoothstep(sd, 30, 190);                    // thin toward the frontier, gone on charted land
+      if (tr < 0 && (Math.sin(x * 0.013 + z * 0.009) + Math.sin(z * 0.017 - x * 0.006)) * 0.5 + sd0 * 0.6 < 0.55) r = 0;   // torn over a run
+      if (r < 4) r = 0;
+      if (immediate) { puffCur[k] = puffTo[k] = r; puffT[k] = 1; continue; }
+      if (Math.abs(r - puffTo[k]) < 0.5) continue;
+      puffFrom[k] = puffCur[k]; puffTo[k] = r; puffT[k] = 0;
+      puffDelay[k] = sd0 * 0.9 + Math.max(0, -sd) / 900;                          // a rolling wave, not a blink
+      puffAnimating = true;
+    }
+    writePuffs();
+  }
+  function writePuffs() {
+    if (!puffs) return;
+    const Mx = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), Sc = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
+    for (let k = 0; k < puffSpots.length / 4; k++) {
+      const x = puffSpots[k * 4], z = puffSpots[k * 4 + 1], sd0 = puffSpots[k * 4 + 3], r = puffCur[k];
+      if (r < 0.5) { Mx.makeScale(0, 0, 0); puffs.setMatrixAt(k, Mx); continue; }
+      V.set(x, ground(x, z) + 14 + r * 0.25, z);
+      Q.setFromAxisAngle(UP, sd0 * 6.28);
+      Sc.set(r, r * (0.7 + sd0 * 0.25), r * (0.8 + sd0 * 0.3));
+      puffs.setMatrixAt(k, Mx.compose(V, Q, Sc));
+    }
+    puffs.instanceMatrix.needsUpdate = true;
+  }
+  function animatePuffs(dt: number) {
+    if (!puffAnimating || !puffGlow) return;
+    let busy = false;
+    const glow = puffGlow.array as Float32Array;
+    for (let k = 0; k < puffCur.length; k++) {
+      if (puffT[k] >= 1) continue;
+      busy = true;
+      if (puffDelay[k] > 0) { puffDelay[k] -= dt; continue; }
+      puffT[k] = Math.min(1, puffT[k] + dt / 1.1);
+      const t = puffT[k], a = puffFrom[k], b = puffTo[k];
+      if (b < a) {
+        // swell, glow, pop: ease-in-back to nothing
+        const c1 = 2.2, e = (c1 + 1) * t * t * t - c1 * t * t;
+        puffCur[k] = Math.max(0, a + (b - a) * e);
+        glow[k] = Math.sin(Math.min(1, t * 1.3) * Math.PI) * 0.85;
+      } else {
+        // clouds rolling back in: ease-out
+        puffCur[k] = a + (b - a) * (1 - Math.pow(1 - t, 3));
+        glow[k] = 0;
+      }
+      if (t >= 1) glow[k] = 0;
+    }
+    puffGlow.needsUpdate = true;
+    writePuffs();
+    puffAnimating = busy;
   }
 
   // ----------------------------------------------------------------- canals: sunken water between stone walls
@@ -2144,7 +2280,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     camera.updateProjectionMatrix();
     for (const l of landmarks) l.mesh.rotation.y = Math.atan2(camera.position.x - l.x, camera.position.z - l.z);
     if (M) { updateLights(); updateLife(dt, cd); }
-    if (M) { updateLod(); pumpDetail(opts.capture ? 1e9 : 8); placeLabels(); }
+    if (M) { updateLod(); pumpDetail(opts.capture ? 1e9 : 8); animatePuffs(dt); placeLabels(); }
     renderInkPrepass();
     composer.render();
   }
