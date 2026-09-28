@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   legacyDayforgeTenantAdminProcedure,
+  legacyDayforgeTenantMemberProcedure,
   legacyDayforgeTenantOperatorProcedure,
   router,
 } from "../_core/trpc";
@@ -25,7 +26,7 @@ function identityFailure(error: unknown): never {
 }
 
 export const persistentOperatorRouter = router({
-  identity: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
+  identity: legacyDayforgeTenantMemberProcedure.query(async ({ ctx }) => {
     try {
       const identity = await requireCanonicalOperatorIdentityForUser({
         tenantId: ctx.tenantId,
