@@ -112,8 +112,12 @@ function VisitSurface(
           cause instanceof Error ? cause.message : "Visit state is unavailable."
         );
     });
-    void props.services
-      .loadPreVisitIntel(props.action.missionId!)
+    const loadPreVisitIntel = props.services.loadPreVisitIntel;
+    if (!loadPreVisitIntel) {
+      setIntelLoading(false);
+      return;
+    }
+    void loadPreVisitIntel(props.action.missionId!)
       .then(intel => {
         if (mounted.current) setPreVisitIntel(intel);
       })
