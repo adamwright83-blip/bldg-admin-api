@@ -32,8 +32,6 @@ export type GoldlineVisitContext = {
   parkingLotClerkObservation: ParkingLotClerkObservation | null;
   proposal: { id: string; status: string; validThrough: string } | null;
   navigationUrl: string | null;
-  /** Claire's three pre-visit recommendations over authoritative mission truth. */
-  preVisitIntel?: ClairePreVisitIntel | null;
 };
 
 export type VisitOutcomeRequest = {
@@ -53,6 +51,8 @@ export type VisitOutcomeRequest = {
 export type GoldlineActionServices = {
   recordCall: (request: RealActionRequest) => Promise<void>;
   loadVisit: (missionId: number) => Promise<GoldlineVisitContext>;
+  /** Non-blocking recommendation read; visit truth never waits on Sales Intel. */
+  loadPreVisitIntel: (missionId: number) => Promise<ClairePreVisitIntel | null>;
   startVisitPreparation: (input: {
     missionId: number;
     requestId: string;
