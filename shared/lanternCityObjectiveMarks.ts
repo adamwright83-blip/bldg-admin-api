@@ -309,7 +309,12 @@ export function projectLanternObjectiveMarks(input: {
   }
   const todayTargets: LanternTodayTarget[] = [];
   for (const mark of currentMarks) {
-    const target = targetById.get(mark.targetId)!;
+    const target = targetById.get(mark.targetId);
+    // Redundant with the all-target preflight above, but keeps the nullable
+    // CampaignTarget coordinate type narrowed for TypeScript.
+    if (!hasCoordinates(target)) {
+      return { ...base, todayStatus: "no_coordinates", today: null };
+    }
     todayTargets.push({
       slotId: mark.slotId,
       targetId: mark.targetId,
