@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { summarizeArmoryAssociations } from "./armoryEvidenceService";
+import {
+  filterArmoryUsagesForAssociation,
+  summarizeArmoryAssociations,
+} from "./armoryEvidenceService";
 
 describe("Armory J0 outcome accounting", () => {
   it("keeps one real win as one business win across eight usage associations", () => {
@@ -14,7 +17,39 @@ describe("Armory J0 outcome accounting", () => {
       associations: 8,
       businessOutcomes: 1,
       wins: 1,
-    });
+      it("requires exact lineage before using direct association strengths", () => {
+    const usages = [
+      { decisionPointId: "dp-1", encounterReference: "enc-1" },
+      { decisionPointId: "dp-2", encounterReference: "enc-2" },
+    ];
+
+    expect(
+      filterArmoryUsagesForAssociation(usages, {
+        associationStrength: "decision_point",
+        decisionPointId: "dp-2",
+      })
+    ).toEqual([usages[1]]);
+
+    expect(
+      filterArmoryUsagesForAssociation(usages, {
+        associationStrength: "encounter",
+        encounterReference: "enc-1",
+      })
+    ).toEqual([usages[0]]);
+
+    expect(() =>
+      filterArmoryUsagesForAssociation(usages, {
+        associationStrength: "decision_point",
+      })
+    ).toThrow("decisionPointId is required");
+
+    expect(
+      filterArmoryUsagesForAssociation(usages, {
+        associationStrength: "mission_window_legacy",
+      })
+    ).toEqual(usages);
+  });
+});
   });
 
   it("keeps different stable outcomes distinct", () => {
