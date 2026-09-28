@@ -81,7 +81,7 @@ export function filterArmoryUsagesForAssociation<T extends {
 
 /** Pure aggregation: one stable outcome reference is one business outcome. */
 export function summarizeArmoryAssociations(
-  rows: readonly Array<{
+  rows: ReadonlyArray<{
     usageId: string;
     outcomeKind: ArmoryOutcomeKind;
     outcomeReference: string;
