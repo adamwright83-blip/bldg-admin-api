@@ -21,7 +21,7 @@ import { recordPersistentOperatorDiagnosticEvent } from "../persistentOperator/o
 import {
   freezeTargetSet,
   getRunProjection,
-  listOperatorRuns,
+  listOperatorRunsForIdentities,
   listRunSlots,
   listTargets,
   recordPlacement,
@@ -56,6 +56,14 @@ async function campaignIdentity(ctx: {
   });
 }
 
+function authorizedCampaignOperatorIds(identity: Awaited<ReturnType<typeof campaignIdentity>>) {
+  return [...new Set([
+    identity.canonicalOpenId,
+    identity.sourceOpenId,
+    ...identity.aliases.map(alias => alias.openId),
+  ])];
+}
+
 export const campaignRunRouter = router({
   listPacks: legacyDayforgeTenantMemberProcedure
     .input(z.object({}).optional())
@@ -73,9 +81,9 @@ export const campaignRunRouter = router({
     .query(async ({ ctx }) => {
       const identity = await campaignIdentity(ctx, "campaign_runs.list");
       const storeAvailable = Boolean(await getDb());
-      const runs = await listOperatorRuns({
+      const runs = await listOperatorRunsForIdentities({
         tenantId: identity.tenantId,
-        operatorUserId: identity.campaignOperatorUserId,
+        operatorUserIds: authorizedCampaignOperatorIds(identity),
       });
       await recordPersistentOperatorDiagnosticEvent({
         tenantId: identity.tenantId,
@@ -166,6 +174,7 @@ export const campaignRunRouter = router({
       return recordTerritoryPresence({
         tenantId: identity.tenantId,
         operatorUserId: identity.campaignOperatorUserId,
+        authorizedOperatorUserIds: authorizedCampaignOperatorIds(identity),
         ...input,
       });
     }),
@@ -184,6 +193,7 @@ export const campaignRunRouter = router({
       const result = await recordPlacement({
         tenantId: identity.tenantId,
         operatorUserId: identity.campaignOperatorUserId,
+        authorizedOperatorUserIds: authorizedCampaignOperatorIds(identity),
         ...input,
       });
       if (result) {
@@ -219,6 +229,7 @@ export const campaignRunRouter = router({
       return replaceTarget({
         tenantId: identity.tenantId,
         operatorUserId: identity.campaignOperatorUserId,
+        authorizedOperatorUserIds: authorizedCampaignOperatorIds(identity),
         ...input,
       });
     }),
