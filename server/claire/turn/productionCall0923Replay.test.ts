@@ -510,7 +510,6 @@ describe("Monday morning voice handoff into Weekly Mission Readiness", () => {
     const result = await runClaireTurn(
       {
         ...base,
-        businessDate: undefined,
         utterance: "yes",
         state,
         allowFragmentWait: false,
