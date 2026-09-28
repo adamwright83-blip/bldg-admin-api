@@ -19,6 +19,7 @@ import {
   type Dossier,
   type Overview,
 } from "./LanternCityHUD";
+import { TheCurrent } from "./TheCurrent";
 import {
   DEFAULT_CONTROLS,
   type SceneObject,
@@ -178,6 +179,9 @@ export default function LanternCityScene({
     staleTime: 30000,
     refetchInterval: 30000,
     retry: false,
+  });
+  const current = trpc.system.gumball.economicReaction.useQuery(undefined, {
+    refetchOnWindowFocus: false,
   });
   useEffect(() => {
     if (!root.current) return;
@@ -373,6 +377,7 @@ export default function LanternCityScene({
         damage={damage}
         onSelect={select}
       />
+      <TheCurrent reaction={current.data?.reaction ?? null} />
       <LanternCityHUD
         scene={scene}
         overview={overview.data as Overview | undefined}

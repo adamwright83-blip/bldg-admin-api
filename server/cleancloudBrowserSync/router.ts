@@ -25,6 +25,7 @@ import {
 } from "./reconcileEconomics";
 import { enqueueEconomicSnapshot } from "./worldOutbox";
 import { findPhysicalEntityIdByAddress } from "../goldlineWorld/entityLookup";
+import { selectTheCurrent } from "../../shared/economicReaction";
 import {
   assimilateImportedCustomerTruth,
   assimilationReceiptFields,
@@ -1108,5 +1109,43 @@ export const cleancloudBrowserSyncRouter = router({
       .orderBy(desc(verifiedEconomicEvents.verifiedAt))
       .limit(1);
     return { event: row ? publicEconomicEvent(row) : null };
+  }),
+  economicReaction: legacyDayforgeTenantOperatorProcedure.query(async ({ ctx }) => {
+    const db = await requireDb();
+    const [reconciliation] = await db
+      .select()
+      .from(economicReconciliations)
+      .where(eq(economicReconciliations.tenantId, ctx.tenantId))
+      .orderBy(desc(economicReconciliations.createdAt))
+      .limit(1);
+    const [event] = await db
+      .select()
+      .from(verifiedEconomicEvents)
+      .where(
+        and(
+          eq(verifiedEconomicEvents.tenantId, ctx.tenantId),
+          eq(verifiedEconomicEvents.eventType, "economic.mom_revenue_gain_verified")
+        )
+      )
+      .orderBy(desc(verifiedEconomicEvents.verifiedAt))
+      .limit(1);
+    const reaction = selectTheCurrent({
+      event: event
+        ? {
+            eventType: event.eventType,
+            deltaCents: event.deltaCents,
+            periodFrom: event.periodFrom,
+            periodTo: event.periodTo,
+          }
+        : null,
+      reconciliation: reconciliation
+        ? {
+            status: reconciliation.status,
+            rangeFrom: reconciliation.rangeFrom,
+            rangeTo: reconciliation.rangeTo,
+          }
+        : null,
+    });
+    return { reaction };
   }),
 });
