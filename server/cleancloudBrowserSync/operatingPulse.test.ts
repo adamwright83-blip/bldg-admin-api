@@ -63,6 +63,34 @@ describe("operating pulse", () => {
     );
   });
 
+  it("does not call the book fresh when the latest capture failed", () => {
+    const pulse = projectOperatingPulse({
+      tenants: [tenant({ lastAttemptOutcome: "failed" })],
+    });
+    expect(pulse.functioning).toBe(false);
+    expect(pulse.jawbreaker).toBe("refreshed");
+    expect(pulse.summary).toBe(
+      "Last Gumball capture failed. An older refresh is not a current capture."
+    );
+    expect(pulse.summary).not.toMatch(/Book fresh/);
+  });
+
+  it("does not invent a capture when a store is paired and nothing has run", () => {
+    const pulse = projectOperatingPulse({
+      tenants: [
+        tenant({
+          lastAttemptAt: null,
+          lastAttemptOutcome: null,
+          lastSuccessAt: null,
+          customerTruth: null,
+          book: "unavailable",
+        }),
+      ],
+    });
+    expect(pulse.functioning).toBe(false);
+    expect(pulse.summary).toBe("Gumball has not recorded a capture.");
+  });
+
   it("drops private fields before anything is published", () => {
     const pulse = projectOperatingPulse({
       tenants: [tenant({ tenantId: "tenant-a" })],
@@ -89,6 +117,7 @@ describe("latest CleanCloud sales", () => {
           placedAt: new Date("2026-09-27T17:00:00.000Z"),
           paymentAt: new Date("2026-09-27T18:30:00.000Z"),
           paidAt: null,
+          ingestedAt: new Date("2026-09-27T19:00:00.000Z"),
         },
         {
           orderId: "100",
@@ -97,6 +126,7 @@ describe("latest CleanCloud sales", () => {
           placedAt: new Date("2026-09-27T17:00:00.000Z"),
           paymentAt: null,
           paidAt: new Date("2026-09-27T18:30:00.000Z"),
+          ingestedAt: new Date("2026-09-06T19:00:00.000Z"),
         },
       ],
       20
@@ -106,6 +136,7 @@ describe("latest CleanCloud sales", () => {
         at: "2026-09-27T18:30:00.000Z",
         placedAt: "2026-09-27T17:00:00.000Z",
         paidAt: "2026-09-27T18:30:00.000Z",
+        ingestedAt: "2026-09-06T19:00:00.000Z",
         customerName: "Ada Lovelace",
         amountCents: 5100,
       },
@@ -117,13 +148,16 @@ describe("latest CleanCloud sales", () => {
       placedAt: new Date("2026-09-27T16:00:00.000Z"),
       paymentAt: null,
       paidAt: null,
+      ingestedAt: new Date("2026-09-27T16:05:00.000Z"),
     });
     expect(view.at).toBe("2026-09-27T16:00:00.000Z");
     expect(view.paidAt).toBeNull();
+    expect(view.ingestedAt).toBe("2026-09-27T16:05:00.000Z");
     expect(Object.keys(view).sort()).toEqual([
       "amountCents",
       "at",
       "customerName",
+      "ingestedAt",
       "paidAt",
       "placedAt",
     ]);

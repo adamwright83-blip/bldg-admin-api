@@ -1,6 +1,6 @@
 /**
  * Latest CleanCloud sales for a signed-in operator.
- * Date, time, customer name, and amount. Nothing else.
+ * Payment time, customer name, amount, and when Goldline stored the row.
  */
 import { and, desc, eq, sql } from "drizzle-orm";
 import { cleancloudPaidOrders } from "../../drizzle/schema";
@@ -10,6 +10,7 @@ export type LatestCleanCloudSale = {
   at: string | null;
   placedAt: string | null;
   paidAt: string | null;
+  ingestedAt: string | null;
   customerName: string;
   amountCents: number;
 };
@@ -21,6 +22,7 @@ type SaleRow = {
   placedAt: Date | null;
   paymentAt: Date | null;
   paidAt: Date | null;
+  ingestedAt: Date | null;
 };
 
 function iso(value: Date | null | undefined): string | null {
@@ -36,21 +38,27 @@ export function saleFromRow(row: SaleRow): LatestCleanCloudSale {
     at: paidAt ?? placedAt,
     placedAt,
     paidAt,
+    ingestedAt: iso(row.ingestedAt),
     customerName: row.customerName,
     amountCents: row.amountCents,
   };
 }
 
 export function dedupeLatestSales(rows: SaleRow[], limit: number): LatestCleanCloudSale[] {
-  const seen = new Set<string>();
-  const sales: LatestCleanCloudSale[] = [];
+  const byOrder = new Map<string, SaleRow>();
   for (const row of rows) {
-    if (seen.has(row.orderId)) continue;
-    seen.add(row.orderId);
-    sales.push(saleFromRow(row));
-    if (sales.length >= limit) break;
+    const existing = byOrder.get(row.orderId);
+    if (!existing) {
+      byOrder.set(row.orderId, row);
+      continue;
+    }
+    const existingIngest = existing.ingestedAt?.getTime() ?? Number.POSITIVE_INFINITY;
+    const rowIngest = row.ingestedAt?.getTime() ?? Number.POSITIVE_INFINITY;
+    if (rowIngest < existingIngest) {
+      byOrder.set(row.orderId, { ...existing, ingestedAt: row.ingestedAt });
+    }
   }
-  return sales;
+  return [...byOrder.values()].slice(0, limit).map(saleFromRow);
 }
 
 export async function loadLatestCleanCloudSales(input: {
@@ -69,6 +77,7 @@ export async function loadLatestCleanCloudSales(input: {
       placedAt: cleancloudPaidOrders.placedAtUtc,
       paymentAt: cleancloudPaidOrders.paymentDateUtc,
       paidAt: cleancloudPaidOrders.paidDateUtc,
+      ingestedAt: cleancloudPaidOrders.createdAt,
     })
     .from(cleancloudPaidOrders)
     .where(
@@ -88,6 +97,7 @@ export async function loadLatestCleanCloudSales(input: {
         placedAt: row.placedAt,
         paymentAt: row.paymentAt,
         paidAt: row.paidAt,
+        ingestedAt: row.ingestedAt,
       })),
       limit
     ),

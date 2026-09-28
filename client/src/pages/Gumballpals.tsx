@@ -141,8 +141,9 @@ export default function Gumballpals() {
             {sales.data && sales.data.sales.length > 0 ? (
               <ol style={{ lineHeight: 1.8, paddingLeft: 24 }}>
                 {sales.data.sales.map(sale => (
-                  <li key={`${sale.at}-${sale.customerName}-${sale.amountCents}`}>
-                    {pacific(sale.at)} · {sale.customerName} · {money(sale.amountCents)}
+                  <li key={`${sale.at}-${sale.ingestedAt}-${sale.customerName}-${sale.amountCents}`}>
+                    {pacific(sale.at)} · {sale.customerName} · {money(sale.amountCents)} · imported{" "}
+                    {pacific(sale.ingestedAt)}
                   </li>
                 ))}
               </ol>

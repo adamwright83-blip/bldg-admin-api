@@ -163,6 +163,13 @@ function combinedJawbreaker(
 }
 
 function pulseSummary(tenants: OperatingPulseTenant[]): string {
+  const missed = tenants.filter(tenant => !captureReached(tenant.lastAttemptOutcome));
+  if (missed.length) {
+    const recordedFailure = missed.some(tenant => tenant.lastAttemptOutcome);
+    return recordedFailure
+      ? "Last Gumball capture failed. An older refresh is not a current capture."
+      : "Gumball has not recorded a capture.";
+  }
   if (tenants.some(tenant => tenant.jawbreaker === "failed")) {
     return "Gumball imported. Jawbreaker did not refresh customer truth.";
   }
