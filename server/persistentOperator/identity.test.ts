@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  operatorUserCanResolveOnTenant,
   resolveCanonicalOperatorIdentity,
   type OperatorIdentityBinding,
   type OperatorIdentityResolverDeps,
@@ -253,6 +254,53 @@ describe("canonical operator identity", () => {
       fixture
     );
     expect(result).toEqual({ ok: false, reason: "identity_unresolved" });
+  });
+
+  it("allows only recognized shared-password identities to use a legacy host tenant", () => {
+    expect(
+      operatorUserCanResolveOnTenant(
+        {
+          id: 1,
+          tenantId: "default",
+          openId: "admin-owner",
+          role: "admin",
+        },
+        "laundry_farm"
+      )
+    ).toBe(true);
+    expect(
+      operatorUserCanResolveOnTenant(
+        {
+          id: 2,
+          tenantId: "default",
+          openId: "driver-primary",
+          role: "driver",
+        },
+        "laundry_farm"
+      )
+    ).toBe(true);
+    expect(
+      operatorUserCanResolveOnTenant(
+        {
+          id: 3,
+          tenantId: "tenant-a",
+          openId: "ordinary-user",
+          role: "admin",
+        },
+        "laundry_farm"
+      )
+    ).toBe(false);
+    expect(
+      operatorUserCanResolveOnTenant(
+        {
+          id: 1,
+          tenantId: "default",
+          openId: "admin-owner",
+          role: "admin",
+        },
+        "saas-tenant-b"
+      )
+    ).toBe(false);
   });
 
   it("records only typed join metadata on failure, not raw identity values", async () => {
