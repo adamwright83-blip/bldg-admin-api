@@ -777,6 +777,12 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
           float t = uTime;
           float rip = fbm(vW.xz * .006 + vec2(t * .02, t * .013)) + fbm(vW.xz * .014 - vec2(t * .015, -t * .02)) * .5;
           col *= .92 + rip * .14;
+          // open water: hand-drawn crests, short white strokes that drift with the swell
+          vec2 cp = vW.xz * vec2(.0022, .0045) + vec2(t * .006, 0.);
+          float bandN = fbm(cp * 1.3) * 7. + vW.z * .0016;
+          float crest = 1. - smoothstep(.012, .03, .5 - abs(fract(bandN) - .5));
+          float patchy = smoothstep(.58, .7, vn(vW.xz * .0011 + vec2(13., t * .004)));
+          col = mix(col, vec3(.82, .94, .96), crest * patchy * smoothstep(90., 260., d) * .55);
           // foam: a hard white rim, then rings breathing out from the shore
           float wob = fbm(vW.xz * .03 + t * .05) * 14.;
           float rim = 1. - smoothstep(4., 9., d + wob * .4);
@@ -1462,7 +1468,8 @@ export function createIslandBoard(container: HTMLElement, events: IslandEvents =
       const x = F.x0 + (k % F.nx) * F.cell, z = F.z0 + Math.floor(k / F.nx) * F.cell;
       x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
     }
-    const ex = x1 - x0 + 900, ez = z1 - z0 + 900;
+    // room at the sides for the edge islands' banners
+    const ex = x1 - x0 + 2800, ez = z1 - z0 + 900;
     const dist = (Math.max(ex / aspect, ez * 1.25) / (2 * Math.tan((14 * Math.PI) / 180))) * 0.98;
     frame((x0 + x1) / 2, (z0 + z1) / 2 + ez * 0.06, dist, 0, 0.86);
   }
