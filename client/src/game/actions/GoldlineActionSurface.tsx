@@ -116,6 +116,8 @@ function VisitSurface(
   const [missionDebrief, setMissionDebrief] =
     useState<MissionLinkedDebriefState | null>(null);
   const [debriefAnswer, setDebriefAnswer] = useState("");
+  const [debriefAdditionalAnswer, setDebriefAdditionalAnswer] = useState("");
+  const [showAdditionalQuestion, setShowAdditionalQuestion] = useState(false);
   const mounted = useMountedRef();
   const towerSkin = towerEncounterSkin(props.action.missionId!);
 
@@ -188,20 +190,33 @@ function VisitSurface(
     setBusy(true);
     setError(null);
     try {
-      let answer = debriefAnswer.trim() || undefined;
-      if (
-        answer &&
-        missionDebrief.proposal.question?.inputType === "datetime-local"
-      ) {
+      const normalizeAnswer = (
+        input: string,
+        question: typeof missionDebrief.proposal.question
+      ) => {
+        const answer = input.trim();
+        if (!answer) return undefined;
+        if (question?.inputType !== "datetime-local") return answer;
         const parsed = new Date(answer);
-        if (Number.isNaN(parsed.getTime())) throw new Error("Enter the real follow-up time.");
-        answer = parsed.toISOString();
-      }
+        if (Number.isNaN(parsed.getTime())) {
+          throw new Error("Enter the real follow-up time.");
+        }
+        return parsed.toISOString();
+      };
+      const answer = normalizeAnswer(
+        debriefAnswer,
+        missionDebrief.proposal.question
+      );
+      const additionalAnswer = normalizeAnswer(
+        debriefAdditionalAnswer,
+        missionDebrief.proposal.additionalQuestion
+      );
       const next = await finalize({
         missionId: props.action.missionId!,
         journalEntryId: missionDebrief.journalEntryId,
         requestId: props.requestId,
         ...(answer ? { answer } : {}),
+        ...(additionalAnswer ? { additionalAnswer } : {}),
       });
       if (mounted.current) setMissionDebrief(next);
       await refresh();
@@ -500,7 +515,7 @@ function VisitSurface(
                 </strong>
                 <p>{missionDebrief.proposal.summary}</p>
               </div>
-              {missionDebrief.proposal.question ? (
+              {!showAdditionalQuestion && missionDebrief.proposal.question ? (
                 <label className="tower-debrief__question">
                   <span>{missionDebrief.proposal.question.prompt}</span>
                   <input
@@ -511,24 +526,66 @@ function VisitSurface(
                   />
                 </label>
               ) : null}
+              {showAdditionalQuestion && missionDebrief.proposal.additionalQuestion ? (
+                <label className="tower-debrief__question">
+                  <span>{missionDebrief.proposal.additionalQuestion.prompt}</span>
+                  <input
+                    data-testid="mission-debrief-additional-answer"
+                    type={missionDebrief.proposal.additionalQuestion.inputType}
+                    value={debriefAdditionalAnswer}
+                    onChange={event => setDebriefAdditionalAnswer(event.target.value)}
+                  />
+                </label>
+              ) : null}
               {missionDebrief.proposal.emailDraft ? (
                 <p className="tower-debrief__draft-note">
                   Claire can prepare the requested email as a draft. Nothing is
                   sent from this debrief.
                 </p>
               ) : null}
+              {missionDebrief.proposal.additionalQuestion && !showAdditionalQuestion ? (
+                <button
+                  type="button"
+                  data-testid="continue-mission-debrief"
+                  disabled={busy || !debriefAnswer.trim()}
+                  onClick={() => setShowAdditionalQuestion(true)}
+                >
+                  NEXT QUESTION
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  data-testid="confirm-mission-debrief"
+                  disabled={
+                    busy ||
+                    Boolean(
+                      missionDebrief.proposal.question && !debriefAnswer.trim()
+                    ) ||
+                    Boolean(
+                      missionDebrief.proposal.additionalQuestion &&
+                        !debriefAdditionalAnswer.trim()
+                    )
+                  }
+                  onClick={() => void finalizeLinkedDebrief()}
+                >
+                  {busy ? "LOCKING THE RECORD…" : "CONFIRM WHAT HAPPENED"}
+                </button>
+              )}
               <button
                 type="button"
-                data-testid="confirm-mission-debrief"
-                disabled={
-                  busy ||
-                  Boolean(
-                    missionDebrief.proposal.question && !debriefAnswer.trim()
-                  )
-                }
-                onClick={() => void finalizeLinkedDebrief()}
+                data-testid="correct-mission-debrief"
+                disabled={busy}
+                onClick={() => {
+                  setDebriefAnswer("");
+                  setDebriefAdditionalAnswer("");
+                  setShowAdditionalQuestion(false);
+                  props.services.openMissionDebrief?.({
+                    missionId: props.action.missionId!,
+                    buildingName: props.mission.name,
+                  });
+                }}
               >
-                {busy ? "LOCKING THE RECORD…" : "CONFIRM WHAT HAPPENED"}
+                CLAIRE GOT SOMETHING WRONG · RECORD A CORRECTION
               </button>
             </div>
           ) : null}
