@@ -38,6 +38,7 @@ import { readOnlySelfMemoryDeps } from "../selfMemory/adapter";
 import { readOnlyGoalsDeps } from "../goals/adapter";
 import { isAuthorizedProductionOperator } from "../businessMemory/sourceVisibility";
 import type { FactualClaimReceipt } from "../../provenance/claimReceipts";
+import { planBusinessQuestionWithLLM } from "../../businessConversation";
 import { persistShadowFailure, persistShadowObservation } from "../telemetry/shadowRecorder";
 import {
   shadowMemoryStore,
@@ -144,6 +145,7 @@ export function liveExecutiveDeps(
       ...retrievalDeps,
     }),
     ctx: { timeZone: ctx.timeZone, today: ctx.businessDate, surface: ctx.surface },
+    planBusinessQuery: input => planBusinessQuestionWithLLM(input),
   };
 }
 
