@@ -105,6 +105,11 @@ export function revenueReportEvidence(
   period: { from: string; to: string },
   covered: boolean
 ): { cents: number; evidenceId: string } | null {
+  // Rows alone do not prove the report was complete. Direct CSV imports can
+  // write paid CleanCloud rows without an exact browser-sync receipt, so even
+  // a non-empty matching subtotal is insufficient unless this exact period is
+  // receipt-covered.
+  if (!covered) return null;
   const revenue = rows.filter(row => row.sourceReportType === "orders_revenue" && row.paid);
   if (revenue.some(row => !row.paidDateUtc)) return null;
   const placed = new Map<string, number>();
