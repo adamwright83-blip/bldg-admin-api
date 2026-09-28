@@ -203,6 +203,95 @@ describe("mission-linked debrief proposal", () => {
     expect(proposal.emailDraft).toMatchObject({ to: null, sendAuthorized: false });
   });
 
+  it("does not combine unrelated evidence items into a quote or pilot request", () => {
+    const proposal = deriveMissionLinkedDebriefProposal({
+      buildingName: "Los Feliz Towers",
+      transcript:
+        "I asked for the manager. I left pricing information at the desk. We discussed a pilot earlier.",
+      extraction: extraction({
+        actions: [
+          {
+            entityClientKey: null,
+            type: "spoke_with_contact",
+            evidence: evidence("I asked for the manager."),
+            occurredAtText: null,
+          },
+          {
+            entityClientKey: null,
+            type: "collateral_delivered",
+            evidence: evidence("I left pricing information at the desk."),
+            occurredAtText: null,
+          },
+        ],
+        outcomes: [
+          {
+            entityClientKey: null,
+            type: "other",
+            evidence: evidence("We discussed a pilot earlier."),
+            explicitlyReported: true,
+          },
+        ],
+      }),
+    });
+
+    expect(proposal.quoteRequested).toBe(false);
+    expect(proposal.pilotRequested).toBe(false);
+  });
+
+  it("does not address one contact's requested draft to another contact", () => {
+    const proposal = deriveMissionLinkedDebriefProposal({
+      buildingName: "Los Feliz Towers",
+      transcript:
+        "Alice is alice@example.com. Bob asked me to email him the packet.",
+      extraction: extraction({
+        entities: [
+          {
+            clientEntityKey: "alice",
+            kind: "person",
+            propertyName: null,
+            addressClue: null,
+            neighborhood: null,
+            websiteDomain: null,
+            contactName: evidence("Alice"),
+            contactTitle: null,
+            email: evidence("alice@example.com"),
+            phone: null,
+            amenities: [],
+            architecture: [],
+          },
+          {
+            clientEntityKey: "bob",
+            kind: "person",
+            propertyName: null,
+            addressClue: null,
+            neighborhood: null,
+            websiteDomain: null,
+            contactName: evidence("Bob"),
+            contactTitle: null,
+            email: null,
+            phone: null,
+            amenities: [],
+            architecture: [],
+          },
+        ],
+        followUps: [
+          {
+            entityClientKey: "bob",
+            requestedAction: evidence("Bob asked me to email him the packet."),
+            explicitDateText: null,
+          },
+        ],
+      }),
+      knownEmail: "alice@example.com",
+    });
+
+    expect(proposal.emailDraft).toMatchObject({
+      to: null,
+      sendAuthorized: false,
+    });
+    expect(proposal.question?.kind).toBe("email");
+  });
+
   it("recognizes explicitly reported wins and losses without upgrading an undecided visit", () => {
     const won = deriveMissionLinkedDebriefProposal({
       buildingName: "Tower A",
