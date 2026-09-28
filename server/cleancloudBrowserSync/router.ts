@@ -46,6 +46,7 @@ const importInput = store.merge(account).extend({
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   exportUrl: z.string().max(2048),
   csv: z.string().min(1).max(4_000_000),
+  reportType: z.enum(["orders_sales", "orders_revenue"]).default("orders_sales"),
 });
 function assertAccount(
   ctx: { tenantId: string; user: { openId: string } },
@@ -480,7 +481,7 @@ export const cleancloudBrowserSyncRouter = router({
       assertAccount(ctx, input);
       // Validate ALL rows before any write. Existing CSV endpoint permits partial
       // imports; this transport deliberately requires an atomic, auditable result.
-      const { normalized, digest } = validatePayload(input, ctx.tenantId);
+      const { normalized, digest, reportType } = validatePayload(input, ctx.tenantId);
       const db = await requireDb();
       const physicalIds = new Map<string, string | null>();
       for (const row of normalized) {
@@ -525,7 +526,7 @@ export const cleancloudBrowserSyncRouter = router({
           .insert(cleancloudImportBatches)
           .values({
             tenantId: ctx.tenantId,
-            source: "cleancloud_orders_sales",
+            source: `cleancloud_${reportType}`,
             sourceFileName,
             importStatus: "completed",
           })
@@ -546,7 +547,7 @@ export const cleancloudBrowserSyncRouter = router({
                   cleancloudPaidOrders.cleancloudOrderId,
                   row.cleancloudOrderId
                 ),
-                eq(cleancloudPaidOrders.sourceReportType, "orders_sales")
+                eq(cleancloudPaidOrders.sourceReportType, reportType)
               )
             )
             .for("update");
@@ -575,7 +576,7 @@ export const cleancloudBrowserSyncRouter = router({
           digest,
           from: input.from,
           to: input.to,
-          reportType: "orders_sales",
+          reportType,
           completedAt: completedAt.toISOString(),
           batchId: batch.id,
           inserted,

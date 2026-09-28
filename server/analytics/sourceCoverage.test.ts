@@ -576,6 +576,21 @@ describe("business source coverage contract", () => {
     expect(source(result, "cleancloud").status).toBe("fresh");
     expect(result.book.exhaustiveCurrent).toBe(true);
     expect(result.book.paymentEventsProven).toBe(false);
+    const revenueRows = [
+      {
+        createdAt: new Date("2026-09-20T02:00:00.000Z"),
+        receiptJson: {
+          reportType: "orders_revenue",
+          from: "2026-09-01",
+          to: "2026-09-19",
+          completedAt: "2026-09-20T02:00:00.000Z",
+          customerTruth: "refreshed",
+        },
+      },
+    ];
+    expect(coverageRangesFromReceiptRows(revenueRows)[0]?.basis).toBe("economic_event");
+    expect(assimilationReceiptsFromRows(revenueRows)[0]?.basis).toBe("economic_event");
+    expect(coverageRangesFromReceiptRows(rows)[0]?.basis).toBe("orders_created");
     expect("exactRevenueLicensed" in result.book).toBe(false);
   });
 
