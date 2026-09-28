@@ -19,6 +19,8 @@ import {
   clickExport,
   fetchReport,
   goldlineRequest,
+  readMetricsOverview,
+  assertCleanCloudScreenshotTarget,
 } from "./browser.js";
 import { nextDailyRun } from "./schedule.js";
 let scheduled = false;
@@ -350,11 +352,126 @@ if (!globalThis.chrome?.runtime?.id) {
     void startSync();
   });
 
-  async function confirmSync() {
-    if (!staged) return;
-    busy(true);
-    $("confirm").disabled = true;
+  const DASHBOARD_CAPTURE_ORIGINS = ["<all_urls>"];
+
+  async function prepareDashboardCapturePermission() {
+    // Manual Confirm must invoke request() before any awaited preflight so the
+    // browser can still attribute the prompt to the operator's click.
+    if (!scheduled) {
+      try {
+        return await chrome.permissions.request({ origins: DASHBOARD_CAPTURE_ORIGINS });
+      } catch {
+        return false;
+      }
+    }
+    // Automatic syncs never prompt or acquire broader permission on their own.
     try {
+      return await chrome.permissions.contains({ origins: DASHBOARD_CAPTURE_ORIGINS });
+    } catch {
+      return false;
+    }
+  }
+
+  async function recordDashboardWitness(context, range, captureAllowed) {
+    if (!captureAllowed) {
+      return {
+        saved: false,
+        reconciliation: null,
+        note: "Dashboard screenshot permission was not granted.",
+      };
+    }
+    let tab = null;
+    try {
+      tab = await openSite(`${CLEANCLOUD}/store`);
+      const reading = await runInTab(tab, readMetricsOverview, [range]);
+      const shot = await captureCleanCloudPng(tab);
+      await request("recordWitness", {
+        tenantId: context.tenantId,
+        actorId: context.actorId,
+        observedStoreLabel: reading.storeLabel,
+        rangeFrom: range.from,
+        rangeTo: range.to,
+        rangeText: reading.rangeText,
+        comparisonText: reading.comparisonText,
+        fields: reading.fields,
+        screenshotBase64: shot.base64,
+        screenshotSha256: shot.screenshotSha256,
+      });
+      try {
+        const result = await request("reconcilePeriod", {
+          rangeFrom: range.from,
+          rangeTo: range.to,
+        });
+        return {
+          saved: true,
+          reconciliation: result?.reconciliation?.status ?? "insufficient_evidence",
+          note: null,
+        };
+      } catch (error) {
+        return {
+          saved: true,
+          reconciliation: null,
+          note: `Reconciliation did not complete: ${String(error?.message || error)}`,
+        };
+      }
+    } catch (error) {
+      return {
+        saved: false,
+        reconciliation: null,
+        note: String(error?.message || error || "Dashboard witness was not saved."),
+      };
+    } finally {
+      if (tab) await chrome.tabs.remove(tab).catch(() => {});
+    }
+  }
+
+  async function captureCleanCloudPng(tabId) {
+    if (!(await chrome.permissions.contains({ origins: DASHBOARD_CAPTURE_ORIGINS }))) {
+      throw new Error(
+        "Dashboard screenshot permission is required before totals can be witnessed."
+      );
+    }
+    const tab = await chrome.tabs.get(tabId);
+    await chrome.tabs.update(tabId, { active: true });
+    if (tab.windowId !== undefined)
+      await chrome.windows.update(tab.windowId, { focused: true });
+    const visible = await chrome.tabs.get(tabId);
+    assertCleanCloudScreenshotTarget(visible);
+    let dataUrl;
+    try {
+      dataUrl = await chrome.tabs.captureVisibleTab(visible.windowId, { format: "png" });
+    } catch {
+      throw new Error(
+        "Screenshot was not granted for the CleanCloud store. Totals were not saved."
+      );
+    }
+    const after = await chrome.tabs.get(tabId);
+    assertCleanCloudScreenshotTarget(after);
+    if (after.url !== visible.url)
+      throw new Error("The store tab changed before the screenshot. Totals were not saved.");
+    const match = /^data:image\/png;base64,([A-Za-z0-9+/=\s]+)$/.exec(dataUrl || "");
+    if (!match) throw new Error("Screenshot was not a PNG. Totals were not saved.");
+    const base64 = match[1].replace(/\s/g, "");
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    const screenshotSha256 = [...new Uint8Array(digest)]
+      .map(byte => byte.toString(16).padStart(2, "0"))
+      .join("");
+    return { base64, screenshotSha256 };
+  }
+
+  async function confirmSync() {
+    if (!staged || $("confirm").disabled) return;
+    // Disable synchronously so a double-click cannot start a second import while
+    // the browser permission prompt is open. This does not consume the user gesture.
+    $("confirm").disabled = true;
+    busy(true);
+    try {
+      // Runtime permission requests must stay inside the operator's Confirm gesture.
+      // A refusal never blocks the actual imports.
+      const dashboardCaptureAllowed = await prepareDashboardCapturePermission();
       await withLock(async () => {
         const { run: pending } = await chrome.storage.local.get("run");
         if (
@@ -414,6 +531,11 @@ if (!globalThis.chrome?.runtime?.id) {
         } catch (error) {
           revenueNote = `Orders (Sales) saved. Orders (Revenue) did not import: ${error.message}`;
         }
+        const witnessContext = {
+          tenantId: staged.tenantId,
+          actorId: staged.actorId,
+        };
+        const witnessRange = { from: staged.from, to: staged.to };
         await chrome.storage.local.set({
           verifiedPairing: {
             tenantId: staged.tenantId,
@@ -426,7 +548,26 @@ if (!globalThis.chrome?.runtime?.id) {
         await save("completed", { receipt });
         showReceipt(receipt);
         $("approval").hidden = true;
-        status(`Import confirmed. ${revenueNote}`);
+        let witnessResult = null;
+        try {
+          witnessResult = await recordDashboardWitness(
+            witnessContext,
+            witnessRange,
+            dashboardCaptureAllowed
+          );
+        } catch (error) {
+          witnessResult = {
+            saved: false,
+            reconciliation: null,
+            note: error?.message || "Dashboard witness was not saved.",
+          };
+        }
+        const witnessStatus = !witnessResult?.saved
+          ? `Dashboard witness was not saved: ${witnessResult?.note || "unknown error"}`
+          : witnessResult.note
+            ? `Dashboard witness saved. ${witnessResult.note}`
+            : `Dashboard witness saved. Economic reconciliation: ${witnessResult.reconciliation}.`;
+        status(`Import confirmed. ${revenueNote} ${witnessStatus}`);
         if (scheduled) await scheduleStatus("completed");
       });
     } catch (error) {
@@ -529,7 +670,9 @@ if (!globalThis.chrome?.runtime?.id) {
     staged = null;
     await chrome.storage.local.clear();
     await chrome.storage.session.clear();
-    await chrome.permissions.remove({ origins: HOSTS });
+    await chrome.permissions.remove({
+      origins: [...HOSTS, ...DASHBOARD_CAPTURE_ORIGINS],
+    });
     location.reload();
   });
   const { run: saved } = await chrome.storage.local.get("run");

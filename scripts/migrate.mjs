@@ -1345,6 +1345,60 @@ await assertRequiredColumns("cleancloud_browser_sync_attempts", [
   "rowCount",
   "createdAt",
 ]);
+await assertRequiredColumns("cleancloud_dashboard_witnesses", [
+  "id",
+  "tenantId",
+  "storeId",
+  "storeLabel",
+  "rangeFrom",
+  "rangeTo",
+  "comparisonFrom",
+  "comparisonTo",
+  "salesCents",
+  "comparisonSalesCents",
+  "revenueCents",
+  "comparisonRevenueCents",
+  "orders",
+  "comparisonOrders",
+  "newCustomers",
+  "observedAt",
+  "screenshotSha256",
+  "extractionVersion",
+  "source",
+]);
+await assertRequiredColumns("cleancloud_dashboard_witness_screenshots", [
+  "witnessId",
+  "tenantId",
+  "sha256",
+  "pngBase64",
+]);
+await assertRequiredColumns("cleancloud_economic_reconciliations", [
+  "id",
+  "tenantId",
+  "storeId",
+  "rangeFrom",
+  "rangeTo",
+  "status",
+  "dashboardWitnessId",
+  "dashboardRevenueCents",
+  "revenueReportCents",
+  "bookCents",
+  "discrepancyCents",
+  "evidenceIdsJson",
+  "evidenceHash",
+]);
+await assertRequiredColumns("cleancloud_verified_economic_events", [
+  "id",
+  "tenantId",
+  "eventType",
+  "periodFrom",
+  "periodTo",
+  "currentRevenueCents",
+  "deltaCents",
+  "evidenceIdsJson",
+  "idempotencyKey",
+  "verifiedAt",
+]);
 
 const impactSql = await readFile(
   new URL("../server/towerWars/impactSchema.sql", import.meta.url),
