@@ -323,6 +323,26 @@ function hasUnsupportedCompiledFact(input: {
     if (!corpus.includes(token.toLowerCase())) return true;
   }
 
+  // Adaptation may turn source guidance into a question or conditional, but
+  // it may not smuggle in a new assertion about this account. These phrases
+  // are high-risk factual forms; if the exact assertion language was not in
+  // the grounded corpus, fail closed to the source-faithful move.
+  const riskyAssertions = [
+    /\bsince your\b/i,
+    /\bbecause your\b/i,
+    /\byour current\b/i,
+    /\byou already\b/i,
+    /\bthey already\b/i,
+    /\byou (?:said|told|asked|requested)\b/i,
+    /\bthey (?:said|told|asked|requested)\b/i,
+    /\bi know (?:you|your|they|their)\b/i,
+    /\bwe know (?:you|your|they|their)\b/i,
+  ];
+  for (const pattern of riskyAssertions) {
+    const match = claims.match(pattern)?.[0]?.toLowerCase();
+    if (match && !corpus.includes(match)) return true;
+  }
+
   return false;
 }
 
@@ -401,7 +421,9 @@ async function compileBuildingRelevantLines(input: {
       return {
         ...fallback[index],
         line: compiled.line,
-        why: compiled.why,
+        // The model may adapt spoken wording, but it never authors the
+        // provenance/rationale shown as fact about why this move exists.
+        why: fallback[index].why,
       };
     });
     return items as [
