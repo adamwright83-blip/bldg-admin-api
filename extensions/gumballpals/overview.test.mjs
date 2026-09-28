@@ -11,6 +11,8 @@ function element(text, options = {}) {
   const children = options.children ?? [];
   const node = {
     tag: options.tag ?? "div",
+    style: options.style ?? {},
+    parentElement: options.parentElement ?? null,
     textContent: options.textContent ?? text,
     childNodes: text ? [textNode(text)] : [],
     children,
@@ -28,6 +30,9 @@ function element(text, options = {}) {
     click() {
       options.onClick?.();
     },
+    contains(other) {
+      return other === node || node.children.some(child => child.contains?.(other));
+    },
     querySelectorAll(selector) {
       const all = walk(node);
       if (selector === "*") return all;
@@ -39,12 +44,22 @@ function element(text, options = {}) {
 }
 
 function walk(node) {
+  for (const child of node.children) {
+    if (!child.parentElement) child.parentElement = node;
+  }
   return [node, ...node.children.flatMap(walk)];
 }
 
-function install(metrics) {
+function install(metrics, options = {}) {
+  walk(metrics);
   globalThis.location = { origin: "https://cleancloudapp.com", pathname: "/store" };
-  globalThis.getComputedStyle = () => ({ visibility: "visible" });
+  globalThis.getComputedStyle = node => ({
+    visibility: "visible",
+    overflow: "visible",
+    overflowX: "visible",
+    overflowY: "visible",
+    ...(node?.style ?? {}),
+  });
   globalThis.window = { innerHeight: 800, innerWidth: 1200 };
   globalThis.document = {
     title: "Goldline Laundry | CleanCloud",
@@ -52,6 +67,12 @@ function install(metrics) {
       if (selector === "#metricsContainer") return metrics;
       return null;
     },
+    ...(options.elementFromPoint
+      ? { elementFromPoint: options.elementFromPoint }
+      : {}),
+    ...(options.elementsFromPoint
+      ? { elementsFromPoint: options.elementsFromPoint }
+      : {}),
   };
 }
 
@@ -155,6 +176,50 @@ test("refuses a witness when required totals would be outside captureVisibleTab"
   const result = await readMetricsOverview({ from: "2026-09-01", to: "2026-09-27" });
   assert.equal(result.ok, false);
   assert.match(result.error, /do not fit in the visible screenshot/);
+});
+
+test("refuses a witness when a sticky overlay occludes the proof block", async () => {
+  const sales = element("Sales", { next: element("$3,126.32") });
+  const revenue = element("Revenue", { next: element("$2,984.10") });
+  const orders = element("Orders", { next: element("41") });
+  const range = element("", {
+    textContent: "September 1, 2026 – September 27, 2026",
+    children: [],
+  });
+  const metrics = element("", {
+    textContent: "Overview",
+    children: [range, sales, revenue, orders],
+  });
+  const stickyHeader = element("sticky");
+  install(metrics, { elementFromPoint: () => stickyHeader });
+  const result = await readMetricsOverview({ from: "2026-09-01", to: "2026-09-27" });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /clipped or covered/);
+});
+
+test("refuses a witness when an overflow ancestor clips required proof", async () => {
+  const range = element("", {
+    textContent: "September 1, 2026 – September 27, 2026",
+    top: 90,
+    bottom: 130,
+    children: [],
+  });
+  const metrics = element("", {
+    textContent: "Overview",
+    top: 100,
+    bottom: 400,
+    style: { overflowY: "hidden" },
+    children: [
+      range,
+      element("Sales", { next: element("$3,126.32") }),
+      element("Revenue", { next: element("$2,984.10") }),
+      element("Orders", { next: element("41") }),
+    ],
+  });
+  install(metrics);
+  const result = await readMetricsOverview({ from: "2026-09-01", to: "2026-09-27" });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /clipped or covered/);
 });
 
 test("does not save an overview that is not on the requested dates", async () => {
