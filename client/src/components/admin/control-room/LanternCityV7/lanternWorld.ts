@@ -68,7 +68,7 @@ type Bldg = { i: number; p: [number, number][]; cx: number; cz: number; h: numbe
 type TileData = { o: [number, number]; b: [number[], number, number, number, string?][]; r: [string, string, number[]][] };
 
 const VEX = 1.35;
-const DUSK_GROUND = new THREE.Color("#5b6680");
+const DUSK_GROUND = new THREE.Color("#5a6b66");
 const PAPER = new THREE.Color("#e9ecf0");
 const DETAIL_RADIUS = 1150;          // tiles this close to the camera get the full building set
 const TYPES = ["house", "apartments", "residential", "retail", "commercial", "yes", "garage", "office", "school", "hotel", "industrial", "church", "other"];
@@ -169,6 +169,62 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
 
   const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, samples: 4, stencilBuffer: true }));
   composer.addPass(new RenderPass(scene, camera));
+  // Ink: a normal + depth pre-pass, then an edge pass that draws warm ink along every crease and
+  // silhouette. Charted land reads as an inked illustration; land under the fog as a pencil sketch.
+  // Objects on INK_SKIP (the fog sheet, water, halos, ground shadows) are left out of the pre-pass.
+  const INK_SKIP = 1;
+  camera.layers.enable(INK_SKIP);
+  const inkTarget = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType });
+  inkTarget.depthTexture = new THREE.DepthTexture(2, 2);
+  const inkNormals = new THREE.MeshNormalMaterial();
+  const ink = new ShaderPass({
+    uniforms: {
+      tDiffuse: { value: null }, tNormal: { value: inkTarget.texture }, tDepth: { value: inkTarget.depthTexture },
+      uPx: { value: new THREE.Vector2(1, 1) }, uNear: { value: 1 }, uFar: { value: 1000 }, uStrength: { value: 1 },
+    },
+    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+    fragmentShader: /* glsl */ `
+      uniform sampler2D tDiffuse; uniform sampler2D tNormal; uniform sampler2D tDepth;
+      uniform vec2 uPx; uniform float uNear; uniform float uFar; uniform float uStrength; varying vec2 vUv;
+      float lin(vec2 uv) { float z = texture2D(tDepth, uv).x * 2. - 1.; return 2. * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }
+      vec3 nrm(vec2 uv) { return texture2D(tNormal, uv).xyz * 2. - 1.; }
+      void main() {
+        vec4 c = texture2D(tDiffuse, vUv);
+        float d0 = lin(vUv); vec3 n0 = nrm(vUv);
+        float dd = 0., nd = 0.;
+        for (int i = 0; i < 4; i++) {
+          vec2 o = (i == 0 ? vec2(1., 0.) : i == 1 ? vec2(-1., 0.) : i == 2 ? vec2(0., 1.) : vec2(0., -1.)) * uPx;
+          float di = lin(vUv + o);
+          dd = max(dd, (d0 - di) / d0);          // only the nearer side of an edge draws the line
+          nd = max(nd, 1. - dot(n0, nrm(vUv + o)));
+        }
+        float e = max(smoothstep(.012, .03, dd), smoothstep(.18, .42, nd));
+        e *= 1. - smoothstep(uFar * .45, uFar * .8, d0);   // lines fade out toward the horizon haze
+        // warm sepia ink, darker over colour, lighter over the white fog: pencil there, ink here
+        float lum = dot(c.rgb, vec3(.299, .587, .114));
+        vec3 inkCol = mix(c.rgb * .22 + vec3(.06, .035, .03), c.rgb * .62, smoothstep(.72, .95, lum));
+        gl_FragColor = vec4(mix(c.rgb, inkCol, e * uStrength), c.a);
+      }`,
+  });
+  // ShaderPass clones texture uniforms; point them back at the live pre-pass buffers
+  ink.uniforms.tNormal.value = inkTarget.texture;
+  ink.uniforms.tDepth.value = inkTarget.depthTexture;
+  composer.addPass(ink);
+  function renderInkPrepass() {
+    const bg = scene.background, fog = scene.fog;
+    scene.background = null; scene.fog = null; scene.overrideMaterial = inkNormals;
+    camera.layers.disable(INK_SKIP);
+    renderer.setRenderTarget(inkTarget);
+    renderer.setClearColor(0x8080ff, 1);
+    renderer.clear();
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    camera.layers.enable(INK_SKIP);
+    scene.background = bg; scene.fog = fog; scene.overrideMaterial = null;
+    ink.uniforms.uNear.value = camera.near;
+    ink.uniforms.uFar.value = camera.far;
+  }
+  const skipInk = (o: THREE.Object3D) => { o.layers.set(INK_SKIP); return o; };
   const bloom = new UnrealBloomPass(new THREE.Vector2(2, 2), 0.6, 0.3, 1.05);
   composer.addPass(bloom);
   const tilt = new ShaderPass({
@@ -196,6 +252,9 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     renderer.domElement.style.height = "100%";
     composer.setSize(w, h);
     bloom.setSize(w, h);
+    const db = renderer.getDrawingBufferSize(new THREE.Vector2());
+    inkTarget.setSize(db.x, db.y);
+    ink.uniforms.uPx.value.set(1 / db.x, 1 / db.y);
     tilt.uniforms.uRes.value.set(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
@@ -581,7 +640,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
           #include <fog_fragment>
         }`,
     });
-    fogMesh = new THREE.Mesh(g, m);
+    fogMesh = skipInk(new THREE.Mesh(g, m)) as THREE.Mesh;
     fogMesh.renderOrder = 2;
     scene.add(fogMesh);
   }
@@ -784,7 +843,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
         }`,
     });
     water.side = THREE.DoubleSide;
-    scene.add(new THREE.Mesh(wg, water));
+    scene.add(skipInk(new THREE.Mesh(wg, water)));
     const walls = new THREE.BufferGeometry();
     walls.setAttribute("position", new THREE.Float32BufferAttribute(sp, 3));
     walls.setAttribute("normal", new THREE.Float32BufferAttribute(sn, 3));
@@ -1133,9 +1192,11 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
           else if (k == ${k(K.WALL)} || k == ${k(K.GRID)}) surf *= .94 + .08 * vn(vec2(fu, hgt) * 1.7 + vC.w * 40.);
           // blue hour: violet bounce from below, cool sky above, a low warm sun
           float hemi = .5 + .5 * n.y;
-          vec3 amb = mix(vec3(.34, .3, .46), vec3(.5, .56, .82), hemi);
-          float ao = mix(.46, 1., smoothstep(-1., 5., hgt));
-          vec3 col = surf * (amb * .62 + vec3(1., .68, .42) * 1.2 * lam) * ao;
+          vec3 amb = mix(vec3(.34, .3, .46), vec3(.5, .56, .82), step(.5, hemi) * .7 + hemi * .3);
+          float ao = mix(.55, 1., smoothstep(0., 3.5, hgt));
+          // cel bands: shade, lit, and a hot rim of sunset where the sun hits square on
+          float band = smoothstep(.16, .2, lam) * .55 + smoothstep(.52, .56, lam) * .3 + smoothstep(.8, .83, lam) * .15;
+          vec3 col = surf * (amb * .62 + vec3(1., .68, .42) * 1.25 * band) * ao;
           col += vec3(.55, .62, .85) * pow(1. - max(dot(n, V), 0.), 3.) * .1;
           if (gm > .01) {
             vec3 sky = mix(vec3(.14, .18, .3), vec3(.62, .66, .78), fres);
@@ -1376,6 +1437,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     const m = new THREE.Mesh(g, shadowMaterial());
     m.renderOrder = 1;
     m.name = "shadows";
+    skipInk(m);
     return m;
   }
   /** footprint occupancy for a tile: keeps pools and trees off the neighbours' buildings */
@@ -1505,7 +1567,8 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
           // soft leaf clumps, sun-warmed tops, cool undersides, a warm rim where the sunset comes through
           float clump = vn(vL.xz * 2.3 + vL.y * 1.7 + vH * 20.);
           vec3 amb = mix(vec3(.3, .32, .42), vec3(.5, .58, .72), .5 + .5 * n.y);
-          col = base * (amb * .75 + vec3(1., .78, .5) * 1.0 * wrap) * (.78 + .38 * clump);
+          float band = smoothstep(.34, .4, wrap) * .6 + smoothstep(.7, .75, wrap) * .4;
+          col = base * (amb * .75 + vec3(1., .78, .5) * 1.05 * band) * (.84 + .26 * step(.5, clump));
           vec3 V = normalize(cameraPosition - vW);
           col += vec3(1., .72, .4) * pow(1. - max(dot(n, V), 0.), 2.5) * max(dot(-V, uSun), 0.) * .35;
           ` : /* glsl */ `
@@ -1769,6 +1832,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
       }));
       halo.position.set(g.x, ground(g.x, g.z) + 1.6, g.z);
       halo.userData.halo = true;
+      skipInk(halo);
       if (!mesh && g.members.length === 1) halo.userData.keys = keys;
       lanternGroup.add(halo);
       for (const m of g.members) placedLanterns.push({ input: m.l, x: g.x, z: g.z, b: g.b, mesh, halo });
@@ -1964,6 +2028,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
 
   // ----------------------------------------------------------------- picking
   const ray = new THREE.Raycaster();
+  ray.layers.enableAll();
   const ndc = new THREE.Vector2();
   let downAt: [number, number] | null = null;
   function onDown(e: PointerEvent) { downAt = [e.clientX, e.clientY]; }
@@ -2080,6 +2145,7 @@ export function createLanternWorld(container: HTMLElement, events: WorldEvents =
     for (const l of landmarks) l.mesh.rotation.y = Math.atan2(camera.position.x - l.x, camera.position.z - l.z);
     if (M) { updateLights(); updateLife(dt, cd); }
     if (M) { updateLod(); pumpDetail(opts.capture ? 1e9 : 8); placeLabels(); }
+    renderInkPrepass();
     composer.render();
   }
   if (!opts.capture) raf = requestAnimationFrame(tick);
