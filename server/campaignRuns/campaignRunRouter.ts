@@ -15,6 +15,7 @@ import {
 } from "../_core/trpc";
 import { PLACEMENT_POINTS, TARGET_SOURCE_CLASSES } from "../../shared/campaignRun";
 import { listFictionPacks } from "../fictionPacks/fictionPackRegistry";
+import { getDb } from "../db";
 import { requireCanonicalOperatorIdentityForUser } from "../persistentOperator/identity";
 import { recordPersistentOperatorDiagnosticEvent } from "../persistentOperator/observability";
 import {
@@ -71,6 +72,7 @@ export const campaignRunRouter = router({
     .input(z.object({}).optional())
     .query(async ({ ctx }) => {
       const identity = await campaignIdentity(ctx, "campaign_runs.list");
+      const storeAvailable = Boolean(await getDb());
       const runs = await listOperatorRuns({
         tenantId: identity.tenantId,
         operatorUserId: identity.campaignOperatorUserId,
@@ -81,7 +83,7 @@ export const campaignRunRouter = router({
         operatorUserId: identity.canonicalOpenId,
         subsystem: "campaign_runs.list",
         eventKind: "selection_attempt",
-        reason: runs.length === 0 ? "legitimate_no_work" : null,
+        reason: !storeAvailable ? "source_unavailable" : runs.length === 0 ? "legitimate_no_work" : null,
       }).catch(() => undefined);
       return runs;
     }),
