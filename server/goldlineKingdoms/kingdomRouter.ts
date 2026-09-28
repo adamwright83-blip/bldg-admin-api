@@ -10,12 +10,11 @@ import {
 import { seedGoldlineKingdoms } from "./seedKingdoms";
 import { deriveKingdomStatuses } from "./kingdomUnlocks";
 import { LANTERN_CITY_STATUSES } from "./kingdomTypes";
-import { dayDirectorActorId } from "../dayDirector/dayDirectorActor";
 
 export const kingdomRouter = router({
-  /** Self-healing: derives real Kingdom-completion status on every read. */
+  /** Uses the same durable openId key as Day 1 Ten Doors. */
   list: legacyDayforgeTenantMemberProcedure.query(({ ctx }) =>
-    deriveKingdomStatuses({ tenantId: ctx.tenantId, operatorId: dayDirectorActorId(ctx) })
+    deriveKingdomStatuses({ tenantId: ctx.tenantId, operatorId: ctx.user.openId })
   ),
   get: legacyDayforgeTenantMemberProcedure
     .input(z.object({ kingdomId: z.string() }))
@@ -24,7 +23,7 @@ export const kingdomRouter = router({
     await seedGoldlineKingdoms(ctx.tenantId ?? "default");
     return deriveKingdomStatuses({
       tenantId: ctx.tenantId ?? "default",
-      operatorId: dayDirectorActorId(ctx),
+      operatorId: ctx.user.openId,
     });
   }),
   selectCampaign: adminProcedure
