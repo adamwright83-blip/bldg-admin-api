@@ -141,14 +141,24 @@ export const campaignRunRouter = router({
         ...input,
       });
       if (run) {
-        await recordPersistentOperatorDiagnosticEvent({
-          tenantId: identity.tenantId,
-          canonicalOperatorId: identity.canonicalOperatorId,
-          operatorUserId: identity.canonicalOpenId,
-          subsystem: "campaign_runs.start",
-          eventKind: "objective_started",
-          objectiveId: run.campaignId,
-        }).catch(() => undefined);
+        await Promise.all([
+          recordPersistentOperatorDiagnosticEvent({
+            tenantId: identity.tenantId,
+            canonicalOperatorId: identity.canonicalOperatorId,
+            operatorUserId: identity.canonicalOpenId,
+            subsystem: "campaign_runs.start",
+            eventKind: "objective_created",
+            objectiveId: run.campaignId,
+          }).catch(() => undefined),
+          recordPersistentOperatorDiagnosticEvent({
+            tenantId: identity.tenantId,
+            canonicalOperatorId: identity.canonicalOperatorId,
+            operatorUserId: identity.canonicalOpenId,
+            subsystem: "campaign_runs.start",
+            eventKind: "objective_started",
+            objectiveId: run.campaignId,
+          }).catch(() => undefined),
+        ]);
       }
       return run;
     }),
