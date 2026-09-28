@@ -32,6 +32,78 @@ export const ARMORY_OUTCOME_KINDS = [
 
 export type ArmoryOutcomeKind = (typeof ARMORY_OUTCOME_KINDS)[number];
 
+export const ARMORY_ASSOCIATION_STRENGTHS = [
+  "decision_point",
+  "encounter",
+  "mission_window_legacy",
+] as const;
+export type ArmoryAssociationStrength =
+  (typeof ARMORY_ASSOCIATION_STRENGTHS)[number];
+
+export type ArmoryAssociationSummary = {
+  usages: number;
+  associations: number;
+  businessOutcomes: number;
+  wins: number;
+};
+
+export function filterArmoryUsagesForAssociation<T extends {
+  decisionPointId: string | null;
+  encounterReference: string | null;
+}>(
+  usages: readonly T[],
+  input: {
+    associationStrength: ArmoryAssociationStrength;
+    decisionPointId?: string | null;
+    encounterReference?: string | null;
+  }
+): T[] {
+  if (input.associationStrength === "decision_point") {
+    const decisionPointId = input.decisionPointId?.trim();
+    if (!decisionPointId) {
+      throw new Error("decisionPointId is required for decision_point association");
+    }
+    return usages.filter(usage => usage.decisionPointId === decisionPointId);
+  }
+
+  if (input.associationStrength === "encounter") {
+    const encounterReference = input.encounterReference?.trim();
+    if (!encounterReference) {
+      throw new Error("encounterReference is required for encounter association");
+    }
+    return usages.filter(
+      usage => usage.encounterReference === encounterReference
+    );
+  }
+
+  return [...usages];
+}
+
+/** Pure aggregation: one stable outcome reference is one business outcome. */
+export function summarizeArmoryAssociations(
+  rows: ReadonlyArray<{
+    usageId: string;
+    outcomeKind: ArmoryOutcomeKind;
+    outcomeReference: string;
+  }>
+): ArmoryAssociationSummary {
+  const usages = new Set(rows.map(row => row.usageId));
+  const businessOutcomes = new Set(
+    rows.map(row => `${row.outcomeKind}:${row.outcomeReference}`)
+  );
+  const wins = new Set(
+    rows
+      .filter(row => row.outcomeKind === "account_won")
+      .map(row => row.outcomeReference)
+  );
+  return {
+    usages: usages.size,
+    associations: rows.length,
+    businessOutcomes: businessOutcomes.size,
+    wins: wins.size,
+  };
+}
+
 export type ArmoryWeaponUsageRecord = {
   id: string;
   weaponId: string;
@@ -51,6 +123,8 @@ export async function recordArmoryWeaponUsage(input: {
   archetype: ObjectionArchetype;
   channel: SalesIntelChannel;
   provenanceKind: "trainer_source" | "personal_evidence" | "foundation";
+  decisionPointId?: string | null;
+  encounterReference?: string | null;
   requestId: string;
 }): Promise<ArmoryWeaponUsageRecord> {
   const db = await getDb();
@@ -68,6 +142,8 @@ export async function recordArmoryWeaponUsage(input: {
       archetype: input.archetype,
       channel: input.channel,
       provenanceKind: input.provenanceKind,
+      decisionPointId: input.decisionPointId ?? null,
+      encounterReference: input.encounterReference ?? null,
       requestId: input.requestId,
     })
     .onDuplicateKeyUpdate({ set: { requestId: input.requestId } });
@@ -114,6 +190,9 @@ export async function associateArmoryOutcome(input: {
   outcomeReference: string;
   observedAt?: Date;
   windowMs?: number;
+  associationStrength?: ArmoryAssociationStrength;
+  decisionPointId?: string | null;
+  encounterReference?: string | null;
 }): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -138,7 +217,16 @@ export async function associateArmoryOutcome(input: {
 
   if (!usages.length) return 0;
 
-  for (const usage of usages) {
+  const associationStrength =
+    input.associationStrength ?? "mission_window_legacy";
+  const matchedUsages = filterArmoryUsagesForAssociation(usages, {
+    associationStrength,
+    decisionPointId: input.decisionPointId,
+    encounterReference: input.encounterReference,
+  });
+  if (!matchedUsages.length) return 0;
+
+  for (const usage of matchedUsages) {
     await db
       .insert(armoryWeaponOutcomes)
       .values({
@@ -150,13 +238,14 @@ export async function associateArmoryOutcome(input: {
         weaponId: usage.weaponId,
         outcomeKind: input.outcomeKind,
         outcomeReference: input.outcomeReference,
+        associationStrength,
         observedAt,
       })
       // Re-reporting the same real outcome must not inflate the evidence.
       .onDuplicateKeyUpdate({ set: { outcomeReference: input.outcomeReference } });
   }
 
-  return usages.length;
+  return matchedUsages.length;
 }
 
 /** Usage history for one mission, for encounter resume and debugging. */

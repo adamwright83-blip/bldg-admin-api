@@ -1,3 +1,5 @@
+import type { TenantSourceAdapter } from "./tenantSourceAdapters";
+
 export type TenantImportProviderKey = "cleancloud_csv" | (string & {});
 
 export type TenantImportCapabilities = {
@@ -43,7 +45,7 @@ export type NormalizedTenantOrder = {
   facts: Record<string, unknown>;
 };
 
-export interface OrderCustomerImportProvider {
+export interface OrderCustomerImportProvider extends TenantSourceAdapter {
   readonly key: TenantImportProviderKey;
   readonly capabilities: TenantImportCapabilities;
   validateConnection(configuration: unknown): Promise<void>;
