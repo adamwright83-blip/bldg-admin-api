@@ -66,12 +66,36 @@ test("reads exact overview labels and the requested period", async () => {
   assert.equal(result.ok, true);
   assert.equal(result.value.storeLabel, "Goldline Laundry");
   assert.equal(result.value.rangeText, "September 1, 2026 – September 27, 2026");
-  assert.equal(result.value.comparisonText, "August 1, 2026 – August 31, 2026");
+  assert.equal(result.value.comparisonText, null);
   assert.deepEqual(result.value.fields, [
     { label: "Sales", valueText: "$3,126.32" },
     { label: "Revenue", valueText: "$2,984.10" },
     { label: "Orders", valueText: "41" },
   ]);
+});
+
+test("withholds comparison totals when their period is not directly bound", async () => {
+  const metrics = element("", {
+    textContent: "Overview",
+    children: [
+      element("", { textContent: "September 1, 2026 – September 27, 2026" }),
+      element("", { textContent: "August 1, 2026 – August 31, 2026" }),
+      element("Sales", { next: element("$3,126.32") }),
+      element("Revenue", { next: element("$2,984.10") }),
+      element("Orders", { next: element("41") }),
+      element("Comparison Sales", { next: element("$2,000.00") }),
+      element("Comparison Revenue", { next: element("$1,847.80") }),
+      element("Comparison Orders", { next: element("33") }),
+    ],
+  });
+  install(metrics);
+  const result = await readMetricsOverview({ from: "2026-09-01", to: "2026-09-27" });
+  assert.equal(result.ok, true);
+  assert.equal(result.value.comparisonText, null);
+  assert.equal(
+    result.value.fields.some(field => field.label.startsWith("Comparison ")),
+    false
+  );
 });
 
 test("does not save an overview that is not on the requested dates", async () => {
@@ -121,13 +145,20 @@ test("screenshot is refused unless the visible tab is the CleanCloud store", () 
   );
 });
 
-test("the screenshot is captured only after the store-tab guard", () => {
+test("the screenshot permission is optional, user-granted, and target-guarded", () => {
   const sync = readFileSync(new URL("./sync.js", import.meta.url), "utf8");
+  const manifest = JSON.parse(
+    readFileSync(new URL("./manifest.json", import.meta.url), "utf8")
+  );
   const guard = sync.indexOf("assertCleanCloudScreenshotTarget(visible)");
   const capture = sync.indexOf("captureVisibleTab");
-  const permission = sync.indexOf("chrome.permissions.contains");
-  assert.ok(permission !== -1 && permission < capture);
+  const permissionCheck = sync.indexOf("chrome.permissions.contains");
+  const permissionRequest = sync.indexOf("chrome.permissions.request");
+  assert.ok(manifest.optional_host_permissions.includes("<all_urls>"));
+  assert.ok(permissionCheck !== -1 && permissionCheck < capture);
+  assert.ok(permissionRequest !== -1 && permissionRequest < capture);
   assert.ok(guard !== -1 && capture !== -1 && guard < capture);
-  assert.match(sync, /CleanCloud site access is required/);
+  assert.match(sync, /if \(scheduled\) return false/);
+  assert.match(sync, /Dashboard screenshot permission is required/);
   assert.match(sync, /recordWitness/);
 });
