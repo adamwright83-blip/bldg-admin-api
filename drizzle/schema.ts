@@ -3356,6 +3356,7 @@ export const persistentOperatorIdentityBindings = mysqlTable(
     tenantId: varchar("tenantId", { length: 64 }).notNull(),
     canonicalOpenId: varchar("canonicalOpenId", { length: 64 }).notNull(),
     aliasOpenId: varchar("aliasOpenId", { length: 64 }).notNull(),
+    activeAliasKey: varchar("activeAliasKey", { length: 191 }),
     surface: varchar("surface", { length: 32 }).notNull(),
     active: boolean("active").notNull().default(true),
     createdByOpenId: varchar("createdByOpenId", { length: 64 }),
@@ -3364,6 +3365,9 @@ export const persistentOperatorIdentityBindings = mysqlTable(
     updatedAt: timestamp("updatedAt").notNull().defaultNow().onUpdateNow(),
   },
   table => ({
+    activeAliasUnique: uniqueIndex(
+      "uq_persistent_operator_identity_active_alias"
+    ).on(table.activeAliasKey),
     aliasIdx: index("idx_persistent_operator_identity_alias").on(
       table.tenantId,
       table.aliasOpenId,
