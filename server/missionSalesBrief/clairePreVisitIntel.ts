@@ -196,7 +196,7 @@ function deterministicItems(
   ];
 }
 
-function groundedCorpus(brief: MissionSalesBrief, sources: EquipSource[]): string {
+function groundedKnownCorpus(brief: MissionSalesBrief, sources: EquipSource[]): string {
   return [
     brief.account.name,
     brief.account.accountType ?? "",
@@ -204,9 +204,12 @@ function groundedCorpus(brief: MissionSalesBrief, sources: EquipSource[]): strin
     brief.recommendedApproach.primaryObjective,
     ...brief.knownFacts.map(fact => fact.text),
     ...brief.priorOutcomes.map(fact => fact.text),
-    ...brief.unknowns.map(item => item.question),
     ...sources.map(source => source.line),
   ].join(" ").toLowerCase();
+}
+
+function unknownQuestionCorpus(brief: MissionSalesBrief): string {
+  return brief.unknowns.map(item => item.question).join(" ").toLowerCase();
 }
 
 const RISKY_ASSERTIONS = [
@@ -224,10 +227,14 @@ const RISKY_ASSERTIONS = [
 ];
 
 const ADAPTATION_GLUE_WORDS = new Set([
-  "about", "after", "again", "also", "before", "could", "does", "from",
-  "have", "here", "into", "just", "like", "more", "need", "only", "right",
-  "that", "their", "them", "then", "there", "these", "they", "this", "today",
-  "what", "when", "where", "which", "with", "would", "your", "you",
+  "a", "about", "after", "again", "also", "am", "an", "and", "are", "as", "at",
+  "be", "been", "before", "being", "by", "can", "could", "did", "do", "does",
+  "for", "from", "had", "has", "have", "he", "her", "here", "him", "his", "i",
+  "if", "in", "into", "is", "it", "its", "just", "like", "may", "might", "more",
+  "my", "need", "no", "not", "of", "on", "one", "only", "or", "our", "right",
+  "she", "should", "so", "that", "the", "their", "them", "then", "there", "these",
+  "they", "this", "to", "today", "us", "was", "we", "were", "what", "when",
+  "where", "which", "who", "why", "will", "with", "would", "yes", "you", "your",
 ]);
 
 function contentTokens(text: string): Set<string> {
@@ -236,8 +243,14 @@ function contentTokens(text: string): Set<string> {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, " ")
       .split(/\s+/)
-      .filter(token => token.length >= 4 && !ADAPTATION_GLUE_WORDS.has(token))
+      .filter(token => token.length >= 2 && !ADAPTATION_GLUE_WORDS.has(token))
   );
+}
+
+function isQuestionLike(line: string): boolean {
+  const trimmed = line.trim().toLowerCase();
+  return trimmed.endsWith("?") &&
+    /^(?:who|what|when|where|why|how|do|does|did|is|are|am|can|could|would|will|have|has|had|should|may|might)\b/.test(trimmed);
 }
 
 function hasUnsupportedCompiledFact(input: {
@@ -245,29 +258,40 @@ function hasUnsupportedCompiledFact(input: {
   sources: EquipSource[];
   lines: string[];
 }): boolean {
-  const corpus = groundedCorpus(input.brief, input.sources);
-  const groundedTokens = contentTokens(corpus);
+  const knownCorpus = groundedKnownCorpus(input.brief, input.sources);
+  const unknownCorpus = unknownQuestionCorpus(input.brief);
+  const knownTokens = contentTokens(knownCorpus);
+  const unknownTokens = contentTokens(unknownCorpus);
 
   for (const line of input.lines) {
-    // The model may shorten/reorder grounded language, but it may not add new
-    // content-bearing vocabulary. Any novel noun/verb/adjective fails closed
-    // to the exact Armory/MissionSalesBrief source line.
+    const questionLike = isQuestionLike(line);
+
+    // Unknown mission details may be asked about, but they may never be
+    // promoted into assertions. Short content words such as "gym", "spa", and
+    // "own" are validated too rather than disappearing under a length cutoff.
     for (const token of contentTokens(line)) {
-      if (!groundedTokens.has(token)) return true;
+      if (knownTokens.has(token)) continue;
+      if (questionLike && unknownTokens.has(token)) continue;
+      return true;
     }
-  }
 
-  const claims = input.lines.join(" ");
-  for (const pattern of RISKY_ASSERTIONS) {
-    const match = claims.match(pattern)?.[0]?.toLowerCase();
-    if (match && !corpus.includes(match)) return true;
-  }
+    for (const pattern of RISKY_ASSERTIONS) {
+      const match = line.match(pattern)?.[0]?.toLowerCase();
+      if (!match) continue;
+      if (knownCorpus.includes(match)) continue;
+      if (questionLike && unknownCorpus.includes(match)) continue;
+      return true;
+    }
 
-  // A newly introduced number is especially likely to be a fabricated unit
-  // count, price, timing claim, or other building fact.
-  const claimNumbers = claims.match(/\b\d[\d,.]*\b/g) ?? [];
-  for (const number of claimNumbers) {
-    if (!corpus.includes(number.toLowerCase())) return true;
+    // A newly introduced number is especially likely to be a fabricated unit
+    // count, price, timing claim, or other building fact. An unknown number may
+    // only survive when Claire preserves it as an actual question.
+    const claimNumbers = line.match(/\b\d[\d,.]*\b/g) ?? [];
+    for (const number of claimNumbers) {
+      if (knownCorpus.includes(number.toLowerCase())) continue;
+      if (questionLike && unknownCorpus.includes(number.toLowerCase())) continue;
+      return true;
+    }
   }
   return false;
 }
