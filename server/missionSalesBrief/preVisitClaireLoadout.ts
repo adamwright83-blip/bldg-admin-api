@@ -22,6 +22,93 @@ const SLOT_CATEGORIES: Record<Slot, readonly string[]> = {
   ],
 };
 
+const STOP_WORDS = new Set([
+  "about", "after", "again", "also", "another", "because", "before", "being",
+  "building", "could", "from", "have", "here", "into", "just", "more", "most",
+  "only", "other", "should", "that", "their", "there", "these", "they", "this",
+  "through", "under", "very", "what", "when", "where", "which", "while", "with",
+  "would", "your",
+]);
+
+function tokens(value: string): Set<string> {
+  return new Set(
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .split(/\s+/)
+      .filter(token => token.length >= 4 && !STOP_WORDS.has(token))
+  );
+}
+
+function overlap(left: Set<string>, right: Set<string>): number {
+  let count = 0;
+  for (const token of left) if (right.has(token)) count += 1;
+  return count;
+}
+
+function missionSituationText(brief: MissionSalesBrief): string {
+  const accountAliases =
+    /multifamily|apartment/i.test(brief.account.accountType ?? "")
+      ? "multifamily apartment apartments resident residents property amenity manager"
+      : /hotel/i.test(brief.account.accountType ?? "")
+        ? "hotel guest guests property hospitality manager"
+        : brief.account.accountType ?? "";
+
+  return [
+    brief.account.name,
+    brief.account.accountType ?? "",
+    accountAliases,
+    brief.mission.missionType,
+    brief.mission.currentStatus,
+    brief.mission.objective,
+    brief.recommendedApproach.primaryObjective,
+    brief.recommendedApproach.recommendedOpening ?? "",
+    ...brief.recommendedApproach.questionsToAsk,
+    ...brief.recommendedApproach.actionsToTake,
+    ...brief.recommendedApproach.thingsToAvoid,
+    ...brief.knownFacts.map(fact => fact.text),
+    ...brief.priorInteractions.map(item => item.summary),
+    ...brief.priorOutcomes.map(item => item.outcome),
+    ...brief.relevantSignals.map(item => item.summary),
+    ...brief.unknowns.map(item => item.question),
+    ...brief.unresolvedQuestions,
+  ].join(" ");
+}
+
+function teachingRelevanceScore(
+  teaching: SalesIntelTeaching,
+  brief: MissionSalesBrief
+): number | null {
+  if (teaching.id === brief.salesIntel.teachingId) return 200;
+
+  const situation = tokens(missionSituationText(brief));
+  const negativeMatches = teaching.whenNotToUse
+    .map(condition => overlap(tokens(condition), situation))
+    .filter(score => score > 0);
+  if (negativeMatches.some(score => score >= 2)) return null;
+
+  const whenScore = Math.max(
+    0,
+    ...teaching.whenToUse.map(condition => overlap(tokens(condition), situation))
+  );
+  const contentScore = Math.max(
+    overlap(tokens(teaching.title), situation),
+    overlap(tokens(teaching.principle), situation),
+    ...teaching.exampleLanguage.map(phrase =>
+      overlap(tokens(phrase.text), situation)
+    )
+  );
+
+  /*
+   * A teaching needs a material tie to this mission. Category compatibility
+   * alone is not enough: a generic accepted lesson does not become relevant
+   * to every building just because it is an "opening" or "closing" lesson.
+   */
+  if (whenScore === 0 && contentScore === 0) return null;
+
+  return whenScore * 30 + contentScore * 10;
+}
+
 function byConfidenceThenRecency(
   left: SalesIntelTeaching,
   right: SalesIntelTeaching
@@ -33,33 +120,107 @@ function byConfidenceThenRecency(
   );
 }
 
+type Candidate = {
+  teaching: SalesIntelTeaching;
+  score: number;
+};
+
+function candidatesForSlot(
+  slot: Slot,
+  teachings: SalesIntelTeaching[],
+  brief: MissionSalesBrief
+): Candidate[] {
+  return teachings
+    .filter(
+      teaching =>
+        teaching.reviewState === "accepted" &&
+        teaching.active &&
+        SLOT_CATEGORIES[slot].includes(teaching.category)
+    )
+    .map(teaching => ({
+      teaching,
+      score: teachingRelevanceScore(teaching, brief),
+    }))
+    .filter((item): item is { teaching: SalesIntelTeaching; score: number } =>
+      item.score !== null
+    )
+    .sort((left, right) => {
+      // Shelby is the preferred authored trainer only after mission relevance
+      // and slot compatibility have both been established.
+      const leftShelby = /\bshelby\s+sapp\b/i.test(left.teaching.creatorName);
+      const rightShelby = /\bshelby\s+sapp\b/i.test(right.teaching.creatorName);
+      if (leftShelby !== rightShelby) return leftShelby ? -1 : 1;
+      if (left.score !== right.score) return right.score - left.score;
+      return byConfidenceThenRecency(left.teaching, right.teaching);
+    })
+    .slice(0, 8);
+}
+
 /**
- * Claire prefers Shelby only inside the role the teaching actually supports.
- * A closing lesson never becomes an OPEN merely because Shelby taught it.
+ * Choose all three slots as one loadout rather than greedily consuming a
+ * multi-role teaching in OPEN and starving WEAPON. Filled slots dominate the
+ * score; within equally complete loadouts, mission relevance, Shelby
+ * preference, confidence, and recency break ties.
  */
 export function selectClairePreVisitTeachings(
-  teachings: SalesIntelTeaching[]
+  teachings: SalesIntelTeaching[],
+  brief: MissionSalesBrief
 ): Array<{ slot: Slot; teaching: SalesIntelTeaching | null }> {
-  const accepted = teachings
-    .filter(teaching => teaching.reviewState === "accepted" && teaching.active)
-    .sort(byConfidenceThenRecency);
-  const used = new Set<string>();
+  const bySlot = new Map(
+    SLOT_ORDER.map(slot => [slot, candidatesForSlot(slot, teachings, brief)])
+  );
 
-  return SLOT_ORDER.map(slot => {
-    const compatible = accepted.filter(
-      teaching =>
-        !used.has(teaching.id) &&
-        SLOT_CATEGORIES[slot].includes(teaching.category)
+  let best: {
+    score: number;
+    picks: Array<{ slot: Slot; teaching: SalesIntelTeaching | null }>;
+  } | null = null;
+
+  function walk(
+    slotIndex: number,
+    used: Set<string>,
+    picks: Array<{ slot: Slot; teaching: SalesIntelTeaching | null }>,
+    score: number
+  ) {
+    if (slotIndex === SLOT_ORDER.length) {
+      if (!best || score > best.score) best = { score, picks: [...picks] };
+      return;
+    }
+    const slot = SLOT_ORDER[slotIndex];
+
+    // Null is always legal: MissionSalesBrief is the truthful fallback.
+    walk(
+      slotIndex + 1,
+      used,
+      [...picks, { slot, teaching: null }],
+      score
     );
-    const teaching =
-      compatible.find(teaching =>
-        /\bshelby\s+sapp\b/i.test(teaching.creatorName)
-      ) ??
-      compatible[0] ??
-      null;
-    if (teaching) used.add(teaching.id);
-    return { slot, teaching };
-  });
+
+    for (const candidate of bySlot.get(slot) ?? []) {
+      if (used.has(candidate.teaching.id)) continue;
+      const nextUsed = new Set(used);
+      nextUsed.add(candidate.teaching.id);
+      const shelbyBonus = /\bshelby\s+sapp\b/i.test(
+        candidate.teaching.creatorName
+      )
+        ? 20
+        : 0;
+      const confidenceBonus = Math.round(
+        (candidate.teaching.confidence ?? 0) * 10
+      );
+      walk(
+        slotIndex + 1,
+        nextUsed,
+        [...picks, { slot, teaching: candidate.teaching }],
+        score + 1000 + candidate.score + shelbyBonus + confidenceBonus
+      );
+    }
+  }
+
+  walk(0, new Set(), [], 0);
+  return (
+    best?.picks ??
+    SLOT_ORDER.map(slot => ({ slot, teaching: null }))
+  );
 }
 
 function sourceLine(teaching: SalesIntelTeaching | null): string | null {
@@ -68,11 +229,15 @@ function sourceLine(teaching: SalesIntelTeaching | null): string | null {
     item => item.kind === "exact_source_phrase"
   );
   const any = teaching.exampleLanguage[0];
-  return (
+  const line =
     (exact ?? any)?.text?.trim() ||
     teaching.principle.trim() ||
-    null
-  );
+    null;
+
+  // Do not mutate reviewed doctrine into an unreviewed fragment. If the
+  // reviewed language is too long for this quick-equipment surface, Claire
+  // falls back to the already-compiled MissionSalesBrief slot.
+  return line && line.length <= 220 ? line : null;
 }
 
 function missionBriefLine(brief: MissionSalesBrief, slot: Slot): string {
@@ -112,7 +277,7 @@ export function compileClairePreVisitItems(input: {
     if (teaching && trainerLine) {
       return {
         slot,
-        line: trainerLine.slice(0, 220),
+        line: trainerLine,
         sourceTeachingId: teaching.id,
         sourceCreator: teaching.creatorName,
         sourceTitle: teaching.title,
@@ -122,7 +287,7 @@ export function compileClairePreVisitItems(input: {
 
     return {
       slot,
-      line: missionBriefLine(input.brief, slot).slice(0, 220),
+      line: missionBriefLine(input.brief, slot),
       sourceTeachingId: null,
       sourceCreator: null,
       sourceTitle: null,
@@ -139,7 +304,8 @@ export async function getClairePreVisitLoadout(input: {
   if (!brief) return null;
 
   const selected = selectClairePreVisitTeachings(
-    await listEligibleSalesIntel()
+    await listEligibleSalesIntel(),
+    brief
   );
 
   return {
