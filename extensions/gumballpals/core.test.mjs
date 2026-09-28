@@ -91,7 +91,7 @@ test("interrupted imports are unknown, never successful or automatically replaye
   assert.equal(recoveryState({ phase: "downloading" }).phase, "interrupted");
   assert.equal(recoveryState({ phase: "completed" }).phase, "completed");
 });
-test("permissions are scoped; no cookie, debugger, remote script or broad host access", async () => {
+test("permissions are scoped; broad screenshot access is optional, never required", async () => {
   const manifest = JSON.parse(
     await readFile(new URL("./manifest.json", import.meta.url), "utf8")
   );
@@ -99,7 +99,9 @@ test("permissions are scoped; no cookie, debugger, remote script or broad host a
   assert.deepEqual(manifest.optional_host_permissions, [
     "https://cleancloudapp.com/*",
     "https://admin.bldg.chat/*",
+    "<all_urls>",
   ]);
+  assert.equal(manifest.host_permissions, undefined);
   assert.equal(manifest.externally_connectable, undefined);
   const ui = await readFile(new URL("./sync.js", import.meta.url), "utf8");
   assert.ok(!ui.includes("innerHTML"));
