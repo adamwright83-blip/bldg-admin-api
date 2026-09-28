@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 import { decideTurn, noRetrieval, type ExecutiveDeps, type RetrievalRunner } from "../executive/decide";
+import { liveExecutiveDeps } from "../shadow/observeShadowTurn";
 import {
   buildBusinessQuery,
   inferBusinessMetric,
@@ -179,6 +180,66 @@ describe("retrieval planning", () => {
     });
   });
 
+  it("preserves prior metric and period for an explicit CleanCloud scope follow-up", async () => {
+    const priorQuery = {
+      metric: "revenue" as const,
+      period: { kind: "between" as const, start: "2026-08-01", end: "2026-08-31" },
+      comparison: null,
+      serviceType: null,
+      minOrders: 1,
+      limit: 5,
+      customerName: null,
+      listMembers: false,
+      filters: null,
+      filterUnion: null,
+      groupBy: null,
+      rank: null,
+    };
+    const perceived = perceiveTurn({
+      rawText: "And what about through CleanCloud?",
+      completeness: "complete",
+    });
+    const requests: import("../contracts/retrieval").RetrievalRequest[] = [];
+    let previousSeen: typeof priorQuery | null = null;
+    await decideTurn(
+      perceived,
+      memory({
+        orderedQuery: {
+          sourceEvidence: null,
+          queryFingerprint: "august-revenue",
+          parameters: priorQuery,
+          requestedCardinality: null,
+          ordering: null,
+          anchorEntity: null,
+          exclusions: [],
+          resolved: [],
+          presented: [],
+        },
+      }),
+      {
+        retrieve: async request => {
+          requests.push(request);
+          return [];
+        },
+        ctx: INTEGRATION,
+        planBusinessQuery: async input => {
+          previousSeen = input.previous as typeof priorQuery | null;
+          return input.previous
+            ? { ...input.previous, filters: { ...(input.previous.filters ?? {}), sources: ["cleancloud"] } }
+            : null;
+        },
+      }
+    );
+    expect(previousSeen?.metric).toBe("revenue");
+    expect(previousSeen?.period).toEqual(priorQuery.period);
+    const request = requests.find(candidate => candidate.kind === "business_query");
+    expect(request && "query" in request ? request.query : null).toMatchObject({
+      metric: "revenue",
+      period: priorQuery.period,
+      filters: { sources: ["cleancloud"] },
+    });
+  });
+
   it("does not give an unrelated new question the previous query's period or source scope", async () => {
     const priorQuery = {
       metric: "revenue" as const,
@@ -224,6 +285,20 @@ describe("retrieval planning", () => {
       }
     );
     expect(previousSeen).toBeNull();
+  });
+
+  it("does not attach the semantic planner to awaited live fallback deps", () => {
+    const live = liveExecutiveDeps({
+      tenantId: "default",
+      operatorUserId: "adam-admin",
+      conversationId: "conversation-1",
+      dayDirectorActorId: "1",
+      timeZone: "America/Los_Angeles",
+      businessDate: "2026-09-20",
+      surface: "voice",
+      priorClaimReceipts: [],
+    });
+    expect(live.planBusinessQuery).toBeUndefined();
   });
 
   it("falls back to deterministic query parsing when semantic planning fails", async () => {
