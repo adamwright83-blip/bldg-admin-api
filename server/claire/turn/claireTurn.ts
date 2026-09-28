@@ -1004,7 +1004,7 @@ export async function runClaireTurn(input: ClaireTurnInput, overrides: Partial<C
       // A referential bundle authorization is one complete command. Some older
       // confirmation parsing can leave "to the Day Line" as a remainder; replaying
       // that fragment after the save can route back through Day Line logic and write twice.
-      if (reply.remainder && !explicitPendingCommit) {
+      if (reply.remainder && !explicitPendingCommit && !weeklySpeech) {
         const more = await runClaireTurn({ ...input, utterance: reply.remainder, state, allowFragmentWait: false }, overrides);
         return finish({
           speak: more.speak,
