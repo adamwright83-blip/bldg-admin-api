@@ -92,6 +92,10 @@ import {
   saveDriverSalesJournal,
 } from "./driverSalesMotivationService";
 import { cancelDayLineItem } from "../goldline/dayline/dayLineMutationService";
+import {
+  finalizeMissionLinkedDebrief,
+  getMissionLinkedDebriefState,
+} from "./missionLinkedDebriefService";
 
 function httpUrl(maxLength: number) {
   return z
@@ -283,6 +287,51 @@ export const commercialMissionRouter = router({
         driverId: ctx.user.openId,
       })
     ),
+  missionDebriefState: legacyDayforgeMissionFieldProcedure
+    .input(z.object({ missionId: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+      if (!mission) return notFound();
+      assertDriverCanReadMission({
+        mission,
+        userId: ctx.user.openId,
+        isAdmin: ctx.legacyDayforgeMembership.role !== "field",
+      });
+      return getMissionLinkedDebriefState({
+        tenantId: ctx.tenantId,
+        driverId: ctx.user.openId,
+        missionId: input.missionId,
+      });
+    }),
+  finalizeMissionDebrief: legacyDayforgeMissionFieldProcedure
+    .input(
+      z.object({
+        missionId: z.number().int().positive(),
+        journalEntryId: z.string().uuid(),
+        requestId: z.string().uuid(),
+        answer: z.string().trim().min(1).max(1000).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const mission = await getCommercialMission({
+        tenantId: ctx.tenantId,
+        missionId: input.missionId,
+      });
+      if (!mission) return notFound();
+      assertDriverCanReadMission({
+        mission,
+        userId: ctx.user.openId,
+        isAdmin: ctx.legacyDayforgeMembership.role !== "field",
+      });
+      return finalizeMissionLinkedDebrief({
+        ...input,
+        tenantId: ctx.tenantId,
+        driverId: ctx.user.openId,
+      });
+    }),
   salesJournalsAdmin: legacyDayforgeTenantAdminProcedure
     .input(z.object({ limit: z.number().int().min(1).max(100).default(30) }))
     .query(({ ctx, input }) =>
