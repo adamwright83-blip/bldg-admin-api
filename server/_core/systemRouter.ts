@@ -55,6 +55,7 @@ import { rookContactRouter } from "../rookContact/rookContactRouter";
 import { companionRouter } from "../companions/companionRouter";
 import { missionDirectorRouter } from "../missionDirector/missionDirectorRouter";
 import { currentDayLineRouter } from "../goldline/dayline/currentDayLineRouter";
+import { lanternCityRouter } from "../lanternCity/lanternCityRouter";
 import { claireRouter } from "../claire/claireRouter";
 import { claireRelationshipOffboardingRouter } from "../claire/relationshipOffboardingRouter";
 import { missionSalesBriefRouter } from "../missionSalesBrief/missionSalesBriefRouter";
@@ -115,6 +116,7 @@ export const systemRouter = router({
   goldlineCompanions: companionRouter,
   missionDirector: missionDirectorRouter,
   currentDayLine: currentDayLineRouter,
+  lanternCity: lanternCityRouter,
   claire: claireRouter,
   claireRelationshipOffboarding: claireRelationshipOffboardingRouter,
   missionSalesBrief: missionSalesBriefRouter,

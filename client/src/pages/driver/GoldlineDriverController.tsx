@@ -428,6 +428,22 @@ function LiveGoldlineDriverController({
       null
     );
   }, [campaignRuns.data]);
+  /**
+   * Lantern City's "Open in Driver" names a Campaign Run. Open it exactly the
+   * way this screen's own campaign-run card does, and only when it is the run
+   * this driver already carries. Any other id changes nothing. Following the
+   * link creates no evidence.
+   */
+  const launchCampaignRunId = launchSearch.get("lanternCampaignRun");
+  const launchedCampaignRun = useRef(false);
+  useEffect(() => {
+    if (launchedCampaignRun.current || !launchCampaignRunId) return;
+    if (bioContainmentRun?.campaignRunId !== launchCampaignRunId) return;
+    launchedCampaignRun.current = true;
+    setDayBriefingOpen(false);
+    setCampaignRunMissionOpen(true);
+    setDriverScene("game");
+  }, [launchCampaignRunId, bioContainmentRun]);
   const bioContainmentIcon =
     resolveFictionPackVisuals(bioContainmentRun?.fictionPackId)?.missionIcon ??
     null;
