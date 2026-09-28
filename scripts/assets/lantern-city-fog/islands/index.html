@@ -36,7 +36,7 @@
   .towerView h2 { margin: 0; font: 30px/1 Anton, Impact, sans-serif; letter-spacing: .03em; color: var(--ink); }
   .towerView p { margin: 4px 0 0; font: 600 14px/1.2 "Barlow Condensed", sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--gold); }
   .towerView button { appearance: none; border: 0; border-radius: 10px; padding: 10px 16px; font: 700 14px/1 "Barlow Condensed", sans-serif; letter-spacing: .1em; text-transform: uppercase; background: var(--gold); color: #3a2600; cursor: pointer; }
-  #twStage { min-height: 0; padding: 0 12px 12px; }
+  #twStage { min-height: 0; position: relative; overflow: hidden; }
   #loading { position: fixed; inset: 0; display: grid; place-items: center; font: 700 16px "Barlow Condensed", sans-serif; letter-spacing: .16em; text-transform: uppercase; color: #5d4a3a; background: #f3d6b4; padding: 0 24px; text-align: center; }
   @media (max-width: 640px) { .sample { bottom: auto; top: calc(env(safe-area-inset-top, 0px) + 96px); } .win { left: 18px; right: 18px; bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); } .card { bottom: calc(env(safe-area-inset-bottom, 0px) + 84px); } }
 </style>
