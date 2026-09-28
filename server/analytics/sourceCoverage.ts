@@ -723,7 +723,7 @@ export function assimilationReceiptsFromRows(
       to,
       completedAt: completedAt.toISOString(),
       customerTruth: asGumballAssimilationStatus(receipt.customerTruth),
-      basis: "orders_created",
+      basis: receipt.reportType === "orders_revenue" ? "economic_event" : "orders_created",
       provenance: "browser_sync_receipt",
     });
   }

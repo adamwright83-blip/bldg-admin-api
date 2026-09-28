@@ -37,9 +37,11 @@ export function initialRange(now = new Date()) {
   const to = pacificToday(now);
   return { from: to, to };
 }
-// This is the normal Orders (Sales) export URL observed in Chrome, NOT the paid API.
+// This is the normal export URL observed in Chrome, NOT the paid API.
 // Never accept arbitrary URLs received from a web page or a download event.
-export function validateExportUrl(raw, range) {
+// type=1 is the observed Orders (Sales) export. Revenue uses the same endpoint
+// and a different type, which is checked from the captured URL rather than guessed.
+function readObservedExportUrl(raw, range) {
   const u = new URL(raw);
   if (
     u.origin !== CLEANCLOUD ||
@@ -65,8 +67,9 @@ export function validateExportUrl(raw, range) {
     allowed.some(k => u.searchParams.getAll(k).length !== 1)
   )
     throw new Error("Report parameters changed.");
-  if (u.searchParams.get("type") !== "1" || u.searchParams.get("group") !== "")
-    throw new Error("Only single-store Orders (Sales) reports are supported.");
+  const type = u.searchParams.get("type");
+  if (!/^[1-9]\d*$/.test(type) || u.searchParams.get("group") !== "")
+    throw new Error("Report parameters changed.");
   const stores = JSON.parse(u.searchParams.get("stores"));
   if (
     !Array.isArray(stores) ||
@@ -79,10 +82,22 @@ export function validateExportUrl(raw, range) {
     `${u.searchParams.get(`y${i}`)}-${u.searchParams.get(`m${i}`).padStart(2, "0")}-${u.searchParams.get(`d${i}`).padStart(2, "0")}`;
   if (date(1) !== range.from || date(2) !== range.to)
     throw new Error("Export dates do not match the requested dates.");
-  return { url: u.href, storeId: String(stores[0]), ...range };
+  return { url: u.href, storeId: String(stores[0]), type, ...range };
+}
+export function validateExportUrl(raw, range) {
+  const parsed = readObservedExportUrl(raw, range);
+  if (parsed.type !== "1")
+    throw new Error("Only single-store Orders (Sales) reports are supported.");
+  return { ...parsed, reportType: "orders_sales" };
+}
+export function validateRevenueExportUrl(raw, range) {
+  const parsed = readObservedExportUrl(raw, range);
+  if (parsed.type === "1")
+    throw new Error("Orders (Sales) cannot prove payment coverage.");
+  return { ...parsed, reportType: "orders_revenue" };
 }
 
-export function parseCsv(text) {
+export function parseCsv(text, reportType = "orders_sales") {
   if (
     typeof text !== "string" ||
     new TextEncoder().encode(text).length > MAX_BYTES
@@ -129,23 +144,30 @@ export function parseCsv(text) {
     rows.push(row);
   }
   const headers = rows.shift();
-  const required = [
-    "Order ID",
-    "Placed",
-    "Customer",
-    "Customer ID",
-    "Address",
-    "Paid",
-    "Payment Date",
-    "Total",
-  ];
+  const required =
+    reportType === "orders_revenue"
+      ? ["Order ID", "Customer", "Paid", "Paid Date", "Total"]
+      : [
+          "Order ID",
+          "Placed",
+          "Customer",
+          "Customer ID",
+          "Address",
+          "Paid",
+          "Payment Date",
+          "Total",
+        ];
+  if (reportType !== "orders_sales" && reportType !== "orders_revenue")
+    throw new Error("Unknown report.");
   if (
     !headers ||
     new Set(headers).size !== headers.length ||
     required.some(h => !headers.includes(h))
   )
     throw new Error(
-      "Orders (Sales) columns changed or the wrong report was returned."
+      reportType === "orders_revenue"
+        ? "Orders (Revenue) columns changed or the wrong report was returned."
+        : "Orders (Sales) columns changed or the wrong report was returned."
     );
   if (rows.length > 15000)
     throw new Error("Report has too many rows. Use a shorter period.");
