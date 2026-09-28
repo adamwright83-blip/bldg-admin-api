@@ -163,6 +163,34 @@ describe("Claire pre-visit three", () => {
     expect(payload.sourceMoves.every((item: any) => item.sourceKind === "reviewed_shelby_sapp_teaching")).toBe(true);
   });
 
+  it("prefers Shelby teaching that overlaps the exact mission context", async () => {
+    mocks.listEligible.mockResolvedValue([
+      {
+        ...teaching("generic-opening", "opening", "Smile first", "Open with energy."),
+        confidence: 0.99,
+      },
+      {
+        ...teaching(
+          "approval-opening",
+          "opening",
+          "Approval path",
+          "Ask about the vendor approval path before pitching."
+        ),
+        confidence: 0.7,
+      },
+      teaching("probe-1", "discovery", "Find the gap", "Ask where the current process creates extra work."),
+      teaching("weapon-1", "objection_handling", "Do not attack the incumbent", "Diagnose the gap before challenging an existing provider."),
+    ]);
+    mocks.invokeLLM.mockRejectedValue(new Error("provider unavailable"));
+
+    const result = await getClairePreVisitIntel({
+      tenantId: "tenant-1",
+      missionId: 15,
+    });
+
+    expect(result?.items[0].provenance.teachingId).toBe("approval-opening");
+  });
+
   it("fails soft to source-faithful lines when the model is unavailable", async () => {
     mocks.invokeLLM.mockRejectedValue(new Error("provider unavailable"));
     const result = await getClairePreVisitIntel({
