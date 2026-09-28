@@ -239,7 +239,7 @@ const ADAPTATION_GLUE_WORDS = new Set([
   "be", "been", "before", "being", "by", "can", "could", "did", "do", "does",
   "for", "from", "had", "has", "have", "he", "her", "here", "him", "his", "i",
   "if", "in", "into", "is", "it", "its", "just", "like", "may", "might", "more",
-  "my", "need", "no", "not", "of", "on", "one", "only", "or", "our", "right",
+  "my", "need", "of", "on", "one", "only", "or", "our", "right",
   "she", "should", "so", "that", "the", "their", "them", "then", "there", "these",
   "they", "this", "to", "today", "us", "was", "we", "were", "what", "when",
   "where", "which", "who", "why", "will", "with", "would", "yes", "you", "your",
@@ -260,6 +260,23 @@ function isQuestionLike(line: string): boolean {
   return trimmed.endsWith("?") &&
     /^(?:who|what|when|where|why|how|do|does|did|is|are|am|can|could|would|will|have|has|had|should|may|might)\b/.test(trimmed);
 }
+function hasNegation(text: string): boolean {
+  return /\b(?:no|not|never|none|without|isn['’]?t|aren['’]?t|doesn['’]?t|don['’]?t|didn['’]?t|hasn['’]?t|haven['’]?t)\b/i.test(text);
+}
+
+function reversesKnownPolarity(line: string, brief: MissionSalesBrief): boolean {
+  const lineTokens = contentTokens(line);
+  if (lineTokens.size < 2) return false;
+  for (const fact of [...brief.knownFacts, ...brief.priorOutcomes]) {
+    const factText = fact.text;
+    const factTokens = contentTokens(factText);
+    let overlap = 0;
+    for (const token of lineTokens) if (factTokens.has(token)) overlap += 1;
+    if (overlap >= 2 && hasNegation(line) !== hasNegation(factText)) return true;
+  }
+  return false;
+}
+
 
 function hasUnsupportedCompiledFact(input: {
   brief: MissionSalesBrief;
@@ -275,6 +292,7 @@ function hasUnsupportedCompiledFact(input: {
 
   for (const line of input.lines) {
     const questionLike = isQuestionLike(line);
+    if (!questionLike && reversesKnownPolarity(line, input.brief)) return true;
 
     // Guidance may be paraphrased as guidance, but vocabulary that only
     // exists inside a source/mission question may survive only as a question.
