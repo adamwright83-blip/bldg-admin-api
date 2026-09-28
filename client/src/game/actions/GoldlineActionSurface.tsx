@@ -22,6 +22,7 @@ import type {
   VisitOutcomeRequest,
 } from "./actionServices";
 import type { ClairePreVisitIntel } from "../../../../shared/missionSalesBrief";
+import type { MissionLinkedDebriefState } from "../../../../shared/missionLinkedDebrief";
 import { useAuthoritativeActionResume } from "./useAuthoritativeActionResume";
 
 type SurfaceProps = {
@@ -97,6 +98,9 @@ function VisitSurface(
   const [quoteRequested, setQuoteRequested] = useState(false);
   const [pilotRequested, setPilotRequested] = useState(false);
   const [followUpRequested, setFollowUpRequested] = useState(false);
+  const [missionDebrief, setMissionDebrief] =
+    useState<MissionLinkedDebriefState | null>(null);
+  const [debriefAnswer, setDebriefAnswer] = useState("");
   const mounted = useMountedRef();
 
   async function refresh() {
@@ -128,7 +132,76 @@ function VisitSurface(
         if (mounted.current) setIntelLoading(false);
       });
   }, []);
+
+  useEffect(() => {
+    const loadMissionDebrief = props.services.loadMissionDebrief;
+    if (
+      !loadMissionDebrief ||
+      context?.mission.status !== "arrived" ||
+      context.visitOutcome
+    ) return;
+
+    let active = true;
+    const poll = async () => {
+      try {
+        const next = await loadMissionDebrief(props.action.missionId!);
+        if (active && mounted.current) setMissionDebrief(next);
+      } catch (cause) {
+        if (active && mounted.current) {
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Claire could not read the debrief state."
+          );
+        }
+      }
+    };
+    void poll();
+    const interval = window.setInterval(() => void poll(), 1_250);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [context?.mission.status, context?.visitOutcome, props.action.missionId]);
+
   const armResume = useAuthoritativeActionResume(refresh);
+
+  async function finalizeLinkedDebrief() {
+    const finalize = props.services.finalizeMissionDebrief;
+    if (!finalize || missionDebrief?.status !== "ready") return;
+    setBusy(true);
+    setError(null);
+    try {
+      let answer = debriefAnswer.trim() || undefined;
+      if (
+        answer &&
+        missionDebrief.proposal.question?.inputType === "datetime-local"
+      ) {
+        const parsed = new Date(answer);
+        if (Number.isNaN(parsed.getTime())) throw new Error("Enter the real follow-up time.");
+        answer = parsed.toISOString();
+      }
+      const next = await finalize({
+        missionId: props.action.missionId!,
+        journalEntryId: missionDebrief.journalEntryId,
+        requestId: props.requestId,
+        ...(answer ? { answer } : {}),
+      });
+      if (mounted.current) setMissionDebrief(next);
+      await refresh();
+      if (mounted.current) props.onPersisted();
+    } catch (cause) {
+      if (mounted.current) {
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "The debrief could not be confirmed."
+        );
+      }
+    } finally {
+      if (mounted.current) setBusy(false);
+    }
+  }
 
   async function write(
     operation: () => Promise<GoldlineVisitContext>,
@@ -329,7 +402,126 @@ function VisitSurface(
           </button>
         </>
       ) : null}
-      {context?.mission.status === "arrived" ? (
+      {context?.mission.status === "arrived" &&
+      props.services.openMissionDebrief &&
+      props.services.loadMissionDebrief &&
+      props.services.finalizeMissionDebrief ? (
+        <section
+          className="tower-debrief"
+          data-testid="mission-linked-debrief"
+          aria-label="Mission-linked visit debrief"
+        >
+          <div className="tower-debrief__mechanism" aria-hidden="true">
+            <span className="tower-debrief__door tower-debrief__door--left" />
+            <span className="tower-debrief__door tower-debrief__door--right" />
+            <span className="tower-debrief__signal" />
+          </div>
+          <div className="tower-debrief__copy">
+            <small>CLAIRE // AFTER-ACTION CHANNEL</small>
+            <h3>WHAT HAPPENED?</h3>
+            <p>
+              {props.mission.name} is already locked to this mission. Tell Claire
+              the encounter once; she will structure the evidence without asking
+              you which tower you were in.
+            </p>
+          </div>
+
+          {!missionDebrief || missionDebrief.status === "not_started" ? (
+            <button
+              type="button"
+              data-testid="open-mission-debrief"
+              disabled={busy}
+              onClick={() =>
+                props.services.openMissionDebrief?.({
+                  missionId: props.action.missionId!,
+                  buildingName: props.mission.name,
+                })
+              }
+            >
+              OPEN CLAIRE COMMS <Radio />
+            </button>
+          ) : null}
+
+          {missionDebrief?.status === "processing" ? (
+            <div className="tower-debrief__processing" role="status">
+              <Loader2 className="animate-spin" />
+              <span>
+                <b>RAW RECORDING SECURED</b>
+                Claire is decoding the encounter. No outcome has been written.
+              </span>
+            </div>
+          ) : null}
+
+          {missionDebrief?.status === "failed" ? (
+            <div className="tower-debrief__processing" role="alert">
+              <span>
+                <b>THE RECORDING IS SAFE</b>
+                {missionDebrief.message}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  props.services.openMissionDebrief?.({
+                    missionId: props.action.missionId!,
+                    buildingName: props.mission.name,
+                  })
+                }
+              >
+                RECORD A CORRECTION
+              </button>
+            </div>
+          ) : null}
+
+          {missionDebrief?.status === "ready" ? (
+            <div className="tower-debrief__verdict">
+              <div className="tower-debrief__readout">
+                <small>CLAIRE'S READ // NOT YET BUSINESS TRUTH</small>
+                <strong>
+                  {missionDebrief.proposal.outcome.replaceAll("_", " ").toUpperCase()}
+                </strong>
+                <p>{missionDebrief.proposal.summary}</p>
+              </div>
+              {missionDebrief.proposal.question ? (
+                <label className="tower-debrief__question">
+                  <span>{missionDebrief.proposal.question.prompt}</span>
+                  <input
+                    data-testid="mission-debrief-answer"
+                    type={missionDebrief.proposal.question.inputType}
+                    value={debriefAnswer}
+                    onChange={event => setDebriefAnswer(event.target.value)}
+                  />
+                </label>
+              ) : null}
+              {missionDebrief.proposal.emailDraft ? (
+                <p className="tower-debrief__draft-note">
+                  Claire can prepare the requested email as a draft. Nothing is
+                  sent from this debrief.
+                </p>
+              ) : null}
+              <button
+                type="button"
+                data-testid="confirm-mission-debrief"
+                disabled={
+                  busy ||
+                  Boolean(
+                    missionDebrief.proposal.question && !debriefAnswer.trim()
+                  )
+                }
+                onClick={() => void finalizeLinkedDebrief()}
+              >
+                {busy ? "LOCKING THE RECORD…" : "CONFIRM WHAT HAPPENED"}
+              </button>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {context?.mission.status === "arrived" &&
+      !(
+        props.services.openMissionDebrief &&
+        props.services.loadMissionDebrief &&
+        props.services.finalizeMissionDebrief
+      ) ? (
         <div className="visit-outcome-fields">
           <label>
             REAL VISIT RESULT
@@ -455,7 +647,9 @@ function VisitSurface(
           </button>
         </div>
       ) : null}
-      {context?.visitOutcome && !context.parkingLotClerkObservation ? (
+      {context?.visitOutcome &&
+      !props.services.openMissionDebrief &&
+      !context.parkingLotClerkObservation ? (
         <div
           className="visit-outcome-fields"
           data-testid="parking-lot-clerk-prompt"
@@ -497,7 +691,7 @@ function VisitSurface(
           </button>
         </div>
       ) : null}
-      {context?.parkingLotClerkObservation ? (
+      {!props.services.openMissionDebrief && context?.parkingLotClerkObservation ? (
         <p data-testid="parking-lot-clerk-recorded" className="action-field-prep-note">
           Clerk note recorded as operator-reported testimony.
         </p>
