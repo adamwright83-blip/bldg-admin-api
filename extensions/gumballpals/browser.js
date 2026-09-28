@@ -27,7 +27,9 @@ export async function openSite(url) {
 
 // All actions and selectors below were grounded in the visible gumball export
 // UI. No application internals, cookies, localStorage or private API are read.
-export async function prepareSource(range, reportType = "orders_sales") {\n  const reportLabel =\n    reportType === "orders_revenue" ? "Orders (Revenue)" : "Orders (Sales)";
+export async function prepareSource(range, reportType = "orders_sales") {
+  const reportLabel =
+    reportType === "orders_revenue" ? "Orders (Revenue)" : "Orders (Sales)";
   let stage = "opening reporting";
   try {
     if (
@@ -456,15 +458,17 @@ export async function readMetricsOverview(range) {
       throw new Error(
         "The overview is not on the requested dates, and the date control is not one this extension has observed. Nothing was saved."
       );
-    const others = unique.filter(text => text !== primary[0]);
-    if (others.length > 1) throw new Error("The comparison period is ambiguous. Nothing was saved.");
+    // Do not infer a comparison period from an unrelated second date string.
+    // Until the observed Overview DOM gives us a direct relationship between
+    // comparison totals and their date control, comparison truth is withheld.
+    const primaryFields = fields.filter(field => !field.label.startsWith("Comparison "));
     return {
       ok: true,
       value: {
         storeLabel,
         rangeText: primary[0],
-        comparisonText: others[0] ?? null,
-        fields,
+        comparisonText: null,
+        fields: primaryFields,
       },
     };
   } catch (error) {
