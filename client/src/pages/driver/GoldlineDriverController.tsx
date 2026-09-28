@@ -1070,11 +1070,12 @@ function LiveGoldlineDriverController({
   async function loadVisitContext(
     missionId: number
   ): Promise<GoldlineVisitContext> {
-    const state = await utils.system.commercialMission.fieldState.fetch({
-      missionId,
-    });
+    const [state, preVisitIntel] = await Promise.all([
+      utils.system.commercialMission.fieldState.fetch({ missionId }),
+      utils.system.missionSalesBrief.preVisitIntel.fetch({ missionId }),
+    ]);
     if (!state) throw new Error("Authoritative visit state is unavailable");
-    return state;
+    return { ...state, preVisitIntel };
   }
 
   async function startVisitAction(input: {
