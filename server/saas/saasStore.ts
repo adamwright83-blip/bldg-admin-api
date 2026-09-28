@@ -672,7 +672,7 @@ export async function provisionTenantFromSubscription(input: {
   const plan = await getActiveSaasPlan(input.planKey);
   const entitlements = (
     Array.isArray(plan.entitlementsJson) ? plan.entitlementsJson : []
-  ) as LegacyDayforgeEntitlement[];
+  ) as SaasEntitlement[];
   const tenantId = session.tenantId || tenantIdForOnboarding(session.id);
   const tenantStatus =
     input.status === "active" || input.status === "trialing"
