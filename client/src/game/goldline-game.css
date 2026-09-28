@@ -2986,6 +2986,23 @@
   color: #8fcbd0;
   font: 700 12px Inter;
 }
+.claire-tower-intel__loading {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 1px solid rgba(255, 188, 72, 0.28);
+  border-radius: 14px;
+  color: #e9c66c;
+  background: rgba(28, 19, 8, 0.68);
+  font: 900 12px "Barlow Condensed";
+  letter-spacing: .12em;
+}
+.claire-tower-intel__loading svg {
+  width: 18px;
+  animation: game-spin 1s linear infinite;
+}
 .claire-tower-intel__slots {
   position: relative;
   z-index: 1;
