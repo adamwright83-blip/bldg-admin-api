@@ -98,7 +98,7 @@ describe("approved tower-boss linked debrief contract", () => {
     expect(service).toContain("await reconcileCommercialMissionVisitScore({");
     expect(fieldService).toContain("export async function reconcileCommercialMissionVisitScore");
     expect(fieldService).toContain("state.visitOutcome.outcome");
-    expect(fieldService).toContain('dedupeKey: `score:field-outcome:${input.requestId}`');
+    expect(fieldService).toContain('dedupeKey: `score:field-outcome:${state.visitOutcome.id}`');
     const writer = fieldService.indexOf("export async function recordCommercialMissionVisitOutcome");
     const reconcile = fieldService.indexOf("return reconcileCommercialMissionVisitScore({", writer);
     expect(reconcile).toBeGreaterThan(writer);
