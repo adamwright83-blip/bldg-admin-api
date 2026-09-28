@@ -81,11 +81,54 @@ function bestSourceText(teaching: SalesIntelTeaching): string {
   return exact?.text ?? paraphrase?.text ?? teaching.principle;
 }
 
-function rankTeachings(teachings: SalesIntelTeaching[]): SalesIntelTeaching[] {
+function meaningfulTokens(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .split(/\s+/)
+      .filter(token => token.length >= 4)
+  );
+}
+
+function teachingRelevance(
+  teaching: SalesIntelTeaching,
+  missionText: string
+): number {
+  const missionTokens = meaningfulTokens(missionText);
+  const teachingTokens = meaningfulTokens(
+    [
+      teaching.title,
+      teaching.principle,
+      ...teaching.whenToUse,
+      ...teaching.whenNotToUse,
+      ...teaching.exampleLanguage.map(item => item.text),
+    ].join(" ")
+  );
+  let overlap = 0;
+  for (const token of teachingTokens) {
+    if (missionTokens.has(token)) overlap += 1;
+  }
+  return overlap * 10 + (teaching.confidence ?? 0);
+}
+
+function rankTeachings(
+  teachings: SalesIntelTeaching[],
+  brief: MissionSalesBrief
+): SalesIntelTeaching[] {
+  const missionText = [
+    brief.account.accountType ?? "",
+    brief.mission.objective,
+    brief.recommendedApproach.primaryObjective,
+    ...brief.knownFacts.map(fact => fact.text),
+    ...brief.priorOutcomes.map(fact => fact.text),
+    ...brief.unknowns.map(item => item.question),
+  ].join(" ");
   return [...teachings].sort((left, right) => {
-    const confidence =
-      (right.confidence ?? 0) - (left.confidence ?? 0);
-    if (confidence !== 0) return confidence;
+    const score =
+      teachingRelevance(right, missionText) -
+      teachingRelevance(left, missionText);
+    if (score !== 0) return score;
     return right.createdAt.localeCompare(left.createdAt);
   });
 }
@@ -99,7 +142,8 @@ function selectShelbySources(
       teaching =>
         normalizedCreator(teaching) === "shelby sapp" ||
         normalizedCreator(teaching).includes("shelby sapp")
-    )
+    ),
+    brief
   );
   const used = new Set<string>();
 
