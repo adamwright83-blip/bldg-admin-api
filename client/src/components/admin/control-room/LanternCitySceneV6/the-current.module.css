@@ -1,0 +1,174 @@
+.current {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.canal {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8%;
+  width: 100%;
+  height: 34%;
+}
+
+.bed {
+  fill: none;
+  stroke: rgba(18, 42, 58, 0.85);
+  stroke-width: 18;
+  stroke-linecap: round;
+}
+
+.flow {
+  fill: none;
+  stroke: #f3d48a;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 80 920;
+  stroke-dashoffset: 1000;
+  filter: drop-shadow(0 0 6px #f3d48a);
+  animation: run 9s ease-in-out forwards;
+}
+
+.waterline {
+  fill: none;
+  stroke: rgba(243, 212, 138, 0.55);
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0;
+  animation: settle 9s ease-in-out forwards;
+}
+
+.window {
+  position: absolute;
+  width: 10px;
+  height: 16px;
+  background: #1a2830;
+  box-shadow: 0 0 0 1px rgba(243, 212, 138, 0.25);
+  opacity: 0.35;
+  animation: wake 9s ease-in-out forwards;
+}
+
+.window:nth-of-type(2) {
+  animation-delay: 1.6s;
+}
+
+.window:nth-of-type(3) {
+  animation-delay: 3.2s;
+}
+
+.wheel {
+  position: absolute;
+  left: 58%;
+  bottom: 28%;
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(243, 212, 138, 0.35);
+  border-radius: 50%;
+  opacity: 0.2;
+  animation: turn 9s linear forwards;
+}
+
+.bird {
+  position: absolute;
+  right: 16%;
+  top: 22%;
+  width: 18px;
+  height: 8px;
+  border-bottom: 2px solid rgba(255, 240, 196, 0.7);
+  border-radius: 50%;
+  opacity: 0;
+  animation: lift 9s ease-in-out forwards;
+}
+
+.plaque {
+  position: absolute;
+  left: 50%;
+  bottom: 18%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 8px 14px;
+  border: 1px solid rgba(243, 212, 138, 0.7);
+  background: rgba(12, 36, 52, 0.82);
+  color: #fff0c4;
+  font-family: "Iowan Old Style", Palatino, "Palatino Linotype", serif;
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  opacity: 0;
+  animation: read 9s ease-in-out forwards;
+}
+
+@keyframes run {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes settle {
+  0%,
+  70% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes wake {
+  0%,
+  20% {
+    background: #1a2830;
+    opacity: 0.35;
+  }
+  45%,
+  100% {
+    background: #f3d48a;
+    opacity: 1;
+    box-shadow: 0 0 12px #f3d48a;
+  }
+}
+
+@keyframes turn {
+  0%,
+  40% {
+    opacity: 0.2;
+    transform: rotate(0deg);
+  }
+  70% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0.45;
+    transform: rotate(240deg);
+  }
+}
+
+@keyframes lift {
+  0%,
+  35% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(-10px);
+  }
+  100% {
+    opacity: 0.7;
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes read {
+  0%,
+  55% {
+    opacity: 0;
+  }
+  75%,
+  100% {
+    opacity: 1;
+  }
+}
