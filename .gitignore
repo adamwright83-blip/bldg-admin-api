@@ -137,3 +137,7 @@ tmp/goldline-openchannel-frames/
 
 # Goldline external-order frames
 tmp/goldline-external-frames/
+
+# Python bytecode (Blender asset scripts)
+__pycache__/
+*.pyc
