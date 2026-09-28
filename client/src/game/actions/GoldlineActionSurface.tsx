@@ -21,6 +21,7 @@ import type {
   GoldlineVisitContext,
   VisitOutcomeRequest,
 } from "./actionServices";
+import type { ClairePreVisitIntel } from "../../../../shared/missionSalesBrief";
 import { useAuthoritativeActionResume } from "./useAuthoritativeActionResume";
 
 type SurfaceProps = {
@@ -80,6 +81,9 @@ function VisitSurface(
   }
 ) {
   const [context, setContext] = useState<GoldlineVisitContext | null>(null);
+  const [preVisitIntel, setPreVisitIntel] =
+    useState<ClairePreVisitIntel | null>(null);
+  const [intelLoading, setIntelLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
@@ -108,6 +112,17 @@ function VisitSurface(
           cause instanceof Error ? cause.message : "Visit state is unavailable."
         );
     });
+    void props.services
+      .loadPreVisitIntel(props.action.missionId!)
+      .then(intel => {
+        if (mounted.current) setPreVisitIntel(intel);
+      })
+      .catch(() => {
+        // Sales coaching is optional guidance. It can never block the real visit.
+      })
+      .finally(() => {
+        if (mounted.current) setIntelLoading(false);
+      });
   }, []);
   const armResume = useAuthoritativeActionResume(refresh);
 
@@ -121,11 +136,7 @@ function VisitSurface(
       const next = await operation();
       await props.services.refetchAuthoritativeTruth(props.action.missionId);
       if (mounted.current) {
-        setContext(current => ({
-          ...next,
-          preVisitIntel:
-            next.preVisitIntel ?? current?.preVisitIntel ?? null,
-        }));
+        setContext(next);
         if (final) props.onPersisted();
       }
     } catch (cause) {
@@ -171,7 +182,12 @@ function VisitSurface(
           <Loader2 /> READING FIELD STATE…
         </p>
       ) : null}
-      {context?.preVisitIntel && !context.visitOutcome ? (
+      {intelLoading && context && !context.visitOutcome ? (
+        <div className="claire-tower-intel__loading" role="status">
+          <Loader2 /> CLAIRE IS LOADING THE TOWER DOSSIER…
+        </div>
+      ) : null}
+      {preVisitIntel && !context?.visitOutcome ? (
         <section
           className="claire-tower-intel"
           data-testid="claire-tower-intel"
@@ -185,11 +201,11 @@ function VisitSurface(
             <small>CLAIRE // TOWER BOSS INTEL</small>
             <strong>THREE THINGS BEFORE YOU GO IN</strong>
             <span>
-              {context.preVisitIntel.accountName} · loadout locked to this mission
+              {preVisitIntel.accountName} · loadout locked to this mission
             </span>
           </div>
           <div className="claire-tower-intel__slots">
-            {context.preVisitIntel.items.map((item, index) => (
+            {preVisitIntel.items.map((item, index) => (
               <article
                 key={item.slot}
                 className="claire-tower-intel__slot"
