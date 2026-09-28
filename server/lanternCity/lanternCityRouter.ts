@@ -10,12 +10,12 @@ import { loadLanternObjectiveMarks } from "./objectiveMarksService";
 export function lanternObjectiveMarksScope(input: {
   tenantId: string;
   dayDirectorActorId: string;
-  campaignOperatorUserId: string;
+  campaignOperatorUserIds: readonly string[];
 }) {
   return {
     tenantId: input.tenantId,
     operatorId: input.dayDirectorActorId,
-    viewerOpenId: input.campaignOperatorUserId,
+    viewerOpenIds: [...new Set(input.campaignOperatorUserIds)],
   };
 }
 
@@ -30,7 +30,11 @@ export const lanternCityRouter = router({
       lanternObjectiveMarksScope({
         tenantId: identity.tenantId,
         dayDirectorActorId: identity.dayDirectorActorId,
-        campaignOperatorUserId: identity.campaignOperatorUserId,
+        campaignOperatorUserIds: [
+          identity.canonicalOpenId,
+          identity.sourceOpenId,
+          ...identity.aliases.map(alias => alias.openId),
+        ],
       })
     );
   }),
