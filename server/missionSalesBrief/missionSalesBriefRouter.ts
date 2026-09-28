@@ -64,6 +64,7 @@ export const missionSalesBriefRouter = router({
       }
       return getClairePreVisitIntel({
         tenantId: ctx.tenantId,
+        actorId: ctx.user.openId,
         missionId: input.missionId,
       });
     }),
