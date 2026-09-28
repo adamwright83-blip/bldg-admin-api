@@ -85,6 +85,41 @@ describe("driver mission target resolution", () => {
     );
   });
 
+
+  it("uses the selected Google Place ID as the exact-property authority", async () => {
+    const provider: DriverMissionPlacesProvider = {
+      name: "google_places",
+      async resolveBusiness() {
+        throw new Error("Selected Place ID must bypass free-text resolution.");
+      },
+      async resolveBusinessByPlaceId(placeId: string) {
+        expect(placeId).toBe("los-feliz-towers");
+        return losFelizTowers;
+      },
+      async geocode() {
+        throw new Error("Selected Place ID must not enter territory geocoding.");
+      },
+      async searchBusinesses() {
+        throw new Error("Selected Place ID must not enter nearby discovery.");
+      },
+    };
+
+    const result = await resolveDriverMissionTargets({
+      targetMode: "exact_property",
+      searchNear:
+        "Los Feliz Towers, 4455 Los Feliz Blvd, Los Angeles, CA 90027",
+      placeId: "los-feliz-towers",
+      venueType: "luxury_living",
+      count: 3,
+      operator,
+      places: provider,
+    });
+
+    expect(result.exactTarget?.providerId).toBe(losFelizTowers.providerId);
+    expect(result.opportunities).toHaveLength(1);
+    expect(result.opportunities[0]?.account.name).toBe("Los Feliz Towers");
+  });
+
   it("fails closed when an exact property cannot be identified", async () => {
     await expect(
       resolveDriverMissionTargets({

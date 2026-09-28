@@ -12,9 +12,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  fast-goldline-smoke:
+  fast-contracts:
+    name: fast-contracts
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     services:
       mysql:
         image: mysql:8.0
@@ -50,19 +51,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Type-check
         run: pnpm check
-      - name: Prove production migration path (scripts/migrate.mjs) against a genuinely clean database
-        # Deliberately a SEPARATE database on the same disposable MySQL
-        # server, not the job's shared goldline_proof — applyLegacyDayforgeReleaseMigrations
-        # (the `pnpm db:legacy-dayforge:release` step later in this job) replays
-        # numbered drizzle/*.sql files with plain, non-idempotent
-        # CREATE TABLE statements, on the assumption that it is the only
-        # thing that will ever bootstrap goldline_proof. Running
-        # scripts/migrate.mjs against that same database first (proven by
-        # an earlier CI run: ER_TABLE_EXISTS_ERROR on `users`) breaks that
-        # assumption. A dedicated database lets this step prove
-        # migrate.mjs bootstraps a truly empty database on its own, without
-        # disturbing the pristine database the legacy compatibility release path still
-        # needs.
+      - name: Prove exact property Google Places targeting
+        run: >-
+          pnpm vitest run
+          server/territory/googlePlacesTerritoryProvider.test.ts
+          server/commercialMissions/commercialMissionTargetResolution.test.ts
+      - name: Prove production migration path against a genuinely clean database
         env:
           DATABASE_URL: mysql://root:root@127.0.0.1:3399/goldline_migrate_check
         run: |
@@ -75,7 +69,6 @@ jobs:
             })().catch(err => { console.error(err); process.exit(1); });
           "
           node scripts/migrate.mjs
-          echo "--- second run: proving idempotency ---"
           node scripts/migrate.mjs
       - name: Prove campaign and behavioral truth invariants
         run: >-
@@ -97,13 +90,6 @@ jobs:
           shared/behavioralExperimentPolicy.test.ts
           server/behavioralExperiment/assignPresentation.test.ts
       - name: Prove ops task completion concurrency against real MySQL
-        # Targets goldline_migrate_check, not the job's shared goldline_proof:
-        # this step runs before `pnpm db:legacy-dayforge:release` (below), which is
-        # the only thing that ever creates ops_tasks/ops_task_events in
-        # goldline_proof. goldline_migrate_check already has a complete,
-        # valid schema from the migration-proof step above — a real MySQL
-        # database is a real MySQL database; this test needs one with the
-        # right tables, not specifically the browser-fixture database.
         env:
           DATABASE_URL: mysql://root:root@127.0.0.1:3399/goldline_migrate_check
         run: >-
@@ -113,7 +99,7 @@ jobs:
           server/behavioralExperiment/assignPresentation.mysql.integration.test.ts
           server/spiritHumanRescue/rescueMissionStore.mysql.integration.test.ts
           server/cleancloudBrowserSync/gumballCustomerTruth.mysql.integration.test.ts
-      - name: Prove StrategyEngine live snapshot sections (no fabricated fixtures)
+      - name: Prove StrategyEngine live snapshot sections
         run: >-
           pnpm vitest run
           server/strategy/snapshotDormantCustomers.test.ts
@@ -142,6 +128,61 @@ jobs:
           server/goldlineProgression/rookContactGrant.test.ts
           server/rookContact/rookContactAuthorityRepair.test.ts
           client/src/pages/goldline/wayward/waywardTruth.test.ts
+
+  fast-browser:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: fast-smoke-world
+            command: >-
+              pnpm exec playwright test --config playwright.goldline-smoke.config.ts
+              e2e/goldline-smoke/worldSmoke.spec.ts
+              e2e/goldline-smoke/lanternCityMount.spec.ts
+          - name: fast-smoke-territories
+            command: >-
+              pnpm exec playwright test --config playwright.goldline-smoke.config.ts
+              e2e/goldline-smoke/territoriesSmoke.spec.ts
+          - name: fast-smoke-campaign
+            command: >-
+              pnpm exec playwright test --config playwright.goldline-smoke.config.ts
+              e2e/goldline-smoke/campaignSmoke.spec.ts
+              e2e/goldline-smoke/campaignMutation.spec.ts
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: goldline_proof
+        ports:
+          - 3399:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      CI: "true"
+      DATABASE_URL: mysql://root:root@127.0.0.1:3399/goldline_proof
+      DAYFORGE_RELEASE_DB: "1"
+      APP_SHARED_API_SECRET: goldline-proof-app-secret-000000000000000000
+      JWT_SECRET: goldline-proof-jwt-secret-000000000000000000
+      STRIPE_SECRET_KEY: goldline-proof-placeholder-not-used
+      DRIVER_PASSWORD: pixel-driver-pass
+      DRIVER_OPEN_ID: goldline-proof-driver
+      ADMIN_PASSWORD: goldline-proof-admin-pass
+      GOLDLINE_PROOF_MODE: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - name: Prepare deterministic proof world
         run: |
           pnpm db:legacy-dayforge:release
@@ -160,8 +201,8 @@ jobs:
           done
           cat /tmp/goldline-fast-smoke.log
           exit 1
-      - name: Run deterministic fast gate
-        run: pnpm test:goldline:smoke
+      - name: Run deterministic micro gate
+        run: ${{ matrix.command }}
       - name: Stop proof server
         if: always()
         run: |
