@@ -640,7 +640,9 @@ if (!globalThis.chrome?.runtime?.id) {
     staged = null;
     await chrome.storage.local.clear();
     await chrome.storage.session.clear();
-    await chrome.permissions.remove({ origins: HOSTS });
+    await chrome.permissions.remove({
+      origins: [...HOSTS, ...DASHBOARD_CAPTURE_ORIGINS],
+    });
     location.reload();
   });
   const { run: saved } = await chrome.storage.local.get("run");
