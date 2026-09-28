@@ -301,6 +301,7 @@ describe("Claire pre-visit three", () => {
       knownFacts: [
         {
           text: "The property does not have a laundry contract.",
+          provenance: "authoritative_evidence",
           sourceReference: "fixture",
         },
       ],
