@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Building2,
@@ -52,20 +52,20 @@ export function BuildMissionSheet({
   const [missionType, setMissionType] = useState<MissionType | null>(null);
   const [targetMode, setTargetMode] = useState<TargetMode>("exact_property");
   const [searchNearValue, setSearchNearValue] = useState(searchNear);
-  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedPlace, setSelectedPlace] = useState<PlaceSuggestion | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const build = trpc.system.commercialMission.buildForDriver.useMutation();
+  const deferredSearch = useDeferredValue(searchNearValue.trim());
   const placeSuggestions = trpc.system.commercialMission.placeSuggestions.useQuery(
-    { query: debouncedSearch },
+    { query: deferredSearch },
     {
       enabled:
         open &&
-        targetMode === "exact_property" &&
         !selectedPlace &&
-        debouncedSearch.trim().length >= 2,
+        deferredSearch.length >= 2,
       staleTime: 30_000,
       retry: 1,
+      refetchOnWindowFocus: false,
     }
   );
 
@@ -75,23 +75,6 @@ export function BuildMissionSheet({
       setSelectedPlace(null);
     }
   }, [open, searchNear]);
-
-  useEffect(() => {
-    if (
-      !open ||
-      targetMode !== "exact_property" ||
-      selectedPlace ||
-      searchNearValue.trim().length < 2
-    ) {
-      setDebouncedSearch("");
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      setDebouncedSearch(searchNearValue.trim());
-    }, 220);
-    return () => window.clearTimeout(timeout);
-  }, [open, searchNearValue, selectedPlace, targetMode]);
 
   function close() {
     if (build.isPending) return;
@@ -238,16 +221,14 @@ export function BuildMissionSheet({
                     autoComplete="off"
                     className="w-full rounded-[14px] border border-white/15 bg-white/10 px-4 py-4 text-[17px] font-semibold text-white outline-none placeholder:text-white/35 focus:border-violet-300/60"
                     aria-label="Mission search location"
-                    aria-autocomplete={targetMode === "exact_property" ? "list" : undefined}
+                    aria-autocomplete="list"
                     aria-expanded={
-                      targetMode === "exact_property" &&
-                      !selectedPlace &&
-                      Boolean(placeSuggestions.data?.length)
+                      !selectedPlace && Boolean(placeSuggestions.data?.length)
                     }
                   />
                 </label>
 
-                {targetMode === "exact_property" && selectedPlace ? (
+                {selectedPlace ? (
                   <div className="mt-2 rounded-[12px] border border-violet-300/35 bg-violet-300/10 px-4 py-3">
                     <div className="text-[15px] font-black text-white">
                       {selectedPlace.name}
@@ -260,9 +241,7 @@ export function BuildMissionSheet({
                   </div>
                 ) : null}
 
-                {targetMode === "exact_property" &&
-                !selectedPlace &&
-                searchNearValue.trim().length >= 2 ? (
+                {!selectedPlace && searchNearValue.trim().length >= 2 ? (
                   <div
                     className="mt-2 overflow-hidden rounded-[14px] border border-white/15 bg-[#182235] shadow-[0_18px_38px_rgba(0,0,0,.35)]"
                     role="listbox"
@@ -272,6 +251,10 @@ export function BuildMissionSheet({
                       <div className="flex items-center gap-2 px-4 py-3 text-[14px] font-semibold text-white/60">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         Finding the property…
+                      </div>
+                    ) : placeSuggestions.isError ? (
+                      <div className="px-4 py-3 text-[13px] font-semibold text-rose-200">
+                        Google Places could not load suggestions. Keep typing or try again.
                       </div>
                     ) : placeSuggestions.data?.length ? (
                       <>
@@ -283,8 +266,11 @@ export function BuildMissionSheet({
                             aria-selected="false"
                             onClick={() => {
                               setSelectedPlace(suggestion);
-                              setSearchNearValue(suggestion.text);
-                              setDebouncedSearch("");
+                              setSearchNearValue(
+                                targetMode === "nearby_discovery"
+                                  ? suggestion.address || suggestion.text
+                                  : suggestion.text
+                              );
                               sounds.press();
                               haptics.impact();
                             }}
@@ -304,9 +290,9 @@ export function BuildMissionSheet({
                           Powered by Google
                         </div>
                       </>
-                    ) : debouncedSearch ? (
+                    ) : deferredSearch.length >= 2 ? (
                       <div className="px-4 py-3 text-[13px] font-semibold text-white/45">
-                        No Google Places matches yet. Keep typing or enter the full property.
+                        No Google Places matches yet. Keep typing.
                       </div>
                     ) : null}
                   </div>
