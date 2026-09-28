@@ -223,12 +223,40 @@ const RISKY_ASSERTIONS = [
   /\bwe know (?:you|your|they|their)\b/i,
 ];
 
+const ADAPTATION_GLUE_WORDS = new Set([
+  "about", "after", "again", "also", "before", "could", "does", "from",
+  "have", "here", "into", "just", "like", "more", "need", "only", "right",
+  "that", "their", "them", "then", "there", "these", "they", "this", "today",
+  "what", "when", "where", "which", "with", "would", "your", "you",
+]);
+
+function contentTokens(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .split(/\s+/)
+      .filter(token => token.length >= 4 && !ADAPTATION_GLUE_WORDS.has(token))
+  );
+}
+
 function hasUnsupportedCompiledFact(input: {
   brief: MissionSalesBrief;
   sources: EquipSource[];
   lines: string[];
 }): boolean {
   const corpus = groundedCorpus(input.brief, input.sources);
+  const groundedTokens = contentTokens(corpus);
+
+  for (const line of input.lines) {
+    // The model may shorten/reorder grounded language, but it may not add new
+    // content-bearing vocabulary. Any novel noun/verb/adjective fails closed
+    // to the exact Armory/MissionSalesBrief source line.
+    for (const token of contentTokens(line)) {
+      if (!groundedTokens.has(token)) return true;
+    }
+  }
+
   const claims = input.lines.join(" ");
   for (const pattern of RISKY_ASSERTIONS) {
     const match = claims.match(pattern)?.[0]?.toLowerCase();
@@ -236,8 +264,7 @@ function hasUnsupportedCompiledFact(input: {
   }
 
   // A newly introduced number is especially likely to be a fabricated unit
-  // count, price, timing claim, or other building fact. Source-grounded
-  // numbers are allowed; new ones fail closed to the unadapted source move.
+  // count, price, timing claim, or other building fact.
   const claimNumbers = claims.match(/\b\d[\d,.]*\b/g) ?? [];
   for (const number of claimNumbers) {
     if (!corpus.includes(number.toLowerCase())) return true;
