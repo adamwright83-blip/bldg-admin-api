@@ -157,8 +157,11 @@ export function deriveMissionLinkedDebriefProposal(input: {
         ? "unavailable" as const
         : "not_recorded" as const;
 
-  const wantsEmailDraft = requestedEmailMaterial(extraction);
-  const email = groundedEmail(extraction) ?? input.knownEmail?.trim() ?? null;
+  const emailRequest = requestedEmailMaterial(extraction);
+  const wantsEmailDraft = Boolean(emailRequest);
+  const email = emailRequest?.entityClientKey
+    ? groundedEmail(extraction, emailRequest.entityClientKey)
+    : groundedEmail(extraction, null) ?? input.knownEmail?.trim() ?? null;
   const emailDraft: MissionDebriefEmailDraft | null = wantsEmailDraft
     ? {
         to: email || null,
