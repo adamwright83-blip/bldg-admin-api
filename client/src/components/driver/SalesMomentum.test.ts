@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { describeSaveError } from "./SalesMomentum";
+import {
+  describeMicrophoneError,
+  describeSaveError,
+  startOptionalBrowserTranscript,
+} from "./SalesMomentum";
 
 /**
  * A real Android user recorded a journal entry successfully, but Save
@@ -40,5 +44,32 @@ describe("describeSaveError", () => {
       /could not save your journal/i
     );
     expect(describeSaveError(undefined)).toMatch(/could not save your journal/i);
+  });
+});
+
+
+describe("mission debrief audio capture", () => {
+  it("treats browser SpeechRecognition failure as optional instead of a microphone failure", () => {
+    const session = startOptionalBrowserTranscript(
+      { initialText: "", onTranscript: () => undefined },
+      (() => {
+        throw new Error("SpeechRecognition unsupported");
+      }) as never
+    );
+    expect(session).toBeNull();
+  });
+
+  it("reports an actual microphone permission denial separately from live transcription support", () => {
+    const message = describeMicrophoneError(
+      new DOMException("Permission denied", "NotAllowedError")
+    );
+    expect(message).toMatch(/blocked microphone access/i);
+    expect(message).toMatch(/type what happened/i);
+  });
+
+  it("does not mislabel an unknown recorder failure as permission denied", () => {
+    const message = describeMicrophoneError(new Error("recorder failed"));
+    expect(message).not.toMatch(/permission denied/i);
+    expect(message).toMatch(/type what happened/i);
   });
 });

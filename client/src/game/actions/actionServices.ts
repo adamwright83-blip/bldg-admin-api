@@ -8,6 +8,8 @@ import type { DriverGameWorldNode } from "../../../../shared/driverGameWorld";
 import type { RealActionRequest } from "../encounters/RealActionBridge";
 import type { AuthoritativeFollowUp } from "./actionRegistry";
 import type { CommercialFollowUpOutcome } from "../../../../shared/commercialPipeline";
+import type { ClairePreVisitIntel } from "../../../../shared/missionSalesBrief";
+import type { MissionLinkedDebriefState } from "../../../../shared/missionLinkedDebrief";
 
 export type GoldlineVisitContext = {
   mission: { id: number; version: number; status: CommercialMissionStatus };
@@ -50,6 +52,8 @@ export type VisitOutcomeRequest = {
 export type GoldlineActionServices = {
   recordCall: (request: RealActionRequest) => Promise<void>;
   loadVisit: (missionId: number) => Promise<GoldlineVisitContext>;
+  /** Non-blocking recommendation read; visit truth never waits on Sales Intel. */
+  loadPreVisitIntel?: (missionId: number) => Promise<ClairePreVisitIntel | null>;
   startVisitPreparation: (input: {
     missionId: number;
     requestId: string;
@@ -82,6 +86,20 @@ export type GoldlineActionServices = {
     requestId: string;
     text: string;
   }) => Promise<GoldlineVisitContext>;
+  /**
+   * Mission-linked debriefs are the production visit flow. These remain
+   * optional only for deterministic legacy fixtures that still exercise the
+   * older authoritative writer directly.
+   */
+  loadMissionDebrief?: (missionId: number) => Promise<MissionLinkedDebriefState>;
+  openMissionDebrief?: (input: { missionId: number; buildingName: string }) => void;
+  finalizeMissionDebrief?: (input: {
+    missionId: number;
+    journalEntryId: string;
+    requestId: string;
+    answer?: string;
+    additionalAnswer?: string;
+  }) => Promise<MissionLinkedDebriefState>;
   loadFollowUp: (missionId: number) => Promise<AuthoritativeFollowUp | null>;
   completeFollowUp: (input: {
     followUp: AuthoritativeFollowUp;

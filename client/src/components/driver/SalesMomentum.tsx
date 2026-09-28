@@ -62,6 +62,34 @@ export function describeSaveError(error: unknown): string {
   return message || "Could not save your journal. Your recording is still here — retry.";
 }
 
+export function describeMicrophoneError(error: unknown): string {
+  const name = error instanceof DOMException ? error.name : "";
+  if (name === "NotAllowedError" || name === "SecurityError") {
+    return "Chrome blocked microphone access. Allow the microphone for this site, then retry — or type what happened below.";
+  }
+  if (name === "NotFoundError") {
+    return "No microphone was found on this device. Connect one or type what happened below.";
+  }
+  if (name === "NotReadableError" || name === "AbortError") {
+    return "The microphone is unavailable or already in use. Close the other audio app and retry — or type what happened below.";
+  }
+  if (typeof MediaRecorder === "undefined") {
+    return "This browser cannot record audio here. Type what happened below.";
+  }
+  return "Audio recording could not start. Your microphone permission may still be fine — retry or type what happened below.";
+}
+
+export function startOptionalBrowserTranscript(
+  input: Parameters<typeof startBrowserSpeechTranscript>[0],
+  start: typeof startBrowserSpeechTranscript = startBrowserSpeechTranscript
+): BrowserSpeechSession | null {
+  try {
+    return start(input);
+  } catch {
+    return null;
+  }
+}
+
 function newClientRequestId() {
   return globalThis.crypto?.randomUUID?.() ?? `journal-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -95,26 +123,44 @@ export function SalesJournalSheet({ open, onOpenChange, location, onSaved, debri
   React.useEffect(() => () => { speechRef.current?.abort(); stopTracks(); }, [stopTracks]);
 
   async function startRecording() {
+    let stream: MediaStream | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
       streamRef.current = stream;
       recorderRef.current = recorder;
       chunksRef.current = [];
-      speechRef.current?.abort();
-      speechRef.current = startBrowserSpeechTranscript({ initialText: transcript, onTranscript: setTranscript });
-      recorder.ondataavailable = event => { if (event.data.size) chunksRef.current.push(event.data); };
+      recorder.ondataavailable = event => {
+        if (event.data.size) chunksRef.current.push(event.data);
+      };
       recorder.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        const blob = new Blob(chunksRef.current, {
+          type: recorder.mimeType || "audio/webm",
+        });
         setAudioDataUrl(await blobDataUrl(blob));
         speechRef.current?.stop();
         speechRef.current = null;
         stopTracks();
       };
+      // Raw audio capture is the authority. Start it before attempting the
+      // browser-only live transcript, which is merely a convenience overlay.
       recorder.start(500);
       setRecording(true);
-    } catch {
-      toast.error("Microphone access is needed to record your sales journal.");
+    } catch (error) {
+      stream?.getTracks().forEach(track => track.stop());
+      recorderRef.current = null;
+      streamRef.current = null;
+      toast.error(describeMicrophoneError(error));
+      return;
+    }
+
+    speechRef.current?.abort();
+    speechRef.current = startOptionalBrowserTranscript({
+      initialText: transcript,
+      onTranscript: setTranscript,
+    });
+    if (!speechRef.current) {
+      toast.info("Recording is live. Chrome's live transcript is unavailable, so Claire will transcribe the saved audio afterward.");
     }
   }
 
@@ -148,8 +194,12 @@ export function SalesJournalSheet({ open, onOpenChange, location, onSaved, debri
         utils.system.adaptiveSalesMeter.myMeter.invalidate(),
         utils.system.commercialMission.mySalesJournals.invalidate(),
       ]);
-      celebrate(result.worldEvent);
-      toast.success(debrief ? "Visit debrief saved." : "Field Journal secured. Processing continues safely in the background.");
+      if (!debrief) celebrate(result.worldEvent);
+      toast.success(
+        debrief
+          ? "Raw debrief secured. Claire is decoding the encounter."
+          : "Field Journal secured. Processing continues safely in the background."
+      );
       // Projection refresh is best-effort and may race asynchronous extraction;
       // it is deliberately incapable of turning a successful durable save into
       // a UI failure. Normal polling catches anything that finishes later.
@@ -173,11 +223,11 @@ export function SalesJournalSheet({ open, onOpenChange, location, onSaved, debri
               {debrief ? "CLAIRE · PARKING-LOT DEBRIEF" : "FIELD JOURNAL"}
             </p>
             <h2 id="sales-journal-title" className="mt-2 text-[clamp(30px,4vw,42px)] font-black">
-              {debrief ? "What did they actually say?" : "Review or correct evidence"}
+              {debrief ? "What happened?" : "Review or correct evidence"}
             </h2>
             <p className="mt-2 max-w-xl text-[clamp(15px,2vw,20px)] text-[#3a5f7e]">
               {debrief
-                ? `You just left ${debrief.buildingName}. Tell me once while it is still fresh. Your exact words attach to that recorded visit as operator-reported memory; they are not independently verified.`
+                ? `You just left ${debrief.buildingName}. The tower is already known. Tell Claire what happened; your raw recording is secured before she interprets it.`
                 : "Capture what happened in your own words. The raw entry is retained before any interpretation."}
             </p>
           </div>
