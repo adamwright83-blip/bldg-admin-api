@@ -217,4 +217,64 @@ describe("Claire pre-visit three", () => {
     expect(result?.items.every(item => item.provenance.kind === "mission_brief")).toBe(true);
     expect(result?.items.every(item => item.provenance.creatorName === null)).toBe(true);
   });
+
+  it("uses mission-brief fallback instead of stuffing an unrelated Shelby category into a slot", async () => {
+    mocks.listEligible.mockResolvedValue([
+      teaching(
+        "closing-only",
+        "closing",
+        "Ask for the signature",
+        "Ask directly for the signature once the buyer is ready."
+      ),
+    ]);
+    mocks.invokeLLM.mockRejectedValue(new Error("provider unavailable"));
+
+    const result = await getClairePreVisitIntel({
+      tenantId: "tenant-1",
+      missionId: 15,
+    });
+
+    expect(result?.items[0].slot).toBe("OPENING");
+    expect(result?.items[0].provenance.kind).toBe("mission_brief");
+    expect(result?.items[0].line).toBe(
+      "I have one quick question about resident laundry."
+    );
+    expect(result?.items[0].provenance.teachingId).toBeNull();
+  });
+
+  it("rejects a schema-valid compiled line that invents unsupported business facts", async () => {
+    mocks.invokeLLM.mockResolvedValue({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            items: [
+              {
+                slot: "OPENING",
+                line: "Since your current provider misses pickups, I can solve that.",
+                why: "Invented provider claim.",
+              },
+              {
+                slot: "PROBE",
+                line: "Who owns vendor approval?",
+                why: "Find the approval path.",
+              },
+              {
+                slot: "WEAPON",
+                line: "Diagnose the gap before challenging an existing provider.",
+                why: "Use reviewed trainer guidance.",
+              },
+            ],
+          }),
+        },
+      }],
+    });
+
+    const result = await getClairePreVisitIntel({
+      tenantId: "tenant-1",
+      missionId: 15,
+    });
+
+    expect(result?.items[0].line).toBe("Ask permission before pitching.");
+    expect(result?.items[0].line).not.toMatch(/misses pickups/i);
+  });
 });
