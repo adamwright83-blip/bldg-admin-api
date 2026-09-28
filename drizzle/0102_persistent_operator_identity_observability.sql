@@ -3,12 +3,14 @@ CREATE TABLE persistent_operator_identity_bindings (
   tenantId VARCHAR(64) NOT NULL,
   canonicalOpenId VARCHAR(64) NOT NULL,
   aliasOpenId VARCHAR(64) NOT NULL,
+  activeAliasKey VARCHAR(191) NULL,
   surface VARCHAR(32) NOT NULL,
   active BOOLEAN NOT NULL DEFAULT true,
   createdByOpenId VARCHAR(64) NULL,
   revokedAt TIMESTAMP NULL,
   createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_persistent_operator_identity_active_alias (activeAliasKey),
   KEY idx_persistent_operator_identity_alias (tenantId, aliasOpenId, active),
   KEY idx_persistent_operator_identity_canonical (tenantId, canonicalOpenId, active)
 );
