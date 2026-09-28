@@ -4,7 +4,7 @@
  */
 import { createIslandBoard, type IslandLantern } from "../../../../client/src/components/admin/control-room/LanternCityIslands/islandBoard";
 import { buildTowerModel, darkFloors, TOWER_BUILDINGS, type Resident } from "../../../../client/src/components/admin/control-room/LanternCityIslands/towerStack";
-import { createTowerCutaway } from "../../../../client/src/components/admin/control-room/LanternCityIslands/towerCutaway";
+import { createTowerRooms } from "../../../../client/src/components/admin/control-room/LanternCityIslands/towerRooms";
 
 // sample customers (placeholders: the app lights the real ones)
 const SPOTS: [number, number, number][] = [
@@ -65,6 +65,7 @@ board.setLanterns(SAMPLE);
   ($("win") as HTMLButtonElement).disabled = true;
 };
 (window as unknown as { __b: typeof board; __sample: IslandLantern[] }).__b = board;
+(window as unknown as { __tower: () => typeof cut }).__tower = () => cut;
 (window as unknown as { __sample: IslandLantern[] }).__sample = SAMPLE;
 
 // sample residents of our two towers (placeholders: the app reads each customer's real address and unit)
@@ -79,7 +80,7 @@ const RES: Record<string, Resident[]> = {
     ["2170 Century Park East", "1001"], ["2170 Century Park East", "1409"],
   ].map(([address, unit], i) => ({ key: `cpe-${i}`, name: `Sample Resident ${i + 11}`, address, unit })),
 };
-let cut: ReturnType<typeof createTowerCutaway> | null = null;
+let cut: ReturnType<typeof createTowerRooms> | null = null;
 function openTower(id: string) {
   const spec = TOWER_BUILDINGS.find(b => b.id === id);
   if (!spec) return;
@@ -90,7 +91,7 @@ function openTower(id: string) {
   const lit = m.towers.reduce((n, t) => n + t.lit, 0), units = m.towers.reduce((n, t) => n + t.spec.floors * t.spec.unitsPerFloor, 0);
   const dark = m.towers.reduce((n, t) => n + darkFloors(t).length, 0), floors = m.towers.reduce((n, t) => n + t.spec.floors, 0);
   $("twStats").textContent = `${lit} homes lit of ${units} · ${dark} of ${floors} floors with no customer`;
-  cut ??= createTowerCutaway($("twStage"), {
+  cut ??= createTowerRooms($("twStage"), {
     onHover: h => {
       const tip = $("tip");
       tip.hidden = !h;
