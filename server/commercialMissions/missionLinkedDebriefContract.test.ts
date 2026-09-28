@@ -25,6 +25,10 @@ const journalSheet = readFileSync(
   new URL("../../client/src/components/driver/SalesMomentum.tsx", import.meta.url),
   "utf8"
 );
+const routerSource = readFileSync(
+  new URL("./commercialMissionRouter.ts", import.meta.url),
+  "utf8"
+);
 
 describe("approved tower-boss linked debrief contract", () => {
   it("binds the known mission into the debrief instead of asking for the property again", () => {
@@ -102,6 +106,12 @@ describe("approved tower-boss linked debrief contract", () => {
     const writer = fieldService.indexOf("export async function recordCommercialMissionVisitOutcome");
     const reconcile = fieldService.indexOf("return reconcileCommercialMissionVisitScore({", writer);
     expect(reconcile).toBeGreaterThan(writer);
+  });
+
+  it("keeps authorized admin debrief access bound to the persisted assignee", () => {
+    expect(routerSource).toContain(
+      "driverId: mission.assignedTo ?? ctx.user.openId"
+    );
   });
 
   it("persists requested collateral email as draft-only and contains no transport send path", () => {
