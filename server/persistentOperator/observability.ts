@@ -6,6 +6,8 @@ import {
   persistentOperatorDiagnosticEvents,
 } from "../../drizzle/schema";
 import { loadBusinessSourceCoverage } from "../analytics/sourceCoverage";
+import { getDashboardTimeZone } from "../dashboardZoned";
+import { businessDateInZone } from "../../shared/currentDayLine";
 import { loadObligations } from "../claire/proactive/boardService";
 import { getDb } from "../db";
 
@@ -72,6 +74,68 @@ export async function recordPersistentOperatorDiagnosticEvent(
   });
 }
 
+type DiagnosticSummaryRow = {
+  eventKind: string;
+  reason: string | null;
+  objectiveId: string | null;
+  occurredAt: Date;
+};
+
+export function summarizeSilentIdle(rows: DiagnosticSummaryRow[]) {
+  const attempts = rows.filter(row => row.eventKind === "selection_attempt");
+  const silent = attempts.filter(row => row.reason != null);
+  return {
+    attempts: attempts.length,
+    silent: silent.length,
+    rate: attempts.length ? silent.length / attempts.length : null,
+    byReason: groupedReasons(silent),
+  };
+}
+
+function mondayForBusinessDate(ymd: string): string {
+  const date = new Date(`${ymd}T00:00:00Z`);
+  const day = date.getUTCDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  date.setUTCDate(date.getUTCDate() + offset);
+  return date.toISOString().slice(0, 10);
+}
+
+export function summarizeInitiationFunnelByBusinessWeek(
+  rows: DiagnosticSummaryRow[],
+  timeZone: string
+) {
+  const byWeek = new Map<
+    string,
+    Array<{ eventKind: string; objectiveId: string | null }>
+  >();
+  for (const row of rows) {
+    if (
+      ![
+        "objective_created",
+        "objective_surfaced",
+        "objective_started",
+        "objective_verified",
+      ].includes(row.eventKind)
+    ) {
+      continue;
+    }
+    const businessDate = businessDateInZone(row.occurredAt, timeZone);
+    const weekStart = mondayForBusinessDate(businessDate);
+    const bucket = byWeek.get(weekStart) ?? [];
+    bucket.push(row);
+    byWeek.set(weekStart, bucket);
+  }
+  return [...byWeek.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([weekStart, bucket]) => ({
+      weekStart,
+      objectiveCreated: distinctObjectiveCount(bucket, "objective_created"),
+      objectiveSurfaced: distinctObjectiveCount(bucket, "objective_surfaced"),
+      objectiveStarted: distinctObjectiveCount(bucket, "objective_started"),
+      objectiveVerified: distinctObjectiveCount(bucket, "objective_verified"),
+    }));
+}
+
 function groupedReasons(
   rows: Array<{ reason: string | null }>
 ): Record<string, number> {
@@ -114,17 +178,13 @@ export async function loadPersistentOperatorDiagnostics(input: {
   const today = now.toISOString().slice(0, 10);
   const db = await getDb();
 
-  const eventRows = db
+  const tenantEventRows = db
     ? await db
         .select()
         .from(persistentOperatorDiagnosticEvents)
         .where(
           and(
             eq(persistentOperatorDiagnosticEvents.tenantId, input.tenantId),
-            eq(
-              persistentOperatorDiagnosticEvents.canonicalOperatorId,
-              input.canonicalOperatorId
-            ),
             gte(persistentOperatorDiagnosticEvents.occurredAt, since)
           )
         )
@@ -132,10 +192,16 @@ export async function loadPersistentOperatorDiagnostics(input: {
         .limit(5000)
     : [];
 
-  const attempts = eventRows.filter(row => row.eventKind === "selection_attempt");
-  const silentAttempts = attempts.filter(row => row.reason != null);
-  const identityFailures = eventRows.filter(
+  const eventRows = tenantEventRows.filter(
+    row => row.canonicalOperatorId === input.canonicalOperatorId
+  );
+  const identityFailures = tenantEventRows.filter(
     row => row.eventKind === "identity_join_failure"
+  );
+  const silentIdle = summarizeSilentIdle(eventRows);
+  const initiationFunnel = summarizeInitiationFunnelByBusinessWeek(
+    eventRows,
+    getDashboardTimeZone()
   );
 
   const obligations = await loadObligations(
@@ -229,17 +295,10 @@ export async function loadPersistentOperatorDiagnostics(input: {
       since: since.toISOString(),
       through: now.toISOString(),
     },
-    silentIdle: {
-      attempts: attempts.length,
-      silent: silentAttempts.length,
-      rate: attempts.length ? silentAttempts.length / attempts.length : null,
-      byReason: groupedReasons(silentAttempts),
-    },
+    silentIdle,
     initiationFunnel: {
-      objectiveCreated: distinctObjectiveCount(eventRows, "objective_created"),
-      objectiveSurfaced: distinctObjectiveCount(eventRows, "objective_surfaced"),
-      objectiveStarted: distinctObjectiveCount(eventRows, "objective_started"),
-      objectiveVerified: distinctObjectiveCount(eventRows, "objective_verified"),
+      byBusinessWeek: initiationFunnel,
+      timeZone: getDashboardTimeZone(),
       basis: "persisted_diagnostic_objective_transition_events" as const,
     },
     oldestDueWork: oldestCandidates[0] ?? null,
@@ -267,6 +326,21 @@ export async function loadPersistentOperatorDiagnostics(input: {
         proportion: null,
         reason:
           "goldline_world_events has no standalone conflicting state; no conflict count is invented",
+      },
+      staleSources: {
+        count: sourceCoverage.sources.filter(
+          source => source.includedInCombinedBook && source.status === "stale"
+        ).length,
+        proportion: sourceCoverage.sources.filter(
+          source => source.includedInCombinedBook
+        ).length
+          ? sourceCoverage.sources.filter(
+              source => source.includedInCombinedBook && source.status === "stale"
+            ).length /
+            sourceCoverage.sources.filter(source => source.includedInCombinedBook)
+              .length
+          : null,
+        basis: "canonical_source_coverage_sources" as const,
       },
       sourceCoverage: {
         bookStatus: sourceCoverage.book.status,
