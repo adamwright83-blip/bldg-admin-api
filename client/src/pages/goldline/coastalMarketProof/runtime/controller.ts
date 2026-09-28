@@ -173,7 +173,7 @@ export class PlayerController {
     const step = this.speed * dt;
     const prevY = this.position.y;
     const before = this.progress;
-    if (step > 0) this.moveHorizontal(Math.sin(this.heading) * step, Math.cos(this.heading) * step);
+    if (step > 0) this.moveHorizontal(Math.sin(this.heading) * step, Math.cos(this.heading) * step, dt);
     if (this.mantle) {
       this.verticalRate = 0;
       this.locomotion = "mantle";
@@ -257,7 +257,7 @@ export class PlayerController {
     return this.blockers.some(b => b.on && this.progress < b.s1 && s > b.s0);
   }
 
-  private moveHorizontal(dx: number, dz: number) {
+  private moveHorizontal(dx: number, dz: number, dt: number) {
     const start = this.position.clone();
     const target = start.clone();
     target.x += dx;
@@ -266,7 +266,7 @@ export class PlayerController {
     if (this.blocked(target)) {
       this.speed *= 0.5;
       this.stalledAt = "gate";
-      this.stalledSeconds += 1 / 60;
+      this.stalledSeconds += dt;   // real time, whatever the frame rate
       return;
     }
     if (!this.grounded) {
@@ -295,7 +295,7 @@ export class PlayerController {
     if (g === null || g - start.y > MAX_STEP_UP) {
       if (g === null) {
         this.stalledAt = "edge";
-        this.stalledSeconds += 1 / 60;
+        this.stalledSeconds += dt;   // real time, whatever the frame rate
       }
       // slide along the edge: try each axis on its own before refusing
       for (const [ax, az] of [[dx, 0], [0, dz]] as const) {

@@ -219,3 +219,18 @@ describe("Trailblazer's VRM wears the rig's pose", () => {
     expect(map.length).toBe(6 + 2 * (8 + 3 + 4 * 3));
   });
 });
+
+describe("the ending and the catch", () => {
+  const runtime = readFileSync(new URL("./runtime/CoastalProofRuntime.ts", import.meta.url), "utf8");
+  const controllerSrc = readFileSync(new URL("./runtime/controller.ts", import.meta.url), "utf8");
+  it("reports the catch only after the end card has shown, so the host never cuts the escape off", () => {
+    const report = runtime.slice(runtime.indexOf("if (!rookCaughtReported"), runtime.indexOf("callbacks.onRookCaught?.();") + 30);
+    expect(report).toContain("phase2.state.endCard");
+    expect(report).toContain("END_CARD_HOLD");
+    expect(report).not.toContain("revealTime");
+  });
+  it("counts a stall in real seconds, whatever the frame rate", () => {
+    expect(controllerSrc).not.toContain("stalledSeconds += 1 / 60");
+    expect(controllerSrc.match(/stalledSeconds \+= dt/g)?.length).toBe(2);
+  });
+});

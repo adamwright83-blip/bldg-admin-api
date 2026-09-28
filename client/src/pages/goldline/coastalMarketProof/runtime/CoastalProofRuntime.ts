@@ -532,6 +532,8 @@ export async function createCoastalProof(
   const camM = new THREE.Matrix4();
   let lastCaption = "";
   let rookCaughtReported = false;
+  let endCardSeconds = 0;
+  const END_CARD_HOLD = 3.5;   // the title card stays up this long before the game moves on
   const frame = (t: number) => {
     const workStart = performance.now();
     renderer.info.reset();
@@ -552,13 +554,14 @@ export async function createCoastalProof(
     }
     npcs.update(dt, camera.position);
     phase2.update(dt, controller, input.lineHeld, !!autopilot);
-    if (
-      !rookCaughtReported &&
-      phase2.state.reveal &&
-      phase2.state.revealTime >= 12.4
-    ) {
-      rookCaughtReported = true;
-      callbacks.onRookCaught?.();
+    // report the catch only once the ending has played: the host leaves this scene on success,
+    // so reporting earlier (the old 12.4 s) cut the escape and the end card off mid-play
+    if (!rookCaughtReported && phase2.state.endCard) {
+      endCardSeconds += dt;
+      if (endCardSeconds >= END_CARD_HOLD) {
+        rookCaughtReported = true;
+        callbacks.onRookCaught?.();
+      }
     }
     for (const e of phase2.events) audio.cue(e);
     if (phase2.state.caption !== lastCaption) {
