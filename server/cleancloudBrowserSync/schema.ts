@@ -7,6 +7,7 @@ import {
   index,
   uniqueIndex,
   customType,
+  mysqlEnum,
 } from "drizzle-orm/mysql-core";
 
 const mediumtext = customType<{ data: string; driverData: string }>({
@@ -130,3 +131,68 @@ export const dashboardWitnessScreenshots = mysqlTable(
   })
 );
 
+export const economicReconciliations = mysqlTable(
+  "cleancloud_economic_reconciliations",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    storeId: varchar("storeId", { length: 32 }).notNull(),
+    rangeFrom: varchar("rangeFrom", { length: 10 }).notNull(),
+    rangeTo: varchar("rangeTo", { length: 10 }).notNull(),
+    status: mysqlEnum("status", [
+      "reconciled",
+      "mismatch",
+      "insufficient_evidence",
+    ]).notNull(),
+    dashboardWitnessId: varchar("dashboardWitnessId", { length: 36 }),
+    dashboardRevenueCents: int("dashboardRevenueCents"),
+    revenueReportCents: int("revenueReportCents"),
+    bookCents: int("bookCents"),
+    discrepancyCents: int("discrepancyCents"),
+    evidenceIdsJson: json("evidenceIdsJson").notNull(),
+    evidenceHash: varchar("evidenceHash", { length: 64 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    evidenceUnique: uniqueIndex("uq_cc_economic_reconciliation_evidence").on(
+      table.tenantId,
+      table.storeId,
+      table.rangeFrom,
+      table.rangeTo,
+      table.evidenceHash
+    ),
+    periodIdx: index("idx_cc_economic_reconciliation_period").on(
+      table.tenantId,
+      table.rangeFrom,
+      table.rangeTo,
+      table.createdAt
+    ),
+  })
+);
+
+export const verifiedEconomicEvents = mysqlTable(
+  "cleancloud_verified_economic_events",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    tenantId: varchar("tenantId", { length: 64 }).notNull(),
+    eventType: varchar("eventType", { length: 64 }).notNull(),
+    periodFrom: varchar("periodFrom", { length: 10 }).notNull(),
+    periodTo: varchar("periodTo", { length: 10 }).notNull(),
+    comparisonFrom: varchar("comparisonFrom", { length: 10 }),
+    comparisonTo: varchar("comparisonTo", { length: 10 }),
+    currentRevenueCents: int("currentRevenueCents").notNull(),
+    comparisonRevenueCents: int("comparisonRevenueCents"),
+    deltaCents: int("deltaCents").notNull(),
+    deltaPercentHundredths: int("deltaPercentHundredths"),
+    evidenceIdsJson: json("evidenceIdsJson").notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 64 }).notNull(),
+    verifiedAt: timestamp("verifiedAt").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    idempotencyUnique: uniqueIndex("uq_cc_verified_economic_event").on(
+      table.tenantId,
+      table.idempotencyKey
+    ),
+  })
+);
