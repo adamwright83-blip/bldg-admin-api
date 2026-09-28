@@ -196,20 +196,28 @@ function deterministicItems(
   ];
 }
 
-function groundedKnownCorpus(brief: MissionSalesBrief, sources: EquipSource[]): string {
+function groundedFactCorpus(brief: MissionSalesBrief): string {
   return [
     brief.account.name,
     brief.account.accountType ?? "",
-    brief.mission.objective,
-    brief.recommendedApproach.primaryObjective,
     ...brief.knownFacts.map(fact => fact.text),
     ...brief.priorOutcomes.map(fact => fact.text),
-    ...sources.map(source => source.line),
   ].join(" ").toLowerCase();
 }
 
-function unknownQuestionCorpus(brief: MissionSalesBrief): string {
-  return brief.unknowns.map(item => item.question).join(" ").toLowerCase();
+function sourceGuidanceCorpus(sources: EquipSource[]): string {
+  return sources
+    .map(source => source.line)
+    .filter(line => !isQuestionLike(line))
+    .join(" ")
+    .toLowerCase();
+}
+
+function questionCorpus(brief: MissionSalesBrief, sources: EquipSource[]): string {
+  return [
+    ...brief.unknowns.map(item => item.question),
+    ...sources.map(source => source.line).filter(isQuestionLike),
+  ].join(" ").toLowerCase();
 }
 
 const RISKY_ASSERTIONS = [
@@ -258,38 +266,41 @@ function hasUnsupportedCompiledFact(input: {
   sources: EquipSource[];
   lines: string[];
 }): boolean {
-  const knownCorpus = groundedKnownCorpus(input.brief, input.sources);
-  const unknownCorpus = unknownQuestionCorpus(input.brief);
-  const knownTokens = contentTokens(knownCorpus);
-  const unknownTokens = contentTokens(unknownCorpus);
+  const factCorpus = groundedFactCorpus(input.brief);
+  const guidanceCorpus = sourceGuidanceCorpus(input.sources);
+  const questions = questionCorpus(input.brief, input.sources);
+  const factTokens = contentTokens(factCorpus);
+  const guidanceTokens = contentTokens(guidanceCorpus);
+  const questionTokens = contentTokens(questions);
 
   for (const line of input.lines) {
     const questionLike = isQuestionLike(line);
 
-    // Unknown mission details may be asked about, but they may never be
-    // promoted into assertions. Short content words such as "gym", "spa", and
-    // "own" are validated too rather than disappearing under a length cutoff.
+    // Guidance may be paraphrased as guidance, but vocabulary that only
+    // exists inside a source/mission question may survive only as a question.
+    // That prevents "Does this tower have a pool?" from becoming "This tower
+    // has a pool." while still allowing Claire to ask the grounded question.
     for (const token of contentTokens(line)) {
-      if (knownTokens.has(token)) continue;
-      if (questionLike && unknownTokens.has(token)) continue;
+      if (factTokens.has(token) || guidanceTokens.has(token)) continue;
+      if (questionLike && questionTokens.has(token)) continue;
       return true;
     }
 
+    // Property/customer assertions require factual evidence specifically.
+    // A matching phrase inside coaching, a recommendation, or a question is
+    // never enough to turn it into a business fact.
     for (const pattern of RISKY_ASSERTIONS) {
       const match = line.match(pattern)?.[0]?.toLowerCase();
       if (!match) continue;
-      if (knownCorpus.includes(match)) continue;
-      if (questionLike && unknownCorpus.includes(match)) continue;
+      if (factCorpus.includes(match)) continue;
       return true;
     }
 
-    // A newly introduced number is especially likely to be a fabricated unit
-    // count, price, timing claim, or other building fact. An unknown number may
-    // only survive when Claire preserves it as an actual question.
     const claimNumbers = line.match(/\b\d[\d,.]*\b/g) ?? [];
     for (const number of claimNumbers) {
-      if (knownCorpus.includes(number.toLowerCase())) continue;
-      if (questionLike && unknownCorpus.includes(number.toLowerCase())) continue;
+      if (factCorpus.includes(number.toLowerCase())) continue;
+      if (guidanceCorpus.includes(number.toLowerCase())) continue;
+      if (questionLike && questions.includes(number.toLowerCase())) continue;
       return true;
     }
   }
