@@ -25,6 +25,7 @@ describe("driver sales motivation contract", () => {
     expect(field).toContain('state.visitOutcome.decisionMakerStatus === "met" ? 10');
     expect(field).toContain("const scoreDriverId = persisted.mission.assignedTo;");
     expect(field).toContain("driverId: scoreDriverId,");
+    expect(field).toContain("dedupeKey: `score:field-outcome:${state.visitOutcome.id}`");
     expect(processing).toContain('eventType: "objection_comeback"');
     expect(processing).toContain("points: 15");
   });
