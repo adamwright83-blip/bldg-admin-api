@@ -41,6 +41,7 @@ export const persistentOperatorRouter = router({
         sourceOpenId: identity.sourceOpenId,
         sourceUserId: identity.sourceUserId,
         dayDirectorActorId: identity.dayDirectorActorId,
+        dayDirectorActorIds: identity.dayDirectorActorIds,
         weeklyOperatorId: identity.weeklyOperatorId,
         campaignOperatorUserId: identity.campaignOperatorUserId,
         communicationOperatorUserId: identity.communicationOperatorUserId,
@@ -64,6 +65,7 @@ export const persistentOperatorRouter = router({
         canonicalOperatorId: identity.canonicalOperatorId,
         operatorUserId: identity.canonicalOpenId,
         dayDirectorActorId: identity.dayDirectorActorId,
+        dayDirectorActorIds: identity.dayDirectorActorIds,
       });
     } catch (error) {
       identityFailure(error);
