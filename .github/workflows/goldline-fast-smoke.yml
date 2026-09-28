@@ -126,6 +126,7 @@ jobs:
         run: >-
           pnpm vitest run
           server/missionSalesBrief/clairePreVisitIntel.test.ts
+          server/missionSalesBrief/preVisitIntelAuthorization.test.ts
           client/src/game/actions/actionSurface.test.ts
           client/src/pages/commercialSalesMissionClaireIntel.test.ts
 
