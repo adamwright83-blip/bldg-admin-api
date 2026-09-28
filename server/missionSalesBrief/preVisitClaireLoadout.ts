@@ -1,7 +1,9 @@
-import { z } from "zod";
-import { invokeLLM } from "../_core/llm";
 import type { SalesIntelTeaching } from "../../shared/salesIntelTeaching";
-import type { ClairePreVisitLoadout, ClairePreVisitLoadoutItem } from "../../shared/missionSalesBrief";
+import type {
+  ClairePreVisitLoadout,
+  ClairePreVisitLoadoutItem,
+  MissionSalesBrief,
+} from "../../shared/missionSalesBrief";
 import { ensureCurrentMissionSalesBrief } from "./missionSalesBriefService";
 import { listEligibleSalesIntel } from "./salesIntelEligibility";
 
@@ -11,35 +13,50 @@ type Slot = (typeof SLOT_ORDER)[number];
 const SLOT_CATEGORIES: Record<Slot, readonly string[]> = {
   OPEN: ["opening", "prospecting", "rapport", "positioning"],
   PROBE: ["discovery", "questioning", "qualification"],
-  WEAPON: ["objection_prevention", "objection_handling", "value", "positioning", "closing"],
+  WEAPON: [
+    "objection_prevention",
+    "objection_handling",
+    "value",
+    "positioning",
+    "closing",
+  ],
 };
 
-function byConfidenceThenRecency(left: SalesIntelTeaching, right: SalesIntelTeaching) {
+function byConfidenceThenRecency(
+  left: SalesIntelTeaching,
+  right: SalesIntelTeaching
+) {
   const confidenceDelta = (right.confidence ?? 0) - (left.confidence ?? 0);
   if (confidenceDelta !== 0) return confidenceDelta;
-  return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+  return (
+    new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+  );
 }
 
+/**
+ * Claire prefers Shelby only inside the role the teaching actually supports.
+ * A closing lesson never becomes an OPEN merely because Shelby taught it.
+ */
 export function selectClairePreVisitTeachings(
   teachings: SalesIntelTeaching[]
 ): Array<{ slot: Slot; teaching: SalesIntelTeaching | null }> {
   const accepted = teachings
     .filter(teaching => teaching.reviewState === "accepted" && teaching.active)
     .sort(byConfidenceThenRecency);
-  const shelby = accepted.filter(teaching =>
-    /\bshelby\s+sapp\b/i.test(teaching.creatorName)
-  );
   const used = new Set<string>();
 
   return SLOT_ORDER.map(slot => {
-    const preferred = SLOT_CATEGORIES[slot];
-    const fromShelby = shelby.find(
-      teaching => !used.has(teaching.id) && preferred.includes(teaching.category)
-    ) ?? shelby.find(teaching => !used.has(teaching.id));
-    const fallback = accepted.find(
-      teaching => !used.has(teaching.id) && preferred.includes(teaching.category)
-    ) ?? accepted.find(teaching => !used.has(teaching.id));
-    const teaching = fromShelby ?? fallback ?? null;
+    const compatible = accepted.filter(
+      teaching =>
+        !used.has(teaching.id) &&
+        SLOT_CATEGORIES[slot].includes(teaching.category)
+    );
+    const teaching =
+      compatible.find(teaching =>
+        /\bshelby\s+sapp\b/i.test(teaching.creatorName)
+      ) ??
+      compatible[0] ??
+      null;
     if (teaching) used.add(teaching.id);
     return { slot, teaching };
   });
@@ -47,75 +64,72 @@ export function selectClairePreVisitTeachings(
 
 function sourceLine(teaching: SalesIntelTeaching | null): string | null {
   if (!teaching) return null;
-  const exact = teaching.exampleLanguage.find(item => item.kind === "exact_source_phrase");
+  const exact = teaching.exampleLanguage.find(
+    item => item.kind === "exact_source_phrase"
+  );
   const any = teaching.exampleLanguage[0];
-  return (exact ?? any)?.text?.trim() || teaching.principle.trim() || null;
+  return (
+    (exact ?? any)?.text?.trim() ||
+    teaching.principle.trim() ||
+    null
+  );
 }
 
-function deterministicItems(input: {
-  brief: NonNullable<Awaited<ReturnType<typeof ensureCurrentMissionSalesBrief>>>;
+function missionBriefLine(brief: MissionSalesBrief, slot: Slot): string {
+  if (slot === "OPEN") {
+    return (
+      brief.recommendedApproach.recommendedOpening?.trim() ||
+      "Lead with one clear reason for the visit, then let them respond."
+    );
+  }
+  if (slot === "PROBE") {
+    return (
+      brief.recommendedApproach.questionsToAsk[0]?.trim() ||
+      brief.unknowns[0]?.question ||
+      "Ask one question that reveals the real blocker before pitching harder."
+    );
+  }
+  return (
+    brief.recommendedApproach.thingsToAvoid[0]?.trim() ||
+    "Do not manufacture urgency. Find the real friction and respond to that."
+  );
+}
+
+/**
+ * No second generative truth layer here.
+ *
+ * The MissionSalesBrief is already the existing building-specific compiler
+ * with its own unsupported-fact guard. Reviewed trainer lines cross this
+ * boundary byte-for-byte from accepted Sales Intel. That makes the three
+ * equips useful without asking another model to invent a bespoke sentence.
+ */
+export function compileClairePreVisitItems(input: {
+  brief: MissionSalesBrief;
   selected: Array<{ slot: Slot; teaching: SalesIntelTeaching | null }>;
 }): ClairePreVisitLoadoutItem[] {
-  const opening =
-    input.brief.recommendedApproach.recommendedOpening?.trim() ||
-    sourceLine(input.selected.find(item => item.slot === "OPEN")?.teaching ?? null) ||
-    "Lead with one clear reason for the visit, then let them respond.";
-  const probe =
-    input.brief.recommendedApproach.questionsToAsk[0]?.trim() ||
-    sourceLine(input.selected.find(item => item.slot === "PROBE")?.teaching ?? null) ||
-    input.brief.unknowns[0]?.question ||
-    "Ask one question that reveals the real blocker before pitching harder.";
-  const weaponTeaching = input.selected.find(item => item.slot === "WEAPON")?.teaching ?? null;
-  const weapon =
-    sourceLine(weaponTeaching) ||
-    input.brief.recommendedApproach.thingsToAvoid[0]?.trim() ||
-    "Do not manufacture urgency. Find the real friction and respond to that.";
+  return input.selected.map(({ slot, teaching }) => {
+    const trainerLine = sourceLine(teaching);
+    if (teaching && trainerLine) {
+      return {
+        slot,
+        line: trainerLine.slice(0, 220),
+        sourceTeachingId: teaching.id,
+        sourceCreator: teaching.creatorName,
+        sourceTitle: teaching.title,
+        provenance: "reviewed_sales_intel" as const,
+      };
+    }
 
-  const lines: Record<Slot, string> = { OPEN: opening, PROBE: probe, WEAPON: weapon };
-  return input.selected.map(({ slot, teaching }) => ({
-    slot,
-    line: lines[slot].slice(0, 220),
-    sourceTeachingId: teaching?.id ?? null,
-    sourceCreator: teaching?.creatorName ?? null,
-    sourceTitle: teaching?.title ?? null,
-    provenance: teaching ? "reviewed_sales_intel" : "mission_brief",
-  }));
+    return {
+      slot,
+      line: missionBriefLine(input.brief, slot).slice(0, 220),
+      sourceTeachingId: null,
+      sourceCreator: null,
+      sourceTitle: null,
+      provenance: "mission_brief" as const,
+    };
+  });
 }
-
-const responseSchema = z.object({
-  items: z.array(z.object({
-    slot: z.enum(SLOT_ORDER),
-    sourceTeachingId: z.string().uuid().nullable(),
-    line: z.string().trim().min(1).max(220),
-  })).length(3),
-});
-
-const RESPONSE_JSON_SCHEMA = {
-  name: "claire_previsit_tower_loadout",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      items: {
-        type: "array",
-        minItems: 3,
-        maxItems: 3,
-        items: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            slot: { type: "string", enum: SLOT_ORDER },
-            sourceTeachingId: { type: ["string", "null"] },
-            line: { type: "string", maxLength: 220 },
-          },
-          required: ["slot", "sourceTeachingId", "line"],
-        },
-      },
-    },
-    required: ["items"],
-  },
-} as const;
 
 export async function getClairePreVisitLoadout(input: {
   tenantId: string;
@@ -124,80 +138,9 @@ export async function getClairePreVisitLoadout(input: {
   const brief = await ensureCurrentMissionSalesBrief(input);
   if (!brief) return null;
 
-  const selected = selectClairePreVisitTeachings(await listEligibleSalesIntel());
-  const fallback = deterministicItems({ brief, selected });
-  const teachingById = new Map(
-    selected.flatMap(item => item.teaching ? [[item.teaching.id, item.teaching] as const] : [])
+  const selected = selectClairePreVisitTeachings(
+    await listEligibleSalesIntel()
   );
-
-  let items = fallback;
-  try {
-    const result = await invokeLLM({
-      tenantId: input.tenantId,
-      maxTokens: 700,
-      temperature: 0.2,
-      outputSchema: RESPONSE_JSON_SCHEMA,
-      messages: [
-        {
-          role: "system",
-          content: [
-            "You are Claire equipping a field operator with exactly three short spoken moves before entering a real sales visit.",
-            "The slots are OPEN, PROBE, WEAPON.",
-            "Use only the supplied mission facts and reviewed trainer teachings.",
-            "Adapt the wording to this building only when the supplied facts support it.",
-            "Never invent a manager, objection, incumbent vendor, complaint, relationship, interest level, urgency, or prior conversation.",
-            "OPEN is what the operator can say first. PROBE is one useful question. WEAPON is one concise reframe or response principle.",
-            "Keep each line natural enough to say out loud and under 220 characters.",
-            "Preserve sourceTeachingId exactly when a source teaching is used. If a slot is based only on the mission brief, use null.",
-          ].join(" "),
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            building: brief.account,
-            knownFacts: brief.knownFacts.map(fact => fact.text),
-            keyUnknown: brief.unknowns[0]?.question ?? null,
-            missionObjective: brief.recommendedApproach.primaryObjective,
-            existingRecommendedOpening: brief.recommendedApproach.recommendedOpening,
-            existingQuestions: brief.recommendedApproach.questionsToAsk,
-            selectedTeachings: selected.map(({ slot, teaching }) => ({
-              slot,
-              sourceTeachingId: teaching?.id ?? null,
-              creator: teaching?.creatorName ?? null,
-              category: teaching?.category ?? null,
-              title: teaching?.title ?? null,
-              principle: teaching?.principle ?? null,
-              whenToUse: teaching?.whenToUse ?? [],
-              whenNotToUse: teaching?.whenNotToUse ?? [],
-              exampleLanguage: teaching?.exampleLanguage ?? [],
-            })),
-          }),
-        },
-      ],
-    });
-    const raw = result.choices[0]?.message?.content;
-    const parsed = responseSchema.safeParse(JSON.parse(typeof raw === "string" ? raw : ""));
-    if (parsed.success) {
-      const bySlot = new Map(parsed.data.items.map(item => [item.slot, item]));
-      const candidate = SLOT_ORDER.map(slot => bySlot.get(slot)).filter(Boolean);
-      if (candidate.length === 3) {
-        items = candidate.map((item, index) => {
-          const row = item!;
-          const source = row.sourceTeachingId ? teachingById.get(row.sourceTeachingId) ?? null : null;
-          return {
-            slot: SLOT_ORDER[index],
-            line: row.line,
-            sourceTeachingId: source?.id ?? null,
-            sourceCreator: source?.creatorName ?? null,
-            sourceTitle: source?.title ?? null,
-            provenance: source ? "reviewed_sales_intel" : "mission_brief",
-          };
-        });
-      }
-    }
-  } catch {
-    items = fallback;
-  }
 
   return {
     missionId: brief.missionId,
@@ -206,6 +149,6 @@ export async function getClairePreVisitLoadout(input: {
     buildingName: brief.account.name,
     buildingAddress: brief.account.address,
     generatedAt: new Date().toISOString(),
-    items,
+    items: compileClairePreVisitItems({ brief, selected }),
   };
 }
