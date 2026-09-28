@@ -94,13 +94,26 @@ function snapshot(input: {
 }
 
 describe("Churn Radar customer-book scope", () => {
-  it("never calls a native-only scan the whole book when CleanCloud is held", () => {
+  it("can call the held book current only when every held source is included and current", () => {
     const result = churnScanBookCoverage(
       snapshot({ cleanCloudHeld: true, bookStatus: "fresh" })
     );
-    expect(result.wholeBookCurrent).toBe(false);
-    expect(result.claim).toBe("known_native_candidates");
+    expect(result.scanSource).toBe("native_orders_and_cleancloud_observations");
+    expect(result.wholeBookCurrent).toBe(true);
+    expect(result.claim).toBe("current_held_book");
     expect(result.cleanCloudHeld).toBe(true);
+    expect(result.cleanCloudStatus).toBe("fresh");
+  });
+
+  it("does not treat a CleanCloud read as proof when CleanCloud coverage is not current", () => {
+    const fresh = snapshot({ cleanCloudHeld: true, bookStatus: "fresh" });
+    fresh.sources = fresh.sources.map(source =>
+      source.sourceId === "cleancloud" ? { ...source, status: "stale" } : source
+    );
+    const result = churnScanBookCoverage(fresh);
+    expect(result.wholeBookCurrent).toBe(false);
+    expect(result.claim).toBe("known_scanned_candidates");
+    expect(result.scanSource).toBe("native_orders_and_cleancloud_observations");
   });
 
   it("surfaces stale CleanCloud rather than calling missing history zero", () => {
@@ -114,19 +127,20 @@ describe("Churn Radar customer-book scope", () => {
     ]);
   });
 
-  it("can call the scan current only when native is the sole held source", () => {
+  it("can call the scan current when native is the only held source and the book is current", () => {
     const result = churnScanBookCoverage(
       snapshot({ cleanCloudHeld: false, bookStatus: "fresh" })
     );
     expect(result.wholeBookCurrent).toBe(true);
-    expect(result.claim).toBe("current_native_book");
+    expect(result.claim).toBe("current_held_book");
     expect(result.cleanCloudStatus).toBe("not_held");
   });
 
   it("fails closed when coverage cannot be read", () => {
     expect(churnScanBookCoverage(null)).toMatchObject({
+      scanSource: "native_orders_and_cleancloud_observations",
       wholeBookCurrent: false,
-      claim: "known_native_candidates",
+      claim: "known_scanned_candidates",
       bookStatus: null,
     });
   });

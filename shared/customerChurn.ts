@@ -2,11 +2,12 @@ export type CustomerChurnGrade = "low" | "medium" | "high";
 export type CustomerChurnConfidence = "low" | "medium" | "high";
 
 export type CustomerHistoryObservation = {
-  orderId: number;
+  orderId: number | null;
+  externalOrderId: string | null;
   serviceAt: string | Date;
   valueCents: number;
   weightLbs: number | null;
-  serviceType: "wash_fold" | "dry_cleaning";
+  serviceType: "wash_fold" | "dry_cleaning" | null;
 };
 
 export type CustomerChurnInput = {
@@ -42,7 +43,7 @@ export type ChurnEvidence = {
   label: string;
   value: string;
   source: string;
-  sourceIds: number[];
+  sourceIds: Array<number | string>;
 };
 
 export type WinBackDraft = {
@@ -113,6 +114,69 @@ function deriveCadenceDays(
     )
     .filter(days => days <= 120);
   return clamp(Math.round(median(intervals) || 30), 3, 60);
+}
+
+const CONFIDENCE_RANK: Record<CustomerChurnConfidence, number> = {
+  low: 0,
+  medium: 1,
+  high: 2,
+};
+
+function capConfidence(
+  base: CustomerChurnConfidence,
+  cap: CustomerChurnConfidence
+): CustomerChurnConfidence {
+  return CONFIDENCE_RANK[base] <= CONFIDENCE_RANK[cap] ? base : cap;
+}
+
+/**
+ * Length can support a higher band, but missing weight or an unproven service
+ * type cannot. A guessed service must not raise either the score or this band.
+ */
+export function confidenceForHistory(
+  history: readonly CustomerHistoryObservation[],
+  lengthConfidence: CustomerChurnConfidence
+): CustomerChurnConfidence {
+  let confidence = lengthConfidence;
+  const missingWeight = history.filter(item => item.weightLbs === null).length;
+  if (history.length > 0 && missingWeight === history.length) {
+    confidence = capConfidence(confidence, "low");
+  } else if (missingWeight > 0) {
+    confidence = capConfidence(confidence, "medium");
+  }
+  if (history.some(item => item.serviceType == null)) {
+    confidence = capConfidence(confidence, "low");
+  }
+  return confidence;
+}
+
+/** Honest service phrase. Null is not dry cleaning. */
+export function serviceLabel(
+  value: "wash_fold" | "dry_cleaning" | null | undefined
+): string {
+  if (value === "wash_fold") return "wash & fold";
+  if (value === "dry_cleaning") return "dry cleaning";
+  return "service not proven";
+}
+
+/** Numeric native id, otherwise the external order id. Never a made-up number. */
+export function churnObservationSourceId(
+  item: CustomerHistoryObservation
+): number | string | null {
+  if (typeof item.orderId === "number") return item.orderId;
+  const external = item.externalOrderId?.trim();
+  return external ? external : null;
+}
+
+export function churnObservationSourceIds(
+  items: readonly CustomerHistoryObservation[]
+): Array<number | string> {
+  const ids: Array<number | string> = [];
+  for (const item of items) {
+    const id = churnObservationSourceId(item);
+    if (id !== null) ids.push(id);
+  }
+  return ids;
 }
 
 function recentVolumeChange(
@@ -216,8 +280,9 @@ export function scoreCustomerChurn(
   score = clamp(Math.round(score), 0, 100);
   const grade: CustomerChurnGrade =
     score >= 70 ? "high" : score >= 40 ? "medium" : "low";
-  const confidence: CustomerChurnConfidence =
+  const lengthConfidence: CustomerChurnConfidence =
     history.length >= 6 ? "high" : history.length >= 3 ? "medium" : "low";
+  const confidence = confidenceForHistory(history, lengthConfidence);
   const recommendedAction =
     activeOrderCount > 0
       ? "watch"

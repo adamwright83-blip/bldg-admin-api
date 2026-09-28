@@ -200,7 +200,7 @@ export default function ChurnRadarPage() {
           <div className="cr-alert is-error" role="status" data-testid="churn-book-coverage-warning">
             <AlertTriangle />
             <span>
-              <b>Known native-order signals only.</b>{" "}
+              <b>Known native orders and CleanCloud observations only.</b>{" "}
               {scan.data.coverage.reason}
             </span>
           </div>
