@@ -209,7 +209,7 @@ async function moveForwardUntil(page: Page, action: string) {
     await page.waitForTimeout(600);
     await page.mouse.up();
   }
-  await expect(actionButton).toBeVisible();
+  await expect(actionButton).toBeVisible({ timeout: 5_000 });
 }
 
 async function reachPhysicalEncounter(page: Page) {
@@ -221,8 +221,10 @@ async function reachPhysicalEncounter(page: Page) {
   await page
     .locator(".context-actions button")
     .filter({ hasText: "INTERACT" })
-    .click();
-  await expect(page.locator(".encounter, .anchor-encounter")).toBeVisible();
+    .click({ timeout: 10_000 });
+  await expect(page.locator(".encounter, .anchor-encounter")).toBeVisible({
+    timeout: 10_000,
+  });
 }
 
 async function resolveAnchorPerfectly(page: Page) {
@@ -236,17 +238,19 @@ async function resolveAnchorPerfectly(page: Page) {
   await weakPoint.click({ force: true });
   await ability.click();
   await weakPoint.click({ force: true });
-  await expect(page.locator(".business-resolution-gate")).toBeVisible();
+  await expect(page.locator(".business-resolution-gate")).toBeVisible({
+    timeout: 10_000,
+  });
 }
 
 async function resolveGatekeeperPerfectly(page: Page) {
   const weapon = page.locator(".armory-weapon-main").first();
-  await expect(weapon).toBeVisible();
-  await weapon.click();
+  await expect(weapon).toBeVisible({ timeout: 10_000 });
+  await weapon.click({ timeout: 10_000 });
   const originNode = page.locator(".gate-origin");
   const timingGateNode = page.locator(".gate-node").nth(1);
-  await expect(originNode).toBeVisible();
-  await expect(timingGateNode).toBeVisible();
+  await expect(originNode).toBeVisible({ timeout: 10_000 });
+  await expect(timingGateNode).toBeVisible({ timeout: 10_000 });
   const origin = await originNode.boundingBox();
   const timingGate = await timingGateNode.boundingBox();
   if (!origin || !timingGate)
@@ -282,11 +286,11 @@ async function resolveGhostPerfectly(page: Page) {
 
 async function openBusinessAction(page: Page) {
   const action = page.locator(".business-resolution-gate button");
-  await expect(action).toBeVisible();
-  await action.click();
+  await expect(action).toBeVisible({ timeout: 10_000 });
+  await action.click({ timeout: 10_000 });
   await expect(
     page.locator(".goldline-action-surface, .real-action-bridge")
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 10_000 });
 }
 
 function expectStableRequestId(proof: FixtureProof) {
@@ -344,9 +348,15 @@ test("VISIT requires preparation, departure, arrival, and an authoritative outco
 }) => {
   await login(page, "VISIT");
   const listenersBefore = await stableListenerSnapshot(page);
-  await reachPhysicalEncounter(page);
-  await resolveGatekeeperPerfectly(page);
-  await openBusinessAction(page);
+  await test.step("reach physical encounter", async () => {
+    await reachPhysicalEncounter(page);
+  });
+  await test.step("resolve Gatekeeper encounter", async () => {
+    await resolveGatekeeperPerfectly(page);
+  });
+  await test.step("open authoritative visit action", async () => {
+    await openBusinessAction(page);
+  });
 
   await page.getByRole("button", { name: /PREPARE VISIT/ }).click({ timeout: 10_000 });
   await page.getByRole("button", { name: /DEPART/ }).click({ timeout: 10_000 });
