@@ -355,13 +355,18 @@ if (!globalThis.chrome?.runtime?.id) {
   const DASHBOARD_CAPTURE_ORIGINS = ["<all_urls>"];
 
   async function prepareDashboardCapturePermission() {
-    if (await chrome.permissions.contains({ origins: DASHBOARD_CAPTURE_ORIGINS }))
-      return true;
-    // Only a manual Confirm click may prompt. Automatic syncs never acquire
-    // broader permission on their own; they simply skip the witness.
-    if (scheduled) return false;
+    // Manual Confirm must invoke request() before any awaited preflight so the
+    // browser can still attribute the prompt to the operator's click.
+    if (!scheduled) {
+      try {
+        return await chrome.permissions.request({ origins: DASHBOARD_CAPTURE_ORIGINS });
+      } catch {
+        return false;
+      }
+    }
+    // Automatic syncs never prompt or acquire broader permission on their own.
     try {
-      return await chrome.permissions.request({ origins: DASHBOARD_CAPTURE_ORIGINS });
+      return await chrome.permissions.contains({ origins: DASHBOARD_CAPTURE_ORIGINS });
     } catch {
       return false;
     }
